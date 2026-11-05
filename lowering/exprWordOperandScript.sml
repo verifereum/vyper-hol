@@ -124,8 +124,19 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
 
+Theorem compile_ifexp_arm_grows[local]:
+  compile_ifexp_arm cenv res_ty arm_ty vv s = (r,s') ==>
+  s.cs_next_var <= s'.cs_next_var
+Proof
+  strip_tac >>
+  qspecl_then [`cenv`, `res_ty`, `arm_ty`, `vv`, `s`] mp_tac
+    ci_mono_compile_ifexp_arm >> simp[ci_mono_def]
+QED
+
 Theorem word_compile_expr_ifexp:
   (!ce t e s r s'. lower_value f ce t e s = (r,s') ==>
+                   s.cs_next_var <= s'.cs_next_var) /\
+  (!ce t e s r s'. f ce t e s = (r,s') ==>
                    s.cs_next_var <= s'.cs_next_var) /\
   is_word_type ann /\
   compile_expr_body f g h cenv ty (IfExp ann cond_e then_e else_e) sa = (vv,sb) ==>
@@ -136,7 +147,8 @@ Proof
   gvs[word_result_ok_def] >>
   imp_res_tac fresh_var_safe_operand >>
   irule safe_operand_mono >> goal_assum (drule_at Any) >>
-  qpat_x_assum `!ce t e s r s'. _` (fn th => imp_res_tac th) >>
+  rpt (qpat_x_assum `!ce t e s r s'. _` (fn th => imp_res_tac th)) >>
+  imp_res_tac compile_ifexp_arm_grows >>
   gvs[fresh_label_def, emit_inst_def, fresh_id_def, emit_def,
       new_block_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
@@ -183,7 +195,15 @@ Proof
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `rt` >> gvs[is_word_type_def]
+  qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[word_result_ok_def]) >>
+  pop_assum kall_tac >> IF_CASES_TAC
+  >- (Cases_on `rt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_bytestring_type_def, is_word_type_def] >>
+      rename1 `BytesT bl` >> Cases_on `bl` >>
+      gvs[is_bytestring_type_def, is_word_type_def]) >>
+  pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[is_word_type_def]
   >~ [`FlagT flag_nsid`] >-
     (`is_word_type (expr_type arg)` by
        (Cases_on `expr_type arg` >> gvs[valid_conversion_def, is_word_type_def] >>
@@ -272,13 +292,26 @@ Theorem word_builtin_bop:
   compile_builtin_dispatch_body f cenv vt ty (Bop bop) args sa = (vv,sb) ==>
   word_result_ok sb vv
 Proof
-  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (strip_tac >> Cases_on `HD (TL args)` >> gvs[] >>
+      TRY (rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]) >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[AllCaseEqs()] >>
+      irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
+      metis_tac[compile_list_membership_in_safe_operand,
+        compile_list_membership_notin_safe_operand,
+        compile_var_array_membership_safe_operand]) >>
+  IF_CASES_TAC
+  >- (strip_tac >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `bop = Eq` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
+      metis_tac[emit_op_safe_operand]) >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
-  metis_tac[compile_binop_safe_operand, emit_op_safe_operand,
-    compile_list_membership_in_safe_operand, compile_list_membership_notin_safe_operand,
-    compile_var_array_membership_safe_operand]
+  metis_tac[compile_binop_safe_operand]
 QED
 
 Theorem word_builtin_acc:
@@ -403,15 +436,94 @@ Proof
   Cases_on `e` >> simp[]
 QED
 
+Theorem word_compile_expr_addmod_classify:
+  compile_expr_body f g h cenv ty (Builtin ann AddMod args) sa = (vv,sb) ==>
+  g cenv ann ty AddMod args sa = (vv,sb) \/ word_result_ok sb vv
+Proof
+  namedCases_on `args` ["", "a rest"]
+  >- simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  namedCases_on `rest2` ["", "m rest3"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  reverse (Cases_on `rest3`)
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[word_compile_named_modular]
+QED
+
+Theorem word_compile_expr_mulmod_classify:
+  compile_expr_body f g h cenv ty (Builtin ann MulMod args) sa = (vv,sb) ==>
+  g cenv ann ty MulMod args sa = (vv,sb) \/ word_result_ok sb vv
+Proof
+  namedCases_on `args` ["", "a rest"]
+  >- simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  namedCases_on `rest2` ["", "m rest3"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  reverse (Cases_on `rest3`)
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[word_compile_named_modular]
+QED
+
+Theorem word_compile_expr_powmod256_classify:
+  compile_expr_body f g h cenv ty (Builtin ann PowMod256 args) sa = (vv,sb) ==>
+  g cenv ann ty PowMod256 args sa = (vv,sb) \/ word_result_ok sb vv
+Proof
+  namedCases_on `args` ["", "a rest"]
+  >- simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  reverse (namedCases_on `rest2` ["", "m rest3"])
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `rest3` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[word_compile_named_modular]
+QED
+
+Theorem word_compile_expr_builtin_ordinary_eq:
+  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
+  compile_expr_body f g h cenv ty (Builtin ann bi args) sa =
+  g cenv ann ty bi args sa
+Proof
+  strip_tac >>
+  namedCases_on `args` ["", "a rest"] >>
+  simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"] >>
+  simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest2` ["", "m rest3"]
+  >- (Cases_on `bi` >> gvs[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `rest3` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `bi` >> gvs[compile_expr_body_def, expr_type_def, LET_THM]
+QED
+
 Theorem word_compile_expr_builtin_classify:
   compile_expr_body f g h cenv ty (Builtin ann bi args) sa = (vv,sb) ==>
   g cenv ann ty bi args sa = (vv,sb) \/ word_result_ok sb vv
 Proof
-  Cases_on `bi` >>
-  simp[compile_expr_body_def, expr_type_def, LET_THM,
-       word_list_result_elim, word_expr_result_elim] >>
-  rpt strip_tac >>
-  metis_tac[word_compile_named_modular]
+  Cases_on `bi`
+  >~ [`Builtin ann AddMod args`] >- MATCH_ACCEPT_TAC word_compile_expr_addmod_classify
+  >~ [`Builtin ann MulMod args`] >- MATCH_ACCEPT_TAC word_compile_expr_mulmod_classify
+  >~ [`Builtin ann PowMod256 args`] >- MATCH_ACCEPT_TAC word_compile_expr_powmod256_classify >>
+  simp[word_compile_expr_builtin_ordinary_eq]
 QED
 
 Theorem word_compile_expr_builtin:
@@ -428,6 +540,8 @@ QED
 
 Theorem word_compile_expr_body:
   (!ce t e s r s'. lower_value f ce t e s = (r,s') ==>
+                   s.cs_next_var <= s'.cs_next_var) /\
+  (!ce t e s r s'. f ce t e s = (r,s') ==>
                    s.cs_next_var <= s'.cs_next_var) /\
   (!ann bi args s vv s'.
     well_typed_expr env (Builtin ann bi args) /\ is_word_type ann /\
@@ -448,7 +562,7 @@ Proof
   >~ [`StructLit ann name fields`] >- metis_tac[word_compile_expr_structlit, expr_type_def]
   >~ [`IfExp ann cond_e then_e else_e`] >-
     (irule word_compile_expr_ifexp >> goal_assum (drule_at Any) >>
-     gvs[expr_type_def] >> first_assum ACCEPT_TAC) >>
+     gvs[expr_type_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[compile_expr_body_def, expr_type_def, LET_THM]
   >~ [`compile_name_vv _ _ _ _ = _`] >- metis_tac[compile_name_vv_word_result_ok]
   >~ [`compile_literal_vv _ _ _ = _`] >- metis_tac[compile_literal_vv_word_result_ok]
@@ -458,6 +572,17 @@ Proof
   >~ [`h cenv _ ty _ _ _ sa = (vv,sb)`] >-
     (qpat_x_assum `!ann tb rt args s vv s'. _` drule_all >> simp[]) >>
   gvs[word_result_ok_def] >> rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+Theorem word_child_grows[local]:
+  expr_child_callback bound compile_expr ce ty e sa = (vv,sb) ==>
+  sa.cs_next_var <= sb.cs_next_var
+Proof
+  Cases_on `expr_size e < bound` >> simp[expr_child_callback_def]
+  >- metis_tac[cj 1 compile_expr_grows] >>
+  simp[invalid_expr_call_def, emit_inst_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem word_lower_value_child_grows[local]:
@@ -519,6 +644,7 @@ Resume compile_expr_word_result[expr]:
   irule word_compile_expr_body >> goal_assum (drule_at (Pat `compile_expr_body`)) >>
   qexists_tac `env` >>
   conj_tac >- (rpt strip_tac >> drule word_lower_value_child_grows >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> drule word_child_grows >> simp[]) >>
   simp[] >> conj_tac >-
     (rpt gen_tac >> simp[builtin_child_callback_def] >>
      Cases_on `list_size expr_size args < expr_size e` >> simp[] >-
@@ -575,3 +701,22 @@ Proof
   disch_then (qspec_then `env` mp_tac) >>
   simp[] >> metis_tac[unwrap_value_safe_operand]
 QED
+
+Theorem lower_value_word_shape:
+  !cenv env ty e sa op sb.
+    lower_value compile_expr cenv ty e sa = (op, sb) /\
+    well_typed_expr env e /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+            well_formed_type env.type_defs t) /\
+    is_word_type (expr_type e) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
+  drule lower_value_word_safe_operand >>
+  disch_then (qspec_then `env` mp_tac) >>
+  disch_then drule_all >> simp[exprSafeOperandTheory.safe_operand_def]
+QED
+

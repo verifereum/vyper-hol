@@ -9,21 +9,21 @@ Definition abi_builtin_encode_no_method_pre_def:
   abi_builtin_encode_no_method_pre ei at av st src sb source_cap p maxlen first last b cap s <=>
     abi_encoder_input ei at av sb source_cap s.vs_memory /\
     eval_operand src s = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
-    sb+source_cap < dimword (:256) /\ p+32+maxlen < dimword (:256) /\
+    sb+source_cap < dimword (:256) /\ p+(32+32*word_size maxlen) < dimword (:256) /\
     LENGTH (enc at av) <= maxlen /\
-    (sb+source_cap <= p \/ p+32+maxlen <= sb) /\
+    (sb+source_cap <= p \/ p+(32+32*word_size maxlen) <= sb) /\
     (sb+source_cap <= b \/ b+cap <= sb) /\
-    (p+32+maxlen <= b \/ b+cap <= p) /\
+    (p+(32+32*word_size maxlen) <= b \/ b+cap <= p) /\
     ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
-      FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,maxlen+32)) /\
+      FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,32+32*word_size maxlen)) /\
     st.cs_next_id < first /\ first <= st.cs_next_id+2 /\
     abi_decoder_budget first last b cap
-      (abi_builtin_allocate_state st.cs_next_id (maxlen+32) s)
+      (abi_builtin_allocate_state st.cs_next_id (32+32*word_size maxlen) s)
 End
 
 Theorem abi_builtin_encode_no_method_ready:
   abi_builtin_encode_no_method_pre ei at av st src sb source_cap p maxlen first last b cap initial /\
-  abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (maxlen+32) initial prepared /\
+  abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (32+32*word_size maxlen) initial prepared /\
   eval_operand dst prepared = SOME (n2w (p+32)) /\
   st.cs_next_var <= ready.cs_next_var /\ abi_decoder_operand_live ready.cs_next_var dst ==>
   abi_encoder_pre ei at av ready src dst sb source_cap (p+32) b cap prepared /\
@@ -41,5 +41,6 @@ Proof
     (first_x_assum irule >> asm_simp_tac bool_ss []) >>
   `abi_decoder_operand_live ready.cs_next_var src` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
+  mp_tac (Q.SPEC `maxlen` abi_builtin_word_size_capacity) >>
   asm_simp_tac (srw_ss()) [abi_encoder_pre_def] >> decide_tac
 QED

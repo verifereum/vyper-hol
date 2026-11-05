@@ -267,7 +267,8 @@ Theorem compile_call_intcall_shape:
                      cenv.ce_is_ctor) :: invoke_args) ret_count st3 =
            (results, st4) /\
          store_multi_results rbuf.buf_operand results 0 st4 = (u, st') /\
-         v = LocatedValue ret_ty (base_ptr rbuf)) /\
+         v = LocatedValue (cenv.ce_func_return_type (nsid_to_string func_id))
+                         (base_ptr rbuf)) /\
       (ret_count = 0 /\ 0 < rbs ==>
        ?rbuf u.
          compile_alloc_buffer rbs st1 = (rbuf, st2) /\
@@ -278,7 +279,8 @@ Theorem compile_call_intcall_shape:
                      (cenv.ce_func_param_types (nsid_to_string func_id))
                      cenv.ce_is_ctor) :: rbuf.buf_operand :: invoke_args)
            st3 = (u, st') /\
-         v = LocatedValue ret_ty (base_ptr rbuf)) /\
+         v = LocatedValue (cenv.ce_func_return_type (nsid_to_string func_id))
+                         (base_ptr rbuf)) /\
       (ret_count = 0 /\ rbs = 0 ==>
        ?u. st2 = st1 /\
            emit_void INVOKE
@@ -287,7 +289,8 @@ Theorem compile_call_intcall_shape:
                        (nsid_to_string func_id)
                        (cenv.ce_func_param_types (nsid_to_string func_id))
                        cenv.ce_is_ctor) :: invoke_args) st3 = (u, st') /\
-           v = StackValue ret_ty (Lit 0w))
+           v = StackValue (cenv.ce_func_return_type (nsid_to_string func_id))
+                        (Lit 0w))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>

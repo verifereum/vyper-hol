@@ -325,6 +325,7 @@ Theorem body_entry_state_rel:
     ss.vs_logs = vs.vs_logs /\ ss.vs_call_ctx = vs.vs_call_ctx /\
     ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
+    ss.vs_pending_deletions = vs.vs_pending_deletions /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     (!n off. FLOOKUP cenv.ce_module_vars n <> SOME (ImmutableLoc off)) ==>
@@ -350,6 +351,7 @@ Theorem body_entry_state_rel_runtime[local]:
     ss.vs_logs = vs.vs_logs /\ ss.vs_call_ctx = vs.vs_call_ctx /\
     ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
+    ss.vs_pending_deletions = vs.vs_pending_deletions /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
@@ -500,7 +502,7 @@ QED
 
 (* ===== The selected function's parameters ===== *)
 
-Theorem source_typing_ok_type_def_keys_distinct[local]:
+Theorem source_typing_ok_type_def_keys_distinct:
   !tops am tx.
     source_typing_ok tops am tx ==>
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
@@ -517,7 +519,7 @@ QED
 
 (* With no public variables, an external function lookup_function selects
    is a declared function, not a getter. *)
-Theorem lookup_function_external_decl[local]:
+Theorem lookup_function_external_decl:
   !tops tops0 name mut nr args dflts ret fbody.
     EVERY (supported_declaration_header tops0) tops /\
     lookup_function NONE name External tops =
@@ -552,7 +554,7 @@ Proof
   simp[check_function_body_def, type_env_all_modules_one]
 QED
 
-Theorem build_positional_args_names[local]:
+Theorem build_positional_args_names:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>
@@ -648,6 +650,7 @@ Theorem external_body_entry_state_rel:
     s0.vs_logs = vs.vs_logs /\ s0.vs_call_ctx = vs.vs_call_ctx /\
     s0.vs_tx_ctx = vs.vs_tx_ctx /\ s0.vs_block_ctx = vs.vs_block_ctx /\
     s0.vs_outcomes = vs.vs_outcomes /\ s0.vs_requests = vs.vs_requests /\
+    s0.vs_pending_deletions = vs.vs_pending_deletions /\
     s0.vs_allocas = vs.vs_allocas /\ s0.vs_alloca_next = vs.vs_alloca_next /\
     s0.vs_data_section = vs.vs_data_section /\
     fresh_vars_wrt st s0 /\ fn_has_code st st' func /\ ~s0.vs_halted /\

@@ -1371,11 +1371,13 @@ QED
 Theorem scope_pop_effect_array_primitives[simp]:
   scope_pop_effect (result_array_length cx tv) /\
   scope_pop_effect next_gas_reading /\
+  scope_pop_effect (precompile_call_success bt) /\
   scope_pop_effect (eval_raw_call cx flags target calldata amount gas)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> rw[] >> simp[])
     [result_array_length_state, next_gas_reading_state,
+     precompile_call_success_state,
      eval_raw_call_preserves_non_accounts])
 QED
 
@@ -1413,6 +1415,8 @@ Proof
       Cases_on `bt = Env MsgGas` >> simp[] >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac
       >- (first_x_assum irule >> metis_tac[]) >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
 
@@ -1437,6 +1441,12 @@ Proof
   conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
     [push_log_scopes, vyperCreateFrameTheory.eval_create_preserves_scopes_immutables])
+QED
+
+Theorem scope_pop_effect_check_not_static[simp]:
+  scope_pop_effect (check_not_static cx)
+Proof
+  simp[check_not_static_def]
 QED
 
 Theorem eval_raw_call_scope_effect[local]:
@@ -1482,6 +1492,7 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
+  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   simp[LET_THM] >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
@@ -1495,6 +1506,7 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   simp[LET_THM] >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
   gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
@@ -1521,7 +1533,8 @@ Proof
   >- (irule scope_pop_effect_frame >> irule state_rel_frame_locals_take >> simp[]) >>
   irule scope_pop_effect_identity >>
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation, return_def] >>
-  gen_tac >> IF_CASES_TAC >> simp[]
+  gen_tac >> IF_CASES_TAC >>
+  Cases_on `co.co_success` >> Cases_on `rq.cr_kind = MessageCall` >> simp[]
 QED
 
 Theorem scope_pop_effect_call_helpers[simp]:
@@ -1635,7 +1648,7 @@ Proof
   rpt gen_tac >> rpt strip_tac >~
   [`scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))`] >-
     suspend "ExtCall" >~
-  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))`] >-
+  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
     suspend "IntCall" >>
@@ -1701,7 +1714,10 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   gvs[raise_def, return_def] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-  drule acquire_nonreentrant_lock_scopes >> simp[]
+  qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
+  simp[ignore_bind_def, bind_def, check_def, assert_def, return_def,
+       raise_def, COND_RATOR, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
 QED
 
 Finalise eval_mutual_scope_pop_effect_results

@@ -1,17 +1,19 @@
 (*
  * Expression simulation for convert (#636, part 3)
  *
- * convert(e, t) to a type other than a flag lowers to e's fragment and
- * compile_type_convert with mk_convert_op (lower_value_convert).
- * compile_convert_frag_sim builds expr_sim of the whole from expr_sim of
- * the argument and convert_frag, the conversion's fragment from the
- * argument's value to the source's evaluate_convert result.
+ * convert(e, t) of a non-bytestring lowers to e's fragment and
+ * compile_type_convert, with ConvToFlag for a flag target and mk_convert_op
+ * otherwise (lower_value_convert).  compile_convert_frag_sim builds
+ * expr_sim of the whole from expr_sim of the argument and a unop_frag for
+ * the conversion code f; compile_convert_frag_sim_word specializes it to
+ * word conversions and convert_frag (via convert_frag_unop).
  *
  * TOP-LEVEL:
  *   compile_convert_word_case  — expr_vv_case of a conversion between
  *                                integer types, from bool to an integer
  *                                or from an integer to bool
  *   compile_convert_frag_sim   — the composition
+ *   compile_convert_frag_sim_word — its word-to-word specialization
  *   compile_convert_int_frag   — convert_frag between integer types
  *                                (ConvIntToInt)
  *   compile_convert_bool_frag  — convert_frag from an integer to bool
@@ -32,9 +34,10 @@
 
 Theory exprSimConvert
 Ancestors
-  allocLimits
+  exprUnopSimDefs
+  exprWordOperand exprSimSource exprSimProps exprSimHypsDefs exprSimDefs exprSimStack loweringPosts allocLimits exprSimUnop
   arithmetic list integer words integer_word
-  fragExec varsExt exprSim freshWrites exprSimOps exprSimArith
+  fragExec varsExt  freshWrites exprSimOps exprSimArith
   exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue
@@ -46,15 +49,28 @@ Libs
 
 (* ===== Lowering of convert ===== *)
 
-(* A conversion to a type other than a flag: the argument's fragment, then
-   compile_type_convert with mk_convert_op. *)
+Theorem is_word_type_not_bytestring:
+  !t. is_word_type t ==> ~is_bytestring_type t
+Proof
+  Cases >> simp[is_word_type_def, is_bytestring_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >>
+  simp[is_word_type_def, is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_word_type_def, is_bytestring_type_def]
+QED
+
+(* A non-bytestring conversion selects ConvToFlag for flags and
+   mk_convert_op for all other target types. *)
 Theorem lower_value_convert:
   !cenv ty ann t e1 sa op sb.
+    ~is_bytestring_type (expr_type e1) /\
     lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa =
-      (op, sb) /\ (!n. t <> FlagT n) ==>
+      (op, sb) ==>
     ?x s1.
       lower_value compile_expr cenv (expr_type e1) e1 sa = (x, s1) /\
-      compile_type_convert x (mk_convert_op (expr_type e1) t) s1 = (op, sb)
+      compile_type_convert x
+        (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+                 | _ => mk_convert_op (expr_type e1) t) s1 = (op, sb)
 Proof
   rpt strip_tac >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
@@ -109,6 +125,19 @@ Proof
   simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
 QED
 
+Theorem eval_expr_convert_of_child:
+  !cx ann ty e es v ee.
+    bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
+    bind (eval_expr cx (TypeBuiltin ann Convert ty [e])) (read_result cx) es =
+      (convert_result cx (expr_type e) ty v, ee)
+Proof
+  rpt strip_tac >>
+  Cases_on `bind (eval_expr cx (TypeBuiltin ann Convert ty [e]))
+                 (read_result cx) es` >>
+  drule (SRULE [SF ETA_ss] eval_expr_convert_cases) >>
+  strip_tac >> gvs[]
+QED
+
 (* ===== The conversion's fragment ===== *)
 
 (* The conversion's fragment, from the argument holding v1 in a state
@@ -138,11 +167,30 @@ Definition convert_frag_def:
         (expr_exit (convert_result cx src t v1))
 End
 
+Theorem convert_frag_unop:
+  !ctx func cenv cx src conv t v1 es0 ann tv1.
+    word_value v1 /\ is_word_type ann /\
+    convert_frag ctx func cenv cx src conv t v1 es0 ==>
+    unop_frag ctx func cenv cx (\x. compile_type_convert x conv)
+      (typed_val_to_w256 tv1 v1) ann (convert_result cx src t v1) es0
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[unop_frag_def, typed_val_to_w256_word_value] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `convert_frag _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [convert_frag_def]) >>
+  disch_then drule_all >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  simp[expr_val_rel_def, typed_val_to_w256_word_value] >> metis_tac[]
+QED
+
 Theorem expr_post_convert:
   !func cenv cx ann t e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
     expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
     stmt_state_rel ctx func cenv cx es' ss /\
-    eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
+    expr_val_rel cx ann v op ss /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
            lookup_var z ss = SOME w) /\
     (!aid b. FLOOKUP t0.vs_allocas aid = SOME b ==>
@@ -155,8 +203,7 @@ Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
   `locals_kept cenv es s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
-  simp[expr_val_rel_def, expr_val_at_def, vyperASTTheory.expr_type_def,
-       typed_val_to_w256_word_value] >>
+  simp[expr_val_at_def, expr_type_def] >>
   conj_tac
   >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>
       `not_fresh_at s1 z` by
@@ -170,6 +217,88 @@ QED
 
 (* expr_sim of a conversion from expr_sim of its argument and convert_frag. *)
 Theorem compile_convert_frag_sim:
+  !ctx func cenv cx ty ann t e1 f es.
+    is_word_type ann /\ is_word_type (expr_type e1) /\
+    (!sa sb op.
+       lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (op,sb) ==>
+       ?x s1. lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
+              f x s1 = (op,sb)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e1 sa = (op,sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       (!z. op = Var z ==> not_fresh_at sb z)) /\
+    (!x sa sb op. f x sa = (op,sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    expr_sim ctx func cenv cx (expr_type e1) e1 es /\
+    (!v1 es1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) ==>
+       ?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
+         unop_frag ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+           (convert_result cx (expr_type e1) t v1) es1) ==>
+    expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
+        simp[frag_exec_false_pre] >>
+      pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >> simp[]) >>
+  qpat_x_assum `!sa sb op. lower_value _ _ ty (TypeBuiltin _ _ _ _) _ = _ ==> _`
+    (drule_then strip_assume_tac) >>
+  qpat_x_assum `!sa sb op. lower_value _ _ (expr_type e1) e1 _ = _ ==> _`
+    (drule_then strip_assume_tac) >>
+  qpat_x_assum `!x sa sb op. f _ _ = _ ==> _`
+    (drule_then strip_assume_tac) >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
+    (irule fn_has_code_split >> asm_rewrite_tac[]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> asm_rewrite_tac[]) >>
+  drule_all eval_expr_convert_cases >> strip_tac
+  >- suspend "operand_exit" >>
+  suspend "operand_success"
+QED
+
+Resume compile_convert_frag_sim[operand_exit]:
+  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then drule >> simp[expr_res_ok_def] >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  (impl_tac >- gvs[expr_res_ok_def]) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+                           `\s. F`, `expr_exit res`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  irule frag_exec_exit_prefix >> qexists_tac `s1` >> gvs[]
+QED
+
+Resume compile_convert_frag_sim[operand_success]:
+  gvs[] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then drule >> simp[expr_res_ok_def] >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+                           `expr_exit (convert_result cx (expr_type e1) t v1)`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
+  asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
+  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
+  `stmt_state_rel ctx func cenv cx es' t0 /\
+   eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
+    gvs[expr_post_def, expr_val_rel_def] >>
+  qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [unop_frag_def]) >>
+  disch_then drule_all >> disch_then (qspec_then `t0` mp_tac) >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
+  irule expr_post_convert >> simp[] >>
+  qexistsl_tac [`s1`, `t0`, `v1`, `x`] >> simp[]
+QED
+
+Finalise compile_convert_frag_sim
+
+(* Word-only specialization of the abstract composition interface. *)
+Theorem compile_convert_frag_sim_word:
   !ctx func cenv cx ty ann t e1 es.
     (!n. t <> FlagT n) /\ is_word_type ann /\
     is_word_type (expr_type e1) /\
@@ -189,60 +318,21 @@ Theorem compile_convert_frag_sim:
     expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
-        simp[frag_exec_false_pre] >>
-      pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
-      simp[]) >>
-  drule_all lower_value_convert >> strip_tac >>
-  qpat_x_assum `!sa sb op. lower_value _ _ _ e1 _ = _ ==> _`
-    (drule_then strip_assume_tac) >>
-  qpat_x_assum `!x sa sb op. compile_type_convert _ _ _ = _ ==> _`
-    (drule_then strip_assume_tac) >>
-  `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
-    (irule fn_has_code_split >> asm_rewrite_tac[]) >>
-  `local_ptrs_reserved cenv s1` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
-     asm_rewrite_tac[]) >>
-  drule_all eval_expr_convert_cases >> strip_tac
-  >- ((* e1 raises *)
-      qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
-        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `s1`, `x`, `INR exc`, `es'`, `s0`]
-                    mp_tac) >>
-      (impl_tac >- gvs[]) >>
-      disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                               `\s. F`, `expr_exit res`] mp_tac) >>
-      (impl_tac >- gvs[]) >> strip_tac >>
-      irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[]) >>
-  qpat_x_assum `!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = _ ==> _` drule >>
-  strip_tac >>
-  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es'`, `s0`]
-                mp_tac) >>
-  (impl_tac >- simp[expr_res_ok_def]) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                           `expr_exit res`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
-  asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
-  `stmt_state_rel ctx func cenv cx es' t0 /\
-   eval_operand x t0 = SOME (val_to_w256 v1)` by
-    (fs[expr_post_def] >> irule expr_val_rel_word >> asm_rewrite_tac[] >>
-     first_assum (irule_at Any) >> asm_rewrite_tac[]) >>
-  qpat_x_assum `convert_frag _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [convert_frag_def]) >>
-  disch_then (qspecl_then [`s1`, `sb`, `x`, `op`, `t0`] mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[not_fresh_at_mono])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >> gvs[] >>
-  rpt strip_tac >> gvs[] >>
-  irule expr_post_convert >> simp[] >>
-  qexistsl_tac [`s1`, `t0`, `v1`, `x`] >> simp[]
+  irule compile_convert_frag_sim >>
+  (conj_tac >- metis_tac[]) >> simp[] >>
+  qexists_tac `\x. compile_type_convert x (mk_convert_op (expr_type e1) t)` >>
+  simp[] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `~is_bytestring_type (expr_type e1)` by
+        metis_tac[is_word_type_not_bytestring] >>
+      drule_all lower_value_convert >>
+      strip_tac >> qexistsl_tac [`x`, `s1`] >>
+      Cases_on `t` >> gvs[])
+  >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type e1)` >> gvs[] >>
+  irule convert_frag_unop >> simp[]
 QED
 
 val sf_step = FIRST [
@@ -433,9 +523,8 @@ Proof
           `?n. i = &n` by (irule NUM_POSINT_EXISTS >> intLib.ARITH_TAC) >>
           gvs[integer_wordTheory.i2w_pos, w2n_n2w] >>
           `2 ** (in_b - 1) <= 2 ** 255` by simp[] >>
-          `n < dimword (:256)` by
-            (simp[dimword_def] >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-             qexists_tac `2 ** (in_b - 1)` >> simp[]) >>
+          `2 ** 255 <= dimword (:256)` by simp[dimword_def] >>
+          `n < dimword (:256)` by decide_tac >>
           asm_simp_tac (srw_ss()) [arithmeticTheory.LESS_MOD] >>
           CCONTR_TAC >> fs[arithmeticTheory.NOT_LESS]
           >- (`2 ** (in_b - 1) <= 2 ** out_b` by simp[] >> decide_tac) >>
@@ -653,8 +742,10 @@ Proof
      well_typed_type_builtin_args_def] >>
   Cases_on `args` >> gvs[] >> rename1 `h::tl` >> Cases_on `tl` >>
   gvs[well_typed_expr_def, int_calls_expr_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
-      alloc_limits_expr_def] >>
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every,
+      byte_widths_expr_def, alloc_limits_expr_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             listTheory.APPEND_ASSOC]
 QED
@@ -679,7 +770,7 @@ Proof
   simp[Once (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)),
        compile_type_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `t` >> simp[as_stack_val_pair]
+  Cases_on `t` >> simp[as_stack_val_pair] >> rw[]
 QED
 
 Theorem straight_fresh_convert_pair:
@@ -713,7 +804,7 @@ Proof
   irule expr_vv_sim_stack >> rpt conj_tac
   >- simp[compile_convert_stack]
   >- metis_tac[eval_expr_type_builtin_value] >>
-  irule compile_convert_frag_sim >> rpt conj_tac
+  irule compile_convert_frag_sim_word >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
       drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
   >- (rpt gen_tac >> strip_tac >>

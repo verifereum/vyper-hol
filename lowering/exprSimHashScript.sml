@@ -25,16 +25,26 @@
  *)
 Theory exprSimHash
 Ancestors
+  exprBopSimProps
+  exprSimVVFrame
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
+  exprSimAlloc
   allocLimits
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   builtinHashing exprLoweringProps compileEnv
-  exprSim exprSimHyps exprSimLiteralBuffer exprSimWordArgs
+   exprSimHyps exprSimLiteralBuffer exprSimWordArgs
   vyperTypeSystem valueEncoding valueEncodingProofs extCallOracle
   vyperAST vyperValue exprLowering vyperInterpreter vyperContext
   vyperValueOperation vyperState exprSimWordBuiltins
   vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   exprOperandVar
+  gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
+  fragGasMode fragGasPath fragGasSeq fragGasSeqAbort
 
 Theorem hash_builtin_types:
   (b = Keccak256 \/ b = Sha256 \/ b = MethodId) /\
@@ -50,16 +60,20 @@ Proof
 QED
 
 Theorem sha256_computed_request:
-  rq.cr_target = 2w /\ rq.cr_value = 0 ==>
+  rq.cr_kind = MessageCall /\ rq.cr_target = 2w /\ rq.cr_value = 0 ==>
   computed_precompile rq /\
   take_outcome rq os =
-    (failed_outcome rq with
-       <| co_success := T;
-          co_returnData := word_to_bytes (SHA_256_bytes rq.cr_data) T |>, os) /\
+    (if ?outcome rest. os = outcome::rest /\ outcome.co_success then
+       failed_outcome rq with
+         <| co_success := T;
+            co_returnData := word_to_bytes (SHA_256_bytes rq.cr_data) T |>
+     else failed_outcome rq, DROP 1 os) /\
   record_request rq rqs = rqs
 Proof
   strip_tac >>
-  simp[computed_precompile_def, take_outcome_def, record_request_def]
+  Cases_on `os` >>
+  simp[computed_precompile_def, take_outcome_def, record_request_def] >>
+  Cases_on `h.co_success` >> simp[]
 QED
 
 (* Covers partial words, including the empty byte sequence. *)
@@ -120,34 +134,124 @@ Proof
   gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
-(* The continuation sees the complete operand postcondition, not just a word.
-   Q can in particular be a vv_post for either result representation. *)
+(* The operand's counted outcome composes with a continuation: every
+   successful operand endpoint, reached under some replacement of the gas
+   observations, has a counted summary of the continuation, and operand
+   exceptions exit as the continuation's R allows. *)
 Theorem expr_sim_suffix:
   expr_sim ctx func cenv cx ty e es /\
   lower_value compile_expr cenv ty e sa = (op, sm) /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (res, es') /\ expr_res_ok res /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  cs_extends sa sm /\ cs_extends sm sb /\
-  (!r. expr_exit res r ==> R r) /\
-  (!v t. res = INL v /\
-     expr_post ctx func cenv cx e es sa sm s0 es' v op t ==>
-     frag_exec ctx sm sb (\s. s = t) Q R) ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) Q R
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!gs v ee t.
+     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+       (INL v, ee) /\ ee.gas_obs = [] /\
+     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
+     t.vs_current_bb = sm.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+     ?marks. gas_summary_at F (ctx, func) marks (k v) (ee, t) Q R) ==>
+  gas_outcome F (cx_tops cx) (ctx, func)
+    (bind (bind (eval_expr cx e) (read_result cx)) k) (es, s0) Q R
 Proof
   strip_tac >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_def] >>
-  disch_then drule_all >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  disch_then (mp_then Any mp_tac frag_exec_weaken) >>
-  disch_then (qspecl_then
-    [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-     `\s. ?v. res = INL v /\
-          expr_post ctx func cenv cx e es sa sm s0 es' v op s`, `R`] mp_tac) >>
-  simp[] >>
-  disch_then (mp_then Any irule frag_exec_then) >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> simp[]
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      gvs[]
+      >- (`bind (eval_expr cx e) (read_result cx)
+             (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+             (INL v, es_end with gas_obs := [])` by
+            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+               (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+             strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+          `~t.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          qpat_x_assum `!gs v ee t. _`
+            (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `v`,
+                          `es_end with gas_obs := []`, `t`] mp_tac) >>
+          (impl_tac >- simp[]) >> strip_tac >>
+          rename1 `gas_summary_at F _ right _ _ _ _` >>
+          qexists_tac `marks ++ right` >> disj1_tac >>
+          qpat_x_assum `gas_summary_at F _ right _ _ _ _`
+            (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+          disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
+            (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+          drule_all gas_marked_exec_bind_normal >> strip_tac >>
+          rewrite_tac[gas_summary_at_def] >>
+          qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[]) >>
+      Cases_on `res` >> gvs[] >>
+      rename1 `expr_exit (INR exc) r` >>
+      qexists_tac `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+      irule gas_marked_exec_bind_exception >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qabbrev_tac `a = bind (eval_expr cx e) (read_result cx)` >>
+  `ignore_bind (bind a k) (return ()) =
+   bind a (\v. ignore_bind (k v) (return ()))` by
+    simp[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  pop_assum SUBST1_TAC >>
+  metis_tac[gas_exempt_cert_error_value]
+QED
+
+(* A straight-line run of the emitted code is an actual counted path. *)
+Theorem hash_run_path:
+  fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) insts /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq insts s = OK t ==>
+  gas_marked_path F ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) insts))
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX insts (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >>
+     PURE_REWRITE_TAC[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[]) >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `!fuel. t.vs_current_bb = s.vs_current_bb /\
+          exec_block fuel ctx bb s =
+          exec_block fuel ctx bb (t with vs_inst_idx := s.vs_inst_idx + LENGTH insts)` by
+    (gen_tac >>
+     qspecl_then [`insts`, `s`, `fuel`, `ctx`, `bb`] mp_tac exec_block_run_inst_seq >>
+     simp[]) >>
+  drule gas_path_normal >> strip_tac >> gvs[gas_marked_path_def]
+QED
+
+(* An aborting straight-line run of the emitted code is an actual counted
+   path to that abort. *)
+Theorem hash_abort_path:
+  fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) insts /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq insts s = Abort a t ==>
+  ?n j. gas_marked_path F ctx func s n (Abort a (t with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX insts (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >>
+     PURE_REWRITE_TAC[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[]) >>
+  drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_gas_path >>
+  disch_then (qspecl_then [`F`, `ctx`, `func`, `bb`] mp_tac) >> simp[]
 QED
 
 Theorem step_SHA3_bytes:
@@ -291,19 +395,6 @@ Proof
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem hash_alloc_buffer_labels[local]:
-  compile_alloc_buffer sz sa = (buf,sm) /\
-  run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  t.vs_labels = s.vs_labels
-Proof
-  simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
-       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
-  gvs[update_var_def]
-QED
-
 (* Allocate and stage one word, protecting every earlier allocation. *)
 Theorem hash_alloc_mstore_frame:
   compile_alloc_buffer 32 sa = (buf, sm) /\
@@ -391,7 +482,7 @@ Resume hash_alloc_mstore_frame[compose]:
   `!n b sz. local_region cenv es.scopes s n b sz ==>
     mem_bytes_at b sz (mstore (w2n addr) w allocated).vs_memory =
     mem_bytes_at b sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `allocated`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `allocated.vs_memory = s.vs_memory`
@@ -501,27 +592,44 @@ Proof
 QED
 
 Theorem sha256_consume_outcome:
-  rq.cr_target = 2w /\ rq.cr_value = 0 /\ rq.cr_static ==>
+  rq.cr_kind = MessageCall /\ rq.cr_target = 2w /\ rq.cr_value = 0 /\ rq.cr_static /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   consume_call_outcome rq ro 32 s =
     (1w, (write_memory_with_expansion ro
        (word_to_bytes (SHA_256_bytes rq.cr_data) T) s) with
-       vs_returndata := word_to_bytes (SHA_256_bytes rq.cr_data) T)
+       <| vs_returndata := word_to_bytes (SHA_256_bytes rq.cr_data) T;
+          vs_outcomes := rest |>)
 Proof
   strip_tac >> drule_all sha256_computed_request >> strip_tac >>
   simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
-       failed_outcome_def, TAKE_LENGTH_TOO_LONG, LENGTH_word_to_bytes,
+       adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def, TAKE_LENGTH_TOO_LONG, LENGTH_word_to_bytes,
        write_memory_with_expansion_def, LET_THM,
        venom_state_component_equality]
 QED
 
+Theorem sha256_consume_outcome_fail:
+  rq.cr_kind = MessageCall /\ rq.cr_target = 2w /\ rq.cr_value = 0 /\ rq.cr_static /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
+  consume_call_outcome rq ro 32 s =
+    (0w, (write_memory_with_expansion ro [] s) with
+      <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |> )
+Proof
+  strip_tac >> drule_all sha256_computed_request >> strip_tac >>
+  simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
+       adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def, write_memory_with_expansion_def, LET_THM,
+       venom_state_component_equality]
+QED
+
 Theorem sha256_exec_ext_call:
-  read_memory (w2n args_off) (w2n args_size) s = bs ==>
+  read_memory (w2n args_off) (w2n args_size) s = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   exec_ext_call (mk_inst iid STATICCALL ops [out]) s gas 2w 0w
     args_off args_size ret_off (32w:bytes32) T =
   OK (update_var out 1w
       ((write_memory_with_expansion (w2n ret_off)
          (word_to_bytes (SHA_256_bytes bs) T) s) with
-         vs_returndata := word_to_bytes (SHA_256_bytes bs) T))
+         <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
+            vs_outcomes := rest |>))
 Proof
   strip_tac >>
   `(w2w (2w:bytes32):address) = 2w` by
@@ -532,12 +640,38 @@ Proof
      (venom_call_request s 2w 0w args_off args_size T) (w2n ret_off) 32 s =
    (1w, (write_memory_with_expansion (w2n ret_off)
          (word_to_bytes (SHA_256_bytes bs) T) s) with
-         vs_returndata := word_to_bytes (SHA_256_bytes bs) T)` by
+         <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
+            vs_outcomes := rest |>)` by
     (qspecl_then [`venom_call_request s 2w 0w args_off args_size T`,
                     `w2n ret_off`, `s`] mp_tac
        (Q.GENL [`rq`, `ro`, `s`] sha256_consume_outcome) >>
      simp[venomCallOracleDefsTheory.venom_call_request_def,
           w2w_n2w, Excl "consume_call_outcome_eq"] ) >>
+  simp[exec_ext_call_def, mk_inst_def, Excl "consume_call_outcome_eq",
+       dimword_def, fcpTheory.index_bit0, fcpTheory.finite_bit0,
+       fcpTheory.index_one, fcpTheory.finite_one]
+QED
+
+Theorem sha256_exec_ext_call_fail:
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
+  exec_ext_call (mk_inst iid STATICCALL ops [out]) s gas 2w 0w
+    args_off args_size ret_off (32w:bytes32) T =
+  OK (update_var out 0w
+    ((write_memory_with_expansion (w2n ret_off) [] s) with
+      <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>))
+Proof
+  strip_tac >>
+  `(w2w (2w:bytes32):address) = 2w` by
+    simp[w2w_n2w, fcpTheory.index_bit0, fcpTheory.index_bit1,
+         fcpTheory.finite_bit0, fcpTheory.finite_bit1,
+         fcpTheory.index_one, fcpTheory.finite_one] >>
+  `consume_call_outcome
+     (venom_call_request s 2w 0w args_off args_size T) (w2n ret_off) 32 s =
+   (0w, (write_memory_with_expansion (w2n ret_off) [] s) with
+     <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>)` by
+    (irule sha256_consume_outcome_fail >>
+     simp[venomCallOracleDefsTheory.venom_call_request_def, w2w_n2w] >>
+     metis_tac[]) >>
   simp[exec_ext_call_def, mk_inst_def, Excl "consume_call_outcome_eq",
        dimword_def, fcpTheory.index_bit0, fcpTheory.finite_bit0,
        fcpTheory.index_one, fcpTheory.finite_one]
@@ -554,7 +688,10 @@ Theorem hash_returndata_state_rel:
   stmt_state_rel ctx func cenv cx es (s with vs_returndata := data) <=>
   stmt_state_rel ctx func cenv cx es s
 Proof
-  simp[stmt_state_rel_def, state_rel_def,
+  `fmp_room ctx func (s with vs_returndata := data) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        hash_returndata_immutable_alloca_sep,
        local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
@@ -566,21 +703,102 @@ Proof
        alloca_room_def, pending_alloca_size_def]
 QED
 
+Theorem hash_gas_readings_immutable_alloca_sep[local]:
+  immutable_alloca_sep func cenv cx es (s with vs_gas_readings := rs) <=>
+  immutable_alloca_sep func cenv cx es s
+Proof
+  simp[immutable_alloca_sep_def, local_region_def, lookup_var_def]
+QED
+
+Theorem hash_gas_readings_state_rel:
+  stmt_state_rel ctx func cenv cx es (s with vs_gas_readings := rs) <=>
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  `fmp_room ctx func (s with vs_gas_readings := rs) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
+       hash_gas_readings_immutable_alloca_sep,
+       local_ptrs_rel_def, local_region_def, local_backed_def,
+       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, call_ctx_rel_def, accounts_rel_def,
+       contract_storage_def, contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       alloca_room_def, pending_alloca_size_def]
+QED
+
+(* GAS pops the next reading, or reads 0w once the readings run out. *)
+Theorem step_GAS:
+  step_inst_base (mk_inst iid GAS [] [out]) s =
+  OK (update_var out (HD (s.vs_gas_readings ++ [0w]))
+        (s with vs_gas_readings := DROP 1 s.vs_gas_readings))
+Proof
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_gas_def] >>
+  Cases_on `s.vs_gas_readings` >> simp[] >>
+  gvs[update_var_def, venom_state_component_equality]
+QED
+
 Theorem step_STATICCALL_sha256:
   eval_operand gas_op s = SOME gas /\
   eval_operand args_op s = SOME args_off /\
   eval_operand size_op s = SOME args_size /\
   eval_operand ret_op s = SOME ret_off /\
-  read_memory (w2n args_off) (w2n args_size) s = bs ==>
+  read_memory (w2n args_off) (w2n args_size) s = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   step_inst_base
     (mk_inst iid STATICCALL [gas_op; Lit 2w; args_op; size_op; ret_op; Lit 32w] [out]) s =
   OK (update_var out 1w
       ((write_memory_with_expansion (w2n ret_off)
          (word_to_bytes (SHA_256_bytes bs) T) s) with
-         vs_returndata := word_to_bytes (SHA_256_bytes bs) T))
+         <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
+            vs_outcomes := rest |>))
 Proof
-  strip_tac >> simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  strip_tac >>
+  pure_rewrite_tac [Once step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def] >>
   irule (SRULE [mk_inst_def] sha256_exec_ext_call) >> simp[]
+QED
+
+Theorem step_STATICCALL_sha256_fail:
+  eval_operand gas_op s = SOME gas /\
+  eval_operand args_op s = SOME args_off /\
+  eval_operand size_op s = SOME args_size /\
+  eval_operand ret_op s = SOME ret_off /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
+  step_inst_base
+    (mk_inst iid STATICCALL [gas_op; Lit 2w; args_op; size_op; ret_op; Lit 32w] [out]) s =
+  OK (update_var out 0w
+    ((write_memory_with_expansion (w2n ret_off) [] s) with
+      <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>))
+Proof
+  strip_tac >> pure_rewrite_tac [Once step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def] >>
+  irule (SRULE [mk_inst_def] sha256_exec_ext_call_fail) >> metis_tac[]
+QED
+
+Theorem hash_outcomes_state_rel:
+  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx
+    (es with outcomes := SOME (DROP 1 s.vs_outcomes))
+    (s with vs_outcomes := DROP 1 s.vs_outcomes)
+Proof
+  `fmp_room ctx func (s with vs_outcomes := DROP 1 s.vs_outcomes) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  strip_tac >>
+  gvs[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
+       immutable_alloca_sep_def,
+       local_ptrs_rel_def, local_region_def, local_backed_def,
+       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, call_ctx_rel_def, accounts_rel_def,
+       contract_storage_def, contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       alloca_room_def, pending_alloca_size_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem hash_mload_write_word:
@@ -599,7 +817,8 @@ Theorem sha256_tail_run:
   eval_operand ret_op s = SOME r /\
   (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_var) /\
   (!x. ret_op = Var x ==> x <> success_var) /\
-  mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs ==>
+  mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   run_inst_seq
     [mk_inst i0 GAS [] [gas_var];
      mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
@@ -610,30 +829,41 @@ Theorem sha256_tail_run:
     (update_var success_var 1w
       ((write_memory_with_expansion (w2n r)
           (word_to_bytes (SHA_256_bytes bs) T)
-          (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s)) with
-        vs_returndata := word_to_bytes (SHA_256_bytes bs) T)))
+          (update_var gas_var (HD (s.vs_gas_readings ++ [0w]))
+             (s with vs_gas_readings := DROP 1 s.vs_gas_readings))) with
+        <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
+           vs_outcomes := rest |>)))
 Proof
   strip_tac >>
-  `eval_operand ptr_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME p /\
-   eval_operand len_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME n /\
-   eval_operand ret_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME r` by
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `step_inst_base (mk_inst i0 GAS [] [gas_var]) s = OK (update_var gas_var g s0)` by
+    simp[Abbr `g`, Abbr `s0`, step_GAS] >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
+  `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
+  `mem_bytes_at (w2n p) (w2n n) s0.vs_memory = bs` by simp[Abbr `s0`] >>
+  `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
+   eval_operand len_op (update_var gas_var g s0) = SOME n /\
+   eval_operand ret_op (update_var gas_var g s0) = SOME r` by
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-       exec_read0_def, bind_outputs_def] >>
-  `read_memory (w2n p) (w2n n)
-     (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = bs` by
+  simp[Once run_inst_seq_def] >>
+  `read_memory (w2n p) (w2n n) (update_var gas_var g s0) = bs` by
     simp[read_memory_def, update_var_def, GSYM mem_bytes_at_def] >>
-  `eval_operand (Var gas_var) (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) =
-     SOME (n2w s.vs_call_ctx.cc_gas)` by simp[eval_operand_def, lookup_var_update_var] >>
+  `eval_operand (Var gas_var) (update_var gas_var g s0) = SOME g` by
+    simp[eval_operand_def, lookup_var_update_var] >>
   `step_inst_base
     (mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
-      [success_var]) (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) =
+      [success_var]) (update_var gas_var g s0) =
    OK (update_var success_var 1w
      ((write_memory_with_expansion (w2n r) (word_to_bytes (SHA_256_bytes bs) T)
-       (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s)) with
-       vs_returndata := word_to_bytes (SHA_256_bytes bs) T))` by
-    (irule step_STATICCALL_sha256 >> simp[] >> goal_assum drule >> simp[]) >>
+       (update_var gas_var g s0)) with
+       <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
+          vs_outcomes := rest |>))` by
+    (irule step_STATICCALL_sha256 >> simp[] >>
+     goal_assum drule >> simp[Abbr `s0`, update_var_def]) >>
   fs[mk_inst_def] >> simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
        lookup_var_update_var] >>
@@ -645,11 +875,55 @@ Proof
          finite_mapTheory.FLOOKUP_UPDATE]) >>
   `mload (w2n r) final = SHA_256_bytes bs` by
     (simp[Abbr `final`, mload_def, update_var_def] >>
-     mp_tac (Q.SPECL [`w2n (r:bytes32)`, `SHA_256_bytes bs`, `s`]
+     mp_tac (Q.SPECL [`w2n (r:bytes32)`, `SHA_256_bytes bs`, `s0`]
        (Q.GENL [`dst`, `w`, `s`] hash_mload_write_word)) >>
      simp[mload_def, write_memory_with_expansion_def, LET_THM]) >>
   simp[run_inst_seq_def, Once step_inst_base_def, exec_read1_def,
        bind_outputs_def, Abbr `final`]
+QED
+
+Theorem sha256_tail_fail:
+  eval_operand ptr_op s = SOME p /\
+  eval_operand len_op s = SOME n /\
+  eval_operand ret_op s = SOME r /\
+  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_var) /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
+  ?t. run_inst_seq
+    [mk_inst i0 GAS [] [gas_var];
+     mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+       [success_var];
+     mk_inst i2 ASSERT [Var success_var] [];
+     mk_inst i3 MLOAD [ret_op] [out]] s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `step_inst_base (mk_inst i0 GAS [] [gas_var]) s = OK (update_var gas_var g s0)` by
+    simp[Abbr `g`, Abbr `s0`, step_GAS] >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
+  `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
+  `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
+   eval_operand len_op (update_var gas_var g s0) = SOME n /\
+   eval_operand ret_op (update_var gas_var g s0) = SOME r` by
+    (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
+     gvs[eval_operand_def, lookup_var_update_var]) >>
+  `?t. step_inst_base
+    (mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+      [success_var]) (update_var gas_var g s0) =
+    OK (update_var success_var 0w t)` by
+    (qexists `(write_memory_with_expansion (w2n r) []
+       (update_var gas_var g s0)) with
+       <| vs_returndata := [];
+          vs_outcomes := DROP 1 (update_var gas_var g s0).vs_outcomes |>` >>
+     irule step_STATICCALL_sha256_fail >>
+     simp[eval_operand_def, lookup_var_update_var, Abbr `s0`, update_var_def] >>
+     metis_tac[]) >>
+  simp[Once run_inst_seq_def] >>
+  fs[mk_inst_def] >> simp[Once run_inst_seq_def] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
+       lookup_var_update_var]
 QED
 
 Theorem sha256_tail_frame:
@@ -658,6 +932,7 @@ Theorem sha256_tail_frame:
   (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_var) /\
   (!x. ret_op = Var x ==> x <> success_var) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> x <> gas_var /\ x <> success_var /\ x <> out) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
@@ -676,7 +951,7 @@ Theorem sha256_tail_frame:
      mk_inst i2 ASSERT [Var success_var] [];
      mk_inst i3 MLOAD [ret_op] [out]] s = OK t /\
     eval_operand (Var out) t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\
     (!b len. b + len <= w2n r \/ w2n r + 32 <= b ==>
@@ -699,23 +974,37 @@ Proof
     simp[Abbr `final`, eval_operand_def, lookup_var_update_var] >>
   simp[] >> reverse conj_tac
   >- (rpt strip_tac >> irule hash_write_memory_disjoint >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (final with vs_returndata := s.vs_returndata)` suffices_by
-    (simp[hash_returndata_state_rel]) >>
-  irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+  `stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest)
+     (s with vs_outcomes := rest)` by
+    (drule hash_outcomes_state_rel >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest)
+     (final with <| vs_returndata := s.vs_returndata;
+                    vs_gas_readings := s.vs_gas_readings |>)` suffices_by
+    (simp[hash_returndata_state_rel, hash_gas_readings_state_rel]) >>
+  irule literal_state_memory_frame >>
+  qexists_tac `s with vs_outcomes := rest` >> simp[local_region_def, lookup_var_def] >>
   conj_tac
   >- (rpt strip_tac >> irule hash_write_memory_disjoint >> simp[] >>
-      first_x_assum drule >> simp[]) >>
+      qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
+      simp[local_region_def, lookup_var_def] >>
+      disch_then (qspecl_then [`name`, `w2n w`, `sz`] mp_tac) >>
+      (impl_tac >- metis_tac[]) >> decide_tac) >>
   conj_tac
   >- (rpt strip_tac >> rename1 `PtrVar (Var name_var) sz` >>
       `not_fresh_at sa name_var` by
         (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
       qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x final = _` drule >>
       simp[lookup_var_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x final = _` drule >>
+      simp[lookup_var_def]) >>
   simp[Abbr `final`, update_var_def, LET_THM] >>
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity, arithmeticTheory.MAX_DEF] >>
   conj_tac
-  >- simp[write_memory_with_expansion_def, LET_THM] >>
+  >- simp[write_memory_with_expansion_def, LET_THM, venom_state_component_equality] >>
   rpt strip_tac >> irule hash_write_memory_disjoint >>
   simp[] >> metis_tac[regions_disjoint_def]
 QED
@@ -747,6 +1036,27 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND]
 QED
 
+Theorem emit_sha256_tail_fail:
+  emit_op GAS [] sa = (gas_op, sg) /\
+  emit_op STATICCALL [gas_op; Lit 2w; ptr_op; len_op; ret_op; Lit 32w] sg =
+    (success_op, sc) /\
+  emit_void ASSERT [success_op] sc = ((), sh) /\
+  emit_op MLOAD [ret_op] sh = (op, sb) /\
+  eval_operand ptr_op s = SOME p /\ eval_operand len_op s = SOME n /\
+  eval_operand ret_op s = SOME r /\
+  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> not_fresh_at sa x) /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >> drule_all emitted_insts_sha256_tail >> strip_tac >> gvs[] >>
+  irule sha256_tail_fail >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!x. _ ==> not_fresh_at sa x`
+    (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >>
+  simp[not_fresh_at_def] >>
+  disch_then (qspec_then `sa.cs_next_var` mp_tac) >> simp[]
+QED
+
 Theorem emit_sha256_tail_frame:
   emit_op GAS [] sa = (gas_op, sg) /\
   emit_op STATICCALL [gas_op; Lit 2w; ptr_op; len_op; ret_op; Lit 32w] sg =
@@ -757,6 +1067,7 @@ Theorem emit_sha256_tail_frame:
   eval_operand ret_op s = SOME r /\
   (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> not_fresh_at sa x) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
@@ -769,7 +1080,7 @@ Theorem emit_sha256_tail_frame:
      regions_disjoint off (type_memory_size tv) (w2n r) 32) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\
     (!b len. b + len <= w2n r \/ w2n r + 32 <= b ==>
@@ -789,6 +1100,54 @@ Proof
   simp[] >> rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
+Theorem hash_alloc_sha256_tail_fail:
+  compile_alloc_buffer 32 sa = (buf,sn) /\
+  emit_op GAS [] sn = (gas_op,sg) /\
+  emit_op STATICCALL [gas_op; Lit 2w; ptr_op; len_op; buf.buf_operand; Lit 32w]
+    sg = (success_op,sc) /\
+  emit_void ASSERT [success_op] sc = ((),sh) /\
+  emit_op MLOAD [buf.buf_operand] sh = (op,sb) /\
+  eval_operand ptr_op s = SOME p /\ eval_operand len_op s = SOME n /\
+  (!x. ptr_op = Var x \/ len_op = Var x ==> not_fresh_at sa x) /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sn) s = OK allocated` >>
+  `allocated.vs_labels = s.vs_labels` by
+    (drule_all hash_alloc_buffer_labels >> simp[]) >>
+  `eval_operand ptr_op allocated = SOME p /\
+   eval_operand len_op allocated = SOME n` by
+    (Cases_on `ptr_op` >> Cases_on `len_op` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `sn.cs_next_var = sa.cs_next_var + 1 /\
+   sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn` by
+    (qpat_x_assum `compile_alloc_buffer 32 sa = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+       emit_def] >> strip_tac >> gvs[emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `!x. ptr_op = Var x \/ len_op = Var x \/ buf.buf_operand = Var x ==>
+       not_fresh_at sn x` by
+    (rpt strip_tac >> gvs[] >> gvs[not_fresh_at_def] >> metis_tac[]) >>
+  `~(?outcome rest. allocated.vs_outcomes = outcome::rest /\ outcome.co_success)` by
+    (gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  drule_all emit_sha256_tail_fail >> strip_tac >>
+  `sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
+    (drule_all emitted_insts_sha256_tail >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) s =
+     run_inst_seq (emitted_insts sn sb) allocated` by
+    (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem hash_alloc_sha256_tail_frame:
   compile_alloc_buffer 32 sa = (buf,sn) /\
   emit_op GAS [] sn = (gas_op,sg) /\
@@ -799,13 +1158,14 @@ Theorem hash_alloc_sha256_tail_frame:
   eval_operand ptr_op s = SOME p /\ eval_operand len_op s = SOME n /\
   (!x. ptr_op = Var x \/ len_op = Var x ==> not_fresh_at sa x) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -859,6 +1219,8 @@ Proof
        (qspec_then `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
          [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>
      simp[mk_inst_def]) >>
+  `allocated.vs_outcomes = outcome::rest` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all emit_sha256_tail_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sn sb) allocated = OK final` >>
   suspend "compose"
@@ -874,7 +1236,7 @@ Resume hash_alloc_sha256_tail_frame[compose]:
     (irule (cj 2 run_inst_seq_chain) >> goal_assum drule >> simp[]) >>
   `!nm b sz. local_region cenv es.scopes s nm b sz ==>
     mem_bytes_at b sz final.vs_memory = mem_bytes_at b sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `allocated`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `!b len. _ \/ _ ==> mem_bytes_at b len final.vs_memory = _`
@@ -936,6 +1298,61 @@ Proof
   first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >> gvs[]
 QED
 
+Theorem compile_sha256_bytes_fail:
+  compile_sha256_bytes ptr_op sa = (op, sb) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w len /\ b < dimword (:256) /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_sha256_bytes _ _ = _` mp_tac >>
+  simp_tac (bool_ss ++ pairSimps.PAIR_ss)
+    [compile_sha256_bytes_def, LET_THM, comp_bind_def, comp_ignore_bind_def,
+     comp_return_def] >>
+  ntac 6 (pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) []) >>
+  strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [ptr_op] sa = (length_op, sl)` >>
+  rename1 `emit_op ADD [ptr_op; Lit 32w] sl = (data_op, sm)` >>
+  rename1 `compile_alloc_buffer 32 sm = (buf, sn)` >>
+  rename1 `emit_op GAS [] sn = (gas_op, sg)` >>
+  rename1 `emit_op STATICCALL _ sg = (success_op, sc)` >>
+  rename1 `emit_void ASSERT [success_op] sc = (u, sh)` >> Cases_on `u` >>
+  drule_all hash_data_prefix_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK prefix` >>
+  `stmt_state_rel ctx func cenv cx es prefix` by
+    (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
+     [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by simp[] >>
+  `!x. data_op = Var x \/ length_op = Var x ==> not_fresh_at sm x` by
+    metis_tac[] >>
+  `~(?outcome rest. prefix.vs_outcomes = outcome::rest /\ outcome.co_success)` by
+    (gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  drule_all hash_alloc_sha256_tail_fail >> strip_tac >>
+  `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb` by
+    (qpat_x_assum `compile_alloc_buffer 32 sm = _` mp_tac >>
+     qpat_x_assum `emit_op GAS [] sn = _` mp_tac >>
+     qpat_x_assum `emit_op STATICCALL _ sg = _` mp_tac >>
+     qpat_x_assum `emit_void ASSERT _ sc = _` mp_tac >>
+     qpat_x_assum `emit_op MLOAD _ sh = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+          fresh_id_def, emit_def] >> rpt strip_tac >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC]) >>
+  `run_inst_seq (emitted_insts sa sb) s =
+     run_inst_seq (emitted_insts sm sb) prefix` by
+    (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem compile_sha256_bytes_frame:
   compile_sha256_bytes ptr_op sa = (op, sb) /\
   (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
@@ -943,13 +1360,14 @@ Theorem compile_sha256_bytes_frame:
   mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
   mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -990,6 +1408,8 @@ Proof
      (w2n (n2w (LENGTH bs):bytes32)) prefix.vs_memory = bs` by simp[] >>
   `!x. data_op = Var x \/ length_op = Var x ==> not_fresh_at sm x` by
     metis_tac[] >>
+  `prefix.vs_outcomes = outcome::rest` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all hash_alloc_sha256_tail_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm sb) prefix = OK final` >>
   `run_inst_seq (emitted_insts sa sb) s =
@@ -997,7 +1417,7 @@ Proof
     (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
   `!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
     mem_bytes_at lb sz final.vs_memory = mem_bytes_at lb sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `prefix`] >> gvs[] >> metis_tac[]) >>
   qexists_tac `final` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
@@ -1010,11 +1430,66 @@ Proof
     (qspecl_then [`aid`, `region_base`, `len`] mp_tac) >> simp[]
 QED
 
+Theorem compile_sha256_bytesm_fail:
+  compile_sha256_bytesm val_op len sa = (op, sb) /\
+  (!x. val_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand val_op s = SOME w /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+  MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (sa.cs_next_var + 1))]) (fn_insts func) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_sha256_bytesm _ _ _ = _` mp_tac >>
+  simp_tac (bool_ss ++ pairSimps.PAIR_ss)
+    [compile_sha256_bytesm_def, LET_THM, comp_bind_def, comp_ignore_bind_def,
+     comp_return_def] >>
+  ntac 6 (pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) []) >>
+  strip_tac >> gvs[] >>
+  rename1 `compile_alloc_buffer 32 sa = (in_buf,sm)` >>
+  rename1 `emit_void MSTORE [in_buf.buf_operand; val_op] sm = (u,sd)` >>
+  rename1 `compile_alloc_buffer 32 sd = (out_buf,sn)` >>
+  rename1 `emit_op GAS [] sn = (gas_op,sg)` >>
+  rename1 `emit_op STATICCALL _ sg = (success_op,sc)` >>
+  rename1 `emit_void ASSERT [success_op] sc = (v,sh)` >> Cases_on `v` >>
+  drule_all hash_alloc_mstore_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sd) s = OK staged` >>
+  `eval_operand (Lit (n2w len)) staged = SOME (n2w len)` by
+    simp[eval_operand_def] >>
+  `!x. in_buf.buf_operand = Var x \/ Lit (n2w len) = Var x ==>
+       not_fresh_at sd x` by simp[] >>
+  `MEM (mk_inst sd.cs_next_id ALLOCA [Lit 32w]
+     [STRING #"%" (toString sd.cs_next_var)]) (fn_insts func)` by simp[] >>
+  `~(?outcome rest. staged.vs_outcomes = outcome::rest /\ outcome.co_success)` by
+    (gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  drule_all hash_alloc_sha256_tail_fail >> strip_tac >>
+  `sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb` by
+    (qpat_x_assum `compile_alloc_buffer 32 sd = _` mp_tac >>
+     qpat_x_assum `emit_op GAS [] sn = _` mp_tac >>
+     qpat_x_assum `emit_op STATICCALL _ sg = _` mp_tac >>
+     qpat_x_assum `emit_void ASSERT _ sc = _` mp_tac >>
+     qpat_x_assum `emit_op MLOAD _ sh = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+          fresh_id_def, emit_def] >> rpt strip_tac >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC]) >>
+  `run_inst_seq (emitted_insts sa sb) s =
+     run_inst_seq (emitted_insts sd sb) staged` by
+    (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem compile_sha256_bytesm_frame:
   compile_sha256_bytesm val_op (LENGTH bs) sa = (op, sb) /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   eval_operand val_op s = SOME w /\
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -1023,7 +1498,7 @@ Theorem compile_sha256_bytesm_frame:
     [STRING #"%" (toString (sa.cs_next_var + 1))]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -1058,6 +1533,8 @@ Proof
        not_fresh_at sd x` by simp[] >>
   `MEM (mk_inst sd.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString sd.cs_next_var)]) (fn_insts func)` by simp[] >>
+  `staged.vs_outcomes = outcome::rest` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all hash_alloc_sha256_tail_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sd sb) staged = OK final` >>
   suspend "compose"
@@ -1074,7 +1551,7 @@ Resume compile_sha256_bytesm_frame[compose]:
      qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]) >>
   `!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
     mem_bytes_at lb sz final.vs_memory = mem_bytes_at lb sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `staged`] >> simp[] >> metis_tac[]) >>
   qexists_tac `final` >> simp[] >> reverse conj_tac
   >- metis_tac[] >> rpt strip_tac >>
@@ -1132,7 +1609,10 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``SHR``, mk_inst_def,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``SHL``, mk_inst_def,
+       exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
   simp[dimword_def, update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
@@ -1178,14 +1658,14 @@ Proof
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
-       eval_operand_def] >>
+  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       mk_inst_def, eval_operand_def] >>
   `b < dimword (:256)` by decide_tac >>
   simp[exec_write2_def, eval_operand_def, w2n_n2w] >>
   `eval_operand ptr_op (mstore b (n2w n) s) = SOME (n2w b)` by
     (Cases_on `ptr_op` >> gvs[eval_operand_def, mstore_def, lookup_var_def]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def, bind_outputs_def] >>
+  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ADD``,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
   `eval_operand val_op
      (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w)
        (mstore b (n2w n) s)) = SOME v` by
@@ -1193,8 +1673,8 @@ Proof
      gvs[eval_operand_def, lookup_var_update_var, not_fresh_at_def,
          mstore_def, lookup_var_def]) >>
   fs[word_add_n2w] >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w] >>
+  simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       exec_write2_def, eval_operand_def, lookup_var_update_var, w2n_n2w] >>
   simp_tac (srw_ss()) [mstore_def, update_var_def, LET_THM] >>
   rpt strip_tac >>
   gvs[not_fresh_at_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -1243,6 +1723,10 @@ Proof
   conj_tac
   >- (rpt strip_tac >> qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
       gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x t = _` irule >>
+      first_assum ACCEPT_TAC) >>
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
           arithmeticTheory.MAX_DEF] >>
@@ -1354,7 +1838,7 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
     (simp[] >> irule hash_single_word_buffer_contents >> simp[]) >>
   `!n b sz. local_region cenv es.scopes s n b sz ==>
     mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `allocated`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
@@ -1366,7 +1850,7 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
      regions_disjoint (w2n addr) 64 b sz` by
     (rpt strip_tac >>
      `local_region cenv es.scopes allocated n b sz` by
-       (irule exprSimOpsTheory.local_region_frame >> conj_tac
+       (irule exprSimPropsTheory.local_region_frame >> conj_tac
         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
         qexistsl [`sm`, `es.scopes`, `t`] >> simp[] >> metis_tac[]) >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _`
@@ -1443,9 +1927,10 @@ Proof
      simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
-     gvs[emitted_insts_def, not_fresh_at_def, toString_inj,
-         rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
-         rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
+     gvs[] >>
+     simp[emitted_insts_def, not_fresh_at_def, toString_inj,
+          rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
+          rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
   `local_ptrs_reserved cenv sn` by
     (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
@@ -1473,7 +1958,7 @@ Resume method_id_dynamic_suffix_frame[buffer]:
     (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
   `!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
     mem_bytes_at lb sz t.vs_memory = mem_bytes_at lb sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `masked`] >> gvs[] >> metis_tac[]) >>
   qexistsl_tac [`t`, `p`] >> simp[] >> conj_tac
   >- (rpt strip_tac >>
@@ -1540,25 +2025,39 @@ Proof
     (gvs[expr_sim_pre_def] >>
      simp[well_typed_expr_def, well_typed_literal_def,
        well_formed_type_def, byte_widths_expr_def, alloc_limits_expr_def,
+       type_alloc_ok_def, type_memory_bytes_def,
        literal_alloc_ok_def, vyperTypeCallGraphTheory.int_calls_expr_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm, type_bits_def,
        vfmConstantsTheory.word_size_def, vyperValueTheory.evaluate_type_def,
        vyperValueTheory.compatible_bound_def, vyperValueTheory.type_slot_size_def,
        wordsTheory.dimword_def, LENGTH_TAKE,
-       vyperTypeBytesCryptoTheory.LENGTH_Keccak_256_w64]) >>
+       vyperTypeBytesCryptoTheory.LENGTH_Keccak_256_w64,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedProgramTheory.expr_abi_decode_target_root_def]) >>
   `expr_vv_ok cenv (Literal (BaseT (BytesT (Dynamic 4)))
      (BytesL (TAKE 4 (Keccak_256_w64 bs))))` by
     (irule compile_literal_other_vv_sim >> simp[is_word_type_def]) >>
   qpat_x_assum `expr_vv_ok _ _` (mp_tac o REWRITE_RULE [expr_vv_ok_def]) >>
   disch_then drule >> disch_then (qspecl_then [`ctx`, `func`, `ty`] mp_tac) >>
-  rw[expr_vv_sim_def] >>
-  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
-  qpat_x_assum `!sa sb vv res es' s0. _` (qspecl_then
-    [`sa`, `sb`, `vv`, `INL (Value (BytesV (TAKE 4 (Keccak_256_w64 bs))))`,
-     `es`, `s0`] mp_tac) >>
-  gvs[compile_expr_method_id_literal, compile_expr_def,
-      vv_post_def, expr_type_def] >>
-  simp[Once evaluate_def, return_def, evaluate_literal_def]
+  qabbrev_tac `lit = Literal (BaseT (BytesT (Dynamic 4)))
+    (BytesL (TAKE 4 (Keccak_256_w64 bs)))` >>
+  `eval_expr cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
+   eval_expr cx lit` by
+    (simp[FUN_EQ_THM, Abbr `lit`] >> gen_tac >>
+     Cases_on `eval_expr cx
+       (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) x` >>
+     drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+     simp[Once evaluate_def, return_def, evaluate_literal_def]) >>
+  `!st. compile_expr cenv ty
+          (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) st =
+        compile_expr cenv ty lit st` by
+    gvs[compile_expr_method_id_literal, compile_expr_def, Abbr `lit`,
+        expr_type_def] >>
+  `vv_post ctx func cenv cx
+     (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
+   vv_post ctx func cenv cx lit` by
+    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def] >>
+  simp[expr_vv_sim_def]
 QED
 
 (* Typed postconditions expose the representation needed by hash suffixes. *)
@@ -1632,8 +2131,6 @@ Proof
   disch_then (strip_assume_tac o SRULE [val_in_memory_def, LET_THM]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
-  `w2n p + 32 + LENGTH bs < dimword (:256)` by
-    (irule (cj 1 literal_buffer_range) >> simp[] >> decide_tac) >>
   qexists_tac `w2n p` >> simp[] >> decide_tac
 QED
 
@@ -1655,8 +2152,6 @@ Proof
   disch_then (strip_assume_tac o SRULE [val_in_memory_def, LET_THM]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
-  `w2n p + 32 + LENGTH str < dimword (:256)` by
-    (irule (cj 1 literal_buffer_range) >> simp[] >> decide_tac) >>
   qexists_tac `w2n p` >> simp[] >> decide_tac
 QED
 
@@ -1929,7 +2424,7 @@ Proof
       rpt strip_tac >> rename1 `local_region _ _ _ nm lb lsz` >>
       qpat_x_assum `!n b sz. local_region _ _ _ n b sz ==> _` irule >>
       qexists_tac `nm` >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl [`s0`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
@@ -1973,6 +2468,22 @@ Proof
   gvs[same_blocks_def, IS_PREFIX_APPEND] >> metis_tac[]
 QED
 
+(* Runtime errors accept any abort; no successful post-state is required. *)
+Theorem hash_abort_frag:
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t) ==>
+  frag_exec ctx sa sb P Q
+    (expr_exit (INR (Error (RuntimeError "precompile failed"))))
+Proof
+  strip_tac >> irule frag_exec_run_inst_seq >>
+  gvs[same_blocks_def, IS_PREFIX_APPEND] >> rpt strip_tac >>
+  disj2_tac >> first_x_assum drule >> strip_tac >>
+  qexistsl [`Revert_abort`, `t`] >> simp[expr_exit_def]
+QED
+
 Theorem vv_post_allocated_memory_intro:
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -2014,7 +2525,7 @@ Proof
 QED
 
 Theorem eval_expr_unary_builtin_cases:
-  bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
   eval_expr cx (Builtin ann bt [e]) es = (res,es') ==>
   (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc,es') /\ res = INR exc) \/
   ?v. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
@@ -2030,35 +2541,149 @@ Proof
   rename1 `eval_exprs cx [e] es = (rr, es1)` >>
   drule eval_exprs_cons_cases >> strip_tac >> gvs[eval_exprs_nil] >>
   simp[bind_def, return_def, get_accounts_def, lift_sum_def,
-       builtin_result_def, AllCaseEqs()] >>
+       builtin_result_def, AllCaseEqs(), precompile_call_success_not_builtin,
+       ignore_bind_def] >>
   rpt strip_tac >> gvs[bind_def, AllCaseEqs()] >>
   Cases_on `evaluate_builtin cx es1.accounts ann bt [expr_type e] [v]` >>
   gvs[return_def, raise_def] >> metis_tac[]
 QED
 
+Theorem eval_expr_sha256_cases:
+  eval_expr cx (Builtin ann Sha256 [e]) es = (res,es') ==>
+  (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc,es') /\ res = INR exc) \/
+  ?v es1. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+    (case builtin_result cx es1.accounts ann Sha256 [expr_type e] [v] of
+       INR exc => res = INR exc /\ es' = es1
+     | INL w => (do precompile_call_success Sha256; return (Value w) od) es1 = (res,es'))
+Proof
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
+  Cases_on `eval_exprs cx [e] es` >>
+  rename1 `eval_exprs cx [e] es = (rr, es1)` >>
+  drule eval_exprs_cons_cases >> strip_tac >> gvs[eval_exprs_nil] >>
+  simp[bind_def, return_def, get_accounts_def, lift_sum_def,
+       builtin_result_def, AllCaseEqs(), ignore_bind_def] >>
+  rpt strip_tac >> gvs[bind_def, AllCaseEqs()] >>
+  Cases_on `evaluate_builtin cx es1.accounts ann Sha256 [expr_type e] [v]` >>
+  gvs[return_def, raise_def, ignore_bind_def, bind_def] >> metis_tac[]
+QED
+
+Theorem sha256_source_outcome_step:
+  precompile_call_success Sha256 es =
+    case es.outcomes of
+      NONE => (INL (),es)
+    | SOME [] => (INR (Error (RuntimeError "precompile failed")),es)
+    | SOME (outcome::rest) =>
+        (if call_outcome_success outcome then INL ()
+         else INR (Error (RuntimeError "precompile failed")),
+         es with outcomes := SOME rest)
+Proof
+  Cases_on `es.outcomes` >> simp[precompile_call_success_def, return_def] >>
+  rename1 `SOME os` >> Cases_on `os` >>
+  simp[check_def, assert_def, return_def, raise_def] >>
+  Cases_on `call_outcome_success h` >> simp[return_def, raise_def]
+QED
+
+Theorem sha256_typed_builtin_result:
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v ==>
+  ?r. builtin_result cx accounts (BaseT (BytesT (Fixed 32)))
+    Sha256 [expr_type e] [v] = INL r
+Proof
+  strip_tac >> Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  simp[builtin_result_def, evaluate_builtin_def]
+QED
+
+Theorem eval_expr_unary_builtin_action:
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 ==>
+  eval_expr cx (Builtin ann bt [e]) =
+  bind (bind (eval_expr cx e) (read_result cx))
+    (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
+                INL w => INL (Value w) | INR exc => INR exc), es))
+Proof
+  strip_tac >> pure_rewrite_tac[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `eval_expr cx (Builtin ann bt [e]) x` >>
+  drule_all eval_expr_unary_builtin_cases >> strip_tac >> gvs[bind_def]
+QED
+
+Theorem eval_expr_sha256_action:
+  eval_expr cx (Builtin ann Sha256 [e]) =
+  bind (bind (eval_expr cx e) (read_result cx))
+    (\v es1. case builtin_result cx es1.accounts ann Sha256 [expr_type e] [v] of
+       INR exc => (INR exc, es1)
+     | INL w => (do precompile_call_success Sha256; return (Value w) od) es1)
+Proof
+  pure_rewrite_tac[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `eval_expr cx (Builtin ann Sha256 [e]) x` >>
+  drule eval_expr_sha256_cases >> strip_tac >> gvs[bind_def] >>
+  Cases_on `builtin_result cx es1.accounts ann Sha256 [expr_type e] [v]` >>
+  gvs[]
+QED
+
+(* The sha256 continuation reads the outcomes, never the gas observations. *)
+Theorem sha256_continuation_gas_obs:
+  (case builtin_result cx es1.accounts ann Sha256 tys [v] of
+     INR exc => (INR exc, es1)
+   | INL w => (do precompile_call_success Sha256; return (Value w) od) es1) =
+    (res, es2) ==>
+  !tail. (case builtin_result cx es1.accounts ann Sha256 tys [v] of
+     INR exc => (INR exc, es1 with gas_obs := tail)
+   | INL w => (do precompile_call_success Sha256; return (Value w) od)
+                (es1 with gas_obs := tail)) =
+    (res, es2 with gas_obs := tail)
+Proof
+  Cases_on `builtin_result cx es1.accounts ann Sha256 tys [v]` >> simp[] >>
+  simp[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
+  Cases_on `es1.outcomes` >> simp[return_def] >> strip_tac >> gvs[] >>
+  rename1 `SOME os` >> Cases_on `os` >> gvs[] >>
+  rename1 `SOME (outcome::_)` >>
+  Cases_on `call_outcome_success outcome` >> gvs[return_def]
+QED
+
+Theorem expr_exit_INR_cast[local]:
+  expr_exit (INR exc : value + exception) r ==>
+  expr_exit (INR exc : eval_result + exception) r
+Proof
+  Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+QED
+
 (* Unary composition keeps the complete argument postcondition available to
-   the suffix, including the footprint and protected-allocation frame. *)
+   the suffix, including the footprint and protected-allocation frame. The
+   suffix is an actual counted target path from every operand endpoint. *)
 Theorem compile_typed_unary_builtin_vv_sim:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
-  bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v es' s.
+  (!sa sm sb x vv s0 v gs es' s.
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
-    expr_post ctx func cenv cx e es sa sm s0 es' v x s ==>
-    frag_exec ctx sm sb (\t. t = s)
-      (\t. ?r. builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL r /\
-        vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es' (Value r) vv t)
-      (expr_exit (builtin_result cx es'.accounts ann bt [expr_type e] [v]))) ==>
+    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?n r. gas_marked_path F ctx func s n r /\
+      ((?t rv. r = OK t /\
+          builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
+          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+            (Value rv) vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\
+        expr_exit (builtin_result cx es'.accounts ann bt [expr_type e] [v]) r))) ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
@@ -2068,47 +2693,124 @@ Proof
   qpat_x_assum `!sa sb vv. _` drule >> strip_tac >>
   `cs_appends (code x)` by simp[] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
-  `!ar es1. (do r <- eval_expr cx e; read_result cx r od) es = (ar,es1) ==>
-     expr_sim_inv cenv cx env es1 /\ expr_res_ok ar /\
-     !v. ar = INL v ==> value_has_type (BaseTV bty) v` by
-    (rpt strip_tac >> drule_all expr_body_pre_base_result >> simp[]) >>
-  drule_at (Pos last) eval_expr_unary_builtin_cases >> simp[] >>
-  strip_tac
-  >- (gvs[] >> irule expr_sim_suffix >>
-      goal_assum (drule_at Any) >> simp[] >>
-      first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-      first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
-      simp[] >> rpt strip_tac >>
-      Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
-  Cases_on `builtin_result cx es'.accounts ann bt [expr_type e] [v]` >>
-  gvs[] >> irule expr_sim_suffix >>
-  goal_assum (drule_at Any) >> simp[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  `eval_expr cx (Builtin ann bt [e]) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
+                 INL w => INL (Value w) | INR exc => INR exc), es))` by
+    (irule eval_expr_unary_builtin_action >> simp[]) >>
+  qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
+    (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  irule expr_sim_suffix >>
+  first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
-  simp[] >> rpt strip_tac >>
-  gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `!sa sm sb x vv s0 s. _` drule_all >>
-  strip_tac >> irule frag_exec_conseq >>
-  first_x_assum (irule_at Any) >> simp[] >> rpt gen_tac >>
-  Cases_on `r` >> gvs[expr_exit_def] >>
-  rename1 `INR exc` >> Cases_on `exc` >> gvs[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  rpt strip_tac >>
+  drule_at (Pat `bind _ _ _ = _`)
+    (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
+  disch_then (qspecl_then [`env`, `cenv`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
+    (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
+     Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+  qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    simp[evaluation_state_component_equality] >>
+  qexists_tac `REPLICATE n F` >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
+                   INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
+  simp[expr_exit_success_map] >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+QED
+
+(* The sha256 composition: the operand, then the digest's precompile call,
+   whose outcome the source consumes. *)
+Theorem compile_typed_sha256_unary_vv_sim:
+  expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
+  (!sa sb vv. compile_expr cenv ty (Builtin ann Sha256 [e]) sa = (vv,sb) ==>
+    ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+      code x sm = (vv,sb)) /\
+  (!x. cs_appends (code x)) /\
+  (!sa sm sb x vv s0 v gs es1 s res es2.
+    lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    code x sm = (vv,sb) /\ fn_has_code sm sb func /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    local_ptrs_reserved cenv sm /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (INL v,es1) /\
+    value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es1 /\
+    expr_vv_res_ok res /\
+    (case builtin_result cx es1.accounts ann Sha256 [expr_type e] [v] of
+       INR exc => (INR exc,es1)
+     | INL w => (do precompile_call_success Sha256; return (Value w) od) es1) =
+       (res,es2) /\
+    expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?n r. gas_marked_path F ctx func s n r /\
+      ((?t rv. r = OK t /\ res = INL rv /\
+          vv_post ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
+            rv vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\ expr_exit res r))) ==>
+  expr_vv_sim ctx func cenv cx ty (Builtin ann Sha256 [e]) es
+Proof
+  strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then irule >> gvs[expr_body_pre_def]) >>
+  qpat_x_assum `!sa sb vv. _` drule >> strip_tac >>
+  `cs_appends (code x)` by simp[] >>
+  drule_all hash_unary_suffix_cut >> strip_tac >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
+    (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+  rewrite_tac[eval_expr_sha256_action] >> strip_tac >>
+  irule expr_sim_suffix >>
+  first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  rpt strip_tac >>
+  drule_at (Pat `bind _ _ _ = _`)
+    (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
+  disch_then (qspecl_then [`env`, `cenv`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `case builtin_result cx ee.accounts ann Sha256 [expr_type e] [v] of
+              INR exc => (INR exc,ee)
+            | INL w => (do precompile_call_success Sha256;
+                           return (Value w) od) ee` >>
+  rename1 `_ = (res, es2)` >>
+  `expr_vv_res_ok res` by
+    (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
+     disch_then irule >> gvs[]) >>
+  qpat_x_assum `!sa sm sb x vv s0 v gs es1 s res es2. _` drule_all >> strip_tac >>
+  drule sha256_continuation_gas_obs >> strip_tac >>
+  `es2 with gas_obs := [] = es2` by
+    (first_x_assum (qspec_then `[]` mp_tac) >>
+     `ee with gas_obs := [] = ee` by
+       simp[evaluation_state_component_equality] >>
+     pop_assum SUBST1_TAC >>
+     qpat_x_assum `_ = (res, es2)` SUBST1_TAC >>
+     simp[] >> metis_tac[]) >>
+  qexists_tac `REPLICATE n F` >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`res`, `es2`, `r`] >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem hash_eval_operand_inst_idx[simp]:
   eval_operand op (s with vs_inst_idx := n) = eval_operand op s
 Proof
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem vv_post_inst_idx[simp]:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv (s with vs_inst_idx := n) <=>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
-Proof
-  Cases_on `vv` >>
-  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def]
 QED
 
 Theorem hash_buffer_suffix_shape:
@@ -2296,7 +2998,7 @@ QED
 Theorem compile_typed_stack_unary_builtin_vv_sim:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
-  bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
      ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
        as_stack_val ann (code x sm) = (vv,sb)) /\
@@ -2337,11 +3039,17 @@ Proof
      Cases_on `bty` >> gvs[AllCaseEqs()] >>
      rename1 `expr_type e = BaseT (BytesT bd)` >>
      Cases_on `bd` >> gvs[AllCaseEqs()]) >>
-  drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >> strip_tac >>
+  drule (CONV_RULE (DEPTH_CONV ETA_CONV)
+    exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
+  simp[] >> strip_tac >>
   qpat_x_assum `!sa sm sb x op s0 v es' s. _` drule_all >>
   simp[] >> strip_tac >>
   qpat_x_assum `!x sm op sb. _` drule >> strip_tac >>
-  irule hash_run_frag >> simp[] >> metis_tac[]
+  qpat_x_assum `same_blocks _ _`
+    (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
+  drule_all hash_run_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  goal_assum drule >> gvs[]
 QED
 
 Theorem compile_keccak256_typed_vv_sim:
@@ -2394,7 +3102,50 @@ Proof
        PAD_RIGHT, word_of_bytes_be_def, word_of_bytes_word_to_bytes]
 QED
 
+Theorem sha256_fixed_fail_frag:
+  compile_sha256_bytesm x len sa = (op,sb) /\
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x s = SOME w /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+  MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (sa.cs_next_var + 1))]) (fn_insts func) ==>
+  frag_exec ctx sa sb (\t. t = s) Q
+    (expr_exit (INR (Error (RuntimeError "precompile failed"))))
+Proof
+  strip_tac >> irule hash_abort_frag >> simp[] >>
+  drule_all compile_sha256_bytesm_fail >> simp[]
+QED
+
+Theorem sha256_memory_fail_frag:
+  compile_sha256_bytes x sa = (op,sb) /\
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w len /\ b < dimword (:256) /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
+  frag_exec ctx sa sb (\t. t = s) Q
+    (expr_exit (INR (Error (RuntimeError "precompile failed"))))
+Proof
+  strip_tac >> irule hash_abort_frag >> simp[] >>
+  drule_all compile_sha256_bytes_fail >> simp[]
+QED
+
 Theorem sha256_fixed_post_run:
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) x s /\
   expr_type e = BaseT (BytesT (Fixed m)) /\
   value_has_type (BaseTV (BytesT (Fixed m))) (BytesV bs) /\ m <= 32 /\
@@ -2405,7 +3156,8 @@ Theorem sha256_fixed_post_run:
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-      es sa sb s0 es' (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
+      es sa sb s0 (es' with outcomes := SOME rest)
+      (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
       (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
   strip_tac >> drule_all hash_fixed_post_view >> strip_tac >>
@@ -2426,6 +3178,7 @@ Proof
 QED
 
 Theorem sha256_memory_post_run:
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
   lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
   compile_sha256_bytes x sm = (op,sb) /\ fn_has_code sm sb func /\
@@ -2438,7 +3191,8 @@ Theorem sha256_memory_post_run:
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-      es sa sb s0 es' (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
+      es sa sb s0 (es' with outcomes := SOME rest)
+      (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
       (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
   strip_tac >>
@@ -2458,6 +3212,7 @@ Proof
 QED
 
 Theorem sha256_typed_post_run:
+  s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
@@ -2474,7 +3229,8 @@ Theorem sha256_typed_post_run:
     ?r. builtin_result cx es'.accounts (BaseT (BytesT (Fixed 32)))
       Sha256 [expr_type e] [v] = INL r /\
     vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-      es sa sb s0 es' (Value r) (StackValue (BaseT (BytesT (Fixed 32))) op) t
+      es sa sb s0 (es' with outcomes := SOME rest)
+      (Value r) (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
   strip_tac >> Cases_on `bty` >>
   gvs[is_bytes_or_string_type_def] >>
@@ -2515,6 +3271,216 @@ Proof
   irule hash_buffer_suffix_shape >> qexistsl [`0`, `op`, `x`] >> simp[]
 QED
 
+Theorem sha256_typed_fail_frag:
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if is_bytestring_type (expr_type e) then compile_sha256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
+   | _ => compile_sha256_word x sm) = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+  frag_exec ctx sm sb (\t. t = s) Q
+    (expr_exit (INR (Error (RuntimeError "precompile failed"))))
+Proof
+  strip_tac >>
+  drule_all sha256_typed_suffix_shape >> strip_tac >>
+  `!z. x = Var z ==> not_fresh_at sm z` by
+    (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
+  >~ [`expr_type e = BaseT (BytesT bd)`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def]
+      >- (`n <= 32` by gvs[vyperValueTheory.evaluate_type_def] >>
+          drule_all hash_fixed_post_view >> strip_tac >>
+          drule_all (SRULE [] (Q.INST [`sha` |-> `T`] hash_fixed_alloca_code)) >>
+          strip_tac >>
+          irule sha256_fixed_fail_frag >> goal_assum (drule_at Any) >>
+          simp[] >> metis_tac[]) >>
+      drule_at (Pos hd) hash_dynamic_post_view >> simp[] >> strip_tac >>
+      drule_all hash_sha256_memory_alloca_code >> strip_tac >>
+      `b < dimword (:256)` by decide_tac >>
+      irule sha256_memory_fail_frag >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[]) >>
+  gvs[is_bytestring_type_def] >>
+  drule_at (Pos hd) hash_string_post_view >> simp[] >> strip_tac >>
+  drule_all hash_sha256_memory_alloca_code >> strip_tac >>
+  `b < dimword (:256)` by decide_tac >>
+  irule sha256_memory_fail_frag >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem sha256_typed_effectful_suffix:
+  expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if is_bytestring_type (expr_type e) then compile_sha256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
+   | _ => compile_sha256_word x sm) = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  (do precompile_call_success Sha256; return (Value r) od) es1 = (res,es2) /\
+  builtin_result cx es1.accounts (BaseT (BytesT (Fixed 32)))
+    Sha256 [expr_type e] [v] = INL r ==>
+  frag_exec ctx sm sb (\t. t = s)
+    (\t. ?rv. res = INL rv /\
+      vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+        es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  `es1.outcomes = SOME s.vs_outcomes` by
+    (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
+  Cases_on `s.vs_outcomes`
+  >- (gvs[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
+      irule sha256_typed_fail_frag >> simp[] >>
+      first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[]) >>
+  rename1 `s.vs_outcomes = outcome::rest` >>
+  Cases_on `outcome.co_success` >>
+  gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
+  >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+      simp[] >> strip_tac >> gvs[] >>
+      drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
+      irule hash_run_frag >> simp[] >> metis_tac[]) >>
+  irule sha256_typed_fail_frag >> simp[] >>
+  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
+QED
+
+Theorem sha256_typed_fail_run:
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if is_bytestring_type (expr_type e) then compile_sha256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
+   | _ => compile_sha256_word x sm) = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+  ?t. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `!z. x = Var z ==> not_fresh_at sm z` by
+    (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
+  >~ [`expr_type e = BaseT (BytesT bd)`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def]
+      >- (`n <= 32` by gvs[vyperValueTheory.evaluate_type_def] >>
+          drule_all hash_fixed_post_view >> strip_tac >>
+          drule_all (SRULE [] (Q.INST [`sha` |-> `T`] hash_fixed_alloca_code)) >>
+          strip_tac >>
+          `~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success)` by
+            metis_tac[] >>
+          drule_all compile_sha256_bytesm_fail >> simp[]) >>
+      drule_at (Pos hd) hash_dynamic_post_view >> simp[] >> strip_tac >>
+      drule_all hash_sha256_memory_alloca_code >> strip_tac >>
+      `b < dimword (:256)` by decide_tac >>
+      `~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success)` by
+        metis_tac[] >>
+      drule_all compile_sha256_bytes_fail >> simp[]) >>
+  gvs[is_bytestring_type_def] >>
+  drule_at (Pos hd) hash_string_post_view >> simp[] >> strip_tac >>
+  drule_all hash_sha256_memory_alloca_code >> strip_tac >>
+  `b < dimword (:256)` by decide_tac >>
+  `~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success)` by
+    metis_tac[] >>
+  drule_all compile_sha256_bytes_fail >> simp[]
+QED
+
+Theorem sha256_typed_fail_path:
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if is_bytestring_type (expr_type e) then compile_sha256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
+   | _ => compile_sha256_word x sm) = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?n a t. gas_marked_path F ctx func s n (Abort a t)
+Proof
+  strip_tac >>
+  drule_all sha256_typed_fail_run >> strip_tac >>
+  drule_all sha256_typed_suffix_shape >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb` by gvs[same_blocks_def] >>
+  drule_all hash_abort_path >> metis_tac[]
+QED
+
+(* The digest suffix as an actual counted path: its one GAS site, then the
+   precompile call whose outcome the source consumes. *)
+Theorem sha256_typed_effectful_path:
+  expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if is_bytestring_type (expr_type e) then compile_sha256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
+   | _ => compile_sha256_word x sm) = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  (do precompile_call_success Sha256; return (Value r) od) es1 = (res,es2) /\
+  builtin_result cx es1.accounts (BaseT (BytesT (Fixed 32)))
+    Sha256 [expr_type e] [v] = INL r /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?n rr. gas_marked_path F ctx func s n rr /\
+    ((?t rv. rr = OK t /\ res = INL rv /\
+        vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+          es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result rr /\ expr_exit res rr))
+Proof
+  strip_tac >>
+  `es1.outcomes = SOME s.vs_outcomes` by
+    (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
+  Cases_on `s.vs_outcomes`
+  >- (gvs[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
+      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
+      simp[] >> strip_tac >> goal_assum drule >>
+      simp[exit_result_def, expr_exit_def]) >>
+  rename1 `s.vs_outcomes = outcome::rest` >>
+  Cases_on `outcome.co_success` >>
+  gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
+  >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+      simp[] >> strip_tac >> gvs[] >>
+      drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
+      pop_assum drule >> strip_tac >>
+      qpat_x_assum `same_blocks _ _`
+        (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
+      drule_all hash_run_path >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      goal_assum drule >> gvs[]) >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
+  simp[] >> strip_tac >> goal_assum drule >>
+  simp[exit_result_def, expr_exit_def]
+QED
+
 Theorem compile_sha256_typed_vv_sim:
   expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es ==>
@@ -2527,28 +3493,46 @@ Proof
      gvs[expr_body_pre_def, well_typed_expr_def]) >>
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
-  irule compile_typed_stack_unary_builtin_vv_sim >>
-  simp[builtin_args_length_ok_def] >>
-  reverse conj_tac >- (qexists `env` >> gvs[]) >>
-  qexists `\x sm.
+  irule compile_typed_sha256_unary_vv_sim >> simp[] >>
+  qexistsl [`\x sm. as_stack_val ann
     (if is_bytestring_type (expr_type e) then compile_sha256_bytes x sm
      else case expr_type e of
        BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
-     | _ => compile_sha256_word x sm)` >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> drule_at (Pos hd) sha256_typed_post_run >> simp[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-      simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >>
-      disch_then drule >> simp[]) >>
-  gen_tac >> Cases_on `bty` >> gvs[is_bytes_or_string_type_def,
-    is_bytestring_type_def, hash_suffix_appends, SF ETA_ss] >>
-  rename1 `expr_type e = BaseT (BytesT bd)` >>
-  Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss]
+     | _ => compile_sha256_word x sm)`, `env`] >> simp[] >>
+  reverse conj_tac
+  >- (conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+          simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[]) >>
+      conj_tac >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
+      Cases_on `bty` >> gvs[is_bytes_or_string_type_def,
+        is_bytestring_type_def, hash_suffix_appends, SF ETA_ss] >>
+      rename1 `expr_type e = BaseT (BytesT bd)` >>
+      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss]) >>
+      gvs[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val _ compiled` >>
+  Cases_on `compiled` >> simp[as_stack_val_def] >> strip_tac >>
+  gvs[markerTheory.Abbrev_def] >>
+  `expr_body_pre cenv cx env e es1` by
+    (irule expr_body_pre_builtin_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
+  `evaluate_type (get_tenv cx) (BaseT bty) = SOME (BaseTV bty)` by
+    (drule expr_body_pre_type_evaluates >>
+     simp[vyperValueTheory.evaluate_type_def] >>
+     Cases_on `bty` >> gvs[AllCaseEqs()] >>
+     rename1 `expr_type e = BaseT (BytesT bd)` >>
+     Cases_on `bd` >> gvs[AllCaseEqs()]) >>
+  drule (CONV_RULE (DEPTH_CONV ETA_CONV)
+    exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
+  simp[] >> strip_tac >>
+  drule_at (Pos hd) sha256_typed_builtin_result >> simp[] >>
+  disch_then (qspecl_then [`v`, `cx`, `es1.accounts`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  irule sha256_typed_effectful_path >>
+  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[] >>
+  metis_tac[]
 QED
 
 (* The selector's word representation is independent of the hash producer. *)
@@ -2869,12 +3853,18 @@ Resume compile_method_id_runtime_typed_vv_sim[continuation]:
      Cases_on `bty` >> gvs[AllCaseEqs()] >>
      rename1 `expr_type e = BaseT (BytesT bd)` >>
      Cases_on `bd` >> gvs[AllCaseEqs()]) >>
-  drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >> strip_tac >>
+  drule (CONV_RULE (DEPTH_CONV ETA_CONV)
+    exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
+  simp[] >> strip_tac >>
   drule_at (Pos hd) method_id_runtime_typed_post_run >> simp[] >>
   disch_then drule_all >> strip_tac >>
   drule_at (Pos hd) method_id_typed_suffix_shape >> simp[] >>
   disch_then drule_all >> strip_tac >>
-  irule hash_run_frag >> simp[] >>
+  qpat_x_assum `same_blocks _ _`
+    (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
+  drule_all hash_run_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  goal_assum drule >> simp[] >>
   Cases_on `fixed` >> gvs[contextTheory.mk_ptr_def] >>
   irule vv_post_pointer_cong >> goal_assum (drule_at Any) >> simp[]
 QED

@@ -280,3 +280,35 @@ Proof
   simp[abi_decoder_coherent_tuple_iff] >> rpt strip_tac >>
   metis_tac[listTheory.LIST_REL_EL_EQN]
 QED
+
+Theorem abi_decoder_header_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields ==>
+  (abi_decoder_header ce' env ty tv <=> abi_decoder_header ce env ty tv)
+Proof
+  strip_tac >> drule type_memory_bytes_frame >>
+  simp[abi_decoder_header_def]
+QED
+
+Theorem abi_decoder_coherent_layout_transport:
+  !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
+  !ce'. ce'.ce_struct_fields = ce.ce_struct_fields /\
+        ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+        abi_decoder_coherent ce' env sf ty tv
+Proof
+  ho_match_mp_tac abi_decoder_coherent_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  `!ty tv. abi_decoder_header ce' env ty tv =
+            abi_decoder_header ce env ty tv` by
+    simp[abi_decoder_header_def] >>
+  simp[Once abi_decoder_coherent_cases] >>
+  gvs[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem abi_decoder_coherent_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields /\
+  ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+  (abi_decoder_coherent ce' env sf ty tv <=>
+   abi_decoder_coherent ce env sf ty tv)
+Proof
+  metis_tac[abi_decoder_coherent_layout_transport]
+QED

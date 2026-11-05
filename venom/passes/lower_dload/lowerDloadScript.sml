@@ -1,3 +1,3 @@
 Theory lowerDload
 Ancestors
-  lowerDloadDefs lowerDloadCorrectness
+  lowerDloadDefs lowerDloadSupplyProofs lowerDloadCallChecks

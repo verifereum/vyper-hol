@@ -309,7 +309,8 @@ QED
 
 Theorem store_copy_prefix_memory[local,simp]:
   (store_copy_prefix loc b k sbase i).vs_memory = sbase.vs_memory /\
-  (store_copy_prefix loc b k sbase i).vs_labels = sbase.vs_labels
+  (store_copy_prefix loc b k sbase i).vs_labels = sbase.vs_labels /\
+  (store_copy_prefix loc b k sbase i).vs_call_ctx = sbase.vs_call_ctx
 Proof
   Induct_on `i` >> simp[store_copy_prefix_suc] >>
   Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def]
@@ -374,14 +375,18 @@ QED
 
 Theorem store_copy_frame_memory[local]:
   store_copy_frame sa loc b k sbase i s ==>
-  s.vs_memory = sbase.vs_memory /\ s.vs_labels = sbase.vs_labels
+  s.vs_memory = sbase.vs_memory /\ s.vs_labels = sbase.vs_labels /\
+  s.vs_call_ctx = sbase.vs_call_ctx
 Proof
-  strip_tac >> fs[store_copy_frame_def] >> conj_tac
+  strip_tac >> fs[store_copy_frame_def] >> rpt conj_tac
   >- (qpat_x_assum `store_copy_normalize _ _ = _`
         (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >>
+      simp[store_copy_normalize_def])
+  >- (qpat_x_assum `store_copy_normalize _ _ = _`
+        (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >>
       simp[store_copy_normalize_def]) >>
   qpat_x_assum `store_copy_normalize _ _ = _`
-    (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >>
+    (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >>
   simp[store_copy_normalize_def]
 QED
 
@@ -459,8 +464,8 @@ Proof
          (update_var sv (b + n2w i * 32w) s1) =
        OK (update_var vv (mload (w2n (b + n2w i * 32w)) sbase)
              (update_var sv (b + n2w i * 32w) s1))` by
-        simp[step_inst_base_def, mk_inst_def, exec_read1_def,
-             eval_operand_update_var] >>
+        simp[stepInstBaseLib.simp_opcode_clause ``MLOAD``, mk_inst_def,
+             exec_read1_def, eval_operand_update_var] >>
       simp[run_inst_seq_def]) >>
   conj_tac
   >- (irule store_copy_frame_update >> gvs[] >> metis_tac[]) >>
@@ -476,7 +481,8 @@ Theorem store_copy_destination_run[local]:
     eval_operand (Var cv) s = SOME (n2w i) /\
     eval_operand (Var vv) s = SOME (mload (w2n (b + n2w i * 32w)) sbase) /\
     ALL_DISTINCT [cv;vv;dv] /\
-    (!x. not_fresh_at sa x ==> x <> dv) ==>
+    (!x. not_fresh_at sa x ==> x <> dv) /\
+    ~sbase.vs_call_ctx.cc_static ==>
     ?t. run_inst_seq
       [mk_inst id ADD [dst; Var cv] [dv];
        mk_inst (id+1) (if loc = LocStorage then SSTORE else TSTORE)
@@ -498,9 +504,15 @@ Proof
   >- (`step_inst_base (mk_inst id ADD [dst; Var cv] [dv]) s = OK s1` by
         (simp[Abbr `s1`] >> irule step_ADD >> simp[]) >>
       simp[run_inst_seq_def] >>
-      fs[ALL_DISTINCT, eval_operand_def] >> Cases_on `loc = LocStorage` >>
-      simp[step_inst_base_def, mk_inst_def, exec_write2_def,
-           eval_operand_def, lookup_var_update_var, Abbr `s1`]) >>
+      fs[ALL_DISTINCT, eval_operand_def] >>
+      `~(update_var dv (k + n2w i) s).vs_call_ctx.cc_static` by
+        (drule store_copy_frame_memory >> gvs[update_var_def]) >>
+      Cases_on `loc = LocStorage` >>
+      qpat_x_assum `~(update_var _ _ _).vs_call_ctx.cc_static` (fn th =>
+        simp[th, stepInstBaseLib.simp_opcode_clause ``SSTORE``,
+             stepInstBaseLib.simp_opcode_clause ``TSTORE``, mk_inst_def,
+             exec_write2_def, eval_operand_def, lookup_var_update_var,
+             Abbr `s1`])) >>
   conj_tac >- (irule store_copy_frame_store >> simp[]) >>
   Cases_on `loc = LocStorage` >>
   gvs[sstore_def, tstore_def, eval_operand_def, lookup_var_def,
@@ -527,8 +539,8 @@ Proof
   qexists_tac `update_var cv (n2w i + 1w) s1` >> conj_tac
   >- (`step_inst_base (mk_inst id ADD [Var cv; Lit 1w] [nv]) s = OK s1` by
         (simp[Abbr `s1`] >> irule step_ADD >> simp[eval_operand_lit]) >>
-      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
-           eval_operand_update_var, Abbr `s1`]) >>
+      simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ASSIGN``,
+           mk_inst_def, eval_operand_update_var, Abbr `s1`]) >>
   conj_tac >- (irule store_copy_frame_update >> metis_tac[]) >>
   simp[eval_operand_update_var, update_var_def, Abbr `s1`,
        arithmeticTheory.ADD1, wordsTheory.word_add_n2w]
@@ -541,7 +553,8 @@ Theorem store_copy_body_run[local]:
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
     eval_operand (Var cv) s = SOME (n2w i) /\
     ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
-    (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) ==>
+    (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) /\
+    ~sbase.vs_call_ctx.cc_static ==>
     ?t. run_inst_seq
       [mk_inst id MUL [Var cv; Lit 32w] [mv];
        mk_inst (id+1) ADD [src; Var mv] [sv];
@@ -592,7 +605,8 @@ Theorem store_copy_body_frag[local]:
     eval_operand src sbase = SOME b /\ eval_operand dst sbase = SOME k /\
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
     ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
-    (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) ==>
+    (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) /\
+    ~sbase.vs_call_ctx.cc_static ==>
     frag_exec ctx stb ste
       (\s. store_copy_frame sa loc b k sbase i s /\
            eval_operand (Var cv) s = SOME (n2w i))
@@ -623,7 +637,8 @@ Proof
   fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> gvs[] >> disj1_tac >>
   qexists_tac `update_var cv 0w sbase` >> conj_tac
-  >- simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, eval_operand_lit] >>
+  >- simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ASSIGN``,
+          mk_inst_def, eval_operand_lit] >>
   conj_tac >- (irule store_copy_frame_update >> simp[] >> metis_tac[]) >>
   simp[eval_operand_def, lookup_var_update_var, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE]
@@ -730,7 +745,8 @@ Theorem compile_store_copy_frag:
     compile_word_copy_loop src dst n LocMemory loc F sa = (u,sb) /\
     n < dimword (:256) /\
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
-    eval_operand src sbase = SOME b /\ eval_operand dst sbase = SOME k ==>
+    eval_operand src sbase = SOME b /\ eval_operand dst sbase = SOME k /\
+    ~sbase.vs_call_ctx.cc_static ==>
     frag_exec ctx sa sb (\s. s = sbase)
       (\s. (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
            s with <| vs_vars := sbase.vs_vars;
@@ -747,7 +763,8 @@ Proof
       (\s. store_copy_frame sa loc b k sbase i s /\ eval_operand (Var cv) s = SOME (n2w i))
       (\s. store_copy_frame sa loc b k sbase (SUC i) s /\
            eval_operand (Var cv) s = SOME (n2w (SUC i))) R` by
-    (rpt strip_tac >> irule store_copy_body_frag >> conj_tac
+    (rpt strip_tac >> irule store_copy_body_frag >>
+     conj_tac >- first_assum ACCEPT_TAC >> conj_tac
      >- (goal_assum (drule_at (Pat `emitted_insts _ _ = [_;_;_;_;_;_;_]`)) >>
          fs[ALL_DISTINCT, MEM] >> metis_tac[]) >> simp[]) >>
   `cv <> tv /\ (!x. not_fresh_at sa x ==> x <> tv)` by

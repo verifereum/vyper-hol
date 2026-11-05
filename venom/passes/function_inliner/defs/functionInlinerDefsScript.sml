@@ -104,23 +104,25 @@ End
 
 (* Rewrite a single instruction in a cloned block.
    Returns (replacement instructions, updated param_idx).
-   PARAM → ASSIGN from caller's operand (rotated).
-     The last PARAM gets a Label operand (return PC). Python assigns it
-     because labels are addresses at runtime. Our eval_operand returns
-     NONE for Labels — the correctness proof must show this assign is
-     dead code (output unused after RET → JMP).
-   RET → assign return values to INVOKE outputs, then JMP to return block.
+   Matches Python _inline_call_site:
+   param-class (PARAM, FMP_PARAM, RETPC_PARAM) → ASSIGN from the rotated
+     INVOKE operand at param_idx. The last one gets a Label operand (return
+     PC). Python assigns it because labels are addresses at runtime; the
+     correctness proof must show this assign is dead (its output is unused
+     once RET becomes JMP).
+   RET / RETFMP → assign return values to INVOKE outputs, then JMP to the
+     return block.
    Others → unchanged. *)
 Definition rewrite_inline_inst_def:
   rewrite_inline_inst invoke_ops invoke_outs return_label inst param_idx =
-    if inst.inst_opcode = PARAM then
+    if is_param_opcode inst.inst_opcode then
       if param_idx < LENGTH invoke_ops then
         ([inst with <| inst_opcode := ASSIGN;
                        inst_operands := [EL param_idx invoke_ops] |>],
          param_idx + 1)
       else
         ([inst], param_idx)
-    else if inst.inst_opcode = RET then
+    else if inst.inst_opcode = RET ∨ inst.inst_opcode = RETFMP then
       let all_but_last =
         TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands in
       let ret_vals = FILTER (λop. ¬is_label_op op) all_but_last in

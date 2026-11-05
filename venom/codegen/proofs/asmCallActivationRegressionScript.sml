@@ -122,14 +122,20 @@ Proof
        asm_state_component_equality]
 QED
 
+(* A computed call takes its success from the next outcome, its data from
+   precompile_result, and records no request. *)
 Theorem computed_empty_ecrecover_dispatch:
+  s.as_outcomes = outcome::rest /\ outcome.co_success ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 1w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_returndata := [] |>)) /\
+  AsmOK (asm_next (s with <| as_stack := [1w]; as_returndata := [];
+                            as_outcomes := rest |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 1w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_returndata := [] |>))
+  AsmOK (asm_next (s with <| as_stack := [1w]; as_returndata := [];
+                            as_outcomes := rest |>))
 Proof
+  strip_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
@@ -201,21 +207,22 @@ Proof
 QED
 
 Theorem computed_sha256_and_ec_dispatch:
+  s.as_outcomes = outcome::rest /\ outcome.co_success ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 2w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w];
+  AsmOK (asm_next (s with <| as_stack := [1w]; as_outcomes := rest;
     as_returndata := word_to_bytes
       (0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855w:bytes32) T |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 6w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w];
+  AsmOK (asm_next (s with <| as_stack := [1w]; as_outcomes := rest;
                             as_returndata := REPLICATE 64 0w |>)) /\
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 7w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w];
+  AsmOK (asm_next (s with <| as_stack := [1w]; as_outcomes := rest;
                             as_returndata := REPLICATE 64 0w |>))
 Proof
-  rpt conj_tac >>
+  strip_tac >> rpt conj_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
        asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
        computed_precompile_addresses, take_outcome_def, record_request_def,
@@ -225,14 +232,26 @@ Proof
        asm_state_component_equality]
 QED
 
+Theorem asm_invalid_ec_request[local]:
+  s.as_memory = REPLICATE 63 0w ++ [1w] /\ (addr = 6w \/ addr = 7w) ==>
+  take_outcome (asm_call_request s addr 0w 0 64 static) os =
+    (failed_outcome (asm_call_request s addr 0w 0 64 static),DROP 1 os) /\
+  record_request (asm_call_request s addr 0w 0 64 static) rqs = rqs
+Proof
+  strip_tac >> irule take_outcome_invalid_ec >>
+  simp[asm_call_request_def, asm_expand_memory_def, TAKE_LENGTH_TOO_LONG]
+QED
+
 Theorem computed_invalid_ec_dispatch:
-  s.as_memory = REPLICATE 63 (0w:byte) ++ [1w] ==>
+  s.as_memory = REPLICATE 63 (0w:byte) ++ [1w] /\ s.as_outcomes = outcome::rest ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 6w; 0w; 0w; 64w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [] |>)) /\
+  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [];
+                            as_outcomes := rest |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 7w; 0w; 64w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [] |>))
+  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [];
+                            as_outcomes := rest |>))
 Proof
   strip_tac >> conj_tac >>
   simp[Excl "asm_consume_call_outcome_eq", asm_step_call_staticcall_gas,
@@ -244,6 +263,22 @@ Proof
        precompile_result_invalid_ec, failed_outcome_def,
        adopt_outcome_def, adopt_outcome_deletions_def,
        asm_next_def, asm_state_component_equality]
+QED
+
+(* A failed outcome fails a computed call with valid input (starvation). *)
+Theorem computed_starved_sha256_dispatch:
+  s.as_outcomes = outcome::rest /\ ~outcome.co_success ==>
+  asm_step lo otp (AsmOp "STATICCALL")
+    (s with as_stack := [gas; 2w; 0w; 0w; 0w; 0w]) =
+  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [];
+                            as_outcomes := rest |>))
+Proof
+  strip_tac >>
+  simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def,
+       asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
+       computed_precompile_addresses, take_outcome_def, record_request_def,
+       precompile_result_empty_sha256, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def, asm_next_def, asm_state_component_equality]
 QED
 
 Theorem nonzero_value_precompile_shaped_call:
@@ -295,4 +330,39 @@ Proof
   rewrite_tac[DECIDE ``1 = SUC 0``] >>
   simp[Once asm_steps_def, asm_step_call_staticcall_gas,
        asm_gas_def, asm_push_val_def, asm_next_def] >> simp[asm_steps_def]
+QED
+
+Theorem concrete_result_deletion_delta:
+  es.contexts = [(ctxt,rb)] /\ es.rollback.toDelete = [5w] /\
+  s.as_pending_deletions = [7w] ==>
+  (SND (THE (extract_asm_result s 1w 0 0
+        (SOME (INR NONE,es))))).as_pending_deletions = [5w;7w] /\
+  (SND (THE (extract_asm_result s 1w 0 0
+        (SOME (INR (SOME Reverted),es))))).as_pending_deletions = [7w]
+Proof
+  strip_tac >> simp[extract_asm_result_def]
+QED
+
+(* Both creation opcodes consume the same queued completion as Venom,
+   including the returned address and failure-side account rollback. *)
+Theorem creation_consumes_recorded_outcome:
+  s.as_outcomes = outcome::rest ==>
+  (case salt of
+     NONE => asm_exec_create (s with as_stack := [value; 0w; 0w])
+   | SOME n => asm_exec_create2 (s with as_stack := [value; 0w; 0w; n])) =
+  AsmOK (asm_next (s with <|
+    as_stack := [if outcome.co_success then w2w outcome.co_created else 0w];
+    as_outcomes := rest;
+    as_requests := s.as_requests ++ [asm_create_request s value 0 0 salt];
+    as_accounts := outcome.co_accounts; as_transient := outcome.co_tStorage;
+    as_logs := if outcome.co_success then s.as_logs ++ outcome.co_logs else s.as_logs;
+    as_pending_deletions := if outcome.co_success
+      then outcome.co_toDelete ++ s.as_pending_deletions else s.as_pending_deletions;
+    as_returndata := outcome.co_returnData |>))
+Proof
+  strip_tac >> Cases_on `salt` >>
+  simp[asm_exec_create_def, asm_exec_create2_def, asm_create_request_def, asm_call_memory_def,
+       asm_consume_create_outcome_def, take_outcome_def, record_request_def,
+       computed_precompile_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       asm_next_def, asm_state_component_equality]
 QED

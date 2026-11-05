@@ -139,3 +139,65 @@ Proof
   simp[Abbr `gen`] >> rpt strip_tac >>
   drule generate_fn_plan_with_cleanup_alloc_mono >> simp[]
 QED
+
+(* ===== Spill regions lie in the gap [max_live_eom, cp_initial_fmp) ===== *)
+
+(* Helper: the next spill base never passes the larger of the static end
+   and the live spill peak; an empty region leaves both unchanged. *)
+Theorem generate_context_regions_next_le:
+  !fns acc acc'.
+    (!fn base labels ops ps.
+      gen fn base labels = SOME (ops, ps) ==>
+      base <= ps.ps_alloc.sa_next_offset) /\
+    acc.cpa_next_spill_base <= MAX max_eom acc.cpa_peak_spill_end /\
+    generate_context_regions gen fns acc = SOME acc' ==>
+    acc'.cpa_next_spill_base <= MAX max_eom acc'.cpa_peak_spill_end
+Proof
+  Induct_on `fns` >- simp[generate_context_regions_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_context_regions _ (_::_) _ = _` mp_tac >>
+  simp[Once generate_context_regions_def, AllCaseEqs()] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `generate_context_regions gen fns next` >>
+  last_x_assum (qspecl_then [`next`, `acc'`] mp_tac) >>
+  impl_tac >- (
+    simp[Abbr `next`] >> conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_x_assum `v = _` SUBST_ALL_TAC >>
+    `acc.cpa_next_spill_base <= ps.ps_alloc.sa_next_offset` by
+      (first_assum irule >> metis_tac[]) >>
+    rw[MAX_DEF] >> fs[MAX_DEF]) >>
+  simp[]
+QED
+
+(* TOP-LEVEL: a generated plan's static end is the context's max_live_eom,
+   and every spill region lies between it and the initial free-memory
+   pointer, which fits a word. *)
+Theorem generate_context_plan_spill_gap:
+  generate_context_plan ctx = SOME cp ==>
+  max_live_eom ctx = SOME cp.cp_max_static_eom /\
+  cp.cp_initial_fmp < dimword (:256) /\
+  !r. MEM r cp.cp_regions ==>
+      cp.cp_max_static_eom <= r.sr_spill_base /\
+      r.sr_spill_end <= cp.cp_initial_fmp
+Proof
+  simp[generate_context_plan_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `generate_context_plan_with gen ctx` >>
+  `!fn base labels ops ps.
+     gen fn base labels = SOME (ops, ps) ==>
+     base <= ps.ps_alloc.sa_next_offset` by
+    (simp[Abbr `gen`] >> rpt strip_tac >>
+     drule generate_fn_plan_with_cleanup_alloc_mono >> simp[]) >>
+  qpat_x_assum `generate_context_plan_with _ _ = _` mp_tac >>
+  simp[generate_context_plan_with_def, AllCaseEqs()] >>
+  strip_tac >> gvs[finish_context_plan_def] >>
+  qmatch_asmsub_abbrev_tac `generate_context_regions gen _ init` >>
+  `context_plan_acc_layout max_eom init` by
+    simp[Abbr `init`, context_plan_acc_layout_init] >>
+  drule_all generate_context_regions_layout >> strip_tac >>
+  `init.cpa_next_spill_base <= MAX max_eom init.cpa_peak_spill_end` by
+    simp[Abbr `init`] >>
+  drule_all generate_context_regions_next_le >> strip_tac >>
+  mp_tac (Q.INST [`n` |-> `MAX max_eom acc.cpa_peak_spill_end`]
+    ceil32_ge) >>
+  fs[context_plan_acc_layout_def, EVERY_MEM] >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED

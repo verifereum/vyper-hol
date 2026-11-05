@@ -30,11 +30,20 @@
 
 Theory stmtSimAugAssignAttrStorage
 Ancestors
+  exprBopSimDefs
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec freshWrites loweringSlice exprSim exprSimHyps exprSimOps
+  fragExec freshWrites loweringSlice  exprSimHyps exprSimOps
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimAttributeFields
   exprSimUnwrap
-  stmtSim stmtSimDeclMem stmtSimAssign stmtSimAssignStorage stmtSimAugAssign
+   stmtSimDeclMem stmtSimAssign stmtSimAssignStorage stmtSimAugAssign
   stmtSimAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding accountsRelProps
@@ -99,7 +108,7 @@ QED
    facts needed by the backend load, independently of RHS evaluation. *)
 Theorem augassign_storage_field_read[local]:
   !cx es src id ts tr sid id_str slot fs fld off ftv ty.
-    contract_storage_well_formed cx es /\
+    contract_storage_well_formed cx es /\ storage_layout_safe cx /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts =
       SOME (StorageVarDecl tr (StructT sid), id_str) /\
@@ -109,7 +118,9 @@ Theorem augassign_storage_field_read[local]:
     evaluate_type (get_tenv cx) ty = SOME ftv ==>
     ?cur. read_storage_slot cx tr (n2w slot + n2w off) ftv es =
             (INL cur, es) /\
-          storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es
+          !ctx func cenv s.
+            stmt_state_rel ctx func cenv cx es s ==>
+            storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es s
 Proof
   rpt strip_tac >>
   drule_all toplevel_storage_read_decodes >> strip_tac >>
@@ -125,9 +136,19 @@ Proof
   drule_all vyperLookupStorageTheory.storage_field_slots_in_range >>
   strip_tac >>
   qexists_tac `fv` >> simp[storage_holds_def, read_result_def, return_def] >>
-  irule storage_read_live_field >>
-  goal_assum (drule_at Any) >>
-  irule declared_storage_region_read_live >> goal_assum (drule_at Any)
+  rpt strip_tac >>
+  irule storage_range_agree_field >> goal_assum (drule_at Any) >>
+  irule storage_range_agree_of_live >> conj_tac
+  >- (drule_all
+        vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >>
+      simp[]) >>
+  qexistsl_tac [`cx`, `tr`] >> conj_tac
+  >~ [`storage_read_live`]
+  >- (irule declared_storage_region_read_live >> goal_assum (drule_at Any)) >>
+  Cases_on `tr` >>
+  gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+      vyperStorageBackendTheory.get_storage_def,
+      vfmStateTheory.lookup_account_def]
 QED
 
 (* The saved field is read before the RHS; its address and type are kept
@@ -193,7 +214,9 @@ Theorem augassign_attr_storage_source[local]:
       off /\
       evaluate_type (get_tenv cx) ty = SOME ftv /\
       value_has_type ftv cur /\ word_value cur /\
-      storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es /\
+      (!ctx func s.
+         stmt_state_rel ctx func cenv cx es s ==>
+         storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es s) /\
       (do tv <- eval_expr cx e; read_result cx tv od) es = (r1, es1) /\
       expr_res_ok r1 /\
       (!v2. r1 = INL v2 ==> ?tv2.
@@ -223,7 +246,8 @@ Proof
   `ALOOKUP fs fld = SOME ftv` by
     metis_tac[vyperPlaceTypingTheory.struct_field_slot_type] >>
   gvs[] >>
-  `contract_storage_well_formed cx es` by fs[expr_sim_inv_def] >>
+  `contract_storage_well_formed cx es /\ storage_layout_safe cx` by
+    fs[expr_sim_inv_def] >>
   drule_all augassign_storage_field_read >> strip_tac >>
   `well_formed_type_value ftv` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
@@ -237,14 +261,7 @@ Proof
   drule_all expr_body_pre_word_result >> strip_tac >>
   qexistsl_tac [`cur`, `r1`, `es1`] >> simp[] >>
   rpt conj_tac
-  >- metis_tac[]
-  >- (Cases_on `r1` >> gvs[] >>
-      qmatch_asmsub_abbrev_tac `evaluate_binop u ftv bop cur v2` >>
-      `bop_result cx ty bop [ty; expr_type e] cur v2 es1 =
-        case evaluate_binop u ftv bop cur v2 of
-          INL v => INL v | INR err => INR (Error err)` by
-        (simp[Abbr `u`] >> irule bop_result_augassign >> simp[]) >>
-      Cases_on `evaluate_binop u ftv bop cur v2` >> gvs[])
+  >~ [`encode_value`]
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       `value_has_type ftv v` by
         (qpat_x_assum `bop_result _ _ _ _ _ _ _ = _` mp_tac >>
@@ -261,11 +278,21 @@ Proof
       `word_value v` by metis_tac[word_value_type_typed] >>
       `is_word_type ty` by metis_tac[word_value_type_word] >>
       drule_all encode_value_word_typed >>
-      simp[typed_val_to_w256_word_value]) >>
-  rpt gen_tac >> irule storage_dead_update_struct_word_field >>
-  qexistsl_tac [`fld`, `fs`, `ftv`, `src`, `id`] >>
-  simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
-  metis_tac[word_value_type_word, word_type_slot_size]
+      simp[typed_val_to_w256_word_value])
+  >~ [`storage_dead`]
+  >- (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
+      qexistsl_tac [`fld`, `fs`, `ftv`, `src`, `id`] >>
+      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+      metis_tac[word_value_type_word, word_type_slot_size])
+  >~ [`bop_result`]
+  >- (Cases_on `r1` >> gvs[] >>
+      qmatch_asmsub_abbrev_tac `evaluate_binop u ftv bop cur v2` >>
+      `bop_result cx ty bop [ty; expr_type e] cur v2 es1 =
+        case evaluate_binop u ftv bop cur v2 of
+          INL v => INL v | INR err => INR (Error err)` by
+        (simp[Abbr `u`] >> irule bop_result_augassign >> simp[]) >>
+      Cases_on `evaluate_binop u ftv bop cur v2` >> gvs[]) >>
+  metis_tac[]
 QED
 
 Theorem augassign_attr_storage_code_parts[local]:
@@ -325,7 +352,8 @@ Theorem augassign_storage_load_frag[local]:
     emit_op (if tr then TLOAD else SLOAD) [dst] sn = (cur, s1) /\
     local_ptrs_reserved cenv sa /\ is_word_type ty /\
     evaluate_type (get_tenv cx) ty = SOME ftv /\ word_value v /\
-    storage_holds cx tr ty (Value v) (slot + n2w off) es ==>
+    (!s. stmt_state_rel ctx func cenv cx es s ==>
+         storage_holds cx tr ty (Value v) (slot + n2w off) es s) ==>
     frag_exec ctx sa s1 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. stmt_state_rel ctx func cenv cx es s /\
            eval_operand dst s = SOME (slot + n2w off) /\
@@ -362,7 +390,9 @@ Proof
   rpt strip_tac >>
   `(if tr then tload (slot + n2w off) t else sload (slot + n2w off) t) =
      val_to_w256 v` by
-    (drule_all storage_holds_load >> simp[typed_val_to_w256_word_value]) >>
+    (`storage_holds cx tr ty (Value v) (slot + n2w off) es t` by
+       metis_tac[] >>
+     drule_all storage_holds_load >> simp[typed_val_to_w256_word_value]) >>
   `frag_exec ctx sn s1
      (\s. s = t /\ stmt_state_rel ctx func cenv cx es s)
      (\s. stmt_state_rel ctx func cenv cx es s /\
@@ -375,8 +405,8 @@ Proof
     (irule emit_op_frag >> simp[] >>
      qexistsl_tac [`[Var d]`, `if tr then TLOAD else SLOAD`] >>
      simp[] >> conj_tac >- (Cases_on `tr` >> simp[is_terminator_def]) >>
-     rpt strip_tac >> Cases_on `tr` >>
-     gvs[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+     rpt strip_tac >> Cases_on `tr` >> fs[] >>
+     simp[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
   pop_assum (mp_then Any irule frag_exec_weaken) >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `!x. not_fresh_at sa x ==> not_fresh_at sn x` by
@@ -397,7 +427,8 @@ Theorem augassign_attr_storage_frag[local]:
     fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ is_word_type ty /\
     evaluate_type (get_tenv cx) ty = SOME ftv /\ word_value v1 /\
-    storage_holds cx tr ty (Value v1) (slot + n2w off) es /\
+    (!s. stmt_state_rel ctx func cenv cx es s ==>
+         storage_holds cx tr ty (Value v1) (slot + n2w off) es s) /\
     expr_sim ctx func cenv cx ty e es /\
     (do result <- eval_expr cx e; read_result cx result od) es = (r1, es1) /\
     expr_res_ok r1 /\
@@ -499,11 +530,8 @@ QED
    slot.  e may call internal functions: its simulation at ty is a
    premise. *)
 Theorem compile_augassign_attr_storage_case:
-  !ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es res es'
+  !ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
    ts tr id_str slot.
-    eval_stmt cx
-      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
-      es = (res, es') /\
     expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts =
@@ -513,12 +541,16 @@ Theorem compile_augassign_attr_storage_case:
     cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
             bop e))
-      es res es'
+      (eval_stmt cx
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -535,6 +567,9 @@ Proof
   rename1 `value_has_type ftv v1` >>
   qmatch_asmsub_abbrev_tac `storage_holds cx tr ty (Value v1)
     (n2w slot + n2w off) es` >>
+  `!s. stmt_state_rel ctx func cenv cx es s ==>
+       storage_holds cx tr ty (Value v1) (n2w slot + n2w off) es s` by
+    metis_tac[] >>
   `cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
    (!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l)` by
     (drule_all expr_body_pre_lower_value_word_shape >> simp[]) >>
@@ -555,6 +590,15 @@ Proof
          simp[] >>
          Cases_on `bop_result cx ty bop [ty; expr_type e] v1 v2 es1` >>
          gvs[expr_res_ok_def, stmt_res_ok_def, bop_result_def, AllCaseEqs()]) >>
+     gvs[] >> drule eval_expr_read_INL >> strip_tac >>
+     `!n. expr_int_literal e = SOME n ==> v2 = IntV n` by
+       metis_tac[eval_expr_int_literal_agrees] >>
+     `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+       (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
+     `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
+       (strip_tac >> gvs[nonneg_int_literal_def,
+                         GSYM expr_int_literal_value] >>
+        Cases_on `expr_int_literal e` >> gvs[]) >>
      irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
   `!v2 v. r1 = INL v2 /\
     bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v ==>

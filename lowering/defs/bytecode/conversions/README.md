@@ -7,8 +7,9 @@ checker modes and proves each complete bytecode pair equal to the HOL compiler's
 output, using the same `memoryStoreWitnessLib` as the other compiler witnesses.
 
 `checker-sources/` and `checker-oracle/` retain the 15 codegen-rejected controls:
-the seven inconsistent width conversions must fail the HOL checker, while the
-eight conversions where HOL lowering and source semantics agree stay accepted.
+the ten conversions outside Vyper's input sets or inconsistent in width must
+fail the HOL checker, while the five conversions where HOL lowering and source
+semantics agree stay accepted.
 The same theory checks these verdicts on the exported ASTs in both modes.
 
 The default CI builds the theory and reproduces both sets of independent inputs

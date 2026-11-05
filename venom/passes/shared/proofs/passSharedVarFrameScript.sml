@@ -84,7 +84,7 @@ val step_base_result_tac =
   rw[step_inst_base_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
@@ -110,7 +110,7 @@ Triviality exec_result_helpers_not_intret[simp]:
 Proof
   simp_tac exec_result_head_ss
     [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def]
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, exec_alloca_def]
 QED
 
 Triviality exec_call_helpers_not_intret[simp]:
@@ -134,9 +134,7 @@ Triviality exec_call_helpers_no_halt_abort[simp]:
   (!inst s g a ao as_ ro rs ab s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
+     exec_create inst s v off sz salt <> Halt s')
 Proof
   simp_tac exec_call_result_head_ss []
 QED
@@ -156,8 +154,9 @@ Theorem step_inst_base_no_intret[local]:
     step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* ===================================================================== *)
@@ -194,8 +193,8 @@ val exec_delegatecall_update_var = prove(
      extract_venom_result_def, write_memory_with_expansion_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
 
-val exec_create_update_var = prove(
-  ``!inst x w s v off sz salt.
+Theorem exec_create_update_var[local]:
+  !inst x w s v off sz salt.
     ~MEM x inst.inst_outputs ==>
     exec_create inst (update_var x w s) v off sz salt =
     case exec_create inst s v off sz salt of
@@ -203,12 +202,12 @@ val exec_create_update_var = prove(
     | Error e => Error e
     | Abort ab s' => Abort ab (update_var x w s')
     | Halt s' => Halt (update_var x w s')
-    | IntRet vs s' => IntRet vs (update_var x w s')``,
-  rw[exec_create_def, update_var_def,
-     make_venom_create_state_def, venom_to_tx_params_def,
-     extract_venom_result_def, write_memory_with_expansion_def,
-     read_memory_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
+    | IntRet vs s' => IntRet vs (update_var x w s')
+Proof
+  rw[exec_create_def, update_var_def, venom_create_request_def,
+     read_memory_def, halt_state_def, set_returndata_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]
+QED
 
 val wmwe_update_var = prove(
   ``!x w off dat s.
@@ -315,6 +314,20 @@ Proof
                          finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
+Triviality exec_gas_var_frame[local]:
+  !inst x w st.
+    ~MEM x inst.inst_outputs ==>
+    exec_gas inst (update_var x w st) =
+    var_frame_result x w (exec_gas inst st)
+Proof
+  rw[exec_gas_def, var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `st.vs_gas_readings` >>
+  gvs[var_frame_result_def, update_var_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Triviality exec_read1_var_frame[local]:
   !f inst x w st.
     (!a s0. f a (update_var x w s0) = f a s0) /\
@@ -410,7 +423,8 @@ QED
 
 val exec_frame_thms =
   [exec_pure1_var_frame, exec_pure2_var_frame, exec_pure3_var_frame,
-   exec_read0_var_frame, exec_read1_var_frame, exec_write2_var_frame,
+   exec_read0_var_frame, exec_gas_var_frame, exec_read1_var_frame,
+   exec_write2_var_frame,
    exec_alloca_var_frame, exec_ext_call_var_frame,
    exec_delegatecall_var_frame, exec_create_var_frame];
 

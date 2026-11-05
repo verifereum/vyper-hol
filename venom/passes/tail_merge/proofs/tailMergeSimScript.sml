@@ -82,13 +82,12 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-(* Same canonical instruction implies same opcode, id, and output count *)
+(* Same canonical instruction implies same opcode *)
 Theorem canon_inst_same_fields:
   !vm1 vm2 inst1 inst2 vm1' vm2' ci.
     canon_inst vm1 inst1 = (vm1', ci) /\
     canon_inst vm2 inst2 = (vm2', ci) ==>
-    inst1.inst_opcode = inst2.inst_opcode /\
-    inst1.inst_id = inst2.inst_id
+    inst1.inst_opcode = inst2.inst_opcode
 Proof
   rw[canon_inst_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[])
@@ -100,15 +99,6 @@ Theorem canon_inst_same_opcode:
     canon_inst vm1 inst1 = (vm1', ci) /\
     canon_inst vm2 inst2 = (vm2', ci) ==>
     inst1.inst_opcode = inst2.inst_opcode
-Proof
-  metis_tac[canon_inst_same_fields]
-QED
-
-Theorem canon_inst_same_id:
-  !vm1 vm2 inst1 inst2 vm1' vm2' ci.
-    canon_inst vm1 inst1 = (vm1', ci) /\
-    canon_inst vm2 inst2 = (vm2', ci) ==>
-    inst1.inst_id = inst2.inst_id
 Proof
   metis_tac[canon_inst_same_fields]
 QED
@@ -539,14 +529,22 @@ Proof
   rpt strip_tac >>
   `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
     by gvs[execution_equiv_def] >>
+  `LENGTH inst1.inst_operands = LENGTH inst2.inst_operands`
+    by metis_tac[listTheory.LENGTH_MAP] >>
+  `eval_operands inst1.inst_operands s1 = eval_operands inst2.inst_operands s2`
+    by (irule eval_operands_match >> rw[] >>
+        qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `EL i`) >>
+        gvs[listTheory.EL_MAP]) >>
   ASM_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst1.inst_operands` >> Cases_on `inst2.inst_operands` >>
   gvs[result_equiv_def] >>
   TRY (Cases_on `t`) >> TRY (Cases_on `t'`) >>
   gvs[AllCaseEqs(), result_equiv_def, LET_THM] >>
   TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
   irule halt_state_ee_UNIV >>
-  irule ee_UNIV_with_accounts >>
+  irule set_returndata_ee_UNIV >>
+  TRY (irule ee_UNIV_with_accounts) >>
   ASM_REWRITE_TAC[]
 QED
 

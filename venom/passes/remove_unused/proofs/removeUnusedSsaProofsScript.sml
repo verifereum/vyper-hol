@@ -3,8 +3,8 @@
  *
  * Key theorem: nop_output_not_used_as_operand
  *   Under wf_ssa + ssa_form, NOP'd variables are never used
- *   as operands. This discharges the extern in
- *   remove_unused_single_pass_correct_proof.
+ *   as operands. This supplies the fixed erased-variable invariant for
+ *   backward GAS-oracle reconstruction.
  *
  * Strategy:
  *   Same block: live_vars_at_uses + live_vars_at_propagate_range gives
@@ -334,15 +334,6 @@ Theorem phi_pairs_mem_var[local]:
 Proof
   ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >>
   qpat_x_assum `!l v. _` (drule_then assume_tac) >> simp[]
-QED
-
-Theorem phi_well_formed_var_pair[local]:
-  !ops v.
-    phi_well_formed ops /\ MEM (Var v) ops ==>
-    ?lbl. MEM (lbl,v) (phi_pairs ops)
-Proof
-  ho_match_mp_tac phi_pairs_ind >>
-  rw[phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
 QED
 
 (* fn_cfg_edge → cfg_succs_of (bridge from path-level to analysis-level) *)
@@ -792,25 +783,5 @@ Proof
     metis_tac[])
 QED
 
-(* ===== Compose with existing single-pass proof ===== *)
-
-Theorem remove_unused_single_pass_correct_ssa:
-  !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
-    wf_ssa fn /\ ssa_form fn /\
-    alloca_pointer_confined fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb ==>
-    let elim = single_pass_nop_outputs fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (remove_unused_single_pass fn) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  irule (SIMP_RULE std_ss [LET_THM] remove_unused_single_pass_correct_proof) >>
-  simp[] >> rpt strip_tac >>
-  CCONTR_TAC >> fs[] >>
-  metis_tac[nop_output_not_used_as_operand]
-QED
-
+(* Same-state single-pass correctness removed: reconstruction uses the
+   unchanged global operand-exclusion theorem above. *)

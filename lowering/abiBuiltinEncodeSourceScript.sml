@@ -138,9 +138,9 @@ Theorem lower_abi_encode_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     FLOOKUP actual.vs_allocas start.cs_next_id =
-      SOME (p,maxlen+32+LENGTH (abi_encode_method_id_bytes method_id)) /\
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id))) /\
     abi_builtin_encode_effect first last start final limit_st p
-      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
+      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
       (case method_id of NONE => 0 | SOME _ => 32) b cap initial actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual

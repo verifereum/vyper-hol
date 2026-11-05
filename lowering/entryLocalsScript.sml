@@ -90,15 +90,24 @@ Theorem compile_decode_args_next_var[local]:
 Proof
   Induct >- simp[compile_decode_args_def, comp_return_def] >>
   PairCases >> rpt gen_tac >>
+  Cases_on `h1` >> Cases_on `h2` >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >>
   simp[compile_decode_args_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[comp_bind_def, comp_ignore_bind_def,
-                            comp_return_def]) >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  simp[AllCaseEqs(), comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_next_var >> imp_res_tac emit_void_next_var >>
   imp_res_tac compile_abi_decode_to_buf_next_var >>
   imp_res_tac compile_abi_clamp_basetype_next_var >>
-  res_tac >> gvs[comp_return_def] >> decide_tac
+  res_tac >> gvs[comp_return_def] >>
+  qmatch_asmsub_rename_tac `var_location_decode_operand loc` >>
+  Cases_on `var_location_decode_operand loc` >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_op_next_var >> imp_res_tac emit_void_next_var >>
+  imp_res_tac compile_abi_decode_to_buf_next_var >>
+  res_tac >> gvs[] >> decide_tac
 QED
 
 (* ===== Registration ===== *)
@@ -117,7 +126,9 @@ Theorem register_ptr_step[local]:
     (!n1 n2 p sz1 sz2.
        FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ==>
        not_fresh_at st p /\
-       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ==> n1 = n2)) ==>
+       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ==> n1 = n2)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+         not_fresh_at st x /\ !n sz. FLOOKUP cenv.ce_vars n <> SOME (PtrVar (Var x) sz)) ==>
     (!n off sz.
        FLOOKUP (cenv.ce_vars |+ (name, PtrVar buf.buf_operand msz)) n =
          SOME (MemLoc off sz) ==> MEM n names) /\
@@ -127,6 +138,10 @@ Theorem register_ptr_step[local]:
        not_fresh_at sb p /\
        (FLOOKUP (cenv.ce_vars |+ (name, PtrVar buf.buf_operand msz)) n2 =
           SOME (PtrVar (Var p) sz2) ==> n1 = n2)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+         not_fresh_at sb x /\
+         !n sz. FLOOKUP (cenv.ce_vars |+ (name, PtrVar buf.buf_operand msz)) n <>
+                SOME (PtrVar (Var x) sz)) /\
     ?p. buf.buf_operand = Var p
 Proof
   rpt gen_tac >> strip_tac >>
@@ -136,6 +151,9 @@ Proof
   simp[FLOOKUP_UPDATE] >> rpt conj_tac
   >- (rw[] >> res_tac >> gvs[])
   >- (rpt gen_tac >> rw[] >> gvs[] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!x. cenv.ce_imm_alloca = SOME _ ==> _` drule >>
+      strip_tac >> rw[] >> gvs[] >> metis_tac[])
 QED
 
 (* compile_register_positional_args and compile_register_constructor_args
@@ -184,7 +202,9 @@ Theorem compile_register_positional_args_reserved:
     (!n1 n2 p sz1 sz2.
        FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ==>
        not_fresh_at st p /\
-       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ==> n1 = n2)) ==>
+       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ==> n1 = n2)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+         not_fresh_at st x /\ !n sz. FLOOKUP cenv.ce_vars n <> SOME (PtrVar (Var x) sz)) ==>
     local_ptrs_reserved cenv' st' /\
     !n. (?off sz. FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz)) \/
         (?p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz)) ==>
@@ -201,7 +221,9 @@ Theorem compile_register_constructor_args_reserved:
     (!n1 n2 p sz1 sz2.
        FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ==>
        not_fresh_at st p /\
-       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ==> n1 = n2)) ==>
+       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ==> n1 = n2)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+         not_fresh_at st x /\ !n sz. FLOOKUP cenv.ce_vars n <> SOME (PtrVar (Var x) sz)) ==>
     local_ptrs_reserved cenv' st' /\
     !n. (?off sz. FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz)) \/
         (?p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz)) ==>
@@ -210,9 +232,26 @@ Proof
   register_args_reserved_tac compile_register_constructor_args_def
 QED
 
+Theorem compile_register_constructor_args_fields:
+  !args cenv off dsz st cenv' st'.
+    compile_register_constructor_args cenv args off dsz st = (cenv', st') ==>
+    cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    cenv'.ce_imm_alloca = cenv.ce_imm_alloca
+Proof
+  Induct >- simp[compile_register_constructor_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >>
+  simp[Once compile_register_constructor_args_def] >- metis_tac[] >>
+  rename1 `FLOOKUP cenv.ce_vars h0 = SOME loc` >>
+  Cases_on `var_location_memory_size loc` >> simp[] >- metis_tac[] >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
 (* ===== Each entry kind ===== *)
 
-Theorem build_positional_args_FST[local]:
+Theorem build_positional_args_FST:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>
@@ -239,6 +278,9 @@ Proof
    pos_args = build_positional_args cenv0 fargs` by
     (gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
      rw[update_cenv_ret_abi_def]) >>
+  `cenv0.ce_imm_alloca = NONE` by
+    (gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_imm_alloca]) >>
   qspecl_then [`tops`, `External`, `mut`, `fname`, `fargs`, `ret`, `fbody`,
                `use_trans`] strip_assume_tac build_compile_env_vars >>
   drule compile_register_positional_args_reserved >>
@@ -264,6 +306,9 @@ Proof
                       use_trans).ce_vars /\
    pos_args = build_positional_args cenv0 fargs` by
     gvs[package_constructor_def, update_cenv_nonreentrant_def] >>
+  `cenv0.ce_imm_alloca = NONE` by
+    gvs[package_constructor_def, update_cenv_nonreentrant_def,
+        build_compile_env_imm_alloca] >>
   qspecl_then [`tops`, `Deploy`, `mut`, `fname`, `fargs`, `ret`, `fbody`,
                `use_trans`] strip_assume_tac build_compile_env_vars >>
   drule compile_register_constructor_args_reserved >>
@@ -283,6 +328,7 @@ Theorem fallback_entry_locals:
     local_ptrs_reserved cenv st
 Proof
   rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
+  `cenv.ce_imm_alloca = NONE` by gvs[build_compile_env_imm_alloca] >>
   qspecl_then [`tops`, `External`, `mut`, `fname`, `[]`, `ret`, `fbody`,
                `use_trans`] strip_assume_tac build_compile_env_vars >>
   gvs[local_ptrs_reserved_def] >> metis_tac[]

@@ -238,6 +238,7 @@ Datatype:
      - raw_create: [bytecode; value] ++ ctor_args ++ [salt]?
      The first bool records salt presence; the second is revert_on_failure. *)
   | CreateTarget create_kind bool (* has_salt *) bool (* revert_on_failure *)
+      (num list) (* supplied keyword operand indices, in source order *)
 End
 
 Datatype:
@@ -368,7 +369,7 @@ Datatype:
 End
 
 Datatype:
-  variable_visibility = Public | Private
+  variable_visibility = Public bool | Private
 End
 
 Datatype:
@@ -397,6 +398,9 @@ Datatype:
   | FlagDecl identifier (identifier list)
   | InterfaceDecl identifier (interface_func list)
 End
+
+(* Contexts and ABI entries must share one encoding of declarations. *)
+val _ = cv_typeLib.rec_define_from_to “:toplevel”;
 
 (* Keyword arguments must name the parameters in declaration order: Vyper
    rejects any other order ("keys are required to be in order",

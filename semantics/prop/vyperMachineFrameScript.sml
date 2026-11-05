@@ -120,6 +120,13 @@ Proof
   CASE_TAC >> simp[raise_def, return_def, machine_frame_def]
 QED
 
+Theorem machine_frame_precompile_call_success:
+  state_rel_frame machine_frame (precompile_call_success bt)
+Proof
+  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt st` >>
+  drule precompile_call_success_state >> rw[] >> simp[machine_frame_def]
+QED
+
 Theorem machine_frame_view_lock:
   state_rel_frame machine_frame (acquire_nonreentrant_lock addr slot T)
 Proof
@@ -280,14 +287,17 @@ QED
 Theorem machine_frame_pop_memory_place:
   state_rel_frame machine_frame (pop_place cx (MemoryPlace id path))
 Proof
-  simp[pop_place_def, state_rel_frame_def, get_scopes_def, bind_def,
-       ignore_bind_def, lift_option_type_def, lift_sum_def,
-       type_check_def, check_def, assert_def, set_scopes_def, return_def] >>
-  gen_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  PairCases_on `x` >>
-  gvs[bind_def, ignore_bind_def, assert_def, set_scopes_def,
-      lift_sum_def, return_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def]
+  simp[pop_place_def] >>
+  match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  gen_tac >> simp[] >> match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  qx_gen_tac `scope_parts` >> PairCases_on `scope_parts` >>
+  simp[ignore_bind_def] >>
+  rpt (simp[] >> match_mp_tac machine_frame_bind >> conj_tac
+       >- simp[machine_frame_primitives] >> gen_tac) >>
+  qmatch_goalsub_abbrev_tac `UNCURRY continuation parts` >>
+  PairCases_on `parts` >> simp[Abbr `continuation`] >>
+  match_mp_tac machine_frame_bind >>
+  simp[machine_frame_primitives, state_rel_frame_def, return_def]
 QED

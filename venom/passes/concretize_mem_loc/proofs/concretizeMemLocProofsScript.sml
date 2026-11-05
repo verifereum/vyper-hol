@@ -1906,7 +1906,7 @@ val exec_ok_or_error_thms = let
 in
   map prove_for
     [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def]
+     exec_read0_def, exec_gas_def, exec_read1_def]
 end;
 
 Triviality exec_result_helpers_not_intret_cml[simp]:
@@ -1925,7 +1925,7 @@ Triviality exec_result_helpers_not_intret_cml[simp]:
      exec_create inst s v off sz salt <> IntRet vals s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()]
@@ -2694,6 +2694,41 @@ Proof
   irule cr_update_var_non_pv >> simp[] >>
   irule concretize_rel_update_fmp_same >> simp[]
 QED
+(* GAS pops the same reading on both sides: CR's frame includes the
+   readings, and the output is non-pv. *)
+Triviality concretize_step_gas:
+  !inst amap fn livesets init s1 s2.
+    inst.inst_opcode = GAS /\
+    (!v. MEM v inst.inst_outputs ==>
+         v NOTIN pointer_derived_vars fn (FDOM amap)) /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    lift_result
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (step_inst_base inst s1)
+      (step_inst_base inst s2)
+Proof
+  rpt strip_tac >>
+  `concretize_frame s1 = concretize_frame s2` by fs[concretize_rel_def, LET_THM] >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (qpat_x_assum `concretize_frame _ = _`
+       (mp_tac o AP_TERM ``venom_state_vs_gas_readings``) >>
+     simp[concretize_frame_def]) >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  Cases_on `t` >> simp[lift_result_def] >>
+  Cases_on `s2.vs_gas_readings` >> gvs[lift_result_def] >>
+  irule cr_update_var_non_pv >> simp[] >>
+  irule concretize_rel_frame >> conj_tac
+  >- (`!s r. concretize_frame (s with vs_gas_readings := r) =
+             concretize_frame s with vs_gas_readings := r` by
+        simp[concretize_frame_def, venom_state_component_equality] >>
+      fs[concretize_rel_def, LET_THM]) >>
+  qexistsl [`s1`, `s2`] >> simp[]
+QED
+
 (* Non-memory, non-ext-call, non-effect-free, non-branch ops:
    Covers SSTORE, TSTORE, and non-branch terminators (STOP, SINK,
    INVALID, SELFDESTRUCT, RET). Operands non-pv, scalar fields agree,
@@ -2710,6 +2745,7 @@ Triviality concretize_step_non_mem_identity:
     inst.inst_opcode <> DJMP /\
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
+    inst.inst_opcode <> GAS /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -2764,7 +2800,8 @@ Proof
    s1.vs_return_pc_token = s2.vs_return_pc_token /\
    s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
-  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
+   s1.vs_gas_readings = s2.vs_gas_readings` by
     fs[concretize_rel_def, LET_THM] >>
   (* Step 5: case split on opcode — SSTORE, TSTORE, STOP, SINK,
      INVALID, SELFDESTRUCT, RET remain (RETURN/REVERT eliminated by
@@ -3822,17 +3859,10 @@ Triviality concretize_rel_mem_update:
     concretize_rel amap fn livesets init
       (s1 with vs_memory := m1') (s2 with vs_memory := m2')
 Proof
-  rpt strip_tac >>
   simp[concretize_rel_def, LET_THM, lookup_var_def,
-       allocas_non_overlapping_def] >>
-  qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
-  simp[concretize_rel_def, LET_THM, lookup_var_def,
-       allocas_non_overlapping_def] >>
-  rpt strip_tac >>
-  fs[concretize_rel_def, LET_THM, lookup_var_def, allocas_non_overlapping_def,
-     in_alloca_region_def, in_concrete_region_def, mem_byte_at_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  res_tac >> fs[]
+       allocas_non_overlapping_def, concretize_frame_def,
+       in_alloca_region_def] >>
+  metis_tac[]
 QED
 
 (* mstore is write_memory_with_expansion with word_to_bytes *)
@@ -3874,14 +3904,6 @@ Proof
   fs[mem_write_tail_non_pv_def, LET_THM] >>
   first_x_assum (qspecl_then [`bb`, `inst`, `v`] mp_tac) >>
   simp[memLocDefsTheory.mem_write_ops_def]
-QED
-
-Triviality mstore8_as_wmwe:
-  !off val s.
-    mstore8 off val s = write_memory_with_expansion off [w2w val : word8] s
-Proof
-  rpt strip_tac >>
-  simp[mstore8_def, write_memory_with_expansion_def, LET_THM]
 QED
 
 (* Helper: MSTORE8 value operand is non-pv *)
@@ -4798,7 +4820,7 @@ Proof
   gvs[lift_result_def] >>
   `?val. eval_operand op_val s2 = SOME val` by metis_tac[] >>
   gvs[lift_result_def] >>
-  simp[mstore8_as_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   ONCE_REWRITE_TAC[wmwe_as_mem_update] >>
   irule concretize_rel_mem_update >> rpt conj_tac
   >- (
@@ -5608,6 +5630,11 @@ Proof
     metis_tac[non_alloca_non_pp_output_not_pv]
   ) >>
   (* Non-effect-free ops *)
+  Cases_on `inst.inst_opcode = GAS`
+  >- (`~is_pointer_preserving_op inst.inst_opcode` by
+        simp[is_pointer_preserving_op_def] >>
+      qexists `init` >> irule concretize_step_gas >>
+      metis_tac[non_alloca_non_pp_output_not_pv]) >>
   Cases_on `inst.inst_opcode = RETURN`
   >- (qexists `init` >> irule concretize_step_return >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`

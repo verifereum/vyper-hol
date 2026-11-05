@@ -23,6 +23,15 @@ Definition phi_well_formed_def:
   phi_well_formed (_ :: _ :: rest) = F
 End
 
+Theorem phi_well_formed_var_pair:
+  !ops v.
+    phi_well_formed ops /\ MEM (Var v) ops ==>
+    ?lbl. MEM (lbl,v) (phi_pairs ops)
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rw[venomInstTheory.phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
+QED
+
 (* ==========================================================================
    Per-instruction well-formedness (inst_wf)
 
@@ -623,6 +632,100 @@ End
    retain strict instruction ordering. *)
 Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
+End
+
+(* v is written on every CFG path from the entry to a point of bb: in an
+   earlier block of the path, or in bb before the point.  The point is as in
+   def_available_at: NONE is the end of bb, SOME use_inst just before
+   use_inst.  Unlike def_available_at, different paths may use different
+   definitions, so this holds of code that is not in SSA form. *)
+Definition def_on_all_paths_def:
+  def_on_all_paths fn bb use_inst_opt v <=>
+    !path.
+      is_fn_path fn path /\ path <> [] /\
+      (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+      LAST path = bb.bb_label ==>
+      (?k def_bb def_inst.
+         k < LENGTH path - 1 /\
+         MEM def_bb fn.fn_blocks /\ def_bb.bb_label = EL k path /\
+         MEM def_inst def_bb.bb_instructions /\
+         MEM v def_inst.inst_outputs) \/
+      (?i. i < LENGTH bb.bb_instructions /\
+           MEM v (EL i bb.bb_instructions).inst_outputs /\
+           case use_inst_opt of
+             NONE => T
+           | SOME use_inst =>
+               ?j. i < j /\ j < LENGTH bb.bb_instructions /\
+                   EL j bb.bb_instructions = use_inst)
+End
+
+(* Definite assignment: every ordinary use, and every PHI value at the end
+   of its predecessor, is written on every path from the entry.  Uses in
+   unreachable blocks hold vacuously. *)
+Definition fn_defs_reach_uses_def:
+  fn_defs_reach_uses fn <=>
+    !bb inst.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions ==>
+      if inst.inst_opcode = PHI then
+        !pred v pred_bb.
+          MEM (pred,v) (phi_pairs inst.inst_operands) /\
+          MEM pred_bb fn.fn_blocks /\ pred_bb.bb_label = pred /\
+          fn_cfg_edge fn pred bb.bb_label ==>
+          def_on_all_paths fn pred_bb NONE v
+      else
+        !v. MEM (Var v) inst.inst_operands ==>
+            def_on_all_paths fn bb (SOME inst) v
+End
+
+(* Every variable a PHI reads is written by at most one instruction. *)
+Definition fn_phi_operands_single_def_def:
+  fn_phi_operands_single_def fn <=>
+    !bb inst pred v.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      MEM (pred,v) (phi_pairs inst.inst_operands) ==>
+      LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
+End
+
+(* Every PHI has an operand for every CFG edge into its block, so entering
+   the block never fails to resolve it. *)
+Definition fn_phis_cover_preds_def:
+  fn_phis_cover_preds fn <=>
+    !bb inst pred.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      fn_cfg_edge fn pred bb.bb_label ==>
+      ?v. MEM (pred,v) (phi_pairs inst.inst_operands)
+End
+
+(* A PHI's output has no other definition anywhere in the function, so
+   re-running SSA construction never adds a second PHI for it outside its
+   own block. *)
+Definition fn_phi_outputs_single_def_def:
+  fn_phi_outputs_single_def fn <=>
+    !bb inst v.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      MEM v inst.inst_outputs ==>
+      LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
+End
+
+(* Every PHI merges two distinct values, neither of them its own output,
+   so PHI cleanup never collapses it to a copy. *)
+Definition fn_phis_non_degenerate_def:
+  fn_phis_non_degenerate fn <=>
+    !inst out.
+      MEM inst (fn_insts fn) /\
+      inst.inst_opcode = PHI /\
+      inst.inst_outputs = [out] ==>
+      ?l1 v1 l2 v2.
+        MEM (l1,v1) (phi_pairs inst.inst_operands) /\
+        MEM (l2,v2) (phi_pairs inst.inst_operands) /\
+        v1 <> out /\ v2 <> out /\ v1 <> v2
 End
 
 (* Check if instruction is a PHI. *)

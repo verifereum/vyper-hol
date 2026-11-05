@@ -94,11 +94,37 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_IntCall]:
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_RawCallTarget]:
-  rpt strip_tac >> gvs[supported_expr_exists_def, expr_evm_run_root_def]
+  rpt gen_tac >> strip_tac >>
+  gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr env (Call _ _ _ _)`
+    (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
+  irule eval_raw_call_expr_oracle_storage >> rpt (goal_assum (drule_at Any)) >>
+  reverse conj_tac >- metis_tac[runtime_storage_consistent_storage] >>
+  rpt strip_tac
+  >~ [`eval_exprs _ _ _ = _`]
+  >- (first_x_assum irule >> qexists_tac `env` >>
+      first_assum (irule_at Any) >> fs[]) >>
+  metis_tac[runtime_storage_consistent_storage]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_RawCallCalldataTarget]:
-  rpt strip_tac >> gvs[supported_expr_exists_def, expr_evm_run_root_def]
+  rpt gen_tac >> strip_tac >>
+  gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr env (Call _ _ _ _)`
+    (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
+  irule eval_raw_call_calldata_expr_oracle_storage >> rpt (goal_assum (drule_at Any)) >>
+  reverse conj_tac >- metis_tac[runtime_storage_consistent_storage] >>
+  rpt strip_tac
+  >~ [`eval_exprs _ _ _ = _`]
+  >- (first_x_assum irule >> qexists_tac `env` >>
+      first_assum (irule_at Any) >> fs[]) >>
+  metis_tac[runtime_storage_consistent_storage]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_CreateTarget]:
@@ -366,7 +392,14 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
     get_accounts_def, lift_sum_def]
   >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>
-      gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
+      gvs[return_def, raise_def] >>
+      Cases_on `precompile_call_success bt args_st` >>
+      imp_res_tac precompile_call_success_state >> gvs[] >>
+      rename1 `precompile_call_success bt args_st = (pres,_)` >>
+      Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
+      gvs[] >> irule contract_storage_well_formed_storage_frame >>
+      qexists_tac `args_st` >> simp[] >>
+      Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -375,8 +408,7 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_RawLog]:
   gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
   conj_tac
   >- (strip_tac >>
-      qpat_x_assum `well_typed_expr env (Call ty RawLog es extra)` mp_tac >>
-      rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+      drule raw_log_well_typed_args >> strip_tac >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
         type_check_def, assert_def, return_def, raise_def, push_log_def] >>
@@ -437,7 +469,7 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_SelfDestructTarget]:
               drule_all transfer_value_preserves_contract_storage_well_formed >>
               Cases_on `transfer_res` >>
               gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-              rpt strip_tac >> gvs[]) >>
+              rpt strip_tac >> Cases_on `cx.txn.is_static` >> gvs[]) >>
           rpt strip_tac >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]

@@ -27,7 +27,7 @@
 Theory stmtSimAssignStore
 Ancestors
   list rich_list finite_map pred_set
-  fragExec localPtrsProps loweringSlice exprSim stmtSimDeclStore stmtSimDecl
+  fragExec localPtrsProps loweringSlice  stmtSimDeclStore stmtSimDecl
   exprLowering stmtLowering exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup
@@ -94,12 +94,14 @@ Proof
   qabbrev_tac `entry' = entry with <|value := v; popped := []|>` >>
   qabbrev_tac `scs' = pre ++ (env |+ (id, entry')) :: rest` >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_fmp = s.vs_fmp /\
    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+   t.vs_pending_deletions = s.vs_pending_deletions /\
    t.vs_immutables = s.vs_immutables /\
-   t.vs_data_section = s.vs_data_section` by
+   t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
@@ -150,6 +152,8 @@ Proof
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
@@ -157,6 +161,12 @@ Proof
      gvs[local_region_def] >>
      qpat_x_assum `!n e q sq. _ ==> lookup_var q t = _` drule_all >>
      strip_tac >> Cases_on `id' = id` >> gvs[] >> metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `!q. ~not_local_ptr _ _ q ==> _` irule >>
+     simp[not_local_ptr_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

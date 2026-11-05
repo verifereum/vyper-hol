@@ -34,11 +34,20 @@
 
 Theory stmtSimAugAssignAttr
 Ancestors
+  exprBopSimDefs exprBopSimProps
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec freshWrites loweringSlice exprSim exprSimHyps exprSimOps
+  fragExec freshWrites loweringSlice  exprSimHyps exprSimOps
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimBuffer
   exprSimAttributeFields
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
+   stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
   stmtSimAugAssign stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
@@ -623,18 +632,19 @@ QED
    writes it at f's offset in x's region.  e may call internal functions:
    its simulation at f's type is a premise. *)
 Theorem compile_augassign_attr_local_case:
-  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es res es'.
-    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
     expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -728,6 +738,15 @@ Resume compile_augassign_attr_local_case[frag_pre]:
                       (case type_to_int_bound ty of
                          SOME u => u | NONE => Unsigned 0) ftv bop fv v2` >>
           gvs[expr_res_ok_def, stmt_res_ok_def]) >>
+      drule eval_expr_read_INL >> strip_tac >>
+      `!n. expr_int_literal e = SOME n ==> v2 = IntV n` by
+        metis_tac[eval_expr_int_literal_agrees] >>
+      `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+        (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
+      `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
+        (strip_tac >> gvs[nonneg_int_literal_def,
+                          GSYM expr_int_literal_value] >>
+         Cases_on `expr_int_literal e` >> gvs[]) >>
       irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `evaluate_binop
@@ -741,18 +760,19 @@ Finalise compile_augassign_attr_local_case
 
 (* compile_augassign_attr_local_case for an e with no internal call. *)
 Theorem compile_augassign_attr_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es res es'.
-    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es
 Proof
   rpt strip_tac >> irule compile_augassign_attr_local_case >>
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>

@@ -122,7 +122,7 @@ Theorem supported_bad_storage_declarations_excluded:
     [VariableDecl Private (Constant expr_test_uint) "a" (BaseT (UintT 256)) (SOME 0)]
     (NONE,"a") (BaseT (UintT 256)) /\
   ~supported_storage_scalar
-    [VariableDecl Public Storage "a" (BaseT (UintT 256)) (SOME 0)]
+    [VariableDecl (Public F) Storage "a" (BaseT (UintT 256)) (SOME 0)]
     (NONE,"a") (BaseT (UintT 256))
 Proof
   EVAL_TAC
@@ -319,8 +319,8 @@ Theorem supported_raw_call_forms_excluded:
                      rcf_is_static := F; rcf_revert_on_failure := T;
                      rcf_kws := [] |>;
      RawLog; RawRevert; SelfDestructTarget;
-     CreateTarget CreateMinimalProxy F T; CreateTarget CreateCopyOf F T;
-     CreateTarget (CreateFromBlueprint F) T T; CreateTarget RawCreate F T]
+     CreateTarget CreateMinimalProxy F T []; CreateTarget CreateCopyOf F T [];
+     CreateTarget (CreateFromBlueprint F) T T []; CreateTarget RawCreate F T []]
 Proof
   EVAL_TAC
 QED

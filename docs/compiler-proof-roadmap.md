@@ -51,9 +51,9 @@ Their exact premises are in the linked owners and
 | Stage | Actual export / owner | Contract to prove later | Owner milestone |
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
-| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + supported syntax -> `o1_source_unit_ok` | 5 |
-| S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** -> `raw_unit_memory_ok` | 5 |
-| S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward `checked_unit_transform_correct` | 3 |
+| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** + no `DALLOCA` -> `raw_unit_memory_ok` | 5 |
+| S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + raw shape -> `unit_shape_ok` | 3 |
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
@@ -64,7 +64,7 @@ caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
 **Off the runtime call path:** `venomToAsmProps.gen_fn_simulation` is separately
-ADMITTED (4.2); meaningful `e2eCorrectness.e2e_deploy_correctness` is separately
+ADMITTED (4.2); meaningful `e2eDeployCorrectness.e2e_deploy_correctness` is separately
 ADMITTED (6 item 7), not the old proved `T` placeholder. Current top/generic
 logical closures contain neither, nor any retired API.
 
@@ -161,19 +161,19 @@ and a pending `(request, pre-call log count)`. `observe` records only our frame:
 | That callee returns to our depth | append the pending pair and clear pending |
 | Our frame faults/pops, or an unobserved instruction/descendant step occurs | no new entry |
 
-`full_call_trace es` includes value-zero computed precompiles;
-`call_trace es` filters precisely those out. `gas_readings es` is a separate
+`call_trace es` includes value-zero computed precompiles;
+`call_requests es` filters precisely those out of its requests. `gas_readings es` is a separate
 frame-local list for assembly initialization, **not a source gas-number
 oracle**. The observer is total/deterministic; trace decomposition and semantic
 correctness are not proved by totality and remain 2.1 work. CREATE/CREATE2,
 DELEGATECALL/CALLCODE are not observed and are outside S7 shape.
 
 **Computed calls:** value zero to addresses 1/2/6/7 uses `precompile_result`
-(ecrecover/SHA256/ecadd/ecmul), consumes no outcome, records no request and
-preserves state. Invalid EC input gives failure; invalid ecrecover is a valid
+(ecrecover/SHA256/ecadd/ecmul) for its return data, takes its success from
+the next outcome (the EVM can starve it of gas), records no request and
+preserves state. The source's sha256/ecrecover/ecadd/ecmul builtins take that
+outcome too. Invalid EC input gives failure; invalid ecrecover is a valid
 successful empty result. Nonzero value or another precompile is ordinary.
-`precompile_call_starved` observes a failed computed call with **valid** pure
-input in the full trace; invalid EC input is not starvation.
 
 **Gas and observations:** entry `cc_gas = 0`; Venom GAS remains unchanged.
 `unitShapeDefs.opaque_use_ok` permits GAS copies/PHIs only into CALL/STATICCALL
@@ -181,7 +181,7 @@ gas positions. Oracle calls evaluate but ignore that operand's value; assembly
 GAS consumes actual EVM readings (zero on exhaustion). No equality of Venom
 GAS with EVM readings, `msg.gas`/`gas=` guarantee or sufficient-gas existential
 is claimed. The conclusion is actual `run_call` and frame OutOfGas /
-StackOverflow, valid computed-precompile failure, or `call_result_rel`.
+StackOverflow, or `call_result_rel`.
 
 On success the result relates canonical wrapped return bytes, accounts,
 transient storage, ordered concrete logs and the **entire request sequence**.
@@ -206,9 +206,9 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
 | D1 | Full outcome oracle, not gas numbers; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares whole successful requests. No forwarded-gas field. | 2.1 trace / 7 callee producer |
-| D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; S7/top add valid `precompile_call_starved`. No gas-bound proof. | 2.1 / 4 |
+| D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. No gas-bound proof. | 2.1 / 4 |
 | D3 | Unchanged Venom GAS; asm readings; ignore call gas | `exec_read0` GAS unchanged; `asm_gas`, evaluated CALL/STATICCALL gas, `opaque_use_ok`, entry gas zero. **Implementation proof-scope deviation:** old asm/EVM step now excludes GAS after a checked counterexample; full trace-aware S7 is not proved. | 2.1 / 4.2 |
-| D4 | Compute value-zero precompiles1/2/6/7, not oracle pure builtins | `precompile_result`, `take_outcome`, trace filter/starvation; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
+| D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, request filter `call_requests`; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
@@ -232,7 +232,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
 | D26 | Initial and successful-outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness/uninstalled source target. Computed source SHA256 allowed. | 6 item7 |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness/uninstalled source target. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -249,7 +249,7 @@ S7 now uses actual plan/program maps, `unit_shape_ok`,
 `codegen_context_obligations`, corrected `codegen_reachability_package` and
 `initial_ctx_rel` (live state, nonstatic wf/Collect frame, initial FMP/token,
 assembled code/parser, concrete labels/outcomes). Its conclusion is
-`run_call` plus resource/precompile alternatives or `venom_frame_rel`.
+`run_call` plus the resource alternative or `venom_frame_rel`.
 No sufficient-gas assumption remains. `codegen_fn_correct` is retired;
 `gen_fn_simulation` has actual entry/return relations and an `IntRet` clause,
 separately ADMITTED for 4.2. Existing bridges are not trace-aware S7 proofs.
@@ -267,8 +267,10 @@ contract belongs to Milestone 6.
 
 ### 1.4 Pipeline statement
 
-D17 selected forward `unit_result_rel`, not equal failure observables. S4 and
-S6 are stated for actual O1; S5 supplies memory/reachability. All are ADMITTED.
+D17 selected forward `unit_result_rel`, not equal failure observables; S4
+now relaxes its Halt case to `dead_result_rel D`, equal outside a dead-byte set
+`D`. S4 and S6 are stated for actual O1; S5 supplies memory/reachability. All
+are ADMITTED.
 Old pass APIs do not prove the executed driver, callee-first mixed contexts,
 pruning or label mapping. F25/F26 remain concrete Milestone 3 inputs below.
 
@@ -339,7 +341,7 @@ or proved. Concrete deferred inputs (PLAN T10.3 / 5.1–5.2 / 6.4):
 | H21-hard | `initial_ctx_rel` supplies `wf_state` and `Collect`; Verifereum step/handle/run_call | Prove no OutsideDomain/Unimplemented/Impossible hard abort on reachable wf Collect runs, with wf preservation and required opcode/output boundary. Not a consequence of mere totality or “run returned SOME”. Feed H21-frame/S7. |
 | H21-trace | [callTrace](../venom/codegen/frame/callTraceScript.sml) `observe`, `frame_obs_tr`, `request_of`, `outcome_of` | Decompose first-step entries/readings followed by continuation at our depth; for a pushed callee carry the **pending request/log count** through all descendants and append once on return. Preserve ordered complete sequence and suffix gas readings across same-frame runs; handle own faults and immediate balance/depth/precompile failures. Do not equate whole traces at a callee's depth or lose pending state. Feed oracle initialization/request equality in S7. |
 | H21-static | EVM `step_call`/callee run; `adopt_outcome_static` is only an oracle-helper fact | Prove outgoing STATICCALL leaves live accounts/transient/logs unchanged even when **our caller frame is nonstatic**; include successful/failed callee and rollback. This establishes actual observed payload, not just abstract adoption. |
-| H21-pure | `precompile_result`, `take_outcome_computed_valid`, `computed_precompile_state` in extCallOracle | For actual successful value-zero precompile1/2/6/7, prove bytes equal pure `precompile_result` and accounts/transient/logs unchanged. Separate valid starvation, invalid EC and successful empty ecrecover. Abstract helper purity does not prove this EVM bridge. |
+| H21-pure | `precompile_result`, `take_outcome_computed_valid`, `computed_precompile_state` in extCallOracle | For actual successful value-zero precompile1/2/6/7, prove bytes equal pure `precompile_result` and accounts/transient/logs unchanged. Separate invalid EC and successful empty ecrecover; a starved call is a failed oracle outcome, not part of this bridge. Abstract helper purity does not prove this EVM bridge. |
 | H21-encoding | [asmWf](../venom/codegen/defs/asmWfScript.sml) `asm_encoding_wf`; `codegen_assembly`, target safety, assembled length <=24576 | Prove **all four actual encoding conjuncts**: opcode byte exists; recorded label offsets fit `symbol_size`; resolved `AsmPushOfst` offset+delta fits; push bytes <=32. Use actual generated output/no OFFSET and concrete offsets; label bound follows summed size <= assembled length <65536. Do not require `asm_wf` or positive sizes: data headers/empty items have size0. `asmEncodingRegression.encoding_wf_with_zero_size_data` / `zero_size_reverse_lookup` are focused existing checks, not this producer. |
 | H21-lift | [evmStepSim](../venom/codegen/proofs/evmStepSimScript.sml) `asm_evm_step`, [asmBytecodeSim](../venom/codegen/proofs/asmBytecodeSimScript.sml) `asm_bytecode_sim_aux` | Lift current **one-frame/no-calls/non-GAS** proof interfaces to our frame with arbitrary parents, atomic observed CALL/STATICCALL and matched EVM gas readings. Use within-frame facts and H21-frame/trace/static/pure; conclude genuine resource alternatives or correspondence. Preserve old true non-GAS proofs, not an arbitrary exception loophole. |
 
@@ -386,7 +388,7 @@ stages. It exercises:
 ## Milestone 3: Pipeline leg (O1)
 
 **Owner: Milestone 3 / o1PipelineCorrect, S4 and S6.** Inputs are
-`unitTransformDefs.unit_result_rel`, `ctx_transform_correct`,
+`o1PassContract.dead_result_rel`, `ctx_sim`, `dead_wf`,
 `raw_unit_memory_ok`, and `unitShapeDefs.o1_source_unit_ok` / `unit_shape_ok`.
 S4 is forward simulation from **one initial state**: each terminating raw run
 has a terminating output at possibly different fuel; success preserves
@@ -511,15 +513,11 @@ Remaining work, roughly in dependency order (all future):
 **Owner: Milestone 5 / vyperLoweringCorrect S2/S3 and o1PipelineCorrect S5.**
 These producers exist as ADMITTED statements; this milestone proves them.
 Actual memory API is
-[unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
-older compat `lowering_memory_safe` interface. That theorem still exists in
-[loweringMemSafetyProps](../lowering/loweringMemSafetyPropsScript.sml), with
-single-function compat/reachability premises; it is **not retired** and does
-not establish S3's raw-unit contract.
+[unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml).
 
 | Handoff | Exact current input/contract | Concrete deferred proof |
 |---|---|---|
-| H5-S2 | Lowering success + `supported_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no DLOAD/ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, opaque GAS/RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
+| H5-S2 | Lowering success + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, opaque GAS/RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
 | H5-S3 | S1 boundary + `~source_exempt` -> `raw_unit_memory_ok` | Alloca-aware buffer/layout induction, checked `unit_alloca_budget`, memory accesses below frontier and frontier <2**256. Fresh empty memory alone proves nothing about later accesses. Exemption exclusion is essential: dynamic decoding may read unchecked wrapping offsets. |
 | H5-S5 | Actual O1/output plan, S2/raw entry/S3 and matching initial FMP -> exists `Inv` with output memory + reachability | Transport frontier/allocation safety through dispatched passes, including early SimplifyCFG/DretDesugar/MakeSSA/LowerDload and ConcretizeMemLoc; prove generated spill-region non-overlap, safe reads/writes and successful-step spill preservation, including aggregate INVOKE returns. Deliver **one shared invariant witness** to L5/S7. |
 
@@ -574,7 +572,7 @@ unit simulation by themselves.
 | IfExp/literals, Empty/MaxValue/MinValue/Epsilon | Branch/literals/`typed_val_to_w256` | Word Empty only; correct typed byte literal encoding, fixed evaluation order. |
 | `evaluate_convert` | `compile_type_convert` | Conversions admitted by `valid_conversion`; compare integer/decimal clamps and scaling, bound-before-truncate, bytes->address/decimal/narrow-zero-tail D12d–g, and bytestring length/shift paths. Empty-byte signed integer/decimal conversion has the exact D9 exemption. |
 | Env, account, BlockHash/BlobHash | `compile_env_var`, BALANCE/EXTCODEHASH/size, builtin block paths | Full env/typed-account ties, corrected empty-account codehash; real nonzero block/window bounds D22. |
-| ECRecover/SHA256/ECAdd/ECMul | Value-zero STATICCALL1/2/6/7 + ASSERT/buffer read | H21-pure bridge and starvation alternative; invalid EC now source RuntimeError D12a, invalid recovery succeeds empty. Pure source builtins remain pure. |
+| ECRecover/SHA256/ECAdd/ECMul | Value-zero STATICCALL1/2/6/7 + ASSERT/buffer read | H21-pure bridge; success from the call's oracle outcome on both sides; invalid EC now source RuntimeError D12a, invalid recovery succeeds empty. Not pure: they consume an outcome. |
 | Tuple/struct/aggregate args/tuple locals | Aggregate expression and buffer paths | Same evaluation order and value-memory layout; fixed-memory/name/internal-call restrictions matter. |
 | `evaluate_abi_encode_bytes` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
 | Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; conversion errors **not exempt**. |
@@ -631,18 +629,20 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    - argument decoding establishes `local_ptrs_rel` in `state_rel`;
    - `lower_vyper_runtime_unit_correct`.
 6. **Builtins.** Only the actual whitelist: Send/ExtCall use the complete
-   outcome oracle; computed precompiles use pure results. `raw_call` and
+   outcome oracle; computed precompiles take their success from it and
+   their data from pure results. `raw_call` and
    `raw_create` are excluded, not future missing cases of S1. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
 7. **H6-deploy / owner Milestone 6 item7:** prove actual separately ADMITTED
-   `e2eCorrectness.e2e_deploy_correctness` using
+   `e2eDeployCorrectness.e2e_deploy_correctness` using
    [e2eDeployDefs](../lowering/e2eDeployDefsScript.sml): `constructor_args_encode`,
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,
-   including internal Call/Send/nested reasons; **computed source SHA256 is
-   allowed**. Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
+   including internal Call/Send/nested reasons, and free of the precompile
+   builtins (sha256/ecrecover/ecadd/ecmul), since it runs without the oracle.
+   Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
    `constructor_call_exclusion` is a named negative boundary check;
-   `constructor_computed_builtin_not_call` checks the SHA256 positive case.
+   `constructor_precompile_builtin_excluded` checks SHA256 excluded, Keccak256 not.
    Neither proves constructor/deployment simulation.
 
    Inputs are canonical tuple ABI argument bytes (no selector), actual checked

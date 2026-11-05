@@ -25,9 +25,14 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec exprSim exprSimHyps exprSimLeaves exprSimAttributeFields
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem
+  fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding accountsRelProps
@@ -273,28 +278,10 @@ Theorem store_var_frag:
                     FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
   rpt strip_tac >>
-  `frag_exec ctx st st' (\t. t = s1)
-     (\t. stmt_state_rel ctx func cenv cx es' t /\
-          (!x. lookup_var x t = lookup_var x s1) /\
-          (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
-                   FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
-    (imp_res_tac emitted_insts_emit_void >> imp_res_tac emit_void_extends >>
-     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-        (emitted_insts st st')` by
-       (Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def, is_terminator_def]) >>
-     irule frag_exec_run_inst_seq >>
-     fs[same_blocks_def, IS_PREFIX_APPEND3] >>
-     rpt strip_tac >> gvs[] >>
-     `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
-                        [Var d; op] []) s1 =
-        OK (if tr then tstore a w s1 else sstore a w s1)` by
-       (Cases_on `tr` >>
-        simp[step_inst_base_def, exec_write2_def, mk_inst_def,
-             eval_operand_def]) >>
-     Cases_on `tr` >> gvs[] >>
-     simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
-     gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>
-  pop_assum (mp_then Any irule frag_exec_weaken) >> simp[]
+  `eval_operand (Var d) s1 = SOME a` by simp[eval_operand_def] >>
+  drule_all storage_emit_frame_frag >>
+  disch_then (qspec_then `R` mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_weaken) >> simp[]
 QED
 
 (* self.x.f = e as one fragment: e's errors exit, and on a value it reaches
@@ -361,11 +348,8 @@ QED
    field's slot.  e may call internal functions: its simulation is a
    premise. *)
 Theorem compile_assign_attr_storage_case:
-  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es res es' ts
+  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es ts
    tr id_str slot.
-    eval_stmt cx
-      (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
-         e) es = (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -380,7 +364,10 @@ Theorem compile_assign_attr_storage_case:
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
             fld)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
+            fld)) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -406,11 +393,8 @@ QED
 
 (* compile_assign_attr_storage_case for an e with no internal call. *)
 Theorem compile_assign_attr_storage_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es res es' ts
+  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es ts
    tr id_str slot.
-    eval_stmt cx
-      (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
-         e) es = (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -424,7 +408,10 @@ Theorem compile_assign_attr_storage_stmt_frag:
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
             fld)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
+            fld)) e))
+      es
 Proof
   rpt strip_tac >> irule compile_assign_attr_storage_case >>
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>

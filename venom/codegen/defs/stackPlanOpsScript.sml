@@ -52,6 +52,16 @@ Definition do_restore_def:
                     ps_alloc := alloc' |>)
 End
 
+(* Restore every spilled operand of ops, in order: the up-front restore
+   loop of Python's _stack_reorder.  Operands not spilled are skipped. *)
+Definition restore_spilled_plan_def:
+  restore_spilled_plan [] ps = ([] : stack_op list, ps) /\
+  restore_spilled_plan (op :: ops) ps =
+    let (ops1, ps1) = do_restore op ps in
+    let (ops2, ps2) = restore_spilled_plan ops ps1 in
+    (ops1 ++ ops2, ps2)
+End
+
 (* ===== Swap/Dup with Deep Stack Support ===== *)
 
 (* Get top N items from stack, in bottom-to-top order. *)

@@ -6,6 +6,23 @@ Ancestors
   asmCallOracleProps asmCallActivationRegression venomExecSemantics
   stackPlanGen stackPlanTypes extCallOracle finite_map list rich_list
 
+(* The actual GAS steps agree on the value and remaining readings,
+   including the shared zero result after exhaustion. *)
+Theorem gas_steps_read_and_consume_together:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  vs.vs_gas_readings = ast.as_gas_readings ==>
+  ?vs' ast'.
+    step_inst_base inst vs = OK vs' /\ asm_gas ast = AsmOK ast' /\
+    vs'.vs_gas_readings = ast'.as_gas_readings /\
+    lookup_var out vs' = SOME (HD (vs.vs_gas_readings ++ [0w])) /\
+    ast'.as_stack = HD (vs.vs_gas_readings ++ [0w]) :: ast.as_stack
+Proof
+  strip_tac >> Cases_on `vs.vs_gas_readings` >>
+  Cases_on `ast.as_gas_readings` >>
+  gvs[step_inst_base_def, exec_gas_def, asm_gas_def, asm_push_val_def,
+      asm_next_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
 (* Closed witness for the obsolete four-field terminal constructor: its
    premises hold, but it cannot establish observable request equality. *)
 Theorem terminal_constructor_missing_requests_counterexample:
@@ -22,12 +39,12 @@ Proof
        venom_asm_terminal_rel_def]
 QED
 
-(* The planned running substrate accepts arbitrary assembly readings, but
-   rejects either shared-list mismatch. Context and function-local relations
+(* The planned running substrate rejects any mismatch of the shared lists
+   (outcomes, requests, GAS readings). Context and function-local relations
    agree on these oracle fields even with an empty context spill mask. *)
 Theorem running_oracle_and_gas_boundary:
   let vs = init_venom_state "entry" in
-  let as1 = asm_oracle_initial with as_gas_readings := readings in
+  let as1 = asm_oracle_initial in
   let rq = venom_call_request vs 8w 0w 0w 0w F in
     venom_asm_rel FEMPTY (init_plan_state 0) vs as1 /\
     context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs as1 /\
@@ -35,10 +52,14 @@ Theorem running_oracle_and_gas_boundary:
       (as1 with as_outcomes := [failed_outcome rq]) /\
     ~venom_asm_rel FEMPTY (init_plan_state 0) vs
       (as1 with as_requests := [rq]) /\
+    ~venom_asm_rel FEMPTY (init_plan_state 0) vs
+      (as1 with as_gas_readings := [r]) /\
     ~context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs
       (as1 with as_outcomes := [failed_outcome rq]) /\
     ~context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs
-      (as1 with as_requests := [rq])
+      (as1 with as_requests := [rq]) /\
+    ~context_venom_asm_rel cp FEMPTY (init_plan_state 0) vs
+      (as1 with as_gas_readings := [r])
 Proof
   simp[init_venom_state_def, asm_oracle_initial_def, init_plan_state_def,
        venom_asm_rel_def, context_venom_asm_rel_def, plan_stack_rel_def,

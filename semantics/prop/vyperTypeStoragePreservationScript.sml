@@ -69,7 +69,7 @@ QED
 Definition oracle_storage_ok_def:
   oracle_storage_ok cx st <=>
     !os. st.outcomes = SOME os ==>
-      EVERY (\co. co.co_success ==>
+      EVERY (\co.
         contract_storage_well_formed cx
           (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)) os
 End
@@ -99,7 +99,7 @@ QED
 Theorem oracle_storage_ok_payload:
   oracle_storage_ok cx st <=>
     !os. st.outcomes = SOME os ==>
-      EVERY (\co. co.co_success ==>
+      EVERY (\co.
         contract_storage_well_formed cx
           (empty_state with <|accounts := co.co_accounts;
                               tStorage := co.co_tStorage|>)) os
@@ -134,6 +134,7 @@ Proof
      simp[] >> strip_tac >>
      drule (CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
      simp[] >> metis_tac[]) >>
+  Cases_on `cx.txn.is_static` >>
   gvs[vyperStorageBackendTheory.write_storage_slot_eq,
       vyperStorageTheory.apply_writes_def] >>
   Cases_on `b = b'` >> gvs[]

@@ -3,7 +3,8 @@ Ancestors
   vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
 (* Pure expressions: expressions that do not modify state.  msg.gas is not
-   pure: it consumes a gas reading. *)
+   pure: it consumes a gas reading; nor are the precompile builtins, which
+   consume a call outcome. *)
 Definition pure_expr_def:
   pure_expr (Name _ _) = T ∧
   pure_expr (TopLevelName _ _) = T ∧
@@ -13,7 +14,8 @@ Definition pure_expr_def:
   pure_expr (StructLit _ _ kes) = EVERY pure_expr (MAP SND kes) ∧
   pure_expr (Subscript _ e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
   pure_expr (Attribute _ e _) = pure_expr e ∧
-  pure_expr (Builtin _ bt es) = (bt ≠ Env MsgGas ∧ EVERY pure_expr es) ∧
+  pure_expr (Builtin _ bt es) =
+    (bt ≠ Env MsgGas ∧ ¬precompile_builtin bt ∧ EVERY pure_expr es) ∧
   pure_expr (TypeBuiltin _ _ _ es) = EVERY pure_expr es ∧
   pure_expr _ = F
 Termination
@@ -194,7 +196,8 @@ Proof
   Cases_on `bt = Len`
   >- (rpt strip_tac >>
       gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+          type_check_def, assert_def, return_def, raise_def,
+          precompile_call_success_def, precompile_builtin_def, AllCaseEqs()] >>
       gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
       imp_res_tac result_array_length_state >> gvs[] >>
       `pure_expr (HD es)` by
@@ -203,7 +206,8 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
       type_check_def, assert_def, return_def, raise_def,
-      get_accounts_def, lift_sum_def, AllCaseEqs()] >>
+      get_accounts_def, lift_sum_def, precompile_call_success_def,
+      AllCaseEqs()] >>
   gvs[get_accounts_def, ETA_THM, return_def, raise_def,
       sum_CASE_rator, AllCaseEqs()] >> metis_tac[]
 QED

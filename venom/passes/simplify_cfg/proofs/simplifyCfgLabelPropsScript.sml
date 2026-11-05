@@ -29,7 +29,7 @@ Proof
   simp[collapse_dfs_result_def, collapse_dfs_succs_result_def]
 QED
 
-Theorem fn_labels_update_succ_phi_labels[local]:
+Theorem fn_labels_update_succ_phi_labels:
   !old new bbs succs.
     MAP (\bb. bb.bb_label) (update_succ_phi_labels old new bbs succs) =
     MAP (\bb. bb.bb_label) bbs
@@ -69,7 +69,7 @@ Proof
   simp[MEM_MAP, FILTER_ALL_DISTINCT] >> metis_tac[]
 QED
 
-Theorem can_bypass_jump_target_distinct[local]:
+Theorem can_bypass_jump_target_distinct:
   !func a b target.
     ALL_DISTINCT (fn_labels func) /\
     lookup_block a.bb_label func.fn_blocks = SOME a /\
@@ -361,7 +361,7 @@ Proof
   simp[collapse_result_events_def]
 QED
 
-Theorem collapse_events_joint[local]:
+Theorem collapse_events_joint:
   (!func incoming visited lbl.
      ALL_DISTINCT (fn_labels func) ==>
      collapse_dfs_result
@@ -593,14 +593,14 @@ Proof
   >> gvs[]
 QED
 
-Theorem bb_label_fix_phis_in_block[local]:
+Theorem bb_label_fix_phis_in_block:
   (fix_phis_in_block actual_preds bb).bb_label = bb.bb_label
 Proof
   simp[fix_phis_in_block_def] >>
   pairarg_tac >> simp[]
 QED
 
-Theorem fn_labels_fix_all_phis[local]:
+Theorem fn_labels_fix_all_phis:
   fn_labels (fix_all_phis func) = fn_labels func
 Proof
   simp[fix_all_phis_def, venomInstTheory.fn_labels_def,
@@ -640,7 +640,7 @@ Proof
   gen_tac >> Cases_on `pred h.bb_label` >> simp[]
 QED
 
-Theorem fn_labels_remove_unreachable_all_distinct[local]:
+Theorem fn_labels_remove_unreachable_all_distinct:
   ALL_DISTINCT (fn_labels func) ==>
   ALL_DISTINCT (fn_labels (remove_unreachable_blocks func))
 Proof
@@ -663,7 +663,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem label_event_trace_sources_absent[local]:
+Theorem label_event_trace_sources_absent:
   !initial events final.
     label_event_trace initial events final ==>
     EVERY (\entry. ~MEM (FST entry) final) events
@@ -678,6 +678,19 @@ Proof
   first_x_assum drule >>
   gvs[listTheory.EVERY_MEM, MEM_FILTER] >>
   metis_tac[]
+QED
+
+Theorem collapse_dfs_empty_log_sources_absent:
+  ALL_DISTINCT (fn_labels func) /\
+  collapse_dfs func [] visited lbl = (func',lm,visited') ==>
+  EVERY (\entry. ~MEM (FST entry) (fn_labels func')) lm
+Proof
+  strip_tac >>
+  qspecl_then [`func`, `[]`, `visited`, `lbl`] mp_tac
+    (CONJUNCT1 collapse_events_joint) >>
+  simp[collapse_dfs_result_def, collapse_result_events_def,
+       fn_result_events_def] >> strip_tac >> gvs[] >>
+  drule label_event_trace_sources_absent >> simp[EVERY_MEM, MEM_REVERSE]
 QED
 
 Theorem label_event_trace_transition[local]:
@@ -1066,7 +1079,7 @@ Proof
   rpt gen_tac >> rpt CASE_TAC >> gvs[]
 QED
 
-Theorem fn_insts_blocks_mem[local]:
+Theorem fn_insts_blocks_mem:
   !blocks inst.
     MEM inst (fn_insts_blocks blocks) <=>
     ?bb. MEM bb blocks /\ MEM inst bb.bb_instructions
@@ -1257,7 +1270,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fn_cfg_edge_iff_fn_succ[local]:
+Theorem fn_cfg_edge_iff_fn_succ:
   ALL_DISTINCT (fn_labels func) ==>
   (fn_cfg_edge func src dst <=> fn_succ func src dst)
 Proof
@@ -1272,7 +1285,7 @@ Proof
             venomExecPropsTheory.lookup_block_label]
 QED
 
-Theorem fn_reachable_iff_reachable[local]:
+Theorem fn_reachable_iff_reachable:
   ALL_DISTINCT (fn_labels func) ==>
   (fn_reachable func lbl <=> reachable func lbl)
 Proof
@@ -1386,18 +1399,30 @@ Proof
   simp[update_phi_bypass_def]
 QED
 
+Theorem canon_jnz_inst_opcode[local]:
+  !inst. (canon_jnz_inst inst).inst_opcode = inst.inst_opcode \/
+         (canon_jnz_inst inst).inst_opcode = JMP
+Proof
+  rw[canon_jnz_inst_def] >> BasicProvers.every_case_tac >> rw[]
+QED
+
 Theorem bypass_source_inst_invoke_shape[local]:
   ((if ~is_terminator inst.inst_opcode then inst
-     else subst_label_inst old_lbl new_lbl inst).inst_opcode = INVOKE /\
+     else canon_jnz_inst
+            (subst_label_inst old_lbl new_lbl inst)).inst_opcode = INVOKE /\
    (if ~is_terminator inst.inst_opcode then inst
-    else subst_label_inst old_lbl new_lbl inst).inst_operands =
+    else canon_jnz_inst
+           (subst_label_inst old_lbl new_lbl inst)).inst_operands =
       Label callee :: operands) <=>
   inst.inst_opcode = INVOKE /\
   inst.inst_operands = Label callee :: operands
 Proof
-  Cases_on `inst.inst_opcode` >>
-  simp[venomInstTheory.is_terminator_def,
-       cfgTransformTheory.subst_label_inst_def]
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  qspec_then `subst_label_inst old_lbl new_lbl inst` strip_assume_tac
+    canon_jnz_inst_opcode >>
+  gvs[cfgTransformTheory.subst_label_inst_def]
 QED
 
 Theorem update_phi_bypass_invoke_labels[local]:
@@ -1414,7 +1439,9 @@ Theorem bypass_source_invoke_labels[local]:
   MEM callee
     (MAP FST (get_invoke_targets
       (MAP (\inst. if ~is_terminator inst.inst_opcode then inst
-                    else subst_label_inst old_lbl new_lbl inst) insts))) <=>
+                    else canon_jnz_inst
+                           (subst_label_inst old_lbl new_lbl inst))
+           insts))) <=>
   MEM callee (MAP FST (get_invoke_targets insts))
 Proof
   simp[fcgBridgeTheory.mem_get_invoke_targets, MEM_MAP] >>
@@ -1608,7 +1635,7 @@ Proof
 QED
 
 
-Theorem do_merge_jump_metadata[local]:
+Theorem do_merge_jump_metadata:
   do_merge_jump func a b label_map = SOME (func',label_map') ==>
   fn_identity_metadata_eq func' func /\
   fn_static_input_eq func' func /\
@@ -1690,17 +1717,25 @@ Proof
     MAP (update_phi_bypass a.bb_label b.bb_label) target.bb_instructions` >>
   qabbrev_tac `bbs1 = replace_block target_lbl target' bbs0` >>
   qabbrev_tac `a' = a with bb_instructions :=
-    MAP (\inst. if ~is_terminator inst.inst_opcode then inst
-                  else subst_label_inst b.bb_label target_lbl inst)
-        a.bb_instructions` >>
+    if target_lbl = a.bb_label then
+      MAP (update_phi_bypass a.bb_label b.bb_label)
+        (MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                      else canon_jnz_inst
+                             (subst_label_inst b.bb_label target_lbl inst))
+             a.bb_instructions)
+    else
+      MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                   else canon_jnz_inst
+                          (subst_label_inst b.bb_label target_lbl inst))
+          a.bb_instructions` >>
   `MEM callee (simplify_cfg_block_invoke_labels target') <=>
    MEM callee (simplify_cfg_block_invoke_labels target)` by
     simp[Abbr `target'`, simplify_cfg_block_invoke_labels_def,
          update_phi_bypass_invoke_labels] >>
   `MEM callee (simplify_cfg_block_invoke_labels a') <=>
    MEM callee (simplify_cfg_block_invoke_labels a)` by
-    simp[Abbr `a'`, simplify_cfg_block_invoke_labels_def,
-         bypass_source_invoke_labels] >>
+    (simp[Abbr `a'`, simplify_cfg_block_invoke_labels_def] >>
+     rw[update_phi_bypass_invoke_labels, bypass_source_invoke_labels]) >>
   `ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs0)` by
     simp[Abbr `bbs0`, cfgTransformPropsTheory.ALL_DISTINCT_remove_block,
          GSYM venomInstTheory.fn_labels_def] >>
@@ -1878,17 +1913,25 @@ Proof
     MAP (update_phi_bypass a.bb_label b.bb_label) target.bb_instructions` >>
   qabbrev_tac `bbs1 = replace_block target_lbl target' bbs0` >>
   qabbrev_tac `a' = a with bb_instructions :=
-    MAP (\inst. if ~is_terminator inst.inst_opcode then inst
-                  else subst_label_inst b.bb_label target_lbl inst)
-        a.bb_instructions` >>
+    if target_lbl = a.bb_label then
+      MAP (update_phi_bypass a.bb_label b.bb_label)
+        (MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                      else canon_jnz_inst
+                             (subst_label_inst b.bb_label a.bb_label inst))
+             a.bb_instructions)
+    else
+      MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                   else canon_jnz_inst
+                          (subst_label_inst b.bb_label target_lbl inst))
+          a.bb_instructions` >>
   `!callee. MEM callee (simplify_cfg_block_invoke_labels target') <=>
             MEM callee (simplify_cfg_block_invoke_labels target)` by
     simp[Abbr `target'`, simplify_cfg_block_invoke_labels_def,
          update_phi_bypass_invoke_labels] >>
   `!callee. MEM callee (simplify_cfg_block_invoke_labels a') <=>
             MEM callee (simplify_cfg_block_invoke_labels a)` by
-    simp[Abbr `a'`, simplify_cfg_block_invoke_labels_def,
-         bypass_source_invoke_labels] >>
+    (simp[Abbr `a'`, simplify_cfg_block_invoke_labels_def] >>
+     rw[update_phi_bypass_invoke_labels, bypass_source_invoke_labels]) >>
   simp[simplify_cfg_invoke_subset_def] >> rpt strip_tac >>
   qpat_x_assum
     `MEM callee (simplify_cfg_fn_invoke_labels
@@ -2652,9 +2695,13 @@ Theorem bypass_source_inst_no_raw[local]:
   ~is_raw_fmp_opcode inst.inst_opcode ==>
   ~is_raw_fmp_opcode
     (if ~is_terminator inst.inst_opcode then inst
-     else subst_label_inst old_lbl new_lbl inst).inst_opcode
+     else canon_jnz_inst (subst_label_inst old_lbl new_lbl inst)).inst_opcode
 Proof
-  strip_tac >> IF_CASES_TAC >> simp[subst_label_inst_no_raw]
+  strip_tac >> IF_CASES_TAC >> simp[] >>
+  qspec_then `subst_label_inst old_lbl new_lbl inst` strip_assume_tac
+    canon_jnz_inst_opcode >>
+  gvs[cfgTransformTheory.subst_label_inst_def,
+      venomInstTheory.is_raw_fmp_opcode_def]
 QED
 
 Theorem succ_phi_update_no_raw[local]:
@@ -2779,12 +2826,19 @@ Theorem bypass_source_block_no_raw[local]:
   EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
     (bb with bb_instructions :=
       MAP (\inst. if ~is_terminator inst.inst_opcode then inst
-                   else subst_label_inst old_lbl new_lbl inst)
-          bb.bb_instructions).bb_instructions
+                   else canon_jnz_inst
+                          (subst_label_inst old_lbl new_lbl inst))
+          bb.bb_instructions).bb_instructions /\
+  EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
+    (MAP (update_phi_bypass a_label b_label)
+      (MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                    else canon_jnz_inst
+                           (subst_label_inst old_lbl new_lbl inst))
+           bb.bb_instructions))
 Proof
   simp[listTheory.EVERY_MAP] >>
   pure_rewrite_tac[listTheory.EVERY_MEM] >>
-  metis_tac[bypass_source_inst_no_raw]
+  metis_tac[bypass_source_inst_no_raw, update_phi_bypass_no_raw]
 QED
 
 Theorem update_phi_bypass_block_no_raw[local]:
@@ -2817,22 +2871,28 @@ Proof
   gvs[do_merge_jump_def, AllCaseEqs()] >>
   qabbrev_tac
     `a' = a with bb_instructions :=
-      MAP (\inst. if ~is_terminator inst.inst_opcode then inst
-                   else subst_label_inst b.bb_label target_lbl inst)
-          a.bb_instructions` >>
+      if target_lbl = a.bb_label then
+        MAP (update_phi_bypass a.bb_label b.bb_label)
+          (MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                        else canon_jnz_inst
+                               (subst_label_inst b.bb_label a.bb_label inst))
+               a.bb_instructions)
+      else
+        MAP (\inst. if ~is_terminator inst.inst_opcode then inst
+                     else canon_jnz_inst
+                            (subst_label_inst b.bb_label target_lbl inst))
+            a.bb_instructions` >>
   qabbrev_tac
     `target' = target with bb_instructions :=
       MAP (update_phi_bypass a.bb_label b.bb_label)
           target.bb_instructions` >>
   `EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) a'.bb_instructions` by
-    (simp[Abbr `a'`, listTheory.EVERY_MAP] >>
-     pure_rewrite_tac[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     `EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
+    (`EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
             a.bb_instructions` by metis_tac[lookup_block_no_raw] >>
-     qpat_x_assum `EVERY _ a.bb_instructions` mp_tac >>
-     pure_rewrite_tac[listTheory.EVERY_MEM] >>
-     disch_then (qspec_then `e` mp_tac) >> simp[] >>
-     metis_tac[bypass_source_inst_no_raw]) >>
+     mp_tac (Q.INST [`bb` |-> `a`, `old_lbl` |-> `b.bb_label`,
+                     `new_lbl` |-> `target_lbl`, `a_label` |-> `a.bb_label`,
+                     `b_label` |-> `b.bb_label`] bypass_source_block_no_raw) >>
+     simp[] >> strip_tac >> rw[Abbr `a'`] >> gvs[]) >>
   `EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
          target'.bb_instructions` by
     (simp[Abbr `target'`, listTheory.EVERY_MAP] >>

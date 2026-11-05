@@ -155,7 +155,9 @@ Proof
 QED
 
 (* Bytelike literals and ABI encoding results carry their produced bound,
-   independently of the annotated destination bound. *)
+   independently of the annotated destination bound; an internal call's
+   value is its callee's return buffer, at the declared return type.
+   Mirrors Python: vv.typ (_lower_bytelike, _lower_internal_call). *)
 Definition lowered_value_type_def:
   lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
     BaseT (StringT (LENGTH s)) ∧
@@ -167,6 +169,8 @@ Definition lowered_value_type_def:
      BaseT (BytesT (Dynamic
        (abi_size_bound cenv.ce_struct_fields enc_ty +
         if IS_SOME method_id then 4 else 0)))) ∧
+  lowered_value_type cenv (Call _ (IntCall func_id) _ _) =
+    cenv.ce_func_return_type (nsid_to_string func_id) ∧
   lowered_value_type cenv e = expr_type e
 End
 
@@ -213,20 +217,6 @@ Definition infer_array_location_def:
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
   infer_array_location cenv _ = LocMemory
-End
-
-(* Infer whether an array is dynamic (DynArray) or static (SArray).
-   Mirrors Python: isinstance(array_typ, DArrayT) vs SArrayT *)
-Definition infer_array_is_dynamic_def:
-  infer_array_is_dynamic cenv (Name _ var_name) =
-    (case cenv.ce_var_type var_name of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
-  infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_module_var_type nsid of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
-  infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
 End
 
 (* Compute memory_bytes_required for an AST type.
@@ -1153,13 +1143,17 @@ End
    matching the Python compiler behavior. The popped slot contains stale data,
    but is inaccessible (past the length). Gas accounting differs: interpreter
    gets SSTORE refund for clearing, lowering does not.
-   Mirrors Python: expr.py _lower_dynarray_pop *)
+   The length is loaded and stored by the array's location loc, through
+   compile_ptr_load/compile_ptr_store, so a constructor immutable goes through
+   the immutables buffer.
+   Mirrors Python: expr.py _lower_dynarray_pop, with its location-aware length
+   load and store done as ctx.load_word/store_word do them (at VYPER_PIN its
+   builder.load/builder.store have no IMMUTABLES case and panic). *)
 Definition compile_dynarray_pop_def:
-  compile_dynarray_pop base_op word_scale elem_size
-                            (load_opc : opcode) (store_opc : opcode) =
+  compile_dynarray_pop base_op word_scale elem_size is_ctor imm loc =
     let overhead = word_scale in
     do (* Load current length *)
-       len_op <- emit_op load_opc [base_op];
+       len_op <- compile_ptr_load is_ctor imm loc base_op;
        (* Assert length > 0 *)
        nz <- emit_op ISZERO [len_op];
        valid <- emit_op ISZERO [nz];
@@ -1167,7 +1161,7 @@ Definition compile_dynarray_pop_def:
        (* new_len = len - 1 *)
        new_len <- emit_op SUB [len_op; Lit 1w];
        (* Store new length *)
-       emit_void store_opc [base_op; new_len];
+       compile_ptr_store is_ctor imm loc base_op new_len;
        (* elem_ptr = base + overhead + new_len * elem_size *)
        data_ptr <- emit_op ADD [base_op; Lit (n2w overhead)];
        offset <- emit_op MUL [new_len; Lit (n2w elem_size)];
@@ -1323,7 +1317,7 @@ Definition compile_stage_intcall_args_def:
         do (if is_word_type ty then emit_void MSTORE [buf; val_op]
             else if is_bs then
               do compile_store_bytestring val_op buf; return () od
-            else emit_void MCOPY [buf; val_op; Lit (n2w mem_size)]);
+            else compile_store_memory cenv val_op buf ty (vv_type vv));
            rest <- compile_stage_intcall_args cenv vals flags tys;
            return (buf :: rest)
         od
@@ -1611,7 +1605,6 @@ Datatype:
   | ConvBytestringToDecimal num int int num (* divisor, out_lo, out_hi, in_maxlen *)
   | ConvBytestringToBytesM num       (* out_m *)
   | ConvBytestringCast num num       (* out_maxlen, in_maxlen *)
-  | ConvFixedToBytestring num       (* m: bytesM → Bytes[N] allocation *)
   | ConvIdentity
 End
 
@@ -1624,6 +1617,13 @@ Definition load_bytestring_as_word_def:
     do length <- emit_op MLOAD [v];
        data_ptr <- emit_op ADD [v; Lit 32w];
        data <- emit_op MLOAD [data_ptr];
+       (* An emptied bytestring can retain a stale signed data word. *)
+       data <- (if shift_opc = SAR then
+                  do empty <- emit_op ISZERO [length];
+                     nonempty <- emit_op ISZERO [empty];
+                     emit_op MUL [data; nonempty]
+                  od
+                else return data);
        sub32 <- emit_op SUB [Lit 32w; length];
        num_zero_bits <- emit_op MUL [sub32; Lit 8w];
        shifted <- emit_op shift_opc [num_zero_bits; data];
@@ -1722,10 +1722,12 @@ Definition compile_type_convert_def:
        else return v);
        emit_op SHL [Lit (n2w shift); clamped]
     od) ∧
-  (* Integer→decimal: clamp to pre-scaled bounds then multiply by divisor *)
+  (* Integer→decimal: clamp to pre-scaled bounds then multiply by divisor.
+     The pre-scaled bounds round toward zero (vyperlang/vyper#5298), so the
+     least admitted input times the divisor is still within out_lo. *)
   compile_type_convert v (ConvIntToDecimal in_s in_b divisor out_lo out_hi) =
-    (let pre_lo = out_lo / &divisor in
-    let pre_hi = out_hi / &divisor in
+    (let pre_lo = out_lo quot &divisor in
+    let pre_hi = out_hi quot &divisor in
     let in_lo = if in_s then - &(2 ** (in_b - 1)) else 0 in
     let in_hi = if in_s then &(2 ** (in_b - 1) - 1) else &(2 ** in_b - 1) in
     do (if in_lo < pre_lo then
@@ -1862,20 +1864,19 @@ Definition compile_type_convert_def:
           return v
        od
      else return v) ∧
-  (* Fixed bytes to bytestring: allocate length-prefixed buffer.
-     bytesM (word value) → Bytes[N] (memory pointer to [length][data]).
-     Mirrors Python: convert.py _to_Bytes for BytesM source *)
-  compile_type_convert v (ConvFixedToBytestring m) =
-    do buf_alloc <- compile_alloc_buffer 64;
-       let buf = buf_alloc.buf_operand in
-       do emit_void MSTORE [buf; Lit (n2w m)];
-          data_ptr <- emit_op ADD [buf; Lit 32w];
-          emit_void MSTORE [data_ptr; v];
-          return buf
-       od
-    od ∧
   (* Identity: no-op *)
   compile_type_convert v ConvIdentity = return v
+End
+
+(* Copy a bytestring of src_size buffer bytes into a new buffer of
+   dst_size bytes and return the new buffer.
+   Mirrors Python: convert.py _bytestring_convert_value (vyperlang/vyper#5338) *)
+Definition compile_bytestring_widen_copy_def:
+  compile_bytestring_widen_copy dst_size v src_size =
+    do buf <- compile_alloc_buffer dst_size;
+       compile_copy_memory buf.buf_operand v src_size;
+       return buf.buf_operand
+    od
 End
 
 (* ===== Unary Negation ===== *)
@@ -1982,16 +1983,10 @@ Definition mk_convert_op_def:
          | BaseT (BytesT (Fixed in_m)) => ConvBytesMToBytesM in_m m
          | FlagT _ => ConvIntToBytesM F 256 m
          | _ => ConvIdentity)
-    (* Bytestring/BytesM → Bytes[N]/String[N]:
-       - Bytestring source (is_bs=T): downcast length check only.
-       - BytesM source (is_bs=F): allocate length-prefixed buffer.
-       Mirrors Python: convert.py _to_Bytes, _to_String *)
-    | BaseT (BytesT (Dynamic out_n)) =>
-        (if is_bs then ConvBytestringCast out_n in_n
-         else ConvFixedToBytestring (fixed_bytes_size src_ty))
-    | BaseT (StringT out_n) =>
-        (if is_bs then ConvBytestringCast out_n in_n
-         else ConvFixedToBytestring (fixed_bytes_size src_ty))
+    (* Bytes[N]/String[N] targets take only bytestring sources.
+       Mirrors Python: convert.py to_bytes, to_string *)
+    | BaseT (BytesT (Dynamic out_n)) => ConvBytestringCast out_n in_n
+    | BaseT (StringT out_n) => ConvBytestringCast out_n in_n
     | _ => ConvIdentity
 End
 
@@ -2193,7 +2188,7 @@ Definition compile_make_tuple_def:
     do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst e_ty e_ty;
+       compile_store_memory cenv v dst e_ty (lowered_value_type cenv e);
        compile_make_tuple cfn cenv es buf_op (cur_offset + elem_size)
     od
 Termination
@@ -2212,7 +2207,7 @@ Definition compile_make_array_elems_def:
        (* Materialize the destination before unwrapping the child value. *)
        dst <- emit_op ADD [buf_op; Lit (n2w data_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst elem_ty e_ty;
+       compile_store_memory cenv v dst elem_ty (lowered_value_type cenv e);
        compile_make_array_elems cfn cenv es elem_ty elem_size has_length_word
                                 buf_op (cur_idx + 1)
     od
@@ -2369,7 +2364,7 @@ Definition compile_struct_lit_def:
     do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst field_ty e_ty;
+       compile_store_memory cenv v dst field_ty (lowered_value_type cenv e);
        compile_struct_lit cfn cenv ty rest buf_op (cur_offset + field_size)
     od
 Termination
@@ -2422,16 +2417,35 @@ Definition compile_materialize_vv_def:
     od
 End
 
+(* Operand of one ternary arm, given its lowered value. A non-word arm whose
+   layout differs from the result type's is copied into a fresh temporary
+   of the result type, since the result pointer is read with that layout.
+   Mirrors Python: expr.py lower_IfExp lower_arm, ensure_memory_layout with
+   same_memory_layout (vyperlang/vyper#5236, vyperlang/vyper#5331). *)
+Definition compile_ifexp_arm_def:
+  compile_ifexp_arm cenv res_ty arm_ty vv =
+    if is_word_type res_ty ∨ same_memory_layout cenv arm_ty res_ty then
+      unwrap_value cenv vv
+    else
+      do tmp <- compile_alloc_buffer (type_memory_bytes cenv res_ty);
+         src <- unwrap_value cenv vv;
+         compile_store_memory cenv src tmp.buf_operand res_ty arm_ty;
+         return tmp.buf_operand
+      od
+End
+
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
-   for any other type, a value Python materializes where it is lowered
-   (_parse_external_call_kwargs). Returns the operand and its type. *)
+   for any other type, a value Python materializes where it is lowered, at
+   its lowered type (default_vv.typ in _parse_external_call_kwargs). Returns
+   the operand and its type. *)
 Definition compile_ext_call_kwarg_def:
   compile_ext_call_kwarg cfn cenv return_type k e =
     if k = EKDefault /\ ~is_word_type return_type then
+      let d_ty = lowered_value_type cenv e in
       do vv <- cfn cenv (expr_type e) e;
-         op <- compile_materialize_vv cenv (expr_type e) vv;
-         comp_return (op, expr_type e)
+         op <- compile_materialize_vv cenv d_ty vv;
+         comp_return (op, d_ty)
       od
     else
       do op <- lower_value cfn cenv
@@ -2465,12 +2479,160 @@ End
    succeeds), but the formal proof needs: well_typed ⇒ safe_cast is identity.
    Also: default argument expansion not performed — frontend must inline defaults
    into the Call AST node before codegen (Python does this). *)
+(* ===== Interleaved creation operands ===== *)
+
+Definition compile_create_salt_def:
+  compile_create_salt cfn cenv NONE = return NONE ∧
+  compile_create_salt cfn cenv (SOME e) =
+    do salt <- lower_value cfn cenv (expr_type e) e;
+       return (SOME salt)
+    od
+End
+
+(* Evaluate located values before allocating the temporary tuple, then unwrap
+   them while storing it, exactly as for external-call arguments. *)
+Definition compile_create_ctor_tuple_def:
+  compile_create_ctor_tuple cfn cenv args =
+    let tys = MAP expr_type args in
+    do vals <- compile_multi_vvs cfn cenv args;
+       tmp <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
+       compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
+       return tmp.buf_operand
+    od
+End
+
+Definition compile_create_blueprint_args_def:
+  compile_create_blueprint_args cfn cenv raw_args args =
+    if raw_args then
+      (case args of
+         [e] =>
+           do ptr <- lower_value cfn cenv (expr_type e) e;
+              len <- emit_op MLOAD [ptr];
+              data <- emit_op ADD [ptr; Lit 32w];
+              return (data,len)
+           od
+       | _ => do emit_inst INVALID [] []; return (Lit 0w,Lit 0w) od)
+    else if args = [] then return (Lit 0w,Lit 0w)
+    else
+      let tuple_ty = TupleT (MAP expr_type args) in
+      let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
+      do buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
+         src <- compile_create_ctor_tuple cfn cenv args;
+         len <- compile_abi_encode_to_buf buf.buf_operand src enc;
+         return (buf.buf_operand,len)
+      od
+End
+
+(* Freeze bytecode before value/constructor/salt evaluation can overwrite it. *)
+Definition compile_create_snapshot_def:
+  compile_create_snapshot cenv vv bytecode_ty =
+    let mem_size = type_memory_bytes cenv bytecode_ty in
+    do tmp <- compile_alloc_buffer mem_size;
+       (case vv_location vv of
+          SOME LocStorage =>
+            do compile_slot_to_memory (vv_operand vv) tmp.buf_operand
+                 ((mem_size + 31) DIV 32) LocStorage;
+               return () od
+        | SOME LocTransient =>
+            do compile_slot_to_memory (vv_operand vv) tmp.buf_operand
+                 ((mem_size + 31) DIV 32) LocTransient;
+               return () od
+        | SOME LocCode =>
+            do compile_imm_copy_to_memory cenv.ce_is_ctor cenv.ce_imm_alloca
+                 (vv_operand vv) tmp.buf_operand
+                 ((type_memory_bytes cenv (vv_type vv) + 31) DIV 32) 0;
+               return () od
+        | _ =>
+            do len <- emit_op MLOAD [vv_operand vv];
+               size <- emit_op ADD [len; Lit 32w];
+               compile_copy_memory_dynamic tmp.buf_operand (vv_operand vv) size
+            od);
+       return tmp.buf_operand
+    od
+End
+
+Definition compile_raw_create_def:
+  compile_raw_create cfn cenv bytecode_e value_e ctor_args salt_e rof =
+    (* RawCreate._inputs promotes its bytecode use to Bytes[49152]. Names in
+       our AST retain declaration types, so use the builtin bound for buffer
+       capacity and slot copying, while evaluating the original expression. *)
+    let maxlen = 49152 in
+    let bytecode_ty = BaseT (BytesT (Dynamic maxlen)) in
+    let tuple_ty = TupleT (MAP expr_type ctor_args) in
+    let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
+    let abi_size = abi_size_bound cenv.ce_struct_fields tuple_ty in
+    do vv <- cfn cenv (expr_type bytecode_e) bytecode_e;
+       bytecode <- compile_create_snapshot cenv vv bytecode_ty;
+       value <- lower_value cfn cenv (expr_type value_e) value_e;
+       len <- emit_op MLOAD [bytecode];
+       data <- emit_op ADD [bytecode; Lit 32w];
+       (ptr,total) <-
+         (if ctor_args = [] then return (data,len)
+          else do buf <- compile_alloc_buffer (maxlen + abi_size);
+                  compile_copy_memory_dynamic buf.buf_operand data len;
+                  src <- compile_create_ctor_tuple cfn cenv ctor_args;
+                  dst <- emit_op ADD [buf.buf_operand; len];
+                  args_len <- compile_abi_encode_to_buf dst src enc;
+                  total <- emit_op ADD [len; args_len];
+                  return (buf.buf_operand,total)
+               od);
+       salt <- compile_create_salt cfn cenv salt_e;
+       compile_create_dispatch ptr total value salt rof
+    od
+End
+
+Definition compile_create_call_def:
+  compile_create_call cfn cenv ck has_salt rof args =
+    case args of
+      target_e::value_e::rest =>
+        (if LENGTH rest < (if has_salt then 1 else 0) +
+             (case ck of CreateFromBlueprint _ => 1 | _ => 0) then
+           do emit_inst INVALID [] []; return (Lit 0w) od
+         else case ck of
+           RawCreate =>
+             compile_raw_create cfn cenv target_e value_e
+               (if has_salt then FRONT rest else rest)
+               (if has_salt then SOME (LAST rest) else NONE) rof
+         | _ =>
+           do target <- lower_value cfn cenv (expr_type target_e) target_e;
+              value <- lower_value cfn cenv (expr_type value_e) value_e;
+              case ck of
+                CreateMinimalProxy =>
+                  do buf <- compile_create_proxy_buf target;
+                     salt <- compile_create_salt cfn cenv
+                       (if has_salt then SOME (HD rest) else NONE);
+                     compile_create_dispatch buf (Lit 54w) value salt rof
+                  od
+              | CreateCopyOf =>
+                  do salt <- compile_create_salt cfn cenv
+                       (if has_salt then SOME (HD rest) else NONE);
+                     compile_create_copy target value salt rof
+                  od
+              | CreateFromBlueprint raw_args =>
+                  let suffix = if has_salt then TL rest else rest in
+                  do salt <- compile_create_salt cfn cenv
+                       (if has_salt then SOME (HD rest) else NONE);
+                     offset <- lower_value cfn cenv (expr_type (HD suffix)) (HD suffix);
+                     size <- compile_create_blueprint_check target offset;
+                     (ptr,len) <- compile_create_blueprint_args cfn cenv raw_args (TL suffix);
+                     compile_create_blueprint_append target value salt offset
+                       size ptr len rof
+                  od
+              | RawCreate => return (Lit 0w)
+           od)
+    | _ => do emit_inst INVALID [] []; return (Lit 0w) od
+End
+
 Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret st =
     (let name = nsid_to_string func_id in
     let label = internal_fn_label (cenv.ce_func_ids name) name
                   (cenv.ce_func_param_types name) cenv.ce_is_ctor in
     let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info name in
+    (* The value is the callee's return buffer, laid out at the declared
+       return type even where the call is used at a wider type.
+       Mirrors Python: _make_ptr_value(return_buf, MEMORY, func_t.return_type) *)
+    let call_ty = cenv.ce_func_return_type name in
     let arg_types = MAP expr_type args in
     let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
     let (return_buf, st2) =
@@ -2493,16 +2655,16 @@ Definition compile_call_def:
           let (results, st4) = emit_multi_op INVOKE
                 (Label label :: all_invoke_args) returns_count st3 in
           let (_, st5) = store_multi_results rbuf.buf_operand results 0 st4 in
-          (LocatedValue ret_ty (base_ptr rbuf), st5)
+          (LocatedValue call_ty (base_ptr rbuf), st5)
       | NONE =>
           let (result, st4) = emit_op INVOKE
                 (Label label :: all_invoke_args) st3 in
-          (StackValue ret_ty result, st4)
+          (StackValue call_ty result, st4)
     else
       let (_, st4) = emit_void INVOKE (Label label :: all_invoke_args) st3 in
       (case return_buf of
-         SOME rbuf => (LocatedValue ret_ty (base_ptr rbuf), st4)
-       | NONE => (StackValue ret_ty (Lit 0w), st4))) ∧
+         SOME rbuf => (LocatedValue call_ty (base_ptr rbuf), st4)
+       | NONE => (StackValue call_ty (Lit 0w), st4))) ∧
   compile_call cfn cenv ret_ty ty (ExtCall is_static skip_contract_check
                                      (func_name, arg_types, return_type) opts)
               args default_ret st =
@@ -2619,8 +2781,9 @@ Definition compile_call_def:
          let (result_op, st6) = compile_raw_call_finish addr_op data_ptr data_len
            gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
            out_val out_ptr st5 in
-         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st6)
-         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)
+         let (_, st7) = emit_void SETFMP [data_ptr] st6 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st7)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st7)
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =
@@ -2632,9 +2795,8 @@ Definition compile_call_def:
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
-  compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof) args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st'))
+  compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof _) args default_ret st =
+    as_stack_val ret_ty (compile_create_call cfn cenv ck has_salt rof args st)
 End
 
 (* ===== Builtin Dispatch Helpers ===== *)
@@ -2786,16 +2948,21 @@ Definition compile_expr_body_def:
         let (exit_lbl, st5) = fresh_label "exit" st4 in
         let (_, st6) = emit_inst JNZ [cond_op; Label then_lbl; Label else_lbl] [] st5 in
         let (_, st7) = new_block then_lbl st6 in
-        let (then_op, st8) = lower_value compile_expr cenv ty then_e st7 in
+        let (then_vv, st7a) = compile_expr cenv ty then_e st7 in
+        let (then_op, st8) = compile_ifexp_arm cenv ret_ty
+                               (lowered_value_type cenv then_e) then_vv st7a in
         let (_, st9) = emit_inst ASSIGN [then_op] [result_var] st8 in
         let (_, st10) = emit_inst JMP [Label exit_lbl] [] st9 in
         let (_, st11) = new_block else_lbl st10 in
-        let (else_op, st12) = lower_value compile_expr cenv ty else_e st11 in
+        let (else_vv, st11a) = compile_expr cenv ty else_e st11 in
+        let (else_op, st12) = compile_ifexp_arm cenv ret_ty
+                                (lowered_value_type cenv else_e) else_vv st11a in
         let (_, st13) = emit_inst ASSIGN [else_op] [result_var] st12 in
         let (_, st14) = emit_inst JMP [Label exit_lbl] [] st13 in
         let (_, st15) = new_block exit_lbl st14 in
-        (* A non-word result is the PHI of two memory pointers, so it is a
-           memory pointer value, as in Python's lower_IfExp
+        (* A non-word result is the PHI of two memory pointers, each laid
+           out at the result type (compile_ifexp_arm), so it is a memory
+           pointer value, as in Python's lower_IfExp
            (vyper/codegen_venom/expr.py): an aggregate ternary assigned to a
            local is then copied through a temporary like any memory value. *)
         if is_word_type ret_ty then (StackValue ret_ty (Var result_var), st15)
@@ -2856,12 +3023,9 @@ Definition compile_expr_body_def:
             SOME (ValPT (ArrayT t _)) => t
           | _ => BaseT (IntT 256)) in
         let elem_size = elem_size_in_location cenv loc elem_ty in
-        let load_opc = (case loc of
-           LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
-        let store_opc = (case loc of
-           LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) in
         let (elem_ptr, st2) =
-          compile_dynarray_pop target_op ws elem_size load_opc store_opc st1 in
+          compile_dynarray_pop target_op ws elem_size
+            cenv.ce_is_ctor cenv.ce_imm_alloca loc st1 in
         (LocatedValue ret_ty (mk_ptr elem_ptr loc), st2)))
 End
 
@@ -3149,6 +3313,25 @@ Definition compile_type_builtin_dispatch_body_def:
          (let e1 = HD args in
           let src_ty = expr_type e1 in
           let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
+          (* A zero-capacity bytestring's buffer is its length word alone, so
+             loading its data word would read past it; its value is empty
+             and converts to 0. *)
+          if is_bytestring_type src_ty ∧ is_word_type ret_ty ∧
+             (lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) ∨
+              lowered_value_type cenv e1 = BaseT (StringT 0))
+          then (StackValue vv_ty (Lit 0w), st1)
+          (* Consumers read a bounded bytestring up to its type's size, past
+             a smaller source's buffer: copy the value into a buffer of the
+             target type (vyperlang/vyper#5338).  Python also copies an
+             unbounded source; the frontend has no unbounded bytestring
+             type, so that case can't arise. *)
+          else if is_bytestring_type src_ty ∧ is_bytestring_type ret_ty ∧
+             type_memory_bytes cenv (lowered_value_type cenv e1) <
+             type_memory_bytes cenv ret_ty
+          then as_stack_val vv_ty (compile_bytestring_widen_copy
+                 (type_memory_bytes cenv ret_ty) v
+                 (type_memory_bytes cenv (lowered_value_type cenv e1)) st1)
+          else
           case ret_ty of
             FlagT flag_nsid =>
               as_stack_val vv_ty (compile_type_convert v
@@ -3400,6 +3583,7 @@ QED
 (* Unequal aggregate types must enter typed copying, not flat MCOPY. *)
 Theorem compile_make_array_typed_tuple_order:
   expr_type e = TupleT [BaseT BoolT; BaseT BoolT] /\
+  lowered_value_type cenv e = expr_type e /\
   acyclic_struct_metadata cenv.ce_struct_fields ==>
   MAP (\i. i.inst_opcode)
     (SND (compile_make_array
@@ -3414,4 +3598,20 @@ Proof
        compile_with_byte_offset_def,
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem type_to_abi_dec_info_layout_cong:
+  !sf ce ty ce'.
+    ce'.ce_struct_fields = ce.ce_struct_fields /\
+    ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+    type_to_abi_dec_info sf ce' ty = type_to_abi_dec_info sf ce ty
+Proof
+  recInduct type_to_abi_dec_info_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  simp[Ntimes type_to_abi_dec_info_def 2]
+  >- (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
+      first_x_assum drule >> simp[])
+  >- (irule MAP_CONG >> simp[])
+  >> Cases_on `FLOOKUP sfields (nsid_to_string nsid)` >> simp[] >>
+  irule MAP_CONG >> simp[pairTheory.FORALL_PROD] >> metis_tac[]
 QED

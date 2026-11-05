@@ -6,6 +6,7 @@
  *   - only reachable, non-entry, halting blocks considered
  *   - blocks with PHI nodes are rejected
  *   - blocks with live-in variables are rejected (all vars defined locally)
+ *   - blocks with ALLOCA are rejected (see block_signature)
  *
  * TOP-LEVEL:
  *   bb_self_contained     — no PHIs, all input vars defined within the block
@@ -75,15 +76,13 @@ Definition canon_outputs_def:
     (var_map'', idx :: idxs)
 End
 
-(* Canonical instruction: (opcode, inst_id, canonical_outputs, canonical_operands).
-   inst_id is included because exec_alloca uses it as vs_allocas key, so two
-   instructions with different inst_ids produce genuinely different states.
+(* Canonical instruction: (opcode, canonical_outputs, canonical_operands).
    Outputs are processed first (matches Python: outputs tuple before operands). *)
 Definition canon_inst_def:
   canon_inst var_map inst =
     let (var_map', couts) = canon_outputs var_map inst.inst_outputs in
     let (var_map'', cops) = canon_operands var_map' inst.inst_operands in
-    (var_map'', (inst.inst_opcode, inst.inst_id, couts, cops))
+    (var_map'', (inst.inst_opcode, couts, cops))
 End
 
 (* Canonical instruction list: thread var_map through. *)
@@ -95,10 +94,14 @@ Definition canon_insts_def:
 End
 
 (* Block signature: canonical instruction sequence, or NONE if ineligible.
-   A block is eligible if it's halting and self-contained. *)
+   A block is eligible if it's halting, self-contained and has no ALLOCA.
+   exec_alloca keys vs_allocas by inst_id, so merging two ALLOCA blocks would
+   change the frame. Python has no such check; in its pipeline TailMerge runs
+   after ConcretizeMemLoc, which rewrites the ALLOCAs. *)
 Definition block_signature_def:
   block_signature bb =
-    if bb_is_halting bb ∧ bb_self_contained bb then
+    if bb_is_halting bb ∧ bb_self_contained bb ∧
+       EVERY (λinst. ¬is_alloca_op inst.inst_opcode) bb.bb_instructions then
       SOME (canon_insts [] bb.bb_instructions)
     else NONE
 End

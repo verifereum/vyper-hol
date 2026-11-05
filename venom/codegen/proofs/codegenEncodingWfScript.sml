@@ -196,6 +196,16 @@ Proof
   Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >> rw[] >> simp[]
 QED
 
+Theorem restore_spilled_plan_no_push_ofst[local]:
+  !ops0 ps ops ps'.
+    restore_spilled_plan ops0 ps = (ops, ps') ==>
+    !lbl d. ~MEM (SOPushOfst lbl d) ops
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  imp_res_tac do_restore_no_push_ofst >> metis_tac[]
+QED
+
 Theorem do_dup_no_push_ofst[local]:
   do_dup dist ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
@@ -323,7 +333,9 @@ Proof
   gvs[] >> qpat_x_assum `_ = (input_ops, ps1)` kall_tac >>
   pairarg_tac >>
   `!lbl d. ~MEM (SOPushOfst lbl d) join_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[reorder_plan_no_push_ofst]) >>
+    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+     metis_tac[reorder_plan_no_push_ofst,
+               restore_spilled_plan_no_push_ofst]) >>
   gvs[] >> qpat_x_assum `_ = (join_ops, ps2)` kall_tac >>
   pairarg_tac >>
   `!lbl d. ~MEM (SOPushOfst lbl d) reorder_ops` by

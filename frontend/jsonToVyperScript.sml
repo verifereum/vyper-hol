@@ -118,8 +118,8 @@ Definition collect_consts_and_immutables_def:
   collect_consts_and_immutables [] = [] ∧
   collect_consts_and_immutables (t :: rest) =
     (case t of
-       JTL_VariableDecl name _ _ _ T _ _ => name :: collect_consts_and_immutables rest
-     | JTL_VariableDecl name _ _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
+       JTL_VariableDecl name _ _ _ T _ _ _ => name :: collect_consts_and_immutables rest
+     | JTL_VariableDecl name _ _ _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
      | _ => collect_consts_and_immutables rest)
 End
 
@@ -220,8 +220,8 @@ End
 
 (* Get name of a public variable or hashmap (generates an external getter) *)
 Definition get_public_var_name_def:
-  get_public_var_name (JTL_VariableDecl name _ _ T _ _ _) = SOME name ∧
-  get_public_var_name (JTL_HashMapDecl name _ _ T _) = SOME name ∧
+  get_public_var_name (JTL_VariableDecl name _ _ T _ _ _ _) = SOME name ∧
+  get_public_var_name (JTL_HashMapDecl name _ _ T _ _) = SOME name ∧
   get_public_var_name _ = NONE
 End
 
@@ -627,7 +627,7 @@ Definition toplevel_decl_types_valid_def:
        ret_ty) ∧
      stmt_decl_types_valid nominal_index all_import_maps type_ctx body)) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
-      (JTL_VariableDecl _ inferred ann _ _ _ _) =
+      (JTL_VariableDecl _ inferred ann _ _ _ _ _) =
     declaration_type_valid nominal_index all_import_maps type_ctx inferred ann) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
       (JTL_EventDef _ fields) =
@@ -674,7 +674,7 @@ End
 Definition collect_toplevel_types_def:
   collect_toplevel_types nominal_index all_import_maps type_ctx [] = [] ∧
   collect_toplevel_types nominal_index all_import_maps type_ctx
-      (JTL_VariableDecl name inferred ann _ _ _ _ :: rest) =
+      (JTL_VariableDecl name inferred ann _ _ _ _ _ :: rest) =
     (((tctx_current_nsid type_ctx, name),
        canonical_decl_type nominal_index all_import_maps type_ctx inferred ann) ::
      collect_toplevel_types nominal_index all_import_maps type_ctx rest) ∧

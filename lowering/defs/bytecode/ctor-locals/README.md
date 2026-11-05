@@ -18,6 +18,8 @@ included in the default lowering rollup.
 | `ctor_local_across_call` | a word local live across an internal call whose callee has its own local |
 | `ctor_for_range` | a word accumulator and a `range` loop variable |
 | `ctor_arg_ifelse_local` | a local computed from an argument, read in both branches of an if/else |
+| `ctor_bare_return` | a bare return still installs the external getter |
+| `ctor_immutable_early_return` | an early return and fallthrough share runtime and immutable installation |
 
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode
 from the pinned Python Vyper (`VYPER_PIN`), with the same settings and

@@ -25,9 +25,10 @@
 
 Theory stmtSimAssignTuple
 Ancestors
+  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclMem
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimReturn exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
@@ -222,6 +223,7 @@ Theorem assign_tuple_locals_code_decompose:
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
     expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) ==>
     c = cenv /\
     ?vv sc op su staged sl elems ss.
@@ -241,31 +243,7 @@ Theorem assign_tuple_locals_code_decompose:
         elems ss = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss())
-    [stmt_env_def, declare_stmt_local_def, compile_stmt_def,
-     compile_tuple_unpack_def, comp_bind_def, comp_ignore_bind_def,
-     comp_return_def, LET_THM] >>
-  Cases_on `compile_expr cenv (TupleT tys) e sa` >>
-  rename1 `compile_expr _ _ _ _ = (vv, sc)` >>
-  Cases_on `unwrap_value cenv vv sc` >>
-  rename1 `unwrap_value _ _ _ = (op, su)` >> simp[] >>
-  `~(is_memory_view e /\ vv_location vv = SOME LocMemory /\
-      EXISTS (\t. ~is_word_type t) tys /\
-      0 < SUM (MAP (type_memory_bytes cenv) tys) /\
-      ~cenv.ce_target CapMcopy)` by metis_tac[] >>
-  asm_simp_tac (srw_ss()) [GSYM CONJ_ASSOC, arithmeticTheory.GREATER_DEF,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  qmatch_goalsub_abbrev_tac `(if guard then stage else comp_return op) su` >>
-  Cases_on `(if guard then stage else comp_return op) su` >>
-  rename1 `_ = (staged, sl)` >> simp[] >>
-  Cases_on `compile_tuple_load_all cenv staged tys 0 sl` >>
-  rename1 `compile_tuple_load_all _ _ _ _ _ = (elems, ss)` >> simp[] >>
-  Cases_on `compile_tuple_store_all cenv tys
-    (MAP (BaseTarget o NameTarget) ids) elems ss` >>
-  rename1 `compile_tuple_store_all _ _ _ _ _ = (u, sf1)` >>
-  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  qexistsl [`staged`, `sl`, `elems`, `ss`] >> simp[]
+  drule_all assign_tuple_targets_code_decompose >> simp[]
 QED
 
 Theorem tuple_stage_grows:
@@ -299,7 +277,8 @@ Theorem assign_tuple_locals_code_parts[local]:
     stmt_env cenv lctx ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
@@ -342,7 +321,8 @@ Theorem assign_tuple_locals_success_run[local]:
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
                (INL v, es1) ==> value_has_type tup_tv v) /\
@@ -440,6 +420,12 @@ Resume assign_tuple_locals_success_run[loads]:
      qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
      irule environment_var_not_fresh >> metis_tac[]) >>
+  `!p. cenv.ce_imm_alloca = SOME (Var p) ==>
+     lookup_var p (sv with vs_vars := lvars) = lookup_var p sv` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     irule local_ptrs_reserved_imm_base >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx es1 sl` by
     (simp[Abbr `sl`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_inst_idx] >>
@@ -473,20 +459,20 @@ Finalise assign_tuple_locals_success_run
    store_lays_out of each element against its local's type are required of
    e's value after read_result, as for x = e. *)
 Theorem compile_assign_tuple_locals_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty ids e es res es' tys tup_tv.
-    eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty ids e es tys tup_tv.
     ids <> [] /\
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
-               (INL v, es1) ==> value_has_type tup_tv v) /\
-    (!tvs vs es1 i entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL (ArrayV (TupleV vs)), es1) /\
+    (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
+               (es with gas_obs := gs) = (INL v, es1) ==>
+               value_has_type tup_tv v) /\
+    (!gs tvs vs es1 i entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL (ArrayV (TupleV vs)), es1) /\
        tup_tv = TupleTV tvs /\ i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
        store_lays_out (EL i tvs) entry.type (EL i vs)) /\
@@ -494,7 +480,9 @@ Theorem compile_assign_tuple_locals_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>

@@ -68,7 +68,12 @@ Proof
     fs[abi_builtin_prefix_def, abi_decoder_address_frame_def, w2n_n2w, mload_def] >>
   `abi_builtin_prefix st c2 limit_st s loaded` by
     (irule abi_builtin_prefix_chain >> qexistsl_tac [`c1`, `headed`] >> asm_simp_tac bool_ss []) >>
-  `eval_operand dst loaded = SOME (n2w db)` by fs[abi_builtin_prefix_def, abi_decoder_address_frame_def] >>
+  `eval_operand dst loaded = SOME (n2w db)` by
+    (qpat_assum `abi_builtin_prefix st c2 limit_st s loaded`
+       (strip_assume_tac o
+        PURE_REWRITE_RULE [abi_builtin_prefix_def, abi_decoder_address_frame_def]) >>
+     qpat_x_assum `!op w. _` (qspecl_then [`dst`, `n2w db`] irule) >>
+     asm_rewrite_tac []) >>
   mp_tac (Q.INST [`lhs` |-> `dst`, `rhs` |-> `offset`, `out` |-> `child_dst`,
     `st` |-> `c2`, `st'` |-> `ready`, `s` |-> `loaded:venom_state`,
     `a` |-> `n2w db:bytes32`, `b` |-> `n2w off:bytes32`] abi_builtin_emit_add) >>

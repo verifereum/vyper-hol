@@ -153,7 +153,9 @@ Theorem truncate_unsigned_i2w_roundtrip:
     &(truncate_unsigned n ((i2w i) : bytes32)) = i
 Proof
   PURE_REWRITE_TAC[truncate_unsigned_def] >> rpt strip_tac >>
-  `2 ** n <= dimword(:256)` by simp[wordsTheory.dimword_def] >>
+  `2 ** n <= dimword(:256)` by
+    (PURE_REWRITE_TAC[wordsTheory.dimword_def, dimindex_256] >>
+     irule bitTheory.TWOEXP_MONO2 >> FIRST_ASSUM ACCEPT_TAC) >>
   `0 <= i /\ i < &dimword(:256)` by intLib.ARITH_TAC >>
   `i % &dimword(:256) = i` by simp[integerTheory.INT_LESS_MOD] >>
   `&(w2n ((i2w i) : bytes32)) = i` by
@@ -424,8 +426,7 @@ QED
    The byte-list surgery is: mstore writes TAKE off expanded ++ word_to_bytes w T ++ DROP (off+32) expanded,
    then mem_word_at reads TAKE 32 (DROP off result ++ REPLICATE 32 0w).
    Need to show DROP off (TAKE off X ++ bytes ++ tail) = bytes ++ tail,
-   then TAKE 32 (bytes ++ ...) = bytes when LENGTH bytes = 32.
-   See lowerDloadProofsScript.sml:write_then_mload for a similar local proof. *)
+   then TAKE 32 (bytes ++ ...) = bytes when LENGTH bytes = 32. *)
 Theorem drop_take_append[local]:
   ∀ off (xs : α list) ys.
     off ≤ LENGTH xs ⇒ DROP off (TAKE off xs ++ ys) = ys

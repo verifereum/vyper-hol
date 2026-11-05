@@ -18,13 +18,16 @@
  *   body_expr_ok_case, body_expr_ok_of_case — body_expr_ok is the shared
  *                        judgments at nocalls = F in every frame
  *   body_exprs_ok_case — body_exprs_ok is exprs_case at nocalls = F
- *   body_*_case        — one case of the induction each
+ *   body_*_case        — one case of the induction each; the call cases
+ *                        are in bodySimCallCases
  *)
 
 Theory bodySimExprCases
 Ancestors
-  list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimSource
+  exprSimHypsDefs
+  list bodySim  exprSimHyps exprSimOperators exprSimAttribute
+  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* With no internal call in it, an expression simulates by
@@ -70,6 +73,29 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
+(* A ternary with an arm whose value the lowering lays out differently from
+   its source type: an internal call whose callee's return type the call's
+   type widens (supported_pure_expr keeps calls out of supported ternaries,
+   but body_expr_ok ranges over every expression).  The arm's simulation
+   would have to describe its value at the lowered type, which expr_sim
+   does not do yet; that is the internal-call simulation's work, as for
+   body_intcall_case. *)
+Theorem body_ifexp_widened_call_arm:
+  !cx v5 e1 e2 e3.
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e3) /\
+    body_expr_ok cx e1 ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (IfExp v5 e1 e2 e3) es /\
+      (?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
+           ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) ==>
+      expr_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es /\
+      expr_vv_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es
+Proof
+  cheat
+QED
+
 (* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
@@ -79,9 +105,45 @@ Theorem body_ifexp_case:
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  irule compile_ifexp_case >> rpt conj_tac
-  >- (strip_tac >> metis_tac[body_expr_ok_case]) >>
-  metis_tac[body_expr_ok_case]
+  Cases_on `!e. (e = e2 \/ e = e3) ==>
+    int_calls_expr e = [] \/ same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+  >- (irule compile_ifexp_case >> simp[] >> metis_tac[body_expr_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_ifexp_widened_call_arm]
+QED
+
+(* An aggregate literal with an element whose value the lowering lays out
+   differently from the element's type: an internal call whose callee's
+   return type the call's type widens.  As for body_ifexp_widened_call_arm,
+   describing that value at its lowered type is the internal-call
+   simulation's work (body_intcall_case). *)
+Theorem body_struct_lit_widened_call_elem:
+  !cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
+      (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) ==>
+      expr_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
+      expr_vv_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
+Proof
+  cheat
+QED
+
+Theorem body_make_array_widened_call_elem:
+  !cx ty t n es.
+    (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
+     body_exprs_ok cx es) ==>
+    !tops ctx func cenv env ty' st.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (Builtin ty (MakeArray t n) es) st /\
+      (?e. MEM e es /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) ==>
+      expr_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
+      expr_vv_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
+Proof
+  cheat
 QED
 
 (* exprSimAggregates' compile_struct_lit_case. *)
@@ -90,9 +152,12 @@ Theorem body_structlit_case:
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
-  strip_tac >> irule compile_struct_lit_case >>
-  metis_tac[body_exprs_ok_case]
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  Cases_on `!e. MEM e (MAP SND kes) ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_struct_lit_widened_call_elem]
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
@@ -161,7 +226,11 @@ Proof
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  irule compile_make_array_case >> metis_tac[body_exprs_ok_case]
+  Cases_on `!e. MEM e es ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_make_array_widened_call_elem]
 QED
 
 (* ecadd and ecmul: exprSimECArith's compile_ecadd_call_case and
@@ -271,18 +340,20 @@ Proof
   irule compile_bop_args_case >> gvs[]
 QED
 
-(* GAP (#636 operands with internal calls): pop on a nested target whose
-   subscript key makes an internal call.  Blocked on the target/place
-   judgment that exprSimPlaces' compile_pop_nested_sim needs, here for
-   indices that make internal calls: the induction hypotheses give only
-   body_base_target_ok of the target. *)
+(* pop on a nested target: exprSimPopNested's pop_nested_sim, by the
+   target's root, with the target's fragment judgment from
+   body_pop_nested_target_frag. *)
 Theorem body_pop_nested_case:
   !cx v10 bt.
     (!id. bt <> NameTarget id) /\ (!nid. bt <> TopLevelNameTarget nid) /\
     body_base_target_ok cx bt ==>
     body_expr_ok cx (Pop v10 bt)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Pop v10 bt)` by
+    (rw[expr_vv_case_def] >> irule pop_nested_sim >> qexists_tac `env` >> simp[] >>
+     strip_tac >> irule body_pop_nested_target_frag >> metis_tac[]) >>
+  simp[expr_sim_case_of_vv]
 QED
 
 (* pop on a local: exprSimPlaces' compile_pop_name_case; on a module
@@ -338,208 +409,4 @@ Proof
   `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)` by
     metis_tac[compile_send_case, body_exprs_ok_case] >>
   fs[expr_vv_case_def] >> metis_tac[]
-QED
-
-(* GAP (#636 operands with internal calls): external calls.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_extcall_case:
-  !cx v14 is_static skip_check sig opts es v15.
-    (!s'' target t nargs s'3' results t'.
-       eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
-       nargs = LENGTH (FST (SND sig)) /\
-       eval_expr_results cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
-       body_exprs_ok cx (DROP (1 + nargs) es)) /\
-    (!s'' target t nargs.
-       eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
-       nargs = LENGTH (FST (SND sig)) ==>
-       body_results_ok cx (TAKE nargs (DROP 1 es))) /\
-    body_exprs_ok cx (TAKE 1 es) ==>
-    body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
-   give the arguments' judgments (body_results_ok), the defaults' at the
-   callee's stack (body_exprs_ok), and the callee body's (body_stmts_ok
-   at cxf, the callee's context after push_function).  The step:
-   - compile_call: intCallStep's compile_call_intcall_shape, the INVOKE
-     label by intCallLookup's compile_call_intcall_label (body_inv gives
-     its premises), and the callee's code in ctx by
-     lower_vyper_runtime_unit_internal_lookup;
-   - the arguments: the IH, then intCallArgs' stage_mem_arg_frag for
-     the staged memory arguments;
-   - the callee's entry: intCallCallee's compile_internal_prologue_entry
-     gives stmt_state_rel at the callee's start, at
-     vs with scopes := [env];
-   - the callee's body: the IH at the callee's compile env, with RetQ
-     intret_q (stack returns) or intret_mem_q (memory returns), whose
-     frame_ret_ok stmtSimReturn's compile_return_word_int_frag and
-     compile_return_tuple_int_frag and intCallReturnMem's
-     compile_internal_return_memory_frag give;
-   - the return: intCallStep's frag_exec_invoke_intret, intCallReturn's
-     eval_expr_intcall_return (source) and invoke_intret_state_rel
-     (Venom), with intCallFrame's callee_writes_above for the caller's
-     live regions, and intCallResult's store_multi_results_frag for
-     stack results.
-   Left (the push transfer): the callee body's premises at its entry:
-   body_inv (whose target conjunct needs the callee's compile env at the
-   unit's policy target, as set_*_package_target installs it) and
-   expr_sim_inv for the callee's compile env and env at cxf, and
-   frame_ret_ok for the internal return; and that the callee
-   body's code in ctx is stmts_env's in that compile env.
-   ce_locals_declared there is bodySimEntry's internal_entry_declared and
-   ce_locals_declared_params, for an env that has the parameters; the
-   body's locals_alloc_ok and stmt_exprs_ok's alloc_limits_stmt come from
-   fn_allocs_ok_body. *)
-Theorem body_intcall_case:
-  !cx v16 src_id_opt fn es v17.
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' dflt_vs t'6' s'9' vs t'7' all_tenv s'10' env t'8' s'11' rtv
-         t'9' is_view s'12' x'' t'10' s'13' cxf t'11'.
-       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
-       lift_option_type (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'3' = (INL ts,t') /\
-       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
-       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
-       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
-       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
-       type_check
-         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
-         "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_expr_results cx es s'6' = (INL results,t'4') /\
-       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
-       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
-       get_scopes s'7' = (INL prev,t'5') /\
-       finally
-         (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd needed_dflts))
-         (set_scopes prev) s'8' = (INL dflt_vs,t'6') /\
-       read_results cx results s'9' = (INL vs,t'7') /\
-       all_tenv = get_tenv cx /\
-       lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
-         "IntCall bind_arguments" s'10' = (INL env,t'8') /\
-       lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'11' =
-       (INL rtv,t'9') /\ (is_view <=> is_view_mut mut) /\
-       lock_if_nr cx nr is_view s'12' = (INL x'',t'10') /\
-       push_function (src_id_opt,fn) env cx s'13' = (INL cxf,t'11') ==>
-       body_stmts_ok cxf body') /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' x'' t'6'.
-       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
-       lift_option_type (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'3' = (INL ts,t') /\
-       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
-       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
-       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
-       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
-       type_check
-         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
-         "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_expr_results cx es s'6' = (INL results,t'4') /\
-       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
-       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
-       get_scopes s'7' = (INL prev,t'5') /\
-       set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
-       body_exprs_ok cxd needed_dflts) /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3'.
-       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
-       lift_option_type (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'3' = (INL ts,t') /\
-       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
-       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
-       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
-       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
-       type_check
-         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
-         "IntCall args length" s'5' = (INL x',t'3') ==>
-       body_results_ok cx es) ==>
-    body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#636 operands with internal calls): raw_call.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_raw_call_case:
-  !cx ty flags es v18.
-    body_exprs_ok cx es ==>
-    body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#636 operands with internal calls): raw_call with calldata.  Its
-   case lemma is still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_raw_call_calldata_case:
-  !cx ty flags es v19.
-    body_exprs_ok cx es ==>
-    body_expr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#636 operands with internal calls): raw_log.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_raw_log_case:
-  !cx v20 es v21.
-    body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#636 operands with internal calls): raw_revert.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_raw_revert_case:
-  !cx v22 es v23.
-    body_exprs_ok cx es ==> body_expr_ok cx (Call v22 RawRevert es v23)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#636 operands with internal calls): selfdestruct.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_selfdestruct_case:
-  !cx v24 es v25.
-    body_exprs_ok cx es ==>
-    body_expr_ok cx (Call v24 SelfDestructTarget es v25)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
-QED
-
-(* GAP (#636 operands with internal calls): create.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
-Theorem body_create_case:
-  !cx ty kind has_salt rof es v26.
-    (!raw_args s'' prefix t s'3' code_size t'.
-       kind = CreateFromBlueprint raw_args /\
-       eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' = (INL prefix,t) /\
-       check_create_blueprint has_salt prefix s'3' = (INL code_size,t') ==>
-       body_results_ok cx (DROP (if has_salt then 4 else 3) es)) /\
-    (!raw_args.
-       kind = CreateFromBlueprint raw_args ==>
-       body_exprs_ok cx (TAKE (if has_salt then 4 else 3) es)) /\
-    (!s'' prefix t ctor_es nargs s'3' results t' s'4' args t''.
-       kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
-       ctor_es = DROP 2 es /\
-       nargs = LENGTH ctor_es - (if has_salt then 1 else 0) /\
-       eval_expr_results cx (TAKE nargs ctor_es) s'3' = (INL results,t') /\
-       read_results cx results s'4' = (INL args,t'') ==>
-       body_exprs_ok cx (DROP nargs ctor_es)) /\
-    (!s'' prefix t ctor_es nargs.
-       kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
-       ctor_es = DROP 2 es /\
-       nargs = LENGTH ctor_es - (if has_salt then 1 else 0) ==>
-       body_results_ok cx (TAKE nargs ctor_es)) /\
-    (kind = CreateCopyOf ==> body_exprs_ok cx es) /\
-    (kind = CreateMinimalProxy ==> body_exprs_ok cx es) /\
-    (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
-    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof) es v26)
-Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED

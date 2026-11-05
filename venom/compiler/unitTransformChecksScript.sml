@@ -84,7 +84,9 @@ Theorem o1_initial_state_reset_check:
   o1_initial_state_ok
     (s with <| vs_vars := FEMPTY; vs_halted := F; vs_memory := [];
                vs_allocas := FEMPTY; vs_alloca_next := 0 |>) /\
-  ~o1_initial_state_ok (s with vs_alloca_next := 1) /\
+  o1_initial_state_ok
+    (s with <| vs_vars := FEMPTY; vs_halted := F; vs_memory := [];
+               vs_allocas := FEMPTY; vs_alloca_next := 1 |>) /\
   ~o1_initial_state_ok (s with vs_halted := T) /\
   ~o1_initial_state_ok (s with vs_memory := [0w])
 Proof

@@ -194,9 +194,9 @@ Datatype:
   json_toplevel
   = JTL_FunctionDef string (string list) (string list) (json_arg list) (json_expr list) json_func_type json_type_annotation (json_stmt list)
       (* name, decorators, override module aliases, args, defaults, func_type, syntactic return annotation, body *)
-  | JTL_VariableDecl string json_type json_type_annotation bool bool bool (json_expr option)
+  | JTL_VariableDecl string json_type json_type_annotation bool bool bool bool (json_expr option)
       (* name, inferred type, syntactic annotation, is_public, is_immutable, is_transient, value (for constants) *)
-  | JTL_HashMapDecl string json_type json_value_type bool bool
+  | JTL_HashMapDecl string json_type json_value_type bool bool bool
       (* name, key_type, value_type, is_public, is_transient *)
   | JTL_EventDef string ((json_arg # bool) list)  (* bool = indexed *)
   | JTL_ErrorDef string (json_arg list)

@@ -17,8 +17,7 @@
  *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   accounts_rel     — every address's accounts and transient storage match,
- *                      the running contract's storage up to dead bytes, and
- *                      no pending deletions
+ *                      the running contract's storage up to dead bytes
  *   dead_bytes       — the bytes of a stored value past a bytestring's
  *                      length (or a nested DynArray's)
  *   storage_dead     — dead_bytes of a declared storage region, which the
@@ -35,7 +34,8 @@
  *   fresh_vars_wrt       — compiler var counter ahead of existing venom vars
  *   local_region         — a live local's region through its pointer variable
  *   local_backed         — what backs a live local's region in the current frame
- *   not_local_ptr        — a variable is not a live local's pointer
+ *   not_local_ptr        — a variable is not a live local's pointer or the
+ *                          constructor's immutable base
  *   bound_labels         — set of labels bound to blocks in compile state
  *   compiler_labels_future — co-domain of fresh_label for counter values ≥ n
  *)
@@ -44,7 +44,7 @@ Theory compileEnv
 Ancestors
   immutableValue immutableEncoding vyperStorageLayoutSafety
   venomExecSemantics venomInst venomPolicyTypes
-  vyperState vyperContext vyperValue vyperABI contractABI
+  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI vyperTypeSystem
   byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
@@ -460,11 +460,13 @@ Datatype:
        stack returns. Kept out of ce_vars so user names cannot collide with it.
        Mirrors Python: FunctionContext.return_buffer *)
     ce_return_buf : var_location option;
-    (* Where the return PC is; NONE for external functions. `Return` decides
-       "internal or external?" from this field.
+    (* Where the return PC is; NONE for external functions and constructors.
        Mirrors Python: FunctionContext.return_pc, tested by lower_Return as
        `ctx.return_pc is not None` *)
     ce_return_pc : var_location option;
+    (* Constructors return through one shared runtime-copy epilogue.
+       Internal functions called during deployment still use ce_return_pc. *)
+    ce_ctor_exit_label : string option;
     (* External function: T for external functions, F for internal *)
     ce_is_external : bool;
     (* ABI encoding info for external return type.
@@ -491,6 +493,11 @@ Datatype:
        func_name → arg types. Spells the INVOKE target (internal_fn_label).
        Mirrors Python: func_t.arguments in expr.py lower_Call *)
     ce_func_param_types : string -> type list;
+    (* Internal function declared return types: func_name → return type.
+       The value of an internal call is its callee's return buffer, laid out
+       at this type even where the call is used at a wider type.
+       Mirrors Python: func_t.return_type in expr.py _lower_internal_call *)
+    ce_func_return_type : string -> type;
     (* Internal function ids: func_name → id. Spells the INVOKE target
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)
@@ -879,11 +886,21 @@ End
 
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
-Definition not_local_ptr_def:
-  not_local_ptr cenv scopes x ⇔
+Definition not_scope_ptr_def:
+  not_scope_ptr cenv scopes x ⇔
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* x is neither the pointer variable of a live local nor the constructor's
+   immutable base, so assigning it leaves the locals and the base in place. *)
+Definition not_local_ptr_def:
+  not_local_ptr cenv scopes x ⇔
+    (∀name entry sz.
+       lookup_scopes name scopes = SOME entry ⇒
+       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)) ∧
+    cenv.ce_imm_alloca ≠ SOME (Var x)
 End
 
 (* The locals of cenv are held through pointer variables that were handed out
@@ -897,14 +914,20 @@ End
    - no compiler variable fresh at st is a local's pointer, so a temporary of
      the code compiled from st on never overwrites one;
    - distinct locals have distinct pointers, so declaring a local leaves the
-     others' pointers alone. *)
+     others' pointers alone;
+   - the constructor's immutable base variable (ASSIGN 0 in the prologue,
+     before the body) is no fresh compiler variable and no local's pointer,
+     so neither a temporary nor a local's pointer overwrites it. *)
 Definition local_ptrs_reserved_def:
   local_ptrs_reserved cenv (st:compile_state) ⇔
     (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
-    ∀n1 n2 p sz1 sz2.
-      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
-      not_fresh_at st p ∧
-      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
+    (∀n1 n2 p sz1 sz2.
+       FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+       not_fresh_at st p ∧
+       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)) ∧
+    ∀x. cenv.ce_imm_alloca = SOME (Var x) ⇒
+      not_fresh_at st x ∧
+      ∀name sz. FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -1113,22 +1136,16 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree, and the
-   source has no pending deletions.  Other addresses' accounts and
+(* The accounts and the transient storage of every address agree.
+   Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
-   them equal again.  The source's pending deletions come only from create
-   runs, which the supported subset leaves out; a transaction starts with
-   none, as call_external empties them on success.  Venom also adds the
-   callee's deletions (co_toDelete) on a successful call; the source does
-   not adopt them yet, so this relation says nothing about Venom's queue.
-   The success case of the external result relation, which compares the
-   accounts after the source processes its deletions, needs them empty. *)
+   them equal again. Pending deletion queues are related separately by
+   state_rel and finalized at the external transaction boundary. *)
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient ∧
-    vs.pending_deletions = []
+    transient_agree cx vs.tStorage ss.vs_transient
 End
 
 (* ===== Immutables Relation ===== *)
@@ -1148,11 +1165,12 @@ End
    ce_module_vars maps (src_id_opt, name) to ImmutableLoc byte_offset.
    Semantic contents and capacity bounds do not determine unused padding;
    exact staging is tracked separately in immutableRelation. *)
-(* Base invariant is separate: register updates need not preserve it unless
-   they leave the chosen region operand alone. *)
+(* Constructor accesses keep the region base at zero and retain the runtime
+   label needed by the deployment epilogue. *)
 Definition immutable_base_zero_def:
   immutable_base_zero cenv ss <=>
-    !base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w
+    (!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w) /\
+    (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP ss.vs_labels "runtime_begin"))
 End
 
 Definition immutables_rel_def:
@@ -1165,8 +1183,8 @@ Definition immutables_rel_def:
         SOME (ImmutableLoc byte_offset) /\
       FLOOKUP interp_imms name = SOME (tv,v) ==>
       immutable_value_admissible tv v /\
-      byte_offset + type_memory_size tv <=
-        LENGTH (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
+      (~is_ctor ==>
+         byte_offset + type_memory_size tv <= LENGTH ss.vs_data_section) /\
       val_in_memory tv v byte_offset
         (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
       immutable_value_bytes_rel tv v
@@ -1264,7 +1282,7 @@ Definition indexed_values_def:
 End
 
 Definition indexed_topic_flags_def:
-  indexed_topic_flags [] [] = ([] : bool list) ∧
+  indexed_topic_flags [] [] = ([] : type list) ∧
   indexed_topic_flags (T :: flags) (b :: bs) =
     b :: indexed_topic_flags flags bs ∧
   indexed_topic_flags (F :: flags) (_ :: bs) =
@@ -1282,8 +1300,9 @@ Definition log_bytestring_topic_def:
 End
 
 Definition log_topic_equiv_def:
-  log_topic_equiv T v topic = (log_bytestring_topic v = SOME topic) ∧
-  log_topic_equiv F v topic = (topic = val_to_w256 v)
+  log_topic_equiv ty v topic =
+    (if is_event_bytestring_type ty then log_bytestring_topic v = SOME topic
+     else topic = event_topic_word ty v)
 End
 
 Definition log_indexed_topics_equiv_def:
@@ -1323,7 +1342,58 @@ Definition logs_rel_def:
     EVERY2 (log_entry_equiv cenv addr) vs.logs ss.vs_logs
 End
 
-(* Call context matches *)
+(* The transaction's block context is one an EVM block can have: a block
+   number past genesis and below 2 ** 255, and the hashes of the last
+   MIN 256 block_number blocks.  Under it the source's evaluate_block_hash
+   raises exactly where the lowered blockhash(n) range check reverts, and
+   block.prevhash always has a hash. *)
+Definition tx_env_ok_def:
+  tx_env_ok tx <=>
+    tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
+    MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
+    LENGTH tx.block_hashes <= 256
+End
+
+Theorem tx_env_ok_hash_window:
+  tx_env_ok tx ==>
+  (n < tx.block_number /\ tx.block_number - n - 1 < LENGTH tx.block_hashes <=>
+   n < tx.block_number /\ tx.block_number - 256 <= n)
+Proof
+  simp[tx_env_ok_def] >> strip_tac >>
+  Cases_on `tx.block_number <= 256` >>
+  gvs[arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem tx_env_ok_evaluate_block_hash:
+  tx_env_ok tx ==>
+  evaluate_block_hash tx n =
+    if n < tx.block_number /\ tx.block_number - 256 <= n then
+      INL (BytesV (word_to_bytes_be
+        (EL (tx.block_number - n - 1) tx.block_hashes)))
+    else INR (RuntimeError "evaluate_block_hash")
+Proof
+  strip_tac >> drule tx_env_ok_hash_window >>
+  disch_then (qspec_then `n` assume_tac) >>
+  simp[evaluate_block_hash_def] >>
+  `tx.block_number - 1 - n = tx.block_number - n - 1` by decide_tac >>
+  Cases_on `n < tx.block_number /\ tx.block_number - 256 <= n` >>
+  gvs[] >>
+  Cases_on `tx.block_number <= n \/ LENGTH tx.block_hashes <= tx.block_number - (n + 1)` >>
+  gvs[] >> decide_tac
+QED
+
+Theorem tx_env_ok_evaluate_prevhash:
+  tx_env_ok tx ==>
+  evaluate_block_hash tx (tx.block_number - 1) =
+    INL (BytesV (word_to_bytes_be (EL 0 tx.block_hashes)))
+Proof
+  strip_tac >> drule tx_env_ok_evaluate_block_hash >>
+  disch_then (qspec_then `tx.block_number - 1` mp_tac) >>
+  gvs[tx_env_ok_def]
+QED
+
+(* Call context matches.  BLOCKHASH answers from the transaction's block
+   hashes within the last 256 blocks, and 0 elsewhere, as the EVM does. *)
 Definition call_ctx_rel_def:
   call_ctx_rel (txn:call_txn) (cc:call_context) (tc:tx_context) (bc:block_context) =
     (cc.cc_caller = txn.sender ∧
@@ -1340,8 +1410,30 @@ Definition call_ctx_rel_def:
      bc.bc_prevrandao = n2w txn.prev_randao ∧
      bc.bc_gaslimit = n2w txn.gas_limit ∧
      bc.bc_basefee = n2w txn.base_fee ∧
-     bc.bc_blobbasefee = n2w txn.blob_base_fee)
+     bc.bc_blobbasefee = n2w txn.blob_base_fee ∧
+     tx_env_ok txn ∧
+     (∀n. bc.bc_blockhash n =
+          if n < txn.block_number ∧ txn.block_number - 256 ≤ n ∧
+             txn.block_number - n - 1 < LENGTH txn.block_hashes
+          then EL (txn.block_number - n - 1) txn.block_hashes else 0w))
 End
+
+Theorem call_ctx_rel_prevhash:
+  call_ctx_rel tx cc tc bc ==>
+  bc.bc_blockhash (w2n (bc.bc_number - 1w)) = HD tx.block_hashes
+Proof
+  strip_tac >>
+  `0 < tx.block_number /\ tx.block_number < 2 ** 255 /\
+   0 < LENGTH tx.block_hashes` by
+    gvs[call_ctx_rel_def, tx_env_ok_def] >>
+  `bc.bc_number = n2w tx.block_number` by gvs[call_ctx_rel_def] >>
+  `bc.bc_number - 1w = (n2w (tx.block_number - 1) : bytes32)` by
+    simp[wordsTheory.n2w_sub] >>
+  `w2n (bc.bc_number - 1w) = tx.block_number - 1` by
+    (simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+     simp_tac (srw_ss() ++ wordsLib.SIZES_ss) [] >> fs[]) >>
+  gvs[call_ctx_rel_def]
+QED
 
 (* Top-level oracle-mode source/Venom state relation for the statement and
    expression simulation, in func, the function running.  It ties together
@@ -1355,10 +1447,8 @@ End
    - transient_rel, transient_vars_rel: transient storage up to dead bytes,
      and the slots of transient variables.
    - accounts_rel: the accounts and transient storage of every address (the
-     running contract's storage up to dead bytes), and no pending
-     deletions, which the success case of the external result relation
-     compares (storage_rel and transient_rel are its case for the running
-     contract).
+     running contract's storage up to dead bytes); storage_rel and
+     transient_rel are its case for the running contract.
    - immutables_rel: immutables (vs_immutables in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -1366,9 +1456,12 @@ End
    - the call context is not static: the entry relation (venom_env_rel)
      assumes it and the lowered code never writes cc_static, so a CALL
      asks a static request exactly when the source does.
+   - neither is the source frame (txn.is_static), so source writes succeed.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation; a request's
-     snapshot of the running contract's storage agrees up to dead bytes. *)
+     snapshot of the running contract's storage agrees up to dead bytes.
+   - pending_deletions: equality with vs_pending_deletions, including effects
+     accumulated from adopted external-call outcomes. *)
 Definition state_rel_def:
   state_rel func cenv cx (vs:evaluation_state) ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
@@ -1381,9 +1474,19 @@ Definition state_rel_def:
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
+     ¬cx.txn.is_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     LIST_REL (request_agree cx) vs.requests ss.vs_requests)
+     LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
+     vs.pending_deletions = ss.vs_pending_deletions)
 End
+
+Theorem state_rel_gas_obs:
+  state_rel func cenv cx (es with gas_obs := readings) s =
+  state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def]
+QED
 
 (* ===== Result Relation ===== *)
 
@@ -1445,6 +1548,18 @@ Definition result_rel_def:
   (result_rel _ _ _ _ _ _ = F)
 End
 
+Theorem result_rel_gas_obs:
+  result_rel func ret_tv cenv cx (res, es with gas_obs := readings) r =
+  result_rel func ret_tv cenv cx (res, es) r
+Proof
+  Cases_on `res`
+  >- (rename1 `INL u` >> Cases_on `u` >> Cases_on `r` >>
+      simp[result_rel_def, state_rel_gas_obs]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> Cases_on `r` >>
+  simp[result_rel_def, state_rel_gas_obs] >>
+  Cases_on `a` >> simp[result_rel_def]
+QED
+
 (* ===== Type Classification ===== *)
 
 (* Struct field types function from compile_env.
@@ -1467,6 +1582,37 @@ Definition is_word_type_def:
   is_word_type (FlagT _) = T ∧
   is_word_type _ = F
 End
+
+Theorem type_widens_to_word:
+  !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
+Proof
+  rw[type_widens_to_def] >>
+  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
+  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
+  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
+QED
+
+Theorem arg_type_fits_bytestring_source:
+  !t u. is_bytestring_type u /\ arg_type_fits t u ==> is_bytestring_type t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `u` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT ub` >> Cases_on `ub` >> gvs[is_bytestring_type_def]
+  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+      Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
+  Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
 
 (* ===== Internal Calling Convention ===== *)
 
@@ -1661,3 +1807,18 @@ Definition elem_size_in_location_def:
     else
       type_memory_bytes cenv elem_ty
 End
+
+Theorem type_memory_bytes_struct_fields:
+  !c ty c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+            type_memory_bytes c' ty = type_memory_bytes c ty
+Proof
+  recInduct type_memory_bytes_ind >> rw[type_memory_bytes_def] >>
+  AP_TERM_TAC >> irule MAP_CONG >> simp[]
+QED
+
+Theorem type_memory_bytes_frame:
+  !c c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+         type_memory_bytes c' = type_memory_bytes c
+Proof
+  rw[FUN_EQ_THM] >> irule type_memory_bytes_struct_fields >> simp[]
+QED

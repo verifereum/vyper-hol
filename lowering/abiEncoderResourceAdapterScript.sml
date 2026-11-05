@@ -104,7 +104,9 @@ Proof
     abi_encoder_fragment_missing, GSYM abi_encoder_fragment_ids] >>
   strip_tac >> `lo <= top` by decide_tac >>
   `lo + (top-lo) = top` by decide_tac >>
-  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `lo + (top-lo) = top`
+    (fn th => pure_rewrite_tac [th]) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
   qpat_x_assum `alloca_inv s` mp_tac >>
   pure_rewrite_tac[alloca_inv_def, alloca_next_valid_def,
     allocas_non_overlapping_def] >> strip_tac >>

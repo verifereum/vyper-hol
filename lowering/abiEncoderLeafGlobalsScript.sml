@@ -5,6 +5,12 @@ Ancestors
   emitHelper emitHelperProps exprLoweringProps compileEnv venomState venomExecSemantics venomInst
   valueEncoding list rich_list pred_set words arithmetic
 
+val leaf_step_eqs = map (fn opc => valOf (List.find (fn th =>
+  let val (_, body) = strip_forall (concl th)
+  in aconv (rhs (fst (dest_imp body))) opc end)
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs)))
+  [``MLOAD``, ``MSTORE``, ``MCOPY``, ``ADD``, ``AND``];
+
 Theorem abi_encoder_leaf_step_globals:
   inst.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND} /\
   step_inst_base inst s = OK t ==>
@@ -13,7 +19,7 @@ Theorem abi_encoder_leaf_step_globals:
   t.vs_pending_deletions = s.vs_pending_deletions
 Proof
   simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >> strip_tac >>
-  gvs[Once step_inst_base_def] >>
+  gvs leaf_step_eqs >>
   gvs[exec_pure2_def, exec_read1_def, exec_write2_def, AllCaseEqs()] >>
   simp[update_var_def, mstore_def, mcopy_def, write_memory_with_expansion_def]
 QED

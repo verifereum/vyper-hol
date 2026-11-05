@@ -9,6 +9,7 @@
  *   compile_constructor_epilogue_correct — runtime code copy + RETURN (single-block)
  *
  * Helper (no standalone correctness — always composed):
+ *   cs_appends_decode_args    — unified argument decoding only appends code
  *   compile_decode_args_nil   — empty arg list is no-op
  *   compile_init_kwargs_nil   — empty kwargs list is no-op
  *
@@ -22,8 +23,8 @@
  *   - Entry checks and constructor epilogue stay within a single block,
  *     so they use the simpler run_inst_seq/emitted_insts pattern.
  *   - compile_decode_args and compile_init_kwargs are fragments (no terminator)
- *     always composed within a larger compilation. No standalone theorem;
- *     theorems here cover only their empty-input cases.
+ *     always composed within a larger compilation. The results here give
+ *     append-only code generation and the empty-input execution cases.
  *)
 
 Theory moduleLoweringProps
@@ -34,7 +35,7 @@ Ancestors
   moduleLowering compileEnv context
   venomExecSemantics venomState venomInst venomExecProofs venomMemProps
   stateEquiv
-  abiEncoder
+  abiEncoder abiDecoderAppend
   fragExec selectorDispatch byte vyperMisc list rich_list finite_map words
 Libs
   wordsLib
@@ -189,7 +190,7 @@ Theorem step_CALLDATASIZE:
     step_inst_base (mk_inst id CALLDATASIZE [] [out]) ss =
     OK (update_var out (n2w (LENGTH ss.vs_call_ctx.cc_calldata)) ss)
 Proof
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 Theorem compile_selector_checks_appends:
@@ -701,6 +702,31 @@ val _ = Feedback.set_trace "Theory.allow_rebinds" 1;
 
 (* ===== Argument Decoding (helpers only) ===== *)
 
+Theorem cs_appends_decode_args:
+  !args cenv off opc hi base.
+    cs_appends (compile_decode_args cenv args off opc hi base)
+Proof
+  Induct >- simp[compile_decode_args_def, cs_appends_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[Once compile_decode_args_def, LET_THM] >>
+  Cases_on `h1` >> simp[]
+  >- (ntac 2 (ho_match_mp_tac cs_appends_bind >> conj_tac
+        >- simp[cs_appends_emit_helpers] >> gen_tac) >>
+      irule cs_appends_ignore_bind >> conj_tac
+      >- simp[cs_appends_abi_clamp] >>
+      irule cs_appends_ignore_bind >> conj_tac
+      >- (Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[cs_appends_return] >>
+          Cases_on `var_location_decode_operand x` >>
+          simp[cs_appends_return, cs_appends_emit_helpers]) >> simp[]) >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
+  Cases_on `var_location_decode_operand x` >> simp[] >>
+  Cases_on `h2` >> simp[] >>
+  rpt (ho_match_mp_tac cs_appends_bind >> conj_tac
+    >- simp[cs_appends_emit_helpers] >> gen_tac) >>
+  irule cs_appends_ignore_bind >>
+  simp[cs_appends_abi_decode_mutual]
+QED
+
 Theorem compile_decode_args_nil:
   ∀ cenv offset load_opc hi_op base_adj st.
     compile_decode_args cenv [] offset load_opc hi_op base_adj st = ((), st)
@@ -1058,9 +1084,10 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   qexists_tac `ss'` >> asm_rewrite_tac[] >>
   qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
-  asm_rewrite_tac[run_inst_seq_def, step_inst_base_def, mk_inst_def,
-                  exec_alloca_def] >>
-  simp[] >> disch_then (SUBST_ALL_TAC o SYM) >>
+  asm_rewrite_tac[run_inst_seq_def] >>
+  simp[mk_inst_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_alloca_def] >> disch_then (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_operand v _ = _` mp_tac >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]

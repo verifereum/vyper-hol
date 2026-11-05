@@ -1,34 +1,11 @@
-(*
- * Remove Unused Variables — Proofs
+(* Remove-unused proof infrastructure.
  *
- * Proof strategy:
- *   1. Per-instruction: effect-free instruction only modifies vs_vars at
- *      outputs. step_effect_free_state_equiv gives state_equiv (set outputs).
- *      NOP is identity (step_nop_identity). So orig and NOP'd differ only
- *      on outputs.
- *
- *   2. Block-level: induction over instruction index. At each step:
- *      - Kept instruction: same code, operands don't read dead vars
- *        (liveness soundness) → step_inst_result_equiv_full preserves
- *        state_equiv
- *      - NOP'd instruction: step_effect_free_state_equiv on original,
- *        step_nop_identity on NOP'd → accumulate dead outputs
- *
- *   3. Function-level: block_sim_function framework. Operand condition
- *      holds because eliminated vars are globally dead — no instruction
- *      anywhere in the function reads them (liveness is global).
- *      Composed with clear_nops_function_correct.
- *
- *   4. OWHILE iteration: each pass strictly decreases instruction count
- *      (or is fixpoint). Compose single-pass results.
- *
- * Preconditions:
- * - wf_function fn — for liveness soundness
- * - fn_inst_wf fn — for step_inst well-formedness
- * - venom_wf ctx — for step_inst semantics
- * - no ALLOCA instructions — ALLOCA modifies vs_allocas (side effect
- *   not tracked by state_equiv). This is the only removable opcode
- *   that is not effect-free.
+ * Retains instruction transport, syntactic removal/output facts, liveness and
+ * SSA facts, generic relation composition and structural OWHILE interfaces.
+ * The obsolete same-oracle block/function simulations have been removed:
+ * deleted GAS consumes a reading, so correctness needs backward oracle
+ * reconstruction. Removable instructions outside the must-preserve boundary
+ * are effect-free OR GAS; ALLOCA remains protected by that boundary.
  *)
 
 Theory removeUnusedProofs
@@ -42,12 +19,12 @@ Libs
 
 (* ===== Per-instruction: effect-free removable → state_equiv ===== *)
 
-(* Every removable opcode outside the pass-owned must-preserve boundary is
-   effect-free (pure computation, state reads, or SSA bookkeeping). *)
+(* Outside the pass-owned must-preserve boundary, GAS is the sole
+   removable opcode that is not effect-free. *)
 Theorem removable_not_preserved_effect_free[local]:
   !inst. is_removable inst /\
          ~remove_unused_must_preserve_op inst.inst_opcode ==>
-         is_effect_free_op inst.inst_opcode
+         is_effect_free_op inst.inst_opcode \/ inst.inst_opcode = GAS
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
@@ -100,7 +77,7 @@ Proof
 QED
 
 (* setup_callee on state_equiv states gives same result *)
-Theorem setup_callee_state_equiv[local]:
+Theorem setup_callee_state_equiv:
   !fn args s1 s2 vars.
     state_equiv vars s1 s2 ==>
     setup_callee fn args s1 = setup_callee fn args s2
@@ -236,7 +213,7 @@ Proof
 QED
 
 (* Helper: NOP'd instruction outputs are in block_nop_outputs *)
-Theorem nop_outputs_in_block_nop_outputs[local]:
+Theorem nop_outputs_in_block_nop_outputs:
   !lr bb idx inst.
     idx < LENGTH bb.bb_instructions /\
     EL idx bb.bb_instructions = inst /\
@@ -322,7 +299,7 @@ QED
 Theorem remove_unused_inst_nop_effect_free:
   !live inst.
     remove_unused_inst live inst = mk_nop_inst inst ==>
-    is_effect_free_op inst.inst_opcode
+    is_effect_free_op inst.inst_opcode \/ inst.inst_opcode = GAS
 Proof
   rw[remove_unused_inst_def] >>
   rpt (pop_assum mp_tac) >>
@@ -337,7 +314,7 @@ Proof
 QED
 
 (* NOP'd instruction is not a terminator *)
-Theorem remove_unused_inst_nop_not_terminator[local]:
+Theorem remove_unused_inst_nop_not_terminator:
   !live inst.
     remove_unused_inst live inst = mk_nop_inst inst ==>
     ~is_terminator inst.inst_opcode
@@ -373,7 +350,7 @@ Triviality exec_result_helpers_no_halt_abort[simp]:
   (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -388,7 +365,7 @@ Triviality exec_result_helpers_not_intret[simp]:
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -416,9 +393,7 @@ Triviality exec_call_helpers_no_halt_abort[simp]:
   (!inst s g a ao as_ ro rs ab s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
+     exec_create inst s v off sz salt <> Halt s')
 Proof
   rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
      extract_venom_result_def] >>
@@ -452,7 +427,13 @@ Theorem step_inst_base_no_abort[local]:
                 ~is_terminator inst.inst_opcode ==>
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
-    inst.inst_opcode = RETURNDATACOPY
+    inst.inst_opcode = CREATE \/
+    inst.inst_opcode = CREATE2 \/
+    inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
+      inst.inst_opcode = CALL))
 Proof
   rpt strip_tac >>
   drule opcodeClassTheory.step_inst_base_abort_opcodes >>
@@ -511,127 +492,7 @@ fun apply_block_ih_tac s2_term =
      step_inst_result_equiv gives result_equiv V.
    - NOP'd instruction: original runs effect-free inst, outputs ⊆ V.
      NOP identity on transformed. Compose via state_equiv_effect_free_compose. *)
-Theorem remove_unused_block_sim[local]:
-  !n fuel ctx lr V bb s1 s2.
-    n = LENGTH bb.bb_instructions - s1.vs_inst_idx /\
-    block_nop_outputs lr bb SUBSET V /\
-    (!inst v. MEM inst bb.bb_instructions /\
-              MEM (Var v) inst.inst_operands ==>
-              v NOTIN V) /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    state_equiv V s1 s2 ==>
-    (?e. exec_block fuel ctx bb s1 = Error e) \/
-    lift_result (state_equiv V) (execution_equiv V) (execution_equiv V)
-      (exec_block fuel ctx bb s1)
-      (exec_block fuel ctx (remove_unused_block lr bb) s2)
-Proof
-  completeInduct_on `n` >>
-  rpt strip_tac >> gvs[] >>
-  ONCE_REWRITE_TAC [exec_block_def] >>
-  simp[get_instruction_remove_unused, get_instruction_def] >>
-  reverse (Cases_on `s1.vs_inst_idx < LENGTH bb.bb_instructions`)
-  >- (gvs[] >> DISJ1_TAC >> simp[]) >>
-  simp[] >>
-  (* Unify indices *)
-  qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx`
-    (fn eq => RULE_ASSUM_TAC (REWRITE_RULE [eq]) >> assume_tac eq) >>
-  qabbrev_tac `idx = s2.vs_inst_idx` >>
-  qabbrev_tac `inst = EL idx bb.bb_instructions` >>
-  `MEM inst bb.bb_instructions` by metis_tac[listTheory.MEM_EL] >>
-  (* Case split: NOP'd or kept *)
-  Cases_on `remove_unused_inst
-    (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-    inst = mk_nop_inst inst`
-  >| [
-    (* === NOP'd instruction === *)
-    `is_effect_free_op inst.inst_opcode`
-      by metis_tac[remove_unused_inst_nop_effect_free] >>
-    `~is_terminator inst.inst_opcode`
-      by metis_tac[is_effect_free_not_terminator] >>
-    `inst.inst_opcode <> INVOKE`
-      by (strip_tac >> gvs[is_effect_free_op_def]) >>
-    `set inst.inst_outputs SUBSET V` by (
-      `set inst.inst_outputs SUBSET block_nop_outputs lr bb` by (
-        mp_tac (Q.SPECL [`lr`, `bb`, `idx`, `inst`]
-          nop_outputs_in_block_nop_outputs) >>
-        gvs[Abbr `inst`]) >>
-      metis_tac[pred_setTheory.SUBSET_TRANS]) >>
-    `step_inst fuel ctx (mk_nop_inst inst) s2 = OK s2`
-      by (irule step_nop_identity >> simp[mk_nop_inst_def]) >>
-    mp_tac (Q.SPECL [`fuel`, `ctx`, `inst`, `s1`]
-      effect_free_step_ok_or_error) >>
-    (impl_tac >- gvs[]) >> strip_tac >> (
-    `~is_terminator NOP` by EVAL_TAC >>
-    gvs[mk_nop_inst_def] >>
-    TRY (DISJ1_TAC >> simp[] >> NO_TAC) >>
-    (* Only OK case remains *)
-    rename1 `step_inst fuel ctx inst s1 = OK s1'` >>
-    `state_equiv (set inst.inst_outputs) s1 s1'` by
-      metis_tac[step_effect_free_state_equiv] >>
-    `state_equiv V s1' s2` by
-      metis_tac[state_equiv_effect_free_compose] >>
-    (* Non-terminator: apply IH *)
-    apply_block_ih_tac `s2 with vs_inst_idx := SUC s1.vs_inst_idx`),
-    (* === Kept instruction === *)
-    `remove_unused_inst
-       (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-       inst = inst` by
-      metis_tac[remove_unused_inst_cases] >>
-    gvs[] >>
-    `result_equiv V
-       (step_inst fuel ctx inst s1)
-       (step_inst fuel ctx inst s2)` by (
-      Cases_on `is_terminator inst.inst_opcode`
-      >- (`inst.inst_opcode <> INVOKE`
-            by (CCONTR_TAC >> gvs[is_terminator_def]) >>
-          gvs[step_inst_non_invoke] >>
-          irule execEquivProofsTheory.step_inst_result_equiv >>
-          gvs[] >> rpt strip_tac >> res_tac)
-      >- (irule step_inst_result_equiv_full >> gvs[] >>
-          rpt strip_tac >> res_tac)) >>
-    (* Case split on both results; cross-cases eliminated by result_equiv *)
-    Cases_on `step_inst fuel ctx inst s1` >>
-    Cases_on `step_inst fuel ctx inst s2` >>
-    gvs[result_equiv_def] >>
-    (* Close all non-OK-OK cases uniformly *)
-    TRY (simp[lift_result_def] >> NO_TAC) >>
-    TRY (DISJ1_TAC >> simp[] >> NO_TAC) >>
-    (* Only OK-OK remains *)
-    rename1 `step_inst fuel ctx inst s1 = OK s1'` >>
-    rename1 `step_inst fuel ctx inst s2 = OK s2'` >>
-    IF_CASES_TAC >> gvs[] >>
-    TRY (
-      `s1'.vs_halted <=> s2'.vs_halted`
-        by gvs[state_equiv_def, execution_equiv_def] >>
-      IF_CASES_TAC >> gvs[] >>
-      simp[lift_result_def] >>
-      gvs[state_equiv_def, execution_equiv_def] >> NO_TAC) >>
-    (* Non-terminator OK: apply IH *)
-    apply_block_ih_tac `s2' with vs_inst_idx := SUC s1.vs_inst_idx`
-  ]
-QED
-
-(* Same-starting-state wrapper for backward compat *)
-Theorem remove_unused_block_correct_proof:
-  !fuel ctx lr bb s.
-    (!inst v. MEM inst bb.bb_instructions /\
-              MEM (Var v) inst.inst_operands ==>
-              v NOTIN block_nop_outputs lr bb) /\
-    s.vs_inst_idx = 0 ==>
-    let nop_outs = block_nop_outputs lr bb in
-    (?e. exec_block fuel ctx bb s = Error e) \/
-    lift_result (state_equiv nop_outs) (execution_equiv nop_outs) (execution_equiv nop_outs)
-      (exec_block fuel ctx bb s)
-      (exec_block fuel ctx (remove_unused_block lr bb) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  mp_tac (Q.SPECL [`LENGTH bb.bb_instructions`,
-                    `fuel`, `ctx`, `lr`,
-                    `block_nop_outputs lr bb`,
-                    `bb`, `s`, `s`]
-                   remove_unused_block_sim) >>
-  simp[state_equiv_refl, pred_setTheory.SUBSET_REFL] >> metis_tac[]
-QED
+(* Fixed-V same-state block simulation and its wrapper removed for consuming GAS. *)
 
 (* ===== Function-level building blocks ===== *)
 
@@ -684,7 +545,7 @@ QED
 (* Compose lift_result with result_equiv: if r1 ~ r2 via lift_result
    and r2 ~ r3 via result_equiv (subset), then r1 ~ r3 via lift_result.
    Key pattern: NOP-insertion phase (lift_result) + NOP-cleanup (result_equiv). *)
-Theorem lift_result_compose_result_equiv[local]:
+Theorem lift_result_compose_result_equiv:
   !vars r1 r2 r3.
     lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars) r1 r2 /\
     result_equiv {} r2 r3 ==>
@@ -779,7 +640,7 @@ Proof
 QED
 
 (* Block NOP outputs are subset of single_pass_nop_outputs *)
-Theorem block_nop_outputs_subset_single_pass[local]:
+Theorem block_nop_outputs_subset_single_pass:
   !fn bb.
     MEM bb fn.fn_blocks ==>
     let lr = protect_liveness fn (remove_unused_phi_vars fn)
@@ -983,229 +844,7 @@ QED
    (2) V vars not defined from current position onward
    The output is V_in ∪ block_nop_outputs (the full set for the block).
    V_in tracks vars from prior blocks (not defined in this block). *)
-Theorem remove_unused_block_sim_ssa:
-  !n fuel ctx fn bb s1 s2 V_in V.
-    n = LENGTH bb.bb_instructions - s1.vs_inst_idx /\
-    wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-    EVERY (\inst. inst.inst_opcode <> ALLOCA) bb.bb_instructions /\
-    EVERY (\inst. inst.inst_opcode = NOP ==>
-                  inst.inst_outputs = []) bb.bb_instructions /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    state_equiv V s1 s2 /\
-    V_in SUBSET V /\
-    V SUBSET (V_in UNION
-      block_nop_outputs (liveness_analyze fn) bb) /\
-    (* Inv 1: V vars not live at current position *)
-    (!v. v IN V ==>
-         ~MEM v (live_vars_at (liveness_analyze fn)
-                              bb.bb_label s1.vs_inst_idx)) /\
-    (* Inv 2: V vars not defined from current position onward *)
-    (!v k. v IN V /\ s1.vs_inst_idx <= k /\
-           k < LENGTH bb.bb_instructions ==>
-           ~MEM v (EL k bb.bb_instructions).inst_outputs) ==>
-    let lr = liveness_analyze fn in
-    let V_out = V_in UNION block_nop_outputs lr bb in
-    (?e. exec_block fuel ctx bb s1 = Error e) \/
-    lift_result (state_equiv V_out) (execution_equiv V_out) (execution_equiv V_out)
-      (exec_block fuel ctx bb s1)
-      (exec_block fuel ctx (remove_unused_block lr bb) s2)
-Proof
-  completeInduct_on `n` >>
-  rpt strip_tac >> gvs[] >>
-  ONCE_REWRITE_TAC [exec_block_def] >>
-  simp[get_instruction_remove_unused, get_instruction_def] >>
-  reverse (Cases_on `s1.vs_inst_idx < LENGTH bb.bb_instructions`)
-  >- (gvs[] >> DISJ1_TAC >> simp[]) >>
-  simp[] >>
-  qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx`
-    (fn eq => RULE_ASSUM_TAC (REWRITE_RULE [eq]) >> assume_tac eq) >>
-  qabbrev_tac `idx = s2.vs_inst_idx` >>
-  qabbrev_tac `inst = EL idx bb.bb_instructions` >>
-  `MEM inst bb.bb_instructions` by metis_tac[listTheory.MEM_EL] >>
-  `inst.inst_opcode <> ALLOCA` by (
-    gvs[listTheory.EVERY_MEM] >> res_tac) >>
-  `inst_wf inst` by metis_tac[fn_inst_wf_def] >>
-  (* Discharge operand condition for V at current instruction *)
-  `!v. v IN V /\ MEM (Var v) inst.inst_operands ==> F` by (
-    rpt strip_tac >>
-    `MEM v (inst_uses inst)` by (
-      simp[inst_uses_def] >> irule mem_var_operand_vars >> simp[]) >>
-    `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label idx)` by (
-      mp_tac (Q.SPECL [`fn`, `bb.bb_label`, `bb`, `idx`, `v`]
-                       live_vars_at_uses) >>
-      simp[LET_THM] >> disch_then irule >> gvs[Abbr `inst`]) >>
-    `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label idx)` by (
-      first_x_assum irule >> simp[]) >>
-    metis_tac[]) >>
-  (* Reformulate operand condition for step_inst_result_equiv *)
-  `!x. MEM (Var x) inst.inst_operands ==> x NOTIN V` by metis_tac[] >>
-  (* V SUBSET V_out for weakening *)
-  qabbrev_tac `V_out = V_in UNION block_nop_outputs (liveness_analyze fn) bb` >>
-  `V SUBSET V_out` by gvs[Abbr `V_out`] >>
-  Cases_on `remove_unused_inst
-    (live_after_at (liveness_analyze fn) bb.bb_label idx
-                   (LENGTH bb.bb_instructions))
-    inst = mk_nop_inst inst`
-  >| [
-    (* === NOP'd instruction === *)
-    `is_effect_free_op inst.inst_opcode`
-      by metis_tac[remove_unused_inst_nop_effect_free] >>
-    `~is_terminator inst.inst_opcode`
-      by metis_tac[is_effect_free_not_terminator] >>
-    `inst.inst_opcode <> INVOKE`
-      by (strip_tac >> gvs[is_effect_free_op_def]) >>
-    `step_inst fuel ctx (mk_nop_inst inst) s2 = OK s2`
-      by (irule step_nop_identity >> simp[mk_nop_inst_def]) >>
-    (* Establish subset BEFORE gvs[mk_nop_inst_def] rewrites it away *)
-    `set inst.inst_outputs SUBSET
-      block_nop_outputs (liveness_analyze fn) bb` by (
-      mp_tac (Q.SPECL [`liveness_analyze fn`,
-        `bb`, `idx`, `inst`]
-        nop_outputs_in_block_nop_outputs) >>
-      gvs[Abbr `inst`]) >>
-    (* Establish liveness BEFORE gvs[mk_nop_inst_def] destroys mk_nop_inst *)
-    `!v. MEM v inst.inst_outputs ==>
-         ~MEM v (live_after_at (liveness_analyze fn)
-                   bb.bb_label idx (LENGTH bb.bb_instructions))`
-      by (rpt strip_tac >>
-          mp_tac (Q.SPECL [`liveness_analyze fn`,
-            `bb`, `idx`, `inst`, `v`]
-            nop_inst_outputs_not_live_after) >>
-          simp[Abbr `inst`]) >>
-    (* Resolve abbreviations now — all mk_nop_inst-dependent facts established *)
-    qunabbrev_tac `inst` >> qunabbrev_tac `idx` >>
-    (* Original side: effect-free → OK or Error *)
-    mp_tac (Q.SPECL [`fuel`, `ctx`,
-      `EL s2.vs_inst_idx bb.bb_instructions`, `s1`]
-      effect_free_step_ok_or_error) >>
-    (impl_tac >- gvs[]) >> strip_tac >| [
-      (* OK case *)
-      rename1 `step_inst _ _ (EL _ bb.bb_instructions) s1 = OK s1'` >>
-      `~is_terminator NOP` by EVAL_TAC >>
-      fs[mk_nop_inst_def] >>
-      `state_equiv (set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs)
-                   s1 s1'`
-        by metis_tac[step_effect_free_state_equiv] >>
-      `state_equiv (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) s1' s2`
-        by metis_tac[state_equiv_union_compose] >>
-      `s1'.vs_inst_idx = s1.vs_inst_idx`
-        by gvs[state_equiv_def] >>
-      (* Establish IH preconditions explicitly *)
-      `V_in SUBSET (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs)` by
-        (irule pred_setTheory.SUBSET_TRANS >> qexists_tac `V` >> gvs[]) >>
-      `(V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) SUBSET V_out` by (
-        gvs[pred_setTheory.UNION_SUBSET, Abbr `V_out`] >>
-        irule pred_setTheory.SUBSET_TRANS >>
-        qexists_tac `block_nop_outputs (liveness_analyze fn) bb` >> gvs[]) >>
-      (* Liveness: v IN V ∪ outputs ⇒ not live at SUC s2.vs_inst_idx *)
-      `!v. v IN (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) ==>
-           ~MEM v (live_vars_at (liveness_analyze fn)
-                                bb.bb_label (SUC s2.vs_inst_idx))` by (
-        rpt gen_tac >> strip_tac >>
-        Cases_on `v IN V`
-        >- (irule not_live_one_step >> simp[] >>
-            first_x_assum (qspecl_then [`v`, `s2.vs_inst_idx`] mp_tac) >>
-            simp[])
-        >- (gvs[pred_setTheory.IN_UNION] >>
-            `live_after_at (liveness_analyze fn) bb.bb_label s2.vs_inst_idx
-               (LENGTH bb.bb_instructions) =
-             live_vars_at (liveness_analyze fn) bb.bb_label (SUC s2.vs_inst_idx)` by
-              (irule live_after_at_suc >> simp[]) >>
-            metis_tac[])) >>
-      (* No-def: v IN V ∪ outputs, SUC s2.vs_inst_idx ≤ k ⇒ not in outputs at k *)
-      `!v k. v IN (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) /\
-             SUC s2.vs_inst_idx <= k /\ k < LENGTH bb.bb_instructions ==>
-             ~MEM v (EL k bb.bb_instructions).inst_outputs` by
-        (mp_tac (Q.SPECL [`fn`, `bb`, `s2.vs_inst_idx`, `V`]
-           inv_advance_nodef_union) >> simp[]) >>
-      (* state_equiv through inst_idx update *)
-      `state_equiv (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs)
-         (s1' with vs_inst_idx := SUC s2.vs_inst_idx)
-         (s2 with vs_inst_idx := SUC s2.vs_inst_idx)` by
-        gvs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
-      (* Apply IH *)
-      first_x_assum (qspec_then
-        `LENGTH bb.bb_instructions - SUC s2.vs_inst_idx` mp_tac) >>
-      (impl_tac >- simp[]) >>
-      disch_then (qspecl_then [`fuel`, `ctx`, `fn`, `bb`,
-        `s1' with vs_inst_idx := SUC s2.vs_inst_idx`,
-        `s2 with vs_inst_idx := SUC s2.vs_inst_idx`,
-        `V_in`, `V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs`] mp_tac) >>
-      simp[Abbr `V_out`] >>
-      disch_then irule >> simp[],
-      (* Error case *)
-      DISJ1_TAC >> simp[]
-    ],
-    (* === Kept instruction === *)
-    `remove_unused_inst
-       (live_after_at (liveness_analyze fn) bb.bb_label idx
-                      (LENGTH bb.bb_instructions))
-       inst = inst` by
-      metis_tac[remove_unused_inst_cases] >>
-    qunabbrev_tac `inst` >> qunabbrev_tac `idx` >>
-    gvs[] >>
-    `result_equiv V
-       (step_inst fuel ctx (EL s2.vs_inst_idx bb.bb_instructions) s1)
-       (step_inst fuel ctx (EL s2.vs_inst_idx bb.bb_instructions) s2)` by (
-      Cases_on `is_terminator (EL s2.vs_inst_idx bb.bb_instructions).inst_opcode`
-      >- (`(EL s2.vs_inst_idx bb.bb_instructions).inst_opcode <> INVOKE`
-            by (CCONTR_TAC >> gvs[is_terminator_def]) >>
-          gvs[step_inst_non_invoke] >>
-          irule execEquivProofsTheory.step_inst_result_equiv >>
-          gvs[] >> rpt strip_tac >> first_x_assum irule >> simp[])
-      >- (irule step_inst_result_equiv_full >> gvs[] >>
-          rpt strip_tac >> first_x_assum irule >> simp[])) >>
-    Cases_on `step_inst fuel ctx (EL s2.vs_inst_idx bb.bb_instructions) s1` >>
-    Cases_on `step_inst fuel ctx (EL s2.vs_inst_idx bb.bb_instructions) s2` >>
-    (* Name OK values BEFORE fs[result_equiv_def] consumes OK constructors *)
-    TRY (rename1 `result_equiv V (OK s1') _`) >>
-    TRY (rename1 `result_equiv V _ (OK s2')`) >>
-    fs[result_equiv_def] >> (
-    (* Close non-OK-OK: Halt/Abort/IntRet need weakening V→V_out *)
-    TRY (
-      simp[lift_result_def] >>
-      TRY (irule state_equiv_subset >> qexists_tac `V` >> gvs[]) >>
-      TRY (irule execution_equiv_subset >> qexists_tac `V` >> gvs[]) >>
-      NO_TAC) >>
-    TRY (DISJ1_TAC >> simp[] >> NO_TAC)) >>
-    (* Only OK-OK remains. state_equiv V s1' s2' in assumptions *)
-    Cases_on `is_terminator (EL s2.vs_inst_idx bb.bb_instructions).inst_opcode`
-    >- (
-      (* Terminator kept OK-OK: exec_block returns Halt or OK based on vs_halted *)
-      gvs[] >>
-      (* vs_halted equivalence from state_equiv V via execution_equiv *)
-      `s1'.vs_halted <=> s2'.vs_halted` by
-        gvs[state_equiv_def, execution_equiv_def] >>
-      IF_CASES_TAC >> gvs[] >>
-      simp[lift_result_def] >>
-      TRY (irule state_equiv_subset >> qexists_tac `V` >> gvs[]) >>
-      TRY (irule execution_equiv_subset >> qexists_tac `V` >>
-           gvs[state_equiv_def]))
-    >- (
-      (* Non-terminator kept OK-OK: apply IH with same V *)
-      gvs[] >>
-      (* Advance both invariants *)
-      drule_all inv_advance_V_only >> strip_tac >>
-      (* state_equiv through inst_idx update *)
-      `state_equiv V
-         (s1' with vs_inst_idx := SUC s2.vs_inst_idx)
-         (s2' with vs_inst_idx := SUC s2.vs_inst_idx)` by
-        gvs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
-      (* Apply IH *)
-      first_x_assum (qspec_then
-        `LENGTH bb.bb_instructions - SUC s2.vs_inst_idx` mp_tac) >>
-      (impl_tac >- simp[]) >>
-      disch_then (qspecl_then [`fuel`, `ctx`, `fn`, `bb`,
-        `s1' with vs_inst_idx := SUC s2.vs_inst_idx`,
-        `s2' with vs_inst_idx := SUC s2.vs_inst_idx`,
-        `V_in`, `V`] mp_tac) >>
-      simp[Abbr `V_out`] >>
-      disch_then irule >> simp[])
-  ]
-QED
+(* Per-position same-state SSA simulation removed for consuming GAS. *)
 
 (* ===== SSA dead variable propagation ===== *)
 
@@ -1949,7 +1588,7 @@ Proof
   first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
 QED
 
-Triviality eval_phis_remove_unused:
+Theorem eval_phis_remove_unused:
   !lr insts V s1 s2 s1'.
     state_equiv V s1 s2 /\
     (!inst v. MEM inst insts /\ MEM (Var v) inst.inst_operands ==> v NOTIN V) /\
@@ -2107,7 +1746,7 @@ Proof
   simp[phi_prefix_length_def]
 QED
 
-Triviality phi_prefix_length_remove_unused_clear:
+Theorem phi_prefix_length_remove_unused_clear:
   !lr insts.
     (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
        (EL i insts).inst_opcode = PHI) ==>
@@ -2165,156 +1804,7 @@ Proof
   simp[passSharedDefsTheory.clear_nops_block_def]
 QED
 
-Theorem remove_unused_run_block_clear_sim[local]:
-  !fuel ctx lr fence V bb s1 s2.
-    bb_well_formed bb /\
-    block_nop_outputs lr bb SUBSET V /\
-    (!inst v. MEM inst bb.bb_instructions /\
-              MEM (Var v) inst.inst_operands ==>
-              v NOTIN V) /\
-    s1.vs_inst_idx = 0 /\ state_equiv V s1 s2 ==>
-    (?e. run_block fuel ctx bb s1 = Error e) \/
-    lift_result (state_equiv V) (execution_equiv V) (execution_equiv V)
-      (run_block fuel ctx bb s1)
-      (run_block fuel ctx (clear_nops_block (remove_unused_block lr bb)) s2)
-Proof
-  rpt strip_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
-  DISJ_CASES_TAC (Q.SPECL [`s1`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
-  >- (
-    pop_assum (qx_choose_then `s1_phi` (fn eval_ok_th =>
-      ASSUME_TAC eval_ok_th >>
-      mp_tac (Q.SPECL
-        [`\idx. live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions)`,
-         `bb.bb_instructions`, `V`, `s1`, `s2`, `s1_phi`]
-        eval_phis_remove_unused) >>
-      impl_tac >- (
-        conj_tac >- metis_tac[] >>
-        conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-        conj_tac >- (rpt strip_tac >> metis_tac[remove_unused_nop_outputs_subset]) >>
-        conj_tac >- gvs[bb_well_formed_def] >>
-        ACCEPT_TAC eval_ok_th) >>
-      disch_then (qx_choose_then `s2_phi` strip_assume_tac))) >>
-    gvs[passSharedDefsTheory.clear_nops_block_def, remove_unused_block_def] >>
-    ASM_REWRITE_TAC[] >> simp[] >>
-    mp_tac (Q.SPECL
-      [`LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
-       `fuel`, `ctx`, `lr`, `V`, `bb`,
-       `s1_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
-       `s2_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`]
-      remove_unused_block_sim) >>
-    impl_tac >- (
-      conj_tac >- simp[] >>
-      conj_tac >- metis_tac[] >>
-      conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-      conj_tac >- simp[] >>
-      metis_tac[execEquivProofsTheory.state_equiv_inst_idx]) >>
-    strip_tac
-    >- (DISJ1_TAC >> metis_tac[]) >>
-    `LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-       (TAKE (phi_prefix_length bb.bb_instructions)
-          (remove_unused_block lr bb).bb_instructions)) =
-     phi_prefix_length (clear_nops_block (remove_unused_block lr bb)).bb_instructions` by (
-      simp[passSharedDefsTheory.clear_nops_block_def, remove_unused_block_def] >>
-      mp_tac (Q.SPECL
-        [`\idx. live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions)`,
-         `bb.bb_instructions`] phi_prefix_length_remove_unused_clear) >>
-      impl_tac >- gvs[bb_well_formed_def] >>
-      simp[]) >>
-    `result_equiv {}
-       (exec_block fuel ctx (remove_unused_block lr bb)
-          (s2_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
-       (exec_block fuel ctx (clear_nops_block (remove_unused_block lr bb))
-          (s2_phi with vs_inst_idx :=
-             phi_prefix_length (clear_nops_block (remove_unused_block lr bb)).bb_instructions))` by (
-      mp_tac (Q.SPECL [`fuel`, `ctx`, `remove_unused_block lr bb`,
-        `s2_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`]
-        passSharedPropsTheory.clear_nops_block_gen) >>
-      simp[]) >>
-    DISJ2_TAC >>
-    irule lift_result_compose_result_equiv >>
-    qexists_tac `exec_block fuel ctx (remove_unused_block lr bb)
-      (s2_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
-    gvs[passSharedDefsTheory.clear_nops_block_def, remove_unused_block_def]) >>
-  qpat_x_assum `?e. eval_phis s1 bb.bb_instructions = Error e` strip_assume_tac >>
-  ASM_REWRITE_TAC[] >> DISJ1_TAC >> qexists_tac `e` >> simp[]
-QED
-
-(* Phase 1: function_map_transform preserves semantics up to
-   state_equiv (single_pass_nop_outputs fn).
-   Uses remove_unused_block_sim (non-SSA, fixed V) with the operand
-   condition as a precondition. *)
-Theorem remove_unused_phase1_correct[local]:
-  !fuel ctx fn s.
-    wf_function fn /\ fn_inst_wf fn /\ alloca_pointer_confined fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb /\
-    (* Operand condition: NOP'd outputs not used as operands *)
-    (!bb inst v.
-       MEM bb fn.fn_blocks /\
-       MEM inst bb.bb_instructions /\
-       MEM (Var v) inst.inst_operands ==>
-       v NOTIN single_pass_nop_outputs fn) ==>
-    let lr = protect_liveness fn (remove_unused_phi_vars fn)
-               (liveness_analyze fn) in
-    let cfg = cfg_analyze fn in
-    let bt = \bb. remove_unused_block lr bb in
-    let elim = single_pass_nop_outputs fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (clear_nops_function (function_map_transform bt fn)) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  simp[passSharedDefsTheory.clear_nops_function_def,
-       passSimulationDefsTheory.function_map_transform_def, listTheory.MAP_MAP_o,
-       combinTheory.o_DEF] >>
-  simp[GSYM passSimulationDefsTheory.function_map_transform_def] >>
-  irule two_state_block_sim_reachable >>
-  simp[remove_unused_block_label, clear_nops_block_label,
-       execEquivParamProofsTheory.state_equiv_execution_equiv_valid_state_rel_proof] >>
-  rpt strip_tac >>
-  irule remove_unused_run_block_clear_sim >>
-  rpt conj_tac
-  >- metis_tac[]
-  >- (gvs[wf_function_def] >> metis_tac[])
-  >- (rpt strip_tac >> metis_tac[])
-  >- (mp_tac (SIMP_RULE std_ss [LET_THM]
-        block_nop_outputs_subset_single_pass) >>
-      disch_then (qspecl_then [`fn`, `bb`] mp_tac) >> simp[])
-  >> first_assum ACCEPT_TAC
-QED
-
-(* Single-pass correctness: compose Phase 1 (NOP insertion) with
-   Phase 2 (NOP cleanup via clear_nops_function_correct).
-   The operand condition (NOP'd outputs not used as operands) is required
-   as a precondition. It follows from SSA dominance + liveness soundness,
-   but SSA dominance is not yet formalized. *)
-Theorem remove_unused_single_pass_correct_proof:
-  !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
-    alloca_pointer_confined fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb /\
-    (!bb inst v.
-       MEM bb fn.fn_blocks /\
-       MEM inst bb.bb_instructions /\
-       MEM (Var v) inst.inst_operands ==>
-       v NOTIN single_pass_nop_outputs fn) ==>
-    let elim = single_pass_nop_outputs fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (remove_unused_single_pass fn) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  simp[remove_unused_single_pass_def, LET_THM] >>
-  mp_tac (SPEC_ALL (SIMP_RULE std_ss [LET_THM] remove_unused_phase1_correct)) >>
-  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac
-  >- (DISJ1_TAC >> metis_tac[]) >>
-  DISJ2_TAC >>
-  first_assum ACCEPT_TAC
-QED
+(* Same-state block/phase/single-pass simulations removed for consuming GAS. *)
 
 (* lift_result reflexivity *)
 Theorem lift_result_refl_state_equiv:
@@ -2388,38 +1878,6 @@ Proof
         fs[lift_result_def] >> metis_tac[])
 QED
 
-(* Helper: step condition — each single pass step gives lift_result *)
-Theorem owhile_step_condition[local]:
-  !fuel ctx s elim x fn'.
-    venom_wf ctx /\
-    s.vs_inst_idx = 0 /\
-    Abbrev (elim = remove_unused_eliminated_vars fn) /\
-    remove_unused_single_pass x <> x /\
-    OWHILE (\fn'. remove_unused_single_pass fn' <> fn')
-      remove_unused_single_pass x = SOME fn' /\
-    wf_function x /\ fn_inst_wf x /\ alloca_pointer_confined x /\
-    fn_entry_label x = SOME s.vs_current_bb /\
-    (!bb inst v.
-       MEM bb x.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var v) inst.inst_operands ==>
-       v NOTIN single_pass_nop_outputs x) /\
-    single_pass_nop_outputs x SUBSET elim ==>
-    (?e. run_blocks fuel ctx x s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx x s)
-      (run_blocks fuel ctx (remove_unused_single_pass x) s)
-Proof
-  rpt strip_tac >>
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-            remove_unused_single_pass_correct_proof) >>
-  disch_then (qspecl_then [`fuel`, `ctx`, `x`, `s`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  strip_tac
-  >- (DISJ1_TAC >> metis_tac[]) >>
-  DISJ2_TAC >> irule lift_result_weaken_vars >>
-  qexists_tac `single_pass_nop_outputs x` >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 (* Helper: one step of OWHILE *)
 Theorem owhile_step[local]:
   !G f x r. G x /\ OWHILE G f x = SOME r ==> OWHILE G f (f x) = SOME r
@@ -2476,127 +1934,7 @@ Proof
   strip_tac >> fs[] >> first_assum ACCEPT_TAC
 QED
 
-(* Full iteration correctness via OWHILE_IND.
-   Preconditions: the operand condition and structural invariants must hold
-   for all intermediate functions reachable through OWHILE iteration.
-   wf_function/fn_inst_wf/alloca_pointer_confined/fn_entry_label preservation is
-   provable; the operand condition follows from SSA + liveness (the bridge
-   requires SSA dominance, not yet formalized). *)
-Theorem remove_unused_function_correct_proof:
-  !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
-    alloca_pointer_confined fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb /\
-    (!fn_i. OWHILE (\fn. remove_unused_single_pass fn <> fn)
-                    remove_unused_single_pass fn_i =
-            remove_unused_iterate fn ==>
-      wf_function fn_i /\ fn_inst_wf fn_i /\ alloca_pointer_confined fn_i /\
-      fn_entry_label fn_i = SOME s.vs_current_bb /\
-      (!bb inst v.
-         MEM bb fn_i.fn_blocks /\
-         MEM inst bb.bb_instructions /\
-         MEM (Var v) inst.inst_operands ==>
-         v NOTIN single_pass_nop_outputs fn_i) /\
-      single_pass_nop_outputs fn_i SUBSET
-        remove_unused_eliminated_vars fn) ==>
-    let elim = remove_unused_eliminated_vars fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (remove_unused_function fn) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  simp[remove_unused_function_def] >>
-  (Cases_on `remove_unused_iterate fn`
-   >- simp[lift_result_refl_state_equiv]) >>
-  (* SOME x: OWHILE G f fn = SOME x *)
-  rename1 `remove_unused_iterate fn = SOME fn'` >>
-  simp[] >>
-  qabbrev_tac `elim = remove_unused_eliminated_vars fn` >>
-  (* Apply owhile_lift_result_compose with explicit instantiation *)
-  mp_tac (BETA_RULE (Q.ISPECL [
-    `\fn'. remove_unused_single_pass fn' <> fn'`,
-    `remove_unused_single_pass`,
-    `state_equiv elim`,
-    `execution_equiv elim`,
-    `\fn_i. run_blocks fuel ctx fn_i s`
-  ] owhile_lift_result_compose)) >>
-  disch_then (qspec_then
-    `\fn_i. OWHILE (\fn'. remove_unused_single_pass fn' <> fn')
-                    remove_unused_single_pass fn_i = SOME fn' /\
-            wf_function fn_i /\ fn_inst_wf fn_i /\ alloca_pointer_confined fn_i /\
-            fn_entry_label fn_i = SOME s.vs_current_bb /\
-            (!bb inst v. MEM bb fn_i.fn_blocks /\ MEM inst bb.bb_instructions /\
-               MEM (Var v) inst.inst_operands ==>
-               v NOTIN single_pass_nop_outputs fn_i) /\
-            single_pass_nop_outputs fn_i SUBSET elim` mp_tac) >>
-  simp_tac std_ss [BETA_THM] >>
-  simp[stateEquivPropsTheory.state_equiv_refl,
-       stateEquivPropsTheory.execution_equiv_refl] >>
-  (* Discharge transitivity *)
-  (SUBGOAL_THEN
-    ``(!s1 s2 s3. state_equiv elim s1 s2 /\ state_equiv elim s2 s3 ==>
-                  state_equiv elim s1 s3) /\
-     (!s1 s2 s3. execution_equiv elim s1 s2 /\ execution_equiv elim s2 s3 ==>
-                  execution_equiv elim s1 s3)``
-    (fn th => REWRITE_TAC [th])
-  >- metis_tac[stateEquivPropsTheory.state_equiv_trans,
-               stateEquivPropsTheory.execution_equiv_trans]) >>
-  strip_tac >>
-  (* Step condition as standalone subgoal *)
-  (SUBGOAL_THEN ``!x. remove_unused_single_pass x <> x /\
-       OWHILE (\fn'. remove_unused_single_pass fn' <> fn')
-         remove_unused_single_pass x = SOME fn' /\
-       wf_function x /\ fn_inst_wf x /\ alloca_pointer_confined x /\
-       fn_entry_label x = SOME s.vs_current_bb /\
-       (!bb inst v. MEM bb x.fn_blocks /\ MEM inst bb.bb_instructions /\
-          MEM (Var v) inst.inst_operands ==> v NOTIN single_pass_nop_outputs x) /\
-       single_pass_nop_outputs x SUBSET elim ==>
-       (?e. run_blocks fuel ctx x s = Error e) \/
-       lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-         (run_blocks fuel ctx x s)
-         (run_blocks fuel ctx (remove_unused_single_pass x) s)``
-    assume_tac
-  >- (rpt strip_tac >> irule owhile_step_condition >>
-      rpt conj_tac >> fs[] >> qexists_tac `fn` >> fs[])) >>
-  (* Preservation condition as standalone subgoal *)
-  (SUBGOAL_THEN ``!x. remove_unused_single_pass x <> x /\
-       OWHILE (\fn'. remove_unused_single_pass fn' <> fn')
-         remove_unused_single_pass x = SOME fn' /\
-       wf_function x /\ fn_inst_wf x /\ alloca_pointer_confined x /\
-       fn_entry_label x = SOME s.vs_current_bb /\
-       (!bb inst v. MEM bb x.fn_blocks /\ MEM inst bb.bb_instructions /\
-          MEM (Var v) inst.inst_operands ==> v NOTIN single_pass_nop_outputs x) /\
-       single_pass_nop_outputs x SUBSET elim ==>
-       OWHILE (\fn'. remove_unused_single_pass fn' <> fn')
-         remove_unused_single_pass (remove_unused_single_pass x) = SOME fn' /\
-       wf_function (remove_unused_single_pass x) /\
-       fn_inst_wf (remove_unused_single_pass x) /\
-       alloca_pointer_confined (remove_unused_single_pass x) /\
-       fn_entry_label (remove_unused_single_pass x) = SOME s.vs_current_bb /\
-       (!bb inst v. MEM bb (remove_unused_single_pass x).fn_blocks /\
-          MEM inst bb.bb_instructions /\ MEM (Var v) inst.inst_operands ==>
-          v NOTIN single_pass_nop_outputs (remove_unused_single_pass x)) /\
-       single_pass_nop_outputs (remove_unused_single_pass x) SUBSET elim``
-    assume_tac
-  >- (rpt gen_tac >> strip_tac >>
-      irule owhile_pres_condition >> fs[] >> metis_tac[])) >>
-  (* Feed both to owhile implication *)
-  qpat_x_assum `(_ /\ _) ==> _` mp_tac >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
-  (* Use the conclusion: specialize to fn *)
-  disch_then (qspec_then `fn` mp_tac) >>
-  (impl_tac >- fs[remove_unused_iterate_def]) >>
-  (impl_tac >- (
-    qpat_x_assum `!fn_i. OWHILE _ _ fn_i = SOME _ ==> wf_function _ /\ _`
-      (qspec_then `fn` mp_tac) >>
-    (impl_tac >- fs[remove_unused_iterate_def]) >>
-    strip_tac >> fs[])) >>
-  simp[]
-QED
-
-(* ===== Forward-preservation variant (no false universal) ===== *)
+(* Same-state iteration correctness removed: consuming GAS needs oracle reconstruction. *)
 
 (* block_nop_outputs are a subset of the block's instruction outputs *)
 Theorem block_nop_outputs_subset_block_outputs[local]:

@@ -119,6 +119,16 @@ Proof
     drule_all lift_sum_runtime_state] >> simp[]
 QED
 
+(* The static-frame checks leave the state alone. *)
+Theorem outcomes_frame_static[simp]:
+  outcomes_frame (check_not_static cx) /\
+  outcomes_frame (frame_call_value cx value_opt)
+Proof
+  rw[outcomes_frame_def] >>
+  Cases_on `frame_call_value cx value_opt st` >>
+  drule frame_call_value_state >> simp[]
+QED
+
 Theorem outcomes_frame_primitives[simp]:
   outcomes_frame (check b msg) /\ outcomes_frame (type_check b msg) /\
   outcomes_frame get_scopes /\ outcomes_frame (set_scopes scs) /\
@@ -296,23 +306,6 @@ Proof
   simp[outcomes_frame_def, check_create_blueprint_state]
 QED
 
-Theorem outcomes_frame_create[simp]:
-  outcomes_frame (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
-Proof
-  simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
-  (* Split the exposed run_create_evm option and result tuple incrementally;
-     the head conversion reduces pair cases without generated variable names. *)
-  rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
-              ASSIGN_OUTCOMES_FRAME_STEP])
-QED
-
-Theorem outcomes_frame_raw_call[simp]:
-  outcomes_frame (eval_raw_call cx flags target_addr calldata amount gas)
-Proof
-  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
-  rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
-              ASSIGN_OUTCOMES_FRAME_STEP])
-QED
 
 (* Lock primitives retain the residual outcome field, on success and error. *)
 Theorem lock_outcomes_preserved:
@@ -477,7 +470,8 @@ Proof
   simp[outcomes_frame_def] >> gen_tac >>
   namedCases_on `write_place cx p v st` ["res fin"] >>
   namedCases_on `p` ["tr slot tv", "id path", "src id path"]
-  >- (gvs[write_storage_place_eq, AllCaseEqs()] >>
+  >- (Cases_on `cx.txn.is_static` >>
+      gvs[write_storage_place_eq, AllCaseEqs()] >>
       Cases_on `tr` >> simp[get_storage_def, set_storage_def])
   >- (drule write_memory_place_frame >> strip_tac >> gvs[]) >>
   drule write_immutable_place_frame >> strip_tac >> gvs[]
@@ -513,13 +507,31 @@ val outcomes_suffix_frame_simps =
     (List.concat (List.map (CONJUNCTS o SPEC_ALL)
       [outcomes_frame_reads, outcomes_frame_read_results,
        outcomes_frame_primitives, outcomes_frame_handlers,
-       outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
-       outcomes_frame_check_create_blueprint,
+       outcomes_frame_return, outcomes_frame_raise,
+       outcomes_frame_static, outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
-       outcomes_frame_adopt, outcomes_frame_raw_call,
+       outcomes_frame_adopt,
        outcomes_frame_places, outcomes_frame_write_place,
        outcomes_frame_get_place, outcomes_frame_append_place,
        outcomes_frame_pop_place]));
+
+Theorem outcomes_suffix_create_oracle:
+  outcomes_suffix (create_oracle_result salt value code rof)
+Proof
+  simp[outcomes_suffix_def] >> gen_tac >>
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >>
+  rw[adopt_call_outcome_equation, create_outcome_request_def] >>
+  gvs[AllCaseEqs(), extCallOracleTheory.take_outcome_def,
+      extCallOracleTheory.computed_precompile_def, create_outcome_request_def,
+      outcome_suffix_def, evaluation_state_accfupds] >>
+  Cases_on `rof` >> gvs[AllCaseEqs(), evaluation_state_accfupds] >>
+  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  Cases_on `outcome.co_success` >>
+  Cases_on `outcome.co_created = 0w` >>
+  qexists_tac `[outcome]` >> simp[]
+QED
 
 val outcomes_suffix_fact_index =
   List.map (fn th => (outcomes_fact_key (concl (SPEC_ALL th)),th))
@@ -541,7 +553,7 @@ fun outcomes_suffix_step facts =
   end;
 
 val outcomes_suffix_base_facts =
-  outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
+  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
 
 Theorem outcomes_suffix_ext_call:
   outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)
@@ -558,9 +570,41 @@ Proof
   rpt (outcomes_suffix_step outcomes_suffix_base_facts)
 QED
 
-val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
+(* In oracle mode a call or staticcall consumes an outcome, as extcall does. *)
+Theorem outcomes_suffix_raw_call:
+  outcomes_suffix (eval_raw_call cx flags target_addr calldata amount gas)
+Proof
+  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
 
+(* A precompile builtin's success check consumes at most the head outcome. *)
+Theorem outcomes_suffix_precompile_call_success:
+  outcomes_suffix (precompile_call_success bt)
+Proof
+  simp[outcomes_suffix_def, precompile_call_success_def] >> gen_tac >>
+  Cases_on `precompile_builtin bt` >> simp[return_def] >>
+  Cases_on `st.outcomes` >> simp[return_def] >>
+  rename1 `SOME os` >> Cases_on `os` >> simp[check_def, assert_def] >>
+  simp[outcome_suffix_def] >> qexists_tac `[h]` >> simp[]
+QED
+
+val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
+  (outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_precompile_call_success ::
+   outcomes_suffix_base_facts));
+
+Theorem outcomes_suffix_create:
+  outcomes_suffix (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
+Proof
+  simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
+  OUTCOMES_SUFFIX_TAC >> simp[outcomes_suffix_def]
+QED
+
+val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
+  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_precompile_call_success ::
+   outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
 val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 

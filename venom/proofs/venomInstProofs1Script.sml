@@ -68,7 +68,7 @@ Theorem exec_read0_state_equiv:
     exec_read0 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  rw[exec_read0_def] >> exec_state_equiv_tac
+  rw[exec_read0_def, exec_gas_def] >> exec_state_equiv_tac
 QED
 
 Theorem exec_read1_state_equiv:
@@ -354,7 +354,7 @@ val step_base_field_finish_tac =
       write_effects_def, all_effects_def, empty_effects_def,
       is_alloca_op_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
@@ -380,7 +380,7 @@ Triviality nonterminator_opcode_class:
     is_ext_call_op op \/
     op = SSTORE \/ op = TSTORE \/ op = ISTORE \/ op = LOG \/
     op = SETFMP \/ op = DALLOCA \/
-    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ op = INVOKE
+    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ op = INVOKE \/ op = GAS
 Proof
   Cases >> EVAL_TAC
 QED
@@ -412,7 +412,6 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_effect_free_op_def]
   (* 1--10 *)
-  >- effect_free_opcode_tac
   >- effect_free_opcode_tac
   >- effect_free_opcode_tac
   >- effect_free_opcode_tac
@@ -638,6 +637,7 @@ val ext_call_frame_result = BETA_RULE (prove (
 
 val ext_call_frame_projection_rewrites = let
   val defs = [exec_ext_call_def, venomCallOracleDefsTheory.consume_call_outcome_eq,
+    venomCallOracleDefsTheory.consume_create_outcome_eq,
     exec_delegatecall_def, exec_create_def, extract_venom_result_def,
     step_inst_base_def]
   fun case_type tm = let val (_, arg, _) = TypeBase.dest_case tm
@@ -687,6 +687,7 @@ fun ext_call_frame_cases_tac ss =
 val ext_call_frame_helper_rewrites = let
   val ss = ext_call_frame_projection_ss ++ rewrites
     [exec_ext_call_def, venomCallOracleDefsTheory.consume_call_outcome_eq,
+    venomCallOracleDefsTheory.consume_create_outcome_eq,
      exec_delegatecall_def, exec_create_def, extract_venom_result_def]
   val tests =
     [``case exec_ext_call inst s gas addr value ao az ro rz static of
@@ -756,6 +757,7 @@ Proof
   >- step_base_field_opcode_tac
   >- step_base_field_opcode_tac
   >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac (* GAS *)
 QED
 
 Resume step_inst_base_preserves_all[g1]:

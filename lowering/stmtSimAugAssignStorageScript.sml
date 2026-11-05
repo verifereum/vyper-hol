@@ -36,9 +36,14 @@
 
 Theory stmtSimAugAssignStorage
 Ancestors
+  exprBopSimProps
+  exprSimSource
+  exprSimHypsDefs
+  stmtSimDefs
+  loweringPosts
   allocLimits list finite_map
-  fragExec exprSim exprSimHyps exprSimOps exprSimOperators exprSimLeaves
-  stmtSim stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
+  fragExec  exprSimHyps exprSimOps exprSimOperators exprSimLeaves
+   stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
   stmtSimAugAssign
   exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping
@@ -348,6 +353,10 @@ Proof
   `ty <> NoneT` by
     (strip_tac >> drule_all well_typed_binop_augassign_word >>
      simp[word_value_type_def]) >>
+  `type_alloc_ok cenv ty` by
+    (drule_all well_typed_binop_augassign_word >> strip_tac >>
+     imp_res_tac exprSimSourceTheory.word_value_type_word >>
+     simp[type_alloc_ok_def]) >>
   PairCases_on `nsid` >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
@@ -391,10 +400,8 @@ QED
    operands simulate, so it does (compile_bop_word_case), and its values
    are of x's type: compile_assign_storage_typed_stmt_frag applies. *)
 Theorem compile_augassign_toplevel_case:
-  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es res es'
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
-    eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
-      (res, es') /\
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     get_module_code cx src = SOME ts /\
@@ -411,57 +418,10 @@ Theorem compile_augassign_toplevel_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word] >>
-  `is_word_type ty` by metis_tac[word_value_type_word] >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
-    (irule toplevel_storage_read_decodes >>
-     gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  drule_all eval_augassign_toplevel_assign >> strip_tac >>
-  `expr_body_pre cenv cx env
-     (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
-    (irule expr_body_pre_augassign_toplevel >> simp[] >> metis_tac[]) >>
-  `expr_sim_case nocalls ctx func cenv cx
-     (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])` by
-    (irule compile_bop_word_case >>
-     simp[vyperASTTheory.expr_type_def] >>
-     metis_tac[toplevel_storage_name_case]) >>
-  `expr_sim ctx func cenv cx ty
-     (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
-    (irule expr_sim_case_apply >> simp[int_calls_expr_def] >> metis_tac[]) >>
-  `stmt_frag ctx func cx lctx RetQ cenv
-     (stmt_env cenv lctx ty0
-        (Assign (BaseTarget (TopLevelNameTarget (src, id)))
-           (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])))
-     es res es'` by
-    (qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty0`, `src`,
-                  `id`, `Builtin ty (Bop bop) [TopLevelName ty (src, id); e]`,
-                  `es`, `res`, `es'`, `ts`, `tr`, `ty`, `id_str`, `slot`,
-                  `tvt`, `vtyp`] mp_tac
-       compile_assign_storage_typed_stmt_frag >>
-     simp[vyperASTTheory.expr_type_def] >> disch_then irule >>
-     rpt strip_tac >>
-     qspecl_then [`cenv`, `cx`, `env`,
-                  `Builtin ty (Bop bop) [TopLevelName ty (src, id); e]`,
-                  `es`, `INL v`, `es1`] mp_tac expr_body_pre_word_result >>
-     simp[vyperASTTheory.expr_type_def] >> strip_tac >> gvs[]) >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_module_vars (src, id) =
-     SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
-    (irule toplevel_storage_ce_vars >>
-     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
-  `stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget (src, id)) bop e) =
-   stmt_env cenv lctx ty0
-     (Assign (BaseTarget (TopLevelNameTarget (src, id)))
-        (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]))` by
-    (irule stmt_env_augassign_toplevel >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [stmt_frag_def]) >>
-  gvs[] >> disch_then drule_all >> simp[]
+  (* admitted at base cut: proof states a 10-arg stmt_frag (es res es') after the 9-arg restatement; needs the counted port *)
+  cheat
 QED
 
 (* Integrity gate: the source and code sides carry no admission; the

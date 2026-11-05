@@ -174,11 +174,6 @@ End
    Per-opcode emission logic.
    ========================================================================= *)
 
-Definition bump_round_word_def:
-  bump_round_word (sz:bytes32) =
-    word_lsl (word_lsr (sz + 31w) 5) 5
-End
-
 Definition bump_emit_ops_def:
   bump_emit_ops =
     [SODup 2; SOEmit "ADD"]
@@ -248,6 +243,28 @@ End
    Port of _generate_evm_for_instruction (non-phi, non-offset cases)
    ========================================================================= *)
 
+(* The stack a JMP to a join reorders to: the target block's live-in
+   variables, in input_vars_from order. *)
+Definition join_target_ops_def:
+  join_target_ops liveness fn cur_bb_label inst =
+    case inst.inst_operands of
+      [Label target] =>
+        OPTION_MAP (λtarget_bb.
+            MAP Var (input_vars_from cur_bb_label target_bb.bb_instructions
+                       (live_vars_at liveness target 0)))
+          (lookup_block target fn.fn_blocks)
+    | _ => NONE
+End
+
+(* The stack ends in the join target's stack, if the instruction has one. *)
+Definition join_reached_def:
+  join_reached liveness fn cur_bb_label inst ps ⇔
+    case join_target_ops liveness fn cur_bb_label inst of
+      NONE => T
+    | SOME target_ops =>
+        stack_pop (LENGTH target_ops) ps.ps_stack ++ target_ops = ps.ps_stack
+End
+
 Definition generate_regular_inst_plan_def:
   generate_regular_inst_plan liveness dfg cfg fn inst
     next_liveness is_halting next_is_terminator cur_bb_label ps =
@@ -262,20 +279,17 @@ Definition generate_regular_inst_plan_def:
     let (input_ops, ps1) =
       emit_input_plan opc operands next_liveness ps in
 
-    (* Join-point reorder (jmp only) *)
+    (* Join-point reorder (jmp only).  compute_operands JMP is empty, so
+       emit_input_plan restored none of the target's operands; as Python's
+       _stack_reorder does, restore every spilled one before reordering. *)
     let (join_ops, ps2) =
       if opc = JMP then
-        (case inst.inst_operands of
-          [Label target] =>
-            let target_live = live_vars_at liveness target 0 in
-            (case lookup_block target fn.fn_blocks of
-              NONE => ([] : stack_op list, ps1)
-            | SOME target_bb =>
-                let target_stack =
-                  input_vars_from cur_bb_label
-                    target_bb.bb_instructions target_live in
-                reorder_plan dfg (MAP Var target_stack) ps1)
-        | _ => ([], ps1))
+        (case join_target_ops liveness fn cur_bb_label inst of
+          NONE => ([] : stack_op list, ps1)
+        | SOME target_ops =>
+            let (restore_ops, ps1') = restore_spilled_plan target_ops ps1 in
+            let (swap_ops, ps2) = reorder_plan dfg target_ops ps1' in
+            (restore_ops ++ swap_ops, ps2))
       else ([], ps1) in
 
     (* Commutative optimization.  Reuse the selected dry-run result rather
@@ -310,7 +324,10 @@ Definition generate_regular_inst_plan_def:
       (input_ops ++ join_ops ++ reorder_ops ++ emit_ops, ps8)
     else
       let (pop_ops, ps8) =
-        if ¬ is_halting then
+        (* A halting block may retain a dead single output.  Multi-output
+           instructions such as BUMP still discard dead outputs so later
+           operand reordering sees the same stack as pinned Vyper. *)
+        if ¬ is_halting ∨ LENGTH outputs > 1 then
           let dead = FILTER (λout. ¬ MEM out next_liveness) outputs in
           popmany_plan (MAP Var dead) ps7
         else ([] : stack_op list, ps7) in
@@ -355,14 +372,78 @@ End
    These are what the caller (pipeline proof) must discharge.
    ========================================================================= *)
 
-(* Per-instruction: no pre-codegen opcodes *)
+(* There is no runtime operation for Python's _DeadStackItem.  Label operands
+   are never looked up on the existing stack, so this private marker gives the
+   plan model the same non-aliasing behaviour without emitting bytecode. *)
+Definition dead_stack_marker_def:
+  dead_stack_marker = Label ""
+End
+
+(* Per-instruction: no pre-codegen opcodes, and no operand the planner could
+   mistake for its dead_stack_marker *)
 Definition codegen_ready_inst_def:
   codegen_ready_inst inst ⇔
     ¬ is_pre_codegen_opcode inst.inst_opcode ∧
-    (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst)
+    (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) ∧
+    ¬MEM dead_stack_marker inst.inst_operands
 End
 
-(* Per-function: structural WF + SSA + SUE + normalized CFG + no bad opcodes *)
+(* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
+   is read by two of the block's PHIs, and no PHI operand is live after
+   the prefix.  The join's entry stack (input_vars_from) gives each PHI
+   one slot and maps every PHI operand to it, so a variable read by a
+   second PHI or by a later instruction would lose its own slot.  Upstream
+   single-use expansion establishes this by copying such operands on the
+   edge (vyper #5009, #5284); this repo's single-use expansion predates
+   those changes, so the pipeline driver's codegen_ready check rejects an
+   output without it. *)
+Definition phi_uses_disjoint_def:
+  phi_uses_disjoint [] = T ∧
+  phi_uses_disjoint (phi :: phis) =
+    (EVERY (λq. EVERY (λv. ¬MEM v (inst_uses q)) (inst_uses phi)) phis ∧
+     phi_uses_disjoint phis)
+End
+
+Definition phi_block_ready_def:
+  phi_block_ready liveness bb ⇔
+    phi_uses_disjoint (collect_phis bb.bb_instructions) ∧
+    EVERY (λphi. EVERY (λv.
+        ¬MEM v (live_vars_at liveness bb.bb_label
+                  (LENGTH (collect_phis bb.bb_instructions))))
+      (inst_uses phi))
+      (collect_phis bb.bb_instructions)
+End
+
+(* The planner plans each block once, from the stack of the first edge the
+   DFS takes into it, and reorders the stack to a block's live-in order only
+   on a JMP.  So the entry block, planned from the empty stack, must have no
+   predecessors (and so no PHIs, which would have no edge to read), and a
+   block with several predecessors must be entered from each by a JMP
+   (upstream venom_to_assembly assumes the same of a normalized CFG). *)
+Definition block_entries_ready_def:
+  block_entries_ready cfg fn ⇔
+    (case entry_block fn of
+       NONE => T
+     | SOME eb => NULL (cfg_preds_of cfg eb.bb_label) ∧
+                  NULL (collect_phis eb.bb_instructions)) ∧
+    EVERY (λbb. LENGTH (cfg_preds_of cfg bb.bb_label) ≤ 1 ∨
+             EVERY (λp. case lookup_block p fn.fn_blocks of
+                          NONE => F
+                        | SOME pb => ¬NULL pb.bb_instructions ∧
+                                     (LAST pb.bb_instructions).inst_opcode = JMP)
+               (cfg_preds_of cfg bb.bb_label))
+      fn.fn_blocks
+End
+
+(* The liveness analysis is only consulted when the function has a PHI. *)
+Definition phi_operands_ready_def:
+  phi_operands_ready fn ⇔
+    if EVERY (λbb. NULL (collect_phis bb.bb_instructions)) fn.fn_blocks then T
+    else EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks
+End
+
+(* Per-function: structural WF + SSA + SUE + normalized CFG + PHI operands
+   + no bad opcodes *)
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     canonical_param_prefix fn ∧
@@ -372,6 +453,8 @@ Definition codegen_ready_fn_def:
     def_dominates_uses fn ∧
     single_use_form fn ∧
     cfg_is_normalized (cfg_analyze fn) fn ∧
+    block_entries_ready (cfg_analyze fn) fn ∧
+    phi_operands_ready fn ∧
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
 End
 
@@ -397,9 +480,14 @@ Definition generate_inst_plan_def:
       SOME ([], ps)
     else
       (* ASSIGN and all other opcodes go through regular pipeline.
-         generate_emit_ops returns [] for opcodes with no EVM equivalent. *)
-      SOME (generate_regular_inst_plan liveness dfg cfg fn inst
-              next_liveness is_halting next_is_terminator cur_bb_label ps)
+         generate_emit_ops returns [] for opcodes with no EVM equivalent.
+         A JMP fails unless its join reorder reached the target stack, as
+         Python's _stack_reorder asserts. *)
+      let r = generate_regular_inst_plan liveness dfg cfg fn inst
+                next_liveness is_halting next_is_terminator cur_bb_label ps in
+      if inst.inst_opcode = JMP ∧
+         ¬join_reached liveness fn cur_bb_label inst (SND r)
+      then NONE else SOME r
 End
 
 Theorem generate_inst_plan_pre_codegen_none:
@@ -608,13 +696,6 @@ End
 Definition cleanup_elision_safe_def:
   cleanup_elision_safe ch growth cfg fn bb h <=>
     cleanup_height_safe ch growth cfg fn bb h
-End
-
-(* There is no runtime operation for Python's _DeadStackItem.  Label operands
-   are never looked up on the existing stack, so this private marker gives the
-   plan model the same non-aliasing behaviour without emitting bytecode. *)
-Definition dead_stack_marker_def:
-  dead_stack_marker = Label ""
 End
 
 Definition below_all_live_def:

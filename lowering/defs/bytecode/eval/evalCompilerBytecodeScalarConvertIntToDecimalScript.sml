@@ -126,6 +126,10 @@ val scalar_convert_int_to_decimal_allocs_ok_eval = save_thm
    EQT_ELIM (EVAL ``EVERY (fn_allocs_ok ^scalar_convert_int_to_decimal_tops)
       (^scalar_convert_int_to_decimal_external_sources ++ ^scalar_convert_int_to_decimal_internal_sources ++
        (case ^scalar_convert_int_to_decimal_fallback_source of NONE => [] | SOME f => [f]))``))
+(* lower_vyper_runtime_unit's immutable-section bound. *)
+val scalar_convert_int_to_decimal_immutables_ok_eval =
+  EQT_ELIM (EVAL ``compute_immutables_len
+      (get_struct_fields (make_struct_fields_map scalar_convert_int_to_decimal_program)) scalar_convert_int_to_decimal_program < 0x6000``)
 val scalar_convert_int_to_decimal_internal_fns_eval = save_thm
   ("scalar_convert_int_to_decimal_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
@@ -506,6 +510,7 @@ val scalar_convert_int_to_decimal_runtime_unit_eval = save_thm
       scalar_convert_int_to_decimal_entry_info_eval,
       scalar_convert_int_to_decimal_run_lowering_eval,
       scalar_convert_int_to_decimal_return_buffers_ok_eval, scalar_convert_int_to_decimal_allocs_ok_eval,
+      scalar_convert_int_to_decimal_immutables_ok_eval,
       boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @
@@ -938,7 +943,22 @@ Proof
        scalar_convert_int_to_decimal_runtime_pipeline_def,
        scalar_convert_int_to_decimal_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> simp[] >>
+  rename1 `resolve_o1_policy _ = SOME rpolicy` >>
+  Cases_on `lower_vyper_runtime_unit tops rpolicy` >> simp[] >>
+  rename1 `lower_vyper_runtime_unit _ _ = SOME runtime_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              runtime_unit` >> simp[] >>
+  rename1 `run_venom_pipeline _ _ _ _ _ _ = SOME runtime_out` >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `finalize_codegen (K SOME) rpolicy runtime_out.po_unit` >> simp[] >>
+  rename1 `finalize_codegen _ _ _ = SOME runtime_bytecode` >>
+  Cases_on `lower_vyper_deploy_unit tops rpolicy runtime_bytecode` >> simp[] >>
+  rename1 `lower_vyper_deploy_unit _ _ _ = SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              deploy_unit` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  CASE_TAC >> simp[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

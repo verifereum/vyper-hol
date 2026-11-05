@@ -22,8 +22,9 @@
 
 Theory stmtSimDeclStore
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
-  fragExec localPtrsProps venomMemDefs loweringSlice exprSim
+  fragExec localPtrsProps venomMemDefs loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperTyping
@@ -39,11 +40,14 @@ Theorem stmt_state_rel_declare_memory:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_fmp = s.vs_fmp /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
-    t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+    t.vs_immutables = s.vs_immutables /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\
+    t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
@@ -95,6 +99,8 @@ Proof
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (qpat_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
@@ -111,6 +117,13 @@ Proof
      `local_region cenv (sc :: rest) s j b len` by
        (gvs[local_region_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists_tac `s` >>
+     rpt conj_tac
+     >~ [`lookup_var _ t = lookup_var _ s`]
+     >- (rpt strip_tac >> qpat_x_assum `!q. q = p \/ _ ==> _` irule >>
+         simp[not_local_ptr_def]) >>
+     fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

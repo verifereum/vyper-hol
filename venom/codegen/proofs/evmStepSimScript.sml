@@ -3455,8 +3455,13 @@ Resume asm_evm_step_log_dispatch[log_0_unfolded]:
   rpt (IF_CASES_TAC >> gvs[]) >>
   simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
        set_current_context_def, assert_def, fail_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY common_handle_step_exception_tac >>
+  (* The gvs[] after the gas-check split is the costly part: it simplifies
+     both copies of the unfolded step. holbuild times a parenthesised group
+     that contains TRY once per goal, step by step, so this group keeps that
+     gvs[] a step of its own for each goal. *)
+  (IF_CASES_TAC >> gvs[] >>
+   rpt (IF_CASES_TAC >> gvs[]) >>
+   TRY common_handle_step_exception_tac) >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
@@ -3489,8 +3494,13 @@ Resume asm_evm_step_log_dispatch[log_1_unfolded]:
   rpt (IF_CASES_TAC >> gvs[]) >>
   simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
        set_current_context_def, assert_def, fail_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY common_handle_step_exception_tac >>
+  (* The gvs[] after the gas-check split is the costly part: it simplifies
+     both copies of the unfolded step. holbuild times a parenthesised group
+     that contains TRY once per goal, step by step, so this group keeps that
+     gvs[] a step of its own for each goal. *)
+  (IF_CASES_TAC >> gvs[] >>
+   rpt (IF_CASES_TAC >> gvs[]) >>
+   TRY common_handle_step_exception_tac) >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
@@ -3523,8 +3533,13 @@ Resume asm_evm_step_log_dispatch[log_2_unfolded]:
   rpt (IF_CASES_TAC >> gvs[]) >>
   simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
        set_current_context_def, assert_def, fail_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY common_handle_step_exception_tac >>
+  (* The gvs[] after the gas-check split is the costly part: it simplifies
+     both copies of the unfolded step. holbuild times a parenthesised group
+     that contains TRY once per goal, step by step, so this group keeps that
+     gvs[] a step of its own for each goal. *)
+  (IF_CASES_TAC >> gvs[] >>
+   rpt (IF_CASES_TAC >> gvs[]) >>
+   TRY common_handle_step_exception_tac) >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
@@ -3557,8 +3572,13 @@ Resume asm_evm_step_log_dispatch[log_3_unfolded]:
   rpt (IF_CASES_TAC >> gvs[]) >>
   simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
        set_current_context_def, assert_def, fail_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY common_handle_step_exception_tac >>
+  (* The gvs[] after the gas-check split is the costly part: it simplifies
+     both copies of the unfolded step. holbuild times a parenthesised group
+     that contains TRY once per goal, step by step, so this group keeps that
+     gvs[] a step of its own for each goal. *)
+  (IF_CASES_TAC >> gvs[] >>
+   rpt (IF_CASES_TAC >> gvs[]) >>
+   TRY common_handle_step_exception_tac) >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
@@ -3591,8 +3611,13 @@ Resume asm_evm_step_log_dispatch[log_4_unfolded]:
   rpt (IF_CASES_TAC >> gvs[]) >>
   simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
        set_current_context_def, assert_def, fail_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY common_handle_step_exception_tac >>
+  (* The gvs[] after the gas-check split is the costly part: it simplifies
+     both copies of the unfolded step. holbuild times a parenthesised group
+     that contains TRY once per goal, step by step, so this group keeps that
+     gvs[] a step of its own for each goal. *)
+  (IF_CASES_TAC >> gvs[] >>
+   rpt (IF_CASES_TAC >> gvs[]) >>
+   TRY common_handle_step_exception_tac) >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,

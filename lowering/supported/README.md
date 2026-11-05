@@ -38,7 +38,8 @@ bounds are not excluded by this whitelist; typing and allocation are separate.
   private explicitly slotted storage of storage types; private explicitly slotted
   transient full words; private non-transient non-nested maps with permitted
   keys and full-word values; value-typed struct/interface fields; word/string
-  event fields (thus no indexed aggregates or bytes20); no flags, constants,
+  event fields (thus no indexed aggregates or bytes20), at most three of them
+  indexed; no flags, constants,
   immutables, public storage, or missing slots.
 - `supported_interface_signature tops (name,args,ret,mut)` checks types only.
 - `supported_variable_decl tops id`: option of `(visibility,mutability,type,slot)`.

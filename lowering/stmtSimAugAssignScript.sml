@@ -23,10 +23,18 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  exprBopSimDefs exprBopSimProps
+  exprSimSource
+  exprSimName
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   allocLimits
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
-  exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
+  fragExec localPtrsProps  exprSimHyps exprSimOps exprSimBinopFrag
+  exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv valueEncoding
@@ -144,19 +152,6 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
-Theorem word_value_type_memory_size:
-  !tenv t tv.
-    word_value_type t /\ evaluate_type tenv t = SOME tv ==>
-    type_memory_size tv = 32
-Proof
-  rpt strip_tac >>
-  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
-   t = BaseT DecimalT \/ t = BaseT BoolT \/ (?nsid. t = FlagT nsid)` by
-    (Cases_on `t` >> fs[word_value_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), type_memory_size_def]
-QED
-
 (* The source's operator on x's value and e's is the operator of the
    expression x op e annotated with x's type: the builtin reads its type
    argument from e's type, x op= e from x's place, and neither matters
@@ -246,6 +241,21 @@ Proof
   rw[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def]
 QED
 
+(* The target of an augmented assignment has a word type, so nothing of
+   its size is asked for alloc_limits_expr. *)
+Theorem well_typed_binop_augassign_alloc_ok[local]:
+  !cenv ty bop t2. well_typed_binop ty bop ty t2 ==> type_alloc_ok cenv ty
+Proof
+  rpt strip_tac >>
+  Cases_on `bop = In`
+  >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
+  Cases_on `bop = NotIn`
+  >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  imp_res_tac exprSimSourceTheory.word_value_type_word >>
+  simp[type_alloc_ok_def]
+QED
+
 (* The typing side: x op e meets expr_sim_pre where e does, x is a local
    of type ty and the type checker accepts x op= e. *)
 Theorem expr_sim_pre_augassign:
@@ -260,6 +270,7 @@ Proof
   drule expr_sim_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       builtin_operands_ok_def, int_literal_value_def,
@@ -281,6 +292,7 @@ Proof
   drule expr_body_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       builtin_operands_ok_def, int_literal_value_def,
@@ -362,8 +374,7 @@ QED
    (expr_sim_inv at the state after e), so the result's typed word is the
    word the store lays out at x's type (store_lays_out_word_value). *)
 Theorem compile_augassign_local_case:
-  !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
-    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     FLOOKUP env.var_types id = SOME ty /\
@@ -371,7 +382,8 @@ Theorem compile_augassign_local_case:
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
+      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
+      (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -456,15 +468,15 @@ QED
 
 (* compile_augassign_local_case for an operand with no internal call. *)
 Theorem compile_augassign_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
-    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME ty /\
     (bop = Exp ==> nonneg_int_literal e) /\
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
+      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
+      (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
   rpt strip_tac >> irule compile_augassign_local_case >>
   fs[expr_sim_pre_body, expr_sim_ok_case, DISJ_IMP_THM] >>

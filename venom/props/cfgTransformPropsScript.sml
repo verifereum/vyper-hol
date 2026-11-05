@@ -324,3 +324,33 @@ Proof
   qexists_tac `entry` >> rw[] >>
   metis_tac[relationTheory.RTC_RTC]
 QED
+
+Theorem subst_block_labels_inst_shape:
+  (subst_block_labels_inst lm inst).inst_opcode = inst.inst_opcode /\
+  (subst_block_labels_inst lm inst).inst_id = inst.inst_id /\
+  (subst_block_labels_inst lm inst).inst_outputs = inst.inst_outputs
+Proof
+  simp[subst_block_labels_inst_def, subst_label_map_inst_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem bb_well_formed_map_classification:
+  bb_well_formed bb /\
+  (!inst. is_terminator (f inst).inst_opcode = is_terminator inst.inst_opcode /\
+          ((f inst).inst_opcode = PHI <=> inst.inst_opcode = PHI)) ==>
+  bb_well_formed (bb with bb_instructions := MAP f bb.bb_instructions)
+Proof
+  strip_tac >> qpat_x_assum `bb_well_formed bb` mp_tac >>
+  simp[bb_well_formed_def, LAST_MAP, EL_MAP] >>
+  strip_tac >> conj_tac >> rpt strip_tac >> gvs[listTheory.EL_MAP] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem bb_well_formed_subst_block_labels:
+  bb_well_formed bb ==>
+  bb_well_formed (subst_block_labels_block lm bb)
+Proof
+  strip_tac >> simp[subst_block_labels_block_def] >>
+  irule bb_well_formed_map_classification >>
+  simp[subst_block_labels_inst_shape]
+QED

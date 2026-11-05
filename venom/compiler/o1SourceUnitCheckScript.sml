@@ -2,8 +2,8 @@
  * Computable sufficient check for o1_source_unit_ok on concrete units.
  * TOP-LEVEL: o1_source_unit_check, o1_source_unit_check_sound.
  * Helpers: copy_phi_closed is a closure certificate for copy_phi_var, and
- *   copy_phi_vars iterates the closure rules from the seeds; gas_use_check /
- *   retpc_use_check replace the existentials in gas_use_ok / retpc_use_ok.
+ *   copy_phi_vars iterates the closure rules from the seeds; retpc_use_check
+ *   replaces the existential in retpc_use_ok.
  * EVAL cannot decide o1_source_unit_ok itself: entry_fn_first is existential
  * and copy_phi_var is inductive.
  *)
@@ -76,28 +76,13 @@ End
 
 (* ===== Opaque uses ===== *)
 
-Definition gas_use_check_def:
-  gas_use_check inst x <=>
-    inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-    ((inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-     case inst.inst_operands of
-       [] => F
-     | op :: rest => op = Var x /\ ~MEM (Var x) rest)
-End
-
 Definition retpc_use_check_def:
   retpc_use_check inst x <=>
     inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-    (inst.inst_opcode = RET /\ inst.inst_operands <> [] /\
+    (MEM inst.inst_opcode [RET; RETFMP; DRET] /\ inst.inst_operands <> [] /\
      LAST inst.inst_operands = Var x /\
      ~MEM (Var x) (FRONT inst.inst_operands))
 End
-
-Theorem gas_use_check_sound:
-  gas_use_check inst x ==> gas_use_ok inst x
-Proof
-  rw[gas_use_check_def, gas_use_ok_def] >> Cases_on `inst.inst_operands` >> gvs[]
-QED
 
 Theorem retpc_use_check_sound:
   retpc_use_check inst x ==> retpc_use_ok inst x
@@ -109,14 +94,11 @@ QED
 
 Definition opaque_use_check_def:
   opaque_use_check fn <=>
-    let gas = copy_phi_vars GAS fn;
-        retpc = copy_phi_vars RETPC_PARAM fn in
-    copy_phi_closed GAS fn gas /\ copy_phi_closed RETPC_PARAM fn retpc /\
+    let retpc = copy_phi_vars RETPC_PARAM fn in
+    copy_phi_closed RETPC_PARAM fn retpc /\
     EVERY (\inst. EVERY (\op.
       case op of
-        Var x =>
-          (MEM x gas ==> gas_use_check inst x) /\
-          (MEM x retpc ==> retpc_use_check inst x)
+        Var x => (MEM x retpc ==> retpc_use_check inst x)
       | _ => T)
       inst.inst_operands) (fn_insts fn)
 End
@@ -124,10 +106,85 @@ End
 Theorem opaque_use_check_sound:
   opaque_use_check fn ==> opaque_use_ok fn
 Proof
-  rw[opaque_use_check_def, opaque_use_ok_def, gas_var_def, retpc_var_def,
+  rw[opaque_use_check_def, opaque_use_ok_def, retpc_var_def,
      EVERY_MEM, LET_THM] >>
   first_x_assum drule >> disch_then drule >> simp[] >>
-  metis_tac[copy_phi_closed_sound, gas_use_check_sound, retpc_use_check_sound]
+  metis_tac[copy_phi_closed_sound, retpc_use_check_sound]
+QED
+
+(* A RET's last operand must be a RETPC_PARAM output of the entry block
+   itself (a seed), no PHI may read a variable of the return-PC closure,
+   only RETPC_PARAM may write one, and at most one instruction writes
+   each: enough for raw units, which copy no return PC and have no PHI. *)
+Definition retpc_shape_check_def:
+  retpc_shape_check fn <=>
+    let retpc = copy_phi_vars RETPC_PARAM fn in
+    copy_phi_closed RETPC_PARAM fn retpc /\
+    EVERY (\inst.
+      (MEM inst.inst_opcode [RET; RETFMP; DRET] ==>
+         inst.inst_operands <> [] /\
+         case (LAST inst.inst_operands, fn.fn_blocks) of
+           (Var x, bb :: _) => EXISTS (\i. i.inst_opcode = RETPC_PARAM /\
+                                           MEM x i.inst_outputs)
+                                 bb.bb_instructions
+         | _ => F) /\
+      (inst.inst_opcode = PHI ==>
+         EVERY (\op. case op of Var y => ~MEM y retpc | _ => T)
+           inst.inst_operands) /\
+      EVERY (\x. MEM x retpc ==> inst.inst_opcode = RETPC_PARAM)
+        inst.inst_outputs) (fn_insts fn) /\
+    EVERY (\x. LENGTH (FILTER (\i. MEM x i.inst_outputs) (fn_insts fn)) <= 1)
+      retpc
+End
+
+Theorem FILTER_LENGTH_LE_1_unique[local]:
+  !P l i j. LENGTH (FILTER P l) <= 1 /\ MEM i l /\ P i /\ MEM j l /\ P j ==>
+            i = j
+Proof
+  rpt strip_tac >>
+  `MEM i (FILTER P l) /\ MEM j (FILTER P l)` by simp[MEM_FILTER] >>
+  Cases_on `FILTER P l` >> gvs[] >> Cases_on `t` >> gvs[]
+QED
+
+Theorem retpc_shape_check_sound:
+  retpc_shape_check fn ==> retpc_shape_ok fn
+Proof
+  rewrite_tac[retpc_shape_check_def, LET_THM] >> strip_tac >>
+  fs[EVERY_MEM] >>
+  `!x. retpc_var fn x ==> MEM x (copy_phi_vars RETPC_PARAM fn)`
+    by metis_tac[retpc_var_def, copy_phi_closed_sound] >>
+  `!x. retpc_var (reachable_fn fn) x ==>
+       MEM x (copy_phi_vars RETPC_PARAM fn)`
+    by metis_tac[reachable_retpc_var] >>
+  rewrite_tac[retpc_shape_ok_def] >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (`inst.inst_opcode <> PHI` by gvs[] >>
+      `MEM inst (fn_insts fn)` by metis_tac[reachable_fn_insts_nonphi] >>
+      qpat_x_assum `!i. MEM i (fn_insts _) ==> _` (qspec_then `inst` mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac >>
+      qpat_x_assum `_ \/ _ \/ _ ==> _` mp_tac >>
+      impl_tac >- fs[] >> strip_tac >>
+      Cases_on `LAST inst.inst_operands` >> gvs[] >>
+      Cases_on `fn.fn_blocks` >> gvs[EXISTS_MEM] >>
+      rename1 `LAST inst.inst_operands = Var r` >>
+      qexistsl_tac [`FRONT inst.inst_operands`, `r`] >>
+      (conj_tac >- metis_tac[APPEND_FRONT_LAST]) >>
+      simp[retpc_var_def] >> irule copy_phi_var_seed >>
+      qexists_tac `i` >> simp[] >>
+      irule entry_insts_reachable >> simp[])
+  >- (qspecl_then [`fn`, `inst`, `Var x`] mp_tac reachable_fn_insts_operand >>
+      simp[] >> strip_tac >>
+      `MEM x (copy_phi_vars RETPC_PARAM fn)` by res_tac >>
+      qpat_x_assum `!i. MEM i (fn_insts _) ==> _` (qspec_then `i` mp_tac) >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspec_then `Var x` mp_tac) >> simp[])
+  >- (disj1_tac >>
+      `MEM x (copy_phi_vars RETPC_PARAM fn)` by res_tac >>
+      qpat_x_assum `!i. MEM i (fn_insts _) ==> _` (qspec_then `inst` mp_tac) >>
+      simp[] >> metis_tac[])
+  >> `MEM x (copy_phi_vars RETPC_PARAM fn)` by res_tac >>
+  irule FILTER_LENGTH_LE_1_unique >>
+  qexistsl_tac [`\i. MEM x i.inst_outputs`, `fn_insts fn`] >>
+  simp[] >> metis_tac[]
 QED
 
 (* ===== Unit check ===== *)
@@ -135,14 +192,15 @@ QED
 Definition fn_shape_check_def:
   fn_shape_check fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_check fn /\
-    EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
-    EVERY inst_shape_ok (fn_insts fn)
+    retpc_shape_check fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
+    EVERY inst_shape_ok (fn_insts fn) /\ call_checks_ok fn
 End
 
 Theorem fn_shape_check_sound:
   fn_shape_check fn ==> fn_shape_ok fn
 Proof
-  rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound]
+  rw[fn_shape_check_def, fn_shape_ok_def, opaque_use_check_sound,
+     retpc_shape_check_sound]
 QED
 
 (* Checking every non-head function is stronger than internal_termination_ok

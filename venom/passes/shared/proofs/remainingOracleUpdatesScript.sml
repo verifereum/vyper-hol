@@ -62,8 +62,7 @@ Theorem dse_equiv_oracle_same_updates:
   dse_equiv space (s1 with <| vs_outcomes := os; vs_requests := rqs |>)
     (s2 with <| vs_outcomes := os; vs_requests := rqs |>)
 Proof
-  Cases_on `space` >> simp[dse_equiv_def, lookup_var_def,
-       dse_frame_def, venom_state_component_equality]
+  simp[dse_equiv_def, lookup_var_def] >> strip_tac >> simp[]
 QED
 
 Theorem dse_all_equiv_oracle_same_updates:

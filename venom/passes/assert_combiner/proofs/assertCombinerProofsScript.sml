@@ -7,8 +7,9 @@
 
 Theory assertCombinerProofs
 Ancestors
+  acFunctionSimProofs acAbortRelProofs
   acAbortProofs acSimPrecondProofs acChainProofs acBaseProofs assertCombinerDefs
-  passSimulationDefs passSimulationProps
+  passSimulationDefs passSimulationProps passSimulationProofs
   stateEquiv stateEquivProps execEquivProps execEquivParamProps venomInstProps venomExecProps
   dfgAnalysisProps venomState venomWf venomExecSemantics venomExecProofs
   analysisSimDefs analysisSimProofsBase
@@ -77,10 +78,10 @@ Theorem ac_run_insts_sim[local]:
     (!i x. MEM i insts /\ MEM x i.inst_outputs ==>
        ~IS_SOME (lookup_var x s)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
-    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
       (run_insts fuel ctx insts s)
       (run_insts fuel ctx
-        (SND (FOLDL (ac_apply_merge_step cands) (mp, []) insts)) s)
+        (SND (FOLDL (ac_apply_merge_step id_base cands) (mp, []) insts)) s)
 Proof
   rpt strip_tac >>
   `state_equiv V s s` by simp[state_equiv_refl] >>
@@ -89,11 +90,11 @@ Proof
     metis_tac[ac_precond_ok_or_revert_abort] >>
   pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC
   >- (
-    drule_all ac_run_insts_sim_ok >> strip_tac >>
+    drule_all ac_run_insts_sim_ok >> disch_then (qspec_then `id_base` mp_tac) >> strip_tac >>
     simp[lift_result_def]
   )
   >- (
-    drule_all ac_run_insts_sim_abort >> strip_tac >>
+    drule_all ac_run_insts_sim_abort >> disch_then (qspec_then `id_base` mp_tac) >> strip_tac >>
     simp[lift_result_def]
   )
 QED
@@ -104,8 +105,8 @@ Triviality ac_foldl_snoc_term[local]:
   !cands mp acc insts term.
     ~EXISTS (\mc. mc.mc_first_id = term.inst_id) cands /\
     FIND (\mc. mc.mc_second_id = term.inst_id) cands = NONE ==>
-    SND (FOLDL (ac_apply_merge_step cands) (mp, acc) (SNOC term insts)) =
-    SNOC term (SND (FOLDL (ac_apply_merge_step cands) (mp, acc) insts))
+    SND (FOLDL (ac_apply_merge_step id_base cands) (mp, acc) (SNOC term insts)) =
+    SNOC term (SND (FOLDL (ac_apply_merge_step id_base cands) (mp, acc) insts))
 Proof
   Induct_on `insts`
   >- (
@@ -115,7 +116,7 @@ Proof
   >- (
     rpt gen_tac >> strip_tac >>
     simp[SNOC] >>
-    Cases_on `ac_apply_merge_step cands (mp, acc) h` >>
+    Cases_on `ac_apply_merge_step id_base cands (mp, acc) h` >>
     simp[] >>
     first_x_assum (qspecl_then [`cands`, `q`, `r`, `term`] mp_tac) >>
     simp[SNOC_APPEND] >>
@@ -769,11 +770,11 @@ Triviality run_insts_front_sim_exec_block_fail[local]:
           (FRONT bb2.bb_instructions) /\
     s.vs_inst_idx = 0 /\
     ~(?s1'. run_insts fuel ctx (FRONT bb1.bb_instructions) s = OK s1') /\
-    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
       (run_insts fuel ctx (FRONT bb1.bb_instructions) s)
       (run_insts fuel ctx (FRONT bb2.bb_instructions) s)
   ==>
-    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb1 s)
       (exec_block fuel ctx bb2 s)
 Proof
@@ -801,19 +802,15 @@ Proof
   (impl_tac >- (conj_tac
     >- (rpt strip_tac >> irule (GSYM EL_FRONT) >> simp[NULL_EQ, LENGTH_FRONT])
     >- gvs[])) >> strip_tac >>
-  irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_trans) >>
-  rpt conj_tac
-  >- metis_tac[state_equiv_trans]
-  >- metis_tac[execution_equiv_trans]
-  >- (qexists_tac `run_insts fuel ctx (FRONT bb1.bb_instructions) s` >>
-      conj_tac
-      >- first_assum ACCEPT_TAC
-      >- (irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_trans) >>
-          rpt conj_tac
-          >- metis_tac[state_equiv_trans]
-          >- metis_tac[execution_equiv_trans]
-          >- (qexists_tac `run_insts fuel ctx (FRONT bb2.bb_instructions) s` >>
-              metis_tac[])))
+  Cases_on `run_insts fuel ctx (FRONT bb1.bb_instructions) s` >>
+  gvs[lift_result_def] >>
+  Cases_on `run_insts fuel ctx (FRONT bb2.bb_instructions) s` >>
+  gvs[lift_result_def] >>
+  Cases_on `exec_block fuel ctx bb1 s` >> gvs[lift_result_def] >>
+  Cases_on `exec_block fuel ctx bb2 s` >>
+  gvs[lift_result_def] >>
+  metis_tac[execution_equiv_ac_abort_equiv, ac_abort_equiv_trans,
+            execution_equiv_trans]
 QED
 
 (* Terminator step on different-idx states preserves lift_result through halted_wrap *)
@@ -874,7 +871,7 @@ Triviality run_insts_front_sim_exec_block_ok[local]:
     state_equiv V s1' s2' /\
     (!x. MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==> x NOTIN V)
   ==>
-    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb1 s)
       (exec_block fuel ctx bb2 s)
 Proof
@@ -925,6 +922,10 @@ Proof
   ASSUME_TAC >- metis_tac[] >>
   simp[] >>
   (* Apply the combined terminator+halted_wrap helper *)
+  irule (Q.SPECL [`state_equiv V`, `state_equiv V`,
+    `execution_equiv UNIV`, `execution_equiv UNIV`,
+    `execution_equiv UNIV`, `ac_abort_equiv`] lift_result_mono_proof) >>
+  simp[execution_equiv_ac_abort_equiv] >>
   irule terminator_halted_wrap_lift_result >> simp[]
 QED
 
@@ -938,12 +939,12 @@ Triviality run_insts_front_sim_exec_block[local]:
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
           (FRONT bb2.bb_instructions) /\
     s.vs_inst_idx = 0 /\
-    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
       (run_insts fuel ctx (FRONT bb1.bb_instructions) s)
       (run_insts fuel ctx (FRONT bb2.bb_instructions) s) /\
     (!x. MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==> x NOTIN V)
   ==>
-    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb1 s)
       (exec_block fuel ctx bb2 s)
 Proof
@@ -965,9 +966,9 @@ Triviality ac_transform_front[local]:
     is_terminator (LAST bb.bb_instructions).inst_opcode /\
     ac_scan_block dfg bb.bb_instructions NONE <> [] ==>
     let cands = ac_scan_block dfg bb.bb_instructions NONE in
-    let trans = ac_transform_block dfg bb in
+    let trans = ac_transform_block dfg id_base bb in
     trans.bb_instructions =
-      SND (FOLDL (ac_apply_merge_step cands) ([], [])
+      SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
                   (FRONT bb.bb_instructions)) ++ [LAST bb.bb_instructions] /\
     LAST trans.bb_instructions = LAST bb.bb_instructions /\
     trans.bb_instructions <> []
@@ -983,9 +984,9 @@ Proof
    FIND (\mc. mc.mc_second_id = term.inst_id) cands = NONE` by
     (qunabbrev_tac `cands` >>
      match_mp_tac term_not_candidate >> simp[]) >>
-  `SND (FOLDL (ac_apply_merge_step cands) ([], [])
+  `SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
               (SNOC term (FRONT bb.bb_instructions))) =
-   SNOC term (SND (FOLDL (ac_apply_merge_step cands) ([], [])
+   SNOC term (SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
                           (FRONT bb.bb_instructions)))` by
     metis_tac[ac_foldl_snoc_term] >>
   ONCE_ASM_REWRITE_TAC[] >>
@@ -998,7 +999,7 @@ Triviality ac_merge_step_non_term[local]:
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) acc /\
     (ac_is_safe_between inst \/ inst.inst_opcode = ASSERT) ==>
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-          (SND (ac_apply_merge_step cands (mp, acc) inst))
+          (SND (ac_apply_merge_step id_base cands (mp, acc) inst))
 Proof
   rpt strip_tac >>
   simp[ac_apply_merge_step_def, LET_THM] >>
@@ -1016,13 +1017,13 @@ Triviality ac_foldl_non_term[local]:
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) acc /\
     EVERY (\i. ac_is_safe_between i \/ i.inst_opcode = ASSERT) insts ==>
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-          (SND (FOLDL (ac_apply_merge_step cands) (mp, acc) insts))
+          (SND (FOLDL (ac_apply_merge_step id_base cands) (mp, acc) insts))
 Proof
   Induct_on `insts` >> simp[] >>
   rpt strip_tac >>
-  Cases_on `ac_apply_merge_step cands (mp, acc) h` >>
+  Cases_on `ac_apply_merge_step id_base cands (mp, acc) h` >>
   first_x_assum match_mp_tac >> simp[] >>
-  `r = SND (ac_apply_merge_step cands (mp, acc) h)` by simp[] >>
+  `r = SND (ac_apply_merge_step id_base cands (mp, acc) h)` by simp[] >>
   gvs[] >> metis_tac[ac_merge_step_non_term]
 QED
 
@@ -1033,7 +1034,7 @@ Triviality ac_transform_front_non_term[local]:
     EVERY (\i. ac_is_safe_between i \/ i.inst_opcode = ASSERT \/
                is_terminator i.inst_opcode) bb.bb_instructions ==>
     let cands = ac_scan_block dfg bb.bb_instructions NONE in
-    let trans_insts = SND (FOLDL (ac_apply_merge_step cands) ([], [])
+    let trans_insts = SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
                                   (FRONT bb.bb_instructions)) in
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
           trans_insts
@@ -1085,9 +1086,9 @@ Theorem ac_block_sim_same_nonempty[local]:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
     lift_result
       (state_equiv V)
-      (execution_equiv UNIV) (execution_equiv UNIV)
+      (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb s)
-      (exec_block fuel ctx (ac_transform_block dfg bb) s)
+      (exec_block fuel ctx (ac_transform_block dfg id_base bb) s)
 Proof
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (Q.SUBGOAL_THEN `bb.bb_instructions <> []` ASSUME_TAC >- fs[bb_well_formed_def]) >>
@@ -1104,26 +1105,26 @@ Proof
      >- (rpt strip_tac >> first_x_assum irule >> metis_tac[MEM_FRONT_NOT_NIL])
      >- metis_tac[all_distinct_outputs_front])) >>
   (Q.SUBGOAL_THEN
-    `lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
+    `lift_result (state_equiv V) (execution_equiv UNIV) ac_abort_equiv
        (run_insts fuel ctx (FRONT bb.bb_instructions) s)
        (run_insts fuel ctx
-          (SND (FOLDL (ac_apply_merge_step cands) ([], [])
+          (SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
                        (FRONT bb.bb_instructions))) s)`
     ASSUME_TAC >-
     (irule ac_run_insts_sim >> metis_tac[])) >>
   Q.SUBGOAL_THEN
-    `(ac_transform_block dfg bb).bb_instructions =
-     SND (FOLDL (ac_apply_merge_step cands) ([], [])
+    `(ac_transform_block dfg id_base bb).bb_instructions =
+     SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
                  (FRONT bb.bb_instructions)) ++ [LAST bb.bb_instructions] /\
-     LAST (ac_transform_block dfg bb).bb_instructions =
+     LAST (ac_transform_block dfg id_base bb).bb_instructions =
        LAST bb.bb_instructions /\
-     (ac_transform_block dfg bb).bb_instructions <> []`
+     (ac_transform_block dfg id_base bb).bb_instructions <> []`
     STRIP_ASSUME_TAC
   >- (qunabbrev_tac `cands` >>
       mp_tac ac_transform_front >> simp[LET_THM]) >>
   Q.SUBGOAL_THEN
-    `FRONT (ac_transform_block dfg bb).bb_instructions =
-     SND (FOLDL (ac_apply_merge_step cands) ([], [])
+    `FRONT (ac_transform_block dfg id_base bb).bb_instructions =
+     SND (FOLDL (ac_apply_merge_step id_base cands) ([], [])
                  (FRONT bb.bb_instructions))`
     ASSUME_TAC
   >- simp[FRONT_APPEND] >>
@@ -1162,18 +1163,19 @@ Theorem ac_block_sim_same[local]:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
     lift_result
       (state_equiv V)
-      (execution_equiv UNIV) (execution_equiv UNIV)
+      (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb s)
-      (exec_block fuel ctx (ac_transform_block dfg bb) s)
+      (exec_block fuel ctx (ac_transform_block dfg id_base bb) s)
 Proof
   rpt strip_tac >>
   Cases_on `ac_scan_block dfg bb.bb_instructions NONE = []`
   >- (
     (Q.SUBGOAL_THEN `bb.bb_instructions <> []` ASSUME_TAC >- fs[bb_well_formed_def]) >>
-    (Q.SUBGOAL_THEN `ac_transform_block dfg bb = bb` ASSUME_TAC
+    (Q.SUBGOAL_THEN `ac_transform_block dfg id_base bb = bb` ASSUME_TAC
      >- fs[ac_block_sim_same_no_cands]) >>
     pop_assum (fn th => REWRITE_TAC[th]) >>
-    irule lift_result_refl >> simp[state_equiv_refl, execution_equiv_refl]
+    irule lift_result_refl_proof >>
+    simp[state_equiv_refl, execution_equiv_refl]
   )
   >- (
     irule ac_block_sim_same_nonempty >> metis_tac[]
@@ -1392,9 +1394,9 @@ Triviality ac_block_sim_same_from_fn[local]:
        MEM x i.inst_outputs ==> ~IS_SOME (lookup_var x s)) ==>
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
-      (execution_equiv UNIV) (execution_equiv UNIV)
+      (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb s)
-      (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s)
+      (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) (ac_id_base fn) bb) s)
 Proof
   rpt strip_tac >>
   irule ac_block_sim_same >> rpt conj_tac >>
@@ -1446,9 +1448,9 @@ Theorem ac_block_sim[local]:
        MEM x i.inst_outputs ==> ~IS_SOME (lookup_var x s2)) ==>
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
-      (execution_equiv UNIV) (execution_equiv UNIV)
+      (execution_equiv UNIV) ac_abort_equiv
       (exec_block fuel ctx bb s1)
-      (exec_block fuel ctx (ac_transform_block dfg bb) s2)
+      (exec_block fuel ctx (ac_transform_block dfg (ac_id_base fn) bb) s2)
 Proof
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 1: state_equiv gives result_equiv for original block *)
@@ -1463,9 +1465,9 @@ Proof
   (* Step 2: same-state sim for s2 via helper *)
   (Q.SUBGOAL_THEN
     `lift_result (state_equiv (ac_fresh_vars_fn fn))
-       (execution_equiv UNIV) (execution_equiv UNIV)
+       (execution_equiv UNIV) ac_abort_equiv
        (exec_block fuel ctx bb s2)
-       (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s2)`
+       (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) (ac_id_base fn) bb) s2)`
     ASSUME_TAC >-
     (irule ac_block_sim_same_from_fn >> simp[] >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1474,14 +1476,13 @@ Proof
   (* Step 3: compose via transitivity *)
   qpat_x_assum `result_equiv _ _ _` mp_tac >>
   simp[result_equiv_is_lift_result] >> strip_tac >>
-  irule (REWRITE_RULE [AND_IMP_INTRO]
-    (Q.SPECL [`state_equiv (ac_fresh_vars_fn fn)`,
-              `execution_equiv UNIV`] lift_result_trans)) >>
-  rpt conj_tac
-  >- metis_tac[execution_equiv_trans]
-  >- metis_tac[state_equiv_trans]
-  >- (qexists_tac `exec_block fuel ctx bb s2` >>
-      metis_tac[lift_result_weaken_UNIV])
+  drule lift_result_weaken_UNIV >> strip_tac >>
+  Cases_on `exec_block fuel ctx bb s1` >> gvs[lift_result_def] >>
+  Cases_on `exec_block fuel ctx bb s2` >> gvs[lift_result_def] >>
+  Cases_on `exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s2` >>
+  gvs[lift_result_def] >>
+  metis_tac[state_equiv_trans, execution_equiv_trans,
+            execution_equiv_ac_abort_equiv, ac_abort_equiv_trans]
 QED
 
 Triviality eval_operand_update_inst_idx:
@@ -1503,7 +1504,7 @@ Triviality ac_apply_merge_step_no_phi:
     EVERY (\i. i.inst_opcode <> PHI) (SND st) /\
     inst.inst_opcode <> PHI ==>
     EVERY (\i. i.inst_opcode <> PHI)
-      (SND (ac_apply_merge_step candidates st inst))
+      (SND (ac_apply_merge_step id_base candidates st inst))
 Proof
   Cases_on `st` >>
   rw[ac_apply_merge_step_def, LET_THM] >>
@@ -1519,7 +1520,7 @@ Triviality ac_apply_merge_fold_no_phi:
     EVERY (\i. i.inst_opcode <> PHI) (SND st) /\
     EVERY (\i. i.inst_opcode <> PHI) l ==>
     EVERY (\i. i.inst_opcode <> PHI)
-      (SND (FOLDL (ac_apply_merge_step candidates) st l))
+      (SND (FOLDL (ac_apply_merge_step id_base candidates) st l))
 Proof
   Induct >> simp[] >> rpt strip_tac >>
   first_x_assum irule >>
@@ -1531,7 +1532,7 @@ Triviality ac_transform_block_no_phi:
   !dfg bb.
     EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions ==>
     EVERY (\i. i.inst_opcode <> PHI)
-      (ac_transform_block dfg bb).bb_instructions
+      (ac_transform_block dfg id_base bb).bb_instructions
 Proof
   rpt strip_tac >>
   simp[ac_transform_block_def] >>
@@ -1575,15 +1576,15 @@ Theorem ac_block_sim_run_block[local]:
        MEM x i.inst_outputs ==> ~IS_SOME (lookup_var x s2)) ==>
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
-      (execution_equiv UNIV) (execution_equiv UNIV)
+      (execution_equiv UNIV) ac_abort_equiv
       (run_block fuel ctx bb s1)
-      (run_block fuel ctx (ac_transform_block dfg bb) s2)
+      (run_block fuel ctx (ac_transform_block dfg (ac_id_base fn) bb) s2)
 Proof
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
     metis_tac[ac_safe_blocks_no_phi] >>
   `EVERY (\i. i.inst_opcode <> PHI)
-     (ac_transform_block (dfg_build_function fn) bb).bb_instructions` by
+     (ac_transform_block (dfg_build_function fn) (ac_id_base fn) bb).bb_instructions` by
     metis_tac[ac_transform_block_no_phi] >>
   simp[venomExecProofsTheory.run_block_no_phis_eq_exec_block] >>
   irule ac_block_sim >> simp[] >>
@@ -1638,26 +1639,32 @@ Theorem ac_transform_function_correct_proof:
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (ac_fresh_vars_fn fn))
-               (execution_equiv UNIV) (execution_equiv UNIV)
+               (execution_equiv UNIV)
+               (\s1 s2. ?gs. execution_equiv UNIV s1
+                 (s2 with vs_gas_readings := gs))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn' s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt strip_tac >>
   ONCE_REWRITE_TAC[ac_transform_as_fmt] >>
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] block_sim_function_inv_cross) >>
+  PURE_REWRITE_TAC[GSYM ac_abort_equiv_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] ac_block_sim_function_inv_cross) >>
   disch_then (qspecl_then [
     `state_equiv (ac_fresh_vars_fn fn)`,
     `execution_equiv UNIV`,
-    `ac_transform_block (dfg_build_function fn)`,
+    `ac_abort_equiv`,
+    `ac_transform_block (dfg_build_function fn) (ac_id_base fn)`,
     `fn`,
     `\s. ac_inv fn (dfg_build_function fn) s /\
          (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
             MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s))`
   ] mp_tac) >>
   BETA_TAC >> PURE_REWRITE_TAC[GSYM CONJ_ASSOC] >> disch_then irule >>
-  rpt conj_tac >> simp[valid_state_rel_UNIV, ac_transform_block_label] >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (rpt gen_tac >> strip_tac >>
-       irule ac_block_sim_run_block >> simp[] >> metis_tac[] >> NO_TAC) >>
-  ONCE_REWRITE_TAC[GSYM ac_transform_as_fmt] >> first_assum ACCEPT_TAC
+  rpt conj_tac >> simp[valid_state_rel_UNIV, ac_transform_block_label]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (rpt gen_tac >> strip_tac >>
+      irule ac_block_sim_run_block >> simp[] >> metis_tac[])
+  >- (ONCE_REWRITE_TAC[GSYM ac_transform_as_fmt] >> first_assum ACCEPT_TAC)
 QED

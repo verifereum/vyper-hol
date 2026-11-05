@@ -1,0 +1,60 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
+  "vyper_version": "0.5.0a4+commit.9362e36b",
+  "python_version": "3.14.8",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.3.1",
+    "packaging": "26.3",
+    "pycryptodome": "3.24.1",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "f01_for_calldata_dynarray.vy": "c36600b60084e7639a9014a8c90890b4eb6b0860f1b09664013b7859526bfa75",
+    "f03_for_storage_dynarray.vy": "f5f7ec8e33564a72304e8a2171f28d5b3300a8c31f18420634434482248229ce",
+    "f04_for_storage_fixed.vy": "fd68ed4444d1a907d02521a861175eb3078e05aabc13f51de8b7e6cedf9b30cc",
+    "f05_for_literal_list.vy": "ae1febf2077bb6630b485da134ff728b8fcb37fd3769553a6697ccf76dc70cff",
+    "f06_for_calldata_fixed.vy": "87d24e13d0f7641f1f44a59b08891bdc2a26da3c5abc6c7dcd052f98c9b5ca1d",
+    "f20_for_list_of_vars.vy": "a38900960e346caec664211cc0211511b29f78faefae476f0178881e87d777d0",
+    "f23_for_local_fixed.vy": "51d5da19e9e9abf97b456fa56884b6931dc1dcf9dda7a48098837689468ee391",
+    "f24_for_local_dynarray.vy": "0a4e4dd9359ed46b070575c22c84e3ecad98be565f0f0397b9590c0a5bd518df",
+    "f38_for_storage_struct_field_arr_set.vy": "0036cb2833ec140dcc0813f76cac27c3b06c7272c2f3ae584aa59d5d9d20a629",
+    "f50_for_subscript_row.vy": "ed7f10c497daf7237185627d02e338127669558c48e0b75791bb6e6bceeb5dc7",
+    "g8_a_iter_struct_elem.vy": "3b4347a9b8ede5580c82dcb20250ad491dfa129e008a308b911ccec7b3b9b5e1",
+    "g8_a_iter_transient.vy": "ad1a2ff33b4bca11235f37d54cedcf94df8eec7d3427df2c0b05900275ddccb2"
+  },
+  "outputs": {
+    "f01_for_calldata_dynarray.hex": "8e799a94f83b823d6de0b9946c32a3c06041c47fa7fc16ee67583bb0d3a9fb52",
+    "f01_for_calldata_dynarray.json": "99f4d6cd5cd020166275d970c036a3da071830dd71e3a98b045badacd819fa3c",
+    "f03_for_storage_dynarray.hex": "948bc0f5886a47528a8f4fdaae18d461069e618ee7610d94a0c4443b2cdd7a43",
+    "f03_for_storage_dynarray.json": "88db8db51bd77fdd9bec8f9f6506155e3f1ad00e914867d911eee489b3d9b818",
+    "f04_for_storage_fixed.hex": "d89d7122e80ff3239396c1e0c65d4a90fc60f6b16674ff8f699a6df41a3cae34",
+    "f04_for_storage_fixed.json": "05d2f5990e8e0faf7a80d2545de36a98f360838539cce2f6cf6778b49d46a815",
+    "f05_for_literal_list.hex": "d0f7dc353a075db44783ae7eeb3dd0064a470cc9c00841471cc9f84f04963b7c",
+    "f05_for_literal_list.json": "8bece9aa3775c4ea481d79f414f9005fb0ea95e4a9d5cd96549332d75d98f986",
+    "f06_for_calldata_fixed.hex": "45ccdcfd66326a9165714ffcafa827aafca4fba74f3a3cb1ce25e66ffeb80df3",
+    "f06_for_calldata_fixed.json": "9eee521136d7c19c9c4648a3f73f76c121b155da7815182d73354392a42b4d96",
+    "f20_for_list_of_vars.hex": "18ba00164c60ba8642b84e4ef8621f681f8a86bebf5556ca39090918f08fca5e",
+    "f20_for_list_of_vars.json": "6dda4b6cf6aab18385b20f2cd891ca49a45c837a97bc3753989cf7feec82192e",
+    "f23_for_local_fixed.hex": "e7d79e30ed93cb9f54a13ebe76d37d6d928bf99fdb9a1ebc1cf07df0dcb8acfd",
+    "f23_for_local_fixed.json": "87c759c016ac7f3e8f5165fb8d9af31ef6237919c51cd2e72b934d2a95114389",
+    "f24_for_local_dynarray.hex": "31a6e0b4a605ac830cbbb038153be18dd1b3236df7a605175b9dd064b8966998",
+    "f24_for_local_dynarray.json": "82ae0a16050a5988774dae438b7ea8ab3c3a82e924faedb9e7eef95d647dc5c5",
+    "f38_for_storage_struct_field_arr_set.hex": "2be7b9865b5b6e733e217e2ae8988542769e92da017444d1b7104c3e6d160d3f",
+    "f38_for_storage_struct_field_arr_set.json": "6f8a6b48a8aeabf2833b79ee3e7190ea0a763c439890ab262ec02c3268405d57",
+    "f50_for_subscript_row.hex": "4e239b02d26f73f276c68866475c4c1b4e9133c45e7d49e65af697297f7b34d0",
+    "f50_for_subscript_row.json": "c01b965ac2531aa4ff7405b50565866bcccd1c99392829c85e378c5db59b4c2a",
+    "g8_a_iter_struct_elem.hex": "c71fe360e5e8b4a8c486acdc78e0d23df1aa4287a33339a418adb70aeca7a350",
+    "g8_a_iter_struct_elem.json": "6718af9bd37b5b09d5567c8d512004039b3d287d818b8ebbcc4257ab4b156a86",
+    "g8_a_iter_transient.hex": "4533502ee34be623e5a44f07a2057eca6709d5fd3aa80075be21c824e96f52af",
+    "g8_a_iter_transient.json": "5cf147735d843eee8a95c4d76b63a43937cf4fea926b43cc151c1f51f5eed980"
+  }
+}

@@ -25,7 +25,7 @@
  *   compile_assign_attr_local_stmt_frag — the same for an e with no
  *                                      internal call
  *
- * Helpers: struct_field_type, eval_target_place_attr_local,
+ * Helpers: eval_target_place_attr_local,
  *   write_place_attr_local, fields_in_memory_mstore_field,
  *   fields_val_wf_update, assign_attr_local_code_parts,
  *   assign_attr_local_source, mstore_var_frag, assign_attr_local_frag
@@ -33,10 +33,17 @@
 
 Theory stmtSimAssignAttr
 Ancestors
+  exprSimFieldLayout exprSimProps
+  exprSimSource
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec localPtrsProps exprSim exprSimHyps exprSimUnwrap exprSimBuffer
+  fragExec localPtrsProps  exprSimHyps exprSimUnwrap exprSimBuffer
   exprSimAggregateChildren exprSimAttributeFields freshWrites
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssignStore
+   stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssignStore
   stmtSimAssign
   stmtSimAssignMem stmtSimAugAssign
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -49,42 +56,6 @@ Libs
   monadsyntax
 
 (* ===== The source ===== *)
-
-(* A field the lowering's struct table lists has, in the struct's type
-   value, the type value its declared type evaluates to. *)
-Theorem alookup_zip_field[local]:
-  !fields tvs f fld fty fsz.
-    OPT_MMAP f (MAP (FST o SND) fields) = SOME tvs /\
-    ALOOKUP fields fld = SOME (fty, fsz) ==>
-    ?ftv. ALOOKUP (ZIP (MAP FST fields, tvs)) fld = SOME ftv /\
-          f fty = SOME ftv
-Proof
-  Induct >> simp[] >> PairCases >> rpt gen_tac >> strip_tac >> gvs[] >>
-  rename1 `if h0 = fld then _ else _` >> Cases_on `h0 = fld` >> gvs[]
-QED
-
-Theorem struct_field_type:
-  !cenv cx env es sid fs fld fty fsz.
-    expr_sim_inv cenv cx env es /\
-    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
-    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
-      fld = SOME (fty, fsz) ==>
-    ?ftv. ALOOKUP fs fld = SOME ftv /\
-          evaluate_type (get_tenv cx) fty = SOME ftv
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-  simp[sfields_tenv_consistent_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[get_struct_fields_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  qpat_x_assum `MAP FST fields = _` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
-  drule_all alookup_zip_field >> strip_tac >> simp[] >>
-  metis_tac[cj 1 evaluate_type_mono]
-QED
 
 Theorem alookup_fields_args[local]:
   !fields args fld fty.
@@ -425,6 +396,7 @@ Theorem expr_add_unwrap_frag:
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     unwrap_value cenv vv sn = (op, su) /\
     fn_has_code sa su func /\ fn_inst_ids_distinct func /\
+    is_word_type (expr_type e) /\
     local_ptrs_reserved cenv sa /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es1) /\
@@ -446,9 +418,13 @@ Proof
   `ci_mono sm sn` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
   `ci_mono sn su` by metis_tac[ci_mono_unwrap_value, pairTheory.SND] >>
   `ci_mono sa sn` by (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
-  `fn_has_code sa sm func` by
+  `fn_has_code sa sm func /\ fn_has_code sn su func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `local_ptrs_reserved cenv sn` by metis_tac[compiler_ci_mono_reserved] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sm` >> fs[ci_mono_def] >>
+     drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (raw, est)` >>
   Cases_on `raw` >> simp[]
@@ -743,9 +719,7 @@ QED
    value its typed word is stored at f's offset in x's region.  e may call
    internal functions: its simulation is a premise. *)
 Theorem compile_assign_attr_local_case:
-  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es res es'.
-    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es.
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -755,7 +729,8 @@ Theorem compile_assign_attr_local_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -779,9 +754,7 @@ QED
 
 (* compile_assign_attr_local_case for an e with no internal call. *)
 Theorem compile_assign_attr_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es res es'.
-    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es.
     expr_vv_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
@@ -790,7 +763,8 @@ Theorem compile_assign_attr_local_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es
 Proof
   rpt strip_tac >> irule compile_assign_attr_local_case >>
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>

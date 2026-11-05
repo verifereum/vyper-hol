@@ -44,7 +44,7 @@ End
 Definition lower_abi_encode_def:
   lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen =
     let mid_size = (case method_id_opt of SOME _ => 4 | NONE => 0) in
-    let total_size = maxlen + 32 + mid_size in
+    let total_size = 32 + 32 * word_size (maxlen + mid_size) in
     let data_offset = 32 + mid_size in
     do (* Allocate output buffer: [32-byte length] | [optional method_id] | [data] *)
        buf_op_alloc <- compile_alloc_buffer total_size;

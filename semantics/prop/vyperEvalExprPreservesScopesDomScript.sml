@@ -98,6 +98,7 @@ Proof
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac result_array_length_state >>
           imp_res_tac next_gas_reading_state >>
+          imp_res_tac precompile_call_success_state >>
           imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
           first_x_assum drule >> simp[type_check_def, assert_def, return_def] >>
           metis_tac[])
@@ -232,17 +233,20 @@ Proof
 QED
 
 Theorem lock_acquire_cond_scopes_dom[local]:
-  ∀nr slot_opt addr is_view st res st'.
+  ∀nr slot_opt addr is_view cx st res st'.
     (if nr then
        case slot_opt of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock addr slot is_view
+       | SOME slot =>
+           bind (acquire_nonreentrant_lock addr slot (is_view ∨ cx.txn.is_static))
+             (λx. if is_view then return () else check_not_static cx)
      else return ()) st = (res,st') ⇒
     MAP FDOM st'.scopes = MAP FDOM st.scopes
 Proof
   rpt gen_tac \\ strip_tac
   \\ Cases_on `nr` \\ gvs[return_def]
-  \\ Cases_on `slot_opt` \\ gvs[raise_def]
+  \\ Cases_on `slot_opt`
+  \\ gvs[raise_def, bind_def, return_def, COND_RATOR, AllCaseEqs()]
   \\ imp_res_tac acquire_nonreentrant_lock_scopes \\ gvs[]
 QED
 

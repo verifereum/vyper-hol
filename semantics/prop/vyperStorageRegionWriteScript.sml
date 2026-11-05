@@ -418,14 +418,29 @@ Proof
   rpt conj_tac >> rpt gen_tac >>
   PURE_ONCE_REWRITE_TAC [slots_in_range_def] >>
   simp_tac (srw_ss()) [type_slot_size_def, LET_THM] >>
-  rpt strip_tac >> gvs[]
-  >- (`type_slot_size tv * MIN (w2n (read_slot s off)) max <=
-         max * type_slot_size tv` by (simp[MIN_DEF] >> IF_CASES_TAC >>
-            simp[] >> metis_tac[LESS_MONO_MULT, MULT_COMM]) >>
-      first_x_assum irule >> conj_tac
+  rpt strip_tac
+  >- (`read_slot s' off = read_slot s off` by
+        (first_x_assum irule >> decide_tac) >> asm_rewrite_tac [])
+  >- (`read_slot s' off = read_slot s off` by
+        (first_x_assum irule >> decide_tac) >> asm_rewrite_tac [])
+  >- (`read_slot s' off = read_slot s off` by
+        (first_x_assum irule >> decide_tac) >> asm_rewrite_tac [])
+  >- (`read_slot s' off = read_slot s off` by
+        (first_x_assum irule >> decide_tac) >>
+      asm_rewrite_tac [] >>
+      `MIN (w2n (read_slot s off)) max * type_slot_size tv <=
+         max * type_slot_size tv` by
+        (irule LESS_MONO_MULT >> simp[]) >>
+      first_x_assum (drule_then irule) >>
+      conj_tac
       >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-      decide_tac) >>
-  gvs[MULT_CLAUSES] >> first_assum irule
+      conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
+  (first_assum irule >>
+   conj_tac
+   >- (rpt strip_tac >> first_x_assum irule >>
+       fs[MULT_CLAUSES] >> decide_tac) >>
+   conj_tac >- (fs[MULT_CLAUSES] >> decide_tac) >>
+   first_assum ACCEPT_TAC)
 QED
 
 Theorem tuple_component_storage_transport:
@@ -629,7 +644,10 @@ Theorem base_storage_write_footprint:
   (!a. a < dimword(:256) /\ a <> w2n slot ==>
      read_slot (get_storage cx st' tr) a = read_slot (get_storage cx st tr) a)
 Proof
-  simp_tac bool_ss [write_storage_slot_eq, vyperStorageTheory.encode_value_def] >>
+  Cases_on `cx.txn.is_static`
+  >- (simp[write_storage_slot_eq] >> strip_tac >> gvs[]) >>
+  pop_assum (fn th => simp_tac bool_ss
+    [th, write_storage_slot_eq, vyperStorageTheory.encode_value_def]) >>
   Cases_on `encode_base_to_slot v (BaseTV (UintT 256))` >>
   simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
   Cases_on `tr` >>
@@ -841,7 +859,8 @@ Resume storage_append_preserves_array[zero_width]:
   RESUME_TAC >>
   drule_all typed_zero_storage_write_footprint >> strip_tac >>
   Cases_on `res` >> gvs[]
-  >- (gvs[write_storage_slot_eq, vyperStorageTheory.encode_value_def,
+  >- (Cases_on `cx.txn.is_static` >>
+      gvs[write_storage_slot_eq, vyperStorageTheory.encode_value_def,
            vyperStorageTheory.encode_base_to_slot_def] >>
       simp[zero_width_dynamic_storage_region, get_storage_after_set,
            vyperStorageTheory.read_slot_def, vyperStorageTheory.apply_writes_def,

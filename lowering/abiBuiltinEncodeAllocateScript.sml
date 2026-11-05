@@ -21,7 +21,7 @@ End
 Theorem abi_builtin_encode_setup_allocate:
   abi_builtin_encode_setup method_id_opt maxlen =
     do ops <- abi_builtin_encode_allocate
-         (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))
+         (32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME _ => 4)))
          (32+(case method_id_opt of NONE => 0 | SOME _ => 4));
        abi_builtin_encode_method_id method_id_opt (FST ops);
        return ops
@@ -50,7 +50,7 @@ Theorem abi_builtin_encode_setup_allocate_trace:
   abi_builtin_encode_setup method_id_opt maxlen st = (ops,ready) ==>
   ?address_st.
     abi_builtin_encode_allocate
-      (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))
+      (32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME _ => 4)))
       (32+(case method_id_opt of NONE => 0 | SOME _ => 4)) st = (ops,address_st) /\
     abi_builtin_encode_method_id method_id_opt (FST ops) address_st = ((),ready)
 Proof

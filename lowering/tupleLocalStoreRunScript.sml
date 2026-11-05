@@ -9,7 +9,7 @@
 Theory tupleLocalStoreRun
 Ancestors
   tupleLocalStoreProps stmtSimAssignStore stmtSimAssignMem tupleMemoryFrame
-  tupleMemoryLayout exprSim exprLoweringProps localPtrsProps compileEnv
+  tupleMemoryLayout  exprLoweringProps localPtrsProps compileEnv
   valueEncoding valueEncodingProps valueEncodingProofs vyperState vyperLookup
   list rich_list finite_map arithmetic venomState venomInst
   stmtSimDeclMem stmtLowering emitHelperProps emitHelper fragExec vyperInterpreter
@@ -250,9 +250,9 @@ Proof
   conj_tac >- fs[cs_appends_def] >>
   qpat_assum `vt = ty \/ _` mp_tac >>
   once_rewrite_tac [EQ_SYM_EQ] >> disch_tac >>
-  drule_all (compile_assign_value_memory_widen_open |> SPEC_ALL
-    |> Q.INST [`loc` |-> `NONE`] |> GEN_ALL
-    |> SRULE [compile_assign_value_def]) >> simp[]
+  qspecl_then [`cenv`, `Var p`, `op`, `NONE`, `vt`, `ty`] mp_tac
+    compile_assign_value_memory_widen_open >>
+  simp[compile_assign_value_def] >> disch_then irule >> metis_tac[]
 QED
 
 (* The single recursion used by both the all-word and memory-backed APIs. *)
@@ -333,7 +333,8 @@ Resume tuple_store_mixed_locals_run[cons]:
   `~is_word_type ty ==> (vt = ty \/ is_bytestring_type vt) /\
      0 < type_memory_bytes cenv vt` by
     (strip_tac >> qpat_x_assum `~is_word_type ty ==> _` mp_tac >>
-     simp[] >> metis_tac[]) >>
+     simp[] >> strip_tac >>
+     conj_tac >- (gvs[]) >> gvs[]) >>
   drule_all tuple_store_head_code_shape >> strip_tac >>
   suspend "head_code"
 QED

@@ -396,6 +396,20 @@ Proof
   Cases_on `t` >> gvs[map_result_state_def, MEM, update_var_commutes]
 QED
 
+Theorem exec_gas_frame[local]:
+  !inst s x v.
+  ~MEM x inst.inst_outputs ==>
+  exec_gas inst (update_var x v s) =
+  map_result_state (update_var x v) (exec_gas inst s)
+Proof
+  rw[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[map_result_state_def] >>
+  Cases_on `t` >> gvs[map_result_state_def] >>
+  Cases_on `s.vs_gas_readings` >>
+  gvs[map_result_state_def, update_var_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Theorem exec_read1_frame[local]:
   !f inst s x v.
   (!y. MEM (Var y) inst.inst_operands ==> x <> y) /\
@@ -439,7 +453,7 @@ QED
 (* Frame lemmas for the exec_* helpers *)
 val helper_frames = [
   exec_pure1_frame, exec_pure2_frame, exec_pure3_frame,
-  exec_read0_frame, exec_read1_frame, exec_write2_frame
+  exec_read0_frame, exec_gas_frame, exec_read1_frame, exec_write2_frame
 ];
 
 (* Rewrites for threading update_var through state operations *)
@@ -618,7 +632,14 @@ Theorem exec_create_frame[local]:
   map_result_state (update_var x v)
     (exec_create inst s value offset sz salt_opt)
 Proof
-  ext_call_frame_proof [exec_create_def, make_venom_create_state_def]
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[exec_create_def, map_result_state_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> gvs[exec_create_def, map_result_state_def] >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- simp[map_result_state_def, halt_state_def, set_returndata_def, update_var_def] >>
+  simp[map_result_state_def, venom_create_request_def, read_memory_def, update_var_def,
+       venom_state_component_equality, finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
 val ext_call_frames = [
@@ -712,8 +733,7 @@ fun frame_simp_tac ss =
    frame simpset, not the global word/byte evaluation simpset. *)
 val helper_frame_rules = map (SIMP_RULE (srw_ss()) []) helper_frames;
 
-val base_frame_tac =
-  base_frame_opcode_tac >>
+val base_frame_body_tac =
   FIRST [
     MAP_FIRST (fn th => irule th >>
       asm_simp_tac base_frame_ss [] >> NO_TAC) helper_frame_rules,
@@ -722,14 +742,31 @@ val base_frame_tac =
                        frame_simp_tac base_frame_custom_ss))
   ];
 
+val base_frame_tac = base_frame_opcode_tac >> base_frame_body_tac;
+
 (* Call/create dispatch only needs operand evaluation and its helper frame.
    Keep the large state-operation rewrite set out of the nested list/option
    splits, and leave the execution helpers abstract. *)
 fun call_operand_frame_tac frame = let
   val ss = frame_envelope_ss ++ rewrites
-    [eval_operand_update_var, map_result_state_def, update_var_fields, frame]
+    [eval_operand_update_var, eval_operands_update_var, map_result_state_def,
+     update_var_fields, update_var_halt_state_commute,
+     update_var_set_returndata_commute, frame]
  in
   base_frame_opcode_tac >> frame_simp_tac ss >>
+  rpt (CHANGED_TAC (frame_head_case_tac >> frame_simp_tac ss))
+ end;
+
+(* CREATE/CREATE2 first test the static flag and their operands, which
+   update_var leaves alone: the proof splits on that guard, then this
+   frames each branch as above. *)
+fun static_guard_frame_tac frame = let
+  val ss = frame_envelope_ss ++ rewrites
+    [eval_operand_update_var, eval_operands_update_var, map_result_state_def,
+     update_var_fields, update_var_halt_state_commute,
+     update_var_set_returndata_commute, frame]
+ in
+  frame_simp_tac ss >>
   rpt (CHANGED_TAC (frame_head_case_tac >> frame_simp_tac ss))
  end;
 
@@ -846,10 +883,46 @@ Proof
   >- call_operand_frame_tac exec_ext_call_frame (* CALL *)
   >- call_operand_frame_tac exec_ext_call_frame (* STATICCALL *)
   >- call_operand_frame_tac exec_delegatecall_frame (* DELEGATECALL *)
-  >- call_operand_frame_tac exec_create_frame (* CREATE *)
-  >- call_operand_frame_tac exec_create_frame (* CREATE2 *)
-  >- base_frame_tac (* LOG *)
-  >- base_frame_tac (* SELFDESTRUCT *)
+  >- (base_frame_opcode_tac >> (* CREATE *)
+      `eval_operands inst.inst_operands (update_var x v s) =
+       eval_operands inst.inst_operands s`
+        by (irule eval_operands_update_var >> metis_tac[]) >>
+      Cases_on `s.vs_call_ctx.cc_static /\
+                IS_SOME (eval_operands inst.inst_operands s)`
+      >- asm_simp_tac bool_ss [update_var_fields, map_result_state_def,
+           update_var_halt_state_commute, update_var_set_returndata_commute] >>
+      asm_simp_tac bool_ss [update_var_fields] >>
+      static_guard_frame_tac exec_create_frame)
+  >- (base_frame_opcode_tac >> (* CREATE2 *)
+      `eval_operands inst.inst_operands (update_var x v s) =
+       eval_operands inst.inst_operands s`
+        by (irule eval_operands_update_var >> metis_tac[]) >>
+      Cases_on `s.vs_call_ctx.cc_static /\
+                IS_SOME (eval_operands inst.inst_operands s)`
+      >- asm_simp_tac bool_ss [update_var_fields, map_result_state_def,
+           update_var_halt_state_commute, update_var_set_returndata_commute] >>
+      asm_simp_tac bool_ss [update_var_fields] >>
+      static_guard_frame_tac exec_create_frame)
+  >- (base_frame_opcode_tac >> (* LOG *)
+      `eval_operands inst.inst_operands (update_var x v s) =
+       eval_operands inst.inst_operands s`
+        by (irule eval_operands_update_var >> metis_tac[]) >>
+      Cases_on `s.vs_call_ctx.cc_static /\
+                IS_SOME (eval_operands inst.inst_operands s)`
+      >- asm_simp_tac bool_ss [update_var_fields, map_result_state_def,
+           update_var_halt_state_commute, update_var_set_returndata_commute] >>
+      asm_simp_tac bool_ss [update_var_fields] >>
+      base_frame_body_tac)
+  >- (base_frame_opcode_tac >> (* SELFDESTRUCT *)
+      `eval_operands inst.inst_operands (update_var x v s) =
+       eval_operands inst.inst_operands s`
+        by (irule eval_operands_update_var >> metis_tac[]) >>
+      Cases_on `s.vs_call_ctx.cc_static /\
+                IS_SOME (eval_operands inst.inst_operands s)`
+      >- asm_simp_tac bool_ss [update_var_fields, map_result_state_def,
+           update_var_halt_state_commute, update_var_set_returndata_commute] >>
+      asm_simp_tac bool_ss [update_var_fields] >>
+      base_frame_body_tac)
   >- base_frame_tac (* INVALID *)
   >- base_frame_tac (* ASSERT *)
   >- base_frame_tac (* ASSERT_UNREACHABLE *)

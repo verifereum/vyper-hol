@@ -4,13 +4,16 @@ Ancestors vyperCompiler venomInst venomWf words venomExecSemantics
   venomState stackPlanGen fmpLowerDefs
 Libs computeLib wordsLib
 
+(* Every block ends in a terminator, so the test units are well-formed
+   functions, which lowering_context_ok's ptr_ok_check asks for. *)
 Definition allocation_budget_test_context_def:
   allocation_budget_test_context sizes =
     mk_venom_context
       [mk_raw_function "__entry"
         [<| bb_label := "__entry";
             bb_instructions :=
-              MAP (\(id, size). instruction id ALLOCA [Lit size] ["ptr"]) sizes |>]]
+              MAP (\(id, size). instruction id ALLOCA [Lit size] ["ptr"]) sizes ++
+              [instruction 1000 STOP [] []] |>]]
       (SOME "__entry")
 End
 
@@ -90,7 +93,7 @@ Theorem allocation_lowering_original_points_eval:
       [mk_inst 70 DALLOCA [Lit 1w] ["p"];
        mk_inst 400 JNZ [Var "flag";Label "yes";Label "no"] []]) =
   SOME ([ASSIGN;ADD;NOT;AND;BUMP;ASSIGN;JNZ], [1;2;3;4;5;6;400],
-    [[Var "mark"]; [Lit 1w;Lit 31w]; [Lit 31w];
+    [[Var "mark"]; [Lit 31w;Lit 1w]; [Lit 31w];
      [Var "formal_var_0";Var "formal_var_1"];
      [Var "runner";Var "formal_var_2"]; [Var "p"];
      [Var "flag";Label "yes";Label "no"]], [(("entry",2),"endpoint")])
@@ -132,11 +135,13 @@ Definition allocation_budget_invoke_context_def:
       [mk_raw_function "__entry"
         [<| bb_label := "__entry";
             bb_instructions :=
-              [instruction 0 INVOKE [Label "callee"] []] |>];
+              [instruction 0 INVOKE [Label "callee"] [];
+               instruction 2 STOP [] []] |>];
        mk_raw_function "callee"
          [<| bb_label := "callee";
              bb_instructions :=
-               [instruction 1 ALLOCA [Lit (n2w (2 ** 255))] ["p"]] |>]]
+               [instruction 1 ALLOCA [Lit (n2w (2 ** 255))] ["p"];
+                instruction 3 RET [] []] |>]]
       (SOME "__entry")
 End
 

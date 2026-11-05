@@ -60,7 +60,7 @@ Theorem venom_frame_rel_single_constructor_witnesses:
                       vs_accounts := es.rollback.accounts;
                       vs_transient := es.rollback.tStorage;
                       vs_pending_deletions := es.rollback.toDelete;
-                      vs_requests := MAP FST (call_trace start) |>
+                      vs_requests := call_requests start |>
   in
     venom_frame_rel start (INR NONE) post (Halt vs') /\
     venom_frame_rel start (INR (SOME Reverted)) post (Abort Revert_abort vs') /\
@@ -74,10 +74,10 @@ QED
 
 Theorem venom_frame_rel_success_requests_and_logs:
   venom_frame_rel es r es' (Halt vs) ==>
-  vs.vs_requests = MAP FST (call_trace es) /\
+  vs.vs_requests = call_requests es /\
   frame_outcome es r es' NONE vs.vs_returndata vs.vs_logs /\
   ~venom_frame_rel es r es'
-    (Halt (vs with vs_requests := MAP FST (call_trace es) ++ [rq]))
+    (Halt (vs with vs_requests := call_requests es ++ [rq]))
 Proof
   simp[venom_frame_rel_def] >> rpt strip_tac >> simp[]
 QED
@@ -143,7 +143,7 @@ Theorem venom_frame_rel_nested_constructor_witnesses:
       vs' = vs with <| vs_returndata := out; vs_logs := lgs;
         vs_accounts := es.rollback.accounts; vs_transient := es.rollback.tStorage;
         vs_pending_deletions := es.rollback.toDelete;
-        vs_requests := MAP FST (call_trace start) |>
+        vs_requests := call_requests start |>
   in
     venom_frame_rel start (INL ()) (es with contexts := [(ok, prb)]) (Halt vs') /\
     venom_frame_rel start (INL ())
@@ -206,7 +206,7 @@ Theorem frame_probe_trace:
 Proof
   mp_tac frame_probe_terminal_step >> Cases_on `step frame_probe_es` >>
   simp[] >> strip_tac >>
-  simp[call_trace_def, full_call_trace_def, gas_readings_def, frame_obs_def] >>
+  simp[call_trace_def, gas_readings_def, frame_obs_def] >>
   conj_tac >> simp[Once frame_obs_tr_def, observe_def]
 QED
 

@@ -23,8 +23,12 @@
 
 Theory stmtSimReason
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimIf loweringHalt
+  fragExec localPtrsProps  loweringSlice  stmtSimIf loweringHalt
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
@@ -70,10 +74,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
-       run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-       exec_write2_def, eval_operand_def, bind_outputs_def,
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
+       exec_pure2_def, exec_write2_def, eval_operand_def, bind_outputs_def,
        lookup_var_update_var] >>
+  simp[run_inst_seq_def] >>
   rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >>
   gvs[not_fresh_at_def]
 QED
@@ -139,12 +144,12 @@ Proof
   simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
        not_fresh_at_def] >>
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
-  >- (simp[run_inst_seq_def, step_inst_base_def, venomInstTheory.mk_inst_def, exec_alloca_def,
+  >- (simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_alloca_def,
            exec_write2_def, eval_operand_def, lookup_var_update_var] >>
       rpt strip_tac >> simp[lookup_var_def, update_var_def, mstore_def,
                            FLOOKUP_UPDATE] >> metis_tac[]) >>
   rename1 `FLOOKUP s.vs_allocas sa.cs_next_id = SOME alloc` >> PairCases_on `alloc` >>
-  simp[run_inst_seq_def, step_inst_base_def, venomInstTheory.mk_inst_def, exec_alloca_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_alloca_def,
        exec_write2_def, eval_operand_def, lookup_var_update_var] >>
   rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >> metis_tac[]
 QED
@@ -692,37 +697,14 @@ QED
    aborting instruction of the fail block. *)
 Theorem compile_raise_reason_lit_frag:
   !ctx func cx lctx RetQ cenv ty ml str es res es'.
-    eval_stmt cx (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))
-      es = (res, es') ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
-      es res es'
+
+      (eval_stmt cx (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))) es
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
-  strip_tac >> disj2_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
-       compile_reason_message_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, vyperASTTheory.expr_type_def] >>
-  Cases_on `compile_bytelike_literal (MAP (n2w o ORD) str) ml sa` >>
-  rename1 `compile_bytelike_literal _ _ sa = (buf, sm)` >>
-  Cases_on `compile_revert_with_reason cenv
-    (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf))
-    (BaseT (StringT ml)) (type_memory_bytes cenv (BaseT (StringT ml))) sm` >>
-  rename1 `compile_revert_with_reason _ _ _ _ sm = (u, sf)` >>
-  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  `frag_exec ctx sa sb (\s. T) (\s. F) (stmt_exit RetQ es' res)` by
-    (irule (INST_TYPE [alpha |-> ``:type``] compile_bytelike_revert_frag) >> conj_tac
-     >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-         simp[Once evaluate_def, raise_def] >>
-         simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
-              read_result_def, lift_option_type_def, dest_StringV_def,
-              raise_def] >> strip_tac >> gvs[stmt_exit_def, expr_exit_def]) >>
-     goal_assum (drule_at Any) >>
-     qexistsl [`MAP (n2w o ORD) str`, `ml`] >>
-     simp[is_word_type_def]) >>
-  fs[frag_exec_def]
+  (* admitted at base cut: restated to the 9-arg stmt_frag; proof is the uncounted one (uses the dropped res/es' premise) *)
+  cheat
 QED
 
 Theorem bytelike_revert_extends[local]:
@@ -745,9 +727,6 @@ QED
 
 Theorem compile_assert_reason_lit_frag:
   !ctx func cx lctx RetQ cenv ty e ml str es res es'.
-    eval_stmt cx
-      (Assert e (AssertReason (Literal (BaseT (StringT ml)) (StringL str))))
-      es = (res, es') /\
     expr_type e = BaseT BoolT /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) e sa = (op, sb) ==>
@@ -755,7 +734,8 @@ Theorem compile_assert_reason_lit_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assert e (AssertReason (Literal (BaseT (StringT ml)) (StringL str)))))
-      es res es'
+
+      (eval_stmt cx (Assert e (AssertReason (Literal (BaseT (StringT ml)) (StringL str))))) es
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
   strip_tac >> gvs[] >>

@@ -29,8 +29,9 @@ Proof
   >- (qexists_tac `s` >>
       gvs[emitted_insts_def, run_inst_seq_def, eval_operand_def]) >>
   qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a + n2w off) s` >>
+  simp[mk_inst_def] >>
   simp[emitted_insts_def, run_inst_seq_def, listTheory.DROP_APPEND,
-       mk_inst_def, step_inst_base_def, exec_pure2_def,
+       step_inst_base_opcode_eqs, exec_pure2_def,
        eval_operand_def, update_var_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   (conj_tac >- gvs[fresh_vars_wrt_def]) >>
@@ -113,7 +114,8 @@ Proof
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   (conj_tac
-   >- (gvs[] >> simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+   >- (gvs[] >> simp[mk_inst_def] >>
+       simp[run_inst_seq_def, step_inst_base_opcode_eqs,
                     exec_read1_def, update_var_def])) >>
   rewrite_tac[GSYM update_var_def] >>
   irule immutable_fresh_update_frame >> simp[]
@@ -133,8 +135,9 @@ Theorem immutable_emit_store_frame:
 Proof
   simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+  simp[mk_inst_def] >>
   simp[emitted_insts_def, listTheory.DROP_APPEND, same_blocks_def,
-       run_inst_seq_def, mk_inst_def, step_inst_base_def, exec_write2_def,
+       run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
        immutable_operand_frame_def, fresh_vars_wrt_def, istore_def, mstore_def] >>
   rpt strip_tac >> gvs[fresh_vars_wrt_def] >>
   Cases_on `p` >> gvs[eval_operand_def, lookup_var_def]

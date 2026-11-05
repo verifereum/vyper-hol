@@ -559,15 +559,16 @@ Theorem step_inst_base_outputs_in_fdom[local]:
     !out. MEM out inst.inst_outputs ==> out IN FDOM s'.vs_vars
 Proof
   rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (opcode_clause (rhs (concl eq))) eq]) >>
   gvs[is_terminator_def] >>
   gvs[opcode_has_output_def] >>
   gvs[exec_pure1_def] >>
   gvs[exec_pure2_def] >>
   gvs[exec_pure3_def] >>
-  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_read0_def, exec_gas_def, exec_read1_def] >>
   gvs[exec_write2_def, exec_alloca_def] >>
   gvs[exec_ext_call_def] >>
   gvs[exec_delegatecall_def] >>
@@ -615,7 +616,7 @@ Proof
   gvs[exec_pure1_def] >>
   gvs[exec_pure2_def] >>
   gvs[exec_pure3_def] >>
-  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_read0_def, exec_gas_def, exec_read1_def] >>
   gvs[exec_write2_def, exec_alloca_def] >>
   gvs[exec_ext_call_def] >>
   gvs[exec_delegatecall_def] >>
@@ -2912,7 +2913,7 @@ local
 
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
 

@@ -78,7 +78,8 @@ Proof
     abi_decode_le_guard_def, abi_decode_array_header_def, abi_decode_index_init_def,
     compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[emitted_insts_def] >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
   pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
   gvs[DROP_LENGTH_APPEND, abi_decoder_reentry_opcode_def, mk_inst_def]
 QED

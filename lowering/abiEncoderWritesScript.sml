@@ -174,6 +174,16 @@ QED
 
 (* The three post-child stores at the generated body's addresses. Operand
    facts are intentionally separate from the exact-effect premise. *)
+Theorem encoder_mstore_at[local]:
+  eval_operand a s = SOME (n2w p) /\ eval_operand b s = SOME w /\
+  p + 32 < dimword (:256) ==>
+  step_inst_base (mk_inst site MSTORE [a;b] []) s = OK (mstore p w s)
+Proof
+  rpt strip_tac >>
+  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[exec_write2_def, w2n_n2w]
+QED
+
 Theorem encoder_dynamic_iteration_stores:
   d+32+i*h+32 < dimword (:256) /\
   dyn_p+32 < dimword (:256) /\ idx_p+32 < dimword (:256) /\
@@ -191,7 +201,7 @@ Theorem encoder_dynamic_iteration_stores:
     OK (mstore idx_p (n2w (i+1)) v)
 Proof
   strip_tac >>
-  simp[step_inst_base_def, exec_write2_def] >> gvs[]
+  gvs[] >> rpt conj_tac >> irule encoder_mstore_at >> simp[]
 QED
 
 Theorem encoder_registered_cell_initialization_and_repeat:

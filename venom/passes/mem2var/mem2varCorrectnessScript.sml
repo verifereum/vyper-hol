@@ -7,6 +7,7 @@ Ancestors
   venomExecSemantics venomState venomWf
   venomMemDefs venomMemProps venomExecProofs venomInst
   pointerConfinedDefs memLocDefs instIdxIndep
+  irSupply
   finite_map list pred_set rich_list
   While
 Libs
@@ -457,7 +458,7 @@ QED
 
 (* m2v_bt preserves bb_well_formed *)
 Theorem m2v_bt_well_formed[local]:
-  !fn bb. bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions ==>
+  !fn bb. bb_well_formed bb ==>
     bb_well_formed (m2v_bt fn bb)
 Proof
   rpt strip_tac >> simp[bb_well_formed_def] >> rpt conj_tac
@@ -1221,23 +1222,179 @@ QED
 
 Finalise m2v_transform_function_correct
 
-(* ===== Obligations (out of scope) ===== *)
+(* ===== Structural obligation: supply-aware transform keeps wf_function =====
 
-(* Structural property of the transform, not semantic correctness.
-   Needed for pipeline composition. Requires showing m2v_bt preserves
-   ALL_DISTINCT inst_ids and output uniqueness. *)
-Theorem m2v_preserves_ssa_form:
-  !fn. ssa_form fn ==> ssa_form (m2v_transform_function fn)
+   m2v_transform_function_supply rewrites exactly like m2v_bt up to inst_ids,
+   and the only new id (the mstore before a promoted return) comes from the
+   supply, above every id of the input function. *)
+
+Overload m2v_erase[local] = ``\i:instruction. i with inst_id := 0``
+Overload m2v_ids[local] = ``MAP (\i:instruction. i.inst_id)``
+Overload m2v_bids[local] =
+  ``\bbs. FLAT (MAP (\bb. MAP (\i:instruction. i.inst_id) bb.bb_instructions) bbs)``
+
+Theorem m2v_promote_inst_ids[local]:
+  !pvar ao sz i.
+    (?x. m2v_promote_inst pvar ao sz i = [x] /\ x.inst_id = i.inst_id) \/
+    (?y. m2v_promote_inst pvar ao sz i = [y; i])
 Proof
-  cheat
+  rpt gen_tac >> simp[m2v_promote_inst_def] >> rpt (CASE_TAC >> gvs[])
 QED
 
-(* Structural property — m2v_bt preserves bb_well_formed (proved locally
-   above), label structure, and block membership. *)
-Theorem m2v_preserves_wf_function:
-  !fn. wf_function fn ==> wf_function (m2v_transform_function fn)
+Theorem m2v_rewrite_inst_supply_cases[local]:
+  !fn s i outs s'.
+    m2v_rewrite_inst_supply (m2v_promo_list fn) s i = (outs, s') ==>
+    (m2v_rewrite_inst fn i = outs /\ s' = s /\
+     ?x. outs = [x] /\ x.inst_id = i.inst_id) \/
+    (?y. m2v_rewrite_inst fn i = [y; i] /\
+         outs = [y with inst_id := s.irs_next_inst; i] /\
+         s'.irs_next_inst = SUC s.irs_next_inst)
 Proof
-  cheat
+  rpt gen_tac >> simp[m2v_rewrite_inst_supply_def, m2v_rewrite_inst_def] >>
+  CASE_TAC >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  PairCases_on `x` >> simp[m2v_promote_inst_supply_def] >>
+  qspecl_then [`x1`, `x0`, `x2`, `i`] strip_assume_tac m2v_promote_inst_ids >>
+  simp[fresh_inst_id_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem m2v_rewrite_insts_supply_props[local]:
+  !insts fn s outs s'.
+    m2v_rewrite_insts_supply (m2v_promo_list fn) s insts = (outs, s') ==>
+    MAP m2v_erase outs =
+      MAP m2v_erase (FLAT (MAP (m2v_rewrite_inst fn) insts)) /\
+    s.irs_next_inst <= s'.irs_next_inst /\
+    (!x. MEM x (m2v_ids outs) ==>
+         MEM x (m2v_ids insts) \/
+         s.irs_next_inst <= x /\ x < s'.irs_next_inst) /\
+    (ALL_DISTINCT (m2v_ids insts) /\
+     EVERY (\x. x < s.irs_next_inst) (m2v_ids insts) ==>
+     ALL_DISTINCT (m2v_ids outs))
+Proof
+  Induct >> simp[m2v_rewrite_insts_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `m2v_rewrite_inst_supply (m2v_promo_list fn) s h` >>
+  Cases_on `m2v_rewrite_insts_supply (m2v_promo_list fn) r insts` >>
+  simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  drule m2v_rewrite_inst_supply_cases >> strip_tac >> gvs[]
+  >- (rpt strip_tac >> gvs[MEM_MAP, EVERY_MEM] >>
+      qpat_x_assum `!x. (?i. _ /\ MEM i q') ==> _`
+        (qspec_then `i.inst_id` mp_tac) >>
+      (impl_tac >- (qexists `i` >> simp[])) >>
+      strip_tac >> gvs[] >> metis_tac[])
+  >> conj_tac
+  >- (rpt strip_tac >> gvs[MEM_MAP, PULL_EXISTS] >>
+      qpat_x_assum `!i. MEM i q' ==> _` (drule_then strip_assume_tac) >>
+      gvs[] >> metis_tac[])
+  >> strip_tac >>
+  `ALL_DISTINCT (m2v_ids q')` by
+    (first_x_assum irule >> gvs[MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
+     rpt strip_tac >> res_tac >> simp[]) >>
+  gvs[MEM_MAP, PULL_EXISTS, EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!i. MEM i q' ==> _` (drule_then strip_assume_tac) >>
+  gvs[] >> res_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem m2v_erase_block[local]:
+  !b1 b2.
+    MAP m2v_erase b1.bb_instructions = MAP m2v_erase b2.bb_instructions ==>
+    (bb_well_formed b1 <=> bb_well_formed b2) /\ bb_succs b1 = bb_succs b2
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH b1.bb_instructions = LENGTH b2.bb_instructions`
+    by metis_tac[LENGTH_MAP] >>
+  `!i. i < LENGTH b1.bb_instructions ==>
+       (EL i b1.bb_instructions).inst_opcode =
+         (EL i b2.bb_instructions).inst_opcode /\
+       get_successors (EL i b1.bb_instructions) =
+         get_successors (EL i b2.bb_instructions)` by
+    (rpt gen_tac >> strip_tac >>
+     `m2v_erase (EL i b1.bb_instructions) =
+      m2v_erase (EL i b2.bb_instructions)` by metis_tac[EL_MAP] >>
+     gvs[instruction_component_equality, get_successors_def]) >>
+  Cases_on `b1.bb_instructions = []`
+  >- gvs[bb_well_formed_def, bb_succs_def] >>
+  `b2.bb_instructions <> []` by (strip_tac >> gvs[]) >>
+  `0 < LENGTH b1.bb_instructions` by (Cases_on `b1.bb_instructions` >> gvs[]) >>
+  `LAST b1.bb_instructions = EL (PRE (LENGTH b1.bb_instructions)) b1.bb_instructions /\
+   LAST b2.bb_instructions = EL (PRE (LENGTH b1.bb_instructions)) b2.bb_instructions`
+    by simp[LAST_EL] >>
+  `PRE (LENGTH b1.bb_instructions) < LENGTH b1.bb_instructions` by simp[] >>
+  conj_tac
+  >- (simp[bb_well_formed_def] >> metis_tac[DECIDE ``i < j /\ j < n ==> i < n:num``])
+  >> simp[bb_succs_def] >>
+  Cases_on `b1.bb_instructions` >> Cases_on `b2.bb_instructions` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem m2v_rewrite_blocks_supply_props[local]:
+  !bbs fn s bbs' s'.
+    m2v_rewrite_blocks_supply (m2v_promo_list fn) s bbs = (bbs', s') ==>
+    MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs /\
+    LIST_REL (\bb bb'. MAP m2v_erase bb'.bb_instructions =
+                       MAP m2v_erase (m2v_bt fn bb).bb_instructions) bbs bbs' /\
+    s.irs_next_inst <= s'.irs_next_inst /\
+    (!x. MEM x (m2v_bids bbs') ==>
+         MEM x (m2v_bids bbs) \/
+         s.irs_next_inst <= x /\ x < s'.irs_next_inst) /\
+    (ALL_DISTINCT (m2v_bids bbs) /\
+     EVERY (\x. x < s.irs_next_inst) (m2v_bids bbs) ==>
+     ALL_DISTINCT (m2v_bids bbs'))
+Proof
+  Induct >> simp[m2v_rewrite_blocks_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `m2v_rewrite_insts_supply (m2v_promo_list fn) s h.bb_instructions` >>
+  Cases_on `m2v_rewrite_blocks_supply (m2v_promo_list fn) r bbs` >>
+  simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule m2v_rewrite_insts_supply_props >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  gvs[m2v_bt_instructions] >>
+  conj_tac
+  >- (rpt strip_tac >> res_tac >>
+      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS,
+                arithmeticTheory.LESS_EQ_TRANS]) >>
+  strip_tac >> gvs[ALL_DISTINCT_APPEND, EVERY_MEM] >>
+  `ALL_DISTINCT (m2v_bids q')` by
+    (qpat_x_assum `_ ==> ALL_DISTINCT (m2v_bids q')` irule >>
+     metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!x. MEM x (m2v_ids q) ==> _` drule >>
+  qpat_x_assum `!x. MEM x (m2v_bids q') ==> _` drule >>
+  rpt strip_tac >> gvs[] >> res_tac >> gvs[]
+QED
+
+(* Mem2Var runs between two MakeSSA passes and emits several assigns to one
+   promoted variable, so it has no ssa_form obligation. *)
+Theorem m2v_preserves_wf_function:
+  !s fn.
+    wf_function fn /\ EVERY (\id. id < s.irs_next_inst) (fn_ir_inst_ids fn) ==>
+    wf_function (FST (m2v_transform_function_supply s fn))
+Proof
+  rpt strip_tac >> simp[m2v_transform_function_supply_def] >>
+  Cases_on `m2v_rewrite_blocks_supply (m2v_promo_list fn) s fn.fn_blocks` >>
+  simp[] >>
+  drule m2v_rewrite_blocks_supply_props >> strip_tac >>
+  gvs[wf_function_def, fn_labels_def, fn_has_entry_def,
+      fn_succs_closed_def, fn_inst_ids_distinct_def] >>
+  rpt conj_tac
+  >- (strip_tac >> gvs[])
+  >- (rpt strip_tac >> gvs[LIST_REL_EL_EQN, MEM_EL] >>
+      first_x_assum drule >> strip_tac >>
+      drule m2v_erase_block >> strip_tac >> simp[] >>
+      irule m2v_bt_well_formed >> metis_tac[MEM_EL])
+  >- (rpt strip_tac >> gvs[LIST_REL_EL_EQN, MEM_EL] >>
+      first_x_assum drule >> strip_tac >>
+      drule m2v_erase_block >> strip_tac >>
+      `bb_well_formed (EL n fn.fn_blocks)` by metis_tac[MEM_EL] >>
+      `bb_succs (m2v_bt fn (EL n fn.fn_blocks)) = bb_succs (EL n fn.fn_blocks)`
+        by (irule m2v_bt_succs >> simp[]) >>
+      gvs[] >> metis_tac[MEM_EL])
+  >> first_x_assum irule >>
+  gvs[fn_ir_inst_ids_def, block_ir_inst_ids_def,
+      EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[]
 QED
 
 (* m2v_equiv implies observable_equiv — needed for pipeline composition *)

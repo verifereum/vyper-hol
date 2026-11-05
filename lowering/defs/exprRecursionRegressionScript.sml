@@ -121,8 +121,9 @@ Theorem raw_call_calldata_dispatch:
      let (result_op, st6) = compile_raw_call_finish addr_op data_ptr data_len
        gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
        out_val out_ptr st5 in
-     if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st6)
-     else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6))
+     let (_, st7) = emit_void SETFMP [data_ptr] st6 in
+     if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st7)
+     else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st7))
 Proof
   simp[compile_call_def]
 QED

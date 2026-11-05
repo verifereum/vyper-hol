@@ -14,7 +14,7 @@ Theory structFieldsProps
 Ancestors
   compileVyper compileEnv typedCopyMetadata typedCopyProducer
   vyperTypeContract vyperTypeExprSoundness vyperContext vyperValue
-  valueEncoding vfmConstants
+  valueEncoding vfmConstants vyperTypeSystem
   finite_map list pair combin
 
 Theorem type_env_for_module_struct_mem:
@@ -161,3 +161,26 @@ Proof
   simp[build_compile_env_ce_struct_fields] >>
   metis_tac[distinct_type_keys_struct_args_unique]
 QED
+
+Theorem struct_literal_decl_types:
+  well_typed_expr env (StructLit ann nsid kes) ==>
+  ann = StructT nsid /\
+  ?args. FLOOKUP env.type_defs nsid = SOME (StructArgs args) /\
+         MAP FST kes = MAP FST args /\
+         MAP (expr_type o SND) kes = MAP SND args
+Proof
+  simp[well_typed_expr_def] >> metis_tac[]
+QED
+
+Theorem struct_literal_layout_types:
+  well_typed_expr env (StructLit ann nsid kes) /\
+  sfields_tenv_consistent cenv.ce_struct_fields env.type_defs ==>
+  ann = StructT nsid /\
+  ?fields. FLOOKUP cenv.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+           MAP FST fields = MAP FST kes /\
+           MAP (FST o SND) fields = MAP (expr_type o SND) kes
+Proof
+  strip_tac >> drule struct_literal_decl_types >> strip_tac >>
+  gvs[sfields_tenv_consistent_def] >> metis_tac[]
+QED
+

@@ -91,12 +91,14 @@ Definition target_has_internal_call_def:
 End
 
 (* The calls the source runs on the EVM even when it takes external calls
-   from the outcome oracle: raw_call (eval_raw_call's run_raw_call) and the
-   creates (eval_create's run_create_evm). *)
+   from the outcome oracle: a delegate raw_call (eval_raw_call's
+   run_raw_call) and the creates (eval_create's run_create_evm). *)
 Definition expr_evm_run_root_def:
-  expr_evm_run_root (Call ty (RawCallTarget flags) es default) = T /\
-  expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) = T /\
-  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof) es default) = T /\
+  expr_evm_run_root (Call ty (RawCallTarget flags) es default) =
+    flags.rcf_is_delegate /\
+  expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
+    flags.rcf_is_delegate /\
+  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
   expr_evm_run_root _ = F
 End
 

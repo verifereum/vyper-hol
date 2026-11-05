@@ -137,7 +137,8 @@ in List.app check [false, true] end
 
 val () = List.app (check_conversion false)
   ["u256_to_b4", "bys33_to_bool", "bys64_to_u256", "bys8_to_b4",
-   "str8_to_b4", "u256_to_bys16", "b4_to_bys2"]
+   "str8_to_b4", "u256_to_bys16", "b4_to_bys2",
+   "b4_to_bys", "b4_to_str", "u256_to_bys"]
 val () = List.app (check_conversion true)
   ["i8_to_addr", "i256_to_addr", "lit_300_to_u8", "lit_neg_to_u256",
-   "b4_to_bys", "b4_to_str", "u256_to_bys", "lit_bys_narrow"]
+   "lit_bys_narrow"]

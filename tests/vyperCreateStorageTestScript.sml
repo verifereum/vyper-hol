@@ -1,13 +1,14 @@
 Theory vyperCreateStorageTest
 Ancestors
   vyperCreateSelfdestruct vyperCreate vyperInterpreter
+  extCallOracle vyperCallOutcome
   vyperSmallStep[ignore_grammar] vfmExecution vfmState
 Libs
   cv_transLib wordsLib
 
 Definition storage_create_expr_def:
   storage_create_expr salted rof initcode =
-    Call (BaseT AddressT) (CreateTarget RawCreate salted rof)
+    Call (BaseT AddressT) (CreateTarget RawCreate salted rof [])
       ([blueprint_test_raw_arg initcode;
         Literal (BaseT (UintT 256)) (IntL 5)] ++
        (if salted then
@@ -25,18 +26,31 @@ val () = cv_auto_trans storage_create_address_def;
 Definition storage_create_state_def:
   storage_create_state salted oracle initcode nonce code =
     let st = blueprint_test_state [] in
-    st with
+    let initial = st with
       <|accounts := update_account (storage_create_address salted initcode)
           (empty_account_state with
             <|balance := 7; nonce := nonce; code := code;
               storage := update_storage 0w 17w
-                (update_storage 9w 23w empty_storage)|>) st.accounts;
-        outcomes := if oracle then SOME [] else NONE|>
+                (update_storage 9w 23w empty_storage)|>) st.accounts|> in
+    if oracle then
+      let concrete = blueprint_test_run
+        (storage_create_expr salted T initcode) initial in
+      let final = SND concrete in
+      initial with outcomes := SOME
+        [<|co_success := (FST concrete = INL (Value
+              (AddressV (storage_create_address salted initcode))));
+           co_created := storage_create_address salted initcode;
+           co_returnData := (case FST concrete of
+             INR (Error (RevertData bytes)) => bytes | _ => []);
+           co_accounts := final.accounts; co_tStorage := final.tStorage;
+           co_logs := DROP (LENGTH initial.logs) final.logs;
+           co_toDelete := final.pending_deletions|>]
+    else initial
 End
 val () = cv_auto_trans storage_create_state_def;
 
-(* Check the recursive and CPS evaluators on real EVM initcode in both outcome
-   modes. Creation does not consume an external-call oracle entry. *)
+(* Check recursive/CPS execution directly and through a creation outcome
+   produced by that concrete execution, retaining the storage/balance checks. *)
 Definition storage_create_observation_def:
   storage_create_observation salted oracle rof initcode nonce code =
     let st = storage_create_state salted oracle initcode nonce code in
@@ -47,8 +61,11 @@ Definition storage_create_observation_def:
     let target = lookup_account (storage_create_address salted initcode)
           final.accounts in
     (eval_expr blueprint_test_context e st = r /\
-     final.logs = st.logs /\ final.requests = st.requests /\
-     final.outcomes = st.outcomes,
+     final.logs = st.logs /\
+     final.requests = (if oracle then
+       [create_outcome_request (if salted then Create2Call 0w else CreateCall)
+          5 initcode st] else st.requests) /\
+     final.outcomes = (if oracle then SOME [] else NONE),
      FST r, sender.nonce, sender.balance, target.nonce, target.balance,
      lookup_storage 0w target.storage, lookup_storage 9w target.storage,
      target.code)
@@ -124,7 +141,8 @@ Theorem nonce_or_code_collision_preserves_storage_and_balance:
   EVERY (\salted. EVERY (\oracle. EVERY (\rof.
     EVERY (\(nonce,code).
       storage_create_observation salted oracle rof [0w] nonce code =
-        (T, if rof then INR (Error (RuntimeError "create address collision"))
+        (T, if rof then INR (Error (if oracle then RevertData []
+                                  else RuntimeError "create address collision"))
             else INL (Value (AddressV 0w)),
          3, 100, nonce, 7, 17w, 23w, code))
       [(1,[]); (0,[0w])]) [F;T]) [F;T]) [F;T]

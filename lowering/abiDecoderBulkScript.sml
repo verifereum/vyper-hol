@@ -320,11 +320,28 @@ Proof
     (irule canonical_dynamic_array_count_load >>
      qexists_tac `vyper_to_abi_type env ty` >> fs[vyper_to_abi_type_def]) >>
   `LENGTH vs * mem_sz <= maxn * mem_sz` by simp[LE_MULT_RCANCEL] >>
-  gvs[vyper_to_abi_type_def, abi_footprint_disjoint_def, type_memory_bytes_def,
-      DISJ_IMP_THM, FORALL_AND_THM, Excl "enc_def"] >>
-  rpt strip_tac >> gvs[Excl "enc_def"] >> TRY decide_tac >>
-  disj2_tac >> rename1 `eval_operand hi s = SOME (n2w hb)` >>
-  qexists_tac `hb` >> simp[] >> decide_tac
+  `sb + 32 + LENGTH vs * mem_sz < dimword (:256)` by
+    (qpat_x_assum `sb + LENGTH _ < _` mp_tac >>
+     simp[vyper_to_abi_type_def, Excl "enc_def"]) >>
+  `d + (32 + maxn * mem_sz) < dimword (:256)` by
+    (qpat_x_assum `d + type_memory_bytes _ _ < _` mp_tac >>
+     asm_rewrite_tac[] >> decide_tac) >>
+  `opc = MLOAD ==> sb + 32 + LENGTH vs * mem_sz <= d \/
+                    d + (32 + maxn * mem_sz) <= sb` by
+    (qpat_x_assum `opc = MLOAD ==> _` mp_tac >>
+     simp[abi_footprint_disjoint_def, vyper_to_abi_type_def,
+          Excl "enc_def"] >> metis_tac[]) >>
+  `hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+      sb + 32 + LENGTH vs * abi_sz <= h /\ h < dimword (:256)` by
+    (Cases_on `hi = Lit 0w` >- simp[] >>
+     gvs[Excl "enc_def"] >>
+     rename1 `eval_operand hi s = SOME (n2w hb)` >>
+     qexists_tac `hb` >> simp[Excl "enc_def"]) >>
+  gvs[Excl "enc_def"] >> rpt conj_tac >> rpt strip_tac >>
+  gvs[Excl "enc_def"]
+  >>~- ([`hi = Lit 0w \/ _`],
+        disj2_tac >> rename1 `eval_operand hi s = SOME (n2w hb)` >>
+        qexists_tac `hb` >> simp[Excl "enc_def"]) >> decide_tac
 QED
 
 (* ===== Fragment ===== *)
@@ -367,8 +384,9 @@ Theorem abi_decoder_bulk_shape:
     (emitted_insts st st')
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+  gvs[compile_abi_decode_to_buf_def] >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
   gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]

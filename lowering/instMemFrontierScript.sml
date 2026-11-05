@@ -70,8 +70,10 @@ Theorem below_frontier_no_ranges:
     inst_mem_below_frontier inst s
 Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
-       source_memory_write_ranges_def]
+  simp[] >>
+  simp[inst_mem_below_frontier_def] >>
+  simp[source_memory_read_ranges_def] >>
+  simp[source_memory_write_ranges_def]
 QED
 
 (* The checks for the opcodes the lowering emits, each as the condition on

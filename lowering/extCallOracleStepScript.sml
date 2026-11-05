@@ -118,9 +118,10 @@ Proof
   rename1 `take_outcome rq' _ = (outcome', rest')` >>
   drule_all take_outcome_agree >> strip_tac >>
   `outcome'.co_success = outcome.co_success /\
-   outcome'.co_logs = outcome.co_logs` by
+   outcome'.co_logs = outcome.co_logs /\
+   outcome'.co_toDelete = outcome.co_toDelete` by
     (qpat_x_assum `_ = outcome'` (SUBST1_TAC o SYM) >> simp[]) >>
-  `rq'.cr_static = rq.cr_static /\
+  `rq'.cr_static = rq.cr_static /\ rq'.cr_kind = rq.cr_kind /\
    (computed_precompile rq' <=> computed_precompile rq)` by
     (fs[request_agree_def] >> qpat_x_assum `_ = rq'` (SUBST1_TAC o SYM) >>
      simp[computed_precompile_def]) >>
@@ -138,13 +139,14 @@ Proof
      gvs[state_rel_def, adopt_call_outcome_equation, accounts_rel_def]) >>
   drule accounts_rel_storage_transient >> simp[] >> strip_tac >>
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
-      logs_rel_eq, record_request_def] >>
-  Cases_on `outcome.co_success /\ ~rq.cr_static` >>
+      adopt_outcome_deletions_def, logs_rel_eq, record_request_def] >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  Cases_on `rq.cr_kind = MessageCall` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[immutables_rel_def] >>
-  (conj_tac >- first_assum ACCEPT_TAC >>
-   Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND])
+  Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND] >>
+  first_assum ACCEPT_TAC
 
 QED
 
@@ -249,7 +251,8 @@ Theorem send_call_oracle_step:
 Proof
   rpt gen_tac >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes /\
-   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static` by
+   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static /\
+   ~cx.txn.is_static` by
     fs[state_rel_def] >>
   `step_inst_base inst s =
      exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
@@ -257,8 +260,10 @@ Proof
     (Cases_on `eval_operand gas_op s` >> fs[] >>
      simp[step_inst_base_def, eval_operand_def]) >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       check_def, lift_option_type_def, vyperStateTheory.return_def] >>
+  qpat_x_assum `~cx.txn.is_static` (fn th =>
+    simp[eval_send_def, frame_call_value_def, th, bind_def, ignore_bind_def,
+         type_check_def, assert_def, check_def, lift_option_type_def,
+         vyperStateTheory.return_def]) >>
   Cases_on `take_call_outcome (w2w aw) [] (SOME (w2n vw)) es` >>
   qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
   Cases_on `tr` >> simp[]

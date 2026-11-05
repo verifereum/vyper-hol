@@ -26,13 +26,20 @@ Definition constructor_args_encode_def:
                (ListV abi_vals)
 End
 
-(* All Call constructors, not just external calls or effectful roots. The
- * existing total traversal inspects nested statements, assignment indices,
- * assert/raise reasons and expression children, even in unsupported syntax.
- * Pop and computed builtins are not Call and remain admitted by this test.
+(* All Call constructors, not just external calls or effectful roots, and the
+ * precompile builtins (sha256, ecrecover, ecadd, ecmul): the constructor
+ * source runs without the call oracle, while the EVM can fail their
+ * STATICCALL for lack of gas. The existing total traversal inspects nested
+ * statements, assignment indices, assert/raise reasons and expression
+ * children, even in unsupported syntax. Pop and the other builtins remain
+ * admitted by this test.
  *)
 Definition constructor_call_root_def:
-  constructor_call_root e <=> case e of Call ty target args default => T | _ => F
+  constructor_call_root e <=>
+    case e of
+      Call ty target args default => T
+    | Builtin ty bt args => precompile_builtin bt
+    | _ => F
 End
 
 Definition constructor_call_free_def:
@@ -90,12 +97,14 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       buffer_to_list ctxt.msgParams.data = [] /\
+      tx.calldata = [] /\
       constructor_args_encode tops tx args_bytes /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
+      am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\

@@ -69,8 +69,10 @@
  * lock key nkey; that it is the source's cx.nonreentrant_slot is not
  * shown here (the lowering does not use transient locks yet, #564).
  * The success case compares the accounts and the transient storage of
- * every address; state_rel relates them through accounts_rel, which also
- * leaves the source no pending deletions to process (#665).
+ * every address; state_rel relates them through accounts_rel (#665).
+ * Accounts stay raw during execution; the success bridge processes the
+ * preserved pending-deletion list only at the transaction boundary,
+ * including on static-copy, ABI-encoder and optional-unlock return paths.
  *)
 
 Theory loweringHalt
@@ -99,6 +101,7 @@ Theorem step_alloca_frame:
       s1.vs_memory = s.vs_memory /\ s1.vs_labels = s.vs_labels /\
       s1.vs_accounts = s.vs_accounts /\ s1.vs_transient = s.vs_transient /\
       s1.vs_logs = s.vs_logs /\ s1.vs_requests = s.vs_requests /\
+      s1.vs_pending_deletions = s.vs_pending_deletions /\
       s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = s.vs_inst_idx
 Proof
   rpt gen_tac >>
@@ -111,15 +114,18 @@ Proof
 QED
 
 (* TSTORE writes its value at its key in the running contract's transient
-   storage. *)
+   storage, unless the frame is static. *)
 Theorem step_TSTORE:
   !op1 op2 v1 v2 id s.
     eval_operand op1 s = SOME v1 /\ eval_operand op2 s = SOME v2 ==>
-    step_inst_base (mk_inst id TSTORE [op1; op2] []) s = OK (tstore v1 v2 s)
+    step_inst_base (mk_inst id TSTORE [op1; op2] []) s =
+      if s.vs_call_ctx.cc_static then
+        Abort ExHalt_abort (halt_state (set_returndata [] s))
+      else OK (tstore v1 v2 s)
 Proof
   rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def]
+  simp[mk_inst_def, exec_write2_def, eval_operands_def]
 QED
 
 (* ===== Return bytes ===== *)
@@ -256,6 +262,7 @@ Theorem compile_return_none_external_frag:
   !ctx cenv lctx ty st x st' nr nkey ut iv P Q R.
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) /\
     (!s. P s ==> R (Halt (halt_state (s with vs_returndata := [])))) ==>
     frag_exec ctx st st' P Q R
@@ -377,7 +384,8 @@ Theorem return_word_run:
     ?ss. run_from fuel ctx fn s = Halt ss /\
          ss.vs_returndata = word_to_bytes w T /\
          ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests
+         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+         ss.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt strip_tac >>
   qspecl_then [`id`, `32w`, `buf`, `s`] strip_assume_tac step_alloca_frame >>
@@ -402,7 +410,8 @@ Proof
   `s2'.vs_current_bb = s.vs_current_bb /\
    s2'.vs_inst_idx = s.vs_inst_idx + 2 /\
    s2'.vs_accounts = s.vs_accounts /\ s2'.vs_transient = s.vs_transient /\
-   s2'.vs_logs = s.vs_logs /\ s2'.vs_requests = s.vs_requests` by
+   s2'.vs_logs = s.vs_logs /\ s2'.vs_requests = s.vs_requests /\
+   s2'.vs_pending_deletions = s.vs_pending_deletions` by
     simp[Abbr `s2'`, Abbr `s1'`, mstore_def] >>
   `w2n (32w:bytes32) = 32` by simp[wordsTheory.dimword_def] >>
   qabbrev_tac `ss = halt_state (set_returndata (word_to_bytes w T) s2')` >>
@@ -436,7 +445,8 @@ Theorem return_copy_run:
     ?ss. run_from fuel ctx fn s = Halt ss /\
          ss.vs_returndata = mem_bytes_at (w2n p) m s.vs_memory /\
          ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests
+         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+         ss.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt strip_tac >>
   qspecl_then [`id`, `n2w msz`, `buf`, `s`] strip_assume_tac
@@ -466,7 +476,8 @@ Proof
   `s2'.vs_current_bb = s.vs_current_bb /\
    s2'.vs_inst_idx = s.vs_inst_idx + 2 /\
    s2'.vs_accounts = s.vs_accounts /\ s2'.vs_transient = s.vs_transient /\
-   s2'.vs_logs = s.vs_logs /\ s2'.vs_requests = s.vs_requests` by
+   s2'.vs_logs = s.vs_logs /\ s2'.vs_requests = s.vs_requests /\
+   s2'.vs_pending_deletions = s.vs_pending_deletions` by
     simp[Abbr `s2'`, Abbr `s1'`, mcopy_def, write_memory_with_expansion_def] >>
   `mem_bytes_at (w2n a) m s2'.vs_memory = mem_bytes_at (w2n p) m s.vs_memory`
     by simp[Abbr `s2'`, Abbr `s1'`, mem_bytes_at_def, mcopy_padded_read] >>
@@ -496,7 +507,8 @@ Theorem compile_external_return_word_frag:
     (!s ss. P s /\ ss.vs_returndata = word_to_bytes w T /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient = s.vs_transient /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -531,7 +543,8 @@ Theorem compile_external_return_copy_frag:
              !ss. ss.vs_returndata = mem_bytes_at (w2n p) m s.vs_memory /\
                   ss.vs_accounts = s.vs_accounts /\
                   ss.vs_transient = s.vs_transient /\
-                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+                  ss.vs_pending_deletions = s.vs_pending_deletions ==>
                   R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -831,7 +844,8 @@ Theorem step_alloca_enc_pre:
       enc_pre st st' [Var out;op] (s.vs_alloca_next + msz) top
         tv v (w2n p) [(s.vs_alloca_next,n)] s1 /\
       s1.vs_accounts = s.vs_accounts /\ s1.vs_transient = s.vs_transient /\
-      s1.vs_logs = s.vs_logs /\ s1.vs_requests = s.vs_requests
+      s1.vs_logs = s.vs_logs /\ s1.vs_requests = s.vs_requests /\
+      s1.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt strip_tac >>
   `msz < dimword (:256)` by decide_tac >>
@@ -976,11 +990,13 @@ Proof
   simp[enc_frame_def, eval_operand_def] >> metis_tac[]
 QED
 
+(* The encoder preserves all effects, including deferred deletions. *)
 Theorem enc_frame_effects:
   !st st' lo top outs s0 s.
     enc_frame st st' lo top outs s0 s ==>
     s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
-    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests
+    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests /\
+    s.vs_pending_deletions = s0.vs_pending_deletions
 Proof
   simp[enc_frame_def]
 QED
@@ -996,7 +1012,8 @@ Theorem return_buffer_run:
     mem_bytes_at (w2n b) (LENGTH bytes) s.vs_memory = bytes ==>
     ?ss. run_from fuel ctx fn s = Halt ss /\ ss.vs_returndata = bytes /\
       ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-      ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests
+      ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+      ss.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt strip_tac >>
   qabbrev_tac `ss = halt_state (set_returndata bytes s)` >>
@@ -1021,7 +1038,8 @@ Theorem emit_return_buffer_frag:
       mem_bytes_at (w2n b) (LENGTH bytes) s.vs_memory = bytes /\
       (!ss. ss.vs_returndata = bytes /\ ss.vs_accounts = s.vs_accounts /\
         ss.vs_transient = s.vs_transient /\ ss.vs_logs = s.vs_logs /\
-        ss.vs_requests = s.vs_requests ==> R (Halt ss))) ==>
+        ss.vs_requests = s.vs_requests /\
+        ss.vs_pending_deletions = s.vs_pending_deletions ==> R (Halt ss))) ==>
     frag_exec ctx st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1085,7 +1103,8 @@ Theorem compile_alloc_buffer_enc_frag:
           (s0.vs_alloca_next + msz + 32 * (sf.cs_next_id - st.cs_next_id))
           tv v (w2n p) [(s0.vs_alloca_next,n)] s1 /\
         s1.vs_accounts = s0.vs_accounts /\ s1.vs_transient = s0.vs_transient /\
-        s1.vs_logs = s0.vs_logs /\ s1.vs_requests = s0.vs_requests) R
+        s1.vs_logs = s0.vs_logs /\ s1.vs_requests = s0.vs_requests /\
+        s1.vs_pending_deletions = s0.vs_pending_deletions) R
 Proof
   rpt strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
   irule compile_alloc_buffer_frag >>
@@ -1114,7 +1133,8 @@ Theorem compile_abi_encode_return_frag:
     LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
     (!ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
       ss.vs_accounts = s1.vs_accounts /\ ss.vs_transient = s1.vs_transient /\
-      ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests ==>
+      ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests /\
+      ss.vs_pending_deletions = s1.vs_pending_deletions ==>
       R (Halt ss)) ==>
     frag_exec ctx sa sf (\s. s = s1) Q R
 Proof
@@ -1163,7 +1183,8 @@ Theorem compile_external_return_abi_frag:
              !ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
                   ss.vs_accounts = s.vs_accounts /\
                   ss.vs_transient = s.vs_transient /\
-                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+                  ss.vs_pending_deletions = s.vs_pending_deletions ==>
                   R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -1198,7 +1219,8 @@ Proof
     simp[wordsTheory.w2n_n2w] >>
   `!ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
     ss.vs_accounts = s1.vs_accounts /\ ss.vs_transient = s1.vs_transient /\
-    ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests ==>
+    ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests /\
+    ss.vs_pending_deletions = s1.vs_pending_deletions ==>
     R (Halt ss)` by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
   qpat_x_assum `buf.buf_operand = _` SUBST_ALL_TAC >>
   drule_all compile_abi_encode_return_frag >>
@@ -1235,6 +1257,7 @@ Theorem optional_unlock_frag:
     (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
       st = ((), st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s. P s ==>
          Q ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
               vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
@@ -1247,7 +1270,8 @@ Proof
       exprLoweringPropsTheory.run_inst_seq_def, DROP_LENGTH_APPEND] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_write2_def, eval_operand_def]
+  pure_rewrite_tac [instruction_accessors, opcode_case_def] >>
+  res_tac >> gvs[exec_write2_def, eval_operand_def, eval_operands_def]
 QED
 
 (* A return without a value, or a fallthrough, in an external function:
@@ -1258,12 +1282,14 @@ Theorem unlock_stop_frag:
       (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
       (emit_inst STOP [] []) st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s ss. P s /\ ss.vs_returndata = [] /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
               (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
                else s.vs_transient) /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -1337,14 +1363,17 @@ Theorem compile_external_return_word_unlock_frag:
   !ctx op ei msz nr nkey ut iv st x st' w P Q R.
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (!s. P s ==> eval_operand op s = SOME w) /\
     (!s ss. P s /\ ss.vs_returndata = word_to_bytes w T /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
               (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
                else s.vs_transient) /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -1400,7 +1429,7 @@ QED
 (* The state after the optional unlock, at the start of the return
    sequence without an unlock: only the transient storage (for a release)
    and the instruction index differ, so operands, memory and allocas read
-   the same. *)
+   the same.  Pending deletions are preserved until the success boundary. *)
 Theorem optional_unlock_state:
   !nr iv nkey n s u.
     u = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
@@ -1413,7 +1442,8 @@ Theorem optional_unlock_state:
     u.vs_transient =
       (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
        else s.vs_transient) /\
-    u.vs_logs = s.vs_logs /\ u.vs_requests = s.vs_requests
+    u.vs_logs = s.vs_logs /\ u.vs_requests = s.vs_requests /\
+    u.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `nr /\ ~iv` >>
   gvs[tstore_def, venomMemDefsTheory.alloca_inv_def,
@@ -1428,6 +1458,7 @@ Theorem compile_external_return_unlock_seq:
   !ctx rv p rr ei msz nr nkey ut iv st x st' P Q R.
     compile_external_return rv p rr ei msz nr nkey ut iv st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!st1.
        compile_external_return rv p rr ei msz F nkey ut iv st1 = (x, st') /\
        st1.cs_next_var = st.cs_next_var /\
@@ -1469,7 +1500,9 @@ Theorem compile_external_return_copy_unlock_frag:
   !ctx op m msz nr nkey ut iv st x st' P Q R.
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     m < dimword(:256) /\
     (!s. P s ==>
          ?p. eval_operand op s = SOME p /\
@@ -1478,7 +1511,8 @@ Theorem compile_external_return_copy_unlock_frag:
                   ss.vs_transient =
                     (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
                      else s.vs_transient) /\
-                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+                  ss.vs_pending_deletions = s.vs_pending_deletions ==>
                   R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -1520,7 +1554,9 @@ Theorem compile_external_return_abi_unlock_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
     value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
     LENGTH (enc (vyper_to_abi_type env ty) av) <= msz /\
@@ -1537,7 +1573,8 @@ Theorem compile_external_return_abi_unlock_frag:
                   ss.vs_transient =
                     (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
                      else s.vs_transient) /\
-                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+                  ss.vs_pending_deletions = s.vs_pending_deletions ==>
                   R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -1580,13 +1617,16 @@ Theorem compile_return_none_external_unlock_frag:
   !ctx cenv lctx ty st x st' nr nkey ut iv P Q R.
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s ss. P s /\ ss.vs_returndata = [] /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
               (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
                else s.vs_transient) /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -1606,6 +1646,7 @@ Theorem compile_guarded_body_stop_unlock_frag:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb P Q R.
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (if nr then compile_nonreentrant_lock nkey ut iv else comp_return ()) st =
       ((), sa) /\
     compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\
@@ -1615,7 +1656,8 @@ Theorem compile_guarded_body_stop_unlock_frag:
             ss.vs_transient =
               (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
                else s.vs_transient) /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx sb st' P Q R
 Proof
@@ -1631,10 +1673,10 @@ QED
 
 (* ===== The effects compared on success ===== *)
 
-(* With state_rel at the return, a Halt that leaves the effects as they
-   were, except for the optional unlock's TSTORE, gives the effects
-   external_call_result_rel compares on success, from the state es' after
-   the source releases the lock at the same key. *)
+(* With state_rel at the return, a Halt preserves the raw accounts and
+   pending deletions, except for the optional unlock's TSTORE.  Finalize
+   the accounts only at the success boundary, just as the source does
+   after releasing the lock at the same key. *)
 Theorem external_halt_success_unlock_helper[local]:
   !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
@@ -1644,11 +1686,12 @@ Theorem external_halt_success_unlock_helper[local]:
     ss.vs_transient =
       (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
        else s.vs_transient) /\
-    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions ==>
     accounts_agree cx
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).accounts
-      ss.vs_accounts /\
+      (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
     transient_agree cx
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).tStorage
@@ -1678,14 +1721,17 @@ Proof
   `transient_agree cx es'.tStorage ss.vs_transient` by
     (Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
      irule transient_agree_update >> simp[storage_dead_update_zero]) >>
+  `accounts_agree cx
+     (process_deletions es.pending_deletions es.accounts)
+     (process_deletions es.pending_deletions s.vs_accounts)` by
+    (irule accounts_agree_process_deletions >> simp[]) >>
   `log_entry_equiv cenv cx.txn.target = $= /\
    log_entry_corresponds (compiled_event_info tops) (type_env tops)
      tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def,
          log_entry_corresponds_concrete_event] >>
   gvs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
-      finalize_pending_deletions_def, abstract_machine_from_state_def,
-      process_deletions_def]
+      finalize_pending_deletions_def, abstract_machine_from_state_def]
 QED
 
 (* The same, with the agreements at the context the external call result
@@ -1700,11 +1746,12 @@ Theorem external_halt_success_unlock:
     ss.vs_transient =
       (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
        else s.vs_transient) /\
-    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions ==>
     accounts_agree (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).accounts
-      ss.vs_accounts /\
+      (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
     transient_agree (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).tStorage
@@ -1731,18 +1778,19 @@ Proof
   simp[]
 QED
 
-(* With state_rel at the return, a Halt that leaves the effects as they
-   were gives the effects external_call_result_rel compares on success. *)
+(* With state_rel at the return, a Halt that leaves the effects and pending
+   deletions unchanged gives the finalized effects compared on success. *)
 Theorem external_halt_success:
   !func cenv cx es s ss tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions ==>
     accounts_agree (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).accounts
-      ss.vs_accounts /\
+      (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
     transient_agree (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).tStorage

@@ -32,6 +32,21 @@ Proof
   simp[AC ADD_ASSOC ADD_COMM]
 QED
 
+Theorem elems_in_memory_intro:
+  !vs off tv mem.
+    (!i. i < LENGTH vs ==>
+      val_in_memory tv (EL i vs) (off + i * type_memory_size tv) mem) ==>
+    elems_in_memory vs off tv mem
+Proof
+  Induct >> simp[valueEncodingTheory.val_in_memory_def] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  first_x_assum irule >> qx_gen_tac `i` >> strip_tac >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >>
+  simp[MULT_CLAUSES] >>
+  simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]
+QED
+
 Theorem kvs_in_memory_every:
   !kvs off tv mem.
     kvs_in_memory kvs off tv mem <=>

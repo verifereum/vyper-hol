@@ -33,7 +33,8 @@
 
 Theory bodySim
 Ancestors
-  list exprSim exprSimHyps stmtSim compileEnv compileVyper vyperTypeContract
+  loweringPosts
+  list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness
@@ -41,31 +42,47 @@ Ancestors
 (* ===== The frame ===== *)
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
-   unit, cenv is a runtime function's compile env with the program's
-   function ids and parameter types (so compile_call gives an internal
-   call the label package_internal_fn gave the callee:
-   compile_call_intcall_label), the program's events, and its locals in
+   unit or, while cx.in_deploy, its deployment unit. The constructor and
+   its internal callees share that deployment context. cenv has the program's
+   function ids, parameter types and calling conventions (so compile_call
+   gives an internal call the label package_internal_fn gave the callee:
+   compile_call_intcall_label) and return types (the type compile_call
+   gives an internal call's result), the program's events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
-   has build_compile_env's hashmaps and module variable types, which no
-   declaration changes.  cenv's target is the unit's policy target, as
+   has build_compile_env's hashmaps, module variable types, struct metadata
+   and module DynArray capacities, which no declaration changes.  Its struct
+   metadata is acyclic (build_compile_env_struct_metadata_acyclic), so a
+   typed memory copy never takes its INVALID fallback.  cenv's target is
+   the unit's policy target, as
    set_*_package_target installs it, which run_lowering requires to have
    MCOPY (lowering_policy_ok). *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
-    (?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-                    ctx = unit.cu_context /\
-                    cenv.ce_target = rpolicy.rpol_target) /\
+    (?rpolicy unit.
+       (if cx.in_deploy then
+          ?rbc. lower_vyper_deploy_unit tops rpolicy rbc = SOME unit
+        else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
+       ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
+    cenv.ce_func_info =
+      build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
+    cenv.ce_func_return_type = build_func_return_type tops /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
-    ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
+    cenv.ce_struct_fields = make_struct_fields_map tops /\
+    (cenv.ce_is_ctor <=> cx.in_deploy) /\ cenv.ce_alloca_locals /\
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
     cenv.ce_hashmap_info = build_hashmap_info tops /\
+    cenv.ce_module_dynarray_capacity =
+      build_dynarray_capacity (collect_module_vars tops) /\
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id))
 End
@@ -98,7 +115,9 @@ Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
-    alloc_limits_stmt cenv s
+    alloc_limits_stmt cenv s /\
+    (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+       return_buffer_ok cenv)
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
@@ -138,16 +157,16 @@ QED
    RET, for a value of the return type itself). *)
 Definition frame_ret_ok_def:
   frame_ret_ok ctx func cx RetQ cenv ret_ty <=>
-    !cenv' env lctx eo es res es'.
+    !cenv' env lctx eo es.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      stmt_exprs_ok cenv' (Return eo) /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
               expr_sim ctx func cenv' cx ty e es /\
-              expr_vv_sim ctx func cenv' cx ty e es) /\
-      eval_stmt cx (Return eo) es = (res, es') ==>
+              expr_vv_sim ctx func cenv' cx ty e es) ==>
       stmt_frag ctx func cx lctx RetQ cenv'
-        (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
+        (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 End
 
 (* ===== The predicates of the induction ===== *)
@@ -168,31 +187,35 @@ End
    body's bindings. *)
 Definition body_stmt_ok_def:
   body_stmt_ok cx s <=>
-    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      (!target. supported_stmt_expr_exists
+         (expr_abi_decode_target_root target) s ==>
+         occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
-      frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-      eval_stmt cx s es = (res, es') ==>
+      frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
-        es res es'
+        (eval_stmt cx s) es
 End
 
 Definition body_stmts_ok_def:
   body_stmts_ok cx ss <=>
-    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      (!target. supported_stmts_expr_exists
+         (expr_abi_decode_target_root target) ss ==>
+         occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
-      frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-      eval_stmts cx ss es = (res, es') ==>
+      frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
-        es res es'
+        (eval_stmts cx ss) es
 End
 
 (* The operands of an expression, evaluated and read in order: each

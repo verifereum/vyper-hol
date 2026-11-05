@@ -19,6 +19,8 @@
  *)
 Theory exprSimBufferEmptyExec
 Ancestors
+  exprSimProps
+  exprSimAlloc
   exprSimBuffer exprSimBufferEmpty builtinSimple exprSimBufferStore
   exprSimLiteralBuffer exprSimOps freshWrites valueEncodingProps
   exprSimWordArgs emitHelperProps exprLoweringProps compileEnv context
@@ -168,7 +170,10 @@ Proof
       first_x_assum irule >> decide_tac)
   >- (rpt gen_tac >> strip_tac >>
       `not_fresh_at sa p` by
-        (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
+        (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[])
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `cenv.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
   disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
@@ -361,7 +366,7 @@ Resume compile_builtin_empty_complex_run[package]:
   (* the locals' regions, by their pointers, which the buffer's code keeps *)
   map_every qx_gen_tac [`nm`, `lb`, `llen`] >> strip_tac >>
   `local_region cenv es.scopes t nm lb llen` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
   qpat_x_assum `!name b len. local_region _ _ t name b len ==> _ \/ _` drule >>
   simp[arithmeticTheory.ADD_COMM]

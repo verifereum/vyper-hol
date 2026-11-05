@@ -101,7 +101,7 @@ The entire public theorem is:
   call_outcomes_ok tops am tx (MAP SND (call_trace es))
   ==>
   ?r es'. run_call es = SOME (r, es') /\
-    (frame_resource_starved es r es' \/ precompile_call_starved es \/
+    (frame_resource_starved es r es' \/
      call_result_rel tops ret am tx es r es')
 ```
 
@@ -155,8 +155,12 @@ concrete calls and the two-argument initializer still starts with NONE/empty
 requests. Arbitrary source SOME lists use this **same evaluator**, not a second
 source semantics.
 
-Computed value-zero precompiles1/2/6/7 are computed from pure input, consume no
-outcome and record no request; they are filtered out of `call_trace`. Other
+Computed value-zero precompiles 1/2/6/7 take their success from the next
+outcome (the EVM can fail them for lack of gas) and, on success, their return
+data from pure input. They record no request: `call_trace` keeps them and
+`call_requests` filters them out. The source's sha256/ecrecover/ecadd/ecmul
+builtins take that outcome too; constructors, which run without the oracle,
+exclude them (`constructor_call_free`). Other
 calls, including nonzero-value precompile calls, remain ordinary oracle calls.
 Verifereum still executes callees and any reentrant calls; the oracle abstracts
 that whole execution into an outcome. Re-applying a frame theorem to an inner
@@ -199,9 +203,10 @@ gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
   Callee-return rejection can be exempt only when it produces that same message
   in such a program. Exempt runs still have an actual EVM run but no result/effect
   correspondence obligation.
-- Resource alternatives are genuine frame OutOfGas/StackOverflow, or a failed
-  value-zero computed precompile whose pure input was valid. Invalid ecadd/ecmul
-  input is not precompile starvation. There is no existential sufficient-gas
+- The resource alternative is genuine frame OutOfGas/StackOverflow. A
+  value-zero computed precompile that the EVM fails for lack of gas is not an
+  alternative: its failure is the call's oracle outcome, which the source and
+  Venom both take. There is no existential sufficient-gas
   loophole, gas bound or guarantee of success regardless of resources.
 - Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing

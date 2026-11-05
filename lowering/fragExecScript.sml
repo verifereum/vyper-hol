@@ -392,7 +392,8 @@ Theorem frag_exec_weaken:
       (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
       frag_exec ctx st st' P' Q' R'
 Proof
-  metis_tac[frag_exec_conseq]
+  rpt strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac [`P`, `Q`, `R`] >> simp[]
 QED
 
 Theorem frag_exec_pre_exit:
@@ -699,7 +700,7 @@ Proof
   simp[]
 QED
 
-Theorem eval_phis_no_phi[local]:
+Theorem eval_phis_no_phi:
   !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
 Proof
   Cases >> rw[eval_phis_def, phi_prefix_length_def]
@@ -768,6 +769,26 @@ Proof
   rw[step_inst_base_def]
 QED
 
+Theorem run_from_jump_target:
+  !fuel ctx fn s lbl.
+    ~s.vs_halted /\
+    (!e. run_from fuel ctx fn (jump_to lbl s) <> Error e) ==>
+    ?bb. lookup_block lbl fn.fn_blocks = SOME bb /\
+         phi_prefix_length bb.bb_instructions = 0
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_block lbl fn.fn_blocks`
+  >- gvs[run_from_def, jump_to_def] >>
+  rename1 `lookup_block lbl _ = SOME bb` >>
+  Cases_on `phi_prefix_length bb.bb_instructions = 0`
+  >- simp[] >>
+  `?phi rest. bb.bb_instructions = phi :: rest /\ phi.inst_opcode = PHI` by
+    (Cases_on `bb.bb_instructions` >> gvs[phi_prefix_length_def] >>
+     rename1 `h.inst_opcode` >> Cases_on `h.inst_opcode = PHI` >> gvs[]) >>
+  gvs[run_from_def, jump_to_def, Once exec_block_def, get_instruction_def,
+      step_inst_non_invoke, step_inst_base_phi]
+QED
+
 (* Every non-Error result after a jump is the result before it, one unit of
    fuel later.  No premise on the target: a missing block is an Error, and
    so is a block that starts with a PHI, since run_from reaches the PHI by
@@ -782,17 +803,10 @@ Theorem run_from_jump_result:
     run_from (SUC fuel) ctx fn s = r
 Proof
   rpt strip_tac >>
-  Cases_on `lookup_block lbl fn.fn_blocks`
-  >- gvs[run_from_def, jump_to_def] >>
-  rename1 `lookup_block lbl _ = SOME bb'` >>
-  Cases_on `phi_prefix_length bb'.bb_instructions = 0`
-  >- (drule_all run_from_jump >> simp[]) >>
-  `?phi rest. bb'.bb_instructions = phi :: rest /\ phi.inst_opcode = PHI` by
-    (Cases_on `bb'.bb_instructions` >> gvs[phi_prefix_length_def] >>
-     rename1 `h.inst_opcode` >> Cases_on `h.inst_opcode = PHI` >> gvs[]) >>
-  qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
-  simp[run_from_def, jump_to_def, Once exec_block_def, get_instruction_def,
-       step_inst_non_invoke, step_inst_base_phi]
+  `?target. lookup_block lbl fn.fn_blocks = SOME target /\
+            phi_prefix_length target.bb_instructions = 0` by
+    (irule run_from_jump_target >> simp[] >> metis_tac[]) >>
+  drule_all run_from_jump >> simp[]
 QED
 
 (* A jump to the start of a fragment's first block: what the fragment
@@ -917,7 +931,7 @@ QED
 
 (* ===== Loops ===== *)
 
-Theorem frag_exec_loop_layout[local]:
+Theorem frag_exec_loop_layout:
   !st0 st1 sth stj st2 stb ste st3 stx hdr body exit cnd
    x0 x1 x2 x3 x4 x5 fn.
   emit_inst JMP [Label hdr] [] st0 = (x0, st1) /\
@@ -983,7 +997,8 @@ Theorem frag_outcome_jmp[local]:
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
   goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >> metis_tac[]
+  qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem frag_outcome_jnz[local]:
@@ -997,10 +1012,14 @@ Theorem frag_outcome_jnz[local]:
   frag_outcome ctx fn (jump_to (if w = 0w then body else exit) s) sb Q R ==>
   frag_outcome ctx fn s sb Q R
 Proof
-  rpt strip_tac >> irule frag_outcome_jump >>
-  goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
-  Cases_on `w = 0w` >> gvs[] >> metis_tac[]
+  rpt strip_tac >>
+  rename1 `get_instruction bb _ =
+    SOME (mk_inst id JNZ [cnd; Label exit; Label body_lbl] [])` >>
+  irule frag_outcome_jump >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
+                `if w = 0w then body_lbl else exit`] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
+  Cases_on `w = 0w` >> gvs[]
 QED
 
 Theorem frag_outcome_loop_cond[local]:

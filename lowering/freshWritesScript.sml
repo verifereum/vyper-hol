@@ -15,7 +15,8 @@
  *   fresh_write_op, writes_fresh
  *   run_inst_seq_writes_fresh — the run changes only fresh variables
  *   writes_fresh_emit_op, writes_fresh_mono, writes_fresh_append
- *   frag_exec_writes_fresh    — the fragment
+ *   frag_exec_run_frame       — semantic-frame lifting, including read opcodes
+ *   frag_exec_writes_fresh    — the pure/fresh specialization
  *   straight_fresh            — a compile action that emits such code in
  *                               the current block, with its combinators
  *                               (_return, _emit_op, _emit_void, _bind,
@@ -30,8 +31,9 @@
 
 Theory freshWrites
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
-  fragExec varsExt exprSim
+  fragExec varsExt
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   venomExecSemantics venomInst venomState
 
@@ -59,19 +61,6 @@ Proof
   rw[fresh_write_op_def] >> simp[is_terminator_def, is_ext_call_op_def]
 QED
 
-(* A pure operation that succeeds writes its one output. *)
-Theorem exec_pure_ok_update:
-  (!f inst s t. exec_pure1 f inst s = OK t ==>
-     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
-  (!f inst s t. exec_pure2 f inst s = OK t ==>
-     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
-  (!f inst s t. exec_pure3 f inst s = OK t ==>
-     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s)
-Proof
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
 
 Theorem step_fresh_write_op:
   !inst ss tt.
@@ -80,21 +69,8 @@ Theorem step_fresh_write_op:
     !x. ~MEM x inst.inst_outputs ==>
         FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x
 Proof
-  rpt gen_tac >> simp[fresh_write_op_def] >> strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> strip_tac
-  >>~- ([`exec_pure1 _ _ _ = OK _`],
-        drule (cj 1 exec_pure_ok_update) >> strip_tac >>
-        gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality])
-  >>~- ([`exec_pure2 _ _ _ = OK _`],
-        drule (cj 2 exec_pure_ok_update) >> strip_tac >>
-        gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality])
-  >>~- ([`exec_pure3 _ _ _ = OK _`],
-        drule (cj 3 exec_pure_ok_update) >> strip_tac >>
-        gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality]) >>
-  (* the assertions *)
-  pop_assum mp_tac >> rpt (CASE_TAC >> simp[]) >> rw[update_var_def] >>
-  simp[FLOOKUP_UPDATE, venom_state_component_equality]
+  rewrite_tac[fresh_write_op_def] >>
+  MATCH_ACCEPT_TAC step_pure_opcode_frame
 QED
 
 (* ===== The run ===== *)
@@ -172,11 +148,17 @@ QED
    holding w, the earlier variables, the allocations and the memory kept;
    on an abort allowed by A it exits as R allows.  P must survive dropping
    the fresh variables, as facts about earlier operands do. *)
-Theorem frag_exec_writes_fresh:
+Theorem frag_exec_run_frame:
   !ctx func cenv cx es sa sb op w P A R s0.
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
-    writes_fresh sa (emitted_insts sa sb) /\ local_ptrs_reserved cenv sa /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb) /\
+    (!ss tt. run_inst_seq (emitted_insts sa sb) ss = OK tt ==>
+       tt = ss with vs_vars := tt.vs_vars /\
+       (!x. not_fresh_at sa x ==>
+            FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)) /\
+    local_ptrs_reserved cenv sa /\
     (!ss. P ss ==> P (drop_fresh sa ss)) /\
     (!ss. fresh_vars_wrt sa ss /\ P ss ==>
        (?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
@@ -193,10 +175,6 @@ Theorem frag_exec_writes_fresh:
             ss.vs_memory = s0.vs_memory) R
 Proof
   rpt strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-              ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
-    (fs[writes_fresh_def, EVERY_MEM] >> rpt gen_tac >> strip_tac >>
-     res_tac >> imp_res_tac fresh_write_op_simple >> simp[]) >>
   irule frag_exec_run_inst_seq_drop_fresh >> simp[] >> rpt strip_tac >>
   `P (drop_fresh sa s0)` by res_tac >>
   assume_tac (Q.SPECL [`sa`, `s0`] fresh_vars_wrt_drop_fresh) >>
@@ -205,7 +183,8 @@ Proof
   asm_rewrite_tac[] >> strip_tac
   >- (disj1_tac >> qexists_tac `ss'` >> asm_rewrite_tac[] >> rpt gen_tac >>
       strip_tac >>
-      drule_all run_inst_seq_writes_fresh >> strip_tac >>
+      qpat_x_assum `!ss tt. run_inst_seq _ ss = OK tt ==> _`
+        drule >> strip_tac >>
       (* the variables of s0 that the code does not write are kept *)
       `!x v. not_fresh_at sa x /\ FLOOKUP s0.vs_vars x = SOME v ==>
              FLOOKUP t.vs_vars x = SOME v` by
@@ -223,7 +202,16 @@ Proof
       pop_assum SUBST1_TAC >>
       simp[stmt_state_rel_inst_idx] >>
       conj_tac
-      >- (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+      >- (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+          >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+          >- (`not_fresh_at sa p` by
+                (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+              `FLOOKUP s0.vs_vars p = SOME 0w` by
+                fs[stmt_state_rel_def, immutable_base_zero_def,
+                   eval_operand_def, lookup_var_def] >>
+              qpat_x_assum `!x v. not_fresh_at sa x /\ _ ==> _`
+                (qspecl_then [`p`, `0w`] mp_tac) >>
+              fs[lookup_var_def]) >>
           fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
           first_x_assum drule_all >> strip_tac >>
           `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> res_tac) >>
@@ -248,8 +236,59 @@ Proof
   disj2_tac >> qexistsl_tac [`a`, `ss'`] >> simp[]
 QED
 
+Theorem frag_exec_writes_fresh:
+  !ctx func cenv cx es sa sb op w P A R s0.
+    sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+    isPREFIX sa.cs_current_insts sb.cs_current_insts /\
+    writes_fresh sa (emitted_insts sa sb) /\ local_ptrs_reserved cenv sa /\
+    (!ss. P ss ==> P (drop_fresh sa ss)) /\
+    (!ss. fresh_vars_wrt sa ss /\ P ss ==>
+       (?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+              eval_operand op ss' = SOME w) \/
+       (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
+    (!a ss. A a ==> R (Abort a ss)) ==>
+    frag_exec ctx sa sb
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
+      (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+            (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+                    lookup_var x ss = SOME w') /\
+            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                     FLOOKUP ss.vs_allocas aid = SOME b) /\
+            ss.vs_memory = s0.vs_memory) R
+Proof
+  rpt strip_tac >> irule frag_exec_run_frame >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all run_inst_seq_writes_fresh >> simp[]) >>
+  conj_tac >- (qexists_tac `A` >> simp[]) >>
+  fs[writes_fresh_def, EVERY_MEM] >> rpt strip_tac >>
+  res_tac >> imp_res_tac fresh_write_op_simple >> simp[]
+QED
+
 (* A run-level lemma by which the code always aborts, as A allows, gives a
    fragment that exits as R allows and never reaches its end. *)
+Theorem frag_exec_run_abort:
+  !ctx func cenv cx es sa sb P A Q R s0.
+    sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+    isPREFIX sa.cs_current_insts sb.cs_current_insts /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb) /\
+    (!ss. P ss ==> P (drop_fresh sa ss)) /\
+    (!ss. fresh_vars_wrt sa ss /\ P ss ==>
+       ?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a) /\
+    (!a ss. A a ==> R (Abort a ss)) ==>
+    frag_exec ctx sa sb
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
+Proof
+  rpt strip_tac >>
+  irule frag_exec_run_inst_seq_drop_fresh >> simp[] >> rpt strip_tac >>
+  `P (drop_fresh sa s0)` by res_tac >>
+  assume_tac (Q.SPECL [`sa`, `s0`] fresh_vars_wrt_drop_fresh) >>
+  qpat_x_assum `!ss. fresh_vars_wrt _ _ /\ _ ==> _`
+    (qspec_then `drop_fresh sa s0` mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`a`, `ss'`] >> simp[]
+QED
+
 Theorem frag_exec_writes_fresh_abort:
   !ctx func cenv cx es sa sb P A Q R s0.
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -262,18 +301,10 @@ Theorem frag_exec_writes_fresh_abort:
     frag_exec ctx sa sb
       (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
 Proof
-  rpt strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-              ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
-    (fs[writes_fresh_def, EVERY_MEM] >> rpt gen_tac >> strip_tac >>
-     res_tac >> imp_res_tac fresh_write_op_simple >> simp[]) >>
-  irule frag_exec_run_inst_seq_drop_fresh >> simp[] >> rpt strip_tac >>
-  `P (drop_fresh sa s0)` by res_tac >>
-  assume_tac (Q.SPECL [`sa`, `s0`] fresh_vars_wrt_drop_fresh) >>
-  qpat_x_assum `!ss. fresh_vars_wrt _ _ /\ _ ==> _`
-    (qspec_then `drop_fresh sa s0` mp_tac) >>
-  asm_rewrite_tac[] >> strip_tac >>
-  disj2_tac >> qexistsl_tac [`a`, `ss'`] >> simp[]
+  rpt strip_tac >> irule frag_exec_run_abort >> simp[] >>
+  conj_tac >- (qexists_tac `A` >> simp[]) >>
+  fs[writes_fresh_def, EVERY_MEM] >> rpt gen_tac >> strip_tac >>
+  res_tac >> imp_res_tac fresh_write_op_simple >> simp[]
 QED
 
 (* ===== Compile actions ===== *)

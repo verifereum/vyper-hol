@@ -10,7 +10,7 @@
  *   alloc_limits_expr, literal_alloc_ok -- every static buffer the lowering
  *                                          allocates for an expression
  *   alloc_limits_stmt(s) -- the same for every expression of a statement,
- *                           and every local it declares
+ *                           every local it declares, and a log's buffers
  *)
 Theory allocLimits
 Ancestors
@@ -27,39 +27,99 @@ Definition literal_alloc_ok_def:
   literal_alloc_ok _ = T
 End
 
+(* A value of type t that is not a word fits below Python's allocation
+   limit, 2 ** 64 bytes, in memory.  unwrap_value copies an aggregate held
+   in storage, transient storage or code into a buffer of this size. *)
+Definition type_alloc_ok_def:
+  type_alloc_ok cenv t <=>
+    (~is_word_type t ==> type_memory_bytes cenv t < 2 ** 64)
+End
+
+(* A slice's .code source, replaced by its address, is smaller. *)
+val is_extcode_def = exprLoweringTheory.is_extcode_def;
+val extcode_addr_expr_def = exprLoweringTheory.extcode_addr_expr_def;
+
+Theorem extcode_operands_size[local]:
+  !es. es <> [] /\ is_extcode (HD es) ==>
+       list_size expr_size (extcode_addr_expr (HD es) :: TL es) <
+       list_size expr_size es
+Proof
+  Cases >> simp[] >> rename1 `is_extcode h` >>
+  Cases_on `h` >> simp[is_extcode_def] >>
+  rename1 `Builtin _ b l` >> Cases_on `b` >> simp[is_extcode_def] >>
+  rename1 `Acc a` >> Cases_on `a` >> simp[is_extcode_def] >>
+  Cases_on `l` >> simp[is_extcode_def] >>
+  rename1 `_ :: tl` >> Cases_on `tl` >>
+  simp[is_extcode_def, extcode_addr_expr_def, expr_size_def,
+       listTheory.list_size_def]
+QED
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
-   is not a word, and the output of a calldata slice.  The same recursion
-   as byte_widths_expr. *)
+   is not a word, a convert to a bytestring (the copy of a widening cast),
+   the output of a calldata slice, and the copy unwrap_value makes of the
+   node's value when it is not in memory, which every node's type_alloc_ok
+   bounds.  The same recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
-  alloc_limits_expr cenv (Name t _) = T /\
-  alloc_limits_expr cenv (TopLevelName t _) = T /\
-  alloc_limits_expr cenv (FlagMember t _ _) = T /\
+  alloc_limits_expr cenv (Name t _) = type_alloc_ok cenv t /\
+  alloc_limits_expr cenv (TopLevelName t _) = type_alloc_ok cenv t /\
+  alloc_limits_expr cenv (FlagMember t _ _) = type_alloc_ok cenv t /\
   alloc_limits_expr cenv (IfExp t c x y) =
-    (alloc_limits_expr cenv c /\ alloc_limits_expr cenv x /\
-     alloc_limits_expr cenv y) /\
-  alloc_limits_expr cenv (Literal t l) = literal_alloc_ok l /\
+    (type_alloc_ok cenv t /\ alloc_limits_expr cenv c /\
+     alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Literal t l) =
+    (type_alloc_ok cenv t /\ literal_alloc_ok l) /\
   alloc_limits_expr cenv (StructLit t nsid kes) =
-    (type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
+    (type_alloc_ok cenv t /\
+     type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
-    (alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
-  alloc_limits_expr cenv (Attribute t x _) = alloc_limits_expr cenv x /\
+    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
+     alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Attribute t x _) =
+    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
+  (* Python's codegen rejects an address's .code anywhere but as slice()'s
+     source (CompilerPanic ".code requires slice() context",
+     codegen_venom/expr.py:672), where compile_slice reads it with
+     EXTCODECOPY and lowers only its address.  The check does the same:
+     Acc Code fails, and a slice's .code source is checked through its
+     address (extcode_addr_expr). *)
   alloc_limits_expr cenv (Builtin t bi es) =
-    ((case bi of
+    (type_alloc_ok cenv t /\ bi <> Acc Code /\
+     (case bi of
         MakeArray NONE _ =>
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
       | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
       | _ => T) /\
-     alloc_limits_exprs cenv es) /\
+     alloc_limits_exprs cenv
+       (if (?n. bi = Slice n) /\ es <> [] /\ is_extcode (HD es)
+        then extcode_addr_expr (HD es) :: TL es else es)) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
-    ((tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
+    (type_alloc_ok cenv t /\
+     (case tb of
+        Empty => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
+      | Convert => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
+      | AbiEncode ensure mid =>
+          (let single = (LENGTH es = 1 /\ ~ensure) in
+           let enc_ty = if single then expr_type (HD es)
+                        else TupleT (MAP expr_type es) in
+           let mid_size = case mid of NONE => 0 | SOME _ => 4 in
+           32 + 32 * word_size
+             (abi_size_bound cenv.ce_struct_fields enc_ty + mid_size) < 2 ** 64 /\
+           (~single ==> type_memory_bytes cenv enc_ty < 2 ** 64))
+      | AbiDecode unwrap =>
+          type_memory_bytes cenv
+            (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <
+          2 ** 64
+      | _ => T) /\
      alloc_limits_exprs cenv es) /\
-  alloc_limits_expr cenv (Pop t tgt) = alloc_limits_target cenv tgt /\
+  alloc_limits_expr cenv (Pop t tgt) =
+    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
   alloc_limits_expr cenv (Call t _ es dflt) =
-    (alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
+    (type_alloc_ok cenv t /\ alloc_limits_exprs cenv es /\
+     alloc_limits_opt cenv dflt) /\
 
   alloc_limits_target cenv (NameTarget _) = T /\
   alloc_limits_target cenv (TopLevelNameTarget _) = T /\
@@ -97,7 +157,8 @@ Termination
   simp[expr_size_def, listTheory.list_size_def,
        basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
        bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
-       listTheory.list_size_map, SF ETA_ss]
+       listTheory.list_size_map, SF ETA_ss] >>
+  rw[] >> drule_all extcode_operands_size >> simp[]
 End
 
 Definition alloc_limits_assignment_def:
@@ -136,6 +197,20 @@ Definition alloc_limits_raise_def:
   alloc_limits_raise cenv RaiseUnreachable = T
 End
 
+(* A log's two buffers are below Python's allocation limit, as lower_Log
+   allocates them through allocate_buffer: the data of its non-indexed
+   arguments, and their ABI encoding.  An event the compile env doesn't
+   know has none, since compile_stmt emits INVALID for it. *)
+Definition log_alloc_ok_def:
+  log_alloc_ok cenv id es ⇔
+    case cenv.ce_event_info (nsid_to_string id) of
+      NONE => T
+    | SOME (_, _, flags) =>
+        let tys = log_non_indexed_types flags (MAP expr_type es) in
+          SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 ∧
+          abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
+End
+
 (* alloc_limits_expr of every expression of a statement, targets' keys
    included, and the limit for every local it declares: Python allocates a
    declared local and a loop variable with Context.new_variable.  A tuple
@@ -144,7 +219,8 @@ End
    Python's _lower_tuple_unpack allocates it with
    Context.new_temporary_value), and a storage, transient or immutable source
    is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
-   check covers both, so don't narrow it to the staging condition alone. *)
+   check covers both, so don't narrow it to the staging condition alone.
+   A log's two buffers are bounded by log_alloc_ok. *)
 Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv Pass = T ∧
   alloc_limits_stmt cenv Break = T ∧
@@ -163,7 +239,8 @@ Definition alloc_limits_stmt_def:
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
-  alloc_limits_stmt cenv (Log id es) = alloc_limits_exprs cenv es ∧
+  alloc_limits_stmt cenv (Log id es) =
+    (alloc_limits_exprs cenv es ∧ log_alloc_ok cenv id es) ∧
   alloc_limits_stmt cenv (Assert c reason) =
     (alloc_limits_expr cenv c ∧ alloc_limits_assert cenv reason) ∧
   alloc_limits_stmt cenv (Raise reason) = alloc_limits_raise cenv reason ∧
@@ -181,3 +258,43 @@ Termination
     INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
   simp[stmt_size_def, list_size_def]
 End
+
+(* ABI allocations are physical capacities, not just used byte counts. *)
+Theorem alloc_limits_abi_encode_output:
+  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) ==>
+  32 + 32 * word_size
+    (abi_size_bound ce.ce_struct_fields
+      (if LENGTH es = 1 /\ ~ensure then expr_type (HD es)
+       else TupleT (MAP expr_type es)) +
+     (case mid of NONE => 0 | SOME _ => 4)) < 2 ** 64
+Proof
+  simp[Once alloc_limits_expr_def, LET_THM]
+QED
+
+Theorem alloc_limits_abi_encode_staging:
+  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) /\
+  ~(LENGTH es = 1 /\ ~ensure) ==>
+  type_memory_bytes ce (TupleT (MAP expr_type es)) < 2 ** 64
+Proof
+  Cases_on `LENGTH es = 1 /\ ~ensure` >>
+  simp[Once alloc_limits_expr_def, LET_THM]
+QED
+
+Theorem alloc_limits_abi_decode_output:
+  alloc_limits_expr ce (TypeBuiltin t (AbiDecode unwrap) ty es) ==>
+  type_memory_bytes ce
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64
+Proof
+  simp[Once alloc_limits_expr_def]
+QED
+
+Theorem alloc_limits_abi_rounded_regressions:
+  32 + 32 * word_size (32+4) = 96 /\
+  32 + 32 * word_size (32+4) <> 68 /\
+  32 + 32 * word_size 32 = 64 /\
+  EVERY (\n. n <= 32 * word_size n) [0;1;31;32;33;36] /\
+  32 + 32 * word_size (2 ** 64 - 64) < 2 ** 64 /\
+  ~(32 + 32 * word_size (2 ** 64 - 63) < 2 ** 64)
+Proof
+  EVAL_TAC
+QED

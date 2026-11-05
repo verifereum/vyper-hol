@@ -12,5 +12,7 @@ python3 tests/sanitize_check_contract_json.py compiler-output.jsonl \
   tests/fixtures/check_contract/operator_forms.json --replace "$PWD/=./"
 ```
 
-The rejected forms can't be compiled to an AST, so their tests build the AST
-directly, in `tests/vyperCheckContractLibTestScript.sml`.
+The fixture test needs the whole contract accepted, so the forms the checker
+rejects are tested on ASTs built directly, in
+`tests/vyperCheckContractLibTestScript.sml`. Most of them Vyper rejects too;
+`<<=` and `>>=` by a signed amount it accepts.

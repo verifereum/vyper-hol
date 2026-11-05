@@ -241,6 +241,21 @@ Proof
   EVERY_CASE_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
+Theorem exec_gas_jump[local]:
+  !inst s pb cb idx.
+    exec_gas inst (s with <|vs_prev_bb := pb; vs_current_bb := cb;
+                            vs_inst_idx := idx|>) =
+    exec_result_map
+      (\s'. s' with <|vs_prev_bb := pb; vs_current_bb := cb;
+                       vs_inst_idx := idx|>)
+      (exec_gas inst s)
+Proof
+  rpt strip_tac >>
+  simp[exec_gas_def, update_var_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  EVERY_CASE_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
+QED
+
 Theorem exec_read1_jump[local]:
   !g inst s pb cb idx.
     (!v s pb cb idx. g v (s with <|vs_prev_bb := pb; vs_current_bb := cb;
@@ -327,17 +342,6 @@ Theorem make_venom_delegatecall_state_jump[local]:
     make_venom_delegatecall_state s target gas calldata code is_static
 Proof
   simp[make_venom_delegatecall_state_def, LET_THM, venom_to_tx_params_jump]
-QED
-
-Theorem make_venom_create_state_jump[local]:
-  !s new_address gas value init_code pb cb idx.
-    make_venom_create_state
-      (s with <|vs_prev_bb := pb; vs_current_bb := cb;
-                vs_inst_idx := idx|>)
-      new_address gas value init_code =
-    make_venom_create_state s new_address gas value init_code
-Proof
-  simp[make_venom_create_state_def, LET_THM, venom_to_tx_params_jump]
 QED
 
 (* Utility: case-OPTION_MAP fusion *)
@@ -429,10 +433,10 @@ Theorem exec_create_jump[local]:
       (exec_create inst s value offset sz salt_opt)
 Proof
   rpt gen_tac >>
-  simp([exec_create_def, make_venom_create_state_jump] @ ext_call_rw) >>
-  Cases_on `salt_opt` >> simp[] >>
+  simp([exec_create_def, venom_create_request_def, halt_state_def,
+        set_returndata_def] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
-  simp[instIdxIndepTheory.exec_result_map_def, update_var_jump,
+  simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
 QED
 
@@ -460,7 +464,7 @@ Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
   (simp[is_pseudo_def, is_terminator_def] >>
    simp[step_inst_base_def, exec_pure1_jump, exec_pure2_jump,
-        exec_pure3_jump, exec_alloca_jump] >>
+        exec_pure3_jump, exec_gas_jump, exec_alloca_jump] >>
    TRY (irule exec_read0_jump >> simp jmp_rw >> NO_TAC) >>
    TRY (irule exec_read1_jump >> simp jmp_rw >> NO_TAC) >>
    TRY (irule exec_write2_jump >> simp jmp_rw >> NO_TAC) >>

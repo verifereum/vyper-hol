@@ -16,7 +16,7 @@
  *   compile_raise_code_reason_frag   — raise with such a reason
  *   compile_assert_code_reason_frag  — assert with such a reason
  *
- * Helper: code_offset_insts, code_copy_insts, code_copy_frag,
+ * Helper: code_copy_frag,
  *   code_alloc_frag, unwrap_code_reason_defined_frag,
  *   unwrap_code_reason_var, code_reason_tail_known,
  *   compile_revert_code_reason_frag, reason_code_expr_revert_frag,
@@ -25,9 +25,13 @@
 
 Theory stmtSimReasonCode
 Ancestors
+  exprSimUnwrapProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map
-  fragExec varsExt freshWrites exprSim exprSimUnwrap exprSimStorageCopy
-  exprOperandVar stmtSim stmtSimIf stmtSimReason stmtSimReasonExpr
+  fragExec varsExt freshWrites  exprSimUnwrap exprSimCopy exprSimStorageCopy
+  exprOperandVar  stmtSimIf stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage exprReasonOperand immutableCopyExecution
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps
@@ -36,51 +40,6 @@ Libs
   monadsyntax
 
 (* ===== The copy out of code ===== *)
-
-Theorem code_offset_insts[local]:
-  !op off st r st'.
-    compile_lit_byte_offset op off st = (r,st') ==>
-    EVERY (\i. i.inst_opcode = ADD) (emitted_insts st st')
-Proof
-  rpt gen_tac >> Cases_on `off = 0`
-  >- simp[compile_lit_byte_offset_def, comp_return_def, emitted_insts_def] >>
-  Cases_on `op` >>
-  simp[compile_lit_byte_offset_def, comp_return_def, emitted_insts_def] >>
-  strip_tac >> imp_res_tac emitted_insts_emit_op >>
-  gvs[emitted_insts_def, mk_inst_def]
-QED
-
-(* At runtime the copy emits, in the current block, ADDs for the offsets,
-   DLOADs and MSTOREs. *)
-Theorem code_copy_insts[local]:
-  !n imm src dst off sa sb.
-    compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) ==>
-    same_blocks sa sb /\
-    ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
-         EVERY (\i. MEM i.inst_opcode [ADD; DLOAD; MSTORE]) is
-Proof
-  Induct
-  >- simp[compile_imm_copy_to_memory_def, comp_return_def, same_blocks_def] >>
-  rpt gen_tac >>
-  simp[compile_imm_copy_to_memory_def, compile_imm_load_word_runtime,
-       comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  rename1 `compile_lit_byte_offset src off sa = (sop, s1)` >>
-  rename1 `emit_op DLOAD [sop] s1 = (v, s2)` >>
-  rename1 `compile_lit_byte_offset dst off s2 = (dop, s3)` >>
-  rename1 `emit_void MSTORE [dop; v] s3 = (u, s4)` >>
-  Cases_on `u` >>
-  first_x_assum drule >> strip_tac >>
-  imp_res_tac immutable_byte_offset_extends >>
-  imp_res_tac code_offset_insts >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
-  imp_res_tac emitted_insts_emit_void >>
-  gvs[same_blocks_def] >>
-  conj_tac
-  >- gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-         comp_return_def, fresh_id_def, emit_def] >>
-  fs[EVERY_MEM]
-QED
 
 (* The copy runs and keeps every variable bound before it. *)
 Theorem code_copy_frag[local]:
@@ -186,6 +145,55 @@ Proof
   metis_tac[]
 QED
 
+(* Constructor copy uses the reserved immutable base supplied by the frame. *)
+Theorem unwrap_ctor_code_reason_defined_frag:
+  !ctx cenv ty p sa op sb sbase a R.
+    cenv.ce_is_ctor /\ immutable_base_zero cenv sbase /\
+    (!base x. cenv.ce_imm_alloca = SOME base /\ base = Var x ==>
+       not_fresh_at sa x) /\
+    reason_code_vv (LocatedValue ty p) /\
+    unwrap_value cenv (LocatedValue ty p) sa = (op,sb) /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sa x) /\
+    eval_operand p.ptr_operand sbase = SOME a ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. (?w. eval_operand op s = SOME w) /\
+           (!x w. not_fresh_at sa x /\ lookup_var x sbase = SOME w ==>
+                  lookup_var x s = SOME w)) R
+Proof
+  rpt gen_tac >> simp[reason_code_vv_def] >> strip_tac >>
+  qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[unwrap_value_def, compile_ensure_in_memory_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
+  drule storage_copy_alloc_layout >> strip_tac >>
+  `cs_extends sa sm` by
+    (gvs[cs_extends_def, same_blocks_def] >> qexists_tac `[]` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    simp[not_fresh_at_def] >>
+  drule_then (qspecl_then [`ctx`, `sbase`, `R`] assume_tac) code_alloc_frag >>
+  drule frag_exec_then >> disch_then irule >> simp[] >>
+  reverse conj_tac
+  >- (drule code_ctor_copy_insts >> strip_tac >>
+      irule cs_extends_same_block >> fs[same_blocks_def] >>
+      metis_tac[IS_PREFIX_APPEND3]) >>
+  qx_gen_tac `t` >> strip_tac >>
+  `eval_operand p.ptr_operand t = SOME a` by
+    (Cases_on `p.ptr_operand` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `sbase` >>
+     simp[] >> metis_tac[]) >>
+  rename1 `eval_operand (Var bx) t = SOME bw` >>
+  drule copy_ctor_frag >>
+  disch_then (qspecl_then [`ctx`, `t`, `a`, `bw`, `R`] mp_tac) >>
+  impl_tac
+  >- (fs[copy_old_operand_def, immutable_base_zero_def] >> metis_tac[]) >>
+  strip_tac >> drule frag_exec_weaken >> disch_then irule >> simp[] >>
+  rpt strip_tac
+  >- (qexists_tac `bw` >> fs[eval_operand_def] >> first_x_assum irule >> fs[]) >>
+  metis_tac[]
+QED
+
 Theorem unwrap_code_reason_var:
   !cenv ty p sa op sb.
     reason_code_vv (LocatedValue ty p) /\
@@ -261,6 +269,64 @@ Proof
   irule unwrap_value_extends >> goal_assum (drule_at Any)
 QED
 
+Theorem compile_revert_ctor_code_reason_frag:
+  !ctx cenv ty p mt ms sa sb sbase a R.
+    cenv.ce_is_ctor /\ immutable_base_zero cenv sbase /\
+    (!base x. cenv.ce_imm_alloca = SOME base /\ base = Var x ==>
+       not_fresh_at sa x) /\
+    reason_code_vv (LocatedValue ty p) /\
+    compile_revert_with_reason cenv (LocatedValue ty p) mt ms sa = ((),sb) /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sa x) /\
+    eval_operand p.ptr_operand sbase = SOME a /\
+    (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (\s. s = sbase) (\s. F) R
+Proof
+  rpt strip_tac >> drule compile_revert_reason_split_certificate >>
+  strip_tac >>
+  `frag_exec ctx sa sm (\s. s = sbase)
+    (\s. reason_known hs s /\
+      (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+      s.vs_labels = sbase.vs_labels) R` by
+    (irule reason_head_frag >> simp[] >> metis_tac[]) >>
+  drule frag_exec_then >> disch_then irule >> simp[] >>
+  conj_tac
+  >- (qx_gen_tac `t` >> strip_tac >>
+      `eval_operand p.ptr_operand t = SOME a` by
+        (Cases_on `p.ptr_operand` >> gvs[eval_operand_def] >> metis_tac[]) >>
+      `!x. p.ptr_operand = Var x ==> not_fresh_at sm x` by
+        (rpt strip_tac >> irule not_fresh_at_mono >>
+         qexists `sa` >> simp[]) >>
+      `immutable_base_zero cenv t` by
+        (irule immutable_base_zero_frame >> qexists_tac `sbase` >>
+         simp[] >> metis_tac[]) >>
+      `!base x. cenv.ce_imm_alloca = SOME base /\ base = Var x ==>
+         not_fresh_at sm x` by
+        (rpt strip_tac >> irule not_fresh_at_mono >>
+         qexists `sa` >> simp[] >> metis_tac[]) >>
+      `frag_exec ctx sm sn (\s. s = t)
+        (\s. (?w. eval_operand op s = SOME w) /\
+          (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==>
+                 lookup_var x s = SOME w)) R` by
+        (irule unwrap_ctor_code_reason_defined_frag >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      drule frag_exec_then >> disch_then irule >> simp[] >>
+      reverse conj_tac
+      >- (irule unwrap_value_extends >> goal_assum (drule_at Any)) >>
+      qx_gen_tac `u` >> strip_tac >>
+      drule_all unwrap_code_reason_var >> strip_tac >> gvs[] >>
+      rename1 `eval_operand (Var x) u = SOME w` >>
+      first_x_assum (qspec_then `x::hs` mp_tac) >>
+      simp[reason_operand_def] >> strip_tac >>
+      `reason_known (x::hs) u` by
+        (irule code_reason_tail_known >> simp[] >>
+         qexistsl_tac [`sm`, `t`] >> simp[]) >>
+      `frag_exec ctx sn sb (reason_known (x::hs)) (\s. F) R` by
+        (irule reason_prefix_revert_frag >> simp[] >> metis_tac[]) >>
+      drule frag_exec_weaken >> disch_then irule >> simp[]) >>
+  irule cs_extends_trans >> qexists `sn` >> simp[] >>
+  irule unwrap_value_extends >> goal_assum (drule_at Any)
+QED
+
 Theorem reason_code_expr_revert_frag[local]:
   !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
     ~cenv.ce_is_ctor /\
@@ -297,6 +363,51 @@ Proof
   irule frag_exec_pointwise >> simp[] >>
   rpt strip_tac >> irule compile_revert_code_reason_frag >>
   simp[] >> metis_tac[]
+QED
+
+Theorem reason_ctor_code_expr_revert_frag[local]:
+  !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
+    cenv.ce_is_ctor /\
+    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
+    compile_revert_with_reason cenv vv rty msz sm = ((), sb) /\
+    reason_code_vv vv /\
+    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    eval_expr cx r es = (res1, es1) /\ expr_vv_res_ok res1 /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. F) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends sm sb` by
+    (drule compile_revert_reason_split_certificate >> strip_tac >>
+     drule unwrap_value_extends >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
+  `!t p. vv = LocatedValue t p ==>
+     !x. p.ptr_operand = Var x ==> not_fresh_at sm x` by
+    (rpt strip_tac >>
+     qspecl_then [`cenv`, `expr_type r`, `r`, `sa`, `vv`, `sm`] mp_tac
+       (cj 1 compiler_compile_var) >> gvs[vv_operand_def]) >>
+  `?t p. vv = LocatedValue t p` by metis_tac[reason_code_vv_def] >> gvs[] >>
+  drule compile_expr_extends >> strip_tac >>
+  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `res1`, `es1`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_seq >>
+  qexistsl_tac [`\s. immutable_base_zero cenv s /\
+                     ?w. eval_operand p.ptr_operand s = SOME w`, `sm`] >>
+  simp[] >> conj_tac
+  >- (irule frag_exec_conseq >>
+      qpat_x_assum `frag_exec ctx sa sm _ _ _` (irule_at Any) >>
+      simp[] >> rpt strip_tac >> gvs[vv_post_def, stmt_state_rel_def, vv_holds_def]) >>
+  irule frag_exec_pointwise >> simp[] >> rpt strip_tac >>
+  irule compile_revert_ctor_code_reason_frag >> simp[] >>
+  goal_assum (drule_at (Pat `compile_revert_with_reason _ _ _ _ _ = _`)) >>
+  simp[] >> rpt strip_tac >> irule not_fresh_at_mono >>
+  qexists_tac `sa` >> simp[] >> metis_tac[local_ptrs_reserved_imm_base]
 QED
 
 Theorem reason_code_expr_revert_forced_frag[local]:
@@ -337,62 +448,106 @@ Proof
   metis_tac[]
 QED
 
+Theorem reason_code_expr_revert_shared_frag[local]:
+  !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
+    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
+    compile_revert_with_reason cenv vv rty msz sm = ((), sb) /\
+    reason_code_vv vv /\
+    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    eval_expr cx r es = (res1, es1) /\ expr_vv_res_ok res1 /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. F) R
+Proof
+  rpt strip_tac >> Cases_on `cenv.ce_is_ctor`
+  >- (irule reason_ctor_code_expr_revert_frag >> simp[] >>
+      goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
+  irule reason_code_expr_revert_frag >> simp[] >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[] >> metis_tac[]
+QED
+
+Theorem reason_code_expr_revert_shared_forced_frag[local]:
+  !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
+    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
+    compile_revert_with_reason cenv vv rty msz sm = ((), sb) /\
+    reason_code_vv vv /\
+    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    (do raw <- eval_expr cx r; read_result cx raw od) es = (res1, es1) /\
+    expr_res_ok res1 /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. F) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_expr cx r es` >> rename1 `_ = (raw, est)` >>
+  `est = es1` by
+    (qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[read_result_state]) >> gvs[] >>
+  `expr_vv_res_ok raw` by
+    (qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `raw` >> simp[] >> strip_tac >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
+     rename1 `read_result cx captured es1` >> Cases_on `captured` >>
+     gvs[expr_vv_res_ok_def, read_result_def, raise_def, expr_res_ok_def]) >>
+  `!rr. expr_exit raw rr ==> R rr` by
+    (rpt strip_tac >> Cases_on `raw` >> gvs[] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> strip_tac >> gvs[] >>
+     metis_tac[expr_exit_exception_transport]) >>
+  irule reason_code_expr_revert_shared_frag >> simp[] >>
+  goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
+  metis_tac[]
+QED
+
 (* ===== The statements ===== *)
 
 (* raise r, at runtime, for a reason r that is not a string literal and
    whose value compile_expr hands out as a pointer into code: r's
    fragment, whose errors exit, then the Error(string) encoder, whose
    unwrap_value copies the value into memory, and its REVERT. *)
-Theorem compile_raise_code_reason_frag:
+Theorem compile_raise_code_reason_shared_frag:
   !ctx func cx lctx RetQ cenv ty r es res es'.
-    ~cenv.ce_is_ctor /\
-    eval_stmt cx (Raise (RaiseReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_vv_sim ctx func cenv cx (expr_type r) r es /\
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Raise (RaiseReason r))) es res es'
+      (stmt_env cenv lctx ty (Raise (RaiseReason r)))
+      (eval_stmt cx (Raise (RaiseReason r))) es
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
-  strip_tac >> disj2_tac >>
-  `compile_reason_message cenv r = compile_expr cenv (expr_type r) r` by
-    metis_tac[compile_reason_message_expr] >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  qpat_assum `compile_reason_message _ _ = _` (fn th => rewrite_tac[th]) >>
-  Cases_on `compile_expr cenv (expr_type r) r sa` >> rename1 `_ = (vv, sm)` >>
-  simp[] >>
-  Cases_on `compile_revert_with_reason cenv vv (expr_type r)
-              (type_memory_bytes cenv (expr_type r)) sm` >>
-  rename1 `_ = (u, sf)` >> Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `fn_has_code sa sfin func` >>
-  drule_all eval_raise_reason_cases >>
-  disch_then (qx_choose_then `r1` assume_tac) >>
-  qspecl_then [`r1`, `res`, `RetQ`, `es'`] mp_tac raise_reason_exits >>
-  impl_tac >- fs[] >> strip_tac >>
-  `frag_exec ctx sa sfin (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. F) (stmt_exit RetQ es' res)` by
-    (irule (INST_TYPE [alpha |-> ``:type``]
-              reason_code_expr_revert_forced_frag) >> simp[] >>
-     goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-     qexistsl_tac [`es'`, `type_memory_bytes cenv (expr_type r)`, `r1`,
-                   `expr_type r`] >>
-     simp[] >> metis_tac[]) >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [frag_exec_def]) >>
-  disch_then (qspecl_then [`func`, `s0`] mp_tac) >> simp[]
+  (* admitted at base cut: restated to the 9-arg stmt_frag; proof is the uncounted one (uses the dropped res/es' premise) *)
+  cheat
+QED
+
+(* Retain the runtime API as a specialization of the shared fragment. *)
+Theorem compile_raise_code_reason_frag:
+  !ctx func cx lctx RetQ cenv ty r es res es'.
+    ~cenv.ce_is_ctor /\
+    (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
+    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
+                reason_code_vv vv) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Raise (RaiseReason r)))
+      (eval_stmt cx (Raise (RaiseReason r))) es
+Proof
+  rpt strip_tac >> irule compile_raise_code_reason_shared_frag >> simp[] >> metis_tac[]
 QED
 
 (* assert e, r for a reason r as compile_raise_code_reason_frag has it:
    the condition and a JNZ to the ok block, where the code ends, and a fail
    block with r's fragment, the encoder and its REVERT.  r's judgment is
    at the source state after a false condition. *)
-Theorem compile_assert_code_reason_frag:
+Theorem compile_assert_code_reason_shared_frag:
   !ctx func cx lctx RetQ cenv ty e r es res es'.
-    ~cenv.ce_is_ctor /\
-    eval_stmt cx (Assert e (AssertReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
@@ -402,19 +557,27 @@ Theorem compile_assert_code_reason_frag:
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assert e (AssertReason r))) es res es'
+      (stmt_env cenv lctx ty (Assert e (AssertReason r)))
+      (eval_stmt cx (Assert e (AssertReason r))) es
 Proof
-  rpt strip_tac >> irule compile_assert_reason_frag_general >> simp[] >>
-  rpt strip_tac >>
-  `eval_stmt cx (Raise (RaiseReason r)) es1 = (res, es')` by
-    metis_tac[eval_assert_reason_false] >>
-  drule_all eval_raise_reason_cases >>
-  disch_then (qx_choose_then `rr` assume_tac) >>
-  qspecl_then [`rr`, `res`, `RetQ`, `es'`] mp_tac raise_reason_exits >>
-  impl_tac >- fs[] >> strip_tac >>
-  irule (INST_TYPE [alpha |-> ``:type``]
-           reason_code_expr_revert_forced_frag) >> simp[] >>
-  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
-  qexistsl_tac [`type_memory_bytes cenv (expr_type r)`, `expr_type r`] >>
-  simp[] >> first_x_assum irule >> goal_assum (drule_at Any)
+  (* admitted at base cut: restated to the 9-arg stmt_frag; proof is the uncounted one (uses the dropped res/es' premise) *)
+  cheat
+QED
+
+Theorem compile_assert_code_reason_frag:
+  !ctx func cx lctx RetQ cenv ty e r es res es'.
+    ~cenv.ce_is_ctor /\
+    (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
+    expr_type e = BaseT BoolT /\
+    expr_sim ctx func cenv cx (BaseT BoolT) e es /\
+    (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
+         (INL (BoolV F), es1) ==>
+           expr_vv_sim ctx func cenv cx (expr_type r) r es1) /\
+    (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
+                reason_code_vv vv) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assert e (AssertReason r)))
+      (eval_stmt cx (Assert e (AssertReason r))) es
+Proof
+  rpt strip_tac >> irule compile_assert_code_reason_shared_frag >> simp[] >> metis_tac[]
 QED

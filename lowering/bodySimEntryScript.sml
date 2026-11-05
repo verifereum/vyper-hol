@@ -25,6 +25,70 @@ Ancestors
 Libs
   monadsyntax
 
+(* Rebuilding an internal callee's environment uses the same checked
+   module metadata as its caller. *)
+Theorem body_inv_build_internal_env:
+  body_inv tops ctx caller cx ==>
+  body_inv tops ctx
+    ((build_compile_env tops Internal mut fname args ret stmts use_trans)
+       with <| ce_target := caller.ce_target;
+               ce_is_ctor := caller.ce_is_ctor |>) cx
+Proof
+  rw[body_inv_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_register_positional_args_body_inv:
+  !args cenv off st cenv' st'.
+    body_inv tops ctx cenv cx /\
+    compile_register_positional_args cenv args off st = (cenv',st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  Induct >- simp[compile_register_positional_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once compile_register_positional_args_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[body_inv_def] >> metis_tac[]
+QED
+
+Theorem materialize_internal_params_body_inv[local]:
+  !caps cenv st cenv' st'.
+    body_inv tops ctx cenv cx /\
+    materialize_internal_params cenv caps st = (cenv',st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  Induct >- simp[materialize_internal_params_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
+  Cases_on `h1` >> simp[LET_THM] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[body_inv_def] >> metis_tac[]
+QED
+
+Theorem compile_internal_prologue_body_inv:
+  !cenv params has_rb ret_type st cenv' rpc st'.
+    body_inv tops ctx cenv cx /\
+    compile_internal_prologue cenv params has_rb ret_type st =
+      ((cenv',rpc),st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  rpt gen_tac >>
+  simp[compile_internal_prologue_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[] >>
+  drule_at (Pat `materialize_internal_params _ _ _ = _`)
+    materialize_internal_params_body_inv >>
+  disch_then (qspecl_then [`tops`, `cx`, `ctx`] mp_tac) >>
+  (impl_tac >- (gvs[body_inv_def] >> metis_tac[])) >> simp[]
+QED
+
 (* A compile env that binds only parameters, with a type environment that
    has the parameters. *)
 Theorem ce_locals_declared_params:
@@ -37,7 +101,7 @@ Proof
   rw[ce_locals_declared_def] >> metis_tac[]
 QED
 
-Theorem build_compile_env_bound[local]:
+Theorem build_compile_env_bound:
   !tops vis mut fname args ret body use_trans n l.
     FLOOKUP (build_compile_env tops vis mut fname args ret body
                use_trans).ce_vars n = SOME l ==>
@@ -57,7 +121,7 @@ fun register_args_bound_tac def =
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum drule_all >> simp[FLOOKUP_UPDATE] >> rw[] >> gvs[];
 
-Theorem compile_register_positional_args_bound[local]:
+Theorem compile_register_positional_args_bound:
   !args cenv off st cenv' st' n l.
     compile_register_positional_args cenv args off st = (cenv', st') /\
     FLOOKUP cenv'.ce_vars n = SOME l ==>

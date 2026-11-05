@@ -14,7 +14,7 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperEvent vyperTypeSystem vyperTypeCallGraph
+  vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries
 Libs
   wordsLib
 
@@ -26,7 +26,8 @@ Datatype:
     cta_bare_globals             : (nsid |-> type);
     cta_bare_global_assignable   : (nsid |-> type);
     cta_toplevel_vtypes          : (nsid |-> value_type);
-    cta_flag_members             : (nsid |-> string list)
+    cta_flag_members    : (nsid |-> string list);
+    cta_event_fields    : (nsid |-> ((string # type) # bool) list)
   |>
 End
 
@@ -36,7 +37,8 @@ Definition empty_contract_type_artifact_def:
        cta_bare_globals := FEMPTY;
        cta_bare_global_assignable := FEMPTY;
        cta_toplevel_vtypes := FEMPTY;
-       cta_flag_members := FEMPTY |>
+       cta_flag_members := FEMPTY;
+       cta_event_fields := FEMPTY |>
 End
 
 Definition artifact_env_def:
@@ -49,12 +51,17 @@ Definition artifact_env_def:
        toplevel_vtypes := art.cta_toplevel_vtypes;
        type_defs := type_env_all_modules mods;
        fn_sigs := art.cta_fn_sigs;
-       flag_members := art.cta_flag_members |>
+       flag_members := art.cta_flag_members;
+       event_fields := art.cta_event_fields |>
 End
 
+(* Vyper rejects writes to the arguments of external and deploy functions
+   ("Cannot write to calldata", _handle_modification in
+   vyper/semantics/analysis/local.py); internal-function arguments are
+   writable. *)
 Definition function_entry_env_def:
-  function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env id ty T)
+  function_entry_env art mods src vis args =
+    FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
       (artifact_env art mods src) args
 End
 
@@ -85,7 +92,7 @@ Definition add_toplevel_static_maps_def:
         art with <| cta_bare_globals updated_by
                     (flip FUPDATE ((src,id), typ));
                     cta_bare_global_assignable updated_by
-                    (flip FUPDATE ((src,id), typ));
+                    (if in_deploy then flip FUPDATE ((src,id), typ) else I);
                     cta_toplevel_vtypes updated_by
                     (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>
@@ -102,6 +109,9 @@ Definition add_toplevel_static_maps_def:
     | HashMapDecl _ _ id kt vt _ =>
         art with cta_toplevel_vtypes updated_by
           (flip FUPDATE ((src,id), HashMapT kt vt))
+    | EventDecl id fields =>
+        art with cta_event_fields updated_by
+          (flip FUPDATE ((src,id), fields))
     | FlagDecl fid members =>
         art with cta_flag_members updated_by
           (flip FUPDATE ((src,fid), members))
@@ -150,8 +160,26 @@ Definition type_def_keys_toplevel_def:
   type_def_keys_toplevel _ _ = []
 End
 
+Definition event_keys_toplevel_def:
+  event_keys_toplevel src (EventDecl id fields) = [(src,id)] /\
+  event_keys_toplevel _ _ = []
+End
+
 Definition contract_keys_def:
   contract_keys f mods = FLAT (MAP (\(src,tls). FLAT (MAP (f src) tls)) mods)
+End
+
+(* Names are collected once per declaration: default-argument prefixes are
+   distinct signatures of the same external function. Include the fallback
+   name here even though it has no selector. *)
+Definition external_name_keys_toplevel_def:
+  external_name_keys_toplevel src
+    (FunctionDecl External _ _ _ name _ _ _ _) = [(src,name)] /\
+  external_name_keys_toplevel src (VariableDecl (Public nr) _ name _ _) =
+    [(src,name)] /\
+  external_name_keys_toplevel src (HashMapDecl (Public nr) _ name _ _ _) =
+    [(src,name)] /\
+  external_name_keys_toplevel _ _ = []
 End
 
 Definition contract_namespaces_ok_def:
@@ -161,7 +189,11 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys error_sig_keys_toplevel mods) /\
-    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)
+    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys event_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
+    EVERY (\(src,tls).
+      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
 End
 
 Definition custom_error_resolved_def:
@@ -858,6 +890,29 @@ Termination
   simp[value_type_size_def]
 End
 
+(* Header checks apply in both checking modes, including constructors whose
+   bodies are checked only in deployment mode. *)
+Definition function_header_ok_def:
+  function_header_ok vis (mut : function_mutability) (nr : bool) rr
+      (name : identifier) (args : argument list)
+      (dflts : expr list) ret <=>
+    (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
+    (* Constructor code returns the deployed runtime, not an ABI value. *)
+    (vis = Deploy ==> NULL dflts /\ ret = NoneT) /\
+    (* The source treats Pure as a read-only guard, while the compiler's
+       guard packaging uses mut = View. Reject the explicit invalid header;
+       the pragma frontend already leaves pure functions unguarded. *)
+    (mut = Pure ==> ~nr) /\
+    (* The fallback has no ABI argument-decoding entry block. *)
+    (vis = External /\ name = "__default__" ==> NULL args)
+End
+
+Definition event_indexable_type_def:
+  event_indexable_type (BaseT _) = T /\
+  event_indexable_type (FlagT _) = T /\
+  event_indexable_type _ = F
+End
+
 Definition check_toplevel_decl_def:
   check_toplevel_decl mods art src tl =
     let tenv = type_env_all_modules mods in
@@ -867,11 +922,11 @@ Definition check_toplevel_decl_def:
         assignable_type tenv typ
     | VariableDecl _ Transient id typ _ =>
         assignable_type tenv typ
-    | VariableDecl _ Immutable id typ _ =>
-        assignable_type tenv typ
-    | VariableDecl _ (Constant e) id typ _ =>
-        assignable_type tenv typ /\ well_typed_expr env e /\ expr_type e = typ /\
-        constant_expr mods e
+    | VariableDecl vis Immutable id typ _ =>
+        vis <> Public T /\ assignable_type tenv typ
+    | VariableDecl vis (Constant e) id typ _ =>
+        vis <> Public T /\ assignable_type tenv typ /\
+        well_typed_expr env e /\ expr_type e = typ /\ constant_expr mods e
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
@@ -882,30 +937,29 @@ Definition check_toplevel_decl_def:
         EVERY (\(fn,args,ret,mut).
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
-        EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
+        EVERY (\((_,ty),indexed). assignable_type tenv ty /\
+                                  (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
-    | FunctionDecl vis mut nr _ _ args dflts ret body =>
+    | FunctionDecl vis mut nr rr name args dflts ret body =>
         params_ok tenv args /\ well_formed_type tenv ret /\
-        (* Vyper: "Constructor may not use default arguments" *)
-        (vis = Deploy ==> dflts = []) /\
+        function_header_ok vis mut nr rr name args dflts ret /\
         function_mutability_ok mods vis mut nr dflts body
 End
 
 (* ===== Callable-body checks ===== *)
 
 Definition check_function_body_def:
-  check_function_body layouts addr mods art src mut nr args dflts ret body =
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body =
     let tenv = type_env_all_modules mods in
-    let env = function_entry_env art mods src args in
+    let env = function_entry_env art mods src vis args in
       params_ok tenv args /\
-      (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
+      (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
       custom_errors_stmts_ok mods body /\
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
-      EVERY (runtime_constant_expr mods) dflts /\
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
@@ -920,7 +974,13 @@ Definition check_toplevel_body_def:
     | FunctionDecl vis mut nr _ fn args dflts ret body =>
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
-        check_function_body layouts addr mods art src mut nr args dflts ret body
+        check_function_body layouts addr mods art src vis mut nr args dflts ret body
+    | VariableDecl (Public nr) _ fn _ _ =>
+        function_live layouts addr mods live (src,fn) ==>
+        (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
+    | HashMapDecl (Public nr) _ fn _ _ _ =>
+        function_live layouts addr mods live (src,fn) ==>
+        (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
     | _ => T
 End
 
@@ -985,4 +1045,42 @@ Proof
   simp[check_module_def, EVERY_MEM] >> strip_tac >>
   qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
   simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_function_header:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
+  function_header_ok vis mut nr rr name args dflts ret
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_external_method_ids_distinct:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods ==>
+  ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)
+Proof
+  rw[check_contract_def, contract_namespaces_ok_def, EVERY_MEM,
+     FORALL_PROD] >> metis_tac[]
+QED
+
+Theorem check_contract_external_names_distinct:
+  check_contract in_deploy layouts addr mods = SOME art ==>
+  ALL_DISTINCT (contract_keys external_name_keys_toplevel mods)
+Proof
+  rw[check_contract_def, contract_namespaces_ok_def]
+QED
+
+Theorem function_header_nonreentrant_view:
+  function_header_ok vis mut T rr name args dflts ret ==>
+  (mut = View \/ mut = Pure <=> mut = View)
+Proof
+  Cases_on `mut` >> simp[function_header_ok_def]
 QED

@@ -185,10 +185,11 @@ Proof
     comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
-  imp_res_tac abi_decoder_operand_live_emit >> gvs[] >>
-  FIRST [first_assum ACCEPT_TAC,
-    irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var + 2` >>
-    conj_tac >- decide_tac >> first_assum ACCEPT_TAC]
+  imp_res_tac abi_decoder_operand_live_emit >>
+  (conj_tac >- decide_tac)
+  >- first_assum ACCEPT_TAC >>
+  irule abi_decoder_operand_live_mono >>
+  goal_assum (drule_at Any) >> decide_tac
 QED
 
 Definition abi_decode_array_source_setup_def:

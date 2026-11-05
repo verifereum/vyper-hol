@@ -3,3 +3,5 @@ ctor_arg_local_array
 ctor_local_across_call
 ctor_for_range
 ctor_arg_ifelse_local
+ctor_bare_return
+ctor_immutable_early_return

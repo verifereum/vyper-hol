@@ -1,29 +1,60 @@
 (*
- * Simplify CFG Pass — Correctness Proof (cheated)
+ * Simplify CFG Pass — Correctness Proof
  *
- * Proves: block merging, trivial jump bypass, and unreachable block
- * removal preserve execution semantics.
- * Key insight: merged blocks execute the same instruction sequence;
- * bypassed trivial jumps are no-ops; unreachable blocks never execute.
+ * Block merging, trivial jump bypass, unreachable block removal and PHI
+ * fixup preserve a function's runs from its entry, and every state the
+ * output reaches corresponds to one the input reaches, away from
+ * revert-forward pairs too.
  *)
 
 Theory simplifyCfgProof
 Ancestors
-  simplifyCfgDefs stateEquiv venomExecSemantics
+  simplifyCfgDefs o1PassLift unitShapeDefs venomWf
+  simplifyCfgRoundSemantics simplifyCfgStaticInterface simplifyCfgSimTools
+  simplifyCfgShapeCore
 
-(* Simplify CFG preserves execution semantics at the function level.
- * Since block merging reduces block count, the transformed function
- * may need less fuel. We existentially quantify: for any fuel where
- * the original terminates, there exists sufficient fuel for the
- * transformed function to produce an equivalent result. *)
+(* Merged blocks need less fuel, so the fuel is existential each way.
+   fn_shape_ok bans DJMP and keeps labels out of every terminator operand
+   but a jump target, so a terminator merged away (one distinct successor)
+   could neither fail nor halt. *)
 Theorem simplify_cfg_fn_correct:
-  !func s fuel ctx.
-    wf_function func ==>
-    let func' = simplify_cfg_fn func in
-    ?fuel'.
-      result_equiv {}
-        (run_blocks fuel ctx func s)
-        (run_blocks fuel' ctx func' s)
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  fn_bisim fn (simplify_cfg_fn fn)
+Proof
+  strip_tac >>
+  qspecl_then [`LENGTH fn.fn_blocks`, `fn`] mp_tac scfg_iter_contract >>
+  simp[scfg_static_def, fn_shape_ok_scfg_shape, simplify_cfg_fn_def,
+       simplify_cfg_fn_with_labels_def]
+QED
+
+(* Every state the output reaches in C' (including on runs that later
+   fail) corresponds to one the input reaches in C from the same entry
+   state; C and C' run each function alike. *)
+Theorem simplify_cfg_frame_sim:
+  ctx_bisim C C' /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  frame_sim L C C' fn (simplify_cfg_fn fn)
+Proof
+  strip_tac >> irule frame_sim_trans >> qexistsl_tac [`C'`, `fn`] >>
+  simp[frame_sim_ctx_bisim] >>
+  qspecl_then [`LENGTH fn.fn_blocks`, `fn`] mp_tac scfg_iter_contract >>
+  simp[scfg_static_def, fn_shape_ok_scfg_shape, simplify_cfg_fn_def,
+       simplify_cfg_fn_with_labels_def]
+QED
+
+(* A target state that touches memory outside a revert-forward pair
+   (RETURNDATACOPY [p; 0; rds] then REVERT [p; rds]) corresponds to a source
+   state outside one too.  The pass never separates the two instructions of
+   a pair: both sit in one block, REVERT ends it, and merging only puts a
+   predecessor's non-terminators in front.  Merging can create a pair,
+   which the statement allows. *)
+Theorem simplify_cfg_frame_sim_rf:
+  ctx_bisim C C' /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  frame_sim_rf L C C' fn (simplify_cfg_fn fn)
 Proof
   cheat
 QED

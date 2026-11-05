@@ -28,22 +28,24 @@
  *     whose return may release a transient nonreentrant lock
  *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
- *   lower_vyper_runtime_unit_run_mem_safe -- S3's memory-safe run (planned
- *     admission, Milestone 5)
- *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5), from the run
- *     through mem_safe_raw_unit_memory_ok
+ *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
+ *     has no PARAM, no function has its FMP convention set
+ *   lower_vyper_runtime_unit_fn_ptr_ok -- the lowered functions and their
+ *     reachable parts are pointer-confined (fn_ptr_ok)
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
+ *     every use is written on every path to it
+ *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S3 is proved from the admitted memory-safe run
- *   lower_vyper_runtime_unit_run_mem_safe, so it is NOT yet a proved
- *   correctness certificate.
+ * STATUS: S2 and S2b are proved.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
 
 Theory vyperLoweringCorrect
 Ancestors
-  vyperCompiler
+  vyperCompiler gasSummary
+  ptrOkCheck
   selectorDispatch
   moduleLoweringProps
   stmtLoweringProps
@@ -58,9 +60,10 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs
-  fragExec loweringHalt loweringShapeProps retAbiPlanProps
+  unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
+  fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
+  supportedNames ptrSafeRun
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -127,14 +130,13 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_prev_hashes = tx.block_hashes /\
-    (!n. vs.vs_block_ctx.bc_blockhash n =
-         let idx = tx.block_number - n - 1 in
-         if n < tx.block_number /\ tx.block_number - 256 <= n /\
-            idx < LENGTH tx.block_hashes
-         then EL idx tx.block_hashes else 0w)
+    ~tx.is_static /\
+    vs.vs_prev_hashes = tx.block_hashes
 End
 
+(* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
+   is stated here too so the transaction premises read in one place, not as
+   a separate assumption. *)
 Definition initial_venom_state_rel_def:
   initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\
@@ -145,6 +147,7 @@ Definition initial_venom_state_rel_def:
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
     vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions /\
     immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
@@ -183,8 +186,9 @@ Definition external_call_result_rel_def:
     let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
     case (res, vres) of
       (INL v, Halt ss) =>
-        return_bytes tops ret v ss.vs_returndata /\
-        accounts_agree cx am'.accounts ss.vs_accounts /\
+        tx_return_bytes tops ret tx v ss.vs_returndata /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
@@ -197,11 +201,26 @@ Definition external_call_result_rel_def:
     | _ => F
 End
 
+(* The source call at gas observations gobs either fails with an
+   exempt error or relates to a run of the lowered unit.  The lowered
+   run reads GAS from vs.vs_gas_readings, so the source call that
+   matches it reads the observations the run's GAS reads produce. *)
+Definition source_unit_execution_correct_at_def:
+  source_unit_execution_correct_at gobs tops ret am tx unit vs <=>
+    source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) \/
+    ?fuel. external_call_result_rel tops ret tx
+             (call_external (SOME vs.vs_outcomes) gobs am tx)
+             (run_context fuel unit.cu_context vs)
+End
+
+(* The observations are those some of the run's GAS reads produce
+   (gas_explicit), so a lowered unit cannot pass with readings of its own
+   choosing. *)
 Definition source_unit_execution_correct_def:
   source_unit_execution_correct tops ret am tx unit vs <=>
-    ?fuel. external_call_result_rel tops ret tx
-             (call_external (SOME vs.vs_outcomes) [] am tx)
-             (run_context fuel unit.cu_context vs)
+    ?marks. source_unit_execution_correct_at
+              (gas_explicit marks vs.vs_gas_readings)
+              tops ret am tx unit vs
 End
 
 (* ===== S1 halt bridge (#640) ===== *)
@@ -240,6 +259,7 @@ QED
 Theorem external_return_prim_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -258,6 +278,8 @@ Theorem external_return_prim_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
     return_bytes_prim_value >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
@@ -269,13 +291,14 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def]
 QED
 
 (* Its case for the values word_value covers, whose word is val_to_w256. *)
 Theorem external_return_word_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -307,9 +330,11 @@ QED
 Theorem external_return_none_unlock_result_rel:
   !ctx cenv lctx ty st x st' nr nkey ut iv func cx es es' tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
@@ -322,6 +347,8 @@ Theorem external_return_none_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -329,7 +356,7 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def]
 QED
 
 (* Falling off the end of a function without a return type: from the end
@@ -337,6 +364,7 @@ QED
 Theorem external_fallthrough_unlock_result_rel:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es es' tops tx srcs
      exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
@@ -355,6 +383,8 @@ Theorem external_fallthrough_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`] mp_tac
     compile_guarded_body_stop_unlock_frag >>
@@ -363,13 +393,14 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def]
 QED
 
 (* The same four with no release (nr ==> iv). *)
 Theorem external_return_prim_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -398,6 +429,7 @@ QED
 Theorem external_return_word_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -426,9 +458,11 @@ QED
 Theorem external_return_none_result_rel:
   !ctx cenv lctx ty st x st' nr nkey ut iv func cx es tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s)
@@ -451,6 +485,7 @@ QED
 Theorem external_fallthrough_result_rel:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr ==> iv) /\
@@ -485,6 +520,7 @@ QED
 Theorem external_return_static_unlock_result_rel:
   !ctx op m msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
@@ -505,6 +541,8 @@ Theorem external_return_static_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -516,13 +554,14 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def]
 QED
 
 (* Its case with no release (nr ==> iv). *)
 Theorem external_return_static_result_rel:
   !ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
@@ -558,6 +597,7 @@ QED
 Theorem external_return_static_cenv_unlock_result_rel:
   !ctx op m nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
@@ -597,6 +637,7 @@ QED
 Theorem external_return_static_cenv_result_rel:
   !ctx op m nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
@@ -721,6 +762,7 @@ QED
 Theorem external_return_abi_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -752,13 +794,15 @@ Theorem external_return_abi_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   drule_all return_abi_value_package >>
   disch_then (qspec_then
     `needs_external_call_wrap ret /\
      is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
   drule compile_external_return_abi_unlock_frag >>
   disch_then irule >>
-  asm_rewrite_tac[] >>
+  asm_rewrite_tac[] >> conj_tac >- (simp[] >> metis_tac[]) >>
   qexistsl_tac [`av`, `type_env tops`, `tv'`,
     `if needs_external_call_wrap ret /\
         is_dynamic (vyper_to_abi_type (type_env tops) ret)
@@ -773,7 +817,7 @@ Proof
                    `nkey`, `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`]
         mp_tac external_halt_success_unlock >>
       impl_tac >- simp[] >>
-      simp[external_call_result_rel_def] >> metis_tac[]) >>
+      simp[external_call_result_rel_def, tx_return_bytes_def] >> metis_tac[]) >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
@@ -781,6 +825,7 @@ QED
 Theorem external_return_abi_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
@@ -825,6 +870,7 @@ QED
 Theorem external_return_abi_cenv_result_rel:
   !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
@@ -875,20 +921,61 @@ QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 
-(* S2, Milestone 5: proved in loweringShapeProps as
-   lower_vyper_runtime_unit_source_unit_ok_names. Raw O1 shape excludes
-   DLOAD; the immutable-free hypothesis restricts this theorem's source
-   domain, not the runtime immutable compiler. *)
+(* S2, Milestone 5: proved in loweringShapeSource as
+   lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
+   builtin arities and distinct internal names; raw_shape_free_program
+   excludes msg.gas values and raw_call (wider than the unit shape needs:
+   a plain raw_call passes it, but the body-shape proof lacks that case). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops
+    ==> o1_source_unit_ok unit
+Proof
+  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
+QED
+
+(* S2b, planned admission: every variable a use in the lowering's code
+   reads is written on every path to the use.  SimplifyCFG's pre-walk
+   needs it. *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     immutable_free_program tops
-    ==> o1_source_unit_ok unit
+    ==> unit_defs_reach_uses unit
 Proof
-  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
+  cheat
+QED
+
+(* The runtime unit reserves no global memory. *)
+Theorem lower_vyper_runtime_unit_global_reserved:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit.cu_context.ctx_global_reserved = []
+Proof
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
+  irule vyperCompilerTheory.run_lowering_global_reserved >> metis_tac[]
 QED
 
 (* ===== S3: memory safety ===== *)
+
+(* run_lowering builds every function with mk_raw_function, which leaves
+   fn_eom unset. *)
+Theorem run_lowering_eom_none:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME u ==>
+  EVERY (\fn. fn.fn_eom = NONE) u.cu_context.ctx_functions
+Proof
+  simp[run_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
+QED
 
 (* A unit that lowers comes from run_lowering with the entry label
    "__entry". *)
@@ -904,84 +991,95 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
-(* The run from the unit's entry is memory-safe: every instruction it
-   executes, callee frames included, reads and writes memory below the
-   allocation frontier.  Planned admission, Milestone 5: the memory-safe
-   form of S1's entry, body and halt simulation, whose leaves are the
-   footprint lemmas (fragExecMem, allocaFootprint) and whose composition
-   over compile_guarded_body is S1's run transfer.  Excluding
-   source_exempt is essential: dynamic decoding can read unchecked
-   offsets. *)
-Theorem lower_vyper_runtime_unit_run_mem_safe:
-  !tops rpolicy unit am tx ret vs fn lbl.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-    fn_entry_label fn = SOME lbl
-    ==>
-    !fuel. mem_safe_blocks fuel unit.cu_context fn
-             (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                         vs_inst_idx := 0 |>)
+(* run_lowering builds every function with mk_raw_function, which leaves
+   fn_fmp_signature unset. *)
+Theorem run_lowering_fmp_unsealed:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME u ==>
+  unit_fmp_unsealed u
 Proof
-  cheat
+  simp[run_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def, unit_fmp_unsealed_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
 QED
 
-(* S3, Milestone 5: the memory-safe run (above) through the bridge
-   mem_safe_raw_unit_memory_ok, with alloca_frontier_inv as the frontier
-   bound.  The bridge's structural premises (an entry function with an entry
-   block, distinct labels, an acyclic reachable call graph, the allocation
-   budget below the word size) are lowering_context_ok, which run_lowering
-   checks. *)
-Theorem lower_vyper_runtime_unit_memory_ok:
-  !tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
-    ==> raw_unit_memory_ok unit.cu_context vs
+(* S2b. The entry function reads calldata, never a PARAM: the S2 shape
+   proof gives that of the unit's first function, which run_lowering's
+   distinct function names make the only one named by the entry.  No
+   function has its FMP convention set (run_lowering_fmp_unsealed).  The
+   label and PHI facts S4 also needs follow from unit_wf and
+   o1_source_unit_ok (o1_source_unit_label_refs_no_phi). *)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
+    ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  reverse conj_tac >- metis_tac[run_lowering_fmp_unsealed] >>
+  drule lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params >>
+  impl_tac
+  >- metis_tac[supported_program_runtime_bodies_shape_ok,
+               supported_names_internal_names_distinct,
+               supported_program_names, supported_declaration_names_unique] >>
+  strip_tac >>
+  `entry_fn_first unit.cu_context` by
+    fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
+  `ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions)` by
+    (drule run_lowering_context_ok >>
+     simp[lowering_context_ok_def, ctx_fn_names_def]) >>
+  qpat_x_assum `entry_fn_first _`
+    (strip_assume_tac o REWRITE_RULE [entry_fn_first_def]) >>
+  rename1 `_ = efn :: rest` >>
+  qpat_x_assum `_.ctx_functions = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
+              rewrite_tac [unit_entry_no_params_def, entry_fn_no_params_def, th]) >>
+  qx_gen_tac `g` >> simp_tac std_ss [listTheory.MEM] >> rpt strip_tac
+  >- fs[] >>
+  `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  gs[]
+QED
+
+(* The dead bytes of a source call's result: those storage_dead gives in
+   the running contract's storage and transient storage, by the layout the
+   success case of external_call_result_rel compares with.  The pipeline
+   may change them (o1PassContract's dead_result_rel), and the source
+   relation already ignores them.  S3 bounds by them what a call request
+   or the result may read from moved memory (taint_within). *)
+Definition external_call_dead_def:
+  external_call_dead tx ((res : value + exception), am',
+                      (rqs : call_request list)) =
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    <| d_stor := (\a st. if a = tx.target
+                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         else {});
+       d_trans := (\a st. if a = tx.target
+                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          else {});
+       d_imm := K {}; d_ret := K {} |>
+End
+
+(* The lowered unit's functions and their reachable parts are
+   pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
+   the return buffer, if any, and the arguments passed in memory:
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
+Theorem lower_vyper_runtime_unit_fn_ptr_ok:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
+        EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
-  drule lowering_context_ok_bridge >> strip_tac >>
-  drule lowering_context_ok_integrity >> strip_tac >>
-  drule lowering_context_ok_static_integrity >> strip_tac >>
-  drule lowering_context_ok_alloca_budget >> strip_tac >>
-  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
-  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
-  `?lbl. fn_entry_label fn = SOME lbl` by
-    (Cases_on `fn.fn_blocks` >>
-     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
-  qspecl_then [`unit.cu_context`, `vs`, `"__entry"`, `fn`, `lbl`,
-               `alloca_frontier_inv`] mp_tac mem_safe_raw_unit_memory_ok >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[]
-      >- simp[]
-      >- simp[]
-      >- fs[listTheory.EVERY_MEM]
-      >- (irule alloca_frontier_inv_closed >> simp[])
-      >- (irule alloca_frontier_inv_entry >>
-          simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
-               reachable_call_graph_acyclic_def] >>
-          fs[initial_venom_state_rel_def] >> metis_tac[])
-      >- metis_tac[alloca_frontier_inv_bound]
-      >> drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
-  simp[]
+  drule run_lowering_context_ok >> simp[lowering_context_ok_def] >>
+  strip_tac >> drule ptr_ok_check_sound >> strip_tac >>
+  qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
+  fs[listTheory.EVERY_MEM]
 QED
 
 (* ===== Superseded admission provenance ===== *)

@@ -79,12 +79,28 @@ Theorem excluded_opcode_checks:
   EVERY (\op. ~inst_shape_ok (mk_inst 0 op [] []))
     [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET] /\
   EVERY (\op. ~raw_opcode_ok op)
-    [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET; GETFMP; SETFMP;
+    [ASSERT_UNREACHABLE; DALLOCA; DRET; GETFMP; SETFMP;
      RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP] /\
   EVERY (\op. inst_shape_ok (mk_inst 0 op [] []))
     [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET; GETFMP; SETFMP;
      RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP; RET] /\
-  raw_opcode_ok RET
+  EVERY raw_opcode_ok [RET; DLOAD; DLOADBYTES] /\
+  ~raw_opcode_ok PHI
+Proof
+  EVAL_TAC
+QED
+
+(* A PHI needs at least two incoming (label, value) pairs. *)
+Theorem phi_arity_checks:
+  ~inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"] ["y"]) /\
+  inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"; Label "q"; Var "z"] ["y"])
+Proof
+  EVAL_TAC
+QED
+
+(* A PHI's incoming pairs name distinct predecessors. *)
+Theorem phi_label_checks:
+  ~inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"; Label "p"; Var "z"] ["y"])
 Proof
   EVAL_TAC
 QED
@@ -95,6 +111,7 @@ Theorem label_position_checks:
   label_positions_ok (mk_inst 0 JMP [Label "target"] []) /\
   label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"; Label "f"] []) /\
   ~label_positions_ok (mk_inst 0 JNZ [Label "c"; Label "t"; Label "f"] []) /\
+  ~label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"; Label "t"] []) /\
   label_positions_ok (mk_inst 0 PHI [Label "p"; Var "x"] ["y"]) /\
   label_positions_ok (mk_inst 0 INVOKE [Label "callee"; Var "arg"] []) /\
   ~label_positions_ok (mk_inst 0 INVOKE [Label "callee"; Label "arg"] []) /\
@@ -104,18 +121,6 @@ Theorem label_position_checks:
   ~label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"] [])
 Proof
   EVAL_TAC
-QED
-
-Theorem gas_position_checks:
-  gas_use_ok (mk_inst 0 CALL [Var "g"; Var "a"] ["r"]) "g" /\
-  gas_use_ok (mk_inst 0 STATICCALL [Var "g"; Var "a"] ["r"]) "g" /\
-  ~gas_use_ok (mk_inst 0 CALL [Var "a"; Var "g"] ["r"]) "g" /\
-  ~gas_use_ok (mk_inst 0 CALL [Var "g"; Var "g"] ["r"]) "g" /\
-  ~gas_use_ok (mk_inst 0 SSTORE [Lit 0w; Var "g"] []) "g" /\
-  gas_use_ok (mk_inst 0 ASSIGN [Var "g"] ["h"]) "g" /\
-  gas_use_ok (mk_inst 0 PHI [Label "p"; Var "g"] ["h"]) "g"
-Proof
-  simp[gas_use_ok_def, mk_inst_def]
 QED
 
 Theorem retpc_position_checks:
@@ -139,10 +144,9 @@ Definition shape_probe_cycle_def:
 End
 
 Theorem unseeded_cycle_checks:
-  (!x. ~gas_var (shape_probe_cycle GAS F) x) /\
-  (!x. ~retpc_var (shape_probe_cycle RETPC_PARAM F) x)
+  !x. ~retpc_var (shape_probe_cycle RETPC_PARAM F) x
 Proof
-  simp[gas_var_def, retpc_var_def] >> conj_tac >>
+  simp[retpc_var_def] >>
   irule copy_phi_var_no_seed >>
   simp[shape_probe_cycle_def, shape_probe_fn_def, mk_raw_function_def,
        fn_insts_def, fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]
@@ -166,32 +170,23 @@ Proof
 QED
 
 Theorem seeded_opaque_cycle_checks:
-  gas_var (shape_probe_cycle GAS T) "a" /\
   retpc_var (shape_probe_cycle RETPC_PARAM T) "a"
 Proof
-  simp[gas_var_def, retpc_var_def, seeded_cycle_checks]
+  simp[retpc_var_def, seeded_cycle_checks]
 QED
 
-(* A GAS-to-storage use is rejected by the full function predicate, not just
- * by the local position check. *)
-Theorem opaque_gas_misuse_check:
-  ~opaque_use_ok (shape_probe_fn
+(* GAS readings match between Venom and assembly, so a GAS result is an
+ * ordinary value: storing it is allowed. *)
+Theorem opaque_gas_storage_allowed_check:
+  opaque_use_ok (shape_probe_fn
     [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []])
 Proof
-  strip_tac >>
-  `gas_var (shape_probe_fn
-    [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []]) "g"`
-    by (simp[gas_var_def] >> irule copy_phi_var_seed >>
-        qexists_tac `mk_inst 0 GAS [] ["g"]` >>
-        simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-             fn_insts_blocks_def, mk_inst_def]) >>
-  `gas_use_ok (mk_inst 1 SSTORE [Lit 0w; Var "g"] []) "g"` by
-    (irule opaque_use_ok_gas_use >> simp[mk_inst_def] >>
-     qexists_tac `shape_probe_fn
-       [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []]` >>
+  `!x. ~retpc_var (shape_probe_fn
+    [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []]) x` by
+    (simp[retpc_var_def] >> irule copy_phi_var_no_seed >>
      simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-          fn_insts_blocks_def, mk_inst_def]) >>
-  fs[gas_use_ok_def, mk_inst_def]
+          fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]) >>
+  simp[opaque_use_ok_def]
 QED
 
 Theorem opaque_retpc_misuse_check:
@@ -217,36 +212,79 @@ Proof
   fs[retpc_use_ok_def, mk_inst_def]
 QED
 
-Theorem opaque_gas_call_allowed_check:
-  opaque_use_ok (shape_probe_fn
-    [mk_inst 0 GAS [] ["g"]; mk_inst 1 ASSIGN [Var "g"] ["h"];
-     mk_inst 2 CALL [Var "h"; Lit 0w] ["r"]])
-Proof
-  `!x. ~retpc_var (shape_probe_fn
-    [mk_inst 0 GAS [] ["g"]; mk_inst 1 ASSIGN [Var "g"] ["h"];
-     mk_inst 2 CALL [Var "h"; Lit 0w] ["r"]]) x` by
-    (simp[retpc_var_def] >> irule copy_phi_var_no_seed >>
-     simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-          fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]) >>
-  simp[opaque_use_ok_def, shape_probe_fn_def, mk_raw_function_def,
-       fn_insts_def, fn_insts_blocks_def, mk_inst_def, gas_use_ok_def,
-       GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM]
-QED
-
 Theorem opaque_retpc_return_allowed_check:
   opaque_use_ok (shape_probe_fn
     [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"];
      mk_inst 1 ASSIGN [Var "pc"] ["q"]; mk_inst 2 RET [Lit 1w; Var "q"] []])
 Proof
-  `!x. ~gas_var (shape_probe_fn
-    [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"];
-     mk_inst 1 ASSIGN [Var "pc"] ["q"]; mk_inst 2 RET [Lit 1w; Var "q"] []]) x` by
-    (simp[gas_var_def] >> irule copy_phi_var_no_seed >>
-     simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-          fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]) >>
   simp[opaque_use_ok_def, shape_probe_fn_def, mk_raw_function_def,
        fn_insts_def, fn_insts_blocks_def, mk_inst_def, retpc_use_ok_def,
        GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM, APPEND_EQ_CONS]
+QED
+
+Theorem reachable_shape_probe_fn[local]:
+  !insts. EVERY (\i. i.inst_opcode <> PHI) insts ==>
+          reachable_fn (shape_probe_fn insts) = shape_probe_fn insts
+Proof
+  rw[] >> irule reachable_fn_single_block >>
+  simp[shape_probe_fn_def, mk_raw_function_def]
+QED
+
+(* A RET must end in a return-PC variable, and a PHI must not mix one with
+ * an ordinary variable. *)
+Theorem retpc_shape_checks:
+  ~retpc_shape_ok (shape_probe_fn [mk_inst 0 RET [Lit 0w] []]) /\
+  ~retpc_shape_ok (shape_probe_fn
+    [mk_inst 0 ASSIGN [Lit 1w] ["q"]; mk_inst 1 RET [Var "q"] []]) /\
+  ~retpc_shape_ok (shape_probe_fn
+    [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"];
+     mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]]) /\
+  ~retpc_shape_ok (shape_probe_fn
+    [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"]; mk_inst 1 ASSIGN [Lit 1w] ["pc"]])
+Proof
+  rpt conj_tac >>
+  qmatch_goalsub_abbrev_tac `retpc_shape_ok (shape_probe_fn insts)` >>
+  `fn_insts (shape_probe_fn insts) = insts`
+    by simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
+            fn_insts_blocks_def] >>
+  qabbrev_tac `fn = shape_probe_fn insts` >>
+  rewrite_tac[retpc_shape_ok_def]
+  >- (`reachable_fn fn = fn`
+        by simp[Abbr `fn`, Abbr `insts`, reachable_shape_probe_fn,
+                mk_inst_def] >>
+      pop_assum (fn th => rewrite_tac[th]) >>
+      simp[Abbr `insts`, mk_inst_def, RIGHT_AND_OVER_OR,
+           EXISTS_OR_THM] >>
+      rpt strip_tac >> Cases_on `front` >> gvs[])
+  >- (`reachable_fn fn = fn`
+        by simp[Abbr `fn`, Abbr `insts`, reachable_shape_probe_fn,
+                mk_inst_def] >>
+      pop_assum (fn th => rewrite_tac[th]) >>
+      simp[Abbr `insts`, mk_inst_def, RIGHT_AND_OVER_OR,
+           EXISTS_OR_THM] >>
+      rpt strip_tac >> gvs[retpc_var_def] >>
+      drule copy_phi_var_has_seed >> simp[mk_inst_def, PULL_EXISTS] >>
+      rpt strip_tac >> CCONTR_TAC >> gvs[]) >>
+  `retpc_var fn "pc"`
+    by (simp[retpc_var_def] >> irule copy_phi_var_seed >>
+        qexists_tac `mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"]` >>
+        simp[Abbr `insts`, mk_inst_def]) >>
+  rewrite_tac[DE_MORGAN_THM] >> disj2_tac >> disj2_tac >> disj1_tac >>
+  CONV_TAC (REDEPTH_CONV NOT_FORALL_CONV)
+  >- (`~retpc_var fn "q"`
+        by (simp[retpc_var_def, Once copy_phi_var_cases] >>
+            simp[Abbr `insts`, mk_inst_def] >> rpt strip_tac >> CCONTR_TAC >>
+            gvs[]) >>
+      `retpc_var fn "r"`
+        by (simp[retpc_var_def] >> irule copy_phi_var_phi >>
+            qexistsl_tac [`mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]`,
+                          `"pc"`] >>
+            fs[retpc_var_def, Abbr `insts`, mk_inst_def]) >>
+      qexistsl_tac [`mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]`,
+                    `"r"`] >>
+      simp[Abbr `insts`, mk_inst_def] >> disj2_tac >> qexists_tac `"q"` >> simp[]) >>
+  qexistsl_tac [`mk_inst 1 ASSIGN [Lit 1w] ["pc"]`, `"pc"`] >>
+  simp[Abbr `insts`, mk_inst_def]
 QED
 
 (* ===== Raw-only control-flow restrictions ===== *)
@@ -290,7 +328,11 @@ Theorem complete_unit_shape_checks:
   ~o1_source_unit_ok (shape_probe_unit [mk_inst 0 JMP [Label "entry"] []])
 Proof
   simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
+       mk_venom_context_def, entry_fn_first_def, fn_shape_ok_def,
+       retpc_shape_ok_def, reachable_shape_probe_fn, mk_inst_def] >>
+  simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
        entry_fn_first_def, fn_shape_ok_def, shape_probe_fn_def,
+       retpc_shape_ok_def, retpc_var_def, copy_phi_var_no_seed,
        mk_venom_context_def, mk_raw_function_def, fn_entry_label_def,
        entry_block_def, opaque_use_ok_def, fn_insts_def, fn_insts_blocks_def,
        entry_fn_no_ret_def, get_params_def, inst_shape_ok_def,
@@ -300,8 +342,8 @@ Proof
        is_terminator_def, is_param_opcode_def, mk_inst_def] >> EVAL_TAC
 QED
 
-(* Output shape permits hidden parameters and internal RET; the raw-only
- * FMP_PARAM exclusion must not leak into the output shape. *)
+(* Output shape permits hidden parameters and internal RET to a return PC;
+ * the raw-only FMP_PARAM exclusion must not leak into the output shape. *)
 Theorem internal_output_shape_check:
   unit_shape_ok
     <| cu_context := mk_venom_context
@@ -309,14 +351,50 @@ Theorem internal_output_shape_check:
           mk_raw_function "callee"
             [<| bb_label := "callee";
                 bb_instructions := [mk_inst 1 FMP_PARAM [Lit 0w] ["fmp"];
-                                    mk_inst 2 RET [Lit 0w] []] |>]]
+                                    mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"];
+                                    mk_inst 3 RET [Var "pc"] []] |>]]
          (SOME "entry");
        cu_data_segment := [] |>
 Proof
+  qmatch_goalsub_abbrev_tac `[shape_probe_fn _; callee]` >>
+  `fn_insts callee =
+     [mk_inst 1 FMP_PARAM [Lit 0w] ["fmp"]; mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"];
+      mk_inst 3 RET [Var "pc"] []]`
+    by simp[Abbr `callee`, mk_raw_function_def, fn_insts_def,
+            fn_insts_blocks_def] >>
+  `retpc_var callee "pc"`
+    by (simp[retpc_var_def] >> irule copy_phi_var_seed >>
+        qexists_tac `mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"]` >>
+        simp[mk_inst_def]) >>
+  `~retpc_var callee "fmp"`
+    by (simp[retpc_var_def, Once copy_phi_var_cases] >>
+        simp[mk_inst_def] >> rpt strip_tac >> CCONTR_TAC >> gvs[]) >>
+  `!x. ~gas_var callee x`
+    by (simp[gas_var_def] >> irule copy_phi_var_no_seed >>
+        simp[mk_inst_def] >> rw[] >> simp[]) >>
+  `reachable_fn callee = callee`
+    by (irule reachable_fn_single_block >>
+        simp[Abbr `callee`, mk_raw_function_def, mk_inst_def]) >>
+  `retpc_shape_ok callee`
+    by (gs[retpc_shape_ok_def, mk_inst_def] >>
+        rpt conj_tac >> rpt strip_tac >> gvs[] >>
+        qexistsl_tac [`[]`, `"pc"`] >> simp[]) >>
+  `fn_shape_ok callee`
+    by (simp[fn_shape_ok_def, opaque_use_ok_def, retpc_use_ok_def,
+             DISJ_IMP_THM, FORALL_AND_THM, inst_shape_ok_def,
+             is_read0_opcode_def, label_positions_ok_def, is_label_operand_def,
+             mk_inst_def] >>
+        simp[Abbr `callee`, mk_raw_function_def, fn_entry_label_def,
+             entry_block_def, reserved_label_def, call_checks_ok_def,
+             calls_flagged_def, mk_inst_def] >>
+        rpt strip_tac >> gvs[] >> qexists_tac `[]` >> simp[]) >>
+  simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
+       mk_venom_context_def, entry_fn_first_def, fn_shape_ok_def,
+       retpc_shape_ok_def, reachable_shape_probe_fn, mk_inst_def] >>
   simp[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
        shape_probe_fn_def, mk_venom_context_def, mk_raw_function_def,
        fn_entry_label_def, entry_block_def, opaque_use_ok_def,
-       GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM,
+       retpc_shape_ok_def, GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM,
        fn_insts_def, fn_insts_blocks_def, entry_fn_no_ret_def,
        get_params_def, inst_shape_ok_def, is_read0_opcode_def,
        label_positions_ok_def, is_label_operand_def, reserved_label_def,
@@ -329,6 +407,41 @@ Theorem first_block_predecessor_checks:
   ~first_block_no_preds (mk_raw_function "entry"
     [<| bb_label := "entry"; bb_instructions := [mk_inst 0 JMP [Label "b"] []] |>;
      <| bb_label := "b"; bb_instructions := [mk_inst 1 JMP [Label "entry"] []] |>])
+Proof
+  EVAL_TAC
+QED
+
+(* ===== Call success checks ===== *)
+
+(* An entry block holding insts, beside a block "fail" that reverts. *)
+Definition call_probe_fn_def:
+  call_probe_fn insts = mk_raw_function "entry"
+    [<| bb_label := "entry"; bb_instructions := insts |>;
+     <| bb_label := "fail";
+        bb_instructions := [mk_inst 9 REVERT [Lit 0w; Lit 0w] []] |>]
+End
+
+Definition probe_call_def:
+  probe_call = mk_inst 0 CALL (REPLICATE 7 (Lit 0w)) ["s"]
+End
+
+Theorem call_check_checks:
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSERT [Var "s"] []; mk_inst 2 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSIGN [Var "s"] ["t"];
+     mk_inst 2 ASSERT [Var "t"] []; mk_inst 3 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "ok"; Label "fail"] []]) /\
+  ~call_checks_ok (call_probe_fn [probe_call; mk_inst 1 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 INVOKE [Label "f"] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "fail"; Label "ok"] []])
 Proof
   EVAL_TAC
 QED

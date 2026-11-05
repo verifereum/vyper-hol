@@ -3,13 +3,14 @@
  *
  * Lt, Gt, Eq, NotEq, LtE and GtE on two word values of one type lower to
  * compile_compare, one or two instructions.  binop_frag for them comes
- * from arithmeticProps' compile_compare_correct through
- * frag_exec_writes_fresh.  The source compares the values; the lowering
- * compares their words, unsigned for uint256 and signed otherwise, which
- * agree on values of the type (value_has_type).  Eq and NotEq on two
- * address or two bytesN values, which are BytesV, compare their typed
- * words (typed_val_to_w256) the same way, and those are equal just when
- * the bytes are.
+ * from arithmeticProps' compile_compare_correct: the instructions are
+ * straight_fresh, so their run is a gas_marked_path with no reads.  The
+ * source compares the values; the lowering compares their words,
+ * unsigned for uint256 and signed otherwise, which agree on values of
+ * the type (value_has_type).  Eq and NotEq on two address or two bytesN
+ * values, which are BytesV, compare their typed words
+ * (typed_val_to_w256) the same way, and those are equal just when the
+ * bytes are.
  *
  * Min and Max compare the same way and pick an operand branchlessly
  * (compile_select).
@@ -24,14 +25,16 @@
  *                          typed words
  *   compile_minmax_sim   — binop_frag for Min and Max
  *
- * Helpers: int_word_cmp, compile_compare_shape, typed_val_to_w256_bytes_11,
- *   bop_result_minmax, straight_fresh_minmax, compile_minmax_correct
+ * Helpers: int_word_cmp, compile_compare_shape, straight_fresh_compare,
+ *   typed_val_to_w256_bytes_11, bop_result_minmax, straight_fresh_minmax, compile_minmax_correct
  *)
 
 Theory exprSimCompare
 Ancestors
+  exprBopSimDefs exprBopStraight
+  exprSimDefs
   list rich_list
-  fragExec varsExt exprSim freshWrites exprSimOps loweringSlice
+  fragExec fragGasFresh varsExt freshWrites exprSimOps loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperInterpreter vyperContext vyperValue vyperValueOperation
   vyperTyping
@@ -90,6 +93,37 @@ Proof
   irule w2i_i2w_within_signed >> qexists_tac `w` >> simp[]
 QED
 
+Theorem typed_int_operand_shape[local]:
+  value_has_type tv (IntV n) /\ value_has_type tv v ==> ?m. v = IntV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_decimal_operand_shape[local]:
+  value_has_type tv (DecimalV n) /\ value_has_type tv v ==> ?m. v = DecimalV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_flag_operand_shape[local]:
+  value_has_type tv (FlagV n) /\ value_has_type tv v ==> ?m. v = FlagV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_bool_operand_shape[local]:
+  value_has_type tv (BoolV n) /\ value_has_type tv v ==> ?m. v = BoolV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
 (* The source result of a comparison of two word values of one type is
    eval_compare on their words. *)
 Theorem bop_result_compare:
@@ -108,17 +142,19 @@ Proof
   (* one kind of v1 at a time, so that each unfolding of evaluate_binop
      covers a quarter of the value pairs *)
   >>~- ([`value_has_type _ (IntV _)`],
-        Cases_on `v2` >>
+        drule_all typed_int_operand_shape >>
+        disch_then (qx_choose_then `j` SUBST_ALL_TAC) >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         qspecl_then [`ty`, `tv`, `n`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-        qspecl_then [`ty`, `tv`, `i`] mp_tac int_word_cmp >>
+        qspecl_then [`ty`, `tv`, `j`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
         Cases_on `is_uint256 ty` >> fs[eval_compare_def, val_to_w256_def] >>
         word_cmp_tac)
   >>~- ([`value_has_type _ (DecimalV _)`],
-        Cases_on `v2` >>
+        drule_all typed_decimal_operand_shape >>
+        disch_then (qx_choose_then `i` strip_assume_tac) >> gvs[] >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
@@ -128,7 +164,8 @@ Proof
            simp[]) >>
         fs[eval_compare_def, val_to_w256_def] >> word_cmp_tac)
   >>~- ([`value_has_type _ (FlagV _)`],
-        Cases_on `v2` >>
+        drule_all typed_flag_operand_shape >>
+        disch_then (qx_choose_then `n` strip_assume_tac) >> gvs[] >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
@@ -140,7 +177,8 @@ Proof
         fs[eval_compare_def, val_to_w256_def, n2w_11, dimword_def,
            arithmeticTheory.LESS_MOD]) >>
   (* booleans *)
-  Cases_on `v2` >>
+  drule_all typed_bool_operand_shape >>
+  disch_then (qx_choose_then `b2` strip_assume_tac) >> gvs[] >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       expr_res_ok_def, binop_negate_def] >>
   rw[eval_compare_def, val_to_w256_def]
@@ -188,8 +226,26 @@ Proof
                  rich_listTheory.IS_PREFIX_APPEND3]]
 QED
 
+(* A straight_fresh action built from the combinators. *)
+val straight_fresh_tac =
+  rpt (FIRST [IF_CASES_TAC,
+              irule straight_fresh_bind >> rw[],
+              irule straight_fresh_ignore_bind >> rw[],
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def],
+              irule straight_fresh_emit_void >> simp[fresh_write_op_def],
+              irule straight_fresh_return]);
+
+Theorem straight_fresh_compare:
+  !bop x y ty bl el.
+    MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] ==>
+    straight_fresh (compile_binop bop x y ty bl el)
+Proof
+  rw[] >> rw[compile_binop_def, compile_compare_def] >> straight_fresh_tac
+QED
+
 (* binop_frag_words for the comparisons, when the source result is
-   eval_compare on the operands' words: compile_compare compares them. *)
+   eval_compare on the operands' words: compile_compare compares them
+   along a straight-line path with no gas reads. *)
 Theorem compile_compare_words_sim:
   !ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0.
     MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
@@ -201,25 +257,22 @@ Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[binop_frag_words_def] >>
   rpt strip_tac >>
   qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac >>
+  `straight_fresh (compile_binop bop x y ty bl el)` by
+    metis_tac[straight_fresh_compare] >>
   `compile_compare bop x y ty sa = (op, sb)` by
     (qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >> fs[] >>
      rw[compile_binop_def]) >>
-  drule_all compile_compare_shape >> strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `sa`, `sb`, `op`,
-     `bool_to_word (eval_compare bop ty w1 w2)`,
-     `\ss. eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2`,
-     `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_writes_fresh >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-      FIRST [
-        qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-        qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-        asm_simp_tac bool_ss [] >> NO_TAC,
-        qspecl_then [`bop`, `x`, `y`, `ty`, `ss`, `sa`, `op`, `sb`,
-                     `w1`, `w2`] mp_tac compile_compare_correct >>
-        simp[]])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt strip_tac >>
+  `eval_operand x (drop_fresh sa s0) = SOME w1 /\
+   eval_operand y (drop_fresh sa s0) = SOME w2` by
+    simp[eval_operand_drop_fresh] >>
+  qspecl_then [`bop`, `x`, `y`, `ty`, `drop_fresh sa s0`, `sa`, `op`, `sb`,
+               `w1`, `w2`] mp_tac compile_compare_correct >>
+  simp[fresh_vars_wrt_drop_fresh] >> strip_tac >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  qexists_tac `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
+  simp[] >>
   Cases_on `eval_compare bop ty w1 w2` >>
   gvs[val_to_w256_def, word_value_def, bool_to_word_def]
 QED
@@ -293,21 +346,31 @@ QED
 
 (* ===== Min and Max ===== *)
 
-(* A straight_fresh action built from the combinators. *)
-val straight_fresh_tac =
-  rpt (FIRST [IF_CASES_TAC,
-              irule straight_fresh_bind >> rw[],
-              irule straight_fresh_ignore_bind >> rw[],
-              irule straight_fresh_emit_op >> simp[fresh_write_op_def],
-              irule straight_fresh_emit_void >> simp[fresh_write_op_def],
-              irule straight_fresh_return]);
-
 Theorem straight_fresh_minmax:
   !x y ty bl el.
     straight_fresh (compile_binop Min x y ty bl el) /\
     straight_fresh (compile_binop Max x y ty bl el)
 Proof
   rw[compile_binop_def, compile_select_def] >> straight_fresh_tac
+QED
+
+(* Keep source selection separate from the typed word comparison bridge. *)
+Theorem bop_result_minmax_select[local]:
+  (mm = Min \/ mm = Max) /\
+  expr_res_ok (bop_result cx ann mm tys v1 v2 es) /\ word_value v1 ==>
+  ?b. bop_result cx ann (if mm = Min then Lt else Gt) tys v1 v2 es =
+        INL (BoolV b) /\
+      bop_result cx ann mm tys v1 v2 es = INL (if b then v1 else v2) /\
+      word_value (if b then v1 else v2)
+Proof
+  strip_tac >> gvs[] >>
+  fs[word_value_def] >> gvs[] >>
+  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+      expr_res_ok_def] >>
+  Cases_on `v2` >>
+  gvs[evaluate_binop_def, expr_res_ok_def] >>
+  rpt IF_CASES_TAC >> gvs[word_value_def] >>
+  `n = i` by ARITH_TAC >> simp[]
 QED
 
 (* The source result of Min or Max is the operand eval_compare picks. *)
@@ -326,14 +389,12 @@ Theorem bop_result_minmax:
           then val_to_w256 v1 else val_to_w256 v2
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_at (Pos (el 2)) bop_result_minmax_select >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qspecl_then [`cx`, `ann`, `if mm = Min then Lt else Gt`, `ty`, `tv`, `v1`,
                `v2`, `es`] mp_tac bop_result_compare >>
-  fs[word_value_def] >> gvs[] >> Cases_on `v2` >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      expr_res_ok_def] >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
-  `n = i` by ARITH_TAC >> simp[]
+  (impl_tac >- (asm_rewrite_tac[] >> simp[expr_res_ok_def])) >>
+  strip_tac >> gvs[] >> IF_CASES_TAC >> simp[]
 QED
 
 (* The run of the lowered Min or Max from a state with the fresh variables

@@ -8,9 +8,10 @@
  * subscripts (exprSimTuple's compile_subscript_tuple_sim), a dispatch that
  * disagrees with the base's type and subscripts of any base but an array, a
  * tuple or a mapping, which do not type.  Cheated, for the later #636 PRs:
- * array and mapping subscripts and pop on any other target, by kind
- * (compile_pop_storage_sim, compile_pop_immutable_sim,
- * compile_pop_nested_sim).
+ * array and mapping subscripts.  Pop on a storage variable is
+ * compile_pop_storage_sim; pop on a nested target is compile_pop_nested_sim,
+ * by exprSimPopNested's pop_nested_sim, whose residuals are listed there.
+ * Root immutable pop is rejected by the source checker, as in Python.
  *
  * TOP-LEVEL:
  *   compile_subscript_case — static and dynamic arrays with the
@@ -46,7 +47,7 @@
 
 Theory exprSimPlaces
 Ancestors
-  list exprSim exprSimHyps exprSimPop exprSimAttribute exprSimTuple
+  exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
   exprSimArrayIndex
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
@@ -221,17 +222,18 @@ Proof
   simp[expr_sim_case_of_vv]
 QED
 
-(* pop on a module variable in storage or transient storage.  Cheated:
-   the source reads the popped element from its slots (read_storage_slot),
-   which raises a RuntimeError where the slots do not decode, while the
-   lowering never reads it and hands out the slot; expr_sim_inv's storage
-   clauses keep the slots decoding (as in exprSimLeaves's
-   compile_toplevel_storage_undecodable_sim), but the proof also needs
-   expr_sim_inv to give ce_var_type of the module variable's key, from
-   which the lowering reads the element type.
-   It also breaks expr_post's frame on the live locals (locals_kept): the
-   lowering MSTOREs at the slot's fixed memory address, where an allocation
-   holding a local can sit (allocation starts at 0). *)
+(* pop on a module variable in storage or transient storage.  The target's
+   pointer is the variable's slot (compile_get_target_ptr_toplevel, from
+   storage_vars_rel and expr_sim_inv's module variable clause), and
+   compile_dynarray_pop loads the length with SLOAD (TLOAD), aborts on zero
+   as the source's check raises, stores the length less one, and hands out
+   the last element's slot, as pop_place does.  The element is past the new
+   length, so its slots are dead in the array: storage_holds asks for the
+   element's slots to agree with Venom's (storage_range_agree), which holds
+   before the pop by storage_rel (the element is live) and after it since
+   only the header slot changed (dead_bytes_frame).  stmt_state_rel after
+   the header write: the dead set only grows as the length shrinks, which
+   is what accounts_rel_sstore and accounts_rel_tstore take. *)
 Theorem compile_pop_storage_sim:
   !cenv ann src id ctx func cx env ty es ts d.
     expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
@@ -239,13 +241,16 @@ Theorem compile_pop_storage_sim:
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `well_typed_expr env (Pop ann (TopLevelNameTarget (src,id))) /\
+   env_consistent env cx es` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all pop_storage_target_facts >> strip_tac >> gvs[] >>
+  irule compile_pop_storage_normalized_sim >> metis_tac[]
 QED
 
-(* pop on an immutable, in the constructor.  Cheated: the lowering pops at
-   LocCode with MLOAD and MSTORE at the immutable's data offset, which is
-   not where immutables_rel keeps it, and that offset can hold a live
-   local's allocation (locals_kept). *)
+(* Python requires an immutable's constructor assignment and rejects a second
+   modification, including root pop. The checker therefore excludes bare
+   globals here; a typed module target must have a storage declaration. *)
 Theorem compile_pop_immutable_sim:
   !cenv ann src id ctx func cx env ty es.
     expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
@@ -254,29 +259,35 @@ Theorem compile_pop_immutable_sim:
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  cheat
+  rpt strip_tac >>
+  fs[expr_sim_pre_def, expr_sim_inv_def,
+     vyperTypeInvariantsTheory.env_consistent_def,
+     vyperTypeInvariantsTheory.env_context_consistent_def,
+     Once well_typed_expr_def,
+     vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >>
+  Cases_on `FLOOKUP env.bare_global_assignable (src,id)` >> gvs[] >>
+  qpat_x_assum
+    `!src id ty. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+                 FLOOKUP env.bare_globals (src,id) = NONE ==> _`
+    (qspecl_then [`src`, `id`, `ArrayT ann (Dynamic n)`] mp_tac) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!ts. get_module_code cx src = SOME ts ==> _`
+    (qspec_then `ts` mp_tac) >> simp[]
 QED
 
-(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()).
-   Cheated: the lowering takes the array's pointer, location and type from
-   compile_get_target_ptr, as an assignment does, but no lemma relates
-   compile_get_target_ptr to the source's eval_target_place for a target
-   deeper than a name.  The proof needs that target/place judgment: by
-   induction on the target, with the hypothesis for the indices, the
-   pointer is the place's in memory (with the array bounds abort of each
-   index) or its slot in storage (with the mapping slot of each key); the
-   subscript lemmas need the same judgment for their bases (this file's
-   header).  Given it, a memory target pops as compile_pop_name_sim does at
-   the array's pointer, inside the local's region (locals_kept), and a
-   storage target as compile_pop_storage_sim does, which waits on the new
-   storage statement of #713. *)
+(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
+   exprSimPopNested's pop_nested_sim, by the target's root, with the
+   target's fragment judgment from pop_nested_expr_target_frag. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  cheat
+  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >> irule pop_nested_sim >>
+  qexists_tac `env` >> conj_tac
+  >- metis_tac[pop_nested_expr_target_frag] >>
+  gvs[expr_sim_pre_body]
 QED
 
 (* pop on a target other than a local: compile_pop_storage_sim,

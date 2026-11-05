@@ -62,6 +62,25 @@ Proof
   rw[next_gas_reading_def] >> Cases_on `st.gas_obs` >>
   gvs[return_def, raise_def, evaluation_state_component_equality]
 QED
+(* A precompile builtin's success check consumes an outcome and changes
+ * nothing else; a failed check is a runtime error. *)
+Theorem precompile_call_success_state:
+  !bt st res st'. precompile_call_success bt st = (res, st') ==>
+    ?os. st' = st with outcomes := os
+Proof
+  rw[precompile_call_success_def, return_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[check_def, assert_def, evaluation_state_component_equality]
+QED
+
+Theorem precompile_call_success_exception:
+  !bt st exc st'. precompile_call_success bt st = (INR exc, st') ==>
+    ?msg. exc = Error (RuntimeError msg)
+Proof
+  rw[precompile_call_success_def, return_def] >>
+  BasicProvers.every_case_tac >> gvs[check_def, assert_def]
+QED
+
 Theorem get_accounts_state:
   !st res st'. get_accounts st = (res, st') ==> st' = st
 Proof

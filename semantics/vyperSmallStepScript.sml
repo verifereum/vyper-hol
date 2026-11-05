@@ -196,7 +196,7 @@ Definition eval_expr_cps_def:
     eval_exprs_cps cx10 es st (RawRevertK k) ∧
   eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
     eval_exprs_cps cx10 es st (SelfDestructK k) ∧
-  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof) es _) st k =
+  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof _) es _) st k =
     (case kind of
        CreateFromBlueprint raw_args =>
          eval_exprs_cps cx10 (TAKE (if has_salt then 4 else 3) es) st
@@ -679,6 +679,7 @@ Definition apply_vals_def:
     liftk cx ApplyTv (do
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
+      precompile_call_success bt;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ tys k) =
@@ -691,6 +692,7 @@ Definition apply_vals_def:
       event <- lift_option
         (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
         "Log encode event";
+      check_not_static cx;
       push_log event
     od st) k ∧
   apply_vals cx vs st (CustomErrorK error_name arg_types k) =
@@ -716,7 +718,7 @@ Definition apply_vals_def:
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
       is_view <<- is_view_mut mut;
       (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
-      lock_if_nr cx nr is_view;
+      lock_if_nr (cx with stk updated_by TL) nr is_view;
       cxf <- push_function src_fn env (cx with stk updated_by TL);
       return (prev, cxf, body, rtv, is_view) od st
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
@@ -756,6 +758,7 @@ Definition apply_vals_def:
       topic_vals <<- (case topics of
          TupleV tvs => tvs | DynArrayV tvs => tvs | _ => []);
       type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+      check_not_static cx;
       push_log (encode_raw_event_values cx.txn.target topic_vals data);
       return $ Value NoneV
     od st
@@ -772,6 +775,7 @@ Definition apply_vals_def:
     (case do
       type_check (LENGTH vs = 1) "selfdestruct args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+      check_not_static cx;
       accounts <- get_accounts;
       self_acct <<- lookup_account cx.txn.target accounts;
       balance <<- self_acct.balance;
@@ -1416,8 +1420,10 @@ Proof
     \\ (CASE_TAC \\ reverse CASE_TAC
         >- rw[Once OWHILE_THM, stepk_def, apply_exc_def])
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def,
-          apply_tv_def, bind_def, liftk1]
-    >> CASE_TAC \\ CASE_TAC \\ rw[return_def] )
+          apply_tv_def, bind_def, ignore_bind_def, liftk1]
+    >> simp[get_accounts_def, return_def]
+    >> CASE_TAC \\ CASE_TAC \\ simp[return_def]
+    \\ CASE_TAC \\ CASE_TAC \\ simp[return_def] )
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
     rpt gen_tac >> strip_tac
     >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
@@ -1990,51 +1996,55 @@ Proof
   \\ rw[Once OWHILE_THM]
 QED
 
-val evaluate_defaults_pre_def = evaluate_defaults_def
-  |> SRULE [bind_def, eval_expr_eq_cont_cps]
-  |> cv_auto_trans_pre "evaluate_defaults_pre";
+Definition fromvalsk_def:
+  fromvalsk x =
+    case x of
+      (SOME (AK cx (ApplyVals vs) st DoneK)) => (INL vs, st)
+    | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
+    | _ => (INR $ Error (TypeError "fromvalsk"), empty_state)
+End
 
-Theorem evaluate_defaults_pre[cv_pre]:
-  ∀cx am gobs v. evaluate_defaults_pre cx am gobs v
+val () = cv_auto_trans fromvalsk_def;
+
+Theorem eval_exprs_eq_cont_cps:
+  eval_exprs cx es st = fromvalsk $ cont (eval_exprs_cps cx es st DoneK)
 Proof
-  ntac 2 gen_tac
-  \\ simp[Once SWAP_FORALL_THM]
-  \\ Induct \\ rw[]
-  \\ rw[Once evaluate_defaults_pre_def]
-  \\ gs[bind_def, eval_expr_eq_cont_cps]
-  \\ rw[cont_pre_IS_SOME_cont]
-  \\ qmatch_goalsub_rename_tac`eval_expr_cps ec ee es DoneK`
-  \\ qspecl_then[`ec`,`ee`,`es`,`DoneK`]mp_tac $ cj 5 eval_cps_eq
-  \\ rw[cont_def]
-  \\ CASE_TAC
-  \\ CASE_TAC \\ gvs[]
-  \\ rw[Once OWHILE_THM]
+  Cases_on `eval_exprs cx es st` >>
+  qmatch_goalsub_rename_tac `res,st1` >>
+  qspecl_then [`cx`,`es`,`st`,`DoneK`] mp_tac (cj 6 eval_cps_eq) >>
+  simp[cont_def] >> strip_tac >>
+  simp[Once OWHILE_THM] >> IF_CASES_TAC >>
+  Cases_on `res` >> gvs[] >> simp[fromvalsk_def]
+QED
+
+Theorem cont_pre_eval_exprs_cps[cv_pre]:
+  cont_pre (eval_exprs_cps cx es st DoneK)
+Proof
+  rw[cont_pre_IS_SOME_cont] >>
+  qspecl_then [`cx`,`es`,`st`,`DoneK`] mp_tac (cj 6 eval_cps_eq) >>
+  rw[cont_def] >> CASE_TAC >> CASE_TAC >> gvs[] >>
+  rw[Once OWHILE_THM]
+QED
+
+Theorem cont_pre_eval_stmts_cps[cv_pre]:
+  cont_pre (eval_stmts_cps cx ss st DoneK)
+Proof
+  rw[cont_pre_IS_SOME_cont] >>
+  qspecl_then [`cx`,`ss`,`st`,`DoneK`] mp_tac (cj 2 eval_cps_eq) >>
+  rw[cont_def] >> CASE_TAC >> CASE_TAC >> gvs[] >>
+  rw[Once OWHILE_THM]
 QED
 
 val () = cv_auto_trans evaluate_all_constants_def;
 
-val call_external_function_pre_def = call_external_function_def
-     |> SRULE [eval_stmts_eq_cont_cps,
+val () = call_external_function_def
+     |> SRULE [eval_external_defaults_run, eval_exprs_eq_cont_cps,
+               eval_stmts_eq_cont_cps, set_scopes_def,
                vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
                vyperStateTheory.return_def, vyperStateTheory.raise_def,
                LET_THM, COND_RATOR, option_CASE_rator,
                get_transient_storage_def, update_transient_def]
-     |> cv_auto_trans_pre "call_external_function_pre";
-
-Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre orc gobs am cx nr mut ts all_mods args dflts vals
-    (bod:stmt list) ret
-Proof
-  rw[call_external_function_pre_def]
-  \\ rw[cont_pre_IS_SOME_cont]
-  \\ qmatch_goalsub_abbrev_tac`eval_stmts_cps cx ss st k`
-  \\ qspecl_then[`cx`,`ss`,`st`,`k`]mp_tac $ cj 2 eval_cps_eq
-  \\ rw[]
-  \\ CASE_TAC
-  \\ CASE_TAC
-  \\ rw[Abbr`k`, cont_def]
-  \\ rw[Once OWHILE_THM]
-QED
+     |> cv_auto_trans;
 
 val () = cv_auto_trans call_external_def;
 val () = cv_auto_trans clear_machine_logs_def;
@@ -2054,16 +2064,6 @@ Proof
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
-Theorem cont_pre_eval_stmts_cps[cv_pre]:
-  cont_pre (eval_stmts_cps cx ss st DoneK)
-Proof
-  rw[cont_pre_IS_SOME_cont]
-  \\ qspecl_then[`cx`,`ss`,`st`,`DoneK`]mp_tac $ cj 2 eval_cps_eq
-  \\ rw[cont_def]
-  \\ CASE_TAC \\ CASE_TAC \\ gvs[]
-  \\ rw[Once OWHILE_THM]
-QED
-
 
 (* Integration audit: required CPS equivalences must be kernel closed. *)
 val () = List.app (fn (name,th) =>

@@ -22,8 +22,9 @@ Theorem entry_body_failure_requests:
   call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body NoneT =
     (INR (Error (RuntimeError msg)), am, st.requests)
 Proof
-  simp[call_external_function_def, evaluate_defaults_def, bind_arguments_def,
-       send_call_value_def, return_def, bind_def, ignore_bind_def]
+  simp[call_external_function_def, bind_arguments_def,
+       send_call_value_def, return_def, bind_def, ignore_bind_def,
+       set_scopes_def, initial_state_def]
 QED
 
 Theorem entry_body_success_requests:
@@ -35,8 +36,9 @@ Theorem entry_body_success_requests:
     (INL NoneV, abstract_machine_from_state am.sources am.exports am.layouts st,
      st.requests)
 Proof
-  simp[call_external_function_def, evaluate_defaults_def, bind_arguments_def,
-       send_call_value_def, return_def, bind_def, ignore_bind_def]
+  simp[call_external_function_def, bind_arguments_def,
+       send_call_value_def, return_def, bind_def, ignore_bind_def,
+       set_scopes_def, initial_state_def]
 QED
 
 Theorem entry_return_cast_failure_requests:
@@ -48,8 +50,9 @@ Theorem entry_return_cast_failure_requests:
   call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body ret =
     (INR (Error (TypeError "ext cast ret")), am, st.requests)
 Proof
-  simp[call_external_function_def, evaluate_defaults_def, bind_arguments_def,
-       send_call_value_def, return_def, bind_def, ignore_bind_def]
+  simp[call_external_function_def, bind_arguments_def,
+       send_call_value_def, return_def, bind_def, ignore_bind_def,
+       set_scopes_def, initial_state_def]
 QED
 
 Definition entry_test_program_def:
@@ -99,7 +102,7 @@ QED
 Theorem entry_some_cv:
   entry_test_observations (SOME []) /\
   entry_test_observations (SOME [extCallOracle$failed_outcome
-    <|cr_target := 9w; cr_value := 0; cr_data := []; cr_static := F;
+    <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := 0; cr_target := 9w; cr_value := 0; cr_data := []; cr_static := F;
       cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>])
 Proof
   CONV_TAC cv_eval

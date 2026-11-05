@@ -81,6 +81,20 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Theorem send_cps_NONE_zero_value_runs_precompile:
+  send_observe 9w 0 NONE (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem send_cps_NONE_zero_value_empty_code_unchanged:
+  send_observe 0w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
 Theorem send_cps_failure_consumes_ignores_bad_payload:
   send_observe 9w 7 (SOME [send_outcome F [] (2 ** 256); cpscv_tail])
     (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
@@ -113,24 +127,20 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem send_cps_NONE_zero_value_runs_precompile:
-  send_observe 9w 0 NONE (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
+(* NONE executes recipient code. Use an empty non-precompile account so
+   the zero-value call succeeds without gas or state effects. *)
+Theorem send_cps_NONE_zero_transfer_unchanged:
+  send_observe 0x99w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
     send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
 QED
 
-Theorem send_cps_NONE_zero_value_empty_code_unchanged:
-  send_observe 0w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
-    send_initial_requests NONE
-Proof
-  CONV_TAC cv_eval
-QED
-
-(* Shared computed behavior for all four special addresses; Send has empty
-   calldata so the EC cases are valid zero points, not arbitrary oracle heads. *)
-Theorem send_cps_computed_no_consumption_no_request:
-  EVERY (λtarget. send_observe target 0 (SOME [cpscv_tail])
+(* Shared computed behavior for all four special addresses: the head
+   outcome's success bit is taken and no request is recorded. Send has empty
+   calldata so the EC cases are valid zero points. *)
+Theorem send_cps_computed_consumes_no_request:
+  EVERY (λtarget. send_observe target 0 (SOME [cpscv_tail; cpscv_tail])
     (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
     send_initial_requests cpscv_tail_snapshot) [1w;2w;6w;7w]
 Proof

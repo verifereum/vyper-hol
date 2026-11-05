@@ -267,6 +267,14 @@ Proof
      (adopt_return_fmp ret (merge_callee_state s cs')) = SOME s'` by
     (drule_all step_inst_invoke_intret >> strip_tac >> gvs[]) >>
   drule_all bind_outputs_lookup >> strip_tac >>
+  `immutable_base_zero cenv s'` by
+    (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
+     `!x. cenv.ce_imm_alloca = SOME (Var x) ==> ~MEM x inst.inst_outputs` by
+       (gvs[EVERY_MEM, not_local_ptr_def] >> metis_tac[]) >>
+     irule immutable_base_zero_frame >> qexists_tac `s` >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     gvs[lookup_var_def, adopt_return_fmp_def, merge_callee_state_def] >>
+     metis_tac[]) >>
   gvs[intret_q_def, result_rel_def, adopt_return_fmp_def] >>
   `cs.vs_data_section = s.vs_data_section` by gvs[setup_callee_def] >>
   drule run_blocks_intret_data_section >> strip_tac >>
@@ -278,6 +286,7 @@ Proof
     (irule immutables_rel_env_transport >> qexists_tac `cenv'` >> simp[]) >>
   gvs[merge_callee_state_def, lookup_var_def] >>
   irule stmt_state_rel_allocas_frame >>
+  simp[] >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >>
       qexistsl_tac [`s`, `es2 with scopes := es.scopes`] >> simp[] >>

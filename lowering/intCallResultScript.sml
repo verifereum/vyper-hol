@@ -24,10 +24,12 @@
 
 Theory intCallResult
 Ancestors
+  exprSimProps
+  loweringPosts
   list rich_list arithmetic
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   freshWrites valueEncoding valueEncodingProps entryDecodeProps immutableMemoryFrame
-  exprSim fragExec localPtrsProps context valueCopy
+   fragExec localPtrsProps context valueCopy
   vyperTyping vyperValue vyperState venomExecSemantics venomState
 
 (* ===== Storing the results ===== *)
@@ -53,11 +55,23 @@ Proof
      gvs[not_fresh_at_def, update_var_def]) >>
   gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1, run_inst_seq_def,
-       step_inst_base_def, exec_pure2_def, exec_write2_def, eval_operand_def,
-       bind_outputs_def, lookup_var_update_var] >>
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1] >>
+  `step_inst_base (mk_inst sa.cs_next_id ADD [buf_op; Lit off]
+     [STRING #"%" (toString sa.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var)) (w + off) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst (sa.cs_next_id + 1) MSTORE
+     [Var (STRING #"%" (toString sa.cs_next_var)); op] [])
+     (update_var (STRING #"%" (toString sa.cs_next_var)) (w + off) s) =
+     OK (mstore (w2n (w + off)) x
+       (update_var (STRING #"%" (toString sa.cs_next_var)) (w + off) s))` by
+    (irule step_MSTORE >> simp[eval_operand_def, lookup_var_update_var]) >>
+  simp[run_inst_seq_def] >>
   simp[mstore_def, update_var_def] >>
-  rpt strip_tac >> gvs[not_fresh_at_def]
+  rpt strip_tac >> gvs[not_fresh_at_def] >>
+  simp[lookup_var_def] >>
+  first_x_assum (qspec_then `sa.cs_next_var` mp_tac) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem store_result_head_shape[local]:
@@ -369,7 +383,9 @@ Theorem result_state_memory_frame:
        lookup_var p t = lookup_var p s) /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
        mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+         lookup_var x t = lookup_var x s) ==>
     stmt_state_rel ctx func cenv cx es t
 Proof
   rpt strip_tac >>
@@ -391,10 +407,19 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_fields >> qexists_tac `s` >>
+     qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     gvs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
      fs[local_region_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[] >> fs[stmt_state_rel_def] >>
+     qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   rewrite_tac[stmt_state_rel_def] >>
   conj_tac
   >- (irule state_rel_frame >>
@@ -512,10 +537,13 @@ Resume store_multi_results_frag[post]:
       >- (rpt strip_tac >>
           `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
           metis_tac[]) >>
-      fs[venom_state_component_equality])
+      fs[venom_state_component_equality] >>
+      rpt strip_tac >>
+      drule local_ptrs_reserved_imm_base >> strip_tac >>
+      first_x_assum irule >> metis_tac[])
   >- (match_mp_tac buffer_vv_holds >> qexistsl_tac [`tv`, `w`] >> simp[] >>
-      conj_tac
-      >- (Cases_on `rbuf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
+      TRY (conj_tac
+           >- (Cases_on `rbuf.buf_operand` >> gvs[eval_operand_def, lookup_var_def])) >>
       match_mp_tac stack_results_val_in_memory >>
       qexistsl_tac [`get_tenv cx`, `ws`] >> simp[] >> rpt strip_tac >>
       qpat_x_assum `!i. i < LENGTH ws ==> _` (qspec_then `i` mp_tac) >>

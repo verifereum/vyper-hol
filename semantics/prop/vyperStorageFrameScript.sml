@@ -104,10 +104,11 @@ Proof
   metis_tac[ranges_disjoint_n2w_w2n, ranges_disjoint_sym]
 QED
 
-(* Helper: write_storage_slot succeeds when value has the right type *)
+(* Helper: write_storage_slot succeeds in a non-static frame when value has
+   the right type *)
 Theorem write_storage_slot_succeeds:
   ∀cx b slot tv v st.
-    value_has_type tv v ⇒
+    ¬cx.txn.is_static ∧ value_has_type tv v ⇒
     write_storage_slot cx b slot tv v st =
     (INL (), SND (write_storage_slot cx b slot tv v st))
 Proof
@@ -226,6 +227,7 @@ Theorem write_storage_preserves_read:
     FST (read_storage_slot cx b2 slot2 tv2 st)
 Proof
   rpt gen_tac >> disch_tac >>
+  Cases_on `cx.txn.is_static` >>
   gvs[write_storage_slot_eq, AllCaseEqs()] >>
   rename1 `encode_value tv1 v = SOME writes` >>
   simp[read_storage_slot_eq] >>
@@ -261,7 +263,9 @@ Theorem write_preserves_read_num:
            (SND (write_storage_slot cx b1 (n2w off1) tv1 v st))) =
     FST (read_storage_slot cx b2 (n2w off2) tv2 st)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >>
+  Cases_on `cx.txn.is_static` >- simp[write_storage_slot_eq] >>
+  strip_tac >>
   irule write_storage_preserves_read >>
   qexistsl [`b1`, `n2w off1`, `tv1`, `v`] >>
   simp[Excl "w2n_n2w", write_storage_slot_succeeds] >>
@@ -363,29 +367,20 @@ Proof
   gvs[]
 QED
 
-(* Key helper: ANY write_storage_slot preserves lookup_toplevel_name
-   when slots are disjoint. Composes write_storage_slot_eq,
-   lookup_toplevel_name_after_set_storage, and write_preserves_read_num
-   into a single reusable step. Used by static_write_preserves_static_read,
-   hashmap_write_preserves_static_read, etc. *)
-Theorem lookup_toplevel_name_after_write:
-  ∀cx b slot tv v st mid m.
-    value_has_type tv v ∧
+(* Helper: applying a value's encoded writes to a backend preserves
+   lookup_toplevel_name when slots are disjoint. *)
+Theorem lookup_toplevel_name_after_apply_writes:
+  ∀cx b slot tv v writes st mid m.
+    encode_value tv v = SOME writes ∧ value_has_type tv v ∧
     (∀b2 off2 tv2.
        storage_var_info cx mid m = SOME (b2, off2, tv2) ⇒
        b ≠ b2 ∨
        ranges_disjoint (w2n slot) (type_slot_size tv) off2 (type_slot_size tv2)) ⇒
     lookup_toplevel_name cx
-      (SND (write_storage_slot cx b slot tv v st)) mid m =
+      (set_storage cx st b (apply_writes slot writes (get_storage cx st b))) mid m =
     lookup_toplevel_name cx st mid m
 Proof
   rpt gen_tac >> strip_tac >>
-  (* Reduce SND(write_storage_slot ...) to set_storage *)
-  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >>
-  Cases_on `encode_value tv v` >> gvs[] >>
-  rename1 `encode_value tv v = SOME writes` >>
-  simp[write_storage_slot_eq] >>
-  (* Now goal has set_storage; apply lookup_toplevel_name_after_set_storage *)
   irule lookup_toplevel_name_after_set_storage >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   (* Same backend: decode_value with apply_writes = decode_value without *)
@@ -399,6 +394,29 @@ Proof
       metis_tac[CONJUNCT1 encode_writes_bounded])
   >> disch_then (fn th => rewrite_tac [th]) >>
   CASE_TAC >> simp[]
+QED
+
+(* Key helper: ANY write_storage_slot preserves lookup_toplevel_name
+   when slots are disjoint. Composes write_storage_slot_eq and
+   lookup_toplevel_name_after_apply_writes into a single reusable step.
+   Used by static_write_preserves_static_read, etc. *)
+Theorem lookup_toplevel_name_after_write:
+  ∀cx b slot tv v st mid m.
+    value_has_type tv v ∧
+    (∀b2 off2 tv2.
+       storage_var_info cx mid m = SOME (b2, off2, tv2) ⇒
+       b ≠ b2 ∨
+       ranges_disjoint (w2n slot) (type_slot_size tv) off2 (type_slot_size tv2)) ⇒
+    lookup_toplevel_name cx
+      (SND (write_storage_slot cx b slot tv v st)) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  Cases_on `cx.txn.is_static` >> simp[write_storage_slot_eq] >>
+  drule_then irule lookup_toplevel_name_after_apply_writes >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Key helper: update_toplevel_name reduces to write_storage_slot
@@ -425,13 +443,36 @@ QED
    write_storage_slot at the hashmap_slot_for slot. *)
 Theorem write_hashmap_eq_write_storage:
   ∀cx st b bslot kt t kv v tv.
-    evaluate_type (get_tenv cx) t = SOME tv ⇒
+    evaluate_type (get_tenv cx) t = SOME tv ∧ ¬cx.txn.is_static ⇒
     write_hashmap cx st (HashMapRef b bslot kt (Type t)) kv v =
     SND (write_storage_slot cx b (hashmap_slot_for bslot kt kv) tv v st)
 Proof
   rpt strip_tac >>
   simp[write_hashmap_def, hashmap_write_def, write_storage_slot_eq] >>
   CASE_TAC >> simp[]
+QED
+
+(* Key helper: write_hashmap to a leaf HashMapRef preserves
+   lookup_toplevel_name when slots are disjoint. *)
+Theorem lookup_toplevel_name_after_write_hashmap:
+  ∀cx st b bslot kt t kv v tv mid m.
+    evaluate_type (get_tenv cx) t = SOME tv ∧
+    value_has_type tv v ∧
+    (∀b2 off2 tv2.
+       storage_var_info cx mid m = SOME (b2, off2, tv2) ⇒
+       b ≠ b2 ∨
+       ranges_disjoint (w2n (hashmap_slot_for bslot kt kv)) (type_slot_size tv)
+                       off2 (type_slot_size tv2)) ⇒
+    lookup_toplevel_name cx
+      (write_hashmap cx st (HashMapRef b bslot kt (Type t)) kv v) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  simp[write_hashmap_def, hashmap_write_def] >>
+  drule_then irule lookup_toplevel_name_after_apply_writes >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* ============================================================
@@ -477,8 +518,8 @@ Theorem hashmap_write_preserves_static_read:
     lookup_toplevel_name cx st mid m
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_then (fn th => simp[th]) write_hashmap_eq_write_storage >>
-  irule lookup_toplevel_name_after_write >> simp[Excl "w2n_n2w"]
+  drule_then irule lookup_toplevel_name_after_write_hashmap >>
+  simp[Excl "w2n_n2w"]
 QED
 
 (* ============================================================
@@ -586,7 +627,7 @@ Proof
     metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
   Cases_on `encode_value tv_w v` >> gvs[] >>
   rename1 `encode_value tv_w v = SOME writes` >>
-  simp[write_storage_slot_eq] >>
+  Cases_on `cx.txn.is_static` >> simp[write_storage_slot_eq] >>
   Cases_on `b_w ⇔ b_r`
   >- (gvs[get_storage_after_set] >>
       irule decode_value_disjoint_writes_words >>
@@ -617,8 +658,8 @@ Proof
   drule_all is_leaf_hashmap_THE_lookup >> strip_tac >> simp[] >>
   gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
       get_leaf_tv_def] >>
-  drule_then (fn th => simp[th]) write_hashmap_eq_write_storage >>
-  irule lookup_toplevel_name_after_write >> simp[Excl "w2n_n2w"] >>
+  drule_then irule lookup_toplevel_name_after_write_hashmap >>
+  simp[Excl "w2n_n2w"] >>
   gvs[hashmap_ref_storable_def, AllCaseEqs()]
 QED
 
@@ -872,7 +913,9 @@ Theorem nested_hashmap_write_preserves_static_read_chain:
            (SND (write_storage_slot cx b final_slot tv new_val st))) =
     FST (read_storage_slot cx var_b (n2w var_off) var_tv st)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >>
+  Cases_on `cx.txn.is_static` >- simp[write_storage_slot_eq] >>
+  strip_tac >> gvs[] >>
   irule write_storage_preserves_read >>
   qexistsl [`b`, `final_slot`, `tv`, `new_val`] >>
   simp[Excl "w2n_n2w", write_storage_slot_succeeds] >>

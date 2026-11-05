@@ -66,7 +66,7 @@ Theorem bind_arguments_env_var_type_scope_entry:
     bind_arguments tenv args vs = SOME sc /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types (id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (id) = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable (id))) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
        ?id. MEM (id,ty) args /\ n = id) /\
     FLOOKUP env_body.var_types n = SOME ty ==>
@@ -95,7 +95,7 @@ Theorem bind_arguments_scope_entry_env_var_type:
     bind_arguments tenv args vs = SOME sc /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types (id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (id) = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable (id))) /\
     FLOOKUP sc n = SOME entry ==>
     ?ty. FLOOKUP env_body.var_types n = SOME ty /\
          evaluate_type tenv ty = SOME entry.type /\ entry.assignable
@@ -117,11 +117,11 @@ Theorem bind_arguments_env_var_assignable_scope_entry:
     bind_arguments tenv args vs = SOME sc /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types (id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (id) = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable (id))) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
        ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = id /\ b = T) /\
+       ?id typ. MEM (id,typ) args /\ n = id) /\
     FLOOKUP env_body.var_assignable n = SOME T ==>
     ?entry. FLOOKUP sc n = SOME entry /\ entry.assignable
 Proof
@@ -150,11 +150,11 @@ Theorem bind_arguments_env_scopes_consistent:
     bind_arguments tenv args vs = SOME sc /\ tenv = get_tenv cx /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types (id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (id) = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable (id))) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
        ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = id /\ b = T) ==>
+       ?id typ. MEM (id,typ) args /\ n = id) ==>
     env_scopes_consistent env_body cx (st with scopes := [sc])
 Proof
   rw[env_scopes_consistent_def, lookup_scopes_def]
@@ -401,11 +401,11 @@ Theorem intcall_bind_arguments_from_runtime_typed:
     LENGTH es <= LENGTH params /\ LENGTH params - LENGTH es <= LENGTH dflts /\
     (!id typ. MEM (id,typ) params ==>
        FLOOKUP env_body.var_types (id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (id) = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable (id))) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
        ?id. MEM (id,ty) params /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) params /\ n = id /\ b = T) ==>
+       ?id typ. MEM (id,typ) params /\ n = id) ==>
     ?call_env.
       bind_arguments (get_tenv cx) params (actual_vs ++ dflt_vs) = SOME call_env /\
       scope_well_typed call_env /\

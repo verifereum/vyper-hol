@@ -493,6 +493,19 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Declared return types of the non-external functions, the first
+   declaration of a name winning, as in build_func_param_types. *)
+Definition build_func_return_type_def:
+  build_func_return_type ([] : toplevel list) = (K NoneT : string -> type) ∧
+  build_func_return_type (top :: rest) =
+    let rest_map = build_func_return_type rest in
+    case top of
+      FunctionDecl vis _ _ _ fname _ _ ret _ =>
+        if vis = External then rest_map
+        else (λs. if s = fname then ret else rest_map s)
+    | _ => rest_map
+End
+
 (* Function ids for internal labels (internal_fn_label): a function's
    position among the source's function declarations, counting from n, and
    the first non-external declaration of a name wins, as in
@@ -601,7 +614,7 @@ Definition build_compile_env_def:
        locals get no slot here.
        Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
     let (ret_buf, ret_pc) =
-      if is_external then (NONE, NONE)
+      if vis <> Internal then (NONE, NONE)
       else allocate_internal_special_vars has_return_buf args_end in
     let dynarray_cap = build_dynarray_capacity (args ++ locals) in
     let func_info = build_func_info sft_fn tops in
@@ -629,6 +642,7 @@ Definition build_compile_env_def:
        ce_returns_count := rc;
        ce_return_buf := ret_buf;
        ce_return_pc := ret_pc;
+       ce_ctor_exit_label := NONE;
        ce_is_external := is_external;
        ce_ret_enc_info := AbiPrimWord;
        ce_ret_dec_info := DecPrimWord NoClamp;
@@ -638,6 +652,7 @@ Definition build_compile_env_def:
        ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
+       ce_func_return_type := build_func_return_type tops;
        ce_func_ids := build_func_ids 0 tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
@@ -682,6 +697,17 @@ Theorem build_compile_env_ce_func_param_types:
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_func_param_types =
     build_func_param_types tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_return_type:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_return_type =
+    build_func_return_type tops
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
@@ -771,6 +797,26 @@ Proof
   >> rpt (pairarg_tac >> gvs[])
 QED
 
+Theorem build_compile_env_no_ctor_exit[simp]:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body
+       use_trans).ce_ctor_exit_label = NONE
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_deploy_no_internal_return:
+  !tops mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops Deploy mut func_name args ret_type body
+       use_trans).ce_return_pc = NONE /\
+    (build_compile_env tops Deploy mut func_name args ret_type body
+       use_trans).ce_return_buf = NONE
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
 (* allocate_args places each argument at a MemLoc slot and leaves every
    other name as vars has it. *)
 Theorem allocate_args_FLOOKUP_other:
@@ -808,8 +854,13 @@ Proof
   Induct >> simp[add_module_var_locations_def] >>
   rpt gen_tac >> simp[Once add_module_var_locations_def] >>
   strip_tac >> first_x_assum drule >>
-  Cases_on `h` >> simp[] >> rpt (CASE_TAC >> simp[]) >>
-  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+  Cases_on `h` >> simp[]
+  >~ [`VariableDecl _ vloc _ _ vslot`]
+  >- (Cases_on `vslot` >> simp[] >> Cases_on `vloc` >>
+      rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[])
+  >~ [`HashMapDecl _ htr _ _ _ hslot`]
+  >- (Cases_on `hslot` >> simp[] >> Cases_on `htr` >>
+      rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[])
 QED
 
 Theorem add_immutable_locations_FLOOKUP:
@@ -1059,9 +1110,8 @@ Definition package_internal_fn_def:
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
-    let vis = if is_ctor_context then Deploy else Internal in
     let cenv = (build_compile_env tops
-                  vis mut fname fargs ret body use_trans)
+                  Internal mut fname fargs ret body use_trans)
                  with <| ce_is_ctor := is_ctor_context;
                          ce_raw_return := rr |> in
     let rc = returns_stack_count sft_types ret in
@@ -1367,7 +1417,9 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    if EVERY external_return_buffer_ok external_fns ∧
+    if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+         tops < 0x6000 ∧
+       EVERY external_return_buffer_ok external_fns ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
@@ -1375,6 +1427,17 @@ Definition lower_vyper_runtime_unit_def:
         rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
     else NONE
 End
+
+(* A unit that lowers has its immutable section below the CODE allocator's
+   0x6000 limit (Vyper rejects larger sections). *)
+Theorem lower_vyper_runtime_unit_immutables_bound:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit ⇒
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rw[lower_vyper_runtime_unit_def, AllCaseEqs()]
+QED
 
 (* A unit that lowers has every external return buffer below the limit. *)
 Theorem lower_vyper_runtime_unit_return_buffer_ok:
@@ -1421,7 +1484,8 @@ Definition lower_vyper_deploy_unit_def:
                  package_internal_fn tops use_trans nkey_map T immutables_len)
                 int_fns
           else [] in
-    if ¬EVERY (fn_allocs_ok tops)
+    if ¬(immutables_len < 0x6000) ∨
+       ¬EVERY (fn_allocs_ok tops)
           (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f]))
     then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
@@ -1435,6 +1499,16 @@ Definition lower_vyper_deploy_unit_def:
       immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
       ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy"
 End
+
+Theorem lower_vyper_deploy_unit_immutables_bound:
+  lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ==>
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >>
+  PairCases_on `r` >>
+  rw[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
 
 (* A deploy unit that lowers has the constructor's and every internal
    function's static buffers below the limit. *)
@@ -1571,3 +1645,20 @@ Definition compile_vyper_o1_def:
                    (tops : toplevel list) =
     compile_vyper finalizer (o1_policy all_capabilities) tops
 End
+
+Theorem build_positional_args_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields /\
+  ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+  build_positional_args ce' args = build_positional_args ce args
+Proof
+  strip_tac >> simp[build_positional_args_def] >> irule listTheory.MAP_CONG >>
+  simp[pairTheory.FORALL_PROD, build_positional_arg_def] >>
+  metis_tac[type_to_abi_dec_info_layout_cong]
+QED
+
+Theorem build_positional_args_imm_alloca:
+  build_positional_args (ce with ce_imm_alloca := imm) args =
+  build_positional_args ce args
+Proof
+  irule build_positional_args_layout_cong >> simp[]
+QED

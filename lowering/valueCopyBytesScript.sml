@@ -4,13 +4,16 @@
  *
  * TOP-LEVEL:
  *   compile_store_memory_bytestring_src — the copy at the destination type
- *   bytestring_val_in_memory_transfer, bytestring_val_footprint_eq — layout
- *     and footprint agree across bytestring types
+ *   bytestring_val_in_memory_transfer, bytestring_val_footprint_eq,
+ *   bytestring_val_store_size_eq — layout, footprint and store size agree
+ *     across bytestring types
  *   bytestring_type_value, is_bytestring_word_type — bytestring types
  *)
 Theory valueCopyBytes
 Ancestors
-  exprSim context compileEnv valueTypingMemoryProps vyperTyping vyperValue valueEncoding
+  exprSimProps
+  loweringPosts
+   context compileEnv valueTypingMemoryProps vyperTyping vyperValue valueEncoding
 
 Theorem compile_store_memory_bytestring_src:
   !cenv src dst dty sty.
@@ -67,4 +70,41 @@ Proof
   qspecl_then [`tenv`, `t2`, `tv2`] mp_tac bytestring_type_value >>
   simp[] >> rpt strip_tac >>
   Cases_on `v` >> gvs[value_has_type_def, val_footprint_def]
+QED
+
+Theorem bytestring_val_store_size_eq:
+  !tenv t1 t2 tv1 tv2 v.
+    is_bytestring_type t1 /\ is_bytestring_type t2 /\
+    evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
+    value_has_type tv1 v /\ value_has_type tv2 v ==>
+    val_store_size tv1 v = val_store_size tv2 v
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tenv`, `t1`, `tv1`] mp_tac bytestring_type_value >>
+  qspecl_then [`tenv`, `t2`, `tv2`] mp_tac bytestring_type_value >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def, val_store_size_def]
+QED
+
+(* A payload typed at two dynamic bounds fits either buffer. *)
+Theorem bytestring_val_footprint_le:
+  !tenv t1 t2 tv1 tv2 v.
+    is_bytestring_type t1 /\ is_bytestring_type t2 /\
+    evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
+    value_has_type tv1 v /\ value_has_type tv2 v ==>
+    val_footprint tv1 v <= type_memory_size tv2
+Proof
+  rpt strip_tac >>
+  `val_footprint tv1 v = val_footprint tv2 v` by
+    metis_tac[bytestring_val_footprint_eq] >>
+  simp[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]
+QED
+
+Theorem bytestring_memory_bytes_positive:
+  !cenv t. is_bytestring_type t ==> 0 < type_memory_bytes cenv t
+Proof
+  Cases_on `t` >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+  FIRST [rename1 `BytesT bd` >> Cases_on `bd`, all_tac] >>
+  simp[is_bytestring_type_def, type_memory_bytes_def]
 QED

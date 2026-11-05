@@ -2,7 +2,7 @@
  * Venom unit-transform boundary (PLAN §5.8, D17-D20).
  * TOP-LEVEL: unit_result_rel, ctx_transform_correct,
  *   checked_unit_transform_correct, o1_initial_state_ok,
- *   inst_mem_below_frontier, raw_unit_memory_ok.
+ *   inst_mem_below_frontier, inst_mem_ok_in_fn, raw_unit_memory_ok.
  * Forward simulation only, from ONE initial state; no GAS-reading list.
  * Successful runs compare observable_equiv, including executed requests.
  * Aborts compare neither states nor requests: REVERT alone must stay REVERT.
@@ -93,10 +93,12 @@ QED
 
 (* ===== Initial allocation frontier and raw-run memory ===== *)
 
+(* The allocation frontier is free: a deploy unit's raw run starts it at
+ * the end of its reserved immutables region, a runtime unit's at 0. *)
 Definition o1_initial_state_ok_def:
   o1_initial_state_ok vs <=>
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
-    vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0
+    vs.vs_allocas = FEMPTY
 End
 
 Definition inst_mem_below_frontier_def:
@@ -105,11 +107,20 @@ Definition inst_mem_below_frontier_def:
       (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)
 End
 
+(* The raw memory check at an instruction state of fn: below the frontier,
+   or part of a revert forwarding. *)
+Definition inst_mem_ok_in_fn_def:
+  inst_mem_ok_in_fn fn inst s <=>
+    inst_mem_below_frontier inst s \/
+    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+         revert_forward_at bb s.vs_inst_idx
+End
+
 Definition raw_unit_memory_ok_def:
   raw_unit_memory_ok ctx vs <=>
     ?Inv. codegen_reachability_package Inv ctx vs /\
       !fn inst s. Inv ctx fn inst s ==>
-        s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s
+        s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s
 End
 
 (* Boundary elimination keeps all three corrected reachability clauses. *)
@@ -118,8 +129,8 @@ Theorem raw_unit_memory_ok_invariant:
   ?Inv. codegen_reachability_package Inv ctx vs /\
         reachability_closed Inv ctx /\
         (!fn inst s. Inv ctx fn inst s ==>
-          s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s)
+          s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s)
 Proof
   rw[raw_unit_memory_ok_def] >> qexists_tac `Inv` >>
-  fs[codegen_reachability_package_def] >> first_assum ACCEPT_TAC
+  fs[codegen_reachability_package_def] >> metis_tac[]
 QED

@@ -20,6 +20,7 @@
 
 Theory bodyStoragePreservation
 Ancestors
+  vyperCall
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeCallStackSoundness vyperTypeInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -192,10 +193,40 @@ Proof
   >~ [`eval_expr _ (Literal _ _)`] >- suspend "literal_expr"
   >~ [`eval_expr _ (IfExp _ _ _ _)`] >- suspend "if_expr"
   >~ [`eval_expr _ (Call _ (RawCallTarget _) _ _)`] >-
-    (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
+         int_calls_expr_def] >>
+     reverse conj_tac
+     >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+     strip_tac >>
+     qpat_x_assum `well_typed_expr env (Call _ _ _ _)`
+       (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
+     irule exprOracleStorageInterfacesTheory.eval_raw_call_expr_oracle_storage >>
+     rpt (goal_assum (drule_at Any)) >>
+     reverse conj_tac >- metis_tac[runtime_storage_consistent_storage] >>
+     rpt strip_tac
+     >~ [`eval_exprs _ _ _ = _`]
+     >- (first_x_assum irule >> qexists_tac `env` >>
+         first_assum (irule_at Any) >> fs[]) >>
+     metis_tac[runtime_storage_consistent_storage])
   >~ [`eval_expr _ (Call _ (RawCallCalldataTarget _) _ _)`] >-
-    (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
-  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _) _ _)`] >-
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
+         int_calls_expr_def] >>
+     reverse conj_tac
+     >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+     strip_tac >>
+     qpat_x_assum `well_typed_expr env (Call _ _ _ _)`
+       (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
+     irule exprOracleStorageInterfacesTheory.eval_raw_call_calldata_expr_oracle_storage >>
+     rpt (goal_assum (drule_at Any)) >>
+     reverse conj_tac >- metis_tac[runtime_storage_consistent_storage] >>
+     rpt strip_tac
+     >~ [`eval_exprs _ _ _ = _`]
+     >- (first_x_assum irule >> qexists_tac `env` >>
+         first_assum (irule_at Any) >> fs[]) >>
+     metis_tac[runtime_storage_consistent_storage])
+  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _)`] >-
     (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
   >~ [`eval_exprs _ []`] >-
     (rpt strip_tac >> gvs[Once evaluate_def, return_def, runtime_storage_consistent_def])
@@ -678,12 +709,15 @@ Resume body_oracle_storage_mutual[intcall_start]:
   gvs[int_calls_expr_def, EVERY_APPEND, expr_has_evm_run_def,
       supported_expr_exists_def] >>
   Cases_on `MEM (NONE,fn) cx.stk`
-  >- (gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
-          ignore_bind_apply] >> metis_tac[runtime_storage_consistent_storage]) >>
+  >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
+          ignore_bind_apply] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   Cases_on `lookup_callable_function cx.in_deploy fn tops`
-  >- (gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+  >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
           return_def, raise_def, ignore_bind_apply, bind_apply] >>
-      metis_tac[runtime_storage_consistent_storage]) >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   rename1 `lookup_callable_function cx.in_deploy fn tops = SOME tup` >>
   PairCases_on `tup` >>
   rename1 `lookup_callable_function cx.in_deploy fn tops =
@@ -703,8 +737,8 @@ Resume body_oracle_storage_mutual[intcall_live]:
   asm_x "intcall_ih1" mp_tac >> simp[] >> disch_then assume_tac >>
   asm_x "intcall_ih2" mp_tac >> simp[] >> disch_then assume_tac >>
   rule_assum_tac (SRULE [type_check_def, assert_def, return_def,
-                        body_empty_defaults_finally, get_scopes_def]) >>
-  drule_all body_eval_intcall_empty_defaults >>
+                        eval_empty_defaults_finally, get_scopes_def]) >>
+  drule_all eval_expr_intcall_empty_defaults >>
   disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   simp_tac bool_ss [bind_def, ignore_bind_def] >>
   Cases_on `eval_expr_results cx es st` >>
