@@ -185,7 +185,10 @@ Proof
   simp[compile_call_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[vv_operand_def]) >>
   gvs[vv_operand_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[vv_operand_def])
+  rpt (pairarg_tac >> gvs[vv_operand_def]) >>
+  Cases_on `compile_create_call f ce c b b0 args sa` >>
+  gvs[as_stack_val_def, vv_operand_def] >>
+  metis_tac[compile_create_call_safe_operand, safe_operand_def]
 QED
 
 val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag compile_call_not_label) in
@@ -298,3 +301,186 @@ val _ = List.app (fn th =>
   end) [compile_name_vv_local_not_label, named_modular_not_label,
          compile_expr_builtin_not_label_classify, compile_expr_body_not_label,
          compile_type_convert_not_label];
+
+Theorem as_stack_val_not_label[local]:
+  (!op st. result = (op,st) ==> !l. op <> Label l) /\
+  as_stack_val ty result = (vv,sb) ==> !l. vv_operand vv <> Label l
+Proof
+  PairCases_on `result` >> simp[as_stack_val_def] >> rpt strip_tac >> gvs[vv_operand_def]
+QED
+
+Theorem as_ptr_val_not_label[local]:
+  (!op st. result = (op,st) ==> !l. op <> Label l) /\
+  as_ptr_val ty loc result = (vv,sb) ==> !l. vv_operand vv <> Label l
+Proof
+  PairCases_on `result` >> simp[as_ptr_val_def] >> rpt strip_tac >> gvs[vv_operand_def, mk_ptr_def]
+QED
+
+Theorem compile_bytestring_widen_copy_not_label[local]:
+  compile_bytestring_widen_copy dst v src sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem type_builtin_convert_not_label[local]:
+  (!e t s op s'. MEM e args /\ well_typed_expr env e /\
+    lower_value f ce t e s = (op,s') ==> !l. op <> Label l) /\
+  well_typed_expr env (TypeBuiltin vt Convert rt args) /\
+  compile_type_builtin_dispatch_body f ce vt ty Convert rt args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  strip_tac >> drule typed_convert_child >> strip_tac >> gvs[] >>
+  gvs[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> Cases_on `rt` >>
+  gvs[AllCaseEqs(), vv_operand_def] >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >- metis_tac[compile_type_convert_not_label,
+                        compile_bytestring_widen_copy_not_label]) >> simp[]
+QED
+
+Theorem lower_abi_encode_not_label[local]:
+  lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[builtinAbiTheory.lower_abi_encode_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem type_builtin_nonconvert_not_label[local]:
+  tb <> Convert /\
+  compile_type_builtin_dispatch_body f ce vt ty tb rt args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `tb` >>
+  simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), vv_operand_def, base_ptr_def]
+  >~ [`as_stack_val _ _ = _`] >-
+    (drule_at (Pos last) as_stack_val_not_label >>
+     (impl_tac >-
+       (rpt strip_tac >> drule_all compile_extract32_load_safe_operand >>
+        strip_tac >> metis_tac[compile_clamp_basetype_safe_operand, safe_operand_def])) >>
+     simp[])
+  >~ [`compile_builtin_empty_complex _ _ _ = _`] >- metis_tac[compile_empty_not_label]
+  >~ [`lower_abi_decode _ _ _ _ _ _`] >-
+    (drule_at (Pos last) as_ptr_val_not_label >>
+     (impl_tac >- metis_tac[lower_abi_decode_not_label]) >> simp[]) >>
+  drule_at (Pos last) as_ptr_val_not_label >>
+  (impl_tac >- metis_tac[lower_abi_encode_not_label]) >> simp[]
+QED
+
+Theorem type_builtin_dispatch_body_not_label[local]:
+  (!e t s op s'. MEM e args /\ well_typed_expr env e /\
+    lower_value f ce t e s = (op,s') ==> !l. op <> Label l) /\
+  well_typed_expr env (TypeBuiltin vt tb rt args) /\
+  compile_type_builtin_dispatch_body f ce vt ty tb rt args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `tb = Convert` >> rpt strip_tac
+  >- (gvs[] >> metis_tac[type_builtin_convert_not_label]) >>
+  metis_tac[type_builtin_nonconvert_not_label]
+QED
+
+Theorem builtin_scalar_not_label[local]:
+  (bi = Not \/ bi = Neg \/ bi = Abs \/ bi = BlockHash \/ bi = BlobHash \/
+   bi = Ceil \/ bi = Floor \/ bi = AddMod \/ bi = MulMod \/ bi = PowMod256 \/
+   bi = ECRecover \/ bi = CalldataLen \/ (?item. bi = Env item)) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >-
+    metis_tac[emit_op_safe_operand, compile_invert_safe_operand,
+      compile_neg_safe_operand, compile_builtin_abs_safe_operand,
+      compile_blockhash_safe_operand, compile_blobhash_safe_operand,
+      compile_ceil_safe_operand, compile_floor_safe_operand,
+      compile_addmod_safe_operand, compile_mulmod_safe_operand,
+      compile_pow_mod256_safe_operand, compile_ecrecover_safe_operand,
+      compile_builtin_calldatasize_safe_operand, compile_env_var_safe_operand,
+      safe_operand_def]) >> simp[]
+QED
+
+Theorem builtin_hash_not_label[local]:
+  (bi = Keccak256 \/ bi = Sha256) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >-
+    metis_tac[compile_keccak256_bytes_safe_operand,
+      compile_keccak256_bytesm_safe_operand, compile_keccak256_word_safe_operand,
+      compile_sha256_bytes_safe_operand, compile_sha256_bytesm_safe_operand,
+      compile_sha256_word_safe_operand, safe_operand_def]) >> simp[]
+QED
+
+Theorem builtin_bop_not_label[local]:
+  compile_builtin_dispatch_body f ce vt ty (Bop bop) args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >-
+    metis_tac[compile_binop_safe_operand, emit_op_safe_operand,
+      compile_list_membership_in_safe_operand, compile_list_membership_notin_safe_operand,
+      compile_var_array_membership_safe_operand, safe_operand_def]) >> simp[]
+QED
+
+Theorem builtin_len_not_label[local]:
+  compile_builtin_dispatch_body f ce vt ty Len args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >- metis_tac[compile_builtin_calldatasize_safe_operand,
+                        compile_builtin_len_safe_operand, safe_operand_def]) >> simp[]
+QED
+
+Theorem compile_acc_not_label[local]:
+  (acc = Address ==> !s r s'. lower_value f ce (BaseT AddressT) e s = (r,s') ==>
+     !l. r <> Label l) /\
+  compile_acc f ce e acc sa = (r,sb) ==> !l. r <> Label l
+Proof
+  Cases_on `acc` >> simp[compile_acc_def, LET_THM] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand, safe_operand_def]
+QED
+
+Theorem builtin_acc_not_label[local]:
+  (!e t s op s'. MEM e args /\ well_typed_expr env e /\
+    lower_value f ce t e s = (op,s') ==> !l. op <> Label l) /\
+  well_typed_expr env (Builtin vt (Acc item) args) /\
+  compile_builtin_dispatch_body f ce vt ty (Acc item) args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[well_typed_expr_def, well_typed_builtin_app_def] >>
+  Cases_on `args` >> simp[] >> rename1 `_ :: rest` >>
+  Cases_on `rest` >> simp[] >> rpt strip_tac >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >-
+    (gvs[well_typed_expr_def] >> rpt strip_tac >>
+     drule_at (Pos last) compile_acc_not_label >>
+     (impl_tac >- metis_tac[]) >> simp[])) >> simp[]
+QED
+
+val _ = List.app (fn th =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail "Typed dispatcher operand dependency" else ()
+  end) [as_stack_val_not_label, as_ptr_val_not_label,
+         compile_bytestring_widen_copy_not_label, type_builtin_convert_not_label,
+         lower_abi_encode_not_label, type_builtin_nonconvert_not_label,
+         type_builtin_dispatch_body_not_label, builtin_scalar_not_label,
+         builtin_hash_not_label, builtin_bop_not_label, builtin_len_not_label,
+         compile_acc_not_label, builtin_acc_not_label];
