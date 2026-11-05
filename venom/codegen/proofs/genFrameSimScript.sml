@@ -980,7 +980,7 @@ QED
 
 (* ===== Non-jump instructions ===== *)
 
-Theorem operand_val_memory_update[local]:
+Theorem operand_val_memory_update:
   operand_val (s with vs_memory := m) lo op = operand_val s lo op
 Proof
   Cases_on `op` >> simp[operand_val_def]
