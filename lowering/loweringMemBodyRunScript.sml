@@ -7,7 +7,8 @@
  * its end (compile_guarded_body_end_mem_safe).  bodyMemory joins the
  * ancestors with the composition's proof, once bodyMemory's own cone
  * builds after the GAS join; its body_stmts_sim_mem's abi_decode target
- * premise holds for the called body by lookup_function_abi_decode_target.
+ * premise holds for the called body by bodyAbiDecodeTarget's
+ * lookup_function_abi_decode_target_occurs.
  *)
 Theory loweringMemBodyRun
 Ancestors
@@ -21,7 +22,7 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
-  loweringMemAbiTarget loweringMemEntryReach loweringMemFrameRet
+  bodyAbiDecodeTarget loweringMemEntryReach loweringMemFrameRet gasSummary
 
 val _ = Parse.hide "body";
 
@@ -104,7 +105,9 @@ Theorem lower_vyper_runtime_unit_body_mem:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     LENGTH tx.args = LENGTH args /\
