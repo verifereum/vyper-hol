@@ -10,6 +10,7 @@ Ancestors
   vyperContext vyperTyping vyperValueOperation
   venomState words list finite_map arithmetic
   exprSimWordArgs valueEncoding loweringSlice vyperEvalExprPreservesScopesDom
+  rich_list fragExec fragGasPath gasContext gasSummaryCompose gasExemptCert
 
 Theorem calldata_slice_continuation_summary_mem:
   expr_body_pre cenv cx env
@@ -139,3 +140,133 @@ Resume calldata_slice_continuation_summary_mem[abort]:
 QED
 
 Finalise calldata_slice_continuation_summary_mem
+
+Theorem compile_calldata_slice_vv_sim_mem:
+  expr_body_pre cenv cx env
+    (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es /\
+  expr_type e = BaseT (UintT 256) /\
+  expr_sim_mem ctx func cenv cx (expr_type e) e es ==>
+  expr_vv_sim_mem ctx func cenv cx ty
+    (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es
+Proof
+  strip_tac >> simp[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_calldata_slice_parts] >>
+  Cases_on `lower_value compile_expr cenv (BaseT (UintT 256)) e sa` >>
+  simp[] >> strip_tac >>
+  rename1 `lower_value compile_expr cenv _ e sa = (x,sm)` >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >> disch_then irule >>
+     fs[expr_body_pre_def]) >>
+  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
+  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+  Cases_on `compile_slice_calldata x (Lit (n2w n))
+    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm` >>
+  simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  drule slice_calldata_shape >> strip_tac >>
+  `cs_extends sm r` by
+    fs[cs_extends_def, same_blocks_def, IS_PREFIX_APPEND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm r func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ e _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `x`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- suspend "normal" >>
+  suspend "exempt"
+QED
+
+Resume compile_calldata_slice_vv_sim_mem[normal]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  strip_tac
+  >- suspend "success" >>
+  suspend "exception"
+QED
+
+Resume compile_calldata_slice_vv_sim_mem[success]:
+  gvs[] >>
+  `bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL v, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `expr_body_pre cenv cx env e
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    metis_tac[expr_body_pre_gas_obs] >>
+  `value_has_type (BaseTV (UintT 256)) v` by
+    metis_tac[expr_body_pre_base_result] >>
+  `expr_res_ok (builtin_result cx es_end.accounts (BaseT (BytesT (Dynamic n)))
+    (CalldataSlice n) [expr_type e] [v])` by
+    (qpat_x_assum `gas_admissible (eval_expr cx (Builtin _ _ _)) _ es`
+      (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
+     simp[eval_expr_unary_builtin_action, precompile_builtin_def,
+          builtin_args_length_ok_def, bind_def] >>
+     Cases_on `builtin_result cx es_end.accounts (BaseT (BytesT (Dynamic n)))
+       (CalldataSlice n) [BaseT (UintT 256)] [v]` >>
+     simp[expr_vv_res_ok_def, expr_res_ok_def]) >>
+  `as_ptr_val (BaseT (BytesT (Dynamic n))) LocMemory
+    (compile_slice_calldata x (Lit (n2w n))
+      (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm) =
+    (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory),r)` by
+    simp[as_ptr_val_def] >>
+  drule_at (Pat `expr_post`) calldata_slice_continuation_summary_mem >>
+  disch_then (qspecl_then
+    [`LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)`,
+     `r`, `n`, `gas_explicit marks s0.vs_gas_readings`, `env`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  strip_tac >>
+  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  simp[eval_expr_unary_builtin_action, builtin_args_length_ok_def,
+       expr_type_def] >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  strip_tac >>
+  rename1 `gas_marked_exec _ _ _ _ marks' res fin out` >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `fin`, `out`] >>
+  conj_tac
+  >- (irule gas_marked_exec_bind_normal >>
+      qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >> metis_tac[]) >>
+  gvs[expr_type_def] >>
+  irule gas_marked_exec_bind_normal >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> simp[]
+QED
+
+Resume compile_calldata_slice_vv_sim_mem[exception]:
+  Cases_on `res` >- gvs[expr_exit_def] >>
+  qexists_tac `marks` >> disj1_tac >>
+  simp[eval_expr_unary_builtin_action, builtin_args_length_ok_def,
+       gas_summary_at_def] >>
+  qexistsl_tac [`INR y`, `es_end`, `r'`] >> simp[] >>
+  conj_tac
+  >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  Cases_on `r'` >> Cases_on `y` >> gvs[expr_exit_def] >>
+  rename1 `expr_exit (INR (Error err)) _` >>
+  Cases_on `err` >> gvs[expr_exit_def]
+QED
+
+Resume compile_calldata_slice_vv_sim_mem[exempt]:
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  simp[eval_expr_unary_builtin_action, builtin_args_length_ok_def] >>
+  qmatch_goalsub_abbrev_tac `ignore_bind (bind a k) _` >>
+  `ignore_bind (bind a k) (return ()) =
+    bind a (\v. ignore_bind (k v) (return ()))` by
+    (simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
+     Cases_on `a x'` >> Cases_on `q'` >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_value >> simp[Abbr `a`]
+QED
+
+Finalise compile_calldata_slice_vv_sim_mem
