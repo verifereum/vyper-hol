@@ -802,7 +802,8 @@ Proof
          qexists_tac `[ValueSubscript (IntV &(LENGTH vs - 1))]` >>
          simp[mem_path_offset_def, mem_step_offset_def]) >>
       simp[] >> disj2_tac >> disj1_tac >>
-      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[])
+      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
+      TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))
   >~ [`locals_kept`]
   >- (irule pop_locals_kept >>
       conj_tac
