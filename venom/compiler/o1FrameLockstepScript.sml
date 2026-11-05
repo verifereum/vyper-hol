@@ -1258,3 +1258,149 @@ Proof
   strip_tac >> drule_all lockstep_rel >> strip_tac >> fs[] >>
   metis_tac[inst_mem_ranges_pair]
 QED
+
+(* ===== Single-frame runs ===== *)
+
+(* A paired INVOKE: the callees, related by ctx_bisim, return related
+   results, so the caller resumes in lockstep. *)
+Theorem lockstep_invoke:
+  ctx_bisim C C' /\ lockstep_sim L C C' fn fn' pos R /\
+  R T (inst,s) sg (inst',s') /\ inst'.inst_opcode = INVOKE /\
+  step_inst fuel C' inst' s' = OK t' /\
+  active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+  ?fuel0 t p j sg'.
+    step_inst fuel0 C inst s = OK t /\
+    R p (j, t with vs_inst_idx := SUC s.vs_inst_idx) sg'
+      (j', t' with vs_inst_idx := SUC s'.vs_inst_idx)
+Proof
+  strip_tac >> drule_all lockstep_rel >> simp[] >> strip_tac >>
+  qpat_x_assum `step_inst _ C' _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `_ = (_,_)` SUBST_ALL_TAC >>
+  rename1 `decode_invoke inst' = SOME (nm, ops')` >>
+  rename1 `lookup_function nm C'.ctx_functions = SOME callee'` >>
+  rename1 `setup_callee callee' args s' = SOME cs` >>
+  rename1 `run_blocks fuel C' callee' cs = IntRet ret e'` >>
+  `?ops. inst.inst_operands = Label nm :: ops /\
+         LIST_REL (op_rename sg) ops ops'` by
+    (gvs[inst_pair_def, decode_invoke_def, AllCaseEqs(), LIST_REL_CONS2,
+         op_rename_label] >> metis_tac[]) >>
+  `decode_invoke inst = SOME (nm, ops) /\ inst.inst_opcode = INVOKE` by
+    fs[decode_invoke_def, inst_pair_def] >>
+  `execution_frame s' = execution_frame s /\ vars_rel sg s s'` by
+    fs[state_rel_def] >>
+  `s'.vs_labels = s.vs_labels` by metis_tac[execution_frame_fields] >>
+  `LIST_REL (\op op'. op_rename sg op op' /\
+                      eval_operand op' s' = eval_operand op s) ops ops'` by
+    (irule LIST_REL_op_rename_eval >> fs[]) >>
+  drule eval_operands_rel >> strip_tac >>
+  `eval_operands ops s = SOME args` by gvs[] >>
+  `?calleeS. lookup_function nm C.ctx_functions = SOME calleeS` by
+    (Cases_on `lookup_function nm C.ctx_functions` >> simp[] >>
+     `ctx_fn_names C' = ctx_fn_names C` by fs[ctx_bisim_def] >>
+     imp_res_tac lookup_function_not_mem >>
+     imp_res_tac lookup_function_mem >>
+     metis_tac[ctx_fn_names_def]) >>
+  qpat_x_assum `ctx_bisim _ _` mp_tac >> rewrite_tac[ctx_bisim_def] >>
+  strip_tac >>
+  first_x_assum (qspecl_then [`nm`, `calleeS`] mp_tac) >> asm_rewrite_tac[] >>
+  disch_then (qx_choose_then `fnB` strip_assume_tac) >>
+  `fnB = callee'` by metis_tac[optionTheory.SOME_11] >>
+  pop_assum SUBST_ALL_TAC >>
+  `setup_callee calleeS args s = SOME cs` by
+    metis_tac[setup_callee_execution_frame] >>
+  `fn_entry_state calleeS cs` by metis_tac[setup_callee_fn_entry_state] >>
+  first_x_assum (qspec_then `cs` mp_tac) >> asm_rewrite_tac[] >> strip_tac >>
+  first_x_assum (qspec_then `fuel` mp_tac) >>
+  impl_tac >- simp[passSimulationDefsTheory.terminates_def] >>
+  disch_then (qx_choose_then `fuel0` mp_tac) >>
+  qpat_x_assum `run_blocks fuel C' callee' cs = _` SUBST1_TAC >>
+  Cases_on `run_blocks fuel0 C calleeS cs` >>
+  simp_tac pure_ss [frame_result_rel_def, pairTheory.pair_case_def,
+                    exec_result_case_def] >>
+  strip_tac >>
+  qpat_x_assum `ret = _` (SUBST_ALL_TAC o SYM) >>
+  rename1 `run_blocks fuel0 C calleeS cs = IntRet ret e` >>
+  drule_all lockstep_resume >> strip_tac >>
+  qexistsl [`fuel0`, `t`] >> simp[Once step_inst_def] >> metis_tac[]
+QED
+
+Theorem frame_reach_lockstep_rel:
+  !C' fn' s0 inst' s'.
+    frame_reach C' fn' s0 inst' s' ==>
+    !L C fn pos R.
+      ctx_bisim C C' /\
+      lockstep_sim L C C' fn fn' pos R /\
+      fn_entry_state fn s0 /\ s0.vs_labels = L ==>
+      ?p inst s sg. frame_reach C fn s0 inst s /\ R p (inst,s) sg (inst',s')
+Proof
+  ho_match_mp_tac frame_reach_ind >> rpt conj_tac
+  >- suspend "start"
+  >- suspend "next"
+  >> suspend "block"
+QED
+
+Resume frame_reach_lockstep_rel[start]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all lockstep_entry >> strip_tac >>
+  imp_res_tac lockstep_rel >> metis_tac[frame_reach_rules]
+QED
+
+Resume frame_reach_lockstep_rel[next]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  rename1 `R p (instS,sS) sg _` >>
+  drule_all lockstep_rel >> strip_tac >>
+  Cases_on `p` >> RULE_ASSUM_TAC (REWRITE_RULE []) >>
+  rpt (qpat_x_assum `_ /\ _` strip_assume_tac)
+  >- (Cases_on `inst'.inst_opcode = INVOKE`
+      >- (drule_all lockstep_invoke >> strip_tac >>
+          `~is_terminator instS.inst_opcode` by fs[inst_pair_def] >>
+          imp_res_tac lockstep_rel >> metis_tac[frame_reach_rules]) >>
+      drule_all lockstep_step >> strip_tac >>
+      `~is_terminator instS.inst_opcode` by fs[inst_pair_def] >>
+      gvs[] >>
+      qpat_x_assum `!j'. active_inst _ j' _ ==> _` drule >> strip_tac >>
+      imp_res_tac lockstep_rel >> metis_tac[frame_reach_rules]) >>
+  drule_all lockstep_copy >> strip_tac >> metis_tac[]
+QED
+
+Resume frame_reach_lockstep_rel[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  rename1 `R p (instS,sS) sg _` >>
+  drule_all lockstep_rel >> strip_tac >>
+  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP /\
+   inst'.inst_opcode <> INVOKE` by (rpt strip_tac >> gvs[is_terminator_def]) >>
+  `p` by (Cases_on `p` >> gvs[]) >>
+  gvs[] >>
+  `is_terminator instS.inst_opcode` by fs[inst_pair_def] >>
+  drule_all lockstep_step >> strip_tac >> gvs[] >>
+  qpat_x_assum `!t1' j'. _` drule_all >> strip_tac >>
+  imp_res_tac lockstep_rel >>
+  `~t.vs_halted` by metis_tac[execution_frame_fields] >>
+  metis_tac[frame_reach_rules]
+QED
+
+Finalise frame_reach_lockstep_rel
+
+(* A target state other than an inserted copy runs the same instruction
+   as a source state, on equal operand values and an equal frame. *)
+Theorem frame_reach_lockstep:
+  frame_reach C' fn' s0 inst' s' /\ ctx_bisim C C' /\
+  lockstep_sim L C C' fn fn' pos R /\
+  fn_entry_state fn s0 /\ s0.vs_labels = L /\
+  inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP ==>
+  ?inst s. frame_reach C fn s0 inst s /\
+           inst.inst_opcode = inst'.inst_opcode /\
+           execution_frame s' = execution_frame s /\
+           LIST_REL (\op op'. eval_operand op' s' = eval_operand op s)
+             inst.inst_operands inst'.inst_operands
+Proof
+  strip_tac >> drule frame_reach_lockstep_rel >>
+  disch_then drule_all >> strip_tac >>
+  drule_all lockstep_paired >> strip_tac >>
+  drule_all inst_pair_ops >> strip_tac >>
+  qexistsl [`inst`, `s`] >> fs[inst_pair_def, state_rel_def, ops_pair_def] >>
+  irule LIST_REL_mono >> first_assum (irule_at Any) >> simp[]
+QED
