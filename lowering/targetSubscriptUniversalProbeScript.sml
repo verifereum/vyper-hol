@@ -2,6 +2,7 @@ Theory targetSubscriptUniversalProbe
 Ancestors
   targetSubscriptProbe words vyperStorage vyperStorageBackend vyperState
   vyperInterpreter vyperContext vyperValue vfmState
+  venomExecSemantics venomState venomInst calleeTransport
 Libs
   pairLib
 
@@ -68,4 +69,73 @@ Proof
        wordsTheory.WORD_ADD_0, wordsTheory.word_add_n2w, dimword_def,
        fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   Cases_on `get_storage probe_clear_source_context es F 1w = 0w` >> simp[]
+QED
+
+Theorem clear_machine_setup:
+  !ss. ?cs. setup_callee probe_descendant_function [] ss = SOME cs
+Proof
+  simp[setup_callee_def, probe_descendant_function_def, mk_raw_function_def]
+QED
+
+Theorem clear_machine_invoke_raw:
+  !fuel k ss id out cs.
+    setup_callee probe_descendant_function [] ss = SOME cs ==>
+    step_inst (SUC fuel) (probe_descendant_ctx k)
+      (mk_inst id INVOKE [Label "internal 0 shrink()_runtime"] [out]) ss =
+    OK (update_var out 0w
+      (merge_callee_state ss
+        ((sstore 2w 0w (sstore 0w 0w (cs with vs_inst_idx := 0)))
+          with vs_inst_idx := 2)))
+Proof
+  rpt strip_tac >> irule probe_descendant_invoke >>
+  simp[probe_descendant_ctx_lookups]
+QED
+
+Theorem clear_machine_merge:
+  !ss cs.
+    setup_callee probe_descendant_function [] ss = SOME cs ==>
+    merge_callee_state ss
+      ((sstore 2w 0w (sstore 0w 0w (cs with vs_inst_idx := 0)))
+        with vs_inst_idx := 2) =
+    sstore 2w 0w (sstore 0w 0w ss)
+Proof
+  rpt strip_tac >>
+  gvs[setup_callee_def, probe_descendant_function_def, mk_raw_function_def] >>
+  simp[merge_callee_state_def, sstore_def, venom_state_component_equality]
+QED
+
+Theorem clear_machine_invoke:
+  !fuel k ss id out.
+    step_inst (SUC fuel) (probe_descendant_ctx k)
+      (mk_inst id INVOKE [Label "internal 0 shrink()_runtime"] [out]) ss =
+    OK (update_var out 0w (sstore 2w 0w (sstore 0w 0w ss)))
+Proof
+  rpt gen_tac >>
+  qspec_then `ss` strip_assume_tac clear_machine_setup >>
+  drule clear_machine_invoke_raw >>
+  drule clear_machine_merge >> simp[]
+QED
+
+Theorem clear_machine_frames:
+  !ss out.
+    let t = update_var out 0w (sstore 2w 0w (sstore 0w 0w ss)) in
+    (!v. lookup_var v t = if v = out then SOME 0w else lookup_var v ss) /\
+    t.vs_allocas = ss.vs_allocas /\
+    t.vs_alloca_next = ss.vs_alloca_next /\
+    t.vs_memory = ss.vs_memory /\
+    t.vs_transient = ss.vs_transient /\
+    t.vs_call_ctx = ss.vs_call_ctx /\
+    t.vs_tx_ctx = ss.vs_tx_ctx /\
+    t.vs_block_ctx = ss.vs_block_ctx /\
+    t.vs_current_bb = ss.vs_current_bb /\
+    t.vs_prev_bb = ss.vs_prev_bb /\
+    t.vs_inst_idx = ss.vs_inst_idx /\
+    t.vs_fmp = ss.vs_fmp /\
+    t.vs_call_entry_fmp = ss.vs_call_entry_fmp /\
+    t.vs_return_pc_token = ss.vs_return_pc_token /\
+    contract_storage t = contract_storage (sstore 2w 0w (sstore 0w 0w ss))
+Proof
+  simp[update_var_def, lookup_var_def, sstore_def, contract_storage_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
