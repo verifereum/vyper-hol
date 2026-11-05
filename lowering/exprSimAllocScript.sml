@@ -3,7 +3,7 @@ Theory exprSimAlloc
 Ancestors
   list rich_list finite_map context compileEnv loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
-  venomExecSemantics
+  venomExecSemantics loweringPosts
 
 Theorem literal_alloca_run[local]:
   !func cenv cx es s inst p (n:bytes32) ctx.
@@ -334,4 +334,14 @@ Proof
   goal_assum (drule_at Any) >>
   gvs[local_region_def, not_scope_ptr_def, lookup_var_def, update_var_def] >>
   Cases_on `p = out` >> gvs[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem outside_locals_positive_buffer:
+  eval_operand op s = SOME w /\ 0 < sz /\
+  (!name b len. local_region cenv scopes s name b len ==>
+     w2n w + sz <= b \/ b + len <= w2n w) ==>
+  outside_locals cenv scopes s op
+Proof
+  strip_tac >> simp[outside_locals_def] >> rpt strip_tac >>
+  first_x_assum drule >> decide_tac
 QED
