@@ -4679,6 +4679,146 @@ Proof
     (fn th => rewrite_tac[GSYM th]) >> simp[]
 QED
 
+Theorem place_store_expr_sim_inv_empty_local_vars:
+  !cenv cx env es.
+    expr_sim_inv cenv cx env es /\ es.scopes = [FEMPTY] ==>
+    expr_sim_inv (cenv with ce_vars := FEMPTY) cx env es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!id ty. FLOOKUP env.var_types id <> SOME ty` by
+    (fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_scopes_consistent_def,
+        lookup_scopes_def] >> metis_tac[]) >>
+  gvs[expr_sim_inv_def, placeTypingPropsTheory.place_map_tables_agree_on_defined_def] >>
+  metis_tac[]
+QED
+
+(* Joint witness: all premises below are the frozen antecedent specialized
+   to the wrapped-size storage assignment.  The let bindings retain its actual
+   code, initial state and source context for subsequent path reasoning. *)
+Theorem place_store_wrap_probe_joint_antecedent:
+  let cx = place_store_wrap_probe_context with txn :=
+    (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) in
+  let ee = empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|> in
+  let dty = ArrayT (BaseT (BytesT (Dynamic (dimword (:256)-32)))) (Fixed 1) in
+  let sty = ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1) in
+  let stv = ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 1) in
+  let dtv = ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256)-32)))) (Fixed 1) in
+  let p = StoragePlace F 0w dtv in
+  let v = ArrayV (SArrayV [(0,BytesV [2w])]) in
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  ?cenv env cc tc bc sb ff.
+  let func = mk_raw_function "wrapped"
+    (<|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+     sb.cs_blocks) in
+  let ctx = mk_venom_context [func] (SOME func.fn_name) in
+  let s = (init_venom_state "entry") with
+    <|vs_memory := byte$word_to_bytes (1w:bytes32) T ++
+        (2w:byte) :: REPLICATE 31 0w;
+      vs_alloca_next := dimword (:256)-32;
+      vs_call_ctx := cc with cc_static := F; vs_tx_ctx := tc; vs_block_ctx := bc|> in
+    (LocStorage = LocStorage \/ LocStorage = LocTransient) /\
+    (!et n. dty <> ArrayT et (Dynamic n)) /\
+    compile_assign_value cenv (Lit 0w) LocStorage (Lit 0w) (is_word_type dty)
+      (SOME LocMemory) dty sty
+      (case dty of ArrayT et (Dynamic _) =>
+         SOME ((type_memory_bytes cenv et + 31) DIV 32,
+               type_memory_bytes cenv et) | _ => NONE)
+      (type_memory_bytes cenv dty) sa = ((),sb) /\
+    eval_operand (Lit 0w) s = SOME 0w /\
+    place_ptr_rel cenv cx s (PlaceR p) 0w (SOME LocStorage) (Type dty) /\
+    (!x. Lit 0w = Var x ==> not_fresh_at sa x) /\
+    (!x. Lit 0w = Var x ==> not_fresh_at sa x) /\
+    type_widens_to (get_tenv cx) sty dty /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+    expr_val_rel cx sty v (Lit 0w) s /\ cenv.ce_target CapMcopy /\
+    (LocStorage = LocMemory /\ SOME LocMemory <> SOME LocMemory /\
+     ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty ==>
+     !sw dtv. eval_operand (Lit 0w) s = SOME sw /\
+              evaluate_type (get_tenv cx) dty = SOME dtv ==>
+       type_memory_size stv = 0 \/
+       w2n sw + type_memory_size stv <= w2n (0w:bytes32) \/
+       w2n (0w:bytes32) + type_memory_size dtv <= w2n sw \/
+       sw = 0w /\ stv = dtv) /\
+    expr_sim_inv cenv cx env ee /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    (!id path entry t0. p = MemoryPlace id path /\
+       lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+       evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+    (~is_word_type sty ==> !sw. eval_operand (Lit 0w) s = SOME sw ==>
+      w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+      !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
+        w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
+    (LocStorage = LocMemory ==> !dtv.
+       evaluate_type (get_tenv cx) dty = SOME dtv ==>
+       w2n (0w:bytes32) + type_memory_size dtv + 64 < dimword (:256)) /\
+    (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
+    stmt_state_rel ctx func cenv cx ee s /\
+    write_place cx p v ee = (INL (),ff) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts
+Proof
+  simp_tac pure_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `expr_sim_inv _ cx _ ee` >>
+  qmatch_goalsub_abbrev_tac `compile_assign_value _ _ _ _ _ _ dty sty _ _ sa` >>
+  mp_tac place_store_wrap_probe_compiler_realizable >>
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  mp_tac place_store_wrap_probe_transaction >> strip_tac >>
+  qexistsl_tac [`cenv with ce_vars := FEMPTY`, `env`, `cc`, `tc`, `bc`] >>
+  qmatch_goalsub_abbrev_tac `compile_assign_value cenv1 _ _ _ _ _ _ _ _ _ _` >>
+  `expr_sim_inv cenv1 cx env ee` by
+    (simp[Abbr `cenv1`, Abbr `cx`, Abbr `ee`] >>
+     irule place_store_expr_sim_inv_empty_local_vars >> simp[empty_state_def]) >>
+  `cenv1.ce_struct_fields = FEMPTY` by
+    (irule place_store_expr_sim_inv_empty_tenv_metadata >>
+     goal_assum $ drule_at Any >>
+     simp[Abbr `cx`, vyperContextTheory.get_tenv_def,
+       place_store_wrap_probe_context_def,
+       vyperContextTheory.empty_evaluation_context_def,
+       vyperContextTheory.empty_call_txn_def] >> EVAL_TAC >> simp[]) >>
+  `cenv1.ce_target = K T /\ cenv1.ce_is_ctor = F /\
+   cenv1.ce_imm_alloca = NONE /\
+   cenv1.ce_module_vars = FEMPTY |+ ((NONE,"wrapped"), StorageLoc 0w)` by
+    simp[Abbr `cenv1`] >>
+  Cases_on `compile_assign_value cenv1 (Lit 0w) LocStorage (Lit 0w) F
+    (SOME LocMemory) dty sty NONE (dimword (:256)) sa` >>
+  rename1 `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = (u,sb)` >>
+  Cases_on `u` >> qexists `sb` >>
+  `~cx.txn.is_static` by
+    simp[Abbr `cx`, vyperContextTheory.empty_call_txn_def] >>
+  drule place_store_wrap_probe_write_success >>
+  disch_then (qspec_then `ee` strip_assume_tac) >> qexists `ff` >>
+  qspec_then `cenv1` mp_tac place_store_wrap_probe_finite_code >>
+  simp[GSYM (markerTheory.Abbrev_def), Abbr `sa`, Abbr `dty`, Abbr `sty`] >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `fn_inst_ids_distinct func` >>
+  qmatch_asmsub_abbrev_tac `venomInst$lookup_function _ ctx.ctx_functions` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ _ s` >>
+  drule_all (SRULE[] place_store_call_free_frame) >> strip_tac >>
+  `stmt_state_rel ctx func cenv1 cx ee s` by
+    (simp[Abbr `cx`, Abbr `ee`, Abbr `s`, init_venom_state_def] >>
+     qspecl_then [`ctx`, `func`, `cenv1`] mp_tac
+       place_store_wrap_probe_initial_stmt_rel >>
+     simp[init_venom_state_def] >> disch_then irule >>
+     fs[init_venom_state_def]) >>
+  qpat_x_assum `expr_sim_inv cenv _ _ _` kall_tac >>
+  qpat_x_assum `storage_vars_rel _ _` kall_tac >>
+  qpat_x_assum `transient_vars_rel _ _` kall_tac >>
+  gvs[evaluate_type_def, type_slot_size_def, vfmConstantsTheory.word_size_def] >>
+  simp[eval_operand_def, place_ptr_rel_def, slot_loc_def,
+    is_word_type_def, evaluate_type_def, type_memory_bytes_def,
+    type_slot_size_def, valueEncodingTheory.type_memory_size_def,
+    vfmConstantsTheory.word_size_def,
+    place_store_wrap_probe_value_memory,
+    place_store_wrap_probe_expr_value, local_ptrs_reserved_def,
+    Abbr `cenv1`, Abbr `cx`, Abbr `s`, init_venom_state_def] >>
+  irule (SRULE[] (cj 3 place_store_nested_widening_size_probe))
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
