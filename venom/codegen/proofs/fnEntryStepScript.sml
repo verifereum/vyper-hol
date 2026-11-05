@@ -100,7 +100,7 @@ QED
 
 Theorem entry_body_frame_sim[local]:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
-   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after off_bb pc_bb vs as
+   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
    Inv ra pc_ret rest mem0.
   gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
   ctx = unit.cu_context /\ lo = SND (compute_label_offsets prog) /\
@@ -139,8 +139,9 @@ Theorem entry_body_frame_sim[local]:
     (LENGTH (HD fn.fn_blocks).bb_instructions) 0
     (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
   vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
-  FLOOKUP lo (HD fn.fn_blocks).bb_label = SOME off_bb /\
-  FLOOKUP o2pc off_bb = SOME pc_bb /\
+  ~vs.vs_call_ctx.cc_static /\
+  asm_block_at prog pc_bb (execute_plan cp.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
   as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
     (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
   fn_frame_inv ctx cp lo fn ra rest mem0 ps1 vs as /\
@@ -163,8 +164,27 @@ Theorem entry_body_frame_sim[local]:
         read_byte b as'.as_memory = read_byte b mem0) /\ shared_state_rel vs' as')
 Proof
   rpt gen_tac >> strip_tac >>
+  `fn_reachable fn (HD fn.fn_blocks).bb_label` by
+    metis_tac[entry_step_reachable] >>
+  drule_all entry_step_shape >> strip_tac >>
+  drule entry_step_phi_bound >> strip_tac >>
+  `lineage_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0` by
+    metis_tac[lineage_state_rules] >>
   irule block_body_frame_sim >>
-  FAIL_TAC "entry adapter witnesses"
+  rpt (conj_tac >- (first_assum ACCEPT_TAC)) >>
+  conj_tac >- simp[] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexistsl_tac [`rpolicy`, `unit`] >> simp[]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `Inv` >> simp[]) >>
+  qexistsl_tac [`SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops`,
+    `cfg`, `ch`, `dfg`, `r.sr_plan`, `growth`, `ps0.ps_cleanup_height`,
+    `i`, `LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`, `lbl_ctr`,
+    `liveness`, `pc_bb`, `param_ops`, `ps0.ps_cleanup_promised`, `ps1`,
+    `ps_after`, `ps0`, `ps_after`, `ps_end`, `ps0`, `r`, `ra`, `body_ops`,
+    `r.sr_spill_base`] >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 (* As for fn_block_frame_step, but for the entry block, which
