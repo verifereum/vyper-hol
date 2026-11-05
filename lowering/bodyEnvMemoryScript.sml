@@ -43,7 +43,9 @@ Proof
   irule frag_exec_mem_run_inst_seq >> fs[same_blocks_def] >>
   simp[IS_PREFIX_APPEND3, mk_inst_def] >>
   gen_tac >> strip_tac >> gvs[Abbr `P`] >>
-  conj_tac >- simp[run_inst_seq_mem_ok_last, GSYM mk_inst_def] >>
+  conj_tac
+  >- (simp[run_inst_seq_mem_ok_last, GSYM mk_inst_def] >>
+      simp[memSafeRunTheory.inst_dload_in_section_def, mk_inst_def]) >>
   disj1_tac >>
   qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
   `run_inst_seq (emitted_insts sm sn) entry = OK (update_var out w entry)` by
@@ -137,12 +139,39 @@ Proof
      (OK ((update_var out w entry) with vs_inst_idx := LENGTH sn.cs_current_insts))` by
     (drule_at (Pos last) run_inst_seq_gas_path_mem >>
      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-     simp[IS_PREFIX_APPEND, run_inst_seq_mem_ok_last, GSYM mk_inst_def]) >>
+     simp[IS_PREFIX_APPEND, run_inst_seq_mem_ok_last, GSYM mk_inst_def] >>
+     simp[memSafeRunTheory.inst_dload_in_section_def, mk_inst_def]) >>
   qexists_tac `(update_var out w entry) with vs_inst_idx := LENGTH sn.cs_current_insts` >>
   fs[stmt_state_rel_inst_idx, lookup_var_def] >>
   gvs[Abbr `out`, eval_operand_def, lookup_var_def, same_blocks_def,
       update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[not_fresh_at_def]
+QED
+
+Theorem body_env_counted[local]:
+  item <> PrevHash /\ item <> MsgGas /\
+  compile_env_var item sa = (op,sb) /\
+  evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s0 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es t /\ eval_operand op t = SOME (val_to_w256 v) /\
+      (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t = SOME w) /\
+      t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
+      t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >> Cases_on `item` >>
+  gvs[compile_env_var_def, vyperContextTheory.evaluate_builtin_def] >>
+  irule body_env_read_counted >> simp[] >> HINT_EXISTS_TAC >>
+  simp[is_terminator_def] >> rpt strip_tac >>
+  simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+  gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+      val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def] >>
+  irule below_frontier_no_ranges >> simp[]
 QED
 
 Theorem body_env_source[local]:
@@ -191,14 +220,7 @@ Proof
       t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
       t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts` by
-    (drule lower_value_env >> strip_tac >> Cases_on `item` >>
-     gvs[compile_env_var_def, vyperContextTheory.evaluate_builtin_def] >>
-     irule body_env_read_counted >> simp[] >> HINT_EXISTS_TAC >>
-     simp[is_terminator_def] >> rpt strip_tac >>
-     simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
-     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-         val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def] >>
-     irule below_frontier_no_ranges >> simp[]) >>
+    (drule lower_value_env >> strip_tac >> drule_all body_env_counted >> simp[]) >>
   `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
@@ -215,7 +237,10 @@ Theorem compile_env_body_sim_mem:
     expr_sim_mem ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_mem_word_values >> reverse conj_tac
+  >- (Cases_on `item` >>
+      gvs[vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def]) >>
+  rpt gen_tac >> strip_tac >>
   drule_all body_env_mem_prefix >> strip_tac >>
   qexistsl_tac [`[]`, `v`, `es`, `t`] >> simp[]
 QED
@@ -247,7 +272,10 @@ Theorem compile_env_body_vv_sim_mem:
     item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
     expr_vv_sim_mem ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_vv_sim_mem_stack >>
+  rpt gen_tac >> strip_tac >> `is_word_type (expr_type (Builtin ann (Env item) []))` by
+    (Cases_on `item` >>
+      gvs[vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def]) >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   conj_tac
   >- (gen_tac >> simp[compile_expr_def] >>
       Cases_on `compile_env_var item sa` >> simp[as_stack_val_def]) >>

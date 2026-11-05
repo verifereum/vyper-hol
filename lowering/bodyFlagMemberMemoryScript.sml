@@ -50,7 +50,11 @@ Theorem compile_flag_member_body_sim_mem:
     expr_sim_mem ctx func cenv cx ty (FlagMember ann nsid mid) es
 Proof
   rpt gen_tac >> strip_tac >>
-  irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_mem_word_values >> reverse conj_tac
+  >- (`ann = FlagT nsid` by
+        (PairCases_on `nsid` >> gvs[expr_body_pre_def, well_typed_expr_def]) >>
+      simp[vyperASTTheory.expr_type_def, is_word_type_def]) >>
+  rpt gen_tac >> strip_tac >>
   irule body_flag_member_mem_prefix >> metis_tac[]
 QED
 
@@ -75,7 +79,11 @@ Theorem compile_flag_member_body_vv_sim_mem:
     expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
     expr_vv_sim_mem ctx func cenv cx ty (FlagMember ann nsid mid) es
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_vv_sim_mem_stack >>
+  rpt gen_tac >> strip_tac >> `is_word_type (expr_type (FlagMember ann nsid mid))` by
+    (`ann = FlagT nsid` by
+        (PairCases_on `nsid` >> gvs[expr_body_pre_def, well_typed_expr_def]) >>
+      simp[vyperASTTheory.expr_type_def, is_word_type_def]) >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   conj_tac >- simp[compile_expr_def] >>
   conj_tac
   >- (PairCases_on `nsid` >> rpt gen_tac >>
