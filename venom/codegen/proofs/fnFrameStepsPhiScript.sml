@@ -2573,3 +2573,176 @@ Proof
                 `ps`] >>
   simp[] >> Cases_on `inst.inst_outputs` >> gvs[] >> metis_tac[]
 QED
+
+Theorem phi_pending_source_excluded:
+  !done inst todo v.
+    phi_uses_disjoint (done ++ inst::todo) /\ MEM (Var v) inst.inst_operands ==>
+    !phi. MEM phi todo ==> ~MEM (Var v) phi.inst_operands
+Proof
+  Induct >> simp[phi_uses_disjoint_def] >> rpt strip_tac
+  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, phi_operand_vars_mem] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem phi_processed_output_excluded:
+  !done inst todo out.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ inst::todo))) /\
+    MEM out inst.inst_outputs ==>
+    !phi. MEM phi done ==> ~MEM out phi.inst_outputs
+Proof
+  simp[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
+       listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem phi_provenance_fresh_output:
+  !base pred entry done inst todo ps out.
+    phi_stack_provenance base pred entry done (inst::todo) ps /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ inst::todo))) /\
+    MEM out inst.inst_outputs /\
+    ~MEM (Var out) entry.ps_stack /\ Var out NOTIN FDOM entry.ps_spilled ==>
+    ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule phi_provenance_output_absent >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[phi_processed_output_excluded]
+QED
+
+Theorem phi_collect_outputs_distinct:
+  !insts.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (collect_phis insts)))
+Proof
+  Induct >> simp[collect_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[livenessProofsTheory.collect_phis_mem]
+QED
+
+Theorem phi_codegen_inst_shape:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst (collect_phis bb.bb_instructions) ==>
+  inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
+  phi_well_formed inst.inst_operands
+Proof
+  strip_tac >>
+  `inst.inst_opcode = PHI /\ MEM inst bb.bb_instructions` by
+    (qpat_x_assum `MEM inst (collect_phis _)` mp_tac >>
+     Q.SPEC_TAC (`bb.bb_instructions`, `insts`) >>
+     Induct >> rw[collect_phis_def] >> gvs[]) >>
+  `inst_wf inst` by
+    metis_tac[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+  gvs[venomWfTheory.inst_wf_def]
+QED
+
+Theorem phi_resolve_is_var:
+  !pred ops. phi_well_formed ops ==>
+    !op. resolve_phi pred ops = SOME op ==> is_var_operand op
+Proof
+  recInduct resolve_phi_ind >> rw[resolve_phi_def, venomWfTheory.phi_well_formed_def] >>
+  rename1 `phi_well_formed (_::arg::_)` >>
+  Cases_on `arg` >> gvs[venomWfTheory.phi_well_formed_def, is_var_operand_def]
+QED
+
+Theorem phi_codegen_pending_excluded:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  is_var_operand src /\ MEM src inst.inst_operands /\ MEM out inst.inst_outputs ==>
+  !phi op. MEM phi todo /\ is_var_operand op /\ MEM op phi.inst_operands ==>
+    op <> src /\ op <> Var out
+Proof
+  strip_tac >>
+  `phi_uses_disjoint (done ++ inst::todo)` by
+    metis_tac[phi_codegen_uses_disjoint] >>
+  Cases_on `src` >> gvs[is_var_operand_def] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- metis_tac[phi_pending_source_excluded] >>
+  `MEM inst (collect_phis bb.bb_instructions) /\
+   MEM phi (collect_phis bb.bb_instructions)` by simp[] >>
+  metis_tac[phi_prefix_output_not_operand]
+QED
+
+Theorem phi_codegen_provenance_fresh:
+  !base pred entry done inst todo ps fn bb out.
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  phi_stack_provenance base pred entry done (inst::todo) ps /\
+  MEM out inst.inst_outputs /\
+  ~MEM (Var out) entry.ps_stack /\ Var out NOTIN FDOM entry.ps_spilled ==>
+  ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (collect_phis bb.bb_instructions)))` by
+    (irule phi_collect_outputs_distinct >>
+     irule phi_block_outputs_distinct >>
+     qexists_tac `fn` >> gvs[codegen_ready_fn_def]) >>
+  metis_tac[phi_provenance_fresh_output]
+QED
+
+Theorem phi_provenance_advance:
+  !base pred entry done inst todo ps fn bb halt ops next.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+    collect_phis bb.bb_instructions = done ++ inst::todo /\
+    phi_stack_provenance base pred entry done (inst::todo) ps /\
+    (!phi op. MEM phi (collect_phis bb.bb_instructions) /\ is_var_operand op /\
+      MEM op phi.inst_operands /\ MEM op entry.ps_stack ==>
+      resolve_phi pred phi.inst_operands = SOME op) /\
+    (!phi out. MEM phi (collect_phis bb.bb_instructions) /\ MEM out phi.inst_outputs ==>
+      ~MEM (Var out) entry.ps_stack /\ Var out NOTIN FDOM entry.ps_spilled) /\
+    generate_phi_plan inst
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps =
+      (ops,next) ==>
+    phi_stack_provenance base pred entry (done ++ [inst]) todo next
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `phi_stack_provenance bound pred entry done (inst::todo) ps` >>
+  `MEM inst (collect_phis bb.bb_instructions)` by simp[] >>
+  `inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
+   phi_well_formed inst.inst_operands` by metis_tac[phi_codegen_inst_shape] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- (`SND (generate_phi_plan inst
+         (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps) = next`
+        by simp[] >>
+      pop_assum (SUBST1_TAC o SYM) >>
+      irule phi_provenance_plan_no_hit >> simp[] >>
+      metis_tac[phi_resolve_is_var]) >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  `is_var_operand (stack_peek d ps.ps_stack) /\
+   MEM (stack_peek d ps.ps_stack) inst.inst_operands` by
+    metis_tac[phi_stack_hit_operand] >>
+  `resolve_phi pred inst.inst_operands = SOME (stack_peek d ps.ps_stack)` by
+    (irule phi_provenance_hit_selected >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[listTheory.MEM_APPEND, listTheory.MEM]) >>
+  `MEM (HD inst.inst_outputs) inst.inst_outputs` by
+    (Cases_on `inst.inst_outputs` >> gvs[]) >>
+  `~MEM (Var (HD inst.inst_outputs)) entry.ps_stack /\
+   Var (HD inst.inst_outputs) NOTIN FDOM entry.ps_spilled` by metis_tac[] >>
+  `~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+   Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled` by
+    (drule_all phi_codegen_provenance_fresh >> simp[]) >>
+  `~MEM (operand_to_string (stack_peek d ps.ps_stack))
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done)))` by
+    (Cases_on `stack_peek d ps.ps_stack` >> gvs[is_var_operand_def, operand_to_string_def] >>
+     irule phi_input_dead_at_successor >> simp[] >>
+     simp[listTheory.EL_APPEND_EQN]) >>
+  `inst.inst_outputs <> []` by (Cases_on `inst.inst_outputs` >> gvs[]) >>
+  irule phi_provenance_plan_hit >> simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`halt`, `ops`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> drule_all phi_codegen_pending_excluded >> simp[]
+QED
+
+Theorem phi_provenance_final_resident:
+  !base pred entry phis ps at.
+    generated_plan_state_wf_marked base entry /\
+    phi_stack_provenance base pred entry phis [] ps /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) ==>
+    ((MEM at entry.ps_stack \/ at IN FDOM entry.ps_spilled) /\
+     ~(MEM at entry.ps_stack /\
+       ?inst. MEM inst phis /\ resolve_phi pred inst.inst_operands = SOME at)) \/
+    (?inst v. MEM inst phis /\ MEM v inst.inst_outputs /\ at = Var v)
+Proof
+  simp[phi_stack_provenance_def, generated_plan_state_wf_marked_def,
+       pred_setTheory.IN_DISJOINT] >> metis_tac[]
+QED
