@@ -97,21 +97,21 @@ Proof
   simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE]
 QED
 
-Theorem body_copy_frame_frontier[local]:
+Theorem body_copy_frame_frontier:
   copy_runtime_frame sa s sb t ==> t.vs_alloca_next = s.vs_alloca_next
 Proof
   simp[copy_runtime_frame_def] >> strip_tac >>
   drule copy_static_fields >> simp[]
 QED
 
-Theorem body_copy_frame_data_section[local]:
+Theorem body_copy_frame_data_section:
   copy_runtime_frame sa s sb t ==> t.vs_data_section = s.vs_data_section
 Proof
   simp[copy_runtime_frame_def] >> strip_tac >>
   drule copy_static_fields >> simp[]
 QED
 
-Theorem body_copy_frame_mem_append[local]:
+Theorem body_copy_frame_mem_append:
   copy_runtime_frame sa s sm t /\ copy_runtime_frame sm t sb u /\
   run_inst_seq_mem_ok (emitted_insts sa sm) s /\
   run_inst_seq_mem_ok (emitted_insts sm sb) t ==>
