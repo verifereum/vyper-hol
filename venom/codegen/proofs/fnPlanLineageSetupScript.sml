@@ -604,3 +604,54 @@ Proof
   disch_then (qspec_then `live` mp_tac) >>
   simp[release_dead_spills_def, release_fold_stack_update]
 QED
+
+Theorem regular_post_emit_tail_core_resource:
+  !ps m core spillbase outputs live halting dfg inst term deleted ps8 ps9 final.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    deleted = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then MAP Var (FILTER (\v. ~MEM v live) outputs) else []) /\
+    ps8 = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v live) outputs)) ps)
+      else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []
+      then SND (optimistic_swap_plan dfg inst live term ps8) else ps8) /\
+    final = release_dead_spills live ps9 ==>
+    ?rest. final.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      ALL_DISTINCT rest /\ set rest = set core DIFF set deleted /\
+      FDOM final.ps_spilled = FDOM ps.ps_spilled INTER set (MAP Var live) /\
+      residual_budget_wf spillbase [] (final with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule residual_budget_wf_empty_inventory >> simp[] >> strip_tac >>
+  `?core8. ps8.ps_stack = REPLICATE m dead_stack_marker ++ core8 /\
+     set core8 = set core DIFF set deleted /\
+     residual_budget_wf spillbase [] (ps8 with ps_stack := core8)` by
+    (Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)`
+     >- (gvs[] >> drule popmany_plan_core_resource >>
+         disch_then (qspecl_then [`spillbase`,
+           `MAP Var (FILTER (\v. ~MEM v live) outputs)`,
+           `SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v live) outputs)) ps)`] mp_tac) >>
+         simp[DISJOINT_DEF, EXTENSION, MEM_MAP, dead_stack_marker_def] >>
+         metis_tac[]) >>
+     gvs[] >> qexists_tac `core` >> simp[]) >>
+  `?core9. ps9.ps_stack = REPLICATE m dead_stack_marker ++ core9 /\
+     set core9 = set core8 /\
+     residual_budget_wf spillbase [] (ps9 with ps_stack := core9)` by
+    (Cases_on `outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []` >> gvs[]
+     >- (drule optimistic_swap_plan_core_resource >> simp[] >>
+         disch_then drule >>
+         disch_then (qspecl_then [`dfg`, `inst`, `live`, `term`] mp_tac) >>
+         metis_tac[]) >>
+     qexists_tac `core8` >> simp[]) >>
+  `residual_budget_wf spillbase [] (final with ps_stack := core9)` by
+    (gvs[] >> irule residual_budget_wf_release_dead_spills_core >> simp[]) >>
+  drule residual_budget_wf_empty_inventory >> simp[] >> strip_tac >>
+  drule_all regular_post_emit_tail_core_sets >> strip_tac >>
+  `residual_budget_wf spillbase [] (final with ps_stack := rest)` by
+    (irule residual_budget_wf_canonical >>
+     qpat_x_assum `residual_budget_wf _ _ (final with ps_stack := core9)` mp_tac >>
+     simp[residual_budget_wf_def, plan_slots_bounded_def] >>
+     strip_tac >> ASM_SET_TAC[]) >>
+  qexists_tac `rest` >> metis_tac[]
+QED
