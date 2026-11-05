@@ -62,7 +62,7 @@ Libs
    and transient storage, bytes elsewhere. *)
 
 
-Theorem compile_expr_attribute[local]:
+Theorem compile_expr_attribute:
   !cenv ty ann obj fld st vv st'.
     compile_expr cenv ty (Attribute ann obj fld) st = (vv, st') ==>
     ?bvv st1 p.
@@ -80,7 +80,7 @@ Proof
   gvs[comp_return_def, vv_loc_def, attr_offset_def]
 QED
 
-Theorem eval_expr_attribute[local]:
+Theorem eval_expr_attribute:
   !cx ann obj fld es.
     eval_expr cx (Attribute ann obj fld) es =
     (do r <- eval_expr cx obj;
@@ -89,7 +89,7 @@ Proof
   simp[Once evaluate_def]
 QED
 
-Theorem attr_pre_base[local]:
+Theorem attr_pre_base:
   !cenv cx env ann obj fld es.
     expr_body_pre cenv cx env (Attribute ann obj fld) es ==>
     expr_body_pre cenv cx env obj es /\
@@ -174,7 +174,7 @@ QED
 
 
 
-Theorem struct_value_shape[local]:
+Theorem struct_value_shape:
   !fs v. value_has_type (StructTV fs) v ==>
          ?vals. v = StructV vals /\ struct_has_type fs vals
 Proof
@@ -355,7 +355,7 @@ Proof
 QED
 
 (* The field's value_vv after the ADD, from the base's. *)
-Theorem attr_vv_post[local]:
+Theorem attr_vv_post:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     eval_operand (vv_operand bvv) q = SOME w /\
