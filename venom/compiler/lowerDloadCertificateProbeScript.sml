@@ -521,3 +521,23 @@ macro assembler over global R. Then consolidate all structural macro rows
 using existing effect transports. No global execution induction is justified
 by this inventory; revert-forward and observation production remain open.
 *)
+
+(* Frame-floor probe follow-up (2026-11-05).
+   Checked lowerDloadLiveScratch.ld_live_scratch_separation_floor now has
+   independent lo/f; the original separation theorem is a specialization.
+   lowerDloadFrameRepresentation exports ld_representation_empty, _enter,
+   _return. Entry representation uses the endpoint bound only; combine with
+   ld_setup_callee_floor for floor facts. Return representation uses SAVED R
+   and explicit surviving-entry inclusion, not an assumed post-return R;
+   combine with ld_return_floor. ld_step_floor (non-INVOKE) and
+   ld_enters_block_floor preserve allocas_from f and f<=frontier within a
+   frame; calls reset f to the saved target frontier, returns restore saved f.
+   Still missing: actual call transition must produce entry endpoints from
+   C8/ld_paired_live_endpoints and retained-live inclusion (including saved
+   frames and argument selections). Actual return must produce the surviving
+   entry implication from live/table restriction, not just table congruence.
+   Ordinary ALLOCA must preserve old R and insert a witnessed new owner;
+   repeated ALLOCA must preserve cached geometry. Neither these probes nor
+   saved embedding proves those producers, macro C1-C12 closure, completion
+   of calls, revert-forward execution, or observation coverage.
+*)
