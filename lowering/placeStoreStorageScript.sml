@@ -4081,6 +4081,33 @@ Proof
   drule_all place_store_storage_replace >> Cases_on `tr` >> gvs[]
 QED
 
+Theorem place_store_wrap_probe_transaction:
+  tx_env_ok (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) /\
+  ?cc tc bc. call_ctx_rel
+    (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) cc tc bc
+Proof
+  conj_asm1_tac
+  >- EVAL_TAC >>
+  qexistsl_tac [
+    `ARB with <|cc_caller := empty_call_txn.sender;
+      cc_address := empty_call_txn.target;
+      cc_callvalue := n2w empty_call_txn.value;
+      cc_calldata := empty_call_txn.calldata|>`,
+    `ARB with <|tc_origin := empty_call_txn.origin;
+      tc_gasprice := n2w empty_call_txn.gas_price;
+      tc_chainid := n2w empty_call_txn.chain_id;
+      tc_blobhashes := empty_call_txn.blob_hashes|>`,
+    `ARB with <|bc_coinbase := empty_call_txn.coinbase;
+      bc_timestamp := n2w empty_call_txn.time_stamp;
+      bc_number := 1w;
+      bc_prevrandao := n2w empty_call_txn.prev_randao;
+      bc_gaslimit := n2w empty_call_txn.gas_limit;
+      bc_basefee := n2w empty_call_txn.base_fee;
+      bc_blobbasefee := n2w empty_call_txn.blob_base_fee;
+      bc_blockhash := K 0w|>`] >>
+  simp[call_ctx_rel_def] >> gen_tac >> Cases_on `n = 0` >> simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
