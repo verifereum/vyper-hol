@@ -86,3 +86,36 @@ Proof
   simp[vyperTypeCallGraphSoundnessTheory.call_edge_rel_def]
 QED
 
+
+Theorem probe_make_array_builtin:
+  evaluate_builtin cx acc (ArrayT (BaseT (StringT 1)) (Fixed 1))
+    (MakeArray (SOME (BaseT (StringT 1))) (Fixed 1)) tys [StringV "a"] =
+    INL (ArrayV (SArrayV [(0,StringV "a")]))
+Proof
+  simp[evaluate_builtin_def] >> EVAL_TAC >>
+  simp[dimword_def, venomMemPropsTheory.dimindex_256] >> EVAL_TAC
+QED
+
+Theorem probe_in_builtin:
+  evaluate_builtin cx acc (BaseT BoolT) (Bop In)
+    [BaseT (StringT 1); ArrayT (BaseT (StringT 1)) (Fixed 1)]
+    [StringV "a"; ArrayV (SArrayV [(0,StringV "a")])] = INL (BoolV T)
+Proof
+  simp[evaluate_builtin_def] >> EVAL_TAC >>
+  simp[dimword_def, venomMemPropsTheory.dimindex_256] >> EVAL_TAC
+QED
+
+Theorem membership_whole_source:
+  bind (eval_expr probe_cx probe_expr) (read_result probe_cx) probe_es =
+    (INL (BoolV T), probe_es)
+Proof
+  simp[probe_expr_def, vyperInterpreterTheory.evaluate_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def, vyperContextTheory.builtin_args_length_ok_def,
+       vyperValueTheory.compatible_bound_def,
+       vyperValueOperationTheory.evaluate_literal_def,
+       vyperStateTheory.lift_sum_def, vyperASTTheory.expr_type_def,
+       probe_make_array_builtin, probe_in_builtin]
+QED
