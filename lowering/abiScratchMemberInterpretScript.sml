@@ -543,6 +543,43 @@ Proof
   drule_all abi_scratch_member_dynamic_output_detailed >> simp_tac bool_ss []
 QED
 
+Theorem abi_site_member_static_reach:
+  abi_site_encoder ei /\
+  compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A /\
+  fn_has_code st en func /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_site_encoder_input ei at av st src dst sb source_cap d output_size A b cap initial /\
+  offset+LENGTH (enc at av) <= output_size /\
+  abi_site_budget A b cap initial /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. mem_bytes_at (d+offset) (LENGTH (enc at av)) t.vs_memory = enc at av /\
+    eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+    abi_site_encoder_effect A st.cs_next_id en.cs_next_id st.cs_next_var
+      limit_st (d+offset) (LENGTH (enc at av)) b cap initial t /\
+    t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
+    ~t.vs_halted /\ abi_decode_sim ctx func initial t
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_site_member_static_input >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `!c r. abi_encoder_spine_core_code func c /\
+    abi_encoder_child_ready (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st)
+      (\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A) c r ==>
+    ?u. abi_decode_sim ctx func r u /\
+      abi_encoder_child_post (ctx,func) (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st) c r u` by
+    (rpt strip_tac >> drule_all abi_encoder_child_ready_run >> simp[]) >>
+  qpat_x_assum `!c r. _` (mp_tac o HO_MATCH_MP abi_encoder_spine_child_generate) >>
+  simp_tac (bool_ss ++ ETA_ss) [] >>
+  disch_then drule >> strip_tac >>
+  drule_all abi_encoder_member_static_output >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
+
 val _ = List.app (fn theory => List.app (fn (name, th) =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso
