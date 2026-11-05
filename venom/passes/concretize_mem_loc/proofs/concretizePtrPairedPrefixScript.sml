@@ -185,6 +185,9 @@ Theorem ptr_paired_alignment_params:
   j < LENGTH ht /\
   EL (EL j (done ++ [LENGTH h - 1])) H =
     (tokens,registry,births,PT,TG,saved,entries) ==>
+  (PT = [] /\
+    (EL (EL j (done ++ [LENGTH h - 1])) h).po_state.vs_params =
+    (EL j ht).po_state.vs_params) \/
   ptr_args_transport births positions PT
     (REPLICATE (LENGTH (EL (EL j (done ++ [LENGTH h - 1])) h).po_state.vs_params) {})
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_state.vs_params

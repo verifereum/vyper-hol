@@ -40,6 +40,7 @@ End
 Definition ptr_paired_params_def:
   ptr_paired_params positions a at
       (tokens,registry,births,PT,TG,saved,entries) <=>
+    (PT = [] /\ a.po_state.vs_params = at.po_state.vs_params) \/
     ptr_args_transport births positions PT
       (REPLICATE (LENGTH a.po_state.vs_params) {})
       a.po_state.vs_params at.po_state.vs_params
