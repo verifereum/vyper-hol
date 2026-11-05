@@ -97,3 +97,38 @@ Theorem dse_create_key_retention_counterexample:
 Proof
   EVAL_TAC
 QED
+
+Theorem dse_create_result_cases:
+  inst.inst_opcode IN {CREATE; CREATE2} ==>
+  (?s1. step_inst fuel ctx inst s = OK s1) \/
+  (?e. step_inst fuel ctx inst s = Error e) \/
+  (?s1. step_inst fuel ctx inst s = Abort ExHalt_abort s1)
+Proof
+  strip_tac >> Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+              AllCaseEqs(), exec_create_not_Halt, exec_create_not_IntRet,
+              exec_create_abort_iff] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem dse_create_memory_abort:
+  inst.inst_opcode IN {CREATE; CREATE2} /\
+  dse_local_agrees AddrSp_Memory P s t /\
+  step_inst fuel ctx inst s = Abort reason s1 ==>
+  ?t1. step_inst fuel ctx (dse_inst ids AddrSp_Memory inst) t = Abort reason t1 /\
+    dse_equiv AddrSp_Memory s1 t1
+Proof
+  strip_tac >>
+  `!op. eval_operand op s = eval_operand op t` by
+    (fs[dse_local_agrees_def] >> metis_tac[dse_safety_agrees_eval_operand]) >>
+  `dse_equiv AddrSp_Memory s t` by
+    fs[dse_local_agrees_def, dse_pending_space_def] >>
+  drule dse_create_memory_retained >>
+  disch_then (qspec_then `ids` SUBST1_TAC) >>
+  qpat_x_assum `step_inst _ _ _ s = _` mp_tac >>
+  fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+               AllCaseEqs(), exec_create_abort_iff] >>
+  strip_tac >> gvs[] >>
+  irule dse_equiv_halt_state >> irule dse_equiv_set_returndata >> simp[]
+QED
