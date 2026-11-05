@@ -206,6 +206,100 @@ Definition plan_holds_def:
   plan_holds ps at <=> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 End
 
+Definition alias_var_mass_def:
+  alias_var_mass x ps =
+    LIST_ELEM_COUNT (Var x) ps.ps_stack +
+    (if Var x IN FDOM ps.ps_spilled then 1 else 0)
+End
+
+Definition alias_var_budget_def:
+  alias_var_budget pending ps <=>
+    !x. alias_var_mass x ps <= SUC (LIST_ELEM_COUNT (Var x) pending)
+End
+
+Theorem alias_var_mass_fields:
+  ps.ps_stack = qs.ps_stack /\ FDOM ps.ps_spilled = FDOM qs.ps_spilled ==>
+  alias_var_mass x ps = alias_var_mass x qs
+Proof
+  simp[alias_var_mass_def]
+QED
+
+Theorem alias_var_budget_empty:
+  alias_var_budget [] ps <=>
+  !x. LIST_ELEM_COUNT (Var x) ps.ps_stack +
+    (if Var x IN FDOM ps.ps_spilled then 1 else 0) <= 1
+Proof
+  simp[alias_var_budget_def, alias_var_mass_def, LIST_ELEM_COUNT_THM]
+QED
+
+Theorem alias_var_mass_push:
+  alias_var_mass x (ps with ps_stack := stack_push op ps.ps_stack) =
+  alias_var_mass x ps + (if op = Var x then 1 else 0)
+Proof
+  simp[alias_var_mass_def, stack_push_def, SNOC_APPEND, elem_count_append,
+       LIST_ELEM_COUNT_THM] >>
+  Cases_on `op = Var x` >> simp[LIST_ELEM_COUNT_THM]
+QED
+
+Theorem alias_var_mass_restore:
+  alias_var_mass x (SND (do_restore op ps)) = alias_var_mass x ps
+Proof
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[do_restore_def, alias_var_mass_def, stack_push_def,
+       SNOC_APPEND, elem_count_append, LIST_ELEM_COUNT_THM, finite_mapTheory.FDOM_DOMSUB] >>
+  Cases_on `op = Var x` >>
+  gvs[finite_mapTheory.flookup_thm, LIST_ELEM_COUNT_THM]
+QED
+
+Theorem alias_var_mass_spill_tos:
+  !ps x. ps.ps_stack <> [] ==>
+  alias_var_mass x (SND (do_spill_tos ps)) <= alias_var_mass x ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?a stk. ps.ps_stack = SNOC a stk` by metis_tac[SNOC_CASES] >>
+  simp[do_spill_tos_def, alias_var_mass_def] >>
+  pairarg_tac >> gvs[] >>
+  simp[stack_pop_def, stack_peek_def, SNOC_APPEND, TAKE_APPEND,
+       EL_APPEND_EQN, elem_count_append, LIST_ELEM_COUNT_THM] >>
+  Cases_on `a = Var x` >> simp[LIST_ELEM_COUNT_THM] >>
+  Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[]
+QED
+
+Theorem alias_var_mass_spill:
+  d < LENGTH ps.ps_stack ==>
+  alias_var_mass x (SND (do_spill_at d ps)) <= alias_var_mass x ps
+Proof
+  strip_tac >> Cases_on `d = 0`
+  >- (simp[do_spill_at_def] >> irule alias_var_mass_spill_tos >>
+      strip_tac >> gvs[]) >>
+  `LIST_ELEM_COUNT (Var x) (stack_swap d ps.ps_stack) =
+   LIST_ELEM_COUNT (Var x) ps.ps_stack` by
+    (mp_tac (Q.SPECL [`ps.ps_stack`, `0`, `d`, `Var x`]
+       doSwapSimTheory.stack_poke_exchange_multiplicity) >>
+     simp[stack_poke_def, stack_peek_def, stack_swap_def]) >>
+  `stack_swap d ps.ps_stack <> []` by
+    (strip_tac >> gvs[stack_swap_def]) >>
+  qspecl_then [`ps with ps_stack := stack_swap d ps.ps_stack`, `x`] mp_tac
+    alias_var_mass_spill_tos >>
+  simp[do_spill_at_def, alias_var_mass_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem alias_var_mass_dup:
+  d < LENGTH ps.ps_stack ==>
+  alias_var_mass x (SND (do_dup d ps)) = alias_var_mass x ps +
+    (if stack_peek d ps.ps_stack = Var x then 1 else 0)
+Proof
+  strip_tac >>
+  drule_then assume_tac doSwapSimTheory.do_dup_stack_exact >>
+  Cases_on `d <= 15` >>
+  simp[alias_var_mass_def, do_dup_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[alias_var_mass_def, stack_dup_def, elem_count_append] >>
+  Cases_on `stack_peek d ps.ps_stack = Var x` >>
+  simp[LIST_ELEM_COUNT_THM]
+QED
+
 Theorem alias_popmany_singleton_inventory:
   plan_holds (SND (popmany_plan [v] ps)) at ==> plan_holds ps at
 Proof
