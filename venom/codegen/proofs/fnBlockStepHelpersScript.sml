@@ -40,15 +40,6 @@ Proof
   simp[fn_frame_inv_def, context_venom_asm_rel_def]
 QED
 
-Theorem wf_marked_cleanup_fields:
-  !base ps h promised.
-    generated_plan_state_wf_marked base
-      (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) <=>
-    generated_plan_state_wf_marked base ps
-Proof
-  simp[generated_plan_state_wf_marked_def, plan_slots_bounded_def]
-QED
-
 Theorem operand_val_frame_view_inst_idx:
   !fn ra s k lo at.
     operand_val (frame_view fn ra (s with vs_inst_idx := k)) lo at =

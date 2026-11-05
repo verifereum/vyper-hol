@@ -86,6 +86,15 @@ Definition generated_plan_state_wf_marked_def:
     DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)
 End
 
+Theorem wf_marked_cleanup_fields:
+  !base ps h promised.
+    generated_plan_state_wf_marked base
+      (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) <=>
+    generated_plan_state_wf_marked base ps
+Proof
+  simp[generated_plan_state_wf_marked_def, plan_slots_bounded_def]
+QED
+
 (* generated_plan_state_wf doesn't keep the marker out of the spill map,
    hence the second premise. *)
 Theorem generated_plan_state_wf_marked_wf:
