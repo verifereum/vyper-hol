@@ -95,3 +95,65 @@ Proof
        mk_phi_ops_from_pairs_def, eval_operand_def,
        lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
+
+Theorem le_lattice_single_var:
+  lattice_single_var ll key = SOME v <=>
+  FLOOKUP (unwrap_load_lattice ll) key = SOME [Var v]
+Proof
+  simp[lattice_single_var_def, AllCaseEqs()]
+QED
+
+Theorem le_compute_phi_action_certificate:
+  compute_phi_action m cfg result key lbl inst = SOME pa ==>
+  pa.pa_join_lbl = find_join_block cfg {} lbl /\
+  ?pairs. pa.pa_phi_ops = mk_phi_ops_from_pairs pairs /\
+    MAP FST pairs = cfg_preds_of cfg pa.pa_join_lbl /\
+    EVERY (\pv. FLOOKUP
+      (unwrap_load_lattice (df_boundary NONE result (FST pv))) key =
+      SOME [Var (SND pv)]) pairs
+Proof
+  simp[compute_phi_action_def] >> strip_tac >> gvs[] >>
+  qexists `MAP (\p. (p, THE (lattice_single_var
+    (df_boundary NONE result p) key)))
+    (cfg_preds_of cfg (find_join_block cfg {} lbl))` >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, EVERY_MAP] >>
+  gvs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >>
+  Cases_on `lattice_single_var (df_boundary NONE result p) key` >>
+  simp[] >> metis_tac[le_lattice_single_var]
+QED
+
+Theorem le_compute_phi_action_selected:
+  compute_phi_action m cfg result key lbl inst = SOME pa /\
+  MEM pred (cfg_preds_of cfg pa.pa_join_lbl) ==>
+  ?pairs v. pa.pa_phi_ops = mk_phi_ops_from_pairs pairs /\
+    MAP FST pairs = cfg_preds_of cfg pa.pa_join_lbl /\
+    MEM (pred,v) pairs /\
+    FLOOKUP (unwrap_load_lattice (df_boundary NONE result pred)) key =
+      SOME [Var v]
+Proof
+  strip_tac >> drule le_compute_phi_action_certificate >> strip_tac >>
+  `?v. MEM (pred,v) pairs` by
+    (`MEM pred (MAP FST pairs)` by metis_tac[] >>
+     fs[MEM_MAP] >> metis_tac[pairTheory.PAIR]) >>
+  qexistsl [`pairs`, `v`] >> simp[] >>
+  gvs[EVERY_MEM] >> first_x_assum drule >> simp[]
+QED
+
+Theorem le_compute_phi_action_capture:
+  compute_phi_action m cfg result key lbl inst = SOME pa /\
+  MEM pa actions /\
+  ALL_DISTINCT (MAP (\a. a.pa_phi_out) actions) /\
+  ALL_DISTINCT (cfg_preds_of cfg pa.pa_join_lbl) /\
+  MEM pred (cfg_preds_of cfg pa.pa_join_lbl) /\
+  s.vs_prev_bb = SOME pred /\
+  (!v. FLOOKUP (unwrap_load_lattice (df_boundary NONE result pred)) key =
+       SOME [Var v] ==> lookup_var v s = SOME w) /\
+  eval_phis s (phis_for_block actions pa.pa_join_lbl ++ rest) = OK t ==>
+  lookup_var pa.pa_phi_out t = SOME w
+Proof
+  strip_tac >> drule_all le_compute_phi_action_selected >> strip_tac >>
+  irule le_phi_action_capture >>
+  qexistsl [`actions`, `pa.pa_join_lbl`, `pairs`, `pred`, `rest`, `s`, `v`] >>
+  simp[]
+QED
