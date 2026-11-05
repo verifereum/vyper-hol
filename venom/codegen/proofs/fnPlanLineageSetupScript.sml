@@ -180,3 +180,40 @@ Proof
   qpat_x_assum `set _ = _` mp_tac >>
   simp[Abbr `inventory_set`, EXTENSION, MEM_MAP] >> metis_tac[is_var_operand_def]
 QED
+
+Theorem native_parameter_depth_exists:
+  !fn ch growth spill_base lbl_ctr v.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+    ?d. stack_get_depth (Var v)
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_stack = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_parameter_coverage >>
+  disch_then (qspecl_then [`ch`, `growth`, `spill_base`, `lbl_ctr`] mp_tac) >>
+  simp[EVERY_MEM] >> strip_tac >>
+  `MEM (Var v) (SND (prepare_params_plan (liveness_analyze fn) fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_stack` by metis_tac[] >>
+  gvs[GSYM stack_get_depth_is_some, optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem native_parameter_spill_inventory:
+  !fn ch growth spill_base lbl_ctr v d.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    stack_get_depth (Var v)
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_stack = SOME d /\
+    d <= 16 ==>
+    lineage_inventory
+      (set (MAP Var (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))))
+      (SND (do_spill_at d (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule do_spill_at_lineage_inventory >>
+  simp[] >> conj_tac >- (qexists_tac `v` >> simp[]) >>
+  irule native_parameter_lineage_inventory >> simp[]
+QED

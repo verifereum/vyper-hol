@@ -1823,3 +1823,34 @@ QED
    API. This checkpoint deliberately does not create new liveness machinery
    or claim that residual_budget_wf supplies lower coverage.
 *)
+
+Theorem do_spill_at_lineage_inventory:
+  !inventory_set ps v d.
+    lineage_inventory inventory_set ps /\
+    stack_get_depth (Var v) ps.ps_stack = SOME d /\ d <= 16 ==>
+    lineage_inventory inventory_set (SND (do_spill_at d ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lineage_inventory _ _` mp_tac >>
+  simp[lineage_inventory_def, lineage_core_def] >> strip_tac >>
+  `Var v <> dead_stack_marker` by simp[dead_stack_marker_def] >>
+  `stack_get_depth (Var v) core = SOME d` by
+    gvs[stack_get_depth_bottom_dead] >>
+  drule stack_get_depth_props >> strip_tac >>
+  drule_all stack_pop_swap_core >>
+  disch_then (qspec_then `REPLICATE m dead_stack_marker` strip_assume_tac) >>
+  `d < LENGTH ps.ps_stack` by simp[] >>
+  Cases_on `do_spill_at d ps` >>
+  drule_all do_spill_at_spilled_update >> strip_tac >>
+  `r.ps_stack = REPLICATE m dead_stack_marker ++ core'` by
+    (drule_all do_spill_at_suffix_stack >>
+     disch_then (qspecl_then [`ps`, `[]`] mp_tac) >> gvs[]) >>
+  simp[lineage_inventory_def, lineage_core_def] >>
+  qexistsl_tac [`m`, `core'`] >>
+  `stack_peek d ps.ps_stack = Var v` by metis_tac[stack_get_depth_props] >>
+  `MEM (Var v) core` by
+    (qpat_x_assum `stack_peek d core = Var v` (SUBST1_TAC o SYM) >>
+     simp[stack_peek_def] >> irule EL_MEM >> decide_tac) >>
+  gvs[EVERY_MEM, DISJOINT_ALT, EXTENSION] >>
+  metis_tac[stackPlanTypesTheory.is_var_operand_def]
+QED
