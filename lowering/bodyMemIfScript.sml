@@ -1,10 +1,8 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): an if
-   statement. bodyIfMemory's body_if_mem_case is this case but predates the
-   gas-counted stmt_frag_mem and fails; port it (stmtIfMemory's
-   compile_if_stmt_frag_mem builds). *)
+   statement, which is bodyIfMemory's body_if_mem_case. *)
 Theory bodyMemIf
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyIfMemory
 
 Theorem body_if_mem_ok:
   !cx e ss1 ss2.
@@ -16,5 +14,5 @@ Theorem body_if_mem_ok:
        body_stmts_mem_ok cx ss2) /\ body_expr_mem_ok cx e ==>
     body_stmt_mem_ok cx (If e ss1 ss2)
 Proof
-  cheat
+  ACCEPT_TAC body_if_mem_case
 QED
