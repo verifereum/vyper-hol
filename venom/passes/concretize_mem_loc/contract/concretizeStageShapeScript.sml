@@ -9,6 +9,41 @@
 Theory concretizeStageShape
 Ancestors
   o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher
+  staticLayoutFoldProofs staticLayoutDefs
+
+Theorem mk_concretize_layout_alloca_positions[local]:
+  mk_concretize_layout reserved positions fn = SOME layout ==>
+  !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP layout.cl_positions (Allocation inst.inst_id))
+Proof
+  simp[mk_concretize_layout_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[] >> drule allocation_eom_fold_success >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[allocation_end_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >> gvs[]
+QED
+
+Theorem concretize_function_fresh_positions:
+  fn.fn_eom = NONE /\
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
+  ?layout. fn' = apply_context_concretize_layout ctx layout fn /\
+    (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP layout.cl_positions (Allocation inst.inst_id)))
+Proof
+  simp[concretize_function_fuel_in_context_def, fn_has_static_layout_def] >>
+  strip_tac >>
+  Cases_on `fn_needs_liveness_allocation fn \/ imported_mems_used ctx fn <> []`
+  >- (gvs[AllCaseEqs()] >>
+      qexists `layout` >> simp[] >>
+      qpat_x_assum `compute_function_layout_fuel_in_context _ _ _ _ = _`
+        mp_tac >>
+      simp[compute_function_layout_fuel_in_context_def, AllCaseEqs()] >>
+      rpt strip_tac >> drule mk_concretize_layout_alloca_positions >> simp[]) >>
+  gvs[AllCaseEqs()] >> qexists `layout` >> simp[] >>
+  qpat_x_assum `compute_function_layout_eval _ _ = _` mp_tac >>
+  simp[compute_function_layout_eval_def, AllCaseEqs()] >>
+  rpt strip_tac >> drule mk_concretize_layout_alloca_positions >> simp[]
+QED
 
 (* Why it holds (intuition, not a prescribed proof).
 
