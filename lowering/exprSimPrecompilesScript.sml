@@ -2845,6 +2845,7 @@ QED
 
 (* frag_exec_run_inst_seq's premise, concluding a counted target path. *)
 Theorem run_inst_seq_gas_path:
+  !ctx func st st' s Q R.
   fn_has_code st st' func /\
   st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -2861,7 +2862,7 @@ Theorem run_inst_seq_gas_path:
           u.vs_inst_idx = LENGTH st'.cs_current_insts) \/
      (exit_result r /\ R r))
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
     gvs[rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def,
         rich_listTheory.DROP_LENGTH_APPEND]
