@@ -1332,6 +1332,13 @@ Proof
   ho_match_mp_tac code_slice_source_ind >> simp[]
 QED
 
+Theorem code_slice_source_NONE[simp]:
+  LENGTH es ≠ 3 ⇒ code_slice_source bt es = NONE
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
+QED
+
 Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
