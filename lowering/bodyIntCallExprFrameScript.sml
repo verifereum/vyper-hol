@@ -549,3 +549,119 @@ val () = List.app (fn th =>
     else raise Fail "Abs storage frame has unproved dependencies"
   end) [abs_storage_frame_run, abs_storage_frame_tail,
         compile_abs_storage_frame_frag];
+
+Theorem neg_storage_frame_run:
+  is_numeric_type t /\ ~is_uint_type t /\
+  evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v1 /\
+  unop_result cx t Neg [t] v1 es = INL v /\
+  compile_neg x t sa = (op,sb) /\
+  eval_operand x s = SOME (typed_val_to_w256 tv v1) /\ fresh_vars_wrt sa s ==>
+  ?s'. run_inst_seq (emitted_insts sa sb) s = OK s' /\
+       eval_operand op s' = SOME (typed_val_to_w256 tv v)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all neg_typed_source >> disch_then (qspec_then `es` mp_tac) >>
+  Cases_on `w2i (FST (type_bounds t)) < w2i (typed_val_to_w256 tv v1)` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule_all compile_neg_run >> simp[]
+QED
+
+Theorem neg_storage_frame_tail:
+  ann = expr_type e1 /\ is_numeric_type ann /\ ~is_uint_type ann /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v1 /\
+  unop_result cx ann Neg [ann] v1 es' = INL v /\
+  compile_neg x ann sm = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+  frag_exec ctx sm sb
+    (\s. expr_post ctx func cenv cx e1 es sa sm s0 es' v1 x s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann Neg [e1])
+           es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `is_word_type ann` by
+    (qpat_x_assum `ann = expr_type e1` kall_tac >>
+     Cases_on `ann` >> gvs[is_numeric_type_def, is_int_type_def, is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
+  irule frag_exec_pointwise >> gen_tac >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  `stmt_state_rel ctx func cenv cx es' s1 /\
+   eval_operand x s1 = SOME (typed_val_to_w256 tv v1)` by
+    gvs[expr_post_def, expr_val_rel_def] >>
+  irule frag_exec_conseq >>
+  irule_at Any frag_exec_straight_fresh_storage_frame_success >>
+  qexistsl_tac [`typed_val_to_w256 tv v`, `s1`, `op`,
+                 `compile_neg x ann`, `func`, `es'`, `cx`, `cenv`, `R`] >>
+  qexists_tac `\s. eval_operand x s = SOME (typed_val_to_w256 tv v1)` >>
+  simp[CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg,
+       freshWritesTheory.eval_operand_drop_fresh] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule neg_storage_frame_run >> simp[] >>
+      goal_assum (drule_at (Pat `unop_result _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_neg _ _ _ = _`)) >> gvs[]) >>
+  rpt strip_tac
+  >~ [`expr_post`]
+  >- (qpat_x_assum `ann = expr_type e1` (SUBST_ALL_TAC o SYM) >>
+      irule expr_post_unop >> simp[expr_val_rel_def] >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  gvs[expr_post_def]
+QED
+
+Theorem compile_neg_storage_frame_frag:
+  ann = expr_type e1 /\ is_numeric_type ann /\ ~is_uint_type ann /\
+  (!v1 es1.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) ==>
+    ?tv. evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v1) /\
+  (!a b operand es0 es1 value start saved savedT R.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) /\
+    (do r <- eval_expr cx e1; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e1 es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann Neg [e1]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann Neg [e1]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann Neg [e1]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule lower_value_neg >> strip_tac >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  qspecl_then [`x`, `expr_type e1`] assume_tac
+    (CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg) >>
+  drule_all straight_fresh_cs_extends >> strip_tac >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `?v1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es') /\
+         unop_result cx ann Neg [expr_type e1] v1 es' = INL v` by
+    (drule eval_expr_unop_cases >>
+     simp[precompile_builtin_def, builtin_args_length_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `!v1 es1. bind _ _ es = _ ==> _` drule >> strip_tac >>
+  irule frag_exec_seq >>
+  qpat_x_assum `!a b operand es0 es1 value start saved savedT R. _`
+    (irule_at (Pat `frag_exec _ sa _ _ _ _`)) >>
+  simp[] >> irule neg_storage_frame_tail >>
+  gvs[] >> metis_tac[compile_lower_value_var]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Neg storage frame has unproved dependencies"
+  end) [neg_storage_frame_run, neg_storage_frame_tail,
+        compile_neg_storage_frame_frag];
