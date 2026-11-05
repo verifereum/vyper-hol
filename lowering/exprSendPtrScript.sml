@@ -6,7 +6,8 @@ Ancestors
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
   exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
   sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
-  gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState
+  gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState typedWordArgsFactsPtr
+  typedWordArgsPostPtr
 
 Theorem ptr_inst_ok_assert:
   ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
@@ -548,3 +549,111 @@ Proof
   simp[FUN_EQ_THM, vyperStateTheory.bind_def, vyperStateTheory.assert_def]
 QED
 
+
+Theorem send_expr_sim_ptr:
+  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
+  typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) args /\
+  ptr_args_ready d ctx PG func cenv cx expr_type (expr_sim_inv cenv cx env) args ==>
+  expr_sim_ptr d ctx PG func cenv cx ty (Call ann (Send has_gas) args dflt) es
+Proof
+  strip_tac >> drule send_pre_types >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+      expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)` by
+    (rpt strip_tac >- metis_tac[expr_body_pre_send_arg] >> fs[EVERY_MEM]) >>
+  `wb_args_shape cenv expr_type args` by metis_tac[typed_stack_args_shape] >>
+  rewrite_tac[expr_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
+  drule lower_value_send >> strip_tac >> gvs[] >>
+  drule_all compile_expr_send >> strip_tac >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  drule_all send_tail_shape >> strip_tac >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `!ee gs. expr_sim_inv cenv cx env ee ==>
+      expr_sim_inv cenv cx env (ee with gas_obs := gs)` by simp[] >>
+  drule_all lower_typed_args_sim_ptr >> disch_tac >>
+  drule_all typed_args_outcome_ptr_facts >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >> disch_tac >>
+  drule send_read_action_ptr >> simp[SF ETA_ss] >> disch_then (fn th => rewrite_tac[th]) >>
+  irule gas_outcome_ptr_bind >> rpt conj_tac
+  >- suspend "certificate_head"
+  >- suspend "certificate_tail" >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >> conj_tac
+  >- suspend "normal" >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[wb_args_exit_def, exprSimDefsTheory.expr_exit_def]
+QED
+
+Resume send_expr_sim_ptr[certificate_head]:
+  rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume send_expr_sim_ptr[certificate_tail]:
+  rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_values >> simp[ignore_bind_def]
+QED
+
+Resume send_expr_sim_ptr[normal]:
+  rpt strip_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_admissible _ _ _` kall_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
+  gvs[] >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
+  qpat_x_assum `typed_args_ready _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `ptr_args_ready _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!e s. MEM e args /\ _ ==> _` kall_tac >>
+  qpat_x_assum `wb_args_shape _ _ _` kall_tac >>
+  qpat_x_assum `lower_word_args _ _ _ _ = _` kall_tac >>
+  `LENGTH vs = LENGTH args` by metis_tac[listTheory.LIST_REL_LENGTH] >>
+  `?a v gs. args = a::v::gs` by
+    (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  `?to_v amount_v gas_vs. vs = to_v::amount_v::gas_vs /\
+      LENGTH gas_vs = (if has_gas then 1 else 0)` by
+    (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  gvs[typed_args_post_ptr_def, typed_args_post_def,
+      vyperValueTheory.evaluate_type_def] >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts` by
+    fs[expr_sim_inv_def,
+      vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw` by
+    (Cases_on `has_gas` >> gvs[eval_operand_def, op_taint_def] >>
+     gvs[LENGTH_EQ_NUM_compute]) >>
+  `dest_AddressV to_v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) to_v))` by
+    metis_tac[address_typed_dest] >>
+  `dest_NumV amount_v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) amount_v))` by
+    metis_tac[uint256_typed_dest] >>
+  suspend "tail_summary"
+QED
+
+Resume send_expr_sim_ptr[tail_summary]:
+  `!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
+    metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
+  `!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
+    metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
+  `expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt) = NoneT` by simp[vyperASTTheory.expr_type_def] >>
+  drule_all (Q.INST [`e` |-> `Call NoneT (Send has_gas) (a::v::gs) dflt`]
+    send_tail_summary_ptr) >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  disch_tac >> fs[SF ETA_ss] >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  irule gas_summary_ptr_at_conseq >> goal_assum (drule_at Any) >>
+  conj_tac >- suspend "tail_post" >> simp[]
+QED
+
+Resume send_expr_sim_ptr[tail_post]:
+  rpt strip_tac >> gvs[] >>
+  conj_tac >- simp[callStepPtrTheory.ptr_val_ok_none] >>
+  conj_tac
+  >- (strip_tac >> irule callStepPtrTheory.ptr_buf_ok_zero_type >>
+      simp[callStepPtrTheory.send_none_buffer_size]) >>
+  irule wordArgsPtrTheory.ghost_kept_wb_trans >>
+  goal_assum (drule_at Any) >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise send_expr_sim_ptr
