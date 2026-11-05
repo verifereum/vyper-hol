@@ -3,7 +3,9 @@ Ancestors
   extRetCountedProbePtr entryHaltPtr fragGasPathPtr fragExec
   stmtLowering compileEnv emitHelper contextCodegenRelProps
   loweringHalt ptrSafeRun ptrDiscipline gasCount venomExecSemantics
-  fragExecPtr venomInst venomState fragGasSeqPtr bodyPtrDefs venomInstProofs emitHelperProps abiBuiltinAllocation finite_map allocaFootprint arithmetic
+  fragExecPtr venomInst venomState fragGasSeqPtr bodyPtrDefs venomInstProofs
+  emitHelperProps abiBuiltinAllocation finite_map allocaFootprint arithmetic
+  allocationPtr
 
 Theorem compile_return_none_external_gas_path_ptr:
   compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
@@ -226,4 +228,164 @@ Proof
     (qpat_x_assum `!i. _` (fn th =>
        map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >> simp[]) >>
   irule alloca_return_word_gas_path_ptr >> simp[] >> metis_tac[]
+QED
+
+Theorem mcopy_return_gas_path_ptr:
+  !cx ctx fn PG G tn s bb id dst src n a b.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MCOPY [Var dst; Var src; Lit n] []) /\
+    get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (id + 1) RETURN [Var dst; Lit n] []) /\
+    lookup_var dst s = SOME a /\ lookup_var src s = SOME b /\
+    ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
+    (!j. w2n b <= j /\ j < w2n b + w2n n ==> j NOTIN tn.t_mem) /\
+    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ?G' tn' t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' (Halt t)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `i = mk_inst id MCOPY [Var dst; Var src; Lit n] []` >>
+  qabbrev_tac `u = mcopy (w2n a) (w2n b) (w2n n) s` >>
+  `step_inst_base i s = OK u` by
+    (simp[Abbr `i`, Abbr `u`] >>
+     pure_once_rewrite_tac[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
+  qabbrev_tac `tn1 = step_taint i s u tn` >>
+  qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `ptr_covers G tn1 dst s1 (w2n n) /\ stor_taint_ok cx tn1 s1` by
+    gvs[ptr_covers_def, stor_taint_ok_def, Abbr `tn1`, Abbr `i`,
+        Abbr `s1`, Abbr `u`, mcopy_def, write_memory_with_expansion_def,
+        lookup_var_def, step_taint_def, set_var_taint_def, out_taint_def,
+        store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def,
+        op_taint_def, DRESTRICT_UNIV] >>
+  `!j. w2n a <= j /\ j < w2n a + w2n n ==> j NOTIN tn1.t_mem` by
+    (gen_tac >> disch_tac >> simp[Abbr `tn1`, Abbr `i`] >>
+     irule mcopy_range_clean >> simp[eval_operand_def] >> metis_tac[]) >>
+  `~s1.vs_halted /\ s1.vs_current_bb = s.vs_current_bb /\
+   s1.vs_inst_idx = s.vs_inst_idx + 1 /\ lookup_var dst s1 = SOME a` by
+    fs[Abbr `s1`, Abbr `u`, mcopy_def, write_memory_with_expansion_def,
+       lookup_var_def, ADD1] >>
+  `?t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn1 s1 0 G tn1 (Halt t)` by
+    (irule_at (Pos hd) return_lit_size_gas_path_ptr >>
+     simp[] >> qexistsl_tac [`a`, `dst`, `n`, `id + 1`] >> simp[ADD_COMM]) >>
+  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_mcopy >> simp[]) >>
+  qexistsl_tac [`G`, `tn1`, `t`] >>
+  irule (gas_path_ptr_step |> SPEC_ALL |> Q.INST [`n` |-> `0`] |>
+    Q.INST [`i` |-> `mk_inst id MCOPY [Var dst; Var src; Lit n] []`] |>
+    SRULE [mk_inst_def, is_terminator_def]) >>
+  simp[] >> qexistsl_tac [`dst`, `id`, `n`, `src`, `u`] >>
+  gvs[Abbr `s1`, Abbr `tn1`, Abbr `i`, step_prov_def,
+      set_prov_def, mk_inst_def, DRESTRICT_UNIV]
+QED
+
+Theorem alloca_copy_return_gas_path_ptr:
+  !cx ctx fn PG G tn s bb id buf src m n cenv es ty sa sb v tv w u.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id ALLOCA [Lit (n2w n)] [buf]) /\
+    get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (id+1) MCOPY [Var buf; Var src; Lit (n2w m)] []) /\
+    get_instruction bb (s.vs_inst_idx + 2) =
+      SOME (mk_inst (id+2) RETURN [Var buf; Lit (n2w m)] []) /\
+    stmt_state_rel ctx fn cenv cx es s /\
+    expr_val_at cenv cx ty sa sb es v (Var src) s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand (Var src) s = SOME w /\ src <> buf /\
+    MEM (mk_inst id ALLOCA [Lit (n2w n)] [buf]) (fn_insts fn) /\
+    n < dimword (:256) /\ m <= n /\ m <= val_footprint tv v /\
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s = OK u /\
+    ptr_covers G tn src s m /\
+    (!j. w2n w <= j /\ j < w2n w + m ==> j NOTIN tn.t_mem) /\
+    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ?G' tn' t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' (Halt t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `i = mk_inst id ALLOCA [Lit (n2w n)] [buf]` >>
+  qabbrev_tac `G1 = step_prov PG G i u` >>
+  qabbrev_tac `tn1 = step_taint i s u tn` >>
+  qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `ptr_covers G1 tn1 buf u n` by
+    (simp[Abbr `G1`, Abbr `tn1`, Abbr `i`] >>
+     irule alloca_step_ptr_covers >> metis_tac[]) >>
+  `ptr_covers G1 tn1 src u m` by
+    (simp[Abbr `G1`, Abbr `tn1`, Abbr `i`] >>
+     irule alloca_step_old_ptr_covers >> metis_tac[]) >>
+  `stor_taint_ok cx tn1 u` by
+    (simp[Abbr `tn1`, Abbr `i`] >>
+     irule alloca_step_stor_taint_ok >> metis_tac[]) >>
+  `eval_operand (Var src) u = SOME w` by
+    (`eval_operand (Var src) u = eval_operand (Var src) s` by
+       (irule alloca_step_operand_preserved >> simp[] >> metis_tac[Abbr `i`]) >>
+     simp[]) >>
+  `!j. w2n w <= j /\ j < w2n w + m ==> j NOTIN tn1.t_mem` by
+    (gen_tac >> disch_tac >> simp[Abbr `tn1`, Abbr `i`] >>
+     `j < w2n w + val_footprint tv v` by decide_tac >>
+     irule alloca_step_expr_read_clean >> metis_tac[]) >>
+  `step_inst 0 ctx i s = OK u` by simp[Abbr `i`, step_inst_non_invoke] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    (`~is_terminator i.inst_opcode` by simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
+     drule_all step_preserves_halted >>
+     drule_all step_preserves_control_flow >> simp[]) >>
+  `m < dimword (:256)` by decide_tac >>
+  `?a. lookup_var buf u = SOME a` by gvs[ptr_covers_def] >>
+  `?G' tn' t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G1 tn1 s1 0 G' tn' (Halt t)` by
+    (irule mcopy_return_gas_path_ptr >>
+     simp[Abbr `s1`, ADD1] >>
+     (conj_tac >- gvs[stor_taint_ok_def]) >>
+     qexistsl_tac [`a`, `w`, `buf`, `id+1`, `n2w m`, `src`] >>
+     gvs[ptr_covers_def, lookup_var_def, eval_operand_def] >>
+     metis_tac[LESS_EQ_TRANS]) >>
+  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_alloca >> simp[]) >>
+  qexistsl_tac [`G'`, `tn'`, `t`] >>
+  irule (gas_path_ptr_step |> SPEC_ALL |> Q.INST [`n` |-> `0`] |>
+    Q.INST [`i` |-> `mk_inst id ALLOCA [Lit (n2w n)] [buf]`] |>
+    SRULE [mk_inst_def, is_terminator_def]) >>
+  simp[] >> qexistsl_tac [`buf`, `id`, `n`, `u`] >>
+  gvs[Abbr `s1`, Abbr `G1`, Abbr `tn1`, Abbr `i`, mk_inst_def]
+QED
+
+Theorem compile_external_return_copy_gas_path_ptr:
+  !cx ctx fn PG G tn s src m n nkey ut iv st x st' cenv es ty sa sb v tv w.
+    compile_external_return (SOME (Var src)) F F (AbiCopy m) n F nkey ut iv st =
+      (x,st') /\ not_fresh_at st src /\
+    fn_has_code st st' fn /\ ~block_is_terminated st /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    stmt_state_rel ctx fn cenv cx es s /\
+    expr_val_at cenv cx ty sa sb es v (Var src) s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand (Var src) s = SOME w /\
+    n < dimword (:256) /\ m <= n /\ m <= val_footprint tv v /\
+    ptr_covers G tn src s m /\
+    (!j. w2n w <= j /\ j < w2n w + m ==> j NOTIN tn.t_mem) /\
+    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ?G' tn' t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' (Halt t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule compile_external_return_copy_parts >> simp[] >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `src <> buf` by metis_tac[] >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [buf]) /\
+   get_instruction bb (s.vs_inst_idx+1) =
+     SOME (mk_inst (st.cs_next_id+1) MCOPY [Var buf; Var src; Lit (n2w m)] []) /\
+   get_instruction bb (s.vs_inst_idx+2) =
+     SOME (mk_inst (st.cs_next_id+2) RETURN [Var buf; Lit (n2w m)] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn j => mp_tac (Q.SPEC j th)) [`0`, `1`, `2`]) >> simp[]) >>
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [buf]) (fn_insts fn)` by
+    (irule lookup_block_fn_insts >>
+     qexistsl_tac [`bb`, `s.vs_current_bb`] >> simp[] >>
+     gvs[get_instruction_def] >>
+     `LENGTH st.cs_current_insts < LENGTH bb.bb_instructions` by decide_tac >>
+     metis_tac[listTheory.EL_MEM]) >>
+  qspecl_then [`st.cs_next_id`, `n2w n`, `buf`, `s`]
+    strip_assume_tac step_alloca_frame >>
+  qpat_x_assum `!i. i < _ ==> _` kall_tac >>
+  gvs[] >>
+  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) alloca_copy_return_gas_path_ptr >>
+  simp[] >> disch_then drule_all >> simp[ADD_COMM]
 QED
