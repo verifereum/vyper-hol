@@ -9,7 +9,96 @@ Theory codegenAsmProgOk
 Ancestors
   asmFrameRel codegenEncodingWf codegen unitShapeDefs asmWf asmSem
   symbolResolve stackPlanGen stackPlanOps stackPlanTypes asmIR list rich_list
-  arithmetic finite_map
+  arithmetic finite_map planExec
+
+Theorem exec_stack_op_no_data[local]:
+  EVERY (\i. ~is_data_inst i) (exec_stack_op fmp op)
+Proof
+  Cases_on `op` >> simp[exec_stack_op_def, is_data_inst_def, EVERY_REPLICATE] >>
+  Cases_on `o'` >> simp[exec_stack_op_def, is_data_inst_def]
+QED
+
+Theorem execute_plan_no_data[local]:
+  EVERY (\i. ~is_data_inst i) (execute_plan fmp ops)
+Proof
+  simp[execute_plan_def, EVERY_FLAT, EVERY_MAP, exec_stack_op_no_data]
+QED
+
+Theorem data_suffix_all_data[local]:
+  EVERY is_data_inst (data_segment_asm segs ++ [AsmDataHeader "code_end"])
+Proof
+  simp[data_segment_asm_def, data_section_asm_def, EVERY_FLAT, EVERY_MAP,
+       is_data_inst_def] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  Cases_on `di` >> simp[is_data_inst_def]
+QED
+
+Theorem data_suffix_no_op[local]:
+  ~MEM (AsmOp name) (data_segment_asm segs ++ [AsmDataHeader "code_end"])
+Proof
+  mp_tac data_suffix_all_data >>
+  simp[EVERY_MEM] >> metis_tac[is_data_inst_def]
+QED
+
+Theorem data_suffix_prefix_indices[local]:
+  EVERY (\x. ~is_data_inst x) xs /\ EVERY is_data_inst ys ==>
+  !i. i < LENGTH (xs ++ ys) /\ ~is_data_inst (EL i (xs ++ ys)) ==>
+  !j. j <= i ==> ~is_data_inst (EL j (xs ++ ys))
+Proof
+  rpt strip_tac >>
+  `i < LENGTH xs` by
+    (spose_not_then assume_tac >>
+     gvs[EL_APPEND, EVERY_EL] >>
+     first_x_assum (qspec_then `i - LENGTH xs` mp_tac) >> simp[]) >>
+  `j < LENGTH xs` by decide_tac >>
+  gvs[EL_APPEND, EVERY_EL]
+QED
+
+Theorem cond_ne[local]:
+  (if b then x else y) <> z <=>
+  (b ==> x <> z) /\ (~b ==> y <> z)
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem swap_name_no_forbidden[local]:
+  MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+  swap_name n <> name
+Proof
+  rewrite_tac[MEM] >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[swap_name_def, cond_ne] >>
+  simp_tac (srw_ss()) []
+QED
+
+Theorem dup_name_no_forbidden[local]:
+  MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+  dup_name n <> name
+Proof
+  rewrite_tac[MEM] >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[dup_name_def, cond_ne] >>
+  simp_tac (srw_ss()) []
+QED
+
+Theorem exec_stack_op_no_forbidden[local]:
+  MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] /\
+  op <> SOEmit name ==> ~MEM (AsmOp name) (exec_stack_op fmp op)
+Proof
+  strip_tac >>
+  `!n. swap_name n <> name /\ dup_name n <> name` by
+    metis_tac[swap_name_no_forbidden, dup_name_no_forbidden] >>
+  Cases_on `op`
+  >- (Cases_on `o'` >> simp[exec_stack_op_def]) >>
+  gvs[exec_stack_op_def, MEM_REPLICATE]
+QED
+
+Theorem execute_plan_no_forbidden[local]:
+  MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] /\
+  ~MEM (SOEmit name) ops ==> ~MEM (AsmOp name) (execute_plan fmp ops)
+Proof
+  strip_tac >>
+  simp[execute_plan_def, MEM_FLAT, MEM_MAP] >>
+  metis_tac[exec_stack_op_no_forbidden]
+QED
 
 Theorem spill_fold_no_emit[local]:
   !items acc_ops offsets al ops offsets' al'.
