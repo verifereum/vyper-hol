@@ -1118,6 +1118,95 @@ Proof
   metis_tac[]
 QED
 
+Theorem ifexp_replace_path_runtime[local]:
+  !path tv value replacement updated suffix msg.
+    assign_subscripts tv value path (Replace replacement) = INL updated /\
+    (!ptv. evaluate_subscripts ptv replacement suffix = INR (RuntimeError msg)) ==>
+    evaluate_subscripts tv updated (path ++ suffix) = INR (RuntimeError msg)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[assign_subscripts_def, evaluate_subscripts_def] >> metis_tac[]) >>
+  Cases_on `h`
+  >- (Cases_on `v` >> Cases_on `value` >>
+      simp[assign_subscripts_def] >> rpt strip_tac >>
+      gvs[AllCaseEqs()] >>
+      `?av. updated = ArrayV av` by
+        (Cases_on `a` >> gvs[vyperValueOperationTheory.array_set_index_def, AllCaseEqs()] >> metis_tac[]) >>
+      gvs[] >> drule vyperArrayTheory.array_index_after_set_same >> strip_tac >>
+      first_x_assum drule_all >> simp[evaluate_subscripts_def]) >>
+  Cases_on `value` >> simp[assign_subscripts_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> first_x_assum drule_all >>
+  simp[evaluate_subscripts_def, alistTheory.AFUPDKEY_ALOOKUP]
+QED
+
+Theorem ifexp_shortened_child_runtime[local]:
+  vs <> [] ==>
+  !tv. evaluate_subscripts tv (ArrayV (DynArrayV (FRONT vs)))
+    [ValueSubscript (IntV &(LENGTH vs - 1))] =
+    INR (RuntimeError "evaluate_subscripts array_index")
+Proof
+  Cases_on `vs` >> simp[] >>
+  simp[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+       listTheory.oEL_THM]
+QED
+
+Theorem ifexp_pop_read_domain[local]:
+  lookup_scopes id es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg)) /\
+  pop_place cx (MemoryPlace id path) es = (INL (PlaceR p),ee) /\
+  read_result cx (PlaceR p) ee = (res,ef) ==>
+  expr_res_ok res
+Proof
+  strip_tac >>
+  Cases_on `find_containing_scope id es.scopes`
+  >- gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >> gvs[] >>
+  qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       lift_sum_def, return_def, raise_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `arr` >> gvs[return_def, raise_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[return_def, raise_def, vyperStateTheory.check_def,
+      ignore_bind_def, bind_def, vyperStateTheory.assert_def] >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, set_scopes_def, return_def, AllCaseEqs(), raise_def] >>
+  drule vyperLookupTheory.find_containing_scope_pre_none >> strip_tac >>
+  gvs[read_result_def, read_place_def, get_scopes_def, bind_def,
+      lift_option_type_def, return_def, vyperLookupTheory.lookup_scopes_update] >>
+  Cases_on `evaluate_subscripts entry.type entry.value path`
+  >- (Cases_on `assign_subscripts entry.type entry.value path
+        (Replace (ArrayV (DynArrayV (FRONT l))))` >>
+      gvs[return_def, raise_def] >>
+      drule ifexp_replace_path_runtime >>
+      disch_then (qspecl_then
+        [`[ValueSubscript (IntV &(LENGTH l - 1))]`,
+         `"evaluate_subscripts array_index"`] mp_tac) >>
+      simp[ifexp_shortened_child_runtime] >> strip_tac >>
+      gvs[read_memory_path_def, lift_sum_def, return_def, raise_def,
+          AllCaseEqs(), expr_res_ok_def] >>
+      Cases_on `read_popped entry.type
+        (path ++ [ValueSubscript (IntV &(LENGTH l - 1))])
+        (record_pop path (ArrayV (DynArrayV l)) (LAST l) entry.popped)` >>
+      gvs[return_def, raise_def]) >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `replace_popped entry.type path
+    (ArrayV (DynArrayV (FRONT l))) entry.popped` >> gvs[return_def, raise_def] >>
+  drule evaluate_subscripts_error_shape >> strip_tac >> gvs[] >>
+  drule ifexp_current_error_append >>
+  disch_then (qspec_then `[ValueSubscript (IntV &(LENGTH l - 1))]` assume_tac) >>
+  gvs[read_memory_path_def, lift_sum_def, return_def, raise_def, expr_res_ok_def] >>
+  Cases_on `read_popped entry.type
+    (path ++ [ValueSubscript (IntV &(LENGTH l - 1))])
+    (record_pop path (ArrayV (DynArrayV l)) (LAST l) x)` >>
+  gvs[return_def, raise_def]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
