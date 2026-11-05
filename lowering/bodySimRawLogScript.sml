@@ -6,7 +6,7 @@ Ancestors
   exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent fragExec venomInst
   exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps ASCIInumbers exprSimRawLog
-  bodySimRawLogSource bodySimRawLogBodySource
+  bodySimRawLogSource bodySimRawLogBodySource bodySimRawLogTails
 Libs
   pairLib
 
@@ -68,32 +68,6 @@ Proof
   simp[] >> qexistsl_tac [`s1`, `data_op`, `b`] >> simp[]
 QED
 
-Theorem raw_log_data_post_transport:
-  wb_args_post ctx func cenv cx es0 sa s0 es1 ops vals t /\
-  expr_post ctx func cenv cx data es1 sm sn t es2 v data_op u /\
-  stmt_state_rel ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
-  MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
-  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
-               (!l. op <> Label l)) ops ==>
-  wb_frame cenv es0 sa s0 u /\
-  LIST_REL (\op v. eval_operand op u = SOME (val_to_w256 v)) ops vals
-Proof
-  strip_tac >>
-  `wb_frame cenv es1 sm t u` by metis_tac[expr_post_frame] >>
-  gvs[wb_args_post_def] >> conj_tac
-  >- (irule wb_frame_trans >> simp[] >> conj_tac
-      >- (qexistsl_tac [`es1`, `sm`, `t`] >> simp[]) >>
-      qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `LIST_REL _ ops vals` mp_tac >>
-  qpat_x_assum `EVERY _ ops` mp_tac >>
-  qid_spec_tac `vals` >> Induct_on `ops` >> simp[] >>
-  gen_tac >> Cases_on `vals` >> simp[] >> rpt strip_tac
-  >- (irule exprSimOpsTheory.eval_operand_frame >> simp[] >>
-      qexistsl_tac [`sm`, `t`] >> simp[] >> metis_tac[wb_frame_vars]) >>
-  first_x_assum irule >> simp[]
-QED
 
 Theorem raw_log_fixed_tail_frag:
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
@@ -126,42 +100,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem raw_log_fixed_buffer_after_data:
-  expr_post ctx func cenv cx data es sm sn t es' v data_op s /\
-  stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv sm /\
-  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  not_fresh_at sm pvar /\ lookup_var pvar t = SOME p /\
-  FLOOKUP t.vs_allocas aid = SOME (w2n p,32) /\ sa.cs_next_id <= aid /\
-  (!n b sz. local_region cenv es.scopes t n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) ==>
-  eval_operand (Var pvar) s = SOME p /\
-  FLOOKUP s.vs_allocas aid = SOME (w2n p,32) /\
-  (!old b sz. old < sa.cs_next_id /\
-     FLOOKUP s.vs_allocas old = SOME (b,sz) ==>
-     regions_disjoint (w2n p) 32 b sz) /\
-  (!n b sz. local_region cenv es'.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz)
-Proof
-  strip_tac >>
-  `wb_frame cenv es sm t s` by metis_tac[expr_post_frame] >>
-  `lookup_var pvar s = SOME p /\
-   FLOOKUP s.vs_allocas aid = SOME (w2n p,32)` by
-    (fs[wb_frame_def] >> metis_tac[]) >>
-  simp[eval_operand_def] >> conj_tac
-  >- (rpt strip_tac >>
-      `allocas_non_overlapping s` by
-        fs[expr_post_def, stmt_state_rel_def, alloca_inv_def] >>
-      `aid <> old` by decide_tac >>
-      fs[allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
-      metis_tac[]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!n b sz. local_region _ es.scopes t _ _ _ ==> _` irule >>
-  qexists_tac `n` >> irule exprSimOpsTheory.local_region_frame >>
-  simp[] >> conj_tac
-  >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
-  qexistsl_tac [`sm`, `es'.scopes`, `s`] >> simp[] >>
-  metis_tac[wb_frame_vars]
-QED
 
 Theorem raw_log_fixed32_topics_frag[local]:
   (!rr et t0. eval_exprs cx topics es = (rr,et) /\ fn_has_code sa s1 func ==>
