@@ -1,13 +1,14 @@
 (*
- * DFT's step part of the O1 pass contract: on any function of the O1
- * shape, SSA or not, dft_fn keeps the shape, takes no new labels or
- * instruction ids, renames no label and leaves the supply alone.
+ * DFT's step part of the O1 pass contract: on an SSA function of the O1
+ * shape with its pseudo-instructions first, dft_fn keeps the shape, takes
+ * no new labels or instruction ids, renames no label and leaves the
+ * supply alone.  Off SSA it can break a call check (o1DftCallChecks).
  *)
 Theory o1DftStep
 Ancestors
   o1PassContract unitShapeDefs venomPassDispatcher dftStructural dftDefs
   dftLifting dftShape dftCorrectness unitLabelMapIdentity
-  venomFnScheduleRunnerProps
+  venomFnScheduleRunnerProps o1DftCallChecks o1DftRetpc
   venomWf venomInst venomEffects passSharedDefs dretDesugarDefs list
 Libs
   BasicProvers
@@ -125,21 +126,26 @@ Proof
 QED
 
 (* The base's fn_shape_ok also asks for the return-PC shape and checked
-   call flags; dft_fn keeps both (admitted in the transplant). *)
+   call flags; dft_fn keeps both on an SSA function. *)
 Theorem dft_shape_retpc_shape:
-  o1_fn_shape ctx fn ==> retpc_shape_ok (dft_fn fn)
+  o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
+  retpc_shape_ok (dft_fn fn)
 Proof
-  cheat
+  strip_tac >> irule dft_fn_retpc_shape_ok >>
+  gvs[o1_fn_shape_def, fn_shape_ok_def]
 QED
 
 Theorem dft_shape_call_checks:
-  o1_fn_shape ctx fn ==> call_checks_ok (dft_fn fn)
+  o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
+  call_checks_ok (dft_fn fn)
 Proof
-  cheat
+  strip_tac >> irule dft_fn_call_checks_ok >>
+  gvs[o1_fn_shape_def, fn_shape_ok_def]
 QED
 
 Theorem dft_shape_fn_shape:
-  o1_fn_shape ctx fn ==> fn_shape_ok (dft_fn fn)
+  o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
+  fn_shape_ok (dft_fn fn)
 Proof
   strip_tac >> drule dft_shape_first_rel >> strip_tac >>
   `MAP (\b. b.bb_label) (dft_fn fn).fn_blocks =
@@ -218,6 +224,29 @@ Proof
                       flip_comparison_opcode_def]
 QED
 
+(* Each block keeps its pseudo-instructions and the flips of the others
+   are not parameters, so a block with no parameter instruction keeps
+   none. *)
+Theorem dft_shape_no_param_tl:
+  o1_fn_shape ctx fn /\
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL (dft_fn fn).fn_blocks)
+Proof
+  strip_tac >>
+  `LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `LIST_REL dft_block_rel (TL fn.fn_blocks) (TL (dft_fn fn).fn_blocks)` by
+    (Cases_on `fn.fn_blocks` >> Cases_on `(dft_fn fn).fn_blocks` >> gvs[]) >>
+  simp[EVERY_MEM, callLayoutDefsTheory.no_param_insts_def] >> rpt strip_tac >>
+  rename1 `MEM b' (TL (dft_fn fn).fn_blocks)` >>
+  rename1 `MEM i b'.bb_instructions` >>
+  `?b. MEM b (TL fn.fn_blocks) /\ dft_block_rel b b'` by
+    (gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
+  drule_all dft_block_rel_source >> strip_tac >> gvs[]
+  >- (gvs[EVERY_MEM, callLayoutDefsTheory.no_param_insts_def] >> metis_tac[]) >>
+  drule flip_operands_special_opcode >> gvs[is_param_opcode_iff]
+QED
+
 Theorem flip_operands_not_alloca:
   is_flippable i.inst_opcode ==> (flip_operands i).inst_opcode <> ALLOCA
 Proof
@@ -252,7 +281,8 @@ Proof
 QED
 
 Theorem dft_shape_o1_fn:
-  o1_fn_shape ctx fn ==> o1_fn_shape ctx (dft_fn fn)
+  o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
+  o1_fn_shape ctx (dft_fn fn)
 Proof
   strip_tac >>
   `(dft_fn fn).fn_name = fn.fn_name` by
@@ -307,13 +337,19 @@ QED
      keep arity and opcode class.  ADD [op; Label "code_end"] has at
      most one child, so it is never flipped (the flipped form would fail
      label_positions_ok).
-   - The SSA lemmas (dft_fn_all_perm_of, dft_fn_dft_inv,
-     dft_fn_blocks_well_formed) don't apply: their hypotheses include
-     wf_ssa. *)
-Theorem dft_step_contract:
-  o1_step_contract rpolicy (CFP_Simple VP_DFT)
+   - The call checks and the return-PC shape need SSA (o1DftCallChecks,
+     o1DftRetpc): off SSA, a redefinition of a call's flag can be
+     scheduled between the call and its check. *)
+Theorem dft_step_contract_ssa:
+  fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
+  o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+  wf_ssa fn /\ fn_pseudos_prefix fn ==>
+  o1_fn_shape observed.cu_context out.fpo_function /\
+  fresh_names_ok s fn out.fpo_function /\
+  label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+  ir_supply_inst_ok out.fpo_supply
 Proof
-  simp[o1_step_contract_def, fn_pass_step_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[fn_pass_step_def] >> strip_tac >> gvs[] >>
   `MEM fn observed.cu_context.ctx_functions` by
     metis_tac[lookup_unique_function_member] >>
   `o1_fn_shape observed.cu_context fn` by

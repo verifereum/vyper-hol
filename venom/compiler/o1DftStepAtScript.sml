@@ -1,14 +1,29 @@
 (*
- * DFT's step contract at walk run 7, from the plain step contract
- * (o1DftStep) and row 8 of its output (dft_step_row).
+ * DFT's step contract at walk run 7: row 7 makes the function SSA with
+ * its pseudo-instructions first, which the shape part (o1DftStep's
+ * dft_step_contract_ssa) needs, and dft_fn gives row 8 (dft_step_row).
  *)
 Theory o1DftStepAt
 Ancestors
   o1DftStep o1PassContract venomPassSchedule dftCorrectnessFinal
-  venomFnScheduleRunnerProps list
+  venomFnScheduleRunnerProps dftSsaPreserve dftScheduleOrder list
 
-(* dft_fn keeps every opcode and puts each block's pseudo-instructions
-   first, so it keeps no-ALLOCA and gives the pseudo prefix of row 8. *)
+(* dft_fn reschedules within blocks, keeping each use after its
+   definition, so it keeps SSA. *)
+Theorem dft_fn_wf_ssa:
+  wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==> wf_ssa (dft_fn fn)
+Proof
+  strip_tac >>
+  `dft_fn fn = fn with fn_blocks := (dft_fn fn).fn_blocks` by
+    (rewrite_tac[dftDefsTheory.dft_fn_def, LET_THM] >>
+     CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[]) >>
+  pop_assum (fn th => ONCE_REWRITE_TAC[th]) >>
+  irule dftSsaPreserveTheory.dft_block_rel_wf_ssa >> simp[] >>
+  metis_tac[dftScheduleOrderTheory.dft_fn_block_rel]
+QED
+
+(* dft_fn keeps every opcode, keeps SSA and puts each block's
+   pseudo-instructions first, so row 7 gives row 8. *)
 Theorem dft_step_row:
   fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ o1_fn_row 7 fn ==>
@@ -19,9 +34,12 @@ Proof
     metis_tac[lookup_unique_function_member] >>
   `o1_fn_shape observed.cu_context fn` by
     gvs[o1_ctx_shape_def, EVERY_MEM] >>
-  gvs[o1_fn_row_def, dft_fn_pseudos_prefix, EVERY_MEM] >>
-  rpt strip_tac >> drule_all dft_shape_instruction_source >> strip_tac >>
-  gvs[] >> metis_tac[flip_operands_not_alloca]
+  gvs[o1_fn_row_def, dft_fn_pseudos_prefix] >> rpt conj_tac
+  >- (simp[EVERY_MEM] >> rpt strip_tac >>
+      drule_all dft_shape_instruction_source >> strip_tac >>
+      gvs[EVERY_MEM] >> metis_tac[flip_operands_not_alloca])
+  >- metis_tac[dft_shape_no_param_tl] >>
+  irule dft_fn_wf_ssa >> gvs[o1_fn_shape_def]
 QED
 
 Theorem dft_step_contract_at:
@@ -29,6 +47,6 @@ Theorem dft_step_contract_at:
 Proof
   simp[o1_step_contract_at_def] >> rpt gen_tac >> strip_tac >>
   `o1_fn_row 8 out.fpo_function` by metis_tac[dft_step_row] >>
-  assume_tac dft_step_contract >>
-  fs[o1_step_contract_def] >> metis_tac[]
+  `wf_ssa fn /\ fn_pseudos_prefix fn` by gvs[o1_fn_row_def] >>
+  drule_all dft_step_contract_ssa >> simp[]
 QED
