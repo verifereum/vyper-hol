@@ -6,7 +6,7 @@ Ancestors
   vfmExecution[ignore_grammar] vyperState vyperContext vyperABI vyperAST
   vyperValue list finite_map words vfmTypes
 Libs
-  cv_transLib wordsLib
+  cv_transLib wordsLib vyperCheckContractLib
 
 Definition custom_error_uint_def:
   custom_error_uint = BaseT (UintT 256)
@@ -108,7 +108,13 @@ Theorem custom_error_contract_checker:
     (custom_error_program "Ordered"
       [one_expr; Literal (BaseT BoolT) (BoolL T)]) = NONE
 Proof
-  EVAL_TAC >> simp[]
+  rewrite_tac[custom_error_program_def, one_expr_def, two_expr_def,
+              custom_error_uint_def] >>
+  rpt conj_tac
+  >- (CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >>
+      simp[])
+  >> CONV_TAC (LAND_CONV vyperCheckContractLib.check_contract_conv) >>
+  simp[]
 QED
 
 Definition custom_error_call_def:
