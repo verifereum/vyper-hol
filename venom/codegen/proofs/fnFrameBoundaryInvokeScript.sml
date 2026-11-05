@@ -1206,11 +1206,11 @@ Theorem invoke_cleanup_popmany:
   MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
   r.sr_spill_base <= popped.ps_alloc.sa_spill_base /\
   popped.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
-  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp pops)) st = AsmOK st' /\
-    context_venom_asm_rel cplan lo popped vs st' /\
-    st'.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp pops) /\
+  ?mid. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp pops)) st = AsmOK mid /\
+    context_venom_asm_rel cplan lo popped vs mid /\
+    mid.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp pops) /\
     (!b. ~closure_spill_byte ctx cplan name b ==>
-      read_byte b st'.as_memory = read_byte b st.as_memory) /\
+      read_byte b mid.as_memory = read_byte b st.as_memory) /\
     spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled /\
     ALL_DISTINCT popped.ps_stack /\
     DISJOINT (set popped.ps_stack) (FDOM popped.ps_spilled)
@@ -1238,11 +1238,11 @@ Theorem invoke_cleanup_swap:
   MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
   r.sr_spill_base <= swapped.ps_alloc.sa_spill_base /\
   swapped.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
-  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp opts)) st = AsmOK st' /\
-    context_venom_asm_rel cplan lo swapped vs st' /\
-    st'.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp opts) /\
+  ?fin. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp opts)) st = AsmOK fin /\
+    context_venom_asm_rel cplan lo swapped vs fin /\
+    fin.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp opts) /\
     (!b. ~closure_spill_byte ctx cplan name b ==>
-      read_byte b st'.as_memory = read_byte b st.as_memory)
+      read_byte b fin.as_memory = read_byte b st.as_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `outs = [] \/ FILTER (\out. MEM out nl) outs = []`
@@ -1318,16 +1318,14 @@ Proof
      (execute_plan cplan.cp_initial_fmp opts)` by
     gvs[execute_plan_append, asm_block_at_append] >>
   drule_all invoke_cleanup_popmany >>
-  disch_then (qspecl_then [`o2pc`, `ctx`] mp_tac) >>
-  disch_then (qx_choose_then `after_pop` assume_tac) >>
-  fs[] >>
-  `asm_block_at prog after_pop.as_pc (execute_plan cplan.cp_initial_fmp opts)` by simp[] >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  `asm_block_at prog mid.as_pc (execute_plan cplan.cp_initial_fmp opts)` by
+    (qpat_x_assum `mid.as_pc = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   drule_all invoke_cleanup_swap >>
-  disch_then (qspecl_then [`o2pc`, `ctx`]
-    (qx_choose_then `after_swap` strip_assume_tac)) >>
-  qexists `after_swap` >>
-  conj_tac >- (simp[execute_plan_append] >> irule asm_steps_compose_ok >>
-              goal_assum (drule_at Any) >> simp[]) >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  qexists `fin` >>
+  conj_tac >- (pure_rewrite_tac[execute_plan_append, LENGTH_APPEND] >>
+              irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
   conj_tac >- metis_tac[invoke_context_release_dead_spills] >>
   simp[execute_plan_append] >> metis_tac[]
 QED
