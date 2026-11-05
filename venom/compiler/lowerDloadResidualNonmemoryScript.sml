@@ -1,0 +1,219 @@
+Theory lowerDloadResidualNonmemory
+Ancestors
+  lowerDloadNormalExisting lowerDloadGuardProducer lowerDloadReachableDiscipline
+  lowerDloadProvenanceSupport lowerDloadReturnBoundary lowerDloadNormalData
+  lowerDloadOwnership lowerDloadPairedBoundary ptrDiscipline o1PassContract
+  contextCodegenRel venomWf venomInst list finite_map pred_set
+  pointerConfinedDefs memLocDefs lowerDloadOpaqueExecution lowerDloadCoverageInvariant
+  lowerDloadExplicitBase lowerDloadReadEffects lowerDloadScalarClosure
+  lowerDloadVariableTransport venomState venomExecSemantics codegenRel
+  lowerDloadGasProducer lowerDloadFrameCertificate lowerDloadAllocation
+  lowerDloadParameterEnvelope lowerDloadParamProducer lowerDloadMaskBounds
+
+Theorem ld_annotated_inst_wf:
+  o1_ctx_shape CS /\ (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s ==>
+  inst_wf i
+Proof
+  strip_tac >>
+  `MEM fn CS.ctx_functions` by metis_tac[ld_annotated_fn_member] >>
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
+  `fn_inst_wf fn` by metis_tac[] >>
+  fs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]
+QED
+
+Theorem ld_annotated_guard_scalar:
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  MEM i.inst_opcode [NOP; ASSERT; ASSERT_UNREACHABLE] ==>
+  !op. MEM op i.inst_operands ==> ld_op_prov AG op = NONE
+Proof
+  strip_tac >>
+  `MEM fn CS.ctx_functions` by metis_tac[ld_annotated_fn_member] >>
+  `fn_ptr_ok P fn` by metis_tac[] >>
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `ptr_use_ok P (fn_pv P fn) i` by (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `!v. MEM (Var v) i.inst_operands ==> v NOTIN fn_pv P fn` by
+    (qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+     simp[MEM] >> strip_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def] >>
+     metis_tac[]) >>
+  rpt strip_tac >>
+  `!v. op = Var v ==> v NOTIN fn_pv P fn` by metis_tac[] >>
+  drule_all ld_annotated_scalar_prov >> simp[]
+QED
+
+Theorem ld_normal_guard_backward:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  o1_ctx_shape CS /\ ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i.inst_opcode [NOP; ASSERT; ASSERT_UNREACHABLE] /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `inst_wf i` by metis_tac[ld_annotated_inst_wf] >>
+  `i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+     simp[MEM] >> strip_tac >> simp[inst_wf_def]) >>
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) i.inst_operands ==> v IN U` by
+    (rpt strip_tac >> simp[] >>
+     irule ld_retpc_observable_operand >> simp[] >> qexists_tac `i` >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
+     strip_tac >> simp[]) >>
+  `ld_owned_vars U E AG BH tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule ld_owned_operands_clean >>
+     goal_assum (drule_at (Pat `ld_owned_vars _ _ _ _ _ _ _ _`)) >>
+     rpt gen_tac >> disch_tac >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[ld_annotated_guard_scalar] >>
+     irule ld_taint_operand_clean >>
+     goal_assum (drule_at (Pat `taint_ok _ _ _ _`)) >> simp[] >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
+     strip_tac >> simp[]) >>
+  `t' = t /\ step_inst fuel CS i s = OK s` by
+    (drule_all ld_guard_backward >> simp[]) >>
+  qpat_x_assum `t' = t` SUBST_ALL_TAC >>
+  qexists_tac `s` >> asm_rewrite_tac[] >>
+  drule ld_guard_prov >> disch_then (fn th => rewrite_tac[th]) >>
+  drule ld_guard_taint >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[ld_set_prov_def, set_var_taint_def, DRESTRICT_UNIV] >> metis_tac[]
+QED
+
+Theorem ld_normal_initial_fmp_backward:
+  i.inst_opcode = INITIAL_FMP /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `ld_owned_vars U E AG BH tn un s t /\ ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `?s'. step_inst fuel CS i s = OK s' /\
+    ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'` by
+    (drule_all ld_owned_initial_fmp_backward >> simp[]) >>
+  qexists_tac `s'` >> simp[] >>
+  `?out w. i.inst_outputs = [out] /\
+    s' = update_var out w s /\ t' = update_var out w t` by
+    (drule_all ld_initial_fmp_backward >>
+     disch_then (qspecl_then [`fuel`,`CS`] strip_assume_tac) >>
+     metis_tac[venomExecSemanticsTheory.exec_result_11]) >>
+  irule ld_normal_step_vars_complete >>
+  simp[update_var_def] >> suspend "fields"
+QED
+
+Resume ld_normal_initial_fmp_backward[fields]:
+  `(!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+   (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v))` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `!v. ld_owned_selection E (FLOOKUP (ld_step_prov AP AG L i) v)
+      (FLOOKUP (ld_step_prov BP BH H i) v)` by
+    (simp[ld_step_prov_def, ld_out_prov_def] >>
+     irule ld_owned_set_selection >> simp[ld_owned_selection_def]) >>
+  simp[] >> conj_tac
+  >- (simp[lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+      Cases_on `v = out` >> simp[] >> metis_tac[lookup_var_def]) >>
+  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
+       step_writes_def, source_memory_write_ranges_def,
+       store_taint_def, imm_taint_def, adopt_reset_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, EXTENSION] >>
+  rpt CASE_TAC >> simp[] >> metis_tac[]
+QED
+
+Finalise ld_normal_initial_fmp_backward
+
+Theorem ld_normal_gas_backward:
+  i.inst_opcode = GAS /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `ld_frame_data V U E L H AP BP AG BH tn un s t` by
+    metis_tac[ld_normal_data_frame] >>
+  `s.vs_gas_readings = t.vs_gas_readings` by
+    (drule ld_normal_data_companions >> simp[]) >>
+  `?s'. step_inst fuel CS i s = OK s' /\
+    s'.vs_gas_readings = t'.vs_gas_readings /\
+    ld_frame_data V U E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'` by
+    (drule_all ld_gas_frame_data_backward >> simp[]) >>
+  `?out w rest. i.inst_outputs = [out] /\
+    s' = update_var out w (s with vs_gas_readings := rest) /\
+    t' = update_var out w (t with vs_gas_readings := rest)` by
+    (drule_all ld_gas_backward >>
+     disch_then (qspecl_then [`fuel`,`CS`] strip_assume_tac) >>
+     metis_tac[exec_result_11]) >>
+  qexists_tac `s'` >> simp[] >> suspend "completion"
+QED
+
+Resume ld_normal_gas_backward[completion]:
+  `ld_frame_bound t.vs_alloca_next H BP BH` by
+    (drule ld_normal_data_geometry >> strip_tac >> asm_rewrite_tac[]) >>
+  `ld_frame_bound t.vs_alloca_next H BP (ld_step_prov BP BH H i)` by
+    (irule ld_frame_bound_step >> simp[]) >>
+  `!owner bs sz. ld_live astk L AP (ld_step_prov AP AG L i) (owner,(bs,sz)) ==>
+    owner IN live /\ lo <= bs` by
+    (drule ld_normal_data_geometry >> strip_tac >> metis_tac[ld_live_step_prov]) >>
+  `!st ta. (step_taint i st
+      (update_var out w (st with vs_gas_readings := rest)) ta).t_mem = ta.t_mem /\
+    (step_taint i st (update_var out w (st with vs_gas_readings := rest)) ta).t_stor = ta.t_stor /\
+    (step_taint i st (update_var out w (st with vs_gas_readings := rest)) ta).t_trans = ta.t_trans /\
+    (step_taint i st (update_var out w (st with vs_gas_readings := rest)) ta).t_imm = ta.t_imm` by
+    (rpt gen_tac >>
+     simp[step_taint_def, mem_taint_def, new_site_bytes_def, update_var_def,
+       step_writes_def, source_memory_write_ranges_def,
+       store_taint_def, imm_taint_def, adopt_reset_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, EXTENSION] >>
+     rpt CASE_TAC >> simp[] >> metis_tac[]) >>
+  `!v owner bs sz. FLOOKUP (ld_step_prov AP AG L i) v = SOME(owner,(bs,sz)) ==>
+    owner IN live` by
+    (drule ld_normal_data_geometry >> strip_tac >>
+     simp[ld_step_prov_def, ld_out_prov_def, ld_set_prov_def, FLOOKUP_DRESTRICT] >>
+     metis_tac[]) >>
+  `(!v. op_taint (step_taint i s s' tn) (Var v) SUBSET count 32) /\
+   (!v. op_taint (step_taint i t t' un) (Var v) SUBSET count 32)` by
+    (drule ld_normal_data_masks >> strip_tac >> simp[ld_step_taint_bound]) >>
+  qpat_x_assum `s' = _` SUBST_ALL_TAC >>
+  qpat_x_assum `t' = _` SUBST_ALL_TAC >>
+  simp[ld_normal_data_def] >>
+  qpat_x_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_normal_data_def, update_var_def, ld_alloc_account_def,
+       allocas_from_def, read_memory_def] >>
+  strip_tac >> gvs[update_var_def] >> asm_rewrite_tac[]
+QED
+
+Finalise ld_normal_gas_backward
