@@ -4908,6 +4908,43 @@ Proof
   qexists_tac `(new_head,SND parent)::above` >> simp[]
 QED
 
+Theorem asm_call_saved_suffix_finite:
+  !n. wf_state s /\ asm_call_saved_suffix saved s /\
+    (!k. k <= n ==>
+      LENGTH saved < LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts) ==>
+    wf_state (SND (FUNPOW (step o SND) n (INL (),s))) /\
+    asm_call_saved_suffix saved (SND (FUNPOW (step o SND) n (INL (),s)))
+Proof
+  Induct >- simp[] >> strip_tac >>
+  `wf_state (SND (FUNPOW (step o SND) n (INL (),s))) /\
+   asm_call_saved_suffix saved (SND (FUNPOW (step o SND) n (INL (),s)))` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  simp[arithmeticTheory.FUNPOW_SUC] >> qmatch_goalsub_abbrev_tac `step mid` >>
+  `wf_state mid /\ asm_call_saved_suffix saved mid` by simp[Abbr `mid`] >>
+  `LENGTH saved < LENGTH (SND (step mid)).contexts` by
+    (first_x_assum (qspec_then `SUC n` mp_tac) >> simp[arithmeticTheory.FUNPOW_SUC, Abbr `mid`]) >>
+  Cases_on `step mid` >> gvs[] >> conj_tac
+  >- (drule_all step_preserves_wf_state >> simp[])
+  >> irule asm_call_saved_suffix_step >> metis_tac[]
+QED
+
+Theorem asm_call_child_trace_saved_suffix:
+  wf_state s /\ s.contexts = child::(parent::rest) /\
+  (!k. k <= n ==>
+    LENGTH (parent::rest) <
+      LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts) ==>
+  ?active. active <> [] /\
+    (SND (FUNPOW (step o SND) n (INL (),s))).contexts =
+      active ++ (parent::rest)
+Proof
+  strip_tac >>
+  `asm_call_saved_suffix (parent::rest) s` by
+    (simp[asm_call_saved_suffix_view] >> metis_tac[APPEND]) >>
+  drule_all asm_call_saved_suffix_finite >>
+  simp[asm_call_saved_suffix_def]
+QED
+
 (* The saved suffix is intentionally unconstrained: the caller need not be static. *)
 Theorem asm_call_cp_static_prefix:
   cp f /\ f s = (r,t) /\ active <> [] /\
