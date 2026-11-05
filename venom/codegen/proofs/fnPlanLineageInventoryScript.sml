@@ -1856,13 +1856,14 @@ Proof
 QED
 
 Theorem emit_one_input_live_reserve[local]:
-  !done rest opc nl h ps.
+  !done rest opc nl keep h ps.
+    set keep SUBSET set nl /\
     (!v. LIST_ELEM_COUNT (Var v) done +
-       (if MEM (Var v) (h::rest) \/ MEM v nl then 1 else 0) <=
+       (if MEM (Var v) (h::rest) \/ MEM v keep then 1 else 0) <=
        LIST_ELEM_COUNT (Var v) ps.ps_stack +
        (if Var v IN FDOM ps.ps_spilled then 1 else 0)) ==>
     !v. LIST_ELEM_COUNT (Var v) (done ++ [h]) +
-       (if MEM (Var v) rest \/ MEM v nl then 1 else 0) <=
+       (if MEM (Var v) rest \/ MEM v keep then 1 else 0) <=
        LIST_ELEM_COUNT (Var v)
          (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_stack +
        (if Var v IN FDOM
@@ -1870,17 +1871,19 @@ Theorem emit_one_input_live_reserve[local]:
         then 1 else 0)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
-  first_x_assum (qspec_then `v` assume_tac) >>
+  qpat_x_assum `!v. _ <= _` (qspec_then `v` assume_tac) >>
   qspecl_then [`opc`, `operand_vars rest ++ nl`, `h`, `ps`, `Var v`]
     assume_tac emit_one_input_inventory_mono_aux >>
   Cases_on `Var v = h`
   >- (gvs[elem_count_append, LIST_ELEM_COUNT_THM] >>
-      Cases_on `MEM (Var v) rest \/ MEM v nl`
+      Cases_on `MEM (Var v) rest \/ MEM v keep`
       >- (`MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
             (Cases_on `Var v IN FDOM ps.ps_spilled` >>
              gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
           `MEM v (operand_vars rest ++ nl)` by
-            (gvs[MEM_APPEND, input_mem_operand_vars] >> metis_tac[]) >>
+            (gvs[SUBSET_DEF, MEM_APPEND, input_mem_operand_vars] >> metis_tac[]) >>
+          `MEM (Var v) rest \/ MEM v nl` by
+            (gvs[SUBSET_DEF, MEM_APPEND, input_mem_operand_vars] >> metis_tac[]) >>
           qspecl_then [`opc`, `operand_vars rest ++ nl`, `Var v`, `ps`]
             mp_tac emit_one_input_inventory_inc >>
           simp[stackPlanTypesTheory.is_var_operand_def, input_mem_operand_vars] >>
@@ -1891,27 +1894,52 @@ Proof
 QED
 
 Theorem emit_input_plan_live_reserve_acc[local]:
-  !rest done opc nl ps iops ps1.
+  !rest done opc nl keep ps iops ps1.
+    set keep SUBSET set nl /\
     (!v. LIST_ELEM_COUNT (Var v) done +
-       (if MEM (Var v) rest \/ MEM v nl then 1 else 0) <=
+       (if MEM (Var v) rest \/ MEM v keep then 1 else 0) <=
        LIST_ELEM_COUNT (Var v) ps.ps_stack +
        (if Var v IN FDOM ps.ps_spilled then 1 else 0)) /\
     emit_input_plan opc rest nl ps = (iops,ps1) ==>
     !v. LIST_ELEM_COUNT (Var v) (done ++ rest) +
-       (if MEM v nl then 1 else 0) <=
+       (if MEM v keep then 1 else 0) <=
        LIST_ELEM_COUNT (Var v) ps1.ps_stack +
        (if Var v IN FDOM ps1.ps_spilled then 1 else 0)
 Proof
   Induct_on `rest` >- simp[] >>
   rpt gen_tac >> strip_tac >>
-  drule emit_one_input_live_reserve >>
+  drule_all emit_one_input_live_reserve >>
   disch_then (qspec_then `opc` assume_tac) >>
   Cases_on `emit_one_input opc (operand_vars rest ++ nl) h ps` >>
   rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
   Cases_on `emit_input_plan opc rest nl mid` >>
   gvs[emit_input_plan_cons] >>
   first_x_assum drule >> disch_then drule >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  disch_then drule >> simp[]
+QED
+
+Theorem emit_input_plan_protected_live_reserve:
+  !operands opc nl keep ps iops ps1.
+    set keep SUBSET set nl /\
+    (!v. MEM (Var v) operands \/ MEM v keep ==>
+       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) ==>
+    !v. LIST_ELEM_COUNT (Var v) operands + (if MEM v keep then 1 else 0) <=
+        LIST_ELEM_COUNT (Var v) ps1.ps_stack +
+        (if Var v IN FDOM ps1.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. LIST_ELEM_COUNT (Var v) [] +
+       (if MEM (Var v) operands \/ MEM v keep then 1 else 0) <=
+       LIST_ELEM_COUNT (Var v) ps.ps_stack +
+       (if Var v IN FDOM ps.ps_spilled then 1 else 0)` by
+    (gen_tac >> simp[LIST_ELEM_COUNT_THM] >>
+     IF_CASES_TAC >> simp[] >>
+     `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+     Cases_on `Var v IN FDOM ps.ps_spilled` >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  drule_all emit_input_plan_live_reserve_acc >> simp[]
 QED
 
 Theorem emit_input_plan_live_reserve:
@@ -1923,17 +1951,8 @@ Theorem emit_input_plan_live_reserve:
         LIST_ELEM_COUNT (Var v) ps1.ps_stack +
         (if Var v IN FDOM ps1.ps_spilled then 1 else 0)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!v. LIST_ELEM_COUNT (Var v) [] +
-       (if MEM (Var v) operands \/ MEM v nl then 1 else 0) <=
-       LIST_ELEM_COUNT (Var v) ps.ps_stack +
-       (if Var v IN FDOM ps.ps_spilled then 1 else 0)` by
-    (gen_tac >> simp[LIST_ELEM_COUNT_THM] >>
-     IF_CASES_TAC >> simp[] >>
-     `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
-     Cases_on `Var v IN FDOM ps.ps_spilled` >>
-     gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
-  drule_all emit_input_plan_live_reserve_acc >> simp[]
+  rpt strip_tac >> irule emit_input_plan_protected_live_reserve >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem emit_input_plan_lineage_live_reserve:
@@ -2470,24 +2489,25 @@ Proof
   metis_tac[]
 QED
 
-Theorem emit_reorder_plan_core_consumption:
-  !ps base operands selected opc nl dfg iops ps1 rops ps2.
+Theorem emit_reorder_plan_core_protected_consumption:
+  !ps base operands selected opc nl keep dfg iops ps1 rops ps2.
     residual_budget_wf base [] ps /\ LENGTH operands <= 16 /\
-    (!v. MEM (Var v) operands \/ MEM v nl ==>
+    set keep SUBSET set nl /\
+    (!v. MEM (Var v) operands \/ MEM v keep ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
     PERM operands selected /\
     emit_input_plan opc operands nl ps = (iops,ps1) /\
     reorder_plan dfg selected ps1 = (rops,ps2) ==>
     residual_budget_wf base []
       (ps2 with ps_stack := stack_pop (LENGTH selected) ps2.ps_stack) /\
-    (!v. MEM v nl ==> MEM (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) \/
+    (!v. MEM v keep ==> MEM (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) \/
       Var v IN FDOM ps2.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >> rename1 `residual_budget_wf spillbase [] ps` >>
   `!v. MEM (Var v) operands ==>
     MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
   drule_all emit_reorder_plan_core_suffix >> strip_tac >>
-  drule_all emit_input_plan_live_reserve >> strip_tac >>
+  drule_all emit_input_plan_protected_live_reserve >> strip_tac >>
   `!op. MEM op operands /\ is_var_operand op ==>
     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
     (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]) >>
@@ -2512,12 +2532,32 @@ Proof
   decide_tac
 QED
 
-Theorem emit_reorder_pop_marker_core_reserve:
-  !ps m core base operands selected opc nl dfg iops ps1 rops ps2 qs.
+Theorem emit_reorder_plan_core_consumption:
+  !ps base operands selected opc nl dfg iops ps1 rops ps2.
+    residual_budget_wf base [] ps /\ LENGTH operands <= 16 /\
+    (!v. MEM (Var v) operands \/ MEM v nl ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    residual_budget_wf base []
+      (ps2 with ps_stack := stack_pop (LENGTH selected) ps2.ps_stack) /\
+    (!v. MEM v nl ==> MEM (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) \/
+      Var v IN FDOM ps2.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule emit_reorder_plan_core_protected_consumption >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`iops`, `nl`, `opc`, `operands`, `ps`] >> simp[] >> metis_tac[]
+QED
+
+Theorem emit_reorder_pop_marker_core_protected_reserve:
+  !ps m core base operands selected opc nl keep dfg iops ps1 rops ps2 qs.
     ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
     residual_budget_wf base [] (ps with ps_stack := core) /\
     EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
-    (!v. MEM (Var v) operands \/ MEM v nl ==>
+    set keep SUBSET set nl /\
+    (!v. MEM (Var v) operands \/ MEM v keep ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
     PERM operands selected /\
     emit_input_plan opc operands nl ps = (iops,ps1) /\
@@ -2525,7 +2565,7 @@ Theorem emit_reorder_pop_marker_core_reserve:
     qs = ps2 with ps_stack := stack_pop (LENGTH operands) ps2.ps_stack ==>
     ?rest. qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
       residual_budget_wf base [] (qs with ps_stack := rest) /\
-      (!v. MEM v nl ==> MEM (Var v) rest \/ Var v IN FDOM qs.ps_spilled)
+      (!v. MEM v keep ==> MEM (Var v) rest \/ Var v IN FDOM qs.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `residual_budget_wf spillbase [] (ps with ps_stack := core)` >>
@@ -2533,11 +2573,11 @@ Proof
   rename1 `emit_input_plan _ _ _ _ = (ci,cs1)` >>
   Cases_on `reorder_plan dfg selected cs1` >>
   rename1 `reorder_plan _ _ cs1 = (cr,cs2)` >>
-  `!v. MEM (Var v) operands \/ MEM v nl ==>
+  `!v. MEM (Var v) operands \/ MEM v keep ==>
     MEM (Var v) (ps with ps_stack := core).ps_stack \/
       Var v IN FDOM (ps with ps_stack := core).ps_spilled` by
     (gvs[MEM_REPLICATE, dead_stack_marker_def] >> metis_tac[]) >>
-  drule_all emit_reorder_plan_core_consumption >> strip_tac >>
+  drule_all emit_reorder_plan_core_protected_consumption >> strip_tac >>
   `!op. MEM op operands /\ is_var_operand op ==>
     MEM op (ps with ps_stack := core).ps_stack \/
       op IN FDOM (ps with ps_stack := core).ps_spilled` by
@@ -2573,3 +2613,24 @@ Proof
   gvs[stack_pop_def, TAKE_APPEND]
 QED
 
+
+Theorem emit_reorder_pop_marker_core_reserve:
+  !ps m core base operands selected opc nl dfg iops ps1 rops ps2 qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
+    (!v. MEM (Var v) operands \/ MEM v nl ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) /\
+    qs = ps2 with ps_stack := stack_pop (LENGTH operands) ps2.ps_stack ==>
+    ?rest. qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      residual_budget_wf base [] (qs with ps_stack := rest) /\
+      (!v. MEM v nl ==> MEM (Var v) rest \/ Var v IN FDOM qs.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule emit_reorder_pop_marker_core_protected_reserve >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[SUBSET_REFL]
+QED
