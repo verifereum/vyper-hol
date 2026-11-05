@@ -255,7 +255,7 @@ Proof
       write_memory_with_expansion_def, update_var_def] >> metis_tac[]
 QED
 
-Theorem owned_header_phase[local]:
+Theorem owned_header_phase:
   abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD iv cv cmp done /\
   src <> Var iv /\ iv <> cv /\ LENGTH xs < dimword (:256) /\
   abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) j s /\
@@ -281,12 +281,12 @@ Proof
   irule owned_header_effect
 QED
 
-Theorem owned_backedge_phase[local]:
-  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD iv cv cmp done /\
+Theorem owned_backedge_phase:
+  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD hiv cv cmp done /\
   ip <> Var nv /\ src <> Var nv /\ LENGTH xs < dimword (:256) /\
   EVERY (val_wf tv) xs /\ 32+LENGTH xs*type_memory_size tv <= cap /\
   oid <> cid /\ cid IN ids /\ j < LENGTH xs /\
-  entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr (LENGTH xs) j s /\
+  entry_loop_child_end fn tail prefix bid biv nv ip hdr src p srcaddr (LENGTH xs) j s /\
   entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d cap s /\
   entry_loop_prefix tv xs d (SUC j) s /\
   t = jump_to hdr (mstore (w2n p) (n2w (SUC j)) (update_var nv (n2w (SUC j)) s)) ==>
