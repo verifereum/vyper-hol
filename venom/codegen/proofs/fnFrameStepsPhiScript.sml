@@ -2998,3 +2998,104 @@ Theorem phi_run_init:
 Proof
   simp[phi_run_config_def, phi_stack_provenance_init, eval_phis_def]
 QED
+
+Theorem phi_run_step:
+  !base fn bb pred entry source final done inst todo ra lo m ps st halt ops next
+    prog initial_fmp o2pc.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  phi_run_config fn ra lo base pred entry source m done (inst::todo) ps st /\
+  generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps =
+    (ops,next) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ [inst]) todo next st'
+Proof
+  rpt gen_tac >> rewrite_tac[phi_run_context_def, phi_run_config_def] >> strip_tac >>
+  rename1 `phi_stack_provenance bound pred entry done (inst::todo) ps` >>
+  `MEM inst (collect_phis bb.bb_instructions)` by simp[] >>
+  `inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
+   phi_well_formed inst.inst_operands` by metis_tac[phi_codegen_inst_shape] >>
+  `?after. eval_phis source (done ++ [inst]) = OK after` by
+    (qpat_assum `eval_phis source (collect_phis _) = OK final`
+       (mp_then Any mp_tac phi_eval_take_ok) >>
+     disch_then (qspec_then `SUC (LENGTH done)` mp_tac) >>
+     qpat_x_assum `collect_phis _ = _` SUBST1_TAC >>
+     pure_once_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>
+     simp[listTheory.TAKE_APPEND2, listTheory.TAKE_def,
+          arithmeticTheory.ADD1]) >>
+  `EVERY (\i. i.inst_opcode = PHI) done` by
+    (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[livenessProofsTheory.collect_phis_mem, listTheory.MEM_APPEND,
+       phi_codegen_inst_shape]) >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ [inst])))` by
+    (`ssa_form fn` by gvs[codegen_ready_fn_def] >>
+     drule_all phi_block_outputs_distinct >> strip_tac >>
+     drule phi_collect_outputs_distinct >> simp[] >>
+     simp[listTheory.ALL_DISTINCT_APPEND]) >>
+  `MEM (HD inst.inst_outputs) inst.inst_outputs` by
+    (Cases_on `inst.inst_outputs` >> gvs[]) >>
+  `~MEM (Var (HD inst.inst_outputs)) entry.ps_stack /\
+   Var (HD inst.inst_outputs) NOTIN FDOM entry.ps_spilled` by metis_tac[] >>
+  `~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+   Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled` by
+    (drule_all phi_codegen_provenance_fresh >> simp[]) >>
+  drule_all phi_parallel_frame_residents >>
+  disch_then (qspecl_then [`fn`, `ra`, `lo`] strip_assume_tac) >>
+  `phi_stack_provenance bound pred entry (done ++ [inst]) todo next` by
+    (drule_all phi_provenance_advance >> simp[]) >>
+  `((frame_view fn ra partial with vs_memory := m) with
+       vs_vars := (frame_view fn ra after).vs_vars) =
+     (frame_view fn ra after with vs_memory := m)` by
+    (qpat_x_assum `frame_view fn ra after = _` SUBST1_TAC >> simp[]) >>
+  `!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val ((frame_view fn ra partial with vs_memory := m) with
+      vs_vars := (frame_view fn ra after).vs_vars) lo at =
+    operand_val (frame_view fn ra partial with vs_memory := m) lo at` by
+    (simp[genFrameSimTheory.operand_val_memory_update] >> metis_tac[]) >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- suspend "no_hit" >>
+  rename1 `stack_get_phi_depth _ _ = SOME dist` >> suspend "hit"
+QED
+
+Resume phi_run_step[no_hit]:
+  drule_all phi_numeric_no_hit_sim >>
+  disch_then (qspecl_then [`o2pc`, `prog`, `initial_fmp`] strip_assume_tac) >>
+  drule phi_plan_no_hit >>
+  disch_then (qspecl_then [`live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))`,
+    `halt`] assume_tac) >> gvs[] >>
+  qexists `st` >> simp[] >> qexists `after` >> simp[]
+QED
+
+Resume phi_run_step[hit]:
+  `is_var_operand (stack_peek dist ps.ps_stack) /\
+   MEM (stack_peek dist ps.ps_stack) inst.inst_operands` by
+    metis_tac[phi_stack_hit_operand] >>
+  `resolve_phi pred inst.inst_operands = SOME (stack_peek dist ps.ps_stack)` by
+    (irule phi_provenance_hit_selected >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[listTheory.MEM_APPEND, listTheory.MEM]) >>
+  `~MEM (operand_to_string (stack_peek dist ps.ps_stack))
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done)))` by
+    (Cases_on `stack_peek dist ps.ps_stack` >> gvs[is_var_operand_def, operand_to_string_def] >>
+     irule phi_input_dead_at_successor >> simp[] >>
+     simp[listTheory.EL_APPEND_EQN]) >>
+  `operand_val (frame_view fn ra after) lo (Var (HD inst.inst_outputs)) =
+   operand_val (frame_view fn ra partial) lo (stack_peek dist ps.ps_stack)` by
+    (Cases_on `stack_peek dist ps.ps_stack` >> gvs[is_var_operand_def] >>
+     irule phi_parallel_selected_value >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `operand_val ((frame_view fn ra partial with vs_memory := m) with
+      vs_vars := (frame_view fn ra after).vs_vars) lo (Var (HD inst.inst_outputs)) =
+   operand_val (frame_view fn ra partial with vs_memory := m) lo
+     (stack_peek dist ps.ps_stack)` by
+    simp[genFrameSimTheory.operand_val_memory_update] >>
+  drule_all phi_numeric_hit_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> gvs[]
+QED
+
+Finalise phi_run_step
