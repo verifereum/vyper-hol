@@ -128,14 +128,14 @@ Proof
   Induct >> simp[] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Triviality filter_take_nop:
+Theorem filter_take_nop:
   !l (P:'a -> bool) i. i < LENGTH l /\ ~P (EL i l) ==>
     LENGTH (FILTER P (TAKE (SUC i) l)) = LENGTH (FILTER P (TAKE i l))
 Proof
   Induct >> simp[] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Triviality filter_take_keep:
+Theorem filter_take_keep:
   !l (P:'a -> bool) i. i < LENGTH l /\ P (EL i l) ==>
     LENGTH (FILTER P (TAKE (SUC i) l)) = SUC (LENGTH (FILTER P (TAKE i l)))
 Proof
@@ -294,7 +294,7 @@ QED
    - OK results: state shifted by idx
    - Non-OK results: execution_equiv {} (ignores idx)
    This is what clear_nops_block_gen needs. *)
-Triviality step_inst_non_term_idx:
+Theorem step_inst_non_term_idx:
   !fuel ctx inst s j.
     ~is_terminator inst.inst_opcode ==>
     (case step_inst fuel ctx inst s of

@@ -1,6 +1,6 @@
 Theory deadStoreElimCertificate
 Ancestors
-  decoratedExecution deadStoreElimExecution deadStoreElimSafety
+  decoratedExecution decoratedClearing deadStoreElimExecution deadStoreElimSafety
   deadStoreElimDefs basePtrDefs venomMemDefs venomExecSemantics venomState
   finite_map words deadStoreElimStructure memLocDefs passSimulationDefs
   venomInst list passSharedDefs deadStoreElimStepSimulation deadStoreElimLocal
@@ -364,4 +364,40 @@ Proof
   `dse_single_pass ids sp fn = fn` by metis_tac[dse_single_pass_unsupported] >>
   qexists_tac `r` >> simp[] >>
   Cases_on `r` >> simp[lift_result_def, dse_equiv_refl]
+QED
+
+Theorem bp_ptrs_bounded_clear_nops:
+  bp_ptrs_bounded bp fn s ==>
+  bp_ptrs_bounded bp (clear_nops_function fn) s
+Proof
+  simp[bp_ptrs_bounded_def, clear_nops_function_def,
+       clear_nops_block_def, MEM_MAP, MEM_FILTER] >>
+  rpt strip_tac >> gvs[MEM_MAP, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem dse_occ_safe_clear_nops:
+  wf_function fn /\ dse_safety_agrees s t /\ dse_occ_safe fn inst s ==>
+  dse_occ_safe (clear_nops_function fn) inst t
+Proof
+  strip_tac >>
+  `dse_occ_safe fn inst t` by (irule dse_occ_safe_agrees >> metis_tac[]) >>
+  drule cfg_analyze_clear_nops >> strip_tac >>
+  gvs[dse_occ_safe_def, bp_analyze_clear_nops] >>
+  conj_tac >- metis_tac[] >>
+  irule bp_ptrs_bounded_clear_nops >> simp[]
+QED
+
+Theorem dse_certificate_clear_nops:
+  wf_function fn /\ dse_run_certificate fn fuel ctx s r ==>
+  ?r'. dse_run_certificate (clear_nops_function fn) fuel ctx s r' /\
+    !sp. lift_result (dse_equiv sp) (dse_equiv sp) (dse_equiv sp) r r'
+Proof
+  simp[dse_run_certificate_def] >> strip_tac >>
+  drule decorated_run_clear_nops >>
+  disch_then (qspec_then `dse_occ_safe (clear_nops_function fn)` mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >> irule dse_occ_safe_clear_nops >> simp[] >>
+      qexists_tac `u` >> simp[dse_safety_agrees_def, lookup_var_def]) >>
+  strip_tac >> goal_assum (drule_at Any) >>
+  metis_tac[result_equiv_empty_implies_lift_result_dse_equiv]
 QED
