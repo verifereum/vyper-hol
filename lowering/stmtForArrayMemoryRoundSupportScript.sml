@@ -151,3 +151,68 @@ Proof
   disch_then (qspec_then `[]` mp_tac) >> simp[]
 QED
 
+
+Theorem array_body_round_outcome_mem:
+  ~s.vs_halted /\
+  gas_outcome T tops (ctx,func) (eval_stmts cx stmts)
+    (ei with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes,s) B E /\
+  (!gs r ee. eval_stmts cx stmts
+    (ei with <|scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes; gas_obs := gs|>) = (r,ee) ==>
+    ?sc rest. ee.scopes = sc :: rest) /\
+  (!r ee t. B r ee t ==> ?sc rest b u. ee.scopes = sc :: rest /\
+    (case r of INL x => INL F
+       | INR e => if e = ContinueException then INL F
+                  else if e = BreakException then INL T else INR e) = INL b /\
+    gas_marked_path T ctx func t 0 (OK u) /\
+    (b ==> Done (ee with scopes := rest) u) /\
+    (~b ==> Next (ee with scopes := rest) u)) /\
+  (!r ee rr sc rest. E r ee rr /\ ee.scopes = sc :: rest ==>
+    ?e. r = INR e /\ e <> BreakException /\ e <> ContinueException /\
+        X e (ee with scopes := rest) rr) ==>
+  gas_outcome T tops (ctx,func)
+    (do push_scope_with_var id tv v;
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od) (ei,s)
+    (\res ee t. ?b. res = INL b /\ (b ==> Done ee t) /\ (~b ==> Next ee t))
+    (\res ee rr. ?e. res = INR e /\ X e ee rr)
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_summary_at_def] >> strip_tac
+      >- (gvs[] >>
+          qpat_x_assum `!r ee t. B _ _ _ ==> _` drule >> strip_tac >>
+          `es_end.scopes = sc :: rest` by gvs[] >>
+          drule_all array_round_marked_exec >> strip_tac >>
+          qexists_tac `marks` >> disj1_tac >>
+          qexistsl_tac [`INL b`, `es_end with scopes := rest`, `OK u`] >>
+          simp[evaluation_state_fn_updates] >>
+          fs[gas_marked_exec_def] >>
+          drule_all gas_marked_path_then >> simp[]) >>
+      `?sc rest. es_end.scopes = sc :: rest` by
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+         simp[gas_marked_exec_def] >> strip_tac >>
+         first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
+         qpat_x_assum `!gs r ee. eval_stmts _ _ _ = _ ==> _` drule >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `!r ee rr sc rest. _` drule >>
+      disch_then (qspecl_then [`sc`, `rest`] mp_tac) >> simp[] >> strip_tac >>
+      gvs[] >> drule_all array_round_marked_exec >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INR e`, `es_end with scopes := rest`, `r`] >>
+      gvs[evaluation_state_fn_updates]) >>
+  drule gas_exempt_cert_execution >> strip_tac >>
+  `?sc rest. ee.scopes = sc :: rest` by
+    (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >> strip_tac >>
+     gvs[ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+     qpat_x_assum `!gs r ee. eval_stmts _ _ _ = _ ==> _` drule >>
+     simp[] >> metis_tac[]) >>
+  rename1 `gas_exempt_cert _ _ _ _ _ _ _ (leaf,fin)` >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee with scopes := rest`, `leaf`, `fin`] >>
+  irule array_round_exempt >> simp[] >> metis_tac[]
+QED
