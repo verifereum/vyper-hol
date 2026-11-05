@@ -1011,7 +1011,7 @@ Proof
   rename1 `inst.inst_operands = _ :: _ :: _ :: _ :: _ :: _ :: _ :: tail` >> Cases_on `tail` >> gvs[]
 QED
 
-Theorem source_read_ranges_frame_view[local]:
+Theorem source_read_ranges_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   ~is_terminator inst.inst_opcode ==>
   source_memory_read_ranges inst (frame_view fn ra s with vs_memory := m) =
@@ -1068,7 +1068,7 @@ Proof
   qexists_tac `r` >> simp[] >> decide_tac
 QED
 
-Theorem context_reads_local[local]:
+Theorem context_reads_local:
   !cp inst vs r alloc. source_memory_reads_disjoint cp inst vs /\ MEM r cp.cp_regions /\
   r.sr_spill_base <= alloc.sa_spill_base /\
   alloc.sa_next_offset <= r.sr_spill_end ==>
@@ -1113,7 +1113,7 @@ Proof
   strip_tac >> gvs[] >> first_x_assum drule >> decide_tac
 QED
 
-Theorem frame_view_safe_step[local]:
+Theorem frame_view_safe_step:
   !fuel ctx cp fn ra inst vs vs' m r alloc.
   step_inst fuel ctx inst vs = OK vs' /\
   inst.inst_opcode <> INVOKE /\ ~is_param_opcode inst.inst_opcode /\
@@ -1149,7 +1149,7 @@ Proof
   drule_all context_writes_local >> simp[source_memory_writes_disjoint_def]
 QED
 
-Theorem frame_local_result[local]:
+Theorem frame_local_result:
   !ctx cp lo fn ra rest mem0 ps vs ast ps' vs' out r m'.
   fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
   MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
@@ -1185,7 +1185,7 @@ Proof
   qexists_tac `r` >> simp[]
 QED
 
-Theorem frame_view_control_fields[local]:
+Theorem frame_view_control_fields:
   (frame_view fn ra vs).vs_prev_bb = vs.vs_prev_bb /\
   (frame_view fn ra vs).vs_initial_fmp = vs.vs_initial_fmp
 Proof

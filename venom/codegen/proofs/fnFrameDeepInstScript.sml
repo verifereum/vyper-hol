@@ -11,7 +11,7 @@
 
 Theory fnFrameDeepInst
 Ancestors
-  deepResidualSim fnPlanPrefix genFrameSim frameRel contextCodegenRel
+  deepInstSim deepResidualSim fnPlanPrefix genFrameSim frameRel contextCodegenRel
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs
@@ -130,5 +130,64 @@ Theorem gen_inst_frame_sim_deep:
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rename1 `MEM r cplan.cp_regions` >>
+  qpat_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fn_frame_inv_def]) >>
+  `venom_asm_rel lo ps
+     (frame_view fn ra vs with vs_memory := as.as_memory)
+     (as with as_stack := top)` by
+    (drule context_venom_asm_rel_local >> simp[]) >>
+  `context_memory_rel cplan vs.vs_memory as.as_memory` by
+    fs[context_venom_asm_rel_def, frame_view_def] >>
+  gen_tac >> strip_tac >>
+  `?m'. step_inst fuel ctx inst
+      (frame_view fn ra vs with vs_memory := as.as_memory) =
+      OK (frame_view fn ra vs' with vs_memory := m') /\
+    (!i. read_byte i as.as_memory = read_byte i vs.vs_memory ==>
+         read_byte i m' = read_byte i vs'.vs_memory) /\
+    (!i. context_spill_byte cplan i ==> read_byte i m' = read_byte i as.as_memory) /\
+    inst_memory_safe ps'.ps_alloc inst
+      (frame_view fn ra vs with vs_memory := as.as_memory)
+      (frame_view fn ra vs' with vs_memory := m')` by
+    (irule frame_view_safe_step >> goal_assum (drule_at Any) >>
+     simp[] >> qexists_tac `r` >> simp[]) >>
+  `EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+      ps'.ps_alloc.sa_next_offset <= off) (source_memory_read_ranges inst vs)` by
+    (irule context_reads_local >> qexistsl_tac [`cplan`, `r`] >> simp[]) >>
+  `~MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    (simp[] >> rpt conj_tac >> strip_tac >> gvs[is_terminator_def]) >>
+  `EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+      ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst
+        (frame_view fn ra vs with vs_memory := as.as_memory))` by
+    (simp[source_read_ranges_frame_view] >> fs[arithmeticTheory.ADD_COMM]) >>
+  fs[] >>
+  drule_all
+    (SRULE [venomMemPropsTheory.eval_operand_with_memory, operand_val_memory_update,
+      frame_view_control_fields, arithmeticTheory.ADD_COMM]
+    (Q.INST [`initial_fmp` |-> `cplan.cp_initial_fmp`,
+       `vs` |-> `frame_view fn ra vs with vs_memory := as.as_memory`,
+       `as` |-> `as with as_stack := top`] (SPEC_ALL gen_inst_ok_sim_marked))) >>
+  strip_tac >> rename1 `venom_asm_rel _ ps' _ out` >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
+  `~vs'.vs_halted` by
+    (`step_inst_base inst vs = OK vs'` by
+       (qpat_x_assum `step_inst fuel ctx inst vs = OK vs'` mp_tac >>
+        simp[step_inst_non_invoke]) >>
+     drule venomInstProofs1Theory.step_inst_base_preserves_all >> simp[]) >>
+  `n2w cplan.cp_initial_fmp = vs'.vs_initial_fmp` by
+    (qpat_assum `step_inst fuel ctx inst vs = OK vs'`
+       (mp_then Any mp_tac step_inst_non_invoke_preserves_initial_fmp) >> simp[]) >>
+  qexistsl_tac [`n`, `out with as_stack := out.as_stack ++ rest`] >>
+  conj_tac
+  >- (`as with as_stack := top ++ rest = as` by
+        simp[asmSemTheory.asm_state_component_equality] >>
+      pop_assum (SUBST1_TAC o GSYM) >> irule asm_steps_frame >> simp[]) >>
+  conj_tac >- (irule frame_local_result >> simp[] >> conj_tac
+               >- (qexists_tac `r` >> simp[]) >>
+               qexistsl_tac [`as`, `m'`, `ps`, `vs`] >> simp[]) >>
+  qpat_x_assum `~is_terminator _ ==> _` mp_tac >>
+  (impl_tac >- simp[]) >>
+  rpt (pop_assum kall_tac) >> simp[] >> decide_tac
 QED
