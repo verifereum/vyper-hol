@@ -177,8 +177,8 @@
       "source_sha256": "7735235e2053a21464cc048aa662577fdca1bece36697e6405345a045fb280f0"
     },
     "interface_calls": {
-      "deploy_sha256": "4117363f8a3b3bcd55a06fd35af06b12c0a219057c24ca85b60c3b195ded10ec",
-      "runtime_sha256": "1b4a0f62a7e5531e19ceed64668cd3aa54f7a44c6252513063142a99deaa28ac",
+      "deploy_sha256": "1b6eb1cf558829c13eeb498305287f47bd2e04613dcb5d255d87f51bcbe0e1e0",
+      "runtime_sha256": "065aff758f12be87da71dfa19a211cce0c705606b78854237d2b2f43bf9ae462",
       "source": "python-o1-no-asm-opt-sources/interface_calls.vy",
       "source_sha256": "dad33309147f67f61f2b6b1e00a7f03de648a917da1509e70d75a2482116f36a"
     },
