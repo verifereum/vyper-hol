@@ -1,6 +1,6 @@
 Theory bodyIfExpMemory
 Ancestors
-  loweringPosts exprSimMemUnwrap
+  loweringPosts exprSimMemUnwrap vyperStoragePlaceProvenance
   exprBopSimProps
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
@@ -1562,9 +1562,9 @@ Proof
   drule ifexp_current_error_append >> simp[]
 QED
 
-Theorem ifexp_create_no_memory[local]:
+Theorem ifexp_create_no_place[local]:
   eval_create cx kind salt rof tys vs bsize st <>
-    (INL (PlaceR (MemoryPlace id path)),ee)
+    (INL (PlaceR p),ee)
 Proof
   strip_tac >>
   gvs[vyperCreateTheory.eval_create_def] >>
@@ -1641,7 +1641,7 @@ Proof
        raise_def, COND_RATOR, AllCaseEqs()]) >>
   Cases_on `kind` >>
   gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
-  metis_tac[ifexp_create_no_memory]
+  metis_tac[ifexp_create_no_place]
 QED
 
 Resume ifexp_expr_memory_domain_mutual[subscript]:
@@ -1687,6 +1687,182 @@ Proof
   metis_tac[ifexp_expr_memory_domain_mutual]
 QED
 
+Theorem ifexp_lookup_immutable_domain[local]:
+  lookup_global cx src nm es = (INL (PlaceR (ImmutablePlace src' id path)),ee) ==>
+  ?imms tv v. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables src' imms) id = SOME (tv,v) /\
+    (!msg. evaluate_subscripts tv v path <> INR (TypeError msg))
+Proof
+  strip_tac >>
+  gvs[lookup_global_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `find_var_decl_by_name nm ts`
+  >- (gvs[bind_def, get_immutables_def, get_address_immutables_def,
+          lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+          return_def, raise_def, AllCaseEqs()] >>
+      gvs[evaluate_subscripts_def] >> Cases_on `tvv` >> metis_tac[]) >>
+  PairCases_on `x` >> Cases_on `x0` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_extend_immutable_domain[local]:
+  extend_place cx raw sb es = (INL (PlaceR (ImmutablePlace src id path)),ee) ==>
+  ?imms tv v. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+    (!msg. evaluate_subscripts tv v path <> INR (TypeError msg))
+Proof
+  Cases_on `raw`
+  >- simp[extend_place_def, raise_def]
+  >- (rename1 `PlaceR p` >> Cases_on `p`
+      >- (simp[extend_place_def, bind_def, return_def, AllCaseEqs()] >>
+          rpt strip_tac >> drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+          simp[]) 
+      >- simp[extend_place_def, bind_def, ignore_bind_def, return_def,
+              extend_memory_place_def, AllCaseEqs()] >>
+      strip_tac >>
+      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+          extend_memory_place_def, AllCaseEqs()] >>
+      gvs[place_type_value_def, read_place_def, get_immutables_def,
+          get_address_immutables_def, lift_option_type_def, lift_sum_def,
+          bind_def, return_def, raise_def, AllCaseEqs()] >>
+      gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+          return_def, raise_def, AllCaseEqs()] >>
+      drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+      disch_then (qspec_then `[sb]` assume_tac) >>
+      Cases_on `tva` >> gvs[]) >>
+  Cases_on `sb` >>
+  simp[extend_place_def, bind_def, return_def, raise_def,
+       lift_option_type_def, value_type_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_conditional_no_immutable[local]:
+  conditional_result cx raw es <> (INL (PlaceR (ImmutablePlace src id path)),ee)
+Proof
+  Cases_on `raw` >> simp[conditional_result_def, return_def, raise_def] >>
+  rename1 `PlaceR p` >> Cases_on `p` >>
+  simp[conditional_result_def, bind_def, COND_RATOR, return_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[return_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_pop_no_immutable[local]:
+  pop_place cx p es <> (INL (PlaceR (ImmutablePlace src id path)),ee)
+Proof
+  Cases_on `p`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+      simp[pop_place_def, raise_def] >> rename1 `ArrayTV elem bd` >>
+      Cases_on `bd` >> simp[pop_place_def, raise_def, bind_def,
+        ignore_bind_def, return_def, AllCaseEqs()])
+  >- (simp[pop_place_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[return_def, AllCaseEqs()] >>
+      gvs[pairTheory.UNCURRY, bind_def, ignore_bind_def, return_def, AllCaseEqs()]) >>
+  simp[pop_place_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_select_immutable_domain[local]:
+  select_result cx ty raw sb es = (INL (PlaceR (ImmutablePlace src id path)),ee) ==>
+  ?imms tv v. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+    (!msg. evaluate_subscripts tv v path <> INR (TypeError msg))
+Proof
+  Cases_on `raw` >> simp[select_result_def, bind_def, return_def, AllCaseEqs()] >>
+  metis_tac[ifexp_extend_immutable_domain]
+QED
+
+Theorem ifexp_eval_expr_immutable_domain[local]:
+  eval_expr cx e es = (INL (PlaceR (ImmutablePlace src id path)),ee) ==>
+  ?imms tv v. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+    (!msg. evaluate_subscripts tv v path <> INR (TypeError msg))
+Proof
+  Cases_on `e` >> strip_tac >>
+  gvs[Once evaluate_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()]
+  >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
+      drule ifexp_lookup_immutable_domain >> simp[])
+  >- (PairCases_on `p` >>
+      gvs[lookup_flag_mem_def, vyperMiscTheory.option_CASE_rator,
+          return_def, raise_def, AllCaseEqs()])
+  >- metis_tac[ifexp_conditional_no_immutable]
+  >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
+      gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()])
+  >- (drule ifexp_select_immutable_domain >> simp[])
+  >- (drule ifexp_select_immutable_domain >> simp[])
+  >- metis_tac[ifexp_pop_no_immutable] >>
+  Cases_on `c` >> gvs[Once evaluate_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+  >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
+      gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()])
+  >- (PairCases_on `p` >> Cases_on `target ++ vs ++ kwargs` >>
+      gvs[eval_ext_call_def, raise_def, bind_def, ignore_bind_def, return_def,
+          vyperMiscTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()] >>
+      gvs[bind_def, ignore_bind_def, return_def,
+          vyperMiscTheory.option_CASE_rator, AllCaseEqs()])
+  >- (Cases_on `vs` >> gvs[eval_send_def, raise_def] >>
+      Cases_on `t` >> gvs[eval_send_def, raise_def] >>
+      gvs[bind_def, ignore_bind_def, return_def, COND_RATOR,
+          vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+      gvs[bind_def, ignore_bind_def, return_def, raise_def,
+          vyperMiscTheory.option_CASE_rator, pairTheory.UNCURRY, AllCaseEqs()])
+  >> gvs[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+         raise_def, COND_RATOR, AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY, bind_def, ignore_bind_def, return_def,
+      raise_def, COND_RATOR, AllCaseEqs()] >>
+  Cases_on `c'` >> gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
+  metis_tac[ifexp_create_no_place]
+QED
+
+Theorem ifexp_produced_memory_read_ok[local]:
+  eval_expr cx e es0 = (INL (PlaceR (MemoryPlace id path)),ee) /\
+  read_result cx (PlaceR (MemoryPlace id path)) ee = (res,ef) ==>
+  expr_res_ok res
+Proof
+  strip_tac >> drule ifexp_eval_expr_memory_domain >> strip_tac >>
+  gvs[read_result_def, read_place_def, get_scopes_def, lift_option_type_def,
+      bind_def, return_def, lift_sum_def, AllCaseEqs()] >>
+  Cases_on `read_memory_path entry path` >>
+  gvs[return_def, raise_def]
+  >- simp[expr_res_ok_def] >>
+  drule read_memory_path_error_shape >> strip_tac >> gvs[expr_res_ok_def] >>
+  gvs[ifexp_memory_path_type_error]
+QED
+
+Theorem ifexp_storage_read_ok[local]:
+  read_result cx (PlaceR (StoragePlace tr slot tv)) ee = (res,ef) ==>
+  expr_res_ok res
+Proof
+  strip_tac >> Cases_on `tr` >>
+  gvs[read_result_def, read_place_def, read_storage_slot_def,
+      get_storage_backend_def, get_transient_storage_def, get_accounts_def,
+      lift_option_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[vyperMiscTheory.option_CASE_rator, return_def, raise_def,
+      expr_res_ok_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_produced_immutable_read_ok[local]:
+  eval_expr cx e es0 = (INL (PlaceR (ImmutablePlace src id path)),ee) /\
+  read_result cx (PlaceR (ImmutablePlace src id path)) ee = (res,ef) ==>
+  expr_res_ok res
+Proof
+  strip_tac >> drule ifexp_eval_expr_immutable_domain >> strip_tac >>
+  gvs[read_result_def, read_place_def, get_immutables_def,
+      get_address_immutables_def, lift_option_type_def, bind_def,
+      return_def, lift_sum_def, AllCaseEqs()] >>
+  Cases_on `evaluate_subscripts tv v path` >>
+  gvs[return_def, raise_def, expr_res_ok_def] >>
+  drule evaluate_subscripts_error_shape >> strip_tac >> gvs[]
+QED
+
+Theorem ifexp_produced_place_read_ok[local]:
+  eval_expr cx e es0 = (INL (PlaceR p),ee) /\
+  read_result cx (PlaceR p) ee = (res,ef) ==>
+  expr_res_ok res
+Proof
+  Cases_on `p` >> rpt strip_tac
+  >- metis_tac[ifexp_storage_read_ok]
+  >- metis_tac[ifexp_produced_memory_read_ok] >>
+  metis_tac[ifexp_produced_immutable_read_ok]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
@@ -1702,6 +1878,14 @@ Proof
       simp[expr_vv_res_ok_def]) >>
   qpat_x_assum `!gs res ee. _` drule >>
   simp[expr_vv_res_ok_def, expr_res_ok_def]
+QED
+
+Theorem ifexp_raw_admissible_force[local]:
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  strip_tac >> irule ifexp_raw_admissible_force_boundary >> simp[] >>
+  metis_tac[ifexp_produced_place_read_ok]
 QED
 
 (* Actual source producer: syntax annotations alone do not exclude mappings.
