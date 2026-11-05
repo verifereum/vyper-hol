@@ -7,7 +7,7 @@ Ancestors
   compileEnv emitHelper emitHelperProps fragExec venomState venomExecSemantics
   abiDecoderValidMemberCursor calldataValidMemberEndpoint
   calldataMemberResourceFrame exprLoweringProps abiDecoderTypedContract abiDecoderContract
-  abiDecoderReentry
+  abiDecoderReentry abiDecoderMembers abiDecoderMemberInfos abiEncoderInput abiDecoderCoherence
   words list rich_list pair arithmetic
 
 Theorem calldata_members_success_relation[local]:
@@ -270,7 +270,8 @@ Theorem calldata_source_member_navigation[local]:
       CALLDATALOAD (Lit 0w) (sb+off) (d+vo) base_addr cap t /\
     ~t.vs_halted /\ t.vs_current_bb = ready.cs_current_bb /\
     t.vs_inst_idx = LENGTH ready.cs_current_insts /\
-    calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var d outsz s t [] /\
+    calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
+      (d+vo) (type_memory_size tv) s t [] /\
     ((!fuel. mem_safe_run fuel ctx fn t) ==> !fuel. mem_safe_run fuel ctx fn s) /\
     (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_from fuel' ctx fn s = r /\
@@ -280,7 +281,7 @@ Proof
   drule_all (SIMP_RULE bool_ss [LET_THM] calldata_valid_member_address_endpoint) >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
-    d outsz s endpoint []` by
+    (d+vo) (type_memory_size tv) s endpoint []` by
     (irule calldata_member_resource_unchanged >> simp[]) >>
   qexists_tac `endpoint` >> simp[]
 QED
@@ -368,7 +369,8 @@ Theorem calldata_source_empty_member_resources[local]:
     val_in_memory tv v (d+vo) t.vs_memory /\
     ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
     t.vs_inst_idx = LENGTH last.cs_current_insts /\
-    calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var d outsz s t [] /\
+    calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
+      (d+vo) (type_memory_size tv) s t [] /\
     ((!fuel. mem_safe_run fuel ctx fn t) ==> !fuel. mem_safe_run fuel ctx fn s) /\
     (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_from fuel' ctx fn s = r /\
@@ -377,7 +379,7 @@ Proof
   strip_tac >> drule_all calldata_empty_member_endpoint >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
-    d outsz s endpoint []` by
+    (d+vo) (type_memory_size tv) s endpoint []` by
     (irule calldata_member_resource_unchanged >> simp[]) >>
   qexists_tac `endpoint` >> simp[]
 QED
@@ -471,3 +473,141 @@ Resume calldata_source_member_cursor_advance[lists]:
   asm_simp_tac (srw_ss()) [TAKE_SUC, EL_TAKE, MAP_APPEND, SUM_APPEND, ADD_ASSOC] >> decide_tac
 QED
 Finalise calldata_source_member_cursor_advance
+
+(* Apply the successful recursive contract at the state actually reached by
+   navigation.  Both transfers and RF use that very same child witness. *)
+Theorem calldata_source_member_child_endpoint[local]:
+  let at = vyper_to_abi_type env ty;
+      ao = SUM (MAP abi_member_head_size pre);
+      off = abi_decode_member_offset at bs ao;
+      childbs = abi_decode_member_bytes at bs (DROP ao bs);
+      Safe = \s t. !fuel r.
+        run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx fn s = r /\
+          (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s);
+      Pull = \s t. ((!fuel. mem_safe_run fuel ctx fn t) ==>
+        !fuel. mem_safe_run fuel ctx fn s)
+  in
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
+  fn_has_code st ready fn /\ abi_decoder_coherent ce env sf ty tv /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
+  (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
+  abi_to_vyper env ty (dec at childbs) = SOME v /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
+  vo + type_memory_bytes ce ty <= outsz /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  calldata_member_own fn st.cs_next_id last.cs_next_id s /\
+  st.cs_next_id <= ready.cs_next_id /\ ready.cs_next_id <= last.cs_next_id /\
+  st.cs_next_var <= ready.cs_next_var /\
+  FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+  (oid < ready.cs_next_id \/ last.cs_next_id <= oid) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!u.
+    abi_decoder_valid_pre ce env sf ty tv childbs v ready (FST ops) (SND ops)
+      CALLDATALOAD (Lit 0w) (sb+off) (d+vo) b reserve_cap u /\
+    fresh_vars_wrt limit_st u /\ alloca_inv u /\ alloca_frontier_inv ctx fn site u /\
+    calldata_member_own fn ready.cs_next_id last.cs_next_id u /\
+    FLOOKUP u.vs_allocas oid = SOME (base_addr,cap) /\
+    ~u.vs_halted /\ u.vs_current_bb = ready.cs_current_bb /\
+    u.vs_inst_idx = LENGTH ready.cs_current_insts ==>
+    ?t scratch. ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+      t.vs_inst_idx = LENGTH last.cs_current_insts /\
+      val_wf tv v /\ val_in_memory tv v (d+vo) t.vs_memory /\
+      calldata_member_resource_frame ctx fn site limit_st ready.cs_next_id last.cs_next_id
+        ready.cs_next_var (d+vo) (type_memory_size tv) u t scratch /\ Safe u t /\ Pull u t) ==>
+  ?t scratch. ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    val_wf tv v /\ val_in_memory tv v (d+vo) t.vs_memory /\
+    calldata_member_resource_frame ctx fn site limit_st st.cs_next_id last.cs_next_id
+      st.cs_next_var (d+vo) (type_memory_size tv) s t scratch /\ Safe s t /\ Pull s t
+Proof
+  pure_rewrite_tac[LET_THM] >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all (SIMP_RULE bool_ss [LET_THM] calldata_source_member_navigation) >>
+  strip_tac >>
+  qhdtm_x_assum `abi_decode_member_setup` kall_tac >>
+  qhdtm_x_assum `fn_has_code` kall_tac >>
+  qhdtm_x_assum `abi_decoder_coherent` kall_tac >>
+  qhdtm_x_assum `vyper_decode_valid_enc_tuple` kall_tac >>
+  qhdtm_x_assum `abi_to_vyper` kall_tac >>
+  qhdtm_x_assum `abi_decoder_ranges` kall_tac >>
+  qhdtm_x_assum `mem_bytes_at` kall_tac >>
+  rename1 `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s u []` >>
+  drule calldata_member_resource_endpoint >> strip_tac >>
+  drule calldata_member_resource_observations >> strip_tac >>
+  `calldata_member_own fn ready.cs_next_id last.cs_next_id u` by
+    (irule calldata_member_own_nested >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `!u. abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u /\ _ ==> _` drule >>
+  impl_tac >- simp[] >> strip_tac >>
+  `calldata_member_resource_frame ctx fn site limit_st st.cs_next_id last.cs_next_id
+    st.cs_next_var (d+vo) (type_memory_size tv) s t ([] ++ scratch)` by
+    (irule calldata_member_resource_extend >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s u []` (irule_at Any) >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ u t scratch` (irule_at Any) >>
+     simp[]) >>
+  qexistsl_tac [`t`,`scratch`] >> gnvs[APPEND] >>
+  qpat_x_assum `!fuel. (!e. run_from fuel ctx fn u <> Error e) ==> _` mp_tac >>
+  qpat_x_assum `!fuel. (!e. run_from fuel ctx fn t <> Error e) ==> _` mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[calldata_safe_transfer_trans]
+QED
+
+(* Positional layout is recovered from the compiler's actual member list.
+   The earlier-value bound permits zero-sized members and equal addresses. *)
+Theorem calldata_source_member_layout[local]:
+  xs = abi_decoder_member_infos sf ce tys /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
+  n < LENGTH tys /\ (ei,az,mz)::rest = DROP n xs /\
+  ao = SUM (MAP (\(ei,az,mz). az) (TAKE n xs)) /\
+  vo = SUM (MAP (\(ei,az,mz). mz) (TAKE n xs)) ==>
+  n < LENGTH tvs /\ ei = type_to_abi_dec_info sf ce (EL n tys) /\
+  az = abi_member_head_size (vyper_to_abi_type env (EL n tys)) /\
+  mz = type_memory_size (EL n tvs) /\
+  ao = SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (TAKE n tys))) /\
+  vo = SUM (MAP type_memory_size (TAKE n tvs)) /\
+  (!i. i < n ==> SUM (MAP type_memory_size (TAKE i tvs)) +
+    type_memory_size (EL i tvs) <= vo)
+Proof
+  strip_tac >>
+  `LENGTH tvs = LENGTH tys` by metis_tac[LIST_REL_LENGTH] >>
+  `EL n xs = (ei,az,mz)` by
+    (qpat_x_assum `_::rest = DROP n xs` mp_tac >>
+     simp[Once DROP_EL_CONS, abi_decoder_member_infos_def, GSYM ADD1] >> metis_tac[]) >>
+  `!i. i < LENGTH tys ==> abi_decoder_coherent ce env sf (EL i tys) (EL i tvs)` by
+    fs[LIST_REL_EL_EQN] >>
+  `!i. i < LENGTH tys ==>
+    abi_embedded_static_size ce.ce_struct_fields (EL i tys) =
+      abi_member_head_size (vyper_to_abi_type env (EL i tys))` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
+  suspend "maps"
+QED
+
+Resume calldata_source_member_layout[maps]:
+  `MAP (abi_embedded_static_size ce.ce_struct_fields) (TAKE n tys) =
+   MAP (\ty. abi_member_head_size (vyper_to_abi_type env ty)) (TAKE n tys)` by
+    (irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+     `x < n /\ x < LENGTH tys` by fs[LENGTH_TAKE] >> simp[EL_TAKE]) >>
+  `vo = SUM (MAP type_memory_size (TAKE n tvs))` by
+    (qpat_assum `MAP type_memory_size tvs = _` (mp_tac o AP_TERM ``TAKE n : num list -> num list``) >>
+     simp[GSYM MAP_TAKE] >> strip_tac >>
+     simp[abi_decoder_member_infos_def, GSYM MAP_TAKE, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss]) >>
+  `ei = type_to_abi_dec_info sf ce (EL n tys) /\
+   az = abi_member_head_size (vyper_to_abi_type env (EL n tys)) /\
+   mz = type_memory_size (EL n tvs)` by
+    (qpat_x_assum `EL n xs = _` mp_tac >>
+     qpat_assum `MAP type_memory_size tvs = _` (mp_tac o AP_TERM ``EL n : num list -> num``) >>
+     simp[abi_decoder_member_infos_def, EL_MAP] >> metis_tac[]) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (asm_simp_tac (srw_ss()) [abi_decoder_member_infos_def, GSYM MAP_TAKE,
+        MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss]) >>
+  rpt strip_tac >>
+  qspecl_then [`type_memory_size`,`TAKE n tvs`,`i`] mp_tac abi_encoder_prefix_sum_bound >>
+  simp[LENGTH_TAKE, EL_TAKE, TAKE_TAKE] >> decide_tac
+QED
+Finalise calldata_source_member_layout
