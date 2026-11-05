@@ -18,7 +18,8 @@ Ancestors
   fnPlanLineage frameRel codegenRel unitShapeDefs stackPlanGen stackPlanTypes
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
-  venomInst venomInstProps venomWf venomExecProps list rich_list
+  venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
+  stackPlanOps reorderSim sorting
 
 (* Actual single steps followed by normalize_operand, including literal roots. *)
 Definition alias_assign_step_def:
@@ -162,9 +163,88 @@ Proof
 QED
 
 (* Inventory boundaries do not depend on cleanup metadata or allocator fields. *)
+Theorem alias_stack_find_singleton:
+  !xs p v. FILTER p xs = [v] ==>
+    ?d. stack_find p xs = SOME d /\ d < LENGTH xs /\ EL d xs = v /\
+        (!j. j < LENGTH xs /\ p (EL j xs) ==> j = d)
+Proof
+  Induct >> simp[stack_find_def] >> rpt gen_tac >>
+  Cases_on `p h` >> simp[stack_find_def]
+  >- (strip_tac >> gvs[] >>
+      rpt strip_tac >> Cases_on `j` >> gvs[] >>
+      gvs[FILTER_EQ_NIL, EVERY_EL]) >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `SUC d` >> simp[arithmeticTheory.ADD1, EL_CONS] >>
+  rpt strip_tac >> Cases_on `j` >> gvs[] >> metis_tac[]
+QED
+
+Theorem alias_phi_singleton_poke:
+  FILTER (\at. MEM at inputs) stk = [v] /\ ~MEM ret inputs ==>
+  ?d. stack_get_phi_depth inputs stk = SOME d /\
+      stack_peek d stk = v /\
+      (!at. MEM at inputs ==> ~MEM at (stack_poke d ret stk))
+Proof
+  strip_tac >>
+  `FILTER (\at. MEM at inputs) (REVERSE stk) = [v]` by
+    simp[FILTER_REVERSE] >>
+  drule alias_stack_find_singleton >> strip_tac >>
+  qexists_tac `d` >> simp[stack_get_phi_depth_def] >> conj_tac
+  >- (gvs[LENGTH_REVERSE] >>
+      qspecl_then [`d`,`stk`] mp_tac EL_REVERSE >> simp[stack_peek_def, arithmeticTheory.PRE_SUB1]) >>
+  rpt strip_tac >>
+  `?j. j < LENGTH (stack_poke d ret stk) /\
+       EL j (stack_poke d ret stk) = at` by metis_tac[MEM_EL] >>
+  gvs[stack_poke_def, LENGTH_LUPDATE, EL_LUPDATE] >>
+  Cases_on `j = LENGTH stk - 1 - d` >> gvs[] >>
+  `LENGTH stk - 1 - j = d` by
+    (first_x_assum irule >>
+     simp[EL_REVERSE, GSYM arithmeticTheory.ADD1]) >>
+  decide_tac
+QED
+
 Definition plan_holds_def:
   plan_holds ps at <=> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 End
+
+Theorem alias_popmany_singleton_inventory:
+  plan_holds (SND (popmany_plan [v] ps)) at ==> plan_holds ps at
+Proof
+  Cases_on `stack_get_depth v ps.ps_stack` >>
+  simp[popmany_plan_def, is_contiguous_top_def, popmany_individual_def,
+       QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  drule stack_get_depth_props >> strip_tac >>
+  Cases_on `x = 0`
+  >- (gvs[plan_holds_def, stack_pop_def] >> metis_tac[MEM_TAKE]) >>
+  Cases_on `x = 1` >> gvs[] >> pairarg_tac >> simp[] >>
+  `!a. MEM a ps'.ps_stack \/ a IN FDOM ps'.ps_spilled ==>
+       MEM a ps.ps_stack \/ a IN FDOM ps.ps_spilled` by
+    metis_tac[do_swap_inventory_subset] >>
+  simp[plan_holds_def, stack_pop_def] >> metis_tac[MEM_TAKE]
+QED
+
+Theorem alias_phi_singleton_consumed:
+  inputs = FILTER is_var_operand inst.inst_operands /\
+  ret = Var (HD inst.inst_outputs) /\
+  FILTER (\at. MEM at inputs) ps.ps_stack = [Var v] /\
+  MEM (Var v) inputs /\ ~MEM v next_liveness /\ ~MEM ret inputs /\
+  (!at. MEM at inputs ==> at NOTIN FDOM ps.ps_spilled) ==>
+  !at. MEM at inputs ==>
+    ~plan_holds (SND (generate_phi_plan inst next_liveness is_halting ps)) at
+Proof
+  strip_tac >>
+  `?d. stack_get_phi_depth inputs ps.ps_stack = SOME d /\
+       stack_peek d ps.ps_stack = Var v /\
+       (!at. MEM at inputs ==> ~MEM at (stack_poke d ret ps.ps_stack))` by
+    metis_tac[alias_phi_singleton_poke] >>
+  `!at. MEM at inputs ==>
+      ~plan_holds (ps with ps_stack := stack_poke d ret ps.ps_stack) at` by
+    (simp[plan_holds_def] >> metis_tac[]) >>
+  gvs[] >> simp[generate_phi_plan_def, operand_to_string_def] >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[] >> rpt strip_tac >>
+      metis_tac[alias_popmany_singleton_inventory, pairTheory.SND]) >>
+  simp[]
+QED
 
 Theorem plan_holds_cleanup_update[simp]:
   plan_holds
