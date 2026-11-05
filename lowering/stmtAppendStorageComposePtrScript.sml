@@ -95,7 +95,8 @@ Resume compile_append_storage_word_stmt_frag_ptr[operand]:
      metis_tac[]) >>
   `(if tr then tload slot t else sload slot t) =
    lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr)` by
-    (irule append_storage_header_agree >> conj_tac >>
+    (irule declared_storage_head_agree >> conj_tac
+     >- (goal_assum (drule_at Any) >> simp[type_slot_size_def]) >>
      goal_assum (drule_at Any)) >>
   `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `FLOOKUP cenv.ce_module_vars _ = _` kall_tac >>
@@ -199,7 +200,9 @@ Resume compile_append_storage_word_stmt_frag_ptr[stored_finish]:
   disj1_tac >> simp[] >>
   `sb.cs_current_bb = sB.cs_current_bb` by
     (drule append_storage_word_suffix_structure >> simp[same_blocks_def]) >>
-  `~block_is_terminated sb` by metis_tac[append_storage_word_suffix_open] >>
+  `~block_is_terminated sb` by
+    (irule primitive_append_nonterminator_open >> goal_assum (drule_at Any) >>
+     Cases_on `tr` >> simp[venomInstTheory.is_terminator_def]) >>
   simp[stmt_lands_def, stmt_state_rel_inst_idx, cenv_top_ext_refl] >>
   conj_tac
   >- (qpat_x_assum `ghost_inv d cenv cx ee1 G' tn' u` mp_tac >>
