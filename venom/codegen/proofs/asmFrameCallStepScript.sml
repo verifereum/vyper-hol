@@ -402,6 +402,59 @@ Proof
   simp[vfmContextTheory.context_component_equality]
 QED
 
+Theorem asm_handle_exception_memory_success:
+  s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+  child.msgParams.outputTo = Memory r /\
+  LENGTH parent.stack < stack_limit /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
+  handle_exception NONE s = (INL (), s with contexts :=
+    (parent with <|
+      gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+      pc := SUC parent.pc; stack := b2w T :: parent.stack;
+      returnData := child.returnData;
+      memory := buffer_write r.offset (TAKE r.size child.returnData) parent.memory;
+      logs := parent.logs ++ child.logs;
+      addRefund := parent.addRefund + child.addRefund;
+      subRefund := parent.subRefund + child.subRefund |>,parent_rb)::rest)
+Proof
+  strip_tac >>
+  drule_all asm_pop_and_incorporate_context_state >>
+  disch_then (qspec_then `T` assume_tac) >>
+  fs[vfmConstantsTheory.stack_limit_def] >>
+  simp[handle_exception_def, get_num_contexts_def, get_return_data_def,
+       get_output_to_def, get_current_context_def, bind_def,
+       ignore_bind_def, return_def, asm_pop_and_incorporate_context_state,
+       inc_pc_def, set_return_data_def, push_stack_def, write_memory_def,
+       set_current_context_def, assert_def, vfmConstantsTheory.stack_limit_def] >>
+  AP_THM_TAC >> AP_TERM_TAC >> AP_TERM_TAC >>
+  simp[vfmContextTheory.context_component_equality]
+QED
+
+Theorem asm_handle_exception_memory_reverted:
+  s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+  child.msgParams.outputTo = Memory r /\
+  LENGTH parent.stack < stack_limit /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
+  handle_exception (SOME Reverted) s = (INL (), s with <|
+    contexts := (parent with <|
+      gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+      pc := SUC parent.pc; stack := b2w F :: parent.stack;
+      returnData := child.returnData;
+      memory := buffer_write r.offset (TAKE r.size child.returnData) parent.memory
+    |>,parent_rb)::rest; rollback := child_rb |>)
+Proof
+  strip_tac >>
+  drule_all asm_pop_and_incorporate_context_state >>
+  disch_then (qspec_then `F` assume_tac) >>
+  fs[vfmConstantsTheory.stack_limit_def] >>
+  simp[handle_exception_def, get_num_contexts_def, get_return_data_def,
+       get_output_to_def, get_current_context_def, bind_def,
+       ignore_bind_def, return_def, inc_pc_def, set_return_data_def,
+       push_stack_def, write_memory_def, set_current_context_def, assert_def] >>
+  AP_THM_TAC >> AP_TERM_TAC >> AP_TERM_TAC >>
+  simp[vfmContextTheory.context_component_equality]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
