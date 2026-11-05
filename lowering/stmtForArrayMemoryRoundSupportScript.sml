@@ -163,14 +163,22 @@ Theorem array_body_round_outcome_mem:
       (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
         :: ei.scopes; gas_obs := gs|>) = (r,ee) ==>
     ?sc rest. ee.scopes = sc :: rest) /\
-  (!r ee t. B r ee t ==> ?sc rest b u. ee.scopes = sc :: rest /\
+  (!gs r ee t. eval_stmts cx stmts
+    (ei with <|scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes; gas_obs := gs|>) = (r,ee) /\
+    B r ee t ==> ?sc rest b u. ee.scopes = sc :: rest /\
     (case r of INL x => INL F
        | INR e => if e = ContinueException then INL F
                   else if e = BreakException then INL T else INR e) = INL b /\
     gas_marked_path T ctx func t 0 (OK u) /\
     (b ==> Done (ee with scopes := rest) u) /\
     (~b ==> Next (ee with scopes := rest) u)) /\
-  (!r ee rr sc rest. E r ee rr /\ ee.scopes = sc :: rest ==>
+  (!gs r ee rr sc rest. eval_stmts cx stmts
+    (ei with <|scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes; gas_obs := gs|>) = (r,ee) /\
+    E r ee rr /\ ee.scopes = sc :: rest ==>
     ?e. r = INR e /\ e <> BreakException /\ e <> ContinueException /\
         X e (ee with scopes := rest) rr) ==>
   gas_outcome T tops (ctx,func)
@@ -186,7 +194,12 @@ Proof
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       rewrite_tac[gas_summary_at_def] >> strip_tac
       >- (gvs[] >>
-          qpat_x_assum `!r ee t. B _ _ _ ==> _` drule >> strip_tac >>
+          qhdtm_assum `gas_marked_exec`
+            (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [gas_marked_exec_def]) >>
+          disch_then (qspec_then `[]` mp_tac) >>
+          simp[evaluation_state_fn_updates] >> strip_tac >>
+          qpat_x_assum `!gs r ee t. _ /\ B _ _ _ ==> _` drule >>
+          disch_then drule >> strip_tac >>
           `es_end.scopes = sc :: rest` by gvs[] >>
           drule_all array_round_marked_exec >> strip_tac >>
           qexists_tac `marks` >> disj1_tac >>
@@ -199,8 +212,12 @@ Proof
          simp[gas_marked_exec_def] >> strip_tac >>
          first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
          qpat_x_assum `!gs r ee. eval_stmts _ _ _ = _ ==> _` drule >> simp[] >> metis_tac[]) >>
-      qpat_x_assum `!r ee rr sc rest. _` drule >>
-      disch_then (qspecl_then [`sc`, `rest`] mp_tac) >> simp[] >> strip_tac >>
+      qhdtm_assum `gas_marked_exec`
+        (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [gas_marked_exec_def]) >>
+      disch_then (qspec_then `[]` mp_tac) >>
+      simp[evaluation_state_fn_updates] >> strip_tac >>
+      qpat_x_assum `!gs r ee rr sc rest. _` drule >>
+      disch_then (qspecl_then [`r`, `sc`, `rest`] mp_tac) >> simp[] >> strip_tac >>
       gvs[] >> drule_all array_round_marked_exec >> strip_tac >>
       qexists_tac `marks` >> disj1_tac >>
       qexistsl_tac [`INR e`, `es_end with scopes := rest`, `r`] >>
