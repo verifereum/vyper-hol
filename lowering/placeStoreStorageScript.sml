@@ -4558,6 +4558,80 @@ Proof
   drule_all place_store_expr_sim_inv_empty_tenv_metadata >> simp[]
 QED
 
+Theorem place_store_call_free_frame:
+  !ctx func s.
+    venomInst$lookup_function func.fn_name ctx.ctx_functions = SOME func /\
+    ~EXISTS (\inst. inst.inst_opcode = INVOKE) (fn_insts func) /\
+    pending_alloca_size func s = 0 ==>
+    (!g. ~TC (fn_directly_calls ctx) func.fn_name g) /\
+    FINITE {g | TC (fn_directly_calls ctx) func.fn_name g} /\
+    (!g. TC (fn_directly_calls ctx) func.fn_name g ==>
+         ~TC (fn_directly_calls ctx) g g) /\
+    pending_alloca_size func s +
+      CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
+        unit_alloca_frame ctx < 32 /\
+    (!g f. TC (fn_directly_calls ctx) func.fn_name g /\
+       MEM f ctx.ctx_functions /\ f.fn_name = g ==>
+       ~EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!g. ~fn_directly_calls ctx func.fn_name g` by
+    (gvs[fcgDefsTheory.fn_directly_calls_def, listTheory.EVERY_MEM] >>
+     metis_tac[]) >>
+  `!g. ~TC (fn_directly_calls ctx) func.fn_name g` by
+    metis_tac[relationTheory.TC_CASES1] >>
+  `{g | TC (fn_directly_calls ctx) func.fn_name g} = {}` by
+    simp[pred_setTheory.EXTENSION] >> simp[]
+QED
+
+Theorem place_store_wrap_probe_compilation_boundary:
+  !cenv.
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  compile_assign_value
+    (cenv with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa =
+  compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
+Theorem place_store_wrap_probe_finite_code:
+  !cenv. cenv.ce_struct_fields = FEMPTY /\ cenv.ce_target = K T ==>
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let (_,sb) = compile_assign_value cenv (Lit 0w) LocStorage (Lit 0w) F
+    (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa in
+  let func = mk_raw_function "wrapped"
+    (<|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+     sb.cs_blocks) in
+  venomInst$lookup_function func.fn_name
+    (mk_venom_context [func] (SOME func.fn_name)).ctx_functions = SOME func /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  pending_alloca_size func (init_venom_state sa.cs_current_bb) = 0 /\
+  ~EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
+  ~EXISTS (\inst. inst.inst_opcode = INVOKE) (fn_insts func)
+Proof
+  rpt strip_tac >>
+  `cenv with <|ce_struct_fields := FEMPTY; ce_target := K T|> = cenv` by
+    simp[compile_env_component_equality] >>
+  qspec_then `cenv` mp_tac place_store_wrap_probe_compilation_boundary >>
+  simp[] >> disch_then (fn th => rewrite_tac[th]) >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  qexists `<|bb_label := "@wcopy_exit_5"; bb_instructions := []|>` >> simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
