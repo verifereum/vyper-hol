@@ -10,8 +10,8 @@ The independent `oracle/` files were generated with the `VYPER_PIN` Vyper
 hashes.
 
 The compiler at the pin rejects `dom06_blueprint_rawargs_b32`, so its oracle
-files are kept from `0.5.0a4+commit.cd74ce4f`, and `prepare` cannot reproduce
-this corpus as a whole. Keep that diagnostic and its oracle files when
+files are kept from `0.5.0a4+commit.cd74ce4f`, it is out of
+`parity-fixtures.txt`, and `prepare` cannot reproduce this corpus as a whole. Keep that diagnostic and its oracle files when
 regenerating the accepted fixtures. The fixtures whose bytecode changed at
 the pin through vyperlang/vyper#5127 are out of `parity-fixtures.txt` and
 listed in `../pending-5127-port.md`.
@@ -46,7 +46,8 @@ The task identifies separate prerequisites for dynamic scratch allocation
 and bytecode/raw-argument domain rules (#571). Keep their diagnostic verdicts
 separate from unconditional creation-lowering failures.
 
-Observed comparison results on 2026-10-25, after matching Vyper's
+The results below predate the `0.5.0b1` oracles: they compare against
+`0.5.0a4+commit.cd74ce4f`. Observed comparison results on 2026-10-25, after matching Vyper's
 `ADD`/`NOT`/`AND` DALLOCA alignment, pure-addition `BUMP`, the result-branch
 FMP restore, and pinned Vyper's dead-output rule for multi-output instructions.
 The full 23-witness probe produced these verdicts:
@@ -87,8 +88,11 @@ the general recursive ABI or creation-pipeline correctness theorem.
 
 ## Constructor alias checks
 
-`vyperCtorAliasTestTheory` proves runtime equality with pinned Vyper and checks
-the CREATE memory request for `tests/create/constructor-alias/sources/ctor_alias.vy`.
-An earlier local array argument is read after a later `xs.pop()` shortens it;
-source and compiled execution both request 129 initcode bytes.
+`vyperCtorAliasTestTheory` checks the CREATE memory request for
+`tests/create/constructor-alias/sources/ctor_alias.vy` against the source
+semantics. An earlier local array argument is read after a later `xs.pop()`
+shortens it; source and HOL-compiled execution both request 129 initcode
+bytes. Pinned Vyper snapshots the earlier argument before the pop, so its
+bytecode for this witness is out of parity and listed in
+`../pending-5127-port.md`.
 `vyperCtorStorageAliasTestTheory` checks the corresponding storage-array case.

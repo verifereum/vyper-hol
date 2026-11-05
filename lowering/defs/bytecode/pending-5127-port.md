@@ -25,9 +25,17 @@ The changes, as they appear in the pinned Python compiler:
   they are evaluated (also a source-semantics change).
 - P7 subscript overlap: a dynamic array's base is copied when the index
   expression can modify it (also a source-semantics change).
+- P8 `raw_create` bytecode type: `raw_create` types its bytecode argument
+  with the argument's own type rather than `Bytes[49152]`, which sizes its
+  initcode buffer (the HOL lowering still snapshots 49152 bytes).
+- P9 constructor argument snapshot: a composite constructor argument is
+  copied before a later argument that can modify memory or storage is
+  evaluated (also a source-semantics change).
 
 A fixture listed under several changes needs all of them. The attribution comes
-from reverting one change at a time in the pinned compiler and recompiling.
+from reverting one change at a time in the pinned compiler and recompiling. The
+creation fixtures' P4 entries are by elimination: P4 can't be reverted on its
+own, and no revert of the other changes restores those fixtures.
 
 ## P1 (ceil32)
 
@@ -149,7 +157,6 @@ from reverting one change at a time in the pinned compiler and recompiling.
 - `create-builtins/cb02_blueprint_args`
 - `create-builtins/cb05_blueprint_rof`
 - `create-builtins/cb07_blueprint_args_salt`
-- `create-builtins/rcr04_rawcreate_storage`
 - `external-calls/e40_extcall_gas`
 - `external-calls/e41_staticcall_gas`
 - `external-calls/e42_extcall_gas_value_order`
@@ -169,7 +176,6 @@ from reverting one change at a time in the pinned compiler and recompiling.
 ## P1 (ceil32) + P4 (direct ABI encoder)
 
 - `abi-codegen/enc_multi`
-- `create-builtins/cb06_blueprint_dyn_offset`
 - `external-calls/e25_arg_strlit_short`
 - `external-calls/e36_arg_bytes_literal`
 - `external-calls/e46_arg_storage_str`
@@ -177,16 +183,12 @@ from reverting one change at a time in the pinned compiler and recompiling.
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 
-- `create-builtins/rcr01_rawcreate`
-- `create-builtins/rcr02_rawcreate_args_salt`
-- `create-builtins/rcr03_rawcreate_rof`
-- `create-builtins/rcr05_rawcreate_args`
-- `create-builtins/rcr06_rawcreate_salt`
 - `external-calls/e27_arg_dyn_smaller`
 
 ## P1 (ceil32) + P2 (calldata argument guard) + P4 (direct ABI encoder)
 
 - `abi-codegen/enc_ensT_bytes`
+- `create-builtins/cb06_blueprint_dyn_offset`
 - `external-calls/e26_arg_str_smaller`
 - `main/abi_dynamic`
 - `main/abi_static`
@@ -201,6 +203,22 @@ from reverting one change at a time in the pinned compiler and recompiling.
 
 - `load_timing/nested_retained_pop`
 
-The `raw_create` fixtures' ASTs changed at vyperlang/vyper#5127 as well: the
-bytecode argument is annotated with its own type (`Bytes[100]` in these
-sources) rather than the builtin's `Bytes[49152]` parameter type.
+## P8 (`raw_create` bytecode type)
+
+- `create-builtins/rcr04_rawcreate_storage`
+
+## P2 (calldata argument guard) + P8 (`raw_create` bytecode type)
+
+- `create-builtins/rcr01_rawcreate`
+- `create-builtins/rcr03_rawcreate_rof`
+- `create-builtins/rcr06_rawcreate_salt`
+
+## P2 (calldata argument guard) + P4 (direct ABI encoder) + P8 (`raw_create` bytecode type)
+
+- `create-builtins/rcr02_rawcreate_args_salt`
+- `create-builtins/rcr05_rawcreate_args`
+
+## P2 (calldata argument guard) + P4 (direct ABI encoder) + P8 (`raw_create` bytecode type) + P9 (constructor argument snapshot)
+
+- `constructor-alias/ctor_alias`
+
