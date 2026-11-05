@@ -50,6 +50,28 @@ Proof
   qexistsl_tac [`child`, `finished`] >> simp[]
 QED
 
+Theorem asm_handle_exception_nested_normal:
+  wf_state s /\ 2 <= LENGTH s.contexts /\
+  handle_exception exc s = (r,t) ==> r = INL ()
+Proof
+  strip_tac >>
+  `ISL r` by
+    (irule vfmHandleStepTheory.handle_exception_ge_2_inl >>
+     qexistsl_tac [`exc`, `s`, `t`] >> gvs[wf_state_def]) >>
+  Cases_on `r` >> gvs[] >> Cases_on `x` >> simp[]
+QED
+
+Theorem asm_handle_exception_memory_no_abort:
+  wf_state s /\ s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\ ~vfm_abort exc /\
+  handle_exception exc s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e)
+Proof
+  strip_tac >>
+  `2 <= LENGTH s.contexts` by simp[] >>
+  drule_all asm_handle_exception_nested_normal >> simp[]
+QED
+
 Theorem asm_frame_call_decode:
   asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   a.as_pc < LENGTH prog /\
