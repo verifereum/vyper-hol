@@ -1959,3 +1959,66 @@ val () = List.app (fn th =>
   [mapping_place_root_type_lookup, mapping_place_defined_table,
    mapping_place_subscript_types, mapping_place_constructor,
    mapping_subscript_syntactic_limits];
+
+Theorem lookup_global_hashmap_module_vars:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  lookup_global cx src name es = (INL (HashMapRef tr slot kt vt),es') ==>
+  es' = es /\
+  FLOOKUP cenv.ce_module_vars (src,name) =
+    SOME (if tr then TransientLoc slot else StorageLoc slot)
+Proof
+  simp[lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+      var_decl_info_CASE_rator, bind_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  gvs[storage_vars_rel_def, transient_vars_rel_def] >>
+  Cases_on `tr` >> gvs[var_decl_transient_def] >> metis_tac[]
+QED
+
+Theorem eval_hashmap_root_module_vars:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  eval_expr cx (TopLevelName ann (src,name)) es =
+    (INL (HashMapRef tr slot kt vt),es') ==>
+  es' = es /\
+  FLOOKUP cenv.ce_module_vars (src,name) =
+    SOME (if tr then TransientLoc slot else StorageLoc slot)
+Proof
+  simp[Once evaluate_def] >> metis_tac[lookup_global_hashmap_module_vars]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping root metadata has unproved dependencies"
+  end)
+  [lookup_global_hashmap_module_vars, eval_hashmap_root_module_vars];
+
+Theorem eval_hashmap_root_storage_frame_frag:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  eval_expr cx (TopLevelName ann (src,name)) es =
+    (INL (HashMapRef tr slot kt vt),es') /\
+  compile_expr cenv ty (TopLevelName ann (src,name)) sa = (vv,sb) ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ P s)
+    (\s. s = s0 /\ P s /\
+      (?w. eval_operand (vv_operand vv) s = SOME w /\
+           place_ptr_rel cenv cx s (HashMapRef tr slot kt vt)
+             w (vv_location vv) (HashMapT kt vt)) /\
+      contract_storage s = contract_storage s0 /\
+      contract_transient s = contract_transient s0) R
+Proof
+  strip_tac >> drule_all eval_hashmap_root_module_vars >> strip_tac >>
+  irule compile_hashmap_root_storage_frame_frag >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any)
+QED
+
+val () =
+  let val th = eval_hashmap_root_storage_frame_frag
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping root source frame has unproved dependencies"
+  end;
