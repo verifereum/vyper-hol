@@ -5,7 +5,7 @@ Ancestors
   mstoreOperandStep revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
   typedCopyPtr fragGasSeqPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr exprLoweringProps
   venomMemProps fragExec fragGasPathPtr gasCount ptrSafeRun typedCopyLoopHeaderPtr
-  abiEncoderRounding
+  abiEncoderRounding revertReasonPrefixFramePtr list
   venomInst venomExecSemantics venomState ptrDiscipline words arithmetic finite_map
 
 Theorem alloca_store_literal_checks:
@@ -484,9 +484,38 @@ Theorem zero_pad_copy_checks:
     [mk_inst id ADD [Var dst;Var rounded] [endvar];
      mk_inst (id+1) MSTORE [Var endvar;Lit 0w] [];
      mk_inst (id+2) ADD [Lit 32w;Var lenvar] [countvar];
-     mk_inst (id+3) MCOPY [Var dst;Var src;Var countvar] []] s Gf tnf
+     mk_inst (id+3) MCOPY [Var dst;Var src;Var countvar] []] s Gf tnf /\
+    (!t. run_inst_seq
+      [mk_inst id ADD [Var dst;Var rounded] [endvar];
+       mk_inst (id+1) MSTORE [Var endvar;Lit 0w] [];
+       mk_inst (id+2) ADD [Lit 32w;Var lenvar] [countvar];
+       mk_inst (id+3) MCOPY [Var dst;Var src;Var countvar] []] s = OK t ==>
+      (!x. x <> endvar /\ x <> countvar ==>
+        lookup_var x t = lookup_var x s /\
+        op_taint tnf (Var x) = op_taint tn (Var x) /\
+        (!C. ptr_covers G tn x s C ==> ptr_covers Gf tnf x t C)))
 Proof
   strip_tac >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ code s _ _` >>
+  `?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf` by
+    suspend "checks" >>
+  qexistsl_tac [`Gf`, `tnf`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+     ~MEM x i.inst_outputs) code` by
+    simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  conj_tac >- (irule run_inst_seq_non_output_lookup >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- (drule inst_seq_ptr_other_output_frame >>
+    disch_then (qspec_then `x` mp_tac) >>
+    impl_tac >- fs[EVERY_MEM] >> simp[]) >>
+  rpt strip_tac >> irule (cj 2 inst_seq_ptr_live_pointer_frame) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any)
+QED
+
+Resume zero_pad_copy_checks[checks]:
+  simp[Abbr `code`] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;k;l] _ _ _` >>
   `op_taint tn (Var dst) = {}` by fs[ptr_covers_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
