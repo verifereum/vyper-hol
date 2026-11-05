@@ -858,7 +858,7 @@ Proof
   PURE_REWRITE_TAC[vyperASTTheory.binop_case_def,
                    vyperValueTheory.value_case_def] >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
+  gvs[CaseEq "bool", CaseEq "sum", CaseEq "option"] >>
   gvs[value_has_type_def, Excl "within_int_bound_def"] >>
   (* Re-abstract within_int_bound that got expanded by value_has_type_def *)
   TRY (simp[GSYM within_int_bound_def] >> NO_TAC) >>
