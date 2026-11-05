@@ -359,21 +359,21 @@ Theorem ld_oracle_call_vars:
   ts.vs_params = f.lf_tgt.vs_params ==>
   ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
     lf_H := set_prov f.lf_H [out] NONE;
-    lf_tv := set_var_taint f.lf_tv [out] {}|>)
+    lf_tv := set_var_taint f.lf_tv [out] mask|>)
 Proof
   strip_tac >>
   `ld_vars P A (f with <|
     lf_src := f.lf_src with vs_vars := f.lf_src.vs_vars |+ (out,w);
     lf_tgt := f.lf_tgt with vs_vars := f.lf_tgt.vs_vars |+ (out,w);
     lf_H := set_prov f.lf_H [out] NONE;
-    lf_tv := set_var_taint f.lf_tv [out] {}|>)` by
+    lf_tv := set_var_taint f.lf_tv [out] mask|>)` by
     (irule ld_vars_write >> simp[set_var_taint_def, FLOOKUP_UPDATE,
-       ld_word_agree_empty]) >>
+       word_agree_except_def]) >>
   qspecl_then [`ss`,`f with <|
     lf_src := f.lf_src with vs_vars := f.lf_src.vs_vars |+ (out,w);
     lf_tgt := f.lf_tgt with vs_vars := f.lf_tgt.vs_vars |+ (out,w);
     lf_H := set_prov f.lf_H [out] NONE;
-    lf_tv := set_var_taint f.lf_tv [out] {}|>`,`ts`]
+    lf_tv := set_var_taint f.lf_tv [out] mask|>`,`ts`]
     mp_tac ld_vars_state_cong >> simp[]
 QED
 

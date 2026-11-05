@@ -322,3 +322,33 @@ QED
 
 val _ = if null (hyp ld_extract_venom_effect) then ()
         else raise Fail "delegate extraction transport has hypotheses";
+
+(* CREATE consumes the same current oracle result, retaining separate locals. *)
+Theorem ld_consume_create_effect:
+  ld_memory lo A tn s t /\ ld_nonghost tn s t /\
+  tn.t_stor = {} /\ tn.t_trans = {} /\
+  tn'.t_mem = tn.t_mem /\ tn'.t_imm = tn.t_imm /\
+  tn'.t_stor = {} /\ tn'.t_trans = {} /\
+  consume_create_outcome rq s = (w,ss) /\
+  consume_create_outcome rq t = (w',ts) ==>
+  w = w' /\ ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+  ss.vs_vars = s.vs_vars /\ ts.vs_vars = t.vs_vars /\
+  ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+  ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+  ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+  ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+  ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+Proof
+  strip_tac >>
+  `s.vs_accounts = t.vs_accounts` by
+    metis_tac[ld_nonghost_accounts_empty] >>
+  `s.vs_transient = t.vs_transient` by
+    metis_tac[ld_nonghost_transient_empty] >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[ld_nonghost_def] >>
+  gvs[consume_create_outcome_eq] >>
+  Cases_on `rq.cr_static` >>
+  Cases_on `(FST (take_outcome rq t.vs_outcomes)).co_success` >>
+  gvs[adopt_outcome_def, ld_memory_def, ld_nonghost_def,
+      storage_agree_except_def, word_agree_except_def] >>
+  metis_tac[]
+QED
