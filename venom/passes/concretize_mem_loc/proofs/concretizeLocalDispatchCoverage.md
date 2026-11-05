@@ -202,3 +202,25 @@ and the completed-callee gas agreement remains generic frame-composition work;
 the INVOKE row is still delegated and uninstantiated. Verified together with
 local environment and indexed-context reader consumers by holbuild
 (TO_concretize_sim-20261105T054124Z_m10357_t001).
+
+## Checked indexed parameter-root boundary
+
+`concretizeLayoutParameterRootsTheory` defines `parameter_roots R xs ys`
+by equal length and index-dependent pointwise `R`. Paired successful
+`setup_callee` installs these roots; paired variable writes preserve them.
+`parameter_roots_read` groups PARAM/FMP_PARAM, constructs the target successful
+read from source success, and exposes the two read values related at `w2n idx`.
+The values need not be equal. `parameter_roots_retpc_read` separately exposes
+writes of the respective return-PC tokens without index bounds or token equality.
+The existing `setup_callee_opaque_token` remains the token-setup boundary.
+
+This is a generic semantic parameter interface, not a complete reachable PARAM
+adapter: caller argument evaluation must still produce the indexed relation,
+instantiated with resolved pointer/scalar/opaque classifications and parameter
+taints. Origin/parameter-ghost transport, independent target taint, successor
+demand, guarded output writes and control alignment remain obligations. FMP_PARAM
+is still excluded by frozen fn_ptr_ok in the concrete simulation; its grouped
+semantic read fact does not reclassify it as a clean scalar. RETPC_PARAM still
+needs the opaque-output adapter. Verified by holbuild alongside the existing
+frame/environment and local memory helpers (TO_concretize_sim-20261105T054124Z_m10375_t001,
+TO_concretize_sim-20261105T054124Z_m10384_t001).
