@@ -2,7 +2,7 @@ Theory bodyPtrIntCallMaterializeList
 Ancestors
   bodyPtrIntCallMaterialize intCallCallee moduleLowering emitHelper words fragExec venomState venomExecSemantics
   finite_map list bodyPtrDefs valueEncoding context compileEnv loweringHalt ptrDiscipline
-  fragGasPathPtr exprSimWordBuiltins arithmetic rich_list
+  fragGasPathPtr exprSimWordBuiltins arithmetic rich_list bodyPtrIntCallJoint venomInst exprLoweringProps
 
 (* Only completed source bindings are quantified here.  The compile environment
    may still contain MemLoc declarations for all pending parameters. *)
@@ -284,7 +284,10 @@ Theorem intcall_scalar_materialize_extend_path:
     intcall_completed (done |+ (name,entry))
       (cenv with ce_vars := cenv.ce_vars |+ (name,PtrVar (Var out) n)) G' tn' t /\
     intcall_pending src
-      (cenv with ce_vars := cenv.ce_vars |+ (name,PtrVar (Var out) n)) caps G' tn' t
+      (cenv with ce_vars := cenv.ce_vars |+ (name,PtrVar (Var out) n)) caps G' tn' t /\
+    run_inst_seq [mk_inst id ALLOCA [Lit (n2w n)] [out];
+                  mk_inst (id+1) MSTORE [Var out;op] []] s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all intcall_scalar_materialize_path >>
@@ -564,13 +567,18 @@ Theorem intcall_materialize_list_path:
     t.vs_inst_idx = s.vs_inst_idx +
        LENGTH (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
-    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+    run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    EVERY (\i. ~is_terminator i.inst_opcode)
+      (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)
 Proof
   Induct
   >- (simp[materialize_internal_params_def, comp_return_def,
            internal_stack_size_def] >> rpt strip_tac >> gvs[] >>
       `done = src` by fs[intcall_mat_ready_def, intcall_coverage_empty] >>
-      qexistsl_tac [`s`,`G`,`tn`] >> gvs[gas_path_ptr_rules]) >>
+      qexistsl_tac [`s`,`G`,`tn`] >>
+      gvs[gas_path_ptr_rules, run_inst_seq_def, venom_state_component_equality]) >>
   PairCases >> rpt gen_tac >> strip_tac >>
   `intcall_pending src ce ((h0,h1,h2)::caps) G tn s` by
     fs[intcall_mat_ready_def] >>
@@ -666,6 +674,15 @@ Resume intcall_materialize_list_path[stack]:
        (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
      qpat_x_assum `!x. not_fresh_at mid x ==> _` drule >>
      asm_rewrite_tac[lookup_var_def, FLOOKUP_UPDATE] >> simp[]) >>
+  `run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s =
+     OK (t' with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `DROP (LENGTH st.cs_current_insts) _ = _` (fn th => rewrite_tac[th]) >>
+     irule intcall_run_cursor_append >> conj_tac
+     >- (qexists_tac `t` >> fs[]) >> fs[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+     (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)` by
+    (qpat_assum `DROP (LENGTH st.cs_current_insts) _ = _` (fn th => rewrite_tac[th]) >>
+     simp[mk_inst_def, is_terminator_def]) >>
   qexistsl_tac [`t'`,`G''`,`tn''`] >>
   conj_tac
   >- (qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t)`

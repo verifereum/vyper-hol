@@ -170,7 +170,9 @@ Theorem intcall_compile_scratch_path:
       LENGTH (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x))
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
     comp_return_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def, emit_def] >>
@@ -232,7 +234,13 @@ Resume intcall_compile_scratch_path[endpoint]:
   simp[Abbr `u`, update_var_def] >>
   conj_tac >- suspend "fresh" >>
   conj_tac >- (simp[FDOM_FUPDATE] >> rpt strip_tac >> res_tac >> decide_tac) >>
-  simp[ADD1] >> rpt strip_tac >>
+  simp[ADD1] >> conj_tac >- suspend "oldvars" >>
+  simp[DROP_LENGTH_APPEND, run_inst_seq_def, step_alloca_fresh, update_var_def,
+       venom_state_component_equality]
+QED
+
+Resume intcall_compile_scratch_path[oldvars]:
+  rpt strip_tac >>
   `x <> out` by
     (gvs[Abbr `out`, not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def]

@@ -42,7 +42,10 @@ Theorem intcall_scalar_materialize_path:
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     ptr_covers G' tn' out t n /\
     (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
-         val_in_memory ty value s.vs_alloca_next m)
+         val_in_memory ty value s.vs_alloca_next m) /\
+    run_inst_seq [mk_inst id ALLOCA [Lit (n2w n)] [out];
+                  mk_inst (id+1) MSTORE [Var out;v] []] s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   rpt strip_tac >>
   `n < dimword (:256)` by decide_tac >>
@@ -83,6 +86,10 @@ QED
 
 Resume intcall_scalar_materialize_path[endpoint]:
   `run_inst_seq [ai;si] s = OK s2` by simp[run_inst_seq_def] >>
+  `s1.vs_inst_idx = s.vs_inst_idx` by
+    (gvs[Abbr `ai`, step_alloca_fresh, update_var_def]) >>
+  `s2 with vs_inst_idx := s.vs_inst_idx = s2` by
+    simp[Abbr `s2`, mstore_def, venom_state_component_equality] >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2
      (OK (s2 with vs_inst_idx := s.vs_inst_idx + 2))` by
     (`EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [ai;si]` by
