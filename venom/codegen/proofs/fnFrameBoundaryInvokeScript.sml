@@ -34,3 +34,87 @@ Ancestors
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map
   callLayoutDefs fmpWfDefs list rich_list reorderSim planWf stackModel
+
+Theorem invoke_source_ok:
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  ?callee args cvs ret rvs.
+    lookup_function nm ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops vs = SOME args /\
+    setup_callee callee args vs = SOME cvs /\
+    run_blocks fuel ctx callee cvs = IntRet ret rvs /\
+    bind_outputs inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state vs rvs)) = SOME vs'
+Proof
+  simp[Once step_inst_def, decode_invoke_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem invoke_source_halt:
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  step_inst fuel ctx inst vs = Halt vs' ==>
+  ?callee args cvs.
+    lookup_function nm ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops vs = SOME args /\
+    setup_callee callee args vs = SOME cvs /\
+    run_blocks fuel ctx callee cvs = Halt vs'
+Proof
+  simp[Once step_inst_def, decode_invoke_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem invoke_source_abort:
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  ?callee args cvs.
+    lookup_function nm ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops vs = SOME args /\
+    setup_callee callee args vs = SOME cvs /\
+    run_blocks fuel ctx callee cvs = Abort a vs'
+Proof
+  simp[Once step_inst_def, decode_invoke_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem invoke_plan_decompose:
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps =
+    SOME (ops, final) ==>
+  ?iops prepared rops arranged consumed pushed ret_lbl called pops popped
+   opts swapped.
+    emit_input_plan INVOKE (compute_operands inst) nl ps = (iops, prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops, arranged) /\
+    consumed = arranged with ps_stack :=
+      stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack /\
+    pushed = FOLDL (\s out.
+      s with ps_stack := stack_push (Var out) s.ps_stack)
+      consumed inst.inst_outputs /\
+    fresh_label "return_label" pushed = (ret_lbl, called) /\
+    (if inst.inst_outputs = [] then ([], called)
+     else if ~halting \/ LENGTH inst.inst_outputs > 1 then
+       popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) called
+     else ([], called)) = (pops, popped) /\
+    (if inst.inst_outputs = [] \/
+        FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([], popped)
+     else optimistic_swap_plan dfg inst nl term popped) = (opts, swapped) /\
+    final = release_dead_spills nl swapped /\
+    ops = iops ++ rops ++
+      [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++
+      pops ++ opts
+Proof
+  strip_tac >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+      generate_regular_inst_plan_def, is_commutative_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  gvs[generate_emit_ops_def, venom_to_evm_name_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `inst.inst_outputs = []`
+  >- (gvs[] >> metis_tac[]) >>
+  gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  metis_tac[]
+QED
