@@ -1778,6 +1778,25 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+val prefix_vs_tm = ``deploy_entry_state ^prefix_prog_tm ^prefix_context_plan_tm
+  ^prefix_tops_tm ^prefix_es_tm``;
+
+Theorem deploy_prefix_safe_step_no_abort:
+  !inst s fuel ctx a ss.
+    MEM inst.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE; JMP; CODECOPY; RETURN] ==>
+    step_inst fuel ctx inst s <> Abort a ss
+Proof
+  rpt gen_tac >> simp[] >> strip_tac >>
+  simp[Once venomExecSemanticsTheory.step_inst_def] >>
+  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
+  asm_rewrite_tac[] >>
+  simp[venomExecSemanticsTheory.exec_alloca_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       venomExecSemanticsTheory.exec_write2_def, LET_THM] >>
+  simp[AllCaseEqs()]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
