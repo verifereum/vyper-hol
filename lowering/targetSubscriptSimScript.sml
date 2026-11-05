@@ -1275,3 +1275,182 @@ Proof
   once_rewrite_tac[ADD_COMM] >>
   irule storage_dynamic_array_child_slots >> simp[] >> qexists `n` >> simp[]
 QED
+
+Theorem target_post_storage_step:
+  !ctx func cenv cx es sa sm sb s0 es2 tr slot tv ty rb t u
+    slot' etv ety dst.
+    target_post ctx func cenv cx es sa sm s0 es2
+      (PlaceR (StoragePlace tr slot tv)) (Type ty) rb t /\
+    evaluate_type (get_tenv cx) ety = SOME etv /\
+    eval_operand dst u = SOME slot' /\
+    stmt_state_rel ctx func cenv cx es2 u /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    (!x z. not_fresh_at sm x /\ lookup_var x t = SOME z ==>
+           lookup_var x u = SOME z) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP u.vs_allocas aid = SOME b) /\
+    u.vs_memory = t.vs_memory ==>
+    target_post ctx func cenv cx es sa sb s0 es2
+      (PlaceR (StoragePlace tr slot' etv)) (Type ety)
+      (dst,SOME (slot_loc tr),SOME (ValPT ety)) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[GSYM value_type_place_def] >>
+  drule_then irule target_post_suffix_frame >>
+  simp[place_ptr_rel_def, place_readable_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem target_storage_array_static_suffix:
+  !ctx func cenv cx es sa sm sb s0 es2 es3 tr slot et n etv
+    rb t ix iw i bt bits dst res.
+    target_post ctx func cenv cx es sa sm s0 es2
+      (PlaceR (StoragePlace tr slot (ArrayTV etv (Fixed n))))
+      (Type (ArrayT et (Fixed n))) rb t /\
+    evaluate_type (get_tenv cx) (ArrayT et (Fixed n)) =
+      SOME (ArrayTV etv (Fixed n)) /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    (bt = IntT bits \/ bt = UintT bits) /\ bits <= 256 /\
+    value_has_type (BaseTV bt) (IntV i) /\
+    iw = typed_val_to_w256 (BaseTV bt) (IntV i) /\
+    compile_array_subscript (FST rb) ix F n 1 (type_slot_size etv)
+      (is_signed_type (BaseT bt))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca (slot_loc tr)) sm = (dst,sb) /\
+    eval_operand (FST rb) t = SOME slot /\ eval_operand ix t = SOME iw /\
+    (!x. ix = Var x ==> not_fresh_at sm x) /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV etv (Fixed n))))
+      (ValueSubscript (IntV i)) es2 = (res,es3) ==>
+    frag_exec ctx sm sb
+      (\s. s = t /\ stmt_state_rel ctx func cenv cx es2 s)
+      (\s. ?pv'. res = INL pv' /\
+        target_post ctx func cenv cx es sa sb s0 es3 pv' (Type et)
+          (dst,SOME (slot_loc tr),SOME (ValPT et)) s)
+      (expr_exit res)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `n < dimword (:256)` by
+    (drule evaluate_type_array_bound_word >> simp[bound_length_def]) >>
+  `(idx_in_range (is_signed_type (BaseT bt)) iw (n2w n) <=>
+    0 <= i /\ Num i < n)` by
+    (irule idx_in_range_typed_int >> goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `bits` >> simp[]) >>
+  gnvs[extend_place_storage_array_index] >>
+  Cases_on `0 <= i /\ Num i < n` >> gnvs[]
+  >- suspend "success" >>
+  suspend "oob"
+QED
+
+Resume target_storage_array_static_suffix[success]:
+  RULE_L_ASSUM_TAC CONJUNCTS >> gnvs[] >>
+  rename1 `target_post ctx func cenv cx es sa sm s0 live_es
+    (PlaceR (StoragePlace tr slot (ArrayTV etv (Fixed n)))) (Type (ArrayT et (Fixed n))) rb t` >>
+  `!x. FST rb = Var x ==> not_fresh_at sm x` by gvs[target_post_def] >>
+  `typed_val_to_w256 (BaseTV bt) (IntV i) = n2w (Num i)` by
+    (`i = &Num i` by simp[INT_OF_NUM] >>
+     pop_assum SUBST1_TAC >>
+     gvs[typed_val_to_w256_def, val_to_w256_def, i2w_pos]) >>
+  drule_all compile_array_static_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `live_es`] mp_tac) >>
+  disch_then (mp_then Any match_mp_tac frag_exec_weaken) >>
+  simp[expr_exit_def] >> rpt strip_tac >>
+  drule_then irule target_post_storage_step >>
+  simp[word_mul_n2w] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume target_storage_array_static_suffix[oob]:
+  drule_all compile_array_static_frag_oob >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es3`] mp_tac) >>
+  disch_then (qspec_then `\s. F` mp_tac) >>
+  disch_then (mp_then Any match_mp_tac frag_exec_weaken) >>
+  simp[] >> rpt strip_tac >> gvs[expr_exit_def]
+QED
+
+Finalise target_storage_array_static_suffix
+
+Theorem target_storage_array_dynamic_suffix:
+  !ctx func cenv cx es sa sm sb s0 es2 es3 tr slot et cap etv
+    rb t ix iw i bt bits dst res.
+    target_post ctx func cenv cx es sa sm s0 es2
+      (PlaceR (StoragePlace tr slot (ArrayTV etv (Dynamic cap))))
+      (Type (ArrayT et (Dynamic cap))) rb t /\
+    stmt_state_rel ctx func cenv cx es2 t /\
+    storage_read_live cx tr (get_storage cx es2 tr) slot (ArrayTV etv (Dynamic cap)) /\
+    slots_in_range (get_storage cx es2 tr) (w2n slot) (ArrayTV etv (Dynamic cap)) /\
+    evaluate_type (get_tenv cx) (ArrayT et (Dynamic cap)) =
+      SOME (ArrayTV etv (Dynamic cap)) /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    (bt = IntT bits \/ bt = UintT bits) /\ bits <= 256 /\
+    value_has_type (BaseTV bt) (IntV i) /\
+    iw = typed_val_to_w256 (BaseTV bt) (IntV i) /\
+    compile_array_subscript (FST rb) ix T 0 1 (type_slot_size etv)
+      (is_signed_type (BaseT bt))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca (slot_loc tr)) sm = (dst,sb) /\
+    eval_operand (FST rb) t = SOME slot /\ eval_operand ix t = SOME iw /\
+    (!x. ix = Var x ==> not_fresh_at sm x) /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV etv (Dynamic cap))))
+      (ValueSubscript (IntV i)) es2 = (res,es3) ==>
+    frag_exec ctx sm sb
+      (\s. s = t /\ stmt_state_rel ctx func cenv cx es2 s)
+      (\s. ?pv'. res = INL pv' /\
+        target_post ctx func cenv cx es sa sb s0 es3 pv' (Type et)
+          (dst,SOME (slot_loc tr),SOME (ValPT et)) s)
+      (expr_exit res)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `w2n (lookup_storage slot (get_storage cx es2 tr)) <= cap` by
+    gvs[vyperLookupStorageTheory.slots_in_range_def, vyperStorageTheory.read_slot_def] >>
+  `0 < type_slot_size (ArrayTV etv (Dynamic cap))` by
+    simp[vyperValueTheory.type_slot_size_def] >>
+  drule_all stmt_state_rel_storage_live_head >> strip_tac >>
+  `(idx_in_range (is_signed_type (BaseT bt)) iw
+      (lookup_storage slot (get_storage cx es2 tr)) <=>
+    0 <= i /\ Num i < w2n (lookup_storage slot (get_storage cx es2 tr)))` by
+    (`idx_in_range (is_signed_type (BaseT bt)) iw
+        (n2w (w2n (lookup_storage slot (get_storage cx es2 tr)))) <=>
+        0 <= i /\ Num i < w2n (lookup_storage slot (get_storage cx es2 tr))`
+       suffices_by simp[] >>
+     irule idx_in_range_typed_int >> simp[w2n_lt] >> qexists_tac `bits` >> simp[]) >>
+  `!x. FST rb = Var x ==> not_fresh_at sm x` by gvs[target_post_def] >>
+  `~(slot_loc tr = LocMemory)` by (Cases_on `tr` >> gvs[slot_loc_def]) >>
+  `(slot_loc tr = LocStorage <=> ~tr)` by (Cases_on `tr` >> gvs[slot_loc_def]) >>
+  `(slot_loc tr = LocTransient <=> tr)` by (Cases_on `tr` >> gvs[slot_loc_def]) >>
+  drule compile_array_dynamic_outcome >>
+  simp[] >> disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`ctx`,`func`,`cx`,`es2`] mp_tac) >>
+  simp[] >>
+  disch_then (mp_then Any match_mp_tac frag_exec_weaken) >>
+  simp[] >> conj_tac
+  >- suspend "success" >>
+  suspend "exit"
+QED
+
+Resume target_storage_array_dynamic_suffix[success]:
+  rpt strip_tac >> RULE_L_ASSUM_TAC CONJUNCTS >> gnvs[] >>
+  `0 <= i /\ Num i < w2n (lookup_storage slot (get_storage cx es2 tr))` by
+    (Cases_on `tr` >> gvs[]) >>
+  `Num i < cap` by decide_tac >>
+  `typed_val_to_w256 (BaseTV bt) (IntV i) = n2w (Num i)` by
+    (`i = &Num i` by simp[INT_OF_NUM] >>
+     pop_assum SUBST1_TAC >>
+     gvs[typed_val_to_w256_def, val_to_w256_def, i2w_pos]) >>
+  gnvs[extend_place_storage_array_index] >>
+  RULE_L_ASSUM_TAC CONJUNCTS >> gnvs[] >>
+  drule_then irule target_post_storage_step >>
+  simp[word_mul_n2w, word_add_n2w, GSYM WORD_ADD_ASSOC,
+       AC WORD_ADD_ASSOC WORD_ADD_COMM]
+QED
+
+Resume target_storage_array_dynamic_suffix[exit]:
+  rpt strip_tac >> RULE_L_ASSUM_TAC CONJUNCTS >> gnvs[] >>
+  `~(0 <= i /\ Num i < w2n (lookup_storage slot (get_storage cx es2 tr)))` by
+    (Cases_on `tr` >> gvs[]) >>
+  Cases_on `0 <= i /\ Num i < cap` >>
+  gvs[extend_place_storage_array_index, expr_exit_def]
+QED
+
+Finalise target_storage_array_dynamic_suffix
