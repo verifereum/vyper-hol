@@ -8,7 +8,7 @@
  *)
 Theory concretizeStageShape
 Ancestors
-  o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher
+  o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher cfgWf
   staticLayoutFoldProofs staticLayoutDefs passSharedDefs venomWf passSimulationDefs list rich_list combin venomInst
 
 Theorem concretize_inst_positions_outputs[local]:
@@ -439,6 +439,89 @@ Proof
   drule_at (Pat `def_on_all_paths _ _ _ _`) concretize_positions_def_on_paths >> simp[]
 QED
 
+Theorem concretize_positions_make_ssa_input_ok:
+  EVERY bb_well_formed fn.fn_blocks /\ fn_inst_wf fn /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) /\
+  make_ssa_input_ok fn ==>
+  make_ssa_input_ok (concretize_function_with_positions positions fn)
+Proof
+  strip_tac >>
+  `EVERY inst_wf (fn_insts fn)`
+    by (gvs[EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
+        metis_tac[]) >>
+  `!v. LENGTH (FILTER (\i. MEM v i.inst_outputs)
+      (fn_insts (concretize_function_with_positions positions fn))) =
+       LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn))`
+    by (gen_tac >> irule concretize_positions_definition_count >> simp[]) >>
+  gvs[make_ssa_input_ok_def] >> rpt conj_tac
+  >- (gvs[all_reachable_def] >>
+      simp[concretize_positions_block_provenance] >> rpt strip_tac >>
+      gvs[clear_nops_block_def, block_map_transform_def,
+          concretize_positions_reachable] >> metis_tac[]) 
+  >- (irule concretize_positions_defs_reach_uses >> simp[])
+  >- (gvs[fn_phi_operands_single_def_def] >>
+      simp[concretize_positions_block_provenance,
+           concretize_positions_block_instruction,
+           concretize_inst_positions_phi] >> rpt strip_tac >>
+      gvs[concretize_inst_positions_phi, concretize_positions_block_phi] >> metis_tac[])
+  >- (gvs[fn_phis_cover_preds_def] >>
+      simp[concretize_positions_block_provenance,
+           concretize_positions_block_instruction,
+           concretize_inst_positions_phi] >> rpt strip_tac >>
+      gvs[concretize_positions_block_phi] >>
+      gvs[concretize_inst_positions_phi, concretize_positions_cfg_edge,
+          clear_nops_block_def, block_map_transform_def] >> metis_tac[])
+  >- (gvs[fn_phi_outputs_single_def_def] >>
+      simp[concretize_positions_block_provenance,
+           concretize_positions_block_instruction,
+           concretize_inst_positions_phi] >> rpt strip_tac >>
+      gvs[concretize_inst_positions_phi, concretize_positions_block_phi] >> metis_tac[])
+  >- (gvs[fn_phis_non_degenerate_def] >>
+      simp[concretize_positions_insts, MEM_FILTER, MEM_MAP] >> rpt strip_tac >>
+      gvs[concretize_inst_positions_phi, concretize_positions_block_phi] >> metis_tac[]) >>
+  simp[concretize_positions_block_provenance,
+       concretize_positions_block_instruction,
+       concretize_inst_positions_phi] >> rpt strip_tac >>
+  gvs[concretize_positions_block_phi] >>
+      gvs[concretize_inst_positions_phi, concretize_positions_cfg_edge,
+      clear_nops_block_def, block_map_transform_def] >> metis_tac[]
+QED
+
+Theorem make_ssa_input_ok_blocks:
+  f.fn_blocks = g.fn_blocks ==>
+  (make_ssa_input_ok f <=> make_ssa_input_ok g)
+Proof
+  strip_tac >>
+  `fn_cfg_edge f = fn_cfg_edge g`
+    by simp[FUN_EQ_THM, fn_cfg_edge_def] >>
+  `fn_entry_label f = fn_entry_label g`
+    by simp[fn_entry_label_def, entry_block_def] >>
+  `!path. is_fn_path f path = is_fn_path g path`
+    by (Induct_on `path` >- simp[is_fn_path_def] >>
+        Cases_on `path` >> simp[is_fn_path_def]) >>
+  simp[make_ssa_input_ok_def, all_reachable_def, fn_reachable_def,
+       fn_defs_reach_uses_def, def_on_all_paths_def,
+       fn_phi_operands_single_def_def, fn_phis_cover_preds_def,
+       fn_phi_outputs_single_def_def, fn_phis_non_degenerate_def, fn_insts_def]
+QED
+
+Theorem concretize_positions_no_raw_fmp:
+  no_raw_fmp_ops fn ==>
+  no_raw_fmp_ops (concretize_function_with_positions positions fn)
+Proof
+  simp[no_raw_fmp_ops_def, concretize_positions_insts, MEM_FILTER, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `MEM inst (fn_insts fn)` >>
+  `~is_raw_fmp_opcode inst.inst_opcode` by metis_tac[] >>
+  Cases_on `inst.inst_opcode = ALLOCA` >>
+  gvs[concretize_inst_with_positions_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  rename1 `out::rest` >> Cases_on `rest` >> gvs[] >>
+  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
+  gvs[mk_assign_inst_def, mk_nop_inst_def, is_raw_fmp_opcode_def]
+QED
+
 Theorem mk_concretize_layout_alloca_positions[local]:
   mk_concretize_layout reserved positions fn = SOME layout ==>
   !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
@@ -471,6 +554,60 @@ Proof
   qpat_x_assum `compute_function_layout_eval _ _ = _` mp_tac >>
   simp[compute_function_layout_eval_def, AllCaseEqs()] >>
   rpt strip_tac >> drule mk_concretize_layout_alloca_positions >> simp[]
+QED
+
+Theorem apply_context_layout_make_ssa_input_ok:
+  EVERY bb_well_formed fn.fn_blocks /\ fn_inst_wf fn /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP layout.cl_positions (Allocation inst.inst_id))) /\
+  make_ssa_input_ok fn ==>
+  make_ssa_input_ok (apply_context_concretize_layout ctx layout fn)
+Proof
+  strip_tac >>
+  `make_ssa_input_ok (apply_context_concretize_layout ctx layout fn) =
+   make_ssa_input_ok (concretize_function_with_positions layout.cl_positions fn)`
+    by (irule make_ssa_input_ok_blocks >>
+        simp[apply_context_concretize_layout_def, apply_concretize_layout_def]) >>
+  simp[] >> irule concretize_positions_make_ssa_input_ok >> simp[]
+QED
+
+Theorem apply_context_layout_no_raw_fmp:
+  no_raw_fmp_ops fn ==>
+  no_raw_fmp_ops (apply_context_concretize_layout ctx layout fn)
+Proof
+  strip_tac >>
+  drule concretize_positions_no_raw_fmp >>
+  disch_then (qspec_then `layout.cl_positions` mp_tac) >>
+  simp[no_raw_fmp_ops_def, fn_insts_def,
+       apply_context_concretize_layout_def, apply_concretize_layout_def]
+QED
+
+Theorem concretize_step_make_ssa_input_ok:
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  fn.fn_eom = NONE /\ wf_function fn /\ fn_inst_wf fn /\
+  make_ssa_input_ok fn ==>
+  make_ssa_input_ok out.fpo_function
+Proof
+  strip_tac >>
+  `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+     observed s fn = SOME out` by fs[fn_pass_step_def] >>
+  gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
+  drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
+  irule apply_context_layout_make_ssa_input_ok >> simp[] >>
+  gvs[wf_function_def, EVERY_MEM]
+QED
+
+Theorem concretize_step_no_raw_fmp:
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  fn.fn_eom = NONE /\ no_raw_fmp_ops fn ==>
+  no_raw_fmp_ops out.fpo_function
+Proof
+  strip_tac >>
+  `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+     observed s fn = SOME out` by fs[fn_pass_step_def] >>
+  gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
+  drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
+  irule apply_context_layout_no_raw_fmp >> simp[]
 QED
 
 (* Why it holds (intuition, not a prescribed proof).
