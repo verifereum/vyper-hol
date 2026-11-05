@@ -1,6 +1,6 @@
 (* Ordinary scratch invariants and pointer ghosts at one concrete loop endpoint. *)
 Theory decoderScratchLoopPtr
-Ancestors decoderLoopControlPtr abiScratchDecoderLoopInvariant
+Ancestors decoderLoopControlPtr decoderGhostFramePtr ptrDiscipline abiScratchDecoderLoopInvariant
   abiScratchDecoderLoopControl abiDecoderValidArrayMemory
   abiScratchEffect abiScratchEncoderContract abiDecoderExecution abiDecoderReentry
   abiDecoderValidArrayBackedge abiDecoderContract venomState words arithmetic
@@ -162,4 +162,42 @@ Proof
      first last lo hi next limit_st b cap initial hdr (SUC j) t` by
     asm_simp_tac bool_ss [abi_scratch_decoder_loop_inv_def] >>
   qexistsl_tac [`H`, `u`, `t`] >> asm_simp_tac bool_ss []
+QED
+
+(* A recursive child preserves the parent's cursor at its actual endpoint. *)
+Theorem decoder_child_cursor_frame_ptr:
+  !first last lo hi start limit_st d sz b cap s t site slot q iv
+   G tn H u j.
+  abi_scratch_effect first last lo hi start.cs_next_var limit_st d sz b cap s t /\
+  abi_decoder_budget first last b cap s /\ first <= lo /\ hi <= last /\
+  site IN abi_decoder_ids first last /\ ~(site IN abi_decoder_ids lo hi) /\
+  FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  abi_footprint_disjoint d sz
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  not_fresh_at start q /\ not_fresh_at start iv /\
+  (!x. not_fresh_at start x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    op_taint u (Var x) = op_taint tn (Var x)) /\
+  ptr_covers G tn q s 32 /\ lookup_var q s = SOME (n2w slot) /\
+  mload slot s = n2w j /\ eval_operand (Var iv) s = SOME (n2w j) /\
+  op_taint tn (Var iv) = {} /\ op_prov G (Var iv) = NONE /\
+  u.t_mem SUBSET tn.t_mem /\ DISJOINT {a | slot <= a /\ a < slot + 32} tn.t_mem ==>
+  FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = n2w j /\
+  ptr_covers H u q t 32 /\ lookup_var q t = SOME (n2w slot) /\
+  eval_operand (Var iv) t = SOME (n2w j) /\
+  op_taint u (Var iv) = {} /\ op_prov H (Var iv) = NONE /\
+  DISJOINT {a | slot <= a /\ a < slot + 32} u.t_mem
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_scratch_effect_slot >> strip_tac >>
+  `lookup_var q t = lookup_var q s /\ FLOOKUP H q = FLOOKUP G q /\
+   op_taint u (Var q) = op_taint tn (Var q)` by metis_tac[] >>
+  `lookup_var iv t = lookup_var iv s /\ FLOOKUP H iv = FLOOKUP G iv /\
+   op_taint u (Var iv) = op_taint tn (Var iv)` by metis_tac[] >>
+  `ptr_covers H u q t 32` by
+    (drule_at (Pat `ptr_covers _ _ _ _ _`) ptr_covers_frame >>
+     disch_then irule >> simp[]) >>
+  simp[eval_operand_def, op_prov_def] >>
+  fs[eval_operand_def, op_prov_def] >>
+  ASM_SET_TAC[]
 QED
