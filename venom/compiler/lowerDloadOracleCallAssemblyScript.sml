@@ -629,3 +629,35 @@ Proof
   gen_tac >> strip_tac >> irule ld_set_prov_selected >>
   qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
 QED
+
+(* Checked masked-to-exact consumer at SHA3's real operand shape. *)
+Theorem ld_sha3_observed_bytes:
+  ld_memory lo A tn s t /\
+  access_ok lo (ld_erase A o_f H) fn inst s /\
+  taint_ok fn tn inst s /\ ~about_to_revert fn inst s /\
+  ~in_revert_forward fn s /\ inst.inst_opcode = SHA3 /\
+  inst.inst_operands = [off;len] /\
+  eval_operand off s = SOME x /\ eval_operand len s = SOME n /\
+  (op_prov H off = NONE ==> x = y) /\
+  (!k. op_prov H off = SOME k ==> ld_wordrel A (SOME k) x y) /\
+  (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) ==>
+  TAKE (w2n n) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n n) 0w) =
+  TAKE (w2n n) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n n) 0w)
+Proof
+  strip_tac >>
+  `mem_read_ops inst = SOME <|iao_ofst := off; iao_size := SOME len;
+                             iao_max_size := SOME len|>` by
+    simp[mem_read_ops_def] >>
+  `MEM (w2n x,w2n n) (source_memory_read_ranges inst s)` by
+    simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  `~MEM inst.inst_opcode [MLOAD;ILOAD;MCOPY;RETURN]` by simp[] >>
+  pure_rewrite_tac[GSYM read_memory_def] >>
+  irule ld_observed_memory_read >> simp[] >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`H`, `fn`, `lo`, `tn`] >> simp[]
+QED
+
+val _ = if null (hyp ld_sha3_observed_bytes) then ()
+        else raise Fail "SHA3 observation consumer has hypotheses";

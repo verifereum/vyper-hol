@@ -4,6 +4,7 @@ Ancestors
   lowerDloadSafetyKernel lowerDloadSafetyValues lowerDloadSafetyWriteBytes
   regularCallEmitSim finite_map pred_set list arithmetic
   ptrDiscipline extCallOracle venomCallOracleDefs venomState pair vfmState
+  venomExecSemantics
 
 Theorem ld_take_outcome_rest:
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
@@ -239,3 +240,39 @@ Proof
       gvs[ld_memory_def] >> metis_tac[]) >>
   simp[] >> gvs[consume_call_outcome_eq])
 QED
+
+(* Exact current request projection; historical requests/logs need not agree. *)
+Theorem ld_create_request_equal:
+  ld_nonghost tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n off) (w2n sz) s =
+    read_memory (w2n off') (w2n sz) t ==>
+  venom_create_request s value off sz salt =
+    venom_create_request t value off' sz salt
+Proof
+  strip_tac >>
+  `s.vs_accounts = t.vs_accounts` by
+    metis_tac[ld_nonghost_accounts_empty] >>
+  `s.vs_transient = t.vs_transient` by
+    metis_tac[ld_nonghost_transient_empty] >>
+  simp[venom_create_request_def]
+QED
+
+val _ = if null (hyp ld_create_request_equal) then ()
+        else raise Fail "create request projection has hypotheses";
+
+Theorem ld_delegate_state_equal:
+  ld_nonghost tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
+  make_venom_delegatecall_state s target gas data code static =
+    make_venom_delegatecall_state t target gas data code static
+Proof
+  strip_tac >>
+  `s.vs_accounts = t.vs_accounts` by
+    metis_tac[ld_nonghost_accounts_empty] >>
+  `s.vs_transient = t.vs_transient` by
+    metis_tac[ld_nonghost_transient_empty] >>
+  gvs[ld_nonghost_def, make_venom_delegatecall_state_def,
+      venom_to_tx_params_def]
+QED
+
+val _ = if null (hyp ld_delegate_state_equal) then ()
+        else raise Fail "delegate state projection has hypotheses";
