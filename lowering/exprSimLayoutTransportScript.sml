@@ -177,7 +177,7 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   `type_memory_size sv = type_memory_size dv` by
     (fs[same_memory_layout_def] >> metis_tac[evaluated_layout_size]) >>
-  qexistsl_tac [`dv`, `sv`] >> simp[] >>
+  qexistsl_tac [`dv`, `src`, `sv`] >> simp[] >>
   rpt conj_tac
   >- metis_tac[compatible_word_type]
   >- metis_tac[compatible_footprint]
