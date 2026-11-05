@@ -388,3 +388,116 @@ Proof
   strip_tac >> gvs[ALOOKUP_NONE] >>
   metis_tac[MEM_MAP, pairTheory.FST]
 QED
+
+Theorem ao_cmp_unselected_writes:
+  !fn fs i.
+    ALL_DISTINCT (FLAT (MAP (\j. j.inst_outputs) (fn_insts fn))) /\
+    MEM i (fn_insts fn) /\ ALOOKUP fs i.inst_id = NONE ==>
+    DISJOINT (set i.inst_outputs)
+      (ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) fs)
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[DISJOINT_ALT] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ IN ao_cmp_flipped _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ao_cmp_flipped_def]) >>
+  `i = inst` by
+    (irule (INST_TYPE [beta |-> ``:string``] all_distinct_flat_map_unique) >>
+     qexistsl_tac [`\j. j.inst_outputs`, `fn_insts fn`, `x`] >> simp[]) >>
+  gvs[ao_cmp_flip_cert_def] >>
+  gvs[ALOOKUP_NONE, MEM_MAP] >> metis_tac[pairTheory.FST]
+QED
+
+Theorem ao_cmp_removed_shape:
+  !fn fs rs ins inst.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn))) /\
+    ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) = (fs,rs,ins) /\
+    MEM inst (fn_insts fn) /\ MEM inst.inst_id rs /\
+    LENGTH inst.inst_operands = 1 ==>
+    ?v out. inst.inst_opcode = ISZERO /\ inst.inst_operands = [Var v] /\
+      inst.inst_outputs = [out] /\
+      v IN ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) fs /\
+      out NOTIN ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) fs
+Proof
+  rpt gen_tac >> strip_tac >> drule_all ao_cmp_flip_scan_remove_pair >>
+  strip_tac >>
+  qpat_x_assum `ao_cmp_remove_cert _ _ _` mp_tac >>
+  simp[ao_cmp_remove_cert_def] >> strip_tac >>
+  `MEM after (fn_insts fn) /\ MEM v (operand_vars after.inst_operands)` by
+    (irule dfg_build_function_uses_sound >>
+     qpat_x_assum `ao_cmp_source _ _ _ _ _ _` mp_tac >>
+     simp[ao_cmp_source_def]) >>
+  `after = inst` by
+    (`?n. n < LENGTH (fn_insts fn) /\ after = EL n (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `?m. m < LENGTH (fn_insts fn) /\ inst = EL m (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `EL n (MAP (\i. i.inst_id) (fn_insts fn)) =
+      EL m (MAP (\i. i.inst_id) (fn_insts fn))` by gvs[EL_MAP] >>
+     `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]) >>
+  qpat_x_assum `after = inst` SUBST_ALL_TAC >>
+  `inst.inst_operands = [Var v]` by
+    (Cases_on `inst.inst_operands` >> gvs[] >>
+     Cases_on `h` >> gvs[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
+       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  qexistsl_tac [`v`, `iz_out`] >> asm_rewrite_tac[] >> conj_tac
+  >- (simp[ao_cmp_flipped_def] >>
+      qexistsl_tac [`i`, `f`] >> simp[] >>
+      gvs[ao_cmp_source_def]) >>
+  `~is_comparator inst.inst_opcode` by simp[is_comparator_def] >>
+  drule_all ao_cmp_flipped_noncomparator_writes >>
+  simp[DISJOINT_ALT]
+QED
+
+Theorem ao_cmp_named_shape:
+  !fn fs rs ins s ns s' inst v id z.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+    ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) = (fs,rs,ins) /\
+    ao_name_inserts_supply s ins = (ns,s') /\
+    MEM inst (fn_insts fn) /\ ALOOKUP ns inst.inst_id = SOME (v,id,z) /\
+    LENGTH inst.inst_operands = 1 ==>
+    inst.inst_opcode = ASSERT /\ inst.inst_operands = [Var v] /\
+    v IN ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) fs
+Proof
+  rpt gen_tac >> strip_tac >> drule ALOOKUP_MEM >> strip_tac >>
+  drule_all ao_cmp_named_origin >> strip_tac >>
+  drule_all ao_cmp_flip_scan_insert_pair >> strip_tac >>
+  qpat_x_assum `ao_cmp_insert_cert _ _ _` mp_tac >>
+  simp[ao_cmp_insert_cert_def] >> strip_tac >>
+  `MEM after (fn_insts fn) /\ MEM v (operand_vars after.inst_operands)` by
+    (irule dfg_build_function_uses_sound >>
+     qpat_x_assum `ao_cmp_source _ _ _ _ _ _` mp_tac >>
+     simp[ao_cmp_source_def]) >>
+  `after = inst` by
+    (`?n. n < LENGTH (fn_insts fn) /\ after = EL n (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `?m. m < LENGTH (fn_insts fn) /\ inst = EL m (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `EL n (MAP (\i. i.inst_id) (fn_insts fn)) =
+      EL m (MAP (\i. i.inst_id) (fn_insts fn))` by gvs[EL_MAP] >>
+     `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]) >>
+  qpat_x_assum `after = inst` SUBST_ALL_TAC >>
+  `inst.inst_operands = [Var v]` by
+    (Cases_on `inst.inst_operands` >> gvs[] >>
+     Cases_on `h` >> gvs[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
+       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  asm_rewrite_tac[] >> simp[ao_cmp_flipped_def] >>
+  qexistsl_tac [`i`, `f`] >> simp[] >> gvs[ao_cmp_source_def]
+QED
+
+Theorem ao_cmp_untouched_vars:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn))) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) = (fs,rs,ins) /\
+  ao_name_inserts_supply s ins = (ns,s') /\ MEM inst (fn_insts fn) /\
+  ALOOKUP fs inst.inst_id = NONE /\ ~MEM inst.inst_id rs /\
+  ALOOKUP ns inst.inst_id = NONE ==>
+  DISJOINT (set (operand_vars inst.inst_operands))
+    (ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) fs) /\
+  DISJOINT (set inst.inst_outputs)
+    (ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) fs)
+Proof
+  strip_tac >> conj_tac
+  >- (irule ao_cmp_untouched_reads >> metis_tac[]) >>
+  irule ao_cmp_unselected_writes >> simp[]
+QED
