@@ -126,3 +126,72 @@ Proof
   simp[mk_inst_def]
 QED
 
+
+Theorem alloca_store_offset_alloca_state_rel:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit sz] [q]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
+  not_local_ptr cenv es.scopes q /\ 32 <= n /\ n < dimword(:256) /\
+  run_inst_seq
+    [mk_inst id ALLOCA [Lit (n2w n)] [out];
+     mk_inst (id+1) MSTORE [Var out; Lit value] [];
+     mk_inst (id+2) ADD [Var out; Lit off] [p];
+     mk_inst (id+3) ALLOCA [Lit sz] [q]] s = OK t ==>
+  stmt_state_rel ctx func cenv cx es t
+Proof
+  strip_tac >>
+  Cases_on `step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s` >>
+  gvs[Once run_inst_seq_def] >>
+  rename1 `step_inst_base _ s = OK s1` >>
+  drule_all alloca_mstore_literal_state_rel >>
+  disch_then (qspec_then `value` strip_assume_tac) >>
+  `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 =
+    OK (mstore b value s1)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[Once run_inst_seq_def] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq _ s2` >>
+  `step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 =
+     OK (update_var p (n2w b + off) s2)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, exec_pure2_def, eval_operand_def,
+          Abbr `s2`, mstore_def, lookup_var_def]) >>
+  `stmt_state_rel ctx func cenv cx es (update_var p (n2w b+off) s2)` by
+    (irule stmt_state_rel_update_var >> simp[Abbr `s2`]) >>
+  simp[Once run_inst_seq_def] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq _ s3` >>
+  simp[Once run_inst_seq_def, run_inst_seq_def] >>
+  Cases_on `step_inst_base (mk_inst (id+3) ALLOCA [Lit sz] [q]) s3` >>
+  simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base _ s3 = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def] >> strip_tac >>
+  drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
+  gvs[mk_inst_def] >> metis_tac[]
+QED
+
+Theorem revert_reason_prefix_state_rel:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
+    [STRING #"%" (toString v)]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
+    [STRING #"%" (toString (v+2))]) (fn_insts func) /\
+  (!k. k < 3 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))) /\
+  64+ms < dimword(:256) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t ==>
+  stmt_state_rel ctx func cenv cx es t
+Proof
+  strip_tac >>
+  fs[revert_reason_prefix_def] >>
+  drule_at (Pat `run_inst_seq _ _ = _`) alloca_store_offset_alloca_state_rel >>
+  simp[] >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString v)) /\
+   not_local_ptr cenv es.scopes (STRING #"%" (toString (v+1))) /\
+   not_local_ptr cenv es.scopes (STRING #"%" (toString (v+2)))` by
+    (qpat_x_assum `!k. _` mp_tac >>
+     disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
+       [`0`, `1`, `2`]) >> gvs[ADD_COMM]) >>
+  simp[] >> disch_then irule >> simp[]
+QED
