@@ -73,3 +73,14 @@ QED
 (* JMP rejects the repeated target suffix; single-predecessor JNZ succeeds
    with one available x although the analyzed target list requests two.
    This refutes actual-caller target distinctness, not block-plan replay. *)
+
+(* Test the unbounded height proposal at an undersized deep swap window. *)
+Theorem protected_reorder_height_probe:
+  DISJOINT (set (REPLICATE 18 (Var "x")))
+    (FDOM (init_cleanup_plan_state NONE [] 0 0).ps_spilled) /\
+  LENGTH (SND (reorder_one (dfg_build_function (repeated_use_fn F))
+    (REPLICATE 18 (Var "x")) 0 (Var "x")
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := [Var "x"]))).ps_stack = 18
+Proof
+  EVAL_TAC >> simp[]
+QED
