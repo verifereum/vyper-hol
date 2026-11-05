@@ -34,7 +34,8 @@ Theorem body_attribute_name_counted_prefix:
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     evaluate_type (get_tenv cx) ann = SOME ftv /\
-    eval_operand p t = SOME fw /\ w2n fw + type_memory_size ftv <= t.vs_alloca_next
+    eval_operand p t = SOME fw /\ w2n fw + type_memory_size ftv <= t.vs_alloca_next /\
+    vv_store_bound cx ann (es with gas_obs := []) tv vv t
 Proof
   strip_tac >> drule body_attribute_name_pre >> strip_tac >>
   `expr_sim_pre cenv cx env (Name (StructT sid) id) es` by
@@ -91,6 +92,14 @@ Proof
        fs[attr_offset_def, vv_loc_def, vv_location_def, mk_ptr_def] >>
      drule_all body_attribute_name_capacity >> simp[]) >>
   qexistsl_tac [`PlaceR (MemoryPlace id [AttrSubscript fld])`, `fv`, `t`, `p'`, `fw`] >>
+  `vv_store_bound cx ann (es with gas_obs := [])
+     (PlaceR (MemoryPlace id [AttrSubscript fld]))
+     (LocatedValue ann (mk_ptr p' LocMemory)) t` by
+    (`ann = expr_type (Attribute ann (Name (StructT sid) id) fld)` by
+       simp[expr_type_def] >>
+     pop_assum (fn th => CONV_TAC (RATOR_CONV (ONCE_REWRITE_CONV [th]))) >>
+     irule vv_store_bound_capacity >> simp[expr_type_def, mk_ptr_def] >>
+     fs[mk_ptr_def] >> metis_tac[]) >>
   simp[vv_loc_def, vv_location_def, mk_ptr_def, gas_marked_exec_def,
        gas_marked_path_def] >> fs[mk_ptr_def]
 QED
@@ -106,5 +115,5 @@ Proof
   drule_all body_attribute_name_counted_prefix >> strip_tac >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
-  qexistsl_tac [`INL tv`, `es`, `OK t`] >> gvs[]
+  qexistsl_tac [`INL tv`, `es`, `OK t`] >> gvs[expr_type_def]
 QED

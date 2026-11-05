@@ -92,7 +92,15 @@ Proof
   rpt gen_tac >> strip_tac >> simp[body_expr_mem_ok_def] >>
   rpt gen_tac >> strip_tac >>
   `expr_sim_mem ctx func cenv cx ty (TypeBuiltin v11 tb typ es) es'` by
-    (irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+    (irule expr_sim_mem_word_values >> reverse conj_tac
+     >- (`!t. is_int_type t ==> is_word_type t` by
+           (Cases >> simp[is_word_type_def] >>
+            rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
+         Cases_on `tb` >> gvs[] >>
+         gvs[expr_body_pre_def, well_typed_expr_def,
+          type_builtin_result_ok_def, well_typed_type_builtin_args_def,
+          vyperASTTheory.expr_type_def, is_word_type_def]) >>
+     rpt gen_tac >> strip_tac >>
      qexists_tac `[]` >> irule bound_builtin_mem_prefix >> metis_tac[]) >>
   simp[] >> irule body_expr_vv_sim_mem_stack >> simp[] >> rpt conj_tac
   >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value] >>

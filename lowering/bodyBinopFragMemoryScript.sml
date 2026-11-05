@@ -257,7 +257,9 @@ Theorem compile_bop_typed_sim_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_mem_def] >> rpt gen_tac >> strip_tac >>
-  drule_all lower_value_bop >> strip_tac >>
+  irule expr_sim_mem_word_outcome >>
+  conj_tac >- simp[vyperASTTheory.expr_type_def] >>
+    drule_all lower_value_bop >> strip_tac >>
   qpat_x_assum `!sa sb op. lower_value _ _ _ e1 _ = _ ==> _`
     (drule_then strip_assume_tac) >>
   qpat_x_assum `!sa sb op. lower_value _ _ _ e2 _ = _ ==> _`

@@ -188,7 +188,7 @@ Theorem annassign_memory_store_body_path:
     inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
-    w2n sw + type_memory_size tyv <= s.vs_alloca_next /\
+    w2n sw + val_store_size tyv v <= s.vs_alloca_next /\
     w2n w + type_memory_size tyv <= s.vs_alloca_next /\
     alloca_history func s /\ return_buf_frame d cenv sa s /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -367,6 +367,9 @@ Proof
    w2n w + type_memory_size tyv <= t.vs_alloca_next` by
     (simp[] >> decide_tac) >>
   `w2n w' + type_memory_size tyv <= t.vs_alloca_next` by decide_tac >>
+  `w2n w' + val_store_size tyv v <= t.vs_alloca_next` by
+    (`val_store_size tyv v <= type_memory_size tyv` by
+       metis_tac[val_store_size_le] >> decide_tac) >>
   `not_fresh_at sn p` by simp[] >>
   drule_all annassign_memory_store_body_path >>
   disch_then (qspec_then `a` (qx_choose_then `t2` strip_assume_tac)) >>

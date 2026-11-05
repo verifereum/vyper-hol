@@ -237,7 +237,10 @@ Theorem compile_env_body_sim_mem:
     expr_sim_mem ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_mem_word_values >> reverse conj_tac
+  >- (Cases_on `item` >>
+      gvs[vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def]) >>
+  rpt gen_tac >> strip_tac >>
   drule_all body_env_mem_prefix >> strip_tac >>
   qexistsl_tac [`[]`, `v`, `es`, `t`] >> simp[]
 QED

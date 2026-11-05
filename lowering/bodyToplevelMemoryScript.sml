@@ -62,7 +62,9 @@ Proof
   conj_tac
   >- (match_mp_tac gas_marked_exec_mem_refl >> simp[] >>
       irule toplevel_storage_marked_exec >> simp[]) >>
-  disj1_tac >> simp[] >> irule toplevel_storage_value_post >> simp[]
+  disj1_tac >> simp[] >> conj_tac
+  >- (irule toplevel_storage_value_post >> simp[]) >>
+  irule vv_store_bound_nonmem >> Cases_on `tr` >> simp[mk_ptr_def]
 QED
 
 Theorem compile_toplevel_storage_undecodable_sim_mem:
@@ -99,7 +101,9 @@ Proof
   conj_tac
   >- (match_mp_tac gas_marked_exec_mem_refl >> simp[] >>
       irule toplevel_immutable_marked_exec >> simp[] >> metis_tac[]) >>
-  disj1_tac >> simp[] >> irule toplevel_immutable_post >> simp[] >> metis_tac[]
+  disj1_tac >> simp[] >> conj_tac
+  >- (irule toplevel_immutable_post >> simp[] >> metis_tac[]) >>
+  irule vv_store_bound_nonmem >> simp[mk_ptr_def]
 QED
 
 Theorem compile_toplevel_no_module_sim_mem:

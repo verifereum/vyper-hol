@@ -39,6 +39,8 @@ Proof
   `(mk_ptr p LocMemory).ptr_location = LocMemory` by simp[mk_ptr_def] >>
   drule_all body_unwrap_memory_counted_read >> strip_tac >>
   qexistsl_tac [`[]`, `v`, `es`, `u`] >>
+  reverse conj_tac
+  >- (simp[expr_type_def] >> first_x_assum irule >> fs[]) >>
   simp[gas_value_prefix_def] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>

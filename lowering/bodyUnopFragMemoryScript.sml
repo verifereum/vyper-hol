@@ -359,7 +359,9 @@ Theorem compile_unop_sim_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_mem_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!sa sb op. lower_value _ _ ty (Builtin _ _ _) _ = _ ==> _`
+  irule expr_sim_mem_word_outcome >>
+  conj_tac >- simp[vyperASTTheory.expr_type_def] >>
+    qpat_x_assum `!sa sb op. lower_value _ _ ty (Builtin _ _ _) _ = _ ==> _`
     (drule_then strip_assume_tac) >>
   qpat_x_assum `!sa sb op. lower_value _ _ ty1 e1 _ = _ ==> _`
     (drule_then strip_assume_tac) >>

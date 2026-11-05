@@ -548,6 +548,8 @@ Proof
   (impl_tac >- simp[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
+      PURE_REWRITE_TAC[vyperASTTheory.expr_type_def, expr_store_bound_none,
+                       AND_CLAUSES] >>
       irule send_args_summary_mem >> simp[expr_type_def] >>
       conj_tac
       >- (qexistsl_tac [`addr_op`, `gas_op`, `s3`, `sm`, `success`, `val_op`] >>

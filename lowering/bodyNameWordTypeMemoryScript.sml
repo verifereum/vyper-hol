@@ -157,7 +157,8 @@ Theorem compile_name_wordtype_body_sim_mem:
     is_word_type ann /\ ~word_value_type ann ==>
     expr_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
-  rpt strip_tac >> irule expr_sim_mem_values >> rpt strip_tac >>
+  rpt strip_tac >> irule expr_sim_mem_word_values >>
+  reverse conj_tac >- simp[vyperASTTheory.expr_type_def] >> rpt strip_tac >>
   drule_all body_name_wordtype_mem_prefix >> strip_tac >>
   qexistsl [`[]`, `v`, `es`, `t`] >> simp[]
 QED

@@ -5,7 +5,7 @@ Ancestors
   bodyNameMemoryFacts exprSimSource
   exprSimFieldLayout exprSimAttributeProps exprSimAttributeFields exprSimVVFrame
   exprSimProps valueEncoding compileEnv venomState words list rich_list finite_map
-  exprOperandVar exprSimDefs loweringPosts context
+  exprOperandVar exprSimDefs exprSimMemDefs loweringPosts context
   exprSimUnwrapProps exprSimMemoryPath
   exprLowering exprLoweringProps emitHelper emitHelperProps
   fragExec fragExecMem instMemFrontier allocaHistoryFragment
@@ -781,9 +781,15 @@ Theorem body_unwrap_memory_counted_read:
       expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+      (vv_store_bound cx t es' tv (LocatedValue t p) s ==>
+       expr_store_bound cx t v op u)
 Proof
   strip_tac >>
+  `vv_store_bound cx t es' tv (LocatedValue t p) s ==>
+   vv_store_bound cx t es' (Value v) (LocatedValue t p) s` by
+    (rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
+     metis_tac[]) >>
   `vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s` by
     (drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
@@ -800,9 +806,13 @@ Proof
       disch_then (qspecl_then [`sm.cs_next_id`, `STRING #"%" (toString sm.cs_next_var)`]
         assume_tac) >>
       gvs[run_inst_seq_def] >>
-      drule emit_op_extends >> gvs[same_blocks_def, update_var_def]) >>
+      drule emit_op_extends >> gvs[same_blocks_def, update_var_def,
+                                   expr_store_bound_word]) >>
   simp[comp_return_def] >> strip_tac >> gvs[] >>
-  qexists_tac `s` >> simp[gas_path_mem_rules] >>
-  irule expr_post_of_vv_post_memory >> simp[] >>
-  goal_assum (drule_at Any) >> simp[]
+  qexists_tac `s` >> simp[gas_path_mem_rules] >> conj_tac
+  >- (irule expr_post_of_vv_post_memory >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> first_x_assum drule >>
+  rw[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def] >>
+  metis_tac[]
 QED

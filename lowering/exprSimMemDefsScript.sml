@@ -1,8 +1,57 @@
 (* Memory-counted expression judgments retain allocation history. *)
 Theory exprSimMemDefs
 Ancestors
-  exprSimDefs loweringPosts gasOutcome gasContext allocaHistory
+  exprSimDefs exprSimProps loweringPosts gasOutcome gasContext allocaHistory
   exprLowering compileEnv loweringSlice vyperInterpreter vyperState venomState
+
+(* A memory-backed result lies below the allocation frontier with its
+   bytestring data rounded up to whole words, which is how much a copy of
+   it reads. *)
+Definition expr_store_bound_def:
+  expr_store_bound cx t v op s <=>
+    !tv w. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
+           eval_operand op s = SOME w ==>
+           w2n w + val_store_size tv v <= s.vs_alloca_next
+End
+
+(* The same for a value_vv located in memory. *)
+Definition vv_store_bound_def:
+  vv_store_bound cx t es tv vv s <=>
+    !vt p v tvt w.
+      vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
+      read_result cx tv es = (INL v, es) /\
+      evaluate_type (get_tenv cx) t = SOME tvt /\
+      eval_operand p.ptr_operand s = SOME w ==>
+      w2n w + val_store_size tvt v <= s.vs_alloca_next
+End
+
+Theorem expr_store_bound_word:
+  is_word_type t ==> expr_store_bound cx t v op s
+Proof
+  simp[expr_store_bound_def]
+QED
+
+Theorem expr_store_bound_none:
+  expr_store_bound cx NoneT v (Lit 0w) s
+Proof
+  simp[expr_store_bound_def, vyperValueTheory.evaluate_type_def,
+       eval_operand_def] >>
+  Cases_on `v` >>
+  simp[val_store_size_def, valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem vv_store_bound_stack[simp]:
+  vv_store_bound cx t es tv (StackValue t' op) s
+Proof
+  simp[vv_store_bound_def]
+QED
+
+Theorem vv_store_bound_nonmem:
+  p.ptr_location <> LocMemory ==>
+  vv_store_bound cx t es tv (LocatedValue vt p) s
+Proof
+  simp[vv_store_bound_def]
+QED
 
 Definition expr_sim_mem_def:
   expr_sim_mem ctx func cenv cx ty e es <=>
@@ -19,6 +68,7 @@ Definition expr_sim_mem_def:
         (bind (eval_expr cx e) (read_result cx)) (es, s0)
         (\res ee t. ?v. res = INL v /\
           expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+          expr_store_bound cx (expr_type e) v op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
@@ -39,8 +89,67 @@ Definition expr_vv_sim_mem_def:
       gas_outcome T (cx_tops cx) (ctx, func) (eval_expr cx e) (es, s0)
         (\res ee t. ?tv. res = INL tv /\
           vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+          vv_store_bound cx (expr_type e) ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
         (\res ee r. expr_exit res r)
 End
+
+Theorem gas_outcome_post_mono:
+  gas_outcome m tops p src st Q R /\ (!res ee t. Q res ee t ==> Q' res ee t) ==>
+  gas_outcome m tops p src st Q' R
+Proof
+  PairCases_on `p` >> PairCases_on `st` >>
+  rw[gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  qexists_tac `marks` >> metis_tac[]
+QED
+
+(* A word-typed result's store bound holds vacuously, so a proof of the
+   judgment's other conjuncts suffices. *)
+Theorem expr_sim_mem_word_outcome:
+  is_word_type (expr_type e) /\
+  gas_outcome m tops p src st
+    (\res ee t. ?v. res = INL v /\
+       expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+       t.vs_current_bb = bb /\ t.vs_inst_idx = n /\
+       alloca_history func t /\ a <= t.vs_alloca_next) R ==>
+  gas_outcome m tops p src st
+    (\res ee t. ?v. res = INL v /\
+       expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+       expr_store_bound cx (expr_type e) v op t /\
+       t.vs_current_bb = bb /\ t.vs_inst_idx = n /\
+       alloca_history func t /\ a <= t.vs_alloca_next) R
+Proof
+  strip_tac >> irule gas_outcome_post_mono >>
+  first_x_assum (irule_at Any) >> simp[] >>
+  metis_tac[expr_store_bound_word]
+QED
+
+(* A memory pointer with room below the frontier for its whole type bounds
+   the value it points at. *)
+Theorem vv_store_bound_capacity:
+  vv_post ctx func cenv cx e es sa sb s0 es' tv (LocatedValue vt p) t /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
+  eval_operand p.ptr_operand t = SOME fw /\
+  w2n fw + type_memory_size ftv <= t.vs_alloca_next ==>
+  vv_store_bound cx (expr_type e) es' tv (LocatedValue vt p) t
+Proof
+  rw[vv_store_bound_def, vv_post_def, vv_at_def] >> gvs[] >>
+  drule val_store_size_le >> decide_tac
+QED
+
+Theorem expr_store_bound_capacity:
+  expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+  (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+        ~is_word_type (expr_type e) ==>
+        ?w. eval_operand op t = SOME w /\
+            w2n w + type_memory_size tv <= t.vs_alloca_next) ==>
+  expr_store_bound cx (expr_type e) v op t
+Proof
+  rw[expr_store_bound_def, expr_post_def, expr_val_at_def] >>
+  qpat_x_assum `!tv. _ ==> val_wf _ _ /\ _` (qspec_then `tv` mp_tac) >>
+  qpat_x_assum `!tv. _ ==> ?w. _` (qspec_then `tv` mp_tac) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  drule val_store_size_le >> decide_tac
+QED
