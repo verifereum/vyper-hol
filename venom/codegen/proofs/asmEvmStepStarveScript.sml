@@ -16,7 +16,7 @@ Theory asmEvmStepStarve
 Ancestors
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   asmToBytecodeProofs asmEncodeParse vfmExecution vfmExecutionProp rich_list
-  arithmetic pair vfmOperation asmParseProofs
+  arithmetic pair vfmOperation asmParseProofs spillSim
 Libs
   fcpLib
 
@@ -1304,6 +1304,178 @@ Proof
           simp[vfmStateTheory.recordtype_account_state_seldef_storage_fupd_def]) >>
       simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]) >>
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
+Theorem starve_mcopy_write[local]:
+  !b off src sz n.
+    off + sz <= n /\ src + sz <= n ==>
+    buffer_to_list (buffer_write off
+      (buffer_take src sz (buffer_extend
+        (MAX (buffer_length b) (32 * ((n + 31) DIV 32)) - buffer_length b) b))
+      (buffer_extend
+        (MAX (buffer_length b) (32 * ((n + 31) DIV 32)) - buffer_length b) b)) =
+    TAKE off (asm_expand_memory n (buffer_to_list b)) ++
+    TAKE sz (DROP src (asm_expand_memory n (buffer_to_list b))) ++
+    DROP (off + sz) (asm_expand_memory n (buffer_to_list b))
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `buffer_write off bs expanded` >>
+  `buffer_to_list expanded = asm_expand_memory n (buffer_to_list b)` by
+    (simp[Abbr `expanded`, vfmBufferTheory.buffer_to_list_extend] >>
+     pure_rewrite_tac[GSYM vfmBufferTheory.LENGTH_buffer_to_list] >>
+     rewrite_tac[starve_expand_memory]) >>
+  `n <= buffer_length expanded` by
+    (mp_tac (Q.SPECL [`n`, `buffer_to_list b`]
+      spillSimTheory.asm_expand_memory_length) >>
+     metis_tac[vfmBufferTheory.LENGTH_buffer_to_list]) >>
+  `src + sz <= LENGTH (asm_expand_memory n (buffer_to_list b)) /\
+   off <= buffer_length expanded` by
+    (mp_tac (Q.SPECL [`n`, `buffer_to_list b`]
+      spillSimTheory.asm_expand_memory_length) >> decide_tac) >>
+  `LENGTH bs = sz` by
+    simp[Abbr `bs`, vfmBufferTheory.buffer_take_to_list, listTheory.LENGTH_TAKE_EQ] >>
+  dep_rewrite.DEP_REWRITE_TAC[vfmBufferTheory.buffer_to_list_write_le] >>
+  simp[Abbr `bs`, vfmBufferTheory.buffer_take_to_list]
+QED
+
+Theorem starve_mcopy:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "MCOPY" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_mcopy as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_mcopy_def, LET_THM] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = MCopy` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  Cases_on `h'' = 0w`
+  >- suspend "zero" >>
+  simp[step_def, handle_def, step_inst_def, step_copy_to_memory_def,
+       copy_to_memory_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, max_expansion_range_def, LET_THM] >>
+  Cases_on `w2n h + w2n h'' < w2n h' + w2n h''`
+  >- suspend "src" >> suspend "dst"
+QED
+
+Resume starve_mcopy[zero]:
+  gvs[] >>
+  simp[step_def, handle_def, step_inst_def, step_copy_to_memory_def,
+       copy_to_memory_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, max_expansion_range_def, memory_expansion_info_def,
+       vfmConstantsTheory.word_size_def, consume_gas_def,
+       expand_memory_def, read_memory_def, write_memory_def,
+       assert_def, fail_def, LET_THM] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> disj2_tac >>
+      simp[inc_pc_or_jump_def, LET_THM, bind_def,
+           get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def] >> strip_tac >>
+      simp[asm_evm_rel_def, asm_next_def] >>
+      once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+      simp[opcode_def, asm_inst_size_def, vfmBufferTheory.buffer_take_def,
+           Once vfmBufferTheory.read_bytes_def]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+Resume starve_mcopy[src]:
+  `w2n h < w2n h'` by decide_tac >>
+  `w2n h'' <> 0` by metis_tac[wordsTheory.w2n_eq_0] >>
+  simp[assert_def, fail_def, memory_expansion_info_def,
+       vfmConstantsTheory.word_size_def, consume_gas_def,
+       expand_memory_def, read_memory_def, write_memory_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, LET_THM] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> disj2_tac >>
+      simp[inc_pc_or_jump_def, LET_THM, bind_def,
+           get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qspecl_then [`ctxt.memory`, `w2n h`, `w2n h'`, `w2n h''`,
+                    `w2n h' + w2n h''`] mp_tac starve_mcopy_write >>
+      (impl_tac >- decide_tac) >> strip_tac >>
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def] >> strip_tac >>
+      `MAX (w2n h' + w2n h'') (w2n h + w2n h'') = w2n h' + w2n h''`
+        by simp[MAX_DEF] >>
+      gvs[GSYM ADD_ASSOC] >>
+      simp[asm_evm_rel_def, asm_next_def] >>
+      once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+      simp[opcode_def, asm_inst_size_def]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+Resume starve_mcopy[dst]:
+  `~(w2n h < w2n h')` by decide_tac >>
+  `w2n h'' <> 0` by metis_tac[wordsTheory.w2n_eq_0] >>
+  simp[assert_def, fail_def, memory_expansion_info_def,
+       vfmConstantsTheory.word_size_def, consume_gas_def,
+       expand_memory_def, read_memory_def, write_memory_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, LET_THM] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> disj2_tac >>
+      simp[inc_pc_or_jump_def, LET_THM, bind_def,
+           get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qspecl_then [`ctxt.memory`, `w2n h`, `w2n h'`, `w2n h''`,
+                    `w2n h + w2n h''`] mp_tac starve_mcopy_write >>
+      (impl_tac >- decide_tac) >> strip_tac >>
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def] >> strip_tac >>
+      `MAX (w2n h' + w2n h'') (w2n h + w2n h'') = w2n h + w2n h''`
+        by simp[MAX_DEF] >>
+      gvs[GSYM ADD_ASSOC] >>
+      simp[asm_evm_rel_def, asm_next_def] >>
+      once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+      simp[opcode_def, asm_inst_size_def]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+Finalise starve_mcopy
+
+Theorem starve_memory_dispatch:
+  !prog as es name r.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
+    as.as_pc < LENGTH prog /\ ~(FST (HD es.contexts)).msgParams.static /\
+    EL as.as_pc prog = AsmOp name /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    asm_step_memory name as = SOME r ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case r of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `asm_step_memory _ _ = _` mp_tac >>
+  simp[asm_step_memory_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
+  >- (irule starve_pop >> simp[])
+  >- (irule starve_mload >> simp[])
+  >- (irule starve_mstore >> simp[])
+  >- (irule starve_mstore8 >> simp[])
+  >- (irule starve_mcopy >> simp[])
+  >- (simp[asm_push_val_def] >> drule_all starve_msize >> simp[] >> metis_tac[])
+  >- (irule starve_sload >> simp[] >> metis_tac[])
+  >- (irule starve_sstore >> simp[] >> metis_tac[])
+  >- (irule starve_tload >> simp[])
+  >- (irule starve_tstore >> simp[])
+  >> irule starve_sha3 >> simp[]
 QED
 
 Theorem asm_evm_step_starve:
