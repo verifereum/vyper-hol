@@ -998,6 +998,23 @@ Proof
        bind_def, return_def, raise_def] >> EVAL_TAC
 QED
 
+(* Actual source producer: syntax annotations alone do not exclude mappings.
+   This is a read-totality diagnostic, not a simulation counterexample. *)
+Theorem ifexp_mapping_producer_unreadable[local]:
+  cx.sources = [(cx.txn.target,
+    [(NONE,[HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT BoolT)) NONE])])] /\
+  cx.layouts = [(cx.txn.target, ([( (NONE,"m"),0)],[]))] ==>
+  eval_expr cx (TopLevelName (BaseT BoolT) (NONE,"m")) es =
+    (INL (HashMapRef F 0w (BaseT BoolT) (Type (BaseT BoolT))),es) /\
+  read_result cx (HashMapRef F 0w (BaseT BoolT) (Type (BaseT BoolT))) es =
+    (INR (Error (TypeError "read_result mapping")),es)
+Proof
+  strip_tac >>
+  simp[evaluate_def, lookup_global_def, vyperContextTheory.get_module_code_def,
+       find_var_decl_by_name_def, lookup_var_slot_from_layout_def,
+       bind_def, return_def, lift_option_type_def, read_result_def, raise_def]
+QED
+
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
