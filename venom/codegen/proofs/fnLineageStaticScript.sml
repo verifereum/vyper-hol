@@ -628,6 +628,85 @@ Proof
   simp[MEM_FLAT, MEM_MAP] >> metis_tac[inst_defs_def]
 QED
 
+Theorem phi_disjoint_use_indices[local]:
+  !phis i j v.
+    phi_uses_disjoint phis /\ i < LENGTH phis /\ j < LENGTH phis /\
+    MEM v (inst_uses (EL i phis)) /\ MEM v (inst_uses (EL j phis)) ==> i = j
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> Cases_on `j` >>
+  gvs[phi_uses_disjoint_def, EVERY_MEM] >> metis_tac[EL_MEM]
+QED
+
+Theorem ready_phi_disjoint[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  phi_uses_disjoint (collect_phis bb.bb_instructions)
+Proof
+  strip_tac >> `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `phi_operands_ready fn` by gvs[codegen_ready_fn_def] >>
+  gvs[phi_operands_ready_def] >>
+  Cases_on `EVERY (\bb. NULL (collect_phis bb.bb_instructions)) fn.fn_blocks`
+  >- (gvs[EVERY_MEM, NULL_EQ] >> metis_tac[phi_uses_disjoint_def]) >>
+  gvs[EVERY_MEM, phi_block_ready_def]
+QED
+
+Theorem ready_phi_pair_indices[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  !i j v. i < LENGTH (collect_phis bb.bb_instructions) /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (MAP SND (phi_pairs (EL i (collect_phis bb.bb_instructions)).inst_operands)) /\
+    MEM v (MAP SND (phi_pairs (EL j (collect_phis bb.bb_instructions)).inst_operands))
+    ==> i = j
+Proof
+  strip_tac >> drule_all ready_phi_disjoint >> strip_tac >> rpt strip_tac >>
+  irule phi_disjoint_use_indices >>
+  qexistsl_tac [`collect_phis bb.bb_instructions`, `v`] >> simp[] >>
+  conj_tac >> irule operand_var_in_inst_uses >>
+  gvs[MEM_MAP] >> metis_tac[phi_pairs_mem_var, pairTheory.PAIR]
+QED
+
+Theorem ready_phi_pred_pair[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM pred (cfg_preds_of (cfg_analyze fn) lbl) /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  ?v. MEM (pred,v) (phi_pairs phi.inst_operands)
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `fn_cfg_edge fn pred lbl` by
+    metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond] >>
+  drule_all ready_phi_edge_wf >> simp[phi_edge_uses_wf_def] >> strip_tac >>
+  qpat_x_assum `!pred. fn_cfg_edge _ _ _ <=> _`
+    (qspec_then `pred` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `edge_pair` strip_assume_tac) >>
+  PairCases_on `edge_pair` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ready_phi_input_hypotheses[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
+  (!i j v. i < LENGTH (collect_phis bb.bb_instructions) /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (MAP SND (phi_pairs (EL i (collect_phis bb.bb_instructions)).inst_operands)) /\
+    MEM v (MAP SND (phi_pairs (EL j (collect_phis bb.bb_instructions)).inst_operands))
+    ==> i = j) /\
+  (!phi v. MEM phi (collect_phis bb.bb_instructions) ==>
+    (MEM (Var v) phi.inst_operands <=> MEM v (MAP SND (phi_pairs phi.inst_operands)))) /\
+  (!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+    ?v. MEM (pred,v) (phi_pairs phi.inst_operands)) /\
+  (!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+    ?v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+        MEM v (MAP SND (phi_pairs phi.inst_operands)))
+Proof
+  strip_tac >> conj_tac >- metis_tac[ready_phi_pair_indices] >>
+  conj_tac >- metis_tac[ready_phi_var_pairs] >>
+  conj_tac >- metis_tac[ready_phi_pred_pair] >>
+  rpt strip_tac >> drule_all ready_phi_live_seed >> strip_tac >>
+  metis_tac[ready_phi_var_pairs]
+QED
+
 Theorem input_vars_from_collect[local]:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
