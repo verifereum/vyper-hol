@@ -19,7 +19,7 @@ Ancestors
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
   venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
-  stackPlanOps reorderSim sorting genericInputReady
+  stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
 
 Theorem alias_emit_reorder_consumed_window:
   emit_input_plan opc inputs nl ps = (iops,prepared) /\
@@ -755,6 +755,97 @@ Proof
   simp[alias_var_mass_def, alias_release_dead_spills_domain] >>
   Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[] >>
   Cases_on `MEM x live` >> simp[]
+QED
+
+Theorem alias_emit_ops_inventory:
+  (SND (generate_emit_ops inst topics ps)).ps_stack = ps.ps_stack /\
+  (SND (generate_emit_ops inst topics ps)).ps_spilled = ps.ps_spilled
+Proof
+  rw[generate_emit_ops_def] >>
+  Cases_on `venom_to_evm_name inst.inst_opcode` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  gvs[asmIRTheory.venom_to_evm_name_def, fresh_label_def]
+  >~ [`FILTER is_label_operand inst.inst_operands`] >- suspend "jnz"
+  >~ [`FILTER is_label_operand inst.inst_operands`] >- suspend "jnz"
+  >~ [`HD inst.inst_operands`] >- suspend "invoke"
+  >~ [`HD inst.inst_operands`] >- suspend "invoke"
+  >> suspend "jmp"
+QED
+
+Resume alias_emit_ops_inventory[jnz]:
+  markerLib.RESUME_TAC >>
+  Cases_on `FILTER is_label_operand inst.inst_operands` >> simp[] >>
+  rename1 `h::t` >> Cases_on `h` >> simp[] >>
+  Cases_on `t` >> simp[] >> rename1 `h::t` >>
+  Cases_on `h` >> simp[] >> Cases_on `t` >> simp[]
+QED
+
+Resume alias_emit_ops_inventory[invoke]:
+  markerLib.RESUME_TAC >>
+  Cases_on `HD inst.inst_operands` >> simp[]
+QED
+
+Resume alias_emit_ops_inventory[jmp]:
+  markerLib.RESUME_TAC >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename1 `h::t` >> Cases_on `h` >> simp[] >> Cases_on `t` >> simp[]
+QED
+
+Finalise alias_emit_ops_inventory
+
+Theorem alias_var_mass_emit_ops:
+  alias_var_mass x (SND (generate_emit_ops inst topics ps)) = alias_var_mass x ps
+Proof
+  simp[alias_var_mass_def, alias_emit_ops_inventory]
+QED
+
+Theorem alias_var_mass_pop_foldl_body:
+  alias_var_mass x (SND (pop_foldl_body (ops,ps) v)) <= alias_var_mass x ps
+Proof
+  simp[pop_foldl_body_def] >>
+  Cases_on `stack_get_depth v ps.ps_stack` >> simp[] >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  IF_CASES_TAC >> simp[]
+  >- (mp_tac (Q.INST [`n` |-> `1`] alias_var_mass_pop) >> decide_tac) >>
+  pairarg_tac >> simp[] >>
+  `alias_var_mass x ps1 = alias_var_mass x ps` by
+    metis_tac[alias_var_mass_swap, pairTheory.SND] >>
+  mp_tac (Q.INST [`n` |-> `1`, `ps` |-> `ps1`] alias_var_mass_pop) >>
+  decide_tac
+QED
+
+Theorem alias_var_mass_pop_fold:
+  !xs ops ps.
+    alias_var_mass x (SND (FOLDL pop_foldl_body (ops,ps) xs)) <= alias_var_mass x ps
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `pop_foldl_body (ops,ps) h` >> simp[] >>
+  first_x_assum (qspecl_then [`q`, `r`] mp_tac) >>
+  mp_tac (Q.INST [`v` |-> `h`] alias_var_mass_pop_foldl_body) >>
+  simp[] >> decide_tac
+QED
+
+Theorem alias_var_mass_popmany_individual:
+  alias_var_mass x (SND (popmany_individual to_pop ps)) <= alias_var_mass x ps
+Proof
+  simp[popmany_individual_eq_foldl, alias_var_mass_pop_fold]
+QED
+
+Theorem alias_var_mass_popmany:
+  alias_var_mass x (SND (popmany_plan to_pop ps)) <= alias_var_mass x ps
+Proof
+  Cases_on `to_pop` >- simp[popmany_plan_def] >>
+  simp[popmany_plan_def] >>
+  IF_CASES_TAC >> simp[alias_var_mass_popmany_individual] >>
+  IF_CASES_TAC >> simp[alias_var_mass_popmany_individual] >>
+  `LENGTH (h::t) < LENGTH ps.ps_stack` by
+    (irule contiguous_top_stack_bound >> simp[]) >>
+  fs[] >>
+  pairarg_tac >> simp[] >>
+  `alias_var_mass x ps' = alias_var_mass x ps` by
+    metis_tac[alias_var_mass_swap, pairTheory.SND] >>
+  mp_tac (Q.INST [`n` |-> `SUC (LENGTH (t:operand list))`, `ps` |-> `ps'`] alias_var_mass_pop) >>
+  decide_tac
 QED
 
 Theorem alias_var_mass_optimistic_swap:
