@@ -657,3 +657,37 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   drule_all target_memory_dynamic_array_abort_path >> simp[]
 QED
+
+Theorem target_typed_index_range:
+  evaluate_type tenv ity = SOME itv /\ value_has_type itv (IntV i) /\
+  n < dimword (:256) ==>
+  (idx_in_range (is_signed_type ity) (i2w i) (n2w n) <=>
+   0 <= i /\ Num i < n)
+Proof
+  Cases_on `ity`
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[evaluate_type_def, value_has_type_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[value_has_type_def]
+      >- (`Num i < dimword (:256)` by
+            (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n'` >>
+             simp[dimword_def, bitTheory.TWOEXP_MONO2]) >>
+          `i = &Num i` by simp[integerTheory.INT_OF_NUM] >>
+          qpat_x_assum `i = &Num i` SUBST1_TAC >>
+          simp[idx_in_range_def, is_signed_type_def, integer_wordTheory.i2w_pos,
+               w2n_n2w, LESS_MOD]) >>
+      `w2i (i2w i : bytes32) = i` by
+        metis_tac[vyperArithTheory.w2i_i2w_within_signed] >>
+      simp[idx_in_range_def, is_signed_type_def, integer_wordTheory.WORD_LTi, integer_wordTheory.word_0_w2i,
+           w2n_n2w, LESS_MOD] >>
+      Cases_on `0 <= i`
+      >- (`Num i < dimword (:256)` by
+            (drule_all vyperArithTheory.within_int_bound_in_word_range >>
+             simp[INT_MAX_def, INT_MIN_def, dimword_def] >>
+             intLib.ARITH_TAC) >>
+          `i = &Num i` by simp[integerTheory.INT_OF_NUM] >>
+          qpat_x_assum `i = &Num i` SUBST1_TAC >>
+          simp[integer_wordTheory.i2w_pos, w2n_n2w, LESS_MOD]) >>
+      intLib.ARITH_TAC) >>
+  simp[evaluate_type_def, value_has_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[value_has_type_def]
+QED
