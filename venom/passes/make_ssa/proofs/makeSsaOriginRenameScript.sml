@@ -1,7 +1,7 @@
 Theory makeSsaOriginRename
 Ancestors
   makeSsaOriginInsert makeSsaOriginInvariant makeSsaCurrentDefs
-  makeSsaCurrentProps irSupply venomInst list alist
+  makeSsaCurrentProps makeSsaCurrentInduct irSupply venomInst list alist
 
 Theorem origin_rename_operands:
   !ops rs orig. origin_coherent orig (SND rs) ==>
@@ -223,3 +223,83 @@ Proof
   irule update_current_succ_phis_vars_covered >>
   metis_tac[origin_stacks_values_covered]
 QED
+
+Theorem origin_rename_tree:
+  (!tree s rs bbs sm ctrs' s' bbs' fn orig.
+    rename_current_blocks s rs bbs sm tree = (ctrs',s',bbs') /\
+    EVERY (\bb. EVERY (origin_before_cleanup fn orig) bb.bb_instructions) bbs /\
+    EVERY (\bb. EVERY (origin_inst_covered s) bb.bb_instructions) bbs /\
+    origin_coherent orig (SND rs) /\ origin_stacks_covered s (SND rs) ==>
+    ?orig'. origin_agrees s orig orig' /\ ssa_supply_extends s s' /\
+      EVERY (\bb. EVERY (origin_before_cleanup fn orig') bb.bb_instructions) bbs' /\
+      EVERY (\bb. EVERY (origin_inst_covered s') bb.bb_instructions) bbs') /\
+  (!trees s ctrs stacks bbs sm ctrs' s' bbs' fn orig.
+    rename_current_children s ctrs stacks bbs sm trees = (ctrs',s',bbs') /\
+    EVERY (\bb. EVERY (origin_before_cleanup fn orig) bb.bb_instructions) bbs /\
+    EVERY (\bb. EVERY (origin_inst_covered s) bb.bb_instructions) bbs /\
+    origin_coherent orig stacks /\ origin_stacks_covered s stacks ==>
+    ?orig'. origin_agrees s orig orig' /\ ssa_supply_extends s s' /\
+      EVERY (\bb. EVERY (origin_before_cleanup fn orig') bb.bb_instructions) bbs' /\
+      EVERY (\bb. EVERY (origin_inst_covered s') bb.bb_instructions) bbs')
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- suspend "node"
+  >- (simp[rename_current_blocks_def] >> rpt strip_tac >> gvs[] >>
+      qexists_tac `orig` >> simp[origin_agrees_refl, ssa_supply_extends_refl]) >>
+  suspend "children"
+QED
+
+Resume origin_rename_tree[node]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[rename_current_blocks_def] >>
+  Cases_on `lookup_block lbl bbs` >> simp[]
+  >- (rpt strip_tac >> gvs[] >> qexists_tac `orig` >>
+      simp[origin_agrees_refl, ssa_supply_extends_refl]) >>
+  pairarg_tac >> gvs[] >> rpt strip_tac >>
+  `MEM x bbs` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `EVERY (origin_before_cleanup fn orig) x.bb_instructions /\
+   EVERY (origin_inst_covered s) x.bb_instructions` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all origin_rename_insts >> strip_tac >>
+  `EVERY (\bb. EVERY (origin_before_cleanup fn orig') bb.bb_instructions) bbs` by
+    (gvs[EVERY_MEM] >> metis_tac[origin_before_cleanup_transport]) >>
+  `EVERY (\bb. EVERY (origin_inst_covered s1) bb.bb_instructions) bbs` by
+    (gvs[EVERY_MEM] >> metis_tac[origin_inst_covered_extends]) >>
+  qabbrev_tac `bs1 = replace_block lbl (x with bb_instructions := insts') bbs` >>
+  `EVERY (\bb. EVERY (origin_before_cleanup fn orig') bb.bb_instructions) bs1` by
+    (simp[Abbr `bs1`] >> irule origin_replace_block_every >> simp[]) >>
+  `EVERY (\bb. EVERY (origin_inst_covered s1) bb.bb_instructions) bs1` by
+    (simp[Abbr `bs1`] >> irule origin_replace_block_every >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `update_current_succ_phis rs1 lbl bs1 succs` >>
+  `EVERY (\bb. EVERY (origin_before_cleanup fn orig') bb.bb_instructions)
+      (update_current_succ_phis rs1 lbl bs1 succs)` by
+    (irule origin_update_succ_phis >> simp[]) >>
+  `EVERY (\bb. EVERY (origin_inst_covered s1) bb.bb_instructions)
+      (update_current_succ_phis rs1 lbl bs1 succs)` by
+    (irule origin_update_succ_phis_covered >> simp[]) >>
+  first_x_assum drule >> disch_then (qspecl_then [`fn`, `orig'`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `orig''` >> simp[] >>
+  metis_tac[origin_agrees_trans, origin_agrees_restrict, ssa_supply_extends_trans]
+QED
+
+Resume origin_rename_tree[children]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!s rs bbs sm ctrs' s' bbs' fn orig.
+    rename_current_blocks _ _ _ _ _ = _ /\ _ ==> _` $ mk_asm "child" >>
+  qpat_x_assum `!s ctrs stacks bbs sm ctrs' s' bbs' fn orig.
+    rename_current_children _ _ _ _ _ _ = _ /\ _ ==> _` $ mk_asm "rest" >>
+  rpt gen_tac >> simp[rename_current_blocks_def] >>
+  pairarg_tac >> gvs[] >> rpt strip_tac >>
+  asm "child" drule >> disch_then (qspecl_then [`fn`, `orig`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `origin_coherent orig' stacks` by metis_tac[origin_coherent_transport] >>
+  `origin_stacks_covered s'' stacks` by metis_tac[origin_stacks_covered_extends] >>
+  asm "rest" drule >> disch_then (qspecl_then [`fn`, `orig'`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  asm_x "child" kall_tac >> asm_x "rest" kall_tac >>
+  qexists_tac `orig''` >> simp[] >>
+  metis_tac[origin_agrees_trans, origin_agrees_restrict, ssa_supply_extends_trans]
+QED
+
+Finalise origin_rename_tree
