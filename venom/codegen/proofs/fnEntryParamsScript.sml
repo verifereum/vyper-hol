@@ -427,5 +427,32 @@ Theorem entry_prefix_frame_sim:
          operand_val (frame_view fn ra vs_p) lo at =
          operand_val (frame_view fn ra vs_p) lo (normalize_operand dfg [] at))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `vp = entry_bind_pairs
+    (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+    with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` >>
+  `vp = entry_bind_pairs
+    (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+    with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
+    simp[Abbr `vp`] >>
+  drule_all entry_prefix_asm >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+   exec_block fuel ctx (HD fn.fn_blocks) vp` by
+    (unabbrev_all_tac >> irule bounded_entry_param_skip >> metis_tac[]) >>
+  `!inst. active_inst fn inst vp ==> Inv ctx fn inst vp` by
+    (simp[Abbr `vp`] >>
+     drule entry_prefix_inv >>
+     disch_then drule >> simp[] >>
+     disch_then drule >> disch_then drule >> simp[] >>
+     disch_then (qspec_then `LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` mp_tac) >>
+     simp[]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    normalize_operand dfg [] at = at` by
+    (rpt strip_tac >> gvs[] >> irule entry_plan_normalize >> metis_tac[]) >>
+  qexistsl [`n`, `a'`, `vp`] >>
+  pure_asm_rewrite_tac[] >> simp[NoAsms, entry_bind_pairs_normal] >>
+  rpt strip_tac >>
+  `normalize_operand (dfg_build_function fn) [] at = at` by metis_tac[] >>
+  pure_asm_rewrite_tac[] >> REFL_TAC
 QED
