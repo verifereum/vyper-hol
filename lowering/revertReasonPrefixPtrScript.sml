@@ -723,3 +723,193 @@ Proof
   simp[expr_val_at_def, eval_operand_mstore, local_region_def,
     lookup_var_mstore, mstore_def]
 QED
+
+Theorem alloca_store_offset_expr_frames:
+  expr_val_at cenv cx ty sa sb es v op s /\
+  not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  (!x. op = Var x ==> x <> out /\ x <> p) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 = OK s2 /\
+  step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 = OK s3 /\
+  lookup_var out s1 = SOME a ==>
+  expr_val_at cenv cx ty sa sb es v op s3
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_val_at cenv cx ty sa sb es v op s1` by
+    (irule alloca_step_expr_val_at >> simp[] >> metis_tac[]) >>
+  drule_all store_offset_endpoint >> strip_tac >>
+  qpat_x_assum `s3 = _` SUBST_ALL_TAC >>
+  irule expr_val_at_update_nonlocal >> simp[expr_val_at_mstore] >> metis_tac[]
+QED
+
+Theorem alloca_store_offset_ptr_val_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+  ptr_val_ok cx ty v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  32 <= n /\ n < dimword(:256) /\
+  (!x. op = Var x ==> x <> out /\ x <> p) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 = OK s2 /\
+  step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 = OK s3 /\
+  G1 = step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1 /\
+  tn1 = step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn /\
+  G2 = step_prov PG G1 (mk_inst (id+1) MSTORE [Var out; Lit value] []) s2 /\
+  tn2 = step_taint (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 s2 tn1 ==>
+  ptr_val_ok cx ty v op
+    (step_prov PG G2 (mk_inst (id+2) ADD [Var out; Lit off] [p]) s3)
+    (step_taint (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 s3 tn2) s3
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all alloca_step_site >> strip_tac >>
+  `lookup_var out s1 = SOME (n2w b)` by gvs[eval_operand_def] >>
+  drule_all store_offset_endpoint >> strip_tac >>
+  `ptr_val_ok cx ty v op G2 tn2 s2` by
+    (qpat_x_assum `G2 = _` SUBST_ALL_TAC >>
+     qpat_x_assum `tn2 = _` SUBST_ALL_TAC >>
+     qpat_x_assum `s2 = _` SUBST_ALL_TAC >>
+     irule alloca_mstore_literal_ptr_val_ok >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `s3 = _` SUBST_ALL_TAC >>
+  irule add_step_ptr_val_ok >> metis_tac[]
+QED
+
+Theorem alloca_store_offset_alloca_ptr_val_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+  ptr_val_ok cx ty v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
+  not_local_ptr cenv es.scopes q /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  (id+3 < sa.cs_next_id \/ sb.cs_next_id <= id+3) /\
+  32 <= n /\ n < dimword(:256) /\ sz < dimword(:256) /\
+  (!x. op = Var x ==> x <> out /\ x <> p /\ x <> q) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 = OK s2 /\
+  step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 = OK s3 /\
+  step_inst_base (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) s3 = OK t /\
+  G1 = step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1 /\
+  tn1 = step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn /\
+  G2 = step_prov PG G1 (mk_inst (id+1) MSTORE [Var out; Lit value] []) s2 /\
+  tn2 = step_taint (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 s2 tn1 /\
+  G3 = step_prov PG G2 (mk_inst (id+2) ADD [Var out; Lit off] [p]) s3 /\
+  tn3 = step_taint (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 s3 tn2 ==>
+  ptr_val_ok cx ty v op
+    (step_prov PG G3 (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) t)
+    (step_taint (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) s3 t tn3) t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `stmt_state_rel ctx func cenv cx es s3` by
+    (irule alloca_store_offset_state_rel >> simp[] >> metis_tac[]) >>
+  `ptr_val_ok cx ty v op G3 tn3 s3` by
+    (qpat_x_assum `G3 = _` SUBST_ALL_TAC >>
+     qpat_x_assum `tn3 = _` SUBST_ALL_TAC >>
+     irule alloca_store_offset_ptr_val_ok >> simp[] >> metis_tac[]) >>
+  `?b. FLOOKUP s1.vs_allocas id = SOME (b,n) /\
+       b+n < dimword(:256) /\ eval_operand (Var out) s1 = SOME (n2w b)` by
+    (irule alloca_step_site >> metis_tac[]) >>
+  `lookup_var out s1 = SOME (n2w b)` by gvs[eval_operand_def] >>
+  `expr_val_at cenv cx ty sa sb es v op s3` by
+    (irule alloca_store_offset_expr_frames >> simp[] >> metis_tac[]) >>
+  irule alloca_step_ptr_val_ok >> simp[] >> metis_tac[]
+QED
+
+Theorem alloca_store_offset_alloca_run_ptr_val_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+  ptr_val_ok cx ty v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
+  not_local_ptr cenv es.scopes q /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  (id+3 < sa.cs_next_id \/ sb.cs_next_id <= id+3) /\
+  32 <= n /\ n < dimword(:256) /\ sz < dimword(:256) /\
+  (!x. op = Var x ==> x <> out /\ x <> p /\ x <> q) /\
+  run_inst_seq
+    [mk_inst id ALLOCA [Lit (n2w n)] [out];
+     mk_inst (id+1) MSTORE [Var out; Lit value] [];
+     mk_inst (id+2) ADD [Var out; Lit off] [p];
+     mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]] s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn
+    [mk_inst id ALLOCA [Lit (n2w n)] [out];
+     mk_inst (id+1) MSTORE [Var out; Lit value] [];
+     mk_inst (id+2) ADD [Var out; Lit off] [p];
+     mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]] s Gf tnf ==>
+  ptr_val_ok cx ty v op Gf tnf t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i;j;k;l] s` >>
+  drule run_inst_seq_four_endpoint >> strip_tac >>
+  qabbrev_tac `G1 = step_prov PG G i s1` >>
+  qabbrev_tac `tn1 = step_taint i s s1 tn` >>
+  qabbrev_tac `G2 = step_prov PG G1 j s2` >>
+  qabbrev_tac `tn2 = step_taint j s1 s2 tn1` >>
+  qabbrev_tac `G3 = step_prov PG G2 k s3` >>
+  qabbrev_tac `tn3 = step_taint k s2 s3 tn2` >>
+  qabbrev_tac `G4 = step_prov PG G3 l t` >>
+  qabbrev_tac `tn4 = step_taint l s3 t tn3` >>
+  `~is_terminator j.inst_opcode /\ ~is_terminator k.inst_opcode /\
+   ~is_terminator l.inst_opcode` by
+    simp[Abbr `j`, Abbr `k`, Abbr `l`, mk_inst_def, is_terminator_def] >>
+  `Gf = G4 /\ tnf = tn4` by
+    (irule inst_seq_ptr_four_endpoint >>
+     goal_assum (drule_at Any) >>
+     simp[Abbr `G1`, Abbr `tn1`, Abbr `G2`, Abbr `tn2`,
+          Abbr `G3`, Abbr `tn3`, Abbr `G4`, Abbr `tn4`] >> metis_tac[]) >>
+  qpat_x_assum `Gf = _` SUBST_ALL_TAC >>
+  qpat_x_assum `tnf = _` SUBST_ALL_TAC >>
+  fs[Abbr `i`, Abbr `j`, Abbr `k`, Abbr `l`] >>
+  map_every (fn pat => qpat_assum pat
+    (assume_tac o REWRITE_RULE[markerTheory.Abbrev_def]))
+    [`Abbrev (G1 = _)`, `Abbrev (tn1 = _)`,
+     `Abbrev (G2 = _)`, `Abbrev (tn2 = _)`,
+     `Abbrev (G3 = _)`, `Abbrev (tn3 = _)`] >>
+  qpat_x_assum `Abbrev (G4 = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qpat_x_assum `Abbrev (tn4 = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  irule alloca_store_offset_alloca_ptr_val_ok >> metis_tac[]
+QED
+
+Theorem revert_reason_prefix_ptr_val_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+  ptr_val_ok cx ty v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
+    [STRING #"%" (toString vn)]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
+    [STRING #"%" (toString (vn+2))]) (fn_insts func) /\
+  (!k. k < 3 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (vn+k)))) /\
+  (id+3 < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  64+ms < dimword(:256) /\
+  (!x k. op = Var x /\ k < 3 ==> x <> STRING #"%" (toString (vn+k))) /\
+  run_inst_seq (revert_reason_prefix id vn ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id vn ms) s Gf tnf ==>
+  ptr_val_ok cx ty v op Gf tnf t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[revert_reason_prefix_def] >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString vn)) /\
+   not_local_ptr cenv es.scopes (STRING #"%" (toString (vn+1))) /\
+   not_local_ptr cenv es.scopes (STRING #"%" (toString (vn+2)))` by
+    (qpat_x_assum `!k. k < 3 ==> _` mp_tac >>
+     disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
+       [`0`, `1`, `2`]) >> gvs[ADD_COMM]) >>
+  `ms < dimword(:256) /\ 32 <= ms+64 /\
+   (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+   (id+3 < sa.cs_next_id \/ sb.cs_next_id <= id+3)` by decide_tac >>
+  `!x. op = Var x ==> x <> STRING #"%" (toString vn) /\
+    x <> STRING #"%" (toString (vn+1)) /\
+    x <> STRING #"%" (toString (vn+2))` by
+    (qpat_x_assum `!k. op = _ ==> _` mp_tac >>
+     disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
+       [`0`, `1`, `2`]) >> gvs[ADD_COMM] >> metis_tac[]) >>
+  irule alloca_store_offset_alloca_run_ptr_val_ok >>
+  qpat_assum `run_inst_seq _ _ = OK _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
