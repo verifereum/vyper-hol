@@ -18,7 +18,7 @@ QED
 
 (* Restatement of private exprSimECArith.ec_point_footprint;
    proof from alan-ref/base/exprSimECArithScript.sml.txt. *)
-Theorem ec_point_footprint[local]:
+Theorem ec_point_footprint:
   val_footprint (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v = 64
 Proof
   Cases_on `v` >> simp[val_footprint_def, type_memory_size_def]
