@@ -734,3 +734,350 @@ Proof
     strip_tac >> gvs[] >> qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[]
 QED
 
+
+Theorem current_table_destination_filter:
+  !table. EVERY (\(e,x,y). if e = d then P x y else T) table <=>
+    EVERY (\(e,x,y). P x y) (FILTER (\(e,x,y). e = d) table)
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >> simp[] >>
+  Cases_on `h0 = d` >> simp[]
+QED
+
+Definition current_table_row_check_def:
+  current_table_row_check fn fn' table c d k =
+    EVERY (\(e,x,y).
+      case current_table_pull fn fn' c k x y of
+        SOME (CurrentStaticRead u,CurrentStaticRead v) => MEM (c,u,v) table
+      | _ => T) (FILTER (\(e,x,y). e = d) table)
+End
+
+Theorem current_sparse_rows:
+  current_sparse_closed_check fn fn' table edges <=>
+    EVERY (\(c,d,k). current_table_row_check fn fn' table c d k) edges
+Proof
+  simp[current_sparse_closed_check_def, current_table_row_check_def,
+    current_table_destination_filter]
+QED
+
+Theorem current_backedges_row_00:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "" "E" 0 0) (CurrentStaticCut "" "E" 0 0) 0
+Proof
+  rewrite_tac[current_table_row_check_def] >>
+  CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_finite_backedges_source_blocks,
+    current_finite_backedges_target_blocks, history_probe_backedges_target_def,
+    lookup_block_def, FIND_def, INDEX_FIND_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def] >>
+  EVAL_TAC
+QED
+
+Theorem current_backedges_row_01:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "" "E" 0 0) (CurrentStaticCut "" "E" 1 1) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_02:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "" "E" 1 1) (CurrentStaticCut "" "E" 2 2) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_03:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "" "E" 2 2) (CurrentStaticCut "" "E" 3 3) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_04:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "" "E" 3 3) (CurrentStaticCut "" "E" 4 4) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_05:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "" "E" 4 4) (CurrentStaticCut "E" "H" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_06:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "D" 0 0) (CurrentStaticCut "H" "D" 0 0) 0
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_07:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "D" 0 0) (CurrentStaticCut "H" "D" 1 1) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_08:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "D" 1 1) (CurrentStaticCut "H" "D" 2 2) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_09:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "D" 2 2) (CurrentStaticCut "D" "H" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_10:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "S" 0 0) (CurrentStaticCut "H" "S" 0 0) 0
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_11:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "S" 0 0) (CurrentStaticCut "H" "S" 1 1) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_12:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "H" "S" 1 1) (CurrentStaticCut "S" "H" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_13:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "E" "H" 0 0) (CurrentStaticCut "E" "H" 1 2) 0
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_14:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "E" "H" 1 2) (CurrentStaticCut "E" "H" 1 3) 1
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_15:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "E" "H" 1 3) (CurrentStaticCut "E" "H" 2 4) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_16:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "E" "H" 2 4) (CurrentStaticCut "E" "H" 3 5) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_17:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "E" "H" 3 5) (CurrentStaticCut "H" "D" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_18:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "E" "H" 3 5) (CurrentStaticCut "H" "S" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_19:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "D" "H" 0 0) (CurrentStaticCut "D" "H" 1 2) 0
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_20:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "D" "H" 1 2) (CurrentStaticCut "D" "H" 1 3) 1
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_21:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "D" "H" 1 3) (CurrentStaticCut "D" "H" 2 4) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_22:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "D" "H" 2 4) (CurrentStaticCut "D" "H" 3 5) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_23:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "D" "H" 3 5) (CurrentStaticCut "H" "D" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_24:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "D" "H" 3 5) (CurrentStaticCut "H" "S" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_row_25:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "S" "H" 0 0) (CurrentStaticCut "S" "H" 1 2) 0
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_26:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "S" "H" 1 2) (CurrentStaticCut "S" "H" 1 3) 1
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_27:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "S" "H" 1 3) (CurrentStaticCut "S" "H" 2 4) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_28:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "S" "H" 2 4) (CurrentStaticCut "S" "H" 3 5) 2
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_29:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "S" "H" 3 5) (CurrentStaticCut "H" "D" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+Theorem current_backedges_row_30:
+  current_table_row_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table (CurrentStaticCut "S" "H" 3 5) (CurrentStaticCut "H" "S" 0 0) 3
+Proof
+  rewrite_tac[current_table_row_check_def] >> CONV_TAC (RAND_CONV EVAL) >>
+  simp[current_table_pull_def, current_backedges_lookups,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    history_probe_bb_def, current_probe_inst_def] >> EVAL_TAC
+QED
+
+Theorem current_backedges_sparse_closed:
+  current_sparse_closed_check history_probe_backedges (current_finite_target history_probe_backedges)
+    current_backedges_demand_table current_backedges_sparse_edges
+Proof
+  simp[current_sparse_rows, current_backedges_sparse_edges_def,
+    current_backedges_row_00, current_backedges_row_01, current_backedges_row_02,
+    current_backedges_row_03, current_backedges_row_04, current_backedges_row_05,
+    current_backedges_row_06, current_backedges_row_07, current_backedges_row_08,
+    current_backedges_row_09, current_backedges_row_10, current_backedges_row_11,
+    current_backedges_row_12, current_backedges_row_13, current_backedges_row_14,
+    current_backedges_row_15, current_backedges_row_16, current_backedges_row_17,
+    current_backedges_row_18, current_backedges_row_19, current_backedges_row_20,
+    current_backedges_row_21, current_backedges_row_22, current_backedges_row_23,
+    current_backedges_row_24, current_backedges_row_25, current_backedges_row_26,
+    current_backedges_row_27, current_backedges_row_28, current_backedges_row_29,
+    current_backedges_row_30]
+QED
+
+Theorem current_backedges_demand_contained:
+  current_finite_demand history_probe_backedges (current_finite_target history_probe_backedges)
+    (current_finite_history history_probe_backedges) c x y ==>
+  MEM (c,x,y) current_backedges_demand_table
+Proof
+  map_every qid_spec_tac [`y`,`x`,`c`] >>
+  match_mp_tac current_finite_table_contains >> conj_tac
+  >- metis_tac[current_backedges_table_seeds] >>
+  match_mp_tac (Q.INST [`edges` |-> `current_backedges_sparse_edges`]
+    current_sparse_closed_check_sound) >>
+  simp[current_backedges_sparse_closed, current_backedges_sparse_coverage]
+QED
