@@ -1,6 +1,7 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
+  fnLineageInv fnPlanPrefix list stackPlanGen
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -71,4 +72,30 @@ Theorem regional_lineage_join_input_physical:
 Proof
   rpt gen_tac >> strip_tac >> drule_all lineage_entry_join_stack >>
   strip_tac >> gvs[listTheory.MEM_APPEND, listTheory.MEM_MAP] >> metis_tac[]
+QED
+
+Theorem regional_lineage_join_target_distinct:
+  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred pred_bb bb ps.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred bb.bb_label ps ==>
+    ALL_DISTINCT (MAP Var (input_vars_from pred bb.bb_instructions
+                            (live_vars_at liveness bb.bb_label 0)))
+Proof
+  rpt strip_tac >>
+  drule_all lineage_entry_inventory >> strip_tac >>
+  drule_all lineage_entry_join_stack >> strip_tac >>
+  gvs[generated_plan_state_wf_marked_def, FILTER_APPEND_DISTRIB,
+      dead_stack_marker_def, EVERY_FILTER, ALL_DISTINCT_APPEND] >>
+  `FILTER (\op. op <> Label "")
+     (MAP Var (input_vars_from pred bb.bb_instructions
+       (live_vars_at (liveness_analyze fn) bb.bb_label 0))) =
+   MAP Var (input_vars_from pred bb.bb_instructions
+       (live_vars_at (liveness_analyze fn) bb.bb_label 0))`
+    by simp[FILTER_EQ_ID, EVERY_MAP] >>
+  gvs[]
 QED
