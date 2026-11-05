@@ -11,7 +11,7 @@
 
 Theory fnFrameDeepHalt
 Ancestors
-  deepResidualSim fnPlanPrefix fnFrameTerminal genFrameSim frameRel contextCodegenRel
+  deepResidualBudget deepResidualSim fnPlanPrefix fnFrameTerminal genFrameSim frameRel contextCodegenRel
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs
