@@ -1168,7 +1168,7 @@ Proof
   BasicProvers.every_case_tac >> simp[]
 QED
 
-Theorem run_from_fuel_mono[local]:
+Theorem run_from_fuel_mono:
   !fuel m ctx fn s r.
     run_from fuel ctx fn s = r /\ (!e. r <> Error e) /\ fuel <= m ==>
     run_from m ctx fn s = r
@@ -1185,6 +1185,18 @@ Proof
   `exec_block m ctx bb s = exec_block fuel ctx bb s` by
     (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `fuel` >> simp[]) >>
   simp[]
+QED
+
+Theorem run_from_abort_no_halt:
+  !n ctx fn s a u. run_from n ctx fn s = Abort a u ==>
+    !m t. run_from m ctx fn s <> Halt t
+Proof
+  rpt strip_tac >>
+  `run_from (MAX n m) ctx fn s = Abort a u` by
+    (irule run_from_fuel_mono >> simp[] >> qexists_tac `n` >> simp[]) >>
+  `run_from (MAX n m) ctx fn s = Halt t` by
+    (irule run_from_fuel_mono >> simp[] >> qexists_tac `m` >> simp[]) >>
+  gvs[]
 QED
 
 Theorem run_from_step_invoke[local]:
