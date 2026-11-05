@@ -3,7 +3,7 @@ Theory exprSimExtCallOperands
 Ancestors
   exprSim exprSimHyps compileEnv context finite_map list arithmetic
   venomState vyperState vyperValueOperation exprSimOps freshWrites exprSimPop
-  exprPlaceTransport exprTypedOperand
+  exprPlaceTransport exprTypedOperand exprStorageOrigin
 
 Definition operand_frame_def:
   operand_frame cenv es s cut es' s' <=>
@@ -881,3 +881,21 @@ val _ = ``
   stmt_state_rel ctx func ce cx esK sK /\ expr_sim_inv ce cx env esK /\
   fn_has_code a0 a3 func /\ local_ptrs_reserved ce a3
 ``;
+
+Theorem expr_body_pre_storage_origin_live:
+  expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
+  eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot tv)),es') ==>
+  storage_read_live cx tr (get_storage cx es' tr) slot tv /\
+  slots_in_range (get_storage cx es' tr) (w2n slot) tv
+Proof
+  strip_tac >>
+  `contract_storage_well_formed cx es` by
+    fs[expr_body_pre_def, expr_sim_inv_def] >>
+  drule_all eval_expr_storage_result_live >> simp[storage_result_live_def]
+QED
+
+val _ =
+  let val (ors,axs) = Tag.dest_tag (Thm.tag expr_body_pre_storage_origin_live) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail "Body expression origin dependency" else ()
+  end;
