@@ -547,7 +547,36 @@ Theorem make_ssa_current_fn_block_shape:
                    bb'.bb_instructions).inst_outputs =
           LENGTH (EL k bb.bb_instructions).inst_outputs
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `make_ssa_input_ok _` kall_tac >>
+  qpat_x_assum `fn_inst_wf _` kall_tac >>
+  qpat_x_assum `first_block_no_preds _` kall_tac >>
+  qpat_x_assum `first_block_no_phi _` kall_tac >>
+  qpat_x_assum `ir_supply_covers_fn _ _` kall_tac >>
+  qpat_x_assum `ir_supply_inst_ok _` kall_tac >>
+  qpat_x_assum `make_ssa_current_fn _ _ = _` mp_tac >>
+  simp[make_ssa_current_fn_def] >> CASE_TAC >> simp[]
+  >- (rpt strip_tac >> gvs[] >> qexists `bb` >> simp[]) >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `add_phi_nodes_supply s df pm li fn.fn_blocks defs` >>
+  qmatch_asmsub_abbrev_tac `rename_current_blocks s1 rs bs sm dt` >>
+  drule_all add_phi_nodes_supply_prefix >> strip_tac >>
+  drule add_phi_nodes_supply_labels >> strip_tac >>
+  `ALL_DISTINCT (MAP basic_block_bb_label bs)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  drule_all rename_current_blocks_lookup_signatures >> strip_tac >>
+  drule_all simplify_current_phis_if_lookup_shape >>
+  disch_then (qspec_then `blocks_have_leading_phi fn.fn_blocks` mp_tac) >>
+  strip_tac >>
+  rename1 `lookup_block l (simplify_current_phis_if _ _) = SOME out` >>
+  qexists `out` >> simp[] >>
+  drule instruction_signatures_length >> strip_tac >>
+  drule instruction_signatures_prefix >> strip_tac >>
+  gvs[phi_prefix_length_prepend] >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `MAP _ b''.bb_instructions = _`
+    (mp_tac o Q.AP_TERM `EL (k + LENGTH pre)`) >>
+  simp[EL_APPEND_EQN, EL_MAP]
 QED
 
 Theorem make_ssa_current_fn_lookup_block_rev:
