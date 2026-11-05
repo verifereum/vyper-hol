@@ -6,8 +6,7 @@ Ancestors makeSsaRfFinalBlock makeSsaRfLocalBridge makeSsaRfDomDistinct
 
 Theorem current_event_rf_trace:
   current_event_valid A V ev /\ current_event_trace A finalH ev /\
-  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
-    EVERY (rf_operand_in V) i.inst_operands)
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands)
     (current_event_input_block ev).bb_instructions ==>
   ?f g. rf_back_trace V f g
     (REVERSE (current_event_input_block ev).bb_instructions)
@@ -90,8 +89,7 @@ Theorem current_local_trace_source_rf:
   current_annotations_ok V H (FLAT annss) /\
   current_allocation_consistent V H s rs /\ current_env_realizes H E rs V /\
   current_env_owned V H E /\
-  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
-    EVERY (rf_operand_in V) i.inst_operands) originals ==>
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) originals ==>
   rf_back_trace V (latest_current_name rs) (latest_current_name rs')
     (REVERSE originals) (REVERSE outputs)
 Proof
@@ -110,7 +108,6 @@ Proof
   `rf_back_trace V (latest_current_name rs1) (latest_current_name rs')
      (REVERSE origs) (REVERSE rest1)` by
     (first_x_assum irule >> metis_tac[]) >>
-  `ALL_DISTINCT inst.inst_outputs` by fs[rf_copy_shape_def] >>
   `rf_local_step V (latest_current_name rs) (latest_current_name rs1) inst inst1` by
     (irule current_inst_trace_rf_step >> metis_tac[]) >>
   `rf_local_step V (latest_current_name rs) (latest_current_name rs1) orig inst1` by
@@ -123,8 +120,7 @@ QED
 Theorem current_event_source_rf_trace:
   current_event_valid A V ev /\ current_event_trace A finalH ev /\
   current_edge_shape old (current_event_input_block ev) /\
-  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
-    EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
   ?f g. rf_back_trace V f g (REVERSE old.bb_instructions)
     (REVERSE (current_event_renamed_block ev).bb_instructions)
 Proof
@@ -166,8 +162,7 @@ Theorem rf_trace_final_block_boundary:
   EVERY (current_event_valid A V) events /\
   EVERY (current_event_names H' V) events /\
   lookup_block q bbs = SOME old /\ lookup_block q bbs' = SOME final /\
-  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
-    EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
   ?renamed f g.
     rf_back_trace V f g (REVERSE old.bb_instructions)
       (REVERSE renamed.bb_instructions) /\

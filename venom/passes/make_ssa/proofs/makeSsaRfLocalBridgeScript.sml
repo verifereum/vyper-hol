@@ -69,44 +69,25 @@ Theorem current_inst_trace_rf_step:
   current_inst_trace anns inst s rs H E inst' s' rs' H' E' /\
   current_annotations_ok V H anns /\
   current_allocation_consistent V H s rs /\ current_env_realizes H E rs V /\
-  current_env_owned V H E /\ ALL_DISTINCT inst.inst_outputs ==>
+  current_env_owned V H E ==>
   rf_local_step V (latest_current_name rs) (latest_current_name rs') inst inst'
 Proof
   strip_tac >>
-  `current_allocation_consistent V H' s' rs' /\ current_env_realizes H' E' rs' V` by
-    metis_tac[current_inst_trace_preserves] >>
-  `current_env_owned V H' E'` by metis_tac[current_inst_trace_owned] >>
-  gvs[current_inst_trace_def] >>
-  `names = MAP (latest_current_name rs') (MAP SND anns)` by
-    metis_tac[current_outputs_trace_final_names] >>
   `!v. ~MEM v (MAP SND anns) ==>
       latest_current_name rs' v = latest_current_name rs v` by
-    metis_tac[current_outputs_trace_nonoutput] >>
-  `!w. MEM w inst.inst_outputs ==> MEM w V` by
-    (qpat_assum `MAP SND anns = _` (fn th => rewrite_tac[GSYM th]) >>
-     rpt strip_tac >> fs[MEM_MAP] >>
-     rename1 `MEM y anns` >> PairCases_on `y` >> gvs[] >>
-     fs[current_annotations_ok_def, EVERY_MEM] >>
-     first_x_assum drule >> simp[]) >>
-  `!v w. MEM v V /\ MEM w V /\ v <> w ==>
-      latest_current_name rs' v <> latest_current_name rs' w` by
-    (fs[current_allocation_consistent_def] >>
-     metis_tac[current_latest_name_separation]) >>
-  `!v. MEM v V /\ ~MEM v inst.inst_outputs ==>
-      latest_current_name rs' v = latest_current_name rs v /\
-      ~MEM (latest_current_name rs' v)
-        (MAP (latest_current_name rs') inst.inst_outputs)` by
-    (rpt strip_tac
-     >- metis_tac[] >>
-     fs[MEM_MAP] >>
-     `MEM y V` by metis_tac[] >>
-     `v <> y` by metis_tac[] >>
-     metis_tac[]) >>
+    (fs[current_inst_trace_def] >>
+     metis_tac[current_outputs_trace_nonoutput]) >>
+  `!v. MEM v V /\ ~MEM v (MAP SND anns) ==>
+      ~MEM (latest_current_name rs' v) inst'.inst_outputs` by
+    (fs[current_inst_trace_def] >> rpt strip_tac >>
+     Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
+     drule current_outputs_trace_nonoutput_avoids >>
+     disch_then (qspec_then `v` mp_tac) >> simp[] >>
+     qexists_tac `V` >> simp[]) >>
+  gvs[current_inst_trace_def] >>
   Cases_on `inst.inst_opcode = PHI` >>
-  simp[rf_local_step_def, rename_current_operands_rf] >>
-  rpt strip_tac >>
-  qpat_x_assum `!v. MEM v V /\ ~MEM v inst.inst_outputs ==> _` drule_all >>
-  metis_tac[]
+  gvs[rf_local_step_def, rename_current_operands_rf] >>
+  metis_tac[current_outputs_trace_final_names]
 QED
 
 Theorem current_local_trace_rf_back_trace:
@@ -115,8 +96,7 @@ Theorem current_local_trace_rf_back_trace:
   current_annotations_ok V H (FLAT annss) /\
   current_allocation_consistent V H s rs /\ current_env_realizes H E rs V /\
   current_env_owned V H E /\
-  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
-    EVERY (rf_operand_in V) i.inst_operands) insts ==>
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) insts ==>
   rf_back_trace V (latest_current_name rs) (latest_current_name rs')
     (REVERSE insts) (REVERSE insts')
 Proof

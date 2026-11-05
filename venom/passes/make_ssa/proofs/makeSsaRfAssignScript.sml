@@ -17,7 +17,8 @@ End
 Definition rf_local_step_def:
   rf_local_step V f g inst inst' <=>
     inst'.inst_opcode = inst.inst_opcode /\
-    inst'.inst_outputs = MAP g inst.inst_outputs /\
+    (ALL_DISTINCT inst.inst_outputs ==>
+      inst'.inst_outputs = MAP g inst.inst_outputs) /\
     (inst.inst_opcode <> PHI ==>
       inst'.inst_operands = MAP (rf_map_operand f) inst.inst_operands) /\
     (!v. MEM v V /\ ~MEM v inst.inst_outputs ==>
@@ -98,4 +99,15 @@ Theorem rf_distinct_copy_interface_probe:
 Proof
   simp[rf_local_step_def, mk_inst_def, rf_map_operand_def] >>
   metis_tac[]
+QED
+
+Theorem rf_duplicate_output_interface_probe:
+  rf_local_step ["x";"z"] I (\v. if v = "x" then "b" else v)
+    (mk_inst 0 INVOKE [] ["x";"x"])
+    (mk_inst 0 INVOKE [] ["a";"b"]) /\
+  step_back_assign (mk_inst 0 INVOKE [] ["a";"b"])
+    (Var "z") = SOME (Var "z")
+Proof
+  simp[rf_local_step_def, mk_inst_def, step_back_assign_def] >>
+  rpt strip_tac >> gvs[]
 QED
