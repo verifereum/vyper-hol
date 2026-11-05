@@ -5,6 +5,7 @@
    externalReturnWidenedCallMem's. *)
 Theory externalReturnValueMem
 Ancestors
+  returnValueTyped
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   externalReturnZeroLayout
   nonreentrantExit
@@ -68,6 +69,12 @@ Theorem external_frame_ret_value_run_mem:
        expr_post unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
+       (?gs ee'.
+          bind (eval_expr
+                  (initial_evaluation_context am.sources am.layouts tx NONE) e)
+            (read_result
+               (initial_evaluation_context am.sources am.layouts tx NONE))
+            (es with gas_obs := gs) = (INL v, ee')) /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\

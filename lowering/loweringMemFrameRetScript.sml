@@ -4,6 +4,7 @@
  *)
 Theory loweringMemFrameRet
 Ancestors
+  returnValueTyped
   stmtSimDefs exprSimDefs
   loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
@@ -80,6 +81,8 @@ Theorem return_value_summary_mem[local]:
     (\res ee r. expr_exit res r) /\
   (!ee v t.
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+     (?gs ee'. bind (eval_expr cx e) (read_result cx)
+                 (es with gas_obs := gs) = (INL v, ee')) /\
      t.vs_current_bb = s1.cs_current_bb /\
      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted ==>
@@ -97,7 +100,9 @@ Proof
         (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
          simp[gas_marked_exec_def] >>
          metis_tac[gas_marked_path_exec, gas_path_normal]) >>
-      first_x_assum drule_all >> strip_tac >>
+      drule marked_exec_source_eq >> strip_tac >>
+      first_x_assum (drule_all o Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS]) >>
+      strip_tac >>
       qspecl_then [`fuel`, `ctx`, `func`, `t`, `run_from fuel ctx func t`]
         mp_tac run_from_gas_path_mem >> simp[] >> strip_tac >>
       qexists_tac `marks ++ REPLICATE n F` >>
@@ -126,6 +131,8 @@ Theorem return_value_counted_mem[local]:
      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+     (?gs ee'. bind (eval_expr cx e) (read_result cx)
+                 (es with gas_obs := gs) = (INL v, ee')) /\
      t.vs_current_bb = s1.cs_current_bb /\
      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
