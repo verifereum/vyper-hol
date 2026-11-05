@@ -2,7 +2,7 @@ Theory fnPlanLineagePhiClasses
 Ancestors
   fnPlanLineagePhiMaps fnPlanLineagePath fnPlanLineageLiveness
 
-Theorem ready_block_phi_uses_disjoint[local]:
+Theorem ready_block_phi_uses_disjoint:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
   phi_uses_disjoint (collect_phis bb.bb_instructions)
 Proof
