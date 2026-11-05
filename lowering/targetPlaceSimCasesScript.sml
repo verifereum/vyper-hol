@@ -38,6 +38,7 @@ Ancestors
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim targetSubscriptSim exprSimMappingHash
+  exprNoEffectStorage supportedExprTraverse
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
@@ -737,4 +738,28 @@ Proof
     (irule emitted_insts_append >> simp[]) >>
   irule frag_exec_run_inst_seq >> simp[IS_PREFIX_APPEND] >>
   disj1_tac >> qexists_tac `u` >> gvs[]
+QED
+
+(* Boundary probe for the all-indices storage exclusion. *)
+Theorem target_indices_noeffect_subscript:
+  !bt e. ~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e)) ==>
+    ~EXISTS expr_has_effect (target_indices bt) /\ ~expr_has_effect e
+Proof
+  simp[target_indices_def, listTheory.EXISTS_APPEND]
+QED
+
+Theorem eval_base_place_pure_indices_storage:
+  !cx bt es pv es' tr.
+    ~EXISTS expr_has_effect (target_indices bt) /\
+    eval_base_place cx bt es = (INL pv,es') ==>
+    get_storage cx es' tr = get_storage cx es tr
+Proof
+  rpt strip_tac >>
+  irule eval_base_place_noeffect_storage >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `~EXISTS _ _` mp_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` kall_tac >>
+  qid_spec_tac `bt` >> recInduct base_assignment_target_induct >>
+  simp[target_indices_def, supported_expr_exists_def,
+       expr_has_effect_def, listTheory.EXISTS_APPEND]
 QED

@@ -201,3 +201,12 @@ Proof
   imp_res_tac read_result_state >> gvs[] >>
   drule_all eval_expr_noeffect_storage >> simp[]
 QED
+
+Theorem eval_base_place_noeffect_storage:
+  !cx bt s res s' tr.
+    ~supported_target_exists expr_effect_root bt /\
+    eval_base_place cx bt s = (res,s') ==>
+    get_storage cx s' tr = get_storage cx s tr
+Proof
+  metis_tac[eval_mutual_noeffect_storage]
+QED
