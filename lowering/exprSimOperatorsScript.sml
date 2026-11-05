@@ -797,76 +797,6 @@ Proof
   simp[expr_vv_res_ok_def, expr_read_res_ok_def, expr_res_ok_def]
 QED
 
-(* A conditional keeps a place only for a memory place. *)
-Theorem conditional_result_place_memory[local]:
-  !cx src st p st'.
-    conditional_result cx src st = (INL (PlaceR p), st') ==>
-    ?id path. p = MemoryPlace id path
-Proof
-  rpt gen_tac >> Cases_on `src` >>
-  simp[conditional_result_def, bind_def, return_def, raise_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> rename1 `place_type_value cx q` >>
-  Cases_on `q` >> gvs[bind_def, return_def, AllCaseEqs()] >>
-  qpat_x_assum `_ = (INL (PlaceR p),_)` mp_tac >>
-  IF_CASES_TAC >> simp[return_def, bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* A live memory place of its type reads, leaving the state alone. *)
-Theorem live_memory_place_read[local]:
-  !cx st id path tv.
-    state_well_typed st /\ runtime_place_typed cx st (MemoryPlace id path) tv /\
-    live_memory_result st (PlaceR (MemoryPlace id path)) ==>
-    ?v. read_result cx (PlaceR (MemoryPlace id path)) st = (INL v, st)
-Proof
-  rw[vyperTypeEvalSoundnessTheory.live_memory_result_def,
-     vyperPlaceTypingTheory.runtime_place_typed_memory] >> gvs[] >>
-  `value_has_type entry.type entry.value /\
-   well_formed_type_value entry.type` by
-    metis_tac[state_well_typed_def,
-              vyperTypeStatePreservationTheory.lookup_scopes_well_typed_value_has_type,
-              vyperPlaceTypingTheory.lookup_scopes_well_typed_type] >>
-  `?w. read_memory_path entry path = INL w /\ value_has_type tv w` by
-    metis_tac[vyperPlaceResultTypingTheory.covered_memory_read, MEM] >>
-  gvs[read_result_def, read_place_def, bind_def, get_scopes_def,
-      lift_option_type_def, lift_sum_def, return_def]
-QED
-
-(* A conditional's result reads: a value, or a live memory place. *)
-Theorem expr_body_pre_ifexp_readable[local]:
-  !cenv cx env t c a b es res es'.
-    expr_body_pre cenv cx env (IfExp t c a b) es /\
-    eval_expr cx (IfExp t c a b) es = (res,es') ==>
-    expr_read_res_ok cx es' res
-Proof
-  rpt strip_tac >> drule_all expr_body_pre_eval_result >> strip_tac >>
-  reverse (Cases_on `res`)
-  >- (drule_all expr_body_pre_vv_res_ok >>
-      simp[expr_vv_res_ok_def, expr_read_res_ok_def, expr_res_ok_def]) >>
-  rename1 `eval_expr _ _ _ = (INL r,_)` >>
-  Cases_on `r`
-  >- simp[expr_read_res_ok_def, read_result_def, return_def]
-  >- (rename1 `PlaceR p` >>
-      `?id path. p = MemoryPlace id path` by
-        (qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
-         simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >>
-         strip_tac >> drule conditional_result_place_memory >> simp[]) >>
-      gvs[] >>
-      `live_memory_result es' (PlaceR (MemoryPlace id path))` by
-        (drule_at (Pat `eval_expr _ _ _ = _`)
-           vyperTypeEvalStoragePreservationTheory.eval_expr_success_storage_facts >>
-         disch_then (qspec_then `env` mp_tac) >>
-         impl_tac
-         >- gvs[expr_body_pre_def, expr_sim_inv_def,
-                vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
-         simp[]) >>
-      gvs[vyperTypeInvariantsTheory.eval_result_typed_def, expr_sim_inv_def] >>
-      drule_all live_memory_place_read >> strip_tac >>
-      simp[expr_read_res_ok_def]) >>
-  gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
-QED
-
 (* The operands' internal calls: none if the conditional has none. *)
 Theorem int_calls_ifexp_operands[local]:
   !nocalls t c a b.
@@ -878,9 +808,10 @@ Proof
   Cases >> simp[int_calls_expr_def]
 QED
 
-(* A ternary of a word type: compile_ifexp_vv_sim (exprSimIfExp), the
-   operands' simulation from their judgments, the branches' where the
-   condition evaluates, and their shape from lower_value_word_shape. *)
+(* A ternary of a word type: compile_ifexp_word_vv_sim (exprSimIfExp),
+   with the condition's simulation from its judgment, both judgments of
+   the branches where the condition evaluates, and their shape from
+   lower_value_word_shape. *)
 Theorem compile_ifexp_word_case:
   !nocalls ctx func cenv cx t c a b.
     is_word_type t /\ expr_sim_case nocalls ctx func cenv cx c /\
@@ -927,10 +858,8 @@ QED
 (* A ternary of an aggregate type, which supported_pure_expr admits for
    memory arrays, structs and strings (#561): compile_ifexp_vv_sim
    (exprSimIfExp), as for word types, with the branches' shape from
-   compile_expr_grows, and the result readable by
-   expr_body_pre_ifexp_readable (a memory aggregate is kept as its live
-   place, anything else is read).  A ternary over storage or transient
-   arrays copies its value to memory. *)
+   compile_expr_grows.  A ternary over storage or transient arrays copies
+   its value to memory. *)
 Theorem compile_ifexp_aggregate_case:
   !nocalls ctx func cenv cx t c a b.
     ~is_word_type t /\
