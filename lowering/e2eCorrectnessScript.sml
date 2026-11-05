@@ -876,10 +876,13 @@ Proof
       irule call_result_rel_at_imp >>
       qexists_tac `gas_explicit m vs_in.vs_gas_readings` >>
       irule source_exempt_call_result_rel >> metis_tac[]) >>
-  pop_assum (assume_tac o PURE_REWRITE_RULE [NOT_EXISTS_THM]) >>
+  qpat_x_assum `~?marks'. _`
+    (assume_tac o PURE_REWRITE_RULE [NOT_EXISTS_THM]) >>
   `~source_exempt tops (call_external (SOME vs_in.vs_outcomes) [] am tx)` by
-    (first_assum (qspec_then `[]` mp_tac) >>
-     simp[gas_explicit_def, gas_prefix_def]) >>
+    (CCONTR_TAC >> qpat_x_assum `~?marks'. _` mp_tac >> simp[] >>
+     qexists_tac `[]` >>
+     simp[gasSummaryTheory.gas_explicit_def, gasOracleReplayTheory.gas_prefix_def] >>
+     gvs[]) >>
   `?fuel. external_call_result_rel tops ret tx
             (call_external (SOME vs_in.vs_outcomes)
                (gas_explicit marks vs_in.vs_gas_readings) am tx)
@@ -888,6 +891,7 @@ Proof
   `code_layout_valid vs_in` by
     (fs[gas_variant_def] >>
      qpat_x_assum `vs = _` SUBST_ALL_TAC >> fs[code_layout_valid_def]) >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   `raw_unit_memory_ok unit.cu_context vs_in /\
    ptr_discipline 0 unit.cu_context vs_in /\
    taint_within
@@ -897,14 +901,13 @@ Proof
      metis_tac[external_call_dead_observations]) >>
   `mem_inv dload_offset_ok unit.cu_context vs_in` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
-     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> simp[]) >>
+     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> gvs[]) >>
+  `mem_inv dload_headroom_ok unit.cu_context vs_in` by
+    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
   `ctx_sim (external_call_dead tx
        (call_external (SOME vs.vs_outcomes) [] am tx))
        unit.cu_context out.po_unit.cu_context vs_in vs /\
    o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
-  `mem_inv dload_headroom_ok unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   `?r es'. run_call es = SOME (r, es') /\
@@ -921,8 +924,8 @@ Proof
          in SIMP_RULE bool_ss [] (INST [v |-> mk_abs (x, F)] th) end) >>
   qexistsl_tac [`unit.cu_context`, `out.po_unit.cu_context`, `vs_in`, `vs`] >>
   rpt conj_tac
-  >- metis_tac[]
-  >- (qexists_tac `fuel` >> first_assum ACCEPT_TAC) >>
+  >~ [`external_call_result_rel`] >- (qexists_tac `fuel` >> first_assum ACCEPT_TAC)
+  >~ [`call_trace`] >- metis_tac[] >>
   strip_tac >> conj_tac
   >- metis_tac[external_call_dead_observations] >>
   gen_tac >> irule codegen_correct >> simp[] >>
