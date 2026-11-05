@@ -999,6 +999,80 @@ Proof
   drule inventory_emit_one_physical_origin >> metis_tac[]
 QED
 
+Theorem inventory_emit_one_nonvar_count:
+  emit_one_input opc nl op ps = (ops,qs) /\ ~is_var_operand x ==>
+  LIST_ELEM_COUNT x qs.ps_stack = LIST_ELEM_COUNT x ps.ps_stack +
+    (if x = op then 1 else 0)
+Proof
+  Cases_on `op` >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[do_restore_def, AllCaseEqs(), LET_THM] >> rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs()] >> rpt (IF_CASES_TAC >> gvs[AllCaseEqs()]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[stack_push_def, LIST_ELEM_COUNT_DEF, FILTER_SNOC,
+      stackPlanTypesTheory.is_var_operand_def] >>
+  qmatch_asmsub_abbrev_tac `do_dup dist before` >>
+  `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
+  drule stack_get_depth_props >> strip_tac >>
+  drule do_dup_stack_exact >> simp[] >> strip_tac >>
+  gvs[Abbr `before`, LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_SNOC] >>
+  Cases_on `x = Var s` >> gvs[stackPlanTypesTheory.is_var_operand_def]
+QED
+
+Theorem inventory_emit_nonvar_count_add:
+  !operands ps ops qs.
+    emit_input_plan opc operands nl ps = (ops,qs) /\ ~is_var_operand x ==>
+    LIST_ELEM_COUNT x qs.ps_stack =
+      LIST_ELEM_COUNT x ps.ps_stack + LIST_ELEM_COUNT x operands
+Proof
+  Induct >> simp[emit_input_plan_def, LET_THM, LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  `LIST_ELEM_COUNT x ps1.ps_stack = LIST_ELEM_COUNT x ps.ps_stack +
+     (if x = h then 1 else 0)` by metis_tac[inventory_emit_one_nonvar_count] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  Cases_on `x = h` >> gvs[LIST_ELEM_COUNT_DEF] >> simp[]
+QED
+
+Theorem inventory_emit_nonvar_count:
+  EVERY is_var_operand ps.ps_stack /\
+  emit_input_plan opc operands nl ps = (ops,qs) ==>
+  !x. ~is_var_operand x ==>
+    LIST_ELEM_COUNT x qs.ps_stack = LIST_ELEM_COUNT x operands
+Proof
+  rpt strip_tac >>
+  `~MEM x ps.ps_stack` by metis_tac[EVERY_MEM] >>
+  `LIST_ELEM_COUNT x ps.ps_stack = 0` by simp[LIST_ELEM_COUNT_DEF, FILTER_EQ_NIL, EVERY_MEM] >>
+  metis_tac[inventory_emit_nonvar_count_add, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem inventory_regular_core_nonvar_absent:
+  EVERY is_var_operand ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  LENGTH operands <= LENGTH mid.ps_stack /\
+  reorder_plan dfg pending mid = (rops,arranged) ==>
+  !x. MEM x operands /\ ~is_var_operand x ==>
+    ~MEM x (stack_pop (LENGTH operands) arranged.ps_stack)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `!x. MEM x pending <=> MEM x operands` by metis_tac[PERM_MEM_EQ] >>
+  `!x. LIST_ELEM_COUNT x pending = LIST_ELEM_COUNT x operands` by
+    metis_tac[perm_operand_counts] >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    metis_tac[emit_input_plan_materialised] >>
+  `LIST_ELEM_COUNT x mid.ps_stack = LIST_ELEM_COUNT x pending` by
+    metis_tac[inventory_emit_nonvar_count] >>
+  metis_tac[inventory_reorder_pop_exhausted]
+QED
+
 Theorem inventory_regular_core_dead_absent:
   ALL_DISTINCT ps.ps_stack /\
   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
