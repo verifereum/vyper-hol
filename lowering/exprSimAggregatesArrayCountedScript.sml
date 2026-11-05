@@ -14,7 +14,7 @@ Ancestors
   exprSimAggregateLoops exprSimAggregateChildren exprSimAlloc
   exprSimHyps exprSimHypsDefs exprSimSource exprSimProps exprSimDefs
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
-  fragGasMode fragGasPath fragGasSeq fragExec
+  fragGasMode fragGasPath fragGasSeq fragExec stmtSimDeclPath
   exprLowering exprLoweringProps compileEnv valueEncoding
   vyperInterpreter vyperState
 
