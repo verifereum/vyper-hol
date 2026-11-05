@@ -252,6 +252,258 @@ val _ = if null (hyp raw_call_tuple_build_no_restore_run)
   then print "raw-call no-restore tuple build: checked, no hypotheses\n"
   else raise Fail "raw-call no-restore tuple build retained hypotheses";
 
+Theorem raw_call_nonrevert_finish_code[local]:
+  compile_raw_call_finish to_op dp dl gas val call_ty n F ov op sa = (result,sb) ==>
+  ?ok sc. (case call_ty of
+      DelegateCall => emit_op DELEGATECALL [gas;to_op;dp;dl;op;Lit (n2w n)]
+    | StaticCall => emit_op STATICCALL [gas;to_op;dp;dl;op;Lit (n2w n)]
+    | RegularCall => emit_op CALL [gas;to_op;val;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sc = (result,sb)
+Proof
+  simp[compile_raw_call_finish_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  qexistsl_tac [`success`, `s'`] >>
+  gvs[comp_ignore_bind_def, comp_bind_def, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem raw_call_nonrevert_suffix_code[local]:
+  (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sa = (result,sb) /\ 0 < n ==>
+  ?z s1 cmp s2 cap s3 s4 buf s5 s6 dst s7.
+    emit_op RETURNDATASIZE [] sa = (z,s1) /\
+    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
+    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
+    emit_void MSTORE [ov;cap] s3 = ((),s4) /\
+    compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32) s4 = (buf,s5) /\
+    emit_void MSTORE [buf.buf_operand;ok] s5 = ((),s6) /\
+    emit_op ADD [buf.buf_operand;Lit 32w] s6 = (dst,s7) /\
+    emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))]
+      s7 = ((),sb) /\
+    result = buf.buf_operand /\ ci_mono sa s4 /\ inst_extends sa s4 /\
+    cs_extends sa s4 /\ cs_extends s4 sb /\
+    inst_extends s4 sb /\ s4.cs_next_id < sb.cs_next_id /\ 
+    MEM (mk_inst s4.cs_next_id ALLOCA
+      [Lit (n2w (64 + ((n + 31) DIV 32) * 32))]
+      [STRING #"%" (toString s4.cs_next_var)]) (emitted_insts s4 sb) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+    isPREFIX sa.cs_current_insts sb.cs_current_insts
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  gvs[builtinSimpleTheory.compile_select_def, contextTheory.compile_alloc_buffer_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[ci_mono_def, inst_extends_def, emitted_insts_def,
+       rich_listTheory.IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def, cs_extends_def, same_blocks_def,
+       rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_APPEND]
+QED
+
+Theorem raw_call_tuple_alloc_size_norm[local]:
+  !k:num. 32 + (32 + k * 32) = 32 * k + 64
+Proof
+  decide_tac
+QED
+
+Theorem raw_call_tuple_copy_size_norm[local]:
+  !k:num. 32 + k * 32 = 32 * k + 32
+Proof
+  decide_tac
+QED
+
+Theorem raw_call_nonrevert_positive_run[local]:
+  (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sa = (result,sb) /\ 0 < n /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sf s0 s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+  alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  FLOOKUP s.vs_allocas alloc.inst_id = SOME (w2n w,32 + ((n + 31) DIV 32) * 32) /\
+  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= alloc.inst_id /\
+  alloc.inst_id < sa.cs_next_id /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  safe_operand sa ov /\ safe_operand sa ok /\
+  eval_operand ov s = SOME w /\ eval_operand ok s = SOME (if success then 1w else 0w) /\
+  LENGTH s.vs_returndata < dimword (:256) /\
+  mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
+    TAKE n s.vs_returndata /\
+  64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) ==>
+  ?t tw ti. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sf s0 t /\
+    t.vs_fmp = s.vs_fmp /\
+    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
+    sf.cs_next_id <= ti /\ ti < sb.cs_next_id /\
+    eval_operand result t = SOME tw /\
+    FLOOKUP t.vs_allocas ti = SOME (w2n tw,64 + ((n + 31) DIV 32) * 32) /\
+    w2n tw + (64 + ((n + 31) DIV 32) * 32) < dimword (:256) /\
+    val_in_memory (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
+      (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)]))
+      (w2n tw) t.vs_memory
+Proof
+  strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
+  qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
+  `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
+  drule_at (Pat `MEM _ (fn_insts _)`) raw_call_output_prefix_ready >>
+  simp[] >> disch_then drule >> simp[] >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[] >>
+  fs[wordsTheory.dimword_def] >>
+  `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
+  disch_then drule_all >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa s4) s = OK u` >>
+  `u with vs_fmp := s.vs_fmp = u` by
+    (qpat_assum `u.vs_fmp = _` (SUBST1_TAC o SYM) >> simp[]) >> fs[] >>
+  suspend "tuple"
+QED
+
+Resume raw_call_nonrevert_positive_run[tuple]:
+  `local_ptrs_reserved cenv s4 /\ sf.cs_next_var <= s4.cs_next_var /\
+   sf.cs_next_id <= s4.cs_next_id /\ alloc.inst_id < s4.cs_next_id /\
+   safe_operand s4 ok /\ safe_operand s4 ov` by
+    (fs[ci_mono_def] >> metis_tac[local_ptrs_reserved_next_var,
+       safe_operand_mono, arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `fn_has_code s4 sb func` by
+    (mp_tac (Q.SPECL [`sa`,`s4`,`sb`,`func`] fn_has_code_split) >>
+     impl_tac >- simp[] >> simp[]) >>
+  `MEM (mk_inst s4.cs_next_id ALLOCA
+     [Lit (n2w (64 + ((n + 31) DIV 32) * 32))]
+     [STRING #"%" (toString s4.cs_next_var)]) (fn_insts func)` by
+    (irule hash_emitted_inst_mem >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand ok u = SOME (if success then 1w else 0w) /\
+   eval_operand ov u = SOME w` by metis_tac[] >>
+  `FLOOKUP u.vs_allocas alloc.inst_id = SOME (w2n w,32 + ((n + 31) DIV 32) * 32)` by simp[] >>
+  `val_wf (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n s.vs_returndata))` by
+    (qspec_then `n` mp_tac le_word_size_mul >>
+     simp[val_wf_def, type_memory_size_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+  `type_memory_size (BaseTV (BytesT (Dynamic n))) =
+     32 + ((n + 31) DIV 32) * 32` by
+    simp[type_memory_size_def, vfmConstantsTheory.word_size_def] >>
+  fs[] >>
+  drule_at (Pat `MEM _ (fn_insts _)`)
+    (raw_call_tuple_build_no_restore_run |> SPEC_ALL |> Q.INST
+      [`sz` |-> `32 + ((n + 31) DIV 32) * 32`]
+      |> PURE_REWRITE_RULE [raw_call_tuple_alloc_size_norm]
+      |> PURE_REWRITE_RULE [raw_call_tuple_copy_size_norm]
+      |> PURE_REWRITE_RULE [wordsTheory.dimword_def,
+           fcpLib.INDEX_CONV ``dimindex(:256)``,
+           EVAL ``(2:num) ** 256``]) >>
+  simp[] >>
+  disch_then (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_void MCOPY _ _ = _`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  simp[] >> disch_then (qspec_then `success` mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  drule_all run_inst_seq_compose_ok >> strip_tac >>
+  qexistsl_tac [`t`,`w'`,`s4.cs_next_id`] >> simp[] >>
+  rpt strip_tac >>
+  `safe_operand s4 p` by (irule safe_operand_mono >> goal_assum (drule_at Any) >> fs[ci_mono_def]) >>
+  metis_tac[]
+QED
+
+Finalise raw_call_nonrevert_positive_run
+
+val _ = if null (hyp raw_call_nonrevert_positive_run) then ()
+  else raise Fail "raw_call_nonrevert_positive_run retained hypotheses";
+
+Theorem raw_call_nonrevert_no_restore_frag[local]:
+  (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sa = (result,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sf s0 s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+  alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  FLOOKUP s.vs_allocas alloc.inst_id = SOME (w2n w,32 + ((n + 31) DIV 32) * 32) /\
+  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= alloc.inst_id /\
+  alloc.inst_id < sa.cs_next_id /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  safe_operand sa ov /\ safe_operand sa ok /\
+  eval_operand ov s = SOME w /\ eval_operand ok s = SOME (if success then 1w else 0w) /\
+  LENGTH s.vs_returndata < dimword (:256) /\
+  (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
+    TAKE n s.vs_returndata) /\
+  64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) /\
+  ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\t. stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sf s0 t /\
+      t.vs_fmp = s.vs_fmp /\
+      (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
+      expr_val_rel cx (raw_call_return_type flags)
+        (if n = 0 then BoolV success else
+          ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])) result t /\
+      (0 < n ==> ?ti tw. sf.cs_next_id <= ti /\ ti < sb.cs_next_id /\
+        eval_operand result t = SOME tw /\
+        FLOOKUP t.vs_allocas ti = SOME (w2n tw,64 + ((n + 31) DIV 32) * 32) /\
+        w2n tw + (64 + ((n + 31) DIV 32) * 32) < dimword (:256) /\
+        val_in_memory (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
+          (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)]))
+          (w2n tw) t.vs_memory)) (\r. F)
+Proof
+  strip_tac >> Cases_on `n = 0`
+  >- (gvs[comp_return_def] >>
+      irule frag_path_run_inst_seq >>
+      simp[emitted_insts_def, run_inst_seq_def] >>
+      simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx, eval_operand_def, lookup_var_def] >>
+      irule raw_call_bool_result >> simp[eval_operand_def, lookup_var_def]) >>
+  `0 < n` by decide_tac >>
+  `mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
+    TAKE n s.vs_returndata` by simp[] >>
+  drule_all raw_call_nonrevert_positive_run >> strip_tac >>
+  drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
+  irule frag_path_run_inst_seq >> simp[] >>
+  simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx] >>
+  conj_tac
+  >- (simp[expr_val_rel_def, raw_call_return_type_def, is_word_type_def,
+           evaluate_type_def, eval_operand_def, lookup_var_def] >>
+      qexists_tac `tw` >> fs[] >> rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  qexistsl_tac [`ti`,`tw`] >> fs[]
+QED
+
+val _ = if null (hyp raw_call_nonrevert_no_restore_frag) then ()
+  else raise Fail "raw_call_nonrevert_no_restore_frag retained hypotheses";
+
 Theorem raw_call_values_outcome_bind[local]:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value list evaluation_result) (es,s0) P E /\

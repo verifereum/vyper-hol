@@ -2246,7 +2246,7 @@ Proof
   gvs[]
 QED
 
-Theorem raw_call_wb_frame_inst_idx[local]:
+Theorem raw_call_wb_frame_inst_idx:
   wb_frame cenv es sf s0 (s with vs_inst_idx := k) = wb_frame cenv es sf s0 s
 Proof
   simp[wb_frame_def, locals_kept_def, lookup_var_def]
@@ -2280,7 +2280,7 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_call_output_prefix_ready[local]:
+Theorem raw_call_output_prefix_ready:
   !ctx func cenv cx es es0 sf s0 sa z s1 cmp s2 cap s3 sb pop s w saved n inst q b sz.
     emit_op RETURNDATASIZE [] sa = (z,s1) /\
     emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
