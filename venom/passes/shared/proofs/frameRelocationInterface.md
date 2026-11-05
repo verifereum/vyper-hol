@@ -613,16 +613,25 @@ the callee run fuel: no successor or monotonicity assumption is needed.
 The run begins at setup_callee's cs, BEFORE entry PHIs (run_defs:1706-1723).
 A reachable endpoint alone does not supply that run witness.
 
-Proposed downstream segment interface (not yet proved or a definition):
-carry a stack of activation entry states and finite block/instruction
-execution segments alongside the joint history. Each segment retains the
-entry before PHIs, the current block after PHIs, the list of completed
-ordinary steps and block jumps, and saved INVOKE continuations. Each local
-ordinary edge has a successful semantic step witness; a completed nested
-call is replaced by matched_run_invoke_return at its saved caller. At RET,
-close the innermost segment into an existential-fuel run_blocks witness
-returning the exact ret/send; bind and resume the saved segment. Need fuel
-adequacy/monotonicity for composing completed segments because run_blocks
-spends fuel per block and recursive invocation. Entry/frame endpoint erasure
-cannot replace this well-bracketed segment invariant. First search existing
-exec_block/run_blocks composition and fuel lemmas before defining it.
+### Local-prefix adequacy (frameExecutionPrefix)
+
+`execution_prefix ctx fn entry inst s` now records a finite local execution
+from the pre-PHI entry. Its entry/next/block rules retain active endpoints;
+next accepts any successful nonterminator step, including a completed
+INVOKE, and block accepts a successful nonhalted terminator followed by
+`enters_block`. It does not assert termination of unfinished prefixes.
+
+`execution_prefix_return` proves that `wf_function fn`, this prefix and
+`step_inst fuel ctx inst s = IntRet ret send` imply an existential-fuel
+`run_blocks n ctx fn entry = IntRet ret send`, with exact return and state.
+The proof uses a successful `local_return_suffix` from the active instruction
+(without repeating entry PHIs), backwards extension and fuel addition.
+`prefix_step_fuel_mono` and `prefix_exec_fuel_mono` supply successful-step
+and block monotonicity; the corresponding crossBlockSimProofs helpers are
+private, while its public `run_blocks_fuel_mono` is reused for calls.
+
+Still required: a parallel activation-prefix stack invariant linked to the
+actual decode/lookup/eval/setup witnesses. At return, close the child prefix,
+apply `matched_run_invoke_return`, then extend the saved caller prefix.
+Neither endpoint reachability nor erased joint-history logs alone supplies
+this matched execution invariant or the raw-reachability projection.
