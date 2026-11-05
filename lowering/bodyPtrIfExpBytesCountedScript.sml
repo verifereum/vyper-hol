@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpCopyHeader bodyPtrIfExpCopyInputs typedCopyPtr fragGasSeqPtr
   context compileEnv emitHelper exprLoweringProps rich_list venomInst
   venomState venomExecSemantics ptrSafeRun ptrDiscipline fragExec
-  finite_map instIdxIndep
+  finite_map instIdxIndep ghostPcTransportPtr
 
 Theorem compile_store_bytestring_stages:
   !src dst sa sb.
@@ -269,3 +269,47 @@ Proof
   qexistsl_tac [`Gf`, `tnf`] >> simp[eval_operand_def] >> metis_tac[]
 QED
 
+
+Theorem clean_emitted_prefix_binop:
+  !opc (f:256 word -> 256 word -> 256 word) D ctx fn PG sa sm sb operand out w k s G tn.
+    clean_emitted_prefix D ctx fn PG sa sm operand w s G tn /\
+    emit_op opc [operand; Lit k] sm = (Var out,sb) /\
+    (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
+    ~ctx_has_dalloca ctx /\
+    emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb /\
+    (!p. not_fresh_at sa p ==> not_fresh_at sm p) ==>
+    clean_emitted_prefix D ctx fn PG sa sb (Var out) (f w k) s G tn
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `clean_emitted_prefix _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[clean_emitted_prefix_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `t` strip_assume_tac)))) >>
+  `emitted_insts sm sb = [mk_inst sm.cs_next_id opc [operand;Lit k] [out]] /\
+   (!p. not_fresh_at sm p ==> p <> out)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def,
+         emitted_insts_def, DROP_APPEND1] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `eval_operand operand (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)) = SOME w /\
+   eval_operand (Lit k) (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)) = SOME k /\
+   op_taint tn1 (Lit k) = {}` by simp[op_taint_def, eval_operand_def] >>
+  drule_all emit_copy_len_binop_seq_ptr >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`, `G1`]
+    (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `u` strip_assume_tac)))) >>
+  `step_inst_base (mk_inst sm.cs_next_id opc [operand;Lit k] [out]) t =
+     OK (update_var out (f w k) t)` by
+    (irule copy_len_binop_step >> simp[eval_operand_def]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn
+     (emitted_insts sa sm ++ emitted_insts sm sb) s G2 tn2` by
+    (irule inst_seq_ptr_append_run >> metis_tac[]) >>
+  conj_tac >- (simp[mk_inst_def] >> metis_tac[is_terminator_def]) >>
+  qexistsl_tac [`G2`, `tn2`, `update_var out (f w k) t`] >>
+  simp[] >>
+  conj_tac >-
+    (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK t`
+       (mp_tac o MATCH_MP run_inst_seq_append) >> simp[run_inst_seq_def]) >>
+  gvs[run_inst_seq_def, step_inst_inst_idx_indep, exec_result_map_def] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> `p <> out` by metis_tac[] >>
+  gvs[lookup_var_def] >> metis_tac[]
+QED
