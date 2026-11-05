@@ -88,6 +88,35 @@ Proof
   metis_tac[]
 QED
 
+Theorem ld_vars_write_two:
+  ld_vars P A f /\ MEM u (fn_ir_vars f.lf_fn) /\
+  MEM v (fn_ir_vars f.lf_fn) ==>
+  ld_vars P A (f with <|
+    lf_src := update_var v y (update_var u x f.lf_src);
+    lf_tgt := update_var v y (update_var u x f.lf_tgt);
+    lf_H := DRESTRICT f.lf_H (COMPL {u;v});
+    lf_tv := DRESTRICT f.lf_tv (COMPL {u;v}) |> )
+Proof
+  strip_tac >>
+  `ld_vars P A (f with <|
+    lf_src := update_var u x f.lf_src;
+    lf_tgt := update_var u x f.lf_tgt;
+    lf_H := set_prov f.lf_H [u] NONE;
+    lf_tv := DRESTRICT f.lf_tv (COMPL {u}) |> )` by
+    (simp[update_var_def] >> irule ld_vars_write >>
+     simp[FLOOKUP_DRESTRICT, ld_word_agree_empty]) >>
+  qmatch_asmsub_abbrev_tac `ld_vars P A g` >>
+  `ld_vars P A (g with <|
+    lf_src := update_var v y g.lf_src;
+    lf_tgt := update_var v y g.lf_tgt;
+    lf_H := set_prov g.lf_H [v] NONE;
+    lf_tv := DRESTRICT g.lf_tv (COMPL {v}) |> )` by
+    (pure_rewrite_tac [update_var_def] >> irule ld_vars_write >>
+     simp[FLOOKUP_DRESTRICT, ld_word_agree_empty, Abbr `g`]) >>
+  `COMPL {u} INTER COMPL {v} = COMPL {u;v}` by simp[EXTENSION] >>
+  gvs[Abbr `g`, set_prov_def, DRESTRICT_DRESTRICT]
+QED
+
 Theorem ld_vars_operand_agree:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\
