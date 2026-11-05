@@ -72,7 +72,7 @@ Proof
   drule_all alloca_history_run_inst_seq >> simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem ecmul_prefix_safe:
+Theorem ecmul_prefix_safe_length:
   compile_ecmul_point p scalar sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
@@ -86,9 +86,11 @@ Theorem ecmul_prefix_safe:
     context$compile_alloc_buffer 96 sf = (ib,sa) /\
     context$compile_alloc_buffer 64 sp = (ob,sm) /\
     emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    LENGTH (emitted_insts sf sm) = 12 /\
     run_inst_seq_mem_ok (emitted_insts sf sm) s
 Proof
   strip_tac >> drule_all ecmul_points_prefix >> strip_tac >>
+  drule_all ecmul_prefix_code >> strip_tac >>
   `96 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   qpat_assum `context$compile_alloc_buffer 96 sf = _`
     (mp_then Any mp_tac literal_alloc_buffer_run) >>
@@ -126,13 +128,13 @@ Proof
   irule ec_alloc_buffer_mem_ok >> goal_assum (drule_at Any)
 QED
 
-Theorem ecadd_prefix_safe:
+Theorem ecadd_prefix_safe_length:
   compile_ecadd_points p q sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
-  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 q s /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo2 sf es v2 q s /\
   eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
   (!x. MEM (Var x) [p;q] ==> not_fresh_at sf x) /\
   w2n point + 64 < dimword (:256) /\
@@ -143,9 +145,11 @@ Theorem ecadd_prefix_safe:
     context$compile_alloc_buffer 128 sf = (ib,sa) /\
     context$compile_alloc_buffer 64 sp = (ob,sm) /\
     emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    LENGTH (emitted_insts sf sm) = 18 /\
     run_inst_seq_mem_ok (emitted_insts sf sm) s
 Proof
   strip_tac >> drule_all ecadd_points_prefix >> strip_tac >>
+  drule_all ecadd_prefix_code >> strip_tac >>
   `128 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   qpat_assum `context$compile_alloc_buffer 128 sf = _`
     (mp_then Any mp_tac literal_alloc_buffer_run) >>
@@ -188,6 +192,86 @@ Proof
   irule run_inst_seq_mem_ok_append >> conj_tac
   >- (rpt strip_tac >> gvs[]) >>
   irule ec_alloc_buffer_mem_ok >> goal_assum (drule_at Any)
+QED
+
+Theorem ecmul_prefix_safe:
+  compile_ecmul_point p scalar sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  eval_operand p s = SOME point /\ eval_operand scalar s = SOME wscalar /\
+  (!x. MEM (Var x) [p;scalar] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\
+  w2n point + 64 <= s.vs_alloca_next ==>
+  ?ib ob sa sp sm.
+    context$compile_alloc_buffer 96 sf = (ib,sa) /\
+    context$compile_alloc_buffer 64 sp = (ob,sm) /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    run_inst_seq_mem_ok (emitted_insts sf sm) s
+Proof
+  strip_tac >> drule_all ecmul_prefix_safe_length >> metis_tac[]
+QED
+
+Theorem ecadd_prefix_safe:
+  compile_ecadd_points p q sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 q s /\
+  eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
+  (!x. MEM (Var x) [p;q] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\
+  w2n point2 + 64 < dimword (:256) /\
+  w2n point + 64 <= s.vs_alloca_next /\
+  w2n point2 + 64 <= s.vs_alloca_next ==>
+  ?ib ob sa sp sm.
+    context$compile_alloc_buffer 128 sf = (ib,sa) /\
+    context$compile_alloc_buffer 64 sp = (ob,sm) /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    run_inst_seq_mem_ok (emitted_insts sf sm) s
+Proof
+  strip_tac >> drule_all ecadd_prefix_safe_length >> metis_tac[]
+QED
+
+Theorem ecmul_prefix_take_safe:
+  compile_ecmul_point p scalar sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  eval_operand p s = SOME point /\ eval_operand scalar s = SOME wscalar /\
+  (!x. MEM (Var x) [p;scalar] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\
+  w2n point + 64 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (TAKE 12 (emitted_insts sf sb)) s
+Proof
+  strip_tac >> drule_all ecmul_prefix_safe_length >> strip_tac >>
+  gvs[listTheory.TAKE_APPEND1] >>
+  qpat_x_assum `LENGTH _ = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[]
+QED
+
+Theorem ecadd_prefix_take_safe:
+  compile_ecadd_points p q sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo2 sf es v2 q s /\
+  eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
+  (!x. MEM (Var x) [p;q] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\
+  w2n point2 + 64 < dimword (:256) /\
+  w2n point + 64 <= s.vs_alloca_next /\
+  w2n point2 + 64 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (TAKE 18 (emitted_insts sf sb)) s
+Proof
+  strip_tac >> drule_all ecadd_prefix_safe_length >> strip_tac >>
+  gvs[listTheory.TAKE_APPEND1] >>
+  qpat_x_assum `LENGTH _ = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[]
 QED
 
 Theorem ecmul_prefix_run:
