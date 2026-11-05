@@ -1773,6 +1773,17 @@ Proof
   gvs[plan_holds_def] >> metis_tac[alias_emit_ops_inventory, pairTheory.SND]
 QED
 
+Theorem alias_probe_large_regular_arity:
+  inst_wf (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) []) /\
+  codegen_ready_inst (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) []) /\
+  LENGTH (compute_operands (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) [])) = 17 /\
+  inst_wf (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) []) /\
+  codegen_ready_inst (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) []) /\
+  LENGTH (compute_operands (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) [])) = 19
+Proof
+  EVAL_TAC >> simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def]
+QED
+
 Theorem alias_regular_plan_var_support:
   inst.inst_opcode <> JMP /\ alias_var_mass x ps <= 1 /\
   (plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
