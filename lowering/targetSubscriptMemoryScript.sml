@@ -768,3 +768,92 @@ Proof
   pure_rewrite_tac[GSYM word_add_n2w] >>
   metis_tac[WORD_ADD_ASSOC, WORD_ADD_COMM]
 QED
+
+Theorem target_memory_array_error_suffix:
+  target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (MemoryPlace id path))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) /\
+  eval_operand idx s = SOME (i2w i) /\
+  compile_array_subscript (FST rb) idx dyn cnt 32 (type_memory_bytes cenv ety)
+    (is_signed_type ity)
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sm = (dst,sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x. idx = Var x ==> not_fresh_at sm x) /\
+  (!l. idx <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\
+  extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
+    (INR err,es') ==>
+  (?u. gas_marked_path F ctx func s 0 (Abort Revert_abort u)) /\
+  err = Error (RuntimeError "evaluate_subscripts array_index") /\ es' = es
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es s /\
+   ?b. eval_operand (FST rb) s = SOME b /\
+       place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b
+         (FST (SND rb)) (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)))` by
+    fs[target_post_def] >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  drule_all extend_place_memory_array_index >>
+  disch_then (qspecl_then [`i`, `cx`] assume_tac) >>
+  drule_all target_memory_array_range >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  drule_all target_memory_array_abort_path >> simp[]
+QED
+
+Theorem target_memory_array_suffix:
+  target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (MemoryPlace id path))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) /\
+  eval_operand idx s = SOME (i2w i) /\
+  compile_array_subscript (FST rb) idx dyn cnt 32 (type_memory_bytes cenv ety)
+    (is_signed_type ity)
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sm = (dst,sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x. idx = Var x ==> not_fresh_at sm x) /\
+  (!l. idx <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\
+  extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
+    (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+      target_post ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
+        (dst,SOME LocMemory,SOME (ValPT ety)) u /\
+      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es s /\
+   (?b. eval_operand (FST rb) s = SOME b /\
+        place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b
+          (FST (SND rb)) (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)))) /\
+   (!x. FST rb = Var x ==> not_fresh_at sm x)` by fs[target_post_def] >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  drule_all extend_place_memory_array_index >>
+  disch_then (qspecl_then [`i`, `cx`] assume_tac) >>
+  `0 <= i /\ Num i < array_length (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) av` by
+    (gvs[AllCaseEqs()]) >>
+  drule_all target_memory_array_range >> strip_tac >>
+  `idx_in_range (is_signed_type ity) (i2w i)
+     (if dyn then mload (w2n b) s else n2w cnt)` by metis_tac[] >>
+  drule_all target_memory_array_path >> strip_tac >>
+  drule_all target_memory_array_offset >>
+  disch_then (qspec_then `b` strip_assume_tac) >>
+  `eval_operand dst t = SOME (b + n2w k)` by metis_tac[] >>
+  drule_all target_post_memory_step >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
