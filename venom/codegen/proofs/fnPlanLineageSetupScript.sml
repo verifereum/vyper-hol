@@ -2,7 +2,7 @@ Theory fnPlanLineageSetup
 Ancestors
   fnPlanLineageDemand fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState reorderSim list rich_list venomWf venomInst callLayoutDefs
 Libs
-  pred_setTheory finite_mapTheory stackPlanOpsTheory
+  pred_setTheory finite_mapTheory stackPlanOpsTheory fnPlanLineageReplayTheory doSwapSimTheory planSpillBoundsTheory
 
 Theorem optimistic_swap_plan_inventory:
   !dfg inst live term ps.
@@ -318,4 +318,56 @@ Theorem deep_swap_changes_allocator_probe:
     (init_cleanup_plan_state NONE [] 0 0).ps_alloc
 Proof
   EVAL_TAC
+QED
+
+Theorem residual_budget_wf_optimistic_swap_plan:
+  !base pending dfg inst live term ps.
+    residual_budget_wf base pending ps ==>
+    residual_budget_wf base pending
+      (SND (optimistic_swap_plan dfg inst live term ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> simp[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  Cases_on `do_swap x ps` >>
+  drule_all residual_budget_wf_do_swap >> simp[]
+QED
+
+Theorem optimistic_swap_plan_core_resource:
+  !ps m core base dfg inst live term qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    qs = SND (optimistic_swap_plan dfg inst live term ps) ==>
+    ?rest.
+      qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      set rest = set core /\ qs.ps_spilled = ps.ps_spilled /\
+      residual_budget_wf base [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >> TRY (qexists_tac `core` >> simp[] >> NO_TAC) >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
+  `Var (LAST live) <> dead_stack_marker` by simp[dead_stack_marker_def] >>
+  `stack_get_depth (Var (LAST live)) core = SOME x` by
+    metis_tac[stack_get_depth_bottom_dead] >>
+  `x < LENGTH core` by metis_tac[stack_get_depth_props] >>
+  qexists_tac `stack_swap x core` >>
+  `!op. LIST_ELEM_COUNT op (stack_swap x core) = LIST_ELEM_COUNT op core` by
+    (gen_tac >> qspecl_then [`x`, `ps`, `op`] mp_tac do_swap_multiplicity >>
+     simp[do_swap_stack_result, stack_swap_bottom_extension, elem_count_append]) >>
+  `set (stack_swap x core) = set core` by
+    (simp[EXTENSION] >> metis_tac[LIST_ELEM_COUNT_MEM]) >>
+  rename1 `residual_budget_wf spillbase [] (ps with ps_stack := core)` >>
+  `plan_slots_bounded spillbase ps /\
+   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    (gvs[residual_budget_wf_def, plan_slots_bounded_def] >> metis_tac[]) >>
+  `x < LENGTH ps.ps_stack` by simp[] >>
+  Cases_on `do_swap x ps` >>
+  drule_all do_swap_slots_bounded >> strip_tac >>
+  drule_all do_swap_multiplicity_layout >> strip_tac >>
+  drule do_swap_stack_result >> simp[] >> strip_tac >>
+  gvs[stack_swap_bottom_extension,
+      residual_budget_wf_def, plan_slots_bounded_def] >> metis_tac[]
 QED
