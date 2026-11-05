@@ -2596,3 +2596,334 @@ val () = List.app (fn th =>
   [mapping_place_post_refl, compile_hashmap_root_place_frag,
    mapping_place_post_compose, mapping_key_post_keeps_place,
    compile_mapping_subscript_place_frag];
+
+(* Hashing changes only fresh variables.  Lift that same endpoint to the
+   mapping PLACE boundary before composing the scratch allocation. *)
+Theorem mapping_place_post_readonly:
+  mapping_place_post ctx func cenv cx kt vt es sa sm s0 es'
+    (HashMapRef tr slot kt vt) vv mid /\
+  safe_operand sm (vv_operand vv) /\ sa.cs_next_var <= sm.cs_next_var /\
+  sm.cs_next_var <= sb.cs_next_var /\
+  stmt_state_rel ctx func cenv cx es' s /\
+  s.vs_memory = mid.vs_memory /\ s.vs_allocas = mid.vs_allocas /\
+  contract_storage s = contract_storage mid /\
+  contract_transient s = contract_transient mid /\
+  (!x. not_fresh_at sm x ==> lookup_var x s = lookup_var x mid) ==>
+  mapping_place_post ctx func cenv cx kt vt es sa sb s0 es'
+    (HashMapRef tr slot kt vt) vv s
+Proof
+  rewrite_tac[mapping_place_post_def, place_ptr_rel_def] >>
+  strip_tac >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (simp[] >>
+      Cases_on `vv_operand vv` >>
+      gvs[eval_operand_def, exprSafeOperandTheory.safe_operand_def] >>
+      metis_tac[])
+  >- (rpt strip_tac >> gvs[not_fresh_at_def] >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      metis_tac[])
+  >- metis_tac[]
+  >- metis_tac[]
+  >- (gvs[locals_kept_def] >> metis_tac[])
+  >- metis_tac[] >> metis_tac[]
+QED
+
+Theorem mapping_scalar_typed_encoding:
+  hashmap_key_type kt /\ ~is_bytestring_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v ==>
+  is_word_type kt /\ typed_val_to_w256 tv v = encode_hashmap_key kt v
+Proof
+  Cases_on `kt` >> simp[hashmap_key_type_def] >> strip_tac
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[hashmap_key_type_def, is_bytestring_type_def, evaluate_type_def,
+          is_word_type_def] >>
+      TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+           gvs[is_bytestring_type_def, evaluate_type_def, is_word_type_def]) >>
+      Cases_on `v` >> gvs[value_has_type_def] >>
+      simp[mapping_scalar_key_encoding])
+  >- (gvs[evaluate_type_def, AllCaseEqs(), is_word_type_def] >>
+      Cases_on `v` >> gvs[value_has_type_def] >>
+      simp[typed_val_to_w256_def, val_to_w256_def])
+QED
+
+(* Dispatch the actual MapPT conditional, including the no-hash scalar
+   branch.  The forced key's source type and evaluated type stay explicit. *)
+Theorem mapping_typed_key_post_hash_frag:
+  expr_post ctx func cenv cx e es sa sm s0 es' v key mid /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v /\
+  (if is_bytestring_type kt then compile_keccak256_key key F
+   else comp_return key) sm = (out,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sm sb (\s. s = mid)
+    (\t. eval_operand out t = SOME (encode_hashmap_key kt v) /\
+      stmt_state_rel ctx func cenv cx es' t /\
+      t.vs_memory = mid.vs_memory /\ t.vs_allocas = mid.vs_allocas /\
+      contract_storage t = contract_storage mid /\
+      contract_transient t = contract_transient mid /\
+      (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x mid)) R
+Proof
+  strip_tac >> Cases_on `is_bytestring_type kt`
+  >- (gvs[] >> Cases_on `expr_type e` >> gvs[is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
+      >- (rename1 `StringT cap` >>
+          `tv = BaseTV (StringT cap)` by gvs[evaluate_type_def] >>
+          gvs[] >> Cases_on `v` >> gvs[value_has_type_def] >>
+          irule mapping_string_key_post_hash_frag >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          simp[])
+      >- (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+          rename1 `Dynamic cap` >>
+          `tv = BaseTV (BytesT (Dynamic cap))` by gvs[evaluate_type_def] >>
+          gvs[] >> Cases_on `v` >> gvs[value_has_type_def] >>
+          irule mapping_dynamic_key_post_hash_frag >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          simp[])) >>
+  drule_all mapping_scalar_typed_encoding >> strip_tac >>
+  gvs[comp_return_def] >> irule frag_exec_refl >> simp[] >>
+  gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
+QED
+
+Theorem mapping_typed_key_place_hash_frag:
+  mapping_place_post ctx func cenv cx kt vt es sa sm s0 es'
+    (HashMapRef tr slot kt vt) bvv mid /\
+  expr_post ctx func cenv cx e esk sk sm key_start es' v key mid /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v /\
+  (if is_bytestring_type kt then compile_keccak256_key key F
+   else comp_return key) sm = (out,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  safe_operand sm (vv_operand bvv) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sb.cs_next_var /\
+  local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sm sb (\s. s = mid)
+    (\s. mapping_place_post ctx func cenv cx kt vt es sa sb s0 es'
+           (HashMapRef tr slot kt vt) bvv s /\
+         eval_operand out s = SOME (encode_hashmap_key kt v)) R
+Proof
+  strip_tac >> irule frag_exec_conseq >>
+  irule_at Any mapping_typed_key_post_hash_frag >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl [`tv`, `out`, `kt`, `R`] >> simp[] >> rpt strip_tac >>
+  irule mapping_place_post_readonly >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  goal_assum (drule_at (Pat `mapping_place_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[]
+QED
+
+Theorem mapping_place_scratch_tail:
+  mapping_place_post ctx func cenv cx kt vt es sa sm s0 es'
+    (HashMapRef tr slot kt vt) bvv mid /\
+  compile_mapping_subscript (vv_operand bvv) key sm = (out,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  eval_operand key mid = SOME kw /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz <=>
+            local_region cenv es'.scopes mid n b sz) ==>
+  frag_exec ctx sm sb (\s. s = mid)
+    (mapping_place_post ctx func cenv cx kt vt es sa sb s0 es'
+      (HashMapRef tr (hashmap_slot slot kw) kt vt)
+      (LocatedValue ann (mk_ptr out (slot_loc tr)))) R
+Proof
+  strip_tac >>
+  `eval_operand (vv_operand bvv) mid = SOME slot /\
+   (!x. vv_operand bvv = Var x ==> not_fresh_at sm x) /\
+   stmt_state_rel ctx func cenv cx es' mid` by
+    gvs[mapping_place_post_def, place_ptr_rel_def] >>
+  irule frag_exec_conseq >>
+  irule_at Any compile_mapping_subscript_place_frag >>
+  goal_assum (drule_at (Pat `compile_mapping_subscript _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand key _ = _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  qexistsl [`vt`, `tr`, `kw`, `kt`, `ann`, `R`] >> simp[] >> rpt strip_tac >>
+  irule mapping_place_post_compose >>
+  goal_assum (drule_at (Pat `mapping_place_post _ _ _ _ _ _ es sa sm _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+(* All compiler-extension and locality premises are explicit here; this is
+   the operational suffix, not a reachable-program invariant. *)
+Theorem mapping_typed_key_scratch_frag:
+  mapping_place_post ctx func cenv cx kt vt es sa sm s0 es'
+    (HashMapRef tr slot kt vt) bvv mid /\
+  expr_post ctx func cenv cx e esk sk sm key_start es' v key mid /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v /\
+  (if is_bytestring_type kt then compile_keccak256_key key F
+   else comp_return key) sm = (hashed,sn) /\
+  compile_mapping_subscript (vv_operand bvv) hashed sn = (out,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  (!x. hashed = Var x ==> not_fresh_at sn x) /\
+  safe_operand sm (vv_operand bvv) /\
+  cs_extends sm sn /\ cs_extends sn sb /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+  sa.cs_next_id <= sn.cs_next_id /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sn /\
+  (!s. mapping_place_post ctx func cenv cx kt vt es sa sn s0 es'
+          (HashMapRef tr slot kt vt) bvv s ==>
+       !n b sz. local_region cenv es.scopes s0 n b sz <=>
+                local_region cenv es'.scopes s n b sz) ==>
+  frag_exec ctx sm sb (\s. s = mid)
+    (mapping_place_post ctx func cenv cx kt vt es sa sb s0 es'
+      (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt v)) kt vt)
+      (LocatedValue ann (mk_ptr out (slot_loc tr)))) R
+Proof
+  strip_tac >> irule frag_exec_seq >>
+  irule_at (Pat `frag_exec _ sm _ _ _ _`) mapping_typed_key_place_hash_frag >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `mapping_place_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> irule frag_exec_pointwise >> gen_tac >> simp[] >> strip_tac >>
+  irule mapping_place_scratch_tail >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  qexistsl [`bvv`, `hashed`] >> simp[]
+QED
+
+Theorem mapping_key_post_rebase:
+  mapping_place_post ctx func cenv cx kt vt es sa sm s0 esm
+    (HashMapRef tr slot kt vt) bvv mid /\
+  expr_post ctx func cenv cx e esm sm sn mid es' v key s /\
+  safe_operand sm (vv_operand bvv) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_var <= sn.cs_next_var /\
+  contract_storage s = contract_storage mid /\
+  contract_transient s = contract_transient mid /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz <=>
+            local_region cenv esm.scopes mid n b sz) ==>
+  mapping_place_post ctx func cenv cx kt vt es sa sn s0 es'
+    (HashMapRef tr slot kt vt) bvv s
+Proof
+  strip_tac >> irule mapping_place_post_compose >>
+  goal_assum (drule_at (Pat `mapping_place_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> irule mapping_key_post_keeps_place >>
+  rpt conj_tac
+  >- (gvs[mapping_place_post_def] >> metis_tac[])
+  >- (gvs[mapping_place_post_def] >> metis_tac[])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  goal_assum (drule_at Any)
+QED
+
+(* Conditional constructor assembly.  Child fragments may abort through R;
+   successful endpoints are always the SAME endpoints carrying the frames.
+   Source evaluations and locality transport are deliberately explicit. *)
+Theorem mapping_subscript_place_constructor:
+  eval_expr cx base_e es = (INL (HashMapRef tr slot kt vt),esm) /\
+  (do r <- eval_expr cx idx; read_result cx r od) esm = (INL v,es') /\
+  place_type cenv base_e = MapPT kt vt /\
+  compile_expr cenv ty base_e sa = (bvv,s1) /\
+  lower_value compile_expr cenv (expr_type idx) idx s1 = (key,s2) /\
+  (if is_bytestring_type kt then compile_keccak256_key key F
+   else comp_return key) s2 = (hashed,s3) /\
+  compile_mapping_subscript (vv_operand bvv) hashed s3 = (out,sb) /\
+  expr_type idx = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v /\
+  cs_extends sa s1 /\ cs_extends s1 s2 /\
+  cs_extends s2 s3 /\ cs_extends s3 sb /\
+  sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+  s1.cs_next_var <= s2.cs_next_var /\ s2.cs_next_var <= s3.cs_next_var /\
+  sa.cs_next_id <= s3.cs_next_id /\
+  (!x. key = Var x ==> not_fresh_at s2 x) /\
+  (!x. hashed = Var x ==> not_fresh_at s3 x) /\
+  safe_operand s1 (vv_operand bvv) /\ safe_operand s2 (vv_operand bvv) /\
+  fn_has_code s3 sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
+  frag_exec ctx sa s1
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (mapping_place_post ctx func cenv cx kt vt es sa s1 s0 esm
+      (HashMapRef tr slot kt vt) bvv) R /\
+  (!mid. mapping_place_post ctx func cenv cx kt vt es sa s1 s0 esm
+           (HashMapRef tr slot kt vt) bvv mid ==>
+     frag_exec ctx s1 s2 (\s. s = mid)
+       (\s. expr_post ctx func cenv cx idx esm s1 s2 mid es' v key s /\
+            contract_storage s = contract_storage mid /\
+            contract_transient s = contract_transient mid) R) /\
+  (!mid. mapping_place_post ctx func cenv cx kt vt es sa s1 s0 esm
+           (HashMapRef tr slot kt vt) bvv mid ==>
+     !n b sz. local_region cenv es.scopes s0 n b sz <=>
+              local_region cenv esm.scopes mid n b sz) /\
+  (!s. mapping_place_post ctx func cenv cx kt vt es sa s3 s0 es'
+          (HashMapRef tr slot kt vt) bvv s ==>
+     !n b sz. local_region cenv es.scopes s0 n b sz <=>
+              local_region cenv es'.scopes s n b sz) ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (mapping_place_post ctx func cenv cx kt vt es sa sb s0 es'
+      (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt v)) kt vt)
+      (LocatedValue ann (mk_ptr out
+        (case vv_location bvv of SOME l => l | NONE => LocMemory)))) R
+Proof
+  strip_tac >> irule frag_exec_seq >>
+  goal_assum (drule_at (Pat `frag_exec _ sa s1 _ _ _`)) >>
+  simp[] >> conj_tac >- metis_tac[cs_extends_trans] >>
+  irule frag_exec_pointwise >> gen_tac >> strip_tac >>
+  `vv_location bvv = SOME (slot_loc tr)` by
+    gvs[mapping_place_post_def, place_ptr_rel_def] >> simp[] >>
+  irule frag_exec_seq >>
+  first_x_assum (irule_at (Pat `frag_exec _ s1 s2 _ _ _`)) >>
+  first_assum (irule_at Any) >> simp[] >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  qpat_x_assum `eval_expr cx base_e es = _` kall_tac >>
+  qpat_x_assum `bind _ _ esm = _` kall_tac >>
+  qpat_x_assum `place_type _ _ = _` kall_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `frag_exec _ sa s1 _ _ _` kall_tac >>
+  irule frag_exec_pointwise >> gen_tac >> simp[] >> strip_tac >>
+  irule mapping_typed_key_scratch_frag >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  >- first_assum ACCEPT_TAC
+  >- (qexists `tv` >> simp[]) >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `compile_mapping_subscript _ _ _ = _`)) >>
+  simp[] >> irule mapping_key_post_rebase >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `mapping_place_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem compile_subscript_mapping_components:
+  place_type cenv base_e = MapPT kt vt /\
+  cfn cenv ty base_e sa = (bvv,s1) /\
+  lower_value cfn cenv (expr_type idx) idx s1 = (key,s2) /\
+  (if is_bytestring_type kt then compile_keccak256_key key F
+   else comp_return key) s2 = (hashed,s3) /\
+  compile_mapping_subscript (vv_operand bvv) hashed s3 = (out,sb) ==>
+  compile_subscript cfn cenv ann ty base_e idx sa =
+    (LocatedValue ann (mk_ptr out
+      (case vv_location bvv of SOME l => l | NONE => LocMemory)),sb)
+Proof
+  simp[compile_subscript_def, comp_bind_def, comp_return_def, LET_THM]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping constructor has unproved dependencies"
+  end)
+  [mapping_place_post_readonly, mapping_scalar_typed_encoding,
+   mapping_typed_key_post_hash_frag, mapping_typed_key_place_hash_frag,
+   mapping_place_scratch_tail, mapping_typed_key_scratch_frag,
+   mapping_key_post_rebase, mapping_subscript_place_constructor,
+   compile_subscript_mapping_components];
