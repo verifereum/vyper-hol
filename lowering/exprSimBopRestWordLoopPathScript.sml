@@ -304,3 +304,140 @@ Proof
   simp[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   metis_tac[]
 QED
+
+Theorem rest_word_body_address_sequence:
+  !idx s i arr baseword mul total stride off a b c addr.
+  eval_operand (Var idx) s = SOME (n2w i) /\
+  eval_operand arr s = SOME baseword /\
+  arr <> Var mul /\ arr <> Var total ==>
+  let p = update_var mul (n2w (i * stride)) s in
+  let q = if 0 < off then update_var total (n2w (off + i * stride)) p else p in
+  run_inst_seq
+    ([mk_inst a MUL [Var idx; Lit (n2w stride)] [mul]] ++
+     (if 0 < off then [mk_inst b ADD [Lit (n2w off); Var mul] [total]] else []) ++
+     [mk_inst c ADD [arr; if 0 < off then Var total else Var mul] [addr]]) s =
+    OK (update_var addr (baseword + n2w (off + i * stride)) q)
+Proof
+  rpt gen_tac >> strip_tac >> simp[] >>
+  Cases_on `arr` >> gvs[eval_operand_def] >>
+  Cases_on `0 < off` >>
+  gvs[exprLoweringPropsTheory.run_inst_seq_def, mk_inst_def,
+      step_inst_base_opcode_eqs, exec_pure2_def,
+      eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+      word_mul_n2w, word_add_n2w]
+QED
+
+Theorem rest_word_body_path:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := label; bb_instructions := pre ++ loads ++
+      [mk_inst a EQ [valueop; needleop] [matched];
+       mk_inst b JNZ [Var matched; Label found; Label incr] []]|> /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  rest_word_membership_inv idx result len needle elem R i s /\
+  run_inst_seq pre s = OK p /\ run_inst_seq loads p = OK q /\
+  EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
+              j.inst_opcode <> GAS) (pre ++ loads) /\
+  (memory ==> run_inst_seq_mem_ok pre s /\ run_inst_seq_mem_ok loads p) /\
+  q.vs_current_bb = s.vs_current_bb /\ ~q.vs_halted /\
+  FLOOKUP q.vs_vars idx = FLOOKUP s.vs_vars idx /\
+  FLOOKUP q.vs_vars result = FLOOKUP s.vs_vars result /\
+  eval_operand valueop q = SOME (elem i) /\
+  eval_operand needleop q = SOME needle /\
+  matched <> idx /\ matched <> result /\
+  R (update_var matched (bool_to_word (elem i = needle)) q) /\
+  (!u lbl. R u ==> R (jump_to lbl u)) ==>
+  ?t. gas_marked_path memory ctx fn s 0 (OK t) /\
+      t.vs_current_bb = (if elem i = needle then found else incr) /\
+      t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      rest_word_membership_inv idx result len needle elem R i t
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst a EQ [valueop; needleop] [matched]) q =
+     OK (update_var matched (bool_to_word (elem i = needle)) q)` by
+    (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def]) >>
+  qmatch_asmsub_abbrev_tac `R u` >>
+  `run_inst_seq (pre ++ loads ++ [mk_inst a EQ [valueop; needleop] [matched]]) s = OK u` by
+    (rewrite_tac[GSYM APPEND_ASSOC] >>
+     qpat_assum `run_inst_seq pre s = OK p`
+       (fn th => rewrite_tac[MATCH_MP exprLoweringPropsTheory.run_inst_seq_append th]) >>
+     qpat_assum `run_inst_seq loads p = OK q`
+       (fn th => rewrite_tac[MATCH_MP exprLoweringPropsTheory.run_inst_seq_append th]) >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def]) >>
+  `memory ==> run_inst_seq_mem_ok
+      (pre ++ loads ++ [mk_inst a EQ [valueop; needleop] [matched]]) s` by
+    (strip_tac >> rewrite_tac[GSYM APPEND_ASSOC] >>
+     irule fragExecMemTheory.run_inst_seq_mem_ok_append >> simp[] >>
+     irule fragExecMemTheory.run_inst_seq_mem_ok_append >> simp[] >>
+     simp[fragExecMemTheory.run_inst_seq_mem_ok_def, mk_inst_def] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  qexists `jump_to (if elem i = needle then found else incr) u` >> conj_tac
+  >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
+      qexists `if elem i = needle then found else incr` >>
+      simp[EVERY_APPEND, Abbr `u`, update_var_def, mk_inst_def, is_terminator_def] >>
+      reverse conj_tac >- simp[jump_to_def] >>
+      Cases_on `elem i = needle` >>
+      simp[step_inst_base_def, eval_operand_def, lookup_var_def,
+           FLOOKUP_UPDATE, bool_to_word_def]) >>
+  `R (jump_to (if elem i = needle then found else incr) u)` by metis_tac[] >>
+  `rest_word_membership_inv idx result len needle elem R i u` by
+    (irule rest_word_membership_inv_frame >> simp[] >> qexists `s` >>
+     simp[Abbr `u`, update_var_def, FLOOKUP_UPDATE]) >>
+  gvs[rest_word_membership_inv_def, jump_to_def, eval_operand_def,
+      lookup_var_def, Abbr `u`, update_var_def]
+QED
+
+Theorem rest_word_body_loaded_path:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := label; bb_instructions :=
+      [mk_inst a MUL [Var idx; Lit (n2w stride)] [mulvar]] ++
+      (if 0 < off then [mk_inst b ADD [Lit (n2w off); Var mulvar] [totalvar]] else []) ++
+      [mk_inst c ADD [arr; if 0 < off then Var totalvar else Var mulvar] [addrvar]] ++
+      loads ++ [mk_inst d EQ [valueop; needleop] [matched];
+                mk_inst e JNZ [Var matched; Label found; Label incr] []]|> /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  rest_word_membership_inv idx result len needle elem R i s /\
+  eval_operand arr s = SOME baseword /\
+  arr <> Var mulvar /\ arr <> Var totalvar /\
+  ~MEM idx [mulvar; totalvar; addrvar] /\
+  ~MEM result [mulvar; totalvar; addrvar] /\
+  p = update_var addrvar (baseword + n2w (off + i * stride))
+        (if 0 < off then update_var totalvar (n2w (off + i * stride))
+            (update_var mulvar (n2w (i * stride)) s)
+         else update_var mulvar (n2w (i * stride)) s) /\
+  run_inst_seq loads p = OK q /\
+  EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
+              j.inst_opcode <> GAS) loads /\
+  (memory ==> run_inst_seq_mem_ok loads p) /\
+  q.vs_current_bb = p.vs_current_bb /\ ~q.vs_halted /\
+  FLOOKUP q.vs_vars idx = FLOOKUP p.vs_vars idx /\
+  FLOOKUP q.vs_vars result = FLOOKUP p.vs_vars result /\
+  eval_operand valueop q = SOME (elem i) /\ eval_operand needleop q = SOME needle /\
+  matched <> idx /\ matched <> result /\
+  R (update_var matched (bool_to_word (elem i = needle)) q) /\
+  (!u lbl. R u ==> R (jump_to lbl u)) ==>
+  ?t. gas_marked_path memory ctx fn s 0 (OK t) /\
+      t.vs_current_bb = (if elem i = needle then found else incr) /\
+      t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      rest_word_membership_inv idx result len needle elem R i t
+Proof
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `<|bb_label := label; bb_instructions := pre ++ loads ++ suffix|>` >>
+  `run_inst_seq pre s = OK p` by
+    (qpat_assum `p = _` SUBST1_TAC >> simp[Abbr `pre`] >>
+     irule (SRULE [LET_THM] rest_word_body_address_sequence) >>
+     simp[] >> gvs[rest_word_membership_inv_def]) >>
+  `run_inst_seq_mem_ok pre s` by
+    (irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+     Cases_on `0 < off` >> simp[Abbr `pre`, mk_inst_def] >>
+     rpt conj_tac >> gen_tac >> irule below_frontier_no_ranges >> simp[]) >>
+  `p.vs_current_bb = s.vs_current_bb /\
+   FLOOKUP p.vs_vars idx = FLOOKUP s.vs_vars idx /\
+   FLOOKUP p.vs_vars result = FLOOKUP s.vs_vars result` by
+    (qpat_assum `p = _` SUBST1_TAC >> Cases_on `0 < off` >>
+     gvs[update_var_def, FLOOKUP_UPDATE]) >>
+  irule rest_word_body_path >>
+  simp[Once CONJ_ASSOC, Abbr `suffix`, mk_inst_def] >>
+  qexistsl [`loads`, `p`, `pre`, `q`] >>
+  Cases_on `0 < off` >>
+  simp[EVERY_APPEND, Abbr `pre`, mk_inst_def, is_terminator_def]
+QED
