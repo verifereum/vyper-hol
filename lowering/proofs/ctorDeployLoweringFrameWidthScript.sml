@@ -1,6 +1,6 @@
 Theory ctorDeployLoweringFrameWidth
 Ancestors
-  ctorDeployInitcode ctorDeployDefs e2eDeployDefs codegenEncodingWf symbolResolve
+  ctorDeployDefs e2eDeployDefs codegenEncodingWf symbolResolve
   planExec vfmOperation vfmContext asmParseProofs
 Libs wordsLib finite_mapLib
 
@@ -39,15 +39,6 @@ Proof
        byteTheory.word_slice_alt_zero] >> EVAL_TAC
 QED
 
-Theorem deploy_admitted_initcode_symbol_budget:
-  deploy_phases policy tops (deploy_bc,runtime_bc) arts /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es ==>
-  LENGTH deploy_bc < 65536
-Proof
-  strip_tac >> drule_all deploy_initcode_bounded >>
-  fs[deploy_state_rel_def] >> simp[]
-QED
-
 (* Bounded feasibility audit (not a counterexample to deploy_ctor_body_frame).
    Producer chain: deploy_phases_def names codegen_assembly rpolicy
    dout.po_unit = SOME prog and deploy_bc = assemble prog.
@@ -57,10 +48,9 @@ QED
    Requirement                         Diagnostic status
    ----------------------------------- ------------------------------------
    Supported/typed large source         MISSING: no concrete tops constructed.
-   Deployment length >= 65536           RULED OUT in permitted dependency
-                                        interface: deploy_initcode_bounded
-                                        (admitted) plus deploy_state_rel gives
-                                        the symbol budget proved above.
+   Deployment length >= 65536           RULED OUT by deploy_bc_size_bounded
+                                        (ctorDeployInitcodeAsm, admitted until
+                                        the codegen sync).
    Label offset 65536 in real assembly   No witness; compute_label_offsets_bound
                                         bounds offsets by SUM asm_inst_size.
                                         codegenEncodingWf's local
@@ -80,7 +70,7 @@ QED
    codegen_assembly_asm_encoding_wf already packages a useful consumer
    interface under unit_shape_ok and assembled length < 65536. Its proof
    establishes the offset bound, rather than relying on assembler rejection.
-   The admitted size supplier is allowed by this task, but is not evidence
-   that the executable compiler rejects oversized deployments. No syntactic
+   The admitted size supplier is not evidence that the executable compiler
+   rejects oversized deployments. No syntactic
    or whole-trace confinement theorem is asserted here.
 *)

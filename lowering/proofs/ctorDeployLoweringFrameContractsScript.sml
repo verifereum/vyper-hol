@@ -34,7 +34,7 @@ Ancestors
                                          this is NOT a frozen frame premise.
    initial_ctx_rel                       deploy_entry_state_ok for shadow_root
                                          needs unit shape and <=24576. Existing
-                                         deploy_initcode_bounded supplies size.
+                                         deploy_bc_size_bounded supplies size.
                                          This is for the entry state, not every
                                          arbitrary gas_variant state.
 
