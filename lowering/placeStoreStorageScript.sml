@@ -4819,6 +4819,81 @@ Proof
   irule (SRULE[] (cj 3 place_store_nested_widening_size_probe))
 QED
 
+Theorem place_store_wrap_probe_compilation_mcopy:
+  !cenv.
+  cenv.ce_struct_fields = FEMPTY /\ cenv.ce_target CapMcopy ==>
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  compile_assign_value cenv
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa =
+  compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa
+Proof
+  rpt strip_tac >>
+  `cenv with ce_struct_fields := FEMPTY = cenv` by
+    simp[compile_env_component_equality] >>
+  pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
+  EVAL_TAC >> gvs[]
+QED
+
+Theorem place_store_wrap_probe_code_listing:
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  SND (compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa) =
+  <|cs_next_var := 20; cs_next_label := 6; cs_next_id := 30;
+    cs_current_bb := "@wcopy_exit_5"; cs_current_insts := [];
+    cs_blocks := [
+      <|bb_label := "@wcopy_body_4"; bb_instructions := [
+        mk_inst 22 MUL [Var "%13"; Lit 32w] ["%15"];
+        mk_inst 23 ADD [Var "%0"; Var "%15"] ["%16"];
+        mk_inst 24 MLOAD [Var "%16"] ["%17"];
+        mk_inst 25 ADD [Lit 0w; Var "%13"] ["%18"];
+        mk_inst 26 SSTORE [Var "%18"; Var "%17"] [];
+        mk_inst 27 ADD [Var "%13"; Lit 1w] ["%19"];
+        mk_inst 28 ASSIGN [Var "%19"] ["%13"];
+        mk_inst 29 JMP [Label "@wcopy_cond_3"] []]|>;
+      <|bb_label := "@wcopy_cond_3"; bb_instructions := [
+        mk_inst 20 EQ [Var "%13"; Lit (n2w (dimword (:256) DIV 32))] ["%14"];
+        mk_inst 21 JNZ [Var "%14"; Label "@wcopy_exit_5"; Label "@wcopy_body_4"] []]|>;
+      <|bb_label := "@typed_sa_exit_2"; bb_instructions := [
+        mk_inst 18 ASSIGN [Lit 0w] ["%13"];
+        mk_inst 19 JMP [Label "@wcopy_cond_3"] []]|>;
+      <|bb_label := "@typed_sa_body_1"; bb_instructions := [
+        mk_inst 6 MUL [Var "%1"; Lit 64w] ["%4"];
+        mk_inst 7 MUL [Var "%1"; Lit 0w] ["%5"];
+        mk_inst 8 ADD [Lit 0w; Var "%4"] ["%6"];
+        mk_inst 9 ADD [Var "%0"; Var "%5"] ["%7"];
+        mk_inst 10 MLOAD [Var "%6"] ["%8"];
+        mk_inst 11 ADD [Var "%8"; Lit 31w] ["%9"];
+        mk_inst 12 AND [Var "%9"; Lit (-32w)] ["%10"];
+        mk_inst 13 ADD [Var "%10"; Lit 32w] ["%11"];
+        mk_inst 14 MCOPY [Var "%7"; Var "%6"; Var "%11"] [];
+        mk_inst 15 ADD [Var "%1"; Lit 1w] ["%12"];
+        mk_inst 16 ASSIGN [Var "%12"] ["%1"];
+        mk_inst 17 JMP [Label "@typed_sa_cond_0"] []]|>;
+      <|bb_label := "@typed_sa_cond_0"; bb_instructions := [
+        mk_inst 3 LT [Var "%1"; Lit 1w] ["%2"];
+        mk_inst 4 ISZERO [Var "%2"] ["%3"];
+        mk_inst 5 JNZ [Var "%3"; Label "@typed_sa_exit_2"; Label "@typed_sa_body_1"] []]|>;
+      <|bb_label := "entry"; bb_instructions := [
+        mk_inst 0 ALLOCA [Lit 0w] ["%0"];
+        mk_inst 1 ASSIGN [Lit 0w] ["%1"];
+        mk_inst 2 JMP [Label "@typed_sa_cond_0"] []]|>]; cs_data_sections := []|>
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
