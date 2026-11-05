@@ -125,3 +125,6 @@ Resume ld_successful_run_induction[run]:
 QED
 
 Finalise ld_successful_run_induction
+
+val _ = if null (hyp ld_successful_run_induction) then ()
+        else raise Fail "successful run induction has hypotheses";
