@@ -299,3 +299,39 @@ Proof
   disch_then (qspec_then `R` strip_assume_tac) >>
   qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
 QED
+
+(* Diagnostic: fresh allocation has a point bound, independently of size. *)
+Theorem outside_alloc_local_end_probe[local]:
+  local_ptrs_rel func cenv scopes s /\
+  local_region cenv scopes s name b sz ==>
+  b + sz <= s.vs_alloca_next
+Proof
+  rw[local_region_def] >>
+  gvs[local_ptrs_rel_def] >>
+  qpat_x_assum `!name entry p sz. _` drule >>
+  disch_then drule >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem outside_alloc_zero_interval_probe[local]:
+  (100 + 0 <= 100 \/ 100 + 32 <= 100) /\
+  ~(100 < 100 \/ 100 + 32 <= 100)
+Proof
+  EVAL_TAC
+QED
+
+Theorem outside_alloc_fresh_probe[local]:
+  local_ptrs_rel func cenv scopes s /\
+  not_scope_ptr cenv scopes out /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  inst.inst_outputs = [out] /\ exec_alloca inst s n = OK t ==>
+  !name b sz. local_region cenv scopes t name b sz ==>
+    b + sz <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  gvs[venomExecSemanticsTheory.exec_alloca_def] >>
+  rpt strip_tac >>
+  irule outside_alloc_local_end_probe >>
+  goal_assum (drule_at Any) >>
+  gvs[local_region_def, not_scope_ptr_def, lookup_var_def, update_var_def] >>
+  Cases_on `p = out` >> gvs[FLOOKUP_UPDATE] >> metis_tac[]
+QED
