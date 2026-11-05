@@ -112,3 +112,32 @@ Proof
        comp_return_def, emit_op_def, emit_inst_def, fresh_id_def,
        fresh_var_def, emit_def] >> rpt strip_tac >> gvs[]
 QED
+
+Theorem extract32_generic_or_suffix:
+  compile_binop Or x y ty base_literal exp_literal sa = (r,sb) ==>
+  ?i v. sb.cs_current_insts = sa.cs_current_insts ++ [i] /\
+      i.inst_opcode = OR /\ i.inst_operands = [x;y] /\
+      i.inst_outputs = [v] /\ r = Var v
+Proof
+  simp[compile_binop_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Conditional consumer: the GT read belongs to the right operand region.
+   The region provenance premise, not an opcode-only test, excludes the read. *)
+Theorem extract32_or_right_region_separation:
+  (!i v. MEM i right /\ MEM (Var v) i.inst_operands ==>
+         MEM v imports \/ ?j. MEM j right /\ MEM v j.inst_outputs) /\
+  ~MEM v0 imports /\ EVERY (\i. ~MEM v0 i.inst_outputs) right ==>
+  ~(?addi lti gt ori winpre.
+      pre ++ left ++ right ++ [ori] =
+        winpre ++ [addi; lti; gt; ori] /\
+      MEM gt right /\ gt.inst_opcode = GT /\
+      gt.inst_operands = [Var v0;len])
+Proof
+  rpt strip_tac >>
+  fs[listTheory.EVERY_MEM] >>
+  first_x_assum (qspecl_then [`gt`, `v0`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
