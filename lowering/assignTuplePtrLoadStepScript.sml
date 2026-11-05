@@ -4,7 +4,7 @@ Ancestors
   assignTuplePtrBoundary assignTuplePtrPrefix representationCleanPtr bodyPtrDefs compileEnv
   tupleTypedLoad tupleMemoryLayout words arithmetic list rich_list valueEncoding valueEncodingProofs
   typedCopyPtr ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState emitHelperProps
-  emitHelper fragExec exprLoweringProps fragGasSeqPtr fragGasPathPtr
+  emitHelper fragExec exprLoweringProps fragGasSeqPtr fragGasPathPtr exprSimProps stateFrame
 
 Theorem tuple_word_member_clean:
   !tys tvs vs tenv cenv a mem tn i.
@@ -142,6 +142,7 @@ Theorem emit_add_member_path_ptr:
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!p. not_fresh_at sa p ==>
@@ -173,7 +174,7 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   gvs[] >>
   simp[copy_len_binop_ghost_frame, add_source_site_ptr] >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, state_frame_def] >>
   conj_tac
   >- simp[step_taint_def, imm_taint_def, mk_inst_def] >>
   gen_tac >> strip_tac >>
@@ -199,6 +200,7 @@ Theorem emit_mload_member_path_ptr:
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!p. not_fresh_at sa p ==>
@@ -229,7 +231,7 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   gvs[] >>
   simp[mload_ghost_clean, eval_operand_def] >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, state_frame_def] >>
   conj_tac >- simp[step_taint_def, imm_taint_def, mk_inst_def] >>
   gen_tac >> strip_tac >>
   `p <> STRING #"%" (toString sa.cs_next_var)` by
@@ -237,4 +239,32 @@ Proof
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        set_var_taint_def, op_taint_def, mk_inst_def,
        finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DRESTRICT]
+QED
+
+Theorem robust_typed_word_clean:
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\
+  (!m. mem_agree_outside tm mem m ==> val_in_memory tv v a m) ==>
+  (!m. mem_agree_outside tm mem m ==>
+       mem_word_at a m = typed_val_to_w256 tv v) /\
+  (!i. a <= i /\ i < a+32 ==> i NOTIN tm)
+Proof
+  strip_tac >>
+  `!m. mem_agree_outside tm mem m ==>
+       mem_word_at a m = typed_val_to_w256 tv v` by
+    (rpt strip_tac >> irule val_in_memory_word_type >> metis_tac[]) >>
+  drule robust_mem_word_at_clean >> simp[]
+QED
+
+Theorem stmt_state_rel_old_vars_frame_ptr:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
+  stmt_state_rel ctx func cenv cx es t
+Proof
+  strip_tac >>
+  `t = (s with vs_inst_idx := t.vs_inst_idx) with vs_vars := t.vs_vars` by
+    metis_tac[state_frame_eq_reconstruct] >>
+  pop_assum SUBST1_TAC >> irule stmt_state_rel_vars_frame >>
+  simp[stmt_state_rel_inst_idx] >>
+  fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]
 QED
