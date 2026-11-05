@@ -886,37 +886,42 @@ Theorem compile_ifexp_word_case:
     is_word_type t /\ expr_sim_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
      expr_sim_case nocalls ctx func cenv cx a /\
-     expr_sim_case nocalls ctx func cenv cx b) ==>
+     expr_vv_case nocalls ctx func cenv cx a /\
+     expr_sim_case nocalls ctx func cenv cx b /\
+     expr_vv_case nocalls ctx func cenv cx b) ==>
     expr_vv_case nocalls ctx func cenv cx (IfExp t c a b)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_ifexp >> strip_tac >>
   drule int_calls_ifexp_operands >> strip_tac >>
-  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  `expr_read_res_ok cx es' res` by
-    metis_tac[expr_body_pre_ifexp_word_readable] >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
-    mp_tac compile_ifexp_word_vv_sim >>
-  impl_tac
-  >- (simp[] >> rpt conj_tac
-      >- (rpt gen_tac >> strip_tac >>
-          drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
-          simp[is_word_type_def])
-      >- (rpt gen_tac >> strip_tac >>
-          (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-           `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
-             gvs[] >>
-           drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
-           simp[]))
-      >- (irule expr_sim_case_apply >> metis_tac[]) >>
-      rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
-      drule eval_expr_read_INL >> strip_tac >>
-      `expr_sim_case nocalls ctx func cenv cx a /\
-       expr_sim_case nocalls ctx func cenv cx b` by
-        (first_x_assum irule >> metis_tac[]) >>
-      conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
-  disch_then irule >> simp[]
+  irule compile_ifexp_word_vv_sim >> simp[] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
+      simp[is_word_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+       `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
+         gvs[] >>
+       drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
+       simp[]))
+  >~ [`expr_sim _ _ _ _ (BaseT BoolT) c es`]
+  >- (irule expr_sim_case_apply >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env c (es with gas_obs := gs)` by simp[] >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  drule eval_expr_read_INL >> strip_tac >>
+  `expr_sim_case nocalls ctx func cenv cx a /\
+   expr_vv_case nocalls ctx func cenv cx a /\
+   expr_sim_case nocalls ctx func cenv cx b /\
+   expr_vv_case nocalls ctx func cenv cx b` by
+    (qpat_x_assum `(?s tv s'. _) ==> _` mp_tac >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  rpt conj_tac
+  >- (irule expr_sim_case_apply >> metis_tac[])
+  >- (irule expr_sim_case_apply >> metis_tac[])
+  >- (fs[expr_vv_case_def] >> metis_tac[]) >>
+  fs[expr_vv_case_def] >> metis_tac[]
 QED
 
 (* A ternary of an aggregate type, which supported_pure_expr admits for
@@ -946,9 +951,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_ifexp >> strip_tac >>
   drule int_calls_ifexp_operands >> strip_tac >>
-  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  `expr_read_res_ok cx es' res` by
-    metis_tac[expr_body_pre_ifexp_readable] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
     mp_tac compile_ifexp_vv_sim >>
   impl_tac
@@ -966,7 +968,9 @@ Proof
       >- metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows]
       >- metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows]
       >- (irule expr_sim_case_apply >> metis_tac[]) >>
-      rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+      rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env c (es with gas_obs := gs)` by simp[] >>
+      drule_all expr_body_pre_eval >> strip_tac >>
       drule eval_expr_read_INL >> strip_tac >>
       `expr_sim_case nocalls ctx func cenv cx a /\
        expr_vv_case nocalls ctx func cenv cx a /\
@@ -978,10 +982,11 @@ Proof
       conj_tac >- (irule expr_sim_case_apply >> metis_tac[]) >>
       conj_tac >- (fs[expr_vv_case_def] >> metis_tac[]) >>
       conj_tac >- (fs[expr_vv_case_def] >> metis_tac[]) >>
-      rpt gen_tac >> disch_tac >>
-      `expr_type e = t` by metis_tac[] >>
-      metis_tac[ifexp_body_pre_read_typed]) >>
-  disch_then irule >> simp[]
+      rpt gen_tac >> strip_tac >> gvs[] >>
+      `expr_body_pre cenv cx env a es1 /\ expr_body_pre cenv cx env b es1` by
+        metis_tac[] >>
+      metis_tac[ifexp_body_pre_read_typed, expr_body_pre_gas_obs]) >>
+  simp[]
 QED
 
 (* x if c else y, from its operands' judgments, the branches' where the
