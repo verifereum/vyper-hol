@@ -66,7 +66,7 @@ Proof
     (irule raw_log_child_pre >> simp[] >>
      qexistsl [`ann`, `[Builtin topic_ann (MakeArray elem_ty bnd) topics; data]`,
                `dflt`, `es`] >> simp[]) >>
-  drule_all expr_sim_pre_builtin_arg >> simp[]
+  drule expr_sim_pre_builtin_arg >> disch_then irule >> simp[]
 QED
 
 Theorem raw_log_topic_size[local]:

@@ -138,6 +138,14 @@ Proof
   gvs[]
 QED
 
+Theorem expr_body_pre_make_array_arg[local]:
+  expr_body_pre cenv cx env (Builtin ann (MakeArray t b) args) es /\
+  MEM e args /\ expr_sim_inv cenv cx env es' ==>
+  expr_body_pre cenv cx env e es'
+Proof
+  strip_tac >> drule expr_body_pre_builtin_arg >> disch_then irule >> simp[]
+QED
+
 Theorem raw_log_dynamic_frag:
   body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
@@ -176,7 +184,7 @@ Proof
          qpat_x_assum `MEM arg topics` mp_tac >>
          qpat_x_assum `expr_sim_inv _ _ _ s` mp_tac >>
          rpt (pop_assum kall_tac) >> rpt strip_tac >>
-         metis_tac[expr_body_pre_raw_log_arg, expr_body_pre_builtin_arg, MEM]) >>
+         metis_tac[expr_body_pre_raw_log_arg, expr_body_pre_make_array_arg, MEM]) >>
      fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
   `wb_args_shape cenv expr_type topics` by
     (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
@@ -356,7 +364,7 @@ Proof
          qpat_x_assum `MEM arg topics` mp_tac >>
          qpat_x_assum `expr_sim_inv _ _ _ s` mp_tac >>
          rpt (pop_assum kall_tac) >> rpt strip_tac >>
-         metis_tac[expr_body_pre_raw_log_arg, expr_body_pre_builtin_arg, MEM]) >>
+         metis_tac[expr_body_pre_raw_log_arg, expr_body_pre_make_array_arg, MEM]) >>
      fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
   `wb_args_shape cenv expr_type topics` by
     (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
