@@ -1,7 +1,9 @@
 (* PrevHash source and clean scalar sequence boundaries. *)
 Theory bodyPtrEnvBuiltinsPrevHash
 Ancestors
-  bodyPtrEnvBuiltinsScalar bodyPtrEnvBuiltinsGas compileEnv exprLowering
+  bodyPtrEnvBuiltinsScalar bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsScalarCompose
+  bodyPtrEnvBuiltinsEdges bodyPtrDefs exprLoweringProps exprSimAccounts
+  fragGasPathPtr fragExec ptrDiscipline compileEnv exprLowering
   vyperInterpreter vyperContext vyperState vyperValue vyperTypeSystem
   exprSimProps emitHelper emitHelperProps builtinProps gasSummary
   venomState venomInst venomExecSemantics finite_map list rich_list
@@ -31,4 +33,91 @@ Proof
   simp[compile_env_var_def, comp_bind_def] >>
   Cases_on `emit_op NUMBER [] sa` >>
   Cases_on `emit_op SUB [q; Lit 1w] r` >> simp[]
+QED
+
+Theorem prevhash_context_read:
+  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel ctx fn cenv cx es t ==>
+  t.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w)) =
+  s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))
+Proof
+  strip_tac >>
+  `call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx /\
+   call_ctx_rel cx.txn t.vs_call_ctx t.vs_tx_ctx t.vs_block_ctx` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  `t.vs_block_ctx.bc_number = s.vs_block_ctx.bc_number` by
+    gvs[call_ctx_rel_def] >>
+  metis_tac[call_ctx_rel_prevhash]
+QED
+
+Theorem prevhash_counted_run:
+  compile_env_var PrevHash sa = (op,sb) /\ fn_has_code sa sb fn /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es sa G tn s G' tn' /\
+    op_taint tn' op = {} /\
+    eval_operand op t = SOME
+      (s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))) /\
+    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >> drule prevhash_emit_decompose >> strip_tac >>
+  `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb` by
+    metis_tac[emit_op_extends_next_var] >>
+  `fn_has_code sa sm fn /\ fn_has_code sm sn fn /\ fn_has_code sn sb fn` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `local_ptrs_rel fn cenv es.scopes s` by gvs[stmt_state_rel_def, state_rel_def] >>
+  `ghost_kept cenv es sa G tn s G tn` by simp[ghost_kept_refl] >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK s)` by simp[gas_path_ptr_rules] >>
+  `cs_extends sa sa` by simp[cs_extends_refl] >>
+  `sa.cs_next_var <= sa.cs_next_var /\ sa.cs_next_id <= sa.cs_next_id /\
+    (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s) /\
+    s.vs_memory = s.vs_memory /\ s.vs_allocas = s.vs_allocas` by simp[] >>
+  `step_inst_base (mk_inst sa.cs_next_id NUMBER []
+      [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      s.vs_block_ctx.bc_number s)` by
+    simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+  qpat_assum `emit_op NUMBER [] sa = _`
+    (mp_then Any mp_tac emit_scalar_builtin_append) >>
+  simp[MEM] >> disch_then drule_all >>
+  disch_then (qx_choose_then `G1` (qx_choose_then `tn1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `!a. MEM a [num; Lit 1w] ==> op_taint tn1 a = {}` by
+    (rpt strip_tac >> gvs[op_taint_def]) >>
+  `step_inst_base (mk_inst sm.cs_next_id SUB [num; Lit 1w]
+    [STRING #"%" (toString sm.cs_next_var)]) s1 =
+    OK (update_var (STRING #"%" (toString sm.cs_next_var))
+      (s.vs_block_ctx.bc_number - 1w) s1)` by
+    simp[step_inst_base_opcode_eqs, exec_pure2_def, mk_inst_def,
+         eval_operands_def, eval_operand_def] >>
+  qpat_assum `emit_op SUB _ sm = _`
+    (mp_then Any mp_tac emit_scalar_builtin_append) >>
+  gvs[MEM] >> disch_then drule_all >>
+  disch_then (qx_choose_then `G2` (qx_choose_then `tn2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  `!a. MEM a [prev] ==> op_taint tn2 a = {}` by simp[] >>
+  `s2.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w)) =
+    s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))` by
+    metis_tac[prevhash_context_read] >>
+  `step_inst_base (mk_inst sn.cs_next_id BLOCKHASH [prev]
+    [STRING #"%" (toString sn.cs_next_var)]) s2 =
+    OK (update_var (STRING #"%" (toString sn.cs_next_var))
+      (s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))) s2)` by
+    simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def, eval_operands_def] >>
+  qpat_assum `emit_op BLOCKHASH _ sn = _`
+    (mp_then Any mp_tac emit_scalar_builtin_append) >>
+  gvs[MEM] >> disch_then drule_all >>
+  disch_then strip_assume_tac >> metis_tac[]
 QED
