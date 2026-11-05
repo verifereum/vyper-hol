@@ -948,6 +948,174 @@ Proof
   simp[regions_disjoint_def] >> metis_tac[LESS_EQ_REFL, ADD_COMM]
 QED
 
+(* C1.1.n DESIGN ONLY: counted recursive interface (not an assertion).
+   Proposed entry predicate E cenv ctx dty sty dtv stv v is the following
+   universally quantified contract. For ALL dst src sa sb func s dw sw,
+     compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
+     (!x. dst = Var x ==> not_fresh_at sa x) /\
+     (!x. src = Var x ==> not_fresh_at sa x) /\
+     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+     val_in_memory stv v (w2n sw) s.vs_memory /\
+     w2n sw + type_memory_size stv < dimword (:256) /\
+     w2n dw + type_memory_size dtv < dimword (:256) /\
+     regions_disjoint (w2n sw) (type_memory_size stv)
+                      (w2n dw) (type_memory_size dtv) /\
+     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+     s.vs_inst_idx = LENGTH sa.cs_current_insts
+   implies EXISTS t,
+     gas_marked_path F ctx func s 0 (OK t) /\
+     val_in_memory dtv v (w2n dw) t.vs_memory /\
+     typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
+     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts.
+   The rank theorem should have EXACTLY the hypotheses of typed_copy_rank_entry
+   and conclusion E instead of typed_copy_entry. No continuation-to-path
+   implication is assumed. The checked word boundary below is stronger than
+   this entry's word instance (no source freshness, bounds or disjointness).
+
+   Array consumer, slow path: set N = LENGTH values, hs = hd = 0 for fixed
+   arrays and hs = hd = 32 for dynamic arrays. ss,ds are evaluated element
+   memory sizes, equal to compiler element sizes. At the cond block entry
+   (index 0), invariant I(i,q), relative to original s, is:
+     i <= N /\ lookup_var counter q = SOME (n2w i) /\ ~q.vs_halted /\
+     q.vs_current_bb = cond_lbl /\ q.vs_inst_idx = 0 /\
+     gas_marked_path F ctx func s 0 (OK q) /\
+     val_in_memory stv v (w2n sw) q.vs_memory /\
+     (!j. j < i ==> val_in_memory detv (EL j values)
+          (w2n dw + hd + j*ds) q.vs_memory) /\
+     typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s q.
+   Also retain base/length operands at their original values and all loop
+   temporaries allocated before the child compiler state; these variables
+   are not_fresh_at child_sa, NOT necessarily not_fresh_at outer sa.
+   Fixed typing gives N=count. Dynamic typing gives N<=source_cap<=dest_cap
+   and N<dimword; MLOAD/GT/ISZERO/ASSERT must be executed and MSTORE establishes
+   the destination length header, retained by each child frame. Zero length
+   exits without a child call. Child addresses are sw+hs+i*ss, dw+hd+i*ds;
+   full-region bounds prove no word wrap, and disjoint full regions imply
+   disjoint child regions. Rank(element)<rank(array) supplies E for EL i.
+   At child entry use its actual compiler block/index, not the body label:
+   the address prefix has already advanced the index. Child E returns its
+   own exit block/index, which may differ after nested loops. Execute the
+   increment/ASSIGN/JMP suffix from THAT exit, re-enter cond_lbl at index 0.
+   Compose prefix, child and suffix zero-count paths using path transitivity;
+   finite induction on N-i justifies repetition, not an unbounded back-edge
+   rule. At i=N execute LT/ISZERO/JNZ to exit_lbl, index 0, then match sb.
+   Frame composition and child disjointness preserve earlier elements and
+   source memory; reassemble val_in_memory only at exit. Fast fixed copy
+   and dynamic copy need separate actual counted MCOPY/loop boundaries;
+   the above invariant does not certify those dispatch branches.
+
+   Sequential fields consumer: zip destination/source types, evaluated types
+   and values (structs select source type by ALOOKUP name as in the compiler).
+   At field k retain original base operands, source val_in_memory, the full
+   outer state frame and val_in_memory for each destination field j<k at
+   dw+SUM(previous destination sizes). Source offset is SUM(previous selected
+   source sizes), including the struct compiler's traversal order. Distinct
+   names, metadata consistency and existing field-layout lemmas must justify
+   this selection/order, not an assumed identity of source/destination sizes.
+   Execute both compile_with_byte_offset prefixes, apply E for that field's
+   smaller rank with its actual child_sa/child_sb, then compose with the tail
+   list induction at updated offsets. Child frames preserve original bases
+   and preceding fields; whole-region disjointness preserves source values.
+   Empty lists use the reflexive zero path at the unchanged compiler endpoint.
+   Missing source fields must be ruled out by typing before taking a child.
+   No arrays/fields/bytes fast-path proof is claimed by this design artifact.
+*)
+Theorem place_store_typed_word_path:
+  !cenv ctx func tenv dst dty src sty sa sb stv dtv v sw dw s.
+    compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
+    is_word_type dty /\ type_widens_to tenv sty dty /\
+    evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+                vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typedMemoryCopyTheory.typed_copy_word_widening >> strip_tac >> gvs[] >>
+  `type_memory_size dtv = 32` by suspend "size" >>
+  `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
+    metis_tac[entryDecodePropsTheory.val_in_memory_word] >>
+  drule_all typedMemoryCopyTheory.typed_copy_word_run_seq >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq _ _ = OK u` >>
+  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX sb.cs_current_insts bb.bb_instructions` by
+    (gvs[fragExecTheory.fn_has_code_def, same_blocks_def] >> metis_tac[]) >>
+  `isPREFIX (emitted_insts sa sb)
+     (DROP s.vs_inst_idx bb.bb_instructions)` by suspend "prefix" >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    suspend "no_gas" >>
+  `gas_marked_path F ctx func s 0
+     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    suspend "path" >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  suspend "post"
+QED
+Resume place_store_typed_word_path[size]:
+  qpat_x_assum `is_word_type dty` mp_tac >>
+  qpat_x_assum `evaluate_type tenv dty = SOME dtv` mp_tac >>
+  Cases_on `dty` >> simp[is_word_type_def]
+  >~ [`FlagT`]
+  >- (rw[evaluate_type_def, AllCaseEqs(), PULL_EXISTS] >>
+      gvs[valueEncodingTheory.type_memory_size_def]) >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_word_type_def, evaluate_type_def, valueEncodingTheory.type_memory_size_def] >>
+  rpt strip_tac >> gvs[valueEncodingTheory.type_memory_size_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[is_word_type_def, evaluate_type_def, valueEncodingTheory.type_memory_size_def, AllCaseEqs()]
+QED
+Resume place_store_typed_word_path[prefix]:
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  qpat_x_assum `bb.bb_instructions = _` (fn th => rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  qexists_tac `l` >> rewrite_tac[]
+QED
+Resume place_store_typed_word_path[no_gas]:
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def] >>
+  simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_return_def] >> strip_tac >>
+  gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]
+QED
+Resume place_store_typed_word_path[path]:
+  drule_at (Pat `run_inst_seq _ _ = _`) tuple_run_inst_seq_gas_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  simp[gas_marked_path_def]
+QED
+Resume place_store_typed_word_path[post]:
+  `typedMemoryCopy$typed_copy_state_frame sa (w2n dw) 32 s
+     (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    simp[Abbr `u`, typedMemoryCopyTheory.typed_copy_word_state_frame] >>
+  `val_in_memory dtv v (w2n dw) u.vs_memory` by
+    (drule_all entryDecodePropsTheory.val_in_memory_word >>
+     disch_then (fn th => rewrite_tac[th]) >>
+     simp[Abbr `u`, valueEncodingPropsTheory.mstore_mem_word_at_same,
+          GSYM valueEncodingPropsTheory.mem_word_at_eq_mload]) >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    simp[Abbr `u`, mstore_def, update_var_def] >>
+  gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+      typedMemoryCopyTheory.typed_copy_frame_def, same_blocks_def] >>
+  metis_tac[]
+QED
+Finalise place_store_typed_word_path
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
