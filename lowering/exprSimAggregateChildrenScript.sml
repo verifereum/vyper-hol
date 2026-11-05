@@ -1405,3 +1405,61 @@ Proof
   qexistsl_tac [`aid`, `off`, `sz`] >> simp[] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
+
+Theorem aggregate_intcall_result_location:
+  compile_call cfn ce rt ty (IntCall fid) args drv sa = (vv,sb) ==>
+  !t p. vv = LocatedValue t p ==> p.ptr_location = LocMemory
+Proof
+  simp[exprLoweringTheory.compile_call_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `returns_count > 0` >> Cases_on `return_buf_size > 0` >>
+  gvs[] >> rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[contextTheory.base_ptr_def]
+QED
+
+Theorem aggregate_unequal_post_result_location:
+  post_value_type ce e <> expr_type e /\
+  compile_expr ce ty e si = (vv,sj) ==>
+  !t p. vv = LocatedValue t p ==> p.ptr_location = LocMemory
+Proof
+  strip_tac >>
+  `?et fid args drv. e = Call et (IntCall fid) args drv` by
+    metis_tac[post_value_type_not_int_call] >>
+  qpat_x_assum `e = _` SUBST_ALL_TAC >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once exprLoweringTheory.compile_expr_def] >>
+  strip_tac >> drule aggregate_intcall_result_location >> simp[]
+QED
+
+Theorem unwrap_value_body_rebased_sim:
+  compile_expr ce ty e si = (vv,sj) /\
+  expr_body_pre ce cx env e es /\
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) ==>
+  frag_exec ctx sm su (\s. s = r)
+    (\s. expr_post ctx func ce cx e es'
+      (sa with cs_next_var := sm.cs_next_var) su r es' v op s) R
+Proof
+  strip_tac >> Cases_on `post_value_type ce e = expr_type e`
+  >- (irule unwrap_value_rebased_sim >> simp[] >> conj_tac
+      >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+      qexistsl_tac [`es`, `s0`, `tv`, `vv`] >> simp[]) >>
+  `vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    sm r es' (Value v) vv r` by
+    (drule_all vv_post_materialise >> disch_then (mp_tac o MATCH_MP vv_post_rebase) >> simp[]) >>
+  irule frag_exec_conseq >>
+  qexistsl_tac
+    [`\s. vv_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) sm r es' (Value v) vv s`,
+     `\s. expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op s`, `R`] >>
+  simp[] >> Cases_on `vv`
+  >- (gvs[exprLoweringTheory.unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
+      simp[] >> metis_tac[expr_post_of_vv_post_stack]) >>
+  irule unwrap_memory_sim >> simp[] >>
+  metis_tac[aggregate_unequal_post_result_location]
+QED
