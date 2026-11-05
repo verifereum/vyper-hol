@@ -430,7 +430,8 @@ Theorem ifexp_word_arm_finish_mem[local]:
     (\res ee u. ?tv. res = INL tv /\
       vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
         (StackValue t (Var rv)) u /\
-      vv_store_bound cx t ee tv (StackValue t (Var rv)) u /\
+      vv_store_bound cx t (lowered_value_type cenv (IfExp t c a b)) ee tv
+        (StackValue t (Var rv)) u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
 Proof
