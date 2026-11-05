@@ -34,10 +34,9 @@
  * expr_sim_case; expr_vv_case describes a base's value_vv, captured memory,
  * storage and transient places included.  It does not cover a hashmap
  * base: that evaluates to a HashMapRef and is typed by type_place_expr, not
- * well_typed_expr, so for a nested mapping (m[a][b]) nothing judges the
- * inner key a.  The mapping lemma's proof needs expr_vv_case to describe a
- * HashMapRef result (the operand holding the mapping's slot), which then
- * carries the inner keys' simulation to the outer subscript.
+ * well_typed_expr.  A mapping base is judged by expr_map_case
+ * (exprSimMapDefs) instead, which compile_subscript_case takes for a
+ * MapPT base and compile_subscript_sim supplies via expr_map_case_below.
  *
  * compile_subscript dispatches on place_type of the base, the base's own
  * type for a nested place, and pop takes its target's place from
@@ -104,6 +103,8 @@ QED
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
+    (!kt vt. place_type cenv obj = MapPT kt vt ==>
+             expr_map_case nocalls ctx func cenv cx obj) /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
@@ -136,8 +137,11 @@ Proof
   `expr_ok cenv obj /\ expr_ok cenv idx` by
     (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
      simp[expr_size_def]) >>
+  `expr_sim_below cenv (expr_size obj)` by
+    (irule expr_sim_below_mono >>
+     qexists_tac `expr_size (Subscript ann obj idx)` >> simp[expr_size_def]) >>
   gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_subscript_case >> simp[]
+  irule compile_subscript_case >> simp[expr_map_case_below]
 QED
 
 (* ===== Attributes ===== *)

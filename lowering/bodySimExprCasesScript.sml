@@ -27,7 +27,7 @@ Ancestors
   exprSimSource
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimPopNested bodyPopNestedTargetFrag exprSimPopImmutableTarget targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces bodySubscriptMapResidual exprSimPopNested bodyPopNestedTargetFrag exprSimPopImmutableTarget targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* With no internal call in it, an expression simulates by
@@ -170,8 +170,9 @@ Theorem body_subscript_case:
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
-    (irule exprSimPlacesTheory.compile_subscript_case >> conj_tac
-     >- metis_tac[body_expr_ok_case] >>
+    (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
+     >- metis_tac[body_expr_ok_case]
+     >- metis_tac[body_subscript_map_residual] >>
      rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
   simp[expr_sim_case_of_vv]
 QED
