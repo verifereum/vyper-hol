@@ -582,3 +582,108 @@ Proof
   drule clear_entry_root_header >> simp[] >> strip_tac >>
   simp[clear_root_prefix, exprSimTheory.expr_exit_def]
 QED
+
+Theorem clear_no_local_ptr[local]:
+  !scopes x. not_local_ptr probe_deep_cenv scopes x
+Proof
+  simp[not_local_ptr_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem clear_stmt_update_var[local]:
+  !k es ss x w.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss ==>
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es (update_var x w ss)
+Proof
+  rpt strip_tac >> irule stmt_state_rel_update_var >>
+  simp[clear_no_local_ptr]
+QED
+
+Theorem clear_root_prefix_framed:
+  !k es ss.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss /\ sload 0w ss <> 0w ==>
+    ?t. run_inst_seq
+      (TAKE 9 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) ss = OK t /\
+      stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+        probe_deep_cenv probe_clear_source_context es t /\
+      lookup_var "%7" t = SOME 1w /\
+      t.vs_memory = ss.vs_memory /\ t.vs_allocas = ss.vs_allocas /\
+      sload 1w t = sload 1w ss /\
+      (!x. ~MEM x ["%0"; "%1"; "%2"; "%3"; "%4"; "%5"; "%6"; "%7"] ==>
+        lookup_var x t = lookup_var x ss)
+Proof
+  rpt strip_tac >>
+  simp[clear_root_prefix] >>
+  reverse conj_tac
+  >- simp[emitHelperPropsTheory.lookup_var_update_var, update_var_def] >>
+  ntac 8 (irule clear_stmt_update_var) >> simp[]
+QED
+
+Theorem clear_no_local_region[local]:
+  !es ss n b sz. ~local_region probe_deep_cenv es.scopes ss n b sz
+Proof
+  simp[local_region_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem clear_buffer_store_rel[local]:
+  !k es ss p.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss /\
+    FLOOKUP ss.vs_allocas 9 = SOME (p,32) ==>
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es (mstore p 0w ss)
+Proof
+  rpt strip_tac >> irule loweringSliceTheory.literal_mstore_state_rel >>
+  simp[] >> qexistsl_tac [`p`, `mk_inst 9 ALLOCA [Lit 32w] ["%8"]`, `32`] >>
+  simp[clear_no_local_region] >> EVAL_TAC >> simp[]
+QED
+
+Theorem clear_return_buffer_framed:
+  !k es ss p.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss /\
+    lookup_var "%8" ss = SOME p /\ lookup_var "%9" ss = SOME 0w /\
+    FLOOKUP ss.vs_allocas 9 = SOME (w2n p,32) ==>
+    ?t. run_inst_seq
+      (TAKE 3 (DROP 11
+        (HD probe_descendant_outer_caller.fn_blocks).bb_instructions)) ss = OK t /\
+      stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+        probe_deep_cenv probe_clear_source_context es t /\
+      lookup_var "%11" t = SOME 0w /\
+      t.vs_allocas = ss.vs_allocas /\ sload 1w t = sload 1w ss /\
+      (!x. x <> "%10" /\ x <> "%11" ==> lookup_var x t = lookup_var x ss)
+Proof
+  rpt strip_tac >> drule_all clear_return_buffer >>
+  disch_then (fn th => simp[th]) >>
+  reverse conj_tac
+  >- simp[emitHelperPropsTheory.lookup_var_update_var, update_var_def,
+          mstore_def, sload_def, contract_storage_def] >>
+  irule clear_stmt_update_var >> irule clear_buffer_store_rel >>
+  reverse conj_tac >- (irule clear_stmt_update_var >> simp[]) >>
+  simp[update_var_def]
+QED
+
+Theorem clear_invoke_frag:
+  !k es ss st st' R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++
+      [mk_inst 10 INVOKE [Label "internal 0 shrink()_runtime"] ["%9"]] /\
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss ==>
+    frag_exec (probe_descendant_ctx k) st st' (\s. s = ss)
+      (\s. s = (update_var "%9" 0w (sstore 2w 0w (sstore 0w 0w ss))
+                  with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+        stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+          probe_deep_cenv probe_clear_source_context
+          (set_storage probe_clear_source_context es F
+            (update_storage 0w 0w (get_storage probe_clear_source_context es F))) s) R
+Proof
+  rpt strip_tac >> irule fragExecTheory.frag_exec_invoke >>
+  simp[mk_inst_def] >> rpt strip_tac >>
+  qexists `SUC 0` >> pure_rewrite_tac[GSYM mk_inst_def, clear_machine_invoke] >>
+  simp[] >>
+  simp[stmt_state_rel_inst_idx] >>
+  irule clear_stmt_update_var >> irule clear_stmt_transport >> simp[]
+QED
