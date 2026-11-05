@@ -7,7 +7,7 @@ Ancestors
   exprSimHyps vyperTypeEnv vyperTypeInvariants vyperTyping valueEncodingProofs
   vyperTypeSystem exprLoweringProps venomExecSemantics exprSimUnop builtinSimple
   words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
-  exprSimOps exprBopLowering
+  exprSimOps exprBopLowering exprSimCompare freshWrites rich_list
 Libs
   intLib
 
@@ -782,7 +782,8 @@ Theorem compile_bop_storage_frame_frag:
     compile_binop bop x y (expr_type e1)
       (if bop = Exp then expr_int_literal e1 else NONE)
       (if bop = Exp then expr_int_literal e2 else NONE) a2 = (operand,b) /\
-    (!z. x = Var z ==> not_fresh_at a1 z) /\ (!l. x <> Label l) /\
+    (!z. x = Var z ==> not_fresh_at a1 z) /\
+    (!z. y = Var z ==> not_fresh_at a2 z) /\ (!l. x <> Label l) /\
     local_ptrs_reserved cenv a /\ local_ptrs_reserved cenv a2 /\
     a.cs_next_var <= a1.cs_next_var /\ a1.cs_next_var <= a2.cs_next_var /\
     a.cs_next_id <= a1.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -847,6 +848,8 @@ Proof
   goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexists_tac `R` >> simp[] >>
   qpat_assum `lower_value _ _ _ e1 sa = _`
+    (mp_then Any mp_tac compile_lower_value_var) >> simp[] >> strip_tac >>
+  qpat_assum `lower_value _ _ _ e2 s1 = _`
     (mp_then Any mp_tac compile_lower_value_var) >> simp[] >> strip_tac >>
   qpat_x_assum `!a b operand. _` (drule_then assume_tac) >> simp[]
 QED
@@ -966,7 +969,8 @@ Theorem bitwise_generic_tail_test[local]:
     compile_binop bop x y (expr_type e1)
       (if bop = Exp then expr_int_literal e1 else NONE)
       (if bop = Exp then expr_int_literal e2 else NONE) a2 = (operand,b) /\
-    (!z. x = Var z ==> not_fresh_at a1 z) /\ (!l. x <> Label l) /\
+    (!z. x = Var z ==> not_fresh_at a1 z) /\
+    (!z. y = Var z ==> not_fresh_at a2 z) /\ (!l. x <> Label l) /\
     local_ptrs_reserved cenv a /\ local_ptrs_reserved cenv a2 /\
     a.cs_next_var <= a1.cs_next_var /\ a1.cs_next_var <= a2.cs_next_var /\
     a.cs_next_id <= a1.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -1155,3 +1159,162 @@ val () = List.app (fn th =>
     else raise Fail "Shift framing has unproved dependencies"
   end) [shift_storage_frame_op, shift_result_words,
         shift_storage_frame_tail, compile_shift_storage_frame_frag];
+
+Theorem compare_straight_fresh[local]:
+  MEM bop [Lt;Gt;Eq;NotEq;LtE;GtE] ==>
+  straight_fresh (compile_compare bop x y ty)
+Proof
+  strip_tac >> rw[straight_fresh_def] >>
+  drule_all compile_compare_shape >> strip_tac >>
+  `compile_binop bop x y ty NONE NONE st = (x',st')` by
+    (gvs[compile_binop_def]) >>
+  drule compile_binop_grows >> strip_tac >>
+  gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]
+QED
+
+Theorem compare_storage_frame_op:
+  MEM bop [Lt;Gt;Eq;NotEq;LtE;GtE] /\
+  compile_compare bop x y ty sa = (op,sb) /\
+  eval_operand x s0 = SOME a /\ eval_operand y s0 = SOME b /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
+         eval_operand op s = SOME (bool_to_word (eval_compare bop ty a b)) /\
+         (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
+         (!aid base. FLOOKUP s0.vs_allocas aid = SOME base ==> FLOOKUP s.vs_allocas aid = SOME base) /\
+         s.vs_memory = s0.vs_memory /\
+         contract_storage s = contract_storage s0 /\
+         contract_transient s = contract_transient s0) R
+Proof
+  strip_tac >> irule frag_exec_pre_exit >>
+  irule_at (Pat `frag_exec _ _ _ _ _ _`) frag_exec_straight_fresh_storage_frame_success >>
+  qexistsl_tac [`compile_compare bop x y ty`, `R`] >>
+  qexists_tac `\s. eval_operand x s = SOME a /\ eval_operand y s = SOME b` >>
+  simp[compare_straight_fresh, eval_operand_drop_fresh] >>
+  rpt strip_tac >> irule compile_compare_correct >> simp[] >>
+  goal_assum (drule_at (Pat `compile_compare _ _ _ _ _ = _`)) >> simp[]
+QED
+
+Theorem compare_typed_word_second[local]:
+  word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 ==> word_value v2
+Proof
+  strip_tac >> fs[word_value_def] >> Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `v2` >> gvs[value_has_type_def, word_value_def] >>
+  rename1 `value_has_type (BaseTV bt) _` >> Cases_on `bt` >> gvs[value_has_type_def]
+QED
+
+Theorem compile_compare_storage_frame_tail:
+  MEM bop [Lt;Gt;Eq;NotEq;LtE;GtE] /\
+  bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es' = INL v /\
+  word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+  (is_uint256 (expr_type e1) <=> tv = BaseTV (UintT 256)) /\
+  (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==> m <= 256) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  compile_binop bop x y (expr_type e1) bl el s2 = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\
+  (!z. y = Var z ==> not_fresh_at s2 z) /\ (!l. x <> Label l) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s2 /\
+  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+  sa.cs_next_id <= s1.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t ==>
+  frag_exec ctx s2 sb
+    (\s. expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+           es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_res_ok (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es')` by
+    simp[expr_res_ok_def] >>
+  drule_all bop_result_compare >>
+  disch_then assume_tac >>
+  `v = BoolV (eval_compare bop (expr_type e1) (val_to_w256 v1) (val_to_w256 v2))` by metis_tac[sumTheory.INL_11] >>
+  `word_value v /\ val_to_w256 v = bool_to_word (eval_compare bop (expr_type e1) (val_to_w256 v1) (val_to_w256 v2))` by
+    (Cases_on `eval_compare bop (expr_type e1) (val_to_w256 v1) (val_to_w256 v2)` >>
+     simp[word_value_def, val_to_w256_def, bool_to_word_def]) >>
+  `word_value v2` by metis_tac[compare_typed_word_second] >>
+  `compile_compare bop x y (expr_type e1) s2 = (op,sb)` by gvs[compile_binop_def] >>
+  irule frag_exec_pointwise >> gen_tac >> BETA_TAC >> strip_tac >>
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ u` >>
+  `stmt_state_rel ctx func cenv cx es' u /\
+   eval_operand x u = SOME (val_to_w256 v1) /\
+   eval_operand y u = SOME (val_to_w256 v2)` by
+    (fs[expr_post_def] >>
+     `eval_operand x t = SOME (val_to_w256 v1) /\
+      eval_operand y u = SOME (val_to_w256 v2)` by
+       (conj_tac >> irule expr_val_rel_word >> simp[] >> metis_tac[]) >>
+     simp[] >> irule eval_operand_frame >> simp[] >> qexistsl_tac [`s1`, `t`] >> simp[]) >>
+  irule frag_exec_conseq >> irule_at Any compare_storage_frame_op >>
+  goal_assum (drule_at (Pat `compile_compare _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`u`, `func`, `es'`, `cx`, `cenv`, `val_to_w256 v2`, `val_to_w256 v1`, `R`] >>
+  simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `s1` >> simp[])
+  >> rpt strip_tac
+  >~ [`expr_post`]
+  >- (qpat_x_assum `v = BoolV _` SUBST_ALL_TAC >>
+      irule expr_post_bop >> simp[] >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`)) >> simp[]) >> gvs[]
+QED
+
+Theorem compile_compare_storage_frame_frag:
+  MEM bop [Lt;Gt;Eq;NotEq;LtE;GtE] /\
+  ~is_bytestring_type (expr_type e1) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    ?tv. word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+      (is_uint256 (expr_type e1) <=> tv = BaseTV (UintT 256)) /\
+      (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==> m <= 256)) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==> !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    (e = e1 \/ e = e2) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bop <> In /\ bop <> NotIn /\ bop <> Exp` by
+    (qpat_x_assum `MEM bop _` mp_tac >> simp[] >> rpt strip_tac >> gvs[]) >>
+  irule compile_bop_storage_frame_frag >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!v1 es1 v2 es2. _` (drule_all_then strip_assume_tac) >>
+      irule compile_compare_storage_frame_tail >> simp[] >>
+      qexistsl_tac [`NONE`, `NONE`, `tv`, `v1`, `x`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> first_assum irule >> simp[]) >>
+  qexists_tac `ty` >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Comparison framing has unproved dependencies"
+  end) [compare_straight_fresh, compare_storage_frame_op, compare_typed_word_second,
+        compile_compare_storage_frame_tail, compile_compare_storage_frame_frag];
