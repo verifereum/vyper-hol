@@ -220,22 +220,26 @@ QED
 Theorem raw_call_kwargs_sim[local]:
   EVERY (\k. k = EKValue \/ k = EKGas) ks /\ LENGTH es = LENGTH ks /\
   typed_args_ready ctx func cenv cx (K (BaseT (UintT 256))) Inv es /\ Inv st /\
+  (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) /\
   wb_args_shape cenv (K (BaseT (UintT 256))) es /\
   compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) /\
-  eval_exprs cx es st = (rr,st') /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx st s)
-    (\s. ?xs vs. rr = INL vs /\
-       typed_args_post ctx func cenv cx st sa s0 st' es xs vs s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx st s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx es) (st,s0)
+    (\rr ee s. ?xs vs. rr = INL vs /\
+       typed_args_post ctx func cenv cx st sa s0 ee es xs vs s /\
        vo = ext_call_kwarg EKValue ks xs /\
-       go = ext_call_kwarg EKGas ks xs /\ d = NONE)
-    (wb_args_exit rr)
+       go = ext_call_kwarg EKGas ks xs /\ d = NONE /\
+       s.vs_current_bb = sb.cs_current_bb /\
+       s.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\rr ee r. wb_args_exit rr r)
 Proof
   strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
   drule_all lower_typed_args_sim >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  strip_tac >> irule frag_exec_conseq >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  metis_tac[]
 QED
 
 (* The failure copy needs no allocation-capacity or destination-end bound:
@@ -290,6 +294,7 @@ Proof
   strip_tac >> drule raw_call_pre_flags >> strip_tac >>
   `type_alloc_ok cenv ann` by
     fs[expr_body_pre_def, alloc_limits_expr_def] >>
+  Cases_on `flags.rcf_revert_on_failure` >>
   gvs[raw_call_return_type_def, type_alloc_ok_def, is_word_type_def,
       type_memory_bytes_def] >>
   `2 ** 64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
@@ -480,7 +485,7 @@ Proof
      regions_disjoint (w2n w) (32 * ((cap + 31) DIV 32) + 32) b len` by
     (rpt strip_tac >> simp[] >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _` irule >>
-     qexists_tac `name` >> irule exprSimOpsTheory.local_region_frame >>
+     qexists_tac `name` >> irule exprSimPropsTheory.local_region_frame >>
      conj_tac >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sm`, `es.scopes`, `final`] >> simp[]) >>
   qpat_x_assum `w2n w + _ < dimword(:256)` (assume_tac o SRULE []) >>
