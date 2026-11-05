@@ -1936,3 +1936,26 @@ Proof
       disch_then (qspec_then `take_count` strip_assume_tac) >> simp[]) >>
   simp[eval_phis_def]
 QED
+
+Theorem phi_eval_member_value:
+  !insts s final inst out value.
+    eval_phis s insts = OK final /\ EVERY (\i. i.inst_opcode = PHI) insts /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) /\
+    MEM inst insts /\ eval_one_phi s inst = SOME (out,value) ==>
+    FLOOKUP final.vs_vars out = SOME value
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `eval_phis s (head::tail)` >>
+  simp[eval_phis_def] >> strip_tac >>
+  Cases_on `eval_one_phi s head` >> gvs[] >>
+  rename1 `eval_one_phi s head = SOME result` >> PairCases_on `result` >>
+  Cases_on `eval_phis s tail` >> gvs[] >>
+  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `out = result0` >> gvs[]
+  >- (`MEM out head.inst_outputs /\ MEM out inst.inst_outputs` by
+        metis_tac[venomExecProofsTheory.eval_one_phi_output_mem] >>
+      gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT,
+          listTheory.MEM_MAP] >> metis_tac[]) >>
+  first_x_assum irule >> gvs[listTheory.ALL_DISTINCT_APPEND] >>
+  qexistsl_tac [`inst`, `s`] >> simp[]
+QED
