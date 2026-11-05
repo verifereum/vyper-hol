@@ -2,7 +2,7 @@
 Theory targetSubscriptMapping
 Ancestors
   targetPlaceSimCasesBase loweringPosts vyperState exprSimHash fragGasMode
-  emitHelperProps venomInst
+  emitHelperProps venomInst exprSimAlloc exprSimPrecompiles compileEnv
 
 Theorem target_mapping_extend_place:
   extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript kv) es =
@@ -39,4 +39,27 @@ Proof
   simp[is_terminator_def] >> rpt strip_tac >>
   irule step_SHA3_bytes >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem target_scratch_store_frame:
+  stmt_state_rel ctx func cenv cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+  b <= a /\ a + 32 <= b + sz /\
+  (!aid off len. aid < sa.cs_next_id /\
+     FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+     regions_disjoint b sz off len) /\
+  (!name off len. local_region cenv es.scopes s name off len ==>
+     regions_disjoint b sz off len) ==>
+  stmt_state_rel ctx func cenv cx es (mstore a w s) /\
+  wb_frame cenv es sa s (mstore a w s)
+Proof
+  strip_tac >> conj_tac
+  >- (irule literal_mstore_state_rel >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >>
+      rpt strip_tac >> first_x_assum drule >>
+      simp[regions_disjoint_def]) >>
+  irule scratch_mstore_frame >> conj_tac >> rpt strip_tac >>
+  first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac
 QED
