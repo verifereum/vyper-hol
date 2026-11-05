@@ -518,3 +518,12 @@ Proof
   irule MAP_CONG >> simp[] >> rpt strip_tac >>
   irule ao_resolve_iszero_op_label >> metis_tac[]
 QED
+
+Theorem ao_resolve_iszero_inst_successors:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) ==>
+  get_successors (ao_resolve_iszero_inst targets inst) = get_successors inst
+Proof
+  strip_tac >> drule ao_resolve_iszero_inst_labels >>
+  simp[get_successors_def, ao_resolve_iszero_inst_fields]
+QED
