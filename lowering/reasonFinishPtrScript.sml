@@ -1,7 +1,7 @@
 (* Compiler-facing checked suffix for the shared reason encoder. *)
 Theory reasonFinishPtr
 Ancestors reasonFinishCode reasonEncoderTailPtr reasonRevertPtr fragExec
-  emitHelper emitHelperProps compileEnv venomInst compilerChainCode exprLoweringProps
+  emitHelper emitHelperProps compileEnv venomInst compilerChainCode exprLoweringProps bodyPtrDefs
 Libs intLib wordsLib
 
 (* Erasing only the fresh-name counter lets emit_op's allocated names feed
@@ -167,3 +167,98 @@ QED
 
 Finalise reason_encode_finish_inst_parts
 
+
+Theorem reason_encode_finish_path_ptr:
+  reason_encode_finish (Var outer) (Var payload) (Var tuple) (Var slot) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  (!p. MEM p [outer;payload;tuple;slot] ==> not_fresh_at sa p) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s m /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n /\
+  lookup_var payload s = SOME b /\ ptr_covers G tn payload s (32 + m) /\
+  lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
+  (!i. w2n addr <= i /\ i < w2n addr + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n addr) s = 32w /\
+  lookup_var outer s = SOME outer_addr /\ ptr_covers G tn outer s (64 + m) /\
+  32 <= m /\ w2n (32w + n) <= m /\
+  w2n ((n + 31w) && i2w (-32)) + 32 <= m /\
+  w2n b + 32 < dimword (:256) /\
+  w2n (b + 32w) + w2n ((n + 31w) && i2w (-32)) < dimword (:256) /\
+  w2n outer_addr + 28 < dimword (:256) /\
+  28 + w2n (4w + (32w + (32w + ((n + 31w) && i2w (-32))))) <= 64 + m ==>
+  ?Gf tnf sf. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (Abort Revert_abort sf)
+Proof
+  strip_tac >> drule_all reason_encode_finish_inst_parts >> strip_tac >>
+  fs[Excl "ALL_DISTINCT"] >>
+  `?G2 tn2 s2.
+    gas_path_ptr D 0 ctx func PG G tn s 0 G2 tn2 (OK s2) /\
+    s2.vs_current_bb = c14.cs_current_bb /\
+    s2.vs_inst_idx = LENGTH c14.cs_current_insts /\ ~s2.vs_halted /\
+    lookup_var encoded s2 = SOME (32w + (32w + ((n + 31w) && i2w (-32)))) /\
+    op_taint tn2 (Var encoded) = {} /\
+    (!p. ~MEM p [src;head;off;tail;len;tmp0;rounded0;last;cnt;
+                tmp1;rounded1;item;size_out;encoded] ==>
+      lookup_var p s2 = lookup_var p s /\
+      FLOOKUP G2 p = FLOOKUP G p /\
+      op_taint tn2 (Var p) = op_taint tn (Var p))` by suspend "payload" >>
+  suspend "terminal"
+QED
+
+Resume reason_encode_finish_path_ptr[payload]:
+  irule (Q.INST [`tuple_capacity` |-> `m`, `capacity` |-> `32 + m`,
+    `sa` |-> `sa with cs_next_var := 0`] reason_encoder_payload_ptr) >>
+  rpt conj_tac
+  >- (simp[])
+  >- (simp[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
+  >>
+  qexistsl [`a`, `addr`, `b`, `c1`, `c10`, `c11`, `c12`, `c13`,
+    `c2`, `c3`, `c4`, `c5`, `c6`, `c7`, `c8`, `c9`, `m`,
+    `p1`, `p2`, `p3`, `payload`, `sa`, `slot`, `p4`, `tuple`] >>
+  simp[Excl "ALL_DISTINCT"] >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  qpat_x_assum `!p. not_fresh_at sa p ==> _` mp_tac >>
+  qpat_x_assum `!p. _ ==> not_fresh_at sa p` mp_tac >>
+  rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]
+QED
+
+Resume reason_encode_finish_path_ptr[terminal]:
+  `~MEM outer [src;head;off;tail;len;tmp0;rounded0;last;cnt;
+               tmp1;rounded1;item;size_out;encoded]` by
+    (qpat_x_assum `!p. not_fresh_at sa p ==> _` mp_tac >>
+     qpat_x_assum `!p. _ ==> not_fresh_at sa p` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]) >>
+  `lookup_var outer s2 = lookup_var outer s /\
+   FLOOKUP G2 outer = FLOOKUP G outer /\
+   op_taint tn2 (Var outer) = op_taint tn (Var outer)` by
+    (first_x_assum irule >> simp[]) >>
+  `ptr_covers G2 tn2 outer s2 (64 + m)` by
+    (qpat_x_assum `ptr_covers G tn outer s _` mp_tac >>
+     simp[ptr_covers_def]) >>
+  `?Gf tnf sf. gas_path_ptr D 0 ctx func PG G2 tn2 s2 0 Gf tnf
+      (Abort Revert_abort sf)` by suspend "revert" >>
+  metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Resume reason_encode_finish_path_ptr[revert]:
+  irule (Q.INST [`capacity` |-> `64 + m`] reason_encoder_revert_path_ptr) >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  qexistsl [`outer_addr`, `c15`, `c16`, `encoded`, `rlen`, `m`,
+    `32w + (32w + ((n + 31w) && i2w (-32)))`, `outer`, `c14`,
+    `sb with cs_next_var := 0`, `start`] >>
+  simp[Excl "ALL_DISTINCT"] >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >> simp[]
+QED
+
+Finalise reason_encode_finish_path_ptr
