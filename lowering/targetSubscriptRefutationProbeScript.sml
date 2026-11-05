@@ -332,3 +332,23 @@ Proof
        clear_outer_machine_state_rel, clear_outer_machine_alloca_room] >>
   rpt conj_tac >> EVAL_TAC >> simp[]
 QED
+
+Theorem clear_outer_endpoint_stop:
+  !k s. ~s.vs_halted /\
+    s.vs_current_bb = (SND probe_descendant_outer).cs_current_bb /\
+    s.vs_inst_idx = LENGTH (SND probe_descendant_outer).cs_current_insts ==>
+    ?fuel t. run_from fuel (probe_descendant_ctx k)
+      probe_descendant_outer_caller s = Halt t
+Proof
+  rpt gen_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_from``]) >> strip_tac >>
+  qexists_tac `0` >>
+  simp[fragExecTheory.run_from_def, probe_descendant_outer_caller_def,
+       venomInstTheory.mk_raw_function_def,
+       venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+  simp[Once venomExecSemanticsTheory.exec_block_def,
+       venomInstTheory.get_instruction_def] >>
+  EVAL_TAC >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >> simp[]
+QED
+
