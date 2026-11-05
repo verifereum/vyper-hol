@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticInventory
 Ancestors
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
-  fnFrameStepsRevertForward
+  fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst
 
 Theorem inventory_do_swap_promised:
   !d ps. (SND (do_swap d ps)).ps_cleanup_promised = ps.ps_cleanup_promised
@@ -315,3 +315,114 @@ Proof
 QED
 
 (* Spill preservation is the existing exported rf_popmany_spilled. *)
+
+Theorem inventory_cleanup_branch:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) ==>
+  clean_stack_plan lv cfg fn bb ps =
+  popmany_plan (MAP Var (FILTER (\v. ~MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+    (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))) ps
+Proof
+  strip_tac >> simp[clean_stack_plan_def, LET_THM]
+QED
+
+Theorem inventory_cleanup_mem:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) /\
+  ALL_DISTINCT ps.ps_stack /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))) ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  (MEM (Var v) qs.ps_stack <=> MEM (Var v) ps.ps_stack /\
+    MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+Proof
+  strip_tac >> drule_all inventory_cleanup_branch >> strip_tac >>
+  `popmany_plan (MAP Var (FILTER (\v. ~MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+    (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))) ps = (ops, qs)` by
+    metis_tac[] >>
+  drule_all inventory_popmany_mem >>
+  disch_then (qspec_then `Var v` mp_tac) >> simp[MEM_MAP, MEM_FILTER] >>
+  Cases_on `MEM (Var v) ps.ps_stack` >> simp[] >>
+  qpat_x_assum `EVERY _ ps.ps_stack` mp_tac >>
+  simp[EVERY_MEM] >>
+  disch_then (qspec_then `Var v` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem inventory_cleanup_distinct:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) /\
+  ALL_DISTINCT ps.ps_stack /\ clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  ALL_DISTINCT qs.ps_stack
+Proof
+  strip_tac >> drule_all inventory_cleanup_branch >>
+  disch_then (qspec_then `lv` assume_tac) >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = (ops, qs)` mp_tac >>
+  simp[] >> metis_tac[inventory_popmany_distinct]
+QED
+
+Theorem inventory_cleanup_spilled:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> drule_all inventory_cleanup_branch >>
+  disch_then (qspec_then `lv` assume_tac) >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = (ops, qs)` mp_tac >>
+  simp[] >> metis_tac[rf_popmany_spilled, pairTheory.SND]
+QED
+
+Theorem inventory_cleanup_promised:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  ~qs.ps_cleanup_promised
+Proof
+  strip_tac >> drule_all inventory_cleanup_branch >>
+  disch_then (qspec_then `lv` assume_tac) >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = (ops, qs)` mp_tac >>
+  simp[] >> metis_tac[inventory_popmany_promised, pairTheory.SND]
+QED
+
+Theorem inventory_cleanup_support:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) /\
+  ALL_DISTINCT ps.ps_stack /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))) ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+    qs.ps_stack
+Proof
+  strip_tac >> drule_all inventory_cleanup_mem >> strip_tac >>
+  drule_all inventory_cleanup_branch >>
+  disch_then (qspec_then `lv` assume_tac) >>
+  `!op. MEM op qs.ps_stack ==> MEM op ps.ps_stack` by
+    (drule inventory_popmany >>
+     disch_then (qspec_then `MAP Var (FILTER (\v. ~MEM v
+       (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+       (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))` mp_tac) >>
+     gvs[] >> metis_tac[]) >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
