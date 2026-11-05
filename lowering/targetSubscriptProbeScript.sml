@@ -6296,3 +6296,86 @@ QED
    outer target admission. We use nocalls=F for a substantive test.
    Stop for ancestor strategy review; do not continue admission bookkeeping
    or replace the callee without a new strategy. *)
+
+(* Source-matched clearing candidate: unlike the donor-copy control above,
+   this function has no input-dependent live storage effect. *)
+Definition probe_clear_source_code_def:
+  probe_clear_source_code =
+    [VariableDecl Private Storage "outer" probe_deep_type (SOME 0);
+     FunctionDecl Internal Nonpayable F F "shrink" [] [] (BaseT (UintT 256))
+       [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+          (Builtin probe_deep_type
+            (MakeArray (SOME probe_word_outer_type) (Dynamic 1)) []);
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
+End
+
+Definition probe_clear_source_context_def:
+  probe_clear_source_context = probe_deep_context with
+    sources := [(0w,[(NONE,probe_clear_source_code)])]
+End
+
+Theorem probe_clear_source_call:
+  eval_expr probe_clear_source_context
+    (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+    probe_deep_source_state =
+  (INL (Value (IntV 0)),
+   set_storage probe_clear_source_context probe_deep_source_state F
+     (update_storage 0w 0w
+       (get_storage probe_clear_source_context probe_deep_source_state F)))
+Proof
+  EVAL_TAC >> simp[read_result_def, return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, APPLY_UPDATE_THM] >> EVAL_TAC
+QED
+
+Definition probe_clear_source_after_def:
+  probe_clear_source_after =
+    set_storage probe_clear_source_context probe_deep_source_state F
+      (update_storage 0w 0w
+        (get_storage probe_clear_source_context probe_deep_source_state F))
+End
+
+Theorem probe_clear_source_headers:
+  lookup_storage 0w (get_storage probe_clear_source_context
+    probe_clear_source_after F) = 0w /\
+  lookup_storage 1w (get_storage probe_clear_source_context
+    probe_clear_source_after F) = 1w /\
+  lookup_storage 2w (get_storage probe_clear_source_context
+    probe_clear_source_after F) = 1w
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_clear_source_base:
+  eval_base_place probe_clear_source_context
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+    probe_deep_source_state =
+  (INL (PlaceR (StoragePlace F 2w
+      (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)))),
+   probe_clear_source_after)
+Proof
+  EVAL_TAC >> simp[read_result_def, return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, APPLY_UPDATE_THM] >> EVAL_TAC
+QED
+
+Theorem probe_clear_source_outer:
+  eval_base_place probe_clear_source_context
+    (SubscriptTarget
+      (SubscriptTarget
+        (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))
+        (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+      (Literal (BaseT (UintT 256)) (IntL 0)))
+    probe_deep_source_state =
+  (INL (PlaceR (StoragePlace F 3w (BaseTV (UintT 256)))),
+   probe_clear_source_after)
+Proof
+  EVAL_TAC >> simp[read_result_def, return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[return_def, APPLY_UPDATE_THM] >> EVAL_TAC >>
+  simp[return_def] >> EVAL_TAC
+QED
