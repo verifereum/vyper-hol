@@ -2865,9 +2865,15 @@ Proof
   metis_tac[listTheory.MEM]
 QED
 
+Definition rf_spills_separated_def:
+  rf_spills_separated (ps:plan_state) <=>
+    !x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+      FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+      a + 32 <= b \/ b + 32 <= a
+End
+
 Theorem rf_suffix_preparation_execution:
-  !base.
-  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  codegen_ready_fn fn /\ rf_spills_separated ps /\
   emit_input_plan opc inputs nl ps = (ins,ps1) /\
   reorder_plan (dfg_build_function fn) inputs ps1 = (ros,ps2) /\
   opc <> INVOKE /\ LENGTH inputs <= 16 /\
@@ -2891,15 +2897,14 @@ Theorem rf_suffix_preparation_execution:
     ps2.ps_stack = stack_pop (LENGTH inputs) ps2.ps_stack ++ inputs /\
     rf_inventory_inv fn ra lo entry ps2 s
 Proof
-  gen_tac >> strip_tac >>
+  strip_tac >>
   `EVERY is_simple_stack_op (ins ++ ros) /\
    prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros) /\
    plan_stack_sem_eq lo (frame_view fn ra s)
      (apply_prefix_ops initial_fmp lo (ins ++ ros) ps).ps_stack ps2.ps_stack` by
     (irule rf_preparation_replay >> asm_rewrite_tac[] >>
      conj_tac
-     >- (fs[generated_plan_state_wf_def] >>
-         drule spill_alloc_layout_wf_spilled_separated >> simp[]) >>
+     >- fs[rf_spills_separated_def] >>
      qexistsl_tac [`dfg_build_function fn`, `entry`, `inputs`, `nl`, `opc`, `ps1`] >>
      asm_rewrite_tac[] >> conj_tac
      >- (fs[rf_inventory_inv_def] >> metis_tac[]) >>
@@ -2948,9 +2953,8 @@ Proof
 QED
 
 Theorem rf_assign_plan_execution:
-  !base.
   codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
-  generated_plan_state_wf base ps /\
+  rf_spills_separated ps /\
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
   inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
   (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
@@ -2970,7 +2974,7 @@ Theorem rf_assign_plan_execution:
         as_pc := st.as_pc + LENGTH (execute_plan initial_fmp ops)|>) /\
     plan_stack_rel lo (frame_view fn ra s') ps'.ps_stack stk'
 Proof
-  gen_tac >> strip_tac >>
+  strip_tac >>
   Cases_on `emit_input_plan ASSIGN [rhs] nl ps` >> rename1 `_ = (ins,ps1)` >>
   Cases_on `reorder_plan (dfg_build_function fn) [rhs] ps1` >>
   rename1 `_ = (ros,ps2)` >>
@@ -3059,13 +3063,6 @@ Theorem rf_assign_stale_spill_audit:
 Proof
   EVAL_TAC >> simp[listTheory.SET_TO_LIST_SING] >> EVAL_TAC
 QED
-
-Definition rf_spills_separated_def:
-  rf_spills_separated (ps:plan_state) <=>
-    !x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
-      FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
-      a + 32 <= b \/ b + 32 <= a
-End
 
 Theorem rf_spills_separated_entry:
   !base ps. generated_plan_state_wf base ps ==> rf_spills_separated ps
