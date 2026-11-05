@@ -74,8 +74,11 @@ pre-existing JSON/hex byte-for-byte.
 
 The permanent normative checked-frontend equalities cover:
 
-* p01, p02, p03, p04, p06, p09, p10, p21, p39, p40, p41, p47, p74, p76, p92;
+* p01, p03, p04, p06, p09, p10, p21, p39, p40, p41, p92;
 * `ctl_local_internal` and `nm_local_return_buf` in the name-collision group.
+
+p02, p47, p74 and p76 left the comparison at the v0.5.0b1 pin;
+[`pending-5127-port.md`](../pending-5127-port.md) names what brings each back.
 
 `evalCompilerInternalFrames` reaches the diamond, external-call and two halves'
 child theories (`evalCompilerInternalFrames1` and `evalCompilerInternalFrames2`);
@@ -178,7 +181,7 @@ those exclusions.
   Equality of allocation ordering on these different input IRs is not claimed.
 * p05's fresh control result is MATCH. Historical issue classifications do not
   establish current byte equality.
-* p02/p47 now have permanent MATCH proofs, rather than residuals attributed to
-  the closed #549.
+* p02/p47 had MATCH proofs, rather than residuals attributed to the closed
+  #549, until the v0.5.0b1 pin changed their bytes.
 * Validation is focused: neither a full-project build nor
   `evalCompilerBytecodeParityTheory` was run.

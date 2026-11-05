@@ -1,16 +1,19 @@
 # Conversion witnesses (#548)
 
-`parity-fixtures.txt` names the 13 required bytecode fixtures. Each source in
+`parity-fixtures.txt` names the 6 required bytecode fixtures. Each source in
 `sources/` has independently generated annotated AST/layout JSON and deployment
 and runtime bytecode in `oracle/`. `evalCompilerConversionsTheory` checks both
-checker modes and proves each complete bytecode pair equal to the HOL compiler's
+checker modes and proves each retained complete bytecode pair equal to the HOL compiler's
 output, using the same `memoryStoreWitnessLib` as the other compiler witnesses.
 
-`checker-sources/` and `checker-oracle/` retain the 15 codegen-rejected controls:
-the ten conversions outside Vyper's input sets or inconsistent in width must
-fail the HOL checker, while the five conversions where HOL lowering and source
-semantics agree stay accepted.
-The same theory checks these verdicts on the exported ASTs in both modes.
+`checker-sources/` and `checker-oracle/` retain the three codegen-rejected
+literal controls, which the HOL checker accepts. `typecheck-rejected/` holds 12
+controls that the pinned Vyper's type checker rejects (`_convert_rules.py`), so
+their annotated AST/layout JSON comes from Vyper `9362e36b`, the last pin that
+accepted them: the ten conversions outside Vyper's input sets or inconsistent in
+width must fail the HOL checker, while the two conversions where HOL lowering
+and source semantics agree are still accepted by it. The same theory checks
+these verdicts on the exported ASTs in both modes.
 
 The default CI builds the theory and reproduces both sets of independent inputs
 with pinned Vyper, experimental codegen, Prague, `-O none`, and no metadata.
