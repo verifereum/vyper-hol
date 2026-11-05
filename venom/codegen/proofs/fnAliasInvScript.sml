@@ -339,6 +339,44 @@ Proof
   gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem alias_phi_ready_postprefix_input:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions))) /\
+  (!k. k < LENGTH (collect_phis bb.bb_instructions) ==>
+    ~MEM v (inst_defs (EL k bb.bb_instructions))) ==>
+  MEM v (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+     pop_assum (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
+    (qspecl_then [`fn`, `lbl`, `bb`, `0`] mp_tac
+       livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+     simp[] >> disch_then irule >>
+     qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >> simp[]) >>
+  metis_tac[alias_phi_ready_ordinary_input]
+QED
+
+Theorem alias_selected_input_liveout:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))
+Proof
+  strip_tac >> drule_all liveness_recompute_edge_subset >>
+  gvs[liveness_edge_transfer_def, live_vars_at_def, liveness_analyze_def,
+      liveness_instrs_def, pred_setTheory.SUBSET_DEF]
+QED
+
 Theorem alias_lineage_join_ordinary_coverage:
   liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
   cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
