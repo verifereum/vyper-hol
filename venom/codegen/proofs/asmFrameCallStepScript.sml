@@ -3134,6 +3134,281 @@ Proof
   simp[] >> impl_tac >- metis_tac[asm_call_safe_get_call_data] >> simp[]
 QED
 
+Theorem asm_call_safe_return:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  return v s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[return_def]
+QED
+
+Theorem asm_call_safe_get_callee:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_callee s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_callee_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_accounts:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_accounts s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[get_accounts_def, return_def]
+QED
+
+Theorem asm_call_safe_get_original:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_original s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[get_original_def, return_def]
+QED
+
+Theorem asm_call_safe_get_tStorage:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_tStorage s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[get_tStorage_def, return_def]
+QED
+
+Theorem asm_call_safe_get_tx_params:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_tx_params s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[get_tx_params_def, return_def]
+QED
+
+Theorem asm_call_safe_get_gas_left:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_gas_left s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_gas_left_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_code:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_code address s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[get_code_def, get_accounts_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_current_code:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_current_code s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_current_code_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_return_data:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_return_data s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_return_data_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_update_accounts:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  update_accounts f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[update_accounts_def, return_def]
+QED
+
+Theorem asm_call_safe_set_tStorage:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  set_tStorage a s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[set_tStorage_def, return_def]
+QED
+
+Theorem asm_call_safe_write_storage:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  write_storage address key value s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  simp[write_storage_def] >> metis_tac[asm_call_safe_update_accounts]
+QED
+
+Theorem asm_call_safe_write_transient_storage:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  write_transient_storage address key value s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[write_transient_storage_def, get_tStorage_def, set_tStorage_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_set_return_data:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  set_return_data bytes s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[set_return_data_def, get_current_context_def, set_current_context_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_set_jump_dest:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  set_jump_dest dest s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[set_jump_dest_def, get_current_context_def, set_current_context_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_push_logs:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  push_logs logs s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[push_logs_def, get_current_context_def, set_current_context_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_update_gas_refund:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  update_gas_refund refund s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  PairCases_on `refund` >> rpt strip_tac >>
+  gvs[update_gas_refund_def, get_current_context_def, set_current_context_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_add_to_delete:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  add_to_delete address s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[add_to_delete_def, return_def]
+QED
+
+Theorem asm_call_safe_assert:
+  ~vfm_abort (SOME exc) /\
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  assert b exc s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `b` >> rpt strip_tac >> gvs[assert_def]
+QED
+
+Theorem asm_call_safe_fail:
+  ~vfm_abort (SOME exc) /\
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  fail exc s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[fail_def]
+QED
+
+Theorem asm_call_safe_finish:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  finish s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[finish_def]
+QED
+
+Theorem asm_call_safe_revert:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  revert s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[revert_def]
+QED
+
+Theorem asm_call_safe_get_return_data_check:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_return_data_check offset sz s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_return_data_check_def, get_return_data_def, get_current_context_def,
+      ignore_bind_def, bind_def, return_def, assert_def, AllCaseEqs()]
+QED
+
+Theorem asm_call_safe_assert_not_static:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  assert_not_static s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[assert_not_static_def, get_static_def, get_current_context_def,
+      bind_def, return_def, assert_def, AllCaseEqs()]
+QED
+
+Theorem asm_call_safe_get_caller:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_caller s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_caller_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_value:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_value s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_value_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_static:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_static s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_static_def, get_current_context_def, bind_def, return_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
