@@ -423,3 +423,61 @@ Proof
   simp[Abbr `t`, mstore_def, write_memory_with_expansion_def,
        lookup_var_def, op_taint_def]
 QED
+
+(* The compiler's capacity check is a successful three-instruction path.
+   Neither provenance for the length nor cleanliness of array padding is
+   needed: the comparison is against a literal, and the header is clean. *)
+Theorem emit_bulk_capacity_check_counted_ptr:
+  emit_op GT [len_op;Lit (n2w capacity)] sa = (Var gt,sb) /\
+  emit_op ISZERO [Var gt] sb = (Var ok,sc) /\
+  emit_void ASSERT [Var ok] sc = ((),sd) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\ fn_has_code sc sd fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ eval_operand len_op s = SOME (n2w len) /\
+  op_taint tn len_op = {} /\ len <= capacity /\ capacity < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sd.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `!p. not_fresh_at sa p ==> not_fresh_at sb p` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     rpt strip_tac >> gvs[] >> metis_tac[LESS_EQ_TRANS]) >>
+  `eval_operand (Lit (n2w capacity)) s = SOME (n2w capacity) /\
+   op_taint tn (Lit (n2w capacity)) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all (emit_bulk_binop_counted_ptr |>
+    Q.INST [`opc` |-> `GT`, `right` |-> `Lit (n2w capacity)`,
+      `f` |-> `(\a b. bool_to_word (w2n a > w2n b))`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
+  `lookup_var gt sf = SOME 0w` by
+    (gvs[wordsTheory.w2n_n2w, LESS_MOD, bool_to_word_def] >>
+     `len < dimword(:256)` by decide_tac >> gvs[LESS_MOD]) >>
+  `eval_operand (Var gt) sf = SOME 0w` by simp[eval_operand_def] >>
+  drule_all emit_iszero_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `Gf`, `D`] strip_assume_tac) >>
+  `eval_operand (Var ok) sf' = SOME 1w /\ (1w:bytes32) <> 0w` by
+    simp[eval_operand_def, bool_to_word_def] >>
+  drule_all emit_assert_success_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `Gf'`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf'`, `tnf'`, `sf' with vs_inst_idx := SUC sf'.vs_inst_idx`] >>
+  conj_tac >- suspend "path" >>
+  gvs[lookup_var_def] >> metis_tac[]
+QED
+
+Resume emit_bulk_capacity_check_counted_ptr[path]:
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> gvs[]
+QED
+
+Finalise emit_bulk_capacity_check_counted_ptr
