@@ -32,7 +32,7 @@ Ancestors
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
   exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
-  exprOperandVar
+  exprOperandVar exprSimWordArgs exprBopSimProps
   bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases
   targetPlaceSimDefs
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
@@ -172,6 +172,71 @@ Definition imm_target_post_def:
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es s0 s
 End
+
+Theorem imm_place_at_gas_obs[local,simp]:
+  !cenv cx es pv w ty gs.
+    imm_place_at cenv cx (es with gas_obs := gs) pv w ty <=>
+    imm_place_at cenv cx es pv w ty
+Proof
+  simp[oneline imm_place_at_def]
+QED
+
+Theorem imm_place_at_pure_index[local]:
+  !cenv cx es pv w ty e gs res ee.
+    pure_expr e /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (res,ee) /\
+    imm_place_at cenv cx es pv w ty ==>
+    ee with gas_obs := [] = es with gas_obs := [] /\
+    imm_place_at cenv cx ee pv w ty
+Proof
+  rpt strip_tac >>
+  gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
+  drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
+  drule read_result_state >> strip_tac >> gvs[]
+QED
+
+Theorem imm_target_post_frame[local]:
+  !ctx func cenv cx es sa sb s0 ee pv ty r s.
+    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s <=>
+    stmt_state_rel ctx func cenv cx ee s /\
+    (?w. eval_operand (FST r) s = SOME w /\ imm_place_at cenv cx ee pv w ty) /\
+    FST (SND r) = SOME LocCode /\ SND (SND r) = SOME (ValPT ty) /\
+    (!x. FST r = Var x ==> not_fresh_at sb x) /\
+    wb_frame cenv es sa s0 s
+Proof
+  simp[imm_target_post_def, wb_frame_def]
+QED
+
+Theorem imm_target_post_trans[local]:
+  !ctx func cenv cx es sa sm sb s0 em s1 ee s2 pv ty r pv0 ty0 r0.
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM em.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+    imm_target_post ctx func cenv cx es sa sm s0 em pv0 ty0 r0 s1 /\
+    imm_target_post ctx func cenv cx em sm sb s1 ee pv ty r s2 ==>
+    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s2
+Proof
+  simp[imm_target_post_frame] >> rpt strip_tac >>
+  irule wb_frame_trans >> simp[] >> conj_tac
+  >- (qexistsl_tac [`em`, `sm`, `s1`] >> simp[]) >>
+  goal_assum $ drule_at Any
+QED
+
+Theorem imm_place_at_index_post[local]:
+  !ctx func cenv cx es e gs res ee pv w ty p sa sb s0 v op s.
+    pure_expr e /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (res,ee) /\
+    imm_place_at cenv cx es pv w ty /\ eval_operand p s0 = SOME w /\
+    (!x. p = Var x ==> not_fresh_at sa x) /\ (!l. p <> Label l) /\
+    expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s ==>
+    imm_place_at cenv cx (ee with gas_obs := []) pv w ty /\
+    eval_operand p s = SOME w
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all imm_place_at_pure_index >> strip_tac >> simp[] >>
+  irule eval_operand_frame >> simp[] >> qexistsl_tac [`sa`, `s0`] >>
+  fs[expr_post_def]
+QED
 
 Theorem imm_target_root_assignable[local]:
   !env cx es cenv src id ty.
