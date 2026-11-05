@@ -58,6 +58,21 @@ Proof
   PairCases_on `h` >> gvs[asm_evm_rel_def, next_opcode_def]
 QED
 
+Theorem asm_frame_call_observable:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\
+  ((EL a.as_pc prog = AsmOp "CALL" /\ 7 <= LENGTH a.as_stack) \/
+   (EL a.as_pc prog = AsmOp "STATICCALL" /\ 6 <= LENGTH a.as_stack)) ==>
+  observable_call (FST (HD es.contexts))
+Proof
+  strip_tac >>
+  `next_opcode (FST (HD es.contexts)) =
+     SOME (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall)` by
+    (irule asm_frame_call_decode >> metis_tac[]) >>
+  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def, observable_call_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
