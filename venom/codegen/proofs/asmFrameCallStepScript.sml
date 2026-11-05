@@ -340,6 +340,44 @@ Proof
   simp[bind_def, return_def, Abbr `t`]
 QED
 
+Theorem asm_memory_expansion_info_state:
+  s.contexts = (c,rb)::rest ==>
+  memory_expansion_info offset sz s =
+    (INL <| cost := memory_expansion_cost (buffer_length c.memory)
+                    (if 0 < sz then word_size (offset + sz) * 32 else 0);
+            expand_by := MAX (buffer_length c.memory)
+                    (if 0 < sz then word_size (offset + sz) * 32 else 0)
+                    - buffer_length c.memory |>,s)
+Proof
+  simp[memory_expansion_info_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_consume_gas_state:
+  s.contexts = (c,rb)::rest /\ c.gasUsed + k <= c.msgParams.gasLimit ==>
+  consume_gas k s = (INL (),s with contexts :=
+    (c with gasUsed := c.gasUsed + k,rb)::rest)
+Proof
+  simp[consume_gas_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def]
+QED
+
+Theorem asm_consume_gas_out_of_gas:
+  s.contexts = (c,rb)::rest /\ c.msgParams.gasLimit < c.gasUsed + k ==>
+  consume_gas k s = (INR (SOME OutOfGas),s)
+Proof
+  simp[consume_gas_def, get_current_context_def, bind_def,
+       ignore_bind_def, assert_def, return_def]
+QED
+
+Theorem asm_expand_memory_state:
+  s.contexts = (c,rb)::rest ==>
+  expand_memory n s = (INL (),s with contexts :=
+    (c with memory := buffer_extend n c.memory,rb)::rest)
+Proof
+  simp[expand_memory_def, get_current_context_def, set_current_context_def,
+       bind_def, return_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
