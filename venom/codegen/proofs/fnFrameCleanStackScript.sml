@@ -272,6 +272,33 @@ Proof
   metis_tac[plan_stack_rel_forget_map]
 QED
 
+Theorem do_swap_local_marked_sim:
+  !base dist ps ops ps' lo o2pc prog vs st initial_fmp.
+    generated_plan_state_wf_marked base ps /\
+    do_swap dist ps = (ops, ps') /\ dist < LENGTH ps.ps_stack /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+           off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'.
+      asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      venom_asm_rel lo ps' vs st' /\
+      generated_plan_state_wf_marked base ps'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `generated_plan_state_wf_marked base' ps'` by
+    metis_tac[do_swap_wf_marked] >>
+  `EVERY (\s. case s of SOSpill off => off < dimword (:256)
+        | SORestore off => off < dimword (:256) | _ => T) ops` by
+    (simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+     Cases_on `s` >> simp[] >> metis_tac[]) >>
+  drule do_swap_venom_asm_rel_numeric >>
+  disch_then drule >>
+  fs[generated_plan_state_wf_marked_def] >>
+  metis_tac[]
+QED
+
 (* Used by fnFrameSinglePred$single_pred_prefix_frame_sim, for the cleanup
    a single-predecessor block runs before its instructions.
 
