@@ -1,6 +1,6 @@
 Theory rawCallBufferPtr
 Ancestors
-  bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr
+  bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr typedCopyPtr
   finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
   venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr robustCopyTransportPtr
 
@@ -361,4 +361,100 @@ Proof
   simp[exprLoweringTheory.lowered_value_type_def] >>
   Cases_on `tuple_result` >>
   fs[compileEnvTheory.type_memory_bytes_def]
+QED
+
+Theorem bool_mstore_robust:
+  !m. mem_agree_outside (dirty DIFF {i | b <= i /\ i < b+32})
+    (mstore b (val_to_w256 (BoolV flag)) s).vs_memory m ==>
+    val_in_memory (BaseTV BoolT) (BoolV flag) b m
+Proof
+  rpt strip_tac >> irule clean_footprint_robust_val_in_memory >>
+  conj_tac >-
+    simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+  qexistsl_tac [`dirty DIFF {i | b <= i /\ i < b+32}`,
+    `(mstore b (val_to_w256 (BoolV flag)) s).vs_memory`] >>
+  simp[valueEncodingTheory.val_in_memory_def, mstore_mem_word_at_same,
+    loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem robust_pair_mcopy_step:
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME aw /\
+  eval_operand count_op s = SOME nw /\
+  w2n dw = b + type_memory_size ht /\
+  val_wf ht hv /\ val_footprint ht hv <= type_memory_size ht /\
+  val_wf tt tv /\ val_footprint tt tv <= w2n nw /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory ht hv b m) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tt tv (w2n aw) m) ==>
+  !m. mem_agree_outside
+    (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
+      (mcopy (w2n dw) (w2n aw) (w2n nw) s) tn).t_mem
+    (mcopy (w2n dw) (w2n aw) (w2n nw) s).vs_memory m ==>
+    val_in_memory (TupleTV [ht;tt]) (ArrayV (TupleV [hv;tv])) b m
+Proof
+  strip_tac >> simp[mcopy_operand_ghost_frame] >>
+  gvs[] >> rpt strip_tac >> irule (SRULE [] robust_pair_mcopy) >> simp[] >>
+  goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)) >>
+  qexists_tac `w2n nw` >> simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem bool_mstore_step_robust:
+  lookup_var dst s = SOME a /\
+  eval_operand value s = SOME (val_to_w256 (BoolV flag)) /\
+  op_taint tn value = {} ==>
+  !m. mem_agree_outside
+    (step_taint (mk_inst id MSTORE [Var dst;value] []) s
+      (mstore (w2n a) (val_to_w256 (BoolV flag)) s) tn).t_mem
+    (mstore (w2n a) (val_to_w256 (BoolV flag)) s).vs_memory m ==>
+    val_in_memory (BaseTV BoolT) (BoolV flag) (w2n a) m
+Proof
+  strip_tac >> simp[mstore_ghost_frame] >>
+  rpt strip_tac >> irule bool_mstore_robust >> simp[] >>
+  goal_assum (drule_at (Pat `mem_agree_outside _ _ _`))
+QED
+
+Theorem robust_mstore_disjoint:
+  val_wf tv v /\ (p + val_footprint tv v <= b \/ b+32 <= p) /\
+  (!m. mem_agree_outside dirty s.vs_memory m ==> val_in_memory tv v p m) ==>
+  !m. mem_agree_outside (dirty DIFF {i | b <= i /\ i < b+32})
+    (mstore b w s).vs_memory m ==> val_in_memory tv v p m
+Proof
+  rpt strip_tac >>
+  (irule robust_val_in_memory_exterior_frame >>
+   conj_tac >- simp[] >>
+   qexistsl_tac [`s.vs_memory`, `(mstore b w s).vs_memory`, `dirty`,
+     `dirty DIFF {i | b <= i /\ i < b+32}`, `{i | b <= i /\ i < b+32}`] >>
+   simp[] >> rpt strip_tac >>
+   irule mstore_mem_bytes_at_disjoint >> decide_tac)
+QED
+
+(* The raw_call tuple stores its Boolean head before copying the bytes tail.
+   Only the source's live footprint must be disjoint from that head store. *)
+Theorem bool_pair_mstore_mcopy_robust:
+  val_wf tt tv /\ val_footprint tt tv <= n /\
+  (a + val_footprint tt tv <= b \/ b+32 <= a) /\
+  (!m. mem_agree_outside dirty s.vs_memory m ==> val_in_memory tt tv a m) ==>
+  !m. mem_agree_outside
+    (((dirty DIFF {i | b <= i /\ i < b+32})
+       DIFF {i | b+32 <= i /\ i < b+32+n}) UNION
+      {b+32+i | i | i < n /\ a+i IN (dirty DIFF {j | b <= j /\ j < b+32})})
+    (mcopy (b+32) a n (mstore b (val_to_w256 (BoolV flag)) s)).vs_memory m ==>
+    val_in_memory (TupleTV [BaseTV BoolT;tt])
+      (ArrayV (TupleV [BoolV flag;tv])) b m
+Proof
+  rpt strip_tac >>
+  (irule (robust_pair_mcopy |> Q.INST [`ht` |-> `BaseTV BoolT`]
+     |> SRULE [valueEncodingTheory.type_memory_size_def]) >>
+   conj_tac >-
+     simp[loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
+   conj_tac >- simp[] >>
+   conj_tac >-
+     simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+   qexistsl_tac [`a`, `dirty DIFF {i | b <= i /\ i < b+32}`, `n`,
+     `mstore b (val_to_w256 (BoolV flag)) s`] >>
+   simp[] >> conj_tac
+   >- (rpt strip_tac >> irule robust_mstore_disjoint >> simp[] >>
+       qexistsl_tac [`b`, `dirty`, `s`, `val_to_w256 (BoolV flag)`] >> simp[]) >>
+   rpt strip_tac >> irule bool_mstore_robust >>
+   goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)))
 QED
