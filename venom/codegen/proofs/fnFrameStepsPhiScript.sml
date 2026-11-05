@@ -763,6 +763,60 @@ Proof
   simp[eval_phis_def]
 QED
 
+(* Persistent residents are protected at both their raw and normalized names. *)
+Theorem phi_eval_preserves_frame_operand:
+  eval_phis vs insts = OK s_phi /\
+  (!v. at = Var v ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts))) ==>
+  operand_val (frame_view fn ra s_phi) lo at =
+    operand_val (frame_view fn ra vs) lo at
+Proof
+  strip_tac >> Cases_on `at` >>
+  simp[operand_val_def, frame_view_vars_lookup] >>
+  AP_TERM_TAC >> irule phi_eval_preserves_lookup >>
+  qexists_tac `insts` >> simp[]
+QED
+
+Theorem phi_eval_preserves_frame_alias:
+  eval_phis vs insts = OK s_phi /\
+  (!v. at = Var v \/ normalize_operand dfg [] at = Var v ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts))) /\
+  operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at) ==>
+  operand_val (frame_view fn ra s_phi) lo at =
+    operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)
+Proof
+  strip_tac >>
+  `operand_val (frame_view fn ra s_phi) lo at =
+   operand_val (frame_view fn ra vs) lo at` by
+    (irule phi_eval_preserves_frame_operand >> qexists_tac `insts` >>
+     simp[] >> metis_tac[]) >>
+  `operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at) =
+   operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)` by
+    (irule phi_eval_preserves_frame_operand >> qexists_tac `insts` >>
+     simp[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem phi_spilled_fresh:
+  !base ps insts pred dfg at v.
+  generated_plan_state_wf_marked base ps /\
+  (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    ~(MEM op ps.ps_stack /\
+      ?inst. MEM inst (collect_phis insts) /\
+             resolve_phi pred inst.inst_operands = SOME op) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts))) /\
+  at IN FDOM ps.ps_spilled /\
+  (at = Var v \/ normalize_operand dfg [] at = Var v) ==>
+  ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM at ps.ps_stack` by
+    (gvs[generated_plan_state_wf_marked_def, pred_setTheory.IN_DISJOINT] >>
+     metis_tac[]) >>
+  first_x_assum irule >> qexists_tac `at` >> simp[]
+QED
+
 (* ===== The PHI prefix from any entry stack ===== *)
 
 (* phi_prefix_frame_sim without the join-entry facts: it assumes only that
