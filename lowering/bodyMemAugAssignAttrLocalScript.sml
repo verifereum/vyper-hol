@@ -778,6 +778,18 @@ Proof
   metis_tac[]
 QED
 
+Theorem well_typed_binop_augassign_word_mem_src[local]:
+  !ty bop t2.
+    well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
+    word_value_type ty /\ word_value_type t2
+Proof
+  rpt gen_tac >> Cases_on `bop` >>
+  SIMP_TAC std_ss [well_typed_binop_def, word_value_type_def,
+    is_numeric_type_def] >>
+  rpt strip_tac >>
+  metis_tac[is_bool_type_def]
+QED
+
 Theorem compile_augassign_attr_local_mem[local]:
   (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
   expr_body_pre cenv cx env e es /\
@@ -796,7 +808,7 @@ Proof
   drule_all augassign_attr_source_fields_mem_src >> strip_tac >>
   drule_all expr_sim_inv_local_mem_src >> strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word] >>
+    metis_tac[well_typed_binop_augassign_word_mem_src] >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by metis_tac[] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   `cenv.ce_var_type id = SOME (StructT sid)` by
@@ -1094,6 +1106,8 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
+
+
 
 
 
