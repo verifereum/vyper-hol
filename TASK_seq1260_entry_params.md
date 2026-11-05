@@ -42,6 +42,7 @@ Theorem entry_prefix_frame_sim:
       fn_frame_inv ctx cp lo fn ra rest as.as_memory ps1 vs_p as' /\
       vs_p.vs_current_bb = vs.vs_current_bb /\
       vs_p.vs_labels = vs.vs_labels /\
+      vs_p.vs_call_ctx = vs.vs_call_ctx /\
       (!inst. active_inst fn inst vs_p ==> Inv ctx fn inst vs_p) /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra vs_p) lo at =

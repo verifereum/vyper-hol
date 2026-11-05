@@ -11,7 +11,7 @@
 
 Theory fnEntryPlan
 Ancestors
-  fnBlockBody fnPlanLineage fnPlanPlaceFnRegion allocMono stackPlanGen
+  fnBlockBody fnPlanPrefix fnPlanLineage fnPlanPlaceFnRegion allocMono stackPlanGen
   stackPlanTypes fcgDefs livenessDefs dfgDefs cfgDefs venomInst venomWf
   list rich_list arithmetic
 
@@ -80,6 +80,70 @@ Proof
   simp[MEM_EL] >> metis_tac[]
 QED
 
+Theorem entry_plan_first_block[local]:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn spill_base ctr =
+    SOME (ops, pend) ==>
+  fn.fn_blocks <> [] /\
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks =
+    SOME (HD fn.fn_blocks) /\
+  ?bops pa rest.
+    generate_block_plan lv dfg cfg fn (HD fn.fn_blocks)
+      (init_cleanup_plan_state ch growth spill_base ctr) = SOME (bops, pa) /\
+    ops = bops ++ rest /\
+    pa.ps_alloc.sa_next_offset <= pend.ps_alloc.sa_next_offset
+Proof
+  Cases_on `fn.fn_blocks` >-
+    simp[generate_fn_plan_with_cleanup_analyzed_def, callLayoutDefsTheory.canonical_param_prefix_def] >>
+  simp[generate_fn_plan_with_cleanup_analyzed_def, fn_entry_label_def,
+       entry_block_def] >>
+  simp[Once generate_fn_plan_aux_def, lookup_block_def, FIND_thm] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule (cj 2 fn_plan_aux_alloc_mono) >> strip_tac >>
+  drule (cj 1 fn_plan_aux_alloc_mono) >> strip_tac >>
+  decide_tac
+QED
+
+Theorem entry_plan_param_boundary[local]:
+  codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn (HD fn.fn_blocks) ps0 =
+    SOME (bops, pa) ==>
+  ?pops ps1 body.
+    prepare_params_plan lv fn ps0 = (pops, ps1) /\
+    bops = SOLabel (HD fn.fn_blocks).bb_label :: pops ++ body /\
+    block_plan_state lv dfg (cfg_analyze fn) fn (HD fn.fn_blocks) ps0
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+    generate_block_insts_plan lv dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+      (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body, pa) /\
+    ps1.ps_alloc.sa_next_offset <= pa.ps_alloc.sa_next_offset
+Proof
+  `!insts i ps ops ps'.
+     generate_block_insts_plan lv dfg (cfg_analyze fn) fn
+       (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+       (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+       (LENGTH (HD fn.fn_blocks).bb_instructions) i insts ps = SOME (ops, ps') ==>
+     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset` by
+    (Induct_on `insts` >> rpt gen_tac >>
+     simp[Once generate_block_insts_plan_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     drule generate_inst_plan_next_offset >> strip_tac >>
+     first_x_assum drule >> strip_tac >> decide_tac) >>
+  strip_tac >>
+  `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
+    (qpat_x_assum `codegen_ready_fn _` mp_tac >>
+     Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, block_entries_ready_def, entry_block_def,
+         NULL_EQ]) >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[block_plan_state_def, generate_block_insts_prefix_def] >>
+  metis_tac[]
+QED
+
 (* The DFS planner starts at the entry label from the initial state ps0,
    so the entry block is planned first, from ps0: the plan begins with the
    entry block's code, its label, its parameter code (prepare_params_plan)
@@ -120,5 +184,10 @@ Theorem entry_block_plan:
         (init_cleanup_plan_state ch growth spill_base lbl_ctr) /\
       ps1.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule entry_plan_first_block >> strip_tac >>
+  drule_all entry_plan_param_boundary >> strip_tac >> gvs[] >-
+    (simp[dfs_block_state_def] >>
+     qexistsl_tac [`[]`, `[]`] >> simp[dfs_aux_call_entry]) >>
+  decide_tac
 QED

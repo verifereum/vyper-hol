@@ -41,13 +41,13 @@ Part of the codegen (Venom to assembly) correctness proof in vyper-hol: the fuel
 - Put helper lemmas in `fnEntryStepScript.sml` itself. Do not edit any other existing theory; in particular never touch `semantics/`, `frontend/`, `lowering/`, `venom/defs/`, `venom/compiler/`, `venom/passes/`, or any shared ancestor in `venom/codegen/`.
 - No `cheat`, no new axioms, no raised tactic timeout, no `TRY`/`ORELSE` around `metis_tac` or other search: select goals with `>-`, `>~`, `>|`.
 - Proofs at most ~50 lines each; split into helper lemmas. Use `rename1`, never generated names.
-- Its route lemmas in fnEntryPlan, fnEntryPc, fnEntryParams, fnRunFields and fnBlockBody$block_body_frame_sim are admitted (cheated) while other jobs prove them: use their statements as given and do not edit those files or prove them here. The comment above the theorem gives the route. The only cheat that may remain in fnEntryStepTheory's own proof chain is inherited from those admitted lemmas; fn_entry_block_step's own proof must contain no cheat.
+- Its route lemmas in fnEntryPlan (entry_block_plan is proved), fnEntryParams, fnRunFields and fnBlockBody$block_body_frame_sim are admitted (cheated) while other jobs prove them: use their statements as given and do not edit those files or prove them here. The comment above the theorem gives the route. The only cheat that may remain in fnEntryStepTheory's own proof chain is inherited from those admitted lemmas; fn_entry_block_step's own proof must contain no cheat.
 
 ## Available Resources
 
 | Resource | Location | Description |
 |---|---|---|
-| Target theories | venom/codegen/proofs/fnEntry*Script.sml, fnRunFieldsScript.sml, fnEntryStepScript.sml | entry-step lemmas and the piece |
+| Target theories | venom/codegen/proofs/fnEntryPlanScript.sml, fnEntryParamsScript.sml, fnRunFieldsScript.sml, fnEntryStepScript.sml | entry-step lemmas and the piece |
 | Spec | venom/codegen/proofs/fnSimSpecScript.sml | gen_fn_sim_at, gen_fn_frame_sim_at |
 | Block body | venom/codegen/proofs/fnBlockBodyScript.sml | block_rest, block_plan_state, block_body_frame_sim (admitted) |
 | Frame relation | venom/codegen/defs/frameRelScript.sml | fn_frame_inv, fn_entry_state_rel, fn_return_state_rel, shared_state_rel |
