@@ -990,6 +990,73 @@ Proof
        live_vars_at_def, list_union_mem]
 QED
 
+Theorem lineage_entry_small_fresh[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+  ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  strip_tac >>
+  `op <> dead_stack_marker` by
+    (strip_tac >> gvs[normalize_marker_not_var, dead_stack_marker_def,
+                     normalize_operand_def]) >>
+  drule_all lineage_entry_edge >> strip_tac >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`) lineage_entry_inventory >>
+  disch_then (qspec_then `pb` mp_tac) >> simp[] >> strip_tac >>
+  `?u. op = Var u /\ MEM u (live_vars_at (liveness_analyze fn) pred
+    (LENGTH pb.bb_instructions))` by metis_tac[] >>
+  drule_all live_end_dominating_def >> strip_tac >>
+  `~fn_dominates fn lbl pred` by metis_tac[small_preds_not_dominates_pred] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `~MEM u (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    metis_tac[dominating_def_excludes_outputs] >>
+  gvs[] >> drule_all normalize_dominating_def >> strip_tac >>
+  drule_all dominating_def_excludes_outputs >> simp[]
+QED
+
+Theorem lineage_entry_non_phi_fresh[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ~MEM op (FLAT (MAP (\inst. inst.inst_operands) (collect_phis bb.bb_instructions))) /\
+  (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+  ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  rpt gen_tac >> disch_tac >>
+  Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1`
+  >- metis_tac[lineage_entry_small_fresh] >>
+  qpat_x_assum `_ /\ _` strip_assume_tac >>
+  `op <> dead_stack_marker` by
+    (strip_tac >> gvs[normalize_marker_not_var, dead_stack_marker_def,
+                     normalize_operand_def]) >>
+  drule_all lineage_entry_edge >> strip_tac >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`) lineage_entry_inventory >>
+  disch_then (qspec_then `pb` mp_tac) >> simp[] >> strip_tac >>
+  `?u. op = Var u /\ MEM u (live_vars_at (liveness_analyze fn) pred
+    (LENGTH pb.bb_instructions))` by metis_tac[] >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl)` by decide_tac >>
+  `MEM u (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))` by metis_tac[ready_join_live_out] >>
+  `MEM u (live_vars_at (liveness_analyze fn) lbl 0)` by
+    metis_tac[input_vars_non_phi_iff] >>
+  `~MEM (Var u) (FLAT (MAP (\inst. inst.inst_operands)
+    (collect_phis bb.bb_instructions)))` by metis_tac[] >>
+  drule_all live_start_strict_dominating_def >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `~MEM u (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    metis_tac[strict_dominating_def_excludes_outputs] >>
+  gvs[] >> drule_all normalize_strict_dominating_def >> strip_tac >>
+  drule_all strict_dominating_def_excludes_outputs >> simp[]
+QED
+
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
    reorder's target, the predecessor-side PHI sources and the live-in
    variables; a source may be an output of the join itself (a loop header
