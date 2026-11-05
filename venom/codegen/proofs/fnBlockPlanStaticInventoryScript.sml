@@ -827,6 +827,178 @@ Proof
   gvs[GSYM inventory_filter_count, GSYM inventory_count_pos]
 QED
 
+Theorem inventory_stack_swap_origin[local]:
+  !d stk x. MEM x (stack_swap d stk) ==> MEM x stk
+Proof
+  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
+  `LENGTH stk - 1 < LENGTH stk /\ LENGTH stk - (d + 1) < LENGTH stk` by
+    (Cases_on `stk` >> gvs[]) >>
+  `MEM (EL (LENGTH stk - 1) stk) stk /\
+   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
+    (conj_tac >> irule EL_MEM >> decide_tac) >>
+  simp[stack_swap_def, LET_THM] >> strip_tac >>
+  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
+QED
+
+Theorem inventory_spill_physical_origin[local]:
+  do_spill_at d ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  Cases_on `d = 0` >>
+  simp[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  simp[stack_pop_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[rich_listTheory.MEM_TAKE, inventory_stack_swap_origin]
+QED
+
+Theorem inventory_reduce_physical_origin:
+  !fuel pending op f n ps ops qs.
+  reduce_depth_plan fuel pending op f n ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < n` >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[] >>
+  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
+  Cases_on `dist <= 16` >> gvs[] >>
+  Cases_on `select_spill_candidate ps.ps_stack pending dist n` >> gvs[] >>
+  rename1 `select_spill_candidate ps.ps_stack pending dist n = SOME cand` >>
+  Cases_on `do_spill_at cand ps` >> gvs[] >>
+  rename1 `do_spill_at cand ps = (spill_ops,mid)` >>
+  Cases_on `reduce_depth_plan fuel pending op f n mid` >> gvs[] >>
+  metis_tac[inventory_spill_physical_origin]
+QED
+
+Theorem inventory_swap_physical_origin[local]:
+  (d <= 16 \/ d < LENGTH ps.ps_stack) /\ do_swap d ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  disch_tac >> Cases_on `d <= 16`
+  >- (gvs[do_swap_def, LET_THM] >> Cases_on `d = 0` >> gvs[] >>
+      metis_tac[inventory_stack_swap_origin]) >>
+  gvs[] >>
+  drule do_swap_stack_perm >> simp[] >> strip_tac >>
+  metis_tac[PERM_MEM_EQ]
+QED
+
+Theorem inventory_restore_physical_origin[local]:
+  do_restore op ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ x = op
+Proof
+  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[stack_push_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem inventory_poke_physical_origin[local]:
+  MEM x (stack_poke d op stk) ==> MEM x stk \/ x = op
+Proof
+  simp[stack_poke_def, MEM_LUPDATE] >> metis_tac[EL_MEM]
+QED
+
+Theorem inventory_two_swaps_origin[local]:
+  d < LENGTH ps.ps_stack /\ f <= 16 /\
+  do_swap d ps = (ops,mid) /\ do_swap f mid = (ops',qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  strip_tac >>
+  `!x. MEM x mid.ps_stack ==> MEM x ps.ps_stack` by
+    (metis_tac[inventory_swap_physical_origin]) >>
+  `!x. MEM x qs.ps_stack ==> MEM x mid.ps_stack` by
+    (metis_tac[inventory_swap_physical_origin]) >>
+  metis_tac[]
+QED
+
+Theorem inventory_reorder_one_physical_origin:
+  LENGTH pending <= 16 /\ reorder_one dfg pending idx op ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ x = op
+Proof
+  strip_tac >> qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [reorder_one_def, LET_THM] >>
+  pairarg_tac >>
+  `!x. MEM x ps1.ps_stack ==> MEM x ps.ps_stack \/ x = op` by
+    (gvs[AllCaseEqs()] >> metis_tac[inventory_restore_physical_origin]) >>
+  qmatch_goalsub_abbrev_tac `stack_get_unfixed_depth op f n` >>
+  `f <= 16` by (simp[Abbr `f`, Abbr `n`] >> decide_tac) >>
+  Cases_on `stack_get_unfixed_depth op f n ps1.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >> pairarg_tac >>
+  `!x. MEM x ps2.ps_stack ==> MEM x ps1.ps_stack` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     metis_tac[inventory_reduce_physical_origin]) >>
+  Cases_on `stack_get_unfixed_depth op f n ps2.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `stack_get_unfixed_depth op f n ps2.ps_stack = SOME dist` >>
+  `dist < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >>
+  simp_tac (srw_ss()) [] >> Cases_on `dist = f`
+  >- (simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `f < LENGTH ps2.ps_stack` >> simp[] >>
+  TRY (rename1 `operand_equiv dfg op _` >>
+       Cases_on `operand_equiv dfg op (stack_peek f ps2.ps_stack)` >> simp[]) >>
+  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[]
+  >~ [`MEM _ (stack_poke _ _ _)`]
+  >- (`MEM (stack_peek f ps2.ps_stack) ps2.ps_stack` by
+        metis_tac[stack_peek_mem] >>
+      metis_tac[inventory_poke_physical_origin]) >>
+  metis_tac[inventory_two_swaps_origin]
+QED
+
+Theorem inventory_reorder_steps_origin[local]:
+  !items ps ops qs pending dfg.
+    EVERY (\(idx,op). MEM op pending) items /\ LENGTH pending <= 16 /\
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,qs) ==>
+    !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ MEM x pending
+Proof
+  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `reorder_one dfg pending idx op ps = (step_ops,mid)` >>
+  `!x. MEM x mid.ps_stack ==> MEM x ps.ps_stack \/ x = op` by
+    metis_tac[inventory_reorder_one_physical_origin] >>
+  qpat_x_assum `!ps ops qs pending dfg. _` drule >> simp[] >> metis_tac[]
+QED
+
+Theorem inventory_reorder_physical_origin:
+  LENGTH pending <= 16 /\ reorder_plan dfg pending ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ MEM x pending
+Proof
+  strip_tac >>
+  `EVERY (\(idx,op). MEM op pending) (MAPi (\i op. (i,op)) pending)` by
+    simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi, EL_MEM] >>
+  gvs[reorder_plan_eq_plan_steps] >>
+  metis_tac[inventory_reorder_steps_origin]
+QED
+
+Theorem inventory_emit_one_physical_origin:
+  emit_one_input opc nl op ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ x = op
+Proof
+  Cases_on `op` >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[do_restore_def, AllCaseEqs(), LET_THM] >> rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs()] >> rpt (IF_CASES_TAC >> gvs[AllCaseEqs()]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[stack_push_def] >>
+  qmatch_asmsub_abbrev_tac `do_dup dist before` >>
+  `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
+  drule stack_get_depth_props >> strip_tac >>
+  drule do_dup_stack_exact >> simp[] >> strip_tac >> gvs[Abbr `before`]
+QED
+
+Theorem inventory_emit_physical_origin:
+  !operands ps ops qs.
+    emit_input_plan opc operands nl ps = (ops,qs) ==>
+    !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ MEM x operands
+Proof
+  Induct >> simp[emit_input_plan_def, LET_THM] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >>
+  drule inventory_emit_one_physical_origin >> metis_tac[]
+QED
+
 Theorem inventory_regular_core_dead_absent:
   ALL_DISTINCT ps.ps_stack /\
   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
