@@ -34,14 +34,36 @@ Proof
   rw[fn_pass_step_def] >> gvs[]
 QED
 
-(* Admitted in the transplant.  On the base, label_positions_ok also allows
-   CODECOPY [dst; Label "runtime_begin"; sz], which code_layout_valid does
-   not bind, so this may need a premise binding "runtime_begin" or ruling
-   that CODECOPY out of the context. *)
+(* label_positions_ok leaves one value use of a label outside jumps,
+   PHIs, INVOKE and CODECOPY: LowerDload's ADD [_; Label "code_end"],
+   which code_layout_valid binds. *)
+Triviality label_positions_value_label:
+  label_positions_ok inst /\ MEM (Label l) inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> CODECOPY /\
+  ~is_terminator inst.inst_opcode /\ ~is_pseudo inst.inst_opcode ==>
+  l = "code_end"
+Proof
+  rpt strip_tac >> fs[label_positions_ok_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_pseudo_def, EVERY_MEM] >>
+  res_tac >> fs[stackPlanTypesTheory.is_label_operand_def] >>
+  (* only ADD [op; Label "code_end"] is left *)
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+  first_x_assum (qspec_then `Label l` mp_tac) >>
+  simp[stackPlanTypesTheory.is_label_operand_def]
+QED
+
 Theorem dft_ctx_labels_bound:
   o1_ctx_shape C /\ code_layout_valid vs ==> ctx_labels_bound C vs.vs_labels
 Proof
-  cheat
+  rw[ctx_labels_bound_def] >>
+  `o1_fn_shape C fn` by fs[o1_ctx_shape_def, EVERY_MEM] >>
+  `inst_shape_ok inst` by fs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >>
+  `l = "code_end"` by
+    (fs[inst_shape_ok_def] >> metis_tac[label_positions_value_label]) >>
+  gvs[code_layout_valid_def, finite_mapTheory.FLOOKUP_DEF]
 QED
 
 Theorem dft_fn_rel_stage:
