@@ -771,6 +771,17 @@ Proof
        (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
+Theorem evaluate_subscripts_error_shape:
+  !tv v path err. evaluate_subscripts tv v path = INR err ==>
+    err = RuntimeError "evaluate_subscripts array_index" \/
+    ?msg. err = TypeError msg
+Proof
+  recInduct evaluate_subscripts_ind >>
+  rpt strip_tac >>
+  gvs[evaluate_subscripts_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
 (* mutating inside arrays, structs, hashmaps *)
 
 Datatype:
@@ -949,6 +960,15 @@ Definition read_memory_path_def:
          | SOME v => INL v
          | NONE => INR err)
 End
+
+Theorem read_memory_path_error_shape:
+  read_memory_path entry path = INR err ==>
+    err = RuntimeError "evaluate_subscripts array_index" \/
+    ?msg. err = TypeError msg
+Proof
+  simp[read_memory_path_def, AllCaseEqs()] >>
+  rpt strip_tac >> drule evaluate_subscripts_error_shape >> simp[]
+QED
 
 val () = cv_auto_trans read_memory_path_def;
 

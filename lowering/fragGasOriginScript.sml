@@ -63,6 +63,59 @@ Inductive gas_origin_focus:
      gas_origin_focus memory explicit (ctx,func) s marks (leaf,t))
 End
 
+Theorem gas_path_edge_zero_origin:
+  gas_path_edge ctx func s 0 r ==>
+  gas_origin_edge F explicit ctx func s [] r
+Proof
+  rewrite_tac[gas_path_edge_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  disch_then (qx_choose_then `fuel` (qx_choose_then `bb`
+    (qx_choose_then `inst` (qx_choose_then `middle` mp_tac)))) >>
+  ntac 4 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  disch_tac >>
+  `gas_events_step fuel ctx func.fn_name inst s = []` by
+    metis_tac[cj 1 gas_events_length, LENGTH_NIL] >>
+  rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+  qexistsl_tac [`fuel`, `bb`, `inst`, `middle`] >> simp[]
+QED
+
+Theorem gas_path_mem_edge_zero_origin:
+  gas_path_mem_edge ctx func s 0 r ==>
+  gas_origin_edge memory explicit ctx func s [] r
+Proof
+  rewrite_tac[gas_path_mem_edge_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  disch_then (qx_choose_then `fuel` (qx_choose_then `bb`
+    (qx_choose_then `inst` (qx_choose_then `middle` mp_tac)))) >>
+  ntac 5 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  disch_tac >>
+  `gas_events_step fuel ctx func.fn_name inst s = []` by
+    metis_tac[cj 1 gas_events_length, LENGTH_NIL] >>
+  rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+  qexistsl_tac [`fuel`, `bb`, `inst`, `middle`] >> simp[]
+QED
+
+Theorem gas_mem_edge_origin:
+  gas_path_mem_edge ctx func s n r /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id GAS [] [out]) ==>
+  gas_origin_edge memory explicit ctx func s [(func.fn_name,id) IN explicit] r
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_path_mem_edge _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_path_mem_edge_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  disch_then (qx_choose_then `fuel` (qx_choose_then `bb'`
+    (qx_choose_then `inst` (qx_choose_then `middle` mp_tac)))) >>
+  ntac 5 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  disch_tac >>
+  `bb' = bb` by metis_tac[optionTheory.SOME_11] >>
+  `inst = mk_inst id GAS [] [out]` by metis_tac[optionTheory.SOME_11] >>
+  rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+  qexistsl_tac [`fuel`, `bb'`, `inst`, `middle`] >>
+  gvs[gas_events_step_def, mk_inst_def, is_terminator_def]
+QED
+
 Theorem gas_origin_edge_erase:
   gas_origin_edge memory explicit ctx func s marks r ==>
   gas_path_edge ctx func s (LENGTH marks) r /\
@@ -106,4 +159,34 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[LENGTH_APPEND] >>
   metis_tac[gas_origin_path_erase, gas_focus_path_rules]
+QED
+
+Theorem gas_path_zero_origin:
+  !ctx func s n r.
+    gas_path ctx func s n r ==>
+    n = 0 ==> gas_origin_path F explicit ctx func s [] r
+Proof
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >> gvs[] >>
+  metis_tac[gas_path_edge_zero_origin, gas_origin_path_rules, APPEND_NIL]
+QED
+
+Theorem gas_path_mem_zero_origin:
+  !ctx func s n r.
+    gas_path_mem ctx func s n r ==>
+    n = 0 ==> gas_origin_path memory explicit ctx func s [] r
+Proof
+  ho_match_mp_tac gas_path_mem_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >> gvs[] >>
+  metis_tac[gas_path_mem_edge_zero_origin, gas_origin_path_rules, APPEND_NIL]
+QED
+
+(* With no reached GAS reads, every fixed origin set gives the empty marks. *)
+Theorem gas_marked_path_zero_origin:
+  !memory explicit ctx func s r.
+    gas_marked_path memory ctx func s 0 r ==>
+    gas_origin_path memory explicit ctx func s [] r
+Proof
+  Cases_on `memory` >> simp[gas_marked_path_def] >>
+  metis_tac[gas_path_zero_origin, gas_path_mem_zero_origin]
 QED
