@@ -2309,6 +2309,73 @@ Proof
   decide_tac
 QED
 
+(* A one-slot rename needs no multiplicity bound on its source. *)
+Theorem alias_count_lupdate_bound:
+  !xs n a b.
+    LIST_ELEM_COUNT a (LUPDATE b n xs) <=
+    LIST_ELEM_COUNT a xs + (if a = b then 1 else 0)
+Proof
+  Induct >- simp[LUPDATE_def, LIST_ELEM_COUNT_THM] >> Cases_on `n`
+  >- (rpt gen_tac >> Cases_on `a = h` >> Cases_on `a = b` >>
+      gvs[LUPDATE_def, LIST_ELEM_COUNT_THM]) >>
+  rpt gen_tac >>
+  first_x_assum (qspecl_then [`n'`, `a`, `b`] mp_tac) >>
+  simp[LUPDATE_def, LIST_ELEM_COUNT_THM] >>
+  Cases_on `a = h` >> Cases_on `a = b` >>
+  gvs[LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem alias_phi_mass_bound:
+  !inst live halting ps x.
+  alias_var_mass x (SND (generate_phi_plan inst live halting ps)) <=
+  alias_var_mass x ps + (if x = HD inst.inst_outputs then 1 else 0)
+Proof
+  rpt gen_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  rename1 `_ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >> drule planWfTheory.stack_find_bound >> simp[]) >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) live` >> simp[]
+  >- (Cases_on `do_dup d ps` >> simp[] >>
+      `r.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
+        metis_tac[doSwapSimTheory.do_dup_stack_exact, pairTheory.SND] >>
+      `r.ps_spilled = ps.ps_spilled` by
+        (Cases_on `d <= 15` >>
+         gvs[do_dup_def] >> rpt (pairarg_tac >> gvs[])) >>
+      `alias_var_mass x
+        (r with ps_stack := stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack) =
+       alias_var_mass x ps + (if x = HD inst.inst_outputs then 1 else 0)` by
+        (simp[alias_var_mass_def, stack_poke_def, LUPDATE_APPEND2,
+              elem_count_append, LIST_ELEM_COUNT_THM] >>
+         Cases_on `x = HD inst.inst_outputs` >> simp[LIST_ELEM_COUNT_THM]) >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> simp[] >>
+          metis_tac[alias_var_mass_popmany, pairTheory.SND]) >>
+      gvs[]) >>
+  `alias_var_mass x (ps with ps_stack := stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack) <=
+   alias_var_mass x ps + (if x = HD inst.inst_outputs then 1 else 0)` by
+    (qspecl_then [`ps.ps_stack`, `LENGTH ps.ps_stack - 1 - d`,
+       `Var x`, `Var (HD inst.inst_outputs)`] mp_tac alias_count_lupdate_bound >>
+     simp[alias_var_mass_def, stack_poke_def] >>
+     rpt IF_CASES_TAC >> simp[] >> decide_tac) >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[] >>
+      metis_tac[alias_var_mass_popmany, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]) >>
+  simp[]
+QED
+
+Theorem alias_phi_preserves_fresh_singleton:
+  alias_var_mass x ps <= 1 /\
+  (x = HD inst.inst_outputs ==> alias_var_mass x ps = 0) ==>
+  alias_var_mass x (SND (generate_phi_plan inst live halting ps)) <= 1
+Proof
+  strip_tac >>
+  qspecl_then [`inst`, `live`, `halting`, `ps`, `x`] mp_tac alias_phi_mass_bound >>
+  Cases_on `x = HD inst.inst_outputs` >> gvs[]
+QED
+
 Theorem alias_popmany_upper_support:
   popmany_plan to_pop ps = (ops,qs) /\ plan_holds qs (Var x) ==>
   plan_holds ps (Var x)
