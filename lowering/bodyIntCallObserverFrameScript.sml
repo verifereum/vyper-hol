@@ -60,3 +60,48 @@ val () = List.app (fn th =>
   end)
   [eval_phis_storage_frame, abi_observer_step_storage_frame,
    local_prefix_storage_frame];
+
+Theorem abi_decode_sim_stop_prefix_frame:
+  abi_decode_sim ctx fn s v /\
+  observer_region_safe fn cut R /\ observer_region_closed ctx fn cut R /\
+  (s.vs_current_bb,s.vs_inst_idx) IN R /\ ~s.vs_halted /\
+  lookup_block v.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb v.vs_inst_idx = SOME (mk_inst id STOP [] []) /\
+  (!lbl idx block inst. (lbl,idx) IN R /\ (lbl,idx) <> cut /\
+    lookup_block lbl fn.fn_blocks = SOME block /\
+    get_instruction block idx = SOME inst ==> readonly_opcode inst.inst_opcode) ==>
+  ?u. local_prefix ctx fn cut s u /\ stop_view u = stop_view v /\
+    contract_storage u = contract_storage s /\
+    contract_transient u = contract_transient s
+Proof
+  strip_tac >> drule_all abi_decode_sim_stop_run >> strip_tac >>
+  drule_all observer_region_run_prefix >> strip_tac >>
+  qexists `u` >> simp[] >> irule local_prefix_storage_frame >> metis_tac[]
+QED
+
+Theorem abi_decode_sim_stop_storage_frame:
+  abi_decode_sim ctx fn s v /\
+  observer_region_safe fn cut R /\ observer_region_closed ctx fn cut R /\
+  (s.vs_current_bb,s.vs_inst_idx) IN R /\ ~s.vs_halted /\
+  lookup_block v.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb v.vs_inst_idx = SOME (mk_inst id STOP [] []) /\
+  (!lbl idx block inst. (lbl,idx) IN R /\ (lbl,idx) <> cut /\
+    lookup_block lbl fn.fn_blocks = SOME block /\
+    get_instruction block idx = SOME inst ==> readonly_opcode inst.inst_opcode) ==>
+  contract_storage v = contract_storage s /\
+  contract_transient v = contract_transient s
+Proof
+  strip_tac >> drule_all abi_decode_sim_stop_prefix_frame >> strip_tac >>
+  qpat_x_assum `stop_view u = stop_view v` mp_tac >>
+  simp[stop_view_def, halt_state_def, venom_state_component_equality] >>
+  rpt strip_tac >> gvs[contract_storage_def, contract_transient_def]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "STOP observer bridge has unproved dependencies"
+  end)
+  [abi_decode_sim_stop_prefix_frame, abi_decode_sim_stop_storage_frame];
