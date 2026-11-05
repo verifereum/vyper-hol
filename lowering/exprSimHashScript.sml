@@ -2573,8 +2573,8 @@ Theorem vv_post_inst_idx[simp]:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   Cases_on `vv` >>
-  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def, vv_own_def,
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def,
        storage_holds_inst_idx]
 QED
 
@@ -3428,7 +3428,7 @@ Theorem vv_post_pointer_cong:
 Proof
   strip_tac >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def]
+  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]
 QED
 
 Theorem compile_method_id_runtime_typed_vv_sim:

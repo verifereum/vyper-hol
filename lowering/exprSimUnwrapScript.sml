@@ -156,7 +156,7 @@ Theorem vv_post_read_result:
      vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
 Proof
   rpt strip_tac >> Cases_on `vv` >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, storage_holds_def,
        immutable_holds_def, read_result_def, return_def]
 QED
 
@@ -171,7 +171,7 @@ Theorem expr_post_of_vv_post_stack:
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue t op) s ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
-  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def,
+  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def,
      read_result_def, return_def]
 QED
 
@@ -182,9 +182,9 @@ Theorem expr_post_of_vv_post_memory:
     p.ptr_location = LocMemory /\ ~is_word_type t ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
 Proof
-  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
+  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def] >>
   gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def,
-      is_bytestring_word_type] >>
+      expr_val_own_def, is_bytestring_word_type] >>
   first_x_assum irule >> simp[SF SFY_ss]
 QED
 
@@ -207,6 +207,7 @@ Proof
   rw[expr_post_def]
   >~ [`expr_val_rel`] >- gvs[expr_val_rel_def]
   >~ [`expr_val_at`] >- simp[expr_val_at_def]
+  >~ [`expr_val_own`] >- simp[expr_val_own_def]
   >~ [`lookup_var x s`]
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
   >~ [`FLOOKUP s.vs_allocas`] >- fs[vv_post_def]

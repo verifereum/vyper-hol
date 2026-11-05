@@ -327,6 +327,24 @@ Proof
         disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
 QED
 
+Theorem ifexp_vv_own_alloc_frame[local]:
+  vv_own cenv cx ty sa sb es raw vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+               FLOOKUP q.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes q n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sb.cs_next_id <= sm.cs_next_id ==>
+  vv_own cenv cx ty sa sm es raw vv q
+Proof
+  Cases_on `vv` >>
+  simp[vv_own_def, vv_operand_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[])
+QED
+
 Theorem ifexp_alloc_local_regions[local]:
   !ctx func cenv cx es sa s q.
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
@@ -542,6 +560,10 @@ Proof
   `vv_at cenv cx (post_value_type cenv e) origin sm es' raw vv t` by
     (irule ifexp_vv_at_alloc_frame >> qexistsl_tac [`s`, `sa`] >>
      fs[vv_post_def] >> decide_tac) >>
+  `post_value_type cenv e <> expr_type e ==>
+   vv_own cenv cx (post_value_type cenv e) origin sm es' raw vv t` by
+    (strip_tac >> irule ifexp_vv_own_alloc_frame >>
+     qexistsl_tac [`s`, `sa`] >> fs[vv_post_def] >> decide_tac) >>
   qexistsl_tac [`t`, `w`] >> simp[vv_post_def] >>
   fs[vv_post_def] >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -563,6 +585,13 @@ Theorem ifexp_vv_at_start_var[local,simp]:
   vv_at ce cx ty sa sb es tv vv s
 Proof
   Cases_on `vv` >> simp[vv_at_def]
+QED
+
+Theorem ifexp_vv_own_start_var[local,simp]:
+  vv_own ce cx ty (sa with cs_next_var := n) sb es tv vv s <=>
+  vv_own ce cx ty sa sb es tv vv s
+Proof
+  Cases_on `vv` >> simp[vv_own_def, expr_val_own_def]
 QED
 
 Theorem ifexp_vv_post_rebase[local]:
@@ -801,7 +830,7 @@ Proof
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
 QED
 
 Theorem ifexp_store_bytestring_straight[local]:
@@ -876,8 +905,8 @@ Proof
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   Cases_on `vv` >>
-  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def, vv_own_def,
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def,
        storage_holds_def, venomStateTheory.contract_storage_def,
        venomStateTheory.contract_transient_def]
 QED

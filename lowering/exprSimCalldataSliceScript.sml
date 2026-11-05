@@ -898,6 +898,19 @@ Proof
   >> metis_tac[]
 QED
 
+Theorem vv_own_start_mono:
+  sa.cs_next_id <= sm.cs_next_id /\
+  vv_own cenv cx ty sm sb es tv vv u ==>
+  vv_own cenv cx ty sa sb es tv vv u
+Proof
+  Cases_on `vv` >> simp[vv_own_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP u.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        first_assum ACCEPT_TAC)
+  >> metis_tac[]
+QED
+
 Theorem vv_post_prefix_frame:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -907,7 +920,8 @@ Theorem vv_post_prefix_frame:
   vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u
 Proof
   simp[vv_post_def, GSYM wb_frame_def] >> rpt strip_tac
-  >- metis_tac[vv_at_start_mono] >>
+  >- metis_tac[vv_at_start_mono]
+  >- metis_tac[vv_own_start_mono] >>
   metis_tac[wb_frame_trans]
 QED
 
