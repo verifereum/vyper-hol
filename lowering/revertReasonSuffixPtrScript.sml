@@ -509,3 +509,40 @@ Proof
      simp[exec_pure2_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def, Abbr `j`, copy_len_binop_ghost_frame]
 QED
+
+Theorem store_load_clean_checks:
+  ptr_covers G tn cell s 32 /\ lookup_var cell s = SOME a /\
+  eval_operand value s = SOME w /\ op_taint tn value = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MSTORE [Var cell;value] [];
+       mk_inst (id+1) MLOAD [Var cell] [dst]] s Gf tnf /\
+    op_taint tnf (Var dst) = {}
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j] _ _ _` >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_mstore >> simp[]) >>
+  `step_inst_base i s = OK (mstore (w2n a) w s)` by
+    (simp[Abbr `i`] >> irule step_mstore_operands >> simp[eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
+  `ptr_covers g1 t1 cell s1 32` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `i`, mk_inst_def, mstore_def, lookup_var_def]) >>
+  `lookup_var cell s1 = SOME a` by
+    fs[Abbr `s1`, mstore_def, lookup_var_def] >>
+  `t1.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}` by
+    (simp[Abbr `t1`, Abbr `i`] >> irule (cj 5 mstore_ghost_frame) >> simp[]) >>
+  `!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN t1.t_mem` by simp[] >>
+  `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
+    (simp[Abbr `j`] >> irule ptr_inst_ok_mload >> simp[]) >>
+  `step_inst_base j s1 = OK (update_var dst (mload (w2n a) s1) s1)` by
+    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_read1_def, eval_operand_def]) >>
+  simp[inst_seq_ptr_def, Abbr `j`] >>
+  irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]
+QED
