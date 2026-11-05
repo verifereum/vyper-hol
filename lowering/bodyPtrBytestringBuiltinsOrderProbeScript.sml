@@ -57,3 +57,73 @@ Proof
        exprLoweringTheory.is_extcode_def, exprLoweringTheory.extcode_addr_expr_def] >>
   EVAL_TAC >> simp[]
 QED
+
+(* Concrete local scopes, abbreviated only to keep evaluation probes small. *)
+Definition order_probe_scopes_def:
+  order_probe_scopes =
+    [FEMPTY |+ ("arr", <|assignable := T;
+      type := ArrayTV (BaseTV AddressT) (Dynamic 2);
+      value := ArrayV (DynArrayV [AddressV 1w; AddressV 2w]); popped := []|>)]
+End
+
+Theorem order_probe_len_before:
+  !cx st.
+    eval_expr cx
+      (Builtin (BaseT (UintT 256)) Len
+        [Name (ArrayT (BaseT AddressT) (Dynamic 2)) "arr"])
+      (st with scopes := order_probe_scopes) =
+    (INL (Value (IntV 2)), st with scopes := order_probe_scopes)
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def]
+QED
+
+Theorem order_probe_pop_read:
+  !cx st.
+    FST ((do r <- eval_expr cx (Pop (BaseT AddressT) (NameTarget "arr"));
+             read_result cx r od) (st with scopes := order_probe_scopes)) =
+    INL (AddressV 2w)
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def]
+QED
+
+Theorem order_probe_len_after:
+  !cx st.
+    FST ((do eval_expr cx (Pop (BaseT AddressT) (NameTarget "arr"));
+             eval_expr cx
+               (Builtin (BaseT (UintT 256)) Len
+                 [Name (ArrayT (BaseT AddressT) (Dynamic 2)) "arr"])
+          od) (st with scopes := order_probe_scopes)) =
+    INL (Value (IntV 1))
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def]
+QED
+
+Theorem order_probe_offset_first:
+  !cx st.
+    FST ((do offset <- eval_expr cx
+               (Builtin (BaseT (UintT 256)) Len
+                 [Name (ArrayT (BaseT AddressT) (Dynamic 2)) "arr"]);
+             r <- eval_expr cx (Pop (BaseT AddressT) (NameTarget "arr"));
+             addr <- read_result cx r;
+             return (addr,offset)
+          od) (st with scopes := order_probe_scopes)) =
+    INL (AddressV 2w, Value (IntV 2))
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def,
+    vyperStateTheory.bind_def]
+QED
+
+Theorem order_probe_address_first:
+  !cx st.
+    FST ((do r <- eval_expr cx (Pop (BaseT AddressT) (NameTarget "arr"));
+             addr <- read_result cx r;
+             offset <- eval_expr cx
+               (Builtin (BaseT (UintT 256)) Len
+                 [Name (ArrayT (BaseT AddressT) (Dynamic 2)) "arr"]);
+             return (addr,offset)
+          od) (st with scopes := order_probe_scopes)) =
+    INL (AddressV 2w, Value (IntV 1))
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def,
+    vyperStateTheory.bind_def] >> EVAL_TAC
+QED
