@@ -414,6 +414,75 @@ Proof
     mp_tac) >> simp[]
 QED
 
+Theorem stack_poke_exchange_mem:
+  d < LENGTH (stk : operand list) /\ e < LENGTH stk ==>
+  (MEM at (stack_poke e (stack_peek d stk)
+    (stack_poke d (stack_peek e stk) stk)) <=> MEM at stk)
+Proof
+  strip_tac >>
+  qspecl_then [`stk`, `d`, `e`, `at`] mp_tac
+    doSwapSimTheory.stack_poke_exchange_multiplicity >>
+  simp[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem reorder_one_plan_holds:
+  reorder_one dfg pending idx op ps = (ops,ps') /\ plan_holds ps at ==>
+  plan_holds ps' at
+Proof
+  simp[reorder_one_def] >> pairarg_tac >>
+  `plan_holds ps at ==> plan_holds ps1 at` by
+    (qpat_x_assum `_ = (restore_ops,ps1)` mp_tac >>
+     Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+       (LENGTH pending) ps.ps_stack` >> simp[]
+     >- (Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
+         metis_tac[do_restore_plan_holds]) >>
+     strip_tac >> gvs[]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+    (LENGTH pending) ps1.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  pairarg_tac >>
+  `plan_holds ps1 at ==> plan_holds ps2 at` by
+    (qpat_x_assum `_ = (reduce_ops,ps2)` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- metis_tac[reduce_depth_plan_holds] >> strip_tac >> gvs[]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+    (LENGTH pending) ps2.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME d` >>
+  Cases_on `d = LENGTH pending - (idx + 1)` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack` >> simp[]
+  >- (IF_CASES_TAC >> simp[]
+      >- (strip_tac >> gvs[] >>
+          drule stack_get_unfixed_depth_props >> strip_tac >>
+          gvs[plan_holds_def, stack_poke_exchange_mem]) >>
+      pairarg_tac >> gvs[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      dxrule_all do_swap_plan_holds >> strip_tac >>
+      drule_all do_swap_plan_holds >> simp[]) >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  dxrule_all do_swap_plan_holds >> strip_tac >>
+  drule_all do_swap_plan_holds >> simp[]
+QED
+
+Theorem reorder_plan_holds:
+  reorder_plan dfg pending ps = (ops,ps') /\ plan_holds ps at ==>
+  plan_holds ps' at
+Proof
+  `!steps acc ps ops ps'.
+    FOLDL (\(acc,st) (idx,op).
+      (\(sops,st'). (acc ++ sops,st'))
+        (reorder_one dfg pending idx op st)) (acc,ps) steps = (ops,ps') /\
+    plan_holds ps at ==> plan_holds ps' at` by
+    (Induct >- (simp[] >> rpt strip_tac >> gvs[]) >>
+     simp[] >> rpt gen_tac >> PairCases_on `h` >>
+     Cases_on `reorder_one dfg pending h0 h1 ps` >> simp[] >>
+     strip_tac >> drule_all reorder_one_plan_holds >> strip_tac >>
+     first_x_assum (qspecl_then [`acc ++ q`, `r`, `ops`, `ps'`] mp_tac) >>
+     simp[]) >>
+  simp[reorder_plan_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Definition alias_var_mass_def:
   alias_var_mass x ps =
     LIST_ELEM_COUNT (Var x) ps.ps_stack +
