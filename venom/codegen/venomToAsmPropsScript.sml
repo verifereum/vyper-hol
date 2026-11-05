@@ -85,7 +85,8 @@ Theorem gen_fn_simulation:
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
     MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
     (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee_name :: args /\
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
@@ -170,7 +171,8 @@ Theorem gen_fn_frame_simulation:
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
     MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
     (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee_name :: args /\
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
