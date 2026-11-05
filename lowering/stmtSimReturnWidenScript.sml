@@ -35,15 +35,6 @@ Proof
   rw[arg_type_fits_def, is_word_type_def] >> gvs[]
 QED
 
-Theorem typed_return_copy_static[local]:
-  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
-            vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
-            vs_inst_idx := s.vs_inst_idx|>) = s ==>
-  copy_static t = copy_static s
-Proof
-  simp[copy_static_def, venom_state_component_equality]
-QED
-
 Theorem typed_return_empty_state_frame[local]:
   stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
   copy_static t = copy_static s /\
@@ -104,50 +95,6 @@ Proof
   simp[]
 QED
 
-(* Shared typed-store execution boundary, also used by expression adapters. *)
-Theorem typed_return_store_frag:
-  compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
-  acyclic_struct_metadata cenv.ce_struct_fields /\
-  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
-  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-    ALL_DISTINCT (MAP FST fields) /\
-    EVERY (\(fname, fty, sz). !tv. evaluate_type tenv fty = SOME tv ==>
-      sz = type_memory_size tv) fields) /\
-  type_widens_to tenv sty dty /\
-  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
-  value_has_type stv v /\ value_has_type dtv v /\
-  val_wf stv v /\ val_wf dtv v /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  (!x. dst = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
-  val_in_memory stv v (w2n sw) s.vs_memory /\
-  w2n sw + type_memory_size stv < dimword (:256) /\
-  w2n dw + type_memory_size dtv < dimword (:256) /\
-  (w2n sw + type_memory_size stv <= w2n dw \/
-   w2n dw + type_memory_size dtv <= w2n sw) /\
-  (!t. copy_static t = copy_static s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
-      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory ==> P t) ==>
-  frag_exec ctx sa sb (\z. z = s)
-    (\t. P t /\ val_in_memory dtv v (w2n dw) t.vs_memory /\
-      copy_static t = copy_static s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) R
-Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  rewrite_tac[frag_exec_def] >> rpt strip_tac >>
-  rule_assum_tac BETA_RULE >> qpat_x_assum `_ = s` SUBST_ALL_TAC >>
-  drule_all compile_store_memory_typed_run >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  disj1_tac >> qexists_tac `t` >> simp[] >>
-  `copy_static t = copy_static s` by
-    (irule typed_return_copy_static >> simp[]) >>
-  simp[] >> conj_tac
-  >- (first_x_assum irule >> fs[arithmeticTheory.ADD_COMM] >>
-      first_assum ACCEPT_TAC) >>
-  metis_tac[]
-QED
 
 (* Word members widen only from themselves, so stack returns need no
    conversion. *)

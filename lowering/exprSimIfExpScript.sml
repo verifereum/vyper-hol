@@ -21,7 +21,7 @@
 
 Theory exprSimIfExp
 Ancestors
-  loweringPosts
+  loweringPosts typedMemoryCopy
   list rich_list finite_map marker exprSimHyps exprSimIfExpCompat exprSimLayoutTransport
   fragExec exprSim exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
@@ -376,6 +376,23 @@ Theorem ifexp_bytestring_adapter_parts[local]:
       op = buf.buf_operand
 Proof
   rpt gen_tac >> strip_tac >>
+  gvs[compile_ifexp_arm_def, compile_store_memory_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+(* Aggregate adapters copy from the physical arm layout into the annotation. *)
+Theorem ifexp_typed_adapter_parts[local]:
+  ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
+  ~is_bytestring_type t /\ arm_ty <> t /\
+  compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
+  ?buf sm src sn.
+    compile_alloc_buffer (type_memory_bytes cenv t) sa = (buf,sm) /\
+    unwrap_value cenv vv sm = (src,sn) /\
+    compile_store_memory_typed cenv buf.buf_operand t src arm_ty sn = ((),sb) /\
+    op = buf.buf_operand
+Proof
+  strip_tac >>
   gvs[compile_ifexp_arm_def, compile_store_memory_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
@@ -1488,7 +1505,12 @@ Proof
   >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w'` >>
       `z <> rv` by metis_tac[] >>
       `lookup_var z tt = SOME w'` by metis_tac[] >>
-      metis_tac[]) >>
+      `not_fresh_at sc z` by
+        (qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >> simp[]) >>
+      `lookup_var z u = SOME w'` by
+        (qpat_x_assum `!x w. not_fresh_at sc x /\ _ ==> _` irule >>
+         simp[]) >>
+      fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   (* the locals' memory: kept by c, then by e *)
   `locals_kept cenv es s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `u` >>
