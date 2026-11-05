@@ -1,0 +1,155 @@
+Theory bodyPtrBytestringBuiltinsOrderRun
+Ancestors
+  bodyPtrBytestringBuiltinsOrderProbe bodyPtrBytestringBuiltinsEndpoint
+  vyperCompiler compileVyper
+
+val () = computeLib.add_funs
+  [wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:8)``,
+   fcpLib.INDEX_CONV ``dimindex(:160)``,
+   fcpLib.INDEX_CONV ``dimindex(:256)``];
+
+(* Concrete compilation fixture; the input array occupies bytes 128..223. *)
+Definition order_run_env_def:
+  order_run_env =
+    (build_compile_env [] External Nonpayable "f"
+      [("arr", ArrayT (BaseT AddressT) (Dynamic 2))] NoneT [] F)
+    with ce_vars := FEMPTY |+ ("arr", MemLoc 128 96)
+End
+
+(* Keep the actual compiler output, rather than a hand-written program. *)
+Definition order_run_compiled_def:
+  order_run_compiled = compile_expr order_run_env
+    (BaseT (BytesT (Dynamic 1))) order_probe_expr
+    (initial_compile_state "entry")
+End
+
+Theorem order_run_compilation:
+  FST order_run_compiled =
+    LocatedValue (BaseT (BytesT (Dynamic 1)))
+      <|ptr_operand := Var "%1"; ptr_location := LocMemory; ptr_buf := NONE|> /\
+  (SND order_run_compiled).cs_blocks = [] /\
+  (SND order_run_compiled).cs_current_bb = "entry" /\
+  MAP (\i. (i.inst_opcode, i.inst_operands, i.inst_outputs))
+    (SND order_run_compiled).cs_current_insts =
+    [(MLOAD,[Lit 128w],["%0"]);
+     (ALLOCA,[Lit 64w],["%1"]);
+     (ADD,[Var "%1";Lit 32w],["%2"]);
+     (MLOAD,[Lit 128w],["%3"]);
+     (ISZERO,[Var "%3"],["%4"]);
+     (ISZERO,[Var "%4"],["%5"]);
+     (ASSERT,[Var "%5"],[]);
+     (SUB,[Var "%3";Lit 1w],["%6"]);
+     (MSTORE,[Lit 128w;Var "%6"],[]);
+     (ADD,[Lit 128w;Lit 32w],["%7"]);
+     (MUL,[Var "%6";Lit 32w],["%8"]);
+     (ADD,[Var "%7";Var "%8"],["%9"]);
+     (MLOAD,[Var "%9"],["%10"]);
+     (EXTCODESIZE,[Var "%10"],["%11"]);
+     (ADD,[Var "%0";Lit 1w],["%12"]);
+     (LT,[Var "%12";Var "%0"],["%13"]);
+     (GT,[Var "%12";Var "%11"],["%14"]);
+     (OR,[Var "%13";Var "%14"],["%15"]);
+     (ISZERO,[Var "%15"],["%16"]);
+     (ASSERT,[Var "%16"],[]);
+     (EXTCODECOPY,[Var "%10";Var "%2";Var "%0";Lit 1w],[]);
+     (MSTORE,[Var "%1";Lit 1w],[])]
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256,
+    fcpLib.INDEX_CONV ``dimindex(:8)``]
+QED
+
+(* Observe exactly the emitted straight-line fragment at a STOP continuation. *)
+Definition order_run_fn_def:
+  order_run_fn = mk_raw_function "f"
+    [<|bb_label := "entry";
+       bb_instructions := (SND order_run_compiled).cs_current_insts ++
+         [<|inst_id := 22; inst_opcode := STOP; inst_operands := []; inst_outputs := []|>]|>]
+End
+
+(* The array is disjoint from the output allocation at 256. *)
+Definition order_run_start_def:
+  order_run_start =
+    (init_venom_state "entry") with
+      <|vs_memory := REPLICATE 159 0w ++ [2w] ++
+                      REPLICATE 31 0w ++ [1w] ++ REPLICATE 31 0w ++ [2w];
+        vs_alloca_next := 256;
+        vs_accounts := update_account 2w
+          (empty_account_state with code := [10w;20w;30w]) empty_accounts|>
+End
+
+Theorem order_run_start_array:
+  mload 128 order_run_start = 2w /\
+  mload 160 order_run_start = 1w /\
+  mload 192 order_run_start = 2w
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256,
+    fcpLib.INDEX_CONV ``dimindex(:8)``]
+QED
+
+
+Theorem order_run_instructions:
+  (SND order_run_compiled).cs_current_insts =
+    [mk_inst 0 MLOAD [Lit 128w] ["%0"];
+     mk_inst 1 ALLOCA [Lit 64w] ["%1"];
+     mk_inst 2 ADD [Var "%1";Lit 32w] ["%2"];
+     mk_inst 3 MLOAD [Lit 128w] ["%3"];
+     mk_inst 4 ISZERO [Var "%3"] ["%4"];
+     mk_inst 5 ISZERO [Var "%4"] ["%5"];
+     mk_inst 6 ASSERT [Var "%5"] [];
+     mk_inst 7 SUB [Var "%3";Lit 1w] ["%6"];
+     mk_inst 8 MSTORE [Lit 128w;Var "%6"] [];
+     mk_inst 9 ADD [Lit 128w;Lit 32w] ["%7"];
+     mk_inst 10 MUL [Var "%6";Lit 32w] ["%8"];
+     mk_inst 11 ADD [Var "%7";Var "%8"] ["%9"];
+     mk_inst 12 MLOAD [Var "%9"] ["%10"];
+     mk_inst 13 EXTCODESIZE [Var "%10"] ["%11"];
+     mk_inst 14 ADD [Var "%0";Lit 1w] ["%12"];
+     mk_inst 15 LT [Var "%12";Var "%0"] ["%13"];
+     mk_inst 16 GT [Var "%12";Var "%11"] ["%14"];
+     mk_inst 17 OR [Var "%13";Var "%14"] ["%15"];
+     mk_inst 18 ISZERO [Var "%15"] ["%16"];
+     mk_inst 19 ASSERT [Var "%16"] [];
+     mk_inst 20 EXTCODECOPY [Var "%10";Var "%2";Var "%0";Lit 1w] [];
+     mk_inst 21 MSTORE [Var "%1";Lit 1w] []]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* Explicit step snapshots prevent repeated evaluation of preceding instructions. *)
+Definition order_run_s1_def:
+  order_run_s1 = order_run_start with
+    <|vs_vars := FEMPTY |+ ("%0",2w); vs_inst_idx := 1|>
+End
+
+Theorem order_run_step0:
+  step_inst_base (mk_inst 0 MLOAD [Lit 128w] ["%0"]) order_run_start =
+    OK (order_run_s1 with vs_inst_idx := 0)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256, order_run_start_array] >>
+  simp[venomStateTheory.update_var_def, order_run_s1_def, order_run_start_def,
+       venomStateTheory.init_venom_state_def]
+QED
+
+(* Snapshot after allocation: no memory is written by ALLOCA. *)
+Definition order_run_s2_def:
+  order_run_s2 = order_run_start with
+    <|vs_vars := FEMPTY |+ ("%0",2w) |+ ("%1",256w);
+      vs_inst_idx := 2; vs_allocas := FEMPTY |+ (1,(256,64));
+      vs_alloca_next := 320|>
+End
+
+Theorem order_run_step1:
+  step_inst_base (mk_inst 1 ALLOCA [Lit 64w] ["%1"]) order_run_s1 =
+    OK (order_run_s2 with vs_inst_idx := 1)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256] >>
+  simp[order_run_s1_def, order_run_s2_def,
+       venomStateTheory.update_var_def] >>
+  simp[order_run_start_def, venomStateTheory.init_venom_state_def]
+QED
