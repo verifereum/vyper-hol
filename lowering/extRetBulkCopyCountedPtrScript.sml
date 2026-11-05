@@ -706,3 +706,102 @@ Resume emit_bulk_header_counted_ptr[memory]:
 QED
 
 Finalise emit_bulk_header_counted_ptr
+
+Theorem compile_bulk_dynarray_code:
+  compile_copy_dynarray_typed cenv (Var dst) ty capacity (Var src) ty sa = ((),sz) ==>
+  ?length gt ok sp dp nb sb sc sd se sg sh si sj.
+    emit_op MLOAD [Var src] sa = (Var length,sb) /\
+    emit_op GT [Var length;Lit (n2w capacity)] sb = (Var gt,sc) /\
+    emit_op ISZERO [Var gt] sc = (Var ok,sd) /\
+    emit_void ASSERT [Var ok] sd = ((),se) /\
+    emit_void MSTORE [Var dst;Var length] se = ((),sg) /\
+    emit_op ADD [Var src;Lit 32w] sg = (Var sp,sh) /\
+    emit_op ADD [Var dst;Lit 32w] sh = (Var dp,si) /\
+    emit_op MUL [Var length;Lit (n2w (type_memory_bytes cenv ty))] si = (Var nb,sj) /\
+    compile_copy_memory_dynamic (Var dp) (Var sp) (Var nb) sj = ((),sz)
+Proof
+  simp[Once compile_store_memory_typed_def] >>
+  simp[emit_op_def, emit_void_def, compile_copy_memory_dynamic_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def] >> strip_tac >> gvs[]
+QED
+
+Theorem compile_copy_dynarray_bulk_counted_ptr:
+  compile_copy_dynarray_typed cenv (Var dst) ty capacity (Var src) ty sa = ((),sz) /\
+  fn_has_code sa sz fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn src s (32+len*type_memory_bytes cenv ty) /\
+  ptr_covers G tn dst s (32+len*type_memory_bytes cenv ty) /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n2w len /\ len <= capacity /\ capacity < dimword(:256) /\
+  w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
+  type_memory_bytes cenv ty < dimword(:256) /\
+  len*type_memory_bytes cenv ty < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sz.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sz.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_memory =
+      (mcopy (w2n b+32) (w2n a+32) (len*type_memory_bytes cenv ty)
+        (mstore (w2n b) (n2w len) s)).vs_memory /\
+    tnf.t_mem =
+      ((tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32}) DIFF
+        {i | w2n b+32 <= i /\ i < w2n b+32+len*type_memory_bytes cenv ty}) UNION
+      {w2n b+32+i | i | i < len*type_memory_bytes cenv ty /\
+        w2n a+32+i IN (tn.t_mem DIFF {j | w2n b <= j /\ j < w2n b+32})} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule compile_bulk_dynarray_code >> strip_tac >>
+  `fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
+   fn_has_code sc sd fn /\ fn_has_code sd se fn /\ fn_has_code se sg fn /\
+   fn_has_code sg sh fn /\ fn_has_code sh si fn /\
+   fn_has_code si sj fn /\ fn_has_code sj sz fn` by suspend "code" >>
+  `ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32` by
+    (gvs[ptr_covers_def] >> metis_tac[LESS_EQ_ADD]) >>
+  drule_all emit_bulk_header_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `not_fresh_at sg src /\ not_fresh_at sg dst /\ not_fresh_at sg length /\
+   (!p. not_fresh_at sa p ==> not_fresh_at sg p)` by suspend "fresh" >>
+  `lookup_var src sf = SOME a /\ lookup_var dst sf = SOME b /\
+   ptr_covers Gf tnf src sf (32+len*type_memory_bytes cenv ty) /\
+   ptr_covers Gf tnf dst sf (32+len*type_memory_bytes cenv ty) /\
+   len < dimword(:256)` by
+    (gvs[ptr_covers_def] >> metis_tac[LESS_EQ_LESS_TRANS]) >>
+  drule_all emit_bulk_data_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf'`, `tnf'`, `sf'`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]) >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- suspend "memory" >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume compile_copy_dynarray_bulk_counted_ptr[code]:
+  gvs[emit_op_def, emit_void_def, compile_copy_memory_dynamic_def,
+      comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+      emit_def, comp_return_def, fragExecTheory.fn_has_code_def,
+      fragExecTheory.emitted_blocks_def] >>
+  rpt conj_tac >> irule listTheory.isPREFIX_TRANS >>
+  goal_assum (drule_at Any) >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >> simp[NoAsms]
+QED
+
+Resume compile_copy_dynarray_bulk_counted_ptr[fresh]:
+  gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      fresh_var_def, fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+  metis_tac[LESS_EQ_REFL, LESS_EQ_TRANS]
+QED
+
+Resume compile_copy_dynarray_bulk_counted_ptr[memory]:
+  gvs[mcopy_def, read_memory_def, write_memory_with_expansion_def, expand_memory_def]
+QED
+
+Finalise compile_copy_dynarray_bulk_counted_ptr
