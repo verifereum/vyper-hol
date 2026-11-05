@@ -1,7 +1,7 @@
 (* History, room and memory continuations for exact instruction sequences. *)
 Theory entrySequenceMemResources
 Ancestors
-  entrySequenceResources allocaHistoryFragment fragExecMem exprLoweringProps list
+  intCallCallee allocaHistoryFragment fragExecMem exprLoweringProps list
 
 Theorem entry_sequence_resources:
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
