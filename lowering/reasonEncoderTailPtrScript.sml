@@ -224,7 +224,7 @@ Theorem reason_encoder_pointer_setup_ptr:
   ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s capacity /\
+  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s tuple_capacity /\
   lookup_var payload s = SOME b /\ ptr_covers G tn payload s capacity /\
   lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
   (!i. w2n addr <= i /\ i < w2n addr + 32 ==> i NOTIN tn.t_mem) /\
@@ -237,7 +237,7 @@ Theorem reason_encoder_pointer_setup_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    lookup_var src sf = SOME a /\ ptr_covers Gf tnf src sf capacity /\
+    lookup_var src sf = SOME a /\ ptr_covers Gf tnf src sf tuple_capacity /\
     lookup_var head sf = SOME b /\ ptr_covers Gf tnf head sf capacity /\
     lookup_var tail sf = SOME (b + 32w) /\
     ptr_covers Gf tnf tail sf (capacity - 32) /\
@@ -250,7 +250,8 @@ Theorem reason_encoder_pointer_setup_ptr:
 Proof
   strip_tac >>
   drule_all (SRULE [eval_operand_def, op_taint_def, w2n_lt]
-    (Q.INST [`offset` |-> `Lit 0w`, `d` |-> `0w`, `k` |-> `capacity`]
+    (Q.INST [`offset` |-> `Lit 0w`, `d` |-> `0w`,
+             `k` |-> `tuple_capacity`, `capacity` |-> `tuple_capacity`]
       reason_encoder_offset_path_ptr)) >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
@@ -815,7 +816,7 @@ Theorem reason_encoder_payload_ptr:
   ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s capacity /\
+  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s tuple_capacity /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
   mload (w2n a) s = n /\
   lookup_var payload s = SOME b /\ ptr_covers G tn payload s capacity /\
@@ -824,6 +825,7 @@ Theorem reason_encoder_payload_ptr:
   mload (w2n addr) s = 32w /\ 32 <= capacity /\
   w2n b + 32 < dimword (:256) /\
   w2n (b + 32w) + w2n ((n + 31w) && i2w (-32)) < dimword (:256) /\
+  32 <= tuple_capacity /\ w2n (32w + n) <= tuple_capacity /\
   w2n (32w + n) <= capacity - 32 /\
   w2n ((n + 31w) && i2w (-32)) + 32 <= capacity - 32 /\
   (!p. p = payload \/ p = slot ==> p <> src /\ p <> head /\ p <> off) /\
