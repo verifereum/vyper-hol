@@ -128,7 +128,7 @@ Proof
       simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
   rpt strip_tac >> gvs[MEM_MAP, MEM_FILTER] >>
   drule_at (Pos last) schedule_output_from_block >>
-  (impl_tac >- simp[build_eda_wf, EVERY_MEM, entry_instructions_mem]) >>
+  (impl_tac >- simp[dft_eda_wf, EVERY_MEM, entry_instructions_mem]) >>
   strip_tac >> gvs[from_block_def, flip_operands_inst_id] >>
   qpat_x_assum `MEM _ (schedule_from_entries _ _ _ _ _)` kall_tac >>
   gvs[MEM_EL] >>
@@ -149,25 +149,25 @@ Proof
   drule producing_inst_mem_outputs >> simp[]
 QED
 
-Theorem last_not_dependency:
+Theorem last_not_dft_dependency:
   bi <> [] /\ (LAST bi).inst_outputs = [] /\
   ~is_pseudo (LAST bi).inst_opcode /\
   ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
   MEM inst bi /\ ~is_pseudo inst.inst_opcode ==>
   ~MEM (LAST bi).inst_id
-    (MAP (\d. d.inst_id) (inst_all_deps bi order (build_eda bi) inst))
+    (MAP (\d. d.inst_id) (inst_all_deps bi order (dft_eda bi) inst))
 Proof
   rpt strip_tac >> gvs[MEM_MAP] >>
-  rename1 `MEM dep (inst_all_deps bi order (build_eda bi) inst)` >>
-  `MEM dep bi` by metis_tac[inst_all_deps_mem, build_eda_wf] >>
+  rename1 `MEM dep (inst_all_deps bi order (dft_eda bi) inst)` >>
+  `MEM dep bi` by metis_tac[inst_all_deps_mem, dft_eda_wf] >>
   `dep = LAST bi` by
     (qpat_x_assum `MEM dep (inst_all_deps _ _ _ _)` kall_tac >>
      `MEM (LAST bi) bi` by metis_tac[MEM_LAST_NOT_NIL] >>
      gvs[MEM_EL] >> metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, EL_MAP]) >>
   gvs[inst_all_deps_def, MEM_nub] 
   >- metis_tac[data_dep_has_output] >>
-  Cases_on `FLOOKUP (build_eda bi) inst.inst_id` >> gvs[] >>
-  drule_all eda_deps_backward_plain >> strip_tac >>
+  Cases_on `FLOOKUP (dft_eda bi) inst.inst_id` >> gvs[] >>
+  drule_all dft_eda_deps_backward >> strip_tac >>
   gvs[LAST_EL] >>
   `PRE (LENGTH bi) < LENGTH bi` by (Cases_on `bi` >> gvs[]) >>
   `EL i (MAP (\d. d.inst_id) bi) =
@@ -176,6 +176,19 @@ Proof
     (qspecl_then [`MAP (\d. d.inst_id) bi`, `i`, `PRE (LENGTH bi)`]
        mp_tac ALL_DISTINCT_EL_IMP >> simp[]) >>
   gvs[]
+QED
+
+Theorem last_not_dependency:
+  bi <> [] /\ (LAST bi).inst_outputs = [] /\
+  ~is_pseudo (LAST bi).inst_opcode /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  MEM inst bi /\ ~is_pseudo inst.inst_opcode ==>
+  ~MEM (LAST bi).inst_id
+    (MAP (\d. d.inst_id) (inst_all_deps bi order (build_eda bi) inst))
+Proof
+  rpt strip_tac >> drule_all last_not_dft_dependency >>
+  disch_then (qspec_then `order` mp_tac) >>
+  gvs[MEM_MAP] >> metis_tac[inst_all_deps_dft_eda_mono]
 QED
 
 Theorem entry_instructions_last:
@@ -277,19 +290,19 @@ Proof
           passSharedDefsTheory.is_comparator_def] >>
      metis_tac[]) >>
   qabbrev_tac `out = schedule_from_entries bb.bb_instructions order
-    (build_eda bb.bb_instructions) (build_offspring_map bb.bb_instructions order)
-    (entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions))` >>
+    (dft_eda bb.bb_instructions) (build_offspring_map bb.bb_instructions order)
+    (entry_instructions bb.bb_instructions order (dft_eda bb.bb_instructions))` >>
   `out <> [] /\ (LAST out).inst_id = term.inst_id` by
     (simp[Abbr `out`, Abbr `term`] >>
-     irule (SIMP_RULE (srw_ss()) [LET_THM] schedule_last_id) >> simp[build_eda_wf] >>
-     rpt gen_tac >> strip_tac >> irule last_not_dependency >> simp[]) >>
+     irule (SIMP_RULE (srw_ss()) [LET_THM] schedule_last_id) >> simp[dft_eda_wf] >>
+     rpt gen_tac >> strip_tac >> irule last_not_dft_dependency >> simp[]) >>
   `from_block bb.bb_instructions (LAST out)` by
     (irule (INST_TYPE [alpha |-> ``:instruction``] (cj 1 schedule_output_from_block)) >>
-     simp[build_eda_wf, EVERY_MEM, entry_instructions_mem] >>
-     qexistsl_tac [`build_eda bb.bb_instructions`,
-       `entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions)`,
+     simp[dft_eda_wf, EVERY_MEM, entry_instructions_mem] >>
+     qexistsl_tac [`dft_eda bb.bb_instructions`,
+       `entry_instructions bb.bb_instructions order (dft_eda bb.bb_instructions)`,
        `build_offspring_map bb.bb_instructions order`, `order`] >>
-     simp[build_eda_wf, GSYM EVERY_MEM, entry_instructions_mem] >>
+     simp[dft_eda_wf, GSYM EVERY_MEM, entry_instructions_mem] >>
      qunabbrev_tac `out` >> metis_tac[MEM_LAST_NOT_NIL]) >>
   `LAST out = term` by suspend "exact_last" >>
   gvs[dft_block_def, Abbr `out`, rich_listTheory.LAST_APPEND_NOT_NIL, Abbr `term`]
@@ -399,6 +412,47 @@ Proof
   Cases_on `t` >> gvs[nub_def]
 QED
 
+Theorem dft_eda_pure_lookup:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM inst bi /\
+  read_effects inst.inst_opcode = {} /\ write_effects inst.inst_opcode = {} /\
+  dft_abort_kind inst.inst_opcode = NoFail ==>
+  FLOOKUP (dft_eda bi) inst.inst_id = NONE \/
+  FLOOKUP (dft_eda bi) inst.inst_id = SOME []
+Proof
+  strip_tac >> Cases_on `FLOOKUP (dft_eda bi) inst.inst_id` >> simp[] >>
+  Cases_on `x` >> simp[] >>
+  drule dftStructuralTheory.dft_eda_sources >>
+  disch_then (qspec_then `h` mp_tac) >> impl_tac >- simp[] >> strip_tac
+  >- (drule_all build_eda_pure_lookup >> strip_tac >> gvs[]) >>
+  `MEM y bi` by (
+    `MEM y (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by
+      (qpat_x_assum `FILTER _ _ = _` SUBST1_TAC >> simp[]) >>
+    gvs[MEM_FILTER]) >>
+  `y = inst` by metis_tac[dftCorrectnessTheory.all_distinct_map_mem_inj] >>
+  gvs[]
+QED
+
+Theorem add_label_children_sorted_dft_eda:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM inst bi /\
+  inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label lbl] ==>
+  sort_children bi order (dft_eda bi) om inst
+    (inst_all_deps bi order (dft_eda bi) inst) =
+    inst_all_deps bi order (dft_eda bi) inst
+Proof
+  strip_tac >> irule sort_children_short >>
+  `read_effects inst.inst_opcode = {} /\ write_effects inst.inst_opcode = {} /\
+   dft_abort_kind inst.inst_opcode = NoFail` by
+    simp[venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+         venomEffectsTheory.empty_effects_def, dft_abort_kind_def] >>
+  drule_all dft_eda_pure_lookup >> strip_tac >>
+  `LENGTH (inst_data_deps bi order inst) <= 1` by
+    (irule add_label_data_deps_short >> simp[] >> metis_tac[]) >>
+  simp[inst_all_deps_def] >>
+  Cases_on `inst_data_deps bi order inst` >>
+  gvs[passSharedDefsTheory.nub_first_def, nub_def] >>
+  Cases_on `t` >> gvs[nub_def]
+QED
+
 (* The predicate boundary retains original Process items, but permits Emit
    items to satisfy any property stable under the scheduler's guarded flip. *)
 Definition dfs_pred_state_def:
@@ -461,15 +515,15 @@ QED
 Theorem dft_block_pred:
   EVERY P bb.bb_instructions /\
   (!i. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\ is_flippable i.inst_opcode /\
-       sort_children bb.bb_instructions order (build_eda bb.bb_instructions)
+       sort_children bb.bb_instructions order (dft_eda bb.bb_instructions)
          (build_offspring_map bb.bb_instructions order) i
-         (inst_all_deps bb.bb_instructions order (build_eda bb.bb_instructions) i) <>
-       inst_all_deps bb.bb_instructions order (build_eda bb.bb_instructions) i ==>
+         (inst_all_deps bb.bb_instructions order (dft_eda bb.bb_instructions) i) <>
+       inst_all_deps bb.bb_instructions order (dft_eda bb.bb_instructions) i ==>
        P (flip_operands i)) ==>
   EVERY P (dft_block order bb).bb_instructions
 Proof
   strip_tac >> simp[dft_block_def, EVERY_APPEND] >> conj_tac
   >- (gvs[EVERY_MEM, MEM_FILTER]) >>
   irule schedule_output_pred >>
-  simp[build_eda_wf, entry_instructions_mem]
+  simp[dft_eda_wf, entry_instructions_mem]
 QED

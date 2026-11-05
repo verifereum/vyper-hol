@@ -70,7 +70,7 @@ Proof
   `inst_shape_ok i` by gvs[EVERY_MEM] >>
   drule_all flippable_shape_label_cases >> strip_tac
   >- (irule flip_operands_inst_shape >> simp[]) >>
-  drule_all (INST_TYPE [alpha |-> ``:instruction``] add_label_children_sorted) >>
+  drule_all (INST_TYPE [alpha |-> ``:instruction``] add_label_children_sorted_dft_eda) >>
   disch_then (qspecl_then [`order`, `build_offspring_map bb.bb_instructions order`] mp_tac) >>
   simp[]
 QED

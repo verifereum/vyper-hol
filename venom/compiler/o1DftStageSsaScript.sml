@@ -18,7 +18,8 @@ Theorem dft_stage_fn_rel:
 Proof
   strip_tac >> drule ctx_pass_stage_dft >> strip_tac >> simp[] >>
   `LIST_REL dft_fallible_order_kept C.ctx_functions C'.ctx_functions` by
-    (gvs[LIST_REL_EL_EQN, o1_ctx_shape_def, EVERY_EL, o1_fn_shape_def] >>
+    (gvs[LIST_REL_EL_EQN, o1_ctx_shape_def, EVERY_EL, o1_fn_shape_def,
+         o1_pre_def, o1_fn_row_def] >>
      rpt strip_tac >> gvs[] >> irule dft_fn_fallible_order_kept >>
      metis_tac[]) >>
   irule dft_fn_rel_stage >> simp[EVERY_MEM] >>

@@ -16,8 +16,8 @@ Proof
   strip_tac >> simp[dft_block_def, LET_THM] >>
   qabbrev_tac `ps = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions` >>
   qabbrev_tac `sched = schedule_from_entries bb.bb_instructions order
-    (build_eda bb.bb_instructions) (build_offspring_map bb.bb_instructions order)
-    (entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions))` >>
+    (dft_eda bb.bb_instructions) (build_offspring_map bb.bb_instructions order)
+    (entry_instructions bb.bb_instructions order (dft_eda bb.bb_instructions))` >>
   rpt strip_tac >> Cases_on `j < LENGTH ps`
   >- (`i < LENGTH ps` by decide_tac >> gvs[EL_APPEND1] >>
       qspecl_then [`\i. is_pseudo i.inst_opcode`, `bb.bb_instructions`, `i`, `j`]
@@ -27,10 +27,10 @@ Proof
   `MEM (EL (j - LENGTH ps) sched) sched` by simp[EL_MEM] >>
   `~is_pseudo (EL (j - LENGTH ps) sched).inst_opcode` by
     (irule (INST_TYPE [alpha |-> ``:instruction``] (cj 2 schedule_output_from_block)) >>
-     qexistsl_tac [`bb.bb_instructions`, `build_eda bb.bb_instructions`,
-       `entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions)`,
+     qexistsl_tac [`bb.bb_instructions`, `dft_eda bb.bb_instructions`,
+       `entry_instructions bb.bb_instructions order (dft_eda bb.bb_instructions)`,
        `build_offspring_map bb.bb_instructions order`, `order`] >>
-     simp[build_eda_wf, entry_instructions_mem, Abbr `sched`]) >>
+     simp[dft_eda_wf, entry_instructions_mem, Abbr `sched`]) >>
   gvs[EL_APPEND2, is_pseudo_def]
 QED
 
