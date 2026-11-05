@@ -27,49 +27,9 @@ Ancestors
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
   makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive cfgDefs cfgHelpers finite_map
-  ssaPipeline codegenReadyCompute venomExecProofs
+  ssaPipeline codegenReadyCompute makeSsaCurrentCfg
 Libs
   rich_listTheory
-
-(* SSA's dominance gives MakeSSA's def-reaches-use input row. *)
-Theorem def_available_on_all_paths[local]:
-  wf_function fn /\ MEM bb fn.fn_blocks /\ def_available_at fn bb point v ==>
-  def_on_all_paths fn bb point v
-Proof
-  simp[def_available_at_def] >> rpt strip_tac >>
-  simp[def_on_all_paths_def] >> rpt strip_tac >>
-  Cases_on `def_bb = bb`
-  >- (gvs[] >> disj2_tac >> Cases_on `point` >> gvs[]
-      >- metis_tac[MEM_EL] >>
-      qexists_tac `i` >> simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
-  disj1_tac >>
-  `MEM def_bb.bb_label path` by metis_tac[fn_dominates_def] >>
-  `def_bb.bb_label <> bb.bb_label` by metis_tac[same_label_same_block] >>
-  qpat_x_assum `MEM def_bb.bb_label path` mp_tac >>
-  disch_then (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-  rename1 `k < LENGTH path` >>
-  qexistsl_tac [`k`, `def_bb`, `def_inst`] >> simp[] >>
-  `LAST path = EL (LENGTH path - 1) path` by
-    (qspec_then `path` mp_tac LAST_EL >> simp[arithmeticTheory.PRE_SUB1]) >>
-  Cases_on `k = LENGTH path - 1` >> gvs[] >> decide_tac
-QED
-
-Theorem wf_ssa_defs_reach_uses[local]:
-  wf_ssa fn /\ wf_function fn ==> fn_defs_reach_uses fn
-Proof
-  simp[wf_ssa_def, fn_defs_reach_uses_def, def_dominates_uses_def] >>
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = PHI` >> simp[]
-  >- (rpt strip_tac >>
-      `phi_edge_uses_wf fn bb inst` by metis_tac[] >>
-      qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
-      pure_rewrite_tac[phi_edge_uses_wf_def] >> strip_tac >>
-      qpat_x_assum `!pred v. MEM (pred,v) _ ==> _` drule >>
-      strip_tac >> rename1 `def_available_at fn source NONE v` >>
-      `source = pred_bb` by metis_tac[same_label_same_block] >>
-      gvs[] >> irule def_available_on_all_paths >> metis_tac[]) >>
-  rpt strip_tac >> irule def_available_on_all_paths >> metis_tac[]
-QED
 
 (* Ownership refers to the immutable original output occurrence, never to
    the supply-generated spelling of a renamed variable. *)
@@ -5786,9 +5746,9 @@ Theorem current_wf_probe_input_definite_assignment:
   fn_defs_reach_uses current_wf_probe_fork /\
   fn_defs_reach_uses current_wf_probe_nested
 Proof
-  conj_tac >> irule wf_ssa_defs_reach_uses >>
-  simp[current_wf_probe_input_ssa, current_wf_probe_fork_structural,
-       current_wf_probe_nested_structural]
+  conj_tac >> irule wf_ssa_defs_reach_uses_distinct >>
+  metis_tac[current_wf_probe_input_ssa, current_wf_probe_fork_structural,
+            current_wf_probe_nested_structural, wf_function_def]
 QED
 
 Theorem current_wf_probe_input_reachable:
