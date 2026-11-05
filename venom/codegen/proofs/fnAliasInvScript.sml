@@ -2237,10 +2237,10 @@ QED
 
 Theorem alias_probe_large_regular_arity:
   inst_wf (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) []) /\
-  codegen_ready_inst (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) []) /\
+  ~codegen_ready_inst (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) []) /\
   LENGTH (compute_operands (mk_inst 0 INVOKE (Label "callee" :: REPLICATE 17 (Lit 0w)) [])) = 17 /\
   inst_wf (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) []) /\
-  codegen_ready_inst (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) []) /\
+  ~codegen_ready_inst (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) []) /\
   LENGTH (compute_operands (mk_inst 1 LOG (Lit (17w:256 word) :: REPLICATE 19 (Lit 0w)) [])) = 19
 Proof
   EVAL_TAC >> simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def]
@@ -2678,8 +2678,9 @@ Definition alias_spill_probe_live_def:
   alias_spill_probe_live = liveness_analyze alias_spill_probe_fn
 End
 
-Theorem alias_spill_probe_ready:
-  codegen_ready_fn alias_spill_probe_fn
+Theorem alias_spill_probe_rejected:
+  ~phis_at_joins (cfg_analyze alias_spill_probe_fn) alias_spill_probe_fn /\
+  ~codegen_ready_fn alias_spill_probe_fn
 Proof
   EVAL_TAC
 QED
@@ -2851,7 +2852,14 @@ Proof
     `init_cleanup_plan_state NONE [] 0 0`, `init_cleanup_plan_state NONE [] 0 0`,
     `SND alias_none_e`] >>
   simp[alias_none_dfs_states, alias_none_e_plan, alias_none_cfg_edges] >>
-  FAIL_TAC "lineage remaining"
+  conj_tac >- EVAL_TAC >>
+  reverse conj_tac
+  >- (irule lineage_state_entry >> EVAL_TAC) >>
+  `init_cleanup_plan_state NONE [] 0 0 with
+    <|ps_cleanup_height := NONE; ps_cleanup_promised := F|> =
+    init_cleanup_plan_state NONE [] 0 0` by
+      simp[init_cleanup_plan_state_def] >>
+  simp[alias_none_e_plan]
 QED
 
 Theorem alias_none_lineage_j:
@@ -2866,7 +2874,43 @@ Proof
   simp[alias_none_dfs_states] >>
   qexistsl_tac [`EL 2 alias_none_fn.fn_blocks`, `FST alias_none_a`, `NONE`, `"B"`, `F`,
     `SND alias_none_e`, `SND alias_none_e`, `SND alias_none_a`] >>
-  simp[alias_none_dfs_states, alias_none_a_plan, alias_none_cfg_edges] >> EVAL_TAC
+  simp[alias_none_dfs_states, alias_none_a_plan, alias_none_cfg_edges,
+       alias_none_lineage_b] >> EVAL_TAC
+QED
+
+Theorem alias_none_selected_input:
+  input_vars_from "B" (EL 3 alias_none_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_none_fn) "J" 0) = ["x"] /\
+  LENGTH (cfg_preds_of (cfg_analyze alias_none_fn) "J") = 2
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_none_regular_def:
+  alias_none_regular = generate_regular_inst_plan (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (mk_inst 7 ASSIGN [Var "x"] ["q"])
+    (live_vars_at (liveness_analyze alias_none_fn) "J" 1) F T "J" (SND alias_none_a)
+End
+
+Theorem alias_none_regular_inventory:
+  plan_holds (SND alias_none_a) (Var "x") /\
+  plan_holds (SND alias_none_regular) (Var "q")
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_none_j_result_def:
+  alias_none_j_result = generate_block_plan (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (EL 3 alias_none_fn.fn_blocks) (SND alias_none_a)
+End
+
+Theorem alias_none_final_inventory:
+  IS_SOME alias_none_j_result /\
+  plan_holds (SND (THE alias_none_j_result)) (Var "q")
+Proof
+  EVAL_TAC
 QED
 
 Theorem alias_spill_probe_entry_fields:
