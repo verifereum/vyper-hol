@@ -8,6 +8,11 @@ Ancestors
   stmtSimDeclMem stmtSimAssignMem exprSimProps exprSimBufferStore
   valueEncoding venomMemDefs tupleMemoryFrame tupleMemoryLayout
   vyperLookup list loweringPosts bodyMemAssignTupleTargetsFacts
+  bodyMemAssignLocalWord tupleTargetStoreRun tupleTargetStoreProps
+  instMemFrontier emitHelperProps memSafeRun venomInst freshWrites
+  valueEncodingProps stmtSimDeclStore stmtSimAssignStore allocaFootprint
+  storageStoreFrame stmtSimAssignStorage emitHelper context stmtLowering
+  bodyMemEmitOpFrame fragGasMode fragGasPathMem ASCIInumbers stmtLoweringMono fragExec stmtSimAssignAttrStorage
 
 Theorem tuple_local_memory_store_path_mem:
   !ctx func cenv cx es s id p sz pre env entry rest v tyv src ty sa sb sw d.
@@ -114,4 +119,405 @@ Proof
   `b + sz <= s.vs_alloca_next` by
     (irule tuple_container_frontier >> goal_assum (drule_at Any) >> metis_tac[]) >>
   drule_all tuple_in_memory_unread_suffix >> strip_tac >> simp[] >> decide_tac
+QED
+
+(* Framed word-store boundary: the general local-word assignment interface
+   intentionally hides the byte frame needed by a later tuple element. *)
+Theorem tuple_local_word_store_path_mem:
+  !ctx func cenv cx es s id p sz pre env entry rest v tv op sa sb d.
+    emit_void MSTORE [Var p; op] sa = ((),sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+    stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+    return_buf_frame d cenv sa s /\
+    find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    store_lays_out tv entry.type v ==>
+    ?t dw. gas_path_mem ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx
+        (es with scopes := pre ++
+          (env |+ (id,entry with <|value := v; popped := []|>))::rest) t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ return_buf_frame d cenv sb t /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      (!x. lookup_var x t = lookup_var x s) /\ lookup_var p s = SOME dw /\
+      (!a len. a + len <= w2n dw \/ w2n dw + 32 <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `?w. lookup_var p s = SOME w /\ w2n w + sz <= s.vs_alloca_next /\
+       type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `type_memory_size entry.type = 32` by fs[store_lays_out_def] >>
+  drule_all stmt_state_rel_write_local_store >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 tv v) s` >>
+  `run_inst_seq (emitted_insts sa sb) s = OK u` by
+    (`step_inst_base (mk_inst sa.cs_next_id MSTORE [Var p; op] []) s = OK u` by
+       (simp[Abbr `u`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+     simp[run_inst_seq_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (drule emit_mstore_mem_ok >> disch_then irule >>
+     qexists_tac `w` >> simp[eval_operand_def]) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `gas_path_mem ctx func s 0
+     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb` by
+    (irule body_decl_cursor_path >> simp[is_terminator_def] >>
+     qexists_tac `sa` >> simp[is_terminator_def]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule body_store_memory_history >> simp[is_terminator_def] >>
+     qexistsl_tac [`s`, `sa`] >> simp[is_terminator_def]) >>
+  `return_buf_frame d cenv sb u` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s`, `sa`] >>
+     simp[Abbr `u`, lookup_var_def, mstore_def]) >>
+  `!a len. a + len <= w2n w \/ w2n w + 32 <= a ==>
+    mem_bytes_at a len u.vs_memory = mem_bytes_at a len s.vs_memory` by
+    (rpt strip_tac >> simp[Abbr `u`] >>
+     irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+  `return_buf_frame d cenv sb
+    (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (Cases_on `d` >- fs[return_buf_frame_def] >>
+     rename1 `return_buf_frame (SOME pair)` >> PairCases_on `pair` >>
+     fs[return_buf_frame_def, lookup_var_def]) >>
+  qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
+  simp[stmt_state_rel_inst_idx] >>
+  simp[Abbr `u`, lookup_var_def, mstore_def] >> fs[mstore_def]
+QED
+
+Theorem tuple_target_local_head_path_mem:
+  !ctx func cenv cx es es' s id ty tv v op sa sb d.
+    compile_tuple_store_all cenv [ty] [BaseTarget (NameTarget id)] [op] sa = ((),sb) /\
+    assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (INL (),es') /\
+    tuple_target_aligned cenv cx (BaseTarget (NameTarget id)) ty tv /\
+    tuple_target_layout es.scopes (BaseTarget (NameTarget id)) ty tv v /\
+    value_has_type tv v /\ val_wf tv v /\
+    (if is_word_type ty then eval_operand op s = SOME (typed_val_to_w256 tv v)
+     else ?w. eval_operand op s = SOME w /\
+       val_in_memory tv v (w2n w) s.vs_memory /\
+       type_memory_size tv + 64 < dimword (:256) /\
+       w2n w + type_memory_size tv <= s.vs_alloca_next) /\
+    local_ptrs_reserved cenv sa /\ (!x. op = Var x ==> not_fresh_at sa x) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+    fn_inst_ids_distinct func /\ alloca_history func s /\
+    return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t idp sz entry dw.
+      gas_path_mem ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es' t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ return_buf_frame d cenv sb t /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      lookup_scopes id es.scopes = SOME entry /\
+      FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var idp) sz) /\
+      lookup_var idp s = SOME dw /\
+      (!a len. a + len <= w2n dw \/
+         w2n dw + (if is_word_type ty then 32 else type_memory_size tv) <= a ==>
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[tuple_target_aligned_local, tuple_target_layout_local] >>
+  drule_all tuple_target_local_assignment >> strip_tac >>
+  drule_all tuple_store_local_singleton_code >> strip_tac >>
+  Cases_on `is_word_type ty`
+  >- (gvs[] >> drule_all tuple_local_word_store_path_mem >> strip_tac >>
+      qexistsl_tac [`t`, `dw`] >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  `val_store_size entry.type v <= type_memory_size entry.type` by
+    metis_tac[val_store_size_le] >>
+  `w2n w + val_store_size entry.type v <= s.vs_alloca_next` by decide_tac >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  drule tuple_local_memory_store_path_mem >>
+  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
+  disch_then (drule_at (Pat `val_wf _ _`)) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  qexistsl_tac [`t`, `dw`] >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem tuple_storage_store_head_path_mem:
+  !ctx func cenv cx es es' s tr slot tv v op dst sa sb d.
+    compile_store_at_loc cenv.ce_imm_alloca dst op
+      (SOME (if tr then LocTransient else LocStorage)) sa = ((),sb) /\
+    eval_operand dst s = SOME slot /\
+    eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+    stmt_state_rel ctx func cenv cx es s /\
+    (!u mem. storage_dead cx tr (update_storage slot u mem) = storage_dead cx tr mem) /\
+    write_storage_slot cx tr slot tv v es = (INL (),es') /\
+    encode_value tv v = SOME [(0,typed_val_to_w256 tv v)] /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es' t /\ t.vs_memory = s.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!x. lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      alloca_history func t /\ return_buf_frame d cenv sb t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all stmt_state_rel_write_storage_word >> strip_tac >>
+  `emit_void (if tr then TSTORE else SSTORE) [dst; op] sa = ((),sb)` by
+    (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  qabbrev_tac `u = if tr then tstore slot (typed_val_to_w256 tv v) s
+                  else sstore slot (typed_val_to_w256 tv v) s` >>
+  `run_inst_seq (emitted_insts sa sb) s = OK u` by
+    (`step_inst_base (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE)
+        [dst;op] []) s = OK u` by
+      (Cases_on `tr` >> simp[Abbr `u`, step_inst_base_def, mk_inst_def, exec_write2_def]) >>
+     simp[run_inst_seq_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (drule emit_void_mem_ok >> disch_then irule >> Cases_on `tr` >>
+     simp[below_frontier_no_ranges, inst_dload_in_section_other, mk_inst_def]) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
+  `gas_path_mem ctx func s 0 (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb` by
+    (irule body_decl_cursor_path >> simp[is_terminator_def] >>
+     qexists_tac `sa` >> simp[is_terminator_def]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule body_store_memory_history >> simp[is_terminator_def] >>
+     qexistsl_tac [`s`, `sa`] >> Cases_on `tr` >> simp[is_terminator_def]) >>
+  `return_buf_frame d cenv sb (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s`, `sa`] >>
+     Cases_on `tr` >> simp[Abbr `u`, lookup_var_def, tstore_def, sstore_def]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[stmt_state_rel_inst_idx] >>
+  Cases_on `tr` >> fs[Abbr `u`, tstore_def, sstore_def, lookup_var_def, LET_THM]
+QED
+
+Theorem tuple_field_add_frame_path_mem:
+  !ctx func cenv cx es s sa sb dst slot off d.
+    emit_op ADD [Lit slot; Lit (n2w off)] sa = (dst,sb) /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      eval_operand dst t = SOME (slot + n2w off) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      alloca_history func t /\ return_buf_frame d cenv sb t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id ADD [Lit slot; Lit (n2w off)]
+      [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var)) (slot + n2w off) s)` by
+    simp[mk_inst_def, step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+  drule emit_op_word_path_frame_mem >>
+  disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func s 0 (OK t)` >>
+  `return_buf_frame d cenv sb t` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s`, `sa`] >>
+     simp[Abbr `t`, update_var_def] >> metis_tac[]) >>
+  qexists_tac `t` >> fs[gas_marked_path_def, Abbr `t`, update_var_def]
+QED
+
+Theorem tuple_field_storage_head_path_mem:
+  !ctx func cenv cx es es' s tr slot off tv v op dst sa sp sb d.
+    emit_op ADD [Lit slot; Lit (n2w off)] sa = (dst,sp) /\
+    compile_store_at_loc cenv.ce_imm_alloca dst op
+      (SOME (if tr then LocTransient else LocStorage)) sp = ((),sb) /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+    (!x. op = Var x ==> not_fresh_at sa x) /\
+    (!u mem. storage_dead cx tr (update_storage (slot + n2w off) u mem) =
+             storage_dead cx tr mem) /\
+    write_storage_slot cx tr (slot + n2w off) tv v es = (INL (),es') /\
+    encode_value tv v = SOME [(0,typed_val_to_w256 tv v)] /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es' t /\ t.vs_memory = s.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      alloca_history func t /\ return_buf_frame d cenv sb t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends sa sp /\ cs_extends sp sb` by
+    (Cases_on `tr` >> gvs[compile_store_at_loc_def] >>
+     metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND]) >>
+  `fn_has_code sa sp func /\ fn_has_code sp sb func` by
+    metis_tac[fn_has_code_split] >>
+  drule_all tuple_field_add_frame_path_mem >> strip_tac >>
+  rename1 `stmt_state_rel ctx func cenv cx es mid` >>
+  `eval_operand op mid = SOME (typed_val_to_w256 tv v)` by
+    (Cases_on `op` >> gvs[eval_operand_def]) >>
+  drule_all tuple_storage_store_head_path_mem >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  irule (gas_path_mem_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem tuple_target_nonlocal_head_path_mem:
+  !ctx func cenv cx es es' s g ty tv v op sa sb d.
+    compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
+    assign_tuple_targets cx g v es = (INL (),es') /\
+    tuple_target_aligned cenv cx g ty tv /\
+    (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
+    eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+    local_ptrs_reserved cenv sa /\ (!x. op = Var x ==> not_fresh_at sa x) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+    fn_inst_ids_distinct func /\ alloca_history func s /\
+    return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es' t /\ t.vs_memory = s.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_history func t /\ return_buf_frame d cenv sb t
+Proof
+  rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
+  >- (drule_all tuple_target_toplevel_place >>
+      disch_then (qspec_then `es` assume_tac) >>
+      drule_all tuple_target_storage_assignment >> strip_tac >>
+      drule_all compile_get_target_ptr_toplevel >>
+      disch_then (qspec_then `sa` assume_tac) >> gvs[] >>
+      drule_all tuple_store_word_step >> strip_tac >>
+      qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+      gvs[compile_tuple_store_all_def, comp_return_def] >>
+      drule_all encode_value_word_typed >> strip_tac >>
+      `eval_operand (Lit (n2w k)) s = SOME (n2w k)` by simp[eval_operand_def] >>
+      drule_all tuple_storage_store_head_path_mem >> strip_tac >>
+      qexists_tac `t` >> simp[]) >>
+  drule_all tuple_target_field_place >>
+  disch_then (qspec_then `es` assume_tac) >>
+  drule_all tuple_target_storage_assignment >> strip_tac >>
+  Cases_on `emit_op ADD [Lit (n2w k); Lit (n2w (struct_field_offset_slots
+    (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] sa` >>
+  rename1 `emit_op ADD _ sa = (dst,sp)` >>
+  drule_all tuple_target_field_pointer >> strip_tac >>
+  drule_all tuple_store_word_step >> strip_tac >>
+  qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+  gvs[compile_tuple_store_all_def, comp_return_def] >>
+  drule_all encode_value_word_typed >> strip_tac >>
+  drule_all tuple_field_storage_head_path_mem >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
+
+Theorem tuple_target_store_head_path_mem:
+  !ctx func cenv cx es es' s g ty tv v op sa sb d.
+    compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
+    assign_tuple_targets cx g v es = (INL (),es') /\
+    tuple_target_aligned cenv cx g ty tv /\ tuple_target_layout es.scopes g ty tv v /\
+    value_has_type tv v /\ val_wf tv v /\
+    (if is_word_type ty then eval_operand op s = SOME (typed_val_to_w256 tv v)
+     else ?w. eval_operand op s = SOME w /\ val_in_memory tv v (w2n w) s.vs_memory /\
+       type_memory_size tv + 64 < dimword (:256) /\
+       w2n w + type_memory_size tv <= s.vs_alloca_next) /\
+    local_ptrs_reserved cenv sa /\ (!x. op = Var x ==> not_fresh_at sa x) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+    fn_inst_ids_distinct func /\ alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel ctx func cenv cx es' t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ return_buf_frame d cenv sb t /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+      (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
+           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes)) /\
+      (t.vs_memory = s.vs_memory \/ ?id p sz entry dw.
+        g = BaseTarget (NameTarget id) /\ lookup_scopes id es.scopes = SOME entry /\
+        FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME dw /\
+        (!a len. a + len <= w2n dw \/
+          w2n dw + (if is_word_type ty then 32 else type_memory_size tv) <= a ==>
+          mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all tuple_target_assignment_scope_frame >> strip_tac >>
+  Cases_on `?id. g = BaseTarget (NameTarget id)`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      drule tuple_target_local_head_path_mem >> simp[] >>
+      disch_then drule_all >> strip_tac >>
+      qexists_tac `t` >> simp[] >> disj2_tac >> metis_tac[]) >>
+  `is_word_type ty` by metis_tac[tuple_target_aligned_nonlocal_word] >>
+  gvs[] >> drule_all tuple_target_nonlocal_head_path_mem >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
+
+(* Single store transports only the unread suffix, not the consumed bytes. *)
+Theorem tuple_target_store_tail_path_mem:
+  !ctx func cenv cx es es' s g ty tv tvs v vs op sa sb d b sz addr.
+    compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
+    assign_tuple_targets cx g v es = (INL (),es') /\
+    tuple_target_aligned cenv cx g ty tv /\ tuple_target_layout es.scopes g ty tv v /\
+    value_has_type tv v /\ val_wf tv v /\
+    (if is_word_type ty then eval_operand op s = SOME (typed_val_to_w256 tv v)
+     else ?w. eval_operand op s = SOME w /\ val_in_memory tv v (w2n w) s.vs_memory /\
+       type_memory_size tv + 64 < dimword (:256) /\
+       w2n w + type_memory_size tv <= s.vs_alloca_next) /\
+    local_ptrs_reserved cenv sa /\ (!x. op = Var x ==> not_fresh_at sa x) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+    fn_inst_ids_distinct func /\ alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
+     (?name. local_region cenv es.scopes s name b sz)) /\
+    b <= addr /\ addr + type_memory_size_list (tv::tvs) <= b + sz /\
+    b + sz <= s.vs_alloca_next /\
+    (is_word_type ty ==> type_memory_size tv = 32) /\
+    tuple_in_memory (v::vs) (tv::tvs) addr s.vs_memory /\
+    tuple_val_wf (v::vs) (tv::tvs) ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel ctx func cenv cx es' t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ return_buf_frame d cenv sb t /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
+      MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+      (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
+           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes)) /\
+      b <= addr + type_memory_size tv /\
+      addr + type_memory_size tv + type_memory_size_list tvs <= b + sz /\
+      b + sz <= t.vs_alloca_next /\
+      ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
+       (?name. local_region cenv es'.scopes t name b sz)) /\
+      tuple_in_memory vs tvs (addr + type_memory_size tv) t.vs_memory /\
+      tuple_val_wf vs tvs
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all tuple_target_store_head_path_mem >>
+  disch_then (qx_choose_then `t` (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  drule_all tuple_target_store_memory_tail >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qexists_tac `t` >> simp[]
 QED
