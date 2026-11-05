@@ -1,7 +1,8 @@
 Theory loadElimKeyShapeInvariant
 Ancestors
   loadElimDefs loadElimTransferProvenance loadElimAbsoluteKey
-  loadElimLatticeSoundHelpers finite_map list pred_set
+  loadElimLatticeSoundHelpers loadElimBilateralInvariant loadElimConvergence
+  loadElimSolverHelpers venomInst finite_map list pred_set
 
 Definition le_keys_satisfy_def:
   le_keys_satisfy Q ll <=>
@@ -80,4 +81,36 @@ Theorem le_absolute_keys_fold:
 Proof
   strip_tac >> irule le_keys_satisfy_fold
   >> metis_tac[le_generated_key_absolute]
+QED
+
+Theorem le_analyze_absolute_keys:
+  wf_function fn /\ le_configured_context ctx /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) ==>
+  (!lbl idx. le_keys_satisfy (le_absolute_key ctx.lctx_addr_space)
+    (df_at NONE (load_analyze ctx fn) lbl idx)) /\
+  (!lbl. le_keys_satisfy (le_absolute_key ctx.lctx_addr_space)
+    (df_boundary NONE (load_analyze ctx fn) lbl))
+Proof
+  strip_tac >> simp[load_analyze_def] >>
+  irule le_df_analyze_invariant_bilateral >>
+  simp[load_edge_transfer_def, le_keys_satisfy_join, le_absolute_keys_transfer] >>
+  conj_tac >- (Cases_on `fn_entry_label fn` >> simp[]) >>
+  qexistsl [
+    `le_solver_inv (set (fn_labels fn)) (le_generated_keys ctx (fn_insts fn))
+       (le_generated_operands (fn_insts fn))`,
+    `CARD (set (fn_labels fn)) *
+      (1 + CARD (le_generated_keys ctx (fn_insts fn)) *
+        (CARD (le_generated_operands (fn_insts fn)) + 1))`,
+    `le_solver_leq`,
+    `le_solver_rank (set (fn_labels fn)) (le_generated_keys ctx (fn_insts fn))
+       (le_generated_operands (fn_insts fn))`] >>
+  simp[GSYM le_solver_process_def] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all le_solver_process_closed >>
+      simp[le_solver_process_def]) >>
+  conj_tac >- simp[le_solver_process_inflationary] >>
+  conj_tac
+  >- (drule le_solver_entry_init >>
+      Cases_on `fn_entry_label fn` >> simp[fn_labels_def]) >>
+  irule (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] le_solver_bounded_measure) >> simp[]
 QED
