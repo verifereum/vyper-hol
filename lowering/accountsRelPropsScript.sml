@@ -864,3 +864,53 @@ Proof
   qpat_x_assum `_ + (_ + 1) = _` kall_tac >>
   irule dead_bytes_dynamic_array_selected >> simp[] >> qexists `n` >> simp[]
 QED
+
+(* Shared tuple liveness projection, formerly local to exprSimTuple. *)
+Theorem dead_bytes_list_el[local]:
+  !tvs k st base j b.
+    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
+    base + tuple_prefix_slot_size k tvs <= j /\
+    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
+    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
+  simp[Once dead_bytes_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  imp_res_tac (cj 1 dead_bytes_range) >>
+  imp_res_tac (cj 2 dead_bytes_range) >> gvs[] >>
+  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
+  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem storage_read_live_tuple_elem:
+  !cx tr st w tvs k.
+    storage_read_live cx tr st w (TupleTV tvs) /\ k < LENGTH tvs ==>
+    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size k tvs))
+      (EL k tvs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) <=
+   type_slot_size (TupleTV tvs)` by
+    (irule tuple_component_slot_end_bound >> simp[listTheory.oEL_THM]) >>
+  Cases_on `type_slot_size (EL k tvs) = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size k tvs)` mp_tac
+        wordsTheory.w2n_lt >> decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size k tvs < dimword (:256)` by decide_tac >>
+  `w2n w + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) <=
+   dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size k tvs)) =
+   w2n w + tuple_prefix_slot_size k tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `w2n w <= j /\ j < w2n w + type_slot_size (TupleTV tvs)` by decide_tac >>
+  `dead_bytes_list st (w2n w) tvs j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  drule dead_bytes_list_el >>
+  disch_then (qspec_then `k` mp_tac) >> simp[]
+QED

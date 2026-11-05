@@ -1727,3 +1727,38 @@ Proof
   rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
   Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]
 QED
+
+(* Shared tuple projections, formerly local to exprSimTuple. *)
+Theorem tuple_slots_in_range_el:
+  !tvs k off storage.
+    tuple_slots_in_range storage off tvs /\ k < LENGTH tvs ==>
+    slots_in_range storage (off + tuple_prefix_slot_size k tvs) (EL k tvs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `tuple_slots_in_range _ _ _` mp_tac >>
+  simp[Once slots_in_range_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  first_x_assum drule_all >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem tuple_elem_slots_in_range:
+  !storage w tvs k.
+    slots_in_range storage (w2n (w:bytes32)) (TupleTV tvs) /\
+    k < LENGTH tvs ==>
+    slots_in_range storage
+      (w2n (w + n2w (tuple_prefix_slot_size k tvs))) (EL k tvs)
+Proof
+  rpt strip_tac >>
+  `slots_in_range storage (w2n w + tuple_prefix_slot_size k tvs) (EL k tvs)`
+    by (irule tuple_slots_in_range_el >>
+        gvs[Once slots_in_range_def]) >>
+  `slots_in_range storage (w2n w + tuple_prefix_slot_size k tvs) (EL k tvs) =
+   slots_in_range storage (w2n (w + n2w (tuple_prefix_slot_size k tvs)))
+     (EL k tvs)` by
+    (irule (CONJUNCT1 slots_in_range_offset_cong) >>
+     `w + n2w (tuple_prefix_slot_size k tvs) =
+      n2w (w2n w + tuple_prefix_slot_size k tvs)` by
+       simp[GSYM wordsTheory.word_add_n2w] >>
+     simp[wordsTheory.w2n_n2w]) >>
+  gvs[]
+QED
