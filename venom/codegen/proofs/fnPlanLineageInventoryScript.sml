@@ -1854,3 +1854,101 @@ Proof
   gvs[EVERY_MEM, DISJOINT_ALT, EXTENSION] >>
   metis_tac[stackPlanTypesTheory.is_var_operand_def]
 QED
+
+Theorem emit_one_input_live_reserve[local]:
+  !done rest opc nl h ps.
+    (!v. LIST_ELEM_COUNT (Var v) done +
+       (if MEM (Var v) (h::rest) \/ MEM v nl then 1 else 0) <=
+       LIST_ELEM_COUNT (Var v) ps.ps_stack +
+       (if Var v IN FDOM ps.ps_spilled then 1 else 0)) ==>
+    !v. LIST_ELEM_COUNT (Var v) (done ++ [h]) +
+       (if MEM (Var v) rest \/ MEM v nl then 1 else 0) <=
+       LIST_ELEM_COUNT (Var v)
+         (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_stack +
+       (if Var v IN FDOM
+         (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_spilled
+        then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  first_x_assum (qspec_then `v` assume_tac) >>
+  qspecl_then [`opc`, `operand_vars rest ++ nl`, `h`, `ps`, `Var v`]
+    assume_tac emit_one_input_inventory_mono_aux >>
+  Cases_on `Var v = h`
+  >- (gvs[elem_count_append, LIST_ELEM_COUNT_THM] >>
+      Cases_on `MEM (Var v) rest \/ MEM v nl`
+      >- (`MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+            (Cases_on `Var v IN FDOM ps.ps_spilled` >>
+             gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+          `MEM v (operand_vars rest ++ nl)` by
+            (gvs[MEM_APPEND, input_mem_operand_vars] >> metis_tac[]) >>
+          qspecl_then [`opc`, `operand_vars rest ++ nl`, `Var v`, `ps`]
+            mp_tac emit_one_input_inventory_inc >>
+          simp[stackPlanTypesTheory.is_var_operand_def, input_mem_operand_vars] >>
+          rpt IF_CASES_TAC >> gvs[] >> decide_tac) >>
+      gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  gvs[elem_count_append, LIST_ELEM_COUNT_THM] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem emit_input_plan_live_reserve_acc[local]:
+  !rest done opc nl ps iops ps1.
+    (!v. LIST_ELEM_COUNT (Var v) done +
+       (if MEM (Var v) rest \/ MEM v nl then 1 else 0) <=
+       LIST_ELEM_COUNT (Var v) ps.ps_stack +
+       (if Var v IN FDOM ps.ps_spilled then 1 else 0)) /\
+    emit_input_plan opc rest nl ps = (iops,ps1) ==>
+    !v. LIST_ELEM_COUNT (Var v) (done ++ rest) +
+       (if MEM v nl then 1 else 0) <=
+       LIST_ELEM_COUNT (Var v) ps1.ps_stack +
+       (if Var v IN FDOM ps1.ps_spilled then 1 else 0)
+Proof
+  Induct_on `rest` >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule emit_one_input_live_reserve >>
+  disch_then (qspec_then `opc` assume_tac) >>
+  Cases_on `emit_one_input opc (operand_vars rest ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
+  Cases_on `emit_input_plan opc rest nl mid` >>
+  gvs[emit_input_plan_cons] >>
+  first_x_assum drule >> disch_then drule >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem emit_input_plan_live_reserve:
+  !operands opc nl ps iops ps1.
+    (!v. MEM (Var v) operands \/ MEM v nl ==>
+       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) ==>
+    !v. LIST_ELEM_COUNT (Var v) operands + (if MEM v nl then 1 else 0) <=
+        LIST_ELEM_COUNT (Var v) ps1.ps_stack +
+        (if Var v IN FDOM ps1.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. LIST_ELEM_COUNT (Var v) [] +
+       (if MEM (Var v) operands \/ MEM v nl then 1 else 0) <=
+       LIST_ELEM_COUNT (Var v) ps.ps_stack +
+       (if Var v IN FDOM ps.ps_spilled then 1 else 0)` by
+    (gen_tac >> simp[LIST_ELEM_COUNT_THM] >>
+     IF_CASES_TAC >> simp[] >>
+     `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+     Cases_on `Var v IN FDOM ps.ps_spilled` >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  drule_all emit_input_plan_live_reserve_acc >> simp[]
+QED
+
+Theorem emit_input_plan_lineage_live_reserve:
+  !inventory_set operands opc nl ps iops ps1.
+    lineage_inventory inventory_set ps /\
+    (!v. MEM (Var v) operands \/ MEM v nl ==> Var v IN inventory_set) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) ==>
+    !v. LIST_ELEM_COUNT (Var v) operands + (if MEM v nl then 1 else 0) <=
+        LIST_ELEM_COUNT (Var v) ps1.ps_stack +
+        (if Var v IN FDOM ps1.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule emit_input_plan_live_reserve >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `lineage_inventory _ _` mp_tac >>
+  simp[lineage_inventory_def, lineage_core_def] >>
+  rpt strip_tac >> gvs[EXTENSION] >> metis_tac[MEM_APPEND]
+QED

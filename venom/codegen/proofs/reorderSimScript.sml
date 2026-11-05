@@ -273,7 +273,7 @@ Proof
 QED
 
 
-Theorem elem_count_append[local]:
+Theorem elem_count_append:
   !x (xs : 'a list) ys.
     LIST_ELEM_COUNT x (xs ++ ys) =
     LIST_ELEM_COUNT x xs + LIST_ELEM_COUNT x ys
@@ -1426,7 +1426,7 @@ Proof
 QED
 
 
-Theorem input_mem_operand_vars[local]:
+Theorem input_mem_operand_vars:
   !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
 Proof
   Induct >> simp[dfgDefsTheory.operand_vars_def] >>
