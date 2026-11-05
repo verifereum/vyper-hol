@@ -4557,7 +4557,7 @@ Theorem array_read_emit_frag:
     (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\ P s)
     (\q. vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
       eval_operand dst q = SOME w /\
-      ?s. P s /\
+      ?s. P s /\ q.vs_labels = s.vs_labels /\
         (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)) R
 Proof
   strip_tac >> irule frag_exec_run_inst_seq >>
@@ -4571,7 +4571,9 @@ Proof
     simp[mk_inst_def] >>
   drule_all array_read_emit_vv_post >> strip_tac >>
   qexists_tac `q` >> conj_tac >- metis_tac[] >> simp[] >>
-  qexists_tac `s` >> simp[lookup_var_def] >> gvs[lookup_var_def]
+  qexists_tac `s` >> simp[lookup_var_def] >> gvs[lookup_var_def] >>
+  qpat_x_assum `q with vs_vars := _ = s`
+    (mp_tac o Q.AP_TERM `\x. x.vs_labels`) >> simp[]
 QED
 
 (* The four array length loaders are concrete read-only instructions. *)
@@ -4591,7 +4593,7 @@ Theorem array_ptr_load_frag:
     (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\ P s)
     (\q. vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
       eval_operand dst q = SOME w /\
-      ?s. P s /\
+      ?s. P s /\ q.vs_labels = s.vs_labels /\
         (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)) R
 Proof
   strip_tac >> gvs[listTheory.MEM] >>
@@ -5804,4 +5806,145 @@ Proof
   gvs[] >> drule_all eval_expr_nopop_array_read_after >> strip_tac >>
   drule evaluate_array_capacity_bound >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem array_length_load_frag:
+  (if dyn then compile_ptr_load ctor imm loc addr
+   else comp_return (Lit (n2w cnt))) sm = (lop,sn) /\
+  (~ctor \/ loc <> LocCode) /\
+  MEM loc [LocMemory; LocStorage; LocTransient; LocCode] /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!z. addr = Var z ==> not_fresh_at sm z) /\
+  (!z. iop = Var z ==> not_fresh_at sm z) /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv q0 /\
+  eval_operand addr q0 = SOME b /\ eval_operand iop q0 = SOME i /\
+  (if dyn then
+    ((loc = LocMemory /\ mload (w2n b) q0 = len) \/
+     (loc = LocStorage /\ sload b q0 = len) \/
+     (loc = LocTransient /\ tload b q0 = len) \/
+     (loc = LocCode /\ word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n b) q0.vs_data_section ++ REPLICATE 32 0w)) = len))
+   else len = n2w cnt) ==>
+  frag_exec ctx sm sn (\s. s = q0)
+    (\q. vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+      eval_operand lop q = SOME len /\ eval_operand addr q = SOME b /\
+      eval_operand iop q = SOME i) R
+Proof
+  reverse (Cases_on `dyn`)
+  >- (simp[comp_return_def] >> strip_tac >> gvs[] >>
+      irule frag_exec_refl >> simp[eval_operand_def]) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_conseq >>
+  irule_at Any (Q.INST [`P` |-> `\s. s = q0`] array_ptr_load_frag) >>
+  qpat_assum `compile_ptr_load _ _ _ _ _ = _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qexists_tac `R` >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `addr` >> Cases_on `iop` >>
+  gvs[eval_operand_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem compile_array_subscript_oob_frag:
+  compile_array_subscript (vv_operand vv) iop dyn cnt ws esz sgn
+    (compile_ptr_load ctor imm loc) si = (dst,sn) /\
+  (if dyn then compile_ptr_load ctor imm loc (vv_operand vv)
+   else comp_return (Lit (n2w cnt))) si = (lop,sm) /\
+  cs_extends si sm /\ cs_extends sm sn /\
+  (~ctor \/ loc <> LocCode) /\
+  MEM loc [LocMemory; LocStorage; LocTransient; LocCode] /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= si.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at si z) /\
+  (!z. iop = Var z ==> not_fresh_at si z) /\
+  (!z. iop = Var z ==> not_fresh_at sm z) /\
+  (!z. lop = Var z ==> not_fresh_at sm z) /\
+  vv_post ctx func cenv cx e es sa si s0 es' tv vv q0 /\
+  eval_operand (vv_operand vv) q0 = SOME b /\ eval_operand iop q0 = SOME i /\
+  ~idx_in_range sgn i len /\
+  (if dyn then
+    ((loc = LocMemory /\ mload (w2n b) q0 = len) \/
+     (loc = LocStorage /\ sload b q0 = len) \/
+     (loc = LocTransient /\ tload b q0 = len) \/
+     (loc = LocCode /\ word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n b) q0.vs_data_section ++ REPLICATE 32 0w)) = len))
+   else len = n2w cnt) ==>
+  frag_exec ctx si sn (\s. s = q0) Q
+    (expr_exit (INR (Error (RuntimeError msg))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `comp_ignore_bind (array_bounds_check iop lop sgn)
+     (array_elem_ptr (vv_operand vv) iop dyn ws esz) sm = (dst,sn)` by
+    (Cases_on `dyn` >> gvs[compile_array_subscript_split, comp_bind_def]) >>
+  irule frag_exec_seq >>
+  irule_at Any array_length_load_frag >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `(if dyn then _ else _) si = (lop,sm)` (irule_at Any) >>
+  simp[] >> qexistsl_tac [`len`, `iop`, `i`] >> gvs[] >>
+  match_mp_tac fragExecTheory.frag_exec_pointwise >> rpt strip_tac >> fs[] >>
+  drule (cj 1 (iffLR vv_post_def)) >> strip_tac >>
+  irule frag_exec_conseq >> irule_at Any array_check_ptr_oob_frag >>
+  qpat_assum `comp_ignore_bind _ _ sm = _` (irule_at Any) >>
+  simp[] >> qexists_tac `msg` >> simp[] >>
+  goal_assum (drule_at Any) >> qexists_tac `Q` >> simp[] >> Cases >> simp[expr_exit_def]
+QED
+
+Theorem compile_array_subscript_vv_frag:
+  compile_array_subscript (vv_operand vv) iop dyn cnt ws esz sgn
+    (compile_ptr_load ctor imm loc) si = (dst,sn) /\
+  (if dyn then compile_ptr_load ctor imm loc (vv_operand vv)
+   else comp_return (Lit (n2w cnt))) si = (lop,sm) /\
+  cs_extends si sm /\ cs_extends sm sn /\
+  (~ctor \/ loc <> LocCode) /\
+  MEM loc [LocMemory; LocStorage; LocTransient; LocCode] /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= si.cs_next_var /\ sa.cs_next_var <= sm.cs_next_var /\
+  sm.cs_next_id <= sn.cs_next_id /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at si z) /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!z. iop = Var z ==> not_fresh_at si z) /\
+  (!z. iop = Var z ==> not_fresh_at sm z) /\
+  (!z. lop = Var z ==> not_fresh_at sm z) /\
+  vv_post ctx func cenv cx obj es sa si s0 es' tv vv q0 /\
+  eval_operand (vv_operand vv) q0 = SOME b /\
+  eval_operand iop q0 = SOME (n2w j) /\ idx_in_range sgn (n2w j) len /\
+  (if dyn then
+    ((loc = LocMemory /\ mload (w2n b) q0 = len) \/
+     (loc = LocStorage /\ sload b q0 = len) \/
+     (loc = LocTransient /\ tload b q0 = len) \/
+     (loc = LocCode /\ word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n b) q0.vs_data_section ++ REPLICATE 32 0w)) = len))
+   else len = n2w cnt) /\
+  expr_type obj = ArrayT et bd /\
+  read_result cx tv es' = (INL arr,es') /\
+  read_result cx tv' es' = (INL v,es') /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  value_has_type evt v /\
+  evaluate_subscripts (ArrayTV evt bd) arr [ValueSubscript (IntV (&j))] = INL v /\
+  j < bound_length bd /\
+  ((if dyn then b + n2w ws else b) + n2w j * n2w esz =
+    b + n2w (if is_slot_addressed (vv_loc vv) then
+      (case bd of Fixed cap => 0 | Dynamic cap => 1) + j * type_slot_size evt
+    else (case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt)) /\
+  (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+    ?p0. tv = PlaceR (MemoryPlace id p0) /\ path = p0 ++ [ValueSubscript (IntV (&j))]) ==>
+  frag_exec ctx si sn (\s. s = q0)
+    (vv_post ctx func cenv cx (Subscript et obj idx) es sa sn s0 es' tv'
+      (LocatedValue et (mk_ptr dst (vv_loc vv)))) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  `comp_ignore_bind (array_bounds_check iop lop sgn)
+     (array_elem_ptr (vv_operand vv) iop dyn ws esz) sm = (dst,sn)` by
+    (Cases_on `dyn` >> gvs[compile_array_subscript_split, comp_bind_def]) >>
+  irule frag_exec_seq >>
+  irule_at Any array_length_load_frag >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `(if dyn then _ else _) si = (lop,sm)` (irule_at Any) >>
+  simp[] >> qexistsl_tac [`len`, `iop`, `n2w j`] >> gvs[] >>
+  match_mp_tac fragExecTheory.frag_exec_pointwise >> rpt strip_tac >> fs[] >>
+  irule frag_exec_conseq >> irule_at Any array_check_ptr_vv_frag >>
+  qpat_assum `comp_ignore_bind _ _ sm = _` (irule_at Any) >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ sm _ _ _ _ _` (irule_at Any) >>
+  simp[] >> qexistsl_tac [`v`, `tv'`, `j`, `idx`, `R`] >> simp[] >>
+  drule (cj 1 (iffLR vv_post_def)) >> simp[]
 QED
