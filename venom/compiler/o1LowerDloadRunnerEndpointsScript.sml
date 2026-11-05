@@ -96,6 +96,8 @@ Proof
      >- (drule_all ld_joint_assert_abort >> simp[]) >>
      Cases_on `MEM inst.inst_opcode [RETURNDATACOPY; CREATE; CREATE2]`
      >- (drule_all ld_joint_ordinary_abort >> simp[dead_result_rel_def]) >>
+     Cases_on `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL]`
+     >- (drule_all ld_joint_static_abort >> simp[dead_result_rel_def]) >>
      `inst.inst_opcode = INVALID` by
        (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
      qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
