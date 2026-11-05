@@ -1,6 +1,6 @@
 (*
  * Assembly encoding interface regressions (TASK045).
- * TOP-LEVEL: encoding_wf_with_zero_size_data, duplicate_offset_last_write,
+ * TOP-LEVEL: encoding_wf_with_zero_size_data, data_offsets_not_jump_targets,
  *   zero_size_reverse_lookup, encoding_only_parse.
  * These are concrete kernel checks, not a claim about all codegen output.
  *)
@@ -40,11 +40,14 @@ Proof
   gvs[AllCaseEqs()] >> EVAL_TAC
 QED
 
-(* At offset 3, two headers and empty data are overwritten by the data byte;
-   the terminal header is still a valid entry at offset LENGTH (assemble ...). *)
-Theorem duplicate_offset_last_write:
-  FLOOKUP (build_offset_to_pc encoding_regression_prog) 3 = SOME 6 /\
-  FLOOKUP (build_offset_to_pc encoding_regression_prog) 6 = SOME 8 /\
+(* Only label offsets are jump targets: the data byte at offset 3 and the
+   terminal header at offset LENGTH (assemble ...) are not, and the second
+   of two adjacent labels gets its own offset. *)
+Theorem data_offsets_not_jump_targets:
+  FLOOKUP (build_offset_to_pc encoding_regression_prog) 0 = SOME 0 /\
+  FLOOKUP (build_offset_to_pc encoding_regression_prog) 1 = SOME 1 /\
+  FLOOKUP (build_offset_to_pc encoding_regression_prog) 3 = NONE /\
+  FLOOKUP (build_offset_to_pc encoding_regression_prog) 6 = NONE /\
   FLOOKUP (SND (compute_label_offsets encoding_regression_prog)) "entry" = SOME 1 /\
   FLOOKUP (SND (compute_label_offsets encoding_regression_prog)) "data" = SOME 3 /\
   FLOOKUP (SND (compute_label_offsets encoding_regression_prog)) "code_end" = SOME 6 /\
@@ -53,8 +56,8 @@ Proof
   EVAL_TAC
 QED
 
-(* Exercise the generalized reverse interface at every surviving entry,
-   including the zero-size final header. No positive-size premise is supplied. *)
+(* Exercise the reverse interface at every entry. No positive-size premise
+   is supplied. *)
 Theorem zero_size_reverse_lookup:
   !off pc.
     FLOOKUP (build_offset_to_pc encoding_regression_prog) off = SOME pc ==>
