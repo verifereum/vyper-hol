@@ -64,3 +64,33 @@ Proof
        byteTheory.word_of_bytes_be_def,
        vfmTypesTheory.word_to_bytes_word_of_bytes_256, wordsTheory.w2w_n2w]
 QED
+
+Theorem order_runtime_local_ptrs:
+  local_ptrs_rel func order_ptr_env order_ptr_source.scopes order_runtime_start
+Proof
+  simp[compileEnvTheory.local_ptrs_rel_def,
+       compileEnvTheory.local_region_def,
+       bodyPtrBytestringBuiltinsPtrFrameTheory.order_ptr_source_def,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_scopes_def,
+       bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_env_def,
+       vyperStateTheory.lookup_scopes_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> gvs[] >> qexists_tac `128w` >>
+  simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256,
+       order_runtime_array_wf, order_runtime_array_memory,
+       valueEncodingTheory.type_memory_size_def] >>
+  simp[compileEnvTheory.local_backed_def, order_runtime_start_def,
+       bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_start_def,
+       bodyPtrBytestringBuiltinsOrderRunTheory.order_run_start_def,
+       venomStateTheory.init_venom_state_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem order_runtime_state_rel:
+  state_rel func order_ptr_env order_runtime_cx order_ptr_source order_runtime_start
+Proof
+  simp[compileEnvTheory.state_rel_def, order_runtime_local_ptrs,
+       order_runtime_call_context] >>
+  EVAL_TAC >> rw[] >> gvs[]
+QED
