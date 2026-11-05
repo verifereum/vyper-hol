@@ -59,3 +59,24 @@ Proof
   conj_tac >- (irule Dreach_straight_prefix >> simp[]) >>
   rpt strip_tac >> gvs[]
 QED
+
+Theorem abi_decode_member_setup_wrap_abort:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,middle) /\
+  base_op <> Lit 0w /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand base_op s = SOME(n2w B) /\
+  eval_operand hi s = SOME(n2w H) /\ p+ao+32 <= H /\ B+H < dimword(:256) /\
+  delta = w2n(abi_decode_load MLOAD (n2w(B+p+ao):bytes32) s) /\
+  dimword(:256) <= p+delta /\ fresh_vars_wrt st s /\
+  fn_has_code st middle fn /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?u. Dabort ctx fn s Revert_abort u
+Proof
+  strip_tac >> drule_all abi_decode_member_setup_revert >> strip_tac >>
+  drule abi_decode_member_setup_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st middle)` by fs[EVERY_MEM] >>
+  drule_all abi_decoder_run_sequence_abort >> strip_tac >>
+  qpat_x_assum `!ctx. _` (qspec_then `ctx` strip_assume_tac) >>
+  simp[Dabort_def] >> qexistsl_tac [`t with vs_inst_idx := n`, `0`] >> simp[]
+QED
