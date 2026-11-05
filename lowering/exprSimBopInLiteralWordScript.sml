@@ -292,10 +292,101 @@ Proof
   Cases_on `eval_exprs cx elems st` >>
   rename1 `eval_exprs cx elems st = (res, st')` >>
   Cases_on `res` >> gvs[] >>
+  rename1 `eval_exprs cx elems st = (INL vs, st')` >>
   drule eval_exprs_length >> disch_tac >>
-  `compatible_bound n (LENGTH x)` by metis_tac[] >>
+  `compatible_bound n (LENGTH vs)` by metis_tac[] >>
   simp[builtin_result_def, evaluate_builtin_def, literal_membership_result]
 QED
+Theorem literal_body_evaluate_types:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) ==>
+  ?tv. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
+       evaluate_type (get_tenv cx) a = SOME (ArrayTV tv n)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  drule_all literal_body_typing >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  `well_formed_type env.type_defs a` by
+    fs[expr_body_pre_def, well_typed_expr_def] >>
+  gvs[well_formed_type_def] >>
+  qpat_x_assum `IS_SOME _` mp_tac >>
+  simp[Once evaluate_type_def] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type e1)` >> simp[] >>
+  simp[Once evaluate_type_def]
+QED
+Theorem literal_body_action:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) ==>
+  bind (eval_expr cx (Builtin ann (Bop bop)
+    [e1; Builtin a (MakeArray t n) elems])) (read_result cx) =
+  bind (bind (eval_expr cx e1) (read_result cx))
+    (\v. bind (eval_exprs cx elems)
+      (\vs. vyperState$return (BoolV (if bop = In then MEM v vs else ~MEM v vs))))
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  drule_all literal_body_evaluate_types >> strip_tac >>
+  drule_all literal_body_typing >> strip_tac >>
+  gvs[] >>
+  drule_at (Pat `evaluate_type _ (ArrayT _ _) = _`) literal_membership_action >>
+  simp[]
+QED
+
+Theorem literal_operand_result:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  MEM e (e1::elems) /\ expr_sim_inv cenv cx env es0 /\
+  (do r <- eval_expr cx e; read_result cx r od) es0 = (res, es1) ==>
+  expr_sim_inv cenv cx env es1 /\ expr_res_ok res /\
+  !v tv. res = INL v /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+    value_has_type tv v
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env e es0` by metis_tac[literal_body_operand_pre] >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  drule_all expr_body_pre_res_ok >> disch_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
+QED
+
+Theorem literal_operand_word_type:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
+  MEM e (e1::elems) ==>
+  expr_type e = expr_type e1 /\ is_word_type (expr_type e)
+Proof
+  strip_tac >> drule literal_body_typing >> simp[] >>
+  strip_tac >> gvs[EVERY_MEM]
+QED
+
+Theorem literal_body_eval_cases:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) /\
+  bind (eval_expr cx (Builtin ann (Bop bop)
+    [e1; Builtin a (MakeArray t n) elems])) (read_result cx) es = (res, es') ==>
+  (?exc. bind (eval_expr cx e1) (read_result cx) es = (INR exc, es') /\
+         res = INR exc) \/
+  (?v es1 exc. bind (eval_expr cx e1) (read_result cx) es = (INL v, es1) /\
+              eval_exprs cx elems es1 = (INR exc, es') /\ res = INR exc) \/
+  (?v es1 vs. bind (eval_expr cx e1) (read_result cx) es = (INL v, es1) /\
+             eval_exprs cx elems es1 = (INL vs, es') /\
+             res = INL (BoolV (if bop = In then MEM v vs else ~MEM v vs)))
+Proof
+  strip_tac >> gvs[] >> drule literal_body_action >> simp[] >>
+  disch_then (fn th => gvs[th]) >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+
 
 
 
