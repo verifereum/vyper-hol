@@ -18,7 +18,7 @@ Ancestors
   exprSimFieldLayout
   exprSimSource
   targetPlaceSimDefs
-  stmtSimProps gasSummaryCompose
+  stmtSimProps gasSummary gasSummaryCompose gasContext gasExemptCert
   exprSimProps
   exprSimHypsDefs
   exprSimDefs
@@ -33,6 +33,70 @@ Ancestors
   venomState venomInst
 Libs
   pairLib
+
+Theorem target_subscript_base_exempt_cert:
+  gas_exempt_cert memory tops (ctx, func)
+    (ignore_bind (eval_base_place cx bt) (return ()))
+    (es, s0) marks (err, ee) (leaf, sf) ==>
+  gas_exempt_cert memory tops (ctx, func)
+    (ignore_bind (eval_base_place cx (SubscriptTarget bt e)) (return ()))
+    (es, s0) marks (err, ee) (leaf, sf)
+Proof
+  strip_tac >> once_rewrite_tac[evaluate_def] >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
+QED
+
+Theorem target_subscript_index_exempt_cert:
+  gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
+    (es, s0) left (INL pv) mid (OK t) /\
+  gas_exempt_cert memory tops (ctx, func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (mid with gas_obs := [], t) right (err, ee) (leaf, sf) ==>
+  gas_exempt_cert memory tops (ctx, func)
+    (ignore_bind (eval_base_place cx (SubscriptTarget bt e)) (return ()))
+    (es, s0) (left ++ right) (err, ee) (leaf, sf)
+Proof
+  strip_tac >> once_rewrite_tac[evaluate_def] >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_bind_result >>
+  goal_assum (drule_at Any) >> simp[] >>
+  once_rewrite_tac[GSYM bind_assoc] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc]
+QED
+
+(* Full-target admissibility projects to the base: every base exception
+   propagates unchanged, and every base success is in target_res_ok. *)
+Theorem target_subscript_base_admissible:
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e))
+    target_res_ok es ==>
+  gas_admissible (eval_base_place cx bt) target_res_ok es
+Proof
+  simp[gas_admissible_def] >> rpt strip_tac >>
+  Cases_on `res` >- simp[target_res_ok_def] >>
+  first_x_assum (qspec_then `gs` mp_tac) >>
+  once_rewrite_tac[evaluate_def] >> simp[bind_def] >>
+  disch_then (qspecl_then [`INR y`, `ee`] mp_tac) >> simp[]
+QED
+
+Theorem target_subscript_index_admissible:
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e))
+    target_res_ok es /\
+  gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
+    (es, s0) marks (INL pv) mid (OK t) ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx))
+    expr_res_ok (mid with gas_obs := [])
+Proof
+  simp[gas_admissible_def, gas_marked_exec_def] >> rpt strip_tac >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  qpat_x_assum `!gs res ee. _ ==> _`
+    (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
+  once_rewrite_tac[evaluate_def] >>
+  rewrite_tac[GSYM bind_assoc] >> simp[] >>
+  disch_then (qspecl_then [`INR y`, `ee`] mp_tac) >>
+  gvs[bind_def, target_res_ok_def, expr_res_ok_def]
+QED
 
 (* Internal-call defaults and bodies are bracketed by scope restoration,
    even on exceptions; this boundary requires no invariant on the callee. *)
