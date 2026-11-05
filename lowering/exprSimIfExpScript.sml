@@ -382,6 +382,79 @@ Proof
 QED
 
 (* Aggregate adapters copy from the physical arm layout into the annotation. *)
+Theorem ifexp_zero_source_fits[local]:
+  (!sty dty. arg_type_fits sty dty ==>
+    !tenv tv. evaluate_type tenv sty = SOME tv /\
+      type_memory_size tv = 0 ==> sty = dty) /\
+  (!stys dtys. arg_types_fit stys dtys ==>
+    !tenv tvs. OPT_MMAP (evaluate_type tenv) stys = SOME tvs /\
+      type_memory_size_list tvs = 0 ==> stys = dtys)
+Proof
+  ho_match_mp_tac vyperTypeSystemTheory.arg_type_fits_ind >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def] >>
+  rpt strip_tac >>
+  gvs[evaluate_type_def, evaluate_types_OPT_MMAP, type_memory_size_def,
+      AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ifexp_widened_source_positive[local]:
+  type_widens_to tenv sty dty /\ sty <> dty /\
+  evaluate_type tenv sty = SOME stv ==>
+  0 < type_memory_size stv
+Proof
+  simp[vyperTypeSystemTheory.type_widens_to_def] >> strip_tac >>
+  spose_not_then assume_tac >>
+  `type_memory_size stv = 0` by decide_tac >>
+  metis_tac[ifexp_zero_source_fits]
+QED
+
+Theorem ifexp_physical_source_positive[local]:
+  expr_body_pre cenv cx env e es /\
+  post_value_type cenv e <> expr_type e /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv ==>
+  0 < type_memory_size stv
+Proof
+  strip_tac >> irule ifexp_widened_source_positive >>
+  qexistsl_tac [`expr_type e`, `post_value_type cenv e`, `get_tenv cx`] >>
+  simp[] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  gvs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >> simp[]
+QED
+
+Theorem ifexp_aggregate_footprint[local]:
+  !tenv t tv v.
+    evaluate_type tenv t = SOME tv /\ ~is_bytestring_type t ==>
+    val_footprint tv v = type_memory_size tv
+Proof
+  rpt gen_tac >> Cases_on `t` >>
+  simp[evaluate_type_def, is_bytestring_type_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), is_bytestring_type_def] >>
+  Cases_on `v` >> simp[val_footprint_def]
+QED
+
+Theorem ifexp_aggregate_source_region[local]:
+  expr_val_at cenv cx ty origin sa es v src s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\
+  eval_operand src s = SOME w ==>
+  type_memory_size tv = 0 \/
+  (?aid b sz. aid < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+    b <= w2n w /\ w2n w + type_memory_size tv <= b + sz) \/
+  (?n b sz. local_region cenv es.scopes s n b sz /\
+    b <= w2n w /\ w2n w + type_memory_size tv <= b + sz)
+Proof
+  strip_tac >>
+  `val_footprint tv v = type_memory_size tv` by
+    metis_tac[ifexp_aggregate_footprint] >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem ifexp_typed_adapter_parts[local]:
   ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
   ~is_bytestring_type t /\ arm_ty <> t /\
