@@ -686,3 +686,51 @@ Proof
   conj_tac >> gen_tac >> rpt IF_CASES_TAC >> gvs[]
 QED
 
+
+Theorem current_backedges_sparse_coverage:
+  current_finite_edge history_probe_backedges (current_finite_target history_probe_backedges) c d k ==>
+  MEM (c,d,k) current_backedges_sparse_edges
+Proof
+  simp[current_finite_edge_def] >>
+  CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
+  strip_tac >> gvs[] >>
+  gvs[current_static_edge_lookup, current_backedges_lookups] 
+  >>~- ([`MEM (CurrentStaticCut "" "E" _ _,_,_) _`],
+    gvs[current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+      history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+      current_static_body_start_def] >>
+    gvs[current_backedges_sparse_edges_def] >>
+    qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+    strip_tac >> gvs[] >>
+    qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[])
+  >>~- ([`MEM (CurrentStaticCut "H" "D" _ _,_,_) _`],
+    gvs[current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+      history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_sparse_edges_def] >>
+    qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+    strip_tac >> gvs[] >> qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[])
+  >>~- ([`MEM (CurrentStaticCut "H" "S" _ _,_,_) _`],
+    gvs[current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+      history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_sparse_edges_def] >>
+    qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+    strip_tac >> gvs[] >> qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[])
+  >>~- ([`MEM (CurrentStaticCut "E" "H" _ _,_,_) _`],
+    gvs[current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+      history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_sparse_edges_def] >>
+    qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+    strip_tac >> gvs[] >> qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[])
+  >>~- ([`MEM (CurrentStaticCut "D" "H" _ _,_,_) _`],
+    gvs[current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+      history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_sparse_edges_def] >>
+    qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+    strip_tac >> gvs[] >> qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[])
+  >> gvs[current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+      history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_sparse_edges_def] >>
+    qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+    strip_tac >> gvs[] >> qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[]
+QED
+
