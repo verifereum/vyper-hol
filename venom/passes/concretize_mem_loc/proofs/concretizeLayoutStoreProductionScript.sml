@@ -43,7 +43,7 @@ val _ = if null (hyp joint_mstore_demand_address_coherence) then ()
 val _ = if null (hyp joint_relocation_demand_mstore_value_byte) then ()
         else raise Fail "value byte export has hypotheses";
 
-Theorem concretize_mstore_demand_execution:
+Theorem concretize_mstore_execution_geometry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -70,11 +70,17 @@ Theorem concretize_mstore_demand_execution:
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
   inst.inst_opcode = MSTORE /\ inst.inst_operands = [opd;opv] /\
   eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value ==>
-  ?dstT valueT tpost. eval_operand opd t = SOME dstT /\
+  ?dstT valueT tpost Q. eval_operand opd t = SOME dstT /\
     eval_operand opv t = SOME valueT /\ step_inst_base inst t = OK tpost /\
     tpost = mstore (w2n dstT) valueT t /\ post = mstore (w2n dst) value s /\
-    demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
-      (\a. read_byte a post.vs_memory) (\z. read_byte z tpost.vs_memory)
+    fn_ptr_ok Q fn /\ (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn) /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      w2n dst <= a /\ a < w2n dst+32 ==>
+      w2n dstT <= z /\ z < w2n dstT+32 /\ a-w2n dst = z-w2n dstT) /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      ~(w2n dst <= a /\ a < w2n dst+32) ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
+      ~(w2n dstT <= z /\ z < w2n dstT+32))
 Proof
   strip_tac >>
   drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
@@ -104,11 +110,11 @@ Proof
        w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
     suspend "address" >>
   pop_assum strip_assume_tac >>
-  qexistsl_tac [`dstT`, `valueT`] >>
+  qexistsl_tac [`dstT`, `valueT`, `Q`] >>
   simp[step_inst_base_def, exec_write2_def] >> suspend "memory"
 QED
 
-Resume concretize_mstore_demand_execution[support]:
+Resume concretize_mstore_execution_geometry[support]:
   `?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
@@ -118,7 +124,7 @@ Resume concretize_mstore_demand_execution[support]:
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[resolved_static_support]
 QED
-Resume concretize_mstore_demand_execution[value]:
+Resume concretize_mstore_execution_geometry[value]:
   `!v. opv = Var v ==> ~retpc_var fn v /\ FLOOKUP rv v = NONE` by
     (rpt strip_tac
      >- (spose_not_then assume_tac >>
@@ -128,7 +134,7 @@ Resume concretize_mstore_demand_execution[value]:
   drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_masked_operand >>
   disch_then drule_all >> metis_tac[]
 QED
-Resume concretize_mstore_demand_execution[address]:
+Resume concretize_mstore_execution_geometry[address]:
   `MEM (w2n dst,32) (source_memory_write_ranges inst s)` by
     simp[source_memory_write_ranges_def, fixed_source_write_range_def] >>
   `mem_write_ops inst = SOME <| iao_ofst := opd; iao_size := SOME (Lit 32w);
@@ -175,8 +181,8 @@ Resume concretize_mstore_demand_execution[address]:
   qexists_tac `y` >> simp[] >>
   qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[]
 QED
-Resume concretize_mstore_demand_execution[memory]:
-  markerLib.RESUME_TAC >> (rpt strip_tac >>
+Resume concretize_mstore_execution_geometry[memory]:
+  markerLib.RESUME_TAC >> (all_tac >>
   `(!i. i < 32 ==>
       w2n dst+i IN joint_writes (EL c (q0::qs)) (EL c es) /\
       w2n dstT+i IN range_bytes (step_writes inst t t) /\
@@ -193,32 +199,15 @@ Resume concretize_mstore_demand_execution[memory]:
       step_writes inst t t = [(w2n dstT,32)]` by
        (conj_tac >> irule step_writes_store >> metis_tac[]) >>
      fs[joint_writes_ordinary] >> metis_tac[]) >>
-  `demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
-     (\a. read_byte a (write_memory_with_expansion (w2n dst) (word_to_bytes value T) s).vs_memory)
-     (\z. read_byte z (write_memory_with_expansion (w2n dstT) (word_to_bytes valueT T) t).vs_memory)`
-    suffices_by simp[mstore_def, write_memory_with_expansion_def] >>
-  irule demand_agree_write_memory >>
-  simp[LENGTH_word_to_bytes] >> conj_tac
+  conj_tac
   >- (rpt strip_tac >>
-      rename1 `joint_relocation_demand _ _ _ _ _ (SUC c) a z` >>
       `a = w2n dst + (a-w2n dst) /\ a-w2n dst < 32` by decide_tac >>
       `relocation_pair lo (concretize_positions C') (EL c (q0::qs))
           a (w2n dstT+(a-w2n dst))` by metis_tac[] >>
       `z = w2n dstT+(a-w2n dst)` by
         (irule joint_mstore_demand_address_coherence >> metis_tac[]) >>
-      `EL (a-w2n dst) (word_to_bytes value T) =
-       EL (a-w2n dst) (word_to_bytes valueT T)` by
-        (`joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c)
-            (w2n dst+(a-w2n dst)) z` by metis_tac[] >>
-         drule_at (Pat `local_rel _ _ _ _ _ _ _`)
-           (INST_TYPE [``:'a`` |-> ``:num#num``, ``:'b`` |-> ``:num``]
-             joint_relocation_demand_mstore_value_byte) >>
-         disch_then drule_all >> simp[]) >>
-      gvs[]) >>
-  qexists_tac `joint_relocation_demand lo (concretize_positions C') q0 es qs c` >>
-  reverse conj_tac >- metis_tac[frameRelocationLocalTheory.local_rel_demand] >>
+      decide_tac) >>
   rpt strip_tac >>
-  rename1 `joint_relocation_demand _ _ _ _ _ (SUC c) a z` >>
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by
     (asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac) >>
   `joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
@@ -230,7 +219,66 @@ Resume concretize_mstore_demand_execution[memory]:
      asm_rewrite_tac[] >> metis_tac[]) >>
   gvs[range_bytes_def] >> decide_tac)
 QED
-Finalise concretize_mstore_demand_execution
+Finalise concretize_mstore_execution_geometry
+
+val _ = if null (hyp concretize_mstore_execution_geometry) then ()
+        else raise Fail "store execution export has hypotheses";
+
+Theorem concretize_mstore_demand_execution:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [opd;opv] /\
+  eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value ==>
+  ?dstT valueT tpost. eval_operand opd t = SOME dstT /\
+    eval_operand opv t = SOME valueT /\ step_inst_base inst t = OK tpost /\
+    tpost = mstore (w2n dstT) valueT t /\ post = mstore (w2n dst) value s /\
+    demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (\a. read_byte a post.vs_memory) (\z. read_byte z tpost.vs_memory)
+Proof
+  strip_tac >>
+  drule_all concretize_mstore_execution_geometry >> strip_tac >>
+  qexistsl_tac [`dstT`, `valueT`, `tpost`] >> asm_rewrite_tac[] >>
+  `demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+     (\a. read_byte a (write_memory_with_expansion (w2n dst) (word_to_bytes value T) s).vs_memory)
+     (\z. read_byte z (write_memory_with_expansion (w2n dstT) (word_to_bytes valueT T) t).vs_memory)`
+    suffices_by simp[mstore_def, write_memory_with_expansion_def] >>
+  irule demand_agree_write_memory >> simp[LENGTH_word_to_bytes] >> conj_tac
+  >- (rpt strip_tac >>
+      `w2n dstT <= b /\ b < w2n dstT+32 /\ a-w2n dst = b-w2n dstT` by metis_tac[] >>
+      `a = w2n dst+(a-w2n dst) /\ a-w2n dst < 32` by decide_tac >>
+      `joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c)
+         (w2n dst+(a-w2n dst)) b` by metis_tac[] >>
+      qpat_x_assum `fn_ptr_ok P fn` kall_tac >>
+      drule_at (Pat `local_rel _ _ _ _ _ _ _`)
+        (INST_TYPE [``:'a`` |-> ``:num#num``, ``:'b`` |-> ``:num``]
+          joint_relocation_demand_mstore_value_byte) >>
+      disch_then drule_all >> simp[]) >>
+  qexists_tac `joint_relocation_demand lo (concretize_positions C') q0 es qs c` >>
+  reverse conj_tac >- metis_tac[frameRelocationLocalTheory.local_rel_demand] >>
+  rpt strip_tac >> metis_tac[]
+QED
 
 val _ = if null (hyp concretize_mstore_demand_execution) then ()
         else raise Fail "store execution export has hypotheses";
