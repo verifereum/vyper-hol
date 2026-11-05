@@ -216,6 +216,13 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
+(* Static capacities used by Vyper's concat result inference. *)
+Definition bytelike_type_bound_def:
+  bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
+  bytelike_type_bound (BaseT (StringT n)) = n /\
+  bytelike_type_bound _ = 0
+End
+
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
@@ -238,7 +245,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (AsWeiValue _) ts =
     (LENGTH ts = 1 ∧ ty = BaseT (UintT 256) ∧ is_uint_type (HD ts)) ∧
   well_typed_builtin_app ty (Concat n) ts =
-    (2 <= LENGTH ts /\
+    (2 <= LENGTH ts /\ SUM (MAP bytelike_type_bound ts) <= n /\
      ((ty = BaseT (BytesT (Dynamic n)) /\ EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts) \/
       (ty = BaseT (StringT n) /\ EVERY (\t. ?m. t = BaseT (StringT m)) ts))) /\
   well_typed_builtin_app ty (Slice n) ts =
