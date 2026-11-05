@@ -2745,12 +2745,20 @@ QED
 Theorem ci_mono_load_bytestring_as_word[local]:
   ∀ v shift_opc sa. ci_mono sa (SND (load_bytestring_as_word v shift_opc sa))
 Proof
+  rpt gen_tac >> Cases_on `shift_opc = SAR` >> (
+  simp_tac pure_ss [exprLoweringTheory.load_bytestring_as_word_def] >>
+  asm_rewrite_tac[] >> BETA_TAC >>
+  ntac 3 (ho_match_mp_tac ci_mono_bind >>
+          conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >>
+      rpt (ho_match_mp_tac ci_mono_bind >>
+           conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+      simp[ci_mono_emit_op, ci_mono_comp_return]) >>
   rpt gen_tac >>
-  rewrite_tac[exprLoweringTheory.load_bytestring_as_word_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  ntac 3 (ho_match_mp_tac ci_mono_bind >>
+          conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  simp[ci_mono_comp_return])
 QED
 
 Theorem ci_mono_compile_int_clamp:

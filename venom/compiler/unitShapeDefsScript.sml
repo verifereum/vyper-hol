@@ -314,7 +314,9 @@ Definition inst_shape_ok_def:
     ~MEM inst.inst_opcode
       [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET] /\
     (is_read0_opcode inst.inst_opcode ==> inst.inst_operands = []) /\
-    (inst.inst_opcode = PHI ==> 2 <= LENGTH (phi_pairs inst.inst_operands)) /\
+    (inst.inst_opcode = PHI ==>
+       2 <= LENGTH (phi_pairs inst.inst_operands) /\
+       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))) /\
     label_positions_ok inst
 End
 

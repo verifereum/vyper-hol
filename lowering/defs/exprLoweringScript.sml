@@ -1609,6 +1609,13 @@ Definition load_bytestring_as_word_def:
     do length <- emit_op MLOAD [v];
        data_ptr <- emit_op ADD [v; Lit 32w];
        data <- emit_op MLOAD [data_ptr];
+       (* An emptied bytestring can retain a stale signed data word. *)
+       data <- (if shift_opc = SAR then
+                  do empty <- emit_op ISZERO [length];
+                     nonempty <- emit_op ISZERO [empty];
+                     emit_op MUL [data; nonempty]
+                  od
+                else return data);
        sub32 <- emit_op SUB [Lit 32w; length];
        num_zero_bits <- emit_op MUL [sub32; Lit 8w];
        shifted <- emit_op shift_opc [num_zero_bits; data];

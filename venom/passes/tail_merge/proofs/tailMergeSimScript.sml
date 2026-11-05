@@ -82,13 +82,12 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-(* Same canonical instruction implies same opcode, id, and output count *)
+(* Same canonical instruction implies same opcode *)
 Theorem canon_inst_same_fields:
   !vm1 vm2 inst1 inst2 vm1' vm2' ci.
     canon_inst vm1 inst1 = (vm1', ci) /\
     canon_inst vm2 inst2 = (vm2', ci) ==>
-    inst1.inst_opcode = inst2.inst_opcode /\
-    inst1.inst_id = inst2.inst_id
+    inst1.inst_opcode = inst2.inst_opcode
 Proof
   rw[canon_inst_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[])
@@ -100,15 +99,6 @@ Theorem canon_inst_same_opcode:
     canon_inst vm1 inst1 = (vm1', ci) /\
     canon_inst vm2 inst2 = (vm2', ci) ==>
     inst1.inst_opcode = inst2.inst_opcode
-Proof
-  metis_tac[canon_inst_same_fields]
-QED
-
-Theorem canon_inst_same_id:
-  !vm1 vm2 inst1 inst2 vm1' vm2' ci.
-    canon_inst vm1 inst1 = (vm1', ci) /\
-    canon_inst vm2 inst2 = (vm2', ci) ==>
-    inst1.inst_id = inst2.inst_id
 Proof
   metis_tac[canon_inst_same_fields]
 QED

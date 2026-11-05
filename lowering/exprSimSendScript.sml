@@ -431,7 +431,7 @@ Proof
          rpt strip_tac >> qexists_tac `id` >>
          gvs[local_region_def, lookup_var_def]) >>
       `immutable_base_zero cenv s'` by
-        (irule immutable_base_zero_frame >> qexists_tac `s` >>
+        (irule immutable_base_zero_frame >> qexists_tac `t` >>
          fs[stmt_state_rel_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
       qexistsl_tac [`es1`, `t`] >> simp[] >>

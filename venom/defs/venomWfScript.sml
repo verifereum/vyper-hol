@@ -23,6 +23,15 @@ Definition phi_well_formed_def:
   phi_well_formed (_ :: _ :: rest) = F
 End
 
+Theorem phi_well_formed_var_pair:
+  !ops v.
+    phi_well_formed ops /\ MEM (Var v) ops ==>
+    ?lbl. MEM (lbl,v) (phi_pairs ops)
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rw[venomInstTheory.phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
+QED
+
 (* ==========================================================================
    Per-instruction well-formedness (inst_wf)
 

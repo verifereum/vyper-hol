@@ -1,6 +1,6 @@
 Theory stmtSimLogArgsRun
 Ancestors
-  stmtSimLogArgs stmtSimLogArgsGrowth stmtSimLogLabelObserver exprOperandVar
+  stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar
   exprSimWordArgs supportedTypes exprSim exprSimOps
   loweringSlice exprLoweringProps freshWrites fragExec emitHelperProps varsExt compileEnv
   vyperInterpreter vyperState vyperTyping
@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem compile_log_eval_all_safe_sim:
-  !args ctx func cenv cx R es sa xs sb rr es' s0.
+  !args ctx func cenv cx R es sa xs sb rr es' s0 env.
     (!e tail es. R (e::tail) es ==>
        expr_sim ctx func cenv cx (expr_type e) e es /\
        !v es1. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
@@ -43,7 +43,10 @@ Theorem compile_log_eval_all_safe_sim:
     compile_log_eval_all cenv args sa = (xs,sb) /\
     eval_exprs cx args es = (rr,es') /\
     (case rr of INL vs => T | INR exc => expr_res_ok (INR exc : value + exception)) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    well_typed_exprs env args /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. ?vs. rr = INL vs /\
         log_args_post ctx func cenv cx es sa sb s0 es' xs vs s /\
@@ -88,8 +91,10 @@ QED
 
 Resume compile_log_eval_all_safe_sim[head_value]:
   rename1 `eval_exprs cx args es1 = (tail_res, es')` >>
+  `well_typed_expr env e /\ well_typed_exprs env args` by
+    fs[vyperTypeSystemTheory.well_typed_expr_def] >>
   `!lab. x <> Label lab` by
-    (drule_all log_expr_sim_not_label >> simp[]) >>
+    (drule_all lower_compile_expr_not_label >> simp[]) >>
   `R args es1` by metis_tac[] >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
@@ -119,7 +124,7 @@ QED
 Finalise compile_log_eval_all_safe_sim
 
 Theorem compile_log_eval_all_sim:
-  !args ctx func cenv cx R es sa xs sb rr es' s0.
+  !args ctx func cenv cx R es sa xs sb rr es' s0 env.
     (!e tail es. R (e::tail) es ==>
        expr_sim ctx func cenv cx (expr_type e) e es /\
        !v es1. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
@@ -130,7 +135,10 @@ Theorem compile_log_eval_all_sim:
     compile_log_eval_all cenv args sa = (xs,sb) /\
     eval_exprs cx args es = (rr,es') /\
     (case rr of INL vs => T | INR exc => expr_res_ok (INR exc : value + exception)) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    well_typed_exprs env args /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. ?vs. rr = INL vs /\
         log_args_post ctx func cenv cx es sa sb s0 es' xs vs s)

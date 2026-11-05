@@ -400,6 +400,8 @@ Proof
       FLOOKUP bc.ce_vars name = FLOOKUP cenv.ce_vars name` by
     (rpt strip_tac >> spose_not_then assume_tac >>
      fs[cenv_top_ext_def] >> first_x_assum drule >> simp[]) >>
+  `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    fs[cenv_top_ext_def, compile_env_component_equality] >>
   simp[not_local_ptr_def, lookup_scopes_def] >> metis_tac[]
 QED
 
