@@ -202,3 +202,45 @@ residual relation. The next strategy decision must choose/prove the oracle
 crossing classification (including nonreturning INVOKE), or change the residual
 architecture. Adding another conditional prefix helper would hide the same
 gap. No general simulation is claimed by this report.
+
+## Checked boundary and actual-edge interfaces (C1.4.9.17/.18)
+
+`dftGasInvBoundaryStateTheory` now defines
+`inv_boundary_eq s t <=> (s with vs_inst_idx := 0) = (t with vs_inst_idx := 0)`.
+Its checked consumers are exact merge equality (`inv_boundary_merge`), exact
+setup equality (`inv_boundary_setup`), PHI result equality after resetting both
+indices to any k (`inv_boundary_phis`), successful terminator boundary
+congruence (`inv_boundary_terminator`), and current-label equality. Gas readings
+and every non-index field remain exact. This is not a DFT simulation theorem.
+
+`dftGasInvOracleAvailabilityTheory` proves successful oracle-step FDOM
+monotonicity under `inst_wf`, output membership, and successful-step exclusion
+of PHI. It reuses `inv_ev_step_availability` for the nonterminator domain/frame
+identity rather than duplicating that proof. Actual `ev_block` execution has
+FDOM monotonicity, nonterminator-output coverage from the initial cursor onward,
+initialized earlier-output coverage, and final membership in `bb_succs bb`.
+The last interface needs `bb_well_formed bb` and `EVERY inst_wf` but no entry
+cursor or acyclicity assumption.
+
+The checked main interface is:
+```sml
+wf_function fn /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+bb.bb_label = s.vs_current_bb /\ fn_reachable fn s.vs_current_bb /\
+strict_dom_vars_defined fn s /\ EVERY inst_wf bb.bb_instructions /\
+eval_phis s bb.bb_instructions = OK u /\
+ev_block orc p d fuel ctx bb
+  (u with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK t /\
+~t.vs_halted ==>
+fn_reachable fn t.vs_current_bb /\ strict_dom_vars_defined fn t
+```
+It uses actual oracle transitions (including successful INVOKE through existing
+bind_outputs/domain facts), not conversion to list-semantics execution. Thus
+loop-edge dominance transfer is available independently of reflection.
+
+Remaining integration obligations: full-block sorting/reconstruction with
+exact boundary states; result cases other than OK; smaller-fuel returning-call
+reflection; initial/post-pseudo readiness and actual label-operand availability
+at arbitrary entered blocks; and concrete forwarding preservation. These
+interfaces do not assume or establish any of those missing results. In
+particular label availability is still a separate initialization requirement;
+no label producer is claimed here.
