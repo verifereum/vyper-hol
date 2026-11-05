@@ -92,6 +92,90 @@ val _ = if List.all (null o hyp)
   then print "raw-call tuple encoding/frame: checked, no hypotheses\n"
   else raise Fail "raw-call tuple encoding/frame retained hypotheses";
 
+Theorem raw_call_tuple_copy_seq_run[local]:
+  emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
+  emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
+  safe_operand sa pop /\ safe_operand sa src /\
+  eval_operand pop s = SOME w /\ eval_operand src s = SOME a /\
+  sz < dimword (:256) ==>
+  ?u t. run_inst_seq (emitted_insts sa sc) s = OK t /\
+    t = mcopy (w2n (w + 32w)) (w2n a) sz u /\
+    (?vars. u = s with vs_vars := vars) /\
+    (!p. safe_operand sa p ==> eval_operand p u = eval_operand p s) /\
+    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s)
+Proof
+  strip_tac >> drule_all raw_call_tuple_dst_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sb) s = OK u` >>
+  `eval_operand src u = SOME a` by simp[] >>
+  drule_all emit_mcopy_run >> strip_tac >>
+  qexistsl_tac [`u`, `mcopy (w2n (w + 32w)) (w2n a) sz u`] >>
+  simp[] >> conj_tac
+  >- (irule run_inst_seq_compose_ok >> qexistsl_tac [`u`, `sb`] >>
+      simp[] >> conj_tac
+      >- (irule inst_extends_emit_op >> goal_assum (drule_at Any)) >>
+      irule inst_extends_emit_void >> goal_assum (drule_at Any)) >>
+  conj_tac >- (qexists_tac `vars` >> simp[]) >>
+  rpt strip_tac >>
+  `eval_operand p u = eval_operand p s` by simp[] >>
+  Cases_on `p` >>
+  gvs[mcopy_def, write_memory_with_expansion_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem raw_call_tuple_copy_tail_run[local]:
+  emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
+  emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
+  safe_operand sa pop /\ safe_operand sa src /\
+  eval_operand pop s = SOME w /\ eval_operand src s = SOME a /\
+  sz < dimword (:256) /\ w2n w + (32 + sz) < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\
+  wb_frame cenv es0 sf s0 s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ sf.cs_next_var <= sa.cs_next_var /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,32 + sz) /\
+  sf.cs_next_id <= inst.inst_id /\ local_ptrs_reserved cenv sf /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  mem_word_at (w2n w) s.vs_memory = (if success then 1w else 0w) /\
+  val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) (w2n a) s.vs_memory /\
+  val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
+  type_memory_size (BaseTV (BytesT (Dynamic n))) <= sz ==>
+  ?t. run_inst_seq (emitted_insts sa sc) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sf s0 t /\
+    t.vs_fmp = s.vs_fmp /\ eval_operand pop t = SOME w /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,32 + sz) /\
+    val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
+      (ArrayV (TupleV [BoolV success; BytesV bs])) (w2n w) t.vs_memory /\
+    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s)
+Proof
+  strip_tac >> drule_all raw_call_tuple_copy_seq_run >> strip_tac >>
+  `w2n (w + 32w) = w2n w + 32` by
+    (irule buffer_offset_no_wrap >> qexists_tac `32 + sz` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es u` by
+    (qpat_assum `u = _` SUBST1_TAC >>
+     irule raw_call_reserved_vars_frame >> simp[] >>
+     qexists_tac `sa` >> simp[] >> rpt strip_tac >>
+     `eval_operand p u = eval_operand p s` by simp[] >> gvs[]) >>
+  `wb_frame cenv es0 sf s0 u` by
+    (irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `s`] >>
+     simp[] >> rpt strip_tac >>
+     `eval_operand (Var z) u = eval_operand (Var z) s` by
+       (first_x_assum irule >> simp[safe_operand_def]) >>
+     gvs[eval_operand_def]) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by gvs[] >>
+  `mem_word_at (w2n w) u.vs_memory = (if success then 1w else 0w)` by simp[] >>
+  `val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) (w2n a) u.vs_memory` by simp[] >>
+  `FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,32 + sz)` by simp[] >>
+  drule_all raw_call_tuple_copy_frame >> strip_tac >>
+  drule_all raw_call_tuple_copy_wb >> disch_then (qspec_then `w2n a` assume_tac) >>
+  qexists_tac `t` >> simp[] >>
+  gvs[mcopy_def, write_memory_with_expansion_def]
+QED
+
+val _ = if List.all (null o hyp)
+  [raw_call_tuple_copy_seq_run, raw_call_tuple_copy_tail_run]
+  then print "raw-call no-restore copy tail: checked, no hypotheses\n"
+  else raise Fail "raw-call no-restore copy tail retained hypotheses";
+
 Theorem raw_call_values_outcome_bind[local]:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value list evaluation_result) (es,s0) P E /\
