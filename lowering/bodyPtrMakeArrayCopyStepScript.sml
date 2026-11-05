@@ -155,3 +155,81 @@ Proof
   simp[] >> simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF] >>
   eq_tac >> rpt strip_tac >> gvs[] >> res_tac >> decide_tac
 QED
+
+Theorem external_load_ghost_frame:
+  (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
+  eval_operand src s = SOME a ==>
+  step_prov PG G (mk_inst id opc [src] [tmp]) (update_var tmp w s) =
+    DRESTRICT G (COMPL {tmp}) /\
+  (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn).t_var =
+    tn.t_var |+ (tmp, if opc = SLOAD then key_taint tn.t_stor a
+                     else if opc = TLOAD then key_taint tn.t_trans a else {}) /\
+  (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn).t_mem = tn.t_mem /\
+  (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn).t_stor = tn.t_stor /\
+  (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn).t_trans = tn.t_trans /\
+  (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn).t_imm = tn.t_imm
+Proof
+  strip_tac >> gvs[] >>
+  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       mk_inst_def, set_var_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, fixed_source_write_range_def,
+       written_taint_def, range_bytes_def, new_site_bytes_def, update_var_def,
+       finite_mapTheory.FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem external_load_state_frame:
+  tmp <> old ==>
+  lookup_var tmp ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx) = SOME w /\
+  lookup_var old ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx) = lookup_var old s /\
+  ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx).vs_memory = s.vs_memory /\
+  ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx).vs_allocas = s.vs_allocas /\
+  ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx).vs_fmp = s.vs_fmp
+Proof
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem external_load_old_coverage:
+  (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
+  eval_operand src s = SOME a /\ tmp <> p /\ ptr_covers G tn p s n ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id opc [src] [tmp]) (update_var tmp w s))
+    (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn)
+    p ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx) n
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`opc` |-> `opc`, `src` |-> `src`, `s` |-> `s`,
+                  `a` |-> `a`] external_load_ghost_frame) >>
+  simp[] >> strip_tac >>
+  gvs[ptr_covers_def, op_taint_def, lookup_var_def, update_var_def,
+      allocas_from_def, finite_mapTheory.FLOOKUP_UPDATE,
+      finite_mapTheory.FLOOKUP_DRESTRICT]
+QED
+
+Theorem external_load_output_ghost:
+  (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
+  eval_operand src s = SOME a ==>
+  FLOOKUP (step_prov PG G (mk_inst id opc [src] [tmp]) (update_var tmp w s)) tmp = NONE /\
+  op_taint (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn) (Var tmp) =
+    (if opc = SLOAD then key_taint tn.t_stor a
+     else if opc = TLOAD then key_taint tn.t_trans a else {})
+Proof
+  strip_tac >>
+  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       mk_inst_def, set_var_taint_def, out_taint_def, op_taint_def,
+       finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  gvs[]
+QED
+
+Theorem external_load_endpoint:
+  (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
+  step_inst_base (mk_inst id opc [src] [tmp]) s = OK u ==>
+  ?a w. eval_operand src s = SOME a /\ u = update_var tmp w s
+Proof
+  strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_read1_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
