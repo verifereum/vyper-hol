@@ -226,3 +226,87 @@ Proof
   irule dynarray_memory_LUPDATE_mstore >>
   gvs[val_wf_def] >> simp[AC ADD_ASSOC ADD_COMM, RIGHT_ADD_DISTRIB]
 QED
+
+Theorem fields_memory_child:
+  !vals fs id d ct child locbase mem.
+    struct_has_type fs vals /\ fields_val_wf vals fs /\
+    fields_in_memory vals fs locbase mem /\
+    mem_field_offset fs id = SOME (d,ct) /\ ALOOKUP vals id = SOME child ==>
+    val_wf ct child /\ val_in_memory ct child (locbase + d) mem
+Proof
+  Induct >> simp[] >> PairCases >> Cases >> simp[value_has_type_def] >>
+  PairCases_on `h` >>
+  simp[value_has_type_def, val_wf_def, val_in_memory_def, mem_field_offset_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `h0 = id` >> gvs[AllCaseEqs()] >>
+  PairCases_on `z` >> gvs[] >>
+  first_x_assum drule_all >> simp[AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem struct_child_memory:
+  !fs a locbase id d ct child s.
+    value_has_type (StructTV fs) a /\
+    well_formed_type_value (StructTV fs) /\ val_wf (StructTV fs) a /\
+    val_in_memory (StructTV fs) a locbase s.vs_memory /\
+    mem_step_offset (StructTV fs) (AttrSubscript id) = SOME (d,ct) /\
+    evaluate_subscripts (StructTV fs) a [AttrSubscript id] = INL child ==>
+    val_wf ct child /\ val_in_memory ct child (locbase + d) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `a` >>
+  gvs[value_has_type_def, val_wf_def, val_in_memory_def, mem_step_offset_def,
+      evaluate_subscripts_def, AllCaseEqs()] >>
+  drule_all fields_memory_child >> simp[]
+QED
+
+Theorem fields_memory_child_store:
+  !vals fs id d ct child' locbase q w s.
+    struct_has_type fs vals /\ fields_val_wf vals fs /\
+    fields_in_memory vals fs locbase s.vs_memory /\
+    mem_field_offset fs id = SOME (d,ct) /\
+    d <= q /\ q + 32 <= d + type_memory_size ct /\
+    val_in_memory ct child' (locbase + d) (mstore (locbase + q) w s).vs_memory ==>
+    fields_in_memory (AFUPDKEY id (K child') vals) fs locbase
+      (mstore (locbase + q) w s).vs_memory
+Proof
+  Induct >- simp[AFUPDKEY_def, val_in_memory_def] >>
+  PairCases >> Cases >> simp[value_has_type_def] >>
+  PairCases_on `h` >>
+  simp[value_has_type_def, val_wf_def, val_in_memory_def,
+       mem_field_offset_def, AFUPDKEY_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `h0 = id` >> gvs[AllCaseEqs()]
+  >- (simp[val_in_memory_def] >>
+      `mstore (locbase + q) w s =
+       mstore (locbase + q) w (s with vs_memory := s.vs_memory)` by simp[mstore_def] >>
+      pop_assum SUBST1_TAC >>
+      irule (cj 2 mstore_preserves_val_in_memory) >> simp[]) >>
+  PairCases_on `z` >> gvs[] >>
+  simp[val_in_memory_def] >> conj_tac
+  >- (`mstore (locbase + q) w s =
+       mstore (locbase + q) w (s with vs_memory := s.vs_memory)` by simp[mstore_def] >>
+      pop_assum SUBST1_TAC >>
+      irule (cj 1 mstore_preserves_val_in_memory) >> simp[] >> decide_tac) >>
+  `type_memory_size h1' <= q` by decide_tac >>
+  `q = type_memory_size h1' + (q - type_memory_size h1')` by decide_tac >>
+  qpat_x_assum `q = _` SUBST1_TAC >>
+  pure_rewrite_tac[ADD_ASSOC] >> first_x_assum irule >>
+  simp[AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem struct_child_memory_store:
+  !fs a locbase id d ct child child' a' q w s.
+    value_has_type (StructTV fs) a /\
+    well_formed_type_value (StructTV fs) /\ val_wf (StructTV fs) a /\
+    val_in_memory (StructTV fs) a locbase s.vs_memory /\
+    mem_step_offset (StructTV fs) (AttrSubscript id) = SOME (d,ct) /\
+    evaluate_subscripts (StructTV fs) a [AttrSubscript id] = INL child /\
+    assign_subscripts (StructTV fs) a [AttrSubscript id] (Replace child') = INL a' /\
+    d <= q /\ q + 32 <= d + type_memory_size ct /\
+    val_in_memory ct child' (locbase + d) (mstore (locbase + q) w s).vs_memory ==>
+    val_in_memory (StructTV fs) a' locbase (mstore (locbase + q) w s).vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `a` >>
+  gvs[value_has_type_def, val_wf_def, val_in_memory_def, mem_step_offset_def,
+      evaluate_subscripts_def, assign_subscripts_def, AllCaseEqs()] >>
+  irule fields_memory_child_store >> goal_assum (drule_at Any) >> simp[]
+QED
