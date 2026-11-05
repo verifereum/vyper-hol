@@ -109,12 +109,15 @@ Definition locals_alloc_ok_def:
 End
 
 (* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
-   expression of a statement, targets' keys included, and alloc_limits_stmt,
-   which also bounds the type of each local the statement declares. *)
+   expression of a statement, targets' keys included, but a slice's .code
+   source (is_extcode), which alloc_limits_expr checks through its address,
+   and alloc_limits_stmt, which also bounds the type of each local the
+   statement declares and rules out a bare .code. *)
 Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+       (\e. ~is_extcode e /\
+             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv)
