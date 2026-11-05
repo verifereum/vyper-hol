@@ -81,8 +81,9 @@ Proof
    t.vs_alloca_next = s.vs_alloca_next +
      32 * CARD {id | id IN FDOM X /\ MEM (FST id) (a::MAP (\f. f.of_owner) U)}` by
     gvs[ld_joint_boundary_def, ld_joint_frame_def] >>
-  drule_all ld_alloca_repeated >>
-  disch_then (mp_tac o Q.ISPEC `amount:bytes32`) >> strip_tac >>
+  drule_all
+    (Q.ISPEC `amount:bytes32` (Q.GEN `alloc_size` (SPEC_ALL ld_alloca_repeated))) >>
+  disch_then (qspec_then `amount` mp_tac) >> strip_tac >>
   `ld_env_agree sites fn (occurrence_step a HP H inst s1)
     (step_taint inst s s1 tn) s1 (update_var out (n2w c) t)` by
     (gvs[exec_alloca_def] >>

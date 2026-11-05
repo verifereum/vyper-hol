@@ -18,8 +18,10 @@ Theorem ld_alloca_fresh_annotations[local]:
     <|t_var := tn.t_var |+ (out,{});
       t_mem := tn.t_mem UNION {s.vs_alloca_next+j | j < w2n amount}|>
 Proof
-  strip_tac >> drule_all lower_dload_alloca_fresh >>
-  disch_then (mp_tac o Q.ISPEC `amount:bytes32`) >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all (Q.ISPEC `amount:bytes32`
+    (Q.GEN `amount` (SPEC_ALL lower_dload_alloca_fresh))) >>
+  disch_then (qspec_then `amount` strip_assume_tac) >> gvs[] >>
   simp[occurrence_sites_step_def, occurrence_step_def, occurrence_out_def,
        set_prov_def, update_var_def, FLOOKUP_UPDATE,
        step_taint_def, mem_taint_def, set_var_taint_def, out_taint_def,
@@ -96,9 +98,10 @@ Proof
       (s.vs_alloca_next,t.vs_alloca_next,w2n amount))) X lo U stk ts` by
     (irule ld_joint_saved_extend >> simp[]) >>
   `ld_env_agree sites fn H tn s t` by metis_tac[ld_joint_environment] >>
-  drule_at (Pat `ld_env_agree _ _ _ _ _ _`) ld_alloca_fresh >>
+  drule_at (Pat `ld_env_agree _ _ _ _ _ _`)
+    (Q.ISPEC `amount:bytes32` (Q.GEN `alloc_size` (SPEC_ALL ld_alloca_fresh))) >>
   simp[] >> disch_then drule_all >>
-  disch_then (mp_tac o Q.ISPEC `amount:bytes32`) >>
+  disch_then (qspec_then `amount` mp_tac) >>
   strip_tac >> gvs[] >>
   `active_inst fn inst2 (s with vs_inst_idx := SUC s.vs_inst_idx)` by
     (qpat_x_assum `active_inst fn inst2 _` mp_tac >>

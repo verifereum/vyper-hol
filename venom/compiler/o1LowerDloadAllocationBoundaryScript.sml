@@ -41,7 +41,7 @@ Theorem ld_joint_alloca_fresh_metadata:
     t1.vs_alloca_next = s1.vs_alloca_next +
       32 * CARD {id | id IN FDOM X /\ MEM (FST id) (a::MAP (\f. f.of_owner) U)}
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  rpt gen_tac >> strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
   `s1.vs_alloca_next + 32 * ctx_dload_count C < dimword (:256)` by
@@ -59,8 +59,9 @@ Proof
     (`FLOOKUP B (a,inst.inst_id) = NONE` by
        (fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def]) >>
      fs[ld_joint_erasure_def, FLOOKUP_DEF]) >>
-  drule_all lower_dload_paired_alloca_fresh >>
-  disch_then (mp_tac o Q.ISPEC `amount:bytes32`) >> strip_tac >>
+  drule_all (Q.ISPEC `amount:bytes32`
+    (Q.GEN `z` (SPEC_ALL lower_dload_paired_alloca_fresh))) >>
+  disch_then (qspec_then `amount` strip_assume_tac) >>
   gvs[] >>
   `t1.vs_alloca_next < dimword (:256)` by decide_tac >>
   qexists_tac `t1` >> rpt conj_tac
