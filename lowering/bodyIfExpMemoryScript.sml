@@ -1419,6 +1419,74 @@ Proof
   drule_all ifexp_current_extension_domain >> simp[]
 QED
 
+Theorem ifexp_extend_memory_origin[local]:
+  extend_place cx pv sb es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+  ?base. pv = PlaceR (MemoryPlace id base) /\ path = base ++ [sb]
+Proof
+  Cases_on `pv`
+  >- simp[extend_place_def, raise_def]
+  >- (rename1 `PlaceR p` >> Cases_on `p` >>
+      simp[extend_place_def, bind_def, ignore_bind_def, return_def,
+           raise_def, extend_memory_place_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >>
+      qmatch_asmsub_rename_tac `extend_storage_place cx tr slot tv sub es` >>
+      qpat_x_assum `extend_storage_place _ _ _ _ _ _ = _` mp_tac >>
+      Cases_on `sub`
+      >- (rename1 `ValueSubscript v` >> Cases_on `v` >> Cases_on `tv` >>
+          simp[extend_storage_place_def, bind_def, ignore_bind_def,
+               lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+          rpt strip_tac >> gvs[return_def, raise_def, AllCaseEqs()] >>
+          pairarg_tac >> gvs[return_def, raise_def, AllCaseEqs()]) >>
+      Cases_on `tv` >>
+      simp[extend_storage_place_def, bind_def, ignore_bind_def,
+           lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[return_def, raise_def, AllCaseEqs()] >>
+          pairarg_tac >> gvs[return_def, raise_def, AllCaseEqs()]) >>
+  Cases_on `sb` >>
+  simp[extend_place_def, bind_def, lift_option_type_def, return_def,
+       raise_def, value_type_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem ifexp_base_place_memory_domain[local]:
+  !bt cx es id path ee.
+  eval_base_place cx bt es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+  ?entry. lookup_scopes id ee.scopes = SOME entry /\
+    (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg))
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
+  rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
+       assert_def, check_def, ignore_bind_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  >- (Cases_on `lookup_scopes id ee.scopes` >> gvs[evaluate_subscripts_def])
+  >- (PairCases_on `p` >>
+      gvs[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+          return_def, raise_def, get_immutables_def, AllCaseEqs()] >>
+      gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+          var_decl_info_CASE_rator, bind_def, return_def, raise_def, AllCaseEqs()] >>
+      gvs[bind_def, return_def, raise_def, AllCaseEqs()]) >>
+  drule ifexp_extend_memory_origin >> strip_tac >> gvs[] >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
+  simp[expr_size_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac
+  >- (drule read_result_state >> strip_tac >> gvs[] >>
+      drule_all ifexp_eval_expr_retained_domain >> strip_tac >>
+      drule_all ifexp_extend_memory_domain >> strip_tac >> gvs[] >>
+      metis_tac[]) >>
+  drule_all ifexp_extend_memory_domain >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ifexp_target_place_memory_domain[local]:
+  eval_target_place cx bt es = (INL (MemoryPlace id path),ee) ==>
+  ?entry. lookup_scopes id ee.scopes = SOME entry /\
+    (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg))
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  drule ifexp_base_place_memory_domain >> simp[]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
