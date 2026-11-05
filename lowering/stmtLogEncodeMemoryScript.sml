@@ -4,7 +4,8 @@ Ancestors
   stmtSimLogMembersRun stmtSimLogScalarMembers stmtSimLogEncodeLayout abiEncoderInput
   abiEncoderLeaves abiDecoderGuards abiDecoderLoop abiBuiltinPrefix
   abiEncoderChildPrefix abiEncoderCounters abiDecoderReentryAddress abiDecoderReentry
-  abiEncoderMemberCode abiEncoder
+  abiEncoderMemberCode abiEncoder abiEncoderComplexCode abiBuiltinAllocation
+  stmtSimLogScalarPrefix context stmtSimLogAllocResource venomMemDefs
   valueEncodingProofs abiEncoderBytes abiDecoderDynamicLoopSetup
   abiEncoderWindowBytesMem fragExecMem contractABI words arithmetic
   abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv list rich_list
@@ -310,3 +311,60 @@ Resume log_members_list_mem_ok[nil]:
   simp[emitted_insts_def, run_inst_seq_mem_ok_def]
 QED
 Finalise log_members_list_mem_ok
+
+Theorem log_scalar_cursor_frontier:
+  ((FLOOKUP initial.vs_allocas site = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas site = SOME (p,32)) /\
+  (FLOOKUP initial.vs_allocas site <> NONE ==> p+32 <= initial.vs_alloca_next) ==>
+  initial.vs_alloca_next <= (abi_builtin_allocate_state site 32 initial).vs_alloca_next /\
+  p+32 <= (abi_builtin_allocate_state site 32 initial).vs_alloca_next
+Proof
+  strip_tac >> gvs[abi_builtin_allocate_state_def]
+QED
+
+Theorem log_scalar_cursor_prefix_mem_ok:
+  abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32)) /\
+  p < dimword (:256) /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  (FLOOKUP initial.vs_allocas st.cs_next_id <> NONE ==> p+32 <= initial.vs_alloca_next) ==>
+  run_inst_seq_mem_ok (emitted_insts st st') initial
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_encode_complex_prefix _ _ = _` mp_tac >>
+  simp[abi_encode_complex_prefix_def, compile_alloc_buffer_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
+    fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, Once run_inst_seq_mem_ok_cons] >>
+  (conj_tac >- (irule below_frontier_no_ranges >> simp[mk_inst_def])) >>
+  simp[step_alloca_eq, run_inst_seq_mem_ok_last, below_frontier_MSTORE,
+    eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[w2n_n2w, dimword_def] >> decide_tac
+QED
+
+(* The Log caller keeps statement state through source stores and output
+   allocation; its cursor ALLOCA is an instruction of the same function. *)
+Theorem log_scalar_cursor_stmt_resources:
+  stmt_state_rel ctx func ce cx es initial /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_operands = [Lit (n2w 32)] ==>
+  ?p. ((FLOOKUP initial.vs_allocas inst.inst_id = NONE /\ p = initial.vs_alloca_next) \/
+       FLOOKUP initial.vs_allocas inst.inst_id = SOME (p,32)) /\
+    p < dimword (:256) /\
+    (FLOOKUP initial.vs_allocas inst.inst_id <> NONE ==> p+32 <= initial.vs_alloca_next) /\
+    (abi_builtin_allocate_state inst.inst_id 32 initial).vs_alloca_next < dimword (:256)
+Proof
+  strip_tac >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  drule_all log_event_buffer_resource >> strip_tac >>
+  `alloca_next_valid initial /\ alloca_room ctx func initial` by
+    fs[stmt_state_rel_def, alloca_inv_def] >>
+  `initial.vs_alloca_next < dimword (:256)` by
+    (drule alloca_room_next_lt >> simp[]) >>
+  qexists_tac `p` >>
+  gvs[abi_builtin_allocate_state_def, alloca_next_valid_def] >>
+  metis_tac[DECIDE ``p+32 < n ==> p < n``]
+QED
