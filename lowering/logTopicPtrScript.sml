@@ -4,7 +4,7 @@ Ancestors
   logInstSeqPtr logValueFramePtr bodyPtrDefs codegenRel ptrCoverage ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState
   contextCodegenRelProps contextCodegenRel memLocDefs finite_map words
-  exprSimHash emitHelperProps emitHelper compileEnv context fragExec arithmetic exprLoweringProps logAbiPrefixPtr list
+  exprSimHash emitHelperProps emitHelper compileEnv context fragExec arithmetic exprLoweringProps logAbiPrefixPtr list rich_list fragGasSeqPtr fragGasPathPtr
 
 Theorem ptr_inst_ok_sha3_clean:
   ptr_covers G tn src s (w2n n) /\
@@ -199,3 +199,51 @@ Resume compile_encode_log_topic_bytes_seq_ptr[frame]:
   gvs[Abbr `u`, Abbr `w`, eval_operand_def, lookup_var_def] >> metis_tac[]
 QED
 Finalise compile_encode_log_topic_bytes_seq_ptr
+
+Theorem compile_encode_log_topic_bytes_path_ptr:
+  compile_encode_log_topic (Var src) T sa = (out,sb) /\
+  not_fresh_at sa src /\ ptr_covers G tn src s (32 + LENGTH bs) /\
+  lookup_var src s = SOME a /\ mload (w2n a) s = n2w (LENGTH bs) /\
+  mem_bytes_at (w2n a + 32) (LENGTH bs) s.vs_memory = bs /\
+  w2n a + 32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+  (!i. w2n a <= i /\ i < w2n a + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    eval_operand out sf = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    op_taint tnf out = {} /\ sf.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  drule_all compile_encode_log_topic_bytes_seq_ptr >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`]
+    (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `t` strip_assume_tac)))) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (qpat_x_assum `compile_encode_log_topic _ _ _ = _` mp_tac >>
+     simp[compile_encode_log_topic_def, emit_op_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`Gf`, `tnf`, `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`] >>
+  conj_tac >- (drule_all run_inst_seq_gas_path_ptr >> simp[]) >>
+  gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem compile_encode_log_topic_word_path_ptr:
+  compile_encode_log_topic x F sa = (out,sb) /\ ~s.vs_halted /\
+  eval_operand x s = SOME w /\ op_taint tn x = {} ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK s) /\
+  eval_operand out s = SOME w /\ op_taint tn out = {} /\ sb = sa
+Proof
+  simp[compile_encode_log_topic_def, comp_return_def] >> strip_tac >>
+  gvs[] >> irule (cj 1 gas_path_ptr_rules) >> simp[]
+QED
