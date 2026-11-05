@@ -281,3 +281,110 @@ corollaries expose the additional post/pre key-address equality explicitly;
 this is not inferred from nonaliasing. These facts do not establish key origin
 in a solver lattice, normalized evaluation agreement, or persistence across
 an instruction's output assignment. Those remain integration obligations.
+
+## Solver/key-shape lifting audit (C1.K.2.b.8.2)
+
+### Exact API and reusable invariant contract
+
+Source paths below are relative to `venom/`.
+
+| Stage | Source and actual call/result | Shape obligation/provider |
+|---|---|---|
+| Load entry | `passes/load_elim/defs/loadElimDefsScript.sml:283-289`: `load_analyze ctx fn = df_analyze Forward NONE load_join load_transfer load_edge_transfer ctx (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn)) fn` | Both NONE and SOME FEMPTY satisfy `le_keys_satisfy`, by `le_keys_satisfy_empty`. |
+| Initial state | `analysis/dataflow/defs/dfAnalyzeDefsScript.sml:181-186,215-225`: `init_df_state bottom lbls` has empty ds_inst and all listed boundaries bottom; optional entry overwrites one boundary | Empty/default maps and optional empty entry satisfy shape; convergence invariant for the actual override is `le_solver_entry_init`. |
+| Join input | Same file:144-160: `df_joined_val dir bottom join edge_transfer ctx entry cfg st lbl` folds neighbor boundary values from bottom and optionally joins entry value | Requires **bilateral** closure `P a /\ P b ==> P (load_join a b)`, provided by `le_keys_satisfy_join`. Identity edge is `load_edge_transfer ctx src dst ll = ll` (load defs:274-277). |
+| Block process | Dataflow defs:162-177: `df_process_block dir bottom join transfer edge ctx entry cfg bbs lbl st` folds instructions and joins old boundary with final value; it changes only ds_boundary | Transfer shape is `le_absolute_keys_transfer`, for every instruction, under configured context and empty BP queries. Old boundary also needs shape; do not identify it with fresh exit. |
+| Worklist | Dataflow defs:229-241: `SND (wl_iterate changed process deps wl0 st0')`, with `changed lbl old new = (df_boundary bottom new lbl <> df_boundary bottom old lbl)`, Forward deps = cfg_succs_of cfg, wl0 = cfg_dfs_pre | Finite-step preservation alone does not justify WHILE result. Termination is already owned/proved by C1.S.2, not a new K obligation. |
+| Population | Dataflow defs:192-205: `df_populate_inst dir bottom join transfer edge ctx entry cfg bbs lbls st` uses the **fixed** input st for joined boundaries and FUNIONs each fold's inst_map into ds_inst | Requires bilateral join, transfer, edge and boundary shape; prefix fold stores pre-instruction values plus exit. Wrapper below already covers population and default indices. |
+| Query | Dataflow defs:63-68,83-88: `df_at bottom st lbl idx` and `df_boundary bottom st lbl` default to bottom on absent map lookup | Shape therefore holds even at arbitrary/nonexistent indices if established by the full invariant wrapper; no bounded-index premise needed. |
+
+`analysis/dataflow/dfAnalyzePropsScript.sml:141-169` is NOT directly usable:
+its join premise is `!a b. P a ==> P (join a b)`. With P =
+`le_keys_satisfy (le_absolute_key space)` and a = NONE, load_join returns
+arbitrary b, so unilateral closure is false. Boundary/process/restricted
+variants at 280-371 retain that same problem.
+
+The exact reusable replacement already exists in this task:
+`passes/load_elim/proofs/loadElimBilateralInvariantScript.sml:121-144`,
+`le_df_analyze_invariant_bilateral`. Argument order is
+`dir bottom join transfer edge ctx entry fn P leq m b Q`. Its premises are:
+
+* `P bottom`; optional entry value satisfies P;
+* `!a b. P a /\ P b ==> P (join a b)`;
+* `!inst a. P a ==> P (transfer ctx inst a)`;
+* `!src dst a. P a ==> P (edge ctx src dst a)`;
+* `!lbl st. Q st ==> leq st (df_process_block dir bottom join transfer edge ctx entry (cfg_analyze fn) fn.fn_blocks lbl st)`;
+* the same process preserves Q;
+* Q holds at init_df_state with the actual optional entry override;
+* `bounded_measure Q leq m b`.
+
+Conclusions are simultaneously `!lbl idx. P (df_at bottom
+(df_analyze dir bottom join transfer edge ctx entry fn) lbl idx)` and
+`!lbl. P (df_boundary bottom (df_analyze dir bottom join transfer edge ctx
+entry fn) lbl)`. Its implementation already packages combined worklist
+invariance, empty ds_inst before population, bilateral boundary preservation
+and `populate_inst_P`. Do not duplicate this machinery or rely on generic
+[local] lemmas. The exported generic bilateral boundary-only theorem is in
+`analysis/dataflow/proofs/dfAnalyzeProofsScript.sml:2188-2213`; no new generic
+wrapper is missing.
+
+### Convergence witnesses and intended next statement (not proved here)
+
+Use exactly the convergence witnesses used by
+`loadElimNonemptyScript.sml:36-63`, replacing only its element predicate:
+Q = `le_solver_inv (set (fn_labels fn)) (le_generated_keys ctx (fn_insts fn))
+(le_generated_operands (fn_insts fn))`, leq = `le_solver_leq`,
+m = `le_solver_rank (set (fn_labels fn)) (le_generated_keys ctx (fn_insts fn))
+(le_generated_operands (fn_insts fn))`, and
+b = `CARD (set (fn_labels fn)) * (1 + CARD (le_generated_keys ctx (fn_insts fn)) *
+(CARD (le_generated_operands (fn_insts fn)) + 1))`.
+`loadElimSolverHelpersScript.sml:210-260` supplies process closure,
+inflationarity and bounded measure; `loadElimConvergenceScript.sml:7-28`
+supplies optional-entry initialization. C1.S.2.c.2's
+`le_load_analyze_fixpoint` (same file:41-67) proves stable equations under
+wf_function. It is not by itself a no-invented-keys theorem.
+
+Concrete next lifting statement, suitable for a separate authorized proof:
+
+```sml
+wf_function fn /\ le_configured_context ctx /\
+(!v. bp_get_ptrs ctx.lctx_bp v = []) ==>
+(!lbl idx. le_keys_satisfy (le_absolute_key ctx.lctx_addr_space)
+  (df_at NONE (load_analyze ctx fn) lbl idx)) /\
+(!lbl. le_keys_satisfy (le_absolute_key ctx.lctx_addr_space)
+  (df_boundary NONE (load_analyze ctx fn) lbl))
+```
+
+All element premises have providers in loadElimKeyShapeInvariant:
+empty/entry, bilateral join and unrestricted-instruction transfer. The
+unrestricted closure is valid here, unlike generated-support closure:
+configured load/store guards enforce shape regardless of instruction membership.
+It must NOT be derived from membership in le_generated_keys (an overapproximation).
+Imports needed for the future instantiation include loadElimBilateralInvariant,
+loadElimConvergence and loadElimSolverHelpers. No additional convergence proof
+or solver iteration induction is warranted.
+
+For bounded prefixes, existing `le_analyze_prefix_fold` in
+`loadElimSolverProvenanceScript.sml:92-113` gives the exact fold at
+`df_at NONE (load_analyze ctx fn) lbl n` over `TAKE n bb.bb_instructions`,
+assuming wf_function, reached label, lookup_block = SOME bb, n <= LENGTH,
+and the explicit process fixpoint (dischargeable by le_load_analyze_fixpoint).
+Its shape preservation is already `le_absolute_keys_fold`. This is an
+alternative bounded consumer, not a replacement for arbitrary-index population.
+
+### Consumer contract and outstanding semantic gaps
+
+| Consumer | Available static/local fact | Required dynamic conclusion and owner |
+|---|---|---|
+| Singleton eliminated load | `le_analyze_singleton_origin` gives entry retention or last generating instruction with preserved static lookup; future lifting gives absolute-key shape | C1.P.3 must select the actual producing read/store event, establish defined read and value there, and transport both key address and singleton value to the consumer despite loop/PHI redefinitions. Shape does not imply this. |
+| Redundant store with normalized alternatives | Retained-store content lemmas in loadElimRetainedRead preserve a fixed read under negative alias; `*_key_read` requires explicit address equality | C1.P.3 must prove selected read equals the current compared store value; C1.P.5 must establish le_chain_valid for every normalization. Equality of normalized syntax alone is not evaluation agreement. |
+| Generated PHI | `le_analyze_selected_predecessor`/`le_analyze_selected_exit` expose containment in concrete predecessor/exit maps; `le_analyze_multivalue_origin` preserves the static list through the prefix | C1.P.4 must evaluate the chosen incoming operand in the predecessor **pre-PHI snapshot**, prove find_join_block placement, then persistence of fresh output/read to eliminated load. C1.P.3 supplies selected read validity; no simultaneous truth of all alternatives. |
+| Computed read/write address | le_empty_read_key_address and le_empty_write_key_address require equal defined source/normalized evaluations; dload uses le_dload_key_address | C1.P.5 must supply exact le_chain_valid_eval antecedent at reached rebuilt-DFG use. C1.P.3/P.4 must preserve LK_Op evaluation over the relevant intervals (and labels for Label operands). Absolute LK_Loc address independence is already local. |
+| Later rounds | No-ALLOCA preservation permits new empty-BP-query analyses | C1.P.5 and round simulation still owe reached normalization and original/transformed history compatibility. Never transfer original universal step preservation to transformed DFGs. |
+
+These P.3/P.4/P.5 conclusions remain unproved gaps in integration, not new
+assumptions of the frozen theorem. The key-shape lifting itself has no such
+dynamic premises and can be separated from them by strategy review.
+
+Validation for this diagnostic: loadElimKeyShapeInvariantTheory builds at the
+default tactic timeout (2026-11-05). No final-theorem or frozen-definition edits.
