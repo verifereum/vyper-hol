@@ -2,7 +2,7 @@ Theory o1MakeSsaFormats
 Ancestors
   o1MakeSsaFrontier o1MakeSsaCfg makeSsaCurrentDefs unitShapeDefs
   venomInst stackPlanTypes list o1ContractSueStep simplifyCfgStruct
-  cfgNormSupplySim venomWf fmpStepChunk fmpStepList
+  cfgNormSupplySim venomWf fmpStepChunk fmpStepList o1PassContract
 
 Theorem rename_current_operands_length:
   !ops. LENGTH (rename_current_operands rs ops) = LENGTH ops
@@ -619,4 +619,187 @@ Proof
   irule simplify_current_phis_if_wf >>
   drule (CONJUNCT1 rename_current_blocks_wf) >> disch_then irule >>
   drule add_phi_nodes_supply_wf >> disch_then irule >> simp[]
+QED
+
+Theorem update_current_succ_phis_opcodes:
+  !succs bbs. EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode)
+    bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode)
+    bb.bb_instructions) (update_current_succ_phis rs lbl bbs succs)
+Proof
+  Induct >> gvs[update_current_succ_phis_def] >> rpt strip_tac >>
+  first_x_assum irule >> Cases_on `lookup_block h bbs` >> simp[] >>
+  irule EVERY_replace_block >> simp[] >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  gvs[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem rename_current_blocks_opcodes:
+  (!t s rs bbs sm ctrs s' bbs'.
+    rename_current_blocks s rs bbs sm t = (ctrs,s',bbs') /\
+    EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs ==>
+    EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs') /\
+  (!ts s ctrs stacks bbs sm ctrs' s' bbs'.
+    rename_current_children s ctrs stacks bbs sm ts = (ctrs',s',bbs') /\
+    EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs ==>
+    EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs')
+Proof
+  ho_match_mp_tac makeSsaCurrentInductTheory.current_dom_tree_induction >>
+  rpt conj_tac
+  >- (rpt strip_tac >> gvs[rename_current_blocks_def, AllCaseEqs()] >>
+      pairarg_tac >> gvs[] >> first_x_assum drule >> disch_then irule >>
+      irule update_current_succ_phis_opcodes >>
+      irule EVERY_replace_block >> simp[] >>
+      drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+      drule rename_current_block_insts_opcodes >> strip_tac >>
+      `EVERY (P bb.bb_label) (MAP (\i. i.inst_opcode) bb.bb_instructions)`
+        by (gvs[EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+      `EVERY (P bb.bb_label) (MAP (\i. i.inst_opcode) insts')`
+        by gvs[] >>
+      gvs[EVERY_MAP])
+  >- simp[rename_current_blocks_def] >>
+  rpt strip_tac >> gvs[rename_current_blocks_def] >> pairarg_tac >> gvs[] >>
+  first_x_assum drule >> disch_then irule >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem simplify_current_phi_opcode_cases:
+  (simplify_current_phi inst).inst_opcode = inst.inst_opcode \/
+  (inst.inst_opcode = PHI /\
+    MEM (simplify_current_phi inst).inst_opcode [ASSIGN; NOP])
+Proof
+  Cases_on `inst.inst_opcode = PHI`
+  >- (drule simplify_current_phi_classification >> simp[] >> metis_tac[]) >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  IF_CASES_TAC >> simp[simplify_current_phi_raw_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_opcodes:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    EVERY (\i. P i.inst_opcode) insts /\
+    (P PHI ==> P ASSIGN /\ P NOP) ==>
+    EVERY (\i. P i.inst_opcode) phis /\ EVERY (\i. P i.inst_opcode) ordinary
+Proof
+  Induct >> simp[simplify_current_phi_prefix_parts_def] >> rpt gen_tac >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  gvs[] >> pairarg_tac >> gvs[] >>
+  IF_CASES_TAC >> strip_tac >> gvs[] >>
+  metis_tac[simplify_current_phi_opcode_cases, MEM]
+QED
+
+Theorem simplify_current_phi_prefix_opcodes:
+  EVERY (\i. P i.inst_opcode) insts /\ (P PHI ==> P ASSIGN /\ P NOP) ==>
+  EVERY (\i. P i.inst_opcode) (simplify_current_phi_prefix insts)
+Proof
+  strip_tac >> simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  drule_all simplify_current_phi_prefix_parts_opcodes >> strip_tac >>
+  `EVERY P (MAP (\i. i.inst_opcode) (phis ++ ordinary))`
+    by simp[EVERY_MAP] >>
+  `EVERY P (MAP (\i. i.inst_opcode)
+    (reassign_current_inst_ids (MAP (\i. i.inst_id) insts) (phis ++ ordinary)))`
+    by (pure_rewrite_tac[reassign_current_inst_ids_opcodes] >> simp[EVERY_MAP]) >>
+  gvs[EVERY_MAP]
+QED
+
+Theorem simplify_current_phi_block_opcodes:
+  EVERY (\i. P i.inst_opcode) bb.bb_instructions /\
+  (P PHI ==> P ASSIGN /\ P NOP) ==>
+  EVERY (\i. P i.inst_opcode) (simplify_current_phi_block bb).bb_instructions
+Proof
+  Cases_on `bb.bb_instructions` >> simp[simplify_current_phi_block_def] >>
+  IF_CASES_TAC >> simp[simplify_current_phi_prefix_opcodes]
+QED
+
+Theorem simplify_current_phis_if_opcodes:
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs /\
+  (!lbl. P lbl PHI ==> P lbl ASSIGN /\ P lbl NOP) ==>
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions)
+    (simplify_current_phis_if enabled bbs)
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def] >>
+  Cases_on `blocks_have_leading_phi bbs` >> simp[simplify_current_phis_def] >>
+  simp[EVERY_MAP] >> strip_tac >>
+  simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+  qspecl_then [`P x.bb_label`, `x`] mp_tac
+    (Q.GENL [`P`, `bb`] simplify_current_phi_block_opcodes) >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem add_phi_nodes_supply_opcodes:
+  add_phi_nodes_supply s df pm li bbs defs = (bbs',s') /\
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs /\
+  (!d fs f. ALOOKUP df d = SOME fs /\ MEM f fs ==> P f PHI) ==>
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) bbs'
+Proof
+  strip_tac >> drule add_phi_nodes_supply_invariant >>
+  disch_then irule >> simp[] >> rpt strip_tac >> IF_CASES_TAC >>
+  gvs[makeSsaDefsTheory.insert_phi_at_block_def, build_phi_inst_supply_def] >>
+  metis_tac[]
+QED
+
+Theorem make_ssa_current_fn_opcodes:
+  make_ssa_current_fn s fn = (fn',s') /\
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) fn.fn_blocks /\
+  (!d fs f. ALOOKUP (current_frontier_map fn) d = SOME fs /\ MEM f fs ==> P f PHI) /\
+  (!lbl. P lbl PHI ==> P lbl ASSIGN /\ P lbl NOP) ==>
+  EVERY (\bb. EVERY (\i. P bb.bb_label i.inst_opcode) bb.bb_instructions) fn'.fn_blocks
+Proof
+  Cases_on `fn_entry_label fn`
+  >- (simp[make_ssa_current_fn_def] >> strip_tac >> gvs[]) >>
+  simp[make_ssa_current_fn_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  irule simplify_current_phis_if_opcodes >> simp[] >>
+  drule (CONJUNCT1 rename_current_blocks_opcodes) >> disch_then irule >>
+  drule add_phi_nodes_supply_opcodes >> disch_then irule >>
+  gvs[current_frontier_map_def] >> metis_tac[]
+QED
+
+Theorem make_ssa_current_fn_entry_no_phi:
+  make_ssa_current_fn s fn = (fn',s') /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  fn_entry_label fn = SOME entry ==>
+  EVERY (\bb. EVERY (\i. bb.bb_label = entry ==> i.inst_opcode <> PHI)
+    bb.bb_instructions) fn'.fn_blocks
+Proof
+  strip_tac >>
+  drule make_ssa_current_fn_opcodes >>
+  disch_then (qspec_then `\lbl op. lbl = entry ==> op <> PHI` mp_tac) >>
+  simp[] >> disch_then irule >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM d (fn_labels fn)` by metis_tac[current_frontier_key] >>
+      drule_all current_frontier_not_entry >> simp[]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def] >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
+  gvs[fn_labels_def, EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem make_ssa_current_fn_first_block_no_phi:
+  make_ssa_current_fn s fn = (fn',s') /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn ==>
+  first_block_no_phi fn'
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- (gvs[make_ssa_current_fn_def]) >>
+  drule_all make_ssa_current_fn_entry_no_phi >> strip_tac >>
+  drule make_ssa_current_fn_entry_label >> strip_tac >>
+  Cases_on `fn'.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def]
+QED
+
+Theorem make_ssa_current_fn_opcode_provenance:
+  make_ssa_current_fn s fn = (fn',s') ==>
+  EVERY (\bb. EVERY (\i. MEM i.inst_opcode [PHI; ASSIGN; NOP] \/
+    ?old inst. MEM old fn.fn_blocks /\ MEM inst old.bb_instructions /\
+      old.bb_label = bb.bb_label /\ inst.inst_opcode = i.inst_opcode)
+    bb.bb_instructions) fn'.fn_blocks
+Proof
+  strip_tac >> drule make_ssa_current_fn_opcodes >>
+  disch_then (qspec_then `\lbl op. MEM op [PHI; ASSIGN; NOP] \/
+    ?old inst. MEM old fn.fn_blocks /\ MEM inst old.bb_instructions /\
+      old.bb_label = lbl /\ inst.inst_opcode = op` mp_tac) >>
+  simp[] >> disch_then irule >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
