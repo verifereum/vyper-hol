@@ -487,6 +487,15 @@ Proof
      gvs[MEM] >> simp[step_inst_non_invoke] >>
      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
      simp[AllCaseEqs()] >> metis_tac[]) >>
+  `~s.vs_call_ctx.cc_static` by
+    (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     gvs[MEM] >> simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[eval_operands_def] >>
+     Cases_on `s.vs_call_ctx.cc_static` >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
+  `~t.vs_call_ctx.cc_static` by metis_tac[] >>
   `(!op. MEM op (vop::szop::rest) ==> eval_operand op s = eval_operand op t) /\
    ?off'. eval_operand offop t = SOME off' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t` by
@@ -752,6 +761,13 @@ Proof
      gvs[MEM] >> simp[step_inst_non_invoke] >>
      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
      simp[AllCaseEqs()] >> metis_tac[]) >>
+  `inst.inst_opcode = CALL ==> ~(s.vs_call_ctx.cc_static /\ value <> 0w)` by
+    (strip_tac >>
+     qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     gvs[MEM] >> simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[eval_operands_def] >>
+     Cases_on `s.vs_call_ctx.cc_static /\ value <> 0w` >> gvs[]) >>
   `(!op. MEM op (prefix ++ [szop;rsop]) ==> eval_operand op s = eval_operand op t) /\
    ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
@@ -905,7 +921,7 @@ Proof
      gvs[MEM, Excl "consume_call_outcome_eq"] >> simp[step_inst_non_invoke] >>
      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
      simp[AllCaseEqs()] >> rpt strip_tac >>
-     gvs[out_taint_def, written_taint_def]) >>
+     simp[out_taint_def, written_taint_def, Excl "consume_call_outcome_eq"]) >>
   `ld_env_agree sites fn (occurrence_step a HP H inst s1)
      (step_taint inst s s1 tn) s1 target` by suspend "environment" >>
   `ld_joint_geometry sites X lo (a::MAP (\x. x.of_owner) U)` by

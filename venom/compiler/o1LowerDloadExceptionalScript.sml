@@ -2,6 +2,7 @@
 Theory o1LowerDloadExceptional
 Ancestors
   o1LowerDloadJointRangeCopy o1LowerDloadJointExternal
+  o1LowerDloadJointInternalEffects
   o1LowerDloadJointScalar o1LowerDloadJointRelation
   venomExecSemantics venomExecProps venomInst memLocDefs
   ptrDiscipline o1PassContract o1LowerDloadOpaque unitShapeDefs list finite_map
@@ -64,6 +65,16 @@ Proof
       (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))` by
     (rpt strip_tac >> drule ld_joint_operand_defined >> disch_then irule >>
      metis_tac[ld_active_operand_ir_var]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
+  `IS_SOME (eval_operands inst.inst_operands s) <=>
+   IS_SOME (eval_operands inst.inst_operands t)` by
+    (simp[ld_eval_operands_defined, EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)`
+  >- (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+      gvs[MEM] >> simp[step_inst_non_invoke] >>
+      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+      gvs[] >> metis_tac[]) >>
   qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
   gvs[MEM] >> (
   simp[step_inst_non_invoke] >>

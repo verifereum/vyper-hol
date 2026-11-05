@@ -68,7 +68,9 @@ Proof
   >- (irule ld_joint_shift_next >> simp[]) >>
   Cases_on `MEM inst.inst_opcode [SIGNEXTEND; BYTE; OFFSET; INITIAL_FMP]`
   >- (irule ld_joint_residual_scalar_next >> simp[]) >>
-  Cases_on `MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE;
+  Cases_on `inst.inst_opcode = GAS`
+  >- (irule ld_joint_gas_next >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE;
     CHAINID; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
     BLOBBASEFEE; CALLDATASIZE; CODESIZE; RETURNDATASIZE; SELFBALANCE]`
   >- (irule ld_joint_read0_next >> simp[]) >>

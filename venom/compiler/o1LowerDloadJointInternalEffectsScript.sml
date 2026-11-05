@@ -300,6 +300,16 @@ Proof
   gvs[ld_joint_boundary_def] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+Theorem ld_eval_operands_defined:
+  !ops s. IS_SOME (eval_operands ops s) <=>
+    EVERY (\op. IS_SOME (eval_operand op s)) ops
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `s` assume_tac) >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operands ops s` >> gvs[]
+QED
+
 Theorem ld_joint_log_step[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -320,21 +330,30 @@ Proof
   `rest = REVERSE (p::szop::tops)` by metis_tac[REVERSE_REVERSE] >>
   `LENGTH tops = w2n tc` by
     (qpat_x_assum `LENGTH rest = _` mp_tac >> simp[]) >>
+  `EVERY (\op. IS_SOME (eval_operand op s)) tops` by
+    (qpat_assum `eval_operands tops s = SOME topics` mp_tac >>
+     simp[GSYM ld_eval_operands_defined]) >>
+  `IS_SOME (eval_operands inst.inst_operands s)` by
+    simp[ld_eval_operands_defined, eval_operand_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    (Cases_on `eval_operands inst.inst_operands s` >> fs[] >> gvs[]) >>
+  gvs[] >>
   `?y. eval_operand p t = SOME y /\ eval_operand szop t = SOME sz /\
     eval_operands tops t = SOME topics /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n y) (w2n sz) t` by
-    (irule ld_joint_log_read >> metis_tac[]) >>
+    (irule ld_joint_log_read >> simp[] >> metis_tac[]) >>
   `s.vs_call_ctx = t.vs_call_ctx /\
    ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
    ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
+  `~t.vs_call_ctx.cc_static` by metis_tac[] >>
   qexists_tac `t with vs_logs := t.vs_logs ++
     [<|logger := t.vs_call_ctx.cc_address; topics := topics;
        data := read_memory (w2n y) (w2n sz) t|>]` >>
   simp[GSYM read_memory_def] >>
   `new_site_bytes s s = {}` by
     (simp[new_site_bytes_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
-  conj_tac
+  (conj_tac
   >- (gvs[mem_taint_def, step_writes_def, source_memory_write_ranges_def,
          new_site_bytes_def, written_taint_def, range_bytes_def, FLOOKUP_DEF] >>
       Cases_on `REVERSE tops ++ [szop;p]` >> gvs[] >>
@@ -342,7 +361,7 @@ Proof
       Cases_on `tt` >> gvs[] >> rename1 `_ = hh::hh2::tt2` >>
       Cases_on `tt2` >> gvs[]) >>
   gvs[ld_shared_agree_def, step_taint_def, store_taint_def,
-      imm_taint_def, adopt_reset_def]
+      imm_taint_def, adopt_reset_def])
 QED
 
 Theorem ld_joint_internal_effect_next:

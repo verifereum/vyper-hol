@@ -148,7 +148,7 @@ Proof
    `?w. eval_operand kop t = SOME key /\ eval_operand vop t = SOME w /\
      word_agree_except (op_taint tn vop) v w` by
      (irule ld_joint_store_operands >> simp[] >> metis_tac[]) >>
-   simp[] >>
+   gvs[eval_operands_def] >> simp[eval_operands_def] >>
    simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
    `ld_shared_agree D s.vs_call_ctx.cc_address
       (tn with t_stor := key_update tn.t_stor key (op_taint tn vop))

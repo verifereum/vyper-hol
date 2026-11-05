@@ -197,7 +197,7 @@ Proof
   simp[AllCaseEqs()] >> strip_tac >> fs[] >>
   rename1 `inst.inst_operands = [addr_op]` >>
   `eval_operand addr_op s = eval_operand addr_op t` by simp[] >>
-  gvs[] >> simp[step_inst_non_invoke] >>
+  gvs[eval_operands_def, AllCaseEqs()] >> simp[step_inst_non_invoke] >>
   asm_simp_tac (srw_ss()) [step_inst_base_def] >> simp[] >>
   gvs[halt_state_def, set_returndata_def, step_taint_def, store_taint_def,
       adopt_reset_def, imm_taint_def, lookup_account_def] >>
