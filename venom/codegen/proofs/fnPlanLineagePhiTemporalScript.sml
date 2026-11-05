@@ -1245,3 +1245,27 @@ Proof
   Cases_on `phi_schedule_run steps qs` >> gvs[] >>
   rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem phi_origin_classes_filter_projection:
+  !class_of cells live.
+    phi_origin_classes class_of cells /\
+    (!op k. class_of op = SOME k ==> ~live op) ==>
+    FILTER live (MAP (phi_cell_value T) cells) =
+    FILTER live (MAP (phi_cell_value F) cells)
+Proof
+  gen_tac >> Induct >> simp[phi_origin_classes_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[phi_cell_value_def] >> metis_tac[]
+QED
+
+Theorem phi_origin_classes_mark_projection:
+  !class_of cells live.
+    phi_origin_classes class_of cells /\
+    (!op k. class_of op = SOME k ==> ~live op) ==>
+    MAP (\op. if live op then op else dead_stack_marker) (MAP (phi_cell_value T) cells) =
+    MAP (\op. if live op then op else dead_stack_marker) (MAP (phi_cell_value F) cells)
+Proof
+  gen_tac >> Induct >> simp[phi_origin_classes_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[phi_cell_value_def] >> metis_tac[]
+QED
