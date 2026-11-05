@@ -8,7 +8,7 @@ Ancestors
   valueTypingMemoryProps vyperTyping valueEncoding compileEnv
   entryReachBodyExactArrayLoop abiDecoderLoopRegisters abiDecoderExecution abiDecoderContract
   calldataRecursiveProducers abiDecoderDynamicLoopSetup abiEncoderRegisteredEffect
-  fragExec exprLoweringProps calldataDynOwned
+  fragExec exprLoweringProps calldataDynOwned abiDecoderCounters abiDecoderLoopCode
   entryReachBodyOwnedLoop entryReachBodyOwnedRegion entryReachBodyActualOwnedLoop
   entryReachBodyIndexedLoopInput abiDecoderArrayBackedge
   emitHelperProps valueEncodingProps venomExecSemantics venomState
@@ -386,9 +386,9 @@ Theorem nested_array_child_code_producer[local]:
     phi_prefix_length bb.bb_instructions = 0) /\
   middle.cs_next_var <= limit_st.cs_next_var /\ final.cs_next_var <= limit_st.cs_next_var /\
   FST ops = Var iv /\
-  (?bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb /\
-    bb.bb_instructions = final.cs_current_insts ++
-      abi_decode_backedge_insts final.cs_next_id iv nv ip hdr) ==>
+  lookup_block final.cs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = final.cs_current_insts ++
+    abi_decode_backedge_insts final.cs_next_id iv nv ip hdr ==>
   ?guard_st header_st loop_st iip cnt.
     nested_array_child_code sf ce ty inner ip src dst st ops middle final
       guard_st header_st loop_st iip cnt fn limit_st iv nv hdr /\
@@ -405,7 +405,7 @@ Proof
   `!ins. MEM ins (emitted_insts middle loop_st) ==> MEM ins (fn_insts fn)` by
     suspend "emitted" >>
   qexistsl_tac [`guard_st`,`header_st`,`loop_st`,`ip'`,`cnt`] >>
-  asm_rewrite_tac[nested_array_child_code_def]
+  asm_rewrite_tac[nested_array_child_code_def] >> qexists_tac `bb` >> simp[]
 QED
 Resume nested_array_child_code_producer[emitted]:
   qpat_x_assum `fn_has_code middle loop_st fn` mp_tac >>
@@ -580,3 +580,85 @@ Proof
   fs[entry_loop_prefix_def, nested_array_inv_def, Excl "enc_def"] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+(* Both depths are extracted from one actual outer compilation. *)
+Theorem nested_array_compiler_phases[local]:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecDynArray (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      (type_memory_bytes ce (ArrayT ty (Dynamic inner))) T outer) initial = ((),final) /\
+  type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)) =
+    DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T inner /\
+  fn_has_code initial final fn /\ final.cs_next_var <= limit_st.cs_next_var /\
+  abi_decoder_operand_live initial.cs_next_var src /\
+  abi_decoder_operand_live initial.cs_next_var dst /\
+  (!bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) ==>
+  ?ip cnt pguard pheader ploop labels st ops middle last
+    guard_st header_st loop_st iip icnt.
+    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) outer
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner))) initial =
+      ((ip,cnt),ploop) /\
+    abi_decode_index_init pheader = (ip,ploop) /\
+    abi_decode_loop_prefix ip src CALLDATALOAD ploop = (labels,st) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      (type_memory_bytes ce (ArrayT ty (Dynamic inner))) st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner))) middle = ((),last) /\
+    abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last = ((),final) /\
+    nested_array_child_code sf ce ty inner ip src dst st ops middle last
+      guard_st header_st loop_st iip icnt fn limit_st
+      (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString last.cs_next_var))
+      (FST labels) /\
+    pheader.cs_next_id < header_st.cs_next_id /\
+    st.cs_current_bb = FST (SND labels) /\ st.cs_current_insts = [] /\
+    final.cs_current_bb = SND (SND labels) /\ final.cs_current_insts = [] /\
+    abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) outer
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      initial = ((),pguard) /\
+    abi_decode_array_header dst src CALLDATALOAD pguard = (cnt,pheader)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all (calldata_nonbulk_parent_shell |> SPEC_ALL |>
+    Q.INST [`dyn` |-> `T`] |> SIMP_RULE bool_ss []) >> strip_tac >>
+  rename1 `compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
+    CALLDATALOAD (Lit 0w) _ middle = ((),last)` >>
+  qpat_assum `type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)) = _`
+    (fn th => qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _`
+      (assume_tac o REWRITE_RULE [th])) >>
+  `last.cs_current_insts = []` by
+    (drule (calldata_nonbulk_empty_exit |> SPEC_ALL |>
+      Q.INST [`dyn` |-> `T`] |> SIMP_RULE bool_ss []) >> simp[]) >>
+  `!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `abi_decode_loop_suffix _ _ _ _ last = _` mp_tac >>
+     qpat_assum `FST ops = _` (fn th => pure_rewrite_tac [th]) >>
+     disch_then (mp_then Any mp_tac calldata_loop_child_continuation_phi) >>
+     simp[abi_decode_backedge_insts_def, phi_prefix_length_def, venomInstTheory.mk_inst_def]) >>
+  `middle.cs_next_var <= limit_st.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var` by
+    suspend "bounds" >>
+  `?bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = last.cs_current_insts ++
+      abi_decode_backedge_insts last.cs_next_id (STRING #"%" (toString st0.cs_next_var))
+        (STRING #"%" (toString last.cs_next_var)) ip (FST labels)` by simp[] >>
+  drule_all nested_array_child_code_producer >> strip_tac >>
+  suspend "witnesses"
+QED
+Resume nested_array_compiler_phases[bounds]:
+  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _`
+    (mp_then Any strip_assume_tac abi_decoder_variable_counter) >>
+  qpat_assum `abi_decode_loop_suffix _ _ _ _ last = _` mp_tac >>
+  qpat_assum `FST ops = _` (fn th => pure_rewrite_tac [th]) >>
+  disch_then (mp_then Any strip_assume_tac
+    abiDecoderRecursiveLoopLayoutTheory.abi_decoder_loop_suffix_facts) >> decide_tac
+QED
+Resume nested_array_compiler_phases[witnesses]:
+  rename1 `nested_array_child_code _ _ _ _ _ _ _ _ _ _ _ iguard iheader iloop iip icnt _ _ _ _ _` >>
+  qexistsl_tac [`ip`,`cnt`,`guard_st`,`header_st`,`loop_st`,`labels`,`st0`,`ops`,
+    `middle`,`last`,`iguard`,`iheader`,`iloop`,`iip`,`icnt`] >>
+  asm_rewrite_tac [] >> decide_tac
+QED
+Finalise nested_array_compiler_phases
