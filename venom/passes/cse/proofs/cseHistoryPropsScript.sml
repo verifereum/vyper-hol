@@ -3246,3 +3246,39 @@ Proof
  qexistsl_tac [`bb`, `def_bb`] >> simp[] >>
  qpat_x_assum `def_bb = bb ==> _` mp_tac >> simp[]
 QED
+
+Theorem cse_prefix_assign_use_rewind_predecessors:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var y) use.inst_operands /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] /\ copy.inst_operands = [arg] ==>
+ ?pre post m cb u t value.
+   events = pre ++ [CseStep m cb copy u t] ++ post /\
+   cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+   get_instruction cb u.vs_inst_idx = SOME copy /\
+   eval_operand arg u = SOME value /\
+   eval_operand (Var y) s = SOME value /\
+   EVERY (\ev. ~cse_event_writes ev y) post /\
+   LENGTH pre < LENGTH events /\
+   (!d x. MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
+      cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id ==>
+      lookup_var x s = lookup_var x u /\
+      EVERY (\ev. ~cse_event_writes ev x) (CseStep m cb copy u t :: post))
+Proof
+ strip_tac >>
+ `cse_path_preorder fn copy.inst_id use.inst_id` by
+   metis_tac[cse_prefix_copy_use_order] >>
+ `copy.inst_id <> use.inst_id` by metis_tac[cse_prefix_copy_use_distinct] >>
+ drule_all cse_prefix_assign_use_rewind >> strip_tac >>
+ `!d x. MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
+    cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id ==>
+    lookup_var x s = lookup_var x u /\
+    EVERY (\ev. ~cse_event_writes ev x) (CseStep m cb copy u t :: post)` by
+   (rpt gen_tac >> strip_tac >> conj_tac
+    >- (drule_all cse_prefix_live_copy_predecessor_binding >> simp[]) >>
+    drule_all cse_prefix_live_copy_predecessor_nonwriting >> simp[]) >>
+ qexistsl_tac [`pre`, `post`, `m`, `cb`, `u`, `t`, `value`] >>
+ gvs[EVERY_DEF] >> first_assum ACCEPT_TAC
+QED
