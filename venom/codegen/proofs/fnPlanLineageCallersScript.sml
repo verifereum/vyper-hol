@@ -1,6 +1,7 @@
 Theory fnPlanLineageCallers
 Ancestors
   fnPlanLineageSetup fnPlanLineageDemand fnPlanLineagePath fnPlanLineageDemandSupport
+  fnPlanLineageLiveness
   livenessProofs cfgAnalysisProps venomWf stackPlanGen asmIR codegenReadyCompute
   passSharedDefs venomInst callLayoutDefs list rich_list
 
@@ -275,4 +276,23 @@ Theorem ready_entry_no_clean:
 Proof
   rpt strip_tac >> gvs[codegen_ready_fn_def, block_entries_ready_def] >>
   Cases_on `fn.fn_blocks` >> gvs[entry_block_def, NULL_EQ]
+QED
+
+Theorem analyzed_terminal_jmp_target_coverage:
+  !fn pred succ bb sb inst ps targets.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME bb /\
+    lookup_block succ fn.fn_blocks = SOME sb /\
+    bb.bb_instructions <> [] /\ LAST bb.bb_instructions = inst /\
+    inst.inst_opcode = JMP /\ inst.inst_operands = [Label succ] /\
+    join_target_ops (liveness_analyze fn) fn pred inst = SOME targets /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) pred
+                  (LENGTH bb.bb_instructions)) ==>
+         MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    !at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all analyzed_live_out_jmp >> strip_tac >>
+  gvs[join_target_ops_def, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
