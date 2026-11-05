@@ -844,3 +844,176 @@ witness premise. This does not by itself install a global invariant.
 Directly consulted run-owned suppliers and the syntax-only probe were rebuilt
 with holbuild (outputs m10853, m10865 and m10872). No scratch unproved theorem or specification
 macro was installed. Universal source-prefix extension is still unproved.
+
+## Installed-certificate induction contract review (C1.10.4)
+
+This section supersedes the specification macros at the start of this file.
+It is an architecture audit, NOT a HOL theorem or an authorization to migrate
+production definitions. Checked against PairedPrefix:10-25,98-120, PairedFields:
+11-119, StructuralTranscript:9-57 and OpaqueRetpc:7-105,231-250.
+
+### Exact proposed coverage conclusion using the installed predicate
+
+The following is the single candidate coverage contract, written with existing
+constants only. It is deliberately NOT asserted: the installed sample relation
+has the call/RETPC obstruction below. There is no hidden `Production` or
+`Transport` macro in this contract, and no extra source-success hypothesis.
+
+```sml
+!rpolicy C Ct vs lo eom ht at.
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom Ct = SOME eom /\ ptr_chrono_history vs Ct ht at ==>
+  ?R local_positions positions h a done tokens registry births PT TG saved
+    entries H calls W.
+    ptr_paired_prefix R local_positions positions lo vs C Ct
+      h a ht at done tokens registry births PT TG saved entries H calls W
+```
+
+Quantifier direction is essential: each target history is supplied; source
+history, placement and all historical annotations are constructed. Existential
+R/local_positions alone do not certify production lookup/metadata origin.
+`ptr_paired_code` fixes blocks, entry label and ALLOCA local/global lookup
+coherence, but its `R f g` is arbitrary. The eventual proof must choose R and
+local_positions from the actual stage decomposition, not assume arbitrary R
+has function-shape, output lookup or successful-layout properties.
+
+This contract is NOT yet a validated induction invariant. In particular, do not
+try to prove its step case with unchanged installed definitions: E0327 and the
+OpaqueRetpc probes invalidate the proposed equal-token setup interface locally.
+This is not a counterexample to the complete frozen theorem or even a complete
+production counterexample to the displayed coverage contract.
+
+### What the installed six conjuncts actually supply
+
+| Installed clause / checked projection | Supplies | Does NOT supply |
+|---|---|---|
+| structural_transcript / ptr_paired_prefix_transcript | actual source and target histories via erasure; SAME per-source-index H snapshots and endpoint ownership | new source transition success; transport at arbitrary unmatched source indices |
+| stage_placements / ptr_paired_prefix_placements | exact global metadata lookup table | local map coverage or actual successful pass witness on its own |
+| paired_samples / ptr_paired_prefix_samples | at E[j]=EL j (done++[LENGTH h-1]), unrestricted vars transport and shared fields | mixed opaque relation; agreement of memory reads; arbitrary-index transport |
+| paired_alignment / ptr_paired_prefix_alignment | paired code, NOP-gap cursor, params relation at those SAME samples | source instruction necessarily retained at current cursor; equal whole functions; target o1_fn_shape |
+| paired_callers / ptr_paired_prefix_callers | exact suspended frames refer back to paired INVOKE samples and saved (PT,TG), with equal stack lengths | already-bound equal ordinary returns or post-return mixed vars |
+| paired_writes / ptr_paired_prefix_writes | actual adjacent source/target write pairs, immediate postwrite masked byte equality, owner-relative rho, distinct departed target indices and coverage of nonempty ordinary SOURCE writes | target suffix exclusion; current read equality; completeness for target writes absent paired source classification |
+
+`ptr_ledger_write_pair` records equality at source n+1 and target j+1, not at
+E[j+1]. `ptr_paired_write_owner` uses H[n+1] birth/position lookups; this must be
+reconciled with prewrite operand evidence in H[n], not silently replaced by
+endpoint births. The fixed sentinel is a separate checked initial-origin fact,
+not an owned-initial-memory equality clause. Birth retention is not live demand.
+
+### Preservation obligations and acyclic dependency graph
+
+Base: derive actual root function pair and local map from stage, source entry
+success from target entry, and initial params/sample/caller/empty-write facts.
+Production ALLOCA coverage checked in C1.10.1 excludes missing-map deletions;
+combine that fact with the existing deleted-NOP boundary. It does not construct
+source entry, sample transport or source NOP execution by itself.
+
+Gap: PairedPrefix's checked gap theorem requires the actual tagged NOP step,
+new sample, code/cursor/params facts and saved/stack preservation. Its list algebra
+retains old samples/callers/W. It is not a theorem constructing those premises.
+Normalize finitely after root, ordinary step, block entry, call and return.
+
+Pair: construct the actual tagged source transition from EACH target next,
+block, call or ret derivation, same id and corresponding depth change. Append
+exact computed tokens/registry/births/PT/TG/saved/entries to H, freeze old endpoint
+in done, extend W only at actual immediate write events, and normalize the new
+endpoint. No source OK or target noninterference may be an input assumption.
+
+```
+frozen premises + actual stage decomposition
+  -> production R/local maps + coverage + source shape/preimage exclusions
+  -> root entry + finite NOP normalization -> certificate at target prefix 1
+certificate at n + target transition
+  -> SAME historical snapshot operands/definedness + source access/taint
+  -> fixed/owned/zero/forwarding classification and source success guards
+  -> read recovery [old W + SAME-w protected source interval + conditional X]
+  -> actual source step and post-state transport/effects
+  -> immediate masked write content + new W (where nonempty)
+  -> transcript pair + callers/alignment/samples + finite NOP normalization
+  -> certificate at n+1
+certificate endpoint + static endpoint classification + max_live_eom adapter
+  -> C1.7 output static access bound -> C1.8 frozen mem_inv packaging
+```
+
+For MCOPY, source OK precedes read recovery (no byte test). For external effects,
+whole request equality and guards precede source OK; use only already-constructed
+prefix reads. Neither branch may appeal to the n+1 certificate to construct n+1.
+
+### Exhaustive consumer reconciliation and retained obligations
+
+The dispatch N1-N18,J,C,R,X1-X5,T and owner-relative matrix above remain the
+exhaustive partition, not a new opcode-wrapper queue. Their integration owners:
+
+* C1.5.90 retains universal source-prefix existence, historical same-w read
+  recovery and actual target write exclusion; C1.5.90.67's conditional ordinary
+  write result is NOT unconditional coverage. Fixed reads require last fixed
+  writer or initial sentinel plus interval framing; owned reads require selected
+  initializing writer, continuous live owner and exact historical placement.
+  Existing exact/containment separation handles fixed/fixed, mixed, same owner
+  and coexisting distinct owners only after its operand/footprint premises are
+  derived. No disjointness of completed sibling static slots is assumed.
+* C1.6 retains preservation across N1-N18 and J/C/R, including masked reads,
+  MSTORE/MSTORE8/ISTORE, MCOPY, all buffer copies/EXTCODECOPY, CALL/STATICCALL/
+  DELEGATECALL/CREATE/CREATE2 effects, storage/transient/logs and two-output BUMP.
+  Existing content and exact-footprint boundaries are conditional inputs, not
+  constructed certificate steps. CALL output range is MIN with returndata;
+  equal returned lengths/whole requests must be derived, never guessed.
+* J and entry portions of B/C require matching successor/label evaluation,
+  actual successful enters_block and parallel PHI selection from PRE-entry vars.
+  Use existing StepStructure/StepRetpc/StepShape/StepCallChecks/StageShape facts;
+  no duplicate rewrite lemma is needed. Cursor equality is not whole-block equality.
+* C and R retain ordinary argument transport, callee lookup/setup/entry, saved
+  caller bindings, token restoration and ordinary returned-value equality.
+  RET discards LAST with FRONT; no runtime token-equality check exists. DRET/
+  RETFMP are excluded, not implemented as additional writer branches.
+* Zero-length requests have vacuous byte/footprint obligations but still require
+  defined operand evaluation and source success. Do not infer a numerical bound
+  from an empty actual footprint. Forwarding is a distinct access exemption;
+  SAME-w protected owned intervals already exclude it where appropriate.
+* C1.7 retains active terminal observations, including RETURN/REVERT, as well as
+  every continuing prefix. No chrono Halt/Abort/Error successor exists, but that
+  does not eliminate endpoint static_mem_ok obligations or revert forwarding.
+  Fixed reserved endpoints and function endpoints must use the checked maximum
+  interface; no old ctx_eom_bounded premise or alloca_next=0 is available.
+* C1.8 remains blocked packaging only. No prefix diagnostic is its prerequisite
+  semantic theorem. C1.5.90.40 (OwnedAffinePrefix) and ALL other retained C1.5.90,
+  C1.6, C1.7 obligations/boundaries are preserved, not cancelled or reproved here.
+  D0002 remains in force for every own-helper dependency rebuilt later. Today's
+  two audited targets build cleanly; that is not a claim that every helper was
+  rebuilt or that remaining CHEATs in the final dependency closure are solved.
+
+### Required parent decision before simultaneous induction
+
+Installed ptr_paired_sample STILL uses unrestricted ptr_vars_transport and
+ptr_shared_fields, including equal vs_return_pc_token. ptr_paired_params still
+uses ordinary argument transport, not a hidden opaque-token renaming. The checked
+core/env/setup/merge/RETPC_PARAM probes in OpaqueRetpc are isolated only.
+
+The parent must authorize an in-place certificate migration (or another justified
+interface). The proposed mixed relation is exactly OpaqueRetpc:231-250:
+non-retpc vars use lookup transport; retpc vars use own-token interpretation AND
+synchronized undefinedness, with equal source/target retpc classification.
+Core shared fields normalize ONLY the token, never memory/effects. Still unproved:
+ordinary operand exclusion via opaque_use_ok; mixed ASSIGN and parallel PHI;
+production source/target shape including metadata-only differences; mixed saved
+caller/return binding; equal ordinary returned values. No pointer/opaque-tag
+class disjointness is assumed. Old unrestricted transport lemmas remain valid
+conditional boundaries and must not be weakened or dropped to force migration.
+
+Requested scoped strategy review: replace/update the shallow C1.10 migration
+subtree, preserving C1.5.90/C1.6/C1.7/C1.8 and all checked boundaries. Do not start
+universal induction on the unchanged installed sample, and do not schedule
+another opcode-by-opcode wrapper queue in place of this interface repair.
+
+Verification: holbuild on concretizePtrPairedPrefixTheory and
+concretizePtrOpaqueRetpcTheory passed (TO_concretize_ptr-20261105T174221Z_m11527_t001).
+This audit introduces no HOL definition, theorem, duplicate lemma or admission.
