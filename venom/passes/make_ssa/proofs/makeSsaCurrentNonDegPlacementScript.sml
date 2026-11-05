@@ -38,3 +38,17 @@ Proof
   qexists_tac `d` >> simp[current_actual_inserted_def] >>
   disj2_tac >> goal_assum $ drule_at Any
 QED
+
+Theorem nondeg_lrc_first_arrival:
+  !ls start target. LRC R ls start target /\ start <> target ==>
+  ?pre q. LRC R pre start q /\ R q target /\ q <> target /\
+          ~MEM target pre /\ set (pre ++ [q]) SUBSET set ls
+Proof
+  Induct >> simp[listTheory.LRC_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `z = target`
+  >- (qexistsl_tac [`[]`, `h`] >> gvs[listTheory.LRC_def]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl_tac [`h::pre`, `q`] >>
+  simp[listTheory.LRC_def] >>
+  gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
