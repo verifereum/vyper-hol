@@ -250,11 +250,11 @@ Proof
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_at_def] >>
   rpt strip_tac >>
   first_x_assum (drule_then strip_assume_tac) >> gvs[]
-  >- (irule exprSimHashTheory.hash_live_footprint_bound >>
+  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) 
-  >- (irule exprSimHashTheory.hash_live_footprint_bound >>
+  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) >>
-  simp[w2n_lt]
+  irule (SIMP_RULE (srw_ss()) [] (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt))
 QED
 
 Theorem fixed_array_index_footprint:
@@ -280,4 +280,280 @@ Proof
   strip_tac >> drule_all fixed_array_index_footprint >> strip_tac >>
   irule exprSimAttributePropsTheory.field_ptr_w2n >>
   qexistsl_tac [`0`, `val_footprint (ArrayTV etv (Fixed n)) (ArrayV av)`] >> simp[]
+QED
+
+Theorem framed_array_represented_suffix_summary:
+  ((?ty. vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode) \/
+   (?n. bd = Fixed n)) /\
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_body_pre cenv cx env obj es /\ expr_type obj = ArrayT et bd /\
+  eval_expr cx obj es = (INL r,t) /\
+  ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
+   ((?n. bd = Fixed n) /\
+    (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+    p.ptr_location = LocMemory)) /\
+  local_ptrs_reserved cenv sc /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sc x) /\
+  (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale p.ptr_location) (elem_size_in_location cenv p.ptr_location et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s /\
+  evaluate_type (get_tenv cx) et = SOME etv /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  read_result cx r ee = (INL (ArrayV av),ee) /\
+  val_wf (ArrayTV etv bd) (ArrayV av) /\
+  value_has_type (ArrayTV etv bd) (ArrayV av) /\
+  eval_operand p.ptr_operand s = SOME w /\ eval_operand iop s = SOME iw /\
+  i = (if is_signed_type (expr_type idx) then w2i iw else &(w2n iw)) /\
+  array_length (ArrayTV etv bd) av < dimword (:256) /\
+  (!al. av = SArrayV al ==> ?n. bd = Fixed n) /\
+  (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+       q.vs_memory = s.vs_memory /\ stmt_state_rel ctx func cenv cx ee q ==>
+       vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q) ==>
+  gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s)
+    (\res ee' q. ?child. res = INL child /\
+      vv_post ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then assume_tac array_index_word_bounds >>
+  Cases_on `valid_index (ArrayTV etv bd) av i`
+  >- suspend "valid" >>
+  drule_all_then assume_tac framed_array_select_error >>
+  Cases_on `bd`
+  >- (`array_length (ArrayTV etv (Fixed n)) av = n` by
+        (Cases_on `av` >>
+         gvs[vyperTypingTheory.value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
+      fs[Excl "valid_index_def"] >>
+      drule_all fixed_array_subscript_counted_oob >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      irule select_result_counted_summary >> simp[] >>
+      goal_assum (drule_at Any) >>
+      qexists_tac `INR (Error (RuntimeError "evaluate_subscripts array_index"))` >>
+      metis_tac[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]) >>
+  fs[Excl "valid_index_def"] >>
+  `immutable_holds cenv cx (ArrayT et (Dynamic n)) r w ee s` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def]) >>
+  drule_all_then assume_tac framed_array_code_length_view >>
+  `compile_ptr_load F cenv.ce_imm_alloca LocCode = compile_imm_load_word F cenv.ce_imm_alloca` by
+    simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def] >>
+  gvs[Excl "valid_index_def"] >>
+  `~idx_in_range (is_signed_type (expr_type idx)) iw
+     (word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)))` by simp[] >>
+  drule_all runtime_array_subscript_counted_oob >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule select_result_counted_summary >> simp[] >>
+  goal_assum (drule_at Any) >>
+  simp[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]
+QED
+
+Resume framed_array_represented_suffix_summary[valid]:
+  `ann = et` by
+    (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
+     simp[exprSimHypsDefsTheory.expr_body_pre_def,
+          Once vyperTypeSystemTheory.well_typed_expr_def] >>
+     strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
+     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     strip_tac >> Cases_on `vt` >>
+     gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >>
+     gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
+  drule array_index_valid >>
+  pure_rewrite_tac[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  rename1 `array_index (ArrayTV etv bd) av i = SOME v` >>
+  `well_formed_type_value etv` by
+    metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
+  `value_has_type etv v` by
+    metis_tac[vyperAssignPreservesTypeTheory.array_index_has_type] >>
+  `val_wf etv v` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `type_memory_bytes cenv et = type_memory_size etv` by
+    (irule exprSimHypsTheory.expr_sim_inv_memory_size >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`env`,`es`] >> fs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
+  `iw = n2w (Num i)` by
+    (qpat_x_assum `valid_index _ _ _` mp_tac >>
+     qpat_x_assum `i = _` mp_tac >> rpt (pop_assum kall_tac) >>
+     Cases_on `is_signed_type (expr_type idx)` >>
+     simp[integer_wordTheory.w2i_def] >>
+     Cases_on `word_msb iw` >> simp[] >>
+     rw[] >> gvs[] ) >>
+  qpat_x_assum `i = _` kall_tac >>
+  Cases_on `bd`
+  >- suspend "fixed_valid" >>
+  suspend "dynamic_valid"
+QED
+
+Resume framed_array_represented_suffix_summary[fixed_valid]:
+  `array_length (ArrayTV etv (Fixed n)) av = n` by
+    (Cases_on `av` >>
+     gvs[vyperTypingTheory.value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
+  fs[Excl "valid_index_def"] >>
+  drule_all fixed_array_subscript_counted_ok >> strip_tac >>
+  `vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et (Fixed n)) p) t'` by
+    (first_x_assum irule >> simp[]) >>
+  `eval_operand p.ptr_operand t' = SOME w` by
+    (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
+     first_x_assum irule >> metis_tac[]) >>
+  `eval_operand dst t' = SOME (w + n2w (Num i * type_memory_size etv))` by
+    gvs[compileEnvTheory.elem_size_in_location_def, compileEnvTheory.is_slot_addressed_def,
+        GSYM wordsTheory.word_mul_n2w] >>
+  `p.ptr_location = LocMemory ==> w2n (w + n2w (Num i * type_memory_size etv)) =
+      w2n w + Num i * type_memory_size etv` by
+    (strip_tac >> irule fixed_array_element_nonwrapping >>
+     goal_assum (drule_at Any) >> simp[] >>
+     irule (SIMP_RULE (srw_ss()) [] vv_post_memory_footprint_bound) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_assum `p.ptr_location = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule framed_array_element_summary >> simp[] >>
+  (conj_tac >- (qexists_tac `env` >> simp[]) >>
+   qexistsl_tac [`ArrayT et (Fixed n)`,`t'`,`w`] >> simp[])
+QED
+
+Resume framed_array_represented_suffix_summary[dynamic_valid]:
+  fs[Excl "valid_index_def"] >>
+  `immutable_holds cenv cx (ArrayT et (Dynamic n)) r w ee s` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def]) >>
+  drule_all_then assume_tac framed_array_code_length_view >>
+  `compile_ptr_load F cenv.ce_imm_alloca LocCode = compile_imm_load_word F cenv.ce_imm_alloca` by
+    simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def] >>
+  gvs[Excl "valid_index_def"] >>
+  `idx_in_range (is_signed_type (expr_type idx)) (n2w (Num i))
+     (word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)))` by simp[] >>
+  drule_all runtime_array_subscript_counted_ok >> strip_tac >>
+  `vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT ann (Dynamic n)) p) t'` by
+    (first_x_assum irule >> simp[]) >>
+  `eval_operand p.ptr_operand t' = SOME w` by
+    (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
+     first_x_assum irule >> metis_tac[]) >>
+  `eval_operand dst t' = SOME (w + n2w (32 + Num i * type_memory_size etv))` by
+    (gvs[compileEnvTheory.elem_size_in_location_def, compileEnvTheory.is_slot_addressed_def,
+        compileEnvTheory.word_scale_def, wordsTheory.word_mul_n2w,
+        wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC] >>
+     simp[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC]) >>
+  qpat_assum `p.ptr_location = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule framed_array_element_summary >> simp[] >>
+  conj_tac >- (gvs[] >> metis_tac[]) >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexistsl_tac [`ArrayT ann (Dynamic n)`,`t'`,`w`] >> simp[]
+QED
+
+Finalise framed_array_represented_suffix_summary
+
+Theorem framed_array_suffix_summary:
+  ((?ty. vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode) \/
+   (?n. bd = Fixed n)) /\
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_type obj = ArrayT et bd /\
+  eval_expr cx obj es = (INL r,t) /\
+  eval_expr cx idx t = (INL ir,ee) /\ read_result cx ir ee = (INL iv,ee) /\
+  ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  vv_post ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
+  expr_post ctx func cenv cx idx t sb sc u ee iv iop s /\
+  ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
+   ((?n. bd = Fixed n) /\
+    (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+    p.ptr_location = LocMemory)) /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
+  (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  expr_sim_inv cenv cx env t /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
+  MAP FDOM es.scopes = MAP FDOM t.scopes /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sc.cs_next_id /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale p.ptr_location) (elem_size_in_location cenv p.ptr_location et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT et bd) r (ValueSubscript iv)) (ee,s)
+    (\res ee' q. ?child. res = INL child /\
+      vv_post ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
+  drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
+  `value_has_type tvt iv` by metis_tac[] >>
+  drule_all framed_array_index_post_view >> strip_tac >>
+  `is_word_type (expr_type idx)` by
+    (qpat_x_assum `value_has_type tvt iv` mp_tac >>
+     qpat_x_assum `evaluate_type _ (expr_type idx) = _` mp_tac >>
+     qpat_x_assum `iv = IntV i` SUBST1_TAC >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `expr_type idx` >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+          vyperTypingTheory.value_has_type_def, compileEnvTheory.is_word_type_def] >>
+     rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
+                          compileEnvTheory.is_word_type_def]) >>
+  `stmt_state_rel ctx func cenv cx ee s` by
+    fs[loweringPostsTheory.expr_post_def] >>
+  `vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s` by
+    (irule framed_array_base_endpoint >> simp[] >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[] >> qexists_tac `env` >> simp[]) >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) framed_array_post_view >>
+  disch_then (qspecl_then [`t`,`env`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `eval_result_typed _ ir _` kall_tac >>
+  qpat_x_assum `!v. read_result cx ir ee = _ ==> _` kall_tac >>
+  qpat_x_assum `value_has_type tvt iv` kall_tac >>
+  qpat_x_assum `evaluate_type _ (expr_type idx) = _` kall_tac >>
+  `cs_extends sc sd /\ sc.cs_next_var <= sd.cs_next_var /\
+   sc.cs_next_id <= sd.cs_next_id` by
+    (irule array_subscript_grows >> goal_assum (drule_at Any) >>
+     simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
+  `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+       q.vs_memory = s.vs_memory /\ stmt_state_rel ctx func cenv cx ee q ==>
+       vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q` by
+    (rpt strip_tac >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ sa sc _ _ _ _ _` kall_tac >>
+     irule framed_array_base_endpoint >> simp[] >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[] >> qexists_tac `env` >> simp[]) >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ sa sb _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ es s0` kall_tac >>
+  qpat_x_assum `MAP FDOM _ = _` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ idx t` kall_tac >>
+  qpat_x_assum `eval_expr cx idx t = _` kall_tac >>
+  qpat_x_assum `read_result cx ir ee = _` kall_tac >>
+  qpat_x_assum `iv = IntV i` SUBST1_TAC >>
+  irule framed_array_represented_suffix_summary >>
+  simp[SF SFY_ss] >>
+  conj_tac >- fs[] >>
+  qexistsl_tac [`iop`,`iw`,`sc`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
+  simp[compileEnvTheory.not_fresh_at_def]
 QED
