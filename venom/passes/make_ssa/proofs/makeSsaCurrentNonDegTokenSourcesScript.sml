@@ -1,6 +1,7 @@
 Theory makeSsaCurrentNonDegTokenSources
 Ancestors
   makeSsaCurrentTokens makeSsaCurrentCutTokens makeSsaCurrentLastSite
+  makeSsaCurrentGraphCut dominatorAnalysisProps dominatorDefs
   venomWf venomInst list
 
 Definition current_nondeg_token_at_def:
@@ -84,4 +85,33 @@ Proof
     metis_tac[current_nondeg_chain_token_local] >>
   gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
   metis_tac[current_nondeg_token_at_unique]
+QED
+
+Theorem current_nondeg_actual_exit_source:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM a (fn_labels fn) /\ MEM d (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  dominates (dom_analyze (cfg_analyze fn) fn) d a /\
+  current_changing_site fn ins v d ==>
+  ?l. current_nondeg_token_at l
+        (current_chain_token fn ins v (REVERSE ps ++ [a]) t) /\
+      dominates (dom_analyze (cfg_analyze fn) fn) d l
+Proof
+  strip_tac >>
+  `MEM d (a::ps)` by
+    (Cases_on `d = a` >> simp[] >>
+     metis_tac[current_actual_chain_membership, strict_dominates_def]) >>
+  drule_all current_token_chain_member_suffix >> strip_tac >>
+  `REVERSE ps ++ [a] = REVERSE ds ++ d::REVERSE pre` by
+    metis_tac[listTheory.REVERSE_APPEND, listTheory.REVERSE_DEF,
+              listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+  qpat_x_assum `REVERSE ps ++ [a] = _` (fn th => once_rewrite_tac[th]) >>
+  pure_rewrite_tac[current_chain_token_append] >>
+  drule_all current_nondeg_changing_chain_source >>
+  disch_then (qspecl_then [`REVERSE pre`,
+    `current_chain_token fn ins v (REVERSE ds) t`] strip_assume_tac) >>
+  qexists `l` >> simp[] >>
+  Cases_on `l = d` >- (gvs[] >> metis_tac[dom_self]) >>
+  `MEM l pre` by gvs[] >>
+  metis_tac[current_chain_prefix_dominated]
 QED
