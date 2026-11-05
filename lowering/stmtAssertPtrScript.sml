@@ -10,7 +10,7 @@
  *)
 Theory stmtAssertPtr
 Ancestors
-  stmtAbortPtr bodyPtrDefs fragGasPathPtr gasSummaryComposePtr gasCount fragGasSeqPtr
+  stmtAbortPtr stmtFragPtr bodyPtrDefs fragGasPathPtr gasSummaryComposePtr gasCount fragGasSeqPtr
   stmtSimAssertProps stmtSimDefs stmtSimProps exprSimDefs exprSimProps
   loweringPosts gasContext gasSummary gasExemptCert fragExec
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
@@ -24,15 +24,6 @@ Ancestors
   vyperValueOperation vyperStatePreservation venomExecProofs integer_word
 Libs
   monadsyntax
-
-Theorem ghost_inv_jump_to[local]:
-  ghost_inv d cenv cx es G tn (jump_to l s) <=> ghost_inv d cenv cx es G tn s
-Proof
-  simp[ghost_inv_def, jump_to_def, ptr_covers_def, return_buf_ptr_def,
-       stor_taint_ok_def, lookup_var_def] >>
-  Cases_on `d` >> TRY (PairCases_on `x`) >>
-  simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
-QED
 
 Theorem assert_jnz_zero_path_ptr:
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -169,7 +160,7 @@ Resume compile_assert_frag_ptr[true]:
       simp[Once bind_def, return_def]) >>
   conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
   disj1_tac >> simp[] >> gvs[stmt_post_def] >>
-  gvs[ghost_inv_jump_to, ghost_kept_def])
+  gvs[ghost_inv_jump_to, jump_to_def, ghost_kept_def])
 QED
 
 Resume compile_assert_frag_ptr[false]:
