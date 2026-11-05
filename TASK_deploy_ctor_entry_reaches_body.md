@@ -76,10 +76,10 @@ Facts already checked on the statement:
 - `alloca_room` follows from `deploy_imm_budget_ok`
   (`lowering/proofs/ctorDeployLoweringBudgetScript.sml`) and
   `ctorDeployMemoryFrontier`.
-- `fmp_room` is NOT derivable from the premises (the entry's free memory pointer
-  comes from the optimised unit's plan). It is isolated in the admitted helper
-  `deploy_ctor_entry_fmp_room` (`lowering/proofs/ctorDeployLoweringEntryFmpScript.sml`);
-  use that helper for the `fmp_room` conjunct and do not try to prove it.
+- `fmp_room` is proved: `deploy_ctor_entry_fmp_room`
+  (`lowering/proofs/ctorDeployLoweringEntryFmpScript.sml`) gives it for every
+  state of `func`, from `supported_program tops` (part of `deploy_source_ok`)
+  and `deploy_ctor_code`, since the deploy unit has no DALLOCA.
 - The argument decode: the data section equals the constructor argument bytes
   (`constructor_args_encode`, `lowering/e2eDeployDefsScript.sml`); `data_size = 0`
   disables the decoder's upper-bound check, which is harmless for a
@@ -103,7 +103,7 @@ built in this project.
 ## Available Resources
 
 - `lowering/proofs/ctorDeployLoweringEntryScript.sml` (target)
-- `lowering/proofs/ctorDeployLoweringEntryFmpScript.sml` (admitted helper for `fmp_room`)
+- `lowering/proofs/ctorDeployLoweringEntryFmpScript.sml` (`fmp_room` for the constructor function)
 - `lowering/proofs/ctorDeployLoweringDefsScript.sml` (`deploy_ctor_code_def`, `deploy_ctor_start_def`, `deploy_source_ok_def`)
 - `lowering/proofs/ctorDeployDefsScript.sml` (`deploy_phases_def`, `deploy_entry_state_def`)
 - `lowering/e2eDeployDefsScript.sml` (`deploy_state_rel_def`, `constructor_args_encode_def`)
