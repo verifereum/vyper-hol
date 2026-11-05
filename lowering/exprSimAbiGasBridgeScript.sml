@@ -12,7 +12,7 @@ Theory exprSimAbiGasBridge
 Ancestors
   fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
   venomInst venomExecSemantics venomState compileEnv list rich_list
-  fragGasPath gasCount arithmetic venomExecProofs venomInstProps
+  fragGasPath gasCount arithmetic venomExecProofs venomInstProps venomWf
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -308,6 +308,17 @@ Proof
   fs[frag_gas_free_def, EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem frag_successful_terminator_jump[local]:
+  step_inst 0 ctx inst s = OK middle /\ ~middle.vs_halted /\
+  is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> STOP /\ inst.inst_opcode <> RETURN ==>
+  MEM inst.inst_opcode [JMP; JNZ; DJMP]
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  pairarg_tac >> gvs[]
+QED
+
 Theorem frag_observer_region_closed:
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb ==>
   observer_region_closed ctx (frag_observer sa sb fn id)
@@ -320,10 +331,7 @@ Proof
       gvs[frag_observer_region_def] >> metis_tac[LESS_EQ_SUC_REFL, LESS_EQ_TRANS]) >>
   drule eval_phis_preserves_current_bb >> strip_tac >>
   `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
-    (Cases_on `inst.inst_opcode` >>
-     fs[is_terminator_def] >>
-     gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
-     pairarg_tac >> gvs[]) >>
+    metis_tac[frag_successful_terminator_jump] >>
   `middle.vs_current_bb <> sa.cs_current_bb` by
     (irule frag_observer_jump_no_reentry >>
      qexistsl_tac [`inst`, `s`] >> metis_tac[step_inst_non_invoke]) >>
@@ -355,11 +363,228 @@ Proof
        frag_observer_region_def, emitted_blocks_def]
 QED
 
+Theorem frag_observer_instruction_agrees:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (lbl,idx) IN frag_observer_region sa sb /\
+  (lbl,idx) <> frag_observer_cut sb /\
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst ==>
+  ?original. lookup_block lbl fn.fn_blocks = SOME original /\
+             get_instruction original idx = SOME inst
+Proof
+  strip_tac >> drule frag_observer_lookup_cases >> strip_tac
+  >- (gvs[] >>
+      `idx < LENGTH sb.cs_current_insts` by
+        (fs[get_instruction_def, frag_observer_cut_def] >> decide_tac) >>
+      fs[fn_has_code_def] >>
+      fs[IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN]) >>
+  fs[fn_has_code_def] >> metis_tac[]
+QED
+
+Theorem frag_observer_end_nonphi:
+  cs_extends sa sb /\ frag_gas_free sa sb /\
+  sb.cs_current_bb <> sa.cs_current_bb ==>
+  EVERY (\i. i.inst_opcode <> PHI) sb.cs_current_insts
+Proof
+  strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (strip_tac >> drule frag_extends_emitted_shape >> gvs[]) >>
+  fs[frag_gas_free_def, frag_code_def, NULL_EQ, EVERY_APPEND, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem frag_observer_end_phi_zero:
+  cs_extends sa sb /\ frag_gas_free sa sb ==>
+  sa.cs_blocks = sb.cs_blocks \/
+  !bb. lookup_block sb.cs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb ==>
+       phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> Cases_on `sa.cs_blocks = sb.cs_blocks` >- simp[] >>
+  `sb.cs_current_bb <> sa.cs_current_bb` by
+    (drule frag_extends_emitted_shape >>
+     Cases_on `emitted_blocks sa sb = []` >> gvs[] >>
+     fs[frag_gas_free_def, MEM_MAP] >> metis_tac[MEM_LAST_NOT_NIL]) >>
+  drule_all frag_observer_end_nonphi >> strip_tac >>
+  simp[frag_observer_cut_lookup] >>
+  Cases_on `sb.cs_current_insts` >> fs[phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem frag_observer_phi_agrees:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  lbl <> sa.cs_current_bb /\
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb ==>
+  ?original. lookup_block lbl fn.fn_blocks = SOME original /\
+    phi_prefix_length original.bb_instructions = phi_prefix_length bb.bb_instructions /\
+    TAKE (phi_prefix_length original.bb_instructions) original.bb_instructions =
+    TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule frag_observer_lookup_cases >> strip_tac
+  >- (gvs[] >>
+      `EVERY (\i. i.inst_opcode <> PHI) sb.cs_current_insts` by
+        metis_tac[frag_observer_end_nonphi] >>
+      fs[fn_has_code_def] >>
+      Cases_on `sb.cs_current_insts`
+      >- (gvs[phi_prefix_length_def, mk_inst_def] >>
+          fs[cs_extends_def]) >>
+      Cases_on `bb.bb_instructions` >>
+      gvs[phi_prefix_length_def]) >>
+  fs[fn_has_code_def] >> qexists_tac `bb` >> simp[] >> metis_tac[]
+QED
+
+Definition frag_entry_code_agrees_def:
+  frag_entry_code_agrees start fn fn' cut region <=>
+    (!lbl idx bb inst.
+      (lbl,idx) IN region /\ (lbl,idx) <> cut /\
+      lookup_block lbl fn.fn_blocks = SOME bb /\
+      get_instruction bb idx = SOME inst ==>
+      ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+            get_instruction bb' idx = SOME inst) /\
+    (!lbl bb. lbl <> start /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+      (lbl,phi_prefix_length bb.bb_instructions) IN region ==>
+      ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+        phi_prefix_length bb'.bb_instructions = phi_prefix_length bb.bb_instructions /\
+        TAKE (phi_prefix_length bb'.bb_instructions) bb'.bb_instructions =
+        TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+End
+
+Theorem frag_observer_entry_code_agrees:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) ==>
+  frag_entry_code_agrees sa.cs_current_bb (frag_observer sa sb fn id) fn
+    (frag_observer_cut sb) (frag_observer_region sa sb)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  rewrite_tac[frag_entry_code_agrees_def] >> conj_tac
+  >- (rpt strip_tac >> irule frag_observer_instruction_agrees >> metis_tac[]) >>
+  rpt strip_tac >> irule frag_observer_phi_agrees >> metis_tac[]
+QED
+
+Theorem frag_observer_step_transfer:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
+  abi_observer_step ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s t ==>
+  abi_observer_step ctx fn (frag_observer_cut sb) s t
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `frag_entry_code_agrees sa.cs_current_bb (frag_observer sa sb fn id) fn
+     (frag_observer_cut sb) (frag_observer_region sa sb)` by
+    (irule frag_observer_entry_code_agrees >> simp[]) >>
+  fs[abi_observer_step_def, frag_entry_code_agrees_def] >>
+  qpat_assum `!lbl idx bb inst. _` (drule_all_then strip_assume_tac) >>
+  simp[abi_observer_step_def] >>
+  drule_all frag_observer_off_cut_opcodes >> strip_tac >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_successful_terminator_jump] >>
+  `middle.vs_current_bb <> sa.cs_current_bb` by
+    (irule frag_observer_jump_no_reentry >>
+     qexistsl_tac [`inst`, `s`] >> metis_tac[step_inst_non_invoke]) >>
+  drule eval_phis_preserves_current_bb >> strip_tac >>
+  qpat_x_assum `!lbl bb. _`
+    (qspecl_then [`middle.vs_current_bb`, `target`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> drule frag_observer_lookup_cases >> strip_tac >>
+      fs[frag_observer_region_def, MEM_MAP] >> metis_tac[]) >>
+  strip_tac >> rename1 `lookup_block middle.vs_current_bb fn.fn_blocks = SOME target'` >>
+  qexistsl_tac [`target'`, `entered`] >> simp[] >>
+  once_rewrite_tac[GSYM eval_phis_prefix] >>
+  asm_rewrite_tac[] >> simp[eval_phis_prefix]
+QED
+
+Theorem frag_observer_prefix_transfer:
+  !ctx observed cut s t. local_prefix ctx observed cut s t ==>
+  !sa sb fn id.
+  observed = frag_observer sa sb fn id /\ cut = frag_observer_cut sb /\
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb ==>
+  local_prefix ctx fn cut s t
+Proof
+  ho_match_mp_tac local_prefix_ind >> conj_tac
+  >- (rpt strip_tac >> irule (cj 1 local_prefix_rules) >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> gvs[] >>
+  rename1 `abi_observer_step ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s middle` >>
+  irule (cj 2 local_prefix_rules) >> qexists_tac `middle` >> conj_tac
+  >- (irule frag_observer_step_transfer >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >>
+  metis_tac[observer_region_closed_def, frag_observer_region_closed]
+QED
+
+Theorem frag_distinct_flat_filter[local]:
+  !xs f keep. ALL_DISTINCT (FLAT (MAP f xs)) ==>
+    ALL_DISTINCT (FLAT (MAP f (FILTER keep xs)))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `keep h` >> gvs[ALL_DISTINCT_APPEND] >>
+  gvs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem frag_distinct_flat_extract[local]:
+  !xs f keep chosen.
+  ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM chosen xs /\ ~keep chosen ==>
+  ALL_DISTINCT (f chosen ++ FLAT (MAP f (FILTER keep xs)))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `chosen = h` >> gvs[ALL_DISTINCT_APPEND]
+  >- (conj_tac
+      >- metis_tac[frag_distinct_flat_filter] >>
+      gvs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  Cases_on `keep h` >> gvs[ALL_DISTINCT_APPEND] >>
+  gvs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]
+QED
+
 Theorem frag_fn_insts_blocks_member[local]:
   !blocks inst. MEM inst (fn_insts_blocks blocks) <=>
     ?bb. MEM bb blocks /\ MEM inst bb.bb_instructions
 Proof
   Induct >> simp[fn_insts_blocks_def, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem frag_observer_fresh_id:
+  ?id. !inst. MEM inst (fn_insts fn) ==> inst.inst_id <> id
+Proof
+  qexists_tac `SUC (SUM (MAP (\i. i.inst_id) (fn_insts fn)))` >>
+  rpt strip_tac >> drule SUM_MAP_MEM_bound >>
+  disch_then (qspec_then `\i. i.inst_id` mp_tac) >> simp[]
+QED
+
+Theorem frag_observer_ids_distinct:
+  fn_has_code sa sb fn /\ frag_gas_free sa sb /\ fn_inst_ids_distinct fn /\
+  (!inst. MEM inst (fn_insts fn) ==> inst.inst_id <> id) ==>
+  fn_inst_ids_distinct (frag_observer sa sb fn id)
+Proof
+  strip_tac >> fs[fn_has_code_def] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `~MEM bb (emitted_blocks sa sb)` by
+    (drule lookup_block_label >> strip_tac >>
+     fs[frag_gas_free_def, MEM_MAP] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions ++
+     FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+       (FILTER (\bb. MEM bb (emitted_blocks sa sb)) fn.fn_blocks)))` by
+    (qspecl_then [`fn.fn_blocks`, `\bb. MAP (\i. i.inst_id) bb.bb_instructions`]
+       mp_tac frag_distinct_flat_extract >>
+     fs[fn_inst_ids_distinct_def] >> metis_tac[]) >>
+  gvs[IS_PREFIX_APPEND] >>
+  `~MEM id (MAP (\i. i.inst_id) sb.cs_current_insts)` by
+    (simp[MEM_MAP] >>
+     fs[fn_insts_def, frag_fn_insts_blocks_member] >> metis_tac[MEM_APPEND]) >>
+  `~MEM id (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+     (FILTER (\bb. MEM bb (emitted_blocks sa sb)) fn.fn_blocks)))` by
+    (simp[MEM_FLAT, MEM_MAP, PULL_EXISTS, MEM_FILTER] >>
+     fs[fn_insts_def, frag_fn_insts_blocks_member] >> metis_tac[]) >>
+  fs[fn_inst_ids_distinct_def, frag_observer_def, MAP_APPEND, ALL_DISTINCT_APPEND,
+     mk_inst_def] >> metis_tac[]
 QED
 
 Theorem frag_observer_nonstop_inclusion:
