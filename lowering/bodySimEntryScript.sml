@@ -352,7 +352,9 @@ Theorem external_body_support_bounds:
   env_context_consistent env cx /\
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
-  type_stmts env ret ss = SOME env' ==>
+  type_stmts env ret ss = SOME env' /\
+  (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+   return_buffer_ok cenv) ==>
   locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
   ?bindings. supported_stmts tops bindings ss
 Proof

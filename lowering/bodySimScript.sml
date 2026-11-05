@@ -289,7 +289,9 @@ End
 Theorem stmt_exprs_ok_from_traversal_bounds:
   ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
   ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
-  alloc_limits_stmts cenv ss ==>
+  alloc_limits_stmts cenv ss /\
+  (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+   return_buffer_ok cenv) ==>
   EVERY (stmt_exprs_ok cenv) ss
 Proof
   `!e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e) =

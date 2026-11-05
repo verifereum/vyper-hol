@@ -18,12 +18,12 @@ Proof
   simp[check_toplevel_decl_def, function_header_ok_def]
 QED
 
-Theorem supported_lookup_none_raw[local]:
-  !ts ambient name mut nr args defaults body.
+Theorem supported_lookup_raw:
+  !ts ambient name mut nr args defaults ret body.
   EVERY (supported_declaration_header ambient) ts /\
   lookup_function (NONE : num option) name External ts =
-    SOME (mut,nr,args,defaults,NoneT,body) ==>
-  ?rr. MEM (FunctionDecl External mut nr rr name args defaults NoneT body) ts /\
+    SOME (mut,nr,args,defaults,ret,body) ==>
+  ?rr. MEM (FunctionDecl External mut nr rr name args defaults ret body) ts /\
        lookup_raw_return (NONE : num option) name External ts = SOME rr
 Proof
   Induct_on `ts` >- simp[lookup_function_def] >>
@@ -52,7 +52,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `EVERY (supported_declaration_header tops) tops` by
     gvs[supported_program_def, supported_declaration_headers_def] >>
-  drule_all supported_lookup_none_raw >> strip_tac >>
+  drule_all supported_lookup_raw >> strip_tac >>
   gvs[source_typing_ok_def] >>
   `~rr` by
     (drule check_contract_none_return_plain >>
