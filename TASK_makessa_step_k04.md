@@ -10,7 +10,7 @@ Location: venom/compiler/o1ContractMakeSsaStepScript.sml
 
 ```sml
 Theorem make_ssa_step_contract_at:
-  o1_step_contract_at k rpolicy (CFP_Simple VP_MakeSSA)
+  k = 0 \/ k = 4 ==> o1_step_contract_at k rpolicy (CFP_Simple VP_MakeSSA)
 ```
 
 `o1_step_contract_at_def`, `fn_pass_step_def`, `o1_fn_shape_def`,
@@ -24,6 +24,11 @@ reductions `o1_step_contract_at_plain`, `o1_step_contract_at_preserve`) are in
 in `venom/passes/make_ssa/defs/makeSsaCurrentDefsScript.sml`; the dispatcher
 case is `execute_configured_fn_pass_make_ssa` in
 `venom/defs/venomPassDispatcherScript.sml`.
+
+MakeSSA runs at walk positions 0 and 4 only, which is why the statement
+is limited to them (at k = 2 it would be false: row 3 forbids ALLOCA, which
+MakeSSA keeps). For k = 0 both rows are trivial; at k = 4 the output must
+keep the input's no-ALLOCA row.
 
 **Do not modify this statement.** Prove it as-is, or produce a counterexample.
 

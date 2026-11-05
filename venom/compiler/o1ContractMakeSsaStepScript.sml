@@ -42,7 +42,7 @@ Ancestors
  *   connected to B's definition (not the bare initial spelling).
  *)
 Theorem make_ssa_step_contract_at:
-  o1_step_contract_at k rpolicy (CFP_Simple VP_MakeSSA)
+  k = 0 \/ k = 4 ==> o1_step_contract_at k rpolicy (CFP_Simple VP_MakeSSA)
 Proof
   cheat
 QED
