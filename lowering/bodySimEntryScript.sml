@@ -31,7 +31,8 @@ Theorem body_inv_build_internal_env:
   body_inv tops ctx caller cx ==>
   body_inv tops ctx
     ((build_compile_env tops Internal mut fname args ret stmts use_trans)
-       with ce_target := caller.ce_target) cx
+       with <| ce_target := caller.ce_target;
+               ce_is_ctor := caller.ce_is_ctor |>) cx
 Proof
   rw[body_inv_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[])
