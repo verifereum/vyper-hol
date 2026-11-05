@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
-  vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
+  vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
   wordsLib
 
@@ -4704,6 +4704,77 @@ Theorem asm_call_nested_memory_pop_saved_tail:
 Proof
   strip_tac >> drule_all asm_handle_exception_memory_success >>
   simp[] >> strip_tac >> gvs[]
+QED
+
+(* The saved suffix is intentionally unconstrained: the caller need not be static. *)
+Theorem asm_call_cp_static_prefix:
+  cp f /\ f s = (r,t) /\ active <> [] /\
+  s.contexts = active ++ saved /\
+  s.rollback.accounts = a /\ s.rollback.tStorage = ts /\
+  s.rollback.toDelete = ds /\
+  EVERY (\(c,rb). c.msgParams.static /\
+    (!x. c.msgParams.outputTo <> Code x) /\ c.logs = [] /\
+    rb.accounts = a /\ rb.tStorage = ts /\ rb.toDelete = ds) active ==>
+  t.rollback.accounts = a /\ t.rollback.tStorage = ts /\
+  t.rollback.toDelete = ds /\
+  ?active'. active' <> [] /\ LENGTH active' = LENGTH active /\
+    t.contexts = active' ++ saved /\
+    EVERY (\(c,rb). c.msgParams.static /\
+      (!x. c.msgParams.outputTo <> Code x) /\ c.logs = [] /\
+      rb.accounts = a /\ rb.tStorage = ts /\ rb.toDelete = ds) active'
+Proof
+  strip_tac >> Cases_on `active` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  qpat_x_assum `cp f` mp_tac >> simp[cp_def] >>
+  disch_then drule >> simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `(q',h1)::t'` >> simp[]
+QED
+
+Theorem asm_call_static_push_snapshot:
+  s.contexts = (c,rb)::saved /\ c.msgParams.static /\
+  ~fIN address precompile_addresses /\
+  proceed_call op sender address 0 ao az code stipend (Memory mr) s = (r,t) ==>
+  t.rollback = s.rollback /\ TL t.contexts = s.contexts /\
+  (FST (HD t.contexts)).msgParams.static /\
+  (FST (HD t.contexts)).msgParams.outputTo = Memory mr /\
+  (FST (HD t.contexts)).logs = [] /\
+  SND (HD t.contexts) = s.rollback
+Proof
+  strip_tac >> qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[proceed_call_def, get_rollback_def, read_memory_def,
+       get_caller_def, get_value_def, get_static_def,
+       get_current_context_def, push_context_def,
+       vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def,
+       bind_def, ignore_bind_def, return_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem asm_call_static_memory_pop_effects:
+  s.contexts = (child,crb)::(parent,prb)::saved /\
+  child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
+  LENGTH parent.stack < stack_limit /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed /\
+  crb.accounts = s.rollback.accounts /\
+  crb.tStorage = s.rollback.tStorage /\
+  crb.toDelete = s.rollback.toDelete /\
+  (ex <> NONE /\ ex <> SOME Reverted ==>
+    child.gasUsed <= child.msgParams.gasLimit) /\
+  handle_exception ex s = (q,t) ==>
+  t.rollback.accounts = s.rollback.accounts /\
+  t.rollback.tStorage = s.rollback.tStorage /\
+  t.rollback.toDelete = s.rollback.toDelete /\
+  (FST (HD t.contexts)).logs = parent.logs /\
+  TL t.contexts = saved
+Proof
+  strip_tac >> Cases_on `ex`
+  >- (drule_all asm_handle_exception_memory_success >> simp[] >>
+      strip_tac >> gvs[])
+  >> Cases_on `x = Reverted`
+  >- (qpat_x_assum `x = Reverted` SUBST_ALL_TAC >>
+      drule_all asm_handle_exception_memory_reverted >> simp[] >>
+      strip_tac >> gvs[])
+  >> drule asm_handle_exception_memory_exception >> simp[] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem asm_frame_call_step:
