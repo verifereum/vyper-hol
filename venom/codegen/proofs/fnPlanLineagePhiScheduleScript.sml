@@ -349,3 +349,55 @@ Proof
   goal_assum (drule_at Any) >>
   simp[] >> metis_tac[analyzed_native_phi_endpoint_class_dead]
 QED
+
+Theorem successful_join_edges_phi_common_suffix:
+  !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ entry halting.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn succ /\ succ <> entry /\ MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block q fn.fn_blocks = SOME qb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) q) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb psP0 = SOME (opsP, psP) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn qb psQ0 = SOME (opsQ, psQ) /\
+  psP.ps_alloc = psQ.ps_alloc ==>
+  ?prefixP prefixQ suffix ops al.
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psP =
+      (ops, psP with <|ps_stack := prefixP ++ suffix; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psQ =
+      (ops, psQ with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?cells prefixP prefixQ.
+    cells = MAP
+      (phi_slot_cell (SND (build_phi_maps p (collect_phis sb.bb_instructions)))
+                     (SND (build_phi_maps q (collect_phis sb.bb_instructions))))
+      (phi_slot_trace (FST (build_phi_maps p (collect_phis sb.bb_instructions)))
+        (live_vars_at (liveness_analyze fn) succ 0)) /\
+    phi_uses_disjoint (collect_phis sb.bb_instructions) /\
+    (!v i. FLOOKUP (FST (build_phi_maps p (collect_phis sb.bb_instructions))) v = SOME i ==>
+      IS_SOME (FLOOKUP (SND (build_phi_maps p (collect_phis sb.bb_instructions))) i) /\
+      IS_SOME (FLOOKUP (SND (build_phi_maps q (collect_phis sb.bb_instructions))) i)) /\
+    phi_origin_classes (native_phi_class p (collect_phis sb.bb_instructions)) cells /\
+    psP.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+    psQ.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells /\
+    MAP (phi_cell_value T) cells = MAP Var
+      (input_vars_from p sb.bb_instructions (live_vars_at (liveness_analyze fn) succ 0))` by
+    (irule successful_join_edges_native_cells >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!v i. MEM v (live_vars_at (liveness_analyze fn) succ 0) /\
+    FLOOKUP (FST (build_phi_maps p (collect_phis sb.bb_instructions))) v = SOME i ==>
+    IS_SOME (FLOOKUP (SND (build_phi_maps p (collect_phis sb.bb_instructions))) i) /\
+    IS_SOME (FLOOKUP (SND (build_phi_maps q (collect_phis sb.bb_instructions))) i)` by
+    metis_tac[] >>
+  drule_all analyzed_native_slot_state_replay >>
+  disch_then (qspec_then `halting` strip_assume_tac) >>
+  qexistsl_tac [`prefixP`, `prefixQ`, `suffix`, `ops`, `al`] >> simp[]
+QED

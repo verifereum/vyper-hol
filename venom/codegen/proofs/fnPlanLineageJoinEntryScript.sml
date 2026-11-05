@@ -26,7 +26,7 @@ Proof
   strip_tac >> PairCases_on `p` >> gvs[] >> metis_tac[]
 QED
 
-Theorem successful_join_edges_common_cells_projection:
+Theorem successful_join_edges_native_cells:
   !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ.
   codegen_ready_fn fn /\
   lookup_block p fn.fn_blocks = SOME pb /\
@@ -41,6 +41,15 @@ Theorem successful_join_edges_common_cells_projection:
   generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn qb psQ0 =
     SOME (opsQ, psQ) ==>
   ?cells prefixP prefixQ.
+    cells = MAP
+      (phi_slot_cell (SND (build_phi_maps p (collect_phis sb.bb_instructions)))
+                     (SND (build_phi_maps q (collect_phis sb.bb_instructions))))
+      (phi_slot_trace (FST (build_phi_maps p (collect_phis sb.bb_instructions)))
+        (live_vars_at (liveness_analyze fn) succ 0)) /\
+    phi_uses_disjoint (collect_phis sb.bb_instructions) /\
+    (!v i. FLOOKUP (FST (build_phi_maps p (collect_phis sb.bb_instructions))) v = SOME i ==>
+      IS_SOME (FLOOKUP (SND (build_phi_maps p (collect_phis sb.bb_instructions))) i) /\
+      IS_SOME (FLOOKUP (SND (build_phi_maps q (collect_phis sb.bb_instructions))) i)) /\
     phi_origin_classes (native_phi_class p (collect_phis sb.bb_instructions)) cells /\
     psP.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
     psQ.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells /\
@@ -76,6 +85,9 @@ Proof
     (phi_slot_trace (FST (build_phi_maps p (collect_phis sb.bb_instructions)))
        (live_vars_at (liveness_analyze fn) succ 0))` >>
   qexistsl_tac [`cells`, `prefixP`, `prefixQ`] >>
+  conj_tac >- simp[Abbr `cells`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- (simp[Abbr `cells`] >> irule native_slot_cells_classes >> simp[] >> metis_tac[]) >>
   `MAP (phi_cell_value T) cells = MAP Var
     (input_vars_from p sb.bb_instructions (live_vars_at (liveness_analyze fn) succ 0))` by
@@ -89,6 +101,30 @@ Proof
        metis_tac[build_phi_maps_source_independent] >>
      simp[]) >>
   simp[]
+QED
+
+Theorem successful_join_edges_common_cells_projection:
+  !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ.
+  codegen_ready_fn fn /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block q fn.fn_blocks = SOME qb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) q) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb psP0 =
+    SOME (opsP, psP) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn qb psQ0 =
+    SOME (opsQ, psQ) ==>
+  ?cells prefixP prefixQ.
+    phi_origin_classes (native_phi_class p (collect_phis sb.bb_instructions)) cells /\
+    psP.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+    psQ.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells /\
+    MAP (phi_cell_value T) cells = MAP Var
+      (input_vars_from p sb.bb_instructions (live_vars_at (liveness_analyze fn) succ 0))
+Proof
+  metis_tac[successful_join_edges_native_cells]
 QED
 
 Theorem successful_join_edges_common_cells:
