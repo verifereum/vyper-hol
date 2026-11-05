@@ -305,6 +305,182 @@ Proof
   IF_CASES_TAC >> simp[collect_phis_def]
 QED
 
+Theorem phi_pair_updates_lookup[local]:
+  !pairs m idx v.
+    FLOOKUP (FOLDL (\m (lbl,w). m |+ (w,idx)) m pairs) v =
+    if MEM v (MAP SND pairs) then SOME idx else FLOOKUP m v
+Proof
+  Induct >> simp[] >> Cases >> rpt gen_tac >>
+  simp[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem phi_owner_cons_witness[local]:
+  !i p xs v owner.
+    (MEM v (MAP SND (phi_pairs p.inst_operands)) ==> i = owner) ==>
+    ((?q. MEM (owner,q) ((i,p)::xs) /\
+           MEM v (MAP SND (phi_pairs q.inst_operands))) <=>
+     (MEM v (MAP SND (phi_pairs p.inst_operands)) \/
+      ?q. MEM (owner,q) xs /\ MEM v (MAP SND (phi_pairs q.inst_operands))))
+Proof
+  rpt gen_tac >> strip_tac >> simp[MEM, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  metis_tac[]
+QED
+
+Theorem indexed_phi_owner_lookup[local]:
+  !indexed om mt pred v owner.
+    (!idx phi. MEM (idx,phi) indexed /\
+      MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> idx = owner) ==>
+    FLOOKUP (FST (FOLDL (\(om,mt) (idx,phi).
+      (FOLDL (\m (lbl,w). m |+ (w,idx)) om (phi_pairs phi.inst_operands),
+       case FIND (\(lbl,w). lbl = pred) (phi_pairs phi.inst_operands) of
+         NONE => mt | SOME (lbl,w) => mt |+ (idx,w))) (om,mt) indexed)) v =
+    if (?phi. MEM (owner,phi) indexed /\
+          MEM v (MAP SND (phi_pairs phi.inst_operands)))
+    then SOME owner else FLOOKUP om v
+Proof
+  Induct >- simp[] >>
+  qx_gen_tac `head_pair` >>
+  namedCases_on `head_pair` ["head_idx head_phi"] >>
+  rpt gen_tac >> strip_tac >>
+  `MEM v (MAP SND (phi_pairs head_phi.inst_operands)) ==> head_idx = owner`
+    by metis_tac[MEM] >>
+  drule phi_owner_cons_witness >>
+  disch_then (qspecl_then [`indexed`] (fn th => pure_rewrite_tac[th])) >>
+  `!idx phi. MEM (idx,phi) indexed /\
+     MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> idx = owner`
+    by metis_tac[MEM] >>
+  qpat_x_assum `!om mt pred v owner. _` drule >>
+  simp[NoAsms, FOLDL] >>
+  Cases_on `FIND (\(lbl,w). lbl = pred) (phi_pairs head_phi.inst_operands)`
+  >- (simp[] >> strip_tac >>
+      qpat_x_assum `!om mt pred. _` kall_tac >>
+      Cases_on `MEM v (MAP SND (phi_pairs head_phi.inst_operands))` >>
+      simp[phi_pair_updates_lookup] >>
+      Cases_on `?phi. MEM (owner,phi) indexed /\
+        MEM v (MAP SND (phi_pairs phi.inst_operands))` >> simp[]) >>
+  rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >>
+  simp[] >> strip_tac >> qpat_x_assum `!om mt pred. _` kall_tac >>
+  Cases_on `MEM v (MAP SND (phi_pairs head_phi.inst_operands))` >>
+  simp[phi_pair_updates_lookup] >>
+  Cases_on `?phi. MEM (owner,phi) indexed /\
+    MEM v (MAP SND (phi_pairs phi.inst_operands))` >> simp[]
+QED
+
+Theorem build_phi_owner_at[local]:
+  (!j phi. MEM (j,phi) (MAPi (\k p. (k,p)) phis) /\
+    MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = owner) ==>
+  FLOOKUP (FST (build_phi_maps pred phis)) v =
+    if owner < LENGTH phis /\
+       MEM v (MAP SND (phi_pairs (EL owner phis).inst_operands))
+    then SOME owner else NONE
+Proof
+  strip_tac >>
+  drule indexed_phi_owner_lookup >>
+  disch_then (qspecl_then [`FEMPTY`, `FEMPTY`, `pred`] mp_tac) >>
+  simp[build_phi_maps_def, indexedListsTheory.MEM_MAPi]
+QED
+
+Theorem build_phi_owner_lookup[local]:
+  (!i j v. i < LENGTH phis /\ j < LENGTH phis /\
+    MEM v (MAP SND (phi_pairs (EL i phis).inst_operands)) /\
+    MEM v (MAP SND (phi_pairs (EL j phis).inst_operands)) ==> i = j) ==>
+  (FLOOKUP (FST (build_phi_maps pred phis)) v = SOME i <=>
+   i < LENGTH phis /\
+   MEM v (MAP SND (phi_pairs (EL i phis).inst_operands)))
+Proof
+  strip_tac >>
+  Cases_on `?j. j < LENGTH phis /\
+    MEM v (MAP SND (phi_pairs (EL j phis).inst_operands))`
+  >- (pop_assum (qx_choose_then `owner` strip_assume_tac) >>
+      `!j phi. MEM (j,phi) (MAPi (\k p. (k,p)) phis) /\
+        MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = owner`
+        by (simp[indexedListsTheory.MEM_MAPi] >> metis_tac[]) >>
+      drule build_phi_owner_at >> disch_then (qspec_then `pred` mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  `!j phi. MEM (j,phi) (MAPi (\k p. (k,p)) phis) /\
+    MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = i`
+    by (simp[indexedListsTheory.MEM_MAPi] >> metis_tac[]) >>
+  drule build_phi_owner_at >> disch_then (qspec_then `pred` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem indexed_phi_selected_absent[local]:
+  !indexed om mt pred i.
+    ~MEM i (MAP FST indexed) ==>
+    FLOOKUP (SND (FOLDL (\(om,mt) (idx,phi).
+      (FOLDL (\m (lbl,w). m |+ (w,idx)) om (phi_pairs phi.inst_operands),
+       case FIND (\(lbl,w). lbl = pred) (phi_pairs phi.inst_operands) of
+         NONE => mt | SOME (lbl,w) => mt |+ (idx,w))) (om,mt) indexed)) i =
+    FLOOKUP mt i
+Proof
+  Induct >- simp[] >>
+  qx_gen_tac `head_pair` >>
+  namedCases_on `head_pair` ["idx phi"] >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  simp[FOLDL] >>
+  Cases_on `FIND (\(lbl,w). lbl = pred) (phi_pairs phi.inst_operands)`
+  >- (simp[] >> first_x_assum irule >> simp[]) >>
+  rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >>
+  simp[] >> first_x_assum (drule o SPEC_ALL) >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem indexed_phi_selected_member[local]:
+  !indexed om mt pred i phi.
+    ALL_DISTINCT (MAP FST indexed) /\ MEM (i,phi) indexed ==>
+    FLOOKUP (SND (FOLDL (\(om,mt) (idx,p).
+      (FOLDL (\m (lbl,w). m |+ (w,idx)) om (phi_pairs p.inst_operands),
+       case FIND (\(lbl,w). lbl = pred) (phi_pairs p.inst_operands) of
+         NONE => mt | SOME (lbl,w) => mt |+ (idx,w))) (om,mt) indexed)) i =
+    case FIND (\(lbl,w). lbl = pred) (phi_pairs phi.inst_operands) of
+      NONE => FLOOKUP mt i | SOME (lbl,w) => SOME w
+Proof
+  Induct >- simp[] >>
+  qx_gen_tac `head_pair` >>
+  namedCases_on `head_pair` ["idx head_phi"] >>
+  rpt gen_tac >> simp[] >> disch_tac >>
+  `~MEM idx (MAP FST indexed) /\ ALL_DISTINCT (MAP FST indexed)`
+    by metis_tac[] >>
+  Cases_on `i = idx`
+  >- (`phi = head_phi` by (gvs[] >> metis_tac[MEM_MAP, pairTheory.FST]) >>
+      gvs[] >> simp[FOLDL] >>
+      Cases_on `FIND (\(lbl,w). lbl = pred) (phi_pairs head_phi.inst_operands)`
+      >- (simp[] >> irule indexed_phi_selected_absent >> simp[]) >>
+      rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >>
+      simp[indexed_phi_selected_absent, FLOOKUP_UPDATE]) >>
+  `MEM (i,phi) indexed` by gvs[] >>
+  simp[FOLDL] >>
+  Cases_on `FIND (\(lbl,w). lbl = pred) (phi_pairs head_phi.inst_operands)`
+  >- (simp[] >> first_x_assum irule >> simp[]) >>
+  rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >>
+  simp[] >>
+  qpat_x_assum `!om mt pred i phi. _` (fn th => drule_all th) >>
+  disch_then (fn th => rewrite_tac[th]) >> simp[FLOOKUP_UPDATE]
+QED
+
+Theorem build_phi_selected_lookup[local]:
+  i < LENGTH phis ==>
+  FLOOKUP (SND (build_phi_maps pred phis)) i =
+    OPTION_MAP SND
+      (FIND (\pair. FST pair = pred) (phi_pairs (EL i phis).inst_operands))
+Proof
+  strip_tac >>
+  `MAP FST (MAPi (\k p. (k,p)) phis) = GENLIST I (LENGTH phis)` by
+    (irule LIST_EQ >> simp[indexedListsTheory.LENGTH_MAPi,
+      indexedListsTheory.EL_MAPi, EL_MAP]) >>
+  `ALL_DISTINCT (MAP FST (MAPi (\k p. (k,p)) phis))` by
+    simp[ALL_DISTINCT_GENLIST] >>
+  `MEM (i, EL i phis) (MAPi (\k p. (k,p)) phis)` by
+    simp[indexedListsTheory.MEM_MAPi] >>
+  drule_all indexed_phi_selected_member >>
+  disch_then (qspecl_then [`FEMPTY`, `FEMPTY`, `pred`] mp_tac) >>
+  simp[build_phi_maps_def] >>
+  Cases_on `FIND (\(lbl,w). lbl = pred) (phi_pairs (EL i phis).inst_operands)`
+  >- simp[pairTheory.LAMBDA_PROD] >>
+  rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >>
+  simp[pairTheory.LAMBDA_PROD]
+QED
+
 Theorem input_vars_from_collect[local]:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
