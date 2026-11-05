@@ -93,7 +93,8 @@ End
 (* Variables older than sa keep their provenance and taint; the bytes of
    the frame's older allocations outside live locals (those expr_post
    keeps) gain no taint, and nor do the live locals' bytes that
-   locals_kept keeps (all but a dynamic array's length word). *)
+   locals_kept keeps (all but the length words of the dynamic arrays
+   inside them). *)
 Definition ghost_kept_def:
   ghost_kept cenv (es : evaluation_state) (sa : compile_state) G0 tn0
     (s0 : venom_state) G tn <=>
@@ -108,7 +109,8 @@ Definition ghost_kept_def:
        i IN tn0.t_mem) /\
     (!n b sz i.
        local_region cenv es.scopes s0 n b sz /\
-       b <= i /\ i < b + sz /\ (dynarray_local cenv n ==> b + 32 <= i) /\
+       b <= i /\ i < b + sz /\
+       (!k. dynarray_len_at cenv n k ==> i < b + k \/ b + k + 32 <= i) /\
        i IN tn.t_mem ==>
        i IN tn0.t_mem)
 End
