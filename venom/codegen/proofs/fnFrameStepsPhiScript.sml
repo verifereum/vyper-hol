@@ -3099,3 +3099,98 @@ Resume phi_run_step[hit]:
 QED
 
 Finalise phi_run_step
+
+Theorem phi_run_prefix:
+  !todo done base fn bb pred entry source final ra lo m ps st body block_len
+    dfg cfg halt ops last prog initial_fmp o2pc.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ todo /\
+  phi_run_config fn ra lo base pred entry source m done todo ps st /\
+  block_len = LENGTH done + LENGTH (todo ++ body) /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st'
+Proof
+  Induct >- (rpt gen_tac >>
+    simp[generate_block_insts_prefix_def] >> strip_tac >> gvs[] >>
+    qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  rpt gen_tac >> strip_tac >> rename1 `collect_phis _ = done ++ inst::todo` >>
+  `inst.inst_opcode = PHI` by
+    (irule (cj 1 phi_codegen_inst_shape) >>
+     qexistsl_tac [`bb`, `fn`] >>
+     gvs[phi_run_context_def] >> simp[]) >>
+  rename1 `block_len = LENGTH done + LENGTH (inst::todo ++ suffix)` >>
+  `block_len = SUC (LENGTH done) + LENGTH (todo ++ suffix)` by simp[] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[phi_prefix_cons_plan] >>
+  Cases_on `generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps` >>
+  rename1 `generate_phi_plan _ _ _ _ = (step_ops, next)` >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+      listTheory.EVERY_APPEND] >>
+  `collect_phis bb.bb_instructions = done ++ inst::todo` by simp[] >>
+  drule_all phi_run_step >> disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog _ st = AsmOK middle` >>
+  `collect_phis bb.bb_instructions = (done ++ [inst]) ++ todo` by simp[] >>
+  first_x_assum (qspec_then `done ++ [inst]` assume_tac) >>
+  `asm_block_at prog middle.as_pc (execute_plan initial_fmp tail_ops)` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  first_x_assum drule >> simp[] >>
+  disch_then drule >> simp[] >>
+  disch_then (qspec_then `suffix` mp_tac) >>
+  rule_assum_tac (SIMP_RULE bool_ss
+    [arithmeticTheory.ADD1, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  simp_tac bool_ss [arithmeticTheory.ADD1,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >> disch_then drule_all >> disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog _ middle = AsmOK result_st` >>
+  qexists `result_st` >> simp[] >> conj_tac
+  >- (qpat_assum `asm_steps _ _ _ _ st = AsmOK middle`
+        (mp_then Any mp_tac stackOpSimTheory.asm_steps_add_ok) >>
+      disch_then (qspec_then `LENGTH (execute_plan initial_fmp tail_ops)` mp_tac) >> simp[]) >>
+  metis_tac[listTheory.APPEND_ASSOC, listTheory.APPEND]
+QED
+
+Theorem phi_run_final:
+  !base fn bb pred entry source final ra lo m last st.
+  phi_run_context fn bb pred entry source final /\
+  phi_run_config fn ra lo base pred entry source m
+    (collect_phis bb.bb_instructions) [] last st ==>
+  phi_stack_provenance base pred entry (collect_phis bb.bb_instructions) [] last /\
+  spill_alloc_layout_wf last.ps_alloc last.ps_spilled /\
+  venom_asm_rel lo last ((frame_view fn ra final) with vs_memory := m) st
+Proof
+  simp[phi_run_context_def, phi_run_config_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem phi_run_final_memory:
+  !base fn bb pred entry source final ra lo m last st.
+  phi_run_context fn bb pred entry source final /\
+  phi_run_config fn ra lo base pred entry source m
+    (collect_phis bb.bb_instructions) [] last st ==>
+  memory_rel last.ps_alloc m st.as_memory
+Proof
+  rpt gen_tac >> strip_tac >> drule_all phi_run_final >> strip_tac >>
+  drule fnFrameBoundaryEntryParamsTheory.entry_local_memory_footprint >> simp[]
+QED
+
+Theorem phi_run_final_support:
+  !base fn bb pred entry source final ra lo m last st at.
+  phi_run_context fn bb pred entry source final /\
+  phi_run_config fn ra lo base pred entry source m
+    (collect_phis bb.bb_instructions) [] last st /\
+  generated_plan_state_wf_marked base entry /\
+  (MEM at last.ps_stack \/ at IN FDOM last.ps_spilled) ==>
+  ((MEM at entry.ps_stack \/ at IN FDOM entry.ps_spilled) /\
+   ~(MEM at entry.ps_stack /\ ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+      resolve_phi pred inst.inst_operands = SOME at)) \/
+  (?inst v. MEM inst (collect_phis bb.bb_instructions) /\ MEM v inst.inst_outputs /\ at = Var v)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all phi_run_final >> strip_tac >>
+  metis_tac[phi_provenance_final_resident]
+QED
