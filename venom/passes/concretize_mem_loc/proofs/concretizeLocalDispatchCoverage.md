@@ -137,3 +137,24 @@ Highest-impact missing interface, described by inputs/outputs rather than a new 
 ## Verification
 
 `holbuild` passed for concretizeLayoutLocalLoadTheory, concretizeLayoutLocalStoreTheory and concretizeLayoutLocalCopyTheory (TO_concretize_sim-20261105T054124Z_m9789_t001), and for frameRelocationScalarStepsTheory, frameRelocationAffineStepsTheory, frameRelocationCompareStepsTheory, frameRelocationGuardedStepsTheory, frameRelocationPhiTheory, frameRelocationAllocationStepsTheory, frameRelocationStoreStepsTheory, frameRelocationOpaqueTheory (TO_concretize_sim-20261105T054124Z_m9823_t001). This certifies the existing boundaries used by the inventory, not the missing families or final theorem. No probe theory ships.
+
+## Checked reachable clean-value adapter
+
+`concretizeLayoutLocalValuesTheory.concretize_clean_value_local_complete`
+now covers ISZERO/NOT (one operand) and ADDMOD/MULMOD (three operands),
+with one output, at an actual ordinary joint-trace event. Resolved reachable
+support plus `fn_ptr_ok` excludes pointer origins; discipline supplies taint
+cleanliness and the existing opaque-use boundary excludes return tokens.
+No operand-cleanliness or successor-demand hypothesis is assumed. No writes
+and the actual trace produce demand restriction. The conclusion includes
+successful target execution, guarded successor values/memory/observations,
+actual source provenance erasure, independent target `step_taint` inclusion,
+and preservation of the minimal `relocation_env`.
+
+Incoming obligations remain explicit: empty initial allocation cache,
+`ptr_discipline`, context-wide pointer and instruction well-formedness,
+resolved current config, local function shape/membership, operand-count and
+output envelopes, successful source step, current guarded relation, independent
+taint order and execution environment. This is not full dispatch/frame
+composition. Binary clean-value cases, CALLVALUE/GAS reachable adapters and all
+other outstanding inventory rows retain their previous conditional status.
