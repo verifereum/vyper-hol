@@ -489,3 +489,150 @@ Resume block_prefix_step[join]:
 QED
 
 Finalise block_prefix_step
+
+(* ===== From the block boundary to the block body ===== *)
+
+(* At the start of a non-entry block whose PHIs evaluate to s_phi: the
+   label's JUMPDEST and the block's prefix run, reaching the premises of
+   fnBlockBody$block_body_frame_sim at k = phi_prefix_length (the block
+   has no parameters), with the cleanup fields lineage_state_block_plan
+   picks. *)
+Theorem block_step_prefix:
+  !unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth spill_base
+   lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after vs as Inv
+   ra rest mem0 s_phi.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+    codegen_context_obligations Inv ctx cpl /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps /\
+    vs.vs_prev_bb = SOME pred /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      vs.vs_current_bb ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp block_ops) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs as /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    eval_phis vs bb.bb_instructions = OK s_phi
+    ==>
+    ?h promised ps_after prefix_ops rest_ops ps1 n as1.
+      generate_block_plan liveness dfg cfg fn bb
+        (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+        SOME (block_ops, ps_after) /\
+      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      block_plan_state liveness dfg cfg fn bb
+        (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+        (phi_prefix_length bb.bb_instructions) ps1 /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (phi_prefix_length bb.bb_instructions -
+         LENGTH (get_params bb.bb_instructions))
+        (DROP (phi_prefix_length bb.bb_instructions -
+               LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+        ps1 = SOME (rest_ops, ps_after) /\
+      block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
+      asm_steps lo o2pc prog n as = AsmOK as1 /\
+      as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp
+                                       (SOLabel bb.bb_label :: prefix_ops)) /\
+      fn_frame_inv ctx cpl lo fn ra rest mem0 ps1
+        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) as1 /\
+      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+         operand_val (frame_view fn ra
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) lo at =
+         operand_val (frame_view fn ra
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) lo
+           (normalize_operand dfg [] at))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule venomExecPropsTheory.lookup_block_label >> strip_tac >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+   dfs_block_state liveness dfg cfg fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+     bb.bb_label ps_dfs` by
+    (qpat_x_assum `bb.bb_label = _` (fn th => REWRITE_TAC [th]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all step_fn_shape >> strip_tac >>
+  `canonical_param_prefix fn` by fs[codegen_ready_fn_def] >>
+  drule_all nonentry_block_no_params >> strip_tac >>
+  drule codegen_ready_fn_no_marker >> strip_tac >>
+  drule lineage_entry_lineage_state >> strip_tac >>
+  mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
+    `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `bb.bb_label`, `bb`, `ps`, `ps_dfs`,
+    `block_ops`, `ps_dfs_after`] lineage_state_block_plan) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
+    `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `bb.bb_label`, `bb`, `ps`]
+    lineage_state_static) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `fn`, `bb`,
+    `ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
+    `block_ops`, `ps_after`] generate_block_plan_nonentry) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`,
+    `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb.bb_label`, `ps_dfs`,
+    `bb`, `block_ops`, `ps_dfs_after`] dfs_block_plan_contained) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`,
+    `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb.bb_label`, `ps_dfs`,
+    `bb`, `block_ops`, `ps_dfs_after`] dfs_block_alloc_bounded) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  mp_tac (Q.SPECL [`ctx`, `cpl`, `i`] context_region_fn_name) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `EL i cpl.cp_regions = r` (fn th => REWRITE_TAC [th] >> assume_tac th) >>
+  qpat_x_assum `EL i ctx.ctx_functions = fn` (fn th => REWRITE_TAC [th] >> assume_tac th) >>
+  strip_tac >>
+  `r.sr_spill_base <= ps_after.ps_alloc.sa_spill_base /\
+   ps_after.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (gvs[] >> decide_tac) >>
+  `!off. MEM (SOSpill off) (clean_ops ++ inst_ops) \/
+         MEM (SORestore off) (clean_ops ++ inst_ops) ==> off < dimword (:256)` by
+    (rpt strip_tac >>
+     mp_tac (Q.SPECL [`ctx`, `cpl`, `r`, `pre`, `block_ops`, `post`, `off`]
+       region_subplan_spill_offsets) >> gvs[]) >>
+  qpat_x_assum `block_ops = _` (fn eq =>
+    qpat_assum `asm_block_at _ _ _` (fn th =>
+      strip_assume_tac (MATCH_MP (Q.SPECL [`lo`, `o2pc`] label_block_steps)
+                          (REWRITE_RULE [eq, APPEND] th))) >> assume_tac eq) >>
+  mp_tac (Q.SPECL [`ctx`, `cpl`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`,
+    `cfg`, `ch`, `growth`, `spill_base`, `lbl_ctr`, `fn`, `bb`, `pred`, `ps`,
+    `h`, `promised`, `vs`, `as with as_pc := as.as_pc + 1`, `s_phi`,
+    `clean_ops`, `ps2`, `inst_ops`, `ps_after`, `r`, `ra`, `rest`, `mem0`]
+    block_prefix_step) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+               simp[fn_frame_inv_pc]) >>
+  strip_tac >>
+  `asm_steps lo o2pc prog (1 + n) as = AsmOK as'` by
+    (qpat_x_assum `asm_steps _ _ _ 1 as = _`
+       (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>
+     first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
+                `body_ops`, `ps1`, `1 + n`, `as'`] >>
+  rpt conj_tac >> REWRITE_TAC [operand_val_frame_view_inst_idx] >>
+  TRY (first_assum ACCEPT_TAC)
+  >- (REWRITE_TAC [block_plan_state_def] >>
+      qexistsl_tac [`[]`,
+        `ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
+        `clean_ops`, `ps2`, `phi_ops`] >>
+      gvs[])
+  >> gvs[execute_plan_label_length, operand_val_frame_view_inst_idx]
+QED
