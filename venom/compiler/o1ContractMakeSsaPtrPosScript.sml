@@ -351,7 +351,31 @@ Theorem make_ssa_pos_revert:
   make_ssa_pos fn fn' l k < LENGTH bb'.bb_instructions /\
   (EL (make_ssa_pos fn fn' l k) bb'.bb_instructions).inst_opcode = REVERT
 Proof
-  cheat
+  strip_tac >> drule_all make_ssa_current_fn_block_last >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `k = PRE (LENGTH bb.bb_instructions)` by
+    (gvs[bb_well_formed_def] >>
+     first_x_assum irule >> simp[is_terminator_def]) >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `make_ssa_pos fn fn' l k = PRE (LENGTH bb'.bb_instructions)` by
+    (simp[make_ssa_pos_def] >> decide_tac) >>
+  `0 < LENGTH bb'.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  gvs[] >>
+  `LAST bb.bb_instructions =
+     EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions` by
+    metis_tac[listTheory.LAST_EL] >>
+  `LAST bb'.bb_instructions =
+     EL (PRE (LENGTH bb'.bb_instructions)) bb'.bb_instructions` by
+    (irule listTheory.LAST_EL >> Cases_on `bb'.bb_instructions` >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem make_ssa_pos_suc[local]:
+  make_ssa_pos fn fn' l (SUC k) = SUC (make_ssa_pos fn fn' l k)
+Proof
+  simp[make_ssa_pos_def]
 QED
 
 (* A paired state of a MakeSSA lockstep sits at make_ssa_pos in the block
