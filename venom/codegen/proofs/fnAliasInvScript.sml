@@ -3707,6 +3707,20 @@ Proof
   metis_tac[MEM_REVERSE]
 QED
 
+Theorem alias_ready_phi_single_output:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  ?out. phi.inst_outputs = [out]
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI` by
+    metis_tac[lookup_block_MEM, livenessProofsTheory.collect_phis_mem] >>
+  `inst_wf phi` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `LENGTH phi.inst_outputs = 1` by gvs[inst_wf_def] >>
+  Cases_on `phi.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]
+QED
+
 Theorem alias_phi_plan_holds_live:
   MEM x live /\ plan_holds ps (Var x) ==>
   plan_holds (SND (generate_phi_plan inst live halting ps)) (Var x)
