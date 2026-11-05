@@ -14,7 +14,7 @@ Theorem deploy_unit_execution_correct:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (entry_venom_state prog cplan es)
+    gas_variant vs (deploy_entry_state prog cplan tops es)
     ==>
     ?marks.
       deploy_source_exempt tops
