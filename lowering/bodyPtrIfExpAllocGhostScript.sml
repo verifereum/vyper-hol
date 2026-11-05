@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpAllocGhost
 Ancestors
-  bodyPtrIfExpAllocLocals allocationPtr bodyPtrDefs ptrDiscipline
+  bodyPtrIfExpAllocLocals allocationPtr bodyPtrDefs ptrDiscipline decoderGhostFramePtr
   venomState venomInst finite_map compileEnv exprSimDefs exprLoweringProps
 
 Theorem alloca_step_lookup_preserved:
@@ -12,17 +12,6 @@ Proof
   drule alloca_step_operand_preserved >>
   disch_then (qspec_then `Var p` mp_tac) >>
   simp[eval_operand_def]
-QED
-
-Theorem alloca_step_old_var_taint:
-  !s id n out u tn p.
-    p <> out ==>
-    op_taint (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn)
-      (Var p) = op_taint tn (Var p)
-Proof
-  rpt strip_tac >>
-  simp[step_taint_def, set_var_taint_def, out_taint_def, mk_inst_def,
-       op_taint_def, FLOOKUP_UPDATE]
 QED
 
 Theorem alloca_step_return_buf_ptr:
@@ -80,6 +69,6 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       `x <> out` by metis_tac[] >>
-      simp[alloca_step_old_var_taint] >> metis_tac[]) >>
+      simp[step_taint_other_output, mk_inst_def] >> metis_tac[]) >>
   irule alloca_step_stor_taint_ok >> simp[] >> metis_tac[]
 QED
