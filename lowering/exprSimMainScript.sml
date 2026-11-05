@@ -161,7 +161,7 @@ Proof
   >~ [`Call _ _ _ _`] >- (irule compile_call_case_sim >> gvs[])
   >~ [`Name _ _`] >- simp[compile_name_case_sim]
   >~ [`Literal _ _`] >- simp[compile_literal_case_sim]
-  >~ [`FlagMember _ _ _`] >- simp[compile_flag_member_case_sim] >>
+  >~ [`FlagMember _ _ _`] >- simp[exprSimFlagWordTheory.compile_flag_member_case_sim] >>
   FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
     [compile_toplevel_name_sim, compile_ifexp_sim,
      compile_struct_lit_sim, compile_subscript_sim, compile_attribute_sim,

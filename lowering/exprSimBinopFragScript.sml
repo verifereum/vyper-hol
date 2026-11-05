@@ -1307,7 +1307,6 @@ Proof
   `within_int_bound (Unsigned 256) i2` by
     (Cases_on `is_signed_type t2` >> fs[] >>
      metis_tac[within_int_bound_unsigned_256]) >>
-  simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >> strip_tac >>
   `type_bits ann <= 256` by decide_tac >>
   `?v. bop_result cx ann ShR tys (IntV i) (IntV i2) es0 = INL v /\
        word_value v /\ val_to_w256 v =
@@ -1316,14 +1315,14 @@ Proof
           else word_lsr (val_to_w256 (IntV i)) (w2n (val_to_w256 (IntV i2))))` by
     (irule bop_result_shr >> simp[] >>
      qexists_tac `type_bits ann` >> simp[]) >>
-  irule frag_exec_pointwise >> rpt strip_tac >> gvs[compile_binop_def] >>
-  qpat_x_assum `_ sa = (op, sb)` mp_tac >> rw[] >>
-  drule emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `s0`,
-                           `val_to_w256 v`, `\r. F`] mp_tac) >>
-  (impl_tac >- simp[step_SHR, step_SAR, venomInstTheory.is_terminator_def]) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> metis_tac[]
+  irule binop_frag_straight >>
+  (conj_tac >- metis_tac[straight_fresh_compile_shift]) >>
+  disch_tac >>
+  disj1_tac >> qexists_tac `v` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`) compile_shift_run >>
+  disch_then (qspecl_then [`ss`, `val_to_w256 (IntV i)`, `val_to_w256 (IntV i2)`] mp_tac) >>
+  simp[]
 QED
 
 (* Accepted shifts retain the nonnegative evaluated amount.  ShL is
