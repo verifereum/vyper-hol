@@ -53,3 +53,19 @@ Proof
   rpt strip_tac >> drule_all structlit_new_site_bytes_unchanged >>
   simp[step_taint_def, mem_taint_def, range_bytes_def]
 QED
+
+Theorem structlit_mcopy_operand_byte_clean:
+  !tn id dst src count s t a b n j.
+    eval_operand dst s = SOME a /\ eval_operand src s = SOME b /\
+    eval_operand count s = SOME n /\ j < w2n n /\
+    w2n b + j NOTIN tn.t_mem ==>
+    w2n a + j NOTIN
+      (step_taint (mk_inst id MCOPY [dst;src;count] []) s t tn).t_mem
+Proof
+  rpt strip_tac >>
+  gvs[step_taint_def, mem_taint_def, written_taint_def, step_writes_def,
+      codegenRelTheory.source_memory_write_ranges_def,
+      codegenRelTheory.fixed_source_write_range_def,
+      mk_inst_def, range_bytes_def,
+      codegenRelTheory.sized_source_write_range_def]
+QED
