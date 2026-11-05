@@ -1,8 +1,9 @@
 Theory concretizePtrOwnedAssignPrefix
 Ancestors concretizePtrAffineTransport concretizePtrValueTransport
-  concretizePtrDeletedGapHistory
+  concretizePtrDeletedGapHistory concretizePtrDeletedGaps
   concretizePtrLedgerAlignment concretizePtrSourceOwnership
-  concretizePtrChronologicalHistory
+  concretizePtrChronologicalHistory concretizePtrLedgerProbe
+  concretizePtrActivationChronology concretizePtrActivationBirths
   o1PassContract venomWf ptrDiscipline venomExecSemantics venomState
   venomInst codegenRel list arithmetic finite_map pred_set
 
@@ -86,5 +87,89 @@ Theorem ptr_assign_prefix_gap_transport:
 Proof
   strip_tac >> drule_all ptr_assign_prefix_gap_ghosts >> strip_tac >>
   simp[ptr_gap_scan_fields, ptr_vars_transport_def, lookup_var_def] >>
+  gvs[ptr_vars_transport_def, lookup_var_def]
+QED
+
+(* This is a target-only operational segment: no source witnesses occur here. *)
+Definition ptr_assign_target_segment_def:
+  (ptr_assign_target_segment C bb 0 t u <=> u = t) /\
+  (ptr_assign_target_segment C bb (SUC n) t u <=>
+    ?post. step_inst 0 C (EL t.vs_inst_idx bb.bb_instructions) t = OK post /\
+      ptr_assign_target_segment C bb n
+        (post with vs_inst_idx := SUC t.vs_inst_idx) u)
+End
+
+Theorem ptr_assign_prefix_fields:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  inst.inst_outputs = [out] /\ step_inst fuel C inst s = OK post ==>
+  post.vs_allocas = s.vs_allocas /\ post.vs_labels = s.vs_labels /\
+  post.vs_current_bb = s.vs_current_bb /\ post.vs_inst_idx = s.vs_inst_idx
+Proof
+  strip_tac >> gvs[Once run_defs, step_inst_base_def, AllCaseEqs(), update_var_def]
+QED
+
+Theorem ptr_assign_prefix_attach:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  active_inst a.po_fn a.po_inst a.po_state /\
+  a.po_inst.inst_opcode = ASSIGN /\ a.po_inst.inst_operands = [op] /\
+  a.po_inst.inst_outputs = [out] /\
+  step_inst 0 C a.po_inst a.po_state = OK post /\
+  active_inst a.po_fn inst' (post with vs_inst_idx := SUC a.po_state.vs_inst_idx) ==>
+  ptr_source_ownership vs0 C (h ++ [ptr_ledger_next a inst' post])
+    (ptr_ledger_next a inst' post) tokens registry births PT
+    (step_prov PT TG a.po_inst post) saved
+Proof
+  strip_tac >>
+  `ptr_tagged_chrono_step C (HD tokens) a (ptr_ledger_next a inst' post)
+     PT TG saved PT (step_prov PT TG a.po_inst post) saved` by
+    (simp[ptr_ledger_next_def] >>
+     `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
+       simp[is_terminator_def] >>
+     `ptr_observe a.po_stack a.po_params a.po_prov a.po_taint
+       a.po_fn a.po_inst a.po_state = a` by
+       simp[NoAsms, ptr_observe_def, ptr_observation_component_equality] >>
+     drule_all (cj 1 ptr_tagged_chrono_step_rules) >>
+     simp[ptr_tagged_step_def] >> metis_tac[]) >>
+  drule_all (cj 2 ptr_source_ownership_rules) >>
+  drule ptr_ownership_overlay_fixed >>
+  drule_all ptr_assign_prefix_fields >>
+  simp[ptr_activation_tokens_def, ptr_activation_registry_def,
+    ptr_ledger_next_def, ptr_observe_def]
+QED
+
+Theorem ptr_assign_prefix_gap_aligned:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  fn_inst_wf a.po_fn /\ MEM bb a.po_fn.fn_blocks /\
+  bb.bb_label = a.po_state.vs_current_bb /\
+  a.po_inst = EL a.po_state.vs_inst_idx bb.bb_instructions /\
+  (!i. MEM i (fn_insts a.po_fn) /\ i.inst_opcode = ALLOCA ==>
+    ?p. FLOOKUP layout (Allocation i.inst_id) = SOME p) /\
+  ptr_ledger_block_alignment layout bb.bb_instructions tgt indices /\
+  j < LENGTH indices /\ a.po_state.vs_inst_idx <= EL j indices /\
+  (j = 0 \/ EL (j-1) indices < a.po_state.vs_inst_idx) /\
+  ptr_vars_transport births positions TG a.po_taint a.po_state t ==>
+  ?delta b. LENGTH delta = EL j indices - a.po_state.vs_inst_idx /\
+    ptr_source_ownership vs0 C (h ++ delta) b tokens registry births PT TG saved /\
+    b.po_fn = a.po_fn /\ b.po_stack = a.po_stack /\ b.po_params = a.po_params /\
+    b.po_inst = EL (EL j indices) bb.bb_instructions /\
+    b.po_state = (a.po_state with vs_inst_idx := EL j indices) /\
+    ptr_vars_transport births positions TG b.po_taint b.po_state t
+Proof
+  strip_tac >>
+  `EL j indices < LENGTH bb.bb_instructions` by
+    (drule ptr_ledger_alignment_cursor >> metis_tac[]) >>
+  `!q. a.po_state.vs_inst_idx <= q /\ q < EL j indices ==>
+    (EL q bb.bb_instructions).inst_opcode = NOP` by
+    (rpt strip_tac >> irule ptr_ledger_source_gap >>
+     qexistsl_tac [`a.po_fn`,`indices`,`j`,`layout`,`tgt`] >>
+     simp[] >> decide_tac) >>
+  `a.po_state.vs_inst_idx + (EL j indices - a.po_state.vs_inst_idx) = EL j indices`
+    by decide_tac >>
+  `ptr_gap_tag_scan bb (EL j indices - a.po_state.vs_inst_idx) a PT TG = TG` by
+    (irule (cj 1 ptr_assign_prefix_gap_ghosts) >> gvs[]) >>
+  `(ptr_gap_scan bb (EL j indices - a.po_state.vs_inst_idx) a).po_taint = a.po_taint`
+    by (irule (cj 3 ptr_assign_prefix_gap_ghosts) >> gvs[]) >>
+  drule_all ptr_gap_ownership_interval >> strip_tac >>
+  qexistsl_tac [`delta`,`b`] >> gvs[] >>
   gvs[ptr_vars_transport_def, lookup_var_def]
 QED

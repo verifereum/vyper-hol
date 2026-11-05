@@ -99,7 +99,7 @@ Proof
   simp[ptr_birth_overlay_def, FUNION_ASSOC]
 QED
 
-Theorem ptr_ownership_overlay_fixed[local]:
+Theorem ptr_ownership_overlay_fixed:
   !vs0 C h a tokens registry births PT TG saved.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_birth_overlay (HD tokens) a.po_state.vs_allocas births = births
