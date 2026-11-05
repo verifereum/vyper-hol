@@ -346,6 +346,121 @@ Proof
   simp[EL_APPEND1] >> metis_tac[]
 QED
 
+Theorem starve_stack_step:
+  !prog as es op n cost f.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    n <= LENGTH as.as_stack /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\
+    step_inst op = (do args <- pop_stack n;
+                      consume_gas (cost args); push_stack (f args) od) ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    ?es1. step es = (INL (), es1) /\
+          asm_evm_rel prog (asm_next (as with as_stack :=
+            f (TAKE n as.as_stack) :: DROP n as.as_stack)) es1 /\
+          LENGTH es1.contexts = 1
+Proof
+  rpt strip_tac >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op' = op` by metis_tac[opcode_wf_inj] >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  asm_rewrite_tac[] >> simp[] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def, bind_def,
+       ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def] >> fs[] >>
+  Cases_on `ctxt.gasUsed + cost (TAKE n as.as_stack) <= ctxt.msgParams.gasLimit`
+  >- (simp[] >> Cases_on `LENGTH (DROP n as.as_stack) < stack_limit`
+      >- (fs[] >>
+          simp[inc_pc_or_jump_def, LET_THM, bind_def,
+               get_current_context_def, return_def,
+               set_current_context_def, is_call_def] >>
+          qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+          simp[asm_evm_rel_def] >> strip_tac >>
+          simp[asm_evm_rel_def, asm_next_def] >>
+          once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+          irule ewi_length >>
+          fs[asm_encoding_wf_def, LET_THM, encoding_wf_inst_def, UNCURRY] >>
+          metis_tac[]) >>
+      fs[] >> disj1_tac >> irule starve_handle_resource >> simp[]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
+Theorem starve_binop:
+  !prog as es op f as1.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\
+    step_inst op = step_binop op f /\ asm_binop f as = AsmOK as1 ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    ?es1. step es = (INL (), es1) /\
+          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+Proof
+  rpt strip_tac >>
+  Cases_on `as.as_stack` >> gvs[asm_binop_def] >>
+  Cases_on `t` >> gvs[] >>
+  drule_at (Pos (el 2)) starve_stack_step >>
+  disch_then (qspecl_then [`op`, `2`, `\args. static_gas op`,
+                          `\args. f (EL 0 args) (EL 1 args)`] mp_tac) >>
+  simp[step_binop_def]
+QED
+
+Theorem starve_unop:
+  !prog as es op f as1.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\
+    step_inst op = step_monop op f /\ asm_unop f as = AsmOK as1 ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    ?es1. step es = (INL (), es1) /\
+          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+Proof
+  rpt strip_tac >>
+  Cases_on `as.as_stack` >> gvs[asm_unop_def] >>
+  drule_at (Pos (el 2)) starve_stack_step >>
+  disch_then (qspecl_then [`op`, `1`, `\args. static_gas op`,
+                          `\args. f (EL 0 args)`] mp_tac) >>
+  simp[step_monop_def]
+QED
+
+Theorem starve_ternop:
+  !prog as es op f as1.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\
+    step_inst op = (do args <- pop_stack 3; consume_gas (static_gas op);
+                      push_stack (f (EL 0 args) (EL 1 args) (EL 2 args)) od) /\
+    asm_ternop f as = AsmOK as1 ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    ?es1. step es = (INL (), es1) /\
+          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+Proof
+  rpt strip_tac >>
+  Cases_on `as.as_stack` >> gvs[asm_ternop_def] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  drule_at (Pos (el 2)) starve_stack_step >>
+  disch_then (qspecl_then [`op`, `3`, `\args. static_gas op`,
+                          `\args. f (EL 0 args) (EL 1 args) (EL 2 args)`] mp_tac) >>
+  simp[]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
