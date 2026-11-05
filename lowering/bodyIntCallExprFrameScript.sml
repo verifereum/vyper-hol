@@ -2336,3 +2336,79 @@ val _ = List.app (fn th =>
     else raise Fail "Runtime forcing has unproved dependencies"
   end) [unwrap_runtime_storage_frame_frag,
         raw_to_forced_runtime_storage_frame_frag];
+
+Theorem unwrap_typed_runtime_storage_frame_frag:
+  unwrap_value cenv vv sm = (op,sb) /\ ~cenv.ce_is_ctor /\
+  expr_body_pre cenv cx env e es /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (case vv of StackValue t operand => T | LocatedValue t p =>
+    ~is_word_type t /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+     p.ptr_location = LocCode) ==>
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x)) ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  strip_tac >> irule frag_exec_pointwise >> gen_tac >> simp[] >> strip_tac >>
+  Cases_on `vv`
+  >- (irule frag_exec_conseq >>
+      irule_at (Pos last) unwrap_runtime_storage_frame_frag >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rename1 `LocatedValue t p` >>
+  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
+     type_memory_bytes cenv t = type_memory_size tvt /\
+     type_memory_size tvt < 2 ** 64` by
+    (rpt strip_tac >> gvs[] >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  irule frag_exec_conseq >>
+  irule_at (Pos last) unwrap_runtime_storage_frame_frag >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> gvs[] >> metis_tac[]
+QED
+
+Theorem raw_to_forced_typed_runtime_storage_frame_frag:
+  compile_expr cenv ty e sa = (vv,sm) /\
+  unwrap_value cenv vv sm = (op,sb) /\
+  eval_expr cx e es = (rawres,est) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\
+  expr_res_ok res /\ ~cenv.ce_is_ctor /\ expr_body_pre cenv cx env e es /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM est.scopes /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (case vv of StackValue t operand => T | LocatedValue t p =>
+    ~is_word_type t /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+     p.ptr_location = LocCode) ==>
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x)) /\
+  frag_exec ctx sa sm P
+    (\s. ?raw. rawres = INL raw /\
+         vv_post ctx func cenv cx e es sa sm s0 est raw vv s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (expr_exit rawres) ==>
+  frag_exec ctx sa sb P
+    (\s. ?v. res = INL v /\
+         expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (expr_exit res)
+Proof
+  strip_tac >> irule raw_to_forced_storage_frame_frag >> simp[] >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+  simp[] >> rpt strip_tac >>
+  irule unwrap_typed_runtime_storage_frame_frag >> simp[] >> metis_tac[]
+QED
+
+val _ = List.app (fn th =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Typed runtime forcing has unproved dependencies"
+  end) [unwrap_typed_runtime_storage_frame_frag,
+        raw_to_forced_typed_runtime_storage_frame_frag];
