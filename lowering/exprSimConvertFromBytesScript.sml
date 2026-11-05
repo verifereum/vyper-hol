@@ -2488,19 +2488,7 @@ Theorem compile_convert_from_bytestring_case:
     is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
     (!a f args d. e1 = Call a (IntCall f) args d ==>
        lowered_value_type cenv e1 = expr_type e1) ==>
-    !env ty es sa sb vv res es' s0.
-      expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
-      (nocalls ==> int_calls_expr (TypeBuiltin ann Convert t [e1]) = []) /\
-      compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (vv, sb) /\
-      eval_expr cx (TypeBuiltin ann Convert t [e1]) es = (res, es') /\
-      expr_vv_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?tv. res = INL tv /\
-                  vv_post ctx func cenv cx (TypeBuiltin ann Convert t [e1])
-                    es sa sb s0 es' tv vv s)
-        (expr_exit res)
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   drule expr_body_pre_convert >> strip_tac >>

@@ -44,8 +44,9 @@ Proof
             by (irule compile_convert_to_bytestring_case >> simp[]) >>
           metis_tac[expr_vv_case_def]) >>
       Cases_on `is_bytestring_type (expr_type e1)`
-      >- (simp[expr_vv_sim_def] >>
-          metis_tac[compile_convert_from_bytestring_case]) >>
+      >- (`expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])`
+            by (irule compile_convert_from_bytestring_case >> simp[]) >>
+          metis_tac[expr_vv_case_def]) >>
       `expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])`
         by (irule compile_convert_scalar_case >> simp[]) >>
       metis_tac[expr_vv_case_def]) >>
