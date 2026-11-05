@@ -785,6 +785,44 @@ Proof
   qexists_tac `0` >> simp[gas_count_step_def] >> metis_tac[]
 QED
 
+Theorem frag_observer_step_zero_edge:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
+  abi_observer_step ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s t ==>
+  gas_path_edge ctx fn s 0 (OK t)
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `abi_observer_step ctx fn (frag_observer_cut sb) s t` by
+    (irule frag_observer_step_transfer >> metis_tac[]) >>
+  irule abi_observer_step_zero_edge >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `abi_observer_step ctx (frag_observer sa sb fn id) _ s t`
+    (strip_assume_tac o REWRITE_RULE[abi_observer_step_def]) >>
+  drule_all frag_observer_instruction_agrees >> strip_tac >> gvs[] >>
+  metis_tac[frag_observer_off_cut_opcodes]
+QED
+
+Theorem frag_observer_exit_zero_edge:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
+  (s.vs_current_bb,s.vs_inst_idx) <> frag_observer_cut sb /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = r /\ exit_result r ==>
+  gas_path_edge ctx fn s 0 r
+Proof
+  rpt strip_tac >>
+  drule_all frag_observer_off_cut_opcodes >> strip_tac >>
+  drule_all frag_observer_instruction_agrees >> strip_tac >>
+  simp[gas_path_edge_def] >>
+  qexists_tac `0` >>
+  simp[step_inst_non_invoke, gas_count_step_def]
+QED
+
 Theorem local_prefix_endpoint:
   !ctx fn cut s t. local_prefix ctx fn cut s t ==>
     ~s.vs_halted /\ ~t.vs_halted /\
