@@ -133,6 +133,49 @@ holbuild -j"$(nproc)" build
 
 Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).
 
+### Frontend CV translation and benchmark
+
+The annotated-AST test importer retains `EVAL`: the complete proof-producing
+CV path was slower on every measured workload below. `jsonToVyperCVLib.eval`
+computes translations with `cv_eval`, then uses kernel simplification and
+`EVAL` to prove only their defined-input conditions. It returns an unconditional
+equality or fails, without assuming away undefined cases such as an empty
+interface-constructor argument list.
+
+```bash
+holbuild -j1 build --skip-checkpoints jsonFrontendCVBenchmarkTheory vyperTestLib
+# Re-run the benchmark instead of accepting an up-to-date/cached theory:
+holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBenchmarkTheory
+```
+
+The benchmark uses committed `simple`, `scoped_locals` and `nested_initializes`
+compiler JSON, the same wrapped importer input as the tests, and no native
+runner or external Vyper installation. It checks exact theorem RHS parity
+between `EVAL` and CV, requires unconditional `SOME` results, and exports the
+translation/parity theorems. `FRONTEND_CV` log lines report CPU and wall seconds
+per mode: first use in the HOL process, then warm batches of 3 and 12
+translations (one and four repetitions of the real-module suite). Parsing and
+parity checks are outside the timers; CV encoding, decoding and condition
+proofs are inside. This compares the test importer's translation boundary,
+not whole-suite build or execution time, raw `cv_compute`, or native EmitML
+execution. The default build includes the CV frontend; timing runs are opt-in.
+
+Measured on ARM64 with Poly/ML 5.9.2, holbuild 0.12.1 and HOL revision
+`9783a49979c94c401ff8c0e51b2eefae7ea95ae3`. Every row passed exact RHS parity;
+the benchmark also proved the defined-input boundary regression.
+
+| Workload | EVAL CPU (s) | CV + condition proofs CPU (s) |
+| --- | ---: | ---: |
+| First use: simple | 0.008 | 0.285 |
+| First use: scoped_locals | 0.207 | 9.403 |
+| First use: nested_initializes | 0.121 | 19.213 |
+| Warm batch: 3 translations | 0.311 | 22.050 |
+| Warm batch: 12 translations | 1.289 | 87.308 |
+
+Parity certifies agreement with the existing HOL frontend on these inputs,
+not completeness of supported Vyper, correctness of compiler annotations or
+the ML JSON decoder, or equivalence to deployed EVM bytecode.
+
 ### Running the Vyper test suite
 
 The test runner expects exported JSON fixtures at `tests/vyper-test-exports`.
