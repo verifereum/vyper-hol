@@ -2404,14 +2404,14 @@ Proof
 QED
 
 (* TAKE n (REPLICATE m x) = REPLICATE n x when n <= m *)
-Theorem take_replicate_le[local]:
+Theorem take_replicate_le:
   !n m (x:'a). n <= m ==> TAKE n (REPLICATE m x) = REPLICATE n x
 Proof
   Induct_on `n` >> simp[] >> Cases_on `m` >> simp[]
 QED
 
 (* TAKE from zero-padded list = take_pad_0 *)
-Theorem take_pad_replicate[local]:
+Theorem take_pad_replicate:
   !n (l:byte list) k.
     n <= LENGTH l + k ==>
     TAKE n (l ++ REPLICATE k (0w:byte)) = take_pad_0 n l
@@ -2425,7 +2425,7 @@ Proof
 QED
 
 (* Key lemma: TAKE/DROP from expanded source = take_pad_0 from original *)
-Theorem take_drop_expand_eq_pad[local]:
+Theorem take_drop_expand_eq_pad:
   !sz soff (src:byte list).
     TAKE sz (DROP soff (asm_expand_memory (soff + sz) src)) =
     take_pad_0 sz (DROP soff src)

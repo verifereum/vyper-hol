@@ -1791,48 +1791,6 @@ Proof
   drule_at (Pos (el 2)) starve_invalid >> simp[]
 QED
 
-Theorem starve_take_replicate[local]:
-  !n m (x:'a). n <= m ==> TAKE n (REPLICATE m x) = REPLICATE n x
-Proof
-  Induct_on `n` >> simp[] >> Cases_on `m` >> simp[]
-QED
-
-Theorem starve_take_pad_replicate[local]:
-  !n (l:byte list) k.
-    n <= LENGTH l + k ==>
-    TAKE n (l ++ REPLICATE k (0w:byte)) = take_pad_0 n l
-Proof
-  simp[vfmTypesTheory.take_pad_0_pad_take, listTheory.PAD_RIGHT,
-       GSYM rich_listTheory.REPLICATE_GENLIST] >>
-  Induct_on `n` >> simp[] >> rpt strip_tac >>
-  Cases_on `l` >> gvs[]
-  >- (Cases_on `k` >> gvs[starve_take_replicate]) >>
-  first_x_assum (qspecl_then [`t`, `k`] mp_tac) >> simp[]
-QED
-
-Theorem starve_copy_source[local]:
-  !sz soff (src:byte list).
-    TAKE sz (DROP soff (asm_expand_memory (soff + sz) src)) =
-    take_pad_0 sz (DROP soff src)
-Proof
-  rpt gen_tac >> simp[asm_expand_memory_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `if rounded <= _ then _ else _` >>
-  `soff + sz <= rounded` by
-    (simp[Abbr `rounded`] >>
-     mp_tac (Q.SPEC `soff + sz` n_le_round_up_32) >> simp[]) >>
-  IF_CASES_TAC
-  >- (`soff + sz <= LENGTH src` by decide_tac >>
-      simp[vfmTypesTheory.take_pad_0_def, listTheory.PAD_RIGHT,
-           GSYM rich_listTheory.REPLICATE_GENLIST, LENGTH_TAKE_EQ, LENGTH_DROP]) >>
-  Cases_on `soff <= LENGTH src`
-  >- (simp[DROP_APPEND1] >> irule starve_take_pad_replicate >> simp[LENGTH_DROP]) >>
-  `LENGTH src <= soff` by simp[] >>
-  simp[DROP_APPEND2, rich_listTheory.DROP_REPLICATE, DROP_LENGTH_TOO_LONG,
-       vfmTypesTheory.take_pad_0_def, listTheory.PAD_RIGHT,
-       GSYM rich_listTheory.REPLICATE_GENLIST] >>
-  irule starve_take_replicate >> decide_tac
-QED
-
 Theorem starve_copy_write[local]:
   !b off bs sz.
     LENGTH bs = sz ==>
@@ -1893,7 +1851,7 @@ Proof
             get_current_context_def, return_def, set_current_context_def, is_call_def] >>
        qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
        simp[asm_evm_rel_def] >> strip_tac >>
-       gvs[asm_evm_rel_def, asm_next_def, starve_copy_source,
+       gvs[asm_evm_rel_def, asm_next_def, take_drop_expand_eq_pad,
            starve_copy_write, vfmTypesTheory.LENGTH_take_pad_0,
            vfmTypesTheory.take_pad_0_0] >>
        once_rewrite_tac[GSYM ADD1] >>
@@ -1944,7 +1902,7 @@ Proof
             get_current_context_def, return_def, set_current_context_def, is_call_def] >>
        qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
        simp[asm_evm_rel_def] >> strip_tac >>
-       gvs[asm_evm_rel_def, asm_next_def, starve_copy_source,
+       gvs[asm_evm_rel_def, asm_next_def, take_drop_expand_eq_pad,
            starve_copy_write, vfmTypesTheory.LENGTH_take_pad_0,
            vfmTypesTheory.take_pad_0_0] >>
        once_rewrite_tac[GSYM ADD1] >>
@@ -2081,7 +2039,7 @@ Resume starve_extcodecopy[copy_ok]:
        get_current_context_def, return_def, set_current_context_def, is_call_def] >>
   qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
   simp[asm_evm_rel_def] >> strip_tac >>
-  gvs[asm_evm_rel_def, asm_next_def, starve_copy_source,
+  gvs[asm_evm_rel_def, asm_next_def, take_drop_expand_eq_pad,
       vfmTypesTheory.LENGTH_take_pad_0, vfmTypesTheory.take_pad_0_0] >>
   once_rewrite_tac[GSYM ADD1] >>
   simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
