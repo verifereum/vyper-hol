@@ -18,12 +18,10 @@
  *     dependencies, so nothing after a root is scheduled before it;
  *   - y is a terminator.
  *
- * The schedule does not keep fallible instructions (is_fallible: ASSERT,
- * ASSERT_UNREACHABLE, RETURNDATACOPY, INVALID, INVOKE) in order: an ASSERT
- * can move above an INVOKE that came before it.  dft_fallible_order_kept
- * states that it does, for one input function and its schedule; the pass
- * contract takes it as its pre-condition, until the pinned DFT orders
- * fallible instructions (add_abort_deps).
+ * dft_fallible_order_kept states that aborting instructions of different
+ * kinds keep their order, for one input function and its schedule;
+ * dftAbortOrder proves it of dft_fn, whose effect dependencies (dft_eda)
+ * chain the runs of aborting instructions.
  *)
 Theory dftScheduleOrder
 Ancestors
@@ -38,11 +36,8 @@ End
    can abort in different ways (not dft_abort_compatible: an ASSERT's revert,
    the exceptional halt of ASSERT_UNREACHABLE and RETURNDATACOPY, and an
    INVOKE's anything), in every block.  Instructions that abort the same
-   way, other than two INVOKEs, may swap.  dft_fn does not keep it (it schedules over
-   build_eda, which leaves an ASSERT free to move above an INVOKE); Vyper's
-   fix for that (vyperlang/vyper#5329) orders exactly the aborting
-   instructions of different kinds.  The O1 contract assumes it of DFT's
-   output until the pin moves to that fix. *)
+   way, other than two INVOKEs, may swap.  dft_fn keeps it
+   (dft_fn_fallible_order_kept in dftAbortOrder). *)
 Definition dft_fallible_order_kept_def:
   dft_fallible_order_kept fn fn' <=>
     LIST_REL
@@ -198,7 +193,7 @@ Proof
      bb.bb_instructions = []` by simp[FILTER_EQ_NIL] >>
   simp[] >> sym_tac >>
   simp[FILTER_EQ_ID, EVERY_MEM] >> rpt strip_tac >>
-  metis_tac[schedule_output_from_block, build_eda_wf, entry_instructions_mem]
+  metis_tac[schedule_output_from_block, dft_eda_wf, entry_instructions_mem]
 QED
 
 Theorem dft_block_suffix_structure:
@@ -228,14 +223,14 @@ Proof
   qspecl_then [`order`, `bb`] mp_tac dft_block_suffix_decomposition >>
   simp[Once dft_block_def, LET_THM] >> disch_then (SUBST1_TAC o SYM) >>
   irule schedule_output_producer_before >>
-  simp[build_eda_wf, entry_instructions_mem] >>
+  simp[dft_eda_wf, entry_instructions_mem] >>
   conj_tac
   >- gvs[bb_well_formed_def] >>
   conj_tac
   >- gvs[non_pseudo_defs_before_uses_def] >>
   conj_tac
   >- gvs[bb_well_formed_def] >>
-  irule eda_topo_compatible_gen_weak_plain >>
+  irule eda_topo_compatible_dft_eda >>
   gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
 QED
 
@@ -724,6 +719,25 @@ Proof
   qexistsl [`prefix`, `suffix`] >> gvs[build_eda_scan]
 QED
 
+Theorem dft_block_suffix_dft_eda:
+  bb_well_formed bb /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  non_pseudo_defs_before_uses bb.bb_instructions ==>
+  output_eda_before (dft_eda bb.bb_instructions)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`order`, `bb`] mp_tac dft_block_suffix_decomposition >>
+  simp[Once dft_block_def, LET_THM] >> disch_then (SUBST1_TAC o SYM) >>
+  irule schedule_output_eda_before >>
+  simp[dft_eda_wf, entry_instructions_mem] >>
+  conj_tac >- gvs[bb_well_formed_def] >>
+  conj_tac >- gvs[non_pseudo_defs_before_uses_def] >>
+  conj_tac >- gvs[bb_well_formed_def] >>
+  irule eda_topo_compatible_dft_eda >>
+  gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
+QED
+
 Theorem dft_block_suffix_eda:
   bb_well_formed bb /\
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
@@ -731,16 +745,8 @@ Theorem dft_block_suffix_eda:
   output_eda_before (build_eda bb.bb_instructions)
     (FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions)
 Proof
-  rpt strip_tac >>
-  qspecl_then [`order`, `bb`] mp_tac dft_block_suffix_decomposition >>
-  simp[Once dft_block_def, LET_THM] >> disch_then (SUBST1_TAC o SYM) >>
-  irule schedule_output_eda_before >>
-  simp[build_eda_wf, entry_instructions_mem] >>
-  conj_tac >- gvs[bb_well_formed_def] >>
-  conj_tac >- gvs[non_pseudo_defs_before_uses_def] >>
-  conj_tac >- gvs[bb_well_formed_def] >>
-  irule eda_topo_compatible_gen_weak_plain >>
-  gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
+  strip_tac >> irule output_eda_before_dft_eda >>
+  irule dft_block_suffix_dft_eda >> simp[]
 QED
 
 Theorem build_eda_key_member:
@@ -943,6 +949,15 @@ Proof
   metis_tac[build_eda_deps_have_effects]
 QED
 
+Theorem root_is_entry_gen:
+  MEM r bi /\ ~is_pseudo r.inst_opcode /\ r.inst_outputs = [] /\
+  read_effects r.inst_opcode = empty_effects /\
+  write_effects r.inst_opcode = empty_effects ==>
+  MEM r (entry_instructions bi order eda)
+Proof
+  simp[entry_instructions_def, MEM_FILTER]
+QED
+
 Theorem root_is_entry:
   ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM r bi /\
   ~is_pseudo r.inst_opcode /\ r.inst_outputs = [] /\
@@ -950,11 +965,7 @@ Theorem root_is_entry:
   write_effects r.inst_opcode = empty_effects ==>
   MEM r (entry_instructions bi order (build_eda bi))
 Proof
-  rpt strip_tac >>
-  simp[entry_instructions_def, MEM_FILTER, MEM_nub] >>
-  spose_not_then assume_tac >>
-  gvs[MEM_FLAT, MEM_MAP, MEM_FILTER] >>
-  metis_tac[root_not_dep_target]
+  simp[root_is_entry_gen]
 QED
 
 (* A cut separates all work strictly earlier than a distinguished root from
@@ -1287,8 +1298,8 @@ Proof
      simp[MEM_MAP] >> metis_tac[MEM_EL, flip_operands_inst_id]) >>
   qspecl_then [`order`, `bb`] mp_tac dft_block_suffix_decomposition >>
   simp[Once dft_block_def, LET_THM] >> disch_then (SUBST_ALL_TAC o SYM) >>
-  irule schedule_root_cut_before >> simp[build_eda_wf, root_is_entry] >>
-  irule eda_topo_compatible_gen_weak_plain >>
+  irule schedule_root_cut_before >> simp[dft_eda_wf, root_is_entry_gen] >>
+  irule eda_topo_compatible_dft_eda >>
   gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def]
 QED
 
