@@ -285,6 +285,24 @@ Proof
        set_current_context_def, return_def]
 QED
 
+Theorem asm_pop_stack_state:
+  s.contexts = (c,rb)::rest /\ n <= LENGTH c.stack ==>
+  pop_stack n s =
+    (INL (TAKE n c.stack), s with contexts :=
+      (c with stack := DROP n c.stack,rb)::rest)
+Proof
+  simp[pop_stack_def, bind_def, ignore_bind_def, LET_THM,
+       get_current_context_def, set_current_context_def, assert_def, return_def]
+QED
+
+Theorem asm_pop_stack_underflow:
+  s.contexts = (c,rb)::rest /\ LENGTH c.stack < n ==>
+  pop_stack n s = (INR (SOME StackUnderflow),s)
+Proof
+  simp[pop_stack_def, bind_def, ignore_bind_def, LET_THM,
+       get_current_context_def, assert_def, return_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
