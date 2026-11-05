@@ -55,15 +55,15 @@ Proof
 QED
 
 Theorem intcall_acquire_scopes[local]:
-  !nr slot_opt addr is_view st res st'.
-    (if nr then case slot_opt of
-       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock addr slot is_view
-     else return ()) st = (res,st') ==> st'.scopes = st.scopes
+  !cx nr v st res st'.
+    lock_if_nr cx nr v st = (res,st') ==> st'.scopes = st.scopes
 Proof
-  rpt gen_tac >> Cases_on `nr` >> simp[return_def] >>
-  Cases_on `slot_opt` >> simp[raise_def] >>
-  metis_tac[acquire_nonreentrant_lock_scopes]
+  rpt gen_tac >> Cases_on `nr` >> simp[lock_if_nr_def, return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> simp[raise_def, bind_def, ignore_bind_def] >>
+  Cases_on `acquire_nonreentrant_lock cx.txn.target x (v \/ cx.txn.is_static) st` >>
+  rename1 `_ = (r1,s1)` >>
+  drule acquire_nonreentrant_lock_scopes >>
+  Cases_on `r1` >> Cases_on `v` >> rw[return_def] >> gvs[]
 QED
 
 Theorem eval_no_mutation_scopes[local]:
@@ -172,7 +172,8 @@ Resume eval_no_mutation_scopes[IntCall]:
   simp[pop_function_def, push_function_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac lift_option_type_scopes >> imp_res_tac read_results_state >>
-  imp_res_tac intcall_acquire_scopes >> imp_res_tac intcall_finally_scopes >>
+  imp_res_tac (REWRITE_RULE [lock_if_nr_def, ignore_bind_def] intcall_acquire_scopes) >>
+  imp_res_tac intcall_finally_scopes >>
   gvs[]
 QED
 
