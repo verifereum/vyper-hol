@@ -33,6 +33,39 @@ Proof
   irule dse_local_agrees_memory_overwrite >> simp[]
 QED
 
+Theorem dse_external_record_keep_queues[local]:
+  os = s.vs_outcomes /\ rqs = s.vs_requests ==>
+  (s with <|vs_accounts := ac; vs_transient := ts; vs_logs := logs;
+    vs_pending_deletions := dels; vs_returndata := rd;
+    vs_outcomes := os; vs_requests := rqs|>) =
+  (s with <|vs_accounts := ac; vs_transient := ts; vs_logs := logs;
+    vs_pending_deletions := dels; vs_returndata := rd|>)
+Proof
+  simp[venom_state_component_equality]
+QED
+
+Theorem dse_external_memory_update_keep_queues:
+  dse_local_agrees AddrSp_Memory P s t ==>
+  dse_local_agrees AddrSp_Memory
+    (FILTER (\(loc,(b,n)). ~(a <= b /\ b+n <= a+LENGTH bytes)) P)
+    ((write_memory_with_expansion a bytes s) with
+      <|vs_accounts := ac; vs_transient := ts; vs_logs := logs;
+        vs_pending_deletions := dels; vs_returndata := rd|>)
+    ((write_memory_with_expansion a bytes t) with
+      <|vs_accounts := ac; vs_transient := ts; vs_logs := logs;
+        vs_pending_deletions := dels; vs_returndata := rd|>)
+Proof
+  strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes /\ s.vs_requests = t.vs_requests` by
+    fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def,
+       dse_frame_def, venom_state_component_equality] >>
+  drule dse_external_memory_update >>
+  disch_then (qspecl_then [`ts`, `s.vs_requests`, `rd`, `s.vs_outcomes`] mp_tac) >>
+  simp[dse_external_update_def, dse_external_record_keep_queues,
+       write_memory_with_expansion_def] >>
+  disch_then irule
+QED
+
 Theorem dse_consume_call_outcome:
   dse_local_agrees AddrSp_Memory P s t /\
   consume_call_outcome rq ro rs s = (v,s1) ==>
