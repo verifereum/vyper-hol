@@ -7,7 +7,7 @@ Ancestors
   venomExecSemantics venomState venomInst compileEnv context
   exprLoweringProps exprSimDefs exprSimProps loweringPosts valueEncoding vyperTypeSystem loweringHalt
 
-Theorem normalize_alloc_mem_cont[local]:
+Theorem normalize_alloc_mem_cont:
   compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
   exec_alloca (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)]
     [STRING #"%" (toString sb.cs_next_var)]) s (n2w n : bytes32) = OK t /\
