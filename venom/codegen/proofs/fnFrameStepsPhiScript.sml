@@ -1117,7 +1117,32 @@ Theorem phi_join_entry_spill_empty:
       (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred bb.bb_label ps ==>
     ps.ps_spilled = FEMPTY
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [lineage_entry_def]) >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_all (SRULE [] fnLineageInvTheory.lineage_entry_inventory) >>
+  strip_tac >>
+  drule_all fnPlanLineageJoinTheory.join_predecessor_jmp_shape >> strip_tac >>
+  drule_all fnPlanLineageJoinTheory.join_predecessor_single_successor >>
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all fnPlanLineageJoinTheory.lineage_state_reachable >> strip_tac >>
+  drule_all fnPlanLineageJoinTheory.successful_block_jmp_suffix >> strip_tac >>
+  gvs[] >>
+  simp[GSYM finite_mapTheory.FDOM_EQ_EMPTY, pred_setTheory.EXTENSION] >>
+  rpt strip_tac >>
+  `?v. x = Var v /\
+       MEM v (live_vars_at (liveness_analyze fn) pb.bb_label
+                (LENGTH pb.bb_instructions))` by
+    (qpat_x_assum `!op. _ ==> ?v. _` irule >> metis_tac[]) >>
+  `MEM v (input_vars_from pb.bb_label bb.bb_instructions
+            (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+    (irule fnPlanLineageJoinTheory.single_successor_exit_live >>
+     asm_rewrite_tac[] >> qexists_tac `pb` >> asm_rewrite_tac[]) >>
+  gvs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
+      pred_setTheory.IN_DISJOINT, listTheory.MEM_MAP] >>
+  metis_tac[]
 QED
 
 (* The PHI prefix's narrowed freshness at a join's lineage entry, from the
@@ -1166,12 +1191,12 @@ Proof
     (irule phi_join_entry_spill_empty >> gvs[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `MEM op ps.ps_stack` by gvs[] >>
-  Cases_on `is_var_operand op`
-  >- (`~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+  `?s. op = Var s` by (Cases_on `op` >> gvs[normalize_operand_def]) >>
+  qpat_x_assum `op = Var _` SUBST_ALL_TAC >>
+  `~MEM (Var s) (FLAT (MAP (\inst. inst.inst_operands)
                        (collect_phis bb.bb_instructions)))` by
-        (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> rpt strip_tac >>
-         gvs[] >> metis_tac[]) >>
-      metis_tac[]) >>
-  Cases_on `op` >> gvs[is_var_operand_def, normalize_operand_def]
+    (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> rpt strip_tac >>
+     gvs[] >> metis_tac[is_var_operand_def]) >>
+  metis_tac[]
 QED
 

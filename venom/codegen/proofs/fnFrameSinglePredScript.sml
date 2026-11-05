@@ -115,6 +115,33 @@ Proof
   drule stack_get_depth_props >> simp[]
 QED
 
+(* The operand form of single_pred_phi_hits: with one predecessor a PHI's
+   only variable operand is the one it selects from pred. *)
+Theorem single_pred_phi_operand_hits:
+  !cfg fn lbl bb pred phis body inst op.
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) = 1 /\
+    MEM bb.bb_label (cfg_succs_of cfg pred) /\
+    non_param_insts bb = phis ++ body /\
+    LENGTH phis = phi_prefix_length bb.bb_instructions /\
+    MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands ==>
+    resolve_phi pred inst.inst_operands = SOME op
+Proof
+  rw[] >>
+  `MEM bb fn.fn_blocks` by
+    (gvs[lookup_block_def] >> drule FIND_SOME_MEM >> simp[]) >>
+  `cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred]` by
+    (gvs[cfg_edge_symmetry_uncond] >>
+     Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
+     gvs[LENGTH_NIL]) >>
+  `MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI` by
+    (irule phi_prefix_filter_mem >> gvs[non_param_insts_def] >> metis_tac[]) >>
+  drule_all single_pred_phi_operands >> strip_tac >>
+  Cases_on `op` >> gvs[is_var_operand_def, resolve_phi_def]
+QED
+
+
 (* Used at the start of a non-entry block whose only predecessor is pred
    (so generate_block_plan runs clean_stack_plan before its instructions).
    As in phi_prefix_frame_sim, ps is the lineage entry state from pred with
@@ -210,17 +237,16 @@ Proof
     (rpt strip_tac >> qpat_x_assum `!off. MEM _ (_ ++ _) \/ _ ==> _` irule >>
      simp[]) >>
   drule_all clean_stack_plan_frame_sim >> strip_tac >>
-  `!inst. MEM inst phis ==>
-     !dist. stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-              ps2.ps_stack = SOME dist ==>
-            resolve_phi pred inst.inst_operands =
-              SOME (stack_peek dist ps2.ps_stack)` by
-    (rpt strip_tac >> drule_all single_pred_phi_hits >> simp[]) >>
+  `!inst op. MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
+     MEM op ps2.ps_stack ==>
+     resolve_phi pred inst.inst_operands = SOME op` by
+    (rpt strip_tac >> drule_all single_pred_phi_operand_hits >> simp[]) >>
   `normalize_operand dfg [] dead_stack_marker = dead_stack_marker` by
     simp[dead_stack_marker_def, normalize_operand_def] >>
   `!op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
-     ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
-                     (collect_phis bb.bb_instructions))) /\
+     ~(MEM op ps2.ps_stack /\
+       ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+              resolve_phi pred inst.inst_operands = SOME op) /\
      (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
      ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
     metis_tac[operand_distinct, dead_stack_marker_def] >>
