@@ -481,3 +481,228 @@ Resume emit_bulk_capacity_check_counted_ptr[path]:
 QED
 
 Finalise emit_bulk_capacity_check_counted_ptr
+
+(* Pointer arithmetic exports the new provenance, not just cleanliness. *)
+Theorem emit_bulk_offset_counted_ptr:
+  emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
+  fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ lookup_var root s = SOME a /\
+  ptr_covers G tn root s extent /\ off+n <= extent /\
+  w2n a + off < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (n2w (w2n a+off)) /\
+    ptr_covers Gf tnf out sf n /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out]] /\
+   (!p. not_fresh_at sa p ==> p <> out)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[LESS_EQ_REFL]) >>
+  qabbrev_tac `t = update_var out (a + n2w off) s` >>
+  qabbrev_tac `gf = step_prov PG G
+    (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out]) t` >>
+  qabbrev_tac `tf = step_taint
+    (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out]) s t tn` >>
+  qexistsl_tac [`gf`, `tf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >-
+    (qunabbrev_tac `gf` >> qunabbrev_tac `tf` >>
+     irule emitted_step_counted_ptr >> simp[mk_inst_def, is_terminator_def] >>
+     conj_tac >-
+       (pure_once_rewrite_tac[step_inst_base_def] >>
+        simp[mk_inst_def, exec_pure2_def, Abbr `t`, eval_operand_def]) >>
+     conj_tac >- (qexistsl_tac [`sa`, `sb`] >> simp[mk_inst_def]) >>
+     irule (SRULE [mk_inst_def] ptr_inst_ok_copy_len_binop) >>
+     simp[eval_operand_def, op_taint_def] >> gvs[ptr_covers_def, op_taint_def]) >>
+  conj_tac >- simp[Abbr `t`, update_var_def] >>
+  conj_tac >- simp[Abbr `t`, update_var_def] >>
+  conj_tac >- simp[Abbr `t`, update_var_def] >>
+  conj_tac >-
+    simp[Abbr `t`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+         GSYM word_add_n2w] >>
+  conj_tac >- suspend "coverage" >>
+  simp[Abbr `tf`, Abbr `gf`, Abbr `t`, copy_len_binop_ghost_frame,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  `p <> out` by metis_tac[] >>
+  simp[copy_len_binop_ghost_frame, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Resume emit_bulk_offset_counted_ptr[coverage]:
+  `op_taint tf (Var out) = {}` by
+    simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
+  gvs[ptr_covers_def] >>
+  `off < dimword(:256)` by decide_tac >>
+  simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
+       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
+       lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac
+QED
+
+Finalise emit_bulk_offset_counted_ptr
+
+(* The data suffix of the equal-element dynamic-array branch. *)
+Theorem emit_bulk_data_counted_ptr:
+  emit_op ADD [Var src;Lit 32w] sa = (Var sp,sb) /\
+  emit_op ADD [Var dst;Lit 32w] sb = (Var dp,sc) /\
+  emit_op MUL [Var length;Lit (n2w elem)] sc = (Var nbytes,sd) /\
+  compile_copy_memory_dynamic (Var dp) (Var sp) (Var nbytes) sd = ((),se) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
+  fn_has_code sc sd fn /\ fn_has_code sd se fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\ not_fresh_at sa length /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  lookup_var length s = SOME (n2w len) /\ op_taint tn (Var length) = {} /\
+  ptr_covers G tn src s (32+len*elem) /\
+  ptr_covers G tn dst s (32+len*elem) /\
+  w2n a + 32 < dimword(:256) /\ w2n b + 32 < dimword(:256) /\
+  len < dimword(:256) /\ elem < dimword(:256) /\ len*elem < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = se.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH se.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_memory = (mcopy (w2n b+32) (w2n a+32) (len*elem) s).vs_memory /\
+    tnf.t_mem = (tn.t_mem DIFF {i | w2n b+32 <= i /\ i < w2n b+32+len*elem}) UNION
+      {w2n b+32+i | i < len*elem /\ w2n a+32+i IN tn.t_mem} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `(!p. not_fresh_at sa p ==> not_fresh_at sb p) /\
+   (!p. not_fresh_at sb p ==> not_fresh_at sc p) /\
+   (!p. not_fresh_at sc p ==> not_fresh_at sd p) /\
+   not_fresh_at sb sp /\ not_fresh_at sc dp` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[LESS_EQ_REFL, LESS_EQ_TRANS]) >>
+  `emit_op ADD [Var src;Lit (n2w 32)] sa = (Var sp,sb)` by simp[] >>
+  drule_all (emit_bulk_offset_counted_ptr |>
+    Q.INST [`off` |-> `32`, `n` |-> `len*elem`, `extent` |-> `32+len*elem`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `lookup_var dst sf = SOME b /\ lookup_var length sf = SOME (n2w len) /\
+   op_taint tnf (Var length) = {} /\ ptr_covers Gf tnf dst sf (32+len*elem)` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `emit_op ADD [Var dst;Lit (n2w 32)] sb = (Var dp,sc)` by simp[] >>
+  drule_all (emit_bulk_offset_counted_ptr |>
+    Q.INST [`off` |-> `32`, `n` |-> `len*elem`, `extent` |-> `32+len*elem`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `eval_operand (Var length) sf' = SOME (n2w len) /\
+   op_taint tnf' (Var length) = {} /\
+   eval_operand (Lit (n2w elem)) sf' = SOME (n2w elem) /\
+   op_taint tnf' (Lit (n2w elem)) = {}` by
+    (simp[eval_operand_def, op_taint_def] >> metis_tac[]) >>
+  drule_all (emit_bulk_binop_counted_ptr |>
+    Q.INST [`opc` |-> `MUL`, `f` |-> `word_mul`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`, `Gf'`, `D`] strip_assume_tac) >>
+  `lookup_var sp sf'' = SOME (n2w (w2n a+32)) /\
+   lookup_var dp sf'' = SOME (n2w (w2n b+32)) /\
+   ptr_covers Gf'' tnf'' sp sf'' (w2n (n2w (len*elem):bytes32)) /\
+   ptr_covers Gf'' tnf'' dp sf'' (w2n (n2w (len*elem):bytes32)) /\
+   eval_operand (Var nbytes) sf'' = SOME (n2w (len*elem))` by
+    (simp[eval_operand_def, word_mul_n2w, w2n_n2w, LESS_MOD] >>
+     gvs[ptr_covers_def] >> metis_tac[]) >>
+  drule_all compile_copy_memory_dynamic_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf''`, `tnf'''`, `sf'''`] >>
+  conj_tac >- suspend "path" >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- suspend "memory" >>
+  gvs[w2n_n2w, LESS_MOD] >> metis_tac[]
+QED
+
+Resume emit_bulk_data_counted_ptr[path]:
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[] >>
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf''`, `sf''`, `tnf''`] >> simp[]
+QED
+
+Resume emit_bulk_data_counted_ptr[memory]:
+  gvs[w2n_n2w, LESS_MOD, mcopy_def, read_memory_def,
+      write_memory_with_expansion_def, expand_memory_def]
+QED
+
+Finalise emit_bulk_data_counted_ptr
+
+Theorem emit_bulk_header_counted_ptr:
+  emit_op MLOAD [Var src] sa = (Var length,sb) /\
+  emit_op GT [Var length;Lit (n2w capacity)] sb = (Var gt,sc) /\
+  emit_op ISZERO [Var gt] sc = (Var ok,sd) /\
+  emit_void ASSERT [Var ok] sd = ((),se) /\
+  emit_void MSTORE [Var dst;Var length] se = ((),sg) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
+  fn_has_code sc sd fn /\ fn_has_code sd se fn /\ fn_has_code se sg fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n2w len /\ len <= capacity /\ capacity < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sg.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sg.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var length sf = SOME (n2w len) /\ op_taint tnf (Var length) = {} /\
+    sf.vs_memory = (mstore (w2n b) (n2w len) s).vs_memory /\
+    tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `(!p. not_fresh_at sa p ==> not_fresh_at sb p) /\
+   not_fresh_at sb length` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[LESS_EQ_REFL, LESS_EQ_TRANS]) >>
+  drule_all emit_mload_clean_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `eval_operand (Var length) sf = SOME (n2w len)` by simp[eval_operand_def] >>
+  drule_all emit_bulk_capacity_check_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `Gf`, `D`] strip_assume_tac) >>
+  `lookup_var dst sf' = SOME b /\
+   ptr_covers Gf' tnf' dst sf' 32 /\
+   eval_operand (Var length) sf' = SOME (n2w len) /\
+   op_taint tnf' (Var length) = {}` by
+    (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  drule_all emit_mstore_clean_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf'`, `tnf''`, `sf''`] >>
+  conj_tac >- suspend "path" >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- metis_tac[eval_operand_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- suspend "memory" >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume emit_bulk_header_counted_ptr[path]:
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
+QED
+
+Resume emit_bulk_header_counted_ptr[memory]:
+  gvs[mstore_def, write_memory_with_expansion_def, expand_memory_def]
+QED
+
+Finalise emit_bulk_header_counted_ptr
