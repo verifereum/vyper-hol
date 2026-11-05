@@ -44,7 +44,7 @@ Libs
 (* ===== The source side (S1 copies) ===== *)
 
 (* S1 stmtSimAugAssignAttrStorage's eval_target_place_attr_toplevel_field. *)
-Theorem eval_target_place_attr_toplevel_field_mem_src[local]:
+Theorem eval_target_place_attr_toplevel_field_mem_src:
   !cx src id fld es ts tr typ id_str slot fs off ftv.
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -953,8 +953,10 @@ Proof
   `?tgt_ty. type_place_target env (TopLevelNameTarget (NONE, id)) =
               SOME (Type tgt_ty) /\
             attribute_type env.type_defs tgt_ty fld = SOME ty` by
-    gvs[type_stmt_def, well_typed_target_def,
-        vyperTypeEnvTheory.type_place_target_AttributeTarget, AllCaseEqs()] >>
+    (qpat_assum `type_stmt _ _ _ = SOME _` mp_tac >>
+     simp_tac (srw_ss()) [type_stmt_def, well_typed_target_def,
+       vyperTypeEnvTheory.type_place_target_AttributeTarget, AllCaseEqs()] >>
+     metis_tac[]) >>
   `well_typed_expr env e /\
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
