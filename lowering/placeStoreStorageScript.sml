@@ -6143,6 +6143,20 @@ Proof
   simp[]
 QED
 
+(* The allocation-limit check bounds the natural size, before n2w. *)
+Theorem place_store_destination_alloc_bound:
+  expr_sim_inv cenv cx env es /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  ~is_word_type dty /\ type_alloc_ok cenv dty ==>
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_size dtv < dimword (:256)
+Proof
+  strip_tac >>
+  drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
+  `2 ** 64 < dimword (:256)` by EVAL_TAC >>
+  gvs[allocLimitsTheory.type_alloc_ok_def] >> decide_tac
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
