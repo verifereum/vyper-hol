@@ -819,6 +819,29 @@ Proof
   qexists_tac `tops` >> first_assum ACCEPT_TAC
 QED
 
+Theorem gas_path_mem_ok_first_edge[local]:
+  gas_path_mem ctx fn s n (OK z) /\ z <> s ==>
+  ?k u. gas_path_mem_edge ctx fn s k (OK u)
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_path_mem _ _ _ _ _` mp_tac >>
+  simp[Once gas_path_mem_cases, exit_result_def] >> metis_tac[]
+QED
+
+Theorem gas_path_mem_first_mload_bound[local]:
+  gas_path_mem ctx fn s n (OK z) /\ z <> s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [op] outs) /\
+  ~revert_forward_at bb s.vs_inst_idx ==>
+  !w. eval_operand op s = SOME w ==> w2n w + 32 <= s.vs_alloca_next
+Proof
+  strip_tac >> drule_all gas_path_mem_ok_first_edge >> strip_tac >>
+  gvs[gas_path_mem_edge_def] >>
+  fs[mem_safe_step_non_invoke, mk_inst_def] >>
+  qpat_x_assum `inst_mem_below_frontier _ _` mp_tac >>
+  rewrite_tac[GSYM mk_inst_def, below_frontier_MLOAD] >> simp[]
+QED
+
 (* Successful raw StackValue endpoint: the actual arm emits no unwrap code. *)
 Theorem ifexp_stack_arm_endpoint_mem[local]:
   compile_expr cenv ty e sa = (StackValue st op,sm) /\
