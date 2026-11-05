@@ -37,7 +37,7 @@ Proof
   simp[mcopy_mem_bytes_at_same]
 QED
 
-Theorem ghost_inv_inst_idx[local]:
+Theorem ghost_inv_inst_idx:
   ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
   ghost_inv d cenv cx es G tn s
 Proof
