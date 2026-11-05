@@ -746,7 +746,10 @@ Proof
 QED
 
 Theorem transplant_handle_step_boundary[local]:
-  wf_state s /\ s.contexts = (d, rb) :: (p, prb) :: rest /\
+  s.contexts = (d, rb) :: (p, prb) :: rest /\
+  d.gasUsed <= d.msgParams.gasLimit /\
+  d.msgParams.gasLimit - d.gasUsed <= p.gasUsed /\
+  LENGTH p.stack < stack_limit /\
   d.msgParams.outputTo = Memory mr /\ ~vfm_abort e ==>
   ?d' t s'.
     handle_step e (s with contexts := [(d, rb)]) = (INR e, t) /\
@@ -756,7 +759,6 @@ Theorem transplant_handle_step_boundary[local]:
     (e = NONE ==> s'.rollback = t.rollback)
 Proof
   strip_tac >>
-  drule_all transplant_handler_wf_bounds >> strip_tac >>
   `handle_step e s = handle_exception e s` by
     (irule transplant_handle_step_memory >> simp[] >> metis_tac[]) >>
   `handle_step e (s with contexts := [(d, rb)]) =
@@ -771,6 +773,42 @@ Proof
          [(d with <|gasUsed := d.msgParams.gasLimit; returnData := []|>, rb)])` by
     (irule transplant_handle_exception_singleton >> simp[]) >>
   Cases_on `e = NONE \/ e = SOME Reverted` >> gvs[]
+QED
+
+Theorem transplant_finalization_boundary:
+  es.contexts = (c,rb)::rest /\ rest <> [] /\ wf_state es /\
+  u.contexts = [(d,rb)] /\ u.txParams = es.txParams /\
+  d.msgParams = c.msgParams /\ d.logs = c.logs ++ lgs /\
+  wf_context d /\
+  d.msgParams.gasLimit - d.gasUsed <= c.msgParams.gasLimit - c.gasUsed /\
+  (!a. c.msgParams.outputTo <> Code a) /\ ~vfm_abort e ==>
+  ?d' t es'.
+    handle_step e u = (INR e,t) /\ t.contexts = [(d',rb)] /\
+    d'.logs = c.logs ++ lgs /\
+    handle_step e (u with contexts := (d,rb)::rest) = (INL (),es') /\
+    frame_outcome es (INL ()) es' e d'.returnData lgs /\
+    (e = NONE ==> es'.rollback = t.rollback)
+Proof
+  strip_tac >> Cases_on `rest` >> gvs[] >>
+  PairCases_on `h` >>
+  `c.gasUsed <= c.msgParams.gasLimit /\
+   c.msgParams.gasLimit - c.gasUsed <= h0.gasUsed /\
+   LENGTH h0.stack < stack_limit` by
+    (irule transplant_handler_wf_bounds >> simp[] >> metis_tac[]) >>
+  Cases_on `c.msgParams.outputTo` >> gvs[] >>
+  `d.gasUsed <= d.msgParams.gasLimit` by fs[wf_context_def] >>
+  `d.msgParams.gasLimit - d.gasUsed <= h0.gasUsed` by simp[] >>
+  `(u with contexts := (d,rb)::(h0,h1)::t).contexts =
+   (d,rb)::(h0,h1)::t` by simp[] >>
+  drule transplant_handle_step_boundary >> simp[] >>
+  disch_then (qspec_then `e` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `handle_step e (u with contexts := [(d,rb)]) = (INR e,v)` >>
+  rename1 `v.contexts = [(head,rb)]` >>
+  rename1 `handle_step e (u with contexts := (d,rb)::(h0,h1)::t) = (INL (),w)` >>
+  qexistsl_tac [`head`, `v`, `w`] >> simp[] >>
+  gvs[frame_outcome_def] >>
+  `u with contexts := [(d,rb)] = u` by
+    (simp[vfmContextTheory.execution_state_component_equality]) >> metis_tac[]
 QED
 
 Theorem step_transplant_continue:
