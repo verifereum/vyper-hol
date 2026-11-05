@@ -1205,7 +1205,33 @@ Theorem external_entry_reaches_checks:
                (!e. r <> Error e) ==>
                ?fuel'. run_context fuel' unit.cu_context vs = r
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all selected_external_dispatch >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`, `rr`,
+               `tx.function_name`, `args`, `ret`, `fbody`]
+    strip_assume_tac selected_external_package >>
+  drule_all source_runtime_entry_checks_code >> strip_tac >>
+  `fn_entry_label func = SOME "__entry"` by
+    simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
+         listTheory.NULL_EQ] >>
+  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (drule_all initial_venom_state_calldata_length >> simp[]) >>
+  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
+    fs[initial_venom_state_rel_def] >>
+  `EVERY (\(sel,lbl). sel < 2 ** 32)
+     (MAP (\(sel,lbl,z). (sel,lbl))
+       (build_selectors (type_env tops) (FST (classify_functions tops))))` by
+    simp[linear_selectors_lt] >>
+  `linear_dispatch_target vs.vs_call_ctx.cc_calldata
+     (MAP (\(sel,lbl,z). (sel,lbl))
+       (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
+     st.cs_current_bb` by simp[] >>
+  drule_all linear_dispatch_context_reaches >> strip_tac >>
+  qexistsl_tac [`rr`, `"fn_" ++ tx.function_name`, `cenv`, `pos_args`,
+                `min_cds`, `is_payable`, `nkey`, `ut`, `iv`, `rt`,
+                `st`, `st'`, `func`, `s0`] >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  qexists_tac `fuel` >> simp[]
 QED
 
 (* The source fails to move the call value only for a nonpayable function
