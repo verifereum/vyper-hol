@@ -13,7 +13,7 @@
 
 Theory fnBlockBody
 Ancestors
-  fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
+  fnPlanPrefix fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
   venomExecSemantics
 
@@ -39,19 +39,19 @@ Definition block_plan_state_def:
        then clean_stack_plan liveness cfg fn bb ps1
        else ([], ps1)) = (clean_ops, ps2) /\
       LENGTH (get_params bb.bb_instructions) <= k /\
-      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
         (LENGTH bb.bb_instructions) 0
-        (TAKE (k - LENGTH (get_params bb.bb_instructions))
-              (non_param_insts bb)) ps2 = SOME (pre_ops, ps)
+        (k - LENGTH (get_params bb.bb_instructions))
+        (non_param_insts bb) ps2 = SOME (pre_ops, ps)
 End
 
 (* vs is at instruction k of block bb, past its PHIs, and fn_frame_inv
    holds with ps, the planner's state at k when bb is planned from its
    lineage state ps_l (with the cleanup fields h, promised that
-   lineage_state_block_plan picks).  That plan is the block's DFS code
-   block_ops, and as is at its rest_ops, the code of the instructions from
-   k on.  The entry step starts here after the parameters
+   lineage_state_block_plan picks, which also gives the alloc equation).
+   That plan is the block's DFS code block_ops, placed at pc0, and as is
+   at its rest_ops, the code of the instructions from k on.  The entry step starts here after the parameters
    (entry_params_frame_sim), the block step after the cleanup and the PHI
    prefix.
 
@@ -68,8 +68,8 @@ End
 Theorem block_body_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
-   ps_dfs_after ps_after prefix_ops rest_ops k ps off_bb pc_bb vs as Inv ra
-   pc_ret rest mem0.
+   ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
+   rest mem0.
     gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
@@ -87,6 +87,7 @@ Theorem block_body_frame_sim:
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
        fn_has_retpc callee) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    ~vs.vs_call_ctx.cc_static /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\
     (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
@@ -112,6 +113,7 @@ Theorem block_body_frame_sim:
     generate_block_plan liveness dfg cfg fn bb
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
       SOME (block_ops, ps_after) /\
+    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
     block_plan_state liveness dfg cfg fn bb
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
       k ps /\
@@ -124,9 +126,8 @@ Theorem block_body_frame_sim:
     block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
     phi_prefix_length bb.bb_instructions <= k /\
     vs.vs_inst_idx = k /\
-    FLOOKUP lo bb.bb_label = SOME off_bb /\
-    FLOOKUP o2pc off_bb = SOME pc_bb /\
-    as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
+    asm_block_at prog pc0 (execute_plan cp.cp_initial_fmp block_ops) /\
+    as.as_pc = pc0 + LENGTH (execute_plan cp.cp_initial_fmp
                                  (SOLabel bb.bb_label :: prefix_ops)) /\
     fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
     (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
