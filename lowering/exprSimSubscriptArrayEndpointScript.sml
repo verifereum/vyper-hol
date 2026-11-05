@@ -5,18 +5,6 @@ Ancestors
   exprSimWordArgs exprSimHash exprSimVVFrame exprLoweringProps
   loweringPosts compileEnv freshWrites finite_map
 
-Theorem array_subscript_grows:
-  compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader sa = (dst,sb) /\
-  (!op st. ci_mono st (SND (loader op st))) ==>
-  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
-  sa.cs_next_id <= sb.cs_next_id
-Proof
-  strip_tac >>
-  `sb = SND (compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader sa)` by simp[] >>
-  pop_assum SUBST1_TAC >> rewrite_tac[GSYM ci_mono_def] >>
-  irule ci_mono_compile_array_subscript >> simp[]
-QED
-
 Theorem word_expr_post_readonly_tail:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
   is_word_type (expr_type e) /\ sa.cs_next_var <= sb.cs_next_var /\
