@@ -1805,6 +1805,9 @@ Theorem body_assign_tuple_other:
        body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
