@@ -20,16 +20,18 @@ Ancestors
 Libs
   fcpLib
 
-(* TEMPORARY, until build_offset_to_pc maps only AsmLabel offsets (its
-   own piece on the codegen branch): that map's domain is exactly the
-   labels' offsets, each mapping to its label's index. *)
+(* build_offset_to_pc's domain is exactly the labels' offsets, each
+   mapping to its label's index. *)
 Theorem build_offset_to_pc_labels[local]:
   !prog off pc.
     FLOOKUP (build_offset_to_pc prog) off = SOME pc <=>
     pc < LENGTH prog /\ (?l. EL pc prog = AsmLabel l) /\
     off = asm_pc_to_offset prog pc
 Proof
-  cheat
+  rpt gen_tac >> eq_tac
+  >- (strip_tac >> imp_res_tac offset_to_pc_reverse >>
+      imp_res_tac offset_to_pc_label >> simp[] >> metis_tac[])
+  >- (rw[] >> irule offset_to_pc_inverse_proof >> simp[])
 QED
 
 Theorem starve_step_setup:
