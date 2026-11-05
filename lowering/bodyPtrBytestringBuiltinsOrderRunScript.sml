@@ -677,3 +677,142 @@ Proof
        order_run_step21, venomInstTheory.is_terminator_def] >>
   simp[order_run_s22_def]
 QED
+
+Theorem order_run_indices:
+  order_run_start.vs_inst_idx = 0 /\
+  order_run_s1.vs_inst_idx = 1 /\ order_run_s2.vs_inst_idx = 2 /\
+  order_run_s3.vs_inst_idx = 3 /\ order_run_s4.vs_inst_idx = 4 /\
+  order_run_s5.vs_inst_idx = 5 /\ order_run_s6.vs_inst_idx = 6 /\
+  order_run_s7.vs_inst_idx = 7 /\ order_run_s8.vs_inst_idx = 8 /\
+  order_run_s9.vs_inst_idx = 9 /\ order_run_s10.vs_inst_idx = 10 /\
+  order_run_s11.vs_inst_idx = 11 /\ order_run_s12.vs_inst_idx = 12 /\
+  order_run_s13.vs_inst_idx = 13 /\ order_run_s14.vs_inst_idx = 14 /\
+  order_run_s15.vs_inst_idx = 15 /\ order_run_s16.vs_inst_idx = 16 /\
+  order_run_s17.vs_inst_idx = 17 /\ order_run_s18.vs_inst_idx = 18 /\
+  order_run_s19.vs_inst_idx = 19 /\ order_run_s20.vs_inst_idx = 20 /\
+  order_run_s21.vs_inst_idx = 21 /\ order_run_s22.vs_inst_idx = 22
+Proof
+  conj_tac >- simp[order_run_start_def, venomStateTheory.init_venom_state_def] >>
+  conj_tac >- simp[order_run_s1_def] >>
+  conj_tac >- simp[order_run_s2_def] >>
+  conj_tac >- simp[order_run_s3_def] >>
+  conj_tac >- simp[order_run_s4_def] >>
+  conj_tac >- simp[order_run_s5_def] >>
+  conj_tac >- simp[order_run_s6_def] >>
+  conj_tac >- simp[order_run_s7_def] >>
+  conj_tac >- simp[order_run_s8_def] >>
+  conj_tac >- simp[order_run_s9_def] >>
+  conj_tac >- simp[order_run_s10_def] >>
+  conj_tac >- simp[order_run_s11_def] >>
+  conj_tac >- simp[order_run_s12_def] >>
+  conj_tac >- simp[order_run_s13_def] >>
+  conj_tac >- simp[order_run_s14_def] >>
+  conj_tac >- simp[order_run_s15_def] >>
+  conj_tac >- simp[order_run_s16_def] >>
+  conj_tac >- simp[order_run_s17_def] >>
+  conj_tac >- simp[order_run_s18_def] >>
+  conj_tac >- simp[order_run_s19_def] >>
+  conj_tac >- simp[order_run_s20_def] >>
+  conj_tac >- simp[order_run_s21_def] >>
+  simp[order_run_s22_def]
+QED
+
+Theorem order_run_index_updates:
+  (order_run_s1 with vs_inst_idx := 1) = order_run_s1 /\
+  (order_run_s2 with vs_inst_idx := 2) = order_run_s2 /\
+  (order_run_s3 with vs_inst_idx := 3) = order_run_s3 /\
+  (order_run_s4 with vs_inst_idx := 4) = order_run_s4 /\
+  (order_run_s5 with vs_inst_idx := 5) = order_run_s5 /\
+  (order_run_s6 with vs_inst_idx := 6) = order_run_s6 /\
+  (order_run_s7 with vs_inst_idx := 7) = order_run_s7 /\
+  (order_run_s8 with vs_inst_idx := 8) = order_run_s8 /\
+  (order_run_s9 with vs_inst_idx := 9) = order_run_s9 /\
+  (order_run_s10 with vs_inst_idx := 10) = order_run_s10 /\
+  (order_run_s11 with vs_inst_idx := 11) = order_run_s11 /\
+  (order_run_s12 with vs_inst_idx := 12) = order_run_s12 /\
+  (order_run_s13 with vs_inst_idx := 13) = order_run_s13 /\
+  (order_run_s14 with vs_inst_idx := 14) = order_run_s14 /\
+  (order_run_s15 with vs_inst_idx := 15) = order_run_s15 /\
+  (order_run_s16 with vs_inst_idx := 16) = order_run_s16 /\
+  (order_run_s17 with vs_inst_idx := 17) = order_run_s17 /\
+  (order_run_s18 with vs_inst_idx := 18) = order_run_s18 /\
+  (order_run_s19 with vs_inst_idx := 19) = order_run_s19 /\
+  (order_run_s20 with vs_inst_idx := 20) = order_run_s20 /\
+  (order_run_s21 with vs_inst_idx := 21) = order_run_s21 /\
+  (order_run_s22 with vs_inst_idx := 22) = order_run_s22
+Proof
+  map_every (fn d => conj_tac >- simp[d])
+    [order_run_s1_def, order_run_s2_def, order_run_s3_def, order_run_s4_def,
+     order_run_s5_def, order_run_s6_def, order_run_s7_def, order_run_s8_def,
+     order_run_s9_def, order_run_s10_def, order_run_s11_def, order_run_s12_def,
+     order_run_s13_def, order_run_s14_def, order_run_s15_def, order_run_s16_def,
+     order_run_s17_def, order_run_s18_def, order_run_s19_def, order_run_s20_def,
+     order_run_s21_def] >> simp[order_run_s22_def]
+QED
+
+Theorem order_run_exec_prefix:
+  !fuel ctx bb tail.
+    bb.bb_instructions = (SND order_run_compiled).cs_current_insts ++ tail ==>
+    exec_block fuel ctx bb order_run_start = exec_block fuel ctx bb order_run_s22
+Proof
+  rpt strip_tac >>
+  map_every (fn step =>
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [venomExecSemanticsTheory.exec_block_def])) >>
+    simp[order_run_indices, venomInstTheory.get_instruction_def,
+         order_run_instructions, venomExecSemanticsTheory.step_inst_def,
+         step, venomInstTheory.is_terminator_def, order_run_index_updates])
+    [order_run_step0, order_run_step1, order_run_step2, order_run_step3,
+     order_run_step4, order_run_step5, order_run_step6, order_run_step7,
+     order_run_step8, order_run_step9, order_run_step10, order_run_step11,
+     order_run_step12, order_run_step13, order_run_step14, order_run_step15,
+     order_run_step16, order_run_step17, order_run_step18, order_run_step19,
+     order_run_step20, order_run_step21]
+QED
+
+Theorem order_run_exec_stop:
+  !fuel ctx bb.
+    bb.bb_instructions = (SND order_run_compiled).cs_current_insts ++
+      [mk_inst 22 STOP [] []] ==>
+    exec_block fuel ctx bb order_run_start = Halt (stop_view order_run_s22)
+Proof
+  rpt strip_tac >>
+  drule order_run_exec_prefix >>
+  disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >>
+  simp[] >> disch_then SUBST1_TAC >>
+  once_rewrite_tac[venomExecSemanticsTheory.exec_block_def] >>
+  simp[order_run_indices, venomInstTheory.get_instruction_def,
+       order_run_instructions, venomExecSemanticsTheory.step_inst_def,
+       venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       abiEncoderObserverTheory.stop_view_def, venomStateTheory.halt_state_def]
+QED
+
+Theorem order_run_observing_run:
+  !fuel ctx. run_from fuel ctx order_run_fn order_run_start =
+    Halt (stop_view order_run_s22)
+Proof
+  rpt gen_tac >>
+  `order_run_start.vs_current_bb = "entry"` by
+    simp[order_run_start_def, venomStateTheory.init_venom_state_def] >>
+  simp[fragExecTheory.run_from_def, order_run_fn_def,
+       venomInstTheory.mk_raw_function_def, venomInstTheory.lookup_block_def] >>
+  `exec_block fuel ctx
+     <|bb_label := "entry";
+       bb_instructions := (SND order_run_compiled).cs_current_insts ++
+         [mk_inst 22 STOP [] []]|> order_run_start =
+       Halt (stop_view order_run_s22)` by
+    (irule order_run_exec_stop >> simp[]) >>
+  fs[venomInstTheory.mk_inst_def, listTheory.FIND_def, listTheory.INDEX_FIND_def]
+QED
+
+Theorem order_run_endpoint_observation:
+  gas_path ctx order_run_fn order_run_start n (OK t) /\
+  lookup_block t.vs_current_bb order_run_fn.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME (mk_inst id STOP [] []) ==>
+  stop_view t = stop_view order_run_s22
+Proof
+  strip_tac >> irule gas_path_stop_observation >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  simp[order_run_observing_run]
+QED
