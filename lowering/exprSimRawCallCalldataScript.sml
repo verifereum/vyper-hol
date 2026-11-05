@@ -1692,7 +1692,7 @@ Proof
   qexists_tac `t` >> simp[]
 QED
 
-Theorem calldata_outbuf_operands[local]:
+Theorem calldata_outbuf_operands:
   compile_raw_call_outbuf n sa = ((valop,ptrop),sb) ==>
   exprSafeOperand$safe_operand sb valop /\
   exprSafeOperand$safe_operand sb ptrop

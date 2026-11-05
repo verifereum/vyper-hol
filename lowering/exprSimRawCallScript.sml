@@ -1030,6 +1030,31 @@ Proof
   drule_all venomInstProofs1Theory.step_inst_base_preserves_all >> simp[]
 QED
 
+(* Count the actual allocation instructions; retain the run endpoint so that
+   allocation witnesses from either allocation theorem survive unchanged. *)
+Theorem raw_call_outbuf_path[local]:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\u. u = t with vs_inst_idx := LENGTH sb.cs_current_insts) (\r. F)
+Proof
+  strip_tac >> irule frag_path_run_inst_seq >> simp[] >>
+  Cases_on `cap = 0`
+  >- (qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
+      simp[compile_raw_call_outbuf_def, contextTheory.compile_alloc_buffer_def,
+        emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
+      simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+        rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]) >>
+  `0 < cap` by decide_tac >>
+  drule_all raw_call_outbuf_positive_code >> strip_tac >>
+  drule_all raw_call_outbuf_positive_straight >> strip_tac >>
+  fs[rich_listTheory.IS_PREFIX_APPEND, EVERY_MEM]
+QED
+
+val _ = if null (hyp raw_call_outbuf_path) then ()
+  else raise Fail "raw_call_outbuf_path retained hypotheses";
+
 Theorem raw_call_outbuf_add_frame[local]:
   emit_op ADD [ov; Lit 32w] sa = (op,sb) /\
   eval_operand ov s = SOME w /\
@@ -1153,6 +1178,73 @@ Resume raw_call_outbuf_positive_run[immutable]:
 QED
 
 Finalise raw_call_outbuf_positive_run
+
+(* Common allocation interface for the two result policies.  In particular the
+   zero-cap case still exposes its zero-sized ALLOCA, rather than erasing it. *)
+Theorem raw_call_outbuf_alloc_path[local]:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  (0 < cap ==> ((cap+31) DIV 32)*32+32 < dimword (:256)) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\u. stmt_state_rel ctx func cenv cx es u /\
+      wb_frame cenv es sa s u /\ u.vs_memory = s.vs_memory /\
+      (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
+        eval_operand p u = SOME v) /\
+      (?w. eval_operand ov u = SOME w /\
+        eval_operand op u = SOME (if cap = 0 then w else w+32w) /\
+        FLOOKUP u.vs_allocas sa.cs_next_id =
+          SOME (w2n w, if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+        w2n w + (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword (:256) /\
+        (0 < cap ==> w2n (w+32w) = w2n w+32 /\
+          (!name b sz. local_region cenv es.scopes u name b sz ==>
+            regions_disjoint (w2n w) (((cap+31) DIV 32)*32+32) b sz) /\
+          (cenv.ce_is_ctor ==> !name tv v off.
+            FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+            FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+              | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+            regions_disjoint off (type_memory_size tv) (w2n w) (((cap+31) DIV 32)*32+32)))) /\
+      safe_operand sb ov /\ safe_operand sb op /\
+      (!x. ov = Var x \/ op = Var x ==> not_fresh_at sb x)) (\r. F)
+Proof
+  strip_tac >> drule calldata_outbuf_operands >> strip_tac >>
+  Cases_on `cap = 0`
+  >- suspend "zero" >> suspend "positive"
+QED
+
+Resume raw_call_outbuf_alloc_path[zero]:
+  gvs[] >> drule_all raw_call_outbuf_zero_run >> strip_tac >>
+  drule_all raw_call_outbuf_path >>
+  disch_then (qspec_then `ctx` (mp_then Any irule frag_path_conseq)) >> simp[] >>
+  simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx,
+    instIdxIndepTheory.eval_op_inst_idx] >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `p` >>
+      gvs[safe_operand_def, eval_operand_def] >>
+      irule wb_frame_vars >> qexistsl_tac [`cenv`, `es`, `s`, `sa`] >> simp[]) >>
+  gvs[]
+QED
+
+Resume raw_call_outbuf_alloc_path[positive]:
+  `0 < cap` by decide_tac >>
+  `((cap+31) DIV 32)*32+32 < dimword (:256)` by simp[] >>
+  drule_all raw_call_outbuf_positive_run >> strip_tac >>
+  drule_all raw_call_outbuf_path >>
+  disch_then (qspec_then `ctx` (mp_then Any irule frag_path_conseq)) >> simp[] >>
+  simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx,
+    instIdxIndepTheory.eval_op_inst_idx] >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `p` >>
+      gvs[safe_operand_def, eval_operand_def] >>
+      irule wb_frame_vars >> qexistsl_tac [`cenv`, `es`, `s`, `sa`] >> simp[]) >>
+  fs[local_region_def, lookup_var_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise raw_call_outbuf_alloc_path
+
+val _ = if null (hyp raw_call_outbuf_alloc_path) then ()
+  else raise Fail "raw_call_outbuf_alloc_path retained hypotheses";
 
 Theorem raw_call_frame_footprint[local]:
   expr_sim_inv cenv cx env es /\
@@ -2519,6 +2611,23 @@ Proof
   Cases_on `s.vs_call_ctx.cc_static` >> gvs[]
 QED
 
+(* CALL and STATICCALL are straight-line counted instructions too. *)
+Theorem raw_call_emit_path[local]:
+  emit_op (if stat then STATICCALL else CALL) ops sa = (ok,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\u. u = t with vs_inst_idx := LENGTH sb.cs_current_insts) (\r. F)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  irule frag_path_run_inst_seq >>
+  Cases_on `stat` >>
+  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+val _ = if null (hyp raw_call_emit_path) then ()
+  else raise Fail "raw_call_emit_path retained hypotheses";
+
 (* A fresh result variable is disjoint from source locals even after adoption. *)
 Theorem raw_call_result_frame:
   emit_op opc ops sm = (ok_op,sb) /\ local_ptrs_reserved cenv sm /\
@@ -3731,6 +3840,92 @@ Proof
   `z <> out` by metis_tac[] >>
   simp[finite_mapTheory.FLOOKUP_UPDATE] >> fs[lookup_var_def]
 QED
+
+(* Policy-independent counted oracle instruction, preserving the incoming
+   allocation metadata and the original expression's writeback frame. *)
+Theorem raw_call_oracle_path[local]:
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
+  w2w aw = target /\
+  w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
+  stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+    (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+    b + sz <= w2n ro \/ w2n ro + cap <= b) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+    off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
+  wb_frame cenv initial_es initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
+  (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+  (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
+    compileEnv$regions_disjoint (w2n ro) cap b sz) ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+      wb_frame cenv initial_es initial s0 u /\
+      eval_operand ok u = SOME (bool_to_word outcome.co_success) /\
+      u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
+      u.vs_returndata = outcome.co_returnData /\
+      mem_bytes_at (w2n ro) (LENGTH (TAKE cap outcome.co_returnData)) u.vs_memory =
+        TAKE cap outcome.co_returnData /\
+      (!p. safe_operand sa p ==> eval_operand p u = eval_operand p s)) (\r. F)
+Proof
+  strip_tac >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
+  disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`val_word`, `ro`, `gas`, `aw`] mp_tac) >>
+  impl_tac
+  >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `oracle` (qx_choose_then `u` strip_assume_tac)) >>
+  suspend "frame"
+QED
+
+Resume raw_call_oracle_path[frame]:
+  `oracle.vs_vars = s.vs_vars /\ oracle.vs_allocas = s.vs_allocas /\
+   oracle.vs_fmp = s.vs_fmp` by
+    (qpat_assum `oracle = _ with <| vs_outcomes := _; vs_requests := _;
+       vs_accounts := _; vs_transient := _; vs_logs := _;
+       vs_pending_deletions := _; vs_returndata := _; vs_memory := _ |>`
+       (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `~not_fresh_at initial (STRING #"%" (toString sa.cs_next_var))` by
+    simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  `wb_frame cenv initial_es initial s0 u` by
+    (qpat_assum `u = update_var _ _ oracle` (fn th => once_rewrite_tac[th]) >>
+     irule raw_call_oracle_frame >> simp[] >>
+     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
+     conj_tac >> rpt gen_tac >> strip_tac >>
+     first_x_assum (drule_all_then mp_tac) >>
+     simp[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+  suspend "post"
+QED
+
+Resume raw_call_oracle_path[post]:
+  drule_all raw_call_emit_path >>
+  disch_then (qspec_then `ctx` (mp_then Any irule frag_path_conseq)) >> simp[] >>
+  simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx,
+       instIdxIndepTheory.eval_op_inst_idx] >>
+  qpat_x_assum `u = update_var _ _ oracle` SUBST_ALL_TAC >>
+  simp[update_var_def] >>
+  gvs[] >> rpt strip_tac >>
+  Cases_on `p` >> gvs[safe_operand_def, eval_operand_def, lookup_var_def,
+    update_var_def, finite_mapTheory.FLOOKUP_UPDATE, not_fresh_at_def,
+    ASCIInumbersTheory.toString_inj]
+QED
+
+Finalise raw_call_oracle_path
+
+val _ = if null (hyp raw_call_oracle_path) then ()
+  else raise Fail "raw_call_oracle_path retained hypotheses";
 
 Theorem raw_call_allocated_tail_frag_aged[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
