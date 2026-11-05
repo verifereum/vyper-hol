@@ -1898,3 +1898,64 @@ val () = List.app (fn th =>
   end)
   [compile_toplevel_slot_vv_shape, hashmap_root_place_ptr_rel,
    compile_hashmap_root_storage_frame_frag];
+
+Theorem mapping_place_root_type_lookup:
+  type_place_expr env (TopLevelName ann nsid) = SOME (HashMapT kt vt) ==>
+  FLOOKUP env.toplevel_vtypes nsid = SOME (HashMapT kt vt)
+Proof
+  PairCases_on `nsid` >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mapping_place_defined_table:
+  place_map_tables_agree_on_defined cenv env /\
+  FLOOKUP env.toplevel_vtypes nsid = SOME (HashMapT kt vt) ==>
+  ?tr. cenv.ce_hashmap_info nsid = SOME (tr,kt,vt)
+Proof
+  strip_tac >>
+  qpat_x_assum `place_map_tables_agree_on_defined _ _` mp_tac >>
+  simp[placeTypingPropsTheory.place_map_tables_agree_on_defined_def] >>
+  disch_then (qspecl_then [`nsid`, `HashMapT kt vt`] mp_tac) >> simp[] >>
+  Cases_on `cenv.ce_hashmap_info nsid` >> simp[] >>
+  rename1 `SOME info` >> PairCases_on `info` >> simp[]
+QED
+
+Theorem mapping_place_subscript_types:
+  type_place_expr env (Subscript ann obj key) = SOME (HashMapT kt vt) ==>
+  ?keyty. type_place_expr env obj = SOME (HashMapT keyty (HashMapT kt vt)) /\
+    well_typed_expr env key /\ expr_type key = keyty /\ hashmap_key_type keyty
+Proof
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `subscript_vtype base_ty _ = SOME _` >>
+  Cases_on `base_ty` >> gvs[subscript_vtype_def, AllCaseEqs()] >>
+  rename1 `subscript_vtype (Type t) _ = SOME _` >>
+  Cases_on `t` >> gvs[subscript_vtype_def, AllCaseEqs()]
+QED
+
+Theorem mapping_place_constructor:
+  type_place_expr env e = SOME (HashMapT kt vt) ==>
+  (?ann nsid. e = TopLevelName ann nsid) \/
+  (?ann obj key. e = Subscript ann obj key)
+Proof
+  Cases_on `e` >> simp[Once well_typed_expr_def]
+QED
+
+Theorem mapping_subscript_syntactic_limits:
+  byte_widths_expr (Subscript ann obj key) /\
+  alloc_limits_expr cenv (Subscript ann obj key) ==>
+  byte_widths_expr obj /\ byte_widths_expr key /\
+  alloc_limits_expr cenv obj /\ alloc_limits_expr cenv key
+Proof
+  simp[byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping place typing has unproved dependencies"
+  end)
+  [mapping_place_root_type_lookup, mapping_place_defined_table,
+   mapping_place_subscript_types, mapping_place_constructor,
+   mapping_subscript_syntactic_limits];
