@@ -90,7 +90,8 @@ Theorem entry_nested_owned_initializer_boundary:
   b <= s.vs_alloca_next /\ s.vs_alloca_next+32 <= b+cap /\
   (!q. FLOOKUP s.vs_allocas header_st.cs_next_id = SOME (q,32) ==>
     b <= q /\ q+32 <= b+cap) ==>
-  ?u q. entry_decode_path ctx fn s u /\ entry_loop_fields s u /\
+  ?u q. abi_decoder_address_frame st.cs_next_var s u /\
+    entry_decode_path ctx fn s u /\ entry_loop_fields s u /\
     ~u.vs_halted /\ u.vs_current_bb = middle.cs_current_bb /\
     u.vs_inst_idx = LENGTH middle.cs_current_insts /\ fresh_vars_wrt limit_st u /\
     entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
@@ -165,6 +166,8 @@ Resume entry_nested_owned_initializer_boundary[pc]:
 QED
 Resume entry_nested_owned_initializer_boundary[record_frame]:
   rpt conj_tac
+  >- (qpat_assum `abi_decoder_address_frame _ s raw` mp_tac >>
+      simp_tac (srw_ss()) [abi_decoder_address_frame_def, eval_operand_def])
   >- (qpat_assum `entry_loop_fields s raw` mp_tac >>
       simp_tac (srw_ss()) [entryReachBodyExactArrayLoopTheory.entry_loop_fields_def])
   >- (qpat_assum `abi_decoder_address_frame _ s raw` mp_tac >>
