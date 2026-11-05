@@ -4491,3 +4491,68 @@ Proof
   rpt strip_tac >> drule_all array_check_ptr_run >> simp[]
 QED
 
+Theorem array_check_ptr_vv_frag:
+  comp_ignore_bind (array_bounds_check iop lop sgn)
+    (array_elem_ptr (vv_operand bvv) iop dyn ws esz) sm = (dst,sn) /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  (!z. vv_operand bvv = Var z ==> not_fresh_at sm z) /\
+  (!z. iop = Var z ==> not_fresh_at sm z) /\
+  (!z. lop = Var z ==> not_fresh_at sm z) /\
+  idx_in_range sgn (n2w j) len /\
+  eval_operand (vv_operand bvv) q0 = SOME w /\
+  vv_post ctx func cenv cx obj es sa sm s0 es1 tv bvv q0 /\
+  expr_type obj = ArrayT et bd /\
+  read_result cx tv es1 = (INL arr,es1) /\
+  read_result cx tv' es1 = (INL v,es1) /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  value_has_type evt v /\
+  evaluate_subscripts (ArrayTV evt bd) arr [ValueSubscript (IntV (&j))] = INL v /\
+  j < bound_length bd /\
+  ((if dyn then w + n2w ws else w) + n2w j * n2w esz =
+    w + n2w (if is_slot_addressed (vv_loc bvv) then
+      (case bd of Fixed cap => 0 | Dynamic cap => 1) + j * type_slot_size evt
+    else (case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt)) /\
+  (!id path. tv' = PlaceR (MemoryPlace id path) ==>
+    ?p0. tv = PlaceR (MemoryPlace id p0) /\ path = p0 ++ [ValueSubscript (IntV (&j))]) ==>
+  frag_exec ctx sm sn
+    (\s. s = q0 /\ stmt_state_rel ctx func cenv cx es1 s /\
+      eval_operand (vv_operand bvv) s = SOME w /\
+      eval_operand iop s = SOME (n2w j) /\ eval_operand lop s = SOME len)
+    (vv_post ctx func cenv cx (Subscript et obj idx) es sa sn s0 es1 tv'
+      (LocatedValue et (mk_ptr dst (vv_loc bvv)))) R
+Proof
+  strip_tac >> drule_all array_check_ptr_frag >> disch_then assume_tac >>
+  irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+  qexistsl_tac [`q0`, `func`, `es1`, `cx`, `w`] >> simp[] >>
+  qexists_tac `R` >> simp[] >> rpt strip_tac >>
+  `eval_operand (vv_operand bvv) s = SOME w` by
+    (Cases_on `vv_operand bvv` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv s` by
+    (irule exprSimAggregateChildrenTheory.vv_post_vars_frame >>
+     simp[] >> qexistsl_tac [`q0`, `sm`] >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >> simp[] >>
+     metis_tac[not_fresh_at_mono]) >>
+  irule array_vv_post >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem array_check_ptr_oob_frag:
+  comp_ignore_bind (array_bounds_check iop lop sgn)
+    (array_elem_ptr bop iop dyn ws esz) sm = (dst,sn) /\
+  ~idx_in_range sgn i len /\
+  (!z. iop = Var z ==> not_fresh_at sm z) /\
+  (!z. lop = Var z ==> not_fresh_at sm z) ==>
+  frag_exec ctx sm sn
+    (\s. s = q0 /\ stmt_state_rel ctx func cenv cx es s /\
+      eval_operand iop s = SOME i /\ eval_operand lop s = SOME len)
+    Q (expr_exit (INR (Error (RuntimeError msg))))
+Proof
+  strip_tac >> ho_match_mp_tac (INST_TYPE [alpha |-> ``:operand``]
+    frag_exec_straight_fresh_abort) >>
+  qexistsl_tac [`comp_ignore_bind (array_bounds_check iop lop sgn)
+    (array_elem_ptr bop iop dyn ws esz)`, `dst`, `\a. a = Revert_abort`] >>
+  simp[straight_fresh_array_check_ptr, expr_exit_def] >> conj_tac
+  >- (rpt strip_tac >> metis_tac[eval_operand_drop_fresh]) >>
+  rpt strip_tac >> simp[] >> drule_all array_check_ptr_oob >> simp[]
+QED
