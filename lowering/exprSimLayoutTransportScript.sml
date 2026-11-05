@@ -132,14 +132,6 @@ Proof
   Cases_on `sb` >> Cases_on `db` >> gvs[arg_type_fits_def, is_word_type_def]
 QED
 
-Theorem compatible_dynarray_type:
-  arg_type_fits src dst ==> (dynarray_type src <=> dynarray_type dst)
-Proof
-  Cases_on `src` >> Cases_on `dst` >> simp[arg_type_fits_def, dynarray_type_def] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `b` >> Cases_on `b'` >> gvs[arg_type_fits_def]
-QED
-
 Theorem compatible_footprint:
   arg_type_fits src dst /\ evaluate_type tenv src = SOME sv /\
   evaluate_type tenv dst = SOME dv /\ type_memory_size sv = type_memory_size dv ==>
