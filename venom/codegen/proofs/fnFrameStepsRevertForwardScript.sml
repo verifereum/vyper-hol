@@ -3974,3 +3974,134 @@ Proof
      contextCodegenRelTheory.context_venom_asm_rel_def] >>
   qexistsl_tac [`st.as_memory`, `ps`, `top`] >> simp[]
 QED
+
+Theorem rf_entry_copy_setup:
+  !ctx cp lo prog liveness dfg cfg fn bb i j base ps vs ast ops
+   ps_end ra rest mem0.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
+    LENGTH (get_params bb.bb_instructions) <= i /\
+    EVERY (\inst. EVERY (\op. ~is_label_operand op) inst.inst_operands)
+      (DROP i bb.bb_instructions) /\ generated_plan_state_wf base ps /\
+    (!k inst op. i <= k /\ get_instruction bb k = SOME inst /\
+       MEM op (compute_operands inst) /\ is_var_operand op /\
+       (!k' inst' x. i <= k' /\ k' < k /\ get_instruction bb k' = SOME inst' /\
+                     op = Var x ==> ~MEM x inst'.inst_outputs) ==>
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (i - LENGTH (get_params bb.bb_instructions))
+      (DROP i bb.bb_instructions) ps = SOME (ops, ps_end) /\
+    (!off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops) /\
+    asm_block_at prog ast.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    ?inst dop sop zop dst src sz step_ops rest_ops ps1 stk.
+      lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ i < j /\
+      get_instruction bb i = SOME inst /\ MEM inst (fn_insts fn) /\
+      inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+      inst.inst_operands = [dop;sop;zop] /\
+      EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+      operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+      operand_val (frame_view fn ra vs) lo sop = SOME src /\
+      operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+      (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+        MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+      rf_spills_separated ps /\
+      rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs /\
+      rf_value_inv fn ra bb j lo (frame_view fn ra vs) i vs /\
+      (!op. rf_live_use bb i j op /\ is_var_operand op ==>
+        MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+      ast.as_stack = stk ++ rest /\
+      plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+      venom_asm_terminal_rel vs ast /\ ops = step_ops ++ rest_ops /\
+      generate_regular_inst_plan liveness dfg cfg fn inst
+        (live_vars_at liveness bb.bb_label (SUC i)) (bb_is_halting bb)
+        (case DROP (SUC i) bb.bb_instructions of
+           [] => F | next_i :: _ => is_terminator next_i.inst_opcode)
+        bb.bb_label ps = (step_ops,ps1) /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (SUC i - LENGTH (get_params bb.bb_instructions))
+        (DROP (SUC i) bb.bb_instructions) ps1 = SOME (rest_ops,ps_end) /\
+      (!off. ~MEM (SORestore off) step_ops /\ ~MEM (SOSpill off) step_ops /\
+             ~MEM (SORestore off) rest_ops /\ ~MEM (SOSpill off) rest_ops) /\
+      asm_block_at prog ast.as_pc (execute_plan cp.cp_initial_fmp step_ops) /\
+      asm_block_at prog (ast.as_pc + LENGTH (execute_plan cp.cp_initial_fmp step_ops))
+        (execute_plan cp.cp_initial_fmp rest_ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  `i < j` by fs[revert_forward_pair_def] >>
+  `i <= i /\ i <= j` by decide_tac >>
+  `?inst. get_instruction bb i = SOME inst` by
+    (irule rf_forward_instruction_exists >> qexistsl_tac [`i`, `j`] >> simp[]) >>
+  `inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+   LENGTH inst.inst_operands = 3` by
+    (drule_all rf_forward_instruction_shape >> strip_tac >>
+     drule_all rf_forward_instruction_opcode >> simp[]) >>
+  `?dop sop zop. inst.inst_operands = [dop;sop;zop]` by
+    fs[listTheory.LENGTH_EQ_NUM_compute] >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
+    (irule rf_suffix_instruction_no_labels >> metis_tac[]) >>
+  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
+  `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
+    (irule rf_inventory_inv_entry >> gvs[]) >>
+  `!op. rf_live_use bb i j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> fs[rf_live_use_def] >> first_x_assum irule >> metis_tac[]) >>
+  `rf_value_inv fn ra bb j lo (frame_view fn ra vs) i vs` by
+    (irule rf_value_inv_entry >>
+     qexists_tac `\op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` >>
+     gvs[] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all rf_block_plan_step >> strip_tac >>
+  `generate_regular_inst_plan liveness dfg cfg fn inst
+    (live_vars_at liveness bb.bb_label (SUC i)) (bb_is_halting bb)
+    (case DROP (SUC i) bb.bb_instructions of
+       [] => F | next_i :: _ => is_terminator next_i.inst_opcode)
+    bb.bb_label ps = (step_ops,ps1)` by
+    (irule rf_forward_regular_plan_result >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`bb`, `i`, `j`, `i`] >> simp[]) >>
+  `?stk. ast.as_stack = stk ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk` by
+    (qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[frameRelTheory.fn_frame_inv_def, contextCodegenRelTheory.context_venom_asm_rel_def] >>
+     metis_tac[]) >>
+  `venom_asm_terminal_rel vs ast` by
+    (fs[frameRelTheory.fn_frame_inv_def, contextCodegenRelTheory.context_venom_asm_rel_def,
+        venom_asm_terminal_rel_def, frameRelTheory.frame_view_def]) >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> simp[] >> qexists_tac `inst` >> simp[]) >>
+  `!op. MEM op inst.inst_operands ==>
+    ?v. operand_val (frame_view fn ra vs) lo op = SOME v` by
+    (rpt strip_tac >> irule rf_frame_input_defined >>
+     conj_tac >- gvs[EVERY_MEM] >>
+     qexistsl_tac [`cp'`, `ctx`, `mem0`, `ps`, `rest`, `ast`] >>
+     asm_rewrite_tac[] >>
+     strip_tac >> first_x_assum irule >>
+     gvs[compute_operands_def, python_stack_operands_def,
+         venomInstTheory.ir_specific_operand_order_def]) >>
+  `?dst src sz.
+    operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+    operand_val (frame_view fn ra vs) lo sop = SOME src /\
+    operand_val (frame_view fn ra vs) lo zop = SOME sz` by
+    metis_tac[listTheory.MEM] >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def] >> irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+     qexists_tac `bb` >> conj_tac >- metis_tac[lookup_block_MEM] >>
+     gvs[get_instruction_def] >> metis_tac[EL_MEM]) >>
+  qexistsl_tac [`inst`, `dop`, `sop`, `zop`, `dst`, `src`, `sz`,
+    `step_ops`, `rest_ops`, `ps1`, `stk`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+  fs[execute_plan_append, asm_block_at_append]
+QED
