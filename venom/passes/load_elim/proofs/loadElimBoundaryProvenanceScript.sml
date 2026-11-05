@@ -414,3 +414,37 @@ Theorem le_boundary_provenance_entry:
 Proof
   metis_tac[le_boundary_provenance_def]
 QED
+
+Theorem le_boundary_preserving_reverse:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  le_boundary_provenance ctx fn st /\
+  fn_entry_label fn <> SOME bb.bb_label /\
+  cfg_preds_of (cfg_analyze fn) bb.bb_label = [p] /\
+  le_fold_preserves ctx bb.bb_instructions k /\
+  df_boundary NONE (le_solver_process ctx fn bb.bb_label st) bb.bb_label =
+    df_boundary NONE st bb.bb_label /\
+  FLOOKUP (unwrap_load_lattice (df_boundary NONE st bb.bb_label)) k = SOME xs ==>
+  ?ys. FLOOKUP (unwrap_load_lattice (df_boundary NONE st p)) k = SOME ys /\
+       set xs SUBSET set ys
+Proof
+  strip_tac >>
+  `le_pred_lookup_rel k (df_boundary NONE st p) (df_boundary NONE st bb.bb_label)` by
+    metis_tac[le_boundary_provenance_pred] >>
+  `df_boundary NONE st p <> NONE` by
+    (gvs[le_pred_lookup_rel_def] >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  Cases_on `FLOOKUP (unwrap_load_lattice (df_boundary NONE st p)) k`
+  >- (drule_all le_process_boundary_block >>
+      disch_then (qspecl_then [`st`, `bb.bb_label`, `ctx`] mp_tac) >> simp[] >>
+      strip_tac >>
+      `FLOOKUP (unwrap_load_lattice
+        (FOLDL (\a i. load_transfer ctx i a)
+          (df_joined_val Forward NONE load_join load_edge_transfer ctx
+            (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+            (cfg_analyze fn) st bb.bb_label) bb.bb_instructions)) k = NONE` by
+        (drule_all le_joined_sole_pred >>
+         disch_then (qspecl_then [`st`, `ctx`] mp_tac) >>
+         gvs[le_fold_preserves_def]) >>
+      `FLOOKUP (unwrap_load_lattice (df_boundary NONE st bb.bb_label)) k = NONE` by
+        metis_tac[le_join_lookup_missing, le_wf_block_fold_some] >> gvs[]) >>
+  gvs[le_pred_lookup_rel_def]
+QED
