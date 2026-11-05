@@ -140,8 +140,10 @@ Definition ptr_val_ok_def:
 End
 
 (* ptr_val_ok for compile_expr's value_vv: a stack value as ptr_val_ok, a
-   located one's pointer untainted, and a memory place, of any type,
-   ptr_mem_ok. *)
+   located one's pointer untainted, a memory place, of any type,
+   ptr_mem_ok, and a storage or transient place tainted only in the bytes
+   its own type leaves dead (a popped element's slots are dead after the
+   pop's length store, so this is stated over the taint, not liveness). *)
 Definition ptr_vv_ok_def:
   (ptr_vv_ok cx t tv (StackValue t' op) es G tn s <=>
      ?v. read_result cx tv es = (INL v, es) /\
@@ -150,7 +152,17 @@ Definition ptr_vv_ok_def:
      op_taint tn p.ptr_operand = {} /\
      (p.ptr_location = LocMemory ==>
       ?v. read_result cx tv es = (INL v, es) /\
-          ptr_mem_ok cx t v p.ptr_operand G tn s))
+          ptr_mem_ok cx t v p.ptr_operand G tn s) /\
+     (!w ty k b.
+        eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME ty /\
+        w2n w <= w2n k /\ w2n k < w2n w + type_slot_size ty /\ b < 32 ==>
+        (p.ptr_location = LocStorage /\ (k, b) IN tn.t_stor ==>
+         dead_bytes (s.vs_accounts s.vs_call_ctx.cc_address).storage
+           (w2n w) ty (w2n k) b) /\
+        (p.ptr_location = LocTransient /\ (k, b) IN tn.t_trans ==>
+         dead_bytes (s.vs_transient s.vs_call_ctx.cc_address)
+           (w2n w) ty (w2n k) b)))
 End
 
 (* frag_exec with the ghost: P, Q over the ghost and the state.  The
