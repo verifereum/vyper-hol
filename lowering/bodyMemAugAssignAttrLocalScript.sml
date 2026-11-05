@@ -455,6 +455,41 @@ Proof
   FULL_SIMP_TAC list_ss [alistTheory.ALOOKUP_def] >> metis_tac[]
 QED
 
+Theorem alookup_fields_args_mem_src[local]:
+  !fields args fld fty.
+    MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args /\
+    ALOOKUP args fld = SOME fty ==>
+    ?fsz. ALOOKUP fields fld = SOME (fty, fsz)
+Proof
+  Induct >> Cases_on `args` >>
+  FULL_SIMP_TAC list_ss [alistTheory.ALOOKUP_def] >>
+  rpt gen_tac >> PairCases_on `h` >> PairCases_on `h'` >>
+  FULL_SIMP_TAC list_ss [alistTheory.ALOOKUP_def] >>
+  strip_tac >> Cases_on `h0 = fld` >>
+  FULL_SIMP_TAC list_ss [alistTheory.ALOOKUP_def] >> metis_tac[]
+QED
+
+Theorem attribute_type_struct_field_mem_src[local]:
+  !cenv cx env es sid fld fty.
+    expr_sim_inv cenv cx env es /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME fty ==>
+    ?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                     (nsid_to_string sid)) fld = SOME (fty, fsz)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `attribute_type _ _ _ = _` mp_tac >>
+  SIMP_TAC std_ss [attribute_type_def, AllCaseEqs()] >> strip_tac >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     pure_rewrite_tac [expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  pure_rewrite_tac [sfields_tenv_consistent_def] >> strip_tac >>
+  qpat_x_assum `v1 = StructArgs fields` SUBST_ALL_TAC >>
+  first_x_assum drule >> strip_tac >>
+  FULL_SIMP_TAC std_ss [get_struct_fields_def] >>
+  metis_tac[alookup_fields_args_mem_src]
+QED
+
 Theorem struct_field_type_mem_src[local]:
   !cenv cx env es sid fs fld fty fsz.
     expr_sim_inv cenv cx env es /\
@@ -504,6 +539,51 @@ Proof
      metis_tac[scope_well_typed_lookup_scopes]) >>
   Cases_on `entry.value` >> gvs[value_has_type_def] >>
   drule_all struct_has_type_field_mem_src >> strip_tac >> metis_tac[]
+QED
+
+Theorem write_attr_local_typed_mem_src[local]:
+  !cx cenv env id fld sid fty fsz es1 v res es'.
+    write_place cx (MemoryPlace id [AttrSubscript fld]) v es1 = (res, es') /\
+    (!m. res <> INR (Error (TypeError m))) /\
+    expr_sim_inv cenv cx env es1 /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) ==>
+    res = INL () /\
+    ?pre env1 entry rest fs vals ftv.
+      find_containing_scope id es1.scopes = SOME (pre, env1, entry, rest) /\
+      entry.type = StructTV fs /\ entry.value = StructV vals /\
+      fields_layout (get_struct_fields cenv.ce_struct_fields
+                       (nsid_to_string sid)) fs /\
+      struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
+      evaluate_type (get_tenv cx) fty = SOME ftv /\
+      es' = es1 with scopes :=
+        pre ++ (env1 |+ (id, entry with
+                  <|value := StructV (AFUPDKEY fld (K v) vals);
+                    popped := []|>)) :: rest
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all augassign_attr_source_fields_mem_src >> strip_tac >>
+  drule lookup_scopes_find_containing_scope >> strip_tac >>
+  `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
+    metis_tac[expr_sim_inv_local_mem_src] >>
+  drule_all struct_fields_layout >> strip_tac >>
+  FULL_SIMP_TAC std_ss [type_value_11] >>
+  `struct_has_type fs vals` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     SIMP_TAC std_ss [expr_sim_inv_def, state_well_typed_def] >>
+     strip_tac >> drule_all scope_well_typed_lookup_scopes >>
+     ASM_SIMP_TAC std_ss [value_has_type_def]) >>
+  qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
+  ASM_SIMP_TAC std_ss [write_place_def, get_scopes_def, bind_def,
+    lift_option_type_def, type_check_def, ignore_bind_def, return_def,
+    raise_def, lift_sum_def, replace_memory_entry_def,
+    evaluate_subscripts_def, assign_subscripts_def, set_scopes_def,
+    assert_def, LET_THM, type_value_case_def, sumTheory.sum_case_def,
+    AllCaseEqs()] >>
+  Cases_on `entry.assignable` >>
+  FULL_SIMP_TAC std_ss [return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> FULL_SIMP_TAC std_ss [] >> metis_tac[]
 QED
 
 Theorem augassign_attr_conditional_ih_mem_src[local]:
