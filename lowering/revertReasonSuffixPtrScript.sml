@@ -187,21 +187,59 @@ Proof
   simp[mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
+Theorem alias_pair_load_run:
+  lookup_var q s = SOME Q /\ lookup_var p s = SOME P /\
+  lookup_var cell s = SOME A /\
+  p <> aq /\ cell <> aq /\ cell <> ap ==>
+  run_inst_seq
+    [mk_inst id ADD [Var q; Lit 0w] [aq];
+     mk_inst (id+1) ADD [Var p; Lit 0w] [ap];
+     mk_inst (id+2) MLOAD [Var cell] [dst]] s =
+  OK (update_var dst (mload (w2n A) s)
+       (update_var ap P (update_var aq Q s)))
+Proof
+  strip_tac >> fs[lookup_var_def] >>
+  simp[run_inst_seq_def, mk_inst_def] >>
+  PURE_REWRITE_TAC[step_inst_base_def, instruction_accfupds,
+    combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure2_def, exec_read1_def, eval_operand_def,
+    lookup_var_def, update_var_def, FLOOKUP_UPDATE, mload_def, WORD_ADD_0]
+QED
+
 Theorem alias_pair_load_checks:
   lookup_var q s = SOME Q /\ lookup_var p s = SOME P /\
   lookup_var cell s = SOME A /\
   op_taint tn (Var q) = {} /\ op_taint tn (Var p) = {} /\
   ptr_covers G tn cell s 32 /\
   (!i. w2n A <= i /\ i < w2n A+32 ==> i NOTIN tn.t_mem) /\
-  p <> aq /\ cell <> aq /\ cell <> ap /\ ~ctx_has_dalloca ctx ==>
+  p <> aq /\ cell <> aq /\ cell <> ap /\
+  aq <> ap /\ aq <> dst /\ ap <> dst /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq
+    [mk_inst id ADD [Var q; Lit 0w] [aq];
+     mk_inst (id+1) ADD [Var p; Lit 0w] [ap];
+     mk_inst (id+2) MLOAD [Var cell] [dst]] s = OK t ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id ADD [Var q; Lit 0w] [aq];
        mk_inst (id+1) ADD [Var p; Lit 0w] [ap];
        mk_inst (id+2) MLOAD [Var cell] [dst]] s Gf tnf /\
-    op_taint tnf (Var dst) = {} /\ tnf.t_mem = tn.t_mem
+    op_taint tnf (Var dst) = {} /\ tnf.t_mem = tn.t_mem /\
+    lookup_var aq t = SOME Q /\ lookup_var ap t = SOME P /\
+    lookup_var dst t = SOME (mload (w2n A) s) /\
+    (!C. ptr_covers G tn q s C ==> ptr_covers Gf tnf aq t C) /\
+    (!C. ptr_covers G tn p s C ==> ptr_covers Gf tnf ap t C) /\
+    (!x C. x <> aq /\ x <> ap /\ x <> dst /\ ptr_covers G tn x s C ==>
+       lookup_var x t = lookup_var x s /\ ptr_covers Gf tnf x t C) /\
+    (!a. mload a t = mload a s)
 Proof
   strip_tac >>
+  `t = update_var dst (mload (w2n A) s) (update_var ap P (update_var aq Q s))` by
+    (`run_inst_seq
+       [mk_inst id ADD [Var q; Lit 0w] [aq];
+        mk_inst (id+1) ADD [Var p; Lit 0w] [ap];
+        mk_inst (id+2) MLOAD [Var cell] [dst]] s =
+       OK (update_var dst (mload (w2n A) s) (update_var ap P (update_var aq Q s)))`
+       by (irule alias_pair_load_run >> simp[]) >> fs[]) >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;k] _ _ _` >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
@@ -251,8 +289,71 @@ Resume alias_pair_load_checks[second]:
      simp[exec_read1_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def, Abbr `k`] >> conj_tac
   >- (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]) >>
-  irule EQ_TRANS >> qexists_tac `t2.t_mem` >> conj_tac
-  >- (irule (cj 2 mload_ghost_clean) >> simp[eval_operand_def]) >> simp[]
+  conj_tac
+  >- (irule EQ_TRANS >> qexists_tac `t2.t_mem` >> conj_tac
+      >- (irule (cj 2 mload_ghost_clean) >> simp[eval_operand_def]) >> simp[]) >>
+  suspend "frames"
+QED
+
+Resume alias_pair_load_checks[frames]:
+  qmatch_goalsub_abbrev_tac `step_prov PG g2 k sf` >>
+  qabbrev_tac `gf = step_prov PG g2 k sf` >>
+  qabbrev_tac `tf = step_taint k s2 sf t2` >>
+  qabbrev_tac `out = update_var dst (mload (w2n A) s)
+    (update_var ap P (update_var aq Q s))` >>
+  `!x C. x <> dst /\ ptr_covers g2 t2 x s2 C ==>
+     ptr_covers gf tf x out C` by
+    (rpt gen_tac >> strip_tac >>
+     `ptr_covers gf tf x (update_var dst (mload (w2n A) s2) s2) C` by
+       (simp[Abbr `gf`, Abbr `tf`, Abbr `k`, Abbr `sf`] >> irule ptr_covers_step_frame >>
+        simp[mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+     fs[Abbr `out`, Abbr `s2`, Abbr `s1`, ptr_covers_def,
+        eval_operand_def, lookup_var_def, update_var_def, mload_def]) >>
+  conj_tac >- simp[Abbr `out`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[Abbr `out`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[Abbr `out`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- suspend "alias_q" >>
+  conj_tac >- suspend "alias_p" >>
+  conj_tac >- suspend "live" >>
+  simp[Abbr `out`, update_var_def, mload_def]
+QED
+
+Resume alias_pair_load_checks[alias_q]:
+  gen_tac >> strip_tac >>
+  `ptr_covers g1 t1 aq s1 C` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `i`, Abbr `s1`] >>
+     irule add_zero_ptr_covers >> simp[]) >>
+  `ptr_covers g2 t2 aq s2 C` by
+    (simp[Abbr `g2`, Abbr `t2`, Abbr `s2`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Resume alias_pair_load_checks[alias_p]:
+  gen_tac >> strip_tac >>
+  `ptr_covers g1 t1 p s1 C` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     fs[Abbr `i`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers g2 t2 ap s2 C` by
+    (simp[Abbr `g2`, Abbr `t2`, Abbr `j`, Abbr `s2`] >>
+     irule add_zero_ptr_covers >> simp[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Resume alias_pair_load_checks[live]:
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- simp[Abbr `out`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `ptr_covers g1 t1 x s1 C` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `i`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers g2 t2 x s2 C` by
+    (simp[Abbr `g2`, Abbr `t2`, Abbr `s2`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  first_x_assum irule >> simp[]
 QED
 
 Finalise alias_pair_load_checks
