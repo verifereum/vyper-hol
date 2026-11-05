@@ -559,7 +559,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e1 es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_body_pre_def]) >>
+     gvs[expr_body_pre_def] >> disj1_tac >> rpt strip_tac >>
+     gvs[well_typed_expr_def, well_typed_builtin_app_def]) >>
   gvs[exprs_case_def] >> irule expr_sim_case_apply >>
   conj_tac >- (qexists `env` >> simp[]) >>
   qexists `nocalls` >> simp[] >>

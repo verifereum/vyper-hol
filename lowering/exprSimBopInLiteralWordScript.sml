@@ -196,10 +196,16 @@ Theorem literal_body_operand_pre:
   expr_body_pre cenv cx env e es'
 Proof
   strip_tac >> gvs[]
-  >- metis_tac[expr_body_pre_builtin_arg, MEM] >>
+  >- (irule expr_body_pre_builtin_arg >>
+      qpat_assum `expr_body_pre _ _ _ (Builtin _ (Bop _) _) _` $ irule_at Any >>
+      gs[]) >>
   `expr_body_pre cenv cx env (Builtin a (MakeArray t n) elems) es'` by
-    metis_tac[expr_body_pre_builtin_arg, MEM] >>
-  metis_tac[expr_body_pre_builtin_arg]
+    (irule expr_body_pre_builtin_arg >>
+     qpat_assum `expr_body_pre _ _ _ (Builtin _ (Bop _) _) _` $ irule_at Any >>
+     gs[]) >>
+  irule expr_body_pre_builtin_arg >>
+  qpat_assum `expr_body_pre _ _ _ (Builtin _ (MakeArray _ _) _) _` $ irule_at Any >>
+  gs[]
 QED
 Theorem literal_make_array_action:
   compatible_bound n (LENGTH elems) /\
