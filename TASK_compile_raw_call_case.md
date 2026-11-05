@@ -28,7 +28,7 @@ already proved from it; do not change them.
 
 1. `holbuild -j4 build exprSimRawCallTheory exprSimCallRawCallTheory bodySimCallRawCallTheory` passes and `compile_raw_call_case` is proved (no cheat in it or in any helper it uses).
 2. No duplicate or near-duplicate lemmas; reuse existing ones (listed below) rather than restating them. Helpers used only here are `[local]`.
-3. New helper lemmas go in lowering/exprSimRawCallScript.sml or in new theories `lowering/exprSimRawCall*Script.sml` that only exprSimRawCall imports. Edit no other existing file: no change to any existing theorem, to any definition, or to anything under semantics/, lowering/defs/ or venom/defs/. If you believe you need such a change, stop and report it (blocked) with the reason.
+3. New helper lemmas go in lowering/exprSimRawCallScript.sml or in new theories `lowering/exprSimRawCall*Script.sml` that only exprSimRawCall imports. The one exception: if a lemma you need is `[local]` in lowering/exprSimRawCallCalldataScript.sml or lowering/rawCallFragPathScript.sml, drop its `[local]` there (change nothing else in that file) instead of duplicating it, and list every such export in your final report. Edit no other existing file: no change to any existing theorem, to any definition, or to anything under semantics/, lowering/defs/ or venom/defs/. If you believe you need such a change, stop and report it (blocked) with the reason.
 
 **If the theorem is false as stated:** produce a counterexample, state the tightest fix, do not weaken the statement.
 
@@ -79,8 +79,21 @@ without revert_on_failure were excluded. Two things changed since:
   `flags.rcf_revert_on_failure` hypotheses in its helper lemmas no longer
   follow from `expr_body_pre`). Their cases are new work.
 
-The sibling `raw_call` of `msg.data` (RawCallCalldataTarget) is proved
-separately in parallel; it is not available here.
+The sibling `raw_call` of `msg.data` (RawCallCalldataTarget) is now
+proved on the base: lowering/exprSimRawCallCalldataScript.sml
+(`compile_raw_call_calldata_case`). It shares compile_raw_call_finish and
+the output buffer with this case, and exports the finish-tail lemmas
+(listed under Available Resources). Reuse them: add exprSimRawCallCalldata
+(and rawCallFragPath) to the Ancestors and replace the old proof's local
+copies of the same facts with them, rather than porting duplicates.
+
+The base also changed under the harvest since the last run:
+- counted-GAS observations for oracle calls (see exprSimSend's gas
+  lemmas and rawCallFragPath's `frag_path_*` judgments);
+- `expr_exit (INR (Error (RevertData d))) (Abort a s) <=> a = Revert_abort`;
+- `expr_body_pre` adds `IS_SOME (supported_function_decl tops c Internal)`;
+- builtin args carry a `~is_extcode` premise;
+- `call_result_rel_at gobs` at the top level.
 
 ## Domain Constraints
 
@@ -97,6 +110,8 @@ separately in parallel; it is not available here.
 
 | Resource | Location | Description |
 |----------|----------|-------------|
+| Calldata sibling (proved, current base) | lowering/exprSimRawCallCalldataScript.sml | `compile_raw_call_calldata_case` and the shared finish-tail lemmas: `raw_call_typed_outcome`, `raw_call_oracle_result`, `raw_call_oracle_step`, `raw_call_outbuf_write_frame`, `raw_call_outbuf_write_contents`, `raw_call_finish_revert_compile`, `raw_call_revert_copy`, `raw_call_revert_run`, `raw_call_revert_frag`, `raw_call_failed_jnz_frag`, `raw_call_cap_run`, `raw_call_output_length_memory`, `precompile_result_length`. Reuse these; don't port local copies. |
+| Counted-GAS fragment paths | lowering/rawCallFragPathScript.sml | `frag_path_def` and its rules (`frag_path_seq`, `frag_path_then`, `frag_path_run_inst_seq`, `frag_path_enter`, `frag_path_fresh_label`, `frag_path_abort_suffix`, ...). |
 | Target | lowering/exprSimRawCallScript.sml | `compile_raw_call_case` and the old proof's helpers. |
 | Case predicates | lowering/exprSimHypsDefsScript.sml, lowering/exprSimHypsScript.sml | `expr_sim_case_def`, `expr_vv_case_def`, `exprs_case_def`, `expr_body_pre`, `expr_sim_inv_def`, `expr_sim_case_of_vv`, `typed_args_ready_of_case`. |
 | Closest sibling (proved, current base) | lowering/exprSimSendScript.sml | `compile_send_case`, `send_expr_sim`: send's CALL through the oracle, same case-lemma shape, on the current infrastructure. |
