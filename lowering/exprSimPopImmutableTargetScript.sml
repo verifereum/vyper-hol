@@ -1472,6 +1472,29 @@ QED
 
 Finalise imm_gas_outcome_bind_value
 
+Theorem imm_subscript_compile_parts[local]:
+  !cenv bt e sa rb sm et bd r sb.
+    compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+    FST (SND rb) = SOME LocCode /\
+    SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+    compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb) ==>
+    ?op sn dst.
+      lower_value compile_expr cenv (expr_type e) e sm = (op,sn) /\
+      compile_array_subscript (FST rb) op
+        (case bd of Fixed _ => F | Dynamic _ => T)
+        (case bd of Fixed n => n | Dynamic _ => 0)
+        (word_scale LocCode) (elem_size_in_location cenv LocCode et)
+        (is_signed_type (expr_type e))
+        (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb) /\
+      r = (dst,SOME LocCode,SOME (ValPT et))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_get_target_ptr _ _ (SubscriptTarget _ _) _ = _` mp_tac >>
+  simp[Once compile_get_target_ptr_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `bd` >> simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
