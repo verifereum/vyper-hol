@@ -755,7 +755,7 @@ Proof
   strip_tac >> drule eval_expr_bop_cases >> simp[] >> metis_tac[]
 QED
 
-Theorem compile_bop_storage_frame_frag:
+Theorem compile_bop_storage_frame_reachable_frag:
   ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
   ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
   (!v1 es1 v2 es2.
@@ -766,7 +766,9 @@ Theorem compile_bop_storage_frame_frag:
     lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==>
     !l. operand <> Label l) /\
   (!e a b operand es0 es1 value start saved savedT R.
-    (e = e1 \/ e = e2) /\
+    ((e = e1 /\ es0 = es) \/
+     (e = e2 /\ ?vfirst.
+       (do r <- eval_expr cx e1; read_result cx r od) es = (INL vfirst,es0))) /\
     lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
     (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
     fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
@@ -852,6 +854,61 @@ Proof
   qpat_assum `lower_value _ _ _ e2 s1 = _`
     (mp_then Any mp_tac compile_lower_value_var) >> simp[] >> strip_tac >>
   qpat_x_assum `!a b operand. _` (drule_then assume_tac) >> simp[]
+QED
+
+(* Compatibility boundary: unconditional operand simulations imply the
+   reachable-source callback, but typed recursive callers use the latter. *)
+Theorem compile_bop_storage_frame_frag:
+  ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
+  ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    MAP FDOM es.scopes = MAP FDOM es1.scopes) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==>
+    !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    (e = e1 \/ e = e2) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  (!a a1 a2 b start mid es1 es2 v1 v2 value x y operand saved savedT R.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) /\
+    bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es2 = INL value /\
+    compile_binop bop x y (expr_type e1)
+      (if bop = Exp then expr_int_literal e1 else NONE)
+      (if bop = Exp then expr_int_literal e2 else NONE) a2 = (operand,b) /\
+    (!z. x = Var z ==> not_fresh_at a1 z) /\
+    (!z. y = Var z ==> not_fresh_at a2 z) /\ (!l. x <> Label l) /\
+    local_ptrs_reserved cenv a /\ local_ptrs_reserved cenv a2 /\
+    a.cs_next_var <= a1.cs_next_var /\ a1.cs_next_var <= a2.cs_next_var /\
+    a.cs_next_id <= a1.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    stmt_state_rel ctx func cenv cx es start /\
+    expr_post ctx func cenv cx e1 es a a1 start es1 v1 x mid ==>
+    frag_exec ctx a2 b
+      (\s. expr_post ctx func cenv cx e2 es1 a1 a2 mid es2 v2 y s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+             es a b start es2 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  strip_tac >> irule compile_bop_storage_frame_reachable_frag >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem compile_bitwise_storage_frame_frag:
@@ -1463,3 +1520,217 @@ val () = List.app (fn th =>
     else raise Fail "Checked arithmetic framing has unproved dependencies"
   end) [checked_storage_frame_run, checked_result_word,
         compile_checked_storage_frame_tail, compile_checked_storage_frame_frag];
+
+Theorem compile_checked_storage_frame_reachable_frag:
+  MEM bop [Add;Sub;Mul] /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    ?i1 i2 u. v1 = IntV i1 /\ v2 = IntV i2 /\
+      type_to_int_bound (expr_type e1) = SOME u /\ type_to_int_bound ann = SOME u /\
+      0 < type_bits (expr_type e1) /\ type_bits (expr_type e1) <= 256 /\
+      within_int_bound u i1 /\ within_int_bound u i2) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==> !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    ((e = e1 /\ es0 = es) \/
+     (e = e2 /\ ?vfirst.
+       (do r <- eval_expr cx e1; read_result cx r od) es = (INL vfirst,es0))) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bop <> In /\ bop <> NotIn /\ bop <> Exp` by
+    (qpat_x_assum `MEM bop _` mp_tac >> simp[] >> rpt strip_tac >> gvs[]) >>
+  irule compile_bop_storage_frame_reachable_frag >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!v1 es1 v2 es2. _` (drule_all_then strip_assume_tac) >>
+      gvs[] >> irule compile_checked_storage_frame_tail >> simp[] >>
+      qexistsl_tac [`NONE`, `NONE`, `i1`, `x`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> first_assum irule >> simp[]) >>
+  conj_tac >- (disj2_tac >> fs[]) >>
+  qexists_tac `ty` >> simp[]
+QED
+
+Theorem compile_shift_storage_frame_reachable_frag:
+  (bop = ShL \/ bop = ShR) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    ?i1 i2. v1 = IntV i1 /\ v2 = IntV i2 /\ within_int_bound (Unsigned 256) i2 /\
+      ((type_to_int_bound ann = SOME (if is_signed_type (expr_type e1) then Signed 256 else Unsigned 256) /\
+        within_int_bound (if is_signed_type (expr_type e1) then Signed 256 else Unsigned 256) i1) \/
+       (bop = ShR /\ ?n. 0 < n /\ n <= 256 /\
+        type_to_int_bound ann = SOME (if is_signed_type (expr_type e1) then Signed n else Unsigned n) /\
+        within_int_bound (if is_signed_type (expr_type e1) then Signed n else Unsigned n) i1))) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==> !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    ((e = e1 /\ es0 = es) \/
+     (e = e2 /\ ?vfirst.
+       (do r <- eval_expr cx e1; read_result cx r od) es = (INL vfirst,es0))) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bop <> In /\ bop <> NotIn /\ bop <> Eq /\ bop <> NotEq /\ bop <> Exp` by
+    (qpat_x_assum `bop = ShL \/ _` mp_tac >> rpt strip_tac >> gvs[]) >>
+  irule compile_bop_storage_frame_reachable_frag >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!v1 es1 v2 es2. _` (drule_all_then strip_assume_tac) >>
+      irule shift_storage_frame_tail >> simp[] >>
+      qexistsl_tac [`NONE`, `NONE`, `i1`, `x`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> first_assum irule >> simp[]) >>
+  qexists_tac `ty` >> simp[]
+QED
+
+Theorem compile_compare_storage_frame_reachable_frag:
+  MEM bop [Lt;Gt;Eq;NotEq;LtE;GtE] /\
+  ~is_bytestring_type (expr_type e1) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    ?tv. word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+      (is_uint256 (expr_type e1) <=> tv = BaseTV (UintT 256)) /\
+      (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==> m <= 256)) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==> !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    ((e = e1 /\ es0 = es) \/
+     (e = e2 /\ ?vfirst.
+       (do r <- eval_expr cx e1; read_result cx r od) es = (INL vfirst,es0))) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bop <> In /\ bop <> NotIn /\ bop <> Exp` by
+    (qpat_x_assum `MEM bop _` mp_tac >> simp[] >> rpt strip_tac >> gvs[]) >>
+  irule compile_bop_storage_frame_reachable_frag >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!v1 es1 v2 es2. _` (drule_all_then strip_assume_tac) >>
+      irule compile_compare_storage_frame_tail >> simp[] >>
+      qexistsl_tac [`NONE`, `NONE`, `tv`, `v1`, `x`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> first_assum irule >> simp[]) >>
+  qexists_tac `ty` >> simp[]
+QED
+
+Theorem compile_bitwise_storage_frame_reachable_frag:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    word_value v1 /\ word_value v2 /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
+      within_int_bound (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
+      within_int_bound (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2)) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==>
+    !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    ((e = e1 /\ es0 = es) \/
+     (e = e2 /\ ?vfirst.
+       (do r <- eval_expr cx e1; read_result cx r od) es = (INL vfirst,es0))) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bop <> In /\ bop <> NotIn /\ bop <> Eq /\ bop <> NotEq` by
+    (qpat_x_assum `bop = And \/ _` mp_tac >> rpt strip_tac >> gvs[]) >>
+  irule compile_bop_storage_frame_reachable_frag >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!v1 es1 v2 es2. _` (drule_all_then strip_assume_tac) >>
+      `bop <> Exp` by
+        (qpat_x_assum `bop = And \/ _` mp_tac >> rpt strip_tac >> gvs[]) >>
+      irule bitwise_storage_frame_tail >> simp[] >>
+      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> first_assum irule >> simp[]) >>
+  qexists_tac `ty` >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Reachable binary framing has unproved dependencies"
+  end) [compile_bop_storage_frame_reachable_frag,
+        compile_checked_storage_frame_reachable_frag,
+        compile_shift_storage_frame_reachable_frag,
+        compile_compare_storage_frame_reachable_frag,
+        compile_bitwise_storage_frame_reachable_frag];
