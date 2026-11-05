@@ -120,12 +120,11 @@ QED
 
 Theorem raw_log_eval[local]:
   ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) ==>
-  (do r <- eval_expr cx
+  vyperState$bind (eval_expr cx
         (Call ann RawLog
           [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
              (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-           data] dflt);
-      read_result cx r od) =
+           data] dflt)) (read_result cx) =
   do vs <- eval_exprs cx topics;
      r <- eval_expr cx data;
      v <- read_result cx r;
@@ -182,7 +181,8 @@ Proof
   `no_type_error_result res` by
     (drule_all expr_sim_pre_eval >> simp[]) >>
   qpat_x_assum `expr_sim_pre _ _ _ _ _` kall_tac >>
-  qpat_x_assum `bind _ _ es = _` mp_tac >> simp[raw_log_eval] >>
+  qpat_x_assum `bind _ _ es = _` mp_tac >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[raw_log_eval] >>
   Cases_on `eval_exprs cx topics es` >>
   rename1 `eval_exprs cx topics es = (tr, es1)` >> Cases_on `tr`
   >- (rename1 `eval_exprs cx topics es = (INL vs, es1)` >>
@@ -271,6 +271,32 @@ Proof
   gvs[expr_type_def, vyperValueTheory.evaluate_type_def,
       vyperTypeInvariantsTheory.eval_result_typed_def, vyperTypingTheory.value_has_type_def] >>
   gvs[vyperTypingTheory.all_have_type_EVERY]
+QED
+
+Theorem raw_log_topics_marked_source[local]:
+  expr_sim_pre cenv cx env
+    (Call ann RawLog
+      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] dflt) es /\
+  compatible_bound (Dynamic n) (LENGTH topics) /\
+  gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
+    marks (INL vs) mid (OK t) ==>
+  expr_sim_pre cenv cx env data (mid with gas_obs := []) /\
+  EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs
+Proof
+  strip_tac >>
+  `expr_sim_pre cenv cx env
+    (Call ann RawLog
+      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] dflt)
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    gvs[expr_sim_pre_def] >>
+  `eval_exprs cx topics
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL vs, mid with gas_obs := [])` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule_all raw_log_topics_source >> simp[]
 QED
 
 Theorem raw_log_data_sim[local]:
@@ -438,8 +464,8 @@ Theorem raw_log_dynamic_tail_summary[local]:
         type_check (LENGTH vs <= 4) "raw_log too many topics";
         push_log (encode_raw_event_values cx.txn.target vs bytes);
         return NoneV od) (es2,s)
-    (\rr ee t. rr = INL NoneV /\
-      expr_post ctx func cenv cx e es sa sb s0 ee NoneV (Lit 0w) t /\
+    (\rr ee t. ?v. rr = INL v /\
+      expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
@@ -513,8 +539,8 @@ Theorem raw_log_fixed_tail_summary[local]:
         type_check (LENGTH vs <= 4) "raw_log too many topics";
         push_log (encode_raw_event_values cx.txn.target vs bytes);
         return NoneV od) (es2,s)
-    (\rr ee t. rr = INL NoneV /\
-      expr_post ctx func cenv cx e es sa sb s0 ee NoneV (Lit 0w) t /\
+    (\rr ee t. ?v. rr = INL v /\
+      expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
@@ -666,133 +692,98 @@ Proof
               fragExecTheory.cs_extends_emit_inst] >>
   `fn_has_code sa st1 func /\ fn_has_code st1 st2 func` by
     metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
-  drule_all raw_log_raw_eval_cases >> strip_tac
-  >- (gvs[] >> suspend "topic_error")
-  >- (gvs[] >> suspend "data_error")
-  >> gvs[] >> suspend "success"
-QED
-Resume raw_log_dynamic_sim[topic_error]:
-  drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
-  simp[expr_size_def] >>
-  strip_tac >> irule fragExecTheory.frag_exec_exit_prefix >>
-  qexists `st1` >> simp[] >> conj_tac
-  >- metis_tac[cs_extends_trans] >>
-  qspec_then `Value` (qspec_then `INR exc` mp_tac) expr_exit_success_map >>
-  simp[] >> disch_then SUBST1_TAC >>
-  first_x_assum (irule o SRULE [wb_args_exit_def]) >> simp[]
-QED
-Resume raw_log_dynamic_sim[data_error]:
-  drule_all raw_log_topics_source >> strip_tac >>
-  `expr_sim ctx func cenv cx (expr_type data) data es1` by
-    (irule raw_log_data_sim >> conj_tac
-     >- (qexistsl [`NoneT`, `NONE`,
-           `Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics`] >>
-         simp[expr_size_def]) >>
-     goal_assum (drule_at Any)) >>
+  irule expr_stack_outcome >> conj_tac
+  >- metis_tac[raw_log_eval_value] >>
+  `~cx.txn.is_static` by gvs[stmt_state_rel_def, state_rel_def] >>
+  simp[raw_log_eval] >>
   drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
   simp[expr_size_def] >> strip_tac >>
-  qspec_then `Value` (qspec_then `INR exc` mp_tac) expr_exit_success_map >>
-  simp[] >> disch_then SUBST1_TAC >>
-  irule fragExecTheory.frag_exec_exit_prefix >> qexists `st2` >>
-  `cs_extends sa st2 /\ cs_extends st2 sb` by metis_tac[cs_extends_trans] >>
-  simp[] >>
-  irule fragExecTheory.frag_exec_seq_pointwise >>
-    qexistsl [`\s. typed_args_post ctx func cenv cx es sa s0 es1 topics topic_ops vs s`, `st1`] >>
-    simp[] >> reverse conj_tac
-    >- (irule fragExecTheory.frag_exec_pre_exit >>
-        first_assum (irule_at Any o SRULE [wb_args_exit_def]) >>
-        simp[expr_exit_def]) >>
-    rpt strip_tac >>
-    `local_ptrs_reserved cenv st1` by
-      (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
-       metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-    qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-    simp[expr_sim_def] >> strip_tac >>
-    `expr_res_ok (INR exc)` by gvs[expr_res_ok_def, expr_vv_res_ok_def] >>
-    first_x_assum (drule_then mp_tac) >> simp[] >>
-    disch_then (qspec_then `t` mp_tac) >>
-    disch_then (mp_tac o MATCH_MP fragExecTheory.frag_exec_weaken) >>
-    disch_then irule >> gvs[typed_args_post_def]
+  irule raw_log_topics_bind >>
+  qexists `\vs ee t. typed_args_post ctx func cenv cx es sa s0 ee topics topic_ops vs t /\
+       t.vs_current_bb = st1.cs_current_bb /\
+       t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
+  reverse conj_tac
+  >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+       (\rr ee r. wb_args_exit rr r)` by
+        (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> strip_tac >> suspend "data"
 QED
-Resume raw_log_dynamic_sim[success]:
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- simp[fragExecTheory.frag_exec_def] >>
-  drule_all raw_log_topics_source >> strip_tac >>
-  `expr_sim ctx func cenv cx (expr_type data) data es1` by
+Resume raw_log_dynamic_sim[data]:
+  drule_all raw_log_topics_marked_source >> strip_tac >>
+  qpat_x_assum `!sb' sa' s0' ops func' ctx'. _` kall_tac >>
+  `~t.vs_halted` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     drule fragGasModeTheory.gas_marked_path_exec >>
+     metis_tac[fragGasPathTheory.gas_path_normal]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
+     disch_then (mp_tac o MATCH_MP
+       vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom) >> simp[]) >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` kall_tac >>
+  gvs[] >>
+  `expr_sim ctx func cenv cx (expr_type data) data (mid with gas_obs := [])` by
     (irule raw_log_data_sim >> conj_tac
      >- (qexistsl [`NoneT`, `NONE`,
-           `Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics`] >>
+          `Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+            (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics`] >>
          simp[expr_size_def]) >>
-     goal_assum (drule_at Any)) >>
-  drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
-  simp[expr_size_def] >> strip_tac >>
-  qspec_then `Value` (qspec_then `INL NoneV` mp_tac) expr_exit_success_map >>
-  simp[] >> disch_then SUBST1_TAC >>
-  irule fragExecTheory.frag_exec_seq_pointwise >>
-  qexistsl [`\s. typed_args_post ctx func cenv cx es sa s0 es1 topics topic_ops vs s`, `st1`] >>
-  `cs_extends st1 sb` by metis_tac[cs_extends_trans] >>
+     qexists `env` >> simp[]) >>
+  `gas_admissible (vyperState$bind (eval_expr cx data) (read_result cx)) expr_res_ok
+      (mid with gas_obs := [])` by
+    (rw[gasContextTheory.gas_admissible_def] >>
+     `expr_sim_pre cenv cx env data (mid with gas_obs := gs)` by simp[] >>
+     drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) expr_sim_pre_res_ok) >> simp[]) >>
+  pure_once_rewrite_tac[GSYM bind_assoc] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule expr_sim_suffix >> simp[] >>
+  qexistsl [`cenv`, `v`, `st1`, `st2`, `expr_type data`] >>
   simp[] >> reverse conj_tac
-  >- (irule fragExecTheory.frag_exec_pre_exit >>
-      first_assum (irule_at Any o SRULE [wb_args_exit_def]) >>
-      simp[expr_exit_def]) >>
-  rpt strip_tac >>
-  `local_ptrs_reserved cenv st1` by
-    (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
-     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_sim_def] >> strip_tac >>
-  first_x_assum (drule_then mp_tac) >> simp[expr_res_ok_def] >>
-  disch_then (qspec_then `t` mp_tac) >>
-  disch_then (mp_tac o MATCH_MP fragExecTheory.frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = t`, `expr_exit (INL NoneV : value + exception)`] mp_tac) >>
-  simp[expr_exit_def] >>
-  impl_tac >- gvs[typed_args_post_def] >>
-  disch_then (mp_tac o MATCH_MP fragExecTheory.frag_exec_then) >>
-  simp[expr_exit_def] >> disch_then irule >>
-  `cs_extends st2 sb` by metis_tac[cs_extends_trans] >> simp[] >>
-  rpt strip_tac >> gvs[] >> suspend "tail"
-QED
-Resume raw_log_dynamic_sim[tail]:
-  rpt strip_tac >>
-  qpat_x_assum `expr_sim_below _ _` kall_tac >>
-  qpat_x_assum `typed_args_ready _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `!sb' sa' s0 ops func' ctx'. _` kall_tac >>
-  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    metis_tac[vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom] >>
-  `expr_post ctx func cenv cx data es sa st2 s0 es2 (BytesV bs) v t'` by
+  >- (conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
+      gvs[typed_args_post_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env data (mid with gas_obs := gs)` by simp[] >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) expr_sim_pre_eval) >> strip_tac >>
+  `?bs. v' = BytesV bs` by
+    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+         vyperTypeInvariantsTheory.value_result_typed_def,
+         vyperValueTheory.evaluate_type_def] >>
+     Cases_on `v'` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+  gvs[] >>
+  `expr_post ctx func cenv cx data es sa st2 s0 ee (BytesV bs) v t'` by
     (irule raw_log_post_rebase >> simp[] >>
-     qexistsl [`es1`, `st1`, `t`] >> gvs[typed_args_post_def]) >>
+     qexistsl [`mid with gas_obs := []`, `st1`, `t`] >>
+     simp[] >> gvs[typed_args_post_def]) >>
   `eval_operands topic_ops t = SOME (MAP event_value_to_word vs)` by
-    (drule_all raw_log_topics_post_words >> simp[]) >>
+    metis_tac[raw_log_topics_post_words] >>
   `eval_operands topic_ops t' = SOME (MAP event_value_to_word vs)` by
-    (irule raw_log_post_operands >>
-     qpat_assum `expr_post _ _ _ _ _ es1 _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+    (irule raw_log_post_operands >> goal_assum (drule_at Any) >>
+     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  `LENGTH vs <= 4` by gvs[typed_args_post_def] >>
+  qexists `[]` >>
+  irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_dynamic_tail_summary) >>
+  simp[expr_type_def] >>
+  qpat_assum `expr_post _ _ _ _ _ es sa _ s0 _ _ _ _` (irule_at Any) >>
+  qpat_assum `emit_op MLOAD _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_op ADD _ _ = _` (irule_at Any) >>
+  qpat_assum `eval_operands topic_ops t' = _` (irule_at Any) >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type data))` by
-    (drule_at (Pat `expr_sim_pre _ _ _ data _`) well_typed_expr_type_evaluates >> simp[]) >>
-  `local_ptrs_reserved cenv st2` by
-    (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
-     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  irule fragExecTheory.frag_exec_weaken >>
-  irule_at Any raw_log_dynamic_tail_summary >>
-  qpat_assum `expr_post _ _ _ _ _ es sa _ _ _ _ _ _` (irule_at Any) >>
-  simp[expr_type_def, vyperValueTheory.evaluate_type_def] >>
-  qexistsl [`vs`, `topic_ops`,
-    `Call NoneT RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] NONE`] >>
-  simp[expr_type_def, vyperValueTheory.evaluate_type_def, raw_log_post_vv] >>
-  `m < dimword (:256) /\
-   type_slot_size (BaseTV (BytesT (Dynamic m))) <= dimword (:256)` by
-    gvs[vyperValueTheory.evaluate_type_def] >>
-  `LENGTH topics < dimword (:256)` by
-    (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  `EVERY (\op. (!p. op = Var p ==> not_fresh_at st2 p) /\
-                 (!l. op <> Label l)) topic_ops` by
-    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     first_x_assum drule >> simp[not_fresh_at_def] >> decide_tac) >>
-  simp[] >> drule_at (Pos hd) exprOperandVarTheory.compile_lower_value_var >> simp[]
+    metis_tac[well_typed_expr_type_evaluates] >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  conj_tac
+  >- (drule exprOperandVarTheory.compile_lower_value_var >>
+      metis_tac[local_ptrs_reserved_next_var]) >>
+  conj_tac >- (simp[wordsTheory.dimword_def] >> decide_tac) >>
+  conj_tac
+  >- (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+      first_x_assum drule >> simp[not_fresh_at_def] >> decide_tac) >>
+  conj_tac >- metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
+  metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans]
 QED
 Finalise raw_log_dynamic_sim
 
@@ -828,185 +819,140 @@ Proof
               fragExecTheory.cs_extends_emit_inst] >>
   `fn_has_code sa st1 func /\ fn_has_code st2 st3 func` by
     metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
-  drule_all raw_log_raw_eval_cases >> strip_tac
-  >- (gvs[] >> suspend "topic_error")
-  >- (gvs[] >> suspend "data_error")
-  >> gvs[] >> suspend "success"
-QED
-Resume raw_log_fixed_sim[topic_error]:
-  drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
-  simp[expr_size_def] >>
-  strip_tac >> irule fragExecTheory.frag_exec_exit_prefix >>
-  qexists `st1` >> simp[] >> conj_tac
-  >- metis_tac[cs_extends_trans] >>
-  qspec_then `Value` (qspec_then `INR exc` mp_tac) expr_exit_success_map >>
-  simp[] >> disch_then SUBST1_TAC >>
-  first_x_assum (irule o SRULE [wb_args_exit_def]) >> simp[]
-QED
-Resume raw_log_fixed_sim[data_error]:
-  drule_all raw_log_topics_source >> strip_tac >>
-  `expr_sim ctx func cenv cx (expr_type data) data es1` by
-    (irule raw_log_data_sim >> conj_tac
-     >- (qexistsl [`NoneT`, `NONE`,
-           `Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics`] >>
-         simp[expr_size_def]) >>
-     goal_assum (drule_at Any)) >>
+  irule expr_stack_outcome >> conj_tac
+  >- metis_tac[raw_log_eval_value] >>
+  `~cx.txn.is_static` by gvs[stmt_state_rel_def, state_rel_def] >>
+  simp[raw_log_eval] >>
   drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
   simp[expr_size_def] >> strip_tac >>
-  qspec_then `Value` (qspec_then `INR exc` mp_tac) expr_exit_success_map >>
-  simp[] >> disch_then SUBST1_TAC >>
-  irule fragExecTheory.frag_exec_exit_prefix >> qexists `st3` >>
-  `cs_extends sa st3 /\ cs_extends st3 sb` by metis_tac[cs_extends_trans] >>
-  simp[] >>
-  irule fragExecTheory.frag_exec_seq_pointwise >>
-  qexistsl [`\s. typed_args_post ctx func cenv cx es sa s0 es1 topics topic_ops vs s`, `st1`] >>
-  `cs_extends st1 st3` by metis_tac[cs_extends_trans] >>
-  simp[] >> reverse conj_tac
-  >- (irule fragExecTheory.frag_exec_pre_exit >>
-      first_assum (irule_at Any o SRULE [wb_args_exit_def]) >>
-      simp[expr_exit_def]) >>
-  rpt strip_tac >> suspend "error_alloc"
+  irule raw_log_topics_bind >>
+  qexists `\vs ee t. typed_args_post ctx func cenv cx es sa s0 ee topics topic_ops vs t /\
+       t.vs_current_bb = st1.cs_current_bb /\
+       t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
+  reverse conj_tac
+  >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+       (\rr ee r. wb_args_exit rr r)` by
+        (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> strip_tac >> suspend "data"
 QED
-Resume raw_log_fixed_sim[error_alloc]:
-  `local_ptrs_reserved cenv st1` by
-    (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
-     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  `fn_has_code st1 st2 func` by
-    metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
-  `stmt_state_rel ctx func cenv cx es1 t` by gvs[typed_args_post_def] >>
-  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-  `eval_operand (Lit 0w) t = SOME 0w` by simp[eval_operand_def] >>
-  `!x. Lit 0w = Var x ==> not_fresh_at st1 x` by simp[] >>
-  drule_all exprSimAllocTheory.alloc_buffer_source_frag >>
-  disch_then (qspec_then `expr_exit (INR exc : value + exception)` strip_assume_tac) >>
-  irule fragExecTheory.frag_exec_seq_pointwise >>
-  qexistsl [`\s. s = u`, `st2`] >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  `local_ptrs_reserved cenv st2` by
-    (irule local_ptrs_reserved_next_var >> qexists `st1` >> simp[] >>
-     drule emitted_insts_emit_op_local >> simp[]) >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_sim_def] >> strip_tac >>
-  `expr_res_ok (INR exc)` by gvs[expr_res_ok_def, expr_vv_res_ok_def] >>
-  first_x_assum (drule_then mp_tac) >> simp[] >>
-  disch_then (qspec_then `u` mp_tac) >>
-  disch_then (mp_tac o MATCH_MP fragExecTheory.frag_exec_weaken) >>
-  disch_then irule >> simp[]
-QED
-Resume raw_log_fixed_sim[success]:
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- simp[fragExecTheory.frag_exec_def] >>
-  drule_all raw_log_topics_source >> strip_tac >>
-  `expr_sim ctx func cenv cx (expr_type data) data es1` by
+Resume raw_log_fixed_sim[data]:
+  drule_all raw_log_topics_marked_source >> strip_tac >>
+  qpat_x_assum `!sb' sa' s0' ops func' ctx'. _` kall_tac >>
+  `~t.vs_halted` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     drule fragGasModeTheory.gas_marked_path_exec >>
+     metis_tac[fragGasPathTheory.gas_path_normal]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
+     disch_then (mp_tac o MATCH_MP
+       vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom) >> simp[]) >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` kall_tac >>
+  gvs[] >>
+  `expr_sim ctx func cenv cx (expr_type data) data (mid with gas_obs := [])` by
     (irule raw_log_data_sim >> conj_tac
      >- (qexistsl [`NoneT`, `NONE`,
-           `Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics`] >>
+          `Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+            (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics`] >>
          simp[expr_size_def]) >>
-     goal_assum (drule_at Any)) >>
-  drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
-  simp[expr_size_def] >> strip_tac >>
-  qspec_then `Value` (qspec_then `INL NoneV` mp_tac) expr_exit_success_map >>
-  simp[] >> disch_then SUBST1_TAC >>
-  irule fragExecTheory.frag_exec_seq_pointwise >>
-  qexistsl [`\s. typed_args_post ctx func cenv cx es sa s0 es1 topics topic_ops vs s`, `st1`] >>
-  `cs_extends st1 sb` by metis_tac[cs_extends_trans] >>
-  simp[] >> reverse conj_tac
-  >- (irule fragExecTheory.frag_exec_pre_exit >>
-      first_assum (irule_at Any o SRULE [wb_args_exit_def]) >>
-      simp[expr_exit_def]) >>
-  rpt strip_tac >> suspend "success_alloc"
-QED
-Resume raw_log_fixed_sim[success_alloc]:
+     qexists `env` >> simp[]) >>
+  `gas_admissible (vyperState$bind (eval_expr cx data) (read_result cx)) expr_res_ok
+      (mid with gas_obs := [])` by
+    (rw[gasContextTheory.gas_admissible_def] >>
+     `expr_sim_pre cenv cx env data (mid with gas_obs := gs)` by simp[] >>
+     drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) expr_sim_pre_res_ok) >> simp[]) >>
   `local_ptrs_reserved cenv st1` by
-    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+    metis_tac[local_ptrs_reserved_next_var] >>
   `fn_has_code st1 st2 func` by
     metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
-  `stmt_state_rel ctx func cenv cx es1 t` by gvs[typed_args_post_def] >>
-  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-  `eval_operand (Lit 0w) t = SOME 0w` by simp[eval_operand_def] >>
-  `!x. Lit 0w = Var x ==> not_fresh_at st1 x` by simp[] >>
-  drule_all exprSimAllocTheory.alloc_buffer_source_frag >>
-  disch_then (qspec_then `expr_exit (INL NoneV : value + exception)` strip_assume_tac) >>
-  `cs_extends st2 sb` by metis_tac[cs_extends_trans] >>
-  irule fragExecTheory.frag_exec_seq_pointwise >>
-  qexistsl [`\s. s = u`, `st2`] >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  `local_ptrs_reserved cenv st2` by
-    (irule local_ptrs_reserved_next_var >> qexists `st1` >> simp[] >>
-     drule emitted_insts_emit_op_local >> simp[]) >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_sim_def] >> strip_tac >>
-  first_x_assum (drule_then mp_tac) >> simp[expr_res_ok_def] >>
-  disch_then (qspec_then `u` mp_tac) >>
-  disch_then (mp_tac o MATCH_MP fragExecTheory.frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = u`, `expr_exit (INL NoneV : value + exception)`] mp_tac) >>
-  simp[expr_exit_def] >>
-  disch_then (mp_tac o MATCH_MP fragExecTheory.frag_exec_then) >>
-  simp[expr_exit_def] >> disch_then irule >>
-  `cs_extends st3 sb` by metis_tac[cs_extends_trans] >> simp[] >>
-  rpt strip_tac >> gvs[] >> suspend "fixed_tail"
+  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
+    gvs[typed_args_post_def] >>
+  drule_all raw_log_alloc_path >> strip_tac >>
+  irule stmtSimDeclComposeTheory.gas_outcome_zero_prefix >>
+  goal_assum (drule_at Any) >>
+  pure_once_rewrite_tac[GSYM bind_assoc] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule expr_sim_suffix >> simp[] >>
+  qexistsl [`cenv`, `v`, `st2`, `st3`, `expr_type data`] >>
+  simp[] >> reverse conj_tac
+  >- (conj_tac
+      >- (irule local_ptrs_reserved_next_var >> qexists `st1` >> simp[] >>
+          drule emitted_insts_emit_op_local >> simp[]) >>
+      gvs[stmt_state_rel_gas_obs]) >>
+  rpt gen_tac >> strip_tac >> suspend "tail"
 QED
-Resume raw_log_fixed_sim[fixed_tail]:
+Resume raw_log_fixed_sim[tail]:
   qpat_x_assum `expr_sim_below _ _` kall_tac >>
   qpat_x_assum `typed_args_ready _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `!sb' sa' s0' ops func' ctx'. _` kall_tac >>
-  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    metis_tac[vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom] >>
-  `MAP FDOM es1.scopes = MAP FDOM es2.scopes` by
-    metis_tac[exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom] >>
+  qpat_x_assum `gas_admissible (eval_expr cx _) _ _` kall_tac >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_marked_path _ _ _ _ _ _` kall_tac >>
+  `expr_sim_pre cenv cx env data (mid with gas_obs := gs)` by simp[] >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) expr_sim_pre_eval) >> strip_tac >>
+  `?bs. v' = BytesV bs` by
+    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+         vyperTypeInvariantsTheory.value_result_typed_def,
+         vyperValueTheory.evaluate_type_def] >>
+     Cases_on `v'` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+  gvs[] >>
+  `MAP FDOM mid.scopes = MAP FDOM ee.scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV)
+       exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
   `st1.cs_next_var <= st2.cs_next_var /\ st1.cs_next_id <= st2.cs_next_id` by
     (drule emitted_insts_emit_op_local >> simp[]) >>
-  `wb_frame cenv es sa s0 u` by
+  `local_ptrs_reserved cenv st2` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `wb_frame cenv es sa s0 t'` by
     (irule wb_frame_allocating_tail >> simp[] >>
-     qexistsl [`t`, `es1.scopes`, `st1`] >>
+     qexistsl [`t`, `mid.scopes`, `st1`] >>
      gvs[typed_args_post_def]) >>
-  `expr_post ctx func cenv cx data es sa st3 s0 es2 (BytesV bs) v t'` by
+  `expr_post ctx func cenv cx data es sa st3 s0 ee (BytesV bs) v t''` by
     (irule raw_log_post_rebase >> simp[] >>
-     qexistsl [`es1`, `st2`, `u`] >> simp[] >> decide_tac) >>
-  `FLOOKUP t'.vs_allocas st1.cs_next_id = SOME (w2n w,32) /\
-   lookup_var p t' = SOME (n2w (w2n w)) /\
-   (!name lb len. local_region cenv es2.scopes t' name lb len ==>
+     qexistsl [`mid with gas_obs := []`, `st2`, `t'`] >> simp[] >> decide_tac) >>
+  `FLOOKUP t''.vs_allocas st1.cs_next_id = SOME (w2n w,32) /\
+   lookup_var p t'' = SOME (n2w (w2n w)) /\
+   (!name lb len. local_region cenv ee.scopes t'' name lb len ==>
      w2n w + 32 <= lb \/ lb + len <= w2n w)` by
     (irule raw_log_scratch_transport >>
-     qpat_assum `expr_post _ _ _ _ _ es1 _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ _ (mid with gas_obs := []) _ _ _ _ _ _ _` (irule_at Any) >>
      gvs[eval_operand_def, compileEnvTheory.regions_disjoint_def] >>
      first_assum MATCH_ACCEPT_TAC) >>
   `eval_operands topic_ops t = SOME (MAP event_value_to_word vs)` by
-    (drule_all raw_log_topics_post_words >> simp[]) >>
-  `eval_operands topic_ops u = SOME (MAP event_value_to_word vs)` by
+    metis_tac[raw_log_topics_post_words] >>
+  `eval_operands topic_ops t' = SOME (MAP event_value_to_word vs)` by
     (irule raw_log_operands_frame >> qexistsl [`t`, `st1`] >> simp[]) >>
   `EVERY (\op. (!p. op = Var p ==> not_fresh_at st2 p) /\
                  (!l. op <> Label l)) topic_ops` by
     (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> simp[not_fresh_at_def] >> decide_tac) >>
-  `eval_operands topic_ops t' = SOME (MAP event_value_to_word vs)` by
+  `eval_operands topic_ops t'' = SOME (MAP event_value_to_word vs)` by
     (irule raw_log_post_operands >>
-     qpat_assum `expr_post _ _ _ _ _ es1 _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+     qpat_assum `expr_post _ _ _ _ _ (mid with gas_obs := []) _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
   `value_has_type (BaseTV (BytesT (Fixed 32))) (BytesV bs)` by
-    (drule expr_sim_pre_body_pre >> strip_tac >>
-     drule_all expr_body_pre_base_result >> simp[]) >>
+    gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+        vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+        vyperTypeInvariantsTheory.value_result_typed_def,
+        vyperValueTheory.evaluate_type_def] >>
   `MEM (mk_inst st1.cs_next_id ALLOCA [Lit 32w]
       [STRING #"%" (toString st1.cs_next_var)]) (fn_insts func)` by
     (irule hash_emitted_inst_mem >> qexistsl [`st1`, `st2`] >> simp[] >>
      drule emitted_insts_emit_op_local >> simp[]) >>
-  irule fragExecTheory.frag_exec_weaken >>
-  irule_at Any raw_log_fixed_tail_frag >>
-  qpat_assum `expr_post _ _ _ _ _ es sa _ _ _ _ _ _` (irule_at Any) >>
-  simp[] >>
-  qexistsl [`vs`, `st4`, `Var p`, `topic_ops`,
-    `mk_inst st1.cs_next_id ALLOCA [Lit 32w]
-      [STRING #"%" (toString st1.cs_next_var)]`,
-    `Call NoneT RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] NONE`] >>
-  simp[expr_type_def, raw_log_post_vv] >>
-  qexists `w2n w` >>
+  qexists `[]` >>
+  irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_fixed_tail_summary) >>
+  qpat_assum `expr_post _ _ _ _ _ es sa _ s0 _ _ _ _` (irule_at Any) >>
+  qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
+  qpat_assum `eval_operands topic_ops t'' = _` (irule_at Any) >>
+  simp[expr_type_def] >>
+  qexistsl [`mk_inst st1.cs_next_id ALLOCA [Lit 32w]
+      [STRING #"%" (toString st1.cs_next_var)]`, `w2n w`] >>
   simp[mk_inst_def, eval_operand_def] >>
-  `LENGTH topics < dimword (:256)` by
-    (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  simp[] >> first_assum MATCH_ACCEPT_TAC
+  conj_tac >- gvs[typed_args_post_def] >>
+  metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans]
 QED
 Finalise raw_log_fixed_sim
 
