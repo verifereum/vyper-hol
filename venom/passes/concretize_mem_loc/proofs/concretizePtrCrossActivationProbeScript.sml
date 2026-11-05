@@ -1024,3 +1024,88 @@ Proof
   simp[cap_target_prefix_def, cap_target_entry_def, cap_tcallee_def,
     cap_target_second_call_def, cap_tcallee2_def, ptr_observe_def] >> EVAL_TAC
 QED
+
+(* Each row is a pre-instruction observation, not a completed write.
+   Target j   Source e(j)  inst   active source token / boundary
+      0           0         1    0: root allocation / target ASSIGN
+      -           1         7    0: deleted NOP (source-only gap)
+      1           2         2    0: root initializing store
+      2           3         3    0: first INVOKE
+      3           4       100    4: first entry / imported PARAM (0,1)
+      4           5       101    4: first local allocation (4,101)
+      5           6       102    4: write through imported owner (0,1)
+      6           7       103    4: write through local owner (4,101)
+      7           8       104    4: first return
+      8           9         4    0: restored caller / second INVOKE
+      9          10       100   10: second entry / imported PARAM (0,1)
+     10          11       101   10: reused raw base, new owner (10,101)
+     11          12       102   10: next imported write (not yet executed)
+   Thus the first imported writer's post-state is source 7 / target 6;
+   the local writer's post-state is source 8 / target 7. Birth lookup
+   retention is not a claim that the completed activation remains live. *)
+Theorem cap_actual_event_correspondence:
+  MAP (\j. (EL j cap_target_prefix).po_inst.inst_id) (COUNT_LIST 12) =
+  MAP (\j. (EL (cap_embedding j)
+    ((cap_source_prefix ++ [cap_param2]) ++ [cap_alloc2])).po_inst.inst_id)
+    (COUNT_LIST 12)
+Proof
+  `LENGTH cap_target_prefix = 12` by
+    (mp_tac cap_target_event_ids >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : num list -> num``) >> simp[]) >>
+  `LENGTH ((cap_source_prefix ++ [cap_param2]) ++ [cap_alloc2]) = 13` by
+    (mp_tac cap_source_event_ids >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : num list -> num``) >> simp[]) >>
+  `MAP (\j. EL j (MAP (\a. a.po_inst.inst_id) cap_target_prefix)) (COUNT_LIST 12) =
+   MAP (\j. EL (cap_embedding j) (MAP (\a. a.po_inst.inst_id)
+     ((cap_source_prefix ++ [cap_param2]) ++ [cap_alloc2]))) (COUNT_LIST 12)`
+    suffices_by
+      (CONV_TAC (computeLib.RESTR_EVAL_CONV
+        [``cap_target_prefix``, ``cap_source_prefix``, ``cap_param2``, ``cap_alloc2``]) >>
+       simp[EL_MAP, Excl "MAP_APPEND"] >>
+       Cases_on `cap_target_prefix` >> Cases_on `cap_source_prefix` >> gvs[]) >>
+  rewrite_tac[cap_target_event_ids, cap_source_event_ids] >> EVAL_TAC
+QED
+
+Theorem cap_entry_correspondence_table:
+  MAP (\j. (j,cap_embedding j)) [0;3;9] = [(0,0);(3,4);(9,10)] /\
+  MAP (\j. (j,cap_embedding j)) [5;6;7;8;10;11] =
+    [(5,6);(6,7);(7,8);(8,9);(10,11);(11,12)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem cap_target_activation_observations:
+  EL 0 cap_target_prefix = cap_target_entry /\
+  EL 3 cap_target_prefix = cap_tcallee /\
+  EL 7 cap_target_prefix = cap_tr /\
+  EL 8 cap_target_prefix = cap_target_second_call /\
+  EL 9 cap_target_prefix = cap_tcallee2
+Proof
+  `LENGTH cap_target_to_call = 2` by (EVAL_TAC >> simp[]) >>
+  `LENGTH cap_target_callee_tail = 4` by
+    (simp[cap_target_callee_tail_def, cap_tcallee_def, cap_tcs_def,
+       cap_target_call_view, ptr_observe_def] >>
+     CONV_TAC (computeLib.RESTR_EVAL_CONV [``cap_tframe``]) >> simp[]) >>
+  simp[cap_target_prefix_def, EL_APPEND_EQN, cap_tr_def,
+    LAST_EL, cap_target_tail_nonempty]
+QED
+
+(* The registry is SourceOwnership's token-to-source-function map.
+   Target entry indices are correspondence data, never fresh owner tokens.
+   Both activations consult the same callee layout, whereas the imported
+   pointer continues to consult the root's metadata. *)
+Theorem cap_owner_entry_placement:
+  (EL 0 cap_target_prefix).po_fn = cap_caller_out /\
+  (EL 3 cap_target_prefix).po_fn = sop_leaf_out /\
+  (EL 9 cap_target_prefix).po_fn = sop_leaf_out /\
+  MEM (Allocation (SND (THE (FLOOKUP cap_owned_b2 "p"))),32,32)
+    (EL 0 cap_target_prefix).po_fn.fn_mems_used /\
+  MEM (Allocation (SND (THE (FLOOKUP cap_owned_b "b"))),0,32)
+    (EL 3 cap_target_prefix).po_fn.fn_mems_used /\
+  MEM (Allocation (SND (THE (FLOOKUP cap_owned_b2 "b"))),0,32)
+    (EL 9 cap_target_prefix).po_fn.fn_mems_used
+Proof
+  simp[cap_target_activation_observations, cap_target_entry_def,
+    cap_tcallee_def, cap_tcallee2_def, ptr_observe_def,
+    cap_original_owner_lookups, cap_original_owner_target_positions]
+QED
