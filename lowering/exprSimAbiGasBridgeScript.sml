@@ -12,6 +12,7 @@ Theory exprSimAbiGasBridge
 Ancestors
   fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
   venomInst venomExecSemantics venomState compileEnv list rich_list
+  fragGasPath gasCount arithmetic
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -195,6 +196,67 @@ Proof
     bb_instructions := [mk_inst 0 STOP [] []; mk_inst 1 INVOKE [] [];
                         mk_inst 2 JMP [Label "bridge-end"] []]|>]` >>
   simp[mk_inst_def, IS_PREFIX_APPEND]
+QED
+
+Theorem abi_observer_step_zero_edge:
+  abi_observer_step ctx fn cut s t /\
+  (!bb inst. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+     get_instruction bb s.vs_inst_idx = SOME inst ==>
+     inst.inst_opcode <> GAS) ==>
+  gas_path_edge ctx fn s 0 (OK t)
+Proof
+  rw[abi_observer_step_def, gas_path_edge_def] >> gvs[] >>
+  qexists_tac `0` >> simp[gas_count_step_def] >> metis_tac[]
+QED
+
+Theorem local_prefix_endpoint:
+  !ctx fn cut s t. local_prefix ctx fn cut s t ==>
+    ~s.vs_halted /\ ~t.vs_halted /\
+    (t.vs_current_bb,t.vs_inst_idx) = cut
+Proof
+  ho_match_mp_tac local_prefix_ind >>
+  simp[abi_observer_step_def] >> metis_tac[]
+QED
+
+Theorem local_prefix_zero_path:
+  !ctx fn cut s t. local_prefix ctx fn cut s t ==>
+    !region. observer_region_closed ctx fn cut region /\
+    (s.vs_current_bb,s.vs_inst_idx) IN region /\
+    (!lbl idx bb inst.
+      (lbl,idx) IN region /\ (lbl,idx) <> cut /\
+      lookup_block lbl fn.fn_blocks = SOME bb /\
+      get_instruction bb idx = SOME inst ==>
+      inst.inst_opcode <> GAS) ==>
+    gas_path ctx fn s 0 (OK t)
+Proof
+  ho_match_mp_tac local_prefix_ind >> conj_tac
+  >- (rpt strip_tac >> irule (cj 1 gas_path_rules) >> simp[]) >>
+  rpt strip_tac >>
+  rename1 `abi_observer_step ctx fn cut s successor` >>
+  `gas_path_edge ctx fn s 0 (OK successor)` by
+    (irule abi_observer_step_zero_edge >>
+     reverse conj_tac >- (qexists_tac `cut` >> simp[]) >>
+     fs[abi_observer_step_def] >> metis_tac[]) >>
+  `gas_path ctx fn successor 0 (OK t)` by
+    (first_x_assum irule >> qexists_tac `region` >>
+     fs[observer_region_closed_def] >> metis_tac[]) >>
+  metis_tac[gas_path_rules, ADD]
+QED
+
+Theorem stop_view_recover:
+  ~u.vs_halted /\ ~t.vs_halted /\ stop_view u = stop_view t ==>
+  u = t with vs_returndata := u.vs_returndata
+Proof
+  simp[stop_view_def, halt_state_def, venom_state_component_equality]
+QED
+
+Theorem stop_view_closed_post:
+  (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
+  ~u.vs_halted /\ ~t.vs_halted /\ stop_view u = stop_view t /\ Q t ==>
+  Q u
+Proof
+  strip_tac >> drule_all stop_view_recover >>
+  disch_then SUBST1_TAC >> simp[]
 QED
 
 (* The run_from simulation of frag_exec, taken in a function where the
