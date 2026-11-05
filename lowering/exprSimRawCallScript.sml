@@ -4344,6 +4344,57 @@ QED
 val _ = if null (hyp raw_call_bool_post) andalso null (hyp raw_call_tuple_post)
   then () else raise Fail "raw_call result packaging retained hypotheses";
 
+Theorem raw_call_nonrevert_vv_path[local]:
+  (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sa = (result,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sf s0 s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+  alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  FLOOKUP s.vs_allocas alloc.inst_id = SOME (w2n w,32 + ((n + 31) DIV 32) * 32) /\
+  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= alloc.inst_id /\
+  alloc.inst_id < sa.cs_next_id /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  safe_operand sa ov /\ safe_operand sa ok /\
+  eval_operand ov s = SOME w /\ eval_operand ok s = SOME (if success then 1w else 0w) /\
+  LENGTH s.vs_returndata < dimword (:256) /\
+  (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
+    TAKE n s.vs_returndata) /\
+  64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) /\
+  ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n /\
+  expr_type e = raw_call_return_type flags /\
+  (0 < n ==> evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])) ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\t. vv_post ctx func cenv cx e es0 sf sb s0 es
+      (Value (if n = 0 then BoolV success else
+        ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+      (if n = 0 then StackValue ann result
+       else LocatedValue (expr_type e) (mk_ptr result LocMemory)) t) (\r. F)
+Proof
+  strip_tac >> drule_all raw_call_nonrevert_no_restore_frag >>
+  disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
+  rpt strip_tac >> Cases_on `n = 0`
+  >- (gvs[raw_call_return_type_def] >> irule raw_call_bool_post >> simp[]) >>
+  `0 < n` by decide_tac >> fs[] >>
+  qpat_assum `expr_type e = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule raw_call_tuple_post >>
+  gvs[raw_call_return_type_def] >>
+  qexists_tac `ti` >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+val _ = if null (hyp raw_call_nonrevert_vv_path) then ()
+  else raise Fail "raw_call_nonrevert_vv_path retained hypotheses";
+
 Theorem raw_call_bytes_post[local]:
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
