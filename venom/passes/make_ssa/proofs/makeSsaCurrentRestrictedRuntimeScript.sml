@@ -5,7 +5,9 @@ Ancestors makeSsaCurrentRuntimeOwners makeSsaCurrentLastSite makeSsaCurrentTreeP
   makeSsaCurrentActualRetention makeSsaCurrentRenameTrace
   makeSsaCurrentDefs makeSsaCurrentSourceCuts makeSsaCurrentReinsertionNames
   makeSsaCurrentCleanupShape makeSsaCurrentProps
-  makeSsaCurrentReinsertionSlots venomInst venomExecProps venomWf cfgWf list pair
+  makeSsaCurrentReinsertionSlots makeSsaCurrentRestrictedSegment
+  makeSsaCurrentExecutionHistory makeSsaCurrentSemanticHistory
+  venomInst venomExecSemantics venomExecProps venomWf cfgWf list pair
 
 Theorem current_original_annotations_output_members[local]:
   !insts i. MEM (t,w) (FLAT (current_original_annotations l i insts)) ==>
@@ -129,4 +131,59 @@ Proof
   drule_all current_certificate_event_output_annotation >> strip_tac >>
   qexistsl_tac [`t`, `w`] >> simp[] >>
   irule current_certificate_annotation_site >> metis_tac[]
+QED
+
+Theorem current_certificate_clean_output_excludes:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  current_history_valid U H /\ MEM v U /\
+  lookup_block l fn'.fn_blocks = SOME out /\
+  ~current_changing_site fn (current_actual_inserted fn) v l /\
+  MEM n (FLAT (MAP (\i. i.inst_outputs) out.bb_instructions)) /\
+  current_owner_name H v n ==> F
+Proof
+  strip_tac >> drule_all current_certificate_output_site >> strip_tac >>
+  `MEM w U` by metis_tac[current_history_owner_covered] >>
+  `current_owner_name H w n` by metis_tac[current_owner_name_def] >>
+  `w = v` by metis_tac[current_owner_name_separate] >> gvs[]
+QED
+
+Theorem current_phase_occurs_output_block:
+  current_phase_occurs fn phase /\ MEM n (current_phase_outputs phase) ==>
+  ?l bb. lookup_block l fn.fn_blocks = SOME bb /\
+    MEM n (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) /\
+    (case phase of CurrentBatch label phis => l = label
+      | CurrentOrdinary label idx inst => l = label | CurrentControl => F)
+Proof
+  Cases_on `phase` >>
+  simp[current_phase_occurs_def, current_phase_outputs_def] >> rpt strip_tac
+  >- (goal_assum $ drule_at Any >> simp[] >>
+      gvs[MEM_FLAT, MEM_MAP] >> metis_tac[TAKE_DROP, MEM_APPEND]) >>
+  goal_assum $ drule_at Any >> simp[] >>
+  gvs[get_instruction_def, AllCaseEqs()] >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM]
+QED
+
+Theorem current_restricted_prefix_owner_exclusion:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  current_history_valid U H /\ MEM v U /\
+  current_actual_prefix fn' ctx loc before phases next result after /\
+  current_restricted_path fn v labels /\
+  EVERY (\phase. case phase of CurrentBatch l phis => MEM l labels
+    | CurrentOrdinary l i inst => MEM l labels | CurrentControl => T) phases ==>
+  !phase n w. MEM phase phases /\ MEM n (current_phase_outputs phase) /\
+    current_owner_name H w n ==> w <> v
+Proof
+  strip_tac >> drule_then assume_tac current_actual_prefix_occurs >>
+  map_every qx_gen_tac [`phase`, `n`, `w`] >> strip_tac >>
+  `current_phase_occurs fn' phase` by (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all current_phase_occurs_output_block >> strip_tac >>
+  `MEM l labels` by
+    (qpat_x_assum `EVERY (\p. case p of CurrentBatch l ps => _ | CurrentOrdinary l i inst => _ | CurrentControl => _) phases` mp_tac >>
+     simp[EVERY_MEM] >> disch_then (qspec_then `phase` mp_tac) >>
+     simp[] >> Cases_on `phase` >> gvs[]) >>
+  `~current_changing_site fn (current_actual_inserted fn) v l` by
+    (gvs[current_restricted_path_def, EVERY_MEM] >> metis_tac[]) >>
+  strip_tac >> gvs[] >> metis_tac[current_certificate_clean_output_excludes]
 QED
