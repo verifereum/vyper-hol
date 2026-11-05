@@ -4,7 +4,7 @@ Theory bodyIfExpMemoryAdapter
 Ancestors
   bodyMemoryDefs loweringPosts instMemFrontier compileEnv
   finite_map arithmetic abiBuiltinAllocation exprSimHyps
-  exprLowering fragGasPathMem
+  exprLowering fragGasPathMem context vyperAST
 
 Theorem ifexp_located_footprint_frontier:
   vv_at ce cx t sa sb es raw (LocatedValue t' p) s /\
@@ -89,3 +89,4 @@ Proof
   simp[venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
        venomStateTheory.update_var_def, FLOOKUP_UPDATE] >> EVAL_TAC
 QED
+
