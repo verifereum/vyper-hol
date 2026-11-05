@@ -1,6 +1,6 @@
 Theory o1MakeSsaReachableTree
 Ancestors
-  o1MakeSsaRootedTree o1MakeSsaDomRank o1MakeSsaActualMaps
+  o1MakeSsaRootedTree dominatorRankProofs o1MakeSsaActualMaps
   dominatorAnalysisProps dominatorDefs cfgAnalysisProps cfgDefs venomInst
   makeSsaCurrentDefs list pred_set
 

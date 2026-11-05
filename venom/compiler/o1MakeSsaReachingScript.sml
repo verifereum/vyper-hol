@@ -1,7 +1,7 @@
 Theory o1MakeSsaReaching
 Ancestors
   makeSsaCurrentDefs o1MakeSsaOwnership o1MakeSsaFlags o1MakeSsaFormats
-  venomInst list alist pair
+  venomInst list alist pair makeSsaCurrentAllocation
 
 (* Syntactic reaching-name boundaries.  Defaults are not eliminated. *)
 

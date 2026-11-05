@@ -18,7 +18,7 @@ Ancestors
   makeSsaCurrentNonDegenerate makeSsaCurrentWfSsa makeSsaDefs
   venomPassDispatcher venomPassSchedule venomFnScheduleRunnerProps
   fmpStepBridge unitShapeDefs simplifyCfgStruct simplifyCfgDefs venomWf
-  venomInst callLayoutDefs list
+  venomInst callLayoutDefs list o1ContractMakeSsaSrcOpcodes
 
 (* ===== Pseudo prefixes from opcodes ===== *)
 

@@ -46,12 +46,6 @@ Proof
   first_x_assum irule >> qexists_tac `bbs` >> simp[]
 QED
 
-Theorem mssa_calls_flagged_prefix:
-  !prefix. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) prefix ==>
-  (calls_flagged bbs (prefix ++ rest) <=> calls_flagged bbs rest)
-Proof Induct >> simp[calls_flagged_def]
-QED
-
 Theorem mssa_revert_path_ids:
   !n l bbs.
   revert_path (MAP (\bb. bb with bb_instructions :=

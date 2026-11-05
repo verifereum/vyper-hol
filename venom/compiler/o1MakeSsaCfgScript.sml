@@ -1,22 +1,6 @@
 Theory o1MakeSsaCfg
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaHelper makeSsaCurrentInduct venomInst venomState venomWf unitShapeDefs list
-
-Theorem rename_current_operands_labels:
-  !ops. MAP get_label (rename_current_operands rs ops) = MAP get_label ops
-Proof
-  Induct >> simp[rename_current_operands_def] >>
-  Cases_on `h` >> simp[rename_current_operands_def, get_label_def]
-QED
-
-Theorem rename_current_inst_successors:
-  rename_current_inst s rs inst = (rs',s',inst') ==>
-  get_successors inst' = get_successors inst
-Proof
-  simp[rename_current_inst_def] >> IF_CASES_TAC >>
-  pairarg_tac >> gvs[] >> strip_tac >>
-  gvs[get_successors_def, rename_current_operands_labels]
-QED
+  makeSsaCurrentDefs makeSsaCurrentProps makeSsaHelper makeSsaCurrentInduct venomInst venomState venomWf unitShapeDefs list makeSsaCurrentCfg
 
 Theorem rename_current_block_insts_length:
   !insts s rs rs' s' insts'.
@@ -153,15 +137,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem insert_phi_at_block_succs:
-  phi.inst_opcode = PHI ==>
-  bb_succs (insert_phi_at_block phi bb) = bb_succs bb
-Proof
-  strip_tac >> Cases_on `bb.bb_instructions` >>
-  simp[makeSsaDefsTheory.insert_phi_at_block_def, bb_succs_def,
-       LAST_DEF, get_successors_def, is_terminator_def]
-QED
-
 Theorem process_frontiers_supply_cfg:
   !fs s var pm li bbs rest hp bbs' rest' hp' s'.
     process_frontiers_supply s var pm li bbs rest hp fs =
@@ -247,14 +222,6 @@ Proof
   Cases_on `insts = []` >> Cases_on `ordinary = []` >>
   gvs[LAST_DEF, simplify_current_phi_prefix_parts_def] >>
   IF_CASES_TAC >> gvs[]
-QED
-
-Theorem reassign_current_inst_ids_successors:
-  !ids insts. MAP get_successors (reassign_current_inst_ids ids insts) =
-    MAP get_successors insts
-Proof
-  Induct >> Cases_on `insts` >>
-  simp[reassign_current_inst_ids_def, get_successors_def]
 QED
 
 Theorem reassign_current_inst_ids_last_successors:

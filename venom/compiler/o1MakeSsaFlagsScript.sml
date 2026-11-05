@@ -1,6 +1,6 @@
 Theory o1MakeSsaFlags
 Ancestors
-  unitShapeDefs makeSsaCurrentDefs irSupply venomInst list alist pair
+  unitShapeDefs makeSsaCurrentDefs irSupply venomInst list alist pair makeSsaCurrentAllocation
 
 (* The live original flags need only have their current concrete names among
    the output aliases. Older concrete versions can safely remain in ws. *)
@@ -11,21 +11,6 @@ End
 
 (* Ported from makeSsaCurrentAllocation in the read-only makessa3 reference.
    This interface is independent of definite assignment and dominance. *)
-Theorem current_push_latest:
-  push_current_name s rs v = (rs',s',n) ==>
-  latest_current_name rs' w = if w = v then n else latest_current_name rs w
-Proof
-  PairCases_on `rs` >> simp[push_current_name_def] >>
-  Cases_on `ALOOKUP rs0 v` >> simp[]
-  >- (strip_tac >> Cases_on `w = v` >>
-      gvs[latest_current_name_def, ALOOKUP_FILTER]) >>
-  rename1 `ALOOKUP rs0 v = SOME k` >> Cases_on `k = 0` >> simp[]
-  >- (strip_tac >> Cases_on `w = v` >>
-      gvs[latest_current_name_def, ALOOKUP_FILTER]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[latest_current_name_def] >>
-  Cases_on `w = v` >> simp[ALOOKUP_FILTER]
-QED
-
 Theorem current_flag_alias_copy:
   current_flag_alias rs vs ws /\
   push_current_name s rs v = (rs',s',n) ==>

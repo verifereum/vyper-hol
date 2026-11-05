@@ -1,7 +1,7 @@
 Theory o1MakeSsaCallCleanup
 Ancestors
   o1MakeSsaCallPaths o1MakeSsaFormats unitShapeDefs makeSsaCurrentDefs list
-  fmpStepList
+  fmpStepList simplifyCfgCallChecks
 
 Theorem simplify_current_phi_prefix_parts_suffix:
   !pre rest.
@@ -35,12 +35,12 @@ Proof
   `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) pre` by
     (gvs[EVERY_MEM] >> metis_tac[]) >>
   `calls_flagged env ((phis ++ copies) ++ rest) = calls_flagged env rest` by
-    metis_tac[mssa_calls_flagged_prefix] >>
-  gvs[mssa_calls_flagged_prefix, APPEND_ASSOC] >>
+    metis_tac[calls_flagged_prefix_no_calls] >>
+  gvs[calls_flagged_prefix_no_calls, APPEND_ASSOC] >>
   mp_tac (Q.SPECL [`phis ++ copies ++ rest`,
     `MAP (\i. i.inst_id) pre ++ MAP (\i. i.inst_id) rest`]
     (mssa_calls_flagged_reassign_ids |> Q.INST [`bbs` |-> `env`])) >>
-  simp[mssa_calls_flagged_prefix]
+  simp[calls_flagged_prefix_no_calls]
 QED
 
 Theorem mssa_list_prefix_split[local]:

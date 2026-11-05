@@ -3,14 +3,10 @@ Ancestors
   o1MakeSsaVisitRetention o1MakeSsaVisitNames o1MakeSsaRootedTree
   o1MakeSsaActualMaps o1MakeSsaVisitPaths o1MakeSsaPrefixNames
   o1MakeSsaVisitTrace o1MakeSsaEventFrames o1MakeSsaTraversalFrames
-  o1MakeSsaFormats o1MakeSsaPreparation makeSsaCurrentDefs list alist pair
+  o1MakeSsaFormats o1MakeSsaPreparation makeSsaCurrentDefs list alist pair o1ContractMakeSsaSrcOpcodes makeSsaCurrentTraceCertificate makeSsaCurrentTreeTrace
 
-Theorem initial_current_name[simp]:
-  !defs x. latest_current_name (init_current_rename_state defs) x = x
-Proof
-  Induct >> simp[init_current_rename_state_def, latest_current_name_def] >>
-  Cases_on `h` >> simp[] >> rpt gen_tac >> IF_CASES_TAC >> gvs[init_current_rename_state_def, latest_current_name_def]
-QED
+(* latest_current_name of the initial rename state is the identity *)
+val _ = augment_srw_ss [rewrites [makeSsaCurrentTreeTraceTheory.current_initial_latest]];
 
 Theorem actual_phi_slot_name:
   wf_function fn /\ fn_entry_label fn = SOME entry /\
@@ -28,7 +24,7 @@ Proof
   `ALL_DISTINCT (dom_tree_postorder (current_dom_tree fn))` by
     metis_tac[actual_rooted_tree_distinct] >>
   `!l ss. ALOOKUP (current_succ_map fn) l = SOME ss ==> ALL_DISTINCT ss` by
-    metis_tac[actual_succ_map_distinct] >>
+    metis_tac[current_actual_succs_distinct] >>
   `visit_blocks [] s (init_current_rename_state defs) bbs
      (current_succ_map fn) (current_dom_tree fn) =
      ((ct,t,final), SND (visit_blocks [] s (init_current_rename_state defs) bbs
@@ -50,7 +46,7 @@ Theorem actual_phi_slot_unchanged:
 Proof
   rpt strip_tac >>
   `!l ss. ALOOKUP (current_succ_map fn) l = SOME ss ==> ALL_DISTINCT ss` by
-    metis_tac[actual_succ_map_distinct] >>
+    metis_tac[current_actual_succs_distinct] >>
   `visit_blocks [] s (init_current_rename_state defs) bbs
      (current_succ_map fn) (current_dom_tree fn) =
      ((ct,t,final), SND (visit_blocks [] s (init_current_rename_state defs) bbs

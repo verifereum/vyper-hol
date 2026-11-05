@@ -2,7 +2,7 @@ Theory o1MakeSsaCallBlockBridge
 Ancestors
   o1MakeSsaCallChecks o1MakeSsaTraversalFrames o1MakeSsaFormats
   o1MakeSsaCallOwnership o1MakeSsaCallPaths unitShapeDefs makeSsaCurrentDefs
-  list pred_set
+  list pred_set o1ContractMakeSsaSrcOpcodes simplifyCfgCallChecks
 
 Theorem rename_current_block_insts_append:
   !xs ys s rs.
@@ -38,7 +38,7 @@ Proof
        (mp_tac o MATCH_MP rename_current_block_insts_opcodes) >>
      disch_then (mp_tac o Q.AP_TERM `EVERY (\op. op <> CALL /\ op <> STATICCALL)`) >>
      simp[EVERY_MAP, combinTheory.o_DEF]) >>
-  gvs[mssa_calls_flagged_prefix] >>
+  gvs[calls_flagged_prefix_no_calls] >>
   irule current_calls_flagged_block_insts >> metis_tac[]
 QED
 

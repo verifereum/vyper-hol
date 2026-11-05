@@ -92,17 +92,6 @@ Proof
 QED
 
 (* Ported from the reference Tree theory: purely a list boundary. *)
-Theorem rooted_distinct_flat_map:
-  !g ys. ALL_DISTINCT ys /\
-    (!a. MEM a ys ==> ALL_DISTINCT (g a)) /\
-    (!a b c. MEM a ys /\ MEM b ys /\ MEM c (g a) /\ MEM c (g b) ==> a = b)
-    ==> ALL_DISTINCT (FLAT (MAP g ys))
-Proof
-  Induct_on `ys` >>
-  simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  rpt strip_tac >> metis_tac[]
-QED
-
 Theorem rooted_tree_postorder_distinct:
   (!a. ALL_DISTINCT (dominated_of dom a)) /\
   (!a b. MEM b (dominated_of dom a) ==> parent b = SOME a) /\
@@ -114,7 +103,13 @@ Proof
   rpt strip_tac >>
   simp[current_dom_tree_aux_def, dom_tree_postorder_def, MAP_MAP_o,
     combinTheory.o_DEF, ALL_DISTINCT_APPEND] >> conj_tac
-  >- (irule rooted_distinct_flat_map >> simp[] >> conj_tac
+  >- (`!(g:string -> string list) (ys:string list). ALL_DISTINCT ys /\ (!a. MEM a ys ==> ALL_DISTINCT (g a)) /\
+           (!a b c. MEM a ys /\ MEM b ys /\ MEM c (g a) /\ MEM c (g b) ==> a = b)
+           ==> ALL_DISTINCT (FLAT (MAP g ys))`
+        by (Induct_on `ys` >>
+            simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+            rpt strip_tac >> metis_tac[]) >>
+      pop_assum irule >> simp[] >> conj_tac
       >- (rpt strip_tac >> irule rooted_tree_siblings_disjoint >>
           metis_tac[]) >>
       rpt strip_tac >> first_x_assum irule >>

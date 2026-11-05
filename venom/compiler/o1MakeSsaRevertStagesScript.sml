@@ -3,7 +3,7 @@ Ancestors
   o1MakeSsaCallPaths o1MakeSsaPreparation o1MakeSsaFormats o1MakeSsaCfg
   o1MakeSsaTraversalFrames o1MakeSsaPatchFrames o1MakeSsaVisitRetention
   makeSsaCurrentInduct makeSsaHelper makeSsaCurrentCfg makeSsaCurrentCleanupBoundary
-  unitShapeDefs makeSsaCurrentDefs list pred_set rich_list
+  unitShapeDefs makeSsaCurrentDefs list pred_set rich_list o1ContractMakeSsaSrcOpcodes
 
 Theorem prepared_prefix_revert_block:
   prepared_prefix a b ==> mssa_revert_block a b

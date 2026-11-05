@@ -7,14 +7,17 @@ Ancestors
   o1MakeSsaEventOwnership o1MakeSsaCallOwnership venomExecProps
   makeSsaCurrentDefs makeSsaCurrentProps o1MakeSsaFormats o1MakeSsaFrontier
   o1MakeSsaActualMaps o1MakeSsaOwnership makeSsaCurrentAnalysis
-  venomWf venomInst venomFnScheduleRunner irSupply list pred_set
+  venomWf venomInst venomFnScheduleRunner irSupply list pred_set simplifyCfgCallChecks
+
+(* latest_current_name of the initial rename state is the identity *)
+val _ = augment_srw_ss [rewrites [makeSsaCurrentTreeTraceTheory.current_initial_latest]];
 
 Theorem prepared_prefix_calls_flagged[local]:
   prepared_prefix old new ==>
   (calls_flagged env new.bb_instructions = calls_flagged env old.bb_instructions)
 Proof
   simp[prepared_prefix_def] >> rpt strip_tac >> gvs[] >>
-  irule mssa_calls_flagged_prefix >> fs[EVERY_MEM] >> metis_tac[]
+  irule calls_flagged_prefix_no_calls >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem prepared_blocks_calls_flagged[local]:
