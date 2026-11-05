@@ -2,7 +2,7 @@ Theory typedNormalizeContinuation
 Ancestors
   fragExec loweringHalt exprLoweringProps stmtLowering emitHelper
   venomExecSemantics compileEnv context venomInst exprLowering
-  typedArrayLoopControlMem abiDecoderPhi
+  typedArrayLoopControlMem abiDecoderPhi abiEncoderExitPhi stmtLoweringMono
 
 Theorem normalize_alloc_continuation_entry[local]:
   compile_alloc_buffer n sa = (buf,sc) /\ cs_extends sc sb /\
@@ -45,11 +45,13 @@ QED
 
 Theorem normalize_external_return_entry:
   compile_external_return ret prim raw info msz nr nkey ut iv sa = (x,sb) /\
-  (nr ==> iv) /\ fn_has_code sa sb fn /\ sa.cs_current_insts = [] ==>
+  (nr ==> iv) /\ fn_has_code sa sb fn /\
+  phi_prefix_length sa.cs_current_insts = 0 ==>
   ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     phi_prefix_length bb.bb_instructions = 0
 Proof
-  strip_tac >> Cases_on `ret`
+  strip_tac >> Cases_on `sa.cs_current_insts = []`
+  >- (Cases_on `ret`
   >- (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       simp[compile_external_return_def, optional_unlock_view, emit_inst_def,
            comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def, emit_def] >>
@@ -66,7 +68,12 @@ Proof
   >- (drule_all compile_external_return_word_parts >> strip_tac >>
       gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
       simp[phi_prefix_length_def, mk_inst_def]) >>
-  drule_all normalize_abi_return_entry >> simp[]
+  drule_all normalize_abi_return_entry >> simp[]) >>
+  `cs_extends sa sb` by
+    metis_tac[cj 3 ci_mono_return_helpers, ci_mono_def, pairTheory.SND] >>
+  drule_all fn_has_code_start >> strip_tac >> goal_assum (drule_at Any) >>
+  irule abi_encoder_nonempty_prefix_phi >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 (* Zero offsets emit no instruction: use the enclosing continuation certificate. *)
