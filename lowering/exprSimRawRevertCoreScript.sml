@@ -47,11 +47,18 @@ Theorem expr_body_pre_raw_revert_arg:
     expr_body_pre cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
-  imp_res_tac int_calls_exprs_every_mem >>
-  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, EXISTS_MEM] >>
-  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
-            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
+     supportedExprTraverseTheory.supported_expr_exists_def,
+     supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM]
+  >~ [`well_typed_expr _ _`] >- metis_tac[well_typed_exprs_member]
+  >~ [`byte_widths_expr _`] >- metis_tac[byte_widths_exprs_mem]
+  >~ [`alloc_limits_expr _ _`] >- metis_tac[alloc_limits_exprs_mem]
+  >~ [`call_evaluation_safe _ _`]
+  >- metis_tac[call_evaluation_safe_exprs_mem]
+  >~ [`EVERY _ (int_calls_expr _)`]
+  >- metis_tac[int_calls_exprs_every_mem] >>
+  metis_tac[]
 QED
 
 Theorem raw_revert_pre_arg:
@@ -154,14 +161,18 @@ Proof
   `step_inst 0 ctx i2 (t1 with vs_inst_idx := SUC t.vs_inst_idx) = OK t2` by
     simp[step_inst_non_invoke] >>
   `~t1.vs_halted /\ t1.vs_current_bb = t.vs_current_bb` by
-    (drule venomInstProofsTheory.step_preserves_halted >>
-     drule venomInstProofsTheory.step_preserves_control_flow >>
-     simp[is_terminator_def]) >>
+    (qspecl_then [`0`, `ctx`, `i1`, `t`, `t1`] mp_tac
+       venomInstProofsTheory.step_preserves_halted >>
+     qspecl_then [`0`, `ctx`, `i1`, `t`, `t1`] mp_tac
+       venomInstProofsTheory.step_preserves_control_flow >>
+     fs[is_terminator_def]) >>
   `~t2.vs_halted /\ t2.vs_current_bb = t.vs_current_bb` by
-    (qpat_x_assum `step_inst 0 ctx i2 _ = _` assume_tac >>
-     drule venomInstProofsTheory.step_preserves_halted >>
-     drule venomInstProofsTheory.step_preserves_control_flow >>
-     simp[is_terminator_def]) >>
+    (qspecl_then [`0`, `ctx`, `i2`, `t1 with vs_inst_idx := SUC t.vs_inst_idx`,
+                  `t2`] mp_tac venomInstProofsTheory.step_preserves_halted >>
+     qspecl_then [`0`, `ctx`, `i2`, `t1 with vs_inst_idx := SUC t.vs_inst_idx`,
+                  `t2`] mp_tac
+       venomInstProofsTheory.step_preserves_control_flow >>
+     fs[is_terminator_def]) >>
   mp_tac (Q.SPECL [`ctx`, `func`, `t`, `bb`, `i1`, `t1`] straight_edge_zero) >>
   (impl_tac >- fs[is_terminator_def]) >> strip_tac >>
   mp_tac (Q.SPECL [`ctx`, `func`, `t1 with vs_inst_idx := SUC t.vs_inst_idx`,
@@ -174,7 +185,7 @@ Proof
   `gas_path_edge ctx func (t2 with vs_inst_idx := SUC (SUC t.vs_inst_idx)) 0
      (Abort a w)` by
     (rewrite_tac[gas_path_edge_def] >> simp[exit_result_def] >>
-     qexistsl_tac [`0`, `bb`, `i3`] >> simp[]) >>
+     qexists_tac `0` >> simp[exit_result_def]) >>
   `gas_path ctx func (t2 with vs_inst_idx := SUC (SUC t.vs_inst_idx)) 0
      (Abort a w)` by
     (irule (cj 3 gas_path_rules) >> simp[exit_result_def]) >>
@@ -241,15 +252,16 @@ Proof
     (simp[mk_inst_def] >> irule_at Any step_revert_behavior >>
      gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qexists_tac `w` >>
-  irule (Q.SPECL [`ctx`, `func`, `t`, `bb`,
+  qspecl_then [`ctx`, `func`, `t`, `bb`,
     `mk_inst sm.cs_next_id MLOAD [data] [x]`,
     `mk_inst (sm.cs_next_id + 1) ADD [data; Lit 32w] [y]`,
     `mk_inst (sm.cs_next_id + 2) REVERT [Var y; Var x] []`,
     `update_var x (mload (w2n p) t) t`,
     `update_var y (p + 32w)
-       (update_var x (mload (w2n p) t) t with vs_inst_idx := SUC t.vs_inst_idx)`]
-    tail3_path) >>
-  fs[mk_inst_def]
+       (update_var x (mload (w2n p) t) t with vs_inst_idx := SUC t.vs_inst_idx)`,
+    `Revert_abort`, `w`] mp_tac tail3_path >>
+  impl_tac >- gvs[mk_inst_def] >>
+  simp[]
 QED
 
 (* ===== Composition ===== *)
@@ -313,9 +325,12 @@ Proof
       Cases_on `res` >> gvs[expr_exit_def] >>
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
-      irule gas_marked_exec_bind_exception >> simp[]) >>
+      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      qpat_x_assum `expr_exit _ _` mp_tac >>
+      Cases_on `r` >> Cases_on `y` >> simp[expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish`] >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   rewrite_tac[eval_raw_revert_action, ignore_bind_bind_unit] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
