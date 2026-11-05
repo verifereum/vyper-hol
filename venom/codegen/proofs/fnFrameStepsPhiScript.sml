@@ -1593,3 +1593,38 @@ Proof
   irule phi_input_vars_from_covered >> simp[] >> qexistsl_tac [`i`, `u`] >>
   simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]
 QED
+
+Theorem phi_pair_live_out:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  MEM phi (collect_phis bb.bb_instructions) /\
+  MEM (p,v) (phi_pairs phi.inst_operands) /\
+  lookup_block p fn.fn_blocks = SOME pb ==>
+  MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions))
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `phi_edge_uses_wf fn bb phi` by metis_tac[phi_codegen_edge_wf] >>
+  `fn_reachable fn p /\ fn_cfg_edge fn p bb.bb_label` by
+    (qpat_x_assum `phi_edge_uses_wf _ _ _`
+       (strip_assume_tac o REWRITE_RULE [venomWfTheory.phi_edge_uses_wf_def]) >>
+     first_x_assum drule >> strip_tac >>
+     gvs[venomWfTheory.def_available_at_def, venomWfTheory.fn_dominates_def] >>
+     metis_tac[]) >>
+  `MEM p (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  `cfg_reachable_of (cfg_analyze fn) p` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[codegen_ready_fn_def, venomWfTheory.wf_function_def, fn_labels_def]) >>
+  `MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) p)` by
+    (gvs[venomWfTheory.fn_cfg_edge_def] >>
+     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
+  drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
+  simp[livenessBlockProofsTheory.liveness_instrs_def, liveness_edge_transfer_def,
+       pred_setTheory.SUBSET_DEF] >> strip_tac >>
+  simp[liveness_analyze_def, live_vars_at_def] >> first_x_assum irule >>
+  drule_all phi_selected_input_vars >>
+  simp[liveness_analyze_def, live_vars_at_def]
+QED
