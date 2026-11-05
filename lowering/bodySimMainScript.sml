@@ -16,6 +16,7 @@
 Theory bodySimMain
 Ancestors
   list bodySim bodySimStmtCases bodySimDeclCases bodySimExprCases
+  bodySimCallCases
   bodySimEntry bodySimLog stmtSimIf
   supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph
