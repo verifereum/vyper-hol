@@ -4656,7 +4656,8 @@ Proof
   strip_tac >>
   `abi_decode_count_guard CALLDATALOAD src (limit MOD dimword (:256)) st =
     (count_op,st')` by simp[calldata_count_guard_mod_limit] >>
-  drule calldata_count_guard_repeat_sequence >> simp[]
+  drule calldata_count_guard_repeat_sequence >> simp[] >>
+  disch_then drule_all >> strip_tac >> qexists_tac `t` >> simp[]
 QED
 
 Theorem calldata_count_guard_repeat_rejected_mod:
