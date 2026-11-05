@@ -38,6 +38,8 @@ Ancestors typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr ty
   wordCopyRobustPtr
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract rawEntryCode entryChecksPtr sourceValueRejection entryCheckIntervals sourceEntrySelection entryDispatchPtr sourceEntryCode entryValueRevertPtr
+  loweringShapeProps loweringShapeSource supportedNames supportedDecls
+  entryDispatchProps o1PipelineCorrect
 
 val _ = Parse.hide "body";
 
@@ -73,7 +75,7 @@ Proof
   Cases_on `lowering_policy_ok rpolicy` >> simp[run_lowering_def]
 QED
 
-(* ADMITTED: external_entry_value_revert's run is pointer-safe. *)
+(* Value rejection follows the installed dispatcher into the nonpayable check. *)
 Theorem external_entry_value_revert_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env e st efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -102,7 +104,41 @@ Theorem external_entry_value_revert_ptr:
              (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                          vs_inst_idx := 0 |>)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `source_storage_ok _ _ _` kall_tac >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  qpat_x_assum `call_outcomes_ok _ _ _` kall_tac >>
+  qpat_x_assum `~source_exempt _ _` kall_tac >>
+  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (irule o1_source_unit_ok_no_dalloca >>
+     irule loweringShapePropsTheory.lower_vyper_runtime_unit_source_unit_ok_shape >>
+     goal_assum (drule_at Any) >> conj_tac
+     >- (irule supported_names_internal_names_distinct >>
+         fs[supported_program_def, supported_declaration_names_def]) >>
+     metis_tac[supported_program_runtime_bodies_shape_ok]) >>
+  drule_all initial_entry_rejected_value >> strip_tac >>
+  drule_all source_valid_linear_dispatch_target >> strip_tac >>
+  drule_all source_selected_entry_check_code >> strip_tac >>
+  drule_all initial_entry_dispatch_scalars >>
+  disch_then (qspecl_then [`0`, `elbl`, `ds`] strip_assume_tac) >>
+  qmatch_goalsub_abbrev_tac `ptr_safe_blocks D 0 _ _ _ _ _ _ ss` >>
+  `!G tn fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G tn ss` by
+    (irule dispatch_nonpayable_check_ptr_safe >>
+     simp[Abbr `ss`] >>
+     qexistsl_tac [`checked`, `fb`, `min_cds`, `opened`,
+       `MAP (\(sel,lbl,z). (sel,lbl))
+          (build_selectors (type_env tops) (FST (classify_functions tops)))`,
+       `ds`, `de`] >>
+     gvs[] >>
+     qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
+       mp_tac linear_selectors_lt >> simp[]) >>
+  drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
+  irule ptr_safe_blocks_nonphi_run >>
+  simp[Abbr `ss`] >>
+  qexistsl_tac [`b0`, `mk_inst ds.cs_next_id CALLDATASIZE []
+    [STRING #"%" (toString ds.cs_next_var)]`] >>
+  gvs[mk_inst_def]
 QED
 
 (* ADMITTED: external_entry_reaches_body, with the body's frame free of a
