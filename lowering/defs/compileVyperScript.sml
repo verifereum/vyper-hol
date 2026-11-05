@@ -1082,6 +1082,24 @@ Definition external_return_buffer_ok_def:
         ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_valued_return body ⇒
         return_buffer_ok cenv
 End
+Theorem update_cenv_ret_abi_word_return_buffer_ok:
+  !cenv ret. is_word_type ret ==>
+    return_buffer_ok (update_cenv_ret_abi cenv ret)
+Proof
+  Cases_on `ret` >> simp[is_word_type_def] >-
+    (Cases_on `b` >>
+     simp[is_word_type_def, update_cenv_ret_abi_def, return_buffer_ok_def,
+          type_to_abi_enc_info_def, abi_size_bound_def, is_abi_dynamic_def,
+          abi_static_size_def, type_memory_bytes_def] >>
+     rename1 `BytesT kind` >> Cases_on `kind` >>
+     simp[is_word_type_def, update_cenv_ret_abi_def, return_buffer_ok_def,
+          type_to_abi_enc_info_def, abi_size_bound_def, is_abi_dynamic_def,
+          abi_static_size_def, type_memory_bytes_def]) >>
+  simp[update_cenv_ret_abi_def, return_buffer_ok_def,
+       type_to_abi_enc_info_def, abi_size_bound_def, is_abi_dynamic_def,
+       abi_static_size_def, type_memory_bytes_def]
+QED
+
 
 (* Every buffer a function's lowering allocates statically is below Python's
    allocation limit: its parameters', which an external function decodes
