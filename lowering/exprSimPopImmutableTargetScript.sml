@@ -35,6 +35,7 @@ Ancestors
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
   exprLowering exprLoweringProps compileEnv vyperAST vyperState
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph venomState
+Libs wordsLib intLib
 
 (* In a body, the indices' judgments of a target, internal calls allowed:
    body_base_target_ok gives body_expr_ok for each index whose base place
@@ -277,6 +278,29 @@ Proof
   simp[imm_target_post_def, imm_place_at_def, eval_operand_def,
        exprSimPropsTheory.locals_kept_mem, mem_path_offset_def, evaluate_subscripts_def]
 QED
+
+Theorem imm_place_at_value_type[local]:
+  !cenv cx env es src id path itv iv k tv v.
+    expr_sim_inv cenv cx env es /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+      SOME (itv,iv) /\
+    mem_path_offset itv path = SOME (k,tv) /\
+    evaluate_subscripts itv iv path = INL v ==>
+    value_has_type tv v /\ well_formed_type_value tv
+Proof
+  rpt strip_tac >>
+  `state_well_typed es` by fs[expr_sim_inv_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
+  strip_tac >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  strip_tac >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+            vyperPlaceStatePreservationTheory.subscripts_type_well_formed]
+QED
+
 
 (* The counted walk of a target rooted at an immutable in the
    constructor, with pure indices, given their judgments, the
