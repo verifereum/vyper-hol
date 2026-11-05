@@ -1018,6 +1018,34 @@ Proof
   conj_tac >- metis_tac[] >> qexistsl_tac [`class_of`, `k`] >> simp[]
 QED
 
+Theorem phi_origin_incoming_class:
+  !class_of inst p q cells d k.
+    phi_origin_incoming inst p q cells d /\ d < LENGTH cells /\
+    (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+      class_of op = SOME k) ==>
+    class_of (phi_cell_value T (stack_peek d cells)) = SOME k
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stack_get_depth T (MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
+       (p ++ MAP (phi_cell_value T) cells)) = SOME d` by
+    (`stack_get_depth T (MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
+          (p ++ MAP (phi_cell_value T) cells)) =
+       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+          (p ++ MAP (phi_cell_value T) cells)` by
+       (rewrite_tac[stack_get_depth_def, stack_get_phi_depth_def] >>
+        irule stack_find_predicate_vector >>
+        simp[listTheory.MAP_REVERSE, listTheory.MAP_MAP_o, combinTheory.o_DEF]) >>
+     metis_tac[phi_origin_incoming_def]) >>
+  drule stack_get_depth_props >> strip_tac >>
+  qpat_x_assum `stack_peek d (MAP _ _) = T` mp_tac >>
+  `MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
+      (p ++ MAP (phi_cell_value T) cells) =
+    MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands)) p ++
+    MAP (\c. MEM (phi_cell_value T c) (FILTER is_var_operand inst.inst_operands)) cells`
+     by simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  simp[stack_peek_suffix_map]
+QED
+
 Theorem phi_origin_stage_from_classes:
   !class_of cells inst next halting k cell p q.
     phi_origin_classes class_of cells /\
@@ -1035,24 +1063,8 @@ Proof
   drule_all phi_origin_classes_incoming_covered >>
   disch_then (qspecl_then [`p`, `q`] strip_assume_tac) >>
   `phi_origin_incoming inst p q cells d` by simp[phi_origin_incoming_def] >>
-  `stack_get_depth T (MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
-       (p ++ MAP (phi_cell_value T) cells)) = SOME d` by
-    (`stack_get_depth T (MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
-          (p ++ MAP (phi_cell_value T) cells)) =
-       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-          (p ++ MAP (phi_cell_value T) cells)` by
-       (rewrite_tac[stack_get_depth_def, stack_get_phi_depth_def] >>
-        irule stack_find_predicate_vector >>
-        simp[listTheory.MAP_REVERSE, listTheory.MAP_MAP_o, combinTheory.o_DEF]) >> simp[]) >>
-  drule stack_get_depth_props >> strip_tac >>
   `class_of (phi_cell_value T (stack_peek d cells)) = SOME k` by
-    (qpat_x_assum `stack_peek d (MAP _ _) = T` mp_tac >>
-     `MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
-        (p ++ MAP (phi_cell_value T) cells) =
-      MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands)) p ++
-      MAP (\c. MEM (phi_cell_value T c) (FILTER is_var_operand inst.inst_operands)) cells`
-       by simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-     simp[stack_peek_suffix_map]) >>
+    (irule phi_origin_incoming_class >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `phi_origin_selected next p q cells d F` by
     (irule phi_origin_classes_selected >> goal_assum (drule_at Any) >>
      qexistsl_tac [`class_of`, `k`] >> simp[]) >>
@@ -1501,4 +1513,137 @@ Theorem phi_origin_stage_unique:
 Proof
   rpt strip_tac >> drule phi_origin_stage_count_le >>
   disch_then (qspec_then `i` mp_tac) >> decide_tac
+QED
+
+Theorem phi_origin_tagged_stage_extinction:
+  !class_of cells k inst next halting p q cells1.
+    phi_origin_tagged class_of cells /\ phi_origin_count k cells <= 1 /\
+    (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+          class_of op = SOME k) /\
+    (!op. class_of op = SOME k ==> ~MEM (operand_to_string op) next) /\
+    phi_origin_stage inst next halting p q cells cells1 ==>
+    phi_origin_count k cells1 = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  `phi_origin_classes class_of cells` by metis_tac[phi_origin_tagged_classes] >>
+  qpat_assum `phi_origin_stage _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[phi_origin_stage_def] >> strip_tac >>
+  `d < LENGTH cells` by fs[phi_origin_incoming_def] >>
+  `class_of (phi_cell_value T (stack_peek d cells)) = SOME k` by
+    (irule phi_origin_incoming_class >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `phi_origin_selected next p q cells d F` by
+    (irule phi_origin_classes_selected >> goal_assum (drule_at Any) >>
+     qexistsl_tac [`class_of`, `k`] >> simp[]) >>
+  `keep = F` by fs[phi_origin_selected_def] >>
+  `MEM (stack_peek d cells) cells` by
+    (simp[stack_peek_def] >> irule listTheory.EL_MEM >> decide_tac) >>
+  `?a b. stack_peek d cells = PhiOriginal k a b` by
+    (qpat_assum `phi_origin_tagged _ _` mp_tac >>
+     rewrite_tac[phi_origin_tagged_def, listTheory.EVERY_MEM] >>
+     disch_then (qspec_then `stack_peek d cells` mp_tac) >>
+     Cases_on `stack_peek d cells` >> gvs[phi_cell_value_def]) >>
+  `phi_origin_count k written = 0` by
+    (qspecl_then [`cells`, `LENGTH cells - 1 - d`,
+       `\c. case c of PhiOriginal j a b => j = k | PhiCommon op => F`,
+       `PhiCommon (Var (HD inst.inst_outputs))`] mp_tac filter_lupdate_count >>
+     impl_tac >- decide_tac >>
+     gvs[phi_origin_count_def, phi_origin_write_def, stack_poke_def, stack_peek_def] >>
+     rewrite_tac[GSYM listTheory.LENGTH_NIL] >> decide_tac) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (gvs[] >> qmatch_goalsub_abbrev_tac `phi_origin_pop e ws` >>
+      qspecl_then [`k`, `e`, `ws`] mp_tac phi_origin_pop_count_le >>
+      gvs[Abbr `ws`]) >>
+  gvs[]
+QED
+
+Theorem phi_origin_schedule_count_le:
+  !steps p q cells cells_end k.
+    phi_origin_schedule_ready steps p q cells cells_end ==>
+    phi_origin_count k cells_end <= phi_origin_count k cells
+Proof
+  Induct >- simp[phi_origin_schedule_ready_def] >>
+  Cases_on `h` >> Cases_on `r` >>
+  simp[phi_origin_schedule_ready_def] >> rpt strip_tac >>
+  drule phi_origin_stage_count_le >> disch_then (qspec_then `k` assume_tac) >>
+  first_x_assum drule >> disch_then (qspec_then `k` mp_tac) >> decide_tac
+QED
+
+Theorem phi_origin_tagged_schedule_extinction:
+  !steps n class_of cells p q cells_end.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    phi_origin_tagged class_of cells /\
+    (!k. phi_origin_count k cells <= 1) /\
+    (!i inst next halting. i < LENGTH steps /\ EL i steps = (inst,next,halting) ==>
+      (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+            class_of op = SOME (n+i)) /\
+      class_of (Var (HD inst.inst_outputs)) = NONE /\
+      (!op. class_of op = SOME (n+i) ==> ~MEM (operand_to_string op) next)) ==>
+    !i. i < LENGTH steps ==> phi_origin_count (n+i) cells_end = 0
+Proof
+  Induct >- simp[] >>
+  Cases_on `h` >> Cases_on `r` >> rename1 `(inst,next,halting)::steps` >>
+  rpt gen_tac >> strip_tac >>
+  `(!op. MEM op (FILTER is_var_operand inst.inst_operands) <=> class_of op = SOME n) /\
+   class_of (Var (HD inst.inst_outputs)) = NONE /\
+   (!op. class_of op = SOME n ==> ~MEM (operand_to_string op) next)` by
+    (qpat_assum `!i inst next halting. i < LENGTH (_::_) /\ _ ==> _`
+       (qspecl_then [`0`, `inst`, `next`, `halting`] mp_tac) >>
+     simp[NoAsms] >> metis_tac[]) >>
+  qpat_x_assum `phi_origin_schedule_ready _ _ _ _ _` mp_tac >>
+  simp[phi_origin_schedule_ready_def] >> strip_tac >>
+  rename1 `phi_origin_stage inst next halting p q cells mid` >>
+  `phi_origin_count n mid = 0` by
+    (irule phi_origin_tagged_stage_extinction >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `phi_origin_tagged class_of mid` by
+    (irule phi_origin_tagged_stage >> goal_assum (drule_at Any) >> simp[]) >>
+  `!k. phi_origin_count k mid <= 1` by
+    (gen_tac >> irule phi_origin_stage_unique >> goal_assum (drule_at Any) >> simp[]) >>
+  `!i. i < LENGTH steps ==> phi_origin_count (SUC n+i) cells_end = 0` by
+    (rpt strip_tac >> first_x_assum irule >> conj_tac >- simp[] >>
+     qexistsl_tac [`mid`, `class_of`, `p`, `q`] >>
+     simp[] >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!i inst next halting. i < LENGTH (_::_) /\ _ ==> _`
+       (qspec_then `SUC i'` mp_tac) >>
+     simp[arithmeticTheory.ADD_CLAUSES]) >>
+  Cases
+  >- (simp[] >> drule phi_origin_schedule_count_le >>
+      disch_then (qspec_then `n` mp_tac) >> simp[]) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >> rpt strip_tac >>
+  qpat_x_assum `!i. i < LENGTH steps ==> _` drule >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem phi_origin_tagged_schedule_projection:
+  !steps n class_of cells p q cells_end.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    phi_origin_tagged class_of cells /\
+    (!k. phi_origin_count k cells <= 1) /\
+    (!i inst next halting. i < LENGTH steps /\ EL i steps = (inst,next,halting) ==>
+      (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+            class_of op = SOME (n+i)) /\
+      class_of (Var (HD inst.inst_outputs)) = NONE /\
+      (!op. class_of op = SOME (n+i) ==> ~MEM (operand_to_string op) next)) /\
+    EVERY (\c. !k a b. c = PhiOriginal k a b ==>
+      ?i. i < LENGTH steps /\ k = n+i) cells ==>
+    MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. i < LENGTH steps ==> phi_origin_count (n+i) cells_end = 0` by
+    (rpt strip_tac >> irule phi_origin_tagged_schedule_extinction >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`cells`, `class_of`, `p`, `q`] >> metis_tac[]) >>
+  `!k. phi_origin_count k cells_end = 0` by
+    (gen_tac >> Cases_on `?i. i < LENGTH steps /\ k = n+i`
+     >- metis_tac[] >>
+     `phi_origin_count k cells = 0` by
+       (simp[phi_origin_count_zero] >>
+        gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+     drule phi_origin_schedule_count_le >> disch_then (qspec_then `k` mp_tac) >>
+     simp[]) >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >> Cases_on `x`
+  >- (qpat_x_assum `!k. phi_origin_count k cells_end = 0`
+        (qspec_then `n'` mp_tac) >>
+      simp[phi_origin_count_zero, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[phi_cell_value_def]
 QED
