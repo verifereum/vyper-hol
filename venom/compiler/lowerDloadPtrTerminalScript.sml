@@ -973,3 +973,40 @@ Resume dload_actual_copy_terminal_entry[tables]:
   Cases_on `k` >> simp[]
 QED
 Finalise dload_actual_copy_terminal_entry
+
+Theorem dload_slice_el:
+  TAKE (LENGTH mid) (DROP a xs) = mid /\
+  a + LENGTH mid <= LENGTH xs /\ k < LENGTH mid ==>
+  EL (a+k) xs = EL k mid
+Proof
+  rpt strip_tac >>
+  `a+k < LENGTH xs` by decide_tac >>
+  `EL k (TAKE (LENGTH mid) (DROP a xs)) = EL k mid` by simp[] >>
+  gvs[EL_TAKE, EL_DROP, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem dload_slice_active:
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  s.vs_inst_idx = a+k /\
+  TAKE (LENGTH mid) (DROP a bb.bb_instructions) = mid /\
+  a + LENGTH mid <= LENGTH bb.bb_instructions /\ k < LENGTH mid ==>
+  active_inst f (EL k mid) s
+Proof
+  rpt strip_tac >> drule_all dload_slice_el >> strip_tac >>
+  irule lookup_instruction_active >> qexists `bb` >>
+  simp[get_instruction_def]
+QED
+
+Theorem dload_terminal_slice_opcode:
+  mid <> [] /\ EVERY (\j. j.inst_opcode = ASSIGN) (FRONT mid) /\
+  (LAST mid).inst_opcode = REVERT /\ k < LENGTH mid ==>
+  ((k+1 < LENGTH mid ==> (EL k mid).inst_opcode = ASSIGN) /\
+   (k+1 = LENGTH mid ==> (EL k mid).inst_opcode = REVERT))
+Proof
+  rpt strip_tac
+  >- (`MEM (EL k mid) (FRONT mid)` by
+        (simp[MEM_EL] >> qexists `k` >> simp[LENGTH_FRONT, EL_FRONT, NULL_EQ]) >>
+      gvs[EVERY_MEM]) >>
+  `k = PRE (LENGTH mid)` by decide_tac >>
+  gvs[LAST_EL]
+QED
