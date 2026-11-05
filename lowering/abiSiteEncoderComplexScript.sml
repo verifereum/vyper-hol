@@ -7,8 +7,9 @@ Ancestors
   abiEncoderComplexPrefix abiEncoderMembersInput abiEncoderTuple abiEncoderInput
   abiEncoderMemberCode abiEncoderMembersDefs
   abiScratchAddress abiScratchEffect abiDecoderLoop abiDecoderContract abiEncoderLoadReach
-  abiDecoderDynamicLoopSetup emitHelperProps
-  abiSiteAllocation compileEnv valueEncoding contractABI venomState words list arithmetic
+  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderReentryAddress emitHelperProps
+  abiSiteAllocation abiEncoderAddressReach abiDecoderSiteMembership compilerOccurrences
+  compileEnv valueEncoding contractABI venomState pred_set words list arithmetic
 
 Theorem abi_site_members_run:
   EVERY (\(ei,_,_,_). abi_site_encoder ei) infos /\
@@ -114,6 +115,80 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
+Theorem abi_site_complex_prepare:
+  abi_site_members_pre infos tys avs st src dst sb 0 d output_size A b cap initial /\
+  abi_encode_complex_prefix infos st = (dyn_ptr,prepared) /\ fn_has_code st prepared func /\
+  abi_site_budget A b cap initial /\ st.cs_next_id IN A /\
+  prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  LENGTH (enc (Tuple tys) (ListV avs)) <= output_size /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?ready slot.
+    abi_site_members_inv infos tys avs [] [] T dyn_ptr st.cs_next_id slot A st.cs_next_id
+      prepared limit_st src dst sb 0 0 d (head_lengths tys 0) output_size b cap ready /\
+    abi_site_encoder_effect A st.cs_next_id prepared.cs_next_id st.cs_next_var
+      limit_st d output_size b cap initial ready /\ abi_decode_sim ctx func initial ready
+Proof
+  strip_tac >> drule_all abi_site_complex_prefix_reach >>
+  disch_then (qspecl_then [`output_size`, `d`, `ctx`] strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func initial ready` >>
+  qpat_x_assum `abi_site_complex_prefix_post _ _ _ _ _ _ _ _ _ _ _ _`
+    (qx_choose_then `slot` strip_assume_tac o
+     PURE_REWRITE_RULE [abi_site_complex_prefix_post_def]) >>
+  drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  drule_all abi_site_members_pre_effect >> strip_tac >>
+  `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
+  `abi_site_members_pre infos tys avs prepared src dst sb 0 d output_size A b cap ready` by
+    (drule_all abi_site_members_pre_mono >> simp[]) >>
+  qpat_assum `abi_site_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ initial`
+    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_site_members_pre_def]) >> strip_tac >>
+  drule abi_encoder_complex_input_metadata >> strip_tac >>
+  qpat_assum `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_encoder_effect_def]) >>
+  `abi_encoder_cursor T dyn_ptr st.cs_next_id slot 0 st.cs_next_id prepared
+      (head_lengths tys 0) ready` by
+    (simp_tac bool_ss [abi_encoder_cursor_def] >> asm_simp_tac (srw_ss()) [] >>
+     simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+     qexists_tac `st.cs_next_var` >> simp[]) >>
+  qexistsl_tac [`ready`, `slot`] >> asm_rewrite_tac[] >>
+  irule abi_site_members_initial_inv >> asm_simp_tac (srw_ss()) [] >> gvs[]
+QED
+
+Theorem abi_site_complex_phase_sites:
+  abi_encode_complex_prefix infos st = (dyn_ptr,prepared) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dyn_ptr prepared = (ignored,middle) /\
+  emit_op MLOAD [dyn_ptr] middle = (out,end_st) /\
+  abi_decoder_emitted_sites st.cs_next_id end_st.cs_next_id st end_st SUBSET A ==>
+  st.cs_next_id IN A /\
+  abi_decoder_emitted_sites prepared.cs_next_id middle.cs_next_id prepared middle SUBSET A
+Proof
+  strip_tac >> drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  drule abi_encoder_members_bounds >> strip_tac >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `cs_extends st prepared` by
+    (irule cs_extends_same_block >> fs[inst_extends_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `cs_extends prepared end_st` by
+    (irule cs_extends_trans >> qexists_tac `middle` >> asm_rewrite_tac[]) >>
+  `st.cs_next_id <= prepared.cs_next_id /\ middle.cs_next_id <= end_st.cs_next_id /\
+   prepared.cs_next_id <= end_st.cs_next_id` by decide_tac >>
+  `abi_decoder_emitted_sites prepared.cs_next_id middle.cs_next_id prepared middle SUBSET
+    abi_decoder_emitted_sites st.cs_next_id end_st.cs_next_id st end_st` by
+    (irule abi_decoder_emitted_sites_subsegment >> asm_rewrite_tac[]) >>
+  `abi_decoder_emitted_sites st.cs_next_id prepared.cs_next_id st prepared SUBSET
+    abi_decoder_emitted_sites st.cs_next_id end_st.cs_next_id st end_st` by
+    (irule abi_decoder_emitted_sites_subsegment >> simp[cs_extends_refl]) >>
+  drule abi_site_complex_prefix_sites >> strip_tac >>
+  `abi_decoder_emitted_sites st.cs_next_id prepared.cs_next_id st prepared SUBSET A /\
+   abi_decoder_emitted_sites prepared.cs_next_id middle.cs_next_id prepared middle SUBSET A`
+    by metis_tac[SUBSET_TRANS] >>
+  conj_tac >- (
+    qpat_x_assum `abi_decoder_emitted_sites st.cs_next_id prepared.cs_next_id st prepared SUBSET A`
+      mp_tac >>
+    qpat_x_assum `abi_decoder_emitted_sites st.cs_next_id prepared.cs_next_id st prepared = _`
+      (fn th => rewrite_tac[th]) >> simp[]) >> asm_rewrite_tac[]
+QED
+
 
 val _ = List.app (fn (name,th) =>
   let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
