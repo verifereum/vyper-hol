@@ -6,7 +6,7 @@ Ancestors
   loweringPosts vyperValueOperation emitHelper exprSimUnwrap emitHelperProps vyperState
   exprSimHyps vyperTypeEnv vyperTypeInvariants vyperTyping valueEncodingProofs
   vyperTypeSystem exprLoweringProps venomExecSemantics exprSimUnop builtinSimple
-  words integer_word arithmeticProps builtinProps vyperContext
+  words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
 Libs
   intLib
 
@@ -434,3 +434,118 @@ val () = List.app (fn th =>
     else raise Fail "Not storage frame has unproved dependencies"
   end) [not_storage_frame_step, not_storage_frame_tail,
         compile_not_storage_frame_frag];
+
+Theorem abs_storage_frame_run:
+  value_has_type (BaseTV (IntT 256)) v1 /\
+  unop_result cx (BaseT (IntT 256)) Abs tys v1 es = INL v /\
+  compile_builtin_abs x sa = (op,sb) /\
+  eval_operand x s = SOME (typed_val_to_w256 (BaseTV (IntT 256)) v1) /\
+  fresh_vars_wrt sa s ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      eval_operand op t = SOME (typed_val_to_w256 (BaseTV (IntT 256)) v)
+Proof
+  strip_tac >> Cases_on `v1` >> gvs[value_has_type_def] >>
+  rename1 `within_int_bound _ i` >>
+  drule int256_abs_bound >> strip_tac >>
+  drule_all abs_i2w >> strip_tac >>
+  gvs[unop_result_def, evaluate_builtin_def,
+      vyperASTTheory.type_to_int_bound_def, bounded_int_op_def,
+      typed_val_to_w256_def, val_to_w256_def, AllCaseEqs()] >>
+  `i2w i <> (INT_MINw : bytes32)` by metis_tac[] >>
+  drule_all compile_builtin_abs_run >>
+  disch_then (drule o CONJUNCT1) >> simp[]
+QED
+
+Theorem abs_storage_frame_tail:
+  expr_type e1 = BaseT (IntT 256) /\
+  value_has_type (BaseTV (IntT 256)) v1 /\
+  unop_result cx (BaseT (IntT 256)) Abs [expr_type e1] v1 es' = INL v /\
+  compile_builtin_abs x sm = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+  frag_exec ctx sm sb
+    (\s. expr_post ctx func cenv cx e1 es sa sm s0 es' v1 x s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin (BaseT (IntT 256)) Abs [e1])
+           es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  strip_tac >> irule frag_exec_pointwise >> gen_tac >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  `stmt_state_rel ctx func cenv cx es' s1 /\
+   eval_operand x s1 = SOME (typed_val_to_w256 (BaseTV (IntT 256)) v1)` by
+    gvs[expr_post_def, expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+        is_word_type_def] >>
+  irule frag_exec_conseq >>
+  irule_at Any frag_exec_straight_fresh_storage_frame_success >>
+  qexistsl_tac [`typed_val_to_w256 (BaseTV (IntT 256)) v`, `s1`, `op`,
+                 `compile_builtin_abs x`, `func`, `es'`, `cx`, `cenv`, `R`] >>
+  qexists_tac `\s. eval_operand x s = SOME (typed_val_to_w256 (BaseTV (IntT 256)) v1)` >>
+  simp[straight_fresh_abs, freshWritesTheory.eval_operand_drop_fresh] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule abs_storage_frame_run >> simp[] >>
+      goal_assum (drule_at (Pat `unop_result _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_builtin_abs _ _ = _`)) >> simp[]) >>
+  rpt strip_tac
+  >~ [`expr_post`]
+  >- (irule expr_post_unop >>
+      simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def] >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  gvs[expr_post_def]
+QED
+
+Theorem compile_abs_storage_frame_frag:
+  ann = expr_type e1 /\ ann = BaseT (IntT 256) /\
+  (!v1 es1.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) ==>
+    value_has_type (BaseTV (IntT 256)) v1) /\
+  (!a b operand es0 es1 value start saved savedT R.
+    lower_value compile_expr cenv ty e1 a = (operand,b) /\
+    (do r <- eval_expr cx e1; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e1 es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann Abs [e1]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann Abs [e1]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann Abs [e1]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule lower_value_abs >> strip_tac >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  qspec_then `x` assume_tac straight_fresh_abs >>
+  drule_all straight_fresh_cs_extends >> strip_tac >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `?v1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es') /\
+         unop_result cx ann Abs [expr_type e1] v1 es' = INL v` by
+    (drule eval_expr_unop_cases >>
+     simp[precompile_builtin_def, builtin_args_length_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `!v1 es1. bind _ _ es = _ ==> _` drule >> strip_tac >>
+  irule frag_exec_seq >>
+  qpat_x_assum `!a b operand es0 es1 value start saved savedT R. _`
+    (irule_at (Pat `frag_exec _ sa _ _ _ _`)) >>
+  simp[] >> irule abs_storage_frame_tail >> gvs[] >>
+  metis_tac[compile_lower_value_var]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Abs storage frame has unproved dependencies"
+  end) [abs_storage_frame_run, abs_storage_frame_tail,
+        compile_abs_storage_frame_frag];
