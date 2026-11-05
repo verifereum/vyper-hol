@@ -200,6 +200,133 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+(* Forward inversion requires non-use, not a circular non-definition premise. *)
+Theorem alias_live_no_use_step:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl i) /\
+  ~MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl (SUC i)) /\
+  ~MEM v (inst_defs (EL i bb.bb_instructions))
+Proof
+  strip_tac >>
+  qspecl_then [`fn`, `lbl`, `bb`, `i`] mp_tac
+    livenessAnalysisPropsTheory.live_vars_at_transfer >>
+  simp[] >> strip_tac >>
+  gvs[liveness_transfer_def, livenessTransferProofsTheory.live_update_mem]
+QED
+
+Theorem alias_live_no_use_range:
+  !j fn lbl bb i v.
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  i <= j /\ j <= LENGTH bb.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl i) /\
+  (!k. i <= k /\ k < j ==> ~MEM v (inst_uses (EL k bb.bb_instructions))) ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl j)
+Proof
+  Induct >- (rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> Cases_on `i = SUC j` >- gvs[] >>
+  `i <= j /\ j < LENGTH bb.bb_instructions` by decide_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl j)` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `i` >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `~MEM v (inst_uses (EL j bb.bb_instructions))` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all alias_live_no_use_step >> simp[]
+QED
+
+Theorem alias_live_no_use_range_not_def:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  i <= j /\ j <= LENGTH bb.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl i) /\
+  (!n. i <= n /\ n < j ==> ~MEM v (inst_uses (EL n bb.bb_instructions))) /\
+  i <= k /\ k < j ==>
+  ~MEM v (inst_defs (EL k bb.bb_instructions))
+Proof
+  strip_tac >>
+  `k < LENGTH bb.bb_instructions` by decide_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl k)` by
+    (irule alias_live_no_use_range >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
+  `~MEM v (inst_uses (EL k bb.bb_instructions))` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all alias_live_no_use_step >> simp[]
+QED
+
+Theorem alias_collect_phis_prefix:
+  !xs. ?rest. xs = collect_phis xs ++ rest
+Proof
+  Induct >- simp[collect_phis_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[collect_phis_def] >> metis_tac[]
+QED
+
+Theorem alias_phi_map_absent_prefix_no_use:
+  FLOOKUP (FST (build_phi_maps pred (collect_phis bb.bb_instructions))) v = NONE /\
+  (!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+    phi_well_formed phi.inst_operands) ==>
+  !k. k < LENGTH (collect_phis bb.bb_instructions) ==>
+    ~MEM v (inst_uses (EL k bb.bb_instructions))
+Proof
+  strip_tac >>
+  `!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+    ~MEM v (inst_uses phi)` by
+    metis_tac[alias_build_phi_maps_absent_uses] >>
+  rpt strip_tac >>
+  qspec_then `bb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+  `EL k bb.bb_instructions = EL k (collect_phis bb.bb_instructions)` by
+    metis_tac[EL_APPEND1] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem alias_phi_map_absent_postprefix_live:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+  FLOOKUP (FST (build_phi_maps pred (collect_phis bb.bb_instructions))) v = NONE /\
+  (!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+    phi_well_formed phi.inst_operands) ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >> irule alias_live_no_use_range >>
+  simp[] >> qexists_tac `0` >> simp[] >>
+  conj_tac
+  >- metis_tac[alias_phi_map_absent_prefix_no_use] >>
+  qspec_then `bb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+  pop_assum (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]
+QED
+
+Theorem alias_phi_map_absent_not_output:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+  FLOOKUP (FST (build_phi_maps pred (collect_phis bb.bb_instructions))) v = NONE /\
+  (!p. MEM p (collect_phis bb.bb_instructions) ==>
+    phi_well_formed p.inst_operands) /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  ~MEM v (inst_defs phi)
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM phi _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `n < LENGTH (collect_phis bb.bb_instructions)` >>
+  qspec_then `bb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+  `EL n bb.bb_instructions = phi` by metis_tac[EL_APPEND1] >>
+  qpat_x_assum `EL n bb.bb_instructions = phi`
+    (fn th => once_rewrite_tac[GSYM th]) >>
+  irule alias_live_no_use_range_not_def >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`fn`, `0`, `lbl`] >> simp[] >>
+  conj_tac
+  >- metis_tac[alias_phi_map_absent_prefix_no_use] >>
+  qpat_x_assum `bb.bb_instructions = _ ++ _`
+    (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]
+QED
+
 Theorem alias_phi_ready_ordinary_input:
   phi_block_ready liveness bb /\
   MEM v (live_vars_at liveness bb.bb_label 0) /\
