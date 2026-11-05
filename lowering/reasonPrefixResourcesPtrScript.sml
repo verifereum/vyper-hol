@@ -362,14 +362,15 @@ QED
 
 Theorem reason_encoder_allocated_store_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc inst b sz
-    dst value a w tv ow tn id.
+    dst value a addr u w tv ow tn id.
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_id <= cc.cs_next_id /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
-    b <= w2n a /\ w2n a + 32 <= b + sz /\
+    w2n a = addr /\ u = mstore addr w s /\
+    b <= addr /\ addr + 32 <= b + sz /\
     (!aid off len. aid < cc.cs_next_id /\
       FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
       regions_disjoint b sz off len) /\
@@ -383,15 +384,16 @@ Theorem reason_encoder_allocated_store_resources:
       ~(b <= i /\ i < b + sz)) /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n ow) m) ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op
-      (mstore (w2n a) w s) /\
+    expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
     (!m. mem_agree_outside
-      (step_taint (mk_inst id MSTORE [Var dst; value] []) s
-        (mstore (w2n a) w s) tn).t_mem
-      (mstore (w2n a) w s).vs_memory m ==>
+      (step_taint (mk_inst id MSTORE [Var dst; value] []) s u tn).t_mem
+      u.vs_memory m ==>
       val_in_memory tv v (w2n ow) m)
 Proof
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `w2n a = addr` (assume_tac o GSYM) >>
+  qpat_x_assum `addr = _` SUBST_ALL_TAC >>
+  qpat_x_assum `u = _` SUBST_ALL_TAC >>
   `!i. w2n ow <= i /\ i < w2n ow + val_footprint tv v ==>
      ~(w2n a <= i /\ i < w2n a + 32)` by
     (rpt strip_tac >> first_x_assum drule >> decide_tac) >>
@@ -402,3 +404,73 @@ Proof
       qexistsl_tac [`b`, `cc`, `inst`, `sz`] >> simp[] >> metis_tac[]) >>
   rpt strip_tac >> irule reason_encoder_store_robust_preserved >> metis_tac[]
 QED
+
+(* First compiler consumer of the allocation and store resource boundaries. *)
+Theorem reason_encoder_selector_resources:
+  !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 buf n tv ow PG G tn.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
+    emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
+    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    fn_inst_ids_distinct func /\ 32 <= n /\ n < dimword (:256) /\
+    sa.cs_next_var <= cc.cs_next_var /\
+    sa.cs_next_id <= cc.cs_next_id /\ sb.cs_next_id <= cc.cs_next_id /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    ~is_word_type (expr_type e) /\ val_wf tv v /\
+    eval_operand op s = SOME ow /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n ow) m) ==>
+    ?t out b G1 tn1 u tn2.
+      buf.buf_operand = Var out /\
+      step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
+      G1 = step_prov PG G (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) t /\
+      tn1 = step_taint (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s t tn /\
+      eval_operand (Var out) t = SOME (n2w b) /\ b + n < dimword (:256) /\
+      u = mstore b 0x08c379a0w t /\
+      run_inst_seq (emitted_insts c1 c2) t = OK u /\
+      step_inst_base (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t = OK u /\
+      tn2 = step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t u tn1 /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      fresh_vars_wrt c2 u /\
+      (!m. mem_agree_outside tn2.t_mem u.vs_memory m ==>
+        val_in_memory tv v (w2n ow) m)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all reason_encoder_alloc_buffer_resources >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  `w2n (n2w b : bytes32) = b` by simp[] >>
+  `lookup_var out t = SOME (n2w b)` by gvs[eval_operand_def] >>
+  `eval_operand buf.buf_operand t = SOME (n2w b)` by simp[] >>
+  `run_inst_seq (emitted_insts c1 c2) t = OK (mstore b 0x08c379a0w t) /\
+   fresh_vars_wrt c2 (mstore b 0x08c379a0w t)` by
+    (drule_at (Pat `emit_void _ _ _ = _`) emit_void_MSTORE_correct >>
+     disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+     simp[eval_operand_def]) >>
+  `expr_post ctx func cenv cx e es sa sb s0 es' v op (mstore b 0x08c379a0w t) /\
+   (!m. mem_agree_outside
+     (step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
+       t (mstore b 0x08c379a0w t) tn1).t_mem
+     (mstore b 0x08c379a0w t).vs_memory m ==>
+     val_in_memory tv v (w2n ow) m)` by suspend "post" >>
+  qexistsl_tac [`t`, `out`, `b`, `G1`, `tn1`, `mstore b 0x08c379a0w t`,
+    `step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
+      t (mstore b 0x08c379a0w t) tn1`] >>
+  qpat_assum `i = _` (fn th => once_rewrite_tac[GSYM th]) >> simp[] >>
+  qpat_assum `w2n (n2w b : bytes32) = b`
+    (fn th => once_rewrite_tac[GSYM th]) >>
+  irule step_MSTORE >> simp[eval_operand_def]
+QED
+
+Resume reason_encoder_selector_resources[post]:
+  `MEM i (fn_insts func)` by
+    (drule_all buffer_alloc_code >> strip_tac >>
+     drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
+  irule reason_encoder_allocated_store_resources >>
+  simp[op_taint_def, eval_operand_def] >>
+  qexistsl_tac [`b`, `cc`, `i`, `n`] >>
+  simp[mk_inst_def] >> metis_tac[]
+QED
+
+Finalise reason_encoder_selector_resources
