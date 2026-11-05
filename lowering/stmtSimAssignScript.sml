@@ -134,8 +134,8 @@ QED
    store_lays_out says the stored word is how x's type lays e's value out:
    a word_value, or an address or bytesN of x's type
    (store_lays_out_word_value, store_lays_out_typed).
-   The first hypothesis is the certificate rule
-   gas_exempt_cert_unforce_result, stated in full until that rule lands. *)
+   The first hypothesis is gas_exempt_cert's unforce_result rule, which
+   compile_assign_local_stmt_frag discharges. *)
 Theorem assign_local_stmt_frag_given_unforce[local]:
   !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv.
     (!memory tops ctx' func' cx' e' es' s0 marks err ee leaf finish.
@@ -177,4 +177,27 @@ Proof
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then irule >> simp[]
+QED
+
+(* x = e for a local x of a word type and e of a word type, for every
+   outcome, as assign_local_stmt_frag_given_unforce with its certificate
+   rule discharged by gas_exempt_cert's unforce_result rule. *)
+Theorem compile_assign_local_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv.
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    cenv.ce_var_type id = SOME vtyp /\ is_word_type vtyp /\
+    is_word_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
+       lookup_scopes id es1.scopes = SOME entry ==>
+       store_lays_out etv entry.type v) /\
+    expr_sim ctx func cenv cx (expr_type e) e es ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  rpt strip_tac >> irule assign_local_stmt_frag_given_unforce >>
+  metis_tac[gasExemptCertTheory.gas_exempt_cert_unforce_result]
 QED
