@@ -20,7 +20,7 @@ Ancestors
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs cfgDefs
   venomWf venomEffects asmIR frameViewFacts finite_map callLayoutDefs fmpWfDefs
   list rich_list pred_set reorderSim planWf stackModel regularMemorySim fcgPostorder
-  contextPlanLayoutProps fmpLowerProps generatedPrefixSim allocMono
+  contextPlanLayoutProps fmpLowerProps generatedPrefixSim allocMono codegen
 
 (* ===== Cleanup without stack distinctness =====
 
