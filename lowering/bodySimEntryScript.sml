@@ -101,7 +101,7 @@ Proof
   rw[ce_locals_declared_def] >> metis_tac[]
 QED
 
-Theorem build_compile_env_bound[local]:
+Theorem build_compile_env_bound:
   !tops vis mut fname args ret body use_trans n l.
     FLOOKUP (build_compile_env tops vis mut fname args ret body
                use_trans).ce_vars n = SOME l ==>
@@ -121,7 +121,7 @@ fun register_args_bound_tac def =
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum drule_all >> simp[FLOOKUP_UPDATE] >> rw[] >> gvs[];
 
-Theorem compile_register_positional_args_bound[local]:
+Theorem compile_register_positional_args_bound:
   !args cenv off st cenv' st' n l.
     compile_register_positional_args cenv args off st = (cenv', st') /\
     FLOOKUP cenv'.ce_vars n = SOME l ==>
