@@ -84,3 +84,38 @@ Resume concretize_relocation_write_demand_noncollision[distinct]:
 QED
 
 Finalise concretize_relocation_write_demand_noncollision
+
+(* Coverage concerns actual target writes; numerical layout alone does not
+ * supply it. Retained demand and noncollision then protect the complement. *)
+Theorem concretize_relocation_demand_write_complement:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\
+  n < LENGTH es /\
+  (!k d owner aid base size. k <= LENGTH es /\
+     activation_cache (EL k (q0::qs)) d owner aid (base,size) ==>
+     canonical_metadata C C' (Allocation aid) (positions owner aid) size /\
+     lo <= positions owner aid) /\
+  (!w. w IN target_writes ==> ?byte.
+     byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
+     relocation_pair lo positions (EL n (q0::qs)) byte w) /\
+  joint_relocation_demand lo positions q0 es qs (SUC n) a z /\
+  a NOTIN joint_writes (EL n (q0::qs)) (EL n es) ==>
+  joint_relocation_demand lo positions q0 es qs n a z /\
+  z NOTIN target_writes
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `vs0.vs_allocas = FEMPTY` by
+    gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `joint_relocation_demand lo positions q0 es qs n a z` by
+    (irule joint_relocation_demand_retained >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  strip_tac >>
+  qpat_x_assum `!w. w IN target_writes ==> _` drule >> strip_tac >>
+  `a <> byte` by metis_tac[] >>
+  drule_all concretize_relocation_write_demand_noncollision >> simp[]
+QED
