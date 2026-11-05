@@ -79,14 +79,6 @@ Proof
   simp[compile_var_array_membership_def, LET_THM]
 QED
 
-Theorem rest_word_zero_slot_probes:
-  word_slot_canonical 0w (BaseTV (IntT 8)) /\
-  word_slot_canonical 0w (BaseTV (BytesT (Fixed 1))) /\
-  word_slot_canonical 0w (BaseTV AddressT)
-Proof
-  simp[word_slot_canonical_zero]
-QED
-
 Theorem rest_word_signed_decode_probe:
   truncate_signed 8 (-1w : 256 word) = -1
 Proof

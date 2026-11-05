@@ -3,7 +3,7 @@ Theory exprSimBopRestWordIndex
 Ancestors
   vyperArray vyperTyping vyperValueOperation pred_set list sorting alist
   compileEnv valueEncodingProps valueEncoding vyperValue vyperStorage
-  vyperAssignPreservesType
+  vyperAssignPreservesType exprSimBopInLiteralWord
 
 Theorem rest_word_missing_index[local]:
   ALL_DISTINCT ks /\ EVERY (\k. k < n) ks ==>
@@ -74,33 +74,6 @@ Proof
   simp[EVERY_MEM, pairTheory.FORALL_PROD]
 QED
 
-Theorem rest_word_encoding_roundtrip:
-  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
-  value_has_type tv v ==>
-  w256_to_val (typed_val_to_w256 tv v) tv = v
-Proof
-  strip_tac >> irule w256_roundtrip >>
-  Cases_on `ty` >> gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def,
-      encode_base_to_slot_def, within_int_bound_def, bool_to_slot_def,
-      valueEncodingProofsTheory.word_of_bytes_be_pad_right] >>
-  intLib.ARITH_TAC
-QED
-
-Theorem rest_word_encoding_11:
-  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
-  value_has_type tv v1 /\ value_has_type tv v2 ==>
-  (typed_val_to_w256 tv v1 = typed_val_to_w256 tv v2 <=> v1 = v2)
-Proof
-  strip_tac >> eq_tac >> simp[] >> strip_tac >>
-  `w256_to_val (typed_val_to_w256 tv v1) tv = v1` by
-    (irule rest_word_encoding_roundtrip >> metis_tac[]) >>
-  `w256_to_val (typed_val_to_w256 tv v2) tv = v2` by
-    (irule rest_word_encoding_roundtrip >> metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem rest_word_array_word_membership:
   is_word_type ty /\ evaluate_type tenv ty = SOME et /\
   value_has_type et v /\ value_has_type (ArrayTV et bd) (ArrayV av) ==>
@@ -115,5 +88,5 @@ Proof
   strip_tac >> qexists_tac `i` >> simp[] >>
   `well_formed_type_value et` by metis_tac[evaluate_type_well_formed] >>
   `value_has_type et x` by (irule array_index_has_type >> metis_tac[]) >>
-  `x = v` by metis_tac[rest_word_encoding_11] >> simp[]
+  `x = v` by metis_tac[literal_typed_encoding_11] >> simp[]
 QED

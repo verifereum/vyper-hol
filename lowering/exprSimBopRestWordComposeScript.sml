@@ -4,7 +4,7 @@ Ancestors
   gasSummary gasSummaryCompose gasExemptCert exprBopSimProps vyperState
   vyperInterpreter exprSimMemorySource list allocLimits exprSimHypsDefs
   localPtrsProps exprSimProps freshWrites exprSimBopRestWordTail exprSimUnwrapProps
-  exprSimBopRestWordFacts exprBopLowering exprSimSource
+  exprSimBopRestWordFacts exprBopLowering exprSimSource exprSimHyps
 Libs
   pairLib
 
@@ -122,13 +122,6 @@ Proof
       metis_tac[]) >>
   irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem rest_word_alloc_root:
-  alloc_limits_expr cenv e ==> type_alloc_ok cenv (expr_type e)
-Proof
-  Cases_on `e` >> simp[allocLimitsTheory.alloc_limits_expr_def,
-    vyperASTTheory.expr_type_def]
 QED
 
 Theorem rest_word_array_alloc_bound:
@@ -455,7 +448,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
      Cases_on `p.ptr_location` >> simp[] >> metis_tac[]) >>
   `type_alloc_ok cenv (ArrayT (expr_type e1) bd)` by
     (`alloc_limits_expr cenv e2` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
-     drule rest_word_alloc_root >> simp[]) >>
+     drule alloc_limits_expr_type_alloc_ok >> simp[]) >>
   `(case bd of Fixed n => n | Dynamic n => n) < dimword (:256)` by
     metis_tac[rest_word_array_alloc_bound] >>
   `~u.vs_halted` by
