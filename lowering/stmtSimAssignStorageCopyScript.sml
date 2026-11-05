@@ -927,9 +927,7 @@ Proof
 QED
 
 Theorem assign_storage_empty_stmt_frag[local]:
-  !ctx func cx lctx RetQ cenv ty src id e es res es' ts tr typ id_str slot tvt.
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) es =
-      (res,es') /\
+  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -938,11 +936,12 @@ Theorem assign_storage_empty_stmt_frag[local]:
     (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     cenv.ce_hashmap_info (src,id) = NONE /\
-    (!v st. (do result <- eval_expr cx e; read_result cx result od) es =
-       (INL v,st) ==> value_has_type tvt v) ==>
+    (!gs v st. (do result <- eval_expr cx e; read_result cx result od)
+       (es with gas_obs := gs) = (INL v,st) ==> value_has_type tvt v) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
-        (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) es res es'
+        (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -979,10 +978,8 @@ QED
    right-hand side has t = typ, as type_builtin_result_ok requires; the
    lowering stores only a zero length word for it. *)
 Theorem compile_assign_storage_copy_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty src id e es res es' ts tr typ id_str slot
+  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt.
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) es =
-      (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -1001,14 +998,16 @@ Theorem compile_assign_storage_copy_stmt_frag:
        (k', tv') <> (n2w slot, tvt) ==>
        ranges_disjoint slot (type_slot_size tvt)
                        (w2n k') (type_slot_size tv')) /\
-    (!v es1.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) ==>
+    (!gs v es1.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) ==>
        value_has_type tvt v) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
-         (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) es res es'
+         (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
+      es
 Proof
   gen_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `has_length_word (expr_type e) /\ is_empty_value_expr e`

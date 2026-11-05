@@ -45,9 +45,7 @@ Libs
    not staged lies where expr_val_at puts it, in e's own buffer or inside
    one local's region, so a store into x_i misses the elements after i. *)
 Theorem compile_assign_tuple_locals_memory_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty ids e es res es' tys tvs.
-    eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty ids e es tys tvs.
     ids <> [] /\
     expr_type e = TupleT tys /\
     lowered_value_type cenv e = expr_type e /\
@@ -68,11 +66,12 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
                  type_memory_bytes cenv vt = type_memory_size vtv /\
                  0 < type_memory_size vtv /\
                  type_memory_size vtv + 64 < dimword (:256)) /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
-               (INL v, es1) ==> value_has_type (TupleTV tvs) v) /\
-    (!vs es1 i entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL (ArrayV (TupleV vs)), es1) /\
+    (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
+               (es with gas_obs := gs) = (INL v, es1) ==>
+               value_has_type (TupleTV tvs) v) /\
+    (!gs vs es1 i entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL (ArrayV (TupleV vs)), es1) /\
        i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
        if is_word_type (EL i tys) then
@@ -85,7 +84,9 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
+      es
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
