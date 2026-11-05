@@ -240,6 +240,7 @@ Proof
   >~ [`eval_target_place _ _`] >- suspend "target_place"
   >~ [`eval_base_place _ (AttributeTarget _ _)`] >- suspend "attribute_target" >>
   all_tac
+  >~ [`eval_expr _ (Builtin _ _ _)`] >- suspend "builtin_expr"
   >~ [`eval_expr_results _ (_::_)`] >- suspend "results_cons"
   >~ [`eval_exprs _ (_::_)`] >- suspend "exprs_cons"
   >~ [`eval_base_place _ (SubscriptTarget _ _)`] >- suspend "subscript_target"
@@ -249,7 +250,6 @@ Proof
   >~ [`eval_expr _ (TypeBuiltin _ _ _ _)`] >- suspend "type_builtin"
   >~ [`eval_expr _ (Subscript _ _ _)`] >- suspend "subscript_expr" >>
   all_tac
-  >~ [`eval_expr _ (Builtin _ _ _)`] >- suspend "builtin_expr"
   >~ [`eval_expr _ (Call _ (Send _) _ _)`] >- suspend "send_expr" >>
   suspend "ext_call"
 QED
@@ -313,7 +313,9 @@ Resume body_oracle_storage_mutual[builtin_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
-  >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (Builtin _ _ _) = SOME _` mp_tac >>
+      simp[Once well_typed_expr_def]) >>
   strip_tac >>
   qpat_assum `well_typed_expr env (Builtin ty bt es)`
     (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
@@ -345,6 +347,10 @@ Resume body_oracle_storage_mutual[builtin_args]:
           qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ ==> _`
             (qspecl_then [`st`,`st`] mp_tac) >>
           simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+      conj_tac
+      >- suspend "builtin_slice_addr" >>
+      conj_tac
+      >- suspend "builtin_slice_tail" >>
       metis_tac[runtime_storage_consistent_storage]) >>
   rpt strip_tac >>
   `es <> []` by
@@ -358,6 +364,77 @@ Resume body_oracle_storage_mutual[builtin_args]:
   qpat_x_assum `!s'' t. _ /\ bt = Len ==> _`
     (qspecl_then [`st`,`st`] mp_tac) >>
   simp[type_check_def, assert_def, return_def] >> metis_tac[]
+QED
+
+Resume body_oracle_storage_mutual[builtin_slice_tail]:
+  rpt strip_tac >>
+  rename1 `code_slice_source bt es = SOME (ct,ca)` >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+  strip_tac >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_call_safe >>
+  simp[int_calls_expr_def] >> strip_tac >>
+  `~supported_exprs_exists expr_evm_run_root (TL es) /\
+   ~supported_expr_exists expr_evm_run_root ca /\
+   EVERY (\c. FST c = NONE) (int_calls_exprs (TL es)) /\
+   EVERY (\c. FST c = NONE) (int_calls_expr ca)` by (
+    qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+    qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+    qpat_x_assum `EVERY _ (int_calls_exprs es)` mp_tac >>
+    rpt (pop_assum kall_tac) >> rw[code_slice_source_SOME] >>
+    gvs[supported_expr_exists_def, int_calls_expr_def,
+        expr_evm_run_root_def]) >>
+  `contract_storage_well_formed cx st` by
+    metis_tac[runtime_storage_consistent_storage] >>
+  qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
+    (qspecl_then [`st`,`st`,`ct`,`ca`] mp_tac) >>
+  (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                gvs[code_slice_source_SOME, type_check_def, assert_def,
+                    return_def])) >>
+  disch_then irule >> rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[]
+QED
+
+Resume body_oracle_storage_mutual[builtin_slice_addr]:
+  rpt strip_tac >>
+  rename1 `code_slice_source bt es = SOME (ct,ca)` >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+  strip_tac >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_call_safe >>
+  simp[int_calls_expr_def] >> strip_tac >>
+  `~supported_exprs_exists expr_evm_run_root (TL es) /\
+   ~supported_expr_exists expr_evm_run_root ca /\
+   EVERY (\c. FST c = NONE) (int_calls_exprs (TL es)) /\
+   EVERY (\c. FST c = NONE) (int_calls_expr ca)` by (
+    qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+    qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+    qpat_x_assum `EVERY _ (int_calls_exprs es)` mp_tac >>
+    rpt (pop_assum kall_tac) >> rw[code_slice_source_SOME] >>
+    gvs[supported_expr_exists_def, int_calls_expr_def,
+        expr_evm_run_root_def]) >>
+  `contract_storage_well_formed cx st` by
+    metis_tac[runtime_storage_consistent_storage] >>
+  `contract_storage_well_formed cx s1` by (
+    qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
+      (qspecl_then [`st`,`st`,`ct`,`ca`] mp_tac) >>
+    (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                  gvs[code_slice_source_SOME, type_check_def, assert_def,
+                      return_def])) >>
+    disch_then irule >> rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[]) >>
+  `runtime_consistent env cx s1` by
+    metis_tac[eval_exprs_preserves_runtime_consistent,
+              runtime_storage_consistent_runtime] >>
+  `runtime_storage_consistent env cx s1` by
+    metis_tac[runtime_storage_consistent_intro,
+              runtime_storage_consistent_layout] >>
+  `IS_SOME s1.outcomes /\ oracle_storage_ok cx s1` by
+    (rpt (qpat_x_assum `!x. _` kall_tac) >>
+     metis_tac[exprOracleStorageInterfacesTheory.oracle_storage_entry_suffix,
+               cj 6 eval_outcome_suffix_mutual]) >>
+  qpat_x_assum `!s'' t c a s3 tv t'. _ ==> _`
+    (qspecl_then [`st`,`st`,`ct`,`ca`,`st`,`tvs`,`s1`] mp_tac) >>
+  (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                gvs[code_slice_source_SOME, type_check_def, assert_def,
+                    return_def])) >>
+  disch_then irule >> rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[]
 QED
 
 Resume body_oracle_storage_mutual[subscript_expr]:

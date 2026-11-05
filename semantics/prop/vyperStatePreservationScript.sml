@@ -87,6 +87,79 @@ Proof
   rw[get_accounts_def, return_def]
 QED
 
+(* A builtin's operand evaluation (ordinary, or slice(x.code, start, len)
+   with x evaluated after start and len) preserves any transitive relation
+   that each operand evaluation preserves; the hypotheses match evaluate_ind. *)
+Theorem builtin_operands_preserve:
+  !R cx bt es st res st'.
+    (!a b c. R a b /\ R b c ==> R a c) /\
+    (code_slice_source bt es = NONE ==>
+     !st res st'. eval_exprs cx es st = (res,st') ==> R st st') /\
+    (!code_ty addr. code_slice_source bt es = SOME (code_ty,addr) ==>
+     !st res st'. eval_exprs cx (TL es) st = (res,st') ==> R st st') /\
+    (!code_ty addr s tail_vs t.
+       code_slice_source bt es = SOME (code_ty,addr) /\
+       eval_exprs cx (TL es) s = (INL tail_vs,t) ==>
+       !st res st'. eval_exprs cx [addr] st = (res,st') ==> R st st') /\
+    (case code_slice_source bt es of
+       NONE => eval_exprs cx es
+     | SOME (code_ty,addr) =>
+       do
+         tail_vs <- eval_exprs cx (TL es);
+         addr_vs <- eval_exprs cx [addr];
+         code_acc <- get_accounts;
+         code_v <- lift_sum (evaluate_builtin cx code_acc code_ty (Acc Code)
+                               [expr_type addr] addr_vs);
+         return (code_v::tail_vs)
+       od) st = (res,st') ==>
+    R st st'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `code_slice_source bt es` >> gvs[] >>
+  rename1 `SOME p` >> PairCases_on `p` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >> gvs[] >>
+  metis_tac[]
+QED
+
+(* The outcomes of a builtin's operand evaluation, step by step. *)
+Theorem builtin_operands_cases:
+  !cx bt es st res st'.
+    (case code_slice_source bt es of
+       NONE => eval_exprs cx es
+     | SOME (code_ty,addr) =>
+       do
+         tail_vs <- eval_exprs cx (TL es);
+         addr_vs <- eval_exprs cx [addr];
+         code_acc <- get_accounts;
+         code_v <- lift_sum (evaluate_builtin cx code_acc code_ty (Acc Code)
+                               [expr_type addr] addr_vs);
+         return (code_v::tail_vs)
+       od) st = (res,st') ==>
+    (code_slice_source bt es = NONE /\ eval_exprs cx es st = (res,st')) \/
+    ?code_ty addr r1 s1.
+      code_slice_source bt es = SOME (code_ty,addr) /\
+      eval_exprs cx (TL es) st = (r1,s1) /\
+      ((?e. r1 = INR e /\ res = INR e /\ st' = s1) \/
+       ?tail_vs r2.
+         r1 = INL tail_vs /\ eval_exprs cx [addr] s1 = (r2,st') /\
+         ((?e. r2 = INR e /\ res = INR e) \/
+          ?addr_vs r3.
+            r2 = INL addr_vs /\
+            lift_sum (evaluate_builtin cx st'.accounts code_ty (Acc Code)
+                        [expr_type addr] addr_vs) st' = (r3,st') /\
+            ((?e. r3 = INR e /\ res = INR e) \/
+             ?code_v. r3 = INL code_v /\ res = INL (code_v::tail_vs))))
+Proof
+  rpt gen_tac >>
+  Cases_on `code_slice_source bt es` >> simp[] >>
+  rename1 `SOME p` >> PairCases_on `p` >>
+  simp[bind_def, get_accounts_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  gvs[lift_sum_def, return_def, raise_def, AllCaseEqs()]
+QED
+
 Theorem get_address_immutables_state:
   !cx st res st'. get_address_immutables cx st = (res, st') ==> st' = st
 Proof

@@ -509,9 +509,21 @@ Proof
 QED
 
 Theorem case_expr_builtin_logs[local]:
+  (!s0 x s1 v code_ty addr s2 tail_vs s3.
+     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
+       (INL x,s1) /\ bt <> Len /\ bt <> Env MsgGas /\
+     code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
+     eval_exprs cx (TL es) s2 = (INL tail_vs,s3) ==>
+     !st res st'. eval_exprs cx [addr] st = (res,st') ==> log_extends st st') /\
+  (!s0 x s1 v code_ty addr.
+     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
+       (INL x,s1) /\ bt <> Len /\ bt <> Env MsgGas /\
+     code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
+     !st res st'. eval_exprs cx (TL es) st = (res,st') ==> log_extends st st') /\
   (!s0 x s1.
      type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
-       (INL x,s1) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,s1) /\ bt <> Len /\ bt <> Env MsgGas /\
+     code_slice_source bt es = NONE ==>
      !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') /\
   (!s0 x s1.
      type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
@@ -523,36 +535,29 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once vyperInterpreterTheory.evaluate_def] >>
-  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, vyperStateTheory.check_def,
-       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_sum_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  Cases_on `bt = Len` >> gvs[] >>
-  TRY (gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+  Cases_on `builtin_args_length_ok bt (LENGTH es)` >>
+  fs[vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+     vyperStateTheory.return_def, vyperStateTheory.raise_def,
+     vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+     log_extends_refl] >>
+  Cases_on `bt = Len` >> fs[]
+  >- (simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
            vyperStateTheory.raise_def, AllCaseEqs()] >>
-       imp_res_tac result_array_length_state >> gvs[] >>
-       first_x_assum (qspec_then `st` mp_tac) >>
-       simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
-            vyperStateTheory.assert_def, vyperStateTheory.return_def] >> NO_TAC)
-  >> Cases_on `bt = Env MsgGas` >> gvs[]
-  >> TRY (imp_res_tac next_gas_reading_state >>
-          gvs[log_extends_def] >> NO_TAC)
-  >> `!st res st'. eval_exprs cx es st = (res,st') ==>
-        log_extends st st'` by
-       (first_x_assum (qspec_then `st` mp_tac) >>
-        simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
-             vyperStateTheory.assert_def, vyperStateTheory.return_def])
-  >> gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-         vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
-         AllCaseEqs()]
-  >> BasicProvers.FULL_CASE_TAC
-  >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
-  >> first_x_assum drule >> simp[]
-  >> strip_tac >> imp_res_tac precompile_call_success_state >>
-  gvs[log_extends_def]
+      strip_tac >> gvs[vyperStateTheory.return_def, log_extends_refl] >>
+      imp_res_tac result_array_length_state >> gvs[] >>
+      res_tac >> gvs[]) >>
+  Cases_on `bt = Env MsgGas` >> fs[]
+  >- (simp[AllCaseEqs(), vyperStateTheory.return_def] >> strip_tac >>
+      imp_res_tac next_gas_reading_state >> gvs[log_extends_def]) >>
+  simp[AllCaseEqs(), vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def] >>
+  strip_tac >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  imp_res_tac lift_sum_state >>
+  imp_res_tac precompile_call_success_state >> gvs[] >>
+  drule_at (Pos last) builtin_operands_preserve >>
+  disch_then (qspec_then `log_extends` mp_tac) >>
+  (impl_tac >- metis_tac[log_extends_trans]) >>
+  simp[log_extends_def]
 QED
 
 Theorem case_stmt_return_some_logs[local]:
