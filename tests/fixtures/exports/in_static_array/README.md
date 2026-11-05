@@ -2,7 +2,7 @@
 
 `test_in_static_array.json` is a Vyper functional-test export, in the same
 format as `tests/vyper-test-exports`, recorded from the pinned compiler
-(`VYPER_PIN`, `9362e36b`, `vyper 0.5.0a4+9362e36b`) running
+(`VYPER_PIN`, `577d2534` (`v0.5.0b1`), `vyper 0.5.0b1`) running
 `test_in_static_array.py` in Vyper's own test harness.
 Its call traces therefore carry the outputs Vyper's EVM produced, which is
 what the replay in `tests/vyperInStaticArrayTestScript.sml` checks the
