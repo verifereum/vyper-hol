@@ -1144,6 +1144,149 @@ Proof
   simp[Once vfmContextTheory.parse_code_def] >> EVAL_TAC
 QED
 
+val prefix_parse_unfold_tac = CONV_TAC
+  (LAND_CONV (ONCE_REWRITE_CONV [vfmContextTheory.parse_code_def]));
+val prefix_parse_reduce_tac = CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
+  [vfmOperationTheory.parse_opcode_cond_thm,
+   vfmOperationTheory.opcode_def, wordsTheory.dimword_8]));
+val prefix_parse_let_tac = CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
+  [LET_THM, vfmOperationTheory.opcode_def, wordsTheory.dimword_8]));
+
+Theorem deploy_prefix_parse_prefix:
+  parse_code 0 FEMPTY (^prefix_deploy_bc_tm ++ ^prefix_args_tm) =
+  parse_code 11
+    (FEMPTY |+ (0, JumpDest) |+ (1, Push 1 [32w]) |+ (3, Push 0 [])
+      |+ (4, Push 0 []) |+ (5, Add) |+ (6, Push 2 [0w;33w])
+      |+ (9, Add) |+ (10, Push 0 []))
+    (DROP 11 (^prefix_deploy_bc_tm ++ ^prefix_args_tm))
+Proof
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``parse_code``])
+QED
+
+Theorem deploy_prefix_parse_middle:
+  parse_code 11 m (DROP 11 (^prefix_deploy_bc_tm ++ ^prefix_args_tm)) =
+  parse_code 21
+    (m |+ (11, Swap 0) |+ (12, Dup 1) |+ (13, Swap 2) |+ (14, Swap 1)
+       |+ (15, CodeCopy) |+ (16, MLoad) |+ (17, Push 0 []) |+ (18, MStore)
+       |+ (19, Push 0 []) |+ (20, Push 0 []))
+    (DROP 21 (^prefix_deploy_bc_tm ++ ^prefix_args_tm))
+Proof
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``parse_code``])
+QED
+
+Theorem deploy_prefix_parse_end:
+  parse_code 21 m (DROP 21 (^prefix_deploy_bc_tm ++ ^prefix_args_tm)) =
+  parse_code 33
+    (m |+ (21, Dup 0) |+ (22, Push 2 [0w;33w]) |+ (25, Swap 0)
+       |+ (26, CodeCopy) |+ (27, Push 0 []) |+ (28, Return)
+       |+ (29, JumpDest) |+ (30, Push 0 []) |+ (31, Dup 0) |+ (32, Revert))
+    (DROP 33 (^prefix_deploy_bc_tm ++ ^prefix_args_tm))
+Proof
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``parse_code``])
+QED
+
+Theorem deploy_prefix_parse_args:
+  parse_code 33 m (DROP 33 (^prefix_deploy_bc_tm ++ ^prefix_args_tm)) =
+    m |+ (33, Stop) |+ (34, Stop) |+ (35, Stop) |+ (36, Stop)
+      |+ (37, Stop) |+ (38, Stop) |+ (39, Stop) |+ (40, Stop)
+      |+ (41, Stop) |+ (42, Stop) |+ (43, Stop) |+ (44, Stop)
+      |+ (45, Stop) |+ (46, Stop) |+ (47, Stop) |+ (48, Stop)
+      |+ (49, Stop) |+ (50, Stop) |+ (51, Stop) |+ (52, Stop)
+      |+ (53, Stop) |+ (54, Stop) |+ (55, Stop) |+ (56, Stop)
+      |+ (57, Stop) |+ (58, Stop) |+ (59, Stop) |+ (60, Stop)
+      |+ (61, Stop) |+ (62, Stop) |+ (63, Stop) |+ (64, Add)
+Proof
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >> prefix_parse_let_tac >>
+  prefix_parse_unfold_tac >> prefix_parse_reduce_tac >>
+  REFL_TAC
+QED
+
+val prefix_parsed_tm = ``
+  FEMPTY |+ (0, JumpDest) |+ (1, Push 1 [32w]) |+ (3, Push 0 [])
+    |+ (4, Push 0 []) |+ (5, Add) |+ (6, Push 2 [0w;33w])
+    |+ (9, Add) |+ (10, Push 0 [])
+    |+ (11, Swap 0) |+ (12, Dup 1) |+ (13, Swap 2) |+ (14, Swap 1)
+    |+ (15, CodeCopy) |+ (16, MLoad) |+ (17, Push 0 []) |+ (18, MStore)
+    |+ (19, Push 0 []) |+ (20, Push 0 [])
+    |+ (21, Dup 0) |+ (22, Push 2 [0w;33w]) |+ (25, Swap 0)
+    |+ (26, CodeCopy) |+ (27, Push 0 []) |+ (28, Return)
+    |+ (29, JumpDest) |+ (30, Push 0 []) |+ (31, Dup 0) |+ (32, Revert)
+    |+ (33, Stop) |+ (34, Stop) |+ (35, Stop) |+ (36, Stop)
+    |+ (37, Stop) |+ (38, Stop) |+ (39, Stop) |+ (40, Stop)
+    |+ (41, Stop) |+ (42, Stop) |+ (43, Stop) |+ (44, Stop)
+    |+ (45, Stop) |+ (46, Stop) |+ (47, Stop) |+ (48, Stop)
+    |+ (49, Stop) |+ (50, Stop) |+ (51, Stop) |+ (52, Stop)
+    |+ (53, Stop) |+ (54, Stop) |+ (55, Stop) |+ (56, Stop)
+    |+ (57, Stop) |+ (58, Stop) |+ (59, Stop) |+ (60, Stop)
+    |+ (61, Stop) |+ (62, Stop) |+ (63, Stop) |+ (64, Add)``;
+
+Theorem deploy_prefix_negative_parsed:
+  parse_code 0 FEMPTY (^prefix_deploy_bc_tm ++ ^prefix_args_tm) =
+  ^prefix_parsed_tm
+Proof
+  rewrite_tac[deploy_prefix_parse_prefix, deploy_prefix_parse_middle,
+              deploy_prefix_parse_end, deploy_prefix_parse_args]
+QED
+
 Theorem deploy_prefix_negative_wf_state:
   wf_state ^prefix_es_tm
 Proof
