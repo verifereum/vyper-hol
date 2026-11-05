@@ -1164,3 +1164,11 @@ Proof
   `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
   gvs[frag_observer_cut_def]
 QED
+
+(* Audit task-owned proofs independently of the build cache. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean gas bridge theorem: " ^ name)
+  end) (DB.thms "exprSimAbiGasBridge");
