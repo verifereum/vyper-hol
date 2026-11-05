@@ -1895,3 +1895,56 @@ Proof
   irule entry_local_footprint_outside_closure >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem param_insts_flat_outputs:
+  !params k. param_insts_from k params ==>
+    FLAT (MAP (\i. i.inst_outputs) params) =
+    MAP (\i. HD i.inst_outputs) params
+Proof
+  Induct >> simp[param_insts_from_def] >> rpt strip_tac >>
+  `h.inst_outputs = [HD h.inst_outputs]` by
+    (gvs[param_inst_at_def] >> Cases_on `h.inst_outputs` >> gvs[] >>
+     Cases_on `t'` >> gvs[]) >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `h.inst_outputs = _` (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem ready_entry_param_outputs_distinct:
+  !fn. codegen_ready_fn fn ==>
+    ALL_DISTINCT
+      (MAP (\i. HD i.inst_outputs) (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  rpt strip_tac >>
+  `param_insts_from 0 (get_params (HD fn.fn_blocks).bb_instructions)` by
+    (irule (cj 1 canonical_get_params_layout) >> qexists `fn` >> simp[]) >>
+  drule param_insts_flat_outputs >> disch_then (SUBST1_TAC o SYM) >>
+  qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[codegen_ready_fn_def, canonical_param_prefix_def, ssa_form_def,
+      fn_insts_def, fn_insts_blocks_def] >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
+QED
+
+Theorem entry_installed_structural:
+  !fn params ps0 pi ch growth spill_base lbl_ctr.
+    codegen_ready_fn fn /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    pi = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params ==>
+    FOLDL (\s inst. s with ps_stack :=
+      stack_push (Var (HD inst.inst_outputs)) s.ps_stack) ps0 params = pi /\
+    spill_alloc_layout_wf pi.ps_alloc pi.ps_spilled /\
+    ALL_DISTINCT pi.ps_stack /\
+    DISJOINT (set pi.ps_stack) (FDOM pi.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ready_entry_param_outputs_distinct >> strip_tac >>
+  gvs[parameter_stack_fold, init_cleanup_plan_state_def, init_plan_state_def,
+      init_spill_alloc_def, spill_alloc_layout_wf_def, MAP_MAP_o,
+      ALL_DISTINCT_MAP, combinTheory.o_DEF] >>
+  `MAP (\i. Var (HD i.inst_outputs)) (get_params (HD fn.fn_blocks).bb_instructions) =
+   MAP Var (MAP (\i. HD i.inst_outputs) (get_params (HD fn.fn_blocks).bb_instructions))` by
+    simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  simp[] >> irule ALL_DISTINCT_MAP_INJ >> simp[]
+QED
