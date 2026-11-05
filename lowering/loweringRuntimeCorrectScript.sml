@@ -224,7 +224,7 @@ Theorem external_entry_reaches_body:
     ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
             tx.function_name, args, [], ret, fbody)) =
@@ -274,7 +274,7 @@ Theorem external_body_frame:
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -324,7 +324,7 @@ Theorem external_frame_ret_ok:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -448,7 +448,7 @@ QED
 
 (* call_external_body without a lock, after the value moved to es0 and the
    body ran from es0 to es'. *)
-Theorem call_external_body_run[local]:
+Theorem call_external_body_run:
   !orc am cx mut tenv env fbody ret es0 res es'.
     send_call_value mut cx
       (initial_state am [env] with <| outcomes := orc; requests := [] |>) =

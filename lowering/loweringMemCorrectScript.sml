@@ -120,7 +120,7 @@ Theorem external_entry_reaches_body_mem:
     ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
             tx.function_name, args, [], ret, fbody)) =
@@ -165,7 +165,7 @@ Theorem external_frame_ret_ok_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -233,16 +233,10 @@ Theorem external_body_not_empty_bytes_error:
     res <> INR (Error (RuntimeError "convert empty bytes to signed"))
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all call_external_selected_body >>
-  disch_then (qspec_then `orc` assume_tac) >>
-  `initial_state am [env] with
-     <| outcomes := orc; requests := []; gas_obs := [] |> =
-   initial_state am [env] with <| outcomes := orc; requests := [] |>` by
-    simp[initial_state_def] >>
-  gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
-      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, source_exempt_def,
-      unspecified_behaviour_exempt_def]
+  drule_all call_external_selected_body >> strip_tac >>
+  drule_all call_external_body_run >>
+  disch_then (qspecl_then [`type_env tops`, `ret`] strip_assume_tac) >>
+  gvs[source_exempt_def, unspecified_behaviour_exempt_def]
 QED
 
 Theorem stmt_frag_mem_complete:
@@ -398,9 +392,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
           unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>
@@ -430,7 +422,7 @@ Proof
                         vs_inst_idx := 0 |>)` by
     (drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
   drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
-  drule run_lowering_eom_none >> strip_tac >>
+  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
   drule_all lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
   simp[fixed_region_reserved_def]
 QED

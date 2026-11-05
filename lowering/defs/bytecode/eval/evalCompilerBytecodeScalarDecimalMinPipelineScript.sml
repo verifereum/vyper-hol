@@ -2,7 +2,7 @@
 
 Theory evalCompilerBytecodeScalarDecimalMinPipeline
 Ancestors evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib evalCompilerCleanupPlanLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
@@ -80,33 +80,22 @@ val scalar_decimal_min_max_eom = optionSyntax.dest_some
   (rhs (concl scalar_decimal_min_max_eom_eval))
 val scalar_decimal_min_generate_fn_plan = save_thm
   ("scalar_decimal_min_generate_fn_plan", prove
-    (``∀spill labels.
-        generate_fn_plan ^scalar_decimal_min_fn spill labels =
-        generate_fn_plan_analyzed ^scalar_decimal_min_liveness
-          ^scalar_decimal_min_dfg ^scalar_decimal_min_cfg
+    (``∀ch growth spill labels.
+        generate_fn_plan_with_cleanup ch growth ^scalar_decimal_min_fn spill labels =
+        generate_fn_plan_with_cleanup_analyzed ^scalar_decimal_min_liveness
+          ^scalar_decimal_min_dfg ^scalar_decimal_min_cfg ch growth
           ^scalar_decimal_min_fn spill labels``,
-     simp[stackPlanGenTheory.generate_fn_plan_def,
+     simp[stackPlanGenTheory.generate_fn_plan_with_cleanup_def,
           scalar_decimal_min_liveness_eval,
           scalar_decimal_min_dfg_eval, scalar_decimal_min_cfg_eval]))
 val () = computeLib.upd_compset (computeLib.add_thms
   [scalar_decimal_min_liveness_eval, scalar_decimal_min_dfg_eval,
    scalar_decimal_min_cfg_eval, scalar_decimal_min_generate_fn_plan])
-val scalar_decimal_min_plan_eval = save_thm
-  ("scalar_decimal_min_plan_eval", EVAL
-    ``generate_fn_plan_analyzed ^scalar_decimal_min_liveness
-       ^scalar_decimal_min_dfg ^scalar_decimal_min_cfg ^scalar_decimal_min_fn
-       ^scalar_decimal_min_max_eom 0``)
-val scalar_decimal_min_plan = rhs (concl scalar_decimal_min_plan_eval)
-val scalar_decimal_min_concrete_fn_plan = save_thm
-  ("scalar_decimal_min_concrete_fn_plan", prove
-    (``generate_fn_plan ^scalar_decimal_min_fn ^scalar_decimal_min_max_eom 0 =
-        ^scalar_decimal_min_plan``,
-     simp[scalar_decimal_min_generate_fn_plan,
-          scalar_decimal_min_plan_eval]))
 val () = computeLib.upd_compset
   (fn cs => cs
-    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan``)
-    |> computeLib.add_thms [scalar_decimal_min_concrete_fn_plan])
+    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan_with_cleanup``)
+    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan_with_cleanup_analyzed``)
+    |> computeLib.add_thms [scalar_decimal_min_generate_fn_plan])
 val scalar_decimal_min_context_plan_step1 = SIMP_CONV (srw_ss())
   [stackPlanGenTheory.generate_context_plan_def,
    stackPlanGenTheory.generate_context_plan_with_def,
@@ -116,12 +105,16 @@ val scalar_decimal_min_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^scalar_decimal_min_unit).cu_context``
 val scalar_decimal_min_context_plan_step2 =
   EVAL (rhs (concl scalar_decimal_min_context_plan_step1))
-(* With generate_fn_plan scrubbed and replaced by the concrete plan above,
-   evaluation finishes the whole context plan. *)
+(* Cache the cleanup-aware path with the context's real arguments.  Concrete
+   results need no planner-call extraction. *)
+val scalar_decimal_min_context_plan_step3 = cleanup_plan_conv
+  (rhs (concl scalar_decimal_min_context_plan_step2))
 val scalar_decimal_min_context_plan_eval = save_thm
   ("scalar_decimal_min_context_plan_eval",
    TRANS scalar_decimal_min_context_plan_step1
-     scalar_decimal_min_context_plan_step2)
+    (TRANS scalar_decimal_min_context_plan_step2
+      (TRANS scalar_decimal_min_context_plan_step3
+        (EVAL (rhs (concl scalar_decimal_min_context_plan_step3))))))
 val scalar_decimal_min_context_plan = optionSyntax.dest_some
   (rhs (concl scalar_decimal_min_context_plan_eval))
 val scalar_decimal_min_target_wf_eval = EVAL
@@ -206,22 +199,7 @@ Proof
        scalar_decimal_min_runtime_pipeline_def,
        scalar_decimal_min_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> simp[] >>
-  rename1 `resolve_o1_policy _ = SOME rpolicy` >>
-  Cases_on `lower_vyper_runtime_unit tops rpolicy` >> simp[] >>
-  rename1 `lower_vyper_runtime_unit _ _ = SOME runtime_unit` >>
-  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
-              runtime_unit` >> simp[] >>
-  rename1 `run_venom_pipeline _ _ _ _ _ _ = SOME runtime_out` >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `finalize_codegen (K SOME) rpolicy runtime_out.po_unit` >> simp[] >>
-  rename1 `finalize_codegen _ _ _ = SOME runtime_bytecode` >>
-  Cases_on `lower_vyper_deploy_unit tops rpolicy runtime_bytecode` >> simp[] >>
-  rename1 `lower_vyper_deploy_unit _ _ _ = SOME deploy_unit` >>
-  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
-              deploy_unit` >> simp[] >>
-  IF_CASES_TAC >> simp[] >>
-  CASE_TAC >> simp[]
+  rpt CASE_TAC >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

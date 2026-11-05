@@ -22,14 +22,16 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  externalEntryProps constructorGuardProps
+  nonreentrantEntryEquiv internalReturnLockProps
+  transientLockFrameProps
+  selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
   e2eDeployFrame
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
-  loweringShapeDefs
-  loweringShapeProps
-  ctorShapeProps
+  loweringShapeDefs loweringShapeProps ctorShapeProps
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
