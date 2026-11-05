@@ -5487,6 +5487,108 @@ Proof
   qexists_tac `active'` >> simp[]
 QED
 
+Theorem asm_call_trace_before_final_pop:
+  wf_state s /\ s.contexts = child::saved /\
+  (!k. k <= n ==>
+    LENGTH saved < LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts) /\
+  mid = SND (FUNPOW (step o SND) n (INL (),s)) /\
+  step mid = (r,t) /\ LENGTH t.contexts = LENGTH saved ==>
+  wf_state mid /\ ?c rb. mid.contexts = (c,rb)::saved /\
+    c.msgParams = (FST child).msgParams
+Proof
+  strip_tac >> drule_all asm_call_bottom_message_finite >> strip_tac >>
+  gvs[] >>
+  drule_all step_length_not_drop_more_than_one >> strip_tac >>
+  namedCases_on `active` ["", "head tail"] >> gvs[] >>
+  `tail = []` by (Cases_on `tail` >> gvs[]) >> gvs[] >>
+  PairCases_on `head` >> gvs[]
+QED
+
+Theorem asm_call_final_memory_raw:
+  wf_state mid /\ (?d. mid.msdomain = Collect d) /\
+  mid.contexts = (c,rb)::(parent,prb)::rest /\
+  c.msgParams.outputTo = Memory mr /\
+  step mid = (r,t) /\ LENGTH t.contexts < LENGTH mid.contexts ==>
+  ?ex u c'. step_inner mid = (INR ex,u) /\
+    u.contexts = (c',rb)::(parent,prb)::rest /\
+    c'.msgParams = c.msgParams /\ ~vfm_abort ex /\
+    handle_exception ex u = (r,t) /\
+    EVERY (wf_context o FST) u.contexts /\ stack_room_ok u /\ gas_stack_ok u
+Proof
+  strip_tac >>
+  `mid.contexts <> []` by simp[] >>
+  drule_all asm_call_step_drop_raw_view >> strip_tac >>
+  `~vfm_abort ex` by
+    (drule_at (Pat `step_inner _ = _`) asm_call_step_inner_noabort >> simp[]) >>
+  qpat_x_assum `same_frame_rel _ _` mp_tac >>
+  simp[vfmSameFrameTheory.same_frame_rel_def] >> strip_tac >>
+  `u.contexts <> []` by (Cases_on `u.contexts` >> gvs[]) >>
+  `handle_step ex u = handle_exception ex u` by
+    (irule asm_call_memory_handle_step >> simp[] >> metis_tac[]) >>
+  Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+QED
+
+Theorem asm_call_finite_collect:
+  !n. (?d. s.msdomain = Collect d) ==>
+    ?d. (SND (FUNPOW (step o SND) n (INL (),s))).msdomain = Collect d
+Proof
+  Induct >- simp[] >> strip_tac >>
+  first_x_assum mp_tac >> simp[] >> strip_tac >>
+  simp[arithmeticTheory.FUNPOW_SUC] >>
+  qmatch_goalsub_abbrev_tac `step mid` >>
+  `?d. mid.msdomain = Collect d` by simp[Abbr `mid`] >>
+  Cases_on `step mid` >> gvs[] >>
+  drule_at (Pat `step _ = _`) step_preserves_collect >> simp[]
+QED
+
+Theorem asm_call_run_last_source:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = child::saved /\ run_call s = SOME (INL (),t) /\
+  LENGTH t.contexts = LENGTH saved ==>
+  ?mid c rb. wf_state mid /\ (?d. mid.msdomain = Collect d) /\
+    mid.contexts = (c,rb)::saved /\ c.msgParams = (FST child).msgParams /\
+    step mid = (INL (),t)
+Proof
+  strip_tac >> drule run_call_finite_trace >> strip_tac >>
+  Cases_on `n` >- gvs[] >>
+  qmatch_asmsub_abbrev_tac `FUNPOW (step o SND) (SUC n') start` >>
+  qabbrev_tac `mid = SND (FUNPOW (step o SND) n' start)` >>
+  `step mid = (INL (),t)` by
+    (gvs[arithmeticTheory.FUNPOW_SUC, Abbr `mid`]) >>
+  `!k. k <= n' ==> LENGTH saved <
+      LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts` by
+    (rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+  `wf_state mid /\ ?c rb. mid.contexts = (c,rb)::saved /\
+      c.msgParams = (FST child).msgParams` by
+    (irule asm_call_trace_before_final_pop >>
+     conj_tac
+     >- (qexistsl_tac [`n'`,`s`] >> simp[Abbr `mid`, Abbr `start`]) >>
+     qexistsl_tac [`INL ()`,`t`] >> simp[]) >>
+  `?d. mid.msdomain = Collect d` by
+    (simp[Abbr `mid`, Abbr `start`] >> irule asm_call_finite_collect >> simp[]) >>
+  qexistsl_tac [`mid`,`c`,`rb`] >> simp[]
+QED
+
+Theorem asm_call_run_final_memory_view:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?mid ex u c rb. wf_state mid /\ (?d. mid.msdomain = Collect d) /\
+    step mid = (INL (),t) /\ step_inner mid = (INR ex,u) /\
+    u.contexts = (c,rb)::(parent,prb)::rest /\
+    c.msgParams = child.msgParams /\ ~vfm_abort ex /\
+    handle_exception ex u = (INL (),t) /\
+    EVERY (wf_context o FST) u.contexts /\ stack_room_ok u /\ gas_stack_ok u
+Proof
+  strip_tac >> drule_at (Pat `run_call _ = _`) asm_call_run_last_source >>
+  simp[] >> strip_tac >>
+  `c.msgParams.outputTo = Memory mr` by simp[] >>
+  `LENGTH t.contexts < LENGTH mid.contexts` by simp[] >>
+  drule_at (Pat `step _ = _`) asm_call_final_memory_raw >> simp[] >> strip_tac >>
+  qexistsl_tac [`mid`,`ex`,`u`,`c'`,`rb`] >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
