@@ -47,6 +47,27 @@ Proof
   Cases_on `r` >> gvs[]
 QED
 
+Theorem frame_obs_tr_child:
+  !h r post d pre obs t.
+  h = SUC d /\ d < LENGTH pre.contexts /\
+  run_call_tr h (r,post) = (INL (),t) /\ LENGTH t.contexts = d ==>
+  frame_obs_tr d obs pre (r,post) =
+  frame_obs_tr d (observe d pre ((INL () : unit + exception option),t) obs)
+    t (step t)
+Proof
+  recInduct run_call_tr_ind >> rpt strip_tac >> gvs[] >>
+  Cases_on `r` >- (
+    Cases_on `LENGTH s.contexts < SUC (LENGTH t.contexts)` >- (
+      qpat_x_assum `run_call_tr _ _ = _` mp_tac >>
+      once_rewrite_tac[run_call_tr_def] >> simp[] >> strip_tac >> gvs[] >>
+      once_rewrite_tac[frame_obs_tr_def] >> simp[observe_def]) >>
+    qpat_x_assum `run_call_tr _ _ = _` mp_tac >>
+    once_rewrite_tac[run_call_tr_def] >> simp[] >> strip_tac >>
+    once_rewrite_tac[frame_obs_tr_def] >> simp[observe_def]) >>
+  qpat_x_assum `run_call_tr _ _ = _` mp_tac >>
+  once_rewrite_tac[run_call_tr_def] >> simp[]
+QED
+
 (* ===== call_trace and gas_readings ===== *)
 
 Theorem frame_obs_plain_step:
