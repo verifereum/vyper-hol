@@ -15,7 +15,7 @@ Ancestors
   bodyPtrIntCallStageBoundary bodyPtrIntCallGhostTaint bodyPtrIntCallAuxEntry
   bodyPtrIntCallScalarStore bodyPtrIntCallMaterialize bodyPtrIntCallMaterializeList
   bodyPtrIntCallParamPrefix bodyPtrIntCallEntryMaterialize bodyPtrIntCallReturnAlign
-  bodyPtrIntCallPrologue
+  bodyPtrIntCallPrologue bodyPtrIntCallRoom
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
