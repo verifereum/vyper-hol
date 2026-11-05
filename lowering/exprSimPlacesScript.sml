@@ -51,7 +51,7 @@
 Theory exprSimPlaces
 Ancestors
   list exprSim exprSimHyps exprSimPop exprSimAttribute exprSimTuple
-  exprSimArrayIndex exprSimArraySubscript
+  exprSimArrayIndex exprSimArraySubscript exprLoweringProps fragExec compileEnv
   exprLowering exprCallbackContracts placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* ===== Subscripts ===== *)
@@ -236,8 +236,118 @@ Theorem compile_subscript_array_nopop_case:
              ~cenv.ce_is_ctor /\ ~expr_has_effect idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env obj es` by
+    (drule_all expr_body_pre_subscript_array_base >> simp[]) >>
+  `nocalls ==> int_calls_expr obj = []` by
+    gvs[int_calls_expr_def] >>
+  `expr_vv_sim ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
+     simp[expr_vv_case_def] >> disch_then irule >> simp[] >>
+     qexists_tac `env` >> simp[]) >>
+  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_expr_array_subscript >> strip_tac >> gvs[] >>
+  rename1 `compile_expr cenv ty obj sa = (bvv,sm)` >>
+  rename1 `lower_value compile_expr cenv ty idx sm = (iop,si)` >>
+  `ci_mono si sb` by
+    metis_tac[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load,
+              pairTheory.SND] >>
+  drule (cj 1 compile_expr_grows) >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >> strip_tac >>
+  `cs_extends si sb` by fs[ci_mono_def] >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm si func /\ fn_has_code si sb func` by
+    metis_tac[fn_has_code_split] >>
+  irule frag_exec_pointwise_control >> rpt strip_tac >> gvs[] >>
+  Cases_on `eval_expr cx obj es` >> rename1 `_ = (er,es1)` >>
+  `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
+  simp[expr_vv_sim_def] >> disch_then drule_all >>
+  disch_then (qspec_then `s0` assume_tac) >>
+  Cases_on `er`
+  >- suspend "base_success" >>
+  gvs[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def] >>
+  irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Resume compile_subscript_array_nopop_case[base_success]:
+  rename1 `eval_expr cx obj es = (INL btv,es1)` >> gvs[] >>
+  `expr_body_pre cenv cx env idx es1` by
+    (drule_all expr_body_pre_subscript_array_index_after >> simp[]) >>
+  `nocalls ==> int_calls_expr idx = []` by gvs[int_calls_expr_def] >>
+  `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
+  `expr_sim ctx func cenv cx ty idx es1` by
+    (drule_all expr_sim_case_apply >> simp[]) >>
+  irule frag_exec_seq >>
+  qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`, `sm`] >>
+  simp[] >> conj_tac
+  >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[expr_exit_def]) >>
+  irule frag_exec_pointwise >> rpt strip_tac >> gvs[] >>
+  rename1 `vv_post _ _ _ _ obj _ _ _ _ _ _ _ q0` >>
+  `stmt_state_rel ctx func cenv cx es1 q0` by fs[vv_post_def] >>
+  `local_ptrs_reserved cenv sm` by
+    (drule_all compile_expr_local_ptrs_reserved >> simp[]) >>
+  Cases_on `(do result <- eval_expr cx idx; read_result cx result od) es1` >>
+  rename1 `_ = (ir,es2)` >>
+  `expr_res_ok ir` by (drule_all expr_body_pre_res_ok >> simp[]) >>
+  qpat_x_assum `expr_sim _ _ _ _ _ idx _` mp_tac >>
+  simp[expr_sim_def] >> disch_then drule_all >>
+  disch_then (qspec_then `q0` assume_tac) >>
+  Cases_on `eval_expr cx idx es1` >> rename1 `_ = (itr,eit)` >>
+  Cases_on `itr`
+  >- suspend "index_read" >>
+  gvs[vyperStateTheory.bind_def] >>
+  gvs[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def] >>
+  irule frag_exec_exit_prefix >> qexists_tac `si` >> simp[] >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  gen_tac >> Cases_on `r` >> Cases_on `y` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+QED
+Resume compile_subscript_array_nopop_case[index_read]:
+  rename1 `eval_expr cx idx es1 = (INL itv,eit)` >>
+  gvs[vyperStateTheory.bind_def] >>
+  drule vyperStateTheory.read_result_state >> strip_tac >> gvs[] >>
+  Cases_on `ir`
+  >- suspend "index_success" >>
+  gvs[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def] >>
+  irule frag_exec_exit_prefix >> qexists_tac `si` >> simp[] >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  gen_tac >> Cases_on `r` >> rename1 `INR exc` >>
+  Cases_on `exc` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+QED
+Resume compile_subscript_array_nopop_case[index_success]:
+  rename1 `read_result cx itv eit = (INL iv,eit)` >> gvs[] >>
+  irule frag_exec_seq >>
+  qexistsl_tac [`expr_post ctx func cenv cx idx es1 sm si q0 eit iv iop`, `si`] >>
+  simp[] >> conj_tac
+  >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[expr_exit_def]) >>
+  irule frag_exec_pointwise >> rpt strip_tac >> gvs[] >>
+  rename1 `expr_post _ _ _ _ idx _ _ _ _ _ _ _ q1` >>
+  `~expr_has_pop obj /\ ~expr_has_pop idx` by fs[expr_has_pop_def, supportedExprTraverseTheory.supported_expr_exists_def,
+      expr_pop_root_def] >>
+  `vv_post ctx func cenv cx obj es sa si s0 eit btv bvv q1` by
+    (drule_all compile_array_endpoint_post >> simp[]) >>
+  qpat_x_assum `frag_exec ctx sa sm _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx sm si _ _ _` kall_tac >>
+  `expr_sim_inv cenv cx env eit /\
+   eval_result_typed (env,cx,eit) itv (Type (expr_type idx))` by
+    (drule_all expr_body_pre_eval_result >> simp[]) >>
+  `select_result cx (ArrayT et bd) btv (ValueSubscript iv) eit = (res,es')` by
+    (qpat_x_assum `eval_expr cx (Subscript _ _ _) es = _` mp_tac >>
+     simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def]) >>
+  irule compile_array_selection_suffix >>
+  qpat_assum `compile_expr cenv ty obj sa = _` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> qexists_tac `env` >> simp[] >>
+  strip_tac >>
+  qpat_x_assum `!ty st. vv_location _ = SOME LocCode ==> _`
+    (qspecl_then [`ty`, `sa`] mp_tac) >> simp[]
+QED
+Finalise compile_subscript_array_nopop_case
 
 (* An element of an array in a subscript with a pop (expr_has_pop,
    exprSimHyps).  ADMITTED (cheat), with target_subscript_pop_case on the
