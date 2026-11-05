@@ -491,6 +491,72 @@ Proof
   drule (cj 1 fn_plan_aux_no_forbidden) >> simp[] >> gvs[]
 QED
 
+Theorem generate_context_regions_no_forbidden[local]:
+  !fns acc acc'.
+  generate_context_regions gen fns acc = SOME acc' /\
+  (!fn sb lc ops ps name.
+    MEM fn fns /\ gen fn sb lc = SOME (ops, ps) /\
+    MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) ops) /\
+  (!r name. MEM r acc.cpa_regions /\
+    MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) r.sr_plan) ==>
+  !r name. MEM r acc'.cpa_regions /\
+    MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) r.sr_plan
+Proof
+  Induct >> simp[generate_context_regions_def] >>
+  rpt gen_tac >> simp[AllCaseEqs()] >> rpt strip_tac >>
+  (first_x_assum (drule_then (qspecl_then [`r`, `name`] mp_tac)) >>
+   impl_tac >- (rw[MEM_SNOC] >> gvs[] >> metis_tac[]) >> simp[])
+QED
+
+Theorem generate_context_plan_no_forbidden[local]:
+  generate_context_plan ctx = SOME cplan /\
+  EVERY (\fn. EVERY (\inst. ~MEM inst.inst_opcode
+    [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) (fn_insts fn)) ctx.ctx_functions ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (SOEmit name) (context_plan_ops cplan)
+Proof
+  simp[generate_context_plan_def, generate_context_plan_with_def, AllCaseEqs()] >>
+  strip_tac >>
+  `!r name. MEM r acc.cpa_regions /\
+    MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) r.sr_plan` by
+    (rpt strip_tac >> drule generate_context_regions_no_forbidden >>
+     disch_then (qspecl_then [`r`, `name`] mp_tac) >>
+     impl_tac
+     >- (simp[] >> rpt strip_tac >>
+         drule generate_fn_plan_with_cleanup_no_forbidden >>
+         gvs[EVERY_MEM] >> metis_tac[]) >> gvs[]) >>
+  gvs[context_plan_ops_def, finish_context_plan_def,
+      revert_postamble_def, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem unit_shape_no_forbidden[local]:
+  unit_shape_ok unit ==>
+  EVERY (\fn. EVERY (\inst. ~MEM inst.inst_opcode
+    [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) (fn_insts fn))
+    unit.cu_context.ctx_functions
+Proof
+  simp[unit_shape_ok_def, fn_shape_ok_def, inst_shape_ok_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem codegen_assembly_no_forbidden[local]:
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (AsmOp name) prog
+Proof
+  strip_tac >> drule unit_shape_no_forbidden >> strip_tac >>
+  gvs[codegen_assembly_def, AllCaseEqs()] >>
+  drule generate_context_plan_no_forbidden >> simp[] >>
+  strip_tac >> rpt strip_tac >>
+  gvs[] >>
+  metis_tac[execute_plan_no_forbidden, data_suffix_no_op, MEM, MEM_APPEND]
+QED
+
 
 
 Theorem codegen_assembly_frame_prog_ok:
