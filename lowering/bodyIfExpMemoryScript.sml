@@ -685,6 +685,19 @@ Proof
   cheat
 QED
 
+Theorem ifexp_word_lowering_result[local]:
+  is_word_type t /\
+  lower_value compile_expr cenv ty (IfExp t c a b) sa = (op,sb) ==>
+  ?rv. op = Var rv /\
+    compile_expr cenv ty (IfExp t c a b) sa = (StackValue t (Var rv),sb)
+Proof
+  simp[lower_value_def, comp_bind_def] >> strip_tac >>
+  Cases_on `compile_expr cenv ty (IfExp t c a b) sa` >>
+  rename1 `compile_expr cenv ty (IfExp t c a b) sa = (vv,sm)` >>
+  gvs[] >> drule compile_expr_ifexp >> strip_tac >>
+  gvs[unwrap_value_def, comp_return_def]
+QED
+
 Theorem compile_ifexp_word_sim_mem:
   !ctx func cenv cx ty t c a b es.
     is_word_type t /\
@@ -706,6 +719,8 @@ Theorem compile_ifexp_word_sim_mem:
        expr_vv_sim_mem ctx func cenv cx ty b es1) ==>
     expr_sim_mem ctx func cenv cx ty (IfExp t c a b) es
 Proof
+  rpt gen_tac >> strip_tac >>
+  simp[expr_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  drule_all ifexp_word_lowering_result >> strip_tac >> gvs[] >>
   cheat
-
 QED
