@@ -1719,3 +1719,202 @@ Proof
   irule phi_live_out_backward_edge >> goal_assum drule >>
   simp[] >> qexistsl_tac [`next`, `next_bb`] >> simp[] >> metis_tac[]
 QED
+
+Theorem phi_path_last_suffix[local]:
+  !path fn target.
+    is_fn_path fn path /\ MEM target path ==>
+    ?tail. is_fn_path fn (target::tail) /\
+      LAST (target::tail) = LAST path /\ ~MEM target tail /\
+      (!lbl. MEM lbl (target::tail) ==> MEM lbl path)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `is_fn_path fn (head::rest)` >> strip_tac >>
+  Cases_on `MEM target rest`
+  >- (`is_fn_path fn rest` by
+        (Cases_on `rest` >> gvs[venomWfTheory.is_fn_path_def]) >>
+      first_x_assum drule_all >> strip_tac >>
+      qexists_tac `tail` >> Cases_on `rest` >> gvs[] >> metis_tac[]) >>
+  `head = target` by gvs[] >> gvs[] >>
+  qexists_tac `rest` >> simp[]
+QED
+
+Theorem phi_path_member_reachable[local]:
+  !path fn lbl. is_fn_path fn path /\ path <> [] /\
+    fn_reachable fn (HD path) /\ MEM lbl path ==> fn_reachable fn lbl
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `is_fn_path fn (head::tail)` >> strip_tac >>
+  Cases_on `lbl = head` >- gvs[] >>
+  Cases_on `tail` >- gvs[] >>
+  rename1 `is_fn_path fn (head::next::rest)` >>
+  `fn_cfg_edge fn head next /\ is_fn_path fn (next::rest)` by
+    gvs[venomWfTheory.is_fn_path_def] >>
+  `fn_reachable fn next` by
+    (gvs[venomWfTheory.fn_reachable_def] >>
+     metis_tac[relationTheory.RTC_RULES_RIGHT1]) >>
+  first_x_assum irule >> gvs[] >> metis_tac[]
+QED
+
+Theorem phi_reachable_lookup[local]:
+  wf_function fn /\ fn_reachable fn lbl ==>
+    ?bb. lookup_block lbl fn.fn_blocks = SOME bb
+Proof
+  strip_tac >> gvs[venomWfTheory.fn_reachable_def] >>
+  gvs[Once relationTheory.RTC_CASES2]
+  >- (gvs[fn_entry_label_def, entry_block_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[] >>
+      rename1 `head::tail` >> qexists_tac `head` >>
+      irule venomExecPropsTheory.MEM_lookup_block >>
+      gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  gvs[venomWfTheory.fn_cfg_edge_def] >>
+  `MEM lbl (fn_labels fn)` by
+    metis_tac[venomWfTheory.wf_function_def, venomWfTheory.fn_succs_closed_def] >>
+  gvs[fn_labels_def, listTheory.MEM_MAP] >>
+  metis_tac[venomExecPropsTheory.MEM_lookup_block, venomWfTheory.wf_function_def,
+            fn_labels_def]
+QED
+
+Theorem phi_defined_live_out_back[local]:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs /\
+  fn_dominates fn bb.bb_label p /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions))
+Proof
+  strip_tac >>
+  `wf_function fn /\ ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `fn_reachable fn p` by gvs[venomWfTheory.fn_dominates_def] >>
+  qpat_assum `fn_reachable fn p`
+    (strip_assume_tac o REWRITE_RULE [venomWfTheory.fn_reachable_def]) >>
+  drule phi_rtc_path >> strip_tac >>
+  `MEM bb.bb_label path` by
+    (gvs[venomWfTheory.fn_dominates_def] >> metis_tac[]) >>
+  `fn_reachable fn (HD path)` by
+    (simp[venomWfTheory.fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
+  `!lbl. MEM lbl path ==> fn_reachable fn lbl` by
+    metis_tac[phi_path_member_reachable] >>
+  drule_all phi_path_last_suffix >> strip_tac >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  irule (SRULE [] (Q.SPEC `bb.bb_label::tail` phi_live_out_backward_path)) >>
+  simp[] >> qexists_tac `pb` >> simp[] >>
+  qexists_tac `tail` >> simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> metis_tac[phi_reachable_lookup, listTheory.MEM]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `lookup_block lbl fn.fn_blocks = SOME other_bb` >>
+  `MEM other_bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `other_bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  strip_tac >> gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  `other_bb = bb` by metis_tac[removeUnusedSsaProofsTheory.ssa_unique_output_block] >>
+  metis_tac[]
+QED
+
+Theorem phi_prefix_outputs_disjoint_suffix[local]:
+  !insts v.
+    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) /\
+    MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis insts))) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs)
+      (DROP (LENGTH (collect_phis insts)) insts)))
+Proof
+  Induct >- simp[collect_phis_def] >> rpt gen_tac >>
+  rename1 `collect_phis (head::tail)` >>
+  Cases_on `head.inst_opcode = PHI` >>
+  simp[collect_phis_def, listTheory.ALL_DISTINCT_APPEND] >>
+  rpt strip_tac >> gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  `MEM inst tail` by
+    (gvs[listTheory.MEM_DROP] >> metis_tac[listTheory.EL_MEM]) >>
+  metis_tac[]
+QED
+
+Theorem phi_block_outputs_distinct[local]:
+  ssa_form fn /\ MEM bb fn.fn_blocks ==>
+    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  strip_tac >> gvs[venomWfTheory.ssa_form_def, fn_insts_def] >>
+  qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  Q.SPEC_TAC (`fn.fn_blocks`, `blocks`) >>
+  Induct >> simp[fn_insts_blocks_def, listTheory.MAP_APPEND,
+    listTheory.FLAT_APPEND, listTheory.ALL_DISTINCT_APPEND] >>
+  metis_tac[]
+QED
+
+Theorem phi_output_exit_live_prefix[local]:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  MEM outphi (collect_phis bb.bb_instructions) /\ MEM v outphi.inst_outputs /\
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `wf_function fn /\ ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    metis_tac[phi_block_outputs_distinct] >>
+  `~MEM v (FLAT (MAP (\inst. inst.inst_outputs)
+    (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)))` by
+    (irule phi_prefix_outputs_disjoint_suffix >> simp[] >>
+     simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (Q.SPEC_TAC (`bb.bb_instructions`, `insts`) >> Induct >>
+     simp[collect_phis_def] >> rw[]) >>
+  irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
+  goal_assum drule >> simp[] >> qexists_tac `LENGTH bb.bb_instructions` >>
+  simp[] >> rpt strip_tac >>
+  `MEM (EL k bb.bb_instructions)
+    (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)` by
+    (simp[listTheory.MEM_DROP] >>
+     qexists_tac `k - LENGTH (collect_phis bb.bb_instructions)` >> simp[]) >>
+  qpat_x_assum `~MEM v (FLAT _)` mp_tac >>
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  metis_tac[inst_defs_def]
+QED
+
+Theorem phi_prefix_output_not_operand:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  MEM phi (collect_phis bb.bb_instructions) /\
+  MEM outphi (collect_phis bb.bb_instructions) /\ MEM v outphi.inst_outputs ==>
+  ~MEM (Var v) phi.inst_operands
+Proof
+  strip_tac >> strip_tac >>
+  `wf_function fn /\ ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `MEM outphi bb.bb_instructions` by
+    metis_tac[livenessProofsTheory.collect_phis_mem] >>
+  `phi_edge_uses_wf fn bb phi` by metis_tac[phi_codegen_edge_wf] >>
+  `fn_reachable fn bb.bb_label` by metis_tac[phi_edge_operand_reachable] >>
+  `?p. MEM (p,v) (phi_pairs phi.inst_operands)` by
+    (gvs[venomWfTheory.phi_edge_uses_wf_def] >>
+     metis_tac[venomWfTheory.phi_well_formed_var_pair]) >>
+  `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = p /\
+    def_available_at fn pb NONE v` by
+    (gvs[venomWfTheory.phi_edge_uses_wf_def] >> metis_tac[]) >>
+  `lookup_block p fn.fn_blocks = SOME pb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  `fn_dominates fn bb.bb_label p` by
+    (qpat_x_assum `def_available_at _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [venomWfTheory.def_available_at_def]) >>
+     `def_bb = bb` by
+       metis_tac[removeUnusedSsaProofsTheory.ssa_unique_output_block] >>
+     gvs[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions))` by
+    (irule phi_pair_live_out >> goal_assum drule >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions))` by
+    (irule phi_defined_live_out_back >> goal_assum drule >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH (collect_phis bb.bb_instructions)))` by
+    (irule phi_output_exit_live_prefix >> goal_assum drule >> metis_tac[]) >>
+  `MEM v (inst_uses phi)` by
+    metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
+  metis_tac[phi_codegen_input_dead_after_prefix]
+QED
