@@ -420,3 +420,15 @@ QED
  * outputs, but the exact-live upper invariant needs redesign/qualification
  * before global instruction induction. No frozen theorem/definition changed.
  *)
+
+Theorem definition_support_output_fresh:
+  !fn bb i ps.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      demand_available fn bb i v) ==>
+    EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+      (EL i bb.bb_instructions).inst_outputs
+Proof
+  rpt strip_tac >> simp[listTheory.EVERY_MEM] >>
+  metis_tac[current_output_not_demand_available]
+QED

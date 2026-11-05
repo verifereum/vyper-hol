@@ -364,3 +364,25 @@ Proof
   `demand_available fn bb (SUC i) v` by metis_tac[EVERY_MEM] >>
   metis_tac[demand_available_step_back]
 QED
+
+Theorem demand_available_mono:
+  !fn bb i j v. i <= j /\ demand_available fn bb i v ==>
+    demand_available fn bb j v
+Proof
+  rpt strip_tac >> gvs[demand_available_def] >>
+  qexistsl_tac [`db`, `di`] >> simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `k` >> simp[] >> decide_tac
+QED
+
+Theorem current_output_demand_available_suc:
+  !fn bb i v.
+    wf_function fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\ MEM v (EL i bb.bb_instructions).inst_outputs ==>
+    demand_available fn bb (SUC i) v
+Proof
+  rpt strip_tac >> simp[demand_available_def] >>
+  qexistsl_tac [`bb`, `EL i bb.bb_instructions`] >> simp[EL_MEM] >>
+  conj_tac
+  >- (simp[fn_dominates_def] >> rpt strip_tac >> metis_tac[LAST_MEM]) >>
+  qexists_tac `i` >> simp[]
+QED
