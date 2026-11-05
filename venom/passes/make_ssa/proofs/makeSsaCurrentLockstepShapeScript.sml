@@ -14,6 +14,7 @@ Theory makeSsaCurrentLockstepShape
 Ancestors
   makeSsaCurrentProps makeSsaCurrentDefs o1PassContract unitShapeDefs
   venomWf venomExecSemantics venomExecProofs simplifyCfgStruct irSupply venomInst list
+  makeSsaCurrentCleanupBoundary o1MakeSsaFormats
 
 (* List-level shape boundaries. *)
 Theorem phi_prefix_length_prepend:
@@ -151,16 +152,6 @@ Proof
 QED
 
 (* Renaming keeps positional instruction signatures. *)
-Theorem rename_current_outputs_length:
-  !vs s rs rs' s' vs'.
-  rename_current_outputs s rs vs = (rs',s',vs') ==>
-  LENGTH vs' = LENGTH vs
-Proof
-  Induct >> simp[rename_current_outputs_def] >> rpt gen_tac >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
-  first_x_assum drule >> gvs[]
-QED
-
 Theorem rename_current_inst_signature:
   rename_current_inst s rs i = (rs',s',i') ==>
   (i'.inst_opcode,i'.inst_id,LENGTH i'.inst_outputs) =
@@ -168,7 +159,7 @@ Theorem rename_current_inst_signature:
 Proof
   simp[rename_current_inst_def] >>
   IF_CASES_TAC >> pairarg_tac >> gvs[] >> strip_tac >>
-  gvs[] >> drule rename_current_outputs_length >> simp[]
+  gvs[] >> drule o1MakeSsaFormatsTheory.rename_current_outputs_length >> simp[]
 QED
 
 Theorem rename_current_block_insts_signatures:
@@ -369,13 +360,6 @@ Proof
   Cases_on `copies` >> gvs[phi_prefix_length_drop, phi_prefix_length_def]
 QED
 
-Theorem reassign_current_inst_ids_length:
-  LENGTH (reassign_current_inst_ids ids xs) = LENGTH xs
-Proof
-  mp_tac (Q.SPECL [`ids`, `xs`] reassign_current_inst_ids_projection) >>
-  disch_then (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]
-QED
-
 Theorem reassign_current_inst_ids_EL:
   k < LENGTH xs ==>
   (EL k (reassign_current_inst_ids ids xs)).inst_opcode = (EL k xs).inst_opcode /\
@@ -385,13 +369,7 @@ Proof
   strip_tac >>
   mp_tac (Q.SPECL [`ids`, `xs`] reassign_current_inst_ids_projection) >>
   disch_then (mp_tac o Q.AP_TERM `EL k`) >>
-  simp[EL_MAP, reassign_current_inst_ids_length]
-QED
-
-Theorem simplify_current_phi_prefix_length:
-  LENGTH (simplify_current_phi_prefix xs) = LENGTH xs
-Proof
-  metis_tac[LENGTH_MAP, MAP_simplify_current_phi_prefix_ids]
+  simp[EL_MAP, makeSsaCurrentCleanupBoundaryTheory.current_reassign_length]
 QED
 
 Theorem simplify_current_phi_prefix_bound:
@@ -436,7 +414,7 @@ Proof
   `(EL k (simplify_current_phi_prefix xs)).inst_id = (EL k xs).inst_id` by
     (qspec_then `xs` mp_tac (GEN_ALL MAP_simplify_current_phi_prefix_ids) >>
      disch_then (mp_tac o Q.AP_TERM `EL k`) >>
-     simp[EL_MAP, simplify_current_phi_prefix_length]) >>
+     simp[EL_MAP, makeSsaCurrentCleanupBoundaryTheory.current_phi_prefix_length]) >>
   simp[] >>
   simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
   drule simplify_current_phi_prefix_parts_length >> strip_tac >>
@@ -451,7 +429,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem simplify_current_phi_block_shape:
+Theorem simplify_current_phi_block_layout:
   LENGTH (simplify_current_phi_block b).bb_instructions = LENGTH b.bb_instructions /\
   phi_prefix_length (simplify_current_phi_block b).bb_instructions <=
     phi_prefix_length b.bb_instructions /\
@@ -469,7 +447,7 @@ Theorem simplify_current_phi_block_shape:
 Proof
   Cases_on `b.bb_instructions` >> simp[simplify_current_phi_block_def] >>
   IF_CASES_TAC >> simp[] >>
-  simp[simplify_current_phi_prefix_length, simplify_current_phi_prefix_bound,
+  simp[makeSsaCurrentCleanupBoundaryTheory.current_phi_prefix_length, simplify_current_phi_prefix_bound,
        simplify_current_phi_prefix_copies] >>
   rpt strip_tac >> drule simplify_current_phi_prefix_suffix >> simp[]
 QED
@@ -495,7 +473,7 @@ Proof
       >- (drule_at Any lookup_block_map_relation >>
           disch_then (qspec_then `simplify_current_phi_block` mp_tac) >>
           simp[] >> strip_tac >>
-          simp[simplify_current_phi_block_shape]) >>
+          simp[simplify_current_phi_block_layout]) >>
       qexists `b` >> simp[]) >>
   qexists `b` >> simp[]
 QED
