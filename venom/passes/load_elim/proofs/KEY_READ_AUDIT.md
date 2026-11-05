@@ -247,3 +247,21 @@ validity. Later rounds analyze transformed functions: they still need a
 separate no-ALLOCA preservation argument (or their own wrapper antecedent)
 before using `le_bp_analyze_empty`. Do not transfer the original universal
 step hypothesis to rebuilt DFGs or transformed functions.
+
+## Checked empty-query key boundary (C1.K.2.b.6)
+
+`loadElimAbsoluteKeyTheory` defines `le_absolute_key`: operand keys are
+unconstrained; location keys have no allocation, a word-sized region in the
+selected space, and a representable absolute offset. `le_empty_read_key_shape`
+and `le_empty_write_key_shape` prove this for the configured opcode/operand
+shapes under empty BP queries; `le_dload_key_shape` covers Data separately.
+`le_absolute_location_address` proves state independence only for such location
+keys. It says nothing about persistence of an operand key's evaluation.
+
+`le_empty_read_key_address` and `le_empty_write_key_address` resolve computed
+keys without allocation hypotheses. They explicitly require equal defined
+evaluation of source and normalized addresses. DLOAD uses the existing
+`le_dload_key_address`, which needs only the normalized evaluation. These are
+local address facts, not analysis-origin or normalization-currentness theorems;
+those hypotheses still need discharge at reached consumers. Retained-store
+content preservation and retained-key origin remain separate obligations.
