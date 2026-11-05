@@ -79,6 +79,29 @@ Proof
   qexistsl_tac [`b`, `len`] >> simp[] >> decide_tac
 QED
 
+Theorem method_id_alloc_site_bound:
+  stmt_state_rel ctx func cenv cx es s /\ n < dimword (:256) /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) ==>
+  ?p. FLOOKUP (abi_builtin_allocate_state id n s).vs_allocas id = SOME (p,n) /\
+      p + n < dimword (:256)
+Proof
+  strip_tac >>
+  `?p. FLOOKUP (abi_builtin_allocate_state id n s).vs_allocas id = SOME (p,n)` by
+    (simp[alloca_site_cases] >>
+     Cases_on `FLOOKUP s.vs_allocas id` >- simp[] >>
+     PairCases_on `x` >> fs[stmt_state_rel_def] >>
+     qpat_x_assum `!inst n base sz. _` drule >> simp[mk_inst_def, LESS_MOD]) >>
+  qexists_tac `p` >> simp[] >>
+  gvs[alloca_site_cases] >-
+    (fs[stmt_state_rel_def] >> drule alloca_room_fresh >>
+     disch_then (qspec_then `mk_inst id ALLOCA [Lit (n2w n)] [out]` mp_tac) >>
+     simp[mk_inst_def, LESS_MOD] >>
+     metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
+  fs[stmt_state_rel_def] >>
+  drule_all alloca_site_registered_below >> strip_tac >>
+  drule alloca_room_next_lt >> decide_tac
+QED
+
 Theorem method_id_fixed_hash_mem_ok:
   compile_keccak256_bytesm src m sa = (op,sb) /\ m <= 32 /\
   eval_operand src s = SOME w /\ fresh_vars_wrt sa s /\
@@ -92,23 +115,100 @@ Proof
     (mp_tac (Q.INST [`sha` |-> `F`, `v` |-> `src`] hash_fixed_alloca_code) >>
      simp[]) >>
   `32 < dimword (:256)` by simp[dimword_def] >>
-  `?p. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas
-        sa.cs_next_id = SOME (p,32)` by
-    (simp[alloca_site_cases] >>
-     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >- simp[] >>
-     PairCases_on `x` >> fs[stmt_state_rel_def] >>
-     qpat_x_assum `!inst n base sz. _` drule >> simp[mk_inst_def]) >>
+  drule_all method_id_alloc_site_bound >> strip_tac >>
   `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
-  `p + 32 < dimword (:256)` by
-    (gvs[alloca_site_cases] >-
-       (fs[stmt_state_rel_def] >> drule alloca_room_fresh >>
-        disch_then (qspec_then `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
-          [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>
-        simp[stmt_state_rel_def, mk_inst_def, finite_mapTheory.FLOOKUP_DEF] >>
-        metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
-     fs[stmt_state_rel_def] >>
-     drule_all alloca_site_registered_below >> strip_tac >>
-     drule alloca_room_next_lt >> decide_tac) >>
   irule compile_keccak256_bytesm_mem_ok >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem method_id_word_buffer_mem_ok:
+  emit_void MSTORE [src; Lit (n2w n)] sa = ((),sh) /\
+  emit_op ADD [src; Lit 32w] sh = (data,sd) /\
+  emit_void MSTORE [data; value] sd = ((),sb) /\
+  eval_operand src s = SOME (n2w b) /\
+  b + 32 < dimword (:256) /\ b + 64 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  qpat_assum `emit_void MSTORE [src; Lit (n2w n)] sa = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qpat_assum `emit_void MSTORE [data; value] sd = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  `b < dimword (:256)` by decide_tac >>
+  `w2n (n2w b : bytes32) = b` by simp[LESS_MOD] >>
+  `w2n (n2w (b + 32) : bytes32) = b + 32` by simp[LESS_MOD] >>
+  `!id. step_inst_base (mk_inst id MSTORE [src; Lit (n2w n)] []) s =
+      OK (mstore b (n2w n) s)` by
+    (gen_tac >>
+     qspecl_then [`src`, `Lit (n2w n)`, `n2w b`, `n2w n`, `id`, `s`]
+       mp_tac step_MSTORE >> simp[eval_operand_lit]) >>
+  `!id. inst_mem_below_frontier (mk_inst id MSTORE [src; Lit (n2w n)] []) s` by
+    simp[below_frontier_MSTORE] >>
+  `!id out. step_inst_base (mk_inst id ADD [src; Lit 32w] [out])
+      (mstore b (n2w n) s) =
+      OK (update_var out (n2w (b + 32)) (mstore b (n2w n) s))` by
+    (rpt gen_tac >>
+     qspecl_then [`src`, `Lit 32w`, `n2w b`, `32w`, `id`, `out`,
+                  `mstore b (n2w n) s`] mp_tac step_ADD >>
+     simp[eval_operand_lit, word_add_n2w]) >>
+  `!id out. inst_mem_below_frontier (mk_inst id ADD [src; Lit 32w] [out])
+      (mstore b (n2w n) s)` by
+    (rpt gen_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  qspecl_then [`sa`, `sh`, `sd`, `sb`] mp_tac emitted_insts_three >>
+  simp[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
+       below_frontier_MSTORE, eval_operand_update_var] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem method_id_alloc_word_buffer_mem_ok:
+  compile_alloc_buffer 64 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand; Lit (n2w n)] sm = ((),sh) /\
+  emit_op ADD [buf.buf_operand; Lit 32w] sh = (data,sd) /\
+  emit_void MSTORE [data; value] sd = ((),sb) /\
+  fresh_vars_wrt sa s /\ alloca_next_valid s /\
+  FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 64 s).vs_allocas
+    sa.cs_next_id = SOME (p,64) /\ p + 32 < dimword (:256) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  `64 < dimword (:256)` by simp[dimword_def] >>
+  drule_all compile_alloc_buffer_mem_ok >> strip_tac >>
+  qpat_assum `emit_void MSTORE _ sm = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qpat_assum `emit_void MSTORE _ sd = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[] >>
+     qspecl_then [`sm`, `sh`, `sd`, `sb`] mp_tac emitted_insts_three >> simp[]) >>
+  qpat_x_assum `emitted_insts sa sb = _` (fn th => rewrite_tac[th]) >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac >- simp[] >>
+  rpt strip_tac >> rename1 `run_inst_seq _ s = OK t` >>
+  `t = update_var (STRING #"%" (toString sa.cs_next_var)) (n2w p)
+        (abi_builtin_allocate_state sa.cs_next_id 64 s)` by
+    gvs[run_inst_seq_def] >>
+  drule_at (Pat `emit_void MSTORE [src; Lit (n2w n)] sa = _`)
+    method_id_word_buffer_mem_ok >>
+  disch_then irule >> simp[eval_operand_update_var] >>
+  conj_tac >- (qexists_tac `p` >> simp[] >> irule LESS_MOD >> decide_tac) >>
+  qexists_tac `value` >> gvs[]
+QED
+
+Theorem method_id_output_buffer_mem_ok:
+  compile_alloc_buffer 64 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand; Lit 4w] sm = ((),sh) /\
+  emit_op ADD [buf.buf_operand; Lit 32w] sh = (data,sd) /\
+  emit_void MSTORE [data; value] sd = ((),sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fresh_vars_wrt sa s ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  drule_all hash_method_id_output_alloca_code >> strip_tac >>
+  `64 < dimword (:256)` by simp[dimword_def] >>
+  drule_all method_id_alloc_site_bound >> strip_tac >>
+  `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
+  irule (Q.INST [`n` |-> `4`] method_id_alloc_word_buffer_mem_ok) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
