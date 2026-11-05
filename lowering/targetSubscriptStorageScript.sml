@@ -1,9 +1,10 @@
 (* Live storage-array source bounds and compiler-header agreement. *)
 Theory targetSubscriptStorage
 Ancestors
-  targetSubscriptMemory targetPlaceLive accountsRelProps exprSimArrayIndex
+  targetSubscriptMemory loweringPosts targetPlaceLive accountsRelProps exprSimArrayIndex
   vyperState vyperInterpreter vyperValue vyperStorageBackend
   venomState compileEnv context exprLowering exprLoweringProps exprBopSimProps freshWrites exprSimUnopProps fragExec
+  vyperLookupStorage vyperStorage integer_word
   words arithmetic list rich_list finite_map emitHelper emitHelperProps fragGasMode venomInst venomExecSemantics
 
 Theorem extend_place_storage_array_index:
@@ -39,7 +40,9 @@ Theorem target_storage_array_len_ok:
   array_len_ok T cnt
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
       (if tr then LocTransient else LocStorage)) base_op s
-    (lookup_storage slot (get_storage cx es tr))
+    (lookup_storage slot (get_storage cx es tr)) /\
+  ((if tr then tload slot s else sload slot s) =
+    lookup_storage slot (get_storage cx es tr))
 Proof
   strip_tac >>
   `storage_range_agree (vyperStorageBackend$get_storage cx es tr)
@@ -54,7 +57,7 @@ Proof
   `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
     simp[type_slot_size_def] >>
   drule_all storage_range_agree_head >>
-  Cases_on `tr` >> simp[] >> strip_tac
+  Cases_on `tr` >> simp[] >> strip_tac >> simp[tload_def, sload_def]
   >- (drule array_len_ok_TLOAD >>
       disch_then (qspecl_then [`cenv.ce_is_ctor`, `cenv.ce_imm_alloca`, `cnt`] mp_tac) >>
       simp[tload_def]) >>
@@ -265,4 +268,188 @@ Proof
   drule_all straight_fresh_cs_extends >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
   drule_all target_storage_dynamic_array_abort_path >> simp[]
+QED
+
+Theorem target_storage_array_capacity:
+  slots_in_range st (w2n slot) (ArrayTV etv (Dynamic cnt)) ==>
+  w2n (lookup_storage slot st) <= cnt
+Proof
+  simp[Once slots_in_range_def, read_slot_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem target_storage_array_range:
+  evaluate_type tenv ity = SOME itv /\ value_has_type itv (IntV i) /\
+  cnt < dimword(:256) /\
+  (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
+  (dyn ==> (if tr then tload slot s else sload slot s) =
+             lookup_storage slot (get_storage cx es tr)) ==>
+  (idx_in_range (is_signed_type ity) (i2w i)
+     (if dyn then (if tr then tload slot s else sload slot s) else n2w cnt) <=>
+   0 <= i /\ Num i < cnt /\
+   (dyn ==> Num i < w2n (lookup_storage slot (get_storage cx es tr))))
+Proof
+  Cases_on `dyn` >> simp[] >> strip_tac
+  >- (`idx_in_range (is_signed_type ity) (i2w i)
+         (n2w (w2n (lookup_storage slot (get_storage cx es tr)))) <=>
+       0 <= i /\ Num i < w2n (lookup_storage slot (get_storage cx es tr))` by
+        (irule target_typed_index_range >> metis_tac[w2n_lt]) >>
+      gvs[] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  drule_all target_typed_index_range >> simp[]
+QED
+
+Theorem target_storage_array_offset:
+  0 <= i ==>
+  ((if dyn then slot + n2w 1 else slot) + i2w i * n2w (type_slot_size etv) =
+   (slot : bytes32) + n2w ((if dyn then 1 else 0) + Num i * type_slot_size etv))
+Proof
+  strip_tac >>
+  `i = &Num i` by simp[integerTheory.INT_OF_NUM] >>
+  qpat_x_assum `i = &Num i` SUBST1_TAC >>
+  Cases_on `dyn` >> simp[integer_wordTheory.i2w_pos, word_mul_n2w,
+    word_add_n2w, WORD_ADD_ASSOC] >>
+  pure_rewrite_tac[GSYM word_add_n2w] >>
+  metis_tac[WORD_ADD_ASSOC, WORD_ADD_COMM]
+QED
+
+Theorem target_storage_array_type_bound:
+  evaluate_type tenv (ArrayT ety bd) = SOME (ArrayTV etv bd) ==>
+  bound_length bd < dimword(:256) /\ evaluate_type tenv ety = SOME etv
+Proof
+  rw[evaluate_type_def, AllCaseEqs()] >> Cases_on `bd` >>
+  gvs[type_slot_size_def, vyperASTTheory.bound_length_def] >>
+  `n <= n * type_slot_size etv` by
+    (Cases_on `type_slot_size etv` >> gvs[MULT_CLAUSES]) >> decide_tac
+QED
+
+Theorem target_storage_array_live_range:
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand base_op s = SOME slot /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  slots_in_range (get_storage cx es tr) (w2n slot)
+    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  storage_read_live cx tr (get_storage cx es tr) slot
+    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) ==>
+  (idx_in_range (is_signed_type ity) (i2w i)
+     (if dyn then (if tr then tload slot s else sload slot s) else n2w cnt) <=>
+   0 <= i /\ Num i < cnt /\
+   (dyn ==> Num i < w2n (lookup_storage slot (get_storage cx es tr))))
+Proof
+  strip_tac >>
+  drule_all target_storage_array_type_bound >> strip_tac >>
+  `cnt < dimword(:256)` by
+    (Cases_on `dyn` >> gvs[vyperASTTheory.bound_length_def]) >>
+  `(dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
+   (dyn ==> (if tr then tload slot s else sload slot s) =
+      lookup_storage slot (get_storage cx es tr))` by
+    (Cases_on `dyn` >> gvs[] >> conj_tac
+     >- metis_tac[target_storage_array_capacity] >>
+     `w2n slot + type_slot_size (ArrayTV etv (Dynamic cnt)) <= dimword(:256)` by
+       decide_tac >>
+     drule_all target_storage_array_len_ok >> simp[]) >>
+  drule_all target_storage_array_range >> simp[]
+QED
+
+Theorem target_storage_array_error_suffix:
+  target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
+  slots_in_range (get_storage cx es tr) (w2n slot)
+    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  storage_read_live cx tr (get_storage cx es tr) slot
+    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) /\
+  eval_operand idx s = SOME (i2w i) /\
+  compile_array_subscript (FST rb) idx dyn cnt 1 (type_slot_size etv)
+    (is_signed_type ity)
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+      (if tr then LocTransient else LocStorage)) sm = (dst,sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x. idx = Var x ==> not_fresh_at sm x) /\ (!l. idx <> Label l) /\
+  extend_place cx
+    (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+    (ValueSubscript (IntV i)) es = (INR err,es') ==>
+  (?u. gas_marked_path F ctx func s 0 (Abort Revert_abort u)) /\
+  (?msg. err = Error (RuntimeError msg)) /\ es' = es
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es s /\
+   eval_operand (FST rb) s = SOME slot /\
+   evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+     SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))` by
+    fs[target_post_def, place_ptr_rel_def] >>
+  drule_all target_storage_array_live_range >> strip_tac >>
+  qspecl_then [`cx`, `tr`, `slot`, `etv`,
+    `if dyn then Dynamic cnt else Fixed cnt`, `i`, `es`]
+    assume_tac extend_place_storage_array_index >>
+  `~idx_in_range (is_signed_type ity) (i2w i)
+    (if dyn then (if tr then tload slot s else sload slot s) else n2w cnt)` by
+    (Cases_on `dyn` >> gvs[AllCaseEqs()]) >>
+  drule_all target_storage_array_abort_path >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  Cases_on `dyn` >> gvs[AllCaseEqs()]
+QED
+
+Theorem target_storage_array_suffix:
+  target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
+  slots_in_range (get_storage cx es tr) (w2n slot)
+    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  storage_read_live cx tr (get_storage cx es tr) slot
+    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) /\
+  eval_operand idx s = SOME (i2w i) /\
+  compile_array_subscript (FST rb) idx dyn cnt 1 (type_slot_size etv)
+    (is_signed_type ity)
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+      (if tr then LocTransient else LocStorage)) sm = (dst,sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x. idx = Var x ==> not_fresh_at sm x) /\ (!l. idx <> Label l) /\
+  (!l. FST rb <> Label l) /\ (!x. dst = Var x ==> not_fresh_at sb x) /\
+  extend_place cx
+    (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+    (ValueSubscript (IntV i)) es = (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+      target_post ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
+        (dst,SOME (slot_loc tr),SOME (ValPT ety)) u /\
+      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es s /\
+   eval_operand (FST rb) s = SOME slot /\
+   evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+     SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+   (!x. FST rb = Var x ==> not_fresh_at sm x)` by
+    fs[target_post_def, place_ptr_rel_def] >>
+  drule_all target_storage_array_live_range >> strip_tac >>
+  qspecl_then [`cx`, `tr`, `slot`, `etv`,
+    `if dyn then Dynamic cnt else Fixed cnt`, `i`, `es`]
+    assume_tac extend_place_storage_array_index >>
+  `0 <= i /\ es' = es /\
+   pv' = PlaceR (StoragePlace tr
+     (slot + n2w ((if dyn then 1 else 0) + Num i * type_slot_size etv)) etv) /\
+   idx_in_range (is_signed_type ity) (i2w i)
+     (if dyn then (if tr then tload slot s else sload slot s) else n2w cnt)` by
+    (Cases_on `dyn` >> gvs[AllCaseEqs()]) >>
+  drule_all target_storage_array_path >> strip_tac >>
+  drule_all target_storage_array_type_bound >> strip_tac >>
+  `eval_operand dst t = SOME
+     (slot + n2w ((if dyn then 1 else 0) + Num i * type_slot_size etv))` by
+    metis_tac[target_storage_array_offset] >>
+  qexists_tac `t` >> simp[] >>
+  irule (SRULE [value_type_place_def]
+    (Q.INST [`vt'` |-> `Type ety`] target_post_suffix_frame)) >>
+
+  gvs[place_ptr_rel_def, place_readable_def, value_type_place_def] >>
+  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
 QED
