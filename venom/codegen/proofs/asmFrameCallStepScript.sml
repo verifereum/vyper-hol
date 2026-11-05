@@ -303,6 +303,43 @@ Proof
        get_current_context_def, assert_def, return_def]
 QED
 
+Theorem asm_access_address_collect:
+  s.msdomain = Collect d ==>
+  access_address a s =
+    (INL (if fIN a s.rollback.accesses.addresses
+          then warm_access_cost else cold_access_cost),
+     s with <| rollback := s.rollback with accesses :=
+                 s.rollback.accesses with addresses := fINSERT a s.rollback.accesses.addresses;
+               msdomain := Collect (d with addresses updated_by fINSERT a) |> )
+Proof
+  simp[access_address_def, domain_check_def, set_domain_def, return_def,
+       bind_def, ignore_bind_def]
+QED
+
+Theorem asm_access_addresses_collect:
+  s.msdomain = Collect d ==>
+  (do ca <- access_address a; cb <- access_address b; return (ca,cb) od) s =
+    (INL ((if fIN a s.rollback.accesses.addresses
+           then warm_access_cost else cold_access_cost),
+          (if fIN b (fINSERT a s.rollback.accesses.addresses)
+           then warm_access_cost else cold_access_cost)),
+     s with <| rollback := s.rollback with accesses :=
+                 s.rollback.accesses with addresses :=
+                   fINSERT b (fINSERT a s.rollback.accesses.addresses);
+               msdomain := Collect (d with addresses updated_by (fINSERT b o fINSERT a)) |> )
+Proof
+  strip_tac >> drule asm_access_address_collect >>
+  disch_then (qspec_then `a` assume_tac) >>
+  simp[Once bind_def] >>
+  simp[Once bind_def] >>
+  qmatch_goalsub_abbrev_tac `access_address b t` >>
+  `t.msdomain = Collect (d with addresses updated_by fINSERT a)` by
+    simp[Abbr `t`] >>
+  drule asm_access_address_collect >>
+  disch_then (qspec_then `b` assume_tac) >>
+  simp[bind_def, return_def, Abbr `t`]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
