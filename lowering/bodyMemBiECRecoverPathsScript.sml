@@ -3,7 +3,8 @@ Ancestors
   bodyMemBiECRecoverMemory bodyMemBiECRecoverRun bodyMemBiECRecoverSuffix
   compileEnv exprLoweringProps fragExec fragGasSeqAbort fragGasSeqMem
   allocaHistoryFragment exprSimHash exprSimProps exprSimDefs
-  venomMemProps venomExecSemantics venomInstProofs venomInst list rich_list
+  venomMemProps venomExecSemantics venomInstProofs venomInst venomState
+  fragGasMode exprSimPrecompiles exprSimWordArgs loweringPosts vyperAST list rich_list
 
 Theorem ecrecover_seq_frontier:
   !code s t.
@@ -78,4 +79,62 @@ Proof
   drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_gas_path >>
   disch_then (qspecl_then [`T`, `ctx`, `func`, `bb`] mp_tac) >>
   simp[] >> metis_tac[]
+QED
+
+(* Memory analogue of local ecrecover_success_path in exprSimPrecompiles. *)
+Theorem ecrecover_success_path_mem:
+  compile_ecrecover h v r sig sm = (op,sb) /\ fn_has_code sm sb func /\
+  t.vs_outcomes = co::rest /\ co.co_success /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
+  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
+  wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  stmt_state_rel ctx func cenv cx es' t /\ alloca_history func t /\
+  eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
+  eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?n u. gas_marked_path T ctx func t n (OK u) /\
+    expr_post ctx func cenv cx (Builtin (BaseT AddressT) ECRecover args)
+      es sa sb s0 (es' with outcomes := SOME rest)
+      (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
+        NONE => 0w | SOME a => a)) op u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next
+Proof
+  strip_tac >>
+  `!i. MEM i (emitted_insts sm sb) ==> MEM i (fn_insts func)` by
+    metis_tac[hash_emitted_inst_mem] >>
+  drule_all compile_ecrecover_mem_ok >> strip_tac >>
+  drule_all compile_ecrecover_run >> strip_tac >>
+  rename1 `run_inst_seq _ t = OK output` >>
+  drule ecrecover_code_shape >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb` by gvs[same_blocks_def] >>
+  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sm sb)
+          (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
+  `alloca_inv t` by gvs[stmt_state_rel_def, state_rel_def] >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) ecrecover_seq_path_mem >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `output.vs_current_bb = sb.cs_current_bb` by
+    (drule_all hash_run_path >> strip_tac >> simp[]) >>
+  qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb))`,
+    `output with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sb)`] >>
+  simp[gas_marked_path_def] >>
+  irule expr_post_typed_stack_intro >>
+  simp[stmt_state_rel_inst_idx, expr_type_def, is_word_type_def,
+       vyperValueTheory.evaluate_type_def] >>
+  irule wb_frame_trans >> conj_tac >- simp[] >>
+  conj_tac
+  >- (qexistsl_tac [`es'`, `sm`, `t`] >>
+      gvs[wb_frame_def, lookup_var_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
