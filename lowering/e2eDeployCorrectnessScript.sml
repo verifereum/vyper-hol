@@ -4,7 +4,7 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
-  e2eCorrectness
+  e2eCorrectness e2eDeployDefs
 
 (* TOP-LEVEL / savedDeploymentAdmission: PLAN 5.11, D28, section 9.
  * CLASSIFICATION: single planned stage admission, Milestone 6 item 7.

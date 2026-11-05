@@ -604,9 +604,10 @@ Theorem array_code_step_contract:
         :: ei.scopes) = (r,es2) ==>
     stmt_frag ctx func cx (InLoop exit incr) RetQ bc
       (stmts_env bc (InLoop exit incr) ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2) /\
+          :: ei.scopes)) /\
   (!ei k r es2 sc rest.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
     eval_stmts cx stmts (ei with scopes :=
@@ -662,9 +663,10 @@ Theorem array_public_body_callback[local]:
         :: ei.scopes) = (r,es2) ==>
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
       (stmts_env bc (InLoop ex inc) ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2) ==>
+          :: ei.scopes)) ==>
   !exit incr ei k r es2.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
     eval_stmts cx stmts (ei with scopes :=
@@ -672,9 +674,10 @@ Theorem array_public_body_callback[local]:
         :: ei.scopes) = (r,es2) ==>
     stmt_frag ctx func cx (InLoop exit incr) RetQ bc
       (stmts_env bc (InLoop exit incr) ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2
+          :: ei.scopes)
 Proof
   rpt strip_tac >> first_x_assum drule_all >> simp[]
 QED

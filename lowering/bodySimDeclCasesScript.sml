@@ -1122,9 +1122,10 @@ Theorem array_body_fragment_callback[local]:
                           popped := []|>)) :: ei.scopes) = (r,ef) ==>
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
       (stmts_env bc (InLoop ex inc) ret_ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
-                          popped := []|>)) :: ei.scopes) r ef
+                          popped := []|>)) :: ei.scopes)
 Proof
   rpt gen_tac >> strip_tac >>
   `FLOOKUP cenv.ce_vars id = NONE` by

@@ -1570,7 +1570,7 @@ Theorem ctor_copy_endpoint_post[local]:
   mid.cs_next_id <= sb.cs_next_id /\
   compile_alloc_buffer (type_memory_bytes cenv t) sm = (buf,mid) /\
   fn_has_code sm mid func /\
-  immutable_holds cenv cx t (Value v) a es' /\
+  immutable_holds cenv cx t (Value v) a es' s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ t = expr_type e /\
   type_memory_bytes cenv t = type_memory_size tv /\
   stmt_state_rel ctx func cenv cx es' u /\ u.vs_memory = s.vs_memory /\

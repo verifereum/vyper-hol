@@ -674,7 +674,7 @@ QED
 
 Theorem array_body_fragment_run:
   !ctx func cx lctx RetQ cenv bc m ei stmts r es2 sa sb s0 cenv' sc rest.
-  stmt_frag ctx func cx lctx RetQ bc m ei r es2 /\
+  stmt_frag ctx func cx lctx RetQ bc m (eval_stmts cx stmts) ei /\
   m sa = (cenv',sb) /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved bc sa /\ ret_pc_ok bc sa s0 /\
   ~block_is_terminated sa /\ stmt_res_ok lctx r /\
@@ -885,7 +885,7 @@ Theorem array_for_iteration_frames[local]:
   !ctx func cx RetQ cenv bc m ei stmts r es2 sa sb s2 cenv' sc rest
    idx k p dst saved_base arr_base ainst sz st P vs id sj exit_lbl incr_lbl
    cond_lbl nv i1 i2 i3 cc.
-  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m ei r es2 /\
+  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m (eval_stmts cx stmts) ei /\
   m sa = (cenv',sb) /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved bc sa /\ ret_pc_ok bc sa s2 /\
   ~block_is_terminated sa /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
@@ -972,7 +972,7 @@ Theorem array_for_iteration:
   !ctx func cx RetQ cenv bc m ei stmts r es2 sa sb s2 cenv' sc rest
    idx k p dst saved_base arr_base ainst sz st P vs id sj exit_lbl incr_lbl
    cond_lbl nv i1 i2 i3 cc.
-  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m ei r es2 /\
+  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m (eval_stmts cx stmts) ei /\
   m sa = (cenv',sb) /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved bc sa /\ ret_pc_ok bc sa s2 /\
   ~block_is_terminated sa /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
@@ -1028,7 +1028,7 @@ Theorem array_for_iteration_framed:
    idx k p dst saved_base arr_base ainst sz st P vs id sj exit_lbl incr_lbl
    cond_lbl nv i1 i2 i3 cc caller.
   (!x. not_fresh_at caller x ==> not_fresh_at sa x /\ x <> idx /\ x <> nv) /\
-  (stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m ei r es2 /\
+  (stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m (eval_stmts cx stmts) ei /\
    m sa = (cenv',sb) /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
    local_ptrs_reserved bc sa /\ ret_pc_ok bc sa s2 /\
    ~block_is_terminated sa /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
@@ -1291,7 +1291,7 @@ Theorem array_for_step_framed:
     <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes /\
   cenv_top_ext cenv bc ei.scopes /\
   stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) ei r es2 /\
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts) ei /\
   eval_stmts cx stmts ei = (r,es2) /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
   es2.scopes = sc :: rest /\
   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
@@ -1520,7 +1520,7 @@ Theorem array_for_iteration_frames_open[local]:
   !ctx func cx RetQ cenv bc m ei stmts r es2 sa sb s2 cenv' sc rest
    idx k p dst saved_base arr_base ainst sz st P vs id sj exit_lbl incr_lbl
    cond_lbl nv i1 i2 i3 cc.
-  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m ei r es2 /\
+  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m (eval_stmts cx stmts) ei /\
   m sa = (cenv',sb) /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved bc sa /\ ret_pc_ok bc sa s2 /\
   ~block_is_terminated sa /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
@@ -1608,7 +1608,7 @@ Theorem array_for_iteration_framed_open:
    idx k p dst saved_base arr_base ainst sz st P vs id sj exit_lbl incr_lbl
    cond_lbl nv i1 i2 i3 cc caller.
   (!x. not_fresh_at caller x ==> not_fresh_at sa x /\ x <> idx /\ x <> nv) /\
-  (stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m ei r es2 /\
+  (stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc m (eval_stmts cx stmts) ei /\
    m sa = (cenv',sb) /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
    local_ptrs_reserved bc sa /\ ret_pc_ok bc sa s2 /\
    ~block_is_terminated sa /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
@@ -1703,7 +1703,7 @@ Theorem array_for_step_framed_open:
     <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes /\
   cenv_top_ext cenv bc ei.scopes /\
   stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) ei r es2 /\
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts) ei /\
   eval_stmts cx stmts ei = (r,es2) /\ stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
   es2.scopes = sc :: rest /\
   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
