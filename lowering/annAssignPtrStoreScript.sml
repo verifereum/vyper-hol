@@ -6,7 +6,9 @@ Ancestors
   annAssignPtrSetup fragGasSeqPtr fragGasPathPtr fragExecPtr
   venomInst venomInstProofs venomExecSemantics venomState emitHelperProps
   representationCleanPtr valueEncodingProps valueEncoding list pred_set
-  venomMemProofs valueEncodingProofs
+  venomMemProofs valueEncodingProofs ptrSafeRun ptrDiscipline
+  robustCopyTransportPtr localPtrsProps exprLoweringProps exprSimProps
+  loweringPosts compileEnv venomMemDefs
 
 Theorem annassign_ghost_scope_update_ptr:
  !d cenv cx es G tn s sc rest id entry p sz.
@@ -93,4 +95,68 @@ Proof
  qexistsl [`type_memory_size ty`,
    `(mstore off wd (s with vs_memory := mem)).vs_memory`] >> simp[] >>
  irule annassign_clean_store_observation_ptr >> metis_tac[]
+QED
+
+Theorem annassign_ghost_kept_mem_subset_ptr:
+ !cenv es sa G0 tn0 s0 G tn tm.
+ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+ ghost_kept cenv es sa G0 tn0 s0 G (tn with t_mem := tn.t_mem DIFF tm)
+Proof
+ rw[ghost_kept_def, op_taint_def] >> metis_tac[]
+QED
+
+Theorem annassign_mstore_disjoint_robust_ptr:
+ !ty v b off wd s tm.
+ val_wf ty v /\
+ (b + val_footprint ty v <= off \/ off + 32 <= b) /\
+ (!m. mem_agree_outside tm s.vs_memory m ==> val_in_memory ty v b m) ==>
+ !m. mem_agree_outside (tm DIFF {i | off <= i /\ i < off + 32})
+       (mstore off wd s).vs_memory m ==> val_in_memory ty v b m
+Proof
+ rpt gen_tac >> strip_tac >> (rpt gen_tac >> strip_tac >>
+ irule robust_val_in_memory_exterior_frame >> conj_tac >- simp[] >>
+ qexistsl [`s.vs_memory`, `(mstore off wd s).vs_memory`, `tm`,
+           `tm DIFF {i | off <= i /\ i < off + 32}`,
+           `{i | off <= i /\ i < off + 32}`] >> simp[] >>
+ rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> fs[] >> decide_tac)
+QED
+
+Theorem annassign_alloca_mstore_ghost_ptr:
+ !ctx func cenv cx es d G tn s p sz a inst wd.
+ stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ ghost_inv d cenv cx es G tn s /\ not_local_ptr cenv es.scopes p /\
+ lookup_var p s = SOME a /\ MEM inst (fn_insts func) /\
+ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+ FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n a,sz) /\ 32 <= sz ==>
+ ghost_inv d cenv cx es G
+   (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32})
+   (mstore (w2n a) wd s)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `alloca_inv s /\ local_ptrs_rel func cenv es.scopes s` by
+   fs[stmt_state_rel_def, state_rel_def] >>
+ fs[ghost_inv_def] >>
+ conj_tac >- (
+   rpt gen_tac >> strip_tac >>
+   qpat_assum `local_ptrs_rel _ _ _ _`
+     (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+   qpat_x_assum `!name entry p sz. _ ==> ?w. _` drule_all >> strip_tac >>
+   `local_region cenv es.scopes s name (w2n w) sz'` by
+     (simp[local_region_def] >> metis_tac[]) >>
+   `regions_disjoint (w2n a) sz (w2n w) sz'` by
+     (drule_all local_ptrs_rel_alloca_disjoint >> simp[]) >>
+   qpat_x_assum `!name entry p sz. _` drule_all >> strip_tac >>
+   conj_tac >- fs[ptr_covers_def, op_taint_def, mstore_def, lookup_var_def] >>
+   rpt gen_tac >> strip_tac >>
+   gvs[] >> irule annassign_mstore_disjoint_robust_ptr >>
+   conj_tac >- simp[] >>
+   qexistsl [`w2n a`, `s`, `tn.t_mem`, `wd`] >> simp[] >>
+   `val_footprint entry.type entry.value <= type_memory_size entry.type` by
+     simp[val_footprint_le] >>
+   fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+ fs[return_buf_ptr_def, ptr_covers_def, stor_taint_ok_def,
+    op_taint_def, mstore_def, lookup_var_def] >>
+ Cases_on `d` >- simp[return_buf_ptr_def] >>
+ PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def, op_taint_def,
+                       lookup_var_def]
 QED
