@@ -135,3 +135,17 @@ Proof
   PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def, op_taint_def,
     mstore_def, lookup_var_def]
 QED
+
+Theorem ghost_kept_mstore:
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  op_taint tn value = {} ==>
+  ghost_kept cenv es sa G0 tn0 s0 G
+    (step_taint (mk_inst id MSTORE [Var dst; value] []) s (mstore (w2n a) w s) tn)
+Proof
+  strip_tac >> drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`[]:(num # num) option list`,
+    `FEMPTY:string |-> (num # num)`, `id`] strip_assume_tac) >>
+  gvs[ghost_kept_def, op_taint_def] >>
+  metis_tac[pred_setTheory.IN_DIFF]
+QED
