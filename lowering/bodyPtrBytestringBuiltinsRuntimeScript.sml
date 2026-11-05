@@ -147,3 +147,38 @@ Proof
        vyperContextTheory.get_module_code_def] >>
   EVAL_TAC >> simp[]
 QED
+
+Theorem order_runtime_ghost:
+  ghost_inv NONE order_ptr_env order_runtime_cx order_ptr_source
+    (FEMPTY |+ ("arr_ptr",(128,96))) entry_taint order_runtime_start
+Proof
+  simp[ghost_inv_def, return_buf_ptr_def, stor_taint_ok_def,
+       ptrDisciplineTheory.entry_taint_def,
+       bodyPtrBytestringBuiltinsPtrFrameTheory.order_ptr_source_def,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_scopes_def,
+       bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_env_def,
+       bodyPtrBytestringBuiltinsOrderRunTheory.order_run_env_def,
+       vyperStateTheory.lookup_scopes_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> gvs[ptrDisciplineTheory.op_taint_def] >-
+   (simp[ptr_covers_def, ptrDisciplineTheory.op_taint_def,
+         order_runtime_start_def,
+         bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_start_def,
+         venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+         wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]) >>
+  gvs[order_runtime_start_def,
+      bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_start_def,
+      venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  simp[order_runtime_array_wf] >>
+  qexistsl_tac [`96`, `order_runtime_start.vs_memory`] >>
+  simp[order_runtime_array_wf, order_runtime_array_memory,
+       valueEncodingTheory.type_memory_size_def, order_runtime_start_def,
+       bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_start_def] >>
+  irule listTheory.LIST_EQ >>
+  simp[valueEncodingPropsTheory.LENGTH_mem_bytes_at] >> rpt strip_tac >>
+  fs[mem_agree_outside_def] >>
+  first_x_assum (qspec_then `128 + x` mp_tac) >>
+  simp[listTheory.LIST_EQ_REWRITE, valueEncodingProofsTheory.EL_mem_bytes_at]
+QED
