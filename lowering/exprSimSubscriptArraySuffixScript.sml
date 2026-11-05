@@ -238,3 +238,46 @@ Proof
   gvs[vyperTypingTheory.value_has_type_def, val_in_memory_dynarray,
       mem_word_at_def, vyperValueOperationTheory.array_length_def]
 QED
+
+Theorem vv_post_memory_footprint_bound:
+  vv_post ctx func cenv cx e es sa sb s0 ee r (LocatedValue ann p) q /\
+  p.ptr_location = LocMemory /\
+  read_result cx r ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  eval_operand p.ptr_operand q = SOME w ==>
+  w2n w + val_footprint tv v < dimword (:256)
+Proof
+  simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_at_def] >>
+  rpt strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >> gvs[]
+  >- (irule exprSimHashTheory.hash_live_footprint_bound >>
+      goal_assum (drule_at Any) >> metis_tac[]) 
+  >- (irule exprSimHashTheory.hash_live_footprint_bound >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[w2n_lt]
+QED
+
+Theorem fixed_array_index_footprint:
+  val_wf (ArrayTV etv (Fixed n)) (ArrayV av) /\
+  array_index (ArrayTV etv (Fixed n)) av i = SOME v ==>
+  Num i * type_memory_size etv <=
+    val_footprint (ArrayTV etv (Fixed n)) (ArrayV av)
+Proof
+  strip_tac >> Cases_on `av` >>
+  gvs[valueEncodingTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
+      loweringPostsTheory.val_footprint_def, type_memory_size_def,
+      AllCaseEqs(), listTheory.oEL_THM] >>
+  irule arithmeticTheory.LESS_MONO_MULT >> decide_tac
+QED
+
+Theorem fixed_array_element_nonwrapping:
+  val_wf (ArrayTV etv (Fixed n)) (ArrayV av) /\
+  array_index (ArrayTV etv (Fixed n)) av i = SOME v /\
+  w2n (w:bytes32) + val_footprint (ArrayTV etv (Fixed n)) (ArrayV av) < dimword (:256) ==>
+  w2n (w + n2w (Num i * type_memory_size etv)) =
+    w2n w + Num i * type_memory_size etv
+Proof
+  strip_tac >> drule_all fixed_array_index_footprint >> strip_tac >>
+  irule exprSimAttributePropsTheory.field_ptr_w2n >>
+  qexistsl_tac [`0`, `val_footprint (ArrayTV etv (Fixed n)) (ArrayV av)`] >> simp[]
+QED
