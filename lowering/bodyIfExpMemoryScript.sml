@@ -985,6 +985,47 @@ QED
 
 Finalise compile_ifexp_word_vv_sim_mem
 
+(* The non-word case: the arms are converted to the lowered type
+   (compile_ifexp_arm) and the result is a memory pointer.  Open. *)
+Theorem compile_ifexp_nonword_vv_sim_mem:
+  !ctx func cenv cx ty t c a b es.
+    ~is_word_type t /\
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (is_word_type t ==> ?tvt. evaluate_type (get_tenv cx) t = SOME tvt) /\
+    (~is_word_type t ==>
+     !e. (e = a \/ e = b) ==>
+         lowered_value_type cenv e = expr_type e \/
+         is_bytestring_type (expr_type e) /\
+         is_bytestring_type (lowered_value_type cenv e) /\
+         arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
+       type_memory_bytes cenv t = type_memory_size tvt /\
+       type_memory_size tvt < 2 ** 64) /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
+    (!gs tv es1.
+       (do result <- eval_expr cx c; read_result cx result od)
+         (es with gas_obs := gs) = (INL tv, es1) ==>
+       expr_sim_mem ctx func cenv cx ty a es1 /\
+       expr_sim_mem ctx func cenv cx ty b es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty a es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty b es1 /\
+       !e gs' v es2. ~is_word_type t /\ (e = a \/ e = b) /\
+         (do r <- eval_expr cx e; read_result cx r od)
+           (es1 with gas_obs := gs') = (INL v, es2) ==>
+         ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v) ==>
+    expr_vv_sim_mem ctx func cenv cx ty (IfExp t c a b) es
+Proof
+  cheat
+QED
+
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
@@ -1020,7 +1061,10 @@ Theorem compile_ifexp_vv_sim_mem:
          ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v) ==>
     expr_vv_sim_mem ctx func cenv cx ty (IfExp t c a b) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `is_word_type t`
+  >- (irule compile_ifexp_word_vv_sim_mem >> rpt conj_tac >> metis_tac[]) >>
+  irule compile_ifexp_nonword_vv_sim_mem >> rpt conj_tac >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem ifexp_word_lowering_result[local]:
