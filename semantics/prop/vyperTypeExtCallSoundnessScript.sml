@@ -10,7 +10,6 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperCreate vyperCreateFrame vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperAccountSupply
   vyperRuntimeAccounts vyperCallFrame vfmExecutionProp[ignore_grammar]
   vyperTypeExtCallCore[ignore_grammar] vyperTypeCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
@@ -309,32 +308,6 @@ Proof
   simp[]
 QED
 
-(* Transfer-only sibling of Send_outcome_type_sound, retained as a helper.
-   Direct callee execution is handled by eval_send_result_sound below. *)
-Theorem concrete_send_type_sound:
-  runtime_consistent env cx st /\
-  (do transfer_value fromAddr toAddr amount; return (Value NoneV) od) st =
-    (res,st') ==>
-  state_well_typed st' /\ env_consistent env cx st' /\
-  accounts_well_typed st'.accounts /\ no_type_error_result res /\
-  case res of
-  | INL tv => expr_result_typed env (Call NoneT (Send has_gas) es extra) tv
-  | INR _ => T
-Proof
-  simp[bind_def, ignore_bind_def, return_def] >>
-  Cases_on `transfer_value fromAddr toAddr amount st` >>
-  rename1 `transfer_value fromAddr toAddr amount st = (answer,mid)` >>
-  Cases_on `answer` >> simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  `runtime_consistent env cx mid` by
-    (drule transfer_value_runtime_consistent >>
-     disch_then (qspecl_then [`fromAddr`,`toAddr`,`amount`] mp_tac) >> simp[]) >>
-  gvs[runtime_consistent_def, no_type_error_result_def,
-      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-      value_result_typed_def, value_has_type_def, evaluate_type_def,
-      is_HashMapRef_def] >>
-  drule concrete_send_error >> rw[]
-QED
-
 Theorem evaluate_abi_decode_return_well_typed:
   !tenv ret_type bs v tv.
     evaluate_abi_decode_return tenv ret_type bs = INL v /\
@@ -595,20 +568,30 @@ Proof
 QED
 
 
-(* The unchecked transfer is sound in the conserved physical supply domain.
-   Successful selfdestruct always halts; it has no ordinary value result. *)
+Theorem accounts_well_typed_zero_balance[local]:
+  accounts_well_typed accounts ==>
+  accounts_well_typed
+    (update_account a (lookup_account a accounts with balance := 0) accounts)
+Proof
+  rw[accounts_well_typed_def, account_well_typed_def,
+     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+(* Selfdestruct either halts or fails one of the transfer's runtime checks;
+   it has no ordinary value result. *)
 Theorem selfdestruct_tail_sound:
   !env cx es values before result after.
     runtime_consistent env cx before /\
-    accounts_supply_bounded before.accounts /\
     exprs_runtime_typed env es values /\ LENGTH es = 1 /\
     HD (MAP expr_type es) = BaseT AddressT /\
     (do
        type_check (LENGTH values = 1) "selfdestruct args";
        beneficiary <- lift_option_type (dest_AddressV (EL 0 values)) "selfdestruct target";
        accounts <- get_accounts;
-       update_accounts (vfmExecution$transfer_value cx.txn.target beneficiary
-         (lookup_account cx.txn.target accounts).balance);
+       transfer_value cx.txn.target beneficiary
+         (lookup_account cx.txn.target accounts).balance;
        if cx.txn.created_in_tx then do
          update_accounts (λaccounts. update_account cx.txn.target
            (lookup_account cx.txn.target accounts with balance := 0) accounts);
@@ -616,26 +599,31 @@ Theorem selfdestruct_tail_sound:
        od else return ();
        raise HaltException
      od) before = (result,after) ==>
-    runtime_consistent env cx after /\ result = INR HaltException
+    runtime_consistent env cx after /\
+    (result = INR HaltException \/ ?s. result = INR (Error (RuntimeError s)))
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  `accounts_well_typed
-    (if cx.txn.created_in_tx then
-       let ac = vfmExecution$transfer_value cx.txn.target target_addr
-         (lookup_account cx.txn.target before.accounts).balance before.accounts in
-       update_account cx.txn.target
-         (lookup_account cx.txn.target ac with balance := 0) ac
-     else vfmExecution$transfer_value cx.txn.target target_addr
-       (lookup_account cx.txn.target before.accounts).balance before.accounts)` by
-    (irule accounts_supply_selfdestruct_well_typed >>
-     fs[runtime_consistent_def]) >>
-  Cases_on `cx.txn.created_in_tx` >>
-  gvs[bind_def, ignore_bind_def, type_check_def, assert_def, lift_option_type_def,
-      get_accounts_def, update_accounts_def, update_pending_deletions_def,
-      return_def, raise_def, runtime_consistent_def, state_well_typed_def,
-      env_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  qpat_x_assum `_ = (result,after)` mp_tac >>
+  simp[bind_def, ignore_bind_def, type_check_def, assert_def,
+       lift_option_type_def, get_accounts_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `transfer_value _ _ amount before` >>
+  Cases_on `transfer_value cx.txn.target target_addr amount before` >>
+  rename1 `_ = (tres,mid)` >>
+  `runtime_consistent env cx mid` by
+    (qspecl_then [`env`, `cx`, `cx.txn.target`, `target_addr`, `amount`,
+                  `before`] mp_tac transfer_value_runtime_consistent >>
+     simp[]) >>
+  Cases_on `tres` >> simp[]
+  >- (Cases_on `cx.txn.created_in_tx` >>
+      simp[bind_def, ignore_bind_def, update_accounts_def,
+           update_pending_deletions_def, return_def, raise_def] >>
+      strip_tac >> gvs[runtime_consistent_def, state_well_typed_def,
+        env_consistent_def, env_scopes_consistent_def,
+        env_immutables_consistent_def, accounts_well_typed_zero_balance] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> gvs[] >>
+  drule concrete_send_error >> strip_tac >> gvs[]
 QED
 
 (* ===== Shared creation helper soundness ===== *)

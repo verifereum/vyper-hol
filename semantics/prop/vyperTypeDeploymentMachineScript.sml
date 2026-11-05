@@ -17,17 +17,9 @@ Ancestors
   vyperTypeBindArguments vyperTypeStmtSoundness vyperExprNoControl
   vyperTypeCallGraph vyperTypeCallGraphSoundness
   vyperTypeCallStackSoundness vyperTypeContractSoundness
-  vyperTypeExternalCallMachine vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
-Libs
-  vyperSourceSupplyLib
+  vyperTypeExternalCallMachine
 
 val _ = Parse.hide "body";
-
-val deployment_gvs = gvs;
-val deployment_drule_all = drule_all;
-fun gvs ths = vyperSourceSupplyLib.forward >> deployment_gvs ths >>
-  vyperSourceSupplyLib.forward;
-fun drule_all th = vyperSourceSupplyLib.forward >> deployment_drule_all th;
 
 (* ===== Deployment machine setup ===== *)
 
@@ -186,7 +178,7 @@ Theorem checked_constructor_body_preserves_components:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ state_well_typed st /\
-  accounts_well_typed st.accounts /\ source_supply st /\
+  accounts_well_typed st.accounts /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
   context_well_typed cx /\ eval_stmts cx body st = (res,st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
@@ -224,7 +216,7 @@ Theorem checked_constructor_run_from_states_preserves_machine_well_typed:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   ALL_DISTINCT (MAP FST args) /\
   body_st.scopes = [scope] /\ state_well_typed body_st /\
-  accounts_well_typed body_st.accounts /\ source_supply body_st /\
+  accounts_well_typed body_st.accounts /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st /\
   context_well_typed cx /\ eval_stmts cx body body_st = (res,body_st') /\
   (if nr /\ ~(mut = View \/ mut = Pure) then
@@ -399,7 +391,7 @@ Theorem checked_constructor_prefix_body_components:
     SOME (mut,nr,args,dflts,ret,body) /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   installed_am = (am with immutables updated_by CONS (target,imms)) /\
-  machine_well_typed installed_am /\ machine_supply installed_am orc /\ context_well_typed cx /\
+  machine_well_typed installed_am /\ context_well_typed cx /\
   checked_deployment_constants_ready cx installed_am target mods /\
   evaluate_all_constants cx installed_am target mods = SOME am_c /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -418,10 +410,6 @@ Proof
     (gvs[checked_deployment_constants_ready_def] >>
      drule_all evaluate_all_constants_preserves_accounts >>
      gvs[machine_well_typed_def, deployment_constants_output_typed_def]) >>
-  `machine_supply am_c orc` by
-    (drule evaluate_all_constants_preserves_accounts >>
-     gvs[machine_supply_def]) >>
-  vyperSourceSupplyLib.forward >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   `body_st.scopes = [scope] /\ body_st.immutables = am_c.immutables /\
@@ -459,7 +447,7 @@ Theorem checked_constructor_prefix_run_preserves_machine_well_typed:
     SOME (mut,nr,args,dflts,ret,body) /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   installed_am = (am with immutables updated_by CONS (target,imms)) /\
-  machine_well_typed installed_am /\ machine_supply installed_am orc /\ context_well_typed cx /\
+  machine_well_typed installed_am /\ context_well_typed cx /\
   checked_deployment_constants_ready cx installed_am target mods /\
   evaluate_all_constants cx installed_am target mods = SOME am_c /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -496,7 +484,7 @@ Theorem checked_constructor_call_success_preserves_machine_well_typed:
     SOME (mut,nr,args,dflts,ret,body) /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   installed_am = (am with immutables updated_by CONS (target,imms)) /\
-  machine_well_typed installed_am /\ machine_supply installed_am orc /\ context_well_typed cx /\
+  machine_well_typed installed_am /\ context_well_typed cx /\
   checked_deployment_constants_ready cx installed_am target mods /\
   call_external_function orc gobs installed_am cx nr mut ts mods args dflts vals body ret =
     (INL v,am_out,rqs) ==>
@@ -552,7 +540,7 @@ Theorem checked_constructor_call_halt_preserves_machine_well_typed:
     SOME (mut,nr,args,dflts,ret,body) /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   installed_am = (am with immutables updated_by CONS (target,imms)) /\
-  machine_well_typed installed_am /\ machine_supply installed_am orc /\ context_well_typed cx /\
+  machine_well_typed installed_am /\ context_well_typed cx /\
   checked_deployment_constants_ready cx installed_am target mods /\
   call_external_function orc gobs installed_am cx nr mut ts mods args dflts vals body ret =
     (INR HaltException,am_out,rqs) ==>
@@ -645,7 +633,7 @@ Proof
 QED
 
 Theorem load_contract_establishes_machine_well_typed:
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
   ALOOKUP mods NONE = SOME ts /\
@@ -672,10 +660,6 @@ Proof
                 exports updated_by CONS (tx.target,exps)|>)` by
     (irule deployment_initial_machine_well_typed >> simp[] >>
      qexists `mods` >> simp[]) >>
-  `machine_supply
-     (am with <|immutables updated_by CONS (tx.target,imms);
-                exports updated_by CONS (tx.target,exps)|>) orc` by
-    fs[machine_supply_def] >>
   `machine_well_typed am_ctor` by
     (FIRST [qpat_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ =
                          (INL _,_,_)` (K ALL_TAC) >>

@@ -788,7 +788,7 @@ Definition apply_vals_def:
       accounts <- get_accounts;
       self <<- cx.txn.target;
       balance <<- (lookup_account self accounts).balance;
-      update_accounts (vfmExecution$transfer_value self target_addr balance);
+      transfer_value self target_addr balance;
       if cx.txn.created_in_tx then do
         update_accounts (λacc. update_account self
           (lookup_account self acc with balance := 0) acc);

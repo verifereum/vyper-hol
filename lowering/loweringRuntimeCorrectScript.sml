@@ -47,7 +47,6 @@ Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect
-  vyperSourceSupplyDefs vyperSourceSupplyFields vyperSourceTransferSupply
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
@@ -543,14 +542,6 @@ Proof
   Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx
                           NONE) fbody es0` >> rename1 `_ = (res, es')` >>
   drule_all external_body_source_ok >> strip_tac >>
-  `source_supply es0` by
-    (drule_all source_typing_outcomes_supply >> strip_tac >>
-     drule machine_supply_initial_state >>
-     disch_then (qspecl_then [`[env]`, `[]`] assume_tac) >>
-     qspecl_then [`mut`,
-                  `initial_evaluation_context am.sources am.layouts tx NONE`]
-       mp_tac (Q.GENL [`mut`, `cx`] source_supply_action_send_call_value) >>
-     simp[source_supply_action_def] >> disch_then drule >> simp[]) >>
   drule_all call_external_selected_body >>
   disch_then (qspec_then `SOME vs.vs_outcomes` assume_tac) >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>

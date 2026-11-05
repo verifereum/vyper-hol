@@ -173,7 +173,7 @@ Proof
       strip_tac >>
       gvs[update_accounts_def, update_pending_deletions_def, bind_def,
           ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
-      metis_tac[])
+      imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[])
   >- suspend "CreateTarget"
   >- simp[Once evaluate_def, return_def]
   >- (rpt strip_tac >>

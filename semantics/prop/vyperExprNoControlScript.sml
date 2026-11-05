@@ -1064,7 +1064,8 @@ Resume canonical_eval_no_control_with_results[SelfDestruct]:
     update_accounts_def, update_pending_deletions_def, bind_def, return_def] >>
   imp_res_tac type_check_no_control >>
   imp_res_tac lift_option_type_no_control >>
-  gvs[no_control_exc_def] >> res_tac >> gvs[]
+  imp_res_tac transfer_value_no_control >> res_tac >>
+  gvs[no_control_exc_def]
 QED
 
 Resume canonical_eval_no_control_with_results[Create]:

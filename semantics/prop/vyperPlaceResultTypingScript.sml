@@ -1501,8 +1501,8 @@ Proof
   irule scope_pop_effect_identity >>
   rw[ignore_bind_def, bind_def, type_check_def, assert_def,
      lift_option_type_def, get_accounts_def, update_accounts_def,
-     update_pending_deletions_def, return_def, raise_def,
-     COND_RATOR, AllCaseEqs()] >>
+     update_pending_deletions_def, transfer_value_def, check_def,
+     return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
   Cases_on `dest_AddressV (HD vs)` >> gvs[raise_def, return_def]
 QED
 

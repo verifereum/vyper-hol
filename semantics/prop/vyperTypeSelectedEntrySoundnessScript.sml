@@ -30,7 +30,6 @@ Ancestors
   vyperTypeExprSoundness vyperTypeInitialState vyperTypeEntryReadiness
   vyperTypeContract vyperTypeContractSoundness
   vyperTypeSelectedEntry vyperTypeEntryDefaults
-  vyperSourceSupplyFields
 
 val _ = Parse.hide "body";
 
@@ -165,7 +164,7 @@ QED
 Theorem checked_selected_entry_no_static_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   call_tx_well_typed tx /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   src = find_function_module am tx.target tx.function_name /\
@@ -208,10 +207,10 @@ Theorem checked_selected_entry_no_static_error:
        exc <> BreakException /\ exc <> ContinueException)
 Proof
   strip_tac >>
-  `no_type_error_result (FST (call_external orc gobs am tx)) /\
+  `!orc. no_type_error_result (FST (call_external orc gobs am tx)) /\
          !exc. FST (call_external orc gobs am tx) = INR exc ==>
                exc <> BreakException /\ exc <> ContinueException` by
-    (Cases_on `call_external orc gobs am tx` >>
+    (gen_tac >> Cases_on `call_external orc gobs am tx` >>
      rename1 `call_external orc gobs am tx = (res,rest)` >>
      PairCases_on `rest` >> simp[] >>
      conj_tac >- (drule_all checked_call_external_no_type_error >> simp[]) >>
@@ -219,7 +218,6 @@ Proof
      drule_all checked_call_external_no_loop_control >> simp[]) >>
   `lookup_exported_function cx am tx.function_name =
      SOME (mut,nr,args,dflts,ret,body)` by gvs[selected_entry_def] >>
-  `accounts_supply_bounded am.accounts` by fs[machine_supply_def] >>
   drule_all checked_selected_entry_defaults_cases >>
   disch_then (qspec_then `gobs` strip_assume_tac)
   >- (disj2_tac >>

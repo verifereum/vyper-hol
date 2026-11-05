@@ -2054,6 +2054,8 @@ Proof
     imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_accounts_state >>
+    imp_res_tac transfer_value_scopes >>
+    imp_res_tac transfer_value_immutables >>
     gvs[update_accounts_def, update_pending_deletions_def,
         bind_def, ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
     first_x_assum drule >> rw[] >>

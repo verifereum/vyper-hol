@@ -27,7 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
-  vyperTypeStoragePreservation vyperSourceSupplyDefs vyperEvalSupply
+  vyperTypeStoragePreservation
   list finite_map bodySim bodySimStmtCases allocLimits exprSim exprSimHyps
   exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
@@ -121,7 +121,7 @@ Theorem body_annassign_word[local]:
        (INL tyv,t) ==>
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
@@ -183,7 +183,7 @@ QED
 Theorem body_annassign_rhs_pre[local]:
   !cenv cx env e es tops id typ ctx.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
     expr_body_pre cenv cx env e es
@@ -199,7 +199,7 @@ QED
 Theorem body_annassign_declared_rhs[local]:
   !cenv cx env e es tops id typ st c st1 ctx func.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
@@ -236,7 +236,7 @@ Theorem body_annassign_memory:
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
@@ -346,7 +346,7 @@ Theorem body_annassign_other:
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
@@ -476,7 +476,7 @@ QED
 Theorem expr_sim_inv_for_pop:
   !cenv cx env es id fty tyv v ret_ty body env_b r2 es2 sc rest tops
    bindings.
-    expr_sim_inv cenv cx env es /\ source_supply es /\ id NOTIN FDOM env.var_types /\
+    expr_sim_inv cenv cx env es /\ id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ value_has_type tyv v /\
     type_stmts (extend_local env id fty F) ret_ty body = SOME env_b /\
     call_evaluation_safe cx (int_calls_stmts body) /\
@@ -507,11 +507,6 @@ Proof
      (es with scopes updated_by
         CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
                                popped := []|>))).accounts` by simp[] >>
-  `source_supply
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>)))` by
-    gvs[source_supply_def] >>
   drule_all (cj 2 eval_scc_type_sound_mutual) >> strip_tac >>
   `env_maps_wf env` by metis_tac[env_consistent_env_maps_wf] >>
   `env_consistent env cx (es2 with scopes := TL es2.scopes)` by
@@ -593,7 +588,7 @@ Theorem body_for_range_lit[local]:
     supported_stmt tops bindings
       (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
          stmts) /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty
       (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
@@ -654,7 +649,7 @@ Proof
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
        stmts_exprs_ok_EVERY, alloc_limits_stmt_def] >>
   MATCH_MP_TAC
-    (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei /\ source_supply ei`
+    (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei`
                   compile_for_range_lit_frag)) >>
   qexists_tac `tyv` >> simp[wordsTheory.dimword_def] >> rpt conj_tac
   >- metis_tac[compile_stmts_grows]
@@ -666,11 +661,6 @@ Proof
         (drule_then irule declare_local_same_frame >> simp[]) >>
       `value_has_type tyv (IntV (n1 + &j))` by
         (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
-      `source_supply
-         (ei with scopes :=
-            (FEMPTY |+ (id, <|assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := []|>)) :: ei.scopes)` by
-        gvs[source_supply_def] >>
       qpat_x_assum `body_stmts_ok _ _`
         (irule o REWRITE_RULE [body_stmts_ok_def]) >>
       simp[] >> rpt conj_tac
@@ -683,26 +673,12 @@ Proof
                     locals_alloc_ok_extend]) >>
       metis_tac[frame_ret_ok_same_frame]) >>
   rpt strip_tac >>
-  `source_supply
-     (ei with scopes :=
-        (FEMPTY |+ (id, <|assignable := F; type := tyv;
-                           value := IntV (n1 + &j); popped := []|>)) :: ei.scopes)` by
-    gvs[source_supply_def] >>
-  `source_supply es2` by
-    (qspecl_then
-       [`cx`, `stmts`,
-        `ei with scopes :=
-           (FEMPTY |+ (id, <|assignable := F; type := tyv;
-                              value := IntV (n1 + &j); popped := []|>)) :: ei.scopes`]
-       mp_tac (REWRITE_RULE [source_supply_action_def]
-                 (cj 2 eval_source_supply_mutual)) >> simp[]) >>
-  fs[source_supply_def] >>
   `value_has_type tyv (IntV (n1 + &j))` by
     (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
   (irule expr_sim_inv_for_pop >> conj_tac >- metis_tac[] >>
    qexistsl_tac [`bindings`, `stmts`, `env_b`, `ei`, `typ`, `id`, `r2`,
                  `ret_ty`, `tops`, `tyv`, `IntV (n1 + &j)`] >>
-   simp[] >> fs[body_inv_def, source_supply_def])
+   simp[] >> fs[body_inv_def])
 QED
 
 (* RESIDUAL (#637 for): a loop over a range whose ends are not both
@@ -732,7 +708,7 @@ Theorem body_for_other:
        (INL tyv,t) ==>
        body_iterator_ok cx it) /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (For id typ it n body) = SOME env' /\
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\

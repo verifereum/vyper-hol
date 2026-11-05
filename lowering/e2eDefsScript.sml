@@ -16,8 +16,7 @@ Ancestors
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
-  vyperStorageLayoutSafety vyperRuntimeAccounts vyperAccountSupply
-  vyperSupplyBoundary vyperSourceSupplyFields
+  vyperStorageLayoutSafety vyperRuntimeAccounts
   supportedProgram compileEnv selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
@@ -45,8 +44,7 @@ Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
     ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
           checked_contract_runtime_ready art [(NONE, tops)] am tx /\
-          machine_well_typed am /\ accounts_supply_bounded am.accounts /\
-          call_tx_well_typed tx
+          machine_well_typed am /\ call_tx_well_typed tx
 End
 
 Definition source_storage_ok_def:
@@ -61,21 +59,11 @@ Definition call_outcomes_ok_def:
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome. outcome.co_success ==>
                  accounts_runtime_well_typed outcome.co_accounts /\
-                  accounts_supply_bounded outcome.co_accounts /\
                  contract_storage_well_formed cx
                    (initial_state (am with <| accounts := outcome.co_accounts;
                                               tStorage := outcome.co_tStorage |>) []))
             os
 End
-
-Theorem source_typing_outcomes_supply:
-  source_typing_ok tops am tx /\ call_outcomes_ok tops am tx os ==>
-  machine_supply am (SOME os)
-Proof
-  rw[source_typing_ok_def, call_outcomes_ok_def, machine_supply_def,
-     supply_safe_outcomes_def, supply_safe_outcome_def, listTheory.EVERY_MEM] >>
-  res_tac
-QED
 
 (* ===== Transaction environment and entry transfer ===== *)
 

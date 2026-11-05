@@ -653,7 +653,7 @@ Proof
   qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
   Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
-  gvs[dimword_def]
+  gvs[dimword_def] 
   >- (irule word_builtin_frag_success >>
       simp[straight_fresh_as_wei_value_int, word_value_def] >>
       rpt strip_tac >>
@@ -808,19 +808,19 @@ QED
 (* ===== Typed composition and the case lemmas ===== *)
 
 (* wb_args_ready from the operands' shared case judgments: each operand
-   meets expr_body_pre wherever expr_sim_inv and source_supply hold. *)
+   meets expr_body_pre wherever the invariant holds. *)
 Theorem wb_args_ready_of_case:
   !args nocalls ctx func cenv cx env arg_ty.
-    (!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
        expr_body_pre cenv cx env e s /\ (nocalls ==> int_calls_expr e = []) /\
        word_value_type (expr_type e)) /\
     exprs_case nocalls ctx func cenv cx args ==>
-    wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) args
+    wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args
 Proof
   Induct >> simp[wb_args_ready_def, exprs_case_def] >> rpt gen_tac >>
   strip_tac >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `expr_body_pre cenv cx env h s /\ (nocalls ==> int_calls_expr h = []) /\
+      `expr_body_pre cenv cx env h es /\ (nocalls ==> int_calls_expr h = []) /\
        word_value_type (expr_type h)` by metis_tac[] >>
       rpt conj_tac
       >- metis_tac[expr_sim_case_def]
@@ -837,15 +837,15 @@ QED
    precondition. *)
 Theorem wb_args_ready_of_ok:
   !args ctx func cenv cx env arg_ty.
-    (!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
        expr_sim_pre cenv cx env e s /\ word_value_type (expr_type e)) /\
     EVERY (expr_sim_ok cenv) args ==>
-    wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) args
+    wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args
 Proof
   Induct >> simp[wb_args_ready_def] >> rpt gen_tac >> strip_tac >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `expr_sim_pre cenv cx env h s /\ word_value_type (expr_type h)` by
+      `expr_sim_pre cenv cx env h es /\ word_value_type (expr_type h)` by
         metis_tac[] >>
       rpt conj_tac
       >- metis_tac[expr_sim_ok_def]
@@ -874,9 +874,9 @@ QED
 
 Theorem word_args_values_typed:
   !args vs cenv cx env es es'.
-    (!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
        expr_body_pre cenv cx env e s /\ word_value_type (expr_type e)) /\
-    expr_sim_inv cenv cx env es /\ source_supply es /\ eval_exprs cx args es = (INL vs,es') ==>
+    expr_sim_inv cenv cx env es /\ eval_exprs cx args es = (INL vs,es') ==>
     LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                          value_has_type tv v) args vs
 Proof
@@ -892,12 +892,12 @@ Proof
 QED
 
 (* The composition on typed word operands, given wb_args_ready at the
-   paired invariant expr_sim_inv and source_supply. *)
+   invariant expr_sim_inv. *)
 Theorem compile_typed_word_builtin_sim:
   !ctx func cenv cx env ty ann bt args es arg_ty code.
     expr_body_pre cenv cx env (Builtin ann bt args) es /\
     EVERY (\e. word_value_type (expr_type e)) args /\
-    wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) args /\
+    wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
     bt <> Len /\ bt <> Env MsgGas /\ bt <> Bop In /\ bt <> Bop NotIn /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
@@ -912,8 +912,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `wb_args_shape cenv arg_ty args` by metis_tac[typed_word_args_shape] >>
   irule compile_word_builtin_sim >> simp[] >>
-  qexistsl_tac [`\s. expr_sim_inv cenv cx env s /\ source_supply s`,
-               `arg_ty`, `code`] >> simp[] >>
+  qexistsl_tac [`expr_sim_inv cenv cx env`, `arg_ty`, `code`] >> simp[] >>
   conj_tac >- gvs[expr_body_pre_def] >> conj_tac
   >- (rpt strip_tac >> first_x_assum (qspec_then `xs` mp_tac) >>
       simp[straight_fresh_def] >> disch_then drule >> strip_tac >>
@@ -933,7 +932,7 @@ QED
 Theorem compile_floor_typed_sim:
   !ctx func cenv cx env ty ann e es.
     expr_body_pre cenv cx env (Builtin ann Floor [e]) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) [e]) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [e]) ==>
     expr_sim ctx func cenv cx ty (Builtin ann Floor [e]) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -955,7 +954,7 @@ QED
 Theorem compile_ceil_typed_sim:
   !ctx func cenv cx env ty ann e es.
     expr_body_pre cenv cx env (Builtin ann Ceil [e]) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) [e]) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [e]) ==>
     expr_sim ctx func cenv cx ty (Builtin ann Ceil [e]) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -977,7 +976,7 @@ QED
 Theorem ceil_ready_vv_sim:
   !ctx func cenv cx env ty ann args es.
     expr_body_pre cenv cx env (Builtin ann Ceil args) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) args) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
     expr_vv_sim ctx func cenv cx ty (Builtin ann Ceil args) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -997,7 +996,7 @@ Theorem compile_modular_typed_sim:
   !ctx func cenv cx env ty ann bt a b m es.
     (bt = AddMod \/ bt = MulMod) /\
     expr_body_pre cenv cx env (Builtin ann bt [a; b; m]) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) [a; b; m]) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [a; b; m]) ==>
     expr_sim ctx func cenv cx ty (Builtin ann bt [a; b; m]) es
 Proof
   rpt gen_tac >> strip_tac >> (
@@ -1023,7 +1022,7 @@ QED
 Theorem compile_pow_mod256_typed_sim:
   !ctx func cenv cx env ty ann a b es.
     expr_body_pre cenv cx env (Builtin ann PowMod256 [a; b]) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) [a; b]) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [a; b]) ==>
     expr_sim ctx func cenv cx ty (Builtin ann PowMod256 [a; b]) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1044,7 +1043,7 @@ QED
 Theorem compile_as_wei_value_typed_sim:
   !ctx func cenv cx env ty ann d e es.
     expr_body_pre cenv cx env (Builtin ann (AsWeiValue d) [e]) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) [e]) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [e]) ==>
     expr_sim ctx func cenv cx ty (Builtin ann (AsWeiValue d) [e]) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1084,7 +1083,7 @@ Theorem word_builtin_ready_vv_sim:
   !ctx func cenv cx env ty ann bt args es.
     (bt = Floor \/ (?d. bt = AsWeiValue d) \/ bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
     expr_body_pre cenv cx env (Builtin ann bt args) es /\
-    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (\s. expr_sim_inv cenv cx env s /\ source_supply s) args) ==>
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
     expr_vv_sim ctx func cenv cx ty (Builtin ann bt args) es
 Proof
   rpt gen_tac >> strip_tac >> (

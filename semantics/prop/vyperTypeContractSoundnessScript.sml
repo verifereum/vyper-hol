@@ -18,24 +18,10 @@ Ancestors
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
   vyperTypeStatePreservation vyperTypeConstantFold vyperTypeConstantCells
-  vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
-  wordsLib vyperSourceSupplyLib
+  wordsLib
 
 val _ = Parse.hide "body";
-
-(* Carry the explicit physical entry domain through actual lock/send/body
-   equations. Pure environment and readiness predicates remain unchanged. *)
-val contract_gvs = gvs;
-val contract_fs = fs;
-val contract_drule_all = drule_all;
-val contract_impl_tac = impl_tac;
-fun gvs ths = vyperSourceSupplyLib.forward >> contract_gvs ths >>
-  vyperSourceSupplyLib.forward;
-fun fs ths = vyperSourceSupplyLib.forward >> contract_fs ths >>
-  vyperSourceSupplyLib.forward;
-fun drule_all th = vyperSourceSupplyLib.forward >> contract_drule_all th;
-val impl_tac = vyperSourceSupplyLib.forward >> contract_impl_tac;
 
 (* ===== Public transaction and runtime-readiness predicates ===== *)
 
@@ -1227,17 +1213,17 @@ Proof
   Cases_on `tag`
   >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
       Cases_on `res` >> rpt strip_tac >>
-      contract_gvs[abstract_machine_from_state_def]) >>
+      gvs[abstract_machine_from_state_def]) >>
   rename1 `INR exc` >> Cases_on `exc` >>
   simp[abstract_machine_from_state_def] >> rpt strip_tac >>
-  contract_gvs[] >>
+  gvs[] >>
   rename1 `safe_cast _ v_ret` >>
   namedCases_on `unlock st_body` ["res st_unlocked"] >>
-  Cases_on `res` >> contract_gvs[abstract_machine_from_state_def] >>
-  Cases_on `evaluate_type tenv ret` >> contract_gvs[] >>
+  Cases_on `res` >> gvs[abstract_machine_from_state_def] >>
+  Cases_on `evaluate_type tenv ret` >> gvs[] >>
   rename1 `safe_cast tv v_ret` >>
   Cases_on `safe_cast tv v_ret` >> rpt strip_tac >>
-  contract_gvs[abstract_machine_from_state_def]
+  gvs[abstract_machine_from_state_def]
 QED
 
 Theorem call_external_function_deploy_success_cases:
@@ -1628,7 +1614,7 @@ QED
 Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
@@ -1718,7 +1704,7 @@ QED
 Theorem call_lock_send_eval_return_typed_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
@@ -1802,7 +1788,7 @@ QED
 Theorem call_external_function_exact_selected_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
@@ -1907,7 +1893,7 @@ QED
 Theorem checked_explicit_external_entry_no_type_error_selected[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
@@ -3194,7 +3180,7 @@ Theorem checked_public_getter_post_prefix_body_execution_selected:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st ==>
+  state_well_typed st /\ accounts_well_typed st.accounts ==>
   no_type_error_eval (eval_stmts cx body st) /\
   (!v st'. eval_stmts cx body st = (INR (ReturnException v),st') ==>
      ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
@@ -3266,7 +3252,7 @@ Theorem checked_public_getter_body_preserves_machine_components:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
   eval_stmts cx body st = (res,st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
@@ -3309,7 +3295,7 @@ QED
 Theorem checked_public_getter_initial_body_execution_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
@@ -3337,10 +3323,6 @@ Proof
     simp[initial_state_def] >>
   `(initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>).immutables = am.immutables` by
     simp[initial_state_def] >>
-  `source_supply
-     (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by
-    fs[vyperSourceSupplyFieldsTheory.machine_supply_def,
-       vyperSourceSupplyDefsTheory.source_supply_def, initial_state_def] >>
   drule_all checked_public_getter_post_prefix_body_execution_selected >>
   simp[]
 QED
@@ -3348,7 +3330,7 @@ QED
 Theorem call_external_function_exact_selected_getter_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
@@ -3367,7 +3349,7 @@ Proof
               value_has_type ret_tv v)` by
     (drule_all (Q.INST [`rqs` |-> `[]`]
                   checked_public_getter_initial_body_execution_selected) >>
-     disch_then (qspecl_then [`gobs`] mp_tac) >>
+     disch_then (qspecl_then [`orc`, `gobs`] mp_tac) >>
      simp[initial_state_def]) >>
   `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
     (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
@@ -3548,7 +3530,7 @@ Theorem checked_explicit_external_body_preserves_machine_components:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
   eval_stmts cx body st = (res,st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
@@ -3569,7 +3551,7 @@ QED
 Theorem call_external_function_selected_explicit_raw_args_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
@@ -3602,7 +3584,7 @@ QED
 Theorem call_external_function_selected_getter_raw_args_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
@@ -3640,7 +3622,7 @@ QED
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   call_tx_well_typed tx /\
   call_external orc gobs am tx = (res,am',rqs) ==>
   no_type_error_result res

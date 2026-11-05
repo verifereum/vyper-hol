@@ -1044,6 +1044,7 @@ Proof
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_refl] >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac transfer_value_logs >> gvs[] >>
   Cases_on `cx.txn.created_in_tx` >>
   gvs[vyperStateTheory.update_accounts_def,
       vyperStateTheory.update_pending_deletions_def,

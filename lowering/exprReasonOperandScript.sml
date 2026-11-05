@@ -314,8 +314,8 @@ Proof
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  metis_tac[reason_stack_result]
+  rpt (pairarg_tac >> gvs[]) >>
+  drule_all reason_stack_result >> simp[]
 QED
 
 Theorem reason_ensure_memory_operand[local]:

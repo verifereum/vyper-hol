@@ -15,23 +15,8 @@ Ancestors
   vyperPlaceResultTyping vyperTargetPlaceWrite vyperAugAssignWriteSoundness
   vyperImmutableMetadataFrame[ignore_grammar]
   vyperCallOutcome[ignore_grammar]
-  vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
-  wordsLib markerLib BasicProvers vyperSourceSupplyLib
-
-(* Storage proofs use the same explicit physical domain as evaluator typing.
-   Forward it through actual evaluation equations without changing the
-   established storage/runtime consistency predicates or conclusions. *)
-val storage_gvs = gvs;
-val storage_fs = fs;
-val storage_drule_all = drule_all;
-val storage_impl_tac = impl_tac;
-fun gvs thms = vyperSourceSupplyLib.forward >> storage_gvs thms >>
-  vyperSourceSupplyLib.forward;
-fun fs thms = vyperSourceSupplyLib.forward >> storage_fs thms >>
-  vyperSourceSupplyLib.forward;
-fun drule_all th = vyperSourceSupplyLib.forward >> storage_drule_all th;
-val impl_tac = vyperSourceSupplyLib.forward >> storage_impl_tac;
+  wordsLib markerLib BasicProvers
 
 fun ORACLE_STORAGE_TAC (asl,w) =
   let
@@ -284,7 +269,7 @@ Proof
 QED
 
 Theorem eval_iterator_preserves_runtime_consistent[local]:
-  well_typed_iterator env ty it /\ runtime_consistent env cx st /\ source_supply st /\
+  well_typed_iterator env ty it /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_iterator it) /\
   eval_iterator cx it st = (res,st') ==>
@@ -295,7 +280,7 @@ Proof
 QED
 
 Theorem eval_expr_preserves_runtime_consistent:
-  well_typed_expr env e /\ runtime_consistent env cx st /\ source_supply st /\
+  well_typed_expr env e /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==>
@@ -308,7 +293,7 @@ QED
 
 Theorem eval_exprs_success_runtime_typed[local]:
   well_typed_exprs env es /\
-  runtime_consistent env cx st /\ source_supply st /\
+  runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   eval_exprs cx es st = (INL vs,st') ==>
@@ -320,7 +305,7 @@ QED
 Theorem eval_exprs_success_runtime_typed_from_eval[local]:
   eval_exprs cx es st = (INL vs,st') /\
   well_typed_exprs env es /\
-  runtime_consistent env cx st /\ source_supply st /\
+  runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   exprs_runtime_typed env es vs
@@ -335,7 +320,7 @@ QED
 
 Theorem eval_expr_success_result_typed[local]:
   well_typed_expr env e /\
-  runtime_consistent env cx st /\ source_supply st /\
+  runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL tv,st') ==>
@@ -346,7 +331,7 @@ Proof
 QED
 
 Theorem eval_exprs_preserves_runtime_consistent:
-  well_typed_exprs env es /\ runtime_consistent env cx st /\ source_supply st /\
+  well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   eval_exprs cx es st = (res,st') ==>
@@ -358,7 +343,7 @@ Proof
 QED
 Theorem eval_exprs_preserves_runtime_consistent_from_eval[local]:
   eval_exprs cx es st = (res,st') /\
-  well_typed_exprs env es /\ runtime_consistent env cx st /\ source_supply st /\
+  well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   runtime_consistent env cx st'
@@ -374,7 +359,7 @@ QED
 Theorem eval_expr_results_preserves_runtime_consistent_from_eval[local]:
   eval_expr_results cx es st = (res,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\
+  functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   runtime_consistent env cx st'
 Proof
@@ -385,7 +370,7 @@ QED
 Theorem eval_expr_results_success_typed[local]:
   eval_expr_results cx es st = (INL results,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\
+  functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   expr_results_typed (env,cx,st') es results
 Proof
@@ -398,7 +383,7 @@ Theorem eval_for_preserves_runtime_consistent[local]:
   EVERY (value_has_type tyv) vs /\
   id NOTIN FDOM env.var_types /\
   type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
-  runtime_consistent env cx st /\ source_supply st /\
+  runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts body_stmts) /\
   eval_for cx tyv id body_stmts vs st = (res,st') ==>
@@ -858,7 +843,7 @@ QED
 
 Theorem eval_expr_place_preserves_runtime_consistent:
   (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-  runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
+  runtime_consistent env cx st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==>
   runtime_consistent env cx st'
@@ -869,7 +854,7 @@ QED
 
 Theorem eval_base_place_preserves_runtime_consistent:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (res,st') ==>
   runtime_consistent env cx st'
 Proof
@@ -879,7 +864,7 @@ QED
 
 Theorem eval_target_place_preserves_runtime_consistent[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (res,st') ==>
   runtime_consistent env cx st'
 Proof
@@ -889,7 +874,7 @@ QED
 
 Theorem eval_target_place_success_storage_type:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
   eval_result_typed (env,cx,st') (PlaceR p) (Type ty)
 Proof
@@ -910,7 +895,7 @@ QED
 
 Theorem assign_tuple_targets_preserves_runtime_consistent[local]:
   well_typed_atarget env tgt ty /\ value_runtime_typed env ty v /\
-  runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
+  runtime_consistent env cx st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_atarget tgt) /\
   assign_tuple_targets cx tgt v st = (res,st') ==>
   runtime_consistent env cx st'
@@ -920,7 +905,7 @@ QED
 
 Theorem eval_expr_success_storage_facts:
   well_typed_expr env e /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL pv,st') ==>
   runtime_consistent env cx st' /\
   eval_result_typed (env,cx,st') pv (Type (expr_type e)) /\
@@ -939,7 +924,7 @@ QED
 
 Theorem eval_target_place_storage_trace[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (res,st') ==>
   typed_scope_transition st st'
 Proof
@@ -949,7 +934,7 @@ QED
 
 Theorem eval_target_place_success_storage_facts[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
   eval_result_typed (env,cx,st') (PlaceR p) (Type ty) /\
   live_memory_result st' (PlaceR p)
@@ -964,7 +949,7 @@ QED
 
 Theorem eval_expr_storage_trace[local]:
   well_typed_expr env e /\ runtime_consistent env cx st /\
-  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==>
   typed_scope_transition st st'
 Proof
@@ -1018,7 +1003,7 @@ QED
 Theorem eval_scc_storage_preservation_results_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     protected_storage_calls_preserve cx /\
@@ -1028,7 +1013,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     contract_storage_well_formed cx st') /\
   (!cx ss. !env ret_ty env' st res st'.
     type_stmts env ret_ty ss = SOME env' /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     protected_storage_calls_preserve cx /\
@@ -1038,7 +1023,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     contract_storage_well_formed cx st') /\
   (!cx it. !env ty st res st'.
     well_typed_iterator env ty it /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator it) /\
     protected_storage_calls_preserve cx /\
@@ -1051,7 +1036,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     EVERY (value_has_type tyv) vs /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body) /\
     protected_storage_calls_preserve cx /\
@@ -1060,7 +1045,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     eval_for cx tyv id body vs st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx e. !env st res st'.
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     protected_storage_calls_preserve cx /\
@@ -1072,7 +1057,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
        contract_storage_well_formed cx st'))) /\
   (!cx es. !env st res st'.
     well_typed_exprs env es /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\
     protected_storage_calls_preserve cx /\
@@ -1082,7 +1067,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     contract_storage_well_formed cx st') /\
   (!cx bt. !env vt st res st'.
     type_place_target env bt = SOME vt /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target bt) /\
     protected_storage_calls_preserve cx /\
@@ -1092,7 +1077,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     contract_storage_well_formed cx st') /\
   (!cx tgt. !env ty st res st'.
     well_typed_target env tgt ty /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target tgt) /\
     protected_storage_calls_preserve cx /\
@@ -1102,7 +1087,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     contract_storage_well_formed cx st') /\
   (!cx tgt v. !env ty st res st'.
     well_typed_atarget env tgt ty /\ value_runtime_typed env ty v /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget tgt) /\
     protected_storage_calls_preserve cx /\
@@ -1113,7 +1098,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
   (!cx tgts vs. !env tys st res st'.
     LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
-    runtime_storage_consistent env cx st /\ source_supply st /\
+    runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets tgts) /\
     protected_storage_calls_preserve cx /\
@@ -1122,7 +1107,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     assign_tuple_target_list cx tgts vs st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
     protected_storage_calls_preserve cx /\ protected_storage_creates_preserve cx /\
     oracle_storage_ok cx st /\ eval_expr_results cx es st = (res,st') ==>
@@ -2542,13 +2527,12 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_Send]:
 QED
 
 (* Balance transfer/burning and deferred deletion leave protected storage
-   unchanged even though the message halts successfully. *)
-Theorem selfdestruct_tail_preserves_contract_storage[local]:
+   unchanged, whether the message halts or the transfer check fails. *)
+Theorem selfdestruct_tail_preserves_contract_storage:
   contract_storage_well_formed cx st /\
   (do
-     update_accounts
-       (vfmExecution$transfer_value cx.txn.target target
-         (lookup_account cx.txn.target st.accounts).balance);
+     transfer_value cx.txn.target target
+       (lookup_account cx.txn.target st.accounts).balance;
      (if cx.txn.created_in_tx then do
         update_accounts (\acc. update_account cx.txn.target
           (lookup_account cx.txn.target acc with balance := 0) acc);
@@ -2558,15 +2542,20 @@ Theorem selfdestruct_tail_preserves_contract_storage[local]:
    od) st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
+  simp[ignore_bind_def, bind_def] >>
+  qmatch_goalsub_abbrev_tac `transfer_value _ _ amount st` >>
+  Cases_on `transfer_value cx.txn.target target amount st` >>
+  rename1 `_ = (tres,mid)` >> strip_tac >>
+  `contract_storage_well_formed cx mid` by
+    metis_tac[transfer_value_preserves_contract_storage_well_formed] >>
+  Cases_on `tres` >> gvs[] >>
   Cases_on `cx.txn.created_in_tx` >>
-  simp[bind_def, ignore_bind_def, update_accounts_def,
-       update_pending_deletions_def, return_def, raise_def] >>
-  rpt strip_tac >> gvs[] >>
+  gvs[bind_def, ignore_bind_def, update_accounts_def,
+      update_pending_deletions_def, return_def, raise_def] >>
   irule contract_storage_well_formed_storage_frame >>
-  qexists_tac `st` >> simp[] >>
+  qexists_tac `mid` >> simp[] >>
   gen_tac >> Cases_on `b` >>
   simp[vyperStorageBackendTheory.get_storage_def,
-       vfmExecutionTheory.transfer_value_def,
        vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
        combinTheory.APPLY_UPDATE_THM, AllCaseEqs()] >>
   rpt IF_CASES_TAC >> gvs[combinTheory.APPLY_UPDATE_THM]
@@ -2890,7 +2879,7 @@ Resume eval_scc_storage_preservation_results_mutual[StorageRawCreate]:
 QED
 
 Theorem eval_iterator_success_values_typed[local]:
-  well_typed_iterator env ty it /\ runtime_consistent env cx st /\ source_supply st /\
+  well_typed_iterator env ty it /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_iterator it) /\
   eval_iterator cx it st = (INL vs,st') ==>
@@ -3036,7 +3025,7 @@ Proof
 QED
 
 Theorem extcall_return_tail_preserves_contract_storage:
-  runtime_storage_consistent env cx st /\ source_supply st /\
+  runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   protected_storage_calls_preserve cx /\
   oracle_storage_ok cx st /\
@@ -3045,7 +3034,7 @@ Theorem extcall_return_tail_preserves_contract_storage:
     call_evaluation_safe cx (int_calls_expr (THE drv))) /\
   (returnData = [] /\ IS_SOME drv ==>
     !env0 st0 res0 st0'.
-      runtime_storage_consistent env0 cx st0 /\ source_supply st0 /\
+      runtime_storage_consistent env0 cx st0 /\
       functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr (THE drv)) /\
       protected_storage_calls_preserve cx /\
@@ -3526,7 +3515,7 @@ QED
 
 
 Theorem intcall_defaults_runtime_storage_consistent[local]:
-  runtime_storage_consistent env cx st /\ source_supply st /\
+  runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   env_body.current_src = src_id_opt /\
   env_body.type_defs = get_tenv cx /\
@@ -4445,7 +4434,7 @@ end;
 
 Theorem eval_stmt_preserves_contract_storage_well_formed:
   type_stmt env ret_ty s = SOME env' /\
-  runtime_storage_consistent env cx st /\ source_supply st /\
+  runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmt s) /\
   protected_storage_calls_preserve cx /\
@@ -4459,7 +4448,7 @@ QED
 
 Theorem eval_stmts_preserves_contract_storage_well_formed:
   type_stmts env ret_ty ss = SOME env' /\
-  runtime_storage_consistent env cx st /\ source_supply st /\
+  runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   protected_storage_calls_preserve cx /\
@@ -4473,7 +4462,7 @@ QED
 
 Theorem eval_expr_preserves_contract_storage_well_formed:
   well_typed_expr env e /\
-  runtime_storage_consistent env cx st /\ source_supply st /\
+  runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   protected_storage_calls_preserve cx /\
@@ -4487,7 +4476,7 @@ QED
 
 Theorem eval_exprs_preserves_contract_storage_well_formed:
   well_typed_exprs env es /\
-  runtime_storage_consistent env cx st /\ source_supply st /\
+  runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   protected_storage_calls_preserve cx /\

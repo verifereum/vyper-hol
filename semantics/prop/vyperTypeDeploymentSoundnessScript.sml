@@ -37,20 +37,9 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeExternalCallMachine vyperTypeInvariants vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeStmtResult vyperTypeEvalSoundness
-  vyperExprNoControl vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
-Libs
-  vyperSourceSupplyLib
+  vyperExprNoControl
 
 val _ = Parse.hide "body";
-
-val deploy_gvs = gvs;
-val deploy_fs = fs;
-val deploy_drule_all = drule_all;
-fun gvs ths = vyperSourceSupplyLib.forward >> deploy_gvs ths >>
-  vyperSourceSupplyLib.forward;
-fun fs ths = vyperSourceSupplyLib.forward >> deploy_fs ths >>
-  vyperSourceSupplyLib.forward;
-fun drule_all th = vyperSourceSupplyLib.forward >> deploy_drule_all th;
 
 (* ===== Setup steps ===== *)
 
@@ -311,7 +300,7 @@ QED
 Theorem checked_constructor_prefix_typing:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
   cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
@@ -335,7 +324,7 @@ Theorem checked_constructor_prefix_typing:
     type_stmts env_body ret body = SOME env_after /\
     env_consistent env_body cx body_st /\
     env_body.type_defs = type_env_all_modules mods /\
-    state_well_typed body_st /\ accounts_well_typed body_st.accounts /\ source_supply body_st /\
+    state_well_typed body_st /\ accounts_well_typed body_st.accounts /\
     context_well_typed cx /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body)
 Proof
@@ -343,9 +332,6 @@ Proof
   `machine_well_typed am_c` by
     (drule_all checked_constructor_constants_exist >>
      disch_then (qspec_then `exps` mp_tac) >> strip_tac >> gvs[]) >>
-  `machine_supply am_c orc` by
-    (drule evaluate_all_constants_preserves_accounts >>
-     gvs[machine_supply_def]) >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   drule_all call_lock_send_success_components >> strip_tac >>
@@ -378,7 +364,7 @@ QED
 Theorem checked_constructor_prefix_no_type_error:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
   cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
@@ -432,7 +418,7 @@ QED
 Theorem checked_constructor_prefix_return_typed:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
   cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
@@ -578,7 +564,7 @@ QED
 Theorem checked_constructor_body_no_static_error:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ machine_supply am orc /\ ALOOKUP mods NONE = SOME ts /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
   cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
@@ -628,7 +614,7 @@ QED
 Theorem checked_load_contract_no_static_error:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\ machine_supply am orc /\
+  machine_well_typed am /\
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
