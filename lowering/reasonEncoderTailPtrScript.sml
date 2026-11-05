@@ -196,7 +196,8 @@ Theorem reason_encoder_load_offset_ptr:
     (!p. p <> off /\ p <> out ==>
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (off <> out ==> lookup_var off sf = SOME d /\ op_taint tnf (Var off) = {})
 Proof
   strip_tac >> drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
@@ -244,7 +245,8 @@ Theorem reason_encoder_pointer_setup_ptr:
     (!p. p <> src /\ p <> head /\ p <> off /\ p <> tail ==>
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (off <> tail ==> lookup_var off sf = SOME 32w /\ op_taint tnf (Var off) = {})
 Proof
   strip_tac >>
   drule_all (SRULE [eval_operand_def, op_taint_def, w2n_lt]
@@ -543,3 +545,239 @@ Resume reason_encoder_finish_size_ptr[resources]:
 QED
 
 Finalise reason_encoder_finish_size_ptr
+
+(* Once the clean length is captured, the source need not remain robust:
+   zeroing and copying may transport arbitrary payload taint. *)
+Theorem reason_encoder_tail_copy_ptr:
+  emit_inst MLOAD [Var src] [len] sa = ((),c1) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp] c1 = ((),c2) /\
+  emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c2 = ((),c3) /\
+  emit_inst ADD [Var tail;Var rounded] [last] c3 = ((),c4) /\
+  emit_void MSTORE [Var last;Lit 0w] c4 = ((),c5) /\
+  emit_inst ADD [Lit 32w;Var len] [cnt] c5 = ((),c6) /\
+  emit_void MCOPY [Var tail;Var src;Var cnt] c6 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
+  fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
+  fn_has_code c6 sb func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n /\ lookup_var tail s = SOME b /\
+  ptr_covers G tn tail s capacity /\
+  ptr_covers G tn src s (w2n (32w + n)) /\
+  w2n (32w + n) <= capacity /\
+  w2n ((n + 31w) && i2w (-32)) + 32 <= capacity /\
+  w2n b + w2n ((n + 31w) && i2w (-32)) < dimword (:256) /\
+  (!p. MEM p [src;tail] ==> ~MEM p [len;tmp;rounded;last;cnt]) /\
+  len <> tmp /\ len <> rounded /\ len <> last /\ len <> cnt ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var len sf = SOME n /\ op_taint tnf (Var len) = {} /\
+    (!p. ~MEM p [len;tmp;rounded;last;cnt] ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `tail <> len /\ tail <> tmp /\ tail <> rounded /\
+   tail <> last /\ tail <> cnt /\
+   src <> len /\ src <> tmp /\ src <> rounded /\ src <> last /\ src <> cnt` by
+    (fs[] >> metis_tac[]) >>
+  drule_all reason_encoder_tail_zero_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `lookup_var src s1 = SOME a /\ lookup_var tail s1 = SOME b /\
+   ptr_covers G1 tn1 src s1 (w2n (32w + n)) /\
+   ptr_covers G1 tn1 tail s1 (w2n (32w + n))` by
+    (gvs[ptr_covers_def] >> rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  drule_all reason_encoder_exact_copy_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> fs[] >> metis_tac[]
+QED
+
+Theorem reason_encoder_size_suffix_ptr:
+  emit_inst ADD [Var len;Lit 31w] [tmp] sa = ((),c1) /\
+  emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c1 = ((),c2) /\
+  emit_inst ADD [Lit 32w;Var rounded] [item] c2 = ((),c3) /\
+  emit_void MSTORE [Var head;Var off] c3 = ((),c4) /\
+  emit_inst ADD [Var off;Var item] [size_out] c4 = ((),c5) /\
+  emit_void MSTORE [Var slot;Var size_out] c5 = ((),c6) /\
+  emit_inst MLOAD [Var slot] [encoded] c6 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
+  fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
+  fn_has_code c6 sb func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var len s = SOME n /\ op_taint tn (Var len) = {} /\
+  lookup_var head s = SOME h /\ ptr_covers G tn head s 32 /\
+  lookup_var slot s = SOME a /\ ptr_covers G tn slot s 32 /\
+  lookup_var off s = SOME d /\ op_taint tn (Var off) = {} /\
+  (!p. MEM p [head;slot;off] ==> ~MEM p [tmp;rounded;item]) /\
+  slot <> size_out ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var encoded sf = SOME (d + (32w + ((n + 31w) && i2w (-32)))) /\
+    op_taint tnf (Var encoded) = {} /\
+    (!p. ~MEM p [tmp;rounded;item;size_out;encoded] ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all reason_encoder_item_length_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `lookup_var head s1 = SOME h /\ ptr_covers G1 tn1 head s1 32 /\
+   lookup_var slot s1 = SOME a /\ ptr_covers G1 tn1 slot s1 32 /\
+   lookup_var off s1 = SOME d /\ op_taint tn1 (Var off) = {}` by
+    (gvs[ptr_covers_def] >> fs[] >> metis_tac[]) >>
+  drule_all reason_encoder_finish_size_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> fs[] >> metis_tac[]
+QED
+
+(* The initialized pointer setup feeds two independently checked blocks.
+   This boundary exports only the scalar and live operands needed by REVERT;
+   there is deliberately no cleanliness requirement on the encoded bytes. *)
+Theorem reason_encoder_payload_tail_ptr:
+  emit_inst MLOAD [Var src] [len] sa = ((),c1) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp0] c1 = ((),c2) /\
+  emit_inst AND [Var tmp0;Lit (i2w (-32))] [rounded0] c2 = ((),c3) /\
+  emit_inst ADD [Var tail;Var rounded0] [last] c3 = ((),c4) /\
+  emit_void MSTORE [Var last;Lit 0w] c4 = ((),c5) /\
+  emit_inst ADD [Lit 32w;Var len] [cnt] c5 = ((),c6) /\
+  emit_void MCOPY [Var tail;Var src;Var cnt] c6 = ((),c7) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp1] c7 = ((),c8) /\
+  emit_inst AND [Var tmp1;Lit (i2w (-32))] [rounded1] c8 = ((),c9) /\
+  emit_inst ADD [Lit 32w;Var rounded1] [item] c9 = ((),c10) /\
+  emit_void MSTORE [Var head;Var off] c10 = ((),c11) /\
+  emit_inst ADD [Var off;Var item] [size_out] c11 = ((),c12) /\
+  emit_void MSTORE [Var slot;Var size_out] c12 = ((),c13) /\
+  emit_inst MLOAD [Var slot] [encoded] c13 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
+  fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
+  fn_has_code c6 c7 func /\ fn_has_code c7 c8 func /\
+  fn_has_code c8 c9 func /\ fn_has_code c9 c10 func /\
+  fn_has_code c10 c11 func /\ fn_has_code c11 c12 func /\
+  fn_has_code c12 c13 func /\ fn_has_code c13 sb func /\
+  ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n /\ lookup_var tail s = SOME b /\
+  ptr_covers G tn tail s capacity /\
+  ptr_covers G tn src s (w2n (32w + n)) /\
+  w2n (32w + n) <= capacity /\
+  w2n ((n + 31w) && i2w (-32)) + 32 <= capacity /\
+  w2n b + w2n ((n + 31w) && i2w (-32)) < dimword (:256) /\
+  lookup_var head s = SOME h /\ ptr_covers G tn head s 32 /\
+  lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
+  lookup_var off s = SOME d /\ op_taint tn (Var off) = {} /\
+  (!p. MEM p [src;tail;head;slot;off] ==>
+    ~MEM p [len;tmp0;rounded0;last;cnt;tmp1;rounded1;item]) /\
+  len <> tmp0 /\ len <> rounded0 /\ len <> last /\ len <> cnt /\
+  slot <> size_out ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var encoded sf = SOME (d + (32w + ((n + 31w) && i2w (-32)))) /\
+    op_taint tnf (Var encoded) = {} /\
+    (!p. ~MEM p [len;tmp0;rounded0;last;cnt;tmp1;rounded1;item;size_out;encoded] ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `!p. MEM p [src;tail] ==> ~MEM p [len;tmp0;rounded0;last;cnt]` by
+    (fs[] >> metis_tac[]) >>
+  drule_all reason_encoder_tail_copy_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `lookup_var head s1 = SOME h /\ ptr_covers G1 tn1 head s1 32 /\
+   lookup_var slot s1 = SOME addr /\ ptr_covers G1 tn1 slot s1 32 /\
+   lookup_var off s1 = SOME d /\ op_taint tn1 (Var off) = {}` by
+    (gvs[ptr_covers_def] >> fs[] >> metis_tac[]) >>
+  `!p. MEM p [head;slot;off] ==> ~MEM p [tmp1;rounded1;item]` by
+    (fs[] >> metis_tac[]) >>
+  drule_all reason_encoder_size_suffix_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> fs[] >> metis_tac[]
+QED
+
+(* Combine the counted allocation edge with size-slot initialization.
+   The allocation resources are supplied by reason_encoder_alloc_buffer_resources;
+   they are not re-proved here. *)
+Theorem reason_encoder_size_slot_init_ptr:
+  compile_alloc_buffer 32 sa = (buf,c1) /\ buf.buf_operand = Var slot /\
+  emit_void MSTORE [Var slot;Lit 32w] c1 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
+  ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [slot]) s = OK t /\
+  G1 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [slot]) t /\
+  tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [slot]) s t tn /\
+  lookup_var slot t = SOME a /\ ptr_covers G1 tn1 slot t 32 ==>
+  ?tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 G1 tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var slot sf = SOME a /\ ptr_covers G1 tnf slot sf 32 /\
+    mload (w2n a) sf = 32w /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tnf.t_mem) /\
+    sf.vs_memory = (mstore (w2n a) 32w t).vs_memory /\
+    (!p. lookup_var p sf = lookup_var p t /\
+      op_taint tnf (Var p) = op_taint tn1 (Var p)) /\
+    (!p k. ptr_covers G1 tn1 p t k ==> ptr_covers G1 tnf p sf k)
+Proof
+  strip_tac >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1
+    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_all reason_encoder_alloc_path_ptr >> simp[]) >>
+  `t.vs_current_bb = s.vs_current_bb /\
+   t.vs_inst_idx = s.vs_inst_idx /\ ~t.vs_halted` by
+    (qpat_x_assum `step_inst_base _ _ = OK t` mp_tac >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, exec_alloca_def] >>
+     gvs[AllCaseEqs()] >> rpt strip_tac >>
+     gvs[update_var_def]) >>
+  `c1.cs_current_bb = sa.cs_current_bb /\
+   LENGTH c1.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+    (gvs[contextTheory.compile_alloc_buffer_def, emit_op_def, fresh_var_def,
+         emit_inst_def, fresh_id_def, emit_def, comp_bind_def,
+         comp_ignore_bind_def, comp_return_def]) >>
+  qabbrev_tac `s1 = t with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `s1.vs_current_bb = c1.cs_current_bb /\
+   s1.vs_inst_idx = LENGTH c1.cs_current_insts /\ ~s1.vs_halted /\
+   lookup_var slot s1 = SOME a /\ ptr_covers G1 tn1 slot s1 32 /\
+   eval_operand (Lit 32w) s1 = SOME 32w /\ op_taint tn1 (Lit 32w) = {}` by
+    gvs[Abbr `s1`, lookup_var_def, eval_operand_def, op_taint_def,
+        ptr_covers_def] >>
+  drule_all reason_encoder_mstore_resources_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `tn2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  qexistsl_tac [`tn2`, `s2`] >> conj_tac
+  >- (gvs[Abbr `s1`] >> metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]) >>
+  simp[] >> conj_tac
+  >- (PURE_ONCE_REWRITE_TAC[mstore_def] >> simp[Abbr `s1`]) >>
+  gvs[Abbr `s1`, lookup_var_def, op_taint_def, ptr_covers_def] >>
+  rpt strip_tac >> metis_tac[]
+QED
