@@ -1476,3 +1476,131 @@ Proof
   simp[param_insts_from_def, ADD_CLAUSES] >> strip_tac >>
   first_x_assum (qspecl_then [`SUC k`, `n`] mp_tac) >> simp[ADD_CLAUSES]
 QED
+
+Theorem canonical_get_params_layout:
+  !fn params.
+    codegen_ready_fn fn /\
+    params = get_params (HD fn.fn_blocks).bb_instructions ==>
+    param_insts_from 0 params /\
+    ?ordinary ret.
+      params = ordinary ++ ret /\
+      EVERY (\i. i.inst_opcode <> RETPC_PARAM) ordinary /\
+      (ret = [] \/ ?i. ret = [i] /\ i.inst_opcode = RETPC_PARAM)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `canonical_entry_params_from 0 (HD fn.fn_blocks).bb_instructions` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, canonical_param_prefix_def]) >>
+  drule canonical_entry_params_from_sound >> strip_tac >>
+  `params = users ++ fmp ++ retpc` by
+    (gvs[] >> irule get_params_prefix >>
+     gvs[param_insts_from_append, param_insts_from_def,
+         param_inst_at_def, EVERY_APPEND, EVERY_MEM] >>
+     metis_tac[is_param_opcode_def]) >>
+  (conj_tac >- metis_tac[] >>
+   qexistsl [`users ++ fmp`, `retpc`] >>
+   gvs[EVERY_APPEND, EVERY_MEM])
+QED
+
+Theorem bounded_entry_param_frame_values:
+  !fn cp s st ra rest params j.
+    codegen_ready_fn fn /\ fn_entry_state_rel cp fn s st ra rest /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    LENGTH params < dimword (:256) /\ j < LENGTH params ==>
+    FLOOKUP
+      (frame_view fn ra (entry_bind_pairs (entry_param_pairs s params) s)).vs_vars
+      (HD (EL j params).inst_outputs) =
+    SOME (EL j (s.vs_params ++ if fn_has_retpc fn then [ra] else []))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (entry_param_shape s) params` by
+    (gvs[] >> irule bounded_entry_param_shape >> simp[] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. HD i.inst_outputs) params)` by
+    (gvs[] >> irule bounded_entry_param_outputs_distinct >> simp[] >> metis_tac[]) >>
+  `MEM (EL j params) (fn_insts fn)` by
+    (qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+     Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, canonical_param_prefix_def,
+         fn_insts_def, fn_insts_blocks_def] >>
+     metis_tac[MEM_EL, MEM_APPEND]) >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `MEM (EL j params) params` by simp[EL_MEM] >>
+  drule_all entry_param_frame_lookup >>
+  disch_then (qspec_then `ra` mp_tac) >>
+  strip_tac >>
+  `param_insts_from 0 params` by metis_tac[canonical_get_params_layout] >>
+  `param_inst_at j (EL j params)` by
+    (drule_all param_insts_from_el >> simp[]) >>
+  drule_all canonical_get_params_layout >> strip_tac >>
+  `fn_has_retpc fn <=> EXISTS (\i. i.inst_opcode = RETPC_PARAM) params` by
+    gvs[fn_has_retpc_def] >>
+  `LENGTH s.vs_params = LENGTH params - (if fn_has_retpc fn then 1 else 0)` by
+    (Cases_on `fn_has_retpc fn` >> gvs[fn_entry_state_rel_def] >> decide_tac) >>
+  `~EXISTS (\i. i.inst_opcode = RETPC_PARAM) ordinary` by
+    (gvs[EXISTS_MEM, EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `params = get_params _` kall_tac >>
+  gvs[EXISTS_APPEND, param_inst_at_def, w2n_n2w] >>
+  Cases_on `j < LENGTH ordinary` >>
+  gvs[EL_APPEND1, EL_APPEND2, EVERY_EL] >>
+  `j = LENGTH ordinary` by decide_tac >> gvs[]
+QED
+
+Theorem bounded_entry_param_stack_rel:
+  !fn cp s st ra rest lo params vp.
+    codegen_ready_fn fn /\ fn_entry_state_rel cp fn s st ra rest /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    LENGTH params < dimword (:256) /\
+    vp = (entry_bind_pairs (entry_param_pairs s params) s)
+      with vs_inst_idx := LENGTH params ==>
+    plan_stack_rel lo (frame_view fn ra vp)
+      (MAP (\i. Var (HD i.inst_outputs)) params)
+      ((if fn_has_retpc fn then [ra] else []) ++ REVERSE s.vs_params)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH params = LENGTH (s.vs_params ++ if fn_has_retpc fn then [ra] else [])` by
+    (Cases_on `fn_has_retpc fn` >> gvs[fn_entry_state_rel_def]) >>
+  `!j. j < LENGTH params ==>
+    FLOOKUP (frame_view fn ra vp).vs_vars (HD (EL j params).inst_outputs) =
+    SOME (EL j (s.vs_params ++ if fn_has_retpc fn then [ra] else []))` by
+    (rpt strip_tac >>
+     `FLOOKUP (frame_view fn ra vp).vs_vars =
+      FLOOKUP (frame_view fn ra (entry_bind_pairs (entry_param_pairs s params) s)).vs_vars` by
+       gvs[frame_view_def] >>
+     simp[] >> irule bounded_entry_param_frame_values >>
+     gvs[] >> metis_tac[]) >>
+  `((if fn_has_retpc fn then [ra] else []) ++ REVERSE s.vs_params) =
+    REVERSE (s.vs_params ++ if fn_has_retpc fn then [ra] else [])` by
+    (Cases_on `fn_has_retpc fn` >> simp[]) >>
+  qpat_x_assum `vp = _` kall_tac >>
+  qpat_x_assum `params = get_params _` kall_tac >>
+  simp[plan_stack_rel_def, EL_REVERSE, EL_MAP, operand_val_def] >>
+  rpt strip_tac >> disj2_tac >>
+  qpat_x_assum `!j. _` (qspec_then `LENGTH params - 1 - i` mp_tac) >>
+  gvs[] >> decide_tac
+QED
+
+Theorem bounded_entry_installed_context_rel:
+  !fn cp s st ra rest lo params vp ps0 ch growth spill_base lbl_ctr.
+    codegen_ready_fn fn /\ fn_entry_state_rel cp fn s st ra rest /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    LENGTH params < dimword (:256) /\
+    vp = (entry_bind_pairs (entry_param_pairs s params) s)
+      with vs_inst_idx := LENGTH params /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr ==>
+    context_venom_asm_rel cp lo
+      (ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params)
+      (frame_view fn ra vp)
+      (st with as_stack :=
+        (if fn_has_retpc fn then [ra] else []) ++ REVERSE s.vs_params)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `plan_stack_rel lo (frame_view fn ra vp)
+    (MAP (\i. Var (HD i.inst_outputs)) params)
+    ((if fn_has_retpc fn then [ra] else []) ++ REVERSE s.vs_params)` by
+    (irule bounded_entry_param_stack_rel >> metis_tac[]) >>
+  simp[context_venom_asm_rel_def] >>
+  conj_tac >- gvs[] >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def,
+      plan_spill_rel_def, frame_view_def, entry_bind_pairs_normal,
+      fn_entry_state_rel_def, shared_state_rel_def, venom_asm_terminal_rel_def]
+QED
