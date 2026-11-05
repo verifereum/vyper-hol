@@ -1269,3 +1269,87 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `h` >>
   gvs[phi_cell_value_def] >> metis_tac[]
 QED
+
+(* Single-stage extinction is about surviving origins, not DFG roots.
+   before/after encode uniqueness of the selected tag; lower prefixes are
+   unrestricted and are not removed by this interface. *)
+Theorem phi_origin_write_selected_extinction:
+  !before after i a b ret.
+    EVERY (\c. !x y. c <> PhiOriginal i x y) before /\
+    EVERY (\c. !x y. c <> PhiOriginal i x y) after ==>
+    EVERY (\c. !x y. c <> PhiOriginal i x y)
+      (phi_origin_write F (LENGTH after) ret
+        (before ++ [PhiOriginal i a b] ++ after))
+Proof
+  rpt strip_tac >>
+  simp[phi_origin_write_def, stack_poke_def, LENGTH_APPEND] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.LUPDATE_APPEND2, listTheory.LUPDATE_def]
+QED
+
+Theorem phi_origin_stage_every:
+  !P inst next halting p q cells cells1.
+    phi_origin_stage inst next halting p q cells cells1 /\
+    EVERY P cells /\ (!op. P (PhiCommon op)) ==>
+    EVERY P cells1
+Proof
+  rpt gen_tac >> rewrite_tac[phi_origin_stage_def] >> strip_tac >>
+  `EVERY P written` by
+    (gvs[] >> irule phi_origin_write_every >> fs[phi_origin_incoming_def]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (gvs[] >> irule phi_origin_pop_every >> simp[]) >>
+  gvs[]
+QED
+
+Theorem phi_origin_stage_selected_extinction:
+  !inst next halting p q before after i a b cells1.
+    EVERY (\c. !x y. c <> PhiOriginal i x y) before /\
+    EVERY (\c. !x y. c <> PhiOriginal i x y) after /\
+    phi_origin_incoming inst p q (before ++ [PhiOriginal i a b] ++ after) (LENGTH after) /\
+    phi_origin_selected next p q (before ++ [PhiOriginal i a b] ++ after) (LENGTH after) F /\
+    phi_origin_stage inst next halting p q
+      (before ++ [PhiOriginal i a b] ++ after) cells1 ==>
+    EVERY (\c. !x y. c <> PhiOriginal i x y) cells1
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `phi_origin_stage _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[phi_origin_stage_def] >> strip_tac >>
+  `d = LENGTH after` by fs[phi_origin_incoming_def] >>
+  `keep = F` by fs[phi_origin_selected_def] >>
+  gvs[] >>
+  `EVERY (\c. !x y. c <> PhiOriginal i x y)
+    (phi_origin_write F (LENGTH after) (Var (HD inst.inst_outputs))
+      (before ++ [PhiOriginal i a b] ++ after))` by
+    (irule phi_origin_write_selected_extinction >> simp[]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (gvs[] >> irule phi_origin_pop_every >> simp[]) >>
+  gvs[]
+QED
+
+Theorem phi_origin_keep_retains_selected:
+  phi_origin_write T 0 (Var "out") [PhiOriginal 0 (Var "a") (Var "b")] =
+    [PhiOriginal 0 (Var "a") (Var "b"); PhiCommon (Var "out")]
+Proof
+  EVAL_TAC
+QED
+
+(* Extinction probe premise ledger:
+   - phi_origin_stage_selected_extinction encodes a unique selected tag by
+     before/after EVERY exclusion, and binds the actual search using
+     phi_origin_incoming at LENGTH after.  Determinism of that search and
+     phi_origin_selected forces each stage witness to use that depth and F.
+   - phi_origin_classes_selected supplies the selected branch agreement;
+     analyzed_native_phi_class_dead_after / _dead_range in PhiClasses supply
+     native class death at analyzed indices.  Integrating these with a
+     still-present unique Original at the selected depth is NOT done here.
+   - phi_slot_step (PhiSlots) emits INR i only when i is absent from placed,
+     immediately adding i to placed.  Thus its fold suppresses repeated i;
+     no universal multiplicity producer theorem is asserted by this audit.
+   - keep=T duplicates then pokes the new top: the old Original survives,
+     as the negative-control equation certifies.  keep=F overwrites it.
+     A pop only permutes/deletes.  phi_origin_stage_every specializes to
+     exclusion of any absent Original, hence certifies no new Original tag
+     even in keep=T stages; it does not prevent copying an existing tag.
+   - Arbitrary p/q lower prefixes remain untouched and unrestricted.  Tag
+     extinction in the suffix does not establish prefix shielding, native
+     schedule existence, root exclusion, or ordinary-instruction replay. *)
