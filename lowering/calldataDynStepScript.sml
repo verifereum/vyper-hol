@@ -12,17 +12,18 @@ Ancestors
   abiDecoderArraySetupInputs valueEncodingProps valueEncodingProofs valueEncoding
 
 Theorem calldata_element_setup_opcodes:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD hi di abi_sz mem_sz st =
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) hi di abi_sz mem_sz st =
     (ops,st') ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st st')
 Proof
   strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >> Cases_on `hi = Lit 0w` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
     abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def,
     comp_bind_def, comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
     fresh_id_def, emit_def, comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -217,7 +218,8 @@ Theorem calldata_element_pointer_prefix_safe:
 Proof
   rpt gen_tac >> strip_tac >> ho_match_mp_tac (GEN_ALL calldata_prefix_safe_every) >>
   qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_zero,
+       comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   imp_res_tac emitted_insts_emit_op >>
@@ -246,7 +248,8 @@ Theorem calldata_element_pointer_reentry:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_zero,
+       comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,c1)` >>
@@ -301,8 +304,9 @@ Proof
       `abi_decode_load CALLDATALOAD (n2w (sb+32+j*abi_sz) : bytes32) s =
         n2w (w2n (abi_decode_load CALLDATALOAD (n2w (sb+32+j*abi_sz) : bytes32) s))` by
         simp[] >>
-      drule_all (SIMP_RULE (srw_ss()) []
-        (Q.INST [`hi` |-> `Lit 0w`] abi_decode_dynamic_element_setup_reentry)) >>
+      drule_all (SIMP_RULE (srw_ss()) [eval_operand_def]
+        (Q.INST [`hi` |-> `Lit 0w`, `base_op` |-> `Lit 0w`, `B` |-> `0`]
+          abi_decode_dynamic_element_setup_reentry)) >>
       strip_tac >> qexists_tac `t` >> simp[]) >>
   drule_all abi_decode_static_element_setup_reentry >> strip_tac >>
   qexists_tac `t` >> simp[abi_decoder_address_frame_def]
@@ -325,10 +329,11 @@ Theorem calldata_element_setup_memory_shape:
     EVERY (\i. !u. inst_mem_below_frontier i u) tail
 Proof
   strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
     abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def,
     comp_bind_def, comp_return_def, comp_ignore_bind_def,
     emit_op_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
