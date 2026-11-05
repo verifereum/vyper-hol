@@ -520,7 +520,7 @@ Theorem base_vv_holds_loc[local]:
            read_storage_slot cx T w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) tvt /\
            storage_range_agree (get_storage cx es T) (contract_transient s) w tvt) /\
-        (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
+        (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es s) /\
         vv_loc vv <> LocCalldata
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -665,22 +665,30 @@ QED
 (* The element of a tuple an immutable's code pointer holds: the pointer
    plus the element's offset. *)
 Theorem immutable_holds_tuple_elem[local]:
-  !cenv cx tys tvs tv w es vs j tv'.
-    immutable_holds cenv cx (TupleT tys) tv w es /\
+  !cenv cx tys tvs tv w es s vs j tv'.
+    immutable_holds cenv cx (TupleT tys) tv w es s /\
     read_result cx tv es = (INL (ArrayV (TupleV vs)), es) /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     evaluate_type (get_tenv cx) (EL j tys) = SOME (EL j tvs) /\
     j < LENGTH tvs /\ read_result cx tv' es = (INL (EL j vs), es) ==>
     immutable_holds cenv cx (EL j tys) tv'
-      (w + n2w (SUM (TAKE j (MAP type_memory_size tvs)))) es
+      (w + n2w (SUM (TAKE j (MAP type_memory_size tvs)))) es s
 Proof
-  rw[immutable_holds_def] >> gvs[value_has_type_def] >>
+  rpt strip_tac >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    (fs[immutable_holds_def] >> gvs[]) >>
+  gvs[value_has_type_def] >>
   `LENGTH vs = LENGTH tvs /\ value_has_type (EL j tvs) (EL j vs)` by
     metis_tac[values_have_types_el] >>
-  qexistsl [`name`, `off`, `itv`, `iv`,
-            `k + SUM (TAKE j (MAP type_memory_size tvs))`] >>
-  simp[wordsTheory.word_add_n2w] >>
-  irule sub_layout_tuple_elem >> simp[]
+  `sub_layout (TupleTV tvs) (ArrayV (TupleV vs))
+     (SUM (TAKE j (MAP type_memory_size tvs))) (EL j tvs) (EL j vs)` by
+    (qspecl_then [`TupleTV tvs`, `ArrayV (TupleV vs)`, `0`, `tvs`, `vs`, `j`]
+       mp_tac sub_layout_tuple_elem >>
+     simp[sub_layout_def]) >>
+  irule immutable_holds_sub >>
+  qexistsl [`EL j tvs`, `EL j vs`, `TupleTV tvs`, `ArrayV (TupleV vs)`,
+            `TupleT tys`, `tv`] >>
+  simp[]
 QED
 
 (* ===== A tuple element's slots in storage ===== *)

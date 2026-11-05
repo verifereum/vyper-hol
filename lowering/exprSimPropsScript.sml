@@ -465,6 +465,35 @@ Proof
   qexists_tac `bt0` >> simp[]
 QED
 
+Theorem immutable_holds_memory_cong:
+  s'.vs_memory = s.vs_memory ==>
+  (immutable_holds cenv cx t tv w es s' <=> immutable_holds cenv cx t tv w es s)
+Proof
+  simp[immutable_holds_def]
+QED
+
+(* A value inside the value w points to, j bytes further on (sub_layout),
+   is at w + j. *)
+Theorem immutable_holds_sub:
+  !cenv cx t tv w es s stv sv j ft ftv fv tv'.
+    immutable_holds cenv cx t tv w es s /\
+    read_result cx tv es = (INL sv, es) /\
+    evaluate_type (get_tenv cx) t = SOME stv /\
+    sub_layout stv sv j ftv fv /\
+    evaluate_type (get_tenv cx) ft = SOME ftv /\ value_has_type ftv fv /\
+    read_result cx tv' es = (INL fv, es) ==>
+    immutable_holds cenv cx ft tv' (w + n2w j) es s
+Proof
+  rpt strip_tac >> fs[immutable_holds_def] >> gvs[] >>
+  qexistsl [`name`, `off`, `itv`, `iv`, `k + j`] >>
+  simp[wordsTheory.word_add_n2w]
+  >~ [`sub_layout itv iv k stv sv`]
+  >- (disj1_tac >> fs[sub_layout_def] >> rpt strip_tac >> TRY decide_tac >>
+      res_tac >> res_tac >> fs[]) >>
+  disj2_tac >> fs[sub_layout_def] >>
+  first_x_assum drule >> strip_tac >> fs[] >> decide_tac
+QED
+
 Theorem val_footprint_le_store_size:
   !tv v. val_footprint tv v <= val_store_size tv v
 Proof

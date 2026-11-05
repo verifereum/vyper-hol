@@ -1748,15 +1748,16 @@ Proof
   rpt strip_tac >> simp[lower_value_def] >> irule ci_mono_bind >> simp[ci_mono_unwrap_value]
 QED
 
-Theorem ci_mono_compile_dynarray_pop[local]:
-  ∀ base_op ws es load_opc store_opc sa.
-    ci_mono sa (SND (compile_dynarray_pop base_op ws es load_opc store_opc sa))
+Theorem ci_mono_compile_dynarray_pop:
+  ∀ base_op ws es is_ctor imm loc sa.
+    ci_mono sa (SND (compile_dynarray_pop base_op ws es is_ctor imm loc sa))
 Proof
   simp[compile_dynarray_pop_def, LET_THM] >>
   rpt (CHANGED_TAC (rpt gen_tac >>
     (TRY (irule ci_mono_bind >> conj_tac) >>
      TRY (irule ci_mono_ignore_bind >> conj_tac) >>
-     simp[ci_mono_emit_op, ci_mono_emit_void])))
+     simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_ptr_load,
+          ci_mono_compile_ptr_store])))
 QED
 
 (* ===== compile_expr ci_mono by induction ===== *)

@@ -502,7 +502,7 @@ QED
 Theorem immutable_holds_data:
   !func cenv cx es s t tv w ctx.
     stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
-    immutable_holds cenv cx t tv w es ==>
+    immutable_holds cenv cx t tv w es s' ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
             val_in_memory tvt v (w2n w) s.vs_data_section
@@ -516,7 +516,7 @@ Proof
 QED
 
 Theorem immutable_holds_bounds:
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es s /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_wf tv v /\ w2n a + type_memory_size tv < dimword (:256)
 Proof
@@ -527,21 +527,23 @@ QED
 
 Theorem immutable_holds_memory:
   stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_in_memory tv v (w2n a) uu.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def, read_result_def, return_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by decide_tac >>
-  gvs[arithmeticTheory.ADD_COMM]
+     immutables_rel_def, read_result_def, return_def]
+  >~ [`sub_layout`]
+  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
+      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+      `off + k < dimword (:256)` by decide_tac >>
+      gvs[arithmeticTheory.ADD_COMM]) >>
+  `off + k < dimword (:256)` by decide_tac >> gvs[]
 QED
 
 Theorem immutable_holds_alloca_disjoint:
   stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP uu.vs_allocas inst.inst_id = SOME (dst,sz) ==>
@@ -557,9 +559,9 @@ Proof
 QED
 
 Theorem copy_runtime_contents:
-  !ctx func cenv cx es u t v a tv w z.
+  !ctx func cenv cx es u t v a tv w z s.
     stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
-    immutable_holds cenv cx t (Value v) a es /\
+    immutable_holds cenv cx t (Value v) a es s /\
     evaluate_type (get_tenv cx) t = SOME tv /\
     w2n w + type_memory_size tv < dimword (:256) /\
     z.vs_memory = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory ==>
@@ -1125,7 +1127,7 @@ QED
 
 Theorem copy_ctor_contents:
   stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n w + type_memory_size tv < dimword (:256) /\
   regions_disjoint (w2n a) (type_memory_size tv) (w2n w) (type_memory_size tv) /\
@@ -1184,7 +1186,7 @@ Proof
   irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
@@ -1296,7 +1298,7 @@ Proof
   irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
@@ -1320,6 +1322,8 @@ Proof
   `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
   drule_all alloc_buffer_source_frag_labels >>
   disch_then (qspec_then `R` strip_assume_tac) >>
+  `immutable_holds cenv cx t (Value v) a es' u` by
+    metis_tac[immutable_holds_memory_cong] >>
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
     (rw[copy_old_operand_def] >> gvs[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>

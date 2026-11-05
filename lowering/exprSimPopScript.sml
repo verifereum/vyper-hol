@@ -171,10 +171,11 @@ Theorem compile_expr_pop_name:
     compile_expr cenv ty (Pop ann (NameTarget id)) sa =
       (LocatedValue ann
          (mk_ptr (FST (compile_dynarray_pop (Var p) 32
-                         (type_memory_bytes cenv et) MLOAD MSTORE sa))
+                         (type_memory_bytes cenv et)
+                         cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa))
                  LocMemory),
        SND (compile_dynarray_pop (Var p) 32 (type_memory_bytes cenv et)
-              MLOAD MSTORE sa))
+              cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa))
 Proof
   rpt strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
@@ -184,8 +185,8 @@ Proof
 QED
 
 Theorem dynarray_pop_mem_shape:
-  !p esz sa r sb.
-    compile_dynarray_pop (Var p) 32 esz MLOAD MSTORE sa = (r, sb) ==>
+  !p esz is_ctor imm sa r sb.
+    compile_dynarray_pop (Var p) 32 esz is_ctor imm LocMemory sa = (r, sb) ==>
     ?x0 x1 x2 x3 x4 x5 x6.
       ALL_DISTINCT [x0; x1; x2; x3; x4; x5; x6] /\
       EVERY (\x. ~not_fresh_at sa x) [x0; x1; x2; x3; x4; x5; x6] /\
@@ -203,7 +204,9 @@ Theorem dynarray_pop_mem_shape:
          mk_inst (sa.cs_next_id + 7) MUL [Var x3; Lit (n2w esz)] [x5];
          mk_inst (sa.cs_next_id + 8) ADD [Var x4; Var x5] [x6]]
 Proof
-  simp[compile_dynarray_pop_def, emit_op_def, emit_void_def, fresh_id_def,
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def,
+       emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt strip_tac >> gvs[APPEND_ASSOC] >>
@@ -837,8 +840,8 @@ Proof
   drule_all pop_name_facts >> strip_tac >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Var p) 32 (type_memory_size etv)
-              MLOAD MSTORE sa` >>
-  qmatch_asmsub_rename_tac `compile_dynarray_pop _ _ _ _ _ _ = (rop, sc)` >>
+              cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa` >>
+  qmatch_asmsub_rename_tac `compile_dynarray_pop _ _ _ _ _ _ _ = (rop, sc)` >>
   gvs[] >>
   drule dynarray_pop_mem_shape >> strip_tac >> gvs[] >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>

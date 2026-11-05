@@ -67,7 +67,7 @@ Theorem compile_expr_pop_storage:
     let loc = if tr then LocTransient else LocStorage in
     let result = compile_dynarray_pop (Lit slot) 1
       (elem_size_in_location cenv loc et)
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa in
+      cenv.ce_is_ctor cenv.ce_imm_alloca loc sa in
     (LocatedValue ann (mk_ptr (FST result) loc), SND result)
 Proof
   strip_tac >> Cases_on `tr` >>
@@ -337,9 +337,9 @@ Proof
 QED
 
 Theorem dynarray_pop_storage_shape:
-  !slot tr esz sa r sb.
-    compile_dynarray_pop (Lit slot) 1 esz
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = (r,sb) ==>
+  !slot tr esz is_ctor imm sa r sb.
+    compile_dynarray_pop (Lit slot) 1 esz is_ctor imm
+      (if tr then LocTransient else LocStorage) sa = (r,sb) ==>
     ?x0 x1 x2 x3 x4 x5 x6.
       ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
       EVERY (\x. ~not_fresh_at sa x) [x0;x1;x2;x3;x4;x5;x6] /\
@@ -357,7 +357,10 @@ Theorem dynarray_pop_storage_shape:
          mk_inst (sa.cs_next_id + 7) MUL [Var x3; Lit (n2w esz)] [x5];
          mk_inst (sa.cs_next_id + 8) ADD [Var x4; Var x5] [x6]]
 Proof
-  simp[compile_dynarray_pop_def, emit_op_def, emit_void_def, fresh_id_def,
+  rpt gen_tac >> Cases_on `tr` >>
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def,
+       emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt strip_tac >> gvs[APPEND_ASSOC] >>
@@ -669,7 +672,7 @@ Proof
     type_slot_size tv` by (irule pop_storage_element_size >> metis_tac[]) >>
   drule_all compile_expr_pop_storage >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Lit (n2w slot)) 1 (type_slot_size tv)
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa` >>
+    cenv.ce_is_ctor cenv.ce_imm_alloca (if tr then LocTransient else LocStorage) sa` >>
   drule dynarray_pop_storage_shape >> strip_tac >> gvs[] >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,ArrayTV tv (Dynamic n))` by
     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
@@ -677,7 +680,7 @@ Proof
   drule_all eval_pop_storage >> strip_tac >> gvs[] >>
   qpat_x_assum `!ty sa' ann'. _` kall_tac >>
   qpat_x_assum `!es'' ann'. _` kall_tac >>
-  qpat_x_assum `compile_dynarray_pop _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_dynarray_pop _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `FLOOKUP cenv.ce_module_vars _ = _` kall_tac >>
   qpat_x_assum `cenv.ce_hashmap_info _ = _` kall_tac >>
   qpat_x_assum `cenv.ce_module_var_type _ = _` kall_tac >>

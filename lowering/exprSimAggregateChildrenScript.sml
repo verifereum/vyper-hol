@@ -47,7 +47,7 @@ Proof
   simp[vv_holds_def, storage_holds_def, immutable_holds_def,
        read_result_def, return_def] >>
   rpt strip_tac >> gvs[read_result_def, return_def] >>
-  metis_tac[arithmeticTheory.LESS_MOD]
+  qexistsl [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
 QED
 
 Theorem vv_at_materialise:

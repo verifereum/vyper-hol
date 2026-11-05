@@ -307,7 +307,7 @@ Proof
   `vv_holds cenv cx et raw vv es t` by
     (Cases_on `vv` >>
      gvs[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
-     metis_tac[]) >>
+     BasicProvers.every_case_tac >> gvs[] >> metis_tac[immutable_holds_memory_cong]) >>
   qexistsl_tac [`t`, `w`] >> simp[]
 QED
 
@@ -539,7 +539,7 @@ Proof
   `vv_holds cenv cx (expr_type e) raw vv es' t` by
     (fs[vv_post_def] >> Cases_on `vv` >>
      gvs[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
-     metis_tac[]) >>
+     BasicProvers.every_case_tac >> gvs[] >> metis_tac[immutable_holds_memory_cong]) >>
   `!n b len. local_region cenv es'.scopes t n b len <=>
              local_region cenv es'.scopes s n b len` by
     (drule_all ifexp_alloc_local_regions >> simp[]) >>
@@ -881,7 +881,8 @@ Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
        expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
-       storage_holds_def, venomStateTheory.contract_storage_def,
+       storage_holds_def, immutable_holds_def,
+       venomStateTheory.contract_storage_def,
        venomStateTheory.contract_transient_def]
 QED
 

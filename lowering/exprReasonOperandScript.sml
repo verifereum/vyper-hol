@@ -102,7 +102,7 @@ Proof
 QED
 
 Theorem reason_pop_operand[local]:
-  compile_dynarray_pop bop ws es load_opc store_opc sa = (op,sb) ==>
+  compile_dynarray_pop bop ws es is_ctor imm loc sa = (op,sb) ==>
   !l. op <> Label l
 Proof
   simp[compile_dynarray_pop_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>

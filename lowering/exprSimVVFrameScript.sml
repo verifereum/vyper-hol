@@ -24,7 +24,7 @@ Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
        expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
-       storage_holds_inst_idx]
+       storage_holds_inst_idx, immutable_holds_def]
 QED
 
 Theorem literal_operand_frame:
@@ -50,7 +50,8 @@ Theorem vv_holds_vars_frame:
 Proof
   Cases_on `vv` >>
   simp[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
-  metis_tac[]
+  rpt strip_tac >> gvs[] >> BasicProvers.every_case_tac >> gvs[] >>
+  metis_tac[immutable_holds_memory_cong]
 QED
 
 Theorem vv_at_vars_frame:
