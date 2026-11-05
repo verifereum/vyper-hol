@@ -1,6 +1,7 @@
 (* Compact proof-only interfaces for the allocation-free scalar tuple loop. *)
 Theory stmtSimLogMembersRun
 Ancestors
+  abiDecoderRange
   stmtSimLogScalarMembers abiEncoderInput abiDecoderGuards exprLoweringProps
   abiEncoderMemberCode abiEncoderCounters abiBuiltinPrefix abiEncoderAddressReach
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderFrame abiDecoderLoop

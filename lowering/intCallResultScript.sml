@@ -542,8 +542,8 @@ Resume store_multi_results_frag[post]:
       drule local_ptrs_reserved_imm_base >> strip_tac >>
       first_x_assum irule >> metis_tac[])
   >- (match_mp_tac buffer_vv_holds >> qexistsl_tac [`tv`, `w`] >> simp[] >>
-      conj_tac
-      >- (Cases_on `rbuf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
+      TRY (conj_tac
+           >- (Cases_on `rbuf.buf_operand` >> gvs[eval_operand_def, lookup_var_def])) >>
       match_mp_tac stack_results_val_in_memory >>
       qexistsl_tac [`get_tenv cx`, `ws`] >> simp[] >> rpt strip_tac >>
       qpat_x_assum `!i. i < LENGTH ws ==> _` (qspec_then `i` mp_tac) >>

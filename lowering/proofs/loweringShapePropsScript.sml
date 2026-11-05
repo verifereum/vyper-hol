@@ -4472,11 +4472,11 @@ QED
 fun decode_shape_load_bind_tac frame name normalize =
   shape_scalar_emit_bind_tac frame name
     (normalize >>
-     qpat_assum `load_opc = MLOAD \/ load_opc = CALLDATALOAD` DISJ_CASES_TAC >>
+     qpat_assum `load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD` strip_assume_tac >>
      gvs[]);
 
 Theorem compile_getelemptr_abi_shape_supported[local]:
-  (load_opc = MLOAD \/ load_opc = CALLDATALOAD) /\ shape_stable R ==>
+  (load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD) /\ shape_stable R ==>
   shape_step internal compiler_label (\st. R st /\ EVERY (plain_operand st) [src_op;base_op])
     (compile_getelemptr_abi src_op is_dyn abi_offset load_opc base_op hi_op)
     (\v st. R st /\ plain_operand st v)
@@ -4511,7 +4511,7 @@ Proof
 QED
 
 Theorem compile_abi_decode_dyn_elem_ptr_shape_supported[local]:
-  (load_opc = MLOAD \/ load_opc = CALLDATALOAD) /\ shape_stable R ==>
+  (load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD) /\ shape_stable R ==>
   shape_step internal compiler_label
     (\st. R st /\ EVERY (plain_operand st) [base_op;elem_src;src_data;hi_op])
     (compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src src_data hi_op elem_abi_sz)
@@ -4573,21 +4573,21 @@ Proof
   gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `HeadFrame`, Abbr `P`]
 QED
 
-(* Expression lowering decodes return buffers from memory, never code. *)
+(* Memory (return buffers), calldata, and the constructor data section. *)
 Theorem compile_abi_decode_shape_supported:
   (!dst src_op load_opc base_op hi_op info.
-    (load_opc = MLOAD \/ load_opc = CALLDATALOAD) ==> !R internal. shape_stable R ==>
+    (load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD) ==> !R internal. shape_stable R ==>
     shape_step internal compiler_label
       (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op])
       (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info) (\u st. R st)) /\
   (!dst src_op load_opc base_op hi_op elems abi_ofst mem_ofst.
-    (load_opc = MLOAD \/ load_opc = CALLDATALOAD) ==> !R internal. shape_stable R ==>
+    (load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD) ==> !R internal. shape_stable R ==>
     shape_step internal compiler_label
       (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op])
       (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op elems abi_ofst mem_ofst)
       (\u st. R st)) /\
   (!dst src_op load_opc base_op hi_op info abi_sz mem_sz i_ptr cnt.
-    (load_opc = MLOAD \/ load_opc = CALLDATALOAD) ==> !R internal. shape_stable R ==>
+    (load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD) ==> !R internal. shape_stable R ==>
     shape_step internal compiler_label
       (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op;i_ptr;cnt])
       (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op info abi_sz mem_sz i_ptr cnt)
@@ -4666,7 +4666,7 @@ Resume compile_abi_decode_shape_supported[bytes_copy]:
       shape_under_tac compile_abi_decode_range_check_shape `LenFrame` >>
       simp[Abbr `LenFrame`, Abbr `AddrFrame`, Abbr `HeadFrame`, Abbr `P`]) >>
   gen_tac >> simp[] >> IF_CASES_TAC
-  >- (qpat_assum `load_opc = MLOAD \/ load_opc = CALLDATALOAD` DISJ_CASES_TAC >>
+  >- (qpat_assum `load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD` strip_assume_tac >>
       simp[] >> shape_under_tac shape_step_emit_void_plain `R` >>
       simp[Abbr `LenFrame`, Abbr `AddrFrame`, Abbr `HeadFrame`, Abbr `P`] >> shape_opcode_tac) >>
   shape_scalar_emit_bind_tac `LenFrame` `len_up` (simp[Abbr `LenFrame`]) >>
@@ -4750,7 +4750,7 @@ Resume compile_abi_decode_shape_supported[array]:
         (simp[Abbr `DataFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
          mp_tac (Q.SPEC `[src_data_addr]` shape_stable_plain_operands) >> simp[]) >>
       shape_scalar_emit_bind_tac `DataFrame` `dst_data` (simp[Abbr `DataFrame`, Abbr `CopyFrame`, Abbr `LoopFrame`, Abbr `P`]) >>
-      qpat_assum `load_opc = MLOAD \/ load_opc = CALLDATALOAD` DISJ_CASES_TAC >> simp[] >>
+      qpat_assum `load_opc = MLOAD \/ load_opc = CALLDATALOAD \/ load_opc = DLOAD` strip_assume_tac >> simp[] >>
       shape_under_tac shape_step_emit_void_plain `R` >>
       simp[Abbr `DataFrame`, Abbr `CopyFrame`, Abbr `LoopFrame`, Abbr `P`] >> shape_opcode_tac) >>
   gnvs[] >> match_mp_tac shape_step_bind >>
@@ -4919,7 +4919,7 @@ Resume compile_abi_decode_shape_supported[decode_finish]:
   >- (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
   gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `C`]
 QED
-Finalise compile_abi_decode_shape_supported[local]
+Finalise compile_abi_decode_shape_supported
 
 Theorem compile_abi_decode_shape_mload[local]:
   (!dst src_op load_opc base_op hi_op info.
