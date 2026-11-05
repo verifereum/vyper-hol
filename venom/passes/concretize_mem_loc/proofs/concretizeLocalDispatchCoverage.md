@@ -92,7 +92,7 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 | BUMP | two output writes / OK | missing | NOT excluded by fn_ptr_ok. Must inspect ptr_use_ok to derive scalar restrictions; paired double-write, actual multi-output set_prov erasure and taint, D/O/T. |
 | INVOKE | base default Error; step_inst setup/run/merge/bind / OK,Halt,Abort,Error | delegated | Generic frame lifting, fuel, callee lookup/metadata, argument roots incl opaque pc, static call context, saved state/gas/params, returned values, lifetime/demand. Not an ordinary base step. |
 | FMP_PARAM | vs_params index / OK | excluded | fn_ptr_ok_def excludes FMP_PARAM. |
-| RETPC_PARAM | update_var vs_return_pc_token / OK | B10; missing local adapter | Tokens may differ; guard opaque output, origin erase, actual taint and independent T, no equality of LAST args. |
+| RETPC_PARAM | update_var vs_return_pc_token / OK | reachable opaque producer checked | concretizeLayoutLocalRetpc.concretize_retpc_param_local_complete derives opacity from source instruction membership and reuses parameter_roots_retpc_read. Preserves actual origin erasure, independent source/target taint, retained successor demand, observations and both environment supplements with unequal tokens and no literal-index bound. Frame/control alignment and dispatch consumption remain obligations. |
 | CALLER, ADDRESS, CALLVALUE | exec_read0 call context / OK | complete | concretize_env_reader_local_complete consumes relocation_env (not inferred from Obs), actual ordinary event and independent taint order; constructs fresh clean result, actual G/T, successor D/O and environment. |
 | ORIGIN, GASPRICE, CHAINID | exec_read0 tx context / OK | complete | concretizeLayoutLocalContextReaders.concretize_context_reader_local_complete consumes relocation_reader_context and relocation_env, actual ordinary event, singleton output and independent taint order; produces V/G/D/O/T and both supplements. Incoming context equality remains a frame-composition obligation. |
 | COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, BLOBBASEFEE | exec_read0 block context / OK | complete | Same grouped concretize_context_reader_local_complete boundary and explicit incoming frame/context obligations; no full-state equality assumed. |
@@ -236,8 +236,9 @@ instantiated with resolved pointer/scalar/opaque classifications and parameter
 taints. Origin/parameter-ghost transport, independent target taint, successor
 demand, guarded output writes and control alignment remain obligations. FMP_PARAM
 is still excluded by frozen fn_ptr_ok in the concrete simulation; its grouped
-semantic read fact does not reclassify it as a clean scalar. RETPC_PARAM still
-needs the opaque-output adapter. Verified by holbuild alongside the existing
+semantic read fact does not reclassify it as a clean scalar. RETPC_PARAM's
+opaque-output adapter is now checked in concretizeLayoutLocalRetpc (see row above).
+The parameter-root facts were verified by holbuild alongside the existing
 frame/environment and local memory helpers (TO_concretize_sim-20261105T054124Z_m10375_t001,
 TO_concretize_sim-20261105T054124Z_m10384_t001).
 
