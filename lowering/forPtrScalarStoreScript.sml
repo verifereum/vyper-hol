@@ -75,13 +75,13 @@ QED
 Theorem scalar_mstore_binding_endpoint:
   lookup_var dst s = SOME a /\
   eval_operand value s = SOME (val_to_w256 v) /\
-  op_taint tn value = {} /\ ptr_covers G tn dst s 32 /\
+  op_taint tn value = {} /\ ptr_covers G tn dst s sz /\
   ((?x. v = BoolV x) \/ (?x. v = IntV x) \/
    (?x. v = FlagV x) \/ (?x. v = DecimalV x)) ==>
   ptr_covers G
     (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
       (mstore (w2n a) (val_to_w256 v) s) tn) dst
-    (mstore (w2n a) (val_to_w256 v) s) 32 /\
+    (mstore (w2n a) (val_to_w256 v) s) sz /\
   !mem. mem_agree_outside
     (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
       (mstore (w2n a) (val_to_w256 v) s) tn).t_mem
@@ -105,11 +105,11 @@ Theorem scalar_mstore_install_ghost:
   ghost_inv d cenv cx es G tn s /\
   lookup_var dst s = SOME a /\
   eval_operand value s = SOME (val_to_w256 entry.value) /\
-  op_taint tn value = {} /\ ptr_covers G tn dst s 32 /\
+  op_taint tn value = {} /\ ptr_covers G tn dst s sz /\
   ((?x. entry.value = BoolV x) \/ (?x. entry.value = IntV x) \/
    (?x. entry.value = FlagV x) \/ (?x. entry.value = DecimalV x)) /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\
-  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var dst) 32) /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var dst) sz) /\
   (!name e p sz.
     lookup_scopes name es.scopes = SOME e /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
