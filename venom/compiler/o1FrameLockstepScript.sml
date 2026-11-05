@@ -754,3 +754,429 @@ Proof
       eval_operand_def, lookup_var_def, op_taint_var] >>
   BasicProvers.every_case_tac >> gvs[] >> res_tac >> gvs[]
 QED
+
+(* ===== Entering a block ===== *)
+
+Theorem FLOOKUP_phis_prov:
+  !insts. FLOOKUP (phis_prov prev G0 insts) x =
+    case phi_eff prev x insts of NONE => NONE | SOME op => op_prov G0 op
+Proof
+  Induct >> simp[phis_prov_def, phi_eff_def, phi_read_def, op_prov_def] >>
+  rw[FLOOKUP_set_prov, phi_prov_def] >> gvs[phi_eff_def] >>
+  BasicProvers.every_case_tac >> gvs[op_prov_def]
+QED
+
+Theorem var_taint_phis_taint:
+  !insts. var_taint (phis_taint prev T0 insts) x =
+    case phi_eff prev x insts of NONE => {} | SOME op => op_taint T0 op
+Proof
+  Induct >> simp[phis_taint_def, phi_eff_def, phi_read_def, op_taint_var] >>
+  rw[var_taint_set, phi_taint_def] >> gvs[phi_eff_def] >>
+  BasicProvers.every_case_tac >> gvs[op_taint_def, var_taint_def]
+QED
+
+Theorem phis_ghost_rel:
+  phis_rename_ok prev sg insts insts' sg1 /\
+  vars_ghost_rel sg G T0.t_var G' T0'.t_var ==>
+  vars_ghost_rel sg1 (phis_prov prev G insts) (phis_taint prev T0 insts)
+                     (phis_prov prev G' insts') (phis_taint prev T0' insts')
+Proof
+  strip_tac >>
+  simp[vars_ghost_rel_def, FLOOKUP_phis_prov, var_taint_phis_taint] >>
+  rpt gen_tac >> strip_tac >> fs[phis_rename_ok_def] >>
+  first_x_assum drule >>
+  Cases_on `phi_eff prev x insts` >> Cases_on `phi_eff prev x' insts'` >>
+  simp[] >> metis_tac[op_rename_ghost]
+QED
+
+Theorem entry_ghost_block_insts:
+  entry_prov fn s G = phis_prov s.vs_prev_bb G (block_insts fn s.vs_current_bb) /\
+  entry_taint_vars fn s tn =
+    tn with t_var := phis_taint s.vs_prev_bb tn (block_insts fn s.vs_current_bb)
+Proof
+  simp[entry_prov_def, entry_taint_vars_def, block_insts_def] >>
+  CASE_TAC >> simp[phis_prov_def, phis_taint_def, taint_component_equality]
+QED
+
+Theorem entry_ghost_rel:
+  ghost_rel sg G tn G' tn' /\
+  phis_rename_ok t.vs_prev_bb sg (block_insts fn t.vs_current_bb)
+    (block_insts fn' t.vs_current_bb) sg1 /\
+  t'.vs_current_bb = t.vs_current_bb /\ t'.vs_prev_bb = t.vs_prev_bb ==>
+  ghost_rel sg1 (entry_prov fn t G) (entry_taint_vars fn t tn)
+                (entry_prov fn' t' G') (entry_taint_vars fn' t' tn')
+Proof
+  rw[ghost_rel_def, entry_ghost_block_insts] >>
+  irule phis_ghost_rel >> simp[] >> qexists `sg` >> simp[]
+QED
+
+(* ===== Labels ===== *)
+
+Theorem foldl_update_var_labels:
+  !kvs s. (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_labels = s.vs_labels
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[update_var_def]
+QED
+
+Theorem bind_outputs_labels:
+  bind_outputs outs vals s = SOME s' ==> s'.vs_labels = s.vs_labels
+Proof
+  rw[bind_outputs_def] >> simp[foldl_update_var_labels]
+QED
+
+Theorem enters_block_labels:
+  enters_block fn s s1 ==> s1.vs_labels = s.vs_labels
+Proof
+  rw[enters_block_def] >> imp_res_tac eval_phis_preserves_labels >> simp[]
+QED
+
+Theorem return_state_labels:
+  (adopt_return_fmp ret (merge_callee_state c e)).vs_labels = c.vs_labels
+Proof
+  simp[adopt_return_fmp_def, merge_callee_state_def] >> CASE_TAC >> simp[]
+QED
+
+Theorem frame_reachable_labels:
+  !vs ctx stk PG G tn fn inst s.
+    frame_reachable vs ctx stk PG G tn fn inst s ==>
+    s.vs_labels = vs.vs_labels /\
+    EVERY (\f. f.cf_state.vs_labels = vs.vs_labels) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >> rpt gen_tac >>
+  strip_tac >> imp_res_tac enters_block_labels >>
+  imp_res_tac step_inst_preserves_labels_always >>
+  imp_res_tac bind_outputs_labels >>
+  gvs[setup_callee_def, return_state_labels, AllCaseEqs()]
+QED
+
+(* ===== The ghost transport ===== *)
+
+(* A suspended caller frame of C and one of C', waiting on paired
+   INVOKEs. *)
+Definition frame_pair_def:
+  frame_pair Q L C C' f f' <=>
+    f'.cf_params = f.cf_params /\ f'.cf_inst.inst_opcode = INVOKE /\
+    ?pos R sg.
+      (!l k. pos l (SUC k) = SUC (pos l k)) /\
+      lockstep_sim L C C' f.cf_fn f'.cf_fn pos R /\ Q f.cf_fn f'.cf_fn pos /\
+      R T (f.cf_inst,f.cf_state) sg (f'.cf_inst,f'.cf_state) /\
+      vars_ghost_rel sg f.cf_prov f.cf_tvar f'.cf_prov f'.cf_tvar
+End
+
+Theorem lockstep_ctx_lookup:
+  lockstep_ctx Q L C C' /\ lookup_function nm C'.ctx_functions = SOME fn' ==>
+  ?fn pos R. lookup_function nm C.ctx_functions = SOME fn /\
+    fn'.fn_name = fn.fn_name /\ fn_entry_label fn' = fn_entry_label fn /\
+    (!l k. pos l (SUC k) = SUC (pos l k)) /\
+    lockstep_sim L C C' fn fn' pos R /\ Q fn fn' pos
+Proof
+  rw[lockstep_ctx_def] >> drule list_rel_lookup_function >>
+  impl_tac >- simp[] >>
+  disch_then (qspec_then `nm` mp_tac) >>
+  Cases_on `lookup_function nm C.ctx_functions` >>
+  simp[optionTheory.OPTREL_def, frame_lockstep_def] >> metis_tac[]
+QED
+
+(* The n-th clause of lockstep_sim, applied to the assumptions. *)
+fun lockstep_clause_tac n =
+  strip_tac >>
+  qpat_x_assum `lockstep_sim _ _ _ _ _ _ _`
+    (fn th => drule_all_then ACCEPT_TAC
+       (List.nth (CONJUNCTS (REWRITE_RULE [lockstep_sim_def] th), n)));
+
+Theorem lockstep_rel:
+  lockstep_sim L C C' fn fn' pos R /\ R p (inst,s) sg (inst',s') ==>
+  active_inst fn inst s /\ active_inst fn' inst' s' /\ state_rel sg s s' /\
+  (p ==> inst_pair sg inst inst' /\
+         s'.vs_inst_idx = pos s.vs_current_bb s.vs_inst_idx) /\
+  (~p ==> inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP)
+Proof
+  lockstep_clause_tac 0
+QED
+
+Theorem lockstep_paired:
+  lockstep_sim L C C' fn fn' pos R /\ R p (inst,s) sg (inst',s') /\
+  inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP ==>
+  p /\ inst_pair sg inst inst' /\ state_rel sg s s' /\
+  active_inst fn inst s /\ active_inst fn' inst' s'
+Proof
+  strip_tac >> drule_all lockstep_rel >> Cases_on `p` >> simp[]
+QED
+
+Theorem lockstep_entry:
+  lockstep_sim L C C' fn fn' pos R /\
+  fn_entry_state fn s0 /\ s0.vs_labels = L /\
+  enters_block fn' s0 s1' /\ active_inst fn' inst' s1' ==>
+  ?p inst s1 sg. enters_block fn s0 s1 /\ R p (inst,s1) sg (inst',s1')
+Proof
+  lockstep_clause_tac 1
+QED
+
+Theorem lockstep_copy:
+  lockstep_sim L C C' fn fn' pos R /\
+  R F (inst,s) sg (inst',s') /\ step_inst fuel C' inst' s' = OK t' /\
+  active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+  ?p sg'. R p (inst,s) sg' (j', t' with vs_inst_idx := SUC s'.vs_inst_idx) /\
+          copy_rename_ok sg inst' sg'
+Proof
+  lockstep_clause_tac 2
+QED
+
+Theorem lockstep_step:
+  lockstep_sim L C C' fn fn' pos R /\
+  R T (inst,s) sg (inst',s') /\ inst'.inst_opcode <> INVOKE /\
+  step_inst fuel C' inst' s' = OK t' ==>
+  ?t. step_inst fuel C inst s = OK t /\
+      execution_frame t' = execution_frame t /\
+      (~is_terminator inst'.inst_opcode ==>
+       !j'. active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+         ?p j sg'.
+           R p (j, t with vs_inst_idx := SUC s.vs_inst_idx) sg'
+             (j', t' with vs_inst_idx := SUC s'.vs_inst_idx) /\
+           out_rename_ok sg inst.inst_outputs inst'.inst_outputs sg') /\
+      (is_terminator inst'.inst_opcode ==>
+       t'.vs_current_bb = t.vs_current_bb /\
+       t'.vs_prev_bb = t.vs_prev_bb /\
+       !t1' j'. ~t'.vs_halted /\ enters_block fn' t' t1' /\
+                active_inst fn' j' t1' ==>
+         ?p j t1 sg1. enters_block fn t t1 /\ R p (j,t1) sg1 (j',t1') /\
+           phis_rename_ok t.vs_prev_bb sg
+             (block_insts fn t.vs_current_bb)
+             (block_insts fn' t.vs_current_bb) sg1)
+Proof
+  lockstep_clause_tac 3
+QED
+
+Theorem lockstep_intret:
+  lockstep_sim L C C' fn fn' pos R /\
+  R T (inst,s) sg (inst',s') /\ inst'.inst_opcode <> INVOKE /\
+  step_inst fuel C' inst' s' = IntRet v e' ==>
+  ?e. step_inst fuel C inst s = IntRet v e /\
+      execution_frame e' = execution_frame e
+Proof
+  lockstep_clause_tac 4
+QED
+
+Theorem lockstep_halt:
+  lockstep_sim L C C' fn fn' pos R /\
+  R T (inst,s) sg (inst',s') /\ inst'.inst_opcode <> INVOKE /\
+  step_inst fuel C' inst' s' = Halt h' ==>
+  ?h. step_inst fuel C inst s = Halt h /\
+      execution_frame h' = execution_frame h
+Proof
+  lockstep_clause_tac 5
+QED
+
+Theorem lockstep_resume:
+  lockstep_sim L C C' fn fn' pos R /\
+  R T (inst,s) sg (inst',s') /\ inst'.inst_opcode = INVOKE /\
+  execution_frame e' = execution_frame e /\
+  bind_outputs inst'.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s' e')) = SOME t' /\
+  active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+  ?p j t sg'.
+    bind_outputs inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state s e)) = SOME t /\
+    R p (j, t with vs_inst_idx := SUC s.vs_inst_idx) sg'
+      (j', t' with vs_inst_idx := SUC s'.vs_inst_idx) /\
+    out_rename_ok sg inst.inst_outputs inst'.inst_outputs sg'
+Proof
+  lockstep_clause_tac 6
+QED
+
+Theorem frame_pair_resume:
+  frame_pair Q L C C' f f' /\ execution_frame e' = execution_frame e /\
+  bind_outputs f'.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f'.cf_state e')) = SOME t' /\
+  active_inst f'.cf_fn j' (t' with vs_inst_idx := SUC f'.cf_state.vs_inst_idx) ==>
+  ?posF RF sgF pF jF tF sgF'.
+    (!l k. posF l (SUC k) = SUC (posF l k)) /\
+    lockstep_sim L C C' f.cf_fn f'.cf_fn posF RF /\ Q f.cf_fn f'.cf_fn posF /\
+    bind_outputs f.cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state f.cf_state e)) = SOME tF /\
+    RF pF (jF, tF with vs_inst_idx := SUC f.cf_state.vs_inst_idx) sgF'
+       (j', t' with vs_inst_idx := SUC f'.cf_state.vs_inst_idx) /\
+    out_rename_ok sgF f.cf_inst.inst_outputs f'.cf_inst.inst_outputs sgF' /\
+    vars_ghost_rel sgF f.cf_prov f.cf_tvar f'.cf_prov f'.cf_tvar /\
+    active_inst f.cf_fn jF (tF with vs_inst_idx := SUC f.cf_state.vs_inst_idx) /\
+    f'.cf_params = f.cf_params
+Proof
+  rewrite_tac[frame_pair_def] >> strip_tac >>
+  drule_all lockstep_resume >> strip_tac >>
+  drule_all lockstep_rel >> strip_tac >>
+  qexistsl [`pos`, `R`, `sg`] >> simp[] >> metis_tac[]
+QED
+
+Theorem frame_reachable_lockstep:
+  !vs C' stk' PG G' tn' fn' inst' s'.
+    frame_reachable vs C' stk' PG G' tn' fn' inst' s' ==>
+    !Q C. lockstep_ctx Q vs.vs_labels C C' /\ vs.vs_vars = FEMPTY /\
+          ~vs.vs_halted ==>
+      ?stk G tn fn inst s p sg pos R.
+        frame_reachable vs C stk PG G tn fn inst s /\
+        (!l k. pos l (SUC k) = SUC (pos l k)) /\
+        lockstep_sim vs.vs_labels C C' fn fn' pos R /\ Q fn fn' pos /\
+        R p (inst,s) sg (inst',s') /\ ghost_rel sg G tn G' tn' /\
+        LIST_REL (frame_pair Q vs.vs_labels C C') stk stk'
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume frame_reachable_lockstep[entry]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all lockstep_ctx_lookup >> strip_tac >>
+  `C.ctx_entry = SOME name` by fs[lockstep_ctx_def] >>
+  qmatch_asmsub_abbrev_tac `enters_block _ s0 _` >>
+  `fn_entry_state fn s0` by
+    (simp[Abbr `s0`] >> irule context_fn_entry_state >> gvs[]) >>
+  `s0.vs_labels = vs.vs_labels` by simp[Abbr `s0`] >>
+  drule_all lockstep_entry >> strip_tac >>
+  drule_all lockstep_rel >> strip_tac >>
+  rename1 `R p (instS,s1S) sg _` >>
+  qexistsl [`[]`, `FEMPTY`, `entry_taint`, `fn`, `instS`, `s1S`, `p`, `sg`,
+            `pos`, `R`] >>
+  simp[ghost_rel_def, vars_ghost_rel_def] >>
+  reverse conj_tac >- simp[entry_taint_def, var_taint_def] >>
+  irule frame_reachable_entry >> gvs[Abbr `s0`]
+QED
+
+Resume frame_reachable_lockstep[next]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all lockstep_rel >> strip_tac >>
+  Cases_on `p`
+  >- (gvs[] >>
+      drule_all lockstep_step >> strip_tac >>
+      `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+        fs[inst_pair_def] >>
+      gvs[] >>
+      qpat_x_assum `!j'. active_inst fn' j' _ ==> _` drule >> strip_tac >>
+      imp_res_tac lockstep_rel >>
+      rename1 `R p2 (j,_) sg2 (inst'',_)` >>
+      qexistsl [`stk`, `step_prov PG G inst t`, `step_taint inst s t tn`,
+                `fn`, `j`, `t with vs_inst_idx := SUC s.vs_inst_idx`, `p2`,
+                `sg2`, `pos`, `R`] >>
+      simp[] >> conj_tac
+      >- (irule frame_reachable_next >> simp[] >> metis_tac[]) >>
+      irule step_ghost_pair >> gvs[state_rel_def] >> qexists `sg` >> gvs[]) >>
+  fs[] >>
+  drule_all lockstep_copy >> strip_tac >>
+  rename1 `R pc (inst,s) sgc (inst'',_)` >>
+  qexistsl [`stk`, `G`, `tn`, `fn`, `inst`, `s`, `pc`, `sgc`, `pos`, `R`] >>
+  simp[] >> irule (cj 2 step_ghost_copy) >> simp[] >> metis_tac[]
+QED
+
+Resume frame_reachable_lockstep[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all lockstep_rel >> strip_tac >>
+  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP /\
+   inst'.inst_opcode <> INVOKE` by (rpt strip_tac >> gvs[is_terminator_def]) >>
+  `p` by (Cases_on `p` >> gvs[]) >>
+  gvs[] >>
+  `inst.inst_opcode = inst'.inst_opcode` by fs[inst_pair_def] >>
+  drule_all lockstep_step >> strip_tac >> gvs[] >>
+  qpat_x_assum `!t1' j'. _` drule_all >> strip_tac >>
+  imp_res_tac lockstep_rel >>
+  rename1 `enters_block fn t t1N` >>
+  rename1 `R pN (jN,t1N) sgN _` >>
+  `~t.vs_halted` by metis_tac[execution_frame_fields] >>
+  qexistsl [`stk`, `entry_prov fn t G`, `entry_taint_vars fn t tn`, `fn`,
+            `jN`, `t1N`, `pN`, `sgN`, `pos`, `R`] >>
+  simp[] >> conj_tac
+  >- (irule frame_reachable_block >> simp[] >> metis_tac[]) >>
+  irule entry_ghost_rel >> simp[] >> qexists `sg` >> simp[]
+QED
+
+Resume frame_reachable_lockstep[call]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP` by simp[] >>
+  drule_all lockstep_paired >> strip_tac >> fs[] >>
+  `?ops0. inst.inst_operands = Label nm :: ops0 /\
+          LIST_REL (op_rename sg) ops0 ops` by
+    (gvs[inst_pair_def, decode_invoke_def, AllCaseEqs(), LIST_REL_CONS2,
+         op_rename_label] >> metis_tac[]) >>
+  `decode_invoke inst = SOME (nm, ops0) /\ inst.inst_opcode = INVOKE` by
+    fs[decode_invoke_def, inst_pair_def] >>
+  `vars_ghost_rel sg G tn.t_var G' tn'.t_var` by fs[ghost_rel_def] >>
+  `MAP (op_prov G') ops = MAP (op_prov G) ops0` by
+    metis_tac[map_op_prov_rename] >>
+  `execution_frame s' = execution_frame s /\ vars_rel sg s s'` by
+    fs[state_rel_def] >>
+  `s'.vs_labels = s.vs_labels` by metis_tac[execution_frame_fields] >>
+  `LIST_REL (\op op'. op_rename sg op op' /\
+                      eval_operand op' s' = eval_operand op s) ops0 ops` by
+    (irule LIST_REL_op_rename_eval >> fs[]) >>
+  drule eval_operands_rel >> strip_tac >>
+  `eval_operands ops0 s = SOME args` by gvs[] >>
+  drule_all lockstep_ctx_lookup >> strip_tac >>
+  rename1 `lookup_function nm C.ctx_functions = SOME calleeS` >>
+  `setup_callee calleeS args s = SOME cs` by
+    metis_tac[setup_callee_execution_frame] >>
+  `fn_entry_state calleeS cs` by metis_tac[setup_callee_fn_entry_state] >>
+  `cs.vs_labels = vs.vs_labels` by
+    (imp_res_tac frame_reachable_labels >>
+     qpat_x_assum `setup_callee calleeS _ _ = _` mp_tac >>
+     rw[setup_callee_def] >> simp[]) >>
+  drule_at (Pos (el 2)) lockstep_entry >> disch_then drule_all >> strip_tac >>
+  rename1 `enters_block calleeS cs s1c` >>
+  rename1 `R' pc (instc,s1c) sgc _` >>
+  imp_res_tac lockstep_rel >>
+  `frame_reachable vs C
+     (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+        cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+     (MAP (op_prov G) ops0) FEMPTY (tn with t_var := FEMPTY) calleeS instc s1c` by
+    (irule frame_reachable_call >> simp[] >> metis_tac[]) >>
+  `frame_pair Q vs.vs_labels C C'
+     <|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|>
+     <|cf_fn := fn'; cf_inst := inst'; cf_state := s'; cf_params := PG;
+       cf_prov := G'; cf_tvar := tn'.t_var|>` by
+    (simp[frame_pair_def] >> qexistsl [`pos`, `R`, `sg`] >> simp[]) >>
+  qexistsl [`<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+               cf_prov := G; cf_tvar := tn.t_var|> :: stk`,
+            `FEMPTY`, `tn with t_var := FEMPTY`, `calleeS`, `instc`, `s1c`,
+            `pc`, `sgc`, `pos'`, `R'`] >>
+  fs[ghost_rel_def, vars_ghost_rel_def, var_taint_def]
+QED
+
+Resume frame_reachable_lockstep[ret]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  rename1 `step_inst fuel C' ri' sc' = IntRet ret e'` >>
+  rename1 `bind_outputs fr'.cf_inst.inst_outputs ret.iret_values _ = SOME tq'` >>
+  rename1 `active_inst fr'.cf_fn jq' _` >>
+  rename1 `R p (ri,sc) sg (ri',sc')` >>
+  fs[LIST_REL_CONS2] >>
+  rename1 `frame_pair Q _ C C' fr fr'` >>
+  rename1 `LIST_REL (frame_pair Q _ C C') stkS stk'` >>
+  `ri'.inst_opcode <> ASSIGN /\ ri'.inst_opcode <> NOP /\
+   ri'.inst_opcode <> INVOKE` by
+    (rpt strip_tac >>
+     metis_tac[step_inst_copy_not_intret, step_inst_invoke_not_intret]) >>
+  drule_all lockstep_paired >> strip_tac >> fs[] >>
+  drule_all lockstep_intret >> strip_tac >>
+  drule_all frame_pair_resume >> strip_tac >>
+  `frame_reachable vs C stkS fr.cf_params
+     (DRESTRICT fr.cf_prov (COMPL (set fr.cf_inst.inst_outputs)))
+     (tn with t_var := DRESTRICT fr.cf_tvar (COMPL (set fr.cf_inst.inst_outputs)))
+     fr.cf_fn jF (tF with vs_inst_idx := SUC fr.cf_state.vs_inst_idx)` by
+    (irule frame_reachable_ret >> simp[] >> metis_tac[]) >>
+  qexistsl [`stkS`,
+            `DRESTRICT fr.cf_prov (COMPL (set fr.cf_inst.inst_outputs))`,
+            `tn with t_var :=
+               DRESTRICT fr.cf_tvar (COMPL (set fr.cf_inst.inst_outputs))`,
+            `fr.cf_fn`, `jF`,
+            `tF with vs_inst_idx := SUC fr.cf_state.vs_inst_idx`, `pF`,
+            `sgF'`, `posF`, `RF`] >>
+  fs[ghost_rel_def] >> irule ret_ghost_rel >> qexists `sgF` >> simp[]
+QED
+
+Finalise frame_reachable_lockstep
