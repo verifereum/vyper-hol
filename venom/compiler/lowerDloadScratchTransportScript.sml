@@ -247,6 +247,10 @@ Theorem ld_dload_scratch_exit:
     ld_erase A o_f set_prov f.lf_H [out] NONE =
       step_prov PG (ld_erase A o_f f.lf_H) inst ss /\
     ss.vs_allocas = s.vs_allocas /\ ss.vs_alloca_next = s.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
+    ss.vs_inst_idx = s.vs_inst_idx /\
+    u.vs_current_bb = t0.vs_current_bb /\ u.vs_prev_bb = t0.vs_prev_bb /\
+    u.vs_inst_idx = p+3 /\
     u.vs_allocas = v.vs_allocas /\ u.vs_alloca_next = v.vs_alloca_next /\
     ld_global lo A (g::fs) /\ EVERY (ld_maps A) (g::fs) /\
     FDOM A = ld_slots A (g::fs) /\

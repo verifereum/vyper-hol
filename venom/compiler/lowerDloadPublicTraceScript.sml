@@ -1,7 +1,7 @@
 (* Evaluations recovered from the actual public-copy expansion trace. *)
 Theory lowerDloadPublicTrace
 Ancestors
-  lowerDloadExpansionExit lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
+  lowerDloadExpansionExit lowerDloadSafetyAllocation lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
   lowerDloadSafetyWriteAssembly lowerDloadConfiguredOrigins lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds o1PassLift memSafeRun venomExecProps venomExecProofs contextRawReachable o1PassContract
   lowerDloadSafetyLocations venomFnScheduleRunner contextCodegenRel passSharedDefs lowerDloadSafetyRelation codegenRel lowerDloadDefs irSupply ptrDiscipline pointerConfinedDefs memLocDefs pred_set unitShapeDefs
   venomExecSemantics venomState venomInst finite_map list words
@@ -275,6 +275,57 @@ Proof
   conj_tac >- metis_tac[] >> simp[]
 QED
 
+Theorem ld_dload_operand_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
+  MEM inst (fn_insts f.lf_fn) /\ inst.inst_opcode = DLOAD /\
+  inst.inst_operands = [off] /\ tn.t_var = f.lf_tv /\
+  taint_ok f.lf_fn tn inst f.lf_src ==>
+  eval_operand off f.lf_src = eval_operand off f.lf_tgt
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) inst.inst_operands ==>
+    MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn` by
+    (gen_tac >> disch_tac >> conj_tac
+     >- (irule ld_inst_input_ir >> qexists_tac `inst` >> simp[]) >>
+     irule ld_ptr_use_scalar >> reverse conj_tac >- simp[] >> qexists_tac `inst` >>
+     simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
+  `~MEM inst.inst_opcode
+    [ASSIGN; PHI; RET; RETFMP; DRET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+  drule_all ld_vars_numeric_operands_equal >>
+  simp[eval_operands_def, AllCaseEqs()] >>
+  Cases_on `eval_operand off f.lf_src` >> Cases_on `eval_operand off f.lf_tgt` >> simp[]
+QED
+
+Theorem ld_dload_trace_offset:
+  (EL 0 X).inst_opcode = ALLOCA /\ (EL 0 X).inst_outputs = [a] /\
+  (EL 1 X).inst_opcode = ADD /\
+  (EL 1 X).inst_operands = [off; Label "code_end"] /\
+  off <> Var a /\ ld_prefix C' fn' X p 3 t0 t ==>
+  ?ow basew. eval_operand off t0 = SOME ow /\
+    eval_operand (Label "code_end") t0 = SOME basew
+Proof
+  strip_tac >>
+  dxrule (ld_prefix_predecessor |> Q.INST [`h` |-> `2`] |> SRULE []) >>
+  disch_then (qx_choose_then `t2` (qx_choose_then `u2` strip_assume_tac)) >>
+  dxrule (ld_prefix_predecessor |> Q.INST [`h` |-> `1`] |> SRULE []) >>
+  disch_then (qx_choose_then `t1` (qx_choose_then `u1` strip_assume_tac)) >>
+  dxrule (ld_prefix_predecessor |> Q.INST [`h` |-> `0`] |> SRULE []) >>
+  disch_then (qx_choose_then `tzero` (qx_choose_then `u0` strip_assume_tac)) >>
+  gvs[ld_prefix_zero] >>
+  `?sz:bytes32. exec_alloca (HD X) t0 sz = OK u0` by
+    (qpat_x_assum `step_inst 0 _ _ _ = OK u0` mp_tac >>
+     simp[ld_alloca_step] >> metis_tac[]) >>
+  qpat_x_assum `step_inst 0 _ _ _ = OK u1` mp_tac >>
+  simp[step_inst_non_invoke, Once step_inst_base_def, exec_pure2_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `exec_alloca _ _ _ = OK u0` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `off` >>
+  gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+      AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem ld_raw_reachable_code_data:
   !vs C fn inst s. raw_reachable vs C fn inst s ==>
     s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section
@@ -299,11 +350,12 @@ Proof
   gvs[o1_run_state_ok_def, code_layout_valid_def]
 QED
 
-Theorem ld_sync_dloadbytes_code_offset:
+Theorem ld_sync_dload_code_offset:
   o1_ctx_shape C /\ o1_run_state_ok vs0 /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
   mem_inv dload_offset_ok C vs0 /\
-  inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
+  ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [off]) \/
+   (inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len])) /\
   eval_operand off s = SOME ow ==>
   ?basew. code_layout_valid s /\
     eval_operand (Label "code_end") s = SOME basew /\
@@ -385,11 +437,13 @@ Proof
     (drule ld_dloadbytes_source_operands >> simp[] >>
      disch_then drule >> simp[] >>
      disch_then (qspec_then `tn` mp_tac) >> simp[]) >>
-  drule_all ld_sync_dloadbytes_code_offset >> strip_tac >>
+  qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ld_sync_dload_code_offset) >> simp[] >>
+  strip_tac >>
   `basew = basew'` by gvs[eval_operand_def] >>
   `t0.vs_code = s.vs_code` by
     (drule ld_sync_memory >> simp[ld_nonghost_def]) >>
-  qexistsl_tac [`ai`,`ci`,`z`,`dw'`,`dw`,`ow`,`nw`,`basew`] >> simp[]
+  simp[]
 QED
 
 Theorem ld_sync_dloadbytes_destination_cases:
@@ -440,10 +494,10 @@ val _ = List.app (fn th => if null (hyp th) then ()
    ld_dloadbytes_scalar_observation, ld_dloadbytes_destinations,
    ld_envelope_supply_reserved, ld_dloadbytes_envelope_temporary,
    ld_raw_reachable_code_data, ld_sync_source_code_layout,
-   ld_sync_dloadbytes_code_offset, ld_dloadbytes_source_operands,
+   ld_sync_dload_code_offset, ld_dloadbytes_source_operands,
    ld_sync_dloadbytes_trace_evaluations, ld_sync_dloadbytes_destination_cases];
 
 val _ = app (fn th => if null (hyp th) then () else
   raise Fail "active envelope boundary has hypotheses")
   [ld_active_envelope_origin, ld_dloadbytes_envelope_temporary,
-   ld_dload_supply_temporary, ld_dload_envelope_temporary];
+   ld_dload_supply_temporary, ld_dload_envelope_temporary, ld_dload_operand_equal];
