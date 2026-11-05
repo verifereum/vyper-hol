@@ -6340,6 +6340,128 @@ Proof
   simp[] >> strip_tac >> metis_tac[pairTheory.PAIR]
 QED
 
+Theorem asm_call_noncode_handle_step:
+  s.contexts <> [] /\
+  (!x. (FST (HD s.contexts)).msgParams.outputTo <> Code x) ==>
+  handle_step ex s =
+    (if vfm_abort ex then reraise ex s else handle_exception ex s)
+Proof
+  strip_tac >>
+  drule_all (INST_TYPE [alpha |-> ``:unit``] handle_create_reraises) >>
+  disch_then (qspec_then `ex` assume_tac) >>
+  Cases_on `vfm_abort ex` >> simp[handle_step_def, handle_def, reraise_def]
+QED
+
+Theorem asm_call_static_prefix_singleton_exception:
+  asm_call_static_prefix saved a ts ds s /\ LENGTH s.contexts = 1 /\
+  handle_exception ex s = (r,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  Cases_on `s.contexts` >> simp[] >> Cases_on `t'` >> simp[] >>
+  PairCases_on `h` >>
+  Cases_on `ex = NONE` >> Cases_on `ex = SOME Reverted` >>
+  simp[handle_exception_def, bind_def, ignore_bind_def,
+       get_gas_left_def, get_current_context_def, return_def,
+       consume_gas_def, set_return_data_def, set_current_context_def,
+       get_num_contexts_def, reraise_def, assert_def, fail_def,
+       AllCaseEqs(), asm_call_static_prefix_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `active` >> gvs[] >> Cases_on `t'` >> gvs[]
+QED
+
+Theorem asm_call_static_prefix_handle_exception:
+  asm_call_static_prefix saved a ts ds s /\
+  EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
+  handle_exception ex s = (r,t) /\ LENGTH saved < LENGTH t.contexts ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >>
+  `s.contexts <> []` by (drule asm_call_static_prefix_head >> simp[]) >>
+  Cases_on `LENGTH s.contexts = 1`
+  >- (drule_all asm_call_static_prefix_singleton_exception >> simp[]) >>
+  `2 <= LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  `LENGTH t.contexts + 1 = LENGTH s.contexts` by
+    (irule vfmHandleStepTheory.handle_exception_ge_2_pops >>
+     simp[arithmeticTheory.GREATER_EQ] >> metis_tac[]) >>
+  irule asm_call_static_prefix_internal_pop_safe >>
+  qexistsl_tac [`ex`,`r`,`s`] >> simp[] >> decide_tac
+QED
+
+Theorem asm_call_static_prefix_handle_step:
+  asm_call_static_prefix saved a ts ds s /\
+  EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
+  handle_step ex s = (r,t) /\ LENGTH saved < LENGTH t.contexts ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >> drule asm_call_static_prefix_head >> strip_tac >>
+  drule_all asm_call_noncode_handle_step >>
+  disch_then (qspec_then `ex` assume_tac) >>
+  Cases_on `vfm_abort ex` >- gvs[reraise_def] >>
+  `handle_exception ex s = (r,t)` by gvs[] >>
+  drule_all asm_call_static_prefix_handle_exception >> simp[]
+QED
+
+Theorem asm_call_static_prefix_step:
+  wf_state s /\ asm_call_static_prefix saved a ts ds s /\
+  step s = (r,t) /\ LENGTH saved < LENGTH t.contexts ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >> qpat_x_assum `step s = _` mp_tac >>
+  rewrite_tac[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner s` >> rename1 `step_inner s = (res,mid)` >>
+  `asm_call_static_prefix saved a ts ds mid` by
+    (drule_all asm_call_static_prefix_step_inner >> simp[]) >>
+  `EVERY (wf_context o FST) mid.contexts /\ stack_room_ok mid /\ gas_stack_ok mid` by
+    (drule_all asm_call_step_inner_pop_invariants >> simp[]) >>
+  Cases_on `res` >> simp[] >> disch_tac >- gvs[] >>
+  drule_all asm_call_static_prefix_handle_step >> simp[]
+QED
+
+Theorem asm_call_static_prefix_final_exception:
+  asm_call_static_prefix ((parent,prb)::rest) a ts ds s /\
+  EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
+  handle_exception ex s = (r,t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  t.rollback.accounts = a /\ t.rollback.tStorage = ts /\ t.rollback.toDelete = ds /\
+  (FST (HD t.contexts)).logs = parent.logs /\ TL t.contexts = rest
+Proof
+  strip_tac >>
+  `s.contexts <> []` by (drule asm_call_static_prefix_head >> simp[]) >>
+  `LENGTH s.contexts <= LENGTH t.contexts + 1` by
+    (drule_all vfmHandleStepTheory.handle_exception_shrinks_by_one >>
+     simp[arithmeticTheory.GREATER_EQ]) >>
+  fs[asm_call_static_prefix_def] >>
+  `LENGTH active = 1` by
+    (gvs[LENGTH_APPEND] >> Cases_on `active` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  Cases_on `active` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  Cases_on `h0.msgParams.outputTo` >> gvs[] >>
+  `2 <= LENGTH s.contexts /\ EVERY (wf_context o FST) s.contexts` by simp[] >>
+  drule_all asm_call_memory_pop_bounds >> strip_tac >> gvs[] >>
+  drule_at (Pat `handle_exception _ _ = _`) asm_call_static_memory_pop_effects >>
+  simp[]
+QED
+
+Theorem asm_call_static_prefix_final_step:
+  wf_state s /\ asm_call_static_prefix ((parent,prb)::rest) a ts ds s /\
+  step s = (r,t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  t.rollback.accounts = a /\ t.rollback.tStorage = ts /\ t.rollback.toDelete = ds /\
+  (FST (HD t.contexts)).logs = parent.logs /\ TL t.contexts = rest
+Proof
+  strip_tac >>
+  `s.contexts <> [] /\ LENGTH t.contexts < LENGTH s.contexts` by
+    (fs[asm_call_static_prefix_def] >> Cases_on `active` >> gvs[]) >>
+  drule_all asm_call_step_drop_raw_view >> strip_tac >>
+  `asm_call_static_prefix ((parent,prb)::rest) a ts ds u` by
+    (drule_all asm_call_static_prefix_step_inner >> simp[]) >>
+  drule_at (Pat `asm_call_static_prefix _ _ _ _ u`) asm_call_static_prefix_head >>
+  strip_tac >>
+  drule_all asm_call_noncode_handle_step >>
+  disch_then (qspec_then `ex` assume_tac) >>
+  Cases_on `vfm_abort ex`
+  >- (gvs[reraise_def, asm_call_static_prefix_def] >>
+      Cases_on `active'` >> gvs[]) >>
+  `handle_exception ex u = (r,t)` by gvs[] >>
+  drule_all asm_call_static_prefix_final_exception >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
