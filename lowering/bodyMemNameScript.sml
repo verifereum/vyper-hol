@@ -5,7 +5,7 @@
 Theory bodyMemName
 Ancestors
   bodyMemoryPreds bodyNameMemory bodyNameWordTypeMemory bodyNameValueMemory
-  exprSimSource exprSimHypsDefs vyperAST
+  exprSimSource exprSimHypsDefs vyperAST vyperTypeCallGraph
 
 Theorem body_name_mem_ok:
   !cx ann id. body_expr_mem_ok cx (Name ann id)
