@@ -2,6 +2,19 @@
 Theory bodyDeclMemory
 Ancestors
   bodyDeclMemoryCore
+  loweringPosts exprSimProps stmtSimProps exprSimHypsDefs
+  bodyNameMemoryFacts bodyCopyMemory bodyMemoryDefs stmtSimDeclMem
+  localPtrsProps stmtSimDeclStore stmtSimDecl valueCopy valueCopyBytes
+  exprOperandVar freshWrites valueTypingMemoryProps vyperTyping
+  exprSimDefs stmtSimDefs venomState valueEncoding valueEncodingProofs
+  intCallResult compileEnv exprLoweringProps loweringSlice exprLowering
+  exprSimBufferStore words venomExecSemantics stmtLowering context
+  fragExec fragExecMem allocaHistoryFragment list rich_list emitHelper
+  emitHelperProps venomInst exprSimLiteralBuffer exprSimAlloc exprSimBuffer
+  finite_map bodySimDeclCases allocLimits bodySim exprSimHyps
+  vyperTypeSystem vyperTypeInvariants memoryLocalRhsProps
+  supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
+  vyperTypeCallStackSoundness vyperInterpreter vyperState
 
 
 Theorem body_annassign_read_eval[local]:
@@ -21,6 +34,25 @@ Proof
   strip_tac >> gvs[] >>
   simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
        type_check_def, assert_def, set_scopes_def, return_def]
+QED
+
+Theorem body_annassign_name_eval_tails[local]:
+  lookup_scopes source_id es.scopes = SOME entry /\
+  evaluate_type (get_tenv cx) ty = SOME entry.type /\
+  lookup_scopes id es.scopes = NONE /\ es.scopes = sc :: rest ==>
+  !tail. eval_stmt cx (AnnAssign id ty (Name ty source_id))
+    (es with gas_obs := tail) =
+    (INL (), (es with scopes :=
+      (sc |+ (id, <|assignable := T; type := entry.type;
+        value := entry.value; popped := []|>)) :: rest) with gas_obs := tail)
+Proof
+  strip_tac >> gen_tac >>
+  `lookup_scopes source_id (es with gas_obs := tail).scopes = SOME entry` by fs[] >>
+  drule_then (qspecl_then [`cx`, `ty`] mp_tac) eval_name_word >>
+  strip_tac >>
+  `lookup_scopes id (es with gas_obs := tail).scopes = NONE /\
+   (es with gas_obs := tail).scopes = sc :: rest` by fs[] >>
+  drule_all body_annassign_read_eval >> simp[]
 QED
 
 Theorem body_annassign_name_exec[local]:
@@ -86,11 +118,12 @@ Theorem body_annassign_name_prepare[local]:
   type_stmt env ret_ty (AnnAssign id ty (Name ty source_id)) = SOME env' /\
   stmt_exprs_ok ce (AnnAssign id ty (Name ty source_id)) /\
   call_evaluation_safe cx (int_calls_stmt (AnnAssign id ty (Name ty source_id))) /\
-  eval_stmt cx (AnnAssign id ty (Name ty source_id)) es = (res,es') /\
   ~is_word_type ty /\ 0 < type_memory_bytes ce ty /\
   stmt_env ce lctx ret_ty (AnnAssign id ty (Name ty source_id)) sa = (c,sb) ==>
-  ?tyv v sc rest st sA src info.
-    res = INL () /\
+  ?tyv v sc rest st sA src info es'.
+    eval_stmt cx (AnnAssign id ty (Name ty source_id)) es = (INL (),es') /\
+    (!tail. eval_stmt cx (AnnAssign id ty (Name ty source_id))
+      (es with gas_obs := tail) = (INL (),es' with gas_obs := tail)) /\
     es' = es with scopes :=
       (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest /\
     es.scopes = sc :: rest /\ cenv_top_ext ce c es'.scopes /\
@@ -172,14 +205,14 @@ Proof
     (INL entry.value,es)` by (irule eval_name_word >> simp[]) >>
   `?sc rest. es.scopes = sc :: rest` by
     (Cases_on `es.scopes` >> gvs[lookup_scopes_def]) >>
+  drule_all body_annassign_name_eval_tails >> strip_tac >>
   drule_all body_annassign_read_eval >> strip_tac >>
-  `res = INL ()` by (qpat_x_assum `eval_stmt _ _ _ = (res,es')` mp_tac >> simp[]) >>
-  qpat_x_assum `eval_stmt _ _ _ = (res,es')` mp_tac >> simp[] >> strip_tac >>
-  `cenv_top_ext ce c es'.scopes` by
+  qmatch_asmsub_abbrev_tac `eval_stmt cx (AnnAssign id ty (Name ty source_id)) es = (INL (),es_end)` >>
+  `cenv_top_ext ce c es_end.scopes` by
     (irule annassign_word_top_ext >> simp[] >>
      goal_assum (drule_at (Pat `declare_local _ _ _ _ = _`)) >>
      simp[] >> qexistsl_tac [`cx`, `Name ty source_id`, `es`] >> simp[]) >>
-  gvs[] >> goal_assum (drule_at Any)
+  gvs[Abbr `es_end`] >> goal_assum (drule_at Any)
 QED
 
 Theorem body_annassign_name_code[local]:
@@ -210,30 +243,18 @@ Proof
 QED
 
 Theorem body_decl_normal_landing[local]:
-  frag_exec_mem ctx sa sb (\u. u = s0)
-    (\s. stmt_state_rel ctx func c cx es' s /\ alloca_history func s /\
-      s0.vs_alloca_next <= s.vs_alloca_next /\ return_buf_frame d c sb s /\
-      (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b)) (\r. F) /\
-  fn_has_code sa sb func /\ ~s0.vs_halted /\
-  s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func c cx es' s /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   ~block_is_terminated sb /\ cenv_top_ext ce c es'.scopes ==>
-  ?s c'. stmt_lands lctx sb (INL ()) s /\ ~s.vs_halted /\
-    (~block_is_terminated sb /\ c' = c) /\
-    cenv_top_ext ce c' es'.scopes /\ stmt_state_rel ctx func c' cx es' s /\
-    alloca_history func s /\
-    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x s = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
-    return_buf_frame d c' sb s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
-    !fuel r. run_from fuel ctx func s = r /\ (!e. r <> Error e) ==>
-      ?fuel'. run_from fuel' ctx func s0 = r /\
-        (mem_safe_run fuel ctx func s ==> mem_safe_run fuel' ctx func s0)
+  stmt_lands lctx sb (INL ()) s /\
+  cenv_top_ext ce c (es' with gas_obs := []).scopes /\
+  stmt_state_rel ctx func c cx (es' with gas_obs := []) s
 Proof
-  strip_tac >>
-  qpat_x_assum `frag_exec_mem _ _ _ _ _ _` mp_tac >>
-  simp[frag_exec_mem_def] >>
-  disch_then (qspec_then `func` mp_tac) >> simp[] >> strip_tac >>
-  qexists_tac `s` >> simp[stmt_lands_def] >> metis_tac[]
+  strip_tac >> simp[stmt_lands_def] >>
+  drule msg_gas_state_frame >>
+  disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
+  simp[NoAsms]
 QED
 
 Theorem body_annassign_name_mem:
