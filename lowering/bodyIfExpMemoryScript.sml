@@ -1304,6 +1304,27 @@ Proof
   simp[vyperLookupTheory.lookup_scopes_update_other] >> metis_tac[]
 QED
 
+Theorem ifexp_call_cleanup_retained_domain[local]:
+  lookup_scopes keep saved = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) /\
+  finally f (do pop_function saved; unlock_if_nr cx nr is_view od) s = (res,ee) ==>
+  lookup_scopes keep ee.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg))
+Proof
+  strip_tac >> gvs[unlock_if_nr_def] >>
+  drule vyperPlaceResultTypingTheory.finally_conditional_lock_scopes >> simp[]
+QED
+
+Theorem ifexp_defaults_retained_domain[local]:
+  lookup_scopes keep saved = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) /\
+  finally (do set_scopes [FEMPTY]; defaults od) (set_scopes saved) s = (res,ee) ==>
+  lookup_scopes keep ee.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg))
+Proof
+  strip_tac >> drule vyperScopePreservationTheory.finally_set_scopes >> simp[]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
