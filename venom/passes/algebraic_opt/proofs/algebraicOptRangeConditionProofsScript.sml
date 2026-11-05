@@ -451,3 +451,24 @@ Resume ao_source_trace_branch_refine_sound[jnz]:
    qexists_tac `SOME (LAST bb.bb_instructions)` >> simp[] >> metis_tac[])
 QED
 Finalise ao_source_trace_branch_refine_sound
+
+Theorem ao_range_phis_sound:
+  !fn bb s p.
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK p /\
+    in_range_state (range_at_inst (range_analyze fn) bb.bb_label 0) s.vs_vars ==>
+    in_range_state (range_at_inst (range_analyze fn) bb.bb_label
+      (phi_prefix_length bb.bb_instructions)) p.vs_vars
+Proof
+  rpt gen_tac >> strip_tac >>
+  `range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label 0) s` by
+    (Cases_on `df_widen_at NONE (range_analyze fn) bb.bb_label 0` >>
+     gvs[range_at_inst_def, range_sound_def, range_unwrap_def]) >>
+  drule_all eval_phis_range_sound >>
+  Cases_on `df_widen_at NONE (range_analyze fn) bb.bb_label
+    (phi_prefix_length bb.bb_instructions)` >>
+  simp[range_at_inst_def, range_sound_def, range_unwrap_def,
+       rangeEvalDefsTheory.in_range_state_def]
+QED
