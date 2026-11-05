@@ -70,6 +70,9 @@ Definition call_external_body_def:
                of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
                 | SOME v => (INL v, am_ret, st.requests))
             | (INR e, st) => (INR e, am, st.requests))
+       | (INR HaltException, st) =>
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st,
+            st.requests)
        | (INR e, st) => (INR e, am, st.requests)) in
     (res, am_out, rqs)
 End
@@ -108,6 +111,8 @@ Theorem call_external_selected_entry_body[local]:
     case call_external_body orc gobs' am cx nr mut (type_env_all_modules mods)
            scope body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+     | (INR HaltException, am', rqs) =>
+         (INR HaltException, finalize_pending_deletions am', rqs)
     | failure => failure
 Proof
   strip_tac >>
@@ -144,9 +149,11 @@ Theorem finalize_case_FST[local]:
   FST (case r of
          (INL value, am', rqs) =>
            (INL value, finalize_pending_deletions am', rqs)
+       | (INR HaltException, am', rqs) =>
+           (INR HaltException, finalize_pending_deletions am', rqs)
        | failure => failure) = FST r
 Proof
-  PairCases_on `r` >> Cases_on `r0` >> simp[]
+  PairCases_on `r` >> Cases_on `r0` >> simp[] >> rpt CASE_TAC >> simp[]
 QED
 
 (* The ABI premise is the length fit plus provided_args_typed: bind_arguments
@@ -188,6 +195,8 @@ Theorem checked_selected_entry_no_static_error:
                scope body ret of
           (INL value, am', rqs) =>
             (INL value, finalize_pending_deletions am', rqs)
+         | (INR HaltException, am', rqs) =>
+             (INR HaltException, finalize_pending_deletions am', rqs)
         | failure => failure) /\
      no_type_error_result
        (FST (call_external_body orc gobs' am cx nr mut (type_env_all_modules mods)

@@ -44,6 +44,7 @@ Ancestors
   vyperStorageOutcomeTest
   vyperStoragePopTest
   vyperStringScopeTest
+  vyperSystemHaltTest
   vyperTestLibTest
   vyperTestRunner
   vyperTupleSubscriptTest

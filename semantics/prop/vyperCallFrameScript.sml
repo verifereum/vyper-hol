@@ -23,7 +23,7 @@ Theorem concrete_extcall_tail:
   else (INR (Error (RuntimeError msg)),st)
 Proof
   rw[bind_def, ignore_bind_def, check_def, assert_def,
-     update_accounts_def, update_transient_def, append_logs_def,
+     update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
      return_def, raise_def]
 QED
 
@@ -61,7 +61,7 @@ Theorem concrete_extcall_tail_cases:
 Proof
   Cases_on `success` >>
   simp[concrete_extcall_tail, check_def, assert_def, return_def,
-       update_accounts_def, update_transient_def, append_logs_def, EQ_SYM_EQ]
+       update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def, EQ_SYM_EQ]
 QED
 
 (* Reusable relation transport, keeping default/decode in k. *)
@@ -123,3 +123,105 @@ Proof
      return_def, raise_def] >>
   gvs[AllCaseEqs(), evaluation_state_component_equality]
 QED
+
+(* Pre-TASK029 client proof fragments, retained for proof-history review.
+   Live replacements use the named contracts above; no proof was admitted.
+
+vyperEvalExprPreservesScopesDom: Send / ExtCall post-run continuation
+  imp_res_tac transfer_value_scopes >>
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (
+    first_x_assum drule
+    \\ first_x_assum(qspec_then`ARB`kall_tac)
+    \\ rw[]
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[check_def, type_check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
+           return_def, CaseEq"sum", CaseEq"prod", get_accounts_def,
+           get_transient_storage_def]
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes \\ gvs[] )
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (pop_assum mp_tac \\ rw[update_accounts_def, return_def])
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (pop_assum mp_tac \\ rw[update_transient_def, return_def])
+  \\ IF_CASES_TAC
+  >- (
+    strip_tac
+    \\ last_x_assum $ funpow 2 drule_then drule
+    \\ simp[]
+    \\ rpt $ disch_then $ drule_at Any
+    \\ gvs[]
+    \\ rpt $ disch_then $ drule_at Any
+    \\ gvs[ignore_bind_def]
+    \\ disch_then $ drule_at Any
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac update_accounts_scopes
+    \\ imp_res_tac update_transient_scopes
+    \\ imp_res_tac append_logs_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ strip_tac
+    \\ gvs[append_logs_def, update_pending_deletions_def, return_def, check_def, type_check_def, assert_def]
+    \\ first_x_assum drule
+    \\ first_x_assum drule
+    \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
+           check_def, assert_def,
+           COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[])
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (
+    first_x_assum drule
+    \\ first_x_assum(qspec_then`ARB`kall_tac)
+    \\ rw[] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac update_accounts_scopes
+    \\ imp_res_tac update_transient_scopes
+    \\ imp_res_tac append_logs_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes
+    \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
+           COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[assert_def] )
+  \\ first_x_assum drule
+  \\ first_x_assum(qspec_then`ARB`kall_tac)
+  \\ rw[return_def] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+  \\ imp_res_tac update_accounts_scopes
+  \\ imp_res_tac update_transient_scopes
+  \\ imp_res_tac append_logs_scopes
+  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+  \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes
+  \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
+         COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
+  \\ imp_res_tac lift_sum_runtime_scopes
+  \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+  \\ gvs[assert_def]
+
+vyperEvalPreservesImmutablesDom: Send / extcall_inner_pipeline_imm_dom
+  imp_res_tac transfer_value_immutables >> gvs[] >>
+  rw[bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
+     update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def, return_def,
+
+vyperEvalPreservesScopes: Send / mechanical loop_body rename
+    imp_res_tac transfer_value_scopes >>
+    imp_res_tac transfer_value_immutables >> gvs[] >>
+    qspecl_then [`cx`, `body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
+  (qspecl_then [`cx`, `body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
+
+vyperLogPreservation: Send / ext_call_tail_log_extends
+  imp_res_tac transfer_value_logs >> gvs[] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       vyperInterpreterTheory.append_logs_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+*)

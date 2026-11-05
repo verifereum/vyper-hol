@@ -120,7 +120,8 @@ Theorem outcome_success_actual_client:
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
                  logs := st2.logs; outcomes := st2.outcomes;
-                 requests := st2.requests|>
+                 requests := st2.requests;
+                 pending_deletions := st2.pending_deletions|>
 Proof
   rpt strip_tac
   >- (drule_all take_adopt_call_outcome_typed >> simp[]) >>
