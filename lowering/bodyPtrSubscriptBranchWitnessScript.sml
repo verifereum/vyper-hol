@@ -3,7 +3,7 @@ Theory bodyPtrSubscriptBranchWitness
 Ancestors
   bodyPtrSubscriptNamedScalar bodyPtrSubscriptWordProvenance
   stmtAssertPtr bodyPtrCtrlCases fragGasSeqPtr fragGasPathPtr
-  exprSimIfExp exprSimOperators emitHelper exprLoweringProps
+  exprSimIfExp exprSimOperators emitHelper exprLoweringProps exprLowering
   ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState
   venomExecProofs gasCount finite_map pred_set codegenRel contextCodegenRel
   compileEnv fragExec
@@ -88,4 +88,16 @@ Proof
        set_prov_def, set_var_taint_def, mk_inst_def, op_taint_def,
        FLOOKUP_DRESTRICT] >>
   CASE_TAC >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
+(* The general layout alternative avoids duplicating this interface for
+   scalar and equal-layout arms. The S1 rewrite is local to its theory. *)
+Theorem ifexp_arm_lower_value:
+  compile_expr cenv ty e sa = (vv,sm) /\
+  compile_ifexp_arm cenv rt at vv sm = (op,sb) /\
+  (is_word_type rt \/ same_memory_layout cenv at rt) ==>
+  lower_value compile_expr cenv ty e sa = (op,sb)
+Proof
+  simp[compile_ifexp_arm_def, lower_value_def, comp_bind_def] >>
+  rpt strip_tac >> gvs[]
 QED
