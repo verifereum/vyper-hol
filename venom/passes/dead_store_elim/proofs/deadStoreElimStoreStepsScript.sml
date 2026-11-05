@@ -98,13 +98,13 @@ Proof
 QED
 
 Theorem dse_mstore_write_location:
-  inst.inst_opcode IN {MSTORE; MSTORE8} /\
+  inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE} /\
   inst.inst_operands = [addr; value] ==>
   bp_get_write_location bp inst AddrSp_Memory =
     bp_segment_from_ops bp
       <|iao_ofst := addr;
-        iao_size := SOME (Lit (if inst.inst_opcode = MSTORE then 32w else 1w));
-        iao_max_size := SOME (Lit (if inst.inst_opcode = MSTORE then 32w else 1w))|>
+        iao_size := SOME (Lit (if inst.inst_opcode = MSTORE8 then 1w else 32w));
+        iao_max_size := SOME (Lit (if inst.inst_opcode = MSTORE8 then 1w else 32w))|>
 Proof
   simp[] >> strip_tac >>
   simp[bp_get_write_location_def, is_raw_fmp_opcode_def,
@@ -112,28 +112,28 @@ Proof
 QED
 
 Theorem dse_mstore_write_region:
-  inst.inst_opcode IN {MSTORE; MSTORE8} /\
+  inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE} /\
   inst.inst_operands = [addr; value] /\ eval_operand addr s = SOME a /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s ==>
   dse_region_matches (bp_get_write_location bp inst AddrSp_Memory) s
-    (w2n a) (if inst.inst_opcode = MSTORE then 32 else 1)
+    (w2n a) (if inst.inst_opcode = MSTORE8 then 1 else 32)
 Proof
   strip_tac >> drule_all dse_mstore_write_location >>
   disch_then (qspec_then `bp` SUBST1_TAC) >>
   `w2n (32w:bytes32) = 32 /\ w2n (1w:bytes32) = 1` by
     (simp[wordsTheory.dimword_def] >>
      CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> EVAL_TAC) >>
-  Cases_on `inst.inst_opcode = MSTORE` >> fs[Excl "w2n_n2w"] >>
+  Cases_on `inst.inst_opcode = MSTORE8` >> fs[Excl "w2n_n2w"] >>
   irule bp_segment_region_matches >> simp[eval_operand_def, Excl "w2n_n2w"] >>
   qexistsl_tac [`inst`, `AddrSp_Memory`] >>
   simp[bp_access_ops_def, mem_write_ops_def]
 QED
 
 Theorem dse_mstore_write_size:
-  inst.inst_opcode IN {MSTORE; MSTORE8} /\
+  inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE} /\
   inst.inst_operands = [addr; value] /\
   (bp_get_write_location bp inst AddrSp_Memory).ml_size = SOME n ==>
-  n = (if inst.inst_opcode = MSTORE then 32 else 1)
+  n = (if inst.inst_opcode = MSTORE8 then 1 else 32)
 Proof
   strip_tac >> drule_all dse_mstore_write_location >>
   disch_then (qspec_then `bp` assume_tac) >> gvs[] >>
@@ -144,11 +144,11 @@ QED
 
 Theorem dse_mstore_clobber_covered:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
-  inst.inst_opcode IN {MSTORE; MSTORE8} /\
+  inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE} /\
   inst.inst_operands = [addr; value] /\ eval_operand addr s = SOME a /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
   MEM (loc,(b,m)) P /\ dse_inst_clobbers bp AddrSp_Memory loc inst ==>
-  w2n a <= b /\ b+m <= w2n a + (if inst.inst_opcode = MSTORE then 32 else 1)
+  w2n a <= b /\ b+m <= w2n a + (if inst.inst_opcode = MSTORE8 then 1 else 32)
 Proof
   strip_tac >>
   drule_all dse_pending_at_member >> strip_tac >>
@@ -171,7 +171,11 @@ Theorem dse_mstore_pending_memory_step:
     (FILTER (\(loc,(b,m)). ~(w2n a <= b /\ b+m <= w2n a+LENGTH bytes)) P)
     (write_memory_with_expansion (w2n a) bytes s)
 Proof
-  strip_tac >> irule dse_pending_at_allocas_extend >>
+  strip_tac >>
+  `inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE}` by fs[] >>
+  `((if inst.inst_opcode = MSTORE8 then 1 else 32):num) =
+   (if inst.inst_opcode = MSTORE then 32 else 1)` by gvs[] >>
+  irule dse_pending_at_allocas_extend >>
   qexists_tac `s` >> simp[write_memory_with_expansion_def] >>
   irule (SRULE [] dse_pending_at_overwrite_step) >> simp[] >>
   rpt strip_tac >> drule_all dse_mstore_clobber_covered >> simp[]
@@ -242,7 +246,11 @@ Theorem dse_mstore_pending_insert_step:
       FILTER (\(loc,(b,m)). ~(w2n a <= b /\ b+m <= w2n a+LENGTH bytes)) P)
     (write_memory_with_expansion (w2n a) bytes s)
 Proof
-  strip_tac >> irule dse_pending_at_allocas_extend >>
+  strip_tac >>
+  `inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE}` by fs[] >>
+  `((if inst.inst_opcode = MSTORE8 then 1 else 32):num) =
+   (if inst.inst_opcode = MSTORE then 32 else 1)` by gvs[] >>
+  irule dse_pending_at_allocas_extend >>
   qexists_tac `s` >> simp[write_memory_with_expansion_def] >>
   irule dse_pending_at_cons >> simp[] >>
   `?n. (bp_get_write_location bp inst AddrSp_Memory).ml_size = SOME n` by
@@ -294,7 +302,7 @@ Proof
 QED
 
 Theorem dse_mstore_other_write_location:
-  inst.inst_opcode IN {MSTORE; MSTORE8} /\ sp <> AddrSp_Memory ==>
+  inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE} /\ sp <> AddrSp_Memory ==>
   bp_get_write_location bp inst sp = ml_empty
 Proof
   simp[] >> strip_tac >>
@@ -303,13 +311,14 @@ Proof
 QED
 
 Theorem dse_mstore_other_pending_step:
-  inst.inst_opcode IN {MSTORE; MSTORE8} /\ sp <> AddrSp_Memory /\
+  inst.inst_opcode IN {MSTORE; MSTORE8; ISTORE} /\ sp <> AddrSp_Memory /\
   dse_pending_at cfg bp sp fn bb idx P s /\
   EL idx bb.bb_instructions = inst ==>
   dse_pending_at cfg bp sp fn bb (SUC idx) P
     (write_memory_with_expansion a bytes s)
 Proof
-  strip_tac >> irule dse_pending_at_allocas_extend >>
+  strip_tac >>
+  irule dse_pending_at_allocas_extend >>
   qexists_tac `s` >> simp[write_memory_with_expansion_def] >>
   irule dse_pending_at_step >> simp[] >> rpt strip_tac >>
   drule_all dse_pending_at_member >> strip_tac >>
