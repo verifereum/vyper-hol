@@ -107,9 +107,9 @@ QED
 
 (* Consumer contract for the remaining forcing development (unproved).
 
-   The unrestricted runtime boundary must have exactly the parameters and
-   conclusion of unwrap_runtime_noncopy_sim, dropping its case restriction
-   and retaining ~cenv.ce_is_ctor.  Equivalently its hypotheses are:
+   Historical proposal (insufficient premises; superseded by the coverage
+   audit below): drop the case restriction from unwrap_runtime_noncopy_sim.
+   The originally proposed hypotheses were:
      unwrap_value cenv vv sm = (op,sb) /\ local_ptrs_reserved cenv sm /\
      sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
      ~cenv.ce_is_ctor
@@ -303,4 +303,51 @@ QED
    are explicitly identified by the allocation diagnostic. No diagnostic
    comment in this file is a theorem. Parent forcing is NOT ready to close.
    A semantic implementation PLAN is required before any of these proofs.
+*)
+
+(* Current producer coverage audit (C1.6.2.12.16.5).
+   The historical unrestricted proposal above is NOT the current interface.
+   For nonword LocCode, exprSimCopy.unwrap_runtime_code_copy_sim already
+   proves the vv_post-to-expr_post boundary for the actual unwrap operation.
+   Its premises, beyond unwrap_value and the location/nonword/runtime split,
+   are:
+     local_ptrs_reserved cenv sa;
+     MAP FDOM es.scopes = MAP FDOM es'.scopes;
+     sa.cs_next_var <= sm.cs_next_var;
+     sa.cs_next_id <= sm.cs_next_id;
+     fn_has_code sm sb func; fn_inst_ids_distinct func;
+     !x. p.ptr_operand = Var x ==> not_fresh_at sm x;
+     !tv. evaluate_type (get_tenv cx) t = SOME tv ==>
+          type_memory_bytes cenv t = type_memory_size tv.
+   Reservation is required at sa, not merely at sm. Code membership and
+   distinct ids are caller facts about the actual function. Scope domains
+   and operand safety must be threaded explicitly: vv_post alone does not
+   supply them. expr_sim_inv_memory_size discharges size correspondence
+   only given expr_sim_inv at the actual source endpoint. No full source
+   state equality is used or implied.
+
+   Exact operation: compile_ensure_in_memory uses compile_alloc_buffer,
+   then compile_imm_copy_to_memory F with offset zero. copy_runtime_frag
+   handles that compiler (including zero words), not compile_word_copy_loop.
+   Its single postcondition contains immutable_transfers memory equality,
+   copy_static equality, and all old-variable equalities. copy_runtime_contents
+   provides typed contents; the finalised unwrap proof transports allocation,
+   operand result and statement relation through copy_buffer_post_transport.
+   The resulting expr_post includes stmt_state_rel, expr_val_rel/at, old known
+   registers, allocation-map inclusion, separated old-buffer bytes and
+   locals_kept. Thus no additional immutable-copy execution induction is
+   needed for the unframed LocCode case.
+
+   This does NOT prove the held-entry contract at lines 250ff. expr_post is
+   relative to s0 and does not by itself preserve every arbitrary held value
+   at the unwrap-entry state. C1.6.2.12.13 owns construction of the unframed
+   aggregate SML theorem using the explicit premises above. C1.6.2.12.14 owns
+   single-entry and EVERY preservation at the SAME allocation/copy execution
+   witness, retaining each lo and advancing its upper boundary sm to sb.
+   That proof must retain exact memory/static/old-operand frames, compose
+   replay-safe allocation separation, use vv_at_region_frame, and transport
+   contents even for memory-valued StackValue. Independently existential
+   frag_exec postconditions cannot be conjoined. vv_post_read_result adapts
+   the raw input only after this semantic frame is available.
+   This comment certifies interface coverage, not either pending theorem.
 *)
