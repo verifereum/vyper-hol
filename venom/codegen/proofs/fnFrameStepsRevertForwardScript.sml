@@ -932,35 +932,6 @@ Proof
   irule simple_prefix_spill_wf >> simp[]
 QED
 
-Theorem list_elem_count_dom_length:
-  !xs ys. (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
-    LENGTH xs <= LENGTH ys
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  `MEM h ys` by
-    (first_x_assum (qspec_then `h` mp_tac) >>
-     Cases_on `MEM h ys` >> simp[LIST_ELEM_COUNT_THM] >>
-     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
-  qpat_x_assum `MEM h ys` mp_tac >>
-  rewrite_tac[listTheory.MEM_SPLIT] >> strip_tac >> gvs[] >>
-  `!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (l1 ++ l2)` by
-    (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
-     simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
-     Cases_on `h = x` >> simp[] >> decide_tac) >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem available_input_plan_length:
-  !opc inputs nl ps input_ops ps1.
-    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
-    (!op. MEM op inputs /\ is_var_operand op ==>
-      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
-    LENGTH inputs <= LENGTH ps1.ps_stack
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule list_elem_count_dom_length >>
-  drule_all emit_input_plan_materialised >> simp[]
-QED
 
 Theorem available_preparation_prefix_wf:
   !opc inputs nl ps input_ops ps1 dfg reorder_ops ps2 lo.
@@ -1949,7 +1920,7 @@ Theorem rf_probe_pair:
 Proof
   simp[revert_forward_pair_def, rf_probe_bb_def, get_instruction_def,
        mk_inst_def] >>
-  simp[resolve_block_assigns_def]
+  simp[same_after_assigns_def, step_back_assign_def, resolve_block_assigns_def]
 QED
 Theorem rf_probe_word_ne[local]:
   (0w : 256 word) <> 1w

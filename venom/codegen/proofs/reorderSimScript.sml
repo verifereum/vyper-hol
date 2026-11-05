@@ -7678,3 +7678,34 @@ Proof
   simp[GSYM reorder_plan_eq_plan_steps, EVERY_EL,
        indexedListsTheory.EL_MAPi, indexedListsTheory.LENGTH_MAPi]
 QED
+
+(* Generic materialisation-to-height boundary, shared by frame and lineage proofs. *)
+Theorem list_elem_count_dom_length:
+  !xs ys. (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
+    LENGTH xs <= LENGTH ys
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `MEM h ys` by
+    (first_x_assum (qspec_then `h` mp_tac) >>
+     Cases_on `MEM h ys` >> simp[LIST_ELEM_COUNT_THM] >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  qpat_x_assum `MEM h ys` mp_tac >>
+  rewrite_tac[listTheory.MEM_SPLIT] >> strip_tac >> gvs[] >>
+  `!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (l1 ++ l2)` by
+    (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
+     simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
+     Cases_on `h = x` >> simp[] >> decide_tac) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem available_input_plan_length:
+  !opc inputs nl ps input_ops ps1.
+    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+    LENGTH inputs <= LENGTH ps1.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule list_elem_count_dom_length >>
+  drule_all emit_input_plan_materialised >> simp[]
+QED
