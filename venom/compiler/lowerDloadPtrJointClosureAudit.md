@@ -960,3 +960,17 @@ field. No definitions or existing theorem statements changed.
 This is only this opcode-family closure row. Allocation, expansion completion,
 other semantic families/residual opcodes, and global reachability closure
 remain unresolved; this does not certify the frozen stage contract.
+
+### 18.8 Checked affine normal-Q next consumer
+
+`lowerDloadPtrJointAffineTheory.dload_joint_tracked_affine_next` proves the
+whole normal-Q next row for original ADD/SUB at arbitrary literal fuel.
+It consumes the general-V affine semantic core with independent all-original
+U, derives source safety and operand origins from the incoming witness, and
+uses index-update, singleton reachability, and NormalNext interfaces to
+reconstruct the exact successor ghosts and ancillary fields. No source
+success, successor support, or allocation footprint premise is added.
+
+This covers ADD/SUB only, not shifts. Allocation, expansion completion,
+residual opcode families and global induction remain unresolved; neither
+this row nor its successful build proves the frozen stage contract.
