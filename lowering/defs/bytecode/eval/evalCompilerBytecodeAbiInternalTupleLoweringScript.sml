@@ -69,6 +69,10 @@ val internal_tuple_call_allocs_ok_eval = save_thm
    EQT_ELIM (EVAL ``EVERY (fn_allocs_ok ^internal_tuple_call_tops)
       (^internal_tuple_call_external_sources ++ ^internal_tuple_call_internal_sources ++
        (case ^internal_tuple_call_fallback_source of NONE => [] | SOME f => [f]))``))
+(* lower_vyper_runtime_unit's immutable-section bound. *)
+val internal_tuple_call_immutables_ok_eval =
+  EQT_ELIM (EVAL ``compute_immutables_len
+      (get_struct_fields (make_struct_fields_map ^internal_tuple_call_tops)) ^internal_tuple_call_tops < 0x6000``)
 val internal_tuple_call_internal_fns_eval = save_thm
   ("internal_tuple_call_internal_fns_eval",
    weak_eval
@@ -1059,7 +1063,7 @@ Theorem compile_stmt_return_ptr:
   cenv.ce_return_pc = SOME (PtrVar return_pc sz) ⇒
   compile_stmt cenv lctx ty (Return (SOME e)) =
     do val_op <- lower_value compile_expr cenv ty e;
-       compile_internal_return_from_env cenv ty (expr_type e)
+       compile_internal_return_from_env cenv ty (lowered_value_type cenv e)
          val_op return_pc
     od
 Proof
@@ -1074,8 +1078,15 @@ val internal_tuple_call_stmt_clean_step1 = RATOR_CONV
       ^internal_tuple_call_body_ret_ty
       (Return (SOME ^internal_tuple_call_return_expr))
       ^internal_tuple_call_state13``
+(* The return lowers at its lowered value type, which for this expression
+   is its source type. *)
+val internal_tuple_call_lowered_ty_eval = TRANS
+  (EVAL ``lowered_value_type ^internal_tuple_call_cenv2
+            ^internal_tuple_call_return_expr``)
+  (SYM internal_tuple_call_src_ty_eval)
 val internal_tuple_call_stmt_clean_step2 = SIMP_CONV pure_ss
   [compileEnvTheory.comp_bind_def,
+   internal_tuple_call_lowered_ty_eval,
    internal_tuple_call_return_value_eval,
    internal_tuple_call_return_from_env_clean_eval,
    LET_THM, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
@@ -1389,6 +1400,7 @@ val internal_tuple_call_lower_runtime_eval = save_thm
       internal_tuple_call_entry_info_eval,
       internal_tuple_call_run_lowering_eval,
       internal_tuple_call_return_buffers_ok_eval, internal_tuple_call_allocs_ok_eval,
+      internal_tuple_call_immutables_ok_eval,
       boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
