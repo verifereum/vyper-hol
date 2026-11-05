@@ -18,7 +18,14 @@ Theorem word_interval_operand_embedding:
     lookup_block "@then_0" fn.fn_blocks = SOME then_bb /\
     lookup_block "@else_1" fn.fn_blocks = SOME else_bb /\
     lookup_block "@exit_2" fn.fn_blocks = SOME join_bb /\
-    then_bb.bb_label = "@then_0" /\ else_bb.bb_label = "@else_1"
+    then_bb.bb_label = "@then_0" /\ else_bb.bb_label = "@else_1" /\
+    get_instruction entry 7 = SOME (mk_inst 7 MLOAD [Var "%0"] ["%5"]) /\
+    get_instruction entry 8 =
+      SOME (mk_inst 8 JNZ [Var "%5"; Label "@then_0"; Label "@else_1"] []) /\
+    get_instruction then_bb 0 = SOME (mk_inst 9 ASSIGN [Lit 1w] ["%6"]) /\
+    get_instruction then_bb 1 = SOME (mk_inst 10 JMP [Label "@exit_2"] []) /\
+    get_instruction else_bb 0 = SOME (mk_inst 11 ASSIGN [Lit 2w] ["%6"]) /\
+    get_instruction else_bb 1 = SOME (mk_inst 12 JMP [Label "@exit_2"] [])
 Proof
   EVAL_TAC >> rpt strip_tac >> gvs[fn_has_code_def, emitted_blocks_def] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``lookup_block``]) >>
