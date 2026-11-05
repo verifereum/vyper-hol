@@ -581,7 +581,9 @@ Resume compile_augassign_toplevel_mem[rhs_normal]:
   `!n. expr_int_literal e = SOME n ==> v = IntV n` by
     metis_tac[eval_expr_int_literal_agrees] >>
   `(bop = ShL \/ bop = ShR ==> ?i. v = IntV i /\ 0 <= i)` by
-    metis_tac[eval_expr_shift_amount] >>
+    (disch_then (fn th =>
+       qpat_x_assum `_ ==> shift_amount_ok e` (assume_tac o C MP th)) >>
+     drule_all eval_expr_shift_amount >> simp[]) >>
   suspend "binop"
 QED
 
