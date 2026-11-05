@@ -106,36 +106,6 @@ Proof
   ]
 QED
 
-(* After one OWHILE step, wf/SSA/pointer-confinement bundle, entry label, and output subset are preserved *)
-Theorem rusp_preservation_condition[local]:
-  !fn result s x.
-    OWHILE ^G_def ^f_def x = SOME result /\
-    remove_unused_single_pass x <> x /\
-    wf_function x /\ fn_inst_wf x /\ wf_ssa x /\
-    ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
-    fn_entry_label x = SOME s.vs_current_bb /\
-    fn_all_outputs x SUBSET fn_all_outputs fn ==>
-    OWHILE ^G_def ^f_def (remove_unused_single_pass x) = SOME result /\
-    wf_function (remove_unused_single_pass x) /\
-    fn_inst_wf (remove_unused_single_pass x) /\
-    wf_ssa (remove_unused_single_pass x) /\
-    ssa_form (remove_unused_single_pass x) /\
-    nop_outputs_empty (remove_unused_single_pass x) /\
-    alloca_pointer_confined (remove_unused_single_pass x) /\
-    fn_entry_label (remove_unused_single_pass x) = SOME s.vs_current_bb /\
-    fn_all_outputs (remove_unused_single_pass x) SUBSET fn_all_outputs fn
-Proof
-  rpt strip_tac >>
-  `OWHILE (\g. remove_unused_single_pass g <> g)
-          remove_unused_single_pass (remove_unused_single_pass x) = SOME result` by (
-    qpat_x_assum `OWHILE _ _ x = SOME result` mp_tac >>
-    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [WhileTheory.OWHILE_THM])) >>
-    simp[]) >>
-  fs[rusp_preserves_all, rusp_preserves_entry_label] >>
-  metis_tac[removeUnusedProofsTheory.rusp_all_outputs_subset,
-            pred_setTheory.SUBSET_TRANS]
-QED
-
 
 Theorem remove_unused_owhile_reachable_ind[local]:
   !G f P.
