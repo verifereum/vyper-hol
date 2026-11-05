@@ -14,7 +14,7 @@ Ancestors
   irSupply unitShapeDefs o1PassContract venomState stateFrame venomExecSemantics
   venomExecProps venomExecProofs contextCodegenRel list rich_list
   makeSsaCurrentCutInv makeSsaCurrentWfSsa o1MakeSsaFormats
-  makeSsaCurrentLockstepShape analysisSimProofsBase
+  makeSsaCurrentLockstepShape analysisSimProofsBase rangeAnalysisProofs
 
 Definition make_ssa_pos_def:
   make_ssa_pos fn fn' l k =
@@ -472,6 +472,99 @@ Proof
   >- (irule current_lockstep_cleanup_intro >> simp[] >>
       qexistsl_tac [`pre`, `sgs`] >> gvs[]) >>
   gvs[]
+QED
+
+Theorem current_lockstep_entry:
+  current_wf_phi_context s fn renamed s' A H events /\
+  fn' = fn with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
+  ctx_bisim C C' /\ make_ssa_current_fn s fn = (fn',s') /\
+  fn_entry_state fn st /\ enters_block fn' st post' /\ active_inst fn' inst' post' ==>
+  ?p inst post sg. enters_block fn st post /\
+    current_lockstep_rel fn fn' A renamed H events p (inst,post) sg (inst',post')
+Proof
+  strip_tac >>
+  `wf_function fn /\ first_block_no_preds fn /\ first_block_no_phi fn` by
+    fs[current_wf_phi_context_def] >>
+  drule_all make_ssa_lockstep_entry_states >> strip_tac >>
+  qpat_x_assum `post' = st` SUBST_ALL_TAC >>
+  `?eb. entry_block fn = SOME eb` by
+    (fs[fn_entry_state_def, fn_entry_label_def, entry_block_def, AllCaseEqs()] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  drule_all current_phi_context_entry_cut >> strip_tac >>
+  `st.vs_current_bb = eb.bb_label /\ st.vs_inst_idx = 0` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_state_def, fn_entry_label_def, entry_block_def]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
+    (drule current_phi_context_output_distinct >> simp[]) >>
+  `0 < LENGTH eb.bb_instructions` by metis_tac[active_inst_at_lookup] >>
+  `active_inst fn (EL 0 eb.bb_instructions) st` by
+    (irule (iffRL active_inst_at_lookup) >>
+     conj_tac >- fs[wf_function_def, fn_labels_def] >>
+     qexists_tac `eb` >> simp[]) >>
+  qexistsl_tac [`T`, `EL 0 eb.bb_instructions`, `st`, `FEMPTY`] >> simp[] >>
+  `FEMPTY = current_cut_sg fn A renamed H events st.vs_current_bb st.vs_inst_idx` by gvs[] >>
+  pop_assum SUBST1_TAC >> irule current_lockstep_paired_intro >> simp[] >>
+  gvs[]
+QED
+
+Theorem current_lockstep_block_entry:
+  current_wf_phi_context s fn renamed s' A H events /\
+  fn' = fn with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
+  fn_cfg_edge fn pred h /\ lookup_block pred fn.fn_blocks = SOME old_p /\
+  current_cut_inv fn A renamed H events pred (LENGTH old_p.bb_instructions) t t' /\
+  t.vs_prev_bb = SOME pred /\ t.vs_current_bb = h /\
+  (!x' x. FLOOKUP (current_cut_sg fn A renamed H events pred
+      (LENGTH old_p.bb_instructions)) x' = SOME x ==> FLOOKUP incoming x' = SOME x) /\
+  enters_block fn' t' post' /\ active_inst fn' j' post' ==>
+  ?p j post sg. enters_block fn t post /\
+    current_lockstep_rel fn fn' A renamed H events p (j,post) sg (j',post') /\
+    phis_rename_ok t.vs_prev_bb incoming (block_insts fn t.vs_current_bb)
+      (block_insts fn' t.vs_current_bb) sg
+Proof
+  strip_tac >>
+  drule_all current_cut_inv_block_entry_prefix >> strip_tac >>
+  `?post. enters_block fn t post /\
+    post.vs_inst_idx = LENGTH (collect_phis old_h.bb_instructions) /\
+    state_rel (sgs (phi_prefix_length bb'.bb_instructions)) post post' /\
+    (!v. current_demand fn v h (LENGTH (collect_phis old_h.bb_instructions)) ==>
+      IS_SOME (lookup_var v post))` by metis_tac[] >>
+  `t'.vs_current_bb = h` by fs[current_cut_inv_def, state_rel_def] >>
+  `post.vs_current_bb = h /\ post'.vs_current_bb = h /\
+    post'.vs_inst_idx = phi_prefix_length bb'.bb_instructions` by
+    (fs[enters_block_def] >>
+     metis_tac[eval_phis_preserves_current_bb]) >>
+  `wf_function fn` by fs[current_wf_phi_context_def] >>
+  `bb_well_formed old_h` by metis_tac[wf_function_def, lookup_block_MEM] >>
+  `!xs. LENGTH (collect_phis xs) = phi_prefix_length xs` by
+    (Induct >> simp[livenessDefsTheory.collect_phis_def, phi_prefix_length_def] >>
+     qx_gen_tac `ins` >> Cases_on `ins.inst_opcode = PHI` >> simp[]) >>
+  `LENGTH (collect_phis old_h.bb_instructions) < LENGTH old_h.bb_instructions` by
+    (simp[] >> spose_not_then assume_tac >>
+     `phi_prefix_length old_h.bb_instructions = LENGTH old_h.bb_instructions` by
+       metis_tac[phi_prefix_length_le, arithmeticTheory.NOT_LESS, arithmeticTheory.LESS_EQUAL_ANTISYM] >>
+     fs[bb_well_formed_def] >>
+     `LENGTH old_h.bb_instructions <> 0` by
+       (Cases_on `old_h.bb_instructions` >> gvs[]) >>
+     `is_terminator (EL (PRE (LENGTH old_h.bb_instructions)) old_h.bb_instructions).inst_opcode` by
+       metis_tac[LAST_EL] >>
+     `(EL (PRE (LENGTH old_h.bb_instructions)) old_h.bb_instructions).inst_opcode = PHI` by
+       (irule phi_prefix_length_el_phi >> simp[]) >>
+     gvs[is_terminator_def]) >>
+  `active_inst fn (EL post.vs_inst_idx old_h.bb_instructions) post` by
+    (irule (iffRL active_inst_at_lookup) >>
+     conj_tac >- fs[wf_function_def, fn_labels_def] >>
+     qexists_tac `old_h` >> simp[] >> metis_tac[]) >>
+  `current_cleanup_tail fn A renamed H events h post.vs_inst_idx bb'.bb_instructions
+      (LENGTH pre + post.vs_inst_idx) post'.vs_inst_idx sgs post post'` by
+    (simp[current_cleanup_tail_def] >> metis_tac[]) >>
+  qexistsl_tac [`post'.vs_inst_idx = LENGTH pre + post.vs_inst_idx`,
+    `EL post.vs_inst_idx old_h.bb_instructions`, `post`, `sgs post'.vs_inst_idx`] >>
+  simp[] >> conj_tac
+  >- (irule current_lockstep_cleanup_intro >> gvs[] >>
+      qexistsl_tac [`pre`, `sgs`] >> simp[]) >>
+  irule phis_rename_ok_mono >> goal_assum (drule_at Any) >> gvs[]
 QED
 
 Theorem make_ssa_current_fn_frame_lockstep:
