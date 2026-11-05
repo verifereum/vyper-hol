@@ -103,3 +103,35 @@ Proof
   strip_tac >> drule fragGasModeTheory.gas_marked_path_exec >> strip_tac >>
   drule rest_word_path_alloca >> simp[]
 QED
+
+Theorem rest_word_edge_frontier:
+  gas_path_edge ctx fn s n (OK t) ==> s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  rw[fragGasPathTheory.gas_path_edge_def] >>
+  gvs[fragExecTheory.exit_result_def]
+  >- metis_tac[rest_word_step_frontier]
+  >- (drule rest_word_step_frontier >>
+      drule venomExecProofsTheory.eval_phis_preserves_alloca_fields >> simp[])
+  >- simp[venomStateTheory.jump_to_def] >>
+  qpat_x_assum `OK _ = _` (mp_tac o SYM) >>
+  disch_then SUBST_ALL_TAC >> fs[fragExecTheory.exit_result_def]
+QED
+
+Theorem rest_word_path_frontier:
+  !ctx fn s n r. gas_path ctx fn s n r ==>
+  !t. r = OK t ==> s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  ho_match_mp_tac fragGasPathTheory.gas_path_ind >> rpt strip_tac >>
+  gvs[fragExecTheory.exit_result_def] >>
+  drule rest_word_edge_frontier >> simp[]
+QED
+
+Theorem rest_word_marked_allocation_posts:
+  gas_marked_path memory ctx fn s n (OK t) /\ fn_inst_ids_distinct fn /\
+  alloca_history fn s /\ alloca_inv s ==>
+  alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  strip_tac >> drule_all rest_word_marked_alloca >> strip_tac >> simp[] >>
+  drule fragGasModeTheory.gas_marked_path_exec >> strip_tac >>
+  drule rest_word_path_frontier >> simp[]
+QED
