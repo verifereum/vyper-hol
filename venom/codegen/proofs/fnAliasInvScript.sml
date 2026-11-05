@@ -300,6 +300,44 @@ Proof
   simp[LIST_ELEM_COUNT_THM]
 QED
 
+Theorem alias_var_mass_swap:
+  d < LENGTH ps.ps_stack ==>
+  alias_var_mass x (SND (do_swap d ps)) = alias_var_mass x ps
+Proof
+  strip_tac >> drule_then (qspec_then `Var x` assume_tac)
+    doSwapSimTheory.do_swap_multiplicity >>
+  simp[alias_var_mass_def, do_swap_spilled_unchanged]
+QED
+
+Theorem alias_var_mass_restore_spilled:
+  !ops ps x.
+  alias_var_mass x (SND (restore_spilled_plan ops ps)) = alias_var_mass x ps
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  first_x_assum (qspecl_then [`ps1`, `x`] mp_tac) >>
+  mp_tac (Q.INST [`op` |-> `h`] alias_var_mass_restore) >> gvs[]
+QED
+
+Theorem alias_var_mass_reduce_depth:
+  !fuel targets op f n ps x.
+  alias_var_mass x (SND (reduce_depth_plan fuel targets op f n ps)) <=
+  alias_var_mass x ps
+Proof
+  Induct >> simp[Once reduce_depth_plan_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets x' n` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  drule_then assume_tac stack_get_unfixed_depth_bound >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all_then strip_assume_tac planWfTheory.select_spill_candidate_bound >>
+  drule_then (qspec_then `x` mp_tac) (GEN_ALL alias_var_mass_spill) >>
+  first_x_assum (qspecl_then [`targets`, `op`, `f`, `n`, `ps'`, `x`] mp_tac) >>
+  gvs[] >> decide_tac
+QED
+
 Theorem alias_var_mass_emit_one:
   !opc live op ps x.
   alias_var_mass x (SND (emit_one_input opc live op ps)) <=
