@@ -4587,7 +4587,7 @@ Proof
   simp[adopt_call_outcome_equation] >> rw[]
 QED
 
-Theorem calldata_raw_call_gas_obs[local]:
+Theorem calldata_raw_call_gas_obs:
   !cx flags target data amount gas st g.
     ~cx.txn.is_static /\ ~flags.rcf_is_delegate /\ IS_SOME st.outcomes ==>
     eval_raw_call cx flags target data amount gas (st with gas_obs := g) =

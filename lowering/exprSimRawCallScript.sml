@@ -4369,7 +4369,7 @@ Theorem raw_call_keywords_decode[local]:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   expr_sim_inv cenv cx env es2 /\
   eval_exprs cx kws es2 = (INL kvs,es') /\
-  typed_args_post ctx func cenv cx es2 sa s0 es' kws xs kvs s ==>
+  typed_args_post ctx func cenv cx es0 sa s0 es' kws xs kvs s ==>
   ?amount. raw_call_value flags.rcf_kws kvs = SOME amount /\
     eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
       NONE => Lit 0w | SOME x => x) s = SOME (n2w amount) /\
@@ -4395,35 +4395,50 @@ Proof
   gvs[raw_call_value_def, ext_call_kwarg_not_mem]
 QED
 
-Theorem raw_call_prefix_decode[local]:
+Theorem raw_call_prefix_source_ready[local]:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
-  eval_exprs cx [a;d] es = (INL [av;BytesV bs],es2) /\
-  eval_exprs cx kws es2 = (INL kvs,es') /\
+  bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
+  bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
+    (INL (BytesV bs),esD) /\
+  eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
   expr_val_rel cx (BaseT AddressT) av addr t /\
-  typed_args_post ctx func cenv cx es2 s4 tm es' kws xs kvs tk /\
+  typed_args_post ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
   (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) ==>
   ?target amount.
-    av = AddressV target /\
+    av = AddressV target /\ dest_AddressV av = SOME target /\
     eval_operand addr t = SOME (w2w target) /\
     raw_call_value flags.rcf_kws kvs = SOME amount /\
     eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
       NONE => Lit 0w | SOME x => x) t = SOME (n2w amount) /\
     amount < dimword(:256) /\ (flags.rcf_is_static ==> amount = 0) /\
-    LENGTH kvs = LENGTH flags.rcf_kws /\ expr_sim_inv cenv cx env es'
+    LENGTH kvs = LENGTH flags.rcf_kws /\ expr_sim_inv cenv cx env esK
 Proof
-  strip_tac >>
-  qpat_assum `eval_exprs cx [a;d] es = _`
-    (mp_then Any strip_assume_tac eval_exprs_cons_cases) >>
-  gvs[AllCaseEqs()] >>
-  qpat_assum `eval_exprs cx [d] _ = _`
-    (mp_then Any strip_assume_tac eval_exprs_cons_cases) >>
-  gvs[eval_exprs_nil, AllCaseEqs()] >>
-  drule_all raw_call_addr_data_values >> strip_tac >>
+  strip_tac >> drule raw_call_pre_operands >> simp[] >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env a (es with gas_obs := gsA)` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `expr_sim_inv cenv cx env esA` by
+    (irule (cj 1 expr_body_pre_base_result) >>
+     goal_assum (drule_at Any) >> simp[ETA_THM] >>
+     qexists_tac `INL av` >> fs[bind_def]) >>
+  `value_has_type (BaseTV AddressT) av` by
+    (irule (cj 3 expr_body_pre_base_result) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `esA` >> fs[bind_def]) >>
+  `expr_body_pre cenv cx env d (esA with gas_obs := gsD)` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `expr_sim_inv cenv cx env esD` by
+    (irule (cj 1 expr_body_pre_base_result) >>
+     goal_assum (drule_at Any) >> simp[ETA_THM] >>
+     qexists_tac `INL (BytesV bs)` >> fs[bind_def]) >>
+  `expr_sim_inv cenv cx env (esD with gas_obs := gsK)` by simp[] >>
   drule_all raw_call_keywords_decode >> strip_tac >>
   Cases_on `av` >> gvs[value_has_type_def] >>
   gvs[expr_val_rel_def, is_word_type_def,
     vyperValueTheory.evaluate_type_def, typed_val_to_w256_def] >>
-  qexists_tac `word_of_bytes_be l` >>
+  qexists_tac `word_of_bytes_be l` >> simp[dest_AddressV_def] >>
   `word_to_bytes (word_of_bytes_be l : address) T = l` by
     (simp[byteTheory.word_of_bytes_be_def] >>
      irule venomMemPropsTheory.word_bytes_roundtrip >>
@@ -4440,34 +4455,64 @@ Proof
   `MEM x xs` by metis_tac[raw_call_kwarg_mem] >> metis_tac[]
 QED
 
+Theorem raw_call_source_continuation[local]:
+  dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
+  raw_call_value flags.rcf_kws kvs = SOME amount ==>
+  (do
+    type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+    target <- lift_option_type (dest_AddressV av) "raw_call target";
+    data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
+    amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+    eval_raw_call cx flags target data amount
+      (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+  od) = eval_raw_call cx flags target bs amount
+    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+Proof
+  strip_tac >> simp[FUN_EQ_THM, bind_def, ignore_bind_def, type_check_def,
+    assert_def, lift_option_type_def, dest_BytesV_def, return_def]
+QED
+
 Theorem raw_call_source_tail[local]:
-  ~cx.txn.is_static /\
-  ~flags.rcf_is_delegate /\ flags.rcf_revert_on_failure /\
+  ~cx.txn.is_static /\ ~flags.rcf_is_delegate /\
   (flags.rcf_is_static ==> amount = 0) /\ IS_SOME es.outcomes /\
   outcomes_accounts_typed es.outcomes /\
-  accounts_runtime_well_typed es.accounts /\
-  eval_raw_call cx flags target bytes amount gas es = (res,es') ==>
-  ?rq outcome es1.
+  accounts_runtime_well_typed es.accounts ==>
+  ?rq outcome es1 es2.
     take_call_outcome target bytes
       (if flags.rcf_is_static then NONE else SOME amount) es =
         (INL (rq,outcome),es1) /\
-    adopt_call_outcome rq outcome es1 = (INL (),es') /\
-    res = (if outcome.co_success then
-      INL (Value (if flags.rcf_max_outsize = 0 then NoneV
-        else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)))
-      else INR (Error (RevertData outcome.co_returnData)))
+    adopt_call_outcome rq outcome es1 = (INL (),es2) /\
+    eval_raw_call cx flags target bytes amount gas es =
+      (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+         INR (Error (RevertData outcome.co_returnData))
+       else INL (Value
+         (if flags.rcf_revert_on_failure then
+            if flags.rcf_max_outsize = 0 then NoneV
+            else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+          else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+          else ArrayV (TupleV [BoolV outcome.co_success;
+            BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),es2) /\
+    es2.gas_obs = es.gas_obs /\
+    (!gs. eval_raw_call cx flags target bytes amount gas (es with gas_obs := gs) =
+      (FST (eval_raw_call cx flags target bytes amount gas es),es2 with gas_obs := gs))
 Proof
   strip_tac >>
-  drule_all exprSimRawCallCalldataTheory.raw_call_typed_outcome >>
+  drule_all raw_call_typed_outcome >>
   disch_then (qspecl_then [`target`, `bytes`,
     `if flags.rcf_is_static then NONE else SOME amount`] strip_assume_tac) >>
   Cases_on `adopt_call_outcome rq outcome es1` >>
   drule adopt_call_outcome_frame >> strip_tac >> gvs[] >>
-  drule_all exprSimRawCallCalldataTheory.raw_call_oracle_result >>
-  simp[] >>
-  strip_tac >> gvs[] >>
-  Cases_on `outcome.co_success` >> gvs[]
+  drule_all raw_call_oracle_result >> strip_tac >>
+  conj_tac
+  >- (Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success` >> simp[]) >>
+  Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success` >>
+  qspecl_then [`cx`,`flags`,`target`,`bytes`,`amount`,`gas`,`es`] mp_tac
+    calldata_raw_call_gas_obs >> simp[]
 QED
+
+val _ = app (fn th => if null (hyp th) then ()
+  else raise Fail "raw_call source boundary retained hypotheses")
+  [raw_call_prefix_source_ready, raw_call_source_continuation, raw_call_source_tail];
 
 Theorem compile_expr_raw_call[local]:
   compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa =
