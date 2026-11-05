@@ -91,7 +91,8 @@ Theorem log_data_word_store_seq_ptr:
     tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. lookup_var p sf = lookup_var p s /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    log_write_frame sa (w2n a) 32 s sf
 Proof
   strip_tac >> drule_all emit_mstore_clean_seq_ptr >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -106,7 +107,10 @@ Proof
   qexistsl_tac [`tnf`,`sf`] >> gvs[] >>
   conj_tac >- suspend "word_robust" >>
   conj_tac >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  simp[op_taint_def,lookup_var_def,mstore_def,write_memory_with_expansion_def]
+  (conj_tac >- simp[op_taint_def,lookup_var_def,mstore_def,write_memory_with_expansion_def]) >>
+  simp[log_write_frame_def,lookup_var_def,mstore_def,write_memory_with_expansion_def] >>
+  qpat_x_assum `!a k. _` mp_tac >>
+  simp[mstore_def,write_memory_with_expansion_def]
 QED
 Resume log_data_word_store_seq_ptr[word_robust]:
   rpt strip_tac >>
