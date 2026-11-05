@@ -5,7 +5,8 @@ Ancestors
   builtinProps exprLoweringProps compileEnv
   vyperInterpreter vyperValue vyperValueOperation valueEncoding
   vyperContext vyperState vyperAST venomState venomExecSemantics
-  exprSimSource exprSimMemorySource allocaHistory
+  exprSimSource exprSimMemorySource allocaHistory exprSimHypsDefs
+  vyperTyping vyperTypeSystem exprSimMemDefs
   integer integer_word words list arithmeticProps freshWrites exprSimUnopProps
 Libs
   intLib
@@ -77,3 +78,37 @@ Resume compile_blockhash_frag_mem[revert]:
 QED
 
 Finalise compile_blockhash_frag_mem
+
+Theorem compile_blockhash_sim_mem:
+  !ctx func cenv cx env ty ann e es.
+    expr_body_pre cenv cx env (Builtin ann BlockHash [e]) es /\
+    expr_sim_mem ctx func cenv cx ty e es ==>
+    expr_sim_mem ctx func cenv cx ty (Builtin ann BlockHash [e]) es
+Proof
+  rpt strip_tac >>
+  `ann = BaseT (BytesT (Fixed 32)) /\ expr_type e = BaseT (UintT 256)` by
+    fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then (qspecl_then [`e`, `es`] mp_tac) >>
+     simp[] >> disch_then irule >> fs[expr_body_pre_def]) >>
+  irule compile_unop_sim_mem >>
+  simp[is_word_type_def, builtin_args_length_ok_def] >>
+  qexistsl_tac [`compile_blockhash`, `ty`] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> drule lower_value_blockhash >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
+      simp[is_word_type_def])
+  >- (rpt strip_tac >>
+      qspecl_then [`cenv`, `cx`, `env`, `e`, `es with gas_obs := gs1`, `v1`, `es1`]
+        mp_tac expr_body_pre_word_value >>
+      simp[is_word_type_def] >> strip_tac >>
+      gvs[vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v1` >> gvs[value_has_type_def] >>
+      irule compile_blockhash_frag_mem >>
+      `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >> gvs[])
+  >- metis_tac[blockhash_extends, blockhash_next_var] >>
+  simp[]
+QED
