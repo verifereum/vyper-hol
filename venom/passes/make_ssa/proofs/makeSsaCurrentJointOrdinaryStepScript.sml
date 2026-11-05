@@ -5,7 +5,9 @@ Ancestors makeSsaCurrentOrdinaryJoint makeSsaCurrentCleanedOrdinary
   makeSsaCurrentChronologicalTransition makeSsaCurrentAllocation
   makeSsaCurrentValueInvariant makeSsaCurrentRenameTrace
   makeSsaCurrentTreeTrace makeSsaCurrentActualRetention makeSsaCurrentInduct
-  makeSsaCurrentSourceCuts venomWf list
+  makeSsaCurrentSourceCuts makeSsaCurrentOrdinaryIds makeSsaCurrentReinsertionNames
+  makeSsaCurrentTreePaths makeSsaCurrentFinalBlock makeSsaCurrentOutputNames
+  cfgHelpers venomExecProps venomWf list
 
 Theorem current_original_step_joint_singleton:
   current_inst_trace anns inst s rs H E inst' s' rt H' E' /\
@@ -136,4 +138,106 @@ Proof
     `yp ++ [h'']`, `t''`, `s1'`, `H1'`] >>
   simp[APPEND_ASSOC, current_local_trace_append, current_local_trace_def] >>
   metis_tac[]
+QED
+
+Theorem current_certificate_ordinary_step_joint_singleton:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  fn_inst_wf fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  events = before ++ (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)::later /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  old.bb_instructions = phis ++ tail /\
+  EVERY (\inst. inst.inst_opcode = PHI) phis /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  j < LENGTH tail /\ (EL j tail).inst_opcode <> PHI /\ i = LENGTH phis + j ==>
+  ?U ip out rs E rt Et.
+    EVERY (\inst. inst.inst_opcode = PHI) ip /\
+    current_edge_shape
+      (old with bb_instructions := ip ++ old.bb_instructions) bb /\
+    lookup_block l fn'.fn_blocks = SOME out /\
+    current_source_cut A
+      (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) (LENGTH ip+i) rs E /\
+    current_source_cut A
+      (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) (SUC (LENGTH ip+i)) rt Et /\
+    (!st st' post V M N D visit.
+      (!v. MEM v D ==> MEM v U) /\
+      current_joint_rel V M N rs
+        (venomInst$operand_vars (EL i old.bb_instructions).inst_operands ++
+          current_before_outputs (EL i old.bb_instructions).inst_outputs D) st st' /\
+      current_singleton_agree (current_instruction_singleton_table fn H) st st' /\
+      step_inst_base (EL i old.bb_instructions) st = OK post ==>
+      ?n writes post'.
+        step_inst_base (EL (LENGTH ip+i) out.bb_instructions) st' = OK post' /\
+        current_indexed_writes (EL i old.bb_instructions).inst_outputs writes st post /\
+        current_indexed_writes (EL (LENGTH ip+i) out.bb_instructions).inst_outputs writes st' post' /\
+        MAP FST writes = GENLIST I (LENGTH (EL i old.bb_instructions).inst_outputs) /\
+        current_joint_rel (current_event_valuation V visit l i n writes)
+          (current_event_origins (EL i old.bb_instructions).inst_outputs M visit l i n writes)
+          (current_event_origins (EL (LENGTH ip+i) out.bb_instructions).inst_outputs N visit l i n writes)
+          rt D post post' /\
+        current_singleton_agree (current_instruction_singleton_table fn H) post post')
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all current_certificate_ordinary_position >> strip_tac >>
+  drule_all current_certificate_ordinary_id_position >> strip_tac >>
+  `LENGTH ip' = LENGTH ip` by
+    (imp_res_tac current_edge_shape_opcodes >>
+     qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  `out' = out` by metis_tac[optionTheory.SOME_11] >>
+  `MEM (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) events` by simp[] >>
+  `?pre. EVERY (\inst. inst.inst_opcode = PHI) pre /\
+    current_edge_shape (old with bb_instructions := pre ++ old.bb_instructions) bb /\
+    current_event_trace A H
+      (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)` by
+    (drule current_certificate_source_shape >>
+     disch_then (qspecl_then [`old`,
+       `(l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)`, `eb`] mp_tac) >>
+     simp[current_event_label_def, current_event_input_block_def]) >>
+  drule_all current_certificate_block_annotations >> strip_tac >>
+  drule_all current_annotation_prefix_length >> strip_tac >>
+  drule_all current_certificate_events_valid >> strip_tac >>
+  `current_event_valid A V
+    (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2)` by metis_tac[EVERY_MEM] >>
+  `current_env_history_owners H0 E0` by metis_tac[current_certificate_local_entry_owners] >>
+  `MEM old fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `?b. b < LENGTH fn.fn_blocks /\ old = EL b fn.fn_blocks` by metis_tac[MEM_EL] >>
+  `i < LENGTH old.bb_instructions /\ (EL i old.bb_instructions).inst_opcode <> PHI` by
+    simp[EL_APPEND_EQN] >>
+  `inst_wf (EL i old.bb_instructions)` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  `LENGTH ip+i < LENGTH bb.bb_instructions /\
+    EL (LENGTH ip+i) bb.bb_instructions = EL i old.bb_instructions` by
+    (qpat_assum `current_edge_shape (old with bb_instructions := ip ++ _) bb`
+       (mp_tac o REWRITE_RULE [current_edge_shape_def, LIST_REL_EL_EQN]) >>
+     simp[] >> strip_tac >>
+     first_x_assum (qspec_then `LENGTH ip+i` mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  drule_all current_source_cut_ready >> strip_tac >>
+  `LENGTH pre' = LENGTH ip` by metis_tac[current_annotation_prefix_length] >>
+  `LENGTH (EL (LENGTH ip+i) ren).inst_outputs =
+    LENGTH (EL i old.bb_instructions).inst_outputs` by
+    (drule_all current_event_original_output_length >> asm_rewrite_tac[]) >>
+  `!k. k < LENGTH (EL (LENGTH ip+i) ren).inst_outputs ==>
+    current_token_name H (CurrentOriginal old.bb_label i k) =
+      SOME (EL k (EL (LENGTH ip+i) ren).inst_outputs)` by
+    (rpt strip_tac >>
+     `k < LENGTH (EL i old.bb_instructions).inst_outputs` by metis_tac[] >>
+     drule_all current_event_original_output_name >> asm_rewrite_tac[] >> metis_tac[]) >>
+  `EL (LENGTH ip+i) out.bb_instructions = EL (LENGTH ip+i) ren` by metis_tac[] >>
+  qexistsl_tac [`V`, `ip`, `out`, `rs`, `E`, `rn'`, `En'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `old = EL b fn.fn_blocks` SUBST_ALL_TAC >>
+  qpat_x_assum `EL _ bb.bb_instructions = _` SUBST_ALL_TAC >>
+  qpat_x_assum `EL _ out.bb_instructions = _` SUBST_ALL_TAC >>
+  irule (cj 4 current_original_step_joint_singleton) >>
+  goal_assum $ drule_at Any >> asm_rewrite_tac[] >>
+  conj_tac >- (qexists_tac `b` >> gvs[]) >>
+  conj_tac >- metis_tac[] >>
+  goal_assum $ drule_at Any >> asm_rewrite_tac[] >> metis_tac[]
 QED
