@@ -3,7 +3,7 @@ Ancestors
   algebraicOptDefs algebraicOptCmpPairProofs algebraicOptMainShapeProofs
   algebraicOptCmpScanProofs dfgAnalysisProps dfgDefs venomInst list pred_set
   allocaRemapSSA irSupply venomFnScheduleRunner venomInstProps unitShapeDefs
-  alist
+  alist passSharedDefs
 
 (* Only producers actually selected by this scan contribute complemented names. *)
 Definition ao_cmp_flipped_def:
@@ -56,7 +56,7 @@ Proof
   `writer = inst` by
     (irule (INST_TYPE [beta |-> ``:string``] all_distinct_flat_map_unique) >>
      qexistsl_tac [`\i. i.inst_outputs`, `xs`, `v`] >> simp[]) >>
-  gvs[] >> metis_tac[]
+  metis_tac[]
 QED
 
 Theorem ao_cmp_flipped_writer_opcode:
@@ -161,4 +161,230 @@ Proof
       EL m (MAP (\i. i.inst_id) xs)` by gvs[EL_MAP] >>
      `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]) >>
   gvs[]
+QED
+
+Theorem ao_cmp_remove_lookup_cert:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  MEM inst (fn_insts fn) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) =
+    (flips,removes,inserts) /\ MEM inst.inst_id removes ==>
+  ?producer op w v iz_out.
+    MEM producer (fn_insts fn) /\
+    ao_cmp_source (dfg_build_function fn) producer op w v inst /\
+    inst.inst_opcode = ISZERO /\ inst.inst_outputs = [iz_out] /\
+    LENGTH (dfg_get_uses (dfg_build_function fn) iz_out) = 1 /\
+    (HD (dfg_get_uses (dfg_build_function fn) iz_out)).inst_opcode <> ASSERT
+Proof
+  strip_tac >> drule ao_cmp_flip_scan_origins >>
+  simp[ao_cmp_origins_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!a. MEM a removes ==> _` drule >> strip_tac >>
+  qpat_x_assum `ao_cmp_remove_cert _ _ _` mp_tac >>
+  simp[ao_cmp_remove_cert_def] >> strip_tac >>
+  `MEM after (fn_insts fn)` by
+    (irule (cj 1 dfg_build_function_uses_sound) >> qexists_tac `v` >>
+     qpat_x_assum `ao_cmp_source _ _ _ _ _ _` mp_tac >>
+     simp[ao_cmp_source_def]) >>
+  `after = inst` by
+    (`?n. n < LENGTH (fn_insts fn) /\ after = EL n (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `?m. m < LENGTH (fn_insts fn) /\ inst = EL m (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `EL n (MAP (\i. i.inst_id) (fn_insts fn)) =
+      EL m (MAP (\i. i.inst_id) (fn_insts fn))` by gvs[EL_MAP] >>
+     `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem ao_cmp_named_origin:
+  !inserts s named s'.
+    ao_name_inserts_supply s inserts = (named,s') ==>
+    !a out id v. MEM (a,out,id,v) named ==>
+      ?c. MEM (a,out,c) inserts
+Proof
+  Induct >> simp[Once ao_name_inserts_supply_def] >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  Cases_on `fresh_inst_id s` >> rename1 `fresh_inst_id s = (id,s1)` >>
+  Cases_on `fresh_ir_var s1` >> rename1 `fresh_ir_var s1 = (v,s2)` >>
+  Cases_on `ao_name_inserts_supply s2 inserts` >>
+  gvs[Once ao_name_inserts_supply_def] >>
+  first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_cmp_insert_lookup_cert:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  MEM inst (fn_insts fn) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) =
+    (flips,removes,inserts) /\ MEM (inst.inst_id,v,c) inserts ==>
+  ?producer op w.
+    MEM producer (fn_insts fn) /\ producer.inst_id = c /\
+    ao_cmp_source (dfg_build_function fn) producer op w v inst /\
+    inst.inst_opcode = ASSERT
+Proof
+  strip_tac >> drule ao_cmp_flip_scan_origins >>
+  simp[ao_cmp_origins_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!a. MEM a inserts ==> _` drule >> strip_tac >>
+  qpat_x_assum `ao_cmp_insert_cert _ _ _` mp_tac >>
+  simp[ao_cmp_insert_cert_def] >> strip_tac >> gvs[] >>
+  `MEM after (fn_insts fn)` by
+    (irule (cj 1 dfg_build_function_uses_sound) >> qexists_tac `v` >>
+     qpat_x_assum `ao_cmp_source _ _ _ _ _ _` mp_tac >>
+     simp[ao_cmp_source_def]) >>
+  `after = inst` by
+    (`?n. n < LENGTH (fn_insts fn) /\ after = EL n (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `?m. m < LENGTH (fn_insts fn) /\ inst = EL m (fn_insts fn)`
+       by metis_tac[MEM_EL] >>
+     `EL n (MAP (\i. i.inst_id) (fn_insts fn)) =
+      EL m (MAP (\i. i.inst_id) (fn_insts fn))` by gvs[EL_MAP] >>
+     `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem ao_cmp_named_lookup:
+  ir_supply_inst_ok s /\
+  ao_name_inserts_supply s inserts = (named,s') /\
+  ALOOKUP named a = SOME (out,id,v) ==>
+  (?c. MEM (a,out,c) inserts) /\
+  v IN set s'.irs_used_vars DIFF set s.irs_used_vars
+Proof
+  strip_tac >> drule ALOOKUP_MEM >> strip_tac >>
+  drule_all ao_cmp_named_supply_contract >> strip_tac >>
+  drule ao_cmp_named_origin >> metis_tac[]
+QED
+
+Theorem ao_cmp_remove_apply:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  MEM inst (fn_insts fn) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) =
+    (flips,removes,inserts) /\ MEM inst.inst_id removes ==>
+  ALOOKUP flips inst.inst_id = NONE /\
+  ao_cmp_flip_apply_inst flips removes named inst =
+    [inst with inst_opcode := ASSIGN]
+Proof
+  strip_tac >> drule_all ao_cmp_remove_lookup_cert >> strip_tac >>
+  `ALOOKUP flips inst.inst_id = NONE` by
+    (Cases_on `ALOOKUP flips inst.inst_id` >> simp[] >>
+     drule_all ao_cmp_flip_lookup_cert >>
+     simp[ao_cmp_flip_cert_def, ao_cmp_source_def, is_comparator_def]) >>
+  simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Theorem ao_cmp_insert_apply:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  MEM inst (fn_insts fn) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) =
+    (flips,removes,inserts) /\
+  ir_supply_inst_ok s /\ ao_name_inserts_supply s inserts = (named,s') /\
+  ALOOKUP named inst.inst_id = SOME (out,id,v) ==>
+  inst.inst_opcode = ASSERT /\
+  ALOOKUP flips inst.inst_id = NONE /\ ~MEM inst.inst_id removes /\
+  v IN set s'.irs_used_vars DIFF set s.irs_used_vars /\
+  ao_cmp_flip_apply_inst flips removes named inst =
+    [<|inst_id := id; inst_opcode := ISZERO;
+       inst_operands := [Var out]; inst_outputs := [v]|>;
+     inst with inst_operands := [Var v]]
+Proof
+  strip_tac >> drule_all ao_cmp_named_lookup >> strip_tac >>
+  drule_all ao_cmp_insert_lookup_cert >> strip_tac >>
+  `ALOOKUP flips inst.inst_id = NONE` by
+    (Cases_on `ALOOKUP flips inst.inst_id` >> simp[] >>
+     drule_all ao_cmp_flip_lookup_cert >>
+     simp[ao_cmp_flip_cert_def, ao_cmp_source_def, is_comparator_def]) >>
+  `~MEM inst.inst_id removes` by
+    (strip_tac >> drule_all ao_cmp_remove_lookup_cert >> simp[]) >>
+  simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Theorem ao_cmp_producer_apply:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\ MEM inst xs /\
+  ao_cmp_flip_scan dfg xs = (flips,removes,inserts) /\
+  ALOOKUP flips inst.inst_id = SOME (opc,w,op) ==>
+  ao_cmp_flip_cert dfg inst (inst.inst_id,opc,w,op) /\
+  ao_cmp_flip_apply_inst flips removes named inst =
+    [inst with <|inst_opcode := opc; inst_operands := [op; Lit w]|>]
+Proof
+  strip_tac >> drule_all ao_cmp_flip_lookup_cert >>
+  simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Theorem ao_cmp_untouched_apply:
+  ALOOKUP flips inst.inst_id = NONE /\ ~MEM inst.inst_id removes /\
+  ALOOKUP named inst.inst_id = NONE ==>
+  ao_cmp_flip_apply_inst flips removes named inst = [inst]
+Proof
+  simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Theorem ao_cmp_flipped_pair:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  ao_cmp_flip_scan dfg xs = (flips,removes,inserts) /\
+  v IN ao_cmp_flipped dfg xs flips ==>
+  ?inst action. MEM inst xs /\ MEM action flips /\
+    MEM v inst.inst_outputs /\ ao_cmp_flip_cert dfg inst action /\
+    ((?r. MEM r removes /\ ao_cmp_remove_cert dfg inst r) \/
+     (?a. MEM a inserts /\ ao_cmp_insert_cert dfg inst a))
+Proof
+  strip_tac >>
+  qpat_x_assum `v IN ao_cmp_flipped _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ao_cmp_flipped_def]) >>
+  drule_all ao_cmp_flip_scan_flip_pair >> strip_tac >>
+  `i.inst_id = inst.inst_id` by
+    (fs[ao_cmp_flip_cert_def] >> gvs[]) >>
+  `i = inst` by
+    (`?n. n < LENGTH xs /\ i = EL n xs` by metis_tac[MEM_EL] >>
+     `?m. m < LENGTH xs /\ inst = EL m xs` by metis_tac[MEM_EL] >>
+     `EL n (MAP (\i. i.inst_id) xs) =
+      EL m (MAP (\i. i.inst_id) xs)` by gvs[EL_MAP] >>
+     `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem ao_cmp_flipped_read_action:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) =
+    (flips,removes,inserts) /\
+  v IN ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) flips /\
+  MEM user (fn_insts fn) /\ MEM v (operand_vars user.inst_operands) ==>
+  MEM user.inst_id removes \/ ?c. MEM (user.inst_id,v,c) inserts
+Proof
+  strip_tac >> drule_all ao_cmp_flipped_pair >> strip_tac >>
+  drule_all dfg_build_function_uses_complete >> strip_tac
+  >- (qpat_x_assum `ao_cmp_remove_cert _ _ _` mp_tac >>
+      simp[ao_cmp_remove_cert_def] >> strip_tac >>
+      qpat_x_assum `ao_cmp_source _ _ _ _ _ _` mp_tac >>
+      simp[ao_cmp_source_def] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `ao_cmp_insert_cert _ _ _` mp_tac >>
+  simp[ao_cmp_insert_cert_def] >> strip_tac >>
+  qpat_x_assum `ao_cmp_source _ _ _ _ _ _` mp_tac >>
+  simp[ao_cmp_source_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ao_cmp_named_keys:
+  !inserts s named s'.
+    ao_name_inserts_supply s inserts = (named,s') ==>
+    MAP FST named = MAP FST inserts
+Proof
+  Induct >> simp[Once ao_name_inserts_supply_def] >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  Cases_on `fresh_inst_id s` >> rename1 `fresh_inst_id s = (id,s1)` >>
+  Cases_on `fresh_ir_var s1` >> rename1 `fresh_ir_var s1 = (v,s2)` >>
+  Cases_on `ao_name_inserts_supply s2 inserts` >>
+  gvs[Once ao_name_inserts_supply_def] >> metis_tac[]
+QED
+
+Theorem ao_cmp_untouched_reads:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) =
+    (flips,removes,inserts) /\
+  ao_name_inserts_supply s inserts = (named,s') /\
+  MEM inst (fn_insts fn) /\ ~MEM inst.inst_id removes /\
+  ALOOKUP named inst.inst_id = NONE ==>
+  DISJOINT (set (operand_vars inst.inst_operands))
+    (ao_cmp_flipped (dfg_build_function fn) (fn_insts fn) flips)
+Proof
+  strip_tac >> rewrite_tac[DISJOINT_ALT] >> rpt strip_tac >>
+  drule_all ao_cmp_flipped_read_action >> simp[] >> strip_tac >>
+  drule ao_cmp_named_keys >>
+  strip_tac >> gvs[ALOOKUP_NONE] >>
+  metis_tac[MEM_MAP, pairTheory.FST]
 QED
