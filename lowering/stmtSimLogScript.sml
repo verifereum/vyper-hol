@@ -93,16 +93,20 @@ Theorem compile_log_stmt_frag:
       (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  irule (Q.INST [`R` |-> `\tail s. log_args_ready ctx func cenv cx Inv tail /\ Inv s`]
+  mp_tac (Q.INST [`R` |-> `\tail s. log_args_ready ctx func cenv cx Inv tail /\ Inv s`,
+                  `tys` |-> `MAP expr_type args`]
            compile_log_ready_stmt_frag) >>
-  simp[] >> qexistsl_tac [`env`, `flags`, `h`] >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  rpt gen_tac >> simp[Once log_args_ready_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  `Inv s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-                    value_has_type tv v` by metis_tac[] >>
-  simp[] >> first_x_assum irule >>
-  qpat_x_assum `(do r <- eval_expr cx e; read_result cx r od) s = _` mp_tac >>
-  simp[bind_def, AllCaseEqs()] >> metis_tac[]
+  impl_tac >- (
+    simp[] >> rpt conj_tac
+    >~ [`expr_sim`]
+    >- (rpt gen_tac >> simp[Once log_args_ready_def] >> strip_tac >>
+        first_x_assum drule >> strip_tac >> simp[] >>
+        rpt gen_tac >> strip_tac >>
+        `Inv s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                          value_has_type tv v` by metis_tac[] >>
+        simp[] >> first_x_assum irule >>
+        qpat_x_assum `(do r <- eval_expr cx e; read_result cx r od) s = _` mp_tac >>
+        simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
+    gvs[] >> metis_tac[]) >>
+  simp[]
 QED

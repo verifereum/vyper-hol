@@ -81,7 +81,7 @@ Theorem eval_log_bind[local]:
                                  cx.txn.target id vs) "Log encode event")
                  push_log)
 Proof
-  simp[FUN_EQ_THM, Once evaluate_def]
+  simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
 QED
 
 Theorem log_args_admissible[local]:
@@ -92,17 +92,6 @@ Proof
   `eval_stmt cx (Log id args) (es with gas_obs := gs) = (INR exc, ee)` by
     simp[log_eval_outcome] >>
   first_x_assum drule >> strip_tac >> metis_tac[log_argument_error_ok]
-QED
-
-(* The event push after the arguments reads no gas. *)
-Theorem log_push_gas_obs[local]:
-  encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs = SOME event ==>
-  !tail. bind (lift_option (encode_source_event (get_tenv cx) cx.sources
-                              cx.txn.target id vs) "Log encode event")
-              push_log ((mid with gas_obs := []) with gas_obs := tail) =
-         (INL (), (mid with logs := mid.logs ++ [event]) with gas_obs := tail)
-Proof
-  simp[bind_def, lift_option_def, return_def, push_log_def]
 QED
 
 Theorem compile_log_ready_stmt_frag:
@@ -135,7 +124,9 @@ Proof
   drule log_args_admissible >> strip_tac >>
   qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `es`, `sa`, `xs`, `sm`,
                `s0`, `env`] mp_tac compile_log_eval_all_gas >>
-  impl_tac >- simp[] >>
+  impl_tac
+  >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[] >>
+      first_assum ACCEPT_TAC) >>
   rewrite_tac[eval_log_bind] >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "args_summary" >>
@@ -174,12 +165,18 @@ Resume compile_log_ready_stmt_frag[args_value]:
       ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs` by
     (fs[log_args_post_def, LIST_REL_EL_EQN, EVERY_EL, EL_MAP,
         combinTheory.o_DEF, Excl "enc_def"] >>
-     metis_tac[LIST_REL_LENGTH, LENGTH_MAP]) >>
+     rpt strip_tac >>
+     `SND (EL n xs) = expr_type (EL n args)` by
+       (qpat_x_assum `MAP SND xs = _` (mp_tac o Q.AP_TERM `EL n`) >>
+        simp[EL_MAP, Excl "enc_def"]) >>
+     qpat_x_assum `!n. n < LENGTH args ==> _` (qspec_then `n` mp_tac) >>
+     simp[Excl "enc_def"]) >>
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
     (drule compile_log_eval_all_grows >> strip_tac >>
      metis_tac[local_ptrs_reserved_next_var]) >>
+  `LENGTH flags = LENGTH xs` by simp[] >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
@@ -187,12 +184,14 @@ Resume compile_log_ready_stmt_frag[args_value]:
 QED
 
 Resume compile_log_ready_stmt_frag[suffix]:
+  rename1 `compile_stmt _ _ _ (Log _ _) sa = ((),sb)` >>
   `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
         isPREFIX (emitted_insts sm sb) (DROP t.vs_inst_idx bb.bb_instructions) /\
         t.vs_inst_idx + LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts` by
     (gvs[fn_has_code_def, same_blocks_def, inst_extends_def,
          IS_PREFIX_APPEND, Excl "enc_def"] >>
-     qexists_tac `bb` >> simp[Excl "enc_def"]) >>
+     qexists_tac `l` >>
+     REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND]) >>
   qspecl_then [`emitted_insts sm sb`, `t`, `u`, `ctx`, `func`, `bb`]
     mp_tac tuple_run_inst_seq_gas_path >>
   impl_tac >- simp[Excl "enc_def"] >> strip_tac >>
@@ -201,26 +200,33 @@ Resume compile_log_ready_stmt_frag[suffix]:
        mp_tac exec_block_run_inst_seq >>
      impl_tac >- simp[Excl "enc_def"] >> simp[Excl "enc_def"]) >>
   qabbrev_tac `n = LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb))` >>
-  qabbrev_tac `event = <|logger := cx.txn.target; topics := n2w h::topics;
+  qabbrev_tac `ev = <|logger := cx.txn.target; topics := n2w h::topics;
     data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
       (log_non_indexed_types flags (MAP expr_type args)))) (ListV avs)|>` >>
   `gas_marked_exec F (ctx,func)
      (bind (lift_option (encode_source_event (get_tenv cx) cx.sources
                           cx.txn.target id vs) "Log encode event") push_log)
      (es_end with gas_obs := [], t) (REPLICATE n F) (INL ())
-     (es_end with logs := es_end.logs ++ [event])
+     (es_end with logs := es_end.logs ++ [ev])
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (irule gas_marked_exec_no_source_read >>
      simp[gas_marked_path_def, Excl "enc_def"] >>
-     conj_tac >- metis_tac[] >>
-     irule log_push_gas_obs >> simp[Abbr `event`, Excl "enc_def"]) >>
+     conj_tac
+     >- (simp[bind_def, lift_option_def, return_def, push_log_def, Abbr `ev`,
+              wordsTheory.w2w_id, Excl "enc_def"] >>
+         simp[Once contractABITheory.enc_def]) >>
+     metis_tac[]) >>
   qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
   simp[gas_summary_at_def, Excl "enc_def"] >>
-  qexistsl_tac [`INL ()`, `es_end with logs := es_end.logs ++ [event]`,
+  qexistsl_tac [`INL ()`, `es_end with logs := es_end.logs ++ [ev]`,
                 `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   conj_tac
   >- (irule gas_marked_exec_bind_normal >>
-      qexistsl_tac [`es_end`, `t`, `vs`] >> simp[Excl "enc_def"]) >>
+      qexistsl_tac [`es_end`, `t`, `vs`] >> simp[Excl "enc_def"] >>
+      qpat_x_assum `gas_marked_exec _ _ (bind (lift_option _ _) push_log) _ _ _ _ _`
+        mp_tac >>
+      qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
+      simp[Excl "enc_def"]) >>
   suspend "post"
 QED
 
@@ -230,13 +236,14 @@ Resume compile_log_ready_stmt_frag[post]:
     (drule compile_log_eval_all_grows >> simp[]) >>
   `~u.vs_halted` by
     (drule gas_path_normal >> simp[Excl "enc_def"]) >>
+  disj1_tac >>
   simp[stmt_post_def, stmt_lands_def, stmt_state_rel_inst_idx, Excl "enc_def"] >>
   simp[cenv_top_ext_refl, Excl "enc_def"] >>
   rpt conj_tac
   >- fs[same_blocks_def]
   >- metis_tac[log_stmt_open]
   >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) u` mp_tac >>
-      simp[Abbr `event`, wordsTheory.w2w_id, Excl "enc_def"])
+      simp[Abbr `ev`, wordsTheory.w2w_id, Excl "enc_def"])
   >- (rpt strip_tac >>
       `lookup_var x t = SOME w` by metis_tac[] >>
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
