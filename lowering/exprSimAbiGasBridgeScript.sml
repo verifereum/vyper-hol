@@ -806,6 +806,30 @@ Proof
   metis_tac[frag_observer_off_cut_opcodes]
 QED
 
+Theorem frag_observer_prefix_zero_path:
+  !ctx observed cut s t. local_prefix ctx observed cut s t ==>
+  !sa sb fn id.
+  observed = frag_observer sa sb fn id /\ cut = frag_observer_cut sb /\
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb ==>
+  gas_path ctx fn s 0 (OK t)
+Proof
+  ho_match_mp_tac local_prefix_ind >> conj_tac
+  >- (rpt strip_tac >> irule (cj 1 gas_path_rules) >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> gvs[] >>
+  rename1 `abi_observer_step ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s middle` >>
+  `gas_path_edge ctx fn s 0 (OK middle)` by
+    (irule frag_observer_step_zero_edge >> metis_tac[]) >>
+  `gas_path ctx fn middle 0 (OK t)` by
+    (first_x_assum irule >> simp[] >>
+     metis_tac[observer_region_closed_def, frag_observer_region_closed]) >>
+  metis_tac[cj 2 gas_path_rules, ADD]
+QED
+
 Theorem frag_observer_exit_zero_edge:
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
