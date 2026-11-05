@@ -2,7 +2,7 @@ Theory o1MakeSsaFormats
 Ancestors
   o1MakeSsaFrontier o1MakeSsaCfg makeSsaCurrentDefs unitShapeDefs
   venomInst stackPlanTypes list o1ContractSueStep simplifyCfgStruct
-  cfgNormSupplySim venomWf
+  cfgNormSupplySim venomWf fmpStepChunk fmpStepList
 
 Theorem rename_current_operands_length:
   !ops. LENGTH (rename_current_operands rs ops) = LENGTH ops
@@ -270,4 +270,82 @@ Proof
   rpt strip_tac >> gvs[rename_current_blocks_def] >> pairarg_tac >> gvs[] >>
   first_x_assum drule >> disch_then irule >>
   first_x_assum drule_all >> simp[]
+QED
+
+Theorem simplify_current_phi_classification:
+  inst.inst_opcode = PHI ==>
+  MEM (simplify_current_phi inst).inst_opcode [PHI; ASSIGN; NOP]
+Proof
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >> strip_tac >>
+  IF_CASES_TAC >> simp[simplify_current_phi_raw_def] >>
+  Cases_on `current_phi_output inst.inst_outputs` >> simp[] >>
+  Cases_on `current_phi_values (remove_current_phi_self x inst.inst_operands)` >>
+  simp[] >> Cases_on `x'` >> simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem simplify_current_phi_prefix_parts_partition:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    list_prefix (\i. i.inst_opcode = PHI) insts ==>
+    EVERY (\i. i.inst_opcode = PHI) phis /\
+    EVERY (\i. i.inst_opcode <> PHI) ordinary
+Proof
+  Induct >> simp[simplify_current_phi_prefix_parts_def] >> rpt gen_tac >>
+  IF_CASES_TAC
+  >- (strip_tac >> gvs[list_prefix_def] >> metis_tac[]) >>
+  pairarg_tac >> gvs[] >> IF_CASES_TAC >> strip_tac >>
+  gvs[list_prefix_def]
+QED
+
+Theorem simplify_current_phi_nonterminal:
+  inst.inst_opcode = PHI ==>
+  ~is_terminator (simplify_current_phi inst).inst_opcode
+Proof
+  strip_tac >> drule simplify_current_phi_classification >>
+  simp[] >> strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_terminal:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    list_terminal (\i. is_terminator i.inst_opcode) insts ==>
+    EVERY (\i. ~is_terminator i.inst_opcode) phis /\
+    list_terminal (\i. is_terminator i.inst_opcode) ordinary
+Proof
+  Induct >> simp[simplify_current_phi_prefix_parts_def, list_terminal_def] >>
+  rpt gen_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[list_terminal_def]) >>
+  pairarg_tac >> gvs[] >> IF_CASES_TAC >> strip_tac >>
+  gvs[list_terminal_def, is_terminator_def] >>
+  `insts <> []` by (Cases_on `insts` >> gvs[list_terminal_def, is_terminator_def]) >>
+  gvs[] >>
+  `ordinary' <> []` by (Cases_on `ordinary'` >> gvs[list_terminal_def]) >>
+  simp[list_terminal_def, simplify_current_phi_nonterminal]
+QED
+
+Theorem reassign_current_inst_ids_opcodes:
+  !ids insts. MAP (\i. i.inst_opcode) (reassign_current_inst_ids ids insts) =
+    MAP (\i. i.inst_opcode) insts
+Proof
+  Induct_on `ids` >> Cases_on `insts` >>
+  simp[reassign_current_inst_ids_def]
+QED
+
+Theorem simplify_current_phi_prefix_well_formed:
+  bb_well_formed bb ==>
+  bb_well_formed (bb with bb_instructions :=
+    simplify_current_phi_prefix bb.bb_instructions)
+Proof
+  strip_tac >> simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  irule supply_bb_well_formed_opcodes >>
+  qexists `bb with bb_instructions := phis ++ ordinary` >>
+  simp[reassign_current_inst_ids_opcodes] >>
+  qpat_x_assum `bb_well_formed bb` mp_tac >>
+  simp[bb_well_formed_list] >> strip_tac >>
+  drule_all simplify_current_phi_prefix_parts_partition >> strip_tac >>
+  drule_all simplify_current_phi_prefix_parts_terminal >> strip_tac >>
+  `ordinary <> []` by (Cases_on `ordinary` >> gvs[list_terminal_def]) >>
+  simp[list_terminal_append, list_prefix_append, list_prefix_every,
+       list_prefix_none] >>
+  metis_tac[EVERY_MEM]
 QED
