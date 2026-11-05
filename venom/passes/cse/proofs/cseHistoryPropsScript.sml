@@ -1887,3 +1887,168 @@ Proof
  `k = LENGTH (events ++ [ev])` by (fs[] >> decide_tac) >>
  gvs[TAKE_LENGTH_ID_rwt] >> metis_tac[cse_prefix_phase_unique]
 QED
+
+Theorem cse_prefix_source_interval:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ !e src. cse_phase_has_source fn phase e src ==>
+ ?pre post m sb u v.
+   events = pre ++ [CseStep m sb src u v] ++ post /\
+   cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+   avail_source_birth (dfg_build_function fn) e src src /\
+   EVERY (cse_event_survives e) post /\
+   (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+      cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+      cse_phase_has_source fn ph e src)
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac
+ >- suspend "entry"
+ >- suspend "phi"
+ >- suspend "ordinary"
+ >> suspend "branch"
+QED
+Resume cse_prefix_source_interval[entry]:
+ rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >>
+ strip_tac >>
+ `cse_prefix ctx fn fuel0 s0 [] (CseRun fuel0 s0)` by
+   simp[cse_prefix_empty] >>
+ gvs[cse_phase_has_source_def] >>
+ drule_all cse_prefix_run_avail_history >>
+ simp[cse_source_history_def]
+QED
+Resume cse_prefix_source_interval[phi]:
+ rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+ drule_all cse_prefix_run_control >> strip_tac >>
+ `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+ drule_all cse_prefix_run_source_history >> strip_tac >>
+ drule_all cse_avail_atomic_phi_some >> strip_tac >>
+ gvs[cse_phase_has_source_def,
+     availExprDefsTheory.ae_lookup_inst_def,
+     availExprDefsTheory.avail_unwrap_def] >>
+ qpat_x_assum `!e' src'. _ ==> ?pre post m sb u v. _`
+   (qspecl_then [`e`, `src`] mp_tac) >>
+ (impl_tac >- metis_tac[]) >> strip_tac >>
+ `!k ph. LENGTH pre < k /\ k <= LENGTH (events ++ [CsePhi fuel bb s t]) /\
+    cse_prefix ctx fn fuel0 s0 (TAKE k (events ++ [CsePhi fuel bb s t])) ph ==>
+    cse_phase_has_source fn ph e src` by
+   (match_mp_tac (Q.INST
+      [`phase` |-> `CseExec fuel bb (t with vs_inst_idx := phi_prefix_length bb.bb_instructions)`]
+      cse_source_interval_snoc) >>
+    conj_tac >- metis_tac[cse_prefix_phi_extend] >>
+    conj_tac
+    >- (simp[cse_phase_has_source_def, availExprDefsTheory.ae_lookup_inst_def,
+             availExprDefsTheory.avail_unwrap_def] >> metis_tac[]) >>
+    first_assum MATCH_ACCEPT_TAC) >>
+ qexistsl_tac [`pre`, `post ++ [CsePhi fuel bb s t]`, `m`, `sb`, `u`, `v`] >>
+ gvs[APPEND_ASSOC, cse_event_survives_def] >> first_assum MATCH_ACCEPT_TAC
+QED
+Resume cse_prefix_source_interval[ordinary]:
+ rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_prefix_exec_source_history >> strip_tac >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  EL s.vs_inst_idx bb.bb_instructions = inst` by
+   gvs[get_instruction_def, AllCaseEqs()] >>
+ `SUC s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+ gvs[] >> drule_all cse_avail_at_intra >>
+ simp[availExprDefsTheory.avail_transfer_opt_def] >> strip_tac >>
+ gvs[cse_phase_has_source_def, availExprDefsTheory.ae_lookup_inst_def,
+     availExprDefsTheory.avail_unwrap_def] >>
+ rename1 `FLOOKUP (avail_transfer_inst d j a) e = SOME xs` >>
+ qspecl_then [`d`, `j`, `a`, `e`, `src`] mp_tac cse_transfer_source_cases >>
+ (impl_tac >- metis_tac[]) >> strip_tac
+ >- suspend "inherited"
+ >> suspend "birth"
+QED
+Resume cse_prefix_source_interval[inherited]:
+ qpat_x_assum `!e' src'. _ ==> ?pre post m sb u v. _`
+   (qspecl_then [`e`, `src`] mp_tac) >>
+ (impl_tac >- metis_tac[]) >> strip_tac >>
+ `!k ph. LENGTH pre < k /\ k <= LENGTH (events ++ [CseStep fuel bb j s t]) /\
+    cse_prefix ctx fn fuel0 s0 (TAKE k (events ++ [CseStep fuel bb j s t])) ph ==>
+    cse_phase_has_source fn ph e src` by
+   (match_mp_tac (Q.INST
+      [`phase` |-> `CseExec fuel bb (t with vs_inst_idx := SUC s.vs_inst_idx)`]
+      cse_source_interval_snoc) >>
+    conj_tac >- metis_tac[cse_prefix_ordinary_extend] >>
+    conj_tac
+    >- (simp[cse_phase_has_source_def, availExprDefsTheory.ae_lookup_inst_def,
+             availExprDefsTheory.avail_unwrap_def] >> metis_tac[]) >>
+    first_assum MATCH_ACCEPT_TAC) >>
+ qexistsl_tac [`pre`, `post ++ [CseStep fuel bb j s t]`, `m`, `sb`, `u`, `v`] >>
+ gvs[APPEND_ASSOC, cse_event_survives_def] >> first_assum MATCH_ACCEPT_TAC
+QED
+Resume cse_prefix_source_interval[birth]:
+ `src = j` by fs[availExprProofsTheory.avail_source_birth_def] >>
+ gvs[] >> qexistsl_tac [`events`, `[]`, `fuel`, `bb`, `s`, `t`] >>
+ simp[] >> rpt strip_tac >>
+ `k = LENGTH (events ++ [CseStep fuel bb j s t])` by (simp[] >> decide_tac) >>
+ gvs[TAKE_LENGTH_ID_rwt] >>
+ `ph = CseExec fuel bb (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+   metis_tac[cse_prefix_phase_unique, cse_prefix_ordinary_extend] >>
+ gvs[cse_phase_has_source_def, availExprDefsTheory.ae_lookup_inst_def,
+     availExprDefsTheory.avail_unwrap_def] >> metis_tac[]
+QED
+Resume cse_prefix_source_interval[branch]:
+ rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_prefix_exec_source_history >> strip_tac >>
+ drule_all cse_terminator_boundary >> strip_tac >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  EL s.vs_inst_idx bb.bb_instructions = inst` by
+   gvs[get_instruction_def, AllCaseEqs()] >>
+ `SUC s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+ gvs[] >>
+ `SUC s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+ drule_all cse_avail_at_intra >>
+ simp[availExprDefsTheory.avail_transfer_opt_def,
+      availExprDefsTheory.avail_transfer_inst_def] >> strip_tac >>
+ gvs[cse_phase_has_source_def] >>
+ drule_all cse_avail_boundary_member >> strip_tac >>
+ drule_all cse_avail_entry_predecessor >> strip_tac >>
+ gvs[availExprDefsTheory.ae_lookup_inst_def,
+     availExprDefsTheory.avail_unwrap_def] >>
+ rename1 `step_inst fuel ctx j s = OK t` >>
+ qpat_x_assum `!e' src'. _ ==> ?pre post m sb u v. _`
+   (qspecl_then [`e`, `src`] mp_tac) >>
+ (impl_tac >- metis_tac[]) >> strip_tac >>
+ `!k ph. LENGTH pre < k /\ k <= LENGTH (events ++ [CseStep fuel bb j s t]) /\
+    cse_prefix ctx fn fuel0 s0 (TAKE k (events ++ [CseStep fuel bb j s t])) ph ==>
+    cse_phase_has_source fn ph e src` by
+   (match_mp_tac (Q.INST [`phase` |-> `CseRun fuel t`]
+      cse_source_interval_snoc) >>
+    conj_tac >- metis_tac[cse_prefix_branch_extend] >>
+    conj_tac
+    >- (simp[cse_phase_has_source_def, availExprDefsTheory.ae_lookup_inst_def,
+             availExprDefsTheory.avail_unwrap_def] >> metis_tac[]) >>
+    first_assum MATCH_ACCEPT_TAC) >>
+ qexistsl_tac [`pre`, `post ++ [CseStep fuel bb j s t]`, `m`, `sb`, `u`, `v`] >>
+ gvs[APPEND_ASSOC, cse_event_survives_def,
+     availExprProofsTheory.avail_source_survives_def] >>
+ first_assum MATCH_ACCEPT_TAC
+QED
+Finalise cse_prefix_source_interval
+
+Theorem cse_prefix_exec_avail_interval:
+ !ctx fn fuel0 s0 events n bb s e src xs.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ FLOOKUP (ae_lookup_inst fn bb.bb_label s.vs_inst_idx) e = SOME xs /\ MEM src xs ==>
+ ?pre post m sb u v.
+   events = pre ++ [CseStep m sb src u v] ++ post /\
+   cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+   avail_source_birth (dfg_build_function fn) e src src /\
+   EVERY (cse_event_survives e) post /\
+   (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+      cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+      cse_phase_has_source fn ph e src)
+Proof
+ rpt gen_tac >> strip_tac >> drule cse_prefix_source_interval >>
+ simp[cse_phase_has_source_def] >> metis_tac[]
+QED
+
+(* The interval certificate selects a surviving birth, not an arbitrary older
+   visit of the same static source. It establishes analysis membership only.
+   Canonical representative epoch/value alignment and persistence of source
+   output bindings remain separate semantic obligations. *)
