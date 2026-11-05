@@ -2644,3 +2644,90 @@ Resume cse_prefix_copy_normal_form[assign]:
  simp[] >> irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]
 QED
 Finalise cse_prefix_copy_normal_form
+
+Theorem cse_terminal_path_no_cycle[local]:
+ !R x t. RTC R x t ==>
+ (!a b c. R a b /\ R a c ==> b = c) ==>
+ (!z. ~R t z) ==> !y. R x y ==> ~RTC R y x
+Proof
+ gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> conj_tac
+ >- metis_tac[] >> rpt strip_tac >>
+ `y = x'` by metis_tac[] >> gvs[] >>
+ qpat_x_assum `RTC R x' x`
+   (strip_assume_tac o PURE_ONCE_REWRITE_RULE [relationTheory.RTC_CASES1])
+ >- (gvs[] >> metis_tac[relationTheory.RTC_REFL]) >>
+ metis_tac[relationTheory.RTC_SINGLE, relationTheory.RTC_TRANS]
+QED
+
+Theorem cse_copy_path_interpret[local]:
+ !op terminal.
+ RTC (\a b. ?x copy. a = Var x /\
+   FLOOKUP dfg.dfg_defs x = SOME copy /\
+   copy.inst_opcode = ASSIGN /\ copy.inst_operands = [b]) op terminal ==>
+ !visited.
+ ((?w. terminal = Lit w) \/ (?l. terminal = Label l) \/
+  (?x definer. terminal = Var x /\
+    FLOOKUP dfg.dfg_defs x = SOME definer /\
+    definer.inst_opcode <> ASSIGN)) /\
+ (!v. MEM v visited ==> ~RTC (\a b. ?x copy. a = Var x /\
+   FLOOKUP dfg.dfg_defs x = SOME copy /\
+   copy.inst_opcode = ASSIGN /\ copy.inst_operands = [b]) op (Var v)) ==>
+ operand_producer dfg (set visited) op = operand_producer dfg {} terminal /\
+ ((!w. terminal = Lit w ==> mk_operand_expr dfg visited op = ExprLit w) /\
+  (!l. terminal = Label l ==> mk_operand_expr dfg visited op = ExprVar l))
+Proof
+ ho_match_mp_tac relationTheory.RTC_STRONG_INDUCT >> conj_tac
+ >- (rpt strip_tac >> gvs[] >>
+     simp[cseDefsTheory.operand_producer_def,
+          availExprDefsTheory.mk_operand_expr_def] >>
+     `~MEM x visited` by metis_tac[relationTheory.RTC_REFL] >> simp[]) >>
+ rpt gen_tac >> strip_tac >> gen_tac >>
+ disch_then (CONJUNCTS_THEN assume_tac) >>
+ qmatch_asmsub_abbrev_tac `RTC R op' terminal` >>
+ `!a b c. R a b /\ R a c ==> b = c` by
+   (simp[Abbr `R`] >> rpt strip_tac >> gvs[]) >>
+ `!z. ~R terminal z` by
+   (qpat_x_assum `!a b c. R a b /\ R a c ==> b = c` kall_tac >>
+    qpat_x_assum `(?w. terminal = Lit w) \/ _` strip_assume_tac >>
+    simp[Abbr `R`] >> rpt strip_tac >> gvs[]) >>
+ `R op op'` by
+   (qpat_x_assum `!a b c. R a b /\ R a c ==> b = c` kall_tac >>
+    simp[Abbr `R`] >> metis_tac[]) >>
+ `RTC R op terminal` by metis_tac[relationTheory.RTC_RULES] >>
+ `~RTC R op' op` by metis_tac[cse_terminal_path_no_cycle] >>
+ `~MEM x visited` by
+   (gvs[] >> metis_tac[relationTheory.RTC_REFL]) >>
+ first_x_assum (qspec_then `x::visited` mp_tac) >>
+ impl_tac
+ >- (simp[] >> rpt strip_tac >> gvs[] >>
+     metis_tac[relationTheory.RTC_RULES]) >>
+ strip_tac >> gvs[] >>
+ simp[Once cseDefsTheory.operand_producer_def,
+      Once availExprDefsTheory.mk_operand_expr_def,
+      dfgDefsTheory.dfg_get_def_def, venomInstTheory.is_pseudo_def]
+QED
+
+Theorem cse_prefix_operand_producer_none_rewind:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) {} op = NONE ==>
+ ?pre post m cb u terminal_use terminal.
+ events = pre ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+ get_instruction cb u.vs_inst_idx = SOME terminal_use /\
+ terminal_use.inst_opcode <> PHI /\ MEM terminal terminal_use.inst_operands /\
+ eval_operand op s = eval_operand terminal u /\
+ ((?w. terminal = Lit w /\
+       mk_operand_expr (dfg_build_function fn) [] op = ExprLit w) \/
+  (?l. terminal = Label l /\
+       mk_operand_expr (dfg_build_function fn) [] op = ExprVar l))
+Proof
+ strip_tac >> drule_all cse_prefix_copy_normal_form >> strip_tac >>
+ drule cse_copy_path_interpret >>
+ disch_then (qspec_then `[]` mp_tac) >>
+ (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+ qexistsl [`pre`, `post`, `m`, `cb`, `u`, `terminal_use`, `terminal`] >>
+ simp[] >> gvs[cseDefsTheory.operand_producer_def]
+QED
