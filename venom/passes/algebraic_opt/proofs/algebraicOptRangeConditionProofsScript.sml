@@ -283,3 +283,115 @@ Proof
   Cases_on `prod.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[]
 QED
+
+Theorem ao_source_trace_condition_sound:
+  !fuel ctx fn trace target use_opt h t op value b rs.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
+      lookup_var x (SND (SND (HD trace))) = NONE) /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) /\
+    (!x. op = Var x ==> def_available_at fn target use_opt x) /\
+    eval_operand op t = SOME value /\ (b <=> value <> 0w) /\
+    in_range_state rs t.vs_vars ==>
+    in_range_state
+      (range_apply_condition (dfg_build_function fn) fuel op b rs) t.vs_vars
+Proof
+  Induct_on `fuel` >- simp[range_apply_condition_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `op`
+  >~ [`range_apply_condition _ _ (Lit _) _ _`] >- simp[Once range_apply_condition_def]
+  >~ [`range_apply_condition _ _ (Label _) _ _`] >- simp[Once range_apply_condition_def] >>
+  rename1 `eval_operand (Var x) t = SOME value` >>
+  Cases_on `dfg_get_def (dfg_build_function fn) x`
+  >- simp[Once range_apply_condition_def] >>
+  rename1 `dfg_get_def (dfg_build_function fn) x = SOME prod` >>
+  Cases_on `prod.inst_opcode = PHI`
+  >- simp[Once range_apply_condition_def] >>
+  drule_all ao_dfg_source_producer >> strip_tac >>
+  `MEM prod (fn_insts fn)` by metis_tac[dfg_build_function_correct] >>
+  `lookup_var x (SND (SND (HD trace))) = NONE` by metis_tac[] >>
+  `lookup_var x t = SOME value /\ def_available_at fn target use_opt x` by
+    gvs[eval_operand_def] >>
+  `inst_wf prod` by
+    (fs[fn_inst_wf_def, fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     metis_tac[]) >>
+  Cases_on `prod.inst_opcode = ASSIGN`
+  >- suspend "assign" >>
+  Cases_on `prod.inst_opcode = ISZERO`
+  >- suspend "iszero" >>
+  Cases_on `prod.inst_opcode = EQ`
+  >- suspend "eq" >>
+  Cases_on `prod.inst_opcode = LT \/ prod.inst_opcode = GT \/
+            prod.inst_opcode = SLT \/ prod.inst_opcode = SGT`
+  >- suspend "compare" >>
+  simp[Once range_apply_condition_def]
+QED
+Resume ao_source_trace_condition_sound[assign]:
+  `LENGTH prod.inst_outputs = 1 /\ LENGTH prod.inst_operands = 1` by
+    gvs[inst_wf_def] >>
+  `prod.inst_outputs = [x]` by metis_tac[ao_dfg_singleton_output] >>
+  Cases_on `prod.inst_operands` >- gvs[] >>
+  rename1 `prod.inst_operands = inner::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  drule_all ao_source_trace_assign_operand >> strip_tac >>
+  simp[Once range_apply_condition_def] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  conj_tac
+  >- (qexistsl [`ctx`,`h`,`trace`] >> simp[] >> metis_tac[]) >>
+  qexists_tac `use_opt` >> simp[]
+QED
+Resume ao_source_trace_condition_sound[iszero]:
+  qpat_x_assum `!ctx fn trace target use_opt h t op value b rs. _` kall_tac >>
+  `LENGTH prod.inst_outputs = 1 /\ LENGTH prod.inst_operands = 1` by
+    gvs[inst_wf_def] >>
+  `prod.inst_outputs = [x]` by metis_tac[ao_dfg_singleton_output] >>
+  Cases_on `prod.inst_operands` >- gvs[] >>
+  rename1 `prod.inst_operands = inner::rest` >>
+  Cases_on `rest` >> gvs[] >> Cases_on `inner`
+  >~ [`prod.inst_operands = [Lit _]`] >- simp[Once range_apply_condition_def]
+  >~ [`prod.inst_operands = [Label _]`] >- simp[Once range_apply_condition_def] >>
+  rename1 `prod.inst_operands = [Var z]` >>
+  drule_all ao_source_trace_last_iszero >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
+  strip_tac >>
+  irule ao_range_condition_iszero_local >>
+  simp[] >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE, eval_operand_def] >>
+  Cases_on `x' = 0w` >> gvs[venomExecSemanticsTheory.bool_to_word_def]
+QED
+Resume ao_source_trace_condition_sound[eq]:
+  qpat_x_assum `!ctx fn trace target use_opt h t op value b rs. _` kall_tac >>
+  `LENGTH prod.inst_outputs = 1 /\ LENGTH prod.inst_operands = 2` by
+    gvs[inst_wf_def] >>
+  `prod.inst_outputs = [x]` by metis_tac[ao_dfg_singleton_output] >>
+  Cases_on `prod.inst_operands` >- gvs[] >>
+  rename1 `prod.inst_operands = lhs::rest` >>
+  Cases_on `rest` >- gvs[] >>
+  rename1 `prod.inst_operands = lhs::rhs::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  simp[Once range_apply_condition_def] >>
+  drule_at (Pat `lookup_var _ _ = SOME _`) ao_source_trace_eq_refine_sound >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+Resume ao_source_trace_condition_sound[compare]:
+  qpat_x_assum `!ctx fn trace target use_opt h t op value b rs. _` kall_tac >>
+  `LENGTH prod.inst_outputs = 1 /\ LENGTH prod.inst_operands = 2` by
+    (fs[SF CONJ_ss] >> gvs[inst_wf_def]) >>
+  `prod.inst_outputs = [x]` by metis_tac[ao_dfg_singleton_output] >>
+  Cases_on `prod.inst_operands` >- gvs[] >>
+  rename1 `prod.inst_operands = lhs::rest` >>
+  Cases_on `rest` >- gvs[] >>
+  rename1 `prod.inst_operands = lhs::rhs::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  simp[Once range_apply_condition_def] >>
+  drule_at (Pat `lookup_var _ _ = SOME _`) ao_source_trace_compare_refine_sound >>
+  disch_then (drule_at (Pat `get_instruction _ _ = SOME _`)) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+Finalise ao_source_trace_condition_sound
