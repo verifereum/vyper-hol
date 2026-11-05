@@ -40,6 +40,34 @@ Ancestors
    join reorder of a JMP (every loop header is a join).  An INVOKE
    changes only its own outputs among the caller's variables.  Return-PC
    variables all read ra in the frame view, and so do their roots. *)
+
+(* Notes from a statement check (intuition, not a prescribed proof):
+   - Where the planner drops names (stackPlanGen): an operand dead after
+     its instruction is consumed rather than duplicated; dead outputs are
+     popped at the end of generate_regular_inst_plan when the block does
+     not halt (PHI outputs likewise); after a JNZ clean_stack_plan pops
+     dead names or marks them dead_stack_marker; release_dead_spills
+     drops dead spills after each regular instruction.  reorder_one's
+     alias step only swaps the names of two slots.  So a name in ps_after
+     is a name of ps (stack or spill map) or an output of bb.
+   - A name z live out of bb, not defined in bb, whose root is defined in
+     bb, is impossible: bb dominates z's definition (def_dominates_uses,
+     transitively along the ASSIGN chain), and an entry path that meets
+     bb only at its end, followed by liveness_sound's witness path, misses
+     z's definition.  A bb entered around a loop is a join (entry block
+     has no predecessors), entered only by JMP (block_entries_ready),
+     whose reorder leaves only names live into it.
+   - The ps premises tie ps to vs only through ownership and the alias
+     premise; ps's names beyond those are bounded by a static invariant
+     of lineage states (their names are live out of the lineage
+     predecessor, and the vars live along that edge are all held), which
+     also covers a run with vs_prev_bb = NONE at a non-entry block.  The
+     entry block has no live-in variables.
+   - dead_stack_marker is Label "", and Lit/Label operands are fixed by
+     normalize_operand, so only Var operands matter.  PHI and INVOKE
+     outputs are their own roots.  For return-PC variables, copy_phi_var
+     and retpc_shape_ok keep every link of the chain a return-PC
+     variable, so both sides read ra. *)
 Theorem lineage_alias_successor:
   !fuel ctx lo liveness dfg cfg ch growth spill_base lbl_ctr fn lbl bb ps h
    promised block_ops ps_after ra vs vs'.
