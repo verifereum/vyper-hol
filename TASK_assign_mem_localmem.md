@@ -123,13 +123,13 @@ is `write_place cx (MemoryPlace id [])` / `stmt_state_rel_write_local`
   source (`compile_assign_value_name_staged_body_frag_mem`), may help.
 
 S1 (non-memory) proof this ports, proved on another branch; copies are in
-`alan-ref/s1/` (read-only reference, not built):
-- `alan-ref/s1/bodySimStmtCasesScript.sml`: `body_assign_local_memory`
+`alan-ref/s1/` (read-only reference, plain text, not built):
+- `alan-ref/s1/bodySimStmtCases.sml.txt`: `body_assign_local_memory`
   (case split: empty value vs the widen frag), its helpers
   `body_assign_local_rhs_pre`, `body_assign_local_memory_read`,
   `assign_local_memory_bytes_pos` (the last gives `0 < type_memory_bytes cenv ty`,
   which the S1 statement had as a premise and this one derives).
-- `alan-ref/s1/stmtSimAssignMemScript.sml`: `compile_assign_local_memory_widen_stmt_frag`,
+- `alan-ref/s1/stmtSimAssignMem.sml.txt`: `compile_assign_local_memory_widen_stmt_frag`,
   `local_memory_assign_widen_run`, `local_memory_store_run_framed`,
   `compile_assign_local_empty_stmt_frag`, `local_header_store_state`.
 In this tree `lowering/stmtSimAssignMemScript.sml` and

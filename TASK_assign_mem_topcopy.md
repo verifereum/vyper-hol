@@ -97,12 +97,12 @@ Closest proved memory twin: `lowering/bodyMemAssignTopWordScript.sml`
 `body_inv`/`type_stmt`).
 
 S1 (non-memory) proof this ports, proved on another branch; copies are in
-`alan-ref/s1/` (read-only reference, not built):
-- `alan-ref/s1/bodySimStmtCasesScript.sml`: `body_assign_toplevel_copy`
+`alan-ref/s1/` (read-only reference, plain text, not built):
+- `alan-ref/s1/bodySimStmtCases.sml.txt`: `body_assign_toplevel_copy`
   and its helpers `body_assign_copy_rhs_pre`, `body_assign_copy_region`,
   `body_assign_copy_target`, `storage_not_bytestring`,
   `storage_rhs_lowered_type`, `storage_value_fit_equal`.
-- `alan-ref/s1/stmtSimAssignStorageCopyScript.sml`:
+- `alan-ref/s1/stmtSimAssignStorageCopy.sml.txt`:
   `compile_assign_storage_copy_stmt_frag` and its run lemmas
   (`storage_copy_bulk_run`, `storage_copy_one_run`,
   `storage_copy_success_run`, `assign_storage_empty_stmt_frag`, ...).
