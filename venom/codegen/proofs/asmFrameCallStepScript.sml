@@ -5359,6 +5359,48 @@ Proof
   simp[wf_state_def] >> strip_tac >> gvs[wf_state_def]
 QED
 
+Theorem asm_call_step_drop_raw_view:
+  wf_state s /\ s.contexts <> [] /\ step s = (r,t) /\
+  LENGTH t.contexts < LENGTH s.contexts ==>
+  ?ex u. step_inner s = (INR ex,u) /\ handle_step ex u = (r,t) /\
+    same_frame_rel s u /\
+    EVERY (wf_context o FST) u.contexts /\ stack_room_ok u /\ gas_stack_ok u
+Proof
+  strip_tac >> qpat_x_assum `step s = _` mp_tac >>
+  simp[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner s` >> Cases_on `q` >> simp[]
+  >- (strip_tac >> gvs[] >>
+      assume_tac same_frame_or_grow_step_inner_named >>
+      drule_all same_frame_or_grow_length >> strip_tac >>
+      strip_tac >> gvs[])
+  >> strip_tac >>
+  `LENGTH s.contexts <= LENGTH r'.contexts` by
+    (assume_tac same_frame_or_grow_step_inner_named >>
+     drule_all same_frame_or_grow_length >> simp[]) >>
+  `r'.contexts <> []` by (Cases_on `r'.contexts` >> gvs[]) >>
+  `LENGTH r'.contexts <= LENGTH t.contexts + 1` by
+    (drule vfmHandleStepTheory.handle_step_shrinks_by_one >> simp[]) >>
+  `LENGTH r'.contexts = LENGTH s.contexts` by decide_tac >>
+  `same_frame_rel s r'` by
+    (assume_tac same_frame_or_grow_step_inner_named >>
+     drule_all same_frame_or_grow_eq_length >> simp[]) >>
+  drule_all asm_call_step_inner_pop_invariants >> strip_tac >>
+  simp[]
+QED
+
+Theorem asm_call_memory_handle_step:
+  s.contexts <> [] /\
+  (FST (HD s.contexts)).msgParams.outputTo = Memory mr /\
+  ~vfm_abort ex ==>
+  handle_step ex s = handle_exception ex s
+Proof
+  strip_tac >>
+  `!a. (FST (HD s.contexts)).msgParams.outputTo <> Code a` by simp[] >>
+  drule_all (INST_TYPE [alpha |-> ``:unit``] handle_create_reraises) >>
+  disch_then (qspec_then `ex` assume_tac) >>
+  simp[handle_step_def, handle_def, reraise_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
