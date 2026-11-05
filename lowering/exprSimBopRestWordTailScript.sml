@@ -73,89 +73,6 @@ Proof
   qpat_x_assum `mem_word_at _ _ = _` mp_tac >> simp[]
 QED
 
-Theorem rest_word_fixed_memory_tail:
-  compile_var_array_membership cenv needleop vv (ArrayT ty (Fixed n)) is_in sm = (out,ct) /\
-  fn_has_code sm ct fn /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
-  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
-  expr_type e = ArrayT ty (Fixed n) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Fixed n)) /\
-  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
-  value_has_type (ArrayTV et (Fixed n)) (ArrayV av) /\ value_has_type et needle /\
-  eval_operand needleop s = SOME (typed_val_to_w256 et needle) /\
-  eval_operand (vv_operand vv) s = SOME baseword /\
-  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  (!z. needleop = Var z \/ vv_operand vv = Var z ==> not_fresh_at sm z) /\
-  n < dimword (:256) /\
-  s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~s.vs_halted ==>
-  ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
-      t.vs_current_bb = ct.cs_current_bb /\
-      t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
-      eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
-      eval_operand (vv_operand vv) t = SOME baseword /\
-      eval_operand out t = SOME (bool_to_word
-        (if is_in then evaluate_in_array (ArrayTV et (Fixed n)) needle av
-         else ~evaluate_in_array (ArrayTV et (Fixed n)) needle av))
-Proof
-  strip_tac >>
-  `array_length (ArrayTV et (Fixed n)) av = n` by
-    metis_tac[exprSimBopRestWordLoadsTheory.rest_word_array_fixed_length] >>
-  `elem_size_in_location cenv LocMemory ty = 32` by
-    (Cases_on `ty` >>
-     gvs[compileEnvTheory.is_word_type_def, compileEnvTheory.elem_size_in_location_def,
-       compileEnvTheory.type_memory_bytes_def, compileEnvTheory.is_slot_addressed_def] >>
-     Cases_on `b` >> gvs[compileEnvTheory.is_word_type_def,
-       compileEnvTheory.type_memory_bytes_def] >>
-     Cases_on `b'` >> gvs[compileEnvTheory.is_word_type_def,
-       compileEnvTheory.type_memory_bytes_def]) >>
-  `compile_array_membership_loop needleop (vv_operand vv) (Lit (n2w n)) 32 0
-    (context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) is_in sm = (out,ct)` by
-    (qpat_x_assum `compile_var_array_membership _ _ _ _ _ _ = _` mp_tac >>
-     simp[rest_word_fixed_dispatch] >>
-     Cases_on `vv_location vv` >> gvs[]) >>
-  qabbrev_tac `elem = \i. typed_val_to_w256 et
-    (THE (array_index (ArrayTV et (Fixed n)) av (&i)))` >>
-  `!i. i < n ==> array_index (ArrayTV et (Fixed n)) av (&i) =
-      SOME (THE (array_index (ArrayTV et (Fixed n)) av (&i)))` by
-    (rpt strip_tac >>
-     `valid_index (ArrayTV et (Fixed n)) av (&i)` by
-       simp[vyperArrayTheory.valid_index_def] >>
-     drule vyperArrayTheory.array_index_valid >>
-     Cases_on `array_index (ArrayTV et (Fixed n)) av (&i)` >> simp[]) >>
-  `evaluate_in_array (ArrayTV et (Fixed n)) needle av <=>
-    ?i. i < n /\ elem i = typed_val_to_w256 et needle` by
-    (drule_all rest_word_array_word_membership >>
-     simp[Abbr `elem`] >> metis_tac[optionTheory.THE_DEF]) >>
-  `!h cl cm v i p.
-    rest_word_loop_prefix needleop (vv_operand vv) (Lit (n2w n)) 32 0 sm = (h,cl) /\
-    context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory h.rw_addr cl = (v,cm) /\
-    i < n /\
-    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
-      needleop (typed_val_to_w256 et needle) (Lit (n2w n)) n p /\
-    eval_operand (vv_operand vv) p = SOME baseword /\
-    eval_operand h.rw_addr p = SOME (baseword + n2w (0 + i * 32)) ==>
-    ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
-        eval_operand v q = SOME (elem i) /\
-        (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)` by
-    (rpt gen_tac >> simp[rest_word_search_rep_def] >> strip_tac >>
-     `evaluate_type (get_tenv cx) (ArrayT ty (Fixed n)) =
-        SOME (ArrayTV et (Fixed n))` by metis_tac[] >>
-     drule rest_word_memory_element_run >>
-     simp[Abbr `elem`] >>
-     disch_then assume_tac >> metis_tac[]) >>
-  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
-      needleop (typed_val_to_w256 et needle) (Lit (n2w n)) n s` by
-    simp[rest_word_search_rep_def, venomStateTheory.eval_operand_def] >>
-  `!z. vv_operand vv = Var z ==> not_fresh_at sm z` by metis_tac[] >>
-  `!z. needleop = Var z \/ vv_operand vv = Var z \/ Lit (n2w n) = Var z ==>
-       not_fresh_at sm z` by (simp[] >> metis_tac[]) >>
-  `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
-  `LocMemory <> LocCalldata` by simp[] >>
-  drule_all rest_word_compiled_search >>
-  simp[rest_word_search_rep_def] >> metis_tac[]
-QED
 
 (* Slot-addressed loaders need no memory frontier premise. *)
 Theorem rest_word_storage_element_run:
@@ -211,4 +128,138 @@ Proof
     `baseword + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)`] mp_tac) >>
   Cases_on `cenv.ce_is_ctor` >> Cases_on `cenv.ce_imm_alloca` >>
   gvs[wordsTheory.WORD_ADD_0] >> metis_tac[]
+QED
+
+Theorem rest_word_word_stride:
+  is_word_type ty ==> elem_size_in_location cenv loc ty = word_scale loc
+Proof
+  Cases_on `loc` >> Cases_on `ty` >>
+  gvs[compileEnvTheory.is_word_type_def, compileEnvTheory.elem_size_in_location_def,
+    compileEnvTheory.type_memory_bytes_def, compileEnvTheory.word_scale_def,
+    compileEnvTheory.is_slot_addressed_def] >>
+  Cases_on `b` >> gvs[compileEnvTheory.is_word_type_def,
+    compileEnvTheory.type_memory_bytes_def] >>
+  Cases_on `b'` >> gvs[compileEnvTheory.is_word_type_def,
+    compileEnvTheory.type_memory_bytes_def]
+QED
+
+Theorem rest_word_located_element_run:
+  vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv p /\
+  loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\
+  loc <> LocCalldata /\
+  expr_type e = ArrayT ty bd /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
+  eval_operand (vv_operand vv) p = SOME baseword /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  array_index (ArrayTV et bd) av (&i) = SOME value /\
+  context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc addr cl = (v,cm) /\
+  eval_operand addr p = SOME
+    (baseword + n2w ((case bd of Fixed _ => 0 | Dynamic _ => word_scale loc) +
+                     i * word_scale loc)) ==>
+  ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
+      eval_operand v q = SOME (typed_val_to_w256 et value) /\
+      run_inst_seq_mem_ok (emitted_insts cl cm) p
+Proof
+  strip_tac >>
+  Cases_on `vv_location vv = NONE \/ vv_location vv = SOME LocMemory`
+  >- (`loc = LocMemory` by (Cases_on `vv_location vv` >> gvs[]) >>
+      gvs[compileEnvTheory.word_scale_def] >>
+      drule rest_word_memory_element_run >> simp[] >>
+      disch_then irule >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[]) >>
+  `vv_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) vv es' p /\
+   stmt_state_rel ctx func cenv cx es' p` by
+    fs[loweringPostsTheory.vv_post_def] >>
+  Cases_on `vv` >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def,
+    loweringPostsTheory.vv_holds_def] >>
+  Cases_on `p'.ptr_location` >>
+  gvs[compileEnvTheory.word_scale_def,
+    vyperStateTheory.read_result_def, vyperStateTheory.return_def]
+  >- (drule (Q.INST [`tr` |-> `F`] rest_word_storage_element_run) >>
+      simp[] >> disch_then assume_tac >> metis_tac[]) 
+  >- (drule (Q.INST [`tr` |-> `T`] rest_word_storage_element_run) >>
+      simp[] >> disch_then assume_tac >> metis_tac[]) >>
+  drule rest_word_immutable_element_run >> simp[] >>
+  disch_then assume_tac >> metis_tac[]
+QED
+
+Theorem rest_word_fixed_tail:
+  compile_var_array_membership cenv needleop vv (ArrayT ty (Fixed n)) is_in sm = (out,ct) /\
+  fn_has_code sm ct fn /\
+  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\
+  loc <> LocCalldata /\
+  expr_type e = ArrayT ty (Fixed n) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Fixed n)) /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et (Fixed n)) (ArrayV av) /\ value_has_type et needle /\
+  eval_operand needleop s = SOME (typed_val_to_w256 et needle) /\
+  eval_operand (vv_operand vv) s = SOME baseword /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. needleop = Var z \/ vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  n < dimword (:256) /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~s.vs_halted ==>
+  ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
+      t.vs_current_bb = ct.cs_current_bb /\
+      t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
+      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
+      eval_operand (vv_operand vv) t = SOME baseword /\
+      eval_operand out t = SOME (bool_to_word
+        (if is_in then evaluate_in_array (ArrayTV et (Fixed n)) needle av
+         else ~evaluate_in_array (ArrayTV et (Fixed n)) needle av))
+Proof
+  strip_tac >>
+  `array_length (ArrayTV et (Fixed n)) av = n` by
+    metis_tac[exprSimBopRestWordLoadsTheory.rest_word_array_fixed_length] >>
+  `elem_size_in_location cenv loc ty = word_scale loc` by
+    metis_tac[rest_word_word_stride] >>
+  `compile_array_membership_loop needleop (vv_operand vv) (Lit (n2w n))
+    (word_scale loc) 0
+    (context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) is_in sm = (out,ct)` by
+    (qpat_x_assum `compile_var_array_membership _ _ _ _ _ _ = _` mp_tac >>
+     simp[rest_word_fixed_dispatch] >> metis_tac[]) >>
+  qabbrev_tac `elem = \i. typed_val_to_w256 et
+    (THE (array_index (ArrayTV et (Fixed n)) av (&i)))` >>
+  `!i. i < n ==> array_index (ArrayTV et (Fixed n)) av (&i) =
+      SOME (THE (array_index (ArrayTV et (Fixed n)) av (&i)))` by
+    (rpt strip_tac >>
+     `valid_index (ArrayTV et (Fixed n)) av (&i)` by
+       simp[vyperArrayTheory.valid_index_def] >>
+     drule vyperArrayTheory.array_index_valid >>
+     Cases_on `array_index (ArrayTV et (Fixed n)) av (&i)` >> simp[]) >>
+  `evaluate_in_array (ArrayTV et (Fixed n)) needle av <=>
+    ?i. i < n /\ elem i = typed_val_to_w256 et needle` by
+    (drule_all rest_word_array_word_membership >>
+     simp[Abbr `elem`] >> metis_tac[optionTheory.THE_DEF]) >>
+  `!h cl cm v i p.
+    rest_word_loop_prefix needleop (vv_operand vv) (Lit (n2w n)) (word_scale loc) 0 sm = (h,cl) /\
+    context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc h.rw_addr cl = (v,cm) /\
+    i < n /\
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
+      needleop (typed_val_to_w256 et needle) (Lit (n2w n)) n p /\
+    eval_operand (vv_operand vv) p = SOME baseword /\
+    eval_operand h.rw_addr p = SOME (baseword + n2w (0 + i * word_scale loc)) ==>
+    ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
+        eval_operand v q = SOME (elem i) /\
+        (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)` by
+    (rpt gen_tac >> simp[rest_word_search_rep_def] >> strip_tac >>
+     `evaluate_type (get_tenv cx) (ArrayT ty (Fixed n)) =
+        SOME (ArrayTV et (Fixed n))` by metis_tac[] >>
+     drule rest_word_located_element_run >>
+     simp[Abbr `elem`] >>
+     disch_then assume_tac >> metis_tac[]) >>
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
+      needleop (typed_val_to_w256 et needle) (Lit (n2w n)) n s` by
+    simp[rest_word_search_rep_def, venomStateTheory.eval_operand_def] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sm z` by metis_tac[] >>
+  `!z. needleop = Var z \/ vv_operand vv = Var z \/ Lit (n2w n) = Var z ==>
+       not_fresh_at sm z` by (simp[] >> metis_tac[]) >>
+  `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
+  drule_all rest_word_compiled_search >>
+  simp[rest_word_search_rep_def] >> metis_tac[]
 QED
