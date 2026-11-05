@@ -41,3 +41,11 @@ Proof
        supported_scalar_type_def, supported_word_type_def,
        supported_string_type_def]
 QED
+
+(* No expression-frame premise for this module can instantiate the body
+   judgment: failure is earlier than source evaluation or gas exemptions. *)
+Theorem structlit_link_no_body_frame:
+  !ctx cenv cx. ~body_inv structlit_link_program ctx cenv cx
+Proof
+  simp[body_inv_def, structlit_link_not_supported]
+QED
