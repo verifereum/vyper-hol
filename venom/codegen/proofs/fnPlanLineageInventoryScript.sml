@@ -3897,3 +3897,39 @@ Proof
     (irule do_swap_target_ceiling >> simp[] >>
      qexistsl [`LENGTH targets - (idx + 1)`, `swap2_ops`] >> simp[]) >> simp[]
 QED
+
+Theorem plan_steps_reorder_target_ceiling[local]:
+  !items dfg targets ps ops qs.
+    EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets) items /\
+    LENGTH ps.ps_stack <= LENGTH targets /\
+    DISJOINT (set targets) (FDOM ps.ps_spilled) /\
+    plan_steps (\(idx,op) ps. reorder_one dfg targets idx op ps) items ps =
+      (ops,qs) ==>
+    LENGTH qs.ps_stack <= LENGTH targets /\ qs.ps_spilled = ps.ps_spilled
+Proof
+  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
+  Cases_on `h` >> rename1 `(idx,op)` >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `reorder_one dfg targets idx op ps = (step_ops,ps1)` >>
+  `LENGTH ps1.ps_stack <= LENGTH targets /\ ps1.ps_spilled = ps.ps_spilled` by
+    metis_tac[reorder_one_target_ceiling] >>
+  first_x_assum (qspecl_then [`dfg`, `targets`, `ps1`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem reorder_plan_target_ceiling:
+  !dfg targets ps ops qs.
+    LENGTH ps.ps_stack <= LENGTH targets /\
+    DISJOINT (set targets) (FDOM ps.ps_spilled) /\
+    reorder_plan dfg targets ps = (ops,qs) ==>
+    LENGTH qs.ps_stack <= LENGTH targets /\ qs.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets)
+     (MAPi (\i op. (i,op)) targets)` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
+     rpt strip_tac >> gvs[] >> metis_tac[EL_MEM]) >>
+  qpat_x_assum `reorder_plan _ _ _ = _`
+    (assume_tac o REWRITE_RULE [reorder_plan_eq_plan_steps]) >>
+  metis_tac[plan_steps_reorder_target_ceiling]
+QED
