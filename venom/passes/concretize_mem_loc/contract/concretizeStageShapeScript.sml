@@ -442,30 +442,39 @@ QED
 
 Theorem concretize_step_make_ssa_input_ok:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
-  fn.fn_eom = NONE /\ wf_function fn /\ fn_inst_wf fn /\
-  make_ssa_input_ok fn ==>
+  wf_function fn /\ fn_inst_wf fn /\ make_ssa_input_ok fn ==>
   make_ssa_input_ok out.fpo_function
 Proof
   strip_tac >>
   `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
      observed s fn = SOME out` by fs[fn_pass_step_def] >>
-  gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
-  drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
-  irule apply_context_layout_make_ssa_input_ok >> simp[] >>
-  gvs[wf_function_def, EVERY_MEM]
+  Cases_on `fn.fn_eom`
+  >- (gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
+      drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
+      irule apply_context_layout_make_ssa_input_ok >> simp[] >>
+      gvs[wf_function_def, EVERY_MEM]) >>
+  `fn_has_static_layout fn` by fs[fn_has_static_layout_def] >>
+  qpat_x_assum `execute_configured_fn_pass _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [concretize_function_fuel_in_context_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
 QED
 
 Theorem concretize_step_no_raw_fmp:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
-  fn.fn_eom = NONE /\ no_raw_fmp_ops fn ==>
+  no_raw_fmp_ops fn ==>
   no_raw_fmp_ops out.fpo_function
 Proof
   strip_tac >>
   `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
      observed s fn = SOME out` by fs[fn_pass_step_def] >>
-  gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
-  drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
-  irule apply_context_layout_no_raw_fmp >> simp[]
+  Cases_on `fn.fn_eom`
+  >- (gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
+      drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
+      irule apply_context_layout_no_raw_fmp >> simp[]) >>
+  `fn_has_static_layout fn` by fs[fn_has_static_layout_def] >>
+  qpat_x_assum `execute_configured_fn_pass _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [concretize_function_fuel_in_context_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
 QED
 
 Theorem concretize_stage_member[local]:
