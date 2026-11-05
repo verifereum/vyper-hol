@@ -236,3 +236,53 @@ Resume dft_pending_account_compose[right_observe]:
 QED
 
 Finalise dft_pending_account_compose
+
+Theorem dft_pending_orbit_observe_forward:
+  (!j. ?n. A n <= j /\ j < A (SUC n)) /\
+  (!n. pending_segment_account C D w
+    (A (SUC n) - A n) (B (SUC n) - B n)
+    (FUNPOW (dft_occ_oracle_next w C) (A n) l)
+    (FUNPOW (dft_occ_oracle_next w D) (B n) r) (ledger n) (ledger (SUC n))) /\
+  dft_open_observe f inst s (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core /\
+  inst_mem_ranges inst s <> [] ==>
+  ?k g t. dft_pos_functions C D f g /\
+    dft_open_observe g inst t (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core /\
+    t.vs_memory = s.vs_memory /\ inst_mem_ranges inst t = inst_mem_ranges inst s
+Proof
+  strip_tac >>
+  qpat_x_assum `!j. ?n. _` (qspec_then `j` strip_assume_tac) >>
+  `j - A n < A (SUC n) - A n` by decide_tac >>
+  `dft_open_observe f inst s
+    (FUNPOW (dft_occ_oracle_next w C) (j - A n)
+      (FUNPOW (dft_occ_oracle_next w C) (A n) l)).dft_occ_core` by
+    metis_tac[dft_cut_offset] >>
+  qpat_x_assum `!n. pending_segment_account _ _ _ _ _ _ _ _ _`
+    (qspec_then `n` (mp_then Any mp_tac (cj 3 (iffLR pending_segment_account_def)))) >>
+  disch_then drule_all >> strip_tac >>
+  qexistsl [`k + B n`,`g`,`t`] >> simp[FUNPOW_ADD]
+QED
+
+Theorem dft_pending_orbit_observe_backward:
+  (!j. ?n. B n <= j /\ j < B (SUC n)) /\
+  (!n. pending_segment_account C D w
+    (A (SUC n) - A n) (B (SUC n) - B n)
+    (FUNPOW (dft_occ_oracle_next w C) (A n) l)
+    (FUNPOW (dft_occ_oracle_next w D) (B n) r) (ledger n) (ledger (SUC n))) /\
+  dft_open_observe g inst t (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core /\
+  inst_mem_ranges inst t <> [] ==>
+  ?j f s. dft_pos_functions C D f g /\
+    dft_open_observe f inst s (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core /\
+    t.vs_memory = s.vs_memory /\ inst_mem_ranges inst t = inst_mem_ranges inst s
+Proof
+  strip_tac >>
+  qpat_x_assum `!j. ?n. _` (qspec_then `k` strip_assume_tac) >>
+  `k - B n < B (SUC n) - B n` by decide_tac >>
+  `dft_open_observe g inst t
+    (FUNPOW (dft_occ_oracle_next w D) (k - B n)
+      (FUNPOW (dft_occ_oracle_next w D) (B n) r)).dft_occ_core` by
+    metis_tac[dft_cut_offset] >>
+  qpat_x_assum `!n. pending_segment_account _ _ _ _ _ _ _ _ _`
+    (qspec_then `n` (mp_then Any mp_tac (cj 4 (iffLR pending_segment_account_def)))) >>
+  disch_then drule_all >> strip_tac >>
+  qexistsl [`j + A n`,`f`,`s`] >> simp[FUNPOW_ADD]
+QED
