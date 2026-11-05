@@ -449,6 +449,10 @@ Theorem current_certificate_reinsertion_copy:
   (EL i old.bb_instructions).inst_opcode = PHI /\
   (EL i old.bb_instructions).inst_outputs = [v] /\ current_actual_inserted fn v h ==>
   ?pre renamed final k src.
+    EVERY (\p. p.inst_opcode = PHI) pre /\
+    current_phi_view final.bb_instructions =
+      FOLDL (\view ev. current_event_slot_action (current_succ_map fn) h ev view)
+        (current_phi_view (pre ++ old.bb_instructions)) events /\
     fn'.fn_blocks = simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
     lookup_block h renamed = SOME final /\ A h = current_block_annotations old pre /\
     k < LENGTH pre /\ (EL k pre).inst_outputs = [v] /\
@@ -464,6 +468,11 @@ Theorem current_certificate_reinsertion_copy:
         EL (LENGTH pre+i) final.bb_instructions)
 Proof
   strip_tac >> drule_all current_certificate_block_replay >> strip_tac >>
+  `EVERY (\p. p.inst_opcode = PHI) pre` by
+    (qpat_x_assum `EVERY (\i. ?id v. _) pre` mp_tac >>
+     simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+     first_x_assum drule >> simp[build_phi_inst_supply_def] >>
+     rpt strip_tac >> gvs[]) >>
   drule_all current_certificate_reinserted_first_name >> strip_tac >>
   qabbrev_tac `ps = (case ALOOKUP (current_pred_map fn) h of
     NONE => [] | SOME ps => ps)` >>
@@ -471,7 +480,7 @@ Proof
     simp[Abbr `ps`] >>
   drule_all current_certificate_reinsertion_pairs >> strip_tac >>
   `?inst. MEM inst pre /\ MEM v inst.inst_outputs` by metis_tac[] >>
-  qpat_x_assum `EVERY _ pre` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  qpat_x_assum `EVERY (\inst. ?id v. _) pre` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
   disch_then (drule_then strip_assume_tac) >>
   gvs[build_phi_inst_supply_def] >>
   qpat_x_assum `MEM <| inst_id := _; inst_opcode := _; inst_operands := _; inst_outputs := _ |> pre`
