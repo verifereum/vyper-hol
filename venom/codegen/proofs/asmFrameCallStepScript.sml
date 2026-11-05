@@ -3632,6 +3632,98 @@ Proof
   Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
 QED
 
+Theorem asm_create_refund_prefix_noabort:
+  s.contexts <> [] /\
+  (do consume_gas n; assert_not_static; set_return_data [];
+      get_num_contexts od) s = (INR e,t) ==> ~vfm_abort e
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[consume_gas_def, assert_not_static_def, get_static_def,
+       set_return_data_def, get_num_contexts_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), vfm_abort_def]
+QED
+
+Theorem asm_create_charged_safe:
+  s.contexts <> [] /\ s.msdomain = Collect d /\
+  (do consume_gas n; assert_not_static; set_return_data [];
+      depth <- get_num_contexts;
+      if b1 \/ b2 \/ depth > 1024 then abort_unuse n else do
+        access_address address; ensure_storage_in_domain address;
+        if b3 then abort_create_exists sender
+        else proceed_create sender address value code n
+      od
+   od) s = (INR e,t) ==> ~vfm_abort e
+Proof
+  pure_rewrite_tac[ignore_bind_def, GSYM bind_assoc] >>
+  rpt strip_tac >> gvs[bind_def, AllCaseEqs()]
+  >- (rename1 `get_num_contexts _ = (INL depth,u)` >>
+      `(do consume_gas n; assert_not_static; set_return_data [];
+           get_num_contexts od) s = (INL depth,u)` by
+        simp[ignore_bind_def, bind_def] >>
+      drule_at (Pat `_ _ = (INL _,_)`) asm_create_charged_finish_safe >>
+      simp[ignore_bind_def] >> metis_tac[]) >>
+  rename1 `_ _ = (INR e,u)` >>
+  `(do consume_gas n; assert_not_static; set_return_data [];
+       get_num_contexts od) s = (INR e,u)` by
+    simp[ignore_bind_def, bind_def] >>
+  drule_all asm_create_refund_prefix_noabort >> simp[]
+QED
+
+Theorem asm_create_noabort_bind:
+  (!s r t. P s /\ f s = (r,t) ==>
+    (!e. r = INR e ==> ~vfm_abort e) /\ (!x. r = INL x ==> P t)) /\
+  (!x s e t. P s /\ g x s = (INR e,t) ==> ~vfm_abort e) /\
+  P s /\ bind f g s = (INR e,t) ==> ~vfm_abort e
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  Cases_on `f s` >> rename1 `f s = (result,u)` >> Cases_on `result` >>
+  simp[bind_def] >> rpt strip_tac >> metis_tac[]
+QED
+
+
+fun asm_create_prefix_tac primitive =
+  dxrule_at (Pat `bind _ _ _ = _`) asm_create_noabort_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then match_mp_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pat `_ _ = (_,_)`) primitive >> simp[vfm_abort_def]) >>
+  reverse conj_tac >- simp[] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac;
+
+Theorem asm_create_raw_noabort:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_create two s = (INR e,t) ==> ~vfm_abort e
+Proof
+  rewrite_tac[step_create_def, LET_THM, ignore_bind_def] >> BETA_TAC >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  map_every asm_create_prefix_tac
+    [asm_call_safe_pop_stack, asm_call_safe_memory_expansion_info,
+     asm_call_safe_consume_gas, asm_call_safe_expand_memory,
+     asm_call_safe_read_memory, asm_call_safe_get_callee,
+     asm_call_safe_get_accounts, asm_call_safe_assert,
+     asm_call_safe_get_gas_left] >>
+  qpat_x_assum `?d. _ = Collect d` strip_assume_tac >>
+  drule_all (PURE_REWRITE_RULE[ignore_bind_def] asm_create_charged_safe) >> simp[]
+QED
+
+Theorem asm_create_raw_safe:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_create two s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [])
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      drule_at (Pat `step_create _ _ = _`) asm_create_raw_noabort >> simp[]) >>
+  rpt strip_tac >>
+  `LENGTH t.contexts >= LENGTH s.contexts` by
+    (mp_tac vfmStepLengthTheory.same_frame_or_grow_step_create >>
+     metis_tac[vfmStepLengthTheory.same_frame_or_grow_length]) >>
+  Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
+QED
+
 Theorem asm_call_safe_msgParams:
   s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
   step_msgParams op f s = (r,t) ==>
