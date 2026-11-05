@@ -657,7 +657,7 @@ Resume gas_base_data_dispatch[extcodecopy]:
   Cases_on `eval_operand d s` >> simp[lift_result_def]
 QED
 Resume gas_base_data_dispatch[log]:
-  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  IF_CASES_TAC >- simp[lift_result_def, halt_state_def, set_returndata_def] >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   Cases_on `a` >> simp[lift_result_def] >>
   IF_CASES_TAC >> simp[lift_result_def] >>
@@ -666,7 +666,7 @@ Resume gas_base_data_dispatch[log]:
   Cases_on `eval_operands (DROP 2 (REVERSE ops)) s` >> simp[lift_result_def]
 QED
 Resume gas_base_data_dispatch[selfdestruct]:
-  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  IF_CASES_TAC >- simp[lift_result_def, halt_state_def, set_returndata_def] >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   Cases_on `ops` >> simp[lift_result_def] >>
   Cases_on `eval_operand a s` >> simp[lift_result_def, halt_state_def, set_returndata_def]
@@ -687,7 +687,7 @@ Resume gas_base_data_dispatch[call]:
   Cases_on `eval_operand e s` >> simp[lift_result_def] >>
   Cases_on `eval_operand f s` >> simp[lift_result_def] >>
   Cases_on `eval_operand g s` >> simp[lift_result_def] >>
-  IF_CASES_TAC >> simp[lift_result_def] >>
+  IF_CASES_TAC >- simp[lift_result_def, halt_state_def, set_returndata_def] >>
   irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
 QED
 Resume gas_base_data_dispatch[staticcall]:
@@ -723,7 +723,7 @@ Resume gas_base_data_dispatch[delegatecall]:
   irule (SRULE [gas_replay_at_def] gas_exec_delegatecall)
 QED
 Resume gas_base_data_dispatch[create]:
-  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  IF_CASES_TAC >- simp[lift_result_def, halt_state_def, set_returndata_def] >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
   namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
@@ -734,7 +734,7 @@ Resume gas_base_data_dispatch[create]:
   irule (SRULE [gas_replay_at_def] gas_exec_create)
 QED
 Resume gas_base_data_dispatch[create2]:
-  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  IF_CASES_TAC >- simp[lift_result_def, halt_state_def, set_returndata_def] >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
   namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
@@ -959,7 +959,9 @@ Proof
   >>~- ([`gas_replay_at 0 (exec_read1 _ _) _`], irule gas_exec_read1 >> simp[])
   >>~- ([`gas_replay_at 0 (exec_write2 _ _) _`], irule gas_exec_write2 >> simp[]) >>
   simp[gas_replay_at_def, lift_result_def] >> gen_tac >>
-  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  TRY (IF_CASES_TAC
+       >- (simp[lift_result_def, halt_state_def, set_returndata_def] >> NO_TAC) >>
+       irule (SRULE [gas_replay_at_def] gas_exec_write2) >> simp[] >> NO_TAC) >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def] >>
