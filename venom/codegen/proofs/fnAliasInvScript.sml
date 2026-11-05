@@ -20,6 +20,7 @@ Ancestors
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
   venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
+  fnFrameBoundaryEntryParams
 
 Theorem alias_do_swap_stack:
   dist < LENGTH ps.ps_stack ==>
@@ -1935,6 +1936,46 @@ Proof
      stack_pop (LENGTH selected) reordered.ps_stack) (Var x)` by
     metis_tac[alias_emit_reorder_consume_live] >>
   metis_tac[])
+QED
+
+Theorem alias_entry_live_param_output:
+  codegen_ready_fn fn /\
+  MEM x (live_vars_at (liveness_analyze fn)
+    (HD fn.fn_blocks).bb_label
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+  MEM x (MAP (\inst. HD inst.inst_outputs)
+    (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  strip_tac >>
+  `fn.fn_blocks <> []` by
+    (gvs[codegen_ready_fn_def, callLayoutDefsTheory.canonical_param_prefix_def] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  Cases_on `fn.fn_blocks` >> gvs[] >>
+  rename1 `fn.fn_blocks = entry::rest` >>
+  `lookup_block entry.bb_label fn.fn_blocks = SOME entry` by
+    simp[lookup_block_def, FIND_thm] >>
+  `collect_phis entry.bb_instructions = []` by
+    (gvs[codegen_ready_fn_def, block_entries_ready_def, entry_block_def, NULL_EQ]) >>
+  `alias_path_available fn entry.bb_label
+    (LENGTH (get_params entry.bb_instructions)) x` by
+    (irule alias_live_available_after_phis >> simp[] >>
+     gvs[codegen_ready_fn_def]) >>
+  qpat_x_assum `alias_path_available _ _ _ _` mp_tac >>
+  simp[alias_path_available_def] >>
+  disch_then (qspec_then `[entry.bb_label]` mp_tac) >>
+  simp[is_fn_path_def, fn_entry_label_def, entry_block_def] >>
+  strip_tac >> gvs[] >>
+  qspec_then `entry.bb_instructions` strip_assume_tac get_params_suffix >>
+  `MEM (EL j entry.bb_instructions) (get_params entry.bb_instructions)` by
+    (irule (iffRL MEM_EL) >> qexists_tac `j` >> simp[] >>
+     qpat_x_assum `entry.bb_instructions = _ ++ _`
+       (fn th => CONV_TAC (LHS_CONV (RAND_CONV (REWR_CONV th)))) >>
+     simp[EL_APPEND1]) >>
+  `param_insts_from 0 (get_params entry.bb_instructions)` by
+    (drule canonical_get_params_layout >> simp[]) >>
+  drule param_insts_flat_outputs >> disch_then (SUBST1_TAC o SYM) >>
+  simp[MEM_FLAT, MEM_MAP] >>
+  metis_tac[inst_defs_def]
 QED
 
 Theorem stack_poke_retains_other:
