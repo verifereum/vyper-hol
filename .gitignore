@@ -12,6 +12,7 @@
 tests/vyper-test-exports
 tests/vyper-coverage-report.txt
 tests/generated/vyperTest*functional_codegen_vyper_hol_regression_*Script.sml
+tests/.emit/
 
 # Python bytecode caches
 __pycache__/

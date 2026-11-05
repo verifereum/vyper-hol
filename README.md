@@ -176,6 +176,41 @@ Parity certifies agreement with the existing HOL frontend on these inputs,
 not completeness of supported Vyper, correctness of compiler annotations or
 the ML JSON decoder, or equivalence to deployed EVM bytecode.
 
+### Native JSON semantics runner
+
+The EmitML runner executes CV-translated Vyper semantics on exported JSON traces.
+With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`:
+
+```bash
+./tools/demo_run_test.sh
+```
+
+The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
+inputs and results for all five fixture cases and a passing stdin trace.
+The fixture has three passing cases and two intentional failures (an output
+mismatch and an unexpected revert).
+
+```bash
+# Build only; add --smoke for native/HOL parity checks:
+python3 tools/emit_run_test.py
+# Exporter JSON containing named tests and setup fixtures:
+tests/.emit/run-test tests/fixtures/run_test_json/basic.json
+# A deployment/call trace array from stdin:
+tests/.emit/run-test < traces.json
+```
+
+Each case produces one JSON line with `name`, `status`, and, on failure, `error`.
+Exit status is 0 when all cases pass, or 1 for a failed case or import error;
+import errors go to stderr. `{}` is rejected as containing no tests; `[]`
+executes an empty trace successfully. `--dump-input [export.json]` exposes
+diagnostic CV input/result encodings.
+
+Native execution is a trusted regression check, not a kernel proof.
+`vyperJsonReplayLib.replay_file` provides kernel-checked replay. The CV frontend
+retains defined-input preconditions; the native executable does not discharge
+them for each input. CI builds the frontend, emitter, and kernel replay smoke
+theories; native MLton compilation is an explicit local step.
+
 ### Running the Vyper test suite
 
 The test runner expects exported JSON fixtures at `tests/vyper-test-exports`.
