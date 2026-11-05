@@ -18,7 +18,7 @@ Theorem copy_slot_load_segment:
     op_taint tnf (Var out) =
       key_taint (if load = SLOAD then tn.t_stor else tn.t_trans) key /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\

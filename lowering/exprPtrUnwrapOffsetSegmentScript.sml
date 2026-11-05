@@ -1,7 +1,7 @@
 (* Root-plus-bounded-offset ADD: establish coverage before hiding ghosts. *)
 Theory exprPtrUnwrapOffsetSegment
 Ancestors
-  exprPtrUnwrapFrames exprPtrUnwrapScalarEdges typedCopyLoopHeaderPtr
+  exprPtrUnwrapFrames exprPtrUnwrapScalarEdges exprPtrUnwrapCopyEdges typedCopyLoopHeaderPtr
   typedCopyPtr decoderGhostFramePtr bodyPtrDefs fragGasSeqPtr fragExec
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   finite_map exprLoweringProps
@@ -18,7 +18,7 @@ Theorem copy_offset_segment:
       [mk_inst id ADD [Var root;offset] [out]] s Gf tnf /\
     t = update_var out (a + n2w off) s /\ ptr_covers Gf tnf out t n /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
@@ -34,7 +34,7 @@ Proof
     OK (update_var out (a+n2w off) s)` by
     simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_copy_arith,
-       copy_len_binop_ghost_frame] >>
+       copy_len_binop_ghost_frame, copy_mk_immutable_taint] >>
   conj_tac
   >- (irule typed_copy_loop_dynamic_offset_covers >> metis_tac[]) >>
   rpt strip_tac >> irule ptr_covers_step_frame >>

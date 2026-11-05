@@ -17,7 +17,7 @@ Theorem copy_store_segment:
     tnf.t_mem =
       (tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr + 32}) UNION
         {w2n addr + k | k IN op_taint tn v} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. FLOOKUP Gf p = FLOOKUP G p /\
          op_taint tnf (Var p) = op_taint tn (Var p)) /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
@@ -32,7 +32,7 @@ Proof
     OK (mstore (w2n addr) value s)` by
     simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_mstore_tainted,
-       mstore_transferred_taint] >>
+       mstore_transferred_taint, copy_step_immutable_taint, mk_inst_def] >>
   simp[step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,
        store_taint_def, adopt_reset_def, mk_inst_def, op_taint_def,
        FLOOKUP_DRESTRICT, allocas_from_def, allocas_below_fmp_def,

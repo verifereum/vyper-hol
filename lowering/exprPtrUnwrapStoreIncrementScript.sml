@@ -26,7 +26,7 @@ Theorem copy_store_increment_segment:
     tnf.t_mem =
       (tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr + 32}) UNION
         {w2n addr + k | k IN op_taint tn v} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!p. p <> counter /\ p <> next ==>
       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\

@@ -10,7 +10,7 @@ Definition slot_copy_ghost_inv_def:
   slot_copy_ghost_inv cs load p d root n G0 tn0 i G tn s <=>
     op_taint tn (Var (slot_copy_var cs 0)) = {} /\
     ptr_covers G tn root s (32*n) /\
-    tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans /\
+    tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans /\ tn.t_imm = tn0.t_imm /\
     (!j b. j < i /\ b < 32 /\ w2n d + 32*j + b IN tn.t_mem ==>
       b IN key_taint (if load=SLOAD then tn0.t_stor else tn0.t_trans)
         (p+n2w j)) /\
@@ -57,7 +57,7 @@ QED
 Theorem copy_condition_ghost_frame:
   slot_copy_ghost_inv cs load p d root n G0 tn0 i G tn s /\
   slot_copy_external cs (Var root) /\
-  tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+  tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
   op_taint tn1 (Var (slot_copy_var cs 0)) = {} /\
   (!v. v <> slot_copy_var cs 1 ==>
     FLOOKUP G1 v = FLOOKUP G v /\ op_taint tn1 (Var v) = op_taint tn (Var v)) /\
@@ -110,7 +110,7 @@ Theorem copy_body_ghost_frame:
     (tn.t_mem DIFF {a | w2n d+32*i <= a /\ a < w2n d+32*i+32}) UNION
     {w2n d+32*i+b | b | b IN
       key_taint (if load=SLOAD then tn.t_stor else tn.t_trans) (p+n2w i)} /\
-  tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+  tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
   op_taint tn1 (Var (slot_copy_var cs 0)) = {} /\
   ptr_covers G1 tn1 root t (32*n) /\
   (!v. slot_copy_external cs (Var v) ==>

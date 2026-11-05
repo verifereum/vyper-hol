@@ -102,7 +102,7 @@ Theorem copy_eq_jump_frames:
   tn1 = step_taint (mk_inst id EQ [left; right] [out]) s
     (update_var out value s) tn /\
   t = jump_to lbl (update_var out value s) ==>
-  tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+  tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
   allocas_from lo t = allocas_from lo s /\
   allocas_below_fmp t = allocas_below_fmp s /\
   (!p. p <> out ==>
@@ -113,7 +113,7 @@ Proof
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        set_var_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
        written_taint_def, source_memory_write_ranges_def, range_bytes_def,
-       store_taint_def, adopt_reset_def, mk_inst_def, update_var_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, mk_inst_def, update_var_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def,
        allocas_from_def, allocas_below_fmp_def, ptr_covers_def,
        lookup_var_def, jump_to_def] >>
@@ -130,7 +130,7 @@ Theorem copy_generated_condition_framed:
   ?G1 tn1.
     gas_path_ptr D lo ctx fn PG G tn s 0 G1 tn1
       (OK (slot_copy_cond_result cs n i s)) /\
-    tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+    tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
     allocas_from lo (slot_copy_cond_result cs n i s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (slot_copy_cond_result cs n i s)) /\
     op_taint tn1 (Var (slot_copy_var cs 0)) = {} /\
@@ -151,7 +151,7 @@ Proof
         Abbr `inst`, Abbr `u`] >> metis_tac[]) >>
   `((n2w i:bytes32)=n2w n) <=> (i=n)` by
     (pure_rewrite_tac[wordsTheory.n2w_11] >> fs[wordsTheory.dimword_def]) >>
-  `tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+  `tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
    allocas_from lo (slot_copy_cond_result cs n i s) = allocas_from lo s /\
    allocas_below_fmp (slot_copy_cond_result cs n i s) = allocas_below_fmp s /\
    (!p. p <> slot_copy_var cs 1 ==>

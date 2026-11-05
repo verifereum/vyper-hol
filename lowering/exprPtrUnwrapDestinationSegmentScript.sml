@@ -22,7 +22,7 @@ Theorem copy_destination_segment:
     t = update_var out (a + n2w off) (update_var tmp (n2w off) s) /\
     ptr_covers Gf tnf out t n /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> tmp /\ p <> out ==>
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\

@@ -6,6 +6,20 @@ Ancestors
   venomExecProps bodyPtrDefs memLocDefs compileEnv vfmConstants
   venomExecSemantics venomInstProofs venomInst venomState finite_map codegenRel contextCodegenRel
 
+Theorem copy_step_immutable_taint:
+  inst.inst_opcode <> ISTORE ==>
+  (step_taint inst s u tn).t_imm = tn.t_imm
+Proof
+  simp[step_taint_def, imm_taint_def]
+QED
+
+Theorem copy_mk_immutable_taint:
+  opc <> ISTORE ==>
+  (step_taint (mk_inst id opc args outs) s u tn).t_imm = tn.t_imm
+Proof
+  simp[copy_step_immutable_taint, mk_inst_def]
+QED
+
 Theorem slot_load_output_taint:
   (load = SLOAD \/ load = TLOAD) /\ eval_operand a s = SOME key ==>
   op_taint (step_taint (mk_inst id load [a] [out]) s u tn) (Var out) =
@@ -23,12 +37,14 @@ Theorem slot_load_ghost_frame:
   (step_taint (mk_inst id load [a] [out]) s
     (update_var out value s) tn).t_stor = tn.t_stor /\
   (step_taint (mk_inst id load [a] [out]) s
-    (update_var out value s) tn).t_trans = tn.t_trans
+    (update_var out value s) tn).t_trans = tn.t_trans /\
+  (step_taint (mk_inst id load [a] [out]) s
+    (update_var out value s) tn).t_imm = tn.t_imm
 Proof
   strip_tac >>
   gvs[step_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
       written_taint_def, source_memory_write_ranges_def, range_bytes_def,
-      store_taint_def, adopt_reset_def, mk_inst_def, update_var_def,
+      store_taint_def, imm_taint_def, adopt_reset_def, mk_inst_def, update_var_def,
       FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 

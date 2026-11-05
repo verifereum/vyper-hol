@@ -50,7 +50,7 @@ QED
 Theorem copy_initial_ghost_frame:
   slot_copy_external cs (Var root) /\ ptr_covers G tn root s (32*n) /\
   op_taint tn1 (Var (slot_copy_var cs 0)) = {} /\
-  tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+  tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
   (!v. v <> slot_copy_var cs 0 ==>
     FLOOKUP G1 v = FLOOKUP G v /\ op_taint tn1 (Var v) = op_taint tn (Var v)) /\
   (!v c. v <> slot_copy_var cs 0 /\ ptr_covers G tn v s c ==>

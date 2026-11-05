@@ -69,7 +69,7 @@ Theorem copy_generated_body_path:
       (tn.t_mem DIFF {j | w2n (a+n2w off) <= j /\ j < w2n (a+n2w off) + 32}) UNION
       {w2n (a+n2w off) + j | j IN
         key_taint (if load = SLOAD then tn.t_stor else tn.t_trans) (srcword+k)} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     allocas_from lo (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)) /\
     (ctx_has_dalloca ctx ==>
       allocas_below_fmp (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7))) /\

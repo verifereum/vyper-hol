@@ -19,7 +19,7 @@ Theorem copy_increment_segment:
     t = update_var counter (x+1w) (update_var next (x+1w) s) /\
     op_taint tnf (Var counter) = {} /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> counter /\ p <> next ==>
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\

@@ -43,7 +43,7 @@ Theorem copy_body_segment:
       (tn.t_mem DIFF {j | w2n (a+n2w off) <= j /\ j < w2n (a+n2w off) + 32}) UNION
       {w2n (a+n2w off) + j | j IN
         key_taint (if load = SLOAD then tn.t_stor else tn.t_trans) (srcword+k)} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!p. p <> addr /\ p <> valvar /\ p <> tmp /\ p <> out /\
          p <> ctr /\ p <> next ==>

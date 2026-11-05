@@ -33,7 +33,7 @@ Theorem copy_first_four_segment:
     ptr_covers Gf tnf out t n /\
     op_taint tnf (Var value) =
       key_taint (if load = SLOAD then tn.t_stor else tn.t_trans) (srcword+k) /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!p. p <> addr /\ p <> value /\ p <> tmp /\ p <> out ==>
       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\

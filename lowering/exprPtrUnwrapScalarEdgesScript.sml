@@ -14,6 +14,8 @@ Theorem copy_mul_ghost_frame:
       (update_var tmp w s) tn).t_stor = tn.t_stor /\
     (step_taint (mk_inst id MUL [left;right] [tmp]) s
       (update_var tmp w s) tn).t_trans = tn.t_trans /\
+    (step_taint (mk_inst id MUL [left;right] [tmp]) s
+      (update_var tmp w s) tn).t_imm = tn.t_imm /\
     (!p. p <> tmp ==>
       FLOOKUP (step_prov PG G (mk_inst id MUL [left;right] [tmp])
         (update_var tmp w s)) p = FLOOKUP G p /\
@@ -27,7 +29,7 @@ Proof
   Cases_on `eval_operand left s` >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        mk_inst_def, set_var_taint_def, out_taint_def, op_taint_def,
-       store_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
        source_memory_write_ranges_def, written_taint_def, range_bytes_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
@@ -43,6 +45,8 @@ Theorem copy_assign_ghost_frame:
       (update_var tmp w s) tn).t_stor = tn.t_stor /\
     (step_taint (mk_inst id ASSIGN [arg] [tmp]) s
       (update_var tmp w s) tn).t_trans = tn.t_trans /\
+    (step_taint (mk_inst id ASSIGN [arg] [tmp]) s
+      (update_var tmp w s) tn).t_imm = tn.t_imm /\
     (!p. p <> tmp ==>
       FLOOKUP (step_prov PG G (mk_inst id ASSIGN [arg] [tmp])
         (update_var tmp w s)) p = FLOOKUP G p /\
@@ -57,7 +61,7 @@ Proof
          pred_setTheory.EXTENSION, SF CONJ_ss] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        mk_inst_def, set_var_taint_def, out_taint_def, op_taint_def,
-       store_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
        source_memory_write_ranges_def, written_taint_def, range_bytes_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED

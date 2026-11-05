@@ -22,7 +22,7 @@ Theorem copy_source_segment:
     op_taint tnf (Var value) =
       key_taint (if load = SLOAD then tn.t_stor else tn.t_trans) (srcword+k) /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> addr /\ p <> value ==>
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\

@@ -4,6 +4,7 @@ Ancestors
   exprPtrUnwrapFrames ghostPcTransportPtr slotCopyExecution fragGasSeqPtr
   fragExec bodyPtrDefs ptrDiscipline ptrSafeRun venomExecSemantics venomInst
   venomState finite_map exprLoweringProps instIdxIndep list valueEncodingProps
+  exprSimStorageCopy venomMemProps valueEncoding
 
 (* The actual singleton branch: a load directly followed by a store.
    The loaded word's taint is intentionally not required to be empty. *)
@@ -24,7 +25,7 @@ Theorem copy_singleton_segment:
       (tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) UNION
       {w2n addr+k | k IN key_taint
         (if load=SLOAD then tn.t_stor else tn.t_trans) key} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
@@ -86,7 +87,7 @@ Theorem copy_singleton_counted_path:
       (tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) UNION
       {w2n addr+k | k IN key_taint
         (if load=SLOAD then tn.t_stor else tn.t_trans) key} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
@@ -132,4 +133,20 @@ Theorem copy_singleton_runtime_frame:
 Proof
   strip_tac >> simp[mstore_def, update_var_def] >>
   Cases >> simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem copy_singleton_static:
+  t = (mstore (w2n addr) (slot_copy_word load s key)
+    (update_var out (slot_copy_word load s key) s)) with vs_inst_idx := ix ==>
+  copy_static t = copy_static s
+Proof
+  simp[copy_static_def, mstore_def, write_memory_with_expansion_def, update_var_def]
+QED
+
+Theorem copy_singleton_memory_length:
+  t = (mstore (w2n addr) (slot_copy_word load s key)
+    (update_var out (slot_copy_word load s key) s)) with vs_inst_idx := ix ==>
+  LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  simp[LENGTH_mstore_eq, update_var_def]
 QED

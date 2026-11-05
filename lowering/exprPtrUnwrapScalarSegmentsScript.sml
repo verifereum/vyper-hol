@@ -1,7 +1,7 @@
 (* Scalar straight-line summaries hide the concrete intermediate ghosts. *)
 Theory exprPtrUnwrapScalarSegments
 Ancestors
-  exprPtrUnwrapScalarEdges exprPtrUnwrapFrames decoderGhostFramePtr
+  exprPtrUnwrapScalarEdges exprPtrUnwrapCopyEdges exprPtrUnwrapFrames decoderGhostFramePtr
   typedCopyPtr fragGasSeqPtr fragExec ptrDiscipline
   ptrSafeRun venomExecSemantics venomInst venomState finite_map exprLoweringProps
 
@@ -17,7 +17,7 @@ Theorem copy_arith_segment:
     t = update_var tmp (if opc = ADD then x+y else x*y) s /\
     op_taint tnf (Var tmp) = {} /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> tmp ==> FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
@@ -35,7 +35,8 @@ Proof
      simp[step_inst_base_def, mk_inst_def, exec_pure2_def]) >>
   gvs[] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_copy_arith,
-       copy_len_binop_ghost_frame, copy_mul_ghost_frame] >>
+       copy_len_binop_ghost_frame, copy_mul_ghost_frame,
+       copy_mk_immutable_taint] >>
   rpt strip_tac >> irule ptr_covers_step_frame >>
   simp[mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
@@ -49,7 +50,7 @@ Theorem copy_assign_segment:
       s Gf tnf /\
     t = update_var tmp x s /\ op_taint tnf (Var tmp) = {} /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!p. p <> tmp ==> FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
