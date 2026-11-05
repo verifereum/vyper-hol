@@ -182,3 +182,27 @@ Proof
   first_x_assum (qspec_then `128 + x` mp_tac) >>
   simp[listTheory.LIST_EQ_REWRITE, valueEncodingProofsTheory.EL_mem_bytes_at]
 QED
+
+(* The corrected runtime uses the pointer-based emitted fragment, with STOP
+   solely as an observation continuation. *)
+Definition order_runtime_fn_def:
+  order_runtime_fn = mk_raw_function "f"
+    [<|bb_label := "entry";
+       bb_instructions := (SND order_ptr_compiled).cs_current_insts ++
+         [mk_inst 22 STOP [] []]|>]
+End
+
+Theorem order_runtime_function_absent:
+  lookup_function order_runtime_fn.fn_name
+    order_frame_unit.cu_context.ctx_functions = NONE
+Proof
+  EVAL_TAC >> simp[listTheory.INDEX_FIND_def]
+QED
+
+Theorem order_runtime_no_stmt_state:
+  ~stmt_state_rel order_frame_unit.cu_context order_runtime_fn order_ptr_env
+    order_runtime_cx order_ptr_source s
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def,
+       exprLoweringPropsTheory.alloca_room_def, order_runtime_function_absent]
+QED
