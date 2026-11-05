@@ -655,6 +655,61 @@ Proof
   gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[]
 QED
 
+Theorem inventory_emit_one_spilled:
+  emit_one_input opc nl op ps = (ops, qs) ==>
+  FLOOKUP qs.ps_spilled (Var v) =
+    (if op = Var v then NONE else FLOOKUP ps.ps_spilled (Var v))
+Proof
+  Cases_on `op` >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[do_restore_def, AllCaseEqs(), LET_THM] >> rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  rpt (IF_CASES_TAC >> gvs[AllCaseEqs()]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  qmatch_asmsub_abbrev_tac `do_dup dist before` >>
+  mp_tac (Q.INST [`dist` |-> `dist`, `ps` |-> `before`] rf_do_dup_spilled) >>
+  simp[Abbr `before`, finite_mapTheory.DOMSUB_FLOOKUP_THM]
+QED
+
+Theorem inventory_dup_count[local]:
+  do_dup d ps = (ops, qs) /\ stack_get_depth op ps.ps_stack = SOME d ==>
+  LENGTH (FILTER (\a. a = Var v) qs.ps_stack) =
+  LENGTH (FILTER (\a. a = Var v) ps.ps_stack) + (if op = Var v then 1 else 0)
+Proof
+  strip_tac >> drule stack_get_depth_props >> strip_tac >>
+  drule do_dup_stack_exact >> simp[] >>
+  disch_then SUBST1_TAC >> simp[FILTER_APPEND] >>
+  Cases_on `op = Var v` >> simp[]
+QED
+
+Theorem inventory_emit_one_count:
+  emit_one_input opc nl op ps = (ops, qs) /\
+  (op = Var v ==> MEM (Var v) ps.ps_stack \/ IS_SOME (FLOOKUP ps.ps_spilled (Var v))) ==>
+  LENGTH (FILTER (\a. a = Var v) qs.ps_stack) =
+  LENGTH (FILTER (\a. a = Var v) ps.ps_stack) +
+    (if op = Var v /\ IS_SOME (FLOOKUP ps.ps_spilled (Var v)) then 1 else 0) +
+    (if op = Var v /\ MEM v nl then 1 else 0)
+Proof
+  Cases_on `op` >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[do_restore_def, AllCaseEqs(), LET_THM] >> rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs()] >> rpt (IF_CASES_TAC >> gvs[AllCaseEqs()]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[stack_push_def, FILTER_SNOC, inventory_depth_none] >>
+  Cases_on `s = v` >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `do_dup dist before` >>
+  `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
+  qmatch_goalsub_rename_tac `FILTER (\a. a = Var wanted) ps2.ps_stack` >>
+  drule_all inventory_dup_count >>
+  disch_then (qspec_then `wanted` mp_tac) >>
+  simp[Abbr `before`, FILTER_SNOC]
+QED
+
 (* Bounded contract checks: PHIs replace their unique incoming source,
    and discard a dead output on a non-halting path. *)
 Theorem regional_phi_live_probe:
