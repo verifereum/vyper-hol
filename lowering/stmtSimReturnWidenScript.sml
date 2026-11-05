@@ -162,21 +162,6 @@ Proof
             typed_copy_tuple_widening, cj 2 stack_word_fits_eq]
 QED
 
-Theorem return_source_word_fits_eq[local]:
-  (!sty ty. arg_type_fits sty ty /\ is_word_type sty ==> sty = ty) /\
-  (!stys tys. arg_types_fit stys tys /\ EVERY is_word_type stys ==>
-    stys = tys)
-Proof
-  ho_match_mp_tac arg_type_fits_ind >>
-  rw[arg_type_fits_def, is_word_type_def] >> gvs[]
-QED
-
-Theorem return_source_word_widens_eq[local]:
-  is_word_type sty /\ type_widens_to tenv sty ty ==> sty = ty
-Proof
-  simp[type_widens_to_def] >> metis_tac[cj 1 return_source_word_fits_eq]
-QED
-
 Theorem return_bytestring_expr_rel[local]:
   type_widens_to (get_tenv cx) sty ty /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) sty = SOME stv /\

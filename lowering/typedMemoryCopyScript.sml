@@ -3581,6 +3581,41 @@ Proof
   metis_tac[]
 QED
 
+(* Source classification shared by return and aggregate-element stores. *)
+Theorem return_source_word_fits_eq[local]:
+  (!sty ty. arg_type_fits sty ty /\ is_word_type sty ==> sty = ty) /\
+  (!stys tys. arg_types_fit stys tys /\ EVERY is_word_type stys ==>
+    stys = tys)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def, is_word_type_def] >> gvs[]
+QED
+
+Theorem return_source_word_widens_eq:
+  is_word_type sty /\ type_widens_to tenv sty ty ==> sty = ty
+Proof
+  simp[type_widens_to_def] >> metis_tac[cj 1 return_source_word_fits_eq]
+QED
+
+Theorem type_widens_from_bytestring:
+  type_widens_to tenv sty ty /\ is_bytestring_type sty ==>
+  is_bytestring_type ty
+Proof
+  simp[type_widens_to_def] >> strip_tac >>
+  Cases_on `sty` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
+  >- (Cases_on `ty` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `BaseT tb` >> Cases_on `tb` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[is_bytestring_type_def] >> Cases_on `ty` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BaseT tb` >> Cases_on `tb` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BytesT db` >> Cases_on `db` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
+
 (* Every exported copy boundary must be closed, including the recursive
    execution theorem: an old public admission must never be a dependency. *)
 val _ = List.app (fn (name, th) => let
