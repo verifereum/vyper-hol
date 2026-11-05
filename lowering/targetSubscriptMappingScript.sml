@@ -447,3 +447,132 @@ Proof
   strip_tac >> irule target_mapping_dynamic_operand >>
   gvs[expr_post_def] >> metis_tac[]
 QED
+
+Theorem target_mapping_suffix_shape:
+  compile_mapping_subscript bop key sa = (op,sb) ==>
+  (!x. op = Var x ==> not_fresh_at sb x) /\
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_mapping_subscript_def, contextTheory.compile_alloc_buffer_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac[emitted_insts_def, APPEND_ASSOC] >>
+  pure_rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0` by decide_tac >>
+  simp[listTheory.DROP_APPEND, mk_inst_def, is_terminator_def,
+       not_fresh_at_def]
+QED
+
+Theorem target_mapping_run_path:
+  compile_mapping_subscript bop key sa = (op,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >> drule target_mapping_suffix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
+  drule_all hash_run_path >> simp[]
+QED
+
+Theorem target_keccak_key_suffix_shape:
+  compile_keccak256_key key F sa = (op,sb) ==>
+  (!x. op = Var x ==> not_fresh_at sb x) /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_keccak256_key_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac[emitted_insts_def, APPEND_ASSOC] >>
+  pure_rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0` by decide_tac >>
+  simp[listTheory.DROP_APPEND, mk_inst_def, is_terminator_def,
+       not_fresh_at_def]
+QED
+
+Theorem target_keccak_key_run_path:
+  compile_keccak256_key key F sa = (op,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >> drule target_keccak_key_suffix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
+  drule_all hash_run_path >> simp[]
+QED
+
+Theorem target_mapping_post:
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  stmt_state_rel ctx func cenv cx es'' t /\
+  eval_operand op t = SOME (hashmap_slot slot (encode_hashmap_key kt key)) /\
+  (!x. op = Var x ==> not_fresh_at sb x) /\
+  wb_frame cenv es sa s0 t ==>
+  target_post ctx func cenv cx es sa sb s0 es'' pv vt
+    (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
+Proof
+  strip_tac >> simp[target_post_def] >>
+  gvs[wb_frame_def] >>
+  metis_tac[target_mapping_extend_place]
+QED
+
+(* Counted scratch suffix, retaining the frame of the whole target. *)
+Theorem target_mapping_counted_suffix:
+  compile_mapping_subscript bop keyop sm = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es' s /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  wb_frame cenv es sa s0 s /\
+  (!x. bop = Var x ==> not_fresh_at sm x) /\
+  (!x. keyop = Var x ==> not_fresh_at sm x) /\
+  eval_operand bop s = SOME slot /\
+  eval_operand keyop s = SOME (encode_hashmap_key kt key) /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    target_post ctx func cenv cx es sa sb s0 es'' pv vt
+      (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
+Proof
+  strip_tac >> drule_all target_mapping_run >> strip_tac >>
+  drule_all target_mapping_run_path >> strip_tac >>
+  `es'' = es'` by metis_tac[target_mapping_extend_place] >> gvs[] >>
+  `wb_frame cenv es sa s0 t` by
+    (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
+     qexistsl_tac [`s`, `es'.scopes`, `sm`] >> simp[] >>
+     metis_tac[]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[] >> irule target_mapping_post >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[target_mapping_suffix_shape]
+QED
