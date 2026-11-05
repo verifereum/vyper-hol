@@ -1918,3 +1918,21 @@ Proof
     metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
   metis_tac[phi_codegen_input_dead_after_prefix]
 QED
+
+Theorem phi_eval_take_ok:
+  !insts s final k. eval_phis s insts = OK final ==>
+    ?prefix_state. eval_phis s (TAKE k insts) = OK prefix_state
+Proof
+  Induct >- simp[eval_phis_def] >> rpt gen_tac >>
+  rename1 `eval_phis s (head::tail)` >>
+  Cases_on `k` >- simp[eval_phis_def] >>
+  qmatch_goalsub_rename_tac `TAKE (SUC take_count) (head::tail)` >>
+  Cases_on `head.inst_opcode = PHI`
+  >- (simp[eval_phis_def] >> strip_tac >>
+      Cases_on `eval_one_phi s head` >> gvs[] >>
+      rename1 `eval_one_phi s head = SOME pair` >> PairCases_on `pair` >>
+      Cases_on `eval_phis s tail` >> gvs[] >>
+      first_x_assum drule >>
+      disch_then (qspec_then `take_count` strip_assume_tac) >> simp[]) >>
+  simp[eval_phis_def]
+QED
