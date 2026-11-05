@@ -16,7 +16,7 @@
  *                          (targetSubscriptCase)
  *   target_case_all        — every target, by induction, from the indices'
  *                          judgments
- *   target_indices, target_idx_case_ok — the indices' judgments from
+ *   target_idx_case_ok     — the indices' judgments from
  *                          expr_ok, with no internal calls
  *   target_place_sim       — the judgment for eval_target_place: the place
  *                          of a target typed by a value type
@@ -34,7 +34,7 @@
 
 Theory targetPlaceSimCases
 Ancestors
-  targetSubscriptCase targetPlaceSimCasesBase
+  targetSubscriptCase targetPlaceSimCasesBase targetPlaceLive
   exprSimFieldLayout
   exprSimSource
   targetPlaceSimDefs
@@ -66,14 +66,6 @@ Proof
   >- (irule target_subscript_case >> metis_tac[]) >>
   irule target_attr_case >> metis_tac[]
 QED
-
-(* The indices of a target, in order. *)
-Definition target_indices_def:
-  target_indices (NameTarget id) = [] /\
-  target_indices (TopLevelNameTarget nsid) = [] /\
-  target_indices (AttributeTarget t fld) = target_indices t /\
-  target_indices (SubscriptTarget t e) = target_indices t ++ [e]
-End
 
 (* With no internal calls, the indices' judgments follow from expr_ok, as
    compile_expr_sim's induction hypotheses give it. *)
