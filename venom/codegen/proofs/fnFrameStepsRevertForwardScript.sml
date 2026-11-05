@@ -1638,3 +1638,253 @@ Proof
   Cases_on `Var x IN FDOM ps.ps_spilled` >>
   gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
 QED
+
+(* Physical preparation above arbitrary caller stack; no memory relation. *)
+Theorem rf_preparation_stack_frame:
+  EVERY is_simple_stack_op ops /\
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  plan_stack_sem_eq lo current
+    (apply_prefix_ops initial_fmp lo ops ps).ps_stack ps2.ps_stack /\
+  plan_stack_rel lo current ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp ops)|>) /\
+    plan_stack_rel lo current ps2.ps_stack stk'
+Proof
+  strip_tac >>
+  drule_all simple_prefix_stack_frame >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `stk'` >> asm_rewrite_tac[] >>
+  irule plan_stack_rel_sem_eq >>
+  qexists_tac `(apply_simple_ops lo ops ps).ps_stack` >>
+  metis_tac[apply_prefix_ops_eq_simple]
+QED
+
+Theorem rf_copy_plan_live_retained:
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\ MEM x nl /\
+  (MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  MEM (Var x) ps'.ps_stack \/ Var x IN FDOM ps'.ps_spilled
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps` >>
+  rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan dfg (compute_operands inst) ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  drule_all rf_copy_plan_result >> strip_tac >> gvs[] >>
+  irule rf_preparation_live_retained >>
+  asm_rewrite_tac[] >>
+  qexistsl_tac [`dfg`, `ins`, `RETURNDATACOPY`, `ps`, `ps1`, `ros`] >>
+  fs[MEM_APPEND]
+QED
+
+Theorem rf_simple_do_swap_shallow[local]:
+  do_swap d ps = (ops,ps') /\ EVERY is_simple_stack_op ops ==> d <= 16
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  qpat_x_assum `do_swap _ _ = _` mp_tac >>
+  simp[do_swap_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  fs[EVERY_APPEND, EVERY_MAP, EVERY_MEM, is_simple_stack_op_def] >>
+  metis_tac[MEM_APPEND, MEM_REVERSE, MEM]
+QED
+
+Theorem rf_optimistic_stack_frame:
+  optimistic_swap_plan dfg inst nl term ps = (ops,ps') /\
+  EVERY is_simple_stack_op ops /\
+  plan_stack_rel lo current ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp ops)|>) /\
+    plan_stack_rel lo current ps'.ps_stack stk'
+Proof
+  strip_tac >>
+  qpat_x_assum `optimistic_swap_plan _ _ _ _ _ = _` mp_tac >>
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  strip_tac >> gvs[] >>
+  TRY (qexists_tac `stk` >>
+       simp[execute_plan_def, asm_steps_def, asm_state_component_equality] >> NO_TAC) >>
+  `x <= 16` by metis_tac[rf_simple_do_swap_shallow] >>
+  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  `apply_prefix_ops initial_fmp lo ops ps = ps'` by
+    metis_tac[do_swap_align] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) ops` by
+    (qpat_x_assum `do_swap _ _ = _` mp_tac >>
+     Cases_on `x = 0` >> simp[do_swap_def] >> strip_tac >> gvs[] >>
+     simp[prefix_wf_def, stack_op_wf_def]) >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule rf_preparation_stack_frame >>
+  asm_rewrite_tac[] >> qexistsl_tac [`ps`, `stk`] >>
+  simp[plan_stack_sem_eq_refl]
+QED
+
+Theorem rf_release_stack[simp]:
+  (release_dead_spills nl ps).ps_stack = ps.ps_stack
+Proof
+  `!dead (ps0:plan_state).
+    (FOLDL (\ps' (op:operand,off:num).
+       ps' with <|ps_spilled := ps'.ps_spilled \\ op;
+                  ps_alloc := free_spill_slot off ps'.ps_alloc|>) ps0 dead).ps_stack =
+    ps0.ps_stack` by
+    (Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[]) >>
+  simp[release_dead_spills_def]
+QED
+
+Theorem rf_assign_postfix_stack_frame:
+  ps.ps_stack = stack_push (Var out) tail /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  EVERY is_simple_stack_op (pops ++ opts) /\
+  plan_stack_rel lo current ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp (pops ++ opts)) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (pops ++ opts))) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp (pops ++ opts))|>) /\
+    plan_stack_rel lo current (release_dead_spills nl ps9).ps_stack stk'
+Proof
+  strip_tac >> Cases_on `MEM out nl`
+  >- (`pops = [] /\ ps8 = ps` by
+        (Cases_on `halting` >> gvs[popmany_plan_def]) >>
+      gvs[] >>
+      `plan_stack_rel lo current ps.ps_stack stk` by simp[] >>
+      drule_all rf_optimistic_stack_frame >>
+      disch_then (qspec_then `o2pc` mp_tac) >> simp[]) >>
+  gvs[] >> Cases_on `halting`
+  >- (gvs[] >> qexists_tac `stk` >>
+      simp[execute_plan_def, asm_steps_def, asm_state_component_equality]) >>
+  `stack_get_depth (Var out) ps.ps_stack = SOME 0` by
+    simp[stack_push_def, REVERSE_SNOC, stack_get_depth_def, stack_find_def] >>
+  `popmany_plan [Var out] ps =
+     ([SOPop 1],ps with ps_stack := stack_pop 1 ps.ps_stack)` by
+    metis_tac[regularPostfixSimTheory.popmany_plan_top_singleton] >>
+  gvs[] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) [SOPop 1]` by
+    simp[prefix_wf_def, stack_op_wf_def, stack_push_def] >>
+  `plan_stack_rel lo current ps.ps_stack stk` by simp[] >>
+  `EVERY is_simple_stack_op [SOPop 1]` by simp[] >>
+  drule_all simple_prefix_stack_frame >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `stk'` >>
+  gvs[apply_simple_ops_def, apply_simple_op_def, stack_pop_def, stack_push_def]
+QED
+
+Theorem rf_copy_future_owned:
+  wf_function fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  get_instruction bb k = SOME inst /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  k <= j /\
+  generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  !op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> gvs[stackPlanTypesTheory.is_var_operand_def] >>
+  rename1 `rf_live_use bb (SUC k) j (Var x)` >>
+  `MEM x (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))` by
+    metis_tac[rf_live_use_liveness] >>
+  `rf_live_use bb k j (Var x)` by
+    (irule rf_live_use_backward >> simp[] >> metis_tac[MEM]) >>
+  `!at. MEM at (compute_operands inst) /\ is_var_operand at ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled` by
+    metis_tac[stackPlanTypesTheory.is_var_operand_def] >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    rf_copy_plan_live_retained >> simp[]
+QED
+
+Theorem rf_copy_stack_frame:
+  plan_stack_rel lo current (tail ++ [zop;sop;dop]) stk /\
+  dop <> dead_stack_marker /\ sop <> dead_stack_marker /\ zop <> dead_stack_marker /\
+  operand_val current lo dop = SOME dst /\
+  operand_val current lo sop = SOME src /\
+  operand_val current lo zop = SOME sz /\
+  st.as_stack = stk ++ rest /\
+  w2n src + w2n sz <= LENGTH st.as_returndata /\
+  asm_block_at prog st.as_pc [AsmOp "RETURNDATACOPY"] ==>
+  ?stk'.
+    asm_steps lo o2pc prog 1 st =
+      AsmOK (st with <|as_stack := stk' ++ rest; as_pc := st.as_pc + 1;
+        as_memory :=
+          TAKE (w2n dst)
+            (if sz = 0w then st.as_memory
+             else asm_expand_memory (w2n dst + w2n sz) st.as_memory) ++
+          TAKE (w2n sz) (DROP (w2n src) st.as_returndata) ++
+          DROP (w2n dst + w2n sz)
+            (if sz = 0w then st.as_memory
+             else asm_expand_memory (w2n dst + w2n sz) st.as_memory)|>) /\
+    plan_stack_rel lo current tail stk'
+Proof
+  strip_tac >>
+  `?d s z residual. stk = d :: s :: z :: residual /\
+    operand_val current lo dop = SOME d /\
+    operand_val current lo sop = SOME s /\
+    operand_val current lo zop = SOME z` by
+    (irule asm_stack_top3_from_plan >> simp[] >>
+     qexists_tac `tail` >> simp[]) >>
+  gvs[] >> qexists_tac `residual` >> conj_tac
+  >- (once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+      simp[Once asm_steps_def] >>
+      gvs[asm_block_at_def, asm_step_def, asm_step_op_def,
+        asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+        asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+        asm_step_copy_def, asm_returndatacopy_def, asm_next_def,
+        asm_steps_def, asm_state_component_equality]) >>
+  drule plan_stack_rel_pop >>
+  disch_then (qspec_then `3` mp_tac) >> simp[TAKE_APPEND]
+QED
+
+Theorem rf_assign_stack_transfer:
+  ps.ps_stack = tail ++ [rhs] /\ rhs <> dead_stack_marker /\
+  ps' = ps with ps_stack := stack_push (Var x) tail /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  rf_inventory_inv fn ra lo entry ps' s' /\
+  normalize_operand (dfg_build_function fn) [] (Var x) =
+    normalize_operand (dfg_build_function fn) [] rhs /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk ==>
+  plan_stack_rel lo (frame_view fn ra s') ps'.ps_stack stk
+Proof
+  strip_tac >> gvs[] >>
+  `?v residual. stk = v :: residual /\
+    operand_val (frame_view fn ra s) lo rhs = SOME v` by
+    (irule asm_stack_top1_from_plan >> simp[] >> qexists_tac `tail` >> simp[]) >>
+  gvs[] >>
+  `plan_stack_rel lo (frame_view fn ra s) tail residual` by
+    (drule plan_stack_rel_pop >> disch_then (qspec_then `1` mp_tac) >>
+     simp[TAKE_APPEND]) >>
+  `operand_val (frame_view fn ra s') lo (Var x) = SOME v` by
+    (gvs[rf_inventory_inv_def, stack_push_def, MEM_SNOC, MEM_APPEND] >>
+     metis_tac[]) >>
+  simp[stack_push_def] >> irule plan_stack_rel_push >> simp[] >>
+  gvs[plan_stack_rel_def] >> rpt strip_tac >>
+  qpat_x_assum `!i. i < LENGTH tail ==> _` (qspec_then `i` mp_tac) >>
+  strip_tac >> simp[] >>
+  `MEM (EL i (REVERSE tail)) tail` by
+    (pure_once_rewrite_tac[GSYM MEM_REVERSE] >>
+     pure_rewrite_tac[MEM_EL] >> qexists_tac `i` >> simp[]) >>
+  gvs[rf_inventory_inv_def, stack_push_def, MEM_SNOC, MEM_APPEND] >>
+  metis_tac[]
+QED
