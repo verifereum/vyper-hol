@@ -550,3 +550,154 @@ Proof
     (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))` mp_tac) >>
   gvs[] >> metis_tac[]
 QED
+
+(* Bounded contract checks: PHIs replace their unique incoming source,
+   and discard a dead output on a non-halting path. *)
+Theorem regional_phi_live_probe:
+  !ps phi.
+    phi.inst_operands = [Var "source"; Var "other"] /\
+    phi.inst_outputs = ["result"] ==>
+    (SND (generate_phi_plan phi ["result"] F
+      (ps with ps_stack := [Var "source"]))).ps_stack = [Var "result"]
+Proof
+  rpt strip_tac >> simp[generate_phi_plan_def, LET_THM] >> EVAL_TAC
+QED
+
+Theorem regional_phi_dead_probe:
+  !ps phi.
+    phi.inst_operands = [Var "source"; Var "other"] /\
+    phi.inst_outputs = ["result"] ==>
+    (SND (generate_phi_plan phi [] F
+      (ps with ps_stack := [Var "source"]))).ps_stack = []
+Proof
+  rpt strip_tac >> simp[generate_phi_plan_def, LET_THM] >> EVAL_TAC
+QED
+
+Theorem regional_offset_support_probe:
+  inst.inst_operands = [Lit n; Label lbl] /\ inst.inst_outputs = [out] /\
+  EVERY (\op. ?v. op = Var v /\ MEM v live) ps.ps_stack /\ MEM out live ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v live)
+    (SND (generate_offset_plan inst ps)).ps_stack
+Proof
+  strip_tac >> simp[generate_offset_plan_def, LET_THM, stack_push_def,
+                    EVERY_SNOC]
+QED
+
+Theorem regional_ready_nop_probe:
+  codegen_ready_inst inst /\ inst.inst_opcode = NOP ==>
+  inst.inst_operands = [] /\
+  generate_inst_plan lv dfg cfg fn inst live halting next_term lbl ps =
+    SOME ([],ps)
+Proof
+  simp[codegen_ready_inst_def, generate_inst_plan_def]
+QED
+
+Theorem regional_offset_dead_probe:
+  inst.inst_operands = [Lit n; Label lbl] /\ inst.inst_outputs = [out] ==>
+  (SND (generate_offset_plan inst (ps with ps_stack := []))).ps_stack = [Var out]
+Proof
+  simp[generate_offset_plan_def, LET_THM, stack_push_def]
+QED
+
+(* Ownership of a set does not determine its physical/spilled partition.
+   This is a countermodel to that local inference, not to the frozen goal. *)
+Theorem regional_ownership_height_probe:
+  (!op. (MEM op [Var "x"] \/ op IN FDOM (FEMPTY : operand |-> num)) <=>
+        (MEM op [] \/ op IN FDOM (FEMPTY |+ (Var "x",0n)))) /\
+  ~(LENGTH [Var "x"] <= LENGTH ([] : operand list))
+Proof
+  simp[]
+QED
+
+(* Contract-validation checkpoint (C1.1.r.validate).
+
+   PROPOSED, NOT PROVED, regional boundary invariant:
+   For a predecessor edge pred -> bb and source index i after parameter
+   preparation/cleanup, put
+     A_i = input_vars_from pred (DROP i bb.bb_instructions)
+             (live_vars_at (liveness_analyze fn) bb.bb_label i).
+   Require separately:
+   - EVERY (\op. ?v. op = Var v /\ MEM v A_i) ps.ps_stack;
+   - ALL_DISTINCT ps.ps_stack;
+   - DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled);
+   - every spill key is Var v for some v in fn_all_vars fn;
+   - !v. MEM v A_i ==> MEM (Var v) ps.ps_stack \/
+                            Var v IN FDOM ps.ps_spilled;
+   - future-output freshness, with the unprocessed PHI-source exception,
+     as required by lineage_state_static; generated marked wf separately.
+   This is only an instruction-boundary invariant: input emission intentionally
+   duplicates values. A_i reduces to ordinary live_vars_at past the PHI prefix.
+   For the initial block use the state after prepare_params_plan, not ps0.
+
+   IMPORTANT: do NOT require every spill key to belong to A_i immediately
+   after cleanup. inventory_ret_cleanup_spilled proves that cleanup leaves
+   all spills unchanged, including variables needed only by another successor.
+   PHI planning also does not release dead spills. The weak spill-universe
+   clause above is deliberate; restore only loads requested operands. After
+   a regular instruction release_dead_spills supplies the stronger live-spill
+   restriction. Coverage and physical upper support are different clauses.
+
+   Checked probes above cover unique-source PHI overwrite, PHI dead output
+   deletion, OFFSET support with a live output, and ready NOP identity.
+   regional_offset_dead_probe explains why OFFSET needs offset_outputs_used:
+   it pushes its result even when no variable is live. The two PHI probes
+   test the nonduplicating branch; regional_phi_live_source_probe below
+   tests live-source duplication. Full preservation still needs arbitrary
+   depths and phi_uses_disjoint/phi_operands_ready.
+
+   MISSING LOCAL PRESERVATION CONTRACTS (not axioms):
+   1. PHI: boundary inventory for A_i implies inventory for A_(i+1), with
+      exactly one available source and fresh output. The source is retained
+      precisely when live afterwards; a dead output is deleted.
+   2. Regular: boundary support/coverage/freshness, readiness, liveness transfer,
+      non-halting, and successful planning imply support/coverage for next_live.
+      emit_input_plan's pending operand list explains temporary duplication;
+      a last-use variable is consumed by the core pop. reorder/optimistic swap
+      must preserve the residual physical support despite possible spills.
+   3. JMP: after restoring/reordering all join inputs, boundary physical support
+      plus distinctness must exclude a variable prefix below the target suffix.
+      join_reached alone proves only the suffix, not the exclusion.
+   4. Parameters: prepare_params_plan establishes the entry body's invariant
+      from the initial empty stack, including dead-parameter deletion.
+
+   ENTRY HEIGHT CONTRACT (still UNPROVED): under the analyzed, ready,
+   successful whole-function plan, lookup, lineage_state and dfs_block_state
+   premises of block_plan_state_static, with a RET in bb.bb_instructions,
+     LENGTH ps_l.ps_stack <= LENGTH ps_dfs.ps_stack.
+   The cleanup override changes neither side's initial stack. Equality is
+   preferable if the eventual invariant gives it, but is not needed for the
+   signed whole-trace argument. regional_ownership_height_probe falsifies
+   deriving even this inequality from equal owned-variable sets alone.
+   lineage_entry_join_stack allows an arbitrary marker prefix, hence is not
+   a whole-stack height theorem. Required additional certificates are:
+   - actual regional DFS JMP finals have no extra prefix and contain all
+     edge inputs physically (no spill partition ambiguity);
+   - input_vars_from has the same length across predecessors of a ready join,
+     using PHI source disjointness and separation from non-PHI live inputs;
+   - lineage trace transport preserves height along a single-predecessor
+     edge, and at a join its height equals the canonical input cardinality.
+   These are global missing proofs, NOT consequences of the local probes.
+
+   DEPENDENCY MAP:
+   Existing: inventory_popmany_mem/distinct, inventory_ret_cleanup_support,
+   inventory_ret_cleanup_marker, ret_region_dfs_block_unpromised;
+   ready_block_ret_last and RET successor emptiness in RetRegion;
+   trace_weight / regular_correction / silent-core and reflection lemmas
+   in the existing accounting theory; lineage_entry_join_stack (admitted).
+   Missing: local contracts 1--4, endpoint liveness=[] for ready RET, actual
+   regional DFS support/marker origins, canonical join cardinality/partition,
+   the entry comparison, and full physical-fragment non-underflow/balance.
+   Only after these are proved can equal block_ops transport DFS exhaustion
+   to the arbitrary replay promise, then identify the RET final prefix state.
+*)
+
+Theorem regional_phi_live_source_probe:
+  !ps phi.
+    phi.inst_operands = [Var "source"; Var "other"] /\
+    phi.inst_outputs = ["result"] ==>
+    (SND (generate_phi_plan phi ["source"; "result"] F
+      (ps with ps_stack := [Var "source"]))).ps_stack =
+    [Var "source"; Var "result"]
+Proof
+  rpt strip_tac >> simp[generate_phi_plan_def, LET_THM] >> EVAL_TAC
+QED
