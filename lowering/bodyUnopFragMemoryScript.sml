@@ -476,7 +476,11 @@ Theorem compile_not_vv_sim_mem:
     expr_vv_sim_mem ctx func cenv cx ty (Builtin (expr_type e) Not [e]) es
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
-  irule body_expr_vv_sim_mem_stack >>
+  `is_word_type (expr_type (Builtin (expr_type e) Not [e]))` by
+    (simp[vyperASTTheory.expr_type_def] >>
+      qpat_x_assum `_ \/ _` (strip_assume_tac o MATCH_MP not_type_cases) >>
+      gvs[is_word_type_def]) >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   rpt conj_tac
   >~ [`compile_expr`] >- simp[compile_not_abs_stack]
   >~ [`eval_expr`] >- metis_tac[eval_expr_builtin_value] >>

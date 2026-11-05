@@ -16,22 +16,28 @@ Definition expr_store_bound_def:
            w2n w + val_store_size tv v <= s.vs_alloca_next
 End
 
-(* The same for a value_vv located in memory, whose whole region at its
-   located type also lies below the frontier: a staging copy reads that
-   type's full size, not just the value's footprint. *)
+(* The same for a value_vv held in memory: a located one, or a stack value
+   of non-word type, whose operand points at its data.  The whole region at
+   the located type (a stack value's: the expression's) also lies below the
+   frontier, since a staging copy reads that type's full size, not just the
+   value's footprint. *)
 Definition vv_store_bound_def:
   vv_store_bound cx t es tv vv s <=>
-    (!vt p v tvt w.
-      vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
+    (!vt op v tvt w.
+      ((?p. vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
+            p.ptr_operand = op) \/
+       ((?t'. vv = StackValue t' op) /\ ~is_word_type t)) /\
       read_result cx tv es = (INL v, es) /\
       evaluate_type (get_tenv cx) t = SOME tvt /\
-      eval_operand p.ptr_operand s = SOME w ==>
+      eval_operand op s = SOME w ==>
       val_store_size tvt v = 0 \/
       w2n w + val_store_size tvt v <= s.vs_alloca_next) /\
-    (!vt p tvt w.
-      vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
+    (!vt op tvt w.
+      ((?p. vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
+            p.ptr_operand = op) \/
+       ((?t'. vv = StackValue t' op) /\ vt = t /\ ~is_word_type t)) /\
       evaluate_type (get_tenv cx) vt = SOME tvt /\
-      eval_operand p.ptr_operand s = SOME w ==>
+      eval_operand op s = SOME w ==>
       type_memory_size tvt = 0 \/
       w2n w + type_memory_size tvt <= s.vs_alloca_next)
 End
@@ -51,10 +57,21 @@ Proof
   simp[val_store_size_def, valueEncodingTheory.type_memory_size_def]
 QED
 
-Theorem vv_store_bound_stack[simp]:
-  vv_store_bound cx t es tv (StackValue t' op) s
+Theorem vv_store_bound_stack_word:
+  is_word_type t ==> vv_store_bound cx t es tv (StackValue t' op) s
 Proof
   simp[vv_store_bound_def]
+QED
+
+(* A stack value's operand inherits the expression's store bound; the
+   expression's type needs no room when it is a word or has zero size. *)
+Theorem vv_store_bound_stack_value:
+  expr_store_bound cx t v op s /\
+  (~is_word_type t ==>
+   !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==> type_memory_size tvt = 0) ==>
+  vv_store_bound cx t es (Value v) (StackValue t' op) s
+Proof
+  rw[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def]
 QED
 
 Theorem vv_store_bound_nonmem:
