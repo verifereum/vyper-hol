@@ -61,5 +61,5 @@ Proof
   gvs[active_inst_def] >>
   `MEM a.po_inst bb.bb_instructions` by metis_tac[EL_MEM] >>
   `affine_pointer_ops a.po_fn (ptr_roots P a.po_fn)` by gvs[fn_ptr_ok_def] >>
-  drule_all ptr_tagged_affine_conditions >> simp[]
+  metis_tac[ptr_tagged_affine_conditions]
 QED
