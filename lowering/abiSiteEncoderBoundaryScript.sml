@@ -6,7 +6,7 @@ Ancestors
   abiDecoderProtectedScratch abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
   abiDecoderContract abiDecoderLoop abiDecoderIndexInit abiDecoderArrayHeader
   abiDecoderGuards venomMemProps compilerOccurrences abiDecoderSiteMembership
-  abiEncoderComplexCode emitHelperProps exprLoweringProps compileEnv
+  abiEncoderComplexCode fragExec instIdxIndep abiDecoderReentry emitHelperProps exprLoweringProps compileEnv
   context emitHelper venomExecSemantics venomState venomInst finite_map pred_set words list rich_list arithmetic
 
 Theorem abi_site_alloc_buffer_reentry_evolution:
@@ -243,6 +243,59 @@ Proof
      fs[abi_footprint_disjoint_def]) >>
   qexistsl_tac [`actual`, `slot`] >> asm_rewrite_tac[] >>
   simp_tac bool_ss [abi_site_encoder_effect_def] >> gvs[Abbr `B`]
+QED
+
+Definition abi_site_complex_prefix_post_def:
+  abi_site_complex_prefix_post (infos:(abi_enc_info # num # num # bool) list)
+      dyn_ptr st st' A limit_st d sz b cap initial actual <=>
+    ?slot. eval_operand dyn_ptr actual = SOME (n2w slot) /\
+      mload slot actual = n2w (SUM (MAP (\(_,asz,_,_). asz) infos)) /\
+      b <= slot /\ slot+32 <= b+cap /\
+      FLOOKUP actual.vs_allocas st.cs_next_id = SOME (slot,32) /\
+      abi_site_encoder_effect A st.cs_next_id st'.cs_next_id st.cs_next_var
+        limit_st d sz b cap initial actual
+End
+
+Theorem abi_site_complex_prefix_post_inst_idx[simp]:
+  abi_site_complex_prefix_post infos dyn_ptr st st' A limit_st d sz b cap initial
+    (actual with vs_inst_idx := ix) <=>
+  abi_site_complex_prefix_post infos dyn_ptr st st' A limit_st d sz b cap initial actual
+Proof
+  simp[abi_site_complex_prefix_post_def, abi_site_encoder_effect_def,
+    fresh_vars_wrt_def, abi_site_budget_def, abi_scratch_evolution_def,
+    eval_op_inst_idx, mload_def, abi_decode_footprint_frame_def]
+QED
+
+Theorem abi_site_complex_prefix_reach:
+  abi_encode_complex_prefix infos st = (dyn_ptr,st') /\ fn_has_code st st' func /\
+  abi_site_budget A b cap initial /\ st.cs_next_id IN A /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual. abi_site_complex_prefix_post infos dyn_ptr st st' A limit_st d sz b cap
+      initial actual /\
+    actual.vs_current_bb = st'.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+Proof
+  strip_tac >> drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  `isPREFIX st.cs_current_insts st'.cs_current_insts` by
+    fs[inst_extends_def, IS_PREFIX_APPEND] >>
+  `frag_exec ctx st st' (\s. s = initial)
+    (abi_site_complex_prefix_post infos dyn_ptr st st' A limit_st d sz b cap initial)
+    (K F)` by
+    (irule frag_exec_run_inst_seq >> asm_rewrite_tac[] >> simp_tac bool_ss [] >>
+     disj1_tac >>
+     drule_all abi_site_complex_prefix_effect >>
+     disch_then (qspecl_then [`sz`, `d`] strip_assume_tac) >>
+     qexists_tac `actual` >> simp_tac bool_ss [abi_site_complex_prefix_post_inst_idx] >>
+     simp_tac bool_ss [abi_site_complex_prefix_post_def] >> asm_rewrite_tac[] >>
+     qexists_tac `slot` >> gvs[]) >>
+  drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
+  rename1 `abi_decode_sim ctx func initial actual` >>
+  `~actual.vs_halted` by
+    fs[abi_site_complex_prefix_post_def, abi_site_encoder_effect_def] >>
+  qexists_tac `actual` >> asm_rewrite_tac[]
 QED
 
 

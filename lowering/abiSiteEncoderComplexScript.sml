@@ -6,8 +6,9 @@ Ancestors
   abiSiteEncoderBoundary abiEncoderComplexCode abiEncoderComplexDynamic
   abiEncoderComplexPrefix abiEncoderMembersInput abiEncoderTuple abiEncoderInput
   abiEncoderMemberCode abiEncoderMembersDefs
-  abiScratchAddress abiScratchEffect abiDecoderLoop abiDecoderContract
-  compileEnv valueEncoding contractABI venomState list arithmetic
+  abiScratchAddress abiScratchEffect abiDecoderLoop abiDecoderContract abiEncoderLoadReach
+  abiDecoderDynamicLoopSetup emitHelperProps
+  abiSiteAllocation compileEnv valueEncoding contractABI venomState words list arithmetic
 
 Theorem abi_site_members_run:
   EVERY (\(ei,_,_,_). abi_site_encoder ei) infos /\
@@ -76,6 +77,42 @@ Proof
   qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_inv_def]) >>
   qexists_tac `t` >> asm_simp_tac (srw_ss()) [eval_operand_def, Excl "enc_def"]
+QED
+
+Theorem abi_site_complex_finish:
+  abi_site_members_inv [] [] [] tys avs T dyn_ptr site slot A lo st limit_st
+    src dst sb so ho d hl output_size b cap encoded /\
+  emit_op MLOAD [dyn_ptr] st = (out,end_st) /\ fn_has_code st end_st func /\
+  end_st.cs_next_var <= limit_st.cs_next_var ==>
+  ?actual.
+    mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) actual.vs_memory =
+      enc (Tuple tys) (ListV avs) /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple tys) (ListV avs)))) /\
+    abi_site_encoder_effect A lo end_st.cs_next_id st.cs_next_var
+      limit_st d output_size b cap encoded actual /\
+    actual.vs_current_bb = end_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func encoded actual
+Proof
+  strip_tac >> drule abi_site_members_final_output >> strip_tac >>
+  qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_inv_def]) >>
+  qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  `site IN A` by (qpat_x_assum `T ==> site IN A` mp_tac >> simp[]) >>
+  drule_all abi_site_budget_site_bounds >> strip_tac >>
+  `slot < dimword (:256)` by decide_tac >>
+  mp_tac (Q.INST [`src` |-> `dyn_ptr`, `p` |-> `n2w slot:bytes32`,
+    `w` |-> `n2w (LENGTH (enc (Tuple tys) (ListV avs))):bytes32`, `st'` |-> `end_st`,
+    `initial` |-> `encoded:venom_state`] abi_encoder_load_reach) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [w2n_n2w] >> strip_tac >>
+  rename1 `abi_decode_sim ctx func encoded actual` >>
+  `abi_site_encoder_effect A lo end_st.cs_next_id st.cs_next_var
+      limit_st d output_size b cap encoded actual` by
+    (irule abi_site_address_effect >> asm_rewrite_tac[]) >>
+  qpat_assum `abi_decoder_address_frame _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
 
 val _ = List.app (fn (name,th) =>
