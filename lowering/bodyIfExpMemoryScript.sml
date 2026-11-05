@@ -461,6 +461,81 @@ Proof
        comp_bind_def] >> metis_tac[]
 QED
 
+Theorem ifexp_conditional_read_cases[local]:
+  !cx raw st res st'.
+    (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
+    read_result cx raw st = (res,st') \/
+    ?m. conditional_result cx raw st = (INR (Error (TypeError m)),st') /\
+        res = INR (Error (TypeError m))
+Proof
+  rpt gen_tac >> Cases_on `raw` >>
+  simp[conditional_result_def, read_result_def, bind_def, return_def, raise_def] >>
+  rename1 `place_type_value cx p st` >>
+  Cases_on `place_type_value cx p st` >> rename1 `place_type_value cx p st = (pr,pst)` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  Cases_on `pr` >> simp[]
+  >- (IF_CASES_TAC >> simp[read_result_def, bind_def, return_def] >>
+      Cases_on `read_place cx p pst` >> rename1 `read_place cx p pst = (rr,ss)` >>
+      Cases_on `rr` >> simp[read_result_def, return_def]) >>
+  Cases_on `p` >>
+  gvs[place_type_value_def, get_scopes_def, get_immutables_def,
+      get_address_immutables_def, bind_def, return_def, lift_option_type_def,
+      raise_def, AllCaseEqs()] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem ifexp_arm_conditional_read[local]:
+  read_result cx raw ee = (INL v,ee) /\
+  conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
+  ?tv. res = INL tv /\ ss = ee /\
+       read_result cx tv ee = (INL v,ee)
+Proof
+  rpt strip_tac >>
+  Cases_on `(do r <- conditional_result cx raw; read_result cx r od) ee` >>
+  drule ifexp_conditional_read_cases >> strip_tac >>
+  imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
+  gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_retained_read_typeerror_probe[local]:
+  !cx es.
+    ?st raw.
+      conditional_result cx raw st = (INL raw,st) /\
+      expr_vv_res_ok (INL raw) /\
+      read_result cx raw st =
+        (INR (Error (TypeError "evaluate_subscripts type")),st)
+Proof
+  rpt gen_tac >>
+  qexists_tac `es with scopes :=
+    [FEMPTY |+ ("x", <| assignable := T;
+       type := ArrayTV (ArrayTV (BaseTV BoolT) (Fixed 1)) (Fixed 1);
+       value := BoolV F; popped := [] |>)]` >>
+  qexists_tac `PlaceR (MemoryPlace "x" [ValueSubscript (IntV 0)])` >>
+  simp[conditional_result_def, expr_vv_res_ok_def, read_result_def,
+       place_type_value_def, read_place_def, get_scopes_def,
+       lookup_scopes_def, subscripts_type_def, subscript_type_def,
+       read_memory_path_def, evaluate_subscripts_def, read_popped_def,
+       bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
+       finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY] >> EVAL_TAC
+QED
+
+Theorem ifexp_read_conditional_cert[local]:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finstate) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (conditional_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finstate)
+Proof
+  strip_tac >>
+  `gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_expr cx e) (return ()))
+    (es,s0) marks (err,ee) (leaf,finstate)` by
+    (irule gas_exempt_cert_unforce_result >> simp[]) >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
+QED
+
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
