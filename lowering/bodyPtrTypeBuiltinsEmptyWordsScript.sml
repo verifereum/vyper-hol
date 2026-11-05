@@ -81,7 +81,7 @@ Theorem empty_zero_words_certificate:
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
       lookup_var p t = SOME w /\ ptr_covers H th p t sz /\
       th.t_mem = tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w+32*n} /\
-      th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\
+      th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
       (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
         FLOOKUP H q = FLOOKUP G q /\ op_taint th (Var q) = op_taint tn (Var q)) /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
@@ -121,6 +121,7 @@ Proof
   conj_tac >- suspend "memory" >>
   conj_tac >- suspend "storage" >>
   conj_tac >- suspend "transient" >>
+  conj_tac >- simp[] >>
   conj_tac >- suspend "old_vars" >>
   suspend "runtime"
 QED

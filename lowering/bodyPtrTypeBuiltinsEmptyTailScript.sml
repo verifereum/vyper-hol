@@ -17,7 +17,7 @@ Theorem empty_buffer_tail_certificate:
       lookup_var p t = SOME w /\ ptr_covers H th p t sz /\
       th.t_mem = tn.t_mem DIFF
         {i | w2n w <= i /\ i < w2n w+(if header then 32 else sz)} /\
-      th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\
+      th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
       (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
         FLOOKUP H q = FLOOKUP G q /\ op_taint th (Var q) = op_taint tn (Var q)) /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s

@@ -16,7 +16,7 @@ Theorem empty_zero_store_certificate:
         ptr_covers G tn' q (mstore (w2n w) 0w s) k) /\
       tn'.t_mem = tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w+32} /\
       tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
-      tn'.t_trans = tn.t_trans
+      tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
 Proof
   rpt gen_tac >> strip_tac >>
   `ptr_covers G tn p s 32` by
@@ -35,7 +35,8 @@ Proof
   disch_then (qspecl_then [`PG`, `G`, `tn`, `id`, `Lit 0w`, `0w`] mp_tac) >>
   simp[eval_operand_def, op_taint_def] >> strip_tac >>
   simp[inst_seq_ptr_def, ptr_inst_ok_mstore] >>
-  gvs[ptr_covers_def, op_taint_def, lookup_var_def, mstore_def]
+  gvs[ptr_covers_def, op_taint_def, lookup_var_def, mstore_def] >>
+  simp[step_taint_def, imm_taint_def, mk_inst_def]
 QED
 
 Theorem empty_zero_offset_coverage:

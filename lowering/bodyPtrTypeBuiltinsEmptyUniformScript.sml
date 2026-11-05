@@ -15,7 +15,7 @@ Theorem empty_zero_pair_cursor_frame:
       [mk_inst id ADD [Var p; Lit (n2w off)] [out];
        mk_inst (id+1) MSTORE [Var out; Lit 0w] []]
       (s with vs_inst_idx := k) H th) /\
-    th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans
+    th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `u = update_var out (w+n2w off) s` >>
@@ -33,7 +33,8 @@ Proof
   conj_tac >- suspend "cursor" >>
   simp[copy_len_binop_ghost_frame, Abbr `u`, Abbr `v`,
        mstore_ghost_frame, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-       eval_operand_def, op_taint_def]
+       eval_operand_def, op_taint_def] >>
+  simp[step_taint_def, imm_taint_def, mk_inst_def]
 QED
 
 Resume empty_zero_pair_cursor_frame[cursor]:
@@ -74,7 +75,7 @@ Theorem empty_zero_pair_uniform_certificate:
         [mk_inst id ADD [Var p; Lit (n2w off)] [out];
          mk_inst (id+1) MSTORE [Var out; Lit 0w] []]
         (s with vs_inst_idx := k) G' tn') /\
-      tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans
+      tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all empty_zero_pair_certificate >>

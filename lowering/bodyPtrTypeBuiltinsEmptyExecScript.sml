@@ -111,7 +111,7 @@ Theorem empty_buffer_prefixed_tail_certificate:
       lookup_var p t = SOME w /\ ptr_covers K tk p t sz /\
       tk.t_mem = th.t_mem DIFF
         {a | w2n w <= a /\ a < w2n w+(if header then 32 else sz)} /\
-      tk.t_stor = th.t_stor /\ tk.t_trans = th.t_trans /\
+      tk.t_stor = th.t_stor /\ tk.t_trans = th.t_trans /\ tk.t_imm = th.t_imm /\
       (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q u /\
         FLOOKUP K q = FLOOKUP H q /\ op_taint tk (Var q) = op_taint th (Var q))
 Proof
@@ -127,7 +127,7 @@ Proof
     lookup_var p v = SOME w /\ ptr_covers K tk p v sz /\
     tk.t_mem = th.t_mem DIFF
       {a | w2n w <= a /\ a < w2n w+(if header then 32 else sz)} /\
-    tk.t_stor = th.t_stor /\ tk.t_trans = th.t_trans /\
+    tk.t_stor = th.t_stor /\ tk.t_trans = th.t_trans /\ tk.t_imm = th.t_imm /\
     (!q. not_fresh_at sa q ==> lookup_var q v = lookup_var q u /\
       FLOOKUP K q = FLOOKUP H q /\ op_taint tk (Var q) = op_taint th (Var q))` by
     suspend "tail" >>
