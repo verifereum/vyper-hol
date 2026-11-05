@@ -1,6 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsRecoveryInput
 Ancestors bodyPtrPrecompileBuiltinsPrefixes bodyPtrPrecompileBuiltinsStaging
           bodyPtrPrecompileBuiltinsSeq bodyPtrPrecompileBuiltinsAllocationTransport
+          bodyPtrPrecompileBuiltinsObservations
           compileEnv context emitHelper exprLoweringProps fragExec
           venomExecSemantics venomState ptrDiscipline bodyPtrDefs
           finite_map list rich_list venomInst freshWrites
@@ -62,6 +63,8 @@ Theorem clean_input_prefix_extend:
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
   (!l. v <> Label l) /\ (!p. v = Var p ==> not_fresh_at sa p) /\
   not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx /\
+  (!i. ~(w2n b <= i /\ i < w2n b + off) ==>
+    mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
   tnu.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + off} /\
   tnu.t_stor = tn.t_stor /\ tnu.t_trans = tn.t_trans /\
   (!p. not_fresh_at sa p ==>
@@ -72,6 +75,8 @@ Theorem clean_input_prefix_extend:
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (code ++ emitted_insts sb sc)
       (s with vs_inst_idx := k) Gt tnt) /\
     ptr_covers Gt tnt bufroot t capacity /\ lookup_var bufroot t = SOME b /\
+    (!i. ~(w2n b <= i /\ i < w2n b + (off+32)) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
     tnt.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + (off+32)} /\
     tnt.t_stor = tn.t_stor /\ tnt.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -94,6 +99,16 @@ QED
 
 Resume clean_input_prefix_extend[compose]:
   qpat_x_assum `_ sb = ((),sc)` kall_tac >>
+  `w2n (b + n2w off) = w2n b + off` by
+    (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
+  `!i. ~(w2n b <= i /\ i < w2n b + (off+32)) ==>
+    mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+       (first_x_assum irule >> decide_tac) >>
+     `mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 u.vs_memory` by
+       (irule memory_observation_mstore >> goal_assum (drule_at Any) >>
+        simp[] >> decide_tac) >> simp[]) >>
   qpat_x_assum `s2.vs_memory = _` kall_tac >>
   conj_tac >- (rev_drule run_inst_seq_append >> simp[]) >>
   conj_tac
@@ -101,6 +116,7 @@ Resume clean_input_prefix_extend[compose]:
       reverse conj_tac >- simp[] >> qexistsl [`Gu`, `u`, `tnu`] >> simp[]) >>
   conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- simp[] >>
   conj_tac
   >- (`w2n (b + n2w off) = w2n b + off` by
         (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
@@ -146,6 +162,8 @@ Theorem recovery_input_staging_checked:
        emitted_insts sc sd ++ emitted_insts sd se)
       (s with vs_inst_idx := k) G' tn') /\
     ptr_covers G' tn' bufroot t 128 /\ lookup_var bufroot t = SOME b /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 128) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
     (!i. w2n b <= i /\ i < w2n b + 128 ==> i NOTIN tn'.t_mem) /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 128} /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
@@ -168,12 +186,17 @@ Proof
 QED
 
 Resume recovery_input_staging_checked[v]:
+  `!i. ~(w2n b <= i /\ i < w2n b + 32) ==>
+    mem_bytes_at i 1 s1.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >> irule memory_observation_mstore >> simp[] >>
+     qexistsl [`w2n b`, `wh`] >> simp[]) >>
   qpat_x_assum `s1 = _` kall_tac >>
   `!p. not_fresh_at sa p ==>
     lookup_var p s1 = lookup_var p s /\ FLOOKUP G p = FLOOKUP G p /\
     op_taint tn1 (Var p) = op_taint tn (Var p)` by simp[] >>
+  `32 + 32 <= 128` by simp[] >>
   drule_all (Q.INST [`off` |-> `32`, `capacity` |-> `128`]
-    clean_input_prefix_extend |> SRULE []) >>
+    clean_input_prefix_extend) >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s2` (qx_choose_then `G2`
     (qx_choose_then `tn2` strip_assume_tac))) >>
@@ -188,8 +211,10 @@ Resume recovery_input_staging_checked[r]:
   `sa.cs_next_var <= sc.cs_next_var /\
    EVERY (\i. ~is_terminator i.inst_opcode)
      (emitted_insts sa sb ++ emitted_insts sb sc)` by (simp[] >> decide_tac) >>
+  rule_assum_tac (PURE_REWRITE_RULE [EVAL ``32 + 32:num``]) >>
+  `64 + 32 <= 128` by simp[] >>
   drule_all (Q.INST [`off` |-> `64`, `capacity` |-> `128`]
-    clean_input_prefix_extend |> SRULE []) >>
+    clean_input_prefix_extend) >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s3` (qx_choose_then `G3`
     (qx_choose_then `tn3` strip_assume_tac))) >>
@@ -205,8 +230,10 @@ Resume recovery_input_staging_checked[q]:
    EVERY (\i. ~is_terminator i.inst_opcode)
      ((emitted_insts sa sb ++ emitted_insts sb sc) ++ emitted_insts sc sd)` by
     (simp[] >> decide_tac) >>
+  rule_assum_tac (PURE_REWRITE_RULE [EVAL ``64 + 32:num``]) >>
+  `96 + 32 <= 128` by simp[] >>
   drule_all (Q.INST [`off` |-> `96`, `capacity` |-> `128`]
-    clean_input_prefix_extend |> SRULE []) >>
+    clean_input_prefix_extend) >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s4` (qx_choose_then `G4`
     (qx_choose_then `tn4` strip_assume_tac))) >>

@@ -1,5 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsPrefixes
 Ancestors bodyPtrPrecompileBuiltinsTransfer bodyPtrPrecompileBuiltinsFreshFrame
+          bodyPtrPrecompileBuiltinsObservations
           freshWrites builtinMisc context emitHelper exprLoweringProps
           fragExec venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
           finite_map list rich_list compileEnv
@@ -74,6 +75,8 @@ Theorem emitted_point_pair_checked:
       (emitted_insts sa sb ++ emitted_insts sb sc)
       (s with vs_inst_idx := k) G' tn') /\
     ptr_covers G' tn' root t 64 /\ ptr_covers G' tn' bufroot t capacity /\
+    (!i. ~(w2n b + off <= i /\ i < w2n b + off + 64) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n b + off <= i /\ i < w2n b + off + 64} /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -134,6 +137,15 @@ QED
 
 Resume emitted_point_pair_checked[compose]:
   qpat_x_assum `_ sb = ((),sc)` kall_tac >>
+  `!i. ~(w2n b + off <= i /\ i < w2n b + off + 64) ==>
+    mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at i 1 s1.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+       (irule memory_observation_mstore >> goal_assum (drule_at Any) >>
+        simp[] >> decide_tac) >>
+     `mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s1.vs_memory` by
+       (irule memory_observation_mstore >> goal_assum (drule_at Any) >>
+        simp[] >> decide_tac) >> simp[]) >>
   qpat_x_assum `s1.vs_memory = _` kall_tac >>
   qpat_x_assum `s2.vs_memory = _` kall_tac >>
   rpt (qpat_x_assum `!i. _ ==> i NOTIN _` kall_tac) >>
@@ -144,6 +156,7 @@ Resume emitted_point_pair_checked[compose]:
       reverse conj_tac >- simp[] >> qexistsl [`G1`, `s1`, `tn1`] >> simp[]) >>
   conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
   conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
+  conj_tac >- simp[] >>
   conj_tac
   >- (simp[pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF,
            pred_setTheory.IN_GSPEC] >> gen_tac >>
@@ -179,6 +192,8 @@ Theorem ecmul_input_staging_checked:
       (s with vs_inst_idx := k) G' tn') /\
     ptr_covers G' tn' root t 64 /\ ptr_covers G' tn' bufroot t 96 /\
     lookup_var bufroot t = SOME b /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 96) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
     (!i. w2n b <= i /\ i < w2n b + 96 ==> i NOTIN tn'.t_mem) /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 96} /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
@@ -226,11 +241,19 @@ QED
 
 Resume ecmul_input_staging_checked[compose]:
   qpat_x_assum `_ sc = ((),sd)` kall_tac >>
-  qpat_x_assum `s2.vs_memory = _` kall_tac >>
   qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` kall_tac >>
   `w2n (b + n2w 64) = w2n b + 64` by
     (qspecl_then [`b`, `64`] mp_tac
       abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> simp[]) >>
+  `!i. ~(w2n b <= i /\ i < w2n b + 96) ==>
+    mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at i 1 s1.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+       (first_x_assum irule >> decide_tac) >>
+     `mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s1.vs_memory` by
+       (irule memory_observation_mstore >> goal_assum (drule_at Any) >>
+        simp[] >> decide_tac) >> simp[]) >>
+  qpat_x_assum `s2.vs_memory = _` kall_tac >>
   `tn2.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 96}` by
     (simp[pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF,
           pred_setTheory.IN_GSPEC] >> gen_tac >>
@@ -280,6 +303,8 @@ Theorem ecadd_input_staging_checked:
       (s with vs_inst_idx := k) G' tn') /\
     ptr_covers G' tn' root1 t 64 /\ ptr_covers G' tn' root2 t 64 /\
     ptr_covers G' tn' bufroot t 128 /\ lookup_var bufroot t = SOME b /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 128) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
     (!i. w2n b <= i /\ i < w2n b + 128 ==> i NOTIN tn'.t_mem) /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 128} /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
@@ -329,6 +354,13 @@ Resume ecadd_input_staging_checked[compose]:
   qpat_x_assum `_ sc = ((),sd)` kall_tac >>
   qpat_x_assum `_ sd = ((),se)` kall_tac >>
   rpt (qpat_x_assum `!i. _ ==> i NOTIN _` kall_tac) >>
+  `!i. ~(w2n b <= i /\ i < w2n b + 128) ==>
+    mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at i 1 s1.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+       (first_x_assum irule >> decide_tac) >>
+     `mem_bytes_at i 1 s2.vs_memory = mem_bytes_at i 1 s1.vs_memory` by
+       (first_x_assum irule >> decide_tac) >> simp[]) >>
   `tn2.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 128}` by
     (simp[pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF,
           pred_setTheory.IN_GSPEC] >> gen_tac >>
