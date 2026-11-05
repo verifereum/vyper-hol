@@ -632,3 +632,80 @@ Proof
        byteTheory.LENGTH_word_to_bytes, venomMemPropsTheory.dimindex_256,
        order_ptr_s20_memory_length]
 QED
+
+Theorem order_ptr_indices:
+  order_ptr_start.vs_inst_idx = 0 /\
+  order_ptr_s1.vs_inst_idx = 1 /\ order_ptr_s2.vs_inst_idx = 2 /\
+  order_ptr_s3.vs_inst_idx = 3 /\ order_ptr_s4.vs_inst_idx = 4 /\
+  order_ptr_s5.vs_inst_idx = 5 /\ order_ptr_s6.vs_inst_idx = 6 /\
+  order_ptr_s7.vs_inst_idx = 7 /\ order_ptr_s8.vs_inst_idx = 8 /\
+  order_ptr_s9.vs_inst_idx = 9 /\ order_ptr_s10.vs_inst_idx = 10 /\
+  order_ptr_s11.vs_inst_idx = 11 /\ order_ptr_s12.vs_inst_idx = 12 /\
+  order_ptr_s13.vs_inst_idx = 13 /\ order_ptr_s14.vs_inst_idx = 14 /\
+  order_ptr_s15.vs_inst_idx = 15 /\ order_ptr_s16.vs_inst_idx = 16 /\
+  order_ptr_s17.vs_inst_idx = 17 /\ order_ptr_s18.vs_inst_idx = 18 /\
+  order_ptr_s19.vs_inst_idx = 19 /\ order_ptr_s20.vs_inst_idx = 20 /\
+  order_ptr_s21.vs_inst_idx = 21 /\ order_ptr_s22.vs_inst_idx = 22
+Proof
+  conj_tac >- simp[order_ptr_start_def, order_run_indices] >>
+  map_every (fn d => conj_tac >- simp[d])
+    [order_ptr_s1_def, order_ptr_s2_def, order_ptr_s3_def, order_ptr_s4_def,
+     order_ptr_s5_def, order_ptr_s6_def, order_ptr_s7_def, order_ptr_s8_def,
+     order_ptr_s9_def, order_ptr_s10_def, order_ptr_s11_def, order_ptr_s12_def,
+     order_ptr_s13_def, order_ptr_s14_def, order_ptr_s15_def, order_ptr_s16_def,
+     order_ptr_s17_def, order_ptr_s18_def, order_ptr_s19_def, order_ptr_s20_def,
+     order_ptr_s21_def] >> simp[order_ptr_s22_def]
+QED
+
+Theorem order_ptr_index_updates:
+  (order_ptr_s1 with vs_inst_idx := 1) = order_ptr_s1 /\
+  (order_ptr_s2 with vs_inst_idx := 2) = order_ptr_s2 /\
+  (order_ptr_s3 with vs_inst_idx := 3) = order_ptr_s3 /\
+  (order_ptr_s4 with vs_inst_idx := 4) = order_ptr_s4 /\
+  (order_ptr_s5 with vs_inst_idx := 5) = order_ptr_s5 /\
+  (order_ptr_s6 with vs_inst_idx := 6) = order_ptr_s6 /\
+  (order_ptr_s7 with vs_inst_idx := 7) = order_ptr_s7 /\
+  (order_ptr_s8 with vs_inst_idx := 8) = order_ptr_s8 /\
+  (order_ptr_s9 with vs_inst_idx := 9) = order_ptr_s9 /\
+  (order_ptr_s10 with vs_inst_idx := 10) = order_ptr_s10 /\
+  (order_ptr_s11 with vs_inst_idx := 11) = order_ptr_s11 /\
+  (order_ptr_s12 with vs_inst_idx := 12) = order_ptr_s12 /\
+  (order_ptr_s13 with vs_inst_idx := 13) = order_ptr_s13 /\
+  (order_ptr_s14 with vs_inst_idx := 14) = order_ptr_s14 /\
+  (order_ptr_s15 with vs_inst_idx := 15) = order_ptr_s15 /\
+  (order_ptr_s16 with vs_inst_idx := 16) = order_ptr_s16 /\
+  (order_ptr_s17 with vs_inst_idx := 17) = order_ptr_s17 /\
+  (order_ptr_s18 with vs_inst_idx := 18) = order_ptr_s18 /\
+  (order_ptr_s19 with vs_inst_idx := 19) = order_ptr_s19 /\
+  (order_ptr_s20 with vs_inst_idx := 20) = order_ptr_s20 /\
+  (order_ptr_s21 with vs_inst_idx := 21) = order_ptr_s21 /\
+  (order_ptr_s22 with vs_inst_idx := 22) = order_ptr_s22
+Proof
+  map_every (fn d => conj_tac >- simp[d])
+    [order_ptr_s1_def, order_ptr_s2_def, order_ptr_s3_def, order_ptr_s4_def,
+     order_ptr_s5_def, order_ptr_s6_def, order_ptr_s7_def, order_ptr_s8_def,
+     order_ptr_s9_def, order_ptr_s10_def, order_ptr_s11_def, order_ptr_s12_def,
+     order_ptr_s13_def, order_ptr_s14_def, order_ptr_s15_def, order_ptr_s16_def,
+     order_ptr_s17_def, order_ptr_s18_def, order_ptr_s19_def, order_ptr_s20_def,
+     order_ptr_s21_def] >> simp[order_ptr_s22_def]
+QED
+
+Theorem order_ptr_exec_prefix:
+  !fuel ctx bb tail.
+    bb.bb_instructions = (SND order_ptr_compiled).cs_current_insts ++ tail ==>
+    exec_block fuel ctx bb order_ptr_start = exec_block fuel ctx bb order_ptr_s22
+Proof
+  rpt strip_tac >>
+  map_every (fn step =>
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [venomExecSemanticsTheory.exec_block_def])) >>
+    simp[order_ptr_indices, venomInstTheory.get_instruction_def,
+         order_ptr_instructions, venomExecSemanticsTheory.step_inst_def,
+         step, venomInstTheory.is_terminator_def,
+         order_ptr_index_updates])
+    [order_ptr_step0, order_ptr_step1, order_ptr_step2, order_ptr_step3,
+     order_ptr_step4, order_ptr_step5, order_ptr_step6, order_ptr_step7,
+     order_ptr_step8, order_ptr_step9, order_ptr_step10, order_ptr_step11,
+     order_ptr_step12, order_ptr_step13, order_ptr_step14, order_ptr_step15,
+     order_ptr_step16, order_ptr_step17, order_ptr_step18, order_ptr_step19,
+     order_ptr_step20, order_ptr_step21]
+QED
