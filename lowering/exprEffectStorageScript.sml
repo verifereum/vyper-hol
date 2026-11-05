@@ -125,6 +125,7 @@ Resume evaluate_effect_free_storage[builtin]:
   gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac result_array_length_state >> imp_res_tac lift_sum_state >>
   imp_res_tac get_accounts_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac precompile_call_success_state >> gvs[] >>
   Cases_on `es` >> gvs[supported_expr_exists_def] >>
   gvs[type_check_def, assert_def, vyperContextTheory.builtin_args_length_ok_def,
       return_def, raise_def] >> metis_tac[]
@@ -318,6 +319,7 @@ Resume evaluate_effect_free_source_fields[builtin]:
   gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac result_array_length_state >> imp_res_tac lift_sum_state >>
   imp_res_tac get_accounts_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac precompile_call_success_state >> gvs[] >>
   Cases_on `es` >> gvs[supported_expr_exists_def] >>
   gvs[type_check_def, assert_def, vyperContextTheory.builtin_args_length_ok_def,
       return_def, raise_def] >> metis_tac[]

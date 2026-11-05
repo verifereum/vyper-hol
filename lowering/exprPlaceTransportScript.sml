@@ -107,19 +107,6 @@ Proof
   simp[]
 QED
 
-(* Keeping the backend keeps both the decoded value and all dynamic length
-   slots used by range/liveness checks. No claim about popped storage. *)
-Theorem storage_holds_backend_transport:
-  storage_holds cx tr t (PlaceR (StoragePlace tr slot leaf)) w es /\
-  get_storage cx es2 tr = get_storage cx es tr ==>
-  storage_holds cx tr t (PlaceR (StoragePlace tr slot leaf)) w es2
-Proof
-  simp[storage_holds_def, read_result_def, read_place_def,
-       read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
-       bind_def, lift_option_def, vyperMiscTheory.option_CASE_rator,
-       return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
 
 (* Non-root paths of a dynamic local start beyond its exempt length word. *)
 Theorem mem_path_offset_dynamic_tail:
