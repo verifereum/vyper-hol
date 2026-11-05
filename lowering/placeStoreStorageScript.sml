@@ -1116,6 +1116,201 @@ Resume place_store_typed_word_path[post]:
 QED
 Finalise place_store_typed_word_path
 
+(* Lift a GAS-free emitted prefix without exposing continuation semantics. *)
+Theorem place_store_emitted_seq_path:
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  same_blocks sa sb /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0 /\
+  run_inst_seq (emitted_insts sa sb) s = OK u ==>
+  gas_marked_path F ctx func s 0
+    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX sb.cs_current_insts bb.bb_instructions` by
+    (gvs[fragExecTheory.fn_has_code_def, same_blocks_def] >> metis_tac[]) >>
+  `isPREFIX (emitted_insts sa sb)
+     (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `isPREFIX _ _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     qpat_x_assum `bb.bb_instructions = _` (fn th => rewrite_tac[th]) >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+                     rich_listTheory.DROP_LENGTH_APPEND] >>
+     qexists_tac `l` >> rewrite_tac[]) >>
+  drule_at (Pat `run_inst_seq _ _ = _`) tuple_run_inst_seq_gas_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  simp[gas_marked_path_def]
+QED
+
+Theorem place_store_copy_dynamic_path:
+  compile_copy_memory_dynamic dst src len sa = ((),sb) /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+  eval_operand len s = SOME w /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_marked_path F ctx func s 0
+    (OK ((mcopy (w2n d) (w2n a) (w2n w) s)
+          with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  sb.cs_current_bb = sa.cs_current_bb
+Proof
+  strip_tac >>
+  drule_all typedMemoryCopyTheory.typed_copy_dynamic_run_seq >> strip_tac >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    (qpat_x_assum `compile_copy_memory_dynamic _ _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_copy_memory_dynamic_def,
+          emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
+          emit_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >>
+     gvs[] >> simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+                   mk_inst_def]) >>
+  conj_tac >- (irule place_store_emitted_seq_path >> simp[] >> qexists_tac `sa` >> gvs[]) >>
+  gvs[same_blocks_def]
+QED
+
+Theorem place_store_copy_fixed_path:
+  compile_copy_memory dst src n sa = ((),sb) /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+  n < dimword (:256) /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_marked_path F ctx func s 0
+    (OK ((if n = 0 then s else mcopy (w2n d) (w2n a) n s)
+          with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  sb.cs_current_bb = sa.cs_current_bb
+Proof
+  Cases_on `n = 0`
+  >- (simp[contextTheory.compile_copy_memory_def, comp_return_def] >>
+      strip_tac >> gvs[] >>
+      `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
+        simp[venom_state_component_equality] >>
+      simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules]) >>
+  Cases_on `n` >> gvs[contextTheory.compile_copy_memory_def] >> strip_tac >>
+  drule_all valueCopyTheory.emit_mcopy_run >> strip_tac >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
+          emit_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >>
+     gvs[] >> simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+                   mk_inst_def]) >>
+  conj_tac >- (irule place_store_emitted_seq_path >> simp[] >> qexists_tac `sa` >> gvs[]) >>
+  gvs[same_blocks_def]
+QED
+
+Theorem place_store_offset_path:
+  compile_with_byte_offset ptr0 off sa = (op,sb) /\
+  eval_operand ptr0 s = SOME w /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      eval_operand op t = SOME (w + n2w off) /\
+      t.vs_memory = s.vs_memory /\
+      (!dst len. typedMemoryCopy$typed_copy_state_frame sa dst len s t) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> Cases_on `off = 0`
+  >- (gvs[contextTheory.compile_with_byte_offset_def, comp_return_def] >>
+      qexists_tac `s` >>
+      simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules,
+           wordsTheory.WORD_ADD_0,
+           typedMemoryCopyTheory.typed_copy_state_frame_def,
+           venom_state_component_equality,
+           typedMemoryCopyTheory.typed_copy_frame_def]) >>
+  drule_all typedMemoryCopyTheory.typed_copy_offset_run_seq >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq _ _ = OK u` >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    (qpat_x_assum `compile_with_byte_offset _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_with_byte_offset_def] >>
+     simp[emitHelperTheory.emit_op_def, comp_bind_def, fresh_var_def,
+          emit_def, comp_ignore_bind_def, emitHelperTheory.emit_inst_def, fresh_id_def,
+          comp_return_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `gas_marked_path F ctx func s 0
+     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule place_store_emitted_seq_path >> simp[] >>
+     qexists_tac `sa` >> gvs[]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  suspend "post"
+QED
+Resume place_store_offset_path[post]:
+  simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, same_blocks_def] >>
+  conj_tac
+  >- (simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
+           venom_state_component_equality,
+           typedMemoryCopyTheory.typed_copy_frame_def,
+           lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt strip_tac >>
+      `x <> STRING #"%" (toString sa.cs_next_var)` by
+        (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >> simp[]) >>
+  gvs[same_blocks_def]
+QED
+Finalise place_store_offset_path
+
+Theorem place_store_bytestring_path:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME d /\
+  mem_word_at (w2n a) s.vs_memory = n2w L /\
+  32 + 32 * word_size L < dimword (:256) /\
+  val_in_memory tv v (w2n a) s.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= 32 + 32 * word_size L /\
+  32 + 32 * word_size L <= type_memory_size tv /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory tv v (w2n d) t.vs_memory /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n d) (type_memory_size tv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all valueCopyTheory.store_bytestring_run_exact >> strip_tac >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    suspend "no_gas" >>
+  `gas_marked_path F ctx func s 0
+     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule place_store_emitted_seq_path >> simp[] >>
+     qexists_tac `sa` >> gvs[]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  suspend "post"
+QED
+Resume place_store_bytestring_path[no_gas]:
+  qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+  simp[contextTheory.compile_store_bytestring_def,
+       contextTheory.compile_bytestring_copy_len_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_return_def] >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]
+QED
+Resume place_store_bytestring_path[post]:
+  `val_in_memory tv v (w2n d) t.vs_memory` by
+    (asm_rewrite_tac[] >> irule valueCopyTheory.mcopy_val_in_memory >> simp[]) >>
+  `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `typedMemoryCopy$typed_copy_state_frame sa (w2n d) (type_memory_size tv) s
+     (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (simp[typedMemoryCopyTheory.typed_copy_state_frame_def] >>
+     conj_tac
+     >- (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+         simp[venom_state_component_equality]) >>
+     conj_tac
+     >- (simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
+     simp[typedMemoryCopyTheory.typed_copy_frame_def] >> conj_tac
+     >- (rpt strip_tac >> irule valueCopyTheory.mem_bytes_at_mcopy_disjoint >>
+         decide_tac) >>
+     simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+          MAX_DEF]) >>
+  gvs[same_blocks_def] >> metis_tac[]
+QED
+Finalise place_store_bytestring_path
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
