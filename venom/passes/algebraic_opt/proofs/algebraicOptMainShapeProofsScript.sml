@@ -926,3 +926,117 @@ Proof
        fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
   rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
+
+Theorem ao_prefix_order_cons[local]:
+  (!i j. i < j /\ j < LENGTH (h::xs) /\ P (EL j (h::xs)) ==>
+     P (EL i (h::xs))) <=>
+  ((!i j. i < j /\ j < LENGTH xs /\ P (EL j xs) ==> P (EL i xs)) /\
+   (P h \/ EVERY (\x. ~P x) xs))
+Proof
+  eq_tac
+  >- (strip_tac >> conj_tac
+      >- (rpt strip_tac >>
+          first_x_assum (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]) >>
+      Cases_on `P h` >> simp[EVERY_EL] >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
+  strip_tac >> rpt gen_tac >>
+  Cases_on `i` >> Cases_on `j` >> simp[] >>
+  rpt strip_tac >> gvs[EVERY_EL] >> metis_tac[]
+QED
+
+Theorem ao_prefix_order_split:
+  !xs.
+  (!i j. i < j /\ j < LENGTH xs /\ P (EL j xs) ==> P (EL i xs)) <=>
+  (?ps rest. xs = ps ++ rest /\ EVERY P ps /\ EVERY (\x. ~P x) rest)
+Proof
+  Induct >- simp[] >> gen_tac >>
+  rewrite_tac[ao_prefix_order_cons] >>
+  Cases_on `P h` >> simp[] >> eq_tac
+  >- (strip_tac >> gvs[] >> qexistsl [`h::ps`,`rest`] >> simp[]) 
+  >- (strip_tac >> Cases_on `ps` >> gvs[] >> metis_tac[]) 
+  >- (strip_tac >> qexistsl [`[]`,`h::xs`] >> simp[]) >>
+  strip_tac >> Cases_on `ps` >> gvs[] >>
+  qexistsl [`[]`,`xs`] >> simp[]
+QED
+
+Theorem ao_transform_insts_supply_no_phis:
+  EVERY (\i. i.inst_opcode <> PHI) insts /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+  EVERY (\i. i.inst_opcode <> PHI) outs
+Proof
+  strip_tac >> drule ao_transform_insts_supply_phis >>
+  gvs[GSYM FILTER_EQ_NIL]
+QED
+
+Theorem ao_transform_insts_supply_phi_prefix:
+  !insts s idx outs s'.
+    (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
+       (EL i insts).inst_opcode = PHI) /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    (!i j. i < j /\ j < LENGTH outs /\ (EL j outs).inst_opcode = PHI ==>
+       (EL i outs).inst_opcode = PHI)
+Proof
+  Induct >- simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  gnvs[ao_prefix_order_cons] >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts = (tail,s2)` >>
+  gnvs[Once ao_transform_insts_supply_def, Excl "LENGTH_APPEND"] >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`ao_transform_inst dfg ra lbl idx targets fr h =
+         [ao_resolve_iszero_inst targets h]` by
+        (irule ao_transform_inst_control_owner >> simp[]) >>
+      gvs[] >>
+      qpat_x_assum `!s idx outs s'. _` (qspecl_then [`s1`,`SUC idx`,`tail`,`s'`] mp_tac) >>
+      simp[] >> (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+      rpt gen_tac >> Cases_on `i` >> Cases_on `j` >>
+      simp[ao_resolve_iszero_inst_fields, GSYM arithmeticTheory.ADD1] >> metis_tac[]) >>
+  gvs[] >>
+  `EVERY (\i. i.inst_opcode <> PHI) (h::insts)` by simp[] >>
+  `EVERY (\i. i.inst_opcode <> PHI)
+      (ao_transform_inst dfg ra lbl idx targets fr h ++ tail)` by
+    (`ao_transform_insts_supply dfg ra lbl targets s idx (h::insts) =
+        (ao_transform_inst dfg ra lbl idx targets fr h ++ tail,s')` by
+       simp[Once ao_transform_insts_supply_def] >>
+     metis_tac[ao_transform_insts_supply_no_phis]) >>
+  qpat_x_assum `EVERY _ (_ ++ _)` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  pure_rewrite_tac[EVERY_EL] >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_last_only_front:
+  !xs.
+    (!i. i < LENGTH xs /\ P (EL i xs) ==> i = PRE (LENGTH xs)) <=>
+    EVERY (\x. ~P x) (FRONT xs)
+Proof
+  Induct >- simp[] >> gen_tac >> Cases_on `xs = []`
+  >- (gvs[] >> simp[FRONT_DEF]) >>
+  simp[FRONT_DEF] >>
+  eq_tac
+  >- (strip_tac >> conj_tac
+      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
+          Cases_on `xs` >> gvs[]) >>
+      first_x_assum (irule o iffLR) >> rpt strip_tac >>
+      first_x_assum (qspec_then `SUC i` mp_tac) >>
+      Cases_on `xs` >> gvs[]) >>
+  strip_tac >> gen_tac >> Cases_on `i` >> simp[] >>
+  first_x_assum (mp_tac o iffRL) >> simp[] >>
+  Cases_on `xs` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ao_transform_block_supply_well_formed:
+  bb_well_formed bb /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  bb_well_formed bb'
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  drule_all ao_transform_block_supply_last >> strip_tac >>
+  Cases_on `ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+    bb.bb_instructions` >>
+  gvs[ao_transform_block_supply_def, bb_well_formed_def] >>
+  gvs[ao_last_only_front] >>
+  conj_tac >- metis_tac[ao_transform_insts_supply_front] >>
+  metis_tac[ao_transform_insts_supply_phi_prefix]
+QED
