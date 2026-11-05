@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
-  vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
+  vfmAccountDeletion vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
   wordsLib
 
@@ -5845,6 +5845,151 @@ Proof
   drule_all asm_call_memory_pop_selectors >> strip_tac >>
   `ex <> NONE` by (strip_tac >> gvs[]) >>
   drule_all asm_call_memory_pop_failure_effects >> simp[]
+QED
+
+(* Exact list suffixes: proof-only interfaces, preserving order and duplicates. *)
+val call_pending_suffix = ``\(pending:address list) xs. ?added. xs = added ++ pending``;
+val call_pending_inv = ``\pending saved (s:execution_state).
+  ?active. active <> [] /\ s.contexts = active ++ saved /\
+    ^call_pending_suffix pending s.rollback.toDelete /\
+    EVERY (\p. ^call_pending_suffix pending (SND p).toDelete) active``;
+
+Theorem asm_call_pending_initial:
+  s.contexts = (child,crb)::saved /\
+  s.rollback.toDelete = pending /\ crb.toDelete = pending ==>
+  ^call_pending_inv pending saved s
+Proof
+  BETA_TAC >> strip_tac >> qexists_tac `[(child,crb)]` >> simp[] >>
+  qexists_tac `[]` >> simp[]
+QED
+
+Theorem asm_call_pending_projection:
+  ^call_pending_inv pending saved s /\ asm_call_saved_suffix saved t /\
+  t.rollback.toDelete = s.rollback.toDelete /\
+  MAP (\p. (SND p).toDelete) t.contexts =
+    MAP (\p. (SND p).toDelete) s.contexts ==>
+  ^call_pending_inv pending saved t
+Proof
+  simp[asm_call_saved_suffix_def] >> strip_tac >>
+  qexists_tac `active'` >> simp[] >>
+  `MAP (\p. (SND p).toDelete) active' =
+   MAP (\p. (SND p).toDelete) active` by gvs[] >>
+  `EVERY (\xs. ?added. xs = added ++ pending)
+     (MAP (\p. (SND p).toDelete) active')` suffices_by simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP]
+QED
+
+Theorem asm_call_pending_cp:
+  cp m /\ ^call_pending_inv pending saved s /\ m s = (r,t) ==>
+  ^call_pending_inv pending saved t
+Proof
+  BETA_TAC >> strip_tac >>
+  `s.contexts <> []` by (Cases_on `active` >> gvs[]) >>
+  qpat_x_assum `cp m` mp_tac >> simp[cp_def] >>
+  disch_then drule_all >> strip_tac >>
+  namedCases_on `active` ["", "head tail"] >> gvs[] >>
+  qexists_tac `(q',SND head)::tail` >> simp[]
+QED
+
+Theorem asm_call_pending_add_to_delete:
+  ^call_pending_inv pending saved s /\ add_to_delete address s = (r,t) ==>
+  ^call_pending_inv pending saved t
+Proof
+  simp[add_to_delete_def, return_def] >> strip_tac >> gvs[] >>
+  qexists_tac `active` >> simp[] >> qexists_tac `address::added` >> simp[]
+QED
+
+Theorem asm_call_pending_push_projection:
+  ^call_pending_inv pending saved s /\ asm_call_saved_suffix saved t /\
+  t.rollback.toDelete = s.rollback.toDelete /\
+  MAP (\p. (SND p).toDelete) t.contexts =
+    s.rollback.toDelete :: MAP (\p. (SND p).toDelete) s.contexts ==>
+  ^call_pending_inv pending saved t
+Proof
+  simp[asm_call_saved_suffix_def] >> strip_tac >>
+  qexists_tac `active'` >> simp[] >>
+  `MAP (\p. (SND p).toDelete) active' =
+   s.rollback.toDelete :: MAP (\p. (SND p).toDelete) active` by gvs[] >>
+  `EVERY (\xs. ?added. xs = added ++ pending)
+     (MAP (\p. (SND p).toDelete) active')` suffices_by simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP]
+QED
+
+Theorem asm_call_pending_proceed_call:
+  ^call_pending_inv pending saved s /\
+  proceed_call op sender address value ao az code stipend output s = (r,t) ==>
+  ^call_pending_inv pending saved t
+Proof
+  strip_tac >> `s.contexts <> []` by
+    (qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+     simp[] >> strip_tac >> Cases_on `active` >> gvs[]) >>
+  `asm_call_saved_suffix saved t` by
+    (drule_all proceed_call_push_structure >> strip_tac >>
+     qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+     simp[asm_call_saved_suffix_def] >> strip_tac >>
+     Cases_on `t.contexts` >> gvs[] >>
+     qexists_tac `h::active` >> simp[]) >>
+  drule_all proceed_call_deletion_projections >> strip_tac >>
+  irule asm_call_pending_push_projection >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_call_pending_proceed_create:
+  ^call_pending_inv pending saved s /\
+  proceed_create sender address value code gas s = (r,t) ==>
+  ^call_pending_inv pending saved t
+Proof
+  strip_tac >>
+  `s.contexts <> [] /\ asm_call_saved_suffix saved s` by
+    (qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+     simp[asm_call_saved_suffix_def] >> strip_tac >>
+     conj_tac >- (Cases_on `active` >> gvs[]) >> metis_tac[]) >>
+  `asm_call_saved_suffix saved t` by
+    (drule asm_call_saved_suffix_proceed_create >>
+     disch_then (qspecl_then [`value`,`sender`,`gas`,`code`,`address`] mp_tac) >>
+     simp[]) >>
+  drule_all proceed_create_deletion_projections >> strip_tac >>
+  irule asm_call_pending_push_projection >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_call_pending_pop_result:
+  ^call_pending_inv pending saved s /\
+  s.contexts = head::tail /\
+  (t.rollback.toDelete = s.rollback.toDelete \/
+   t.rollback.toDelete = (SND head).toDelete) ==>
+  ^call_pending_suffix pending t.rollback.toDelete
+Proof
+  BETA_TAC >> strip_tac >> namedCases_on `active` ["", "first others"] >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem asm_call_pending_pop:
+  ^call_pending_inv pending saved s /\ asm_call_saved_suffix saved t /\
+  2 <= LENGTH s.contexts /\ pop_and_incorporate_context success s = (r,t) ==>
+  ^call_pending_inv pending saved t
+Proof
+  strip_tac >> drule_all pop_context_deletion_projections >> strip_tac >>
+  qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `asm_call_saved_suffix saved t` mp_tac >>
+  simp[asm_call_saved_suffix_def] >> strip_tac >>
+  namedCases_on `active` ["", "first others"] >> gvs[] >>
+  `MAP (\p. (SND p).toDelete) active' =
+   MAP (\p. (SND p).toDelete) others` by gvs[] >>
+  `EVERY (\xs. ?added. xs = added ++ pending)
+     (MAP (\p. (SND p).toDelete) active')` suffices_by simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP]
+QED
+
+Theorem asm_call_pending_final_handler:
+  ^call_pending_inv pending saved s /\ handle_exception ex s = (r,t) ==>
+  ^call_pending_suffix pending t.rollback.toDelete
+Proof
+  strip_tac >> `s.contexts <> []` by
+    (qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+     simp[] >> strip_tac >> Cases_on `active` >> gvs[]) >>
+  drule_all handle_exception_deletion_projections >> strip_tac >>
+  irule asm_call_pending_pop_result >>
+  Cases_on `s.contexts` >> gvs[] >> metis_tac[]
 QED
 
 Theorem asm_frame_call_step:
