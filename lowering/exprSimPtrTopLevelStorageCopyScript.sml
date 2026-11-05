@@ -1241,3 +1241,62 @@ Proof
   `LENGTH pre + SUC s.vs_inst_idx = SUC (LENGTH pre + s.vs_inst_idx)` by decide_tac >>
   simp[inst_seq_ptr_def, arithmeticTheory.ADD_CLAUSES] >> metis_tac[]
 QED
+
+Theorem toplevel_copy_run_split:
+  run_inst_seq (pre ++ post) s = OK r ==>
+  ?t. run_inst_seq pre s = OK t /\ run_inst_seq post t = OK r
+Proof
+  strip_tac >>
+  Cases_on `?t. run_inst_seq pre s = OK t`
+  >- (gvs[] >> drule exprLoweringPropsTheory.run_inst_seq_append >>
+      disch_then (qspec_then `post` assume_tac) >> metis_tac[]) >>
+  `!t. run_inst_seq pre s <> OK t` by metis_tac[] >>
+  drule exprLoweringPropsTheory.run_inst_seq_append_err >>
+  disch_then (qspec_then `post` assume_tac) >> metis_tac[]
+QED
+
+Theorem toplevel_copy_body_counter_ghost:
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  FLOOKUP G cv = NONE /\ op_taint tn (Var cv) = {} /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+  FLOOKUP Gf cv = NONE /\ op_taint tnf (Var cv) = {}
+Proof
+  strip_tac >>
+  qabbrev_tac `pre = TAKE 5 code` >>
+  qabbrev_tac `post = DROP 5 code` >>
+  `code = pre ++ post` by simp[Abbr `pre`, Abbr `post`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+   EVERY (\i. ~MEM cv i.inst_outputs) pre` by
+    (Cases_on `loc = LocStorage` >>
+     gvs[Abbr `pre`, mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+  `?t. run_inst_seq pre s = OK t /\ run_inst_seq post t = OK r` by
+    (irule toplevel_copy_run_split >> metis_tac[]) >>
+  `?Gm tnm. inst_seq_ptr D 0 ctx fn PG G tn pre s Gm tnm /\
+    inst_seq_ptr D 0 ctx fn PG Gm tnm post
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH pre) Gf tnf` by
+    (irule toplevel_copy_seq_split >> metis_tac[]) >>
+  `FLOOKUP Gm cv = NONE /\ op_taint tnm (Var cv) = {}` by
+    (drule_all toplevel_copy_seq_register_frame >> simp[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) post` by
+    gvs[Abbr `post`, mk_inst_def, is_terminator_def] >>
+  `run_inst_seq post (t with vs_inst_idx := s.vs_inst_idx + LENGTH pre) =
+    OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH pre)` by
+    simp[fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+  `post = [mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst ((id+5)+1) ASSIGN [Var nv] [cv]]` by
+    gvs[Abbr `post`] >>
+  `cv <> nv` by gvs[] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ post _ _ _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  qpat_x_assum `run_inst_seq post (_ with vs_inst_idx := _) = _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  drule_all toplevel_copy_counter_suffix_ghost >> simp[]
+QED
