@@ -415,3 +415,59 @@ Proof
     [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
   simp[]
 QED
+
+Theorem word_abs_runtime_memory:
+  mem_agree_outside {} word_abs_runtime_s0.vs_memory mem ==>
+  val_in_memory (BaseTV (IntT 256)) (IntV 1) 0 mem
+Proof
+  strip_tac >> irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  conj_tac >- EVAL_TAC >>
+  qexistsl_tac [`32`, `word_abs_runtime_s0.vs_memory`] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac
+  >- (irule abiDecodeStaticPropsTheory.mem_bytes_at_bytewise >>
+      gvs[mem_agree_outside_def]) >>
+  EVAL_TAC >> simp[wordsTheory.w2n_n2w]
+QED
+
+Theorem word_abs_runtime_ghost:
+  FLOOKUP G "%11" = SOME (0,32) ==>
+  ghost_inv NONE word_abs_runtime_frame_cenv word_abs_runtime_cx
+    word_abs_runtime_es G entry_taint word_abs_runtime_s0
+Proof
+  strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_abs_runtime_s0``, ``ptr_covers``, ``val_in_memory``,
+     ``mem_agree_outside``, ``function_selector``, ``calldata_method_id``,
+     ``vyper_to_abi_types``]) >>
+  rw[AllCaseEqs()] >> gvs[]
+  >- (simp[ptr_covers_def, ptrDisciplineTheory.op_taint_def,
+           word_abs_runtime_s0_def, venomStateTheory.init_venom_state_def,
+           venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `w = 0w` by gvs[word_abs_runtime_s0_def,
+    venomStateTheory.init_venom_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[] >> irule word_abs_runtime_memory >> simp[]
+QED
+
+Theorem word_abs_runtime_state:
+  state_rel word_abs_runtime_func word_abs_runtime_frame_cenv
+    word_abs_runtime_cx word_abs_runtime_es word_abs_runtime_s0
+Proof
+  irule word_abs_runtime_state_rel >> irule word_abs_runtime_locals >>
+  irule word_abs_runtime_local_backed
+QED
+
+Theorem word_abs_runtime_local_reserved:
+  local_ptrs_reserved word_abs_runtime_frame_cenv word_abs_runtime_sa
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_abs_runtime_func``, ``function_selector``, ``calldata_method_id``,
+     ``vyper_to_abi_types``, ``not_fresh_at``]) >>
+  rw[AllCaseEqs()] >> gvs[] >>
+  `"11" = toString (11:num)` by EVAL_TAC >>
+  pop_assum SUBST1_TAC >>
+  simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+  qpat_x_assum `toString n = toString 11` mp_tac >>
+  pure_rewrite_tac[ASCIInumbersTheory.toString_inj] >>
+  strip_tac >> gvs[]
+QED
