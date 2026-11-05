@@ -6,7 +6,12 @@ Ancestors concretizePtrProtectedLivesets concretizePtrTokenInterval
   concretizePtrChronologicalHistory concretizePtrOwnerPath
   concretizePtrStageReserved concretizePtrWriteTransport
   concretizePtrSourceOwnership concretizePtrActivationBirths
-  concretizePtrActivationChronology option pair
+  concretizePtrActivationChronology concretizePtrHistoryCfg
+  concretizePtrExecutedCoverage concretizePtrAllocationSize
+  concretizePtrImportOrigins concretizePtrStagePlacements
+  concretizeMemLocProofs concretizeMemLocDefs
+  staticLayoutAllocatorProofs o1PassContract venomPassDispatcher
+  contextCodegenRel venomWf venomInst option pair
   list rich_list finite_map arithmetic
 
 (* Keep the initializing writer selected by ProtectedLivesets: token
@@ -297,3 +302,102 @@ Proof
   asm_rewrite_tac[]
 QED
 
+
+Theorem ptr_demand_owner_layout:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\ A = EL j h /\
+  e <= LENGTH A.po_stack /\ owner = (ptr_owner_view e A).cf_fn /\
+  FLOOKUP (ptr_owner_view e A).cf_state.vs_allocas xid = SOME (xb,xsz) /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP positions (Allocation xid) = SOME (xp,xsz) /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) obs st owner result /\
+  lookup_function owner.fn_name C.ctx_functions = SOME owner /\
+  lookup_function owner.fn_name C'.ctx_functions = SOME result.fpo_function /\
+  ctx_fn_names obs.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' owner obs ==>
+  owner.fn_eom = NONE /\ fn_ptr_ok P owner /\ wf_function owner /\
+  ssa_form owner /\ all_reachable owner /\ fn_inst_wf owner /\
+  EVERY inst_wf (fn_insts owner) /\ ptr_history_cfg_ok owner (cfg_analyze owner) /\
+  MEM (Allocation xid,xp,xsz) result.fpo_function.fn_mems_used /\
+  ?reserved items.
+    concretize_function_fuel_in_context (concretize_memloc_fuel owner)
+      obs.cu_context reserved owner = SOME result.fpo_function /\
+    static_alloca_items owner = SOME items /\ MEM (Allocation xid,xsz) items /\
+    (!c p size. MEM (c,p,size) (imported_mems_used obs.cu_context owner) ==>
+      ~MEM c (MAP (\i. Allocation i.inst_id)
+        (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts owner))))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qhdtm_x_assum `ptr_demand_interval` mp_tac >>
+  pure_rewrite_tac[ptr_demand_interval_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `MEM owner C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `owner.fn_eom = NONE /\ fn_ptr_ok P owner /\ wf_function owner /\
+   ssa_form owner /\ all_reachable owner /\ fn_inst_wf owner /\
+   EVERY inst_wf (fn_insts owner)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `ptr_history_cfg_ok owner (cfg_analyze owner)` by
+    metis_tac[ptr_history_cfg_analyze_ok] >>
+  asm_rewrite_tac[] >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  `ptr_observation_reachable vs C A` by
+    (drule ptr_chrono_history_reachable >> simp[EVERY_EL] >>
+     disch_then (qspec_then `j` mp_tac) >> asm_rewrite_tac[] >> simp[]) >>
+  `frame_reachable vs C A.po_stack A.po_params A.po_prov A.po_taint
+    A.po_fn A.po_inst A.po_state` by
+    fs[ptr_observation_reachable_def] >>
+  drule_all ptr_frame_table_source >> strip_tac >>
+  drule_all ptr_frame_sizes >> strip_tac >>
+  `ptr_table_source owner (ptr_owner_view e A).cf_state /\
+   alloca_sizes_match owner (ptr_owner_view e A).cf_state` by
+    (Cases_on `e = LENGTH A.po_stack`
+     >- (simp[ptr_owner_view_def] >> metis_tac[]) >>
+     `MEM (ptr_owner_view e A) A.po_stack` by
+       (simp[ptr_owner_view_def] >> irule EL_MEM >>
+        qpat_x_assum `A = EL j h` (fn th => fs[th]) >> decide_tac) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `?i. MEM i (fn_insts owner) /\ i.inst_opcode = ALLOCA /\
+       i.inst_id = xid` by metis_tac[ptr_table_source_def] >>
+  `xsz = get_alloca_size owner (Allocation xid)` by
+    metis_tac[alloca_sizes_match_def] >>
+  `fn_inst_ids_distinct owner` by fs[wf_function_def] >>
+  `?reserved. concretize_function_fuel_in_context (concretize_memloc_fuel owner)
+    obs.cu_context reserved owner = SOME result.fpo_function` by
+    (qpat_x_assum `fn_pass_step _ _ obs st owner result` mp_tac >>
+     simp[fn_pass_step_def, execute_configured_fn_pass_concretize,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  drule_all ptr_concretize_static_items >> strip_tac >>
+  `MEM (Allocation xid,xsz) items` by
+    (drule_all static_alloca_items_ALLOCA_exact >> strip_tac >>
+     rename1 `i.inst_operands = [Lit n]` >>
+     `xsz = w2n n` by metis_tac[ptr_alloca_inst_size] >>
+     drule static_alloca_items_MEM >>
+     disch_then (qspec_then `(Allocation xid,xsz)` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `MEM (Allocation xid,xp,xsz) result.fpo_function.fn_mems_used` by
+    (drule_all ptr_step_alloca_mems >> strip_tac >>
+     `MEM result.fpo_function C'.ctx_functions` by
+       metis_tac[lookup_function_MEM] >>
+     `FLOOKUP positions (Allocation xid) = SOME (p,xsz)` by
+       (fs[ptr_stage_placements_def] >> metis_tac[]) >>
+     metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+  `!c p size. MEM (c,p,size) (imported_mems_used obs.cu_context owner) ==>
+    ~MEM c (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts owner)))` by
+    (rpt gen_tac >> strip_tac >>
+     pure_rewrite_tac[MEM_MAP, MEM_FILTER] >>
+     CONV_TAC (DEPTH_CONV BETA_CONV) >> strip_tac >>
+     rename1 `is_alloca_op z.inst_opcode` >>
+     `z.inst_opcode = ALLOCA` by
+       (qpat_x_assum `is_alloca_op z.inst_opcode` mp_tac >>
+        Cases_on `z.inst_opcode` >> simp[is_alloca_op_def]) >>
+     drule_all ptr_stage_local_not_imported >>
+     simp[MEM_MAP] >> qexists_tac `(c,p,size')` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `xsz = _` SUBST_ALL_TAC >>
+  qpat_x_assum `owner = _` SUBST_ALL_TAC >>
+  qpat_x_assum `A = EL j h` SUBST_ALL_TAC >>
+  asm_rewrite_tac[] >> qexistsl [`reserved`,`items`] >>
+  metis_tac[]
+QED
