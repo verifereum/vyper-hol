@@ -108,3 +108,61 @@ Proof
   qspecl_then [`k`, `m`] assume_tac scalar_flag_to_bytes32 >>
   `!w:bytes32. w << 0 = w` by wordsLib.WORD_DECIDE_TAC >> simp[]
 QED
+
+Theorem scalar_int_address_result_frag_mem:
+  !ctx func cenv cx src i es0.
+    -&(2**255) <= i /\ i < &(2**256) ==>
+    unop_frag_mem ctx func cenv cx
+      (\x. compile_type_convert x ConvToAddress)
+      (i2w i) (BaseT AddressT)
+      (convert_result cx src (BaseT AddressT) (IntV i)) es0
+Proof
+  rpt strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  irule unop_frag_mem_straight >>
+  simp[straight_fresh_convert_scalar, is_word_type_def] >>
+  Cases_on `within_int_bound (Unsigned 160) i` >> simp[]
+  >- suspend "success" >> suspend "abort"
+QED
+
+Resume scalar_int_address_result_frag_mem[success]:
+  strip_tac >> qexists_tac `i2w i` >>
+  `0 <= i /\ i < &(2**160)` by fs[within_int_bound_ineq] >>
+  `i = &Num i` by intLib.ARITH_TAC >>
+  `Num i < 2**160` by (fs[] >> intLib.ARITH_TAC) >>
+  conj_tac
+  >- (qpat_x_assum `i = &Num i` SUBST1_TAC >> simp[evaluate_type_def, i2w_pos] >>
+      `LENGTH (word_to_bytes (n2w (Num i):address) T) = 20` by
+        simp[byteTheory.LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:160)``] >>
+      mp_tac (Q.INST [`a` |-> `n2w (Num i)`] valueEncodingProofsTheory.val_to_w256_address) >>
+      simp[typed_val_to_w256_def, val_to_w256_def, i2w_pos, w2w_def, w2n_n2w,
+           dimword_def, fcpLib.INDEX_CONV ``dimindex(:160)``] >> fs[]) >>
+  rpt strip_tac >> gvs[compile_type_convert_def] >>
+  irule scalar_int_clamp_word_ok >> simp[] >>
+  qexistsl_tac [`160`, `F`, `x`] >>
+  simp[compile_int_clamp_def] >>
+  `i = &Num i` by intLib.ARITH_TAC >>
+  qpat_x_assum `i = &Num i` SUBST1_TAC >>
+  simp[i2w_pos, w2n_n2w, dimword_def, in_type_range_def,
+       type_bounds_def, is_signed_type_def, type_bits_def] >> intLib.ARITH_TAC
+QED
+
+Resume scalar_int_address_result_frag_mem[abort]:
+  strip_tac >> rpt strip_tac >> gvs[compile_type_convert_def] >>
+  irule scalar_int_clamp_word_abort >> simp[] >>
+  qexistsl_tac [`160`, `op`, `F`, `i2w i`, `x`] >>
+  `~within_int_bound (Unsigned 160) (&w2n (i2w i:bytes32))` by
+    (`(&w2n (i2w i:bytes32):int) = i % &(2**256)` by
+       simp[w2n_i2w, dimword_def] >>
+     asm_rewrite_tac[] >> Cases_on `0 <= i`
+     >- (`i % &(2**256) = i` by
+           (irule integerTheory.INT_MOD_UNIQUE >> qexists_tac `0` >>
+            fs[] >> intLib.ARITH_TAC) >> fs[]) >>
+     `i % &(2**256) = i + &(2**256)` by
+       (irule integerTheory.INT_MOD_UNIQUE >>
+        qexists_tac `-1` >> fs[] >> intLib.ARITH_TAC) >>
+     fs[within_int_bound_ineq] >> intLib.ARITH_TAC) >>
+  gvs[in_type_range_def, type_bits_def, is_signed_type_def,
+      within_int_bound_ineq, compile_int_clamp_def]
+QED
+Finalise scalar_int_address_result_frag_mem
