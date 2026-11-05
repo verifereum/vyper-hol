@@ -925,6 +925,71 @@ Proof
        init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
 QED
 
+Theorem ready_join_pred_jmp[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==>
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `wf_function fn /\ block_entries_ready (cfg_analyze fn) fn` by
+    gvs[codegen_ready_fn_def] >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond] >>
+  gvs[block_entries_ready_def, EVERY_MEM] >>
+  qpat_x_assum `!bb. MEM bb _ ==> _` (qspec_then `bb` mp_tac) >>
+  simp[] >> strip_tac >> gvs[EVERY_MEM] >>
+  qpat_x_assum `!p. MEM p _ ==> _` (qspec_then `pred` mp_tac) >> simp[NULL_EQ]
+QED
+
+Theorem ready_join_pred_succs[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==>
+  cfg_succs_of (cfg_analyze fn) pred = [lbl]
+Proof
+  strip_tac >> drule_all ready_join_pred_jmp >> strip_tac >>
+  `MEM pb fn.fn_blocks /\ pb.bb_label = pred` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `wf_function fn /\ fn_inst_wf fn` by gvs[codegen_ready_fn_def] >>
+  `MEM (LAST pb.bb_instructions) pb.bb_instructions` by
+    (Cases_on `pb.bb_instructions` >> gvs[rich_listTheory.MEM_LAST]) >>
+  `inst_wf (LAST pb.bb_instructions)` by
+    metis_tac[fn_inst_wf_def] >>
+  `?target. (LAST pb.bb_instructions).inst_operands = [Label target]` by
+    gvs[inst_wf_def] >>
+  `bb_succs pb = [target]` by
+    (Cases_on `pb.bb_instructions` >>
+     gvs[bb_succs_def, get_successors_def, is_terminator_def,
+         venomStateTheory.get_label_def, listTheory.nub_def]) >>
+  `cfg_succs_of (cfg_analyze fn) pred = [target]` by
+    metis_tac[cfg_analyze_preserves_bb_succs] >>
+  `MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
+    metis_tac[fn_cfg_edge_cfg_analyze] >> gvs[]
+QED
+
+Theorem ready_join_live_out[local]:
+  codegen_ready_fn fn /\ fn_reachable fn pred /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==>
+  (MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) <=>
+   MEM v (input_vars_from pred bb.bb_instructions
+     (live_vars_at (liveness_analyze fn) lbl 0)))
+Proof
+  strip_tac >> drule_all ready_join_pred_succs >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  drule_all liveness_convergence >>
+  simp[livenessBlockProofsTheory.liveness_instrs_def,
+       livenessBlockProofsTheory.liveness_out_def,
+       liveness_edge_transfer_def, same_vars_set, pred_setTheory.EXTENSION,
+       live_vars_at_def, list_union_mem]
+QED
+
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
    reorder's target, the predecessor-side PHI sources and the live-in
    variables; a source may be an output of the join itself (a loop header
