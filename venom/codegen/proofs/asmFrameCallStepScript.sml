@@ -4840,6 +4840,39 @@ Proof
   qexists_tac `h::active` >> simp[]
 QED
 
+Theorem asm_call_saved_suffix_abort_create_exists:
+  !s. asm_call_saved_suffix saved s ==>
+  asm_call_saved_suffix saved (SND (abort_create_exists senderAddress s))
+Proof
+  rewrite_tac[abort_create_exists_def] >>
+  ho_match_mp_tac asm_call_saved_suffix_ignore_bind >> conj_tac
+  >- simp[asm_call_saved_suffix_def, update_accounts_contexts]
+  >> ho_match_mp_tac asm_call_saved_suffix_ignore_bind >> conj_tac >>
+  gen_tac >> qmatch_goalsub_abbrev_tac `SND (action s)` >>
+  `preserves_same_frame action` by simp[Abbr `action`] >>
+  drule asm_call_saved_suffix_psf >> simp[]
+QED
+
+Theorem asm_call_saved_suffix_step_create:
+  !s. asm_call_saved_suffix saved s ==>
+  asm_call_saved_suffix saved (SND (step_create two s))
+Proof
+  rewrite_tac[step_create_def] >> simp_tac (srw_ss()) [LET_THM] >>
+  rpt (FIRST [
+    ho_match_mp_tac asm_call_saved_suffix_bind >> conj_tac,
+    ho_match_mp_tac asm_call_saved_suffix_ignore_bind >> conj_tac,
+    (qmatch_goalsub_abbrev_tac `SND (action s)` >>
+     `preserves_same_frame action` by simp[Abbr `action`] >>
+     drule asm_call_saved_suffix_psf >> simp[] >> NO_TAC),
+    (simp[asm_call_saved_suffix_proceed_create,
+          asm_call_saved_suffix_abort_create_exists] >> NO_TAC),
+    (qid_spec_tac `s` >> ho_match_mp_tac asm_call_saved_suffix_bind >> conj_tac),
+    (qid_spec_tac `s` >> ho_match_mp_tac asm_call_saved_suffix_ignore_bind >> conj_tac),
+    gen_tac,
+    IF_CASES_TAC,
+    CHANGED_TAC (simp_tac (srw_ss()) [LET_THM])])
+QED
+
 (* The saved suffix is intentionally unconstrained: the caller need not be static. *)
 Theorem asm_call_cp_static_prefix:
   cp f /\ f s = (r,t) /\ active <> [] /\
