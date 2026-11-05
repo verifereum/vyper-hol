@@ -2,7 +2,7 @@
 Theory forPtrAdmin
 Ancestors forPtrBoundary allocationPtr ghostPcTransportPtr fragExecPtr
   venomInst venomExecProofs ptrDiscipline finite_map venomState ptrSafeRun
-  codegenRel contextCodegenRel venomExecSemantics
+  codegenRel contextCodegenRel venomExecSemantics typedCopyPtr
 
 Theorem straight_line_zero_path_ptr:
   ~s.vs_halted /\
@@ -158,4 +158,26 @@ Proof
        written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
        range_bytes_def, mk_inst_def, taint_component_equality,
        first_prov_def, eval_operand_def]
+QED
+
+Theorem copy_len_binop_zero_path_ptr:
+  (opc = ADD \/ opc = AND) /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id opc [left;right] [out]) /\
+  step_inst_base (mk_inst id opc [left;right] [out]) s = OK u ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (step_prov PG G (mk_inst id opc [left;right] [out]) u)
+    (step_taint (mk_inst id opc [left;right] [out]) s u tn)
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `ptr_inst_ok D 0 0 ctx fn G tn
+     (mk_inst id opc [left;right] [out]) s` by
+    (irule ptr_inst_ok_copy_len_binop >> simp[]) >>
+  irule straight_line_zero_path_ptr >>
+  simp[GSYM mk_inst_def] >>
+  Cases_on `opc = ADD` >> gvs[is_terminator_def]
 QED
