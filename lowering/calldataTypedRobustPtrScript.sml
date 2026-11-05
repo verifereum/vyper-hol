@@ -8,6 +8,7 @@ Ancestors calldataDecodePtr calldataWordPtr robustCopyTransportPtr exprSimMemory
   contractABI vyperValue vyperTyping arithmetic abiDecoderClampedTyped
   abiDecoderCoherence abiDecoderTypedContract abiDecoderWordTyped abiDecoderClamp
   valueEncodingTyping abiDecoderReentryPointer abiDecoderPreObservations abiDecoderReentry
+  decoderNavigationPtr
 
 Theorem clean_footprint_val_in_memory_robust:
   !tv v p mem tainted.
