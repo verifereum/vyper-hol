@@ -1809,11 +1809,11 @@ QED
    neither is an external call: an ASSERT next to a state write, which
    venomEffects counts as CanExHalt for static frames. *)
 Theorem dft_swap_fallible_noncall[local]:
-  opcode_fail_class op <> NoFail /\ ~is_ext_call_op op /\ ~is_terminator op ==>
+  !op. opcode_fail_class op <> NoFail /\ ~is_ext_call_op op /\ ~is_terminator op ==>
   MEM op [ASSERT; ASSERT_UNREACHABLE; RETURNDATACOPY; SSTORE; TSTORE; LOG;
           INVOKE]
 Proof
-  Cases_on `op` >> simp[opcode_fail_class_def, is_ext_call_op_def, is_terminator_def]
+  Cases >> simp[opcode_fail_class_def, is_ext_call_op_def, is_terminator_def]
 QED
 
 Theorem dft_swap_not_abort_compatible_assert[local]:
@@ -1827,12 +1827,11 @@ Proof
    opcode_fail_class b.inst_opcode <> NoFail` by gvs[abort_compatible_def] >>
   `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
     gvs[dft_gas_swap_pair_def] >>
-  `MEM a.inst_opcode [ASSERT; ASSERT_UNREACHABLE; RETURNDATACOPY; SSTORE;
-                      TSTORE; LOG; INVOKE] /\
-   MEM b.inst_opcode [ASSERT; ASSERT_UNREACHABLE; RETURNDATACOPY; SSTORE;
-                      TSTORE; LOG; INVOKE]` by
-    metis_tac[dft_swap_fallible_noncall] >>
-  fs[] >> fs[] >>
+  qspec_then `a.inst_opcode` mp_tac dft_swap_fallible_noncall >>
+  impl_tac >- simp[] >>
+  qspec_then `b.inst_opcode` mp_tac dft_swap_fallible_noncall >>
+  impl_tac >- simp[] >>
+  simp[] >> rpt strip_tac >>
   gvs[dft_gas_swap_pair_def, abort_compatible_def, opcode_fail_class_def,
       dft_abort_compatible_def, dft_abort_kind_def, effects_independent_def,
       read_effects_def, write_effects_def, all_effects_def, empty_effects_def]
@@ -1866,18 +1865,19 @@ Proof
   `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
     gvs[dft_gas_swap_pair_def] >>
   `dft_gas_swap_pair b a` by metis_tac[dft_gas_swap_pair_sym]
-  >- (`sa = s` by metis_tac[dft_assert_ok_state] >> gvs[] >>
-      irule dft_assert_ok_replay >> qexists_tac `s` >> simp[] >> rpt strip_tac >>
-      irule dftBlockSimTheory.eval_operand_step_pres >>
-      qexistsl_tac [`C`, `fuel`, `b`] >> simp[] >>
-      metis_tac[dft_swap_output_frame]) >>
-  `sab = sa` by metis_tac[dft_assert_ok_state] >> gvs[] >>
+  >- (`sa = s` by metis_tac[dft_assert_ok_state] >> pop_assum SUBST_ALL_TAC >>
+      `!op. MEM op a.inst_operands ==> eval_operand op sab = eval_operand op s` by
+        (rpt strip_tac >> irule dftBlockSimTheory.eval_operand_step_pres >>
+         qexistsl_tac [`C`, `fuel`, `b`] >> simp[] >>
+         metis_tac[dft_swap_output_frame]) >>
+      metis_tac[dft_assert_ok_replay]) >>
+  `sab = sa` by metis_tac[dft_assert_ok_state] >> pop_assum SUBST_ALL_TAC >>
   `!op. MEM op b.inst_operands ==> eval_operand op sa = eval_operand op s` by
     (rpt strip_tac >> irule dftBlockSimTheory.eval_operand_step_pres >>
      qexistsl_tac [`C`, `fuel`, `a`] >> simp[] >>
      metis_tac[dft_swap_output_frame]) >>
   `step_inst fuel C b s = OK s` by
-    (irule dft_assert_ok_replay >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+    metis_tac[dft_assert_ok_replay] >>
   simp[]
 QED
 
@@ -2274,29 +2274,29 @@ Proof
       dft_swap_runtime_error_opcode_def] >>
   gvs[inst_wf_def] >> simp[step_inst_non_invoke] >>
   with_opcode_clause simp >>
-  rpt IF_CASES_TAC >> simp[] >>
-  gvs[LENGTH_EQ_NUM_compute, DISJ_IMP_THM, FORALL_AND_THM]
-  >>~- ([`exec_write2 _ _ _`], disj1_tac >> irule dft_swap_write2_total >> simp[])
+  all_tac
+  >>~- ([`exec_write2 _ _ _`],
+        IF_CASES_TAC >> simp[] >>
+        disj1_tac >> irule dft_swap_write2_total >> simp[])
   >>~- ([`exec_ext_call _ _ _ _ _ _ _ _ _ _`],
+        gvs[LENGTH_EQ_NUM_compute, DISJ_IMP_THM, FORALL_AND_THM] >>
+        rpt IF_CASES_TAC >> simp[] >>
         disj1_tac >> irule dft_swap_ext_call_total >> simp[])
-  >>~- ([`Lit _ :: _`], suspend "log")
-  >> rpt CASE_TAC >> gvs[] >> rpt IF_CASES_TAC >> simp[]
+  >>~- ([`_ with vs_logs := _`],
+        IF_CASES_TAC >> simp[] >>
+        `MEM (EL 0 (REVERSE rest)) rest /\ MEM (EL 1 (REVERSE rest)) rest` by
+          (conj_tac >> once_rewrite_tac[GSYM MEM_REVERSE] >>
+           irule EL_MEM >> simp[]) >>
+        `?off. eval_operand (EL 0 (REVERSE rest)) s = SOME off` by metis_tac[MEM] >>
+        `?sz. eval_operand (EL 1 (REVERSE rest)) s = SOME sz` by metis_tac[MEM] >>
+        `?topics. eval_operands (DROP 2 (REVERSE rest)) s = SOME topics` by
+          (irule dft_swap_eval_operands_defined >> rpt strip_tac >>
+           drule rich_listTheory.MEM_DROP_IMP >> simp[] >> strip_tac >>
+           metis_tac[MEM]) >>
+        fs[])
+  >> gvs[LENGTH_EQ_NUM_compute, DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt IF_CASES_TAC >> simp[]
 QED
-
-Resume dft_swap_canexhalt_operand_defined[log]:
-  rpt CASE_TAC >> gvs[] >>
-  `MEM (EL 0 (REVERSE t)) t /\ MEM (EL 1 (REVERSE t)) t` by
-    (conj_tac >> once_rewrite_tac[GSYM MEM_REVERSE] >>
-     irule EL_MEM >> simp[]) >>
-  `?off. eval_operand (EL 0 (REVERSE t)) s = SOME off` by metis_tac[MEM] >>
-  `?sz. eval_operand (EL 1 (REVERSE t)) s = SOME sz` by metis_tac[MEM] >>
-  `?topics. eval_operands (DROP 2 (REVERSE t)) s = SOME topics` by
-    (irule dft_swap_eval_operands_defined >> rpt strip_tac >>
-     drule rich_listTheory.MEM_DROP_IMP >> simp[] >> strip_tac >> metis_tac[MEM]) >>
-  fs[]
-QED
-
-Finalise dft_swap_canexhalt_operand_defined
 
 Theorem dft_swap_invoke_partner_class:
   dft_gas_swap_pair x y /\ x.inst_opcode = INVOKE ==>
@@ -2329,7 +2329,8 @@ Proof
   gvs[is_terminator_def] >> with_opcode_clause gvs >>
   gvs[AllCaseEqs(), exec_create_abort_iff] >>
   gvs[exec_ext_call_def, exec_write2_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[])
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[EXISTS_OR_THM]
 QED
 
 Theorem dft_nongas_pair_abort_iff:
@@ -2357,7 +2358,7 @@ Proof
      qexistsl_tac [`C`, `fuel`, `x`] >> simp[] >>
      gvs[effects_independent_def, read_effects_def, empty_effects_def,
          pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  `t.vs_call_ctx = s.vs_call_ctx` by metis_tac[step_preserves_call_ctx] >>
+  `t.vs_call_ctx = s.vs_call_ctx` by metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
   eq_tac >> strip_tac >> irule dft_swap_noninvoke_abort_replay >> metis_tac[]
 QED
 
@@ -2525,7 +2526,7 @@ Theorem dft_prefix_call_ctx:
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >>
   gvs[dft_exec_cons_def, AllCaseEqs()] >>
-  first_x_assum drule >> simp[] >> metis_tac[step_preserves_call_ctx]
+  res_tac >> fs[] >> metis_tac[venomInstProofsTheory.step_preserves_call_ctx]
 QED
 
 Theorem dft_gas_variant_call_ctx:
@@ -2554,8 +2555,15 @@ Proof
   gvs[AllCaseEqs(), exec_create_abort_iff]
 QED
 
+Theorem dft_swap_fail_class_revert_any[local]:
+  !op. (opcode_fail_class op = CanRevert ==> op = ASSERT) /\
+       (opcode_fail_class op = AnyFail ==> op = INVOKE)
+Proof
+  Cases >> simp[opcode_fail_class_def]
+QED
+
 (* A swap partner of an exceptionally halting RETURNDATACOPY, CREATE or
-   CREATE2 neither reverts nor invokes, and touches no memory. *)
+   CREATE2 neither reverts nor invokes, and writes nothing they touch. *)
 Theorem dft_swap_exhalt_partner_class[local]:
   dft_gas_swap_pair x y /\
   MEM x.inst_opcode [RETURNDATACOPY; CREATE; CREATE2] ==>
@@ -2564,11 +2572,20 @@ Theorem dft_swap_exhalt_partner_class[local]:
   (opcode_fail_class y.inst_opcode = NoFail \/
    opcode_fail_class y.inst_opcode = CanExHalt)
 Proof
-  rw[] >> Cases_on `y.inst_opcode` >>
-  gvs[dft_gas_swap_pair_def, effects_independent_def, dft_abort_compatible_def,
-      dft_abort_kind_def, is_terminator_def,
-      opcode_fail_class_def, read_effects_def, write_effects_def,
-      dft_swap_runtime_error_opcode_def, all_effects_def, empty_effects_def]
+  strip_tac >>
+  qpat_x_assum `MEM _ _` (strip_assume_tac o SIMP_RULE list_ss []) >>
+  `effects_independent x.inst_opcode y.inst_opcode /\
+   dft_abort_compatible x.inst_opcode y.inst_opcode` by
+    fs[dft_gas_swap_pair_def] >>
+  `y.inst_opcode <> INVOKE /\ y.inst_opcode <> ASSERT` by
+    (rpt strip_tac >>
+     gvs[dft_abort_compatible_def, dft_abort_kind_def]) >>
+  `y.inst_opcode <> CODECOPY /\ ~dft_swap_runtime_error_opcode y.inst_opcode` by
+    (simp[dft_swap_runtime_error_opcode_def] >> rpt strip_tac >>
+     gvs[effects_independent_def, read_effects_def, write_effects_def,
+         all_effects_def]) >>
+  simp[] >> Cases_on `opcode_fail_class y.inst_opcode` >> simp[] >>
+  metis_tac[dft_swap_fail_class_revert_any]
 QED
 
 Theorem dft_nongas_suffix_first_abort:
@@ -2592,8 +2609,8 @@ Proof
     (drule_all dft_swap_nonstatic_abort_class >> strip_tac
      >- (drule_all dft_swap_invoke_partner_class >> strip_tac >>
          `y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY` by
-           (strip_tac >> gvs[opcode_fail_class_def, write_effects_def,
-                             empty_effects_def]) >>
+           (rpt strip_tac >> gvs[opcode_fail_class_def, write_effects_def,
+                                 empty_effects_def]) >>
          metis_tac[dft_swap_guarded_nofail_total]) >>
      drule_all dft_swap_exhalt_partner_class >> strip_tac
      >- metis_tac[dft_swap_guarded_nofail_total] >>
@@ -2630,10 +2647,7 @@ Proof
       simp[Once dft_res_rel_def] >>
       irule dft_nongas_suffix_swap_error >> metis_tac[])
   >- metis_tac[dft_swap_nonterminator_no_intret]
-  >- (`(y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
-       !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v)` by
-        metis_tac[] >>
-      `?u. dft_exec_suffix fuel C (y::x::tail) s = Abort a u` by
+  >- (`?u. dft_exec_suffix fuel C (y::x::tail) s = Abort a u` by
         metis_tac[dft_nongas_suffix_first_abort] >>
       simp[dft_exec_suffix_cons, dft_exec_cons_def, dft_res_rel_def] >> metis_tac[])
   >- (`dft_exec_suffix fuel C (y::x::tail) s = Halt v` by
@@ -2649,8 +2663,9 @@ Proof
   >- (`?u. dft_exec_suffix fuel C (y::x::tail) s = Abort a u` by
         metis_tac[dft_nongas_suffix_second_abort] >>
       simp[dft_exec_suffix_cons, dft_exec_cons_def, dft_res_rel_def] >> metis_tac[])
-  >- (`dft_exec_suffix fuel C (y::x::tail) s = Halt v` by
-        metis_tac[dft_nongas_suffix_swap_halt] >>
+  >- (`dft_exec_suffix fuel C (x::y::tail) s = Halt v /\
+       dft_exec_suffix fuel C (y::x::tail) s = Halt v` by
+        (irule dft_nongas_suffix_swap_halt >> simp[] >> metis_tac[]) >>
       simp[dft_exec_suffix_cons, dft_exec_cons_def, dft_res_rel_def]) >>
   `dft_exec_suffix fuel C (x::y::tail) s = dft_exec_suffix fuel C (y::x::tail) s` by
     (drule_all dft_nongas_pair_sym >> strip_tac >> metis_tac[dft_suffix_nongas_pair_ok]) >>
@@ -2824,7 +2839,7 @@ Proof
      simp[dft_exec_cons_def] >> strip_tac >>
      gvs[AllCaseEqs()] >>
      rename1 `step_inst fuel C h u = OK t` >>
-     `~t.vs_call_ctx.cc_static` by metis_tac[step_preserves_call_ctx] >>
+     `~t.vs_call_ctx.cc_static` by metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
      `dft_remaining_inv fn bb (pre ++ y::post)
        (t with vs_inst_idx := SUC u.vs_inst_idx)` by
        (drule_at (Pat `step_inst _ _ _ _ = OK _`) dft_remaining_inv_step >>
@@ -2869,7 +2884,7 @@ Proof
     (irule dft_suffix_prefix_variant >> simp[] >> rpt gen_tac >>
      simp[dft_exec_cons_def] >> strip_tac >> gvs[AllCaseEqs()] >>
      rename1 `step_inst fuel C y s' = OK t` >>
-     `~t.vs_call_ctx.cc_static` by metis_tac[step_preserves_call_ctx] >>
+     `~t.vs_call_ctx.cc_static` by metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
      `dft_remaining_inv fn bb (pre ++ post)
        (t with vs_inst_idx := SUC s'.vs_inst_idx)` by
        (drule_at (Pat `step_inst _ _ _ _ = OK _`) dft_remaining_inv_step >>
@@ -2992,7 +3007,7 @@ Proof
            (irule EVERY_DROP >> simp[Abbr `pre`, EVERY_MEM, MEM_FILTER] >>
             rpt strip_tac >> Cases_on `i.inst_opcode` >>
             gvs[is_pseudo_def, is_terminator_def]) >>
-         irule dft_suffix_prefix_variant >> conj_tac >- simp[] >>
+         irule dft_suffix_prefix_variant >> reverse conj_tac >- simp[] >>
          rpt strip_tac >>
          `~t.vs_call_ctx.cc_static` by
            (drule_all dft_prefix_call_ctx >> drule dft_eval_phis_call_ctx >>
