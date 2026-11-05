@@ -214,3 +214,31 @@ Proof
       simp[FLOOKUP_UPDATE, op_taint_def]) >>
   metis_tac[]
 QED
+
+Theorem toplevel_alloca_static_effects:
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w nb)] [p]) s = OK u ==>
+  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+  u.vs_transient = s.vs_transient /\ u.vs_memory = s.vs_memory /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry)
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id` >>
+  gvs[AllCaseEqs(), update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[] >>
+  `aid <> id` by metis_tac[optionTheory.NOT_SOME_NONE] >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem toplevel_alloc_buffer_static_effects:
+  compile_alloc_buffer nb sa = (buf,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK u ==>
+  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+  u.vs_transient = s.vs_transient /\ u.vs_memory = s.vs_memory /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry)
+Proof
+  strip_tac >> drule storage_copy_alloc_layout >> strip_tac >>
+  fs[run_inst_seq_def, AllCaseEqs()] >>
+  drule toplevel_alloca_static_effects >> simp[]
+QED
