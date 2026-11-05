@@ -22,7 +22,7 @@
  *
  * TOP-LEVEL:
  *   inst_mem_ranges, mem_inv, raw_mem_ok, static_mem_ok, lowered_mem_ok,
- *   step_write_footprint                   - definitions
+ *   venom_run_bounded, step_write_footprint - definitions
  *   raw_unit_memory_ok_mem_inv              - S3's statement is the raw phase
  *   mem_inv_raw_reachable                   - the witness is raw_reachable
  *   mem_inv_mono, static_mem_ok_lowered
@@ -34,7 +34,7 @@ Theory unitMemInv
 Ancestors
   list pair words finite_map venomInst venomState venomMemDefs
   venomExecSemantics contextCodegenRel contextCodegenRelProps
-  contextRawReachable unitTransformDefs stackPlanTypes
+  contextRawReachable unitTransformDefs stackPlanTypes passSimulationDefs
 
 (* ===== Definitions ===== *)
 
@@ -73,6 +73,18 @@ Definition lowered_mem_ok_def:
     in_revert_forward fn s \/
     EVERY (\(off,len). len = 0 \/ off + len <= eom \/ fmp <= off)
       (inst_mem_ranges inst s)
+End
+
+(* Resource bound codegen's gas proof consumes: the run ends within fuel,
+   and every access is below M or part of a revert forwarding.  The stages
+   give fuel and M independent of the external-call outcomes. *)
+Definition venom_run_bounded_def:
+  venom_run_bounded fuel M ctx vs <=>
+    terminates (run_context fuel ctx vs) /\
+    mem_inv (\ctx fn inst s.
+               in_revert_forward fn s \/
+               EVERY (\(off,len). len = 0 \/ off + len <= M)
+                 (inst_mem_ranges inst s)) ctx vs
 End
 
 (* A step from a reachable state outside a revert forwarding changes a

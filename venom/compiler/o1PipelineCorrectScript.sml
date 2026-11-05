@@ -7,6 +7,8 @@
  * No compiler hook or final-unit check is changed to obtain output shape.
  * run_venom_pipeline_mem_inv is the output's memory invariant in lowered
  * form, which codegen consumes.
+ * run_venom_pipeline_run_bounded (S6b, a planned admission) is the output's
+ * resource bound, which codegen's gas proof consumes.
  *)
 Theory o1PipelineCorrect
 Ancestors
@@ -150,6 +152,40 @@ Proof
   gvs[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexists_tac `raw_reachable vs` >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
+QED
+
+(* ===== S6b: resource bound of the output (sufficient gas) ===== *)
+
+(* PLANNED ADMISSION S6b.  A fuel bound on the source unit that holds for
+ * every entry state gives the output a fuel bound and a memory bound that
+ * hold for every entry state, so neither depends on the external-call
+ * outcomes.  Takes S5's premises; the plan cp locates the spill slots
+ * (below cp_initial_fmp) and the DRET packing area (above it).  Proof
+ * idea: a variant of ctx_sim whose output fuel is a function of the
+ * input fuel alone, composed once over the pipeline (most passes keep the
+ * fuel; CFGNormalization at most doubles it), and S5's eom with the
+ * dynamic area's growth bounded by the fuel. *)
+Theorem run_venom_pipeline_run_bounded:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp
+    ==>
+    ?fuel' M. !vs.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_run_state_ok vs /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      raw_unit_memory_ok unit.cu_context vs /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\
+      ptr_discipline lo unit.cu_context vs /\
+      mem_inv dload_offset_ok unit.cu_context vs /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      terminates (run_context fuel unit.cu_context vs)
+      ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  cheat
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
