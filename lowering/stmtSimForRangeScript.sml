@@ -37,7 +37,8 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperEvalPreservesScopes
-  vyperExprNoControl vyperValueOperation vyperArith
+  vyperExprNoControl vyperValueOperation
+  gasOutcome gasContext stmtSimForRounds vyperArith
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
   monadsyntax intLib
@@ -859,8 +860,7 @@ QED
    after endpoint evaluation and is preserved by continuing iterations. *)
 Theorem compile_for_range_checked_frag_active:
   !P Q (ctx, func, cx, lctx, RetQ, cenv, env, ty)
-   id fty e1 e2 bound stmts es res es' tyv.
-    eval_stmt cx (For id fty (Range e1 e2) bound stmts) es = (res, es') /\
+   id fty e1 e2 bound stmts es tyv.
     is_int_type fty /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\
     32 <= type_memory_bytes cenv fty /\
@@ -874,10 +874,14 @@ Theorem compile_for_range_checked_frag_active:
     is_word_type (expr_type e2) /\
     evaluate_type (get_tenv cx) (expr_type e2) = SOME tyv /\
     expr_sim ctx func cenv cx fty e1 es /\
-    (!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = (INL tv, es1) ==>
+    (!gs tv es1.
+       (do raw <- eval_expr cx e1; read_result cx raw od)
+         (es with gas_obs := gs) = (INL tv, es1) ==>
        ?n1. tv = IntV n1 /\ value_has_type tyv (IntV n1) /\
             expr_sim ctx func cenv cx fty e2 es1 /\
-            !tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (INL tv2, es2) ==>
+            !gs2 tv2 es2.
+              (do raw <- eval_expr cx e2; read_result cx raw od)
+                (es1 with gas_obs := gs2) = (INL tv2, es2) ==>
               ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
                    P es2 /\
                    ((n1 <= n2 /\ Num (n2 - n1) <= bound /\
@@ -886,34 +890,30 @@ Theorem compile_for_range_checked_frag_active:
     (!x t. FLOOKUP env.var_types x = SOME t ==>
            well_formed_type env.type_defs t) /\
     ~(?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
-    (!st0 c st1 ex inc ei n1 j r2 es2.
+    (!st0 c st1 ex inc ei n1 j.
        declare_local cenv id fty st0 = (c, st1) /\
        Q /\ P ei /\ lookup_scopes id ei.scopes = NONE /\
-       value_has_type tyv (IntV (n1 + &j)) /\
-       eval_stmts cx stmts
-         (ei with scopes :=
-            (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
-         (r2, es2) ==>
+       value_has_type tyv (IntV (n1 + &j)) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
-         (stmts_env c (InLoop ex inc) ty stmts)
+         (stmts_env c (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)
-         r2 es2) /\
-    (!ei n1 j r2 es2 sc rest.
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)) /\
+    (!ei n1 j gs r2 es2 sc rest.
        Q /\ P ei /\ lookup_scopes id ei.scopes = NONE /\
        value_has_type tyv (IntV (n1 + &j)) /\
        eval_stmts cx stmts
-         (ei with scopes :=
+         (ei with <| scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes;
+                     gas_obs := gs |>) =
          (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts)) es res es'
+      (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts))
+      (eval_stmt cx (For id fty (Range e1 e2) bound stmts)) es
 Proof
   map_every qx_gen_tac [`P`, `Q`] >>
   (* Expose the paired abstraction to ordinary forall rewriting. *)
@@ -1329,9 +1329,7 @@ Finalise compile_for_range_checked_frag_active
 
 (* The original checked fragment is the always-active specialization. *)
 Theorem compile_for_range_checked_frag:
-  !P ctx func cx lctx RetQ cenv env ty id fty e1 e2 bound stmts es res es'
-   tyv.
-    eval_stmt cx (For id fty (Range e1 e2) bound stmts) es = (res, es') /\
+  !P ctx func cx lctx RetQ cenv env ty id fty e1 e2 bound stmts es tyv.
     is_int_type fty /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\
     32 <= type_memory_bytes cenv fty /\
@@ -1345,44 +1343,44 @@ Theorem compile_for_range_checked_frag:
     is_word_type (expr_type e2) /\
     evaluate_type (get_tenv cx) (expr_type e2) = SOME tyv /\
     expr_sim ctx func cenv cx fty e1 es /\
-    (!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = (INL tv, es1) ==>
+    (!gs tv es1.
+       (do raw <- eval_expr cx e1; read_result cx raw od)
+         (es with gas_obs := gs) = (INL tv, es1) ==>
        ?n1. tv = IntV n1 /\ value_has_type tyv (IntV n1) /\
             expr_sim ctx func cenv cx fty e2 es1 /\
-            !tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (INL tv2, es2) ==>
+            !gs2 tv2 es2.
+              (do raw <- eval_expr cx e2; read_result cx raw od)
+                (es1 with gas_obs := gs2) = (INL tv2, es2) ==>
               ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
                    P es2) /\
     well_typed_expr env e1 /\ well_typed_expr env e2 /\
     (!x t. FLOOKUP env.var_types x = SOME t ==>
            well_formed_type env.type_defs t) /\
     ~(?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
-    (!st0 c st1 ex inc ei n1 j r2 es2.
+    (!st0 c st1 ex inc ei n1 j.
        declare_local cenv id fty st0 = (c, st1) /\
        P ei /\ lookup_scopes id ei.scopes = NONE /\
-       value_has_type tyv (IntV (n1 + &j)) /\
-       eval_stmts cx stmts
-         (ei with scopes :=
-            (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
-         (r2, es2) ==>
+       value_has_type tyv (IntV (n1 + &j)) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
-         (stmts_env c (InLoop ex inc) ty stmts)
+         (stmts_env c (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)
-         r2 es2) /\
-    (!ei n1 j r2 es2 sc rest.
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)) /\
+    (!ei n1 j gs r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\
        value_has_type tyv (IntV (n1 + &j)) /\
        eval_stmts cx stmts
-         (ei with scopes :=
+         (ei with <| scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes;
+                     gas_obs := gs |>) =
          (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts)) es res es'
+      (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts))
+      (eval_stmt cx (For id fty (Range e1 e2) bound stmts)) es
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`P`, `T`] compile_for_range_checked_frag_active) >>

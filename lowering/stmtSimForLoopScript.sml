@@ -25,6 +25,7 @@ Ancestors
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
+  gasOutcome gasContext stmtSimForRounds
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
   monadsyntax intLib
@@ -318,9 +319,9 @@ End
    loop variable's scope popped); on a break it reaches the exit block; on
    any other outcome it exits as the body does. *)
 Theorem for_iteration_alloca[local]:
-  !ctx func cenv bc cx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv nv
-   n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st r2 es2 sc rest.
+  !ctx func cenv bc cx lctx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv
+   nv n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st vs.
     (* the code and the variables *)
     for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
       cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -335,43 +336,34 @@ Theorem for_iteration_alloca[local]:
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
-    eval_stmts cx stmts
-      (esk with scopes :=
-         (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) =
-      (r2, es2) /\
     stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
-      (esk with scopes :=
+      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
+      (esk with <| scopes :=
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
-      r2 es2 /\
-    stmt_res_ok (InLoop exit_lbl incr_lbl) r2 /\
-    es2.scopes = sc :: rest /\
-    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    ((r2 = INL () \/ r2 = INR ContinueException) /\
-     ?cc'. cc'.vs_current_bb = cond_lbl /\ cc'.vs_inst_idx = 0 /\
-           ~cc'.vs_halted /\
-           stmt_state_rel ctx func cenv cx (es2 with scopes := rest) cc' /\
-           lookup_var cv cc' = SOME (i2w (n1 + &(k + 1))) /\
-           lookup_var ev cc' = SOME (i2w n2) /\ lookup_var p cc' = SOME w /\
-           (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
-                  lookup_var x cc' = SOME v) /\
-           (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                  FLOOKUP cc'.vs_allocas a = SOME b) /\
-           !fuel rr. run_from fuel ctx func cc' = rr /\ (!e. rr <> Error e) ==>
-                     ?fuel'. run_from fuel' ctx func cc = rr) \/
-    (r2 = INR BreakException /\
-     ?s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
+                   gas_obs := [] |>) /\
+    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+      (stmt_res_ok lctx) esk ==>
+    gas_outcome F (cx_tops cx) (ctx, func)
+      (do push_scope_with_var id tyv (IntV (n1 + &k));
+          finally
+            (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+            pop_scope
+       od) (esk, cc)
+      (\res ee t. ?broke. res = INL broke /\
+         t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+         stmt_state_rel ctx func cenv cx ee t /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
-                lookup_var x s = SOME v) /\
+                lookup_var x t = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                FLOOKUP s.vs_allocas a = SOME b) /\
-         !fuel rr. run_from fuel ctx func s = rr /\ (!e. rr <> Error e) ==>
-                   ?fuel'. run_from fuel' ctx func cc = rr) \/
-    (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
-               stmt_exit RetQ (es2 with scopes := rest) r2 rr)
+                FLOOKUP t.vs_allocas a = SOME b) /\
+         (broke ==> t.vs_current_bb = exit_lbl) /\
+         (~broke ==> t.vs_current_bb = cond_lbl /\
+                     lookup_var cv t = SOME (i2w (n1 + &(k + 1))) /\
+                     lookup_var ev t = SOME (i2w n2) /\
+                     lookup_var p t = SOME w))
+      (\res ee r. ?ex. res = INR ex /\
+         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
   rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
   `bc.ce_module_vars = cenv.ce_module_vars /\
@@ -474,14 +466,16 @@ Proof
 QED
 
 Theorem for_iteration:
-  !ctx func cenv bc cx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv nv
-   n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st r2 es2 sc rest cap.
+  !ctx func cenv bc cx lctx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv
+   nv n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st vs cap.
+    (* the code and the variables *)
     for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
       cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\
     st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
+    (* the iteration *)
     n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
     stmt_state_rel ctx func cenv cx esk cc /\
@@ -492,43 +486,34 @@ Theorem for_iteration:
     cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) /\
-    eval_stmts cx stmts
-      (esk with scopes :=
-         (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) =
-      (r2, es2) /\
     stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
-      (esk with scopes :=
+      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
+      (esk with <| scopes :=
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
-      r2 es2 /\
-    stmt_res_ok (InLoop exit_lbl incr_lbl) r2 /\
-    es2.scopes = sc :: rest /\
-    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    ((r2 = INL () \/ r2 = INR ContinueException) /\
-     ?cc'. cc'.vs_current_bb = cond_lbl /\ cc'.vs_inst_idx = 0 /\
-           ~cc'.vs_halted /\
-           stmt_state_rel ctx func cenv cx (es2 with scopes := rest) cc' /\
-           lookup_var cv cc' = SOME (i2w (n1 + &(k + 1))) /\
-           lookup_var ev cc' = SOME (i2w n2) /\ lookup_var p cc' = SOME w /\
-           (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
-                  lookup_var x cc' = SOME v) /\
-           (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                  FLOOKUP cc'.vs_allocas a = SOME b) /\
-           !fuel rr. run_from fuel ctx func cc' = rr /\ (!e. rr <> Error e) ==>
-                     ?fuel'. run_from fuel' ctx func cc = rr) \/
-    (r2 = INR BreakException /\
-     ?s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
+                   gas_obs := [] |>) /\
+    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+      (stmt_res_ok lctx) esk ==>
+    gas_outcome F (cx_tops cx) (ctx, func)
+      (do push_scope_with_var id tyv (IntV (n1 + &k));
+          finally
+            (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+            pop_scope
+       od) (esk, cc)
+      (\res ee t. ?broke. res = INL broke /\
+         t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+         stmt_state_rel ctx func cenv cx ee t /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
-                lookup_var x s = SOME v) /\
+                lookup_var x t = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                FLOOKUP s.vs_allocas a = SOME b) /\
-         !fuel rr. run_from fuel ctx func s = rr /\ (!e. rr <> Error e) ==>
-                   ?fuel'. run_from fuel' ctx func cc = rr) \/
-    (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
-               stmt_exit RetQ (es2 with scopes := rest) r2 rr)
+                FLOOKUP t.vs_allocas a = SOME b) /\
+         (broke ==> t.vs_current_bb = exit_lbl) /\
+         (~broke ==> t.vs_current_bb = cond_lbl /\
+                     lookup_var cv t = SOME (i2w (n1 + &(k + 1))) /\
+                     lookup_var ev t = SOME (i2w n2) /\
+                     lookup_var p t = SOME w))
+      (\res ee r. ?ex. res = INR ex /\
+         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
 QED
@@ -540,7 +525,7 @@ QED
 Theorem for_loop_alloca:
   !m P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
    n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st k esk cc w res es'.
+   sb0 sb1 sj st k esk cc w.
     (* the code and the variables *)
     for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
       cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -549,49 +534,47 @@ Theorem for_loop_alloca:
     st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
     (* the body, at the iteration states over a source state where P holds *)
-    (!ei j r2 es2.
-       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
-       eval_stmts cx stmts
-         (ei with scopes :=
-            (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
+    (!ei j.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) ==>
        stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
-    (* P holds again after an iteration that goes on *)
-    (!ei j r2 es2 sc rest.
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)) /\
+    (* P holds again after an iteration that goes on, whatever the gas *)
+    (!ei j gs r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
-         (ei with scopes :=
+         (ei with <| scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes;
+                     gas_obs := gs |>) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) /\
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m) esk =
-      (res, es') /\
-    stmt_res_ok lctx res /\ P esk /\
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (stmt_res_ok lctx) esk /\
+    P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
     stmt_state_rel ctx func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
-    (?s. res = INL () /\ s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
-         ~s.vs_halted /\ stmt_state_rel ctx func cenv cx es' s /\
+    gas_outcome F (cx_tops cx) (ctx, func)
+      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (esk, cc)
+      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
+         s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+         stmt_state_rel ctx func cenv cx ee s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                FLOOKUP s.vs_allocas a = SOME b) /\
-         !fuel rr. run_from fuel ctx func s = rr /\ (!e. rr <> Error e) ==>
-                   ?fuel'. run_from fuel' ctx func cc = rr) \/
-    (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
-               stmt_exit RetQ es' res rr)
+                FLOOKUP s.vs_allocas a = SOME b))
+      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   Induct
   >- (
@@ -703,7 +686,8 @@ QED
 Theorem for_loop:
   !m P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
    n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st k esk cc w res es' cap.
+   sb0 sb1 sj st k esk cc w cap.
+    (* the code and the variables *)
     for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
       cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
     (!scs. lookup_scopes id scs = NONE ==>
@@ -712,31 +696,31 @@ Theorem for_loop:
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
     (!ei. P ei /\ cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module ei cap) /\
-    (!ei j r2 es2.
-       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
-       eval_stmts cx stmts
-         (ei with scopes :=
-            (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
+    (* the body, at the iteration states over a source state where P holds *)
+    (!ei j.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) ==>
        stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
-    (!ei j r2 es2 sc rest.
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)) /\
+    (* P holds again after an iteration that goes on, whatever the gas *)
+    (!ei j gs r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
-         (ei with scopes :=
+         (ei with <| scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes;
+                     gas_obs := gs |>) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) /\
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
+    (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m) esk =
-      (res, es') /\
-    stmt_res_ok lctx res /\ P esk /\
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (stmt_res_ok lctx) esk /\
+    P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
     stmt_state_rel ctx func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
@@ -744,16 +728,17 @@ Theorem for_loop:
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
     cap <= w2n w ==>
-    (?s. res = INL () /\ s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
-         ~s.vs_halted /\ stmt_state_rel ctx func cenv cx es' s /\
+    gas_outcome F (cx_tops cx) (ctx, func)
+      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (esk, cc)
+      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
+         s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+         stmt_state_rel ctx func cenv cx ee s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                FLOOKUP s.vs_allocas a = SOME b) /\
-         !fuel rr. run_from fuel ctx func s = rr /\ (!e. rr <> Error e) ==>
-                   ?fuel'. run_from fuel' ctx func cc = rr) \/
-    (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
-               stmt_exit RetQ es' res rr)
+                FLOOKUP s.vs_allocas a = SOME b))
+      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >> simp[]
 QED
