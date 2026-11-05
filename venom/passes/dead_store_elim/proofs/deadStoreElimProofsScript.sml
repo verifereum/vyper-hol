@@ -42,6 +42,7 @@
 
 Theory deadStoreElimProofs
 Ancestors
+  deadStoreElimComposition deadStoreElimCertificate decoratedExecution
   deadStoreElimStructure deadStoreElimSafety deadStoreElimEquiv deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
   venomMemProps venomMemProofs memAliasDefs passSharedField cfgAnalysisProps
   stateEquiv stateEquivProps venomState venomInst venomInstProps
@@ -982,7 +983,16 @@ Theorem dse_function_space_correct:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?e. run_blocks fuel ctx fn s = Error e`
+  >- simp[] >> disj2_tac >>
+  `dse_run_certificate fn fuel ctx s (run_blocks fuel ctx fn s)` by
+    (irule dse_certificate_initial >> simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     qexists_tac `safe_inv` >> simp[] >> metis_tac[]) >>
+  drule_all dse_function_space_certificate >> strip_tac >>
+  fs[dse_run_certificate_def] >>
+  drule_all decorated_run_erase >> strip_tac >> simp[]
 QED
 
 (* Full DSE (all three spaces) preserves dse_all_equiv,
@@ -1021,7 +1031,16 @@ Theorem dse_function_correct:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function analysis_fn fn) s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?e. run_blocks fuel ctx fn s = Error e`
+  >- simp[] >> disj2_tac >>
+  `dse_run_certificate fn fuel ctx s (run_blocks fuel ctx fn s)` by
+    (irule dse_certificate_initial >> simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     qexists_tac `safe_inv` >> simp[] >> metis_tac[]) >>
+  drule_all dse_function_certificate >> strip_tac >>
+  fs[dse_run_certificate_def] >>
+  drule_all decorated_run_erase >> strip_tac >> simp[]
 QED
 
 (* ===== ERROR ASYMMETRY COUNTEREXAMPLE: Frozen theorems are FALSE ===== *)
