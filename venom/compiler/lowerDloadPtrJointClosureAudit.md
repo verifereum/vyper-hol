@@ -1046,3 +1046,23 @@ Checked build: lowerDloadPtrJointMemoryStoreTheory and
 o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6805_t001).
 This is local MCOPY propagation only; the frozen theorem and the remaining
 allocation, expansion and global closure obligations are still unfinished.
+
+## C1.12.96: persistent/transient storage normal next rows
+
+`lowerDloadPtrJointStorageTheory` proves `dload_joint_tracked_storage_read_next`
+(SLOAD/TLOAD) and `dload_joint_tracked_storage_write_next` (SSTORE/TSTORE).
+Both have the exact incoming/outgoing normal-Q existential and global source
+hypotheses of the MSTORE row, with only the incoming opcode family changed.
+The storage cores retain finite tracked V and independent U; these consumers
+instantiate V to original non-retpc variables and U to all original variables.
+Source success is reflected at the literal target fuel. Labels, operand
+membership, policy support, source taint safety, write output arity, and bounded
+variable masks all originate from the incoming Q/source hypotheses. In
+particular mask bounds come from source frame reachability, not taint_within.
+Read results remain masked word-related, not necessarily equal. The shared
+write field footprint covers both persistent and transient storage and leaves
+allocation/frontier/call context/control unchanged. Singleton reachability and
+NormalNext rebuild every saved-frame, scratch, support and definedness field,
+with exact step_prov/step_taint successors. No extra caller premise was added.
+This certifies only local normal storage closure, not allocation, expansion
+completion, or the frozen stage theorem.
