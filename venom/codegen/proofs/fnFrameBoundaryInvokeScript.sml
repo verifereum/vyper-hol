@@ -678,3 +678,180 @@ Resume invoke_generated_frame_prefix[finish]:
   simp[APPEND_ASSOC]
 QED
 Finalise invoke_generated_frame_prefix
+
+Theorem invoke_call_packet:
+  asm_block_at prog st.as_pc [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"] /\
+  FLOOKUP lo ret_lbl = SOME ret_off /\ FLOOKUP lo nm = SOME off /\
+  off < dimword(:256) /\ FLOOKUP o2pc off = SOME pc ==>
+  asm_steps lo o2pc prog 3 st =
+    AsmOK (st with <|as_stack := n2w ret_off :: st.as_stack; as_pc := pc|>)
+Proof
+  strip_tac >>
+  `st.as_pc < LENGTH prog /\ st.as_pc + 1 < LENGTH prog /\ st.as_pc + 2 < LENGTH prog /\
+   EL st.as_pc prog = AsmPushLabel ret_lbl /\
+   EL (st.as_pc + 1) prog = AsmPushLabel nm /\
+   EL (st.as_pc + 2) prog = AsmOp "JUMP"` by
+    (gvs[asm_block_at_def] >>
+     first_x_assum (fn th => map_every (fn q => mp_tac (Q.SPEC q th)) [`0`, `1`, `2`]) >>
+     simp[] >> decide_tac) >>
+  rewrite_tac[DECIDE ``3 = SUC (SUC (SUC 0))``] >>
+  simp[Once asm_steps_def, asm_step_def, asm_next_def] >>
+  rewrite_tac[DECIDE ``2 = SUC (SUC 0)``] >>
+  simp[Once asm_steps_def, asm_step_def, asm_next_def] >>
+  rewrite_tac[DECIDE ``1 = SUC 0``] >>
+  simp[Once asm_steps_def, asm_step_def, asm_step_op_def, asm_step_control_def,
+       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+       asm_step_memory_def, asm_jump_def, wordsTheory.w2n_n2w, asm_steps_def]
+QED
+
+Theorem invoke_callee_entry_facts:
+  !Inv ctx cp fn inst vs nm arg_ops callee args cvs.
+  codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  Inv ctx fn inst vs /\ active_inst fn inst vs /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands arg_ops vs = SOME args /\ setup_callee callee args vs = SOME cvs ==>
+  callee.fn_name = nm /\ MEM callee ctx.ctx_functions /\
+  fn_entry_inv Inv ctx callee cvs /\
+  MEM callee.fn_name (fcg_analyze ctx).fcg_reachable
+Proof
+  rpt gen_tac >> strip_tac >>
+  `callee.fn_name = nm /\ MEM callee ctx.ctx_functions` by
+    (`!fns nm callee. lookup_function nm fns = SOME callee ==>
+        callee.fn_name = nm /\ MEM callee fns` by
+       (Induct >> simp[lookup_function_def, FIND_thm] >>
+        rpt gen_tac >> IF_CASES_TAC >> gvs[lookup_function_def] >>
+        metis_tac[]) >> metis_tac[]) >> simp[] >>
+  conj_tac
+  >- (gvs[reachability_closed_def] >>
+      first_x_assum irule >>
+      qexistsl [`args`, `fn`, `inst`, `callee.fn_name`, `arg_ops`, `vs`] >>
+      simp[decode_invoke_def]) >>
+  `fn_directly_calls ctx fn.fn_name nm` by
+    (irule invoke_direct_call >>
+     gvs[codegen_context_obligations_def] >> metis_tac[]) >>
+  `wf_invoke_targets ctx` by
+    (irule invoke_lowered_targets_wf >> gvs[codegen_context_obligations_def]) >>
+  `ctx_wf ctx` by gvs[codegen_context_obligations_def] >>
+  `?entry. ctx.ctx_entry = SOME entry` by
+    gvs[ctx_wf_def, ctx_has_entry_def] >>
+  fs[GSYM fcg_is_reachable_def] >>
+  irule fcg_reachable_direct_callee >> simp[] >> metis_tac[]
+QED
+
+Theorem invoke_setup_entry_rel:
+  !ctx cp lo fn ra rest mem0 arranged vs mid callee args cvs ret_off saved pc.
+  setup_callee callee args vs = SOME cvs /\ fn_has_retpc callee /\
+  LENGTH args + 1 = LENGTH (get_params (HD callee.fn_blocks).bb_instructions) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+  mid.as_stack = REVERSE args ++ saved ++ rest ==>
+  fn_entry_state_rel cp callee cvs
+    (mid with <|as_stack := n2w ret_off :: mid.as_stack; as_pc := pc|>)
+    (n2w ret_off) (saved ++ rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[setup_callee_def, fn_entry_state_rel_def, fn_frame_inv_def,
+      context_venom_asm_rel_def, shared_state_rel_def, venom_asm_terminal_rel_def,
+      frame_view_def]
+QED
+
+Theorem invoke_canonical_param_count:
+  !fn. canonical_param_prefix fn ==>
+  LENGTH (get_params (HD fn.fn_blocks).bb_instructions) =
+    LENGTH (fn_user_param_insts fn) +
+    (if IS_SOME (fn_hidden_fmp_param fn) then 1 else 0) +
+    (if fn_has_retpc fn then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (iffLR canonical_param_prefix_iff) >> strip_tac >>
+  `fn_user_param_insts fn = users /\
+   OPTION_TO_LIST (fn_hidden_fmp_param fn) = fmp` by
+    metis_tac[canonical_param_prefix_queries] >>
+  rename1 `no_param_insts tail_insts` >>
+  `get_params tail_insts = []` by
+    (Cases_on `tail_insts` >> gvs[get_params_def, no_param_insts_def]) >>
+  gvs[fn_has_retpc_def, get_params_param_prefix, EVERY_MEM,
+      is_param_opcode_def, get_params_def, no_param_insts_def,
+      EXISTS_APPEND, EXISTS_MEM] >>
+  Cases_on `fn_hidden_fmp_param fn` >> gvs[OPTION_TO_LIST_def] >>
+  IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem invoke_callee_param_arity:
+  !ctx inst nm arg_ops callee args vs.
+  invoke_layout_wf ctx inst /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands arg_ops vs = SOME args /\ fn_has_retpc callee ==>
+  LENGTH args + 1 = LENGTH (get_params (HD callee.fn_blocks).bb_instructions)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[invoke_layout_wf_def, fmp_seal_layout_matches_fn_def,
+      fmp_signature_syntax_wf_def, invoke_input_arity_ok_def] >>
+  drule invoke_canonical_param_count >> simp[] >>
+  `!ops vs vals. eval_operands ops vs = SOME vals ==>
+      LENGTH vals = LENGTH ops` by
+    (Induct >> simp[eval_operands_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `LENGTH args = LENGTH arg_ops` by metis_tac[] >> simp[]
+QED
+
+Theorem invoke_call_entry:
+  !ctx cp lo o2pc prog fn ra rest mem0 arranged vs mid callee args cvs
+   ret_lbl ret_off saved off pc.
+  setup_callee callee args vs = SOME cvs /\ fn_has_retpc callee /\
+  LENGTH args + 1 = LENGTH (get_params (HD callee.fn_blocks).bb_instructions) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+  mid.as_stack = REVERSE args ++ saved ++ rest /\
+  asm_block_at prog mid.as_pc [AsmPushLabel ret_lbl; AsmPushLabel callee.fn_name; AsmOp "JUMP"] /\
+  FLOOKUP lo ret_lbl = SOME ret_off /\ FLOOKUP lo callee.fn_name = SOME off /\
+  off < dimword(:256) /\ FLOOKUP o2pc off = SOME pc ==>
+  ?cas. asm_steps lo o2pc prog 3 mid = AsmOK cas /\
+    fn_entry_state_rel cp callee cvs cas (n2w ret_off) (saved ++ rest) /\
+    cas.as_pc = pc
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all invoke_call_packet >> strip_tac >>
+  drule_all invoke_setup_entry_rel >>
+  disch_then (qspecl_then [`ret_off`, `pc`] assume_tac) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem invoke_indexed_callee_target:
+  !ctx cp lo o2pc prog callee nm.
+  MEM callee ctx.ctx_functions /\ callee.fn_name = nm /\
+  (!j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
+    ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword(:256) /\
+      FLOOKUP o2pc off = SOME pc /\
+      asm_block_at prog pc
+        (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan)) ==>
+  ?j off pc. j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+    FLOOKUP lo nm = SOME off /\ off < dimword(:256) /\
+    FLOOKUP o2pc off = SOME pc /\
+    asm_block_at prog pc
+      (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[MEM_EL] >> first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+Theorem invoke_return_label_target:
+  !lo o2pc fmp ops pre ret_lbl post pc.
+  ops = pre ++ [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP";
+                SOLabel ret_lbl] ++ post /\
+  (!lbl i. i < LENGTH (execute_plan fmp ops) /\
+    EL i (execute_plan fmp ops) = AsmLabel lbl ==>
+    ?off. FLOOKUP lo lbl = SOME off /\ off < dimword(:256) /\
+      FLOOKUP o2pc off = SOME (pc + i)) ==>
+  ?off. FLOOKUP lo ret_lbl = SOME off /\ off < dimword(:256) /\
+    FLOOKUP o2pc off = SOME (pc + LENGTH (execute_plan fmp pre) + 3)
+Proof
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`ret_lbl`, `LENGTH (execute_plan fmp pre) + 3`] mp_tac) >>
+  gvs[execute_plan_append] >>
+  qmatch_goalsub_abbrev_tac `LENGTH prefix` >>
+  qmatch_goalsub_abbrev_tac `LENGTH suffix` >>
+  simp[execute_plan_def, exec_stack_op_def, EL_APPEND_EQN]
+QED
