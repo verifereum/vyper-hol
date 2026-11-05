@@ -636,4 +636,58 @@ Proof
   gvs[deploy_ctor_noninit_selection_probe]
 QED
 
+val ctor_key = ``assign_nkeys ^deploy_tops 0 "other"``;
+val ctor_env0 = ``(build_compile_env ^deploy_tops Deploy Payable "other" []
+    NoneT [Return NONE] F) with
+  <|ce_is_ctor := T; ce_raw_return := F;
+    ce_nonreentrant := (F,^ctor_key,F,F); ce_target := all_capabilities|>``;
+
+Theorem deploy_ctor_noninit_package:
+  set_constructor_package_target (^deploy_rpolicy).rpol_target
+    (package_constructor ^deploy_tops F (assign_nkeys ^deploy_tops 0)
+      (Payable,F,F,"other",[],[],NoneT,[Return NONE])) =
+  (^ctor_env0,[],T,F,^ctor_key,F,[Return NONE],NoneT)
+Proof
+  simp[package_constructor_def, set_constructor_package_target_def,
+       update_cenv_nonreentrant_def, build_positional_args_def]
+QED
+
+val ctor_env1 = ``^ctor_env0 with ce_imm_alloca := NONE``;
+val ctor_env = ``^ctor_env1 with ce_ctor_exit_label := SOME "@ctor_exit_0"``;
+val closed_state = rhs o concl o EVAL;
+val ctor_init = closed_state ``initial_compile_state "__deploy"``;
+val ctor_sa = closed_state ``SND (fresh_label "ctor_exit" ^ctor_init)``;
+val ctor_sb = closed_state ``SND (emit_inst JMP [Label "@ctor_exit_0"] [] ^ctor_sa)``;
+val ctor_exit = closed_state ``SND (new_block "@ctor_exit_0" ^ctor_sb)``;
+val ctor_old = closed_state ``FST (new_block "@ctor_exit_0" ^ctor_sb)``;
+val ctor_final = closed_state ``SND (compile_constructor_epilogue 0 0 (Lit 0w) ^ctor_exit)``;
+
+Theorem deploy_ctor_noninit_body_compile:
+  compile_stmts ^ctor_env NoLoop NoneT [Return NONE] ^ctor_sa = ((),^ctor_sb)
+Proof
+  simp[stmtLoweringTheory.compile_stmt_def,
+       build_compile_env_deploy_no_internal_return] >>
+  EVAL_TAC
+QED
+
+val ctor_unit = ``THE (lower_vyper_deploy_unit ^deploy_tops ^deploy_rpolicy [])``;
+val ctor_func = ``HD (^ctor_unit).cu_context.ctx_functions``;
+
+Theorem deploy_ctor_noninit_code:
+  deploy_ctor_code ^deploy_tops ^deploy_rpolicy [] ^ctor_unit
+    ([Return NONE],^ctor_env,F,^ctor_key,F,Lit 0w,"@ctor_exit_0",
+     ^ctor_sa,^ctor_sb,^ctor_sb,^ctor_exit,^ctor_exit,^ctor_final,^ctor_func)
+Proof
+  rewrite_tac[deploy_ctor_code_def] >>
+  qexistsl [`[]`, `[]`, `NONE`,
+    `(Payable,F,F,"other",[],[],NoneT,[Return NONE])`,
+    `^ctor_env0`, `[]`, `T`, `NoneT`, `0`, `^ctor_init`,
+    `^ctor_init`, `^ctor_env1`, `^ctor_init`, `^ctor_init`, `^ctor_old`] >>
+  rewrite_tac[deploy_ctor_noninit_package,deploy_ctor_noninit_body_compile,
+              deploy_ctor_noninit_lower_eq] >>
+  simp[moduleLoweringTheory.compile_register_constructor_args_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``build_compile_env``, ``assign_nkeys``]) >>
+  simp[boolTheory.EXISTS_DEF] >> SELECT_ELIM_TAC >> simp[]
+QED
+
 end
