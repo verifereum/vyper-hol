@@ -25,7 +25,7 @@
 Theory exprSimAggregateChildren
 Ancestors
   loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingProofs vyperTyping
-  exprSimAlloc
+  exprSimAlloc typedMemoryCopy
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
@@ -414,6 +414,42 @@ Theorem expr_post_rebased_lookup:
   lookup_var x s = SOME w
 Proof
   simp[expr_post_def, not_fresh_at_def] >> metis_tac[]
+QED
+
+(* Restrict the expression's old-allocation frame before composing a store.
+   The allocation identity remains explicit at this boundary. *)
+Theorem expr_post_rebased_slice:
+  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\
+  FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    off + sz <= b \/ b + k <= off) /\
+  off <= a /\ a + len <= off + sz ==>
+  mem_bytes_at a len s.vs_memory = mem_bytes_at a len r.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `!aid off sz. _` (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem expr_post_rebased_store_slice:
+  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\
+  FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    off + sz <= b \/ b + k <= off) /\
+  off <= a /\ a + len <= off + sz /\
+  (!a len. a + len <= dst \/ dst + n <= a ==>
+    mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory) /\
+  (a + len <= dst \/ dst + n <= a) ==>
+  mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory
+Proof
+  strip_tac >> drule_all expr_post_rebased_slice >>
+  strip_tac >> metis_tac[]
 QED
 
 (* Store the just-unwrapped value.  Both reference-state frames are composed
@@ -941,3 +977,45 @@ Proof
   gvs[expr_post_def, expr_val_rel_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+(* Typed copies may change the control location, but not the data-state
+   invariants used by the aggregate store frame. *)
+Theorem aggregate_store_control_frame:
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+            vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+  (!a k. a+k <= dst \/ dst+n <= a ==>
+    mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+  (!name b sz. local_region ce es.scopes s name b sz ==>
+    b+sz <= dst \/ dst+n <= b) /\
+  LENGTH s.vs_memory <= LENGTH q.vs_memory /\
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) dst n) ==>
+  stmt_state_rel ctx func ce cx es q
+Proof
+  strip_tac >>
+  qabbrev_tac `t = q with <|vs_prev_bb := s.vs_prev_bb;
+    vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>` >>
+  `stmt_state_rel ctx func ce cx es t` by
+    (irule buffer_store_state_frame >>
+     qexistsl [`dst`, `n`, `s`, `sa`] >>
+     simp[Abbr `t`, lookup_var_def] >>
+     gvs[venom_state_component_equality, lookup_var_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `stmt_state_rel ctx func ce cx es t` mp_tac >>
+  simp[Abbr `t`] >> rpt (pop_assum kall_tac) >>
+  simp[stmt_state_rel_def, state_rel_def, accounts_rel_def, local_ptrs_rel_def,
+      local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+      contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.allocas_non_overlapping_def,
+      venomMemDefsTheory.alloca_next_valid_def, alloca_room_def, fmp_room_def,
+      pending_alloca_size_def, immutable_alloca_sep_def, immutable_base_zero_alt] >>
+  strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
