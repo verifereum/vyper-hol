@@ -245,6 +245,33 @@ Proof
       metis_tac[alias_popmany_singleton_inventory, pairTheory.SND]) >>
   simp[]
 QED
+(* Generic projection for spill release; unlike the specialized stack
+   theorem in fnFrameBoundaryGenRet this also describes arbitrary deletion
+   batches, without importing the frame-simulation dependency chain. *)
+Theorem alias_release_fold_fields:
+  !xs ps.
+    (FOLDL (\ps' (op,off).
+       ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                   ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps xs).ps_stack = ps.ps_stack /\
+    (!at. at IN FDOM (FOLDL (\ps' (op,off).
+       ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                   ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps xs).ps_spilled <=>
+      at IN FDOM ps.ps_spilled /\ ~MEM at (MAP FST xs))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem alias_release_dead_spills_domain:
+  at IN FDOM (release_dead_spills live ps).ps_spilled <=>
+    at IN FDOM ps.ps_spilled /\ (?v. at = Var v /\ MEM v live)
+Proof
+  Cases_on `at` >>
+  simp[release_dead_spills_def, alias_release_fold_fields, MEM_MAP, MEM_FILTER,
+       pairTheory.FORALL_PROD, alistTheory.MEM_pair_fmap_to_alist_FLOOKUP] >>
+  metis_tac[finite_mapTheory.flookup_thm]
+QED
+
 
 Theorem plan_holds_cleanup_update[simp]:
   plan_holds
