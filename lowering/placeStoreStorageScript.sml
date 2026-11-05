@@ -3874,6 +3874,51 @@ Proof
   rewrite_tac[place_store_wrap_probe_declared_root] >> EVAL_TAC
 QED
 
+(* Exact room diagnostic; code/call-budget conditions remain explicit. *)
+Theorem place_store_wrap_probe_alloca_room:
+  !ctx func s.
+    s.vs_alloca_next = dimword (:256) - 32 ==>
+    (alloca_room ctx func s <=>
+      venomInst$lookup_function func.fn_name ctx.ctx_functions = SOME func /\
+      FINITE {g | TC (fn_directly_calls ctx) func.fn_name g} /\
+      (!g. TC (fn_directly_calls ctx) func.fn_name g ==>
+        ~TC (fn_directly_calls ctx) g g) /\
+      pending_alloca_size func s +
+        CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
+          unit_alloca_frame ctx < 32)
+Proof
+  rpt strip_tac >> simp[alloca_room_def] >>
+  iff_tac >> strip_tac >> simp[] >> decide_tac
+QED
+
+Theorem place_store_wrap_probe_suffix_allocations:
+  let cenv = (ARB:compile_env) with <|ce_struct_fields := FEMPTY;
+                                        ce_target := K T|> in
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let (_,sb) = compile_assign_value cenv (Lit 0w) LocStorage (Lit 0w) F
+    (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa in
+  EVERY (\inst. inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> INVOKE /\
+      (inst.inst_opcode = ALLOCA ==> inst.inst_operands = [Lit 0w]))
+    (FLAT (MAP (\bb. bb.bb_instructions) sb.cs_blocks) ++ sb.cs_current_insts)
+Proof
+  EVAL_TAC
+QED
+
+Theorem place_store_wrap_probe_backend_context_obstruction:
+  !ctx func cenv ee s.
+    ~stmt_state_rel ctx func cenv place_store_wrap_probe_context ee s
+Proof
+  rpt strip_tac >>
+  gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def, tx_env_ok_def,
+      place_store_wrap_probe_context_def,
+      vyperContextTheory.empty_evaluation_context_def,
+      vyperContextTheory.empty_call_txn_def]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
