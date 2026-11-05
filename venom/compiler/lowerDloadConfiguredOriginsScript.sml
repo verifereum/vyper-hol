@@ -362,6 +362,31 @@ Proof
   decide_tac
 QED
 
+(* Locate a target program counter inside the expansion of one source
+   instruction, retaining both surrounding lists and their supply states. *)
+Theorem lower_dload_insts_supply_position:
+  !s xs t n. lower_dload_insts_supply s ins = (xs,t) /\ n < LENGTH xs ==>
+  ?pre i post ys u zs v ws k.
+    ins = pre ++ i::post /\
+    lower_dload_insts_supply s pre = (ys,u) /\
+    lower_dload_inst_supply u i = (zs,v) /\
+    lower_dload_insts_supply v post = (ws,t) /\
+    xs = ys ++ zs ++ ws /\ n = LENGTH ys + k /\ k < LENGTH zs
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `n < LENGTH out`
+  >- (qexistsl [`[]`,`h`,`ins`,`[]`,`s`,`out`,`s1`,`outs`,`n`] >>
+      simp[lower_dload_insts_supply_def]) >>
+  `n - LENGTH out < LENGTH outs` by (gvs[] >> decide_tac) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`h::pre`,`i`,`post`,`out ++ ys`,`u`,`zs`,`v`,`ws`,`k`] >>
+  simp[Once lower_dload_insts_supply_def] >>
+  gvs[APPEND_ASSOC] >> decide_tac
+QED
+
 (* Unique source boundary covering a target instruction, even when the
    target instruction lies in the middle of a generated expansion. *)
 Theorem lower_dload_insts_supply_envelope:
