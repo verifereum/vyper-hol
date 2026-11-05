@@ -4529,6 +4529,35 @@ Proof
   rpt strip_tac >> simp[Once contextTheory.compile_store_memory_typed_def]
 QED
 
+Theorem place_store_expr_sim_inv_empty_tenv_metadata:
+  !cenv cx env es.
+    expr_sim_inv cenv cx env es /\ get_tenv cx = FEMPTY ==>
+    cenv.ce_struct_fields = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_sim_inv_def] >> strip_tac >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  simp[finite_mapTheory.fmap_eq_flookup] >> gen_tac >>
+  Cases_on `FLOOKUP cenv.ce_struct_fields x` >> simp[] >>
+  qpat_x_assum `!name fields. FLOOKUP cenv.ce_struct_fields _ <> SOME _`
+    (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Theorem place_store_wrap_probe_metadata_acyclic:
+  !cenv env es txn.
+    expr_sim_inv cenv (place_store_wrap_probe_context with txn := txn) env es ==>
+    acyclic_struct_metadata cenv.ce_struct_fields
+Proof
+  rpt strip_tac >>
+  `get_tenv (place_store_wrap_probe_context with txn := txn) = FEMPTY` by
+    (Cases_on `txn.target = 0w` >>
+     simp[vyperContextTheory.get_tenv_def, place_store_wrap_probe_context_def,
+       vyperContextTheory.empty_evaluation_context_def] >> EVAL_TAC >> simp[]) >>
+  drule_all place_store_expr_sim_inv_empty_tenv_metadata >> simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
