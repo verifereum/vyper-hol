@@ -601,3 +601,28 @@ reflection belong to generic frame/integration work. `taint_within` needs
 that reverse reachable/request/final direction even after forward local
 simulation is complete. Frozen wrappers must remain blocked until all
 these interfaces are instantiated, not merely rebuilt.
+
+### Matched-return semantic boundary (frameInvokeReturn)
+
+`matched_run_invoke_return` now checks the run premise needed by the raw
+projection: INVOKE opcode, successful decode/lookup/evaluation/setup,
+`run_blocks fuel ctx callee cs = IntRet ret send`, and successful output
+binding imply `step_inst fuel ctx callinst caller = OK post`. It additionally
+exports restoration of caller vs_allocas and vs_alloca_next. Fuel is EXACTLY
+the callee run fuel: no successor or monotonicity assumption is needed.
+The run begins at setup_callee's cs, BEFORE entry PHIs (run_defs:1706-1723).
+A reachable endpoint alone does not supply that run witness.
+
+Proposed downstream segment interface (not yet proved or a definition):
+carry a stack of activation entry states and finite block/instruction
+execution segments alongside the joint history. Each segment retains the
+entry before PHIs, the current block after PHIs, the list of completed
+ordinary steps and block jumps, and saved INVOKE continuations. Each local
+ordinary edge has a successful semantic step witness; a completed nested
+call is replaced by matched_run_invoke_return at its saved caller. At RET,
+close the innermost segment into an existential-fuel run_blocks witness
+returning the exact ret/send; bind and resume the saved segment. Need fuel
+adequacy/monotonicity for composing completed segments because run_blocks
+spends fuel per block and recursive invocation. Entry/frame endpoint erasure
+cannot replace this well-bracketed segment invariant. First search existing
+exec_block/run_blocks composition and fuel lemmas before defining it.
