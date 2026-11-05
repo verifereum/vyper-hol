@@ -1167,6 +1167,139 @@ Proof
   simp[integer_wordTheory.i2w_def]
 QED
 
+Theorem imm_array_index_range[local]:
+  !etv bd av ix n sgn i.
+    n = array_length (ArrayTV etv bd) av /\ n < dimword (:256) /\
+    i = (integer_word$i2w ix : bytes32) /\
+    (if sgn then -(&(2 ** 255)) <= ix /\ ix < &(2 ** 255)
+     else 0 <= ix /\ ix < &(dimword (:256))) /\
+    (!al. av = SArrayV al ==> ?k. bd = Fixed k) ==>
+    (IS_SOME (array_index (ArrayTV etv bd) av ix) <=>
+     idx_in_range sgn i (n2w n))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all imm_index_word_range >> disch_then SUBST1_TAC >>
+  Cases_on `av` >> gvs[vyperValueOperationTheory.array_index_def,
+                       vyperValueOperationTheory.array_length_def] >>
+  simp[listTheory.oEL_THM] >>
+  rpt CASE_TAC >> gvs[]
+QED
+
+Theorem imm_typed_array_length[local]:
+  !tenv et bd etv av.
+    evaluate_type tenv (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) ==>
+    array_length (ArrayTV etv bd) av < dimword (:256) /\
+    (!al. av = SArrayV al ==> ?k. bd = Fixed k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def,
+      vyperValueOperationTheory.array_length_def, vyperValueTheory.type_slot_size_def,
+      bound_length_def] >>
+  `n <= n * type_slot_size etv` by
+    (once_rewrite_tac[GSYM arithmeticTheory.MULT_RIGHT_1] >>
+     simp[arithmeticTheory.LE_MULT_LCANCEL]) >>
+  decide_tac
+QED
+
+Theorem imm_typed_index_interval[local]:
+  !tenv ity itv ix.
+    is_int_type ity /\ evaluate_type tenv ity = SOME itv /\
+    value_has_type itv (IntV ix) ==>
+    (if is_signed_type ity then
+       -(&(2 ** 255)) <= ix /\ ix < &(2 ** 255)
+     else 0 <= ix /\ ix < &(dimword (:256)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ity` >> gvs[] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+      vyperTypingTheory.value_has_type_def, is_signed_type_def,
+      vyperValueTheory.within_int_bound_def]
+  >- (`2 ** n <= 2 ** 256` by simp[] >>
+      `ix = &Num ix` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
+      `Num ix < 2 ** 256` by decide_tac >>
+      qpat_x_assum `ix = &Num ix` SUBST1_TAC >> gvs[]) >>
+  `n - 1 <= 255` by decide_tac >>
+  `2 ** (n - 1) <= 2 ** 255` by simp[] >>
+  Cases_on `ix < 0`
+  >- (`Num (-ix) <= 2 ** 255` by
+        (qpat_x_assum `if _ then _ else _` mp_tac >>
+         pure_asm_rewrite_tac[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      `-ix = &Num (-ix)` by
+        (simp[Once $ GSYM integerTheory.INT_OF_NUM] >> intLib.ARITH_TAC) >>
+      qpat_x_assum `if _ then _ else _` kall_tac >>
+      qpat_x_assum `Num (-ix) <= _` mp_tac >>
+      pure_once_rewrite_tac[GSYM integerTheory.INT_LE] >>
+      simp[] >> intLib.ARITH_TAC) >>
+  `Num ix < 2 ** 255` by
+    (qpat_x_assum `if _ then _ else _` mp_tac >>
+     pure_asm_rewrite_tac[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `ix = &Num ix` by
+    (simp[Once $ GSYM integerTheory.INT_OF_NUM] >> intLib.ARITH_TAC) >>
+  qpat_x_assum `if _ then _ else _` kall_tac >>
+  qpat_x_assum `Num ix < _` mp_tac >>
+  pure_once_rewrite_tac[GSYM integerTheory.INT_LT] >>
+  simp[] >> intLib.ARITH_TAC
+QED
+
+Theorem imm_typed_array_index_range[local]:
+  !tenv et bd etv av ity itv ix i.
+    evaluate_type tenv (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    is_int_type ity /\ evaluate_type tenv ity = SOME itv /\
+    value_has_type itv (IntV ix) /\ i = val_to_w256 (IntV ix) ==>
+    (array_index (ArrayTV etv bd) av ix = NONE <=>
+       ~idx_in_range (is_signed_type ity) i
+         (n2w (array_length (ArrayTV etv bd) av))) /\
+    (idx_in_range (is_signed_type ity) i
+       (n2w (array_length (ArrayTV etv bd) av)) ==>
+       i = n2w (Num ix))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all imm_typed_array_length >> strip_tac >>
+  drule_all imm_typed_index_interval >> strip_tac >>
+  fs[valueEncodingTheory.val_to_w256_def] >>
+  `IS_SOME (array_index (ArrayTV etv bd) av ix) <=>
+     idx_in_range (is_signed_type ity) i
+       (n2w (array_length (ArrayTV etv bd) av))` by
+    (irule imm_array_index_range >> simp[] >> goal_assum $ drule_at Any) >>
+  conj_tac >- (Cases_on `array_index (ArrayTV etv bd) av ix` >> gvs[]) >>
+  strip_tac >> irule imm_index_word_nat >> simp[] >>
+  qexistsl_tac [`array_length (ArrayTV etv bd) av`, `is_signed_type ity`] >>
+  simp[]
+QED
+
+Theorem imm_typed_array_step_offset[local]:
+  !cenv cx env es et bd etv av ix v.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    array_index (ArrayTV etv bd) av ix = SOME v ==>
+    mem_step_offset (ArrayTV etv bd) (ValueSubscript (IntV ix)) =
+      SOME ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+            Num ix * elem_size_in_location cenv LocCode et, etv)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `evaluate_type (get_tenv cx) et = SOME etv` by
+    gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
+  drule_all imm_typed_array_length >> strip_tac >>
+  `valid_index (ArrayTV etv bd) av ix` by
+    (irule vyperArrayTheory.array_index_bounds >>
+     conj_tac >- metis_tac[] >> goal_assum $ drule_at Any) >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def,
+      vyperValueOperationTheory.array_length_def,
+      vyperArrayTheory.valid_index_def,
+      mem_step_offset_def, elem_size_in_location_def, is_slot_addressed_def] >>
+  `ix = &Num ix` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
+  qpat_x_assum `ix < _` mp_tac >>
+  qpat_x_assum `ix = &Num ix` SUBST1_TAC >> simp[] >> decide_tac
+QED
+
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
