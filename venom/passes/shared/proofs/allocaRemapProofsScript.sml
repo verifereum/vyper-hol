@@ -1510,6 +1510,8 @@ QED
 Theorem remap_step_pending_deletions[local]:
   alloca_remap_rel fn roots remap s1 s2 /\
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> DELEGATECALL /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
   v1.vs_pending_deletions = v2.vs_pending_deletions
 Proof
