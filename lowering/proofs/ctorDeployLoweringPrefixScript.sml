@@ -1133,6 +1133,24 @@ Proof
   CONV_TAC (RHS_CONV computeLib.EVAL_CONV) >> REFL_TAC
 QED
 
+Theorem deploy_prefix_negative_wf_state:
+  wf_state ^prefix_es_tm
+Proof
+  simp[vfmExecutionPropTheory.wf_state_def, LET_THM,
+       vfmContextTheory.initial_context_simp,
+       venomExecSemanticsTheory.make_rollback_def,
+       initial_machine_state_def, empty_call_txn_def,
+       vfmExecutionPropTheory.all_accounts_def,
+       vfmExecutionPropTheory.stack_room_ok_def,
+       vfmExecutionPropTheory.gas_stack_ok_def,
+       vfmExecutionPropTheory.outputTo_consistent_stack_def] >>
+  simp[vfmExecutionPropTheory.wf_accounts_def,
+       vfmExecutionPropTheory.outputTo_consistent_ctx_def,
+       vfmContextTheory.initial_context_simp,
+       vfmContextTheory.initial_msg_params_def] >>
+  EVAL_TAC >> simp[]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
