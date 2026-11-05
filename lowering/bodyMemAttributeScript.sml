@@ -1,13 +1,23 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): a field
-   read. bodyExprClosureMemory's body_attribute_name_mem_case (a field of a
-   local struct, through bodyFieldMemoryProps) predates the gas-counted
-   expr_sim_mem and needs porting; other bases have no case yet. *)
+   read, for any base.  The value judgment is bodyAttributeMemory's, from the
+   base's; the forced one is the generic unwrap, since a field read compiles
+   to a pointer, never a stack value. *)
 Theory bodyMemAttribute
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyAttributeMemory bodyExprForceMemory exprSimAttribute
+  exprSimMemDefs exprLowering context
 
 Theorem body_attribute_mem_ok:
   !cx v9 e id. body_expr_mem_ok cx e ==> body_expr_mem_ok cx (Attribute v9 e id)
 Proof
-  cheat
+  rpt gen_tac >> rewrite_tac[body_expr_mem_ok_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule attr_pre_base >> strip_tac >>
+  `expr_vv_sim_mem ctx func cenv cx ty e es` by metis_tac[] >>
+  `expr_vv_sim_mem ctx func cenv cx ty (Attribute v9 e id) es` by
+    metis_tac[compile_attribute_vv_sim_mem] >>
+  simp[] >> irule body_expr_sim_mem_of_vv_sim_mem >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule compile_expr_attribute >> simp[]) >>
+  goal_assum drule
 QED

@@ -248,7 +248,8 @@ Resume compile_log_eval_all_gas_mem[tail_value]:
      `?w'. eval_operand x t = SOME w'` by
        (fs[expr_post_def, expr_val_at_def] >> metis_tac[]) >>
      `w' = w` by (res_tac >> fs[]) >> gvs[] >>
-     `w2n w + val_store_size tv v <= t.vs_alloca_next` by
+     `val_store_size tv v = 0 \/
+      w2n w + val_store_size tv v <= t.vs_alloca_next` by
        metis_tac[expr_store_bound_def] >>
      decide_tac) >>
   qexistsl_tac [`INL (v::vs)`, `es_end2`, `OK t2`] >>

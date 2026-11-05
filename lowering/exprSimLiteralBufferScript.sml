@@ -467,7 +467,7 @@ Proof
   simp[mstore_def]
 QED
 
-Theorem literal_bytelike_run[local]:
+Theorem literal_bytelike_run:
   !func cenv cx es bs sa sb buf s ctx.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -847,7 +847,7 @@ Proof
   drule_all fragGasSeqTheory.tuple_run_inst_seq_gas_path >> simp[]
 QED
 
-Theorem literal_bytelike_alloca_mem[local]:
+Theorem literal_bytelike_alloca_mem:
   !bs sa buf sb func.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
     fn_has_code sa sb func ==>
@@ -877,7 +877,7 @@ Proof
   goal_assum (drule_at Any) >> simp[MEM_APPEND]
 QED
 
-Theorem literal_memory_vv_post[local]:
+Theorem literal_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
