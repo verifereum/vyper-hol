@@ -14,7 +14,7 @@ Ancestors
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   callTrace frameOutcome vfmExecution vfmExecutionProp list rich_list
   vfmOperation alist asmEncodeParse vfmState vfmSameFrame vfmRunWithinFrame
-  vfmRunCall vfmContext
+  vfmRunCall vfmContext vfmContextLength
 
 Theorem frame_rel_singleton[local]:
   asm_evm_rel p a es /\ es.contexts = (c,rb)::rest ==>
@@ -175,6 +175,125 @@ Proof
   `?d1. es1.msdomain = Collect d1` by
     (Cases_on `es1.msdomain` >> gvs[msdomain_compatible_def]) >>
   simp[asm_frame_rel_def] >> gvs[call_requests_def]
+QED
+
+Theorem frame_terminal_transplant[local]:
+  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  (!op. next_opcode c = SOME op ==>
+    ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
+  step (es with contexts := [(c,rb)]) = (INR e,t) /\
+  t.contexts = [(ct,rt)] /\ ~vfm_abort e ==>
+  ?r es' lgs. run_call es = SOME (r,es') /\
+    frame_outcome es0 r es' e ct.returnData lgs /\
+    (e = NONE ==> lgs = ct.logs /\ es'.rollback = t.rollback) /\
+    call_requests es = []
+Proof
+  strip_tac >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  simp[asm_frame_rel_def] >> strip_tac >> gvs[] >>
+  `!addr. c.msgParams.outputTo <> Code addr` by
+    metis_tac[frame_rel_output_to] >>
+  Cases_on `rest = []`
+  >- (`es with contexts := [(c,rb)] = es` by
+        gvs[execution_state_component_equality] >>
+      `t.txParams = es.txParams` by
+        (irule same_frame_rel_imp_txParams_rel >> irule step_same_frame >>
+         gvs[outputTo_consistent_def]) >>
+      `step es = (INR e,t)` by gvs[] >>
+      `run_call es = SOME (INR e,t)` by
+        (irule run_call_terminal_step >> simp[]) >>
+      `call_trace es = []` by
+        (drule frame_obs_terminal >> simp[]) >>
+      qexistsl_tac [`INR e`,`t`,`ct.logs`] >>
+      simp[frame_outcome_def, call_requests_def]) >>
+  drule_all (SRULE [MEM] step_transplant_end) >> strip_tac >> gvs[] >>
+  `LENGTH es'.contexts < LENGTH es.contexts` by
+    (qpat_x_assum `frame_outcome es _ _ _ _ _` mp_tac >>
+     simp[frame_outcome_def] >> Cases_on `rest` >> gvs[] >>
+     Cases_on `h` >> gvs[] >> strip_tac >> gvs[] >>
+     qpat_x_assum `MAP _ _ = MAP _ _`
+       (mp_tac o AP_TERM ``LENGTH : context list -> num``) >> simp[]) >>
+  `run_call es = SOME (INL (),es')` by
+    (irule run_call_terminal_step >> simp[]) >>
+  `call_trace es = []` by (drule frame_obs_terminal >> simp[]) >>
+  drule_all frame_outcome_mid >> strip_tac >>
+  qexistsl_tac [`INL ()`,`es'`,`c.logs ++ lgs`] >>
+  simp[call_requests_def]
+QED
+
+Theorem frame_terminal_singleton_length[local]:
+  wf_state es /\ es.contexts = (c,rb)::rest /\
+  (!addr. c.msgParams.outputTo <> Code addr) /\
+  step (es with contexts := [(c,rb)]) = (INR e,t) /\ ~vfm_abort e ==>
+  LENGTH t.contexts = 1
+Proof
+  strip_tac >>
+  `EVERY (wf_context o FST) (es with contexts := [(c,rb)]).contexts` by
+    gvs[wf_state_def] >>
+  `(es with contexts := [(c,rb)]).contexts <> []` by simp[] >>
+  `outputTo_consistent (es with contexts := [(c,rb)])` by
+    simp[outputTo_consistent_def] >>
+  drule_all step_inr_not_abort_length >> simp[] >> strip_tac >>
+  drule step_preserves_nonempty_contexts >> simp[] >>
+  Cases_on `t.contexts` >> gvs[]
+QED
+
+Theorem frame_starved_lift[local]:
+  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  (!op. next_opcode c = SOME op ==>
+    ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
+  step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
+  (exc = OutOfGas \/ exc = StackOverflow) ==>
+  ?r es'. run_call es = SOME (r,es') /\ frame_resource_starved es0 r es'
+Proof
+  strip_tac >>
+  `wf_state es /\ (!addr. c.msgParams.outputTo <> Code addr)` by
+    (gvs[asm_frame_rel_def] >> metis_tac[frame_rel_output_to]) >>
+  `~vfm_abort (SOME exc)` by
+    (gvs[vfm_abort_def]) >>
+  `LENGTH t.contexts = 1` by
+    (irule frame_terminal_singleton_length >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
+  drule (SRULE [MEM] frame_terminal_transplant) >>
+  disch_then drule >> simp[vfm_abort_def] >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[frame_resource_starved_def] >>
+  metis_tac[]
+QED
+
+Theorem frame_terminal_lift[local]:
+  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  (!op. next_opcode c = SOME op ==>
+    ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
+  step (es with contexts := [(c,rb)]) = (INR e,t) /\
+  LENGTH t.contexts = 1 /\ ~vfm_abort e ==>
+  ?r es' lgs. run_call es = SOME (r,es') /\
+    frame_outcome es0 r es' e (FST (HD t.contexts)).returnData lgs /\
+    (e = NONE ==> lgs = (FST (HD t.contexts)).logs /\
+                  es'.rollback = t.rollback) /\ call_requests es = []
+Proof
+  strip_tac >> Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
+  drule (SRULE [MEM] frame_terminal_transplant) >>
+  disch_then drule >> simp[]
+QED
+
+Theorem frame_terminal_rel_lift[local]:
+  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  (!op. next_opcode c = SOME op ==>
+    ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
+  step (es with contexts := [(c,rb)]) = (INR e,t) /\
+  LENGTH t.contexts = 1 /\ ~vfm_abort e /\
+  asm_evm_rel (prog ++ [AsmDataItem data]) a1 t ==>
+  ?r es' lgs. run_call es = SOME (r,es') /\
+    frame_outcome es0 r es' e a1.as_returndata lgs /\
+    (e = NONE ==> lgs = a1.as_logs /\
+      es'.rollback.accounts = a1.as_accounts /\
+      es'.rollback.toDelete = a1.as_pending_deletions /\
+      es'.rollback.tStorage = a1.as_transient) /\ call_requests es = []
+Proof
+  strip_tac >> drule_all frame_terminal_lift >> strip_tac >>
+  Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
+  gvs[asm_evm_rel_def] >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem asm_frame_local_step:
