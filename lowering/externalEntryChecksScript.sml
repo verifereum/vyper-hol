@@ -590,7 +590,7 @@ Proof
       gvs[fresh_label_def, vyperCompilerTheory.initial_compile_state_def,
           loweringShapeDefsTheory.all_blocks_def,
           loweringShapeDefsTheory.internal_label_ok_def]) >>
-  drule externalEntryShapeTheory.cs_extends_block_stream >> strip_tac >>
+  drule externalEntryShapeTheory.cs_extends_block_stream_labels >> strip_tac >>
   gvs[fresh_label_def, vyperCompilerTheory.initial_compile_state_def,
       loweringShapeDefsTheory.all_blocks_def]
 QED

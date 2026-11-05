@@ -12,7 +12,7 @@ Libs
   monadsyntax dep_rewrite wordsLib
 
 (* Chronological streams retain the first occurrence of an open block. *)
-Theorem cs_extends_block_stream:
+Theorem cs_extends_block_stream_labels:
   !sa sb. cs_extends sa sb ==>
     ?bb tail.
       all_blocks sb = REVERSE sa.cs_blocks ++ bb::tail /\
@@ -43,7 +43,7 @@ Theorem cs_extends_finished_lookup:
     lookup_block lbl (REVERSE sa.cs_blocks) = SOME bb ==>
     lookup_block lbl (all_blocks sb) = SOME bb
 Proof
-  rpt strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  rpt strip_tac >> drule cs_extends_block_stream_labels >> strip_tac >>
   gvs[lookup_block_APPEND]
 QED
 
@@ -55,7 +55,7 @@ Theorem cs_extends_open_lookup:
     ?bb. lookup_block sa.cs_current_bb (all_blocks sb) = SOME bb /\
          isPREFIX sa.cs_current_insts bb.bb_instructions
 Proof
-  rpt strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  rpt strip_tac >> drule cs_extends_block_stream_labels >> strip_tac >>
   `lookup_block sa.cs_current_bb (REVERSE sa.cs_blocks) = NONE` by
     simp[lookup_block_NONE] >>
   qexists_tac `bb` >> simp[lookup_block_APPEND] >>
@@ -94,7 +94,7 @@ Theorem cs_extends_labels:
     MAP (\bb. bb.bb_label) (all_blocks b) =
       MAP (\bb. bb.bb_label) (all_blocks a) ++ added_labels a b
 Proof
-  rpt strip_tac >> drule cs_extends_block_stream >> strip_tac >>
+  rpt strip_tac >> drule cs_extends_block_stream_labels >> strip_tac >>
   gvs[all_blocks_def, MAP_APPEND]
 QED
 
@@ -427,7 +427,7 @@ Proof
   rewrite_tac[shape_step_def] >>
   disch_then drule >> simp[] >> strip_tac >>
   fs[shape_extends_def] >>
-  drule cs_extends_block_stream >> strip_tac >>
+  drule cs_extends_block_stream_labels >> strip_tac >>
   `lbl <> sd.cs_current_bb` by
     (qpat_x_assum `~MEM lbl (MAP _ (all_blocks sd))` mp_tac >>
      simp[all_blocks_def]) >>
@@ -4189,7 +4189,7 @@ Proof
         >- simp[compile_internal_function_labels] >>
         irule compile_internal_fn_bodies_labels >> simp[EVERY_MEM]) >>
      gvs[comp_ignore_bind_def, comp_bind_def]) >>
-  drule cs_extends_block_stream >> strip_tac >>
+  drule cs_extends_block_stream_labels >> strip_tac >>
   `REVERSE sm.cs_blocks = all_blocks se /\ sm.cs_current_bb = h0` by
     gvs[new_block_def, all_blocks_def, LET_THM] >>
   gvs[internal_fn_descriptors_def] >>
