@@ -104,6 +104,46 @@ Proof
   decide_tac
 QED
 
+Theorem entry_plan_param_boundary[local]:
+  codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn (HD fn.fn_blocks) ps0 =
+    SOME (bops, pa) ==>
+  ?pops ps1 body.
+    prepare_params_plan lv fn ps0 = (pops, ps1) /\
+    bops = SOLabel (HD fn.fn_blocks).bb_label :: pops ++ body /\
+    block_plan_state lv dfg (cfg_analyze fn) fn (HD fn.fn_blocks) ps0
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+    generate_block_insts_plan lv dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+      (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body, pa) /\
+    ps1.ps_alloc.sa_next_offset <= pa.ps_alloc.sa_next_offset
+Proof
+  `!insts i ps ops ps'.
+     generate_block_insts_plan lv dfg (cfg_analyze fn) fn
+       (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+       (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+       (LENGTH (HD fn.fn_blocks).bb_instructions) i insts ps = SOME (ops, ps') ==>
+     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset` by
+    (Induct_on `insts` >> rpt gen_tac >>
+     simp[Once generate_block_insts_plan_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     drule generate_inst_plan_next_offset >> strip_tac >>
+     first_x_assum drule >> strip_tac >> decide_tac) >>
+  strip_tac >>
+  `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
+    (qpat_x_assum `codegen_ready_fn _` mp_tac >>
+     Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, block_entries_ready_def, entry_block_def,
+         NULL_EQ]) >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[block_plan_state_def, generate_block_insts_plan_def] >>
+  metis_tac[]
+QED
+
 (* The DFS planner starts at the entry label from the initial state ps0,
    so the entry block is planned first, from ps0: the plan begins with the
    entry block's code, its label, its parameter code (prepare_params_plan)
