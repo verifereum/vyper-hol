@@ -178,7 +178,8 @@ Theorem expr_body_pre_raw_call_arg[local]:
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def,
-     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+     supportedExprTraverseTheory.supported_expr_exists_def,
+     supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
   imp_res_tac int_calls_exprs_every_mem >>
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
@@ -212,7 +213,8 @@ Proof
        type_check_def, assert_def, return_def, raise_def] >>
   Cases_on `flags.rcf_revert_on_failure` >> simp[] >>
   Cases_on `call_outcome_success outcome` >> simp[return_def, raise_def] >>
-  Cases_on `flags.rcf_max_outsize = 0` >> simp[return_def]
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def]
 QED
 
 Theorem raw_call_kwargs_sim[local]:
