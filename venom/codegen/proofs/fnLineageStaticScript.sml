@@ -18,6 +18,83 @@ Theory fnLineageStatic
 Ancestors
   fnPlanLineageJoin fnLineageInv fnLiveDefDom fnPlanPrefix fnPlanLineage
   stackPlanGen stackPlanTypes livenessDefs dfgDefs
+  codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
+  relation list finite_map
+
+Theorem lineage_state_entry_cases[local]:
+  lineage_state liveness dfg cfg fn ps0 lbl ps ==>
+  (fn_entry_label fn = SOME lbl /\ ps = ps0) \/
+  (?pred. lineage_entry liveness dfg cfg fn ps0 pred lbl ps)
+Proof
+  simp[Once lineage_state_cases, lineage_entry_def] >> metis_tac[]
+QED
+
+Theorem lineage_state_reachable[local]:
+  !liveness dfg cfg fn ps0 lbl ps.
+    lineage_state liveness dfg cfg fn ps0 lbl ps ==>
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn ==>
+    fn_reachable fn lbl
+Proof
+  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
+  ho_match_mp_tac lineage_state_ind >> rpt strip_tac
+  >- (simp[fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL])
+  >> irule fn_reachable_step >> qexists_tac `lbl` >>
+  gvs[codegen_ready_fn_def] >>
+  metis_tac[fn_cfg_edge_cfg_analyze]
+QED
+
+Theorem lineage_entry_edge[local]:
+  lineage_entry liveness dfg (cfg_analyze fn) fn ps0 pred succ ps /\
+  codegen_ready_fn fn ==>
+  (?bb. lookup_block pred fn.fn_blocks = SOME bb) /\
+  fn_cfg_edge fn pred succ /\ fn_reachable fn pred /\
+  fn_reachable fn succ
+Proof
+  strip_tac >>
+  `fn_reachable fn succ` by
+    metis_tac[lineage_entry_lineage_state, lineage_state_reachable] >>
+  gvs[lineage_entry_def] >>
+  `fn_reachable fn pred` by metis_tac[lineage_state_reachable] >>
+  gvs[codegen_ready_fn_def] >>
+  metis_tac[fn_cfg_edge_cfg_analyze]
+QED
+
+Theorem ready_small_preds_no_phis[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 ==>
+  collect_phis bb.bb_instructions = []
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+  metis_tac[NULL_EQ]
+QED
+
+Theorem ready_entry_no_phis[local]:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  collect_phis bb.bb_instructions = []
+Proof
+  strip_tac >>
+  `?eb. entry_block fn = SOME eb /\ eb.bb_label = lbl` by
+    gvs[fn_entry_label_def, AllCaseEqs()] >>
+  `MEM eb fn.fn_blocks` by
+    (gvs[entry_block_def, AllCaseEqs()] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `ALL_DISTINCT (fn_labels fn)` by
+    gvs[codegen_ready_fn_def, wf_function_def] >>
+  `lookup_block lbl fn.fn_blocks = SOME eb` by
+    metis_tac[MEM_lookup_block, fn_labels_def] >>
+  gvs[codegen_ready_fn_def, block_entries_ready_def, NULL_EQ]
+QED
+
+Theorem initial_cleanup_empty[local]:
+  (init_cleanup_plan_state ch growth spill_base lbl_ctr).ps_stack = [] /\
+  (init_cleanup_plan_state ch growth spill_base lbl_ctr).ps_spilled = FEMPTY
+Proof
+  simp[init_cleanup_plan_state_def, init_plan_state_def]
+QED
 
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
    reorder's target, the predecessor-side PHI sources and the live-in
