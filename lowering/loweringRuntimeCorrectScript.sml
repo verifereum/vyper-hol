@@ -171,8 +171,8 @@ QED
 
 Theorem supported_entry_no_getters[local]:
   supported_program tops ==>
-  (!mut ty x name. ~MEM (VariableDecl Public mut name ty x) tops) /\
-  (!b kt vt x name. ~MEM (HashMapDecl Public b name kt vt x) tops)
+  (!nr mut ty x name. ~MEM (VariableDecl (Public nr) mut name ty x) tops) /\
+  (!nr b kt vt x name. ~MEM (HashMapDecl (Public nr) b name kt vt x) tops)
 Proof
   simp[supported_program_def, supported_declaration_headers_def,
        EVERY_MEM] >> rpt strip_tac >>
@@ -502,11 +502,14 @@ Proof
   `shape_state (initial_compile_state "__entry")` by
     simp[loweringShapePropsTheory.shape_state_initial_compile_state] >>
   mp_tac (Q.SPECL [`F`, `jump_label_ok`, `\st. T`, `"fallback"`]
-    loweringShapeRulesTheory.shape_step_fresh_label) >>
+    loweringShapeRulesTheory.shape_step_fresh_label_sfx) >>
   simp[loweringShapeDefsTheory.shape_stable_def,
        loweringShapeDefsTheory.shape_step_def] >>
   disch_then drule_all >> strip_tac >>
   `jump_label_ok fallback` by simp[loweringShapeDefsTheory.jump_label_ok_def] >>
+  `~label_sfx "dispatch" fallback` by
+    (`"fallback" <> "dispatch"` by simp[] >>
+     metis_tac[loweringShapeRulesTheory.label_sfx_distinct]) >>
   drule_all loweringShapePropsTheory.compile_selector_dispatch_linear_shape >>
   rewrite_tac[loweringShapeDefsTheory.shape_step_def] >>
   disch_then drule_all >>

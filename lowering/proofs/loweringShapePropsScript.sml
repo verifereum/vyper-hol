@@ -17403,6 +17403,44 @@ Proof
        DROP_LENGTH_TOO_LONG]
 QED
 
+Theorem compile_internal_function_labels:
+  !cenv params hr nr k t v ctor il body rt s.
+    cs_extends s (SND (compile_internal_function cenv params hr nr k t v ctor il body rt s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_internal_function cenv params hr nr k t v ctor il body rt s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_internal_function_def] >>
+  stmt_labels_chain
+    [compile_internal_param_decls_labels, materialize_internal_params_labels,
+     compile_fixed_region_with_id_labels, compile_alloc_buffer_labels,
+     compile_nonreentrant_lock_labels, stmt_context_helpers_labels,
+     compile_stmt_labels, comp_get_labels, emit_op_labels, emit_inst_labels] >>
+  simp[pairTheory.ELIM_UNCURRY] >>
+  stmt_labels_chain
+    [materialize_internal_params_labels, compile_alloc_buffer_labels,
+     compile_nonreentrant_lock_labels, stmt_context_helpers_labels,
+     compile_stmt_labels, comp_get_labels, emit_op_labels, emit_inst_labels]
+QED
+
+Theorem compile_internal_fn_bodies_labels:
+  !packages P.
+    EVERY (\p. P (FST p)) packages /\
+    (!l. isPREFIX "@" l ==> P l) ==>
+    !s. cs_extends s (SND (compile_internal_fn_bodies packages s)) /\
+      EVERY P (added_labels s (SND (compile_internal_fn_bodies packages s)))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_internal_fn_bodies_def, comp_return_labels] >>
+  PairCases_on `h` >> simp[EVERY_DEF] >> strip_tac >>
+  once_rewrite_tac[compile_internal_fn_bodies_def] >>
+  irule comp_ignore_bind_labels >> conj_tac
+  >- (rpt gen_tac >> irule new_block_action_labels >> simp[]) >>
+  rpt gen_tac >> irule comp_ignore_bind_labels >> conj_tac
+  >- (rpt gen_tac >> irule fresh_namespace_labels_mono >>
+      simp[compile_internal_function_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
