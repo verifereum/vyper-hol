@@ -5,7 +5,7 @@ Ancestors
   bodyPtrDefs typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr gasCount
   emitHelperProps exprLoweringProps fragExec ptrSafeRun ptrDiscipline
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
-  venomExecProofs list
+  venomExecProofs venomInstProofs list
 
 Theorem for_emit_jump_zero_path_ptr:
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -37,6 +37,31 @@ Proof
   metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
+Theorem straight_line_single_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  ptr_inst_ok D lo 0 ctx fn G tn i s /\ step_inst_base i s = OK u ==>
+  gas_path_ptr D lo ctx fn PG G tn s
+    (if i.inst_opcode = GAS then 1 else 0)
+    (step_prov PG G i u) (step_taint i s u tn)
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >> drule_all straight_line_ptr_edge >> strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  qpat_x_assum `!PG. gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `PG` mp_tac) >>
+  strip_tac >>
+  `gas_path_ptr D lo ctx fn PG (step_prov PG G i u) (step_taint i s u tn)
+     (u with vs_inst_idx := SUC s.vs_inst_idx) 0
+     (step_prov PG G i u) (step_taint i s u tn)
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
+  drule (cj 2 gas_path_ptr_rules) >> disch_then drule >> simp[]
+QED
+
 Theorem mstore_zero_path_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -52,19 +77,12 @@ Theorem mstore_zero_path_ptr:
     (OK ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   strip_tac >>
-  `gas_path_ptr_edge D 0 ctx fn PG G tn s 0
-    (step_prov PG G (mk_inst id MSTORE [Var dst; value] []) (mstore (w2n a) w s))
-    (step_taint (mk_inst id MSTORE [Var dst; value] []) s (mstore (w2n a) w s) tn)
-    (OK ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (qspecl_then [`mk_inst id MSTORE [Var dst; value] []`, `mstore (w2n a) w s`, `0`]
-       mp_tac (Q.GENL [`i`, `u`, `lo`] straight_line_ptr_edge) >>
-     simp[GSYM mk_inst_def, is_terminator_def] >> disch_then irule >>
-     simp[] >> reverse conj_tac >- (irule ptr_inst_ok_mstore >> simp[]) >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
-  `~(mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
-    simp[mstore_def] >>
-  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
+  qspecl_then [`mk_inst id MSTORE [Var dst; value] []`, `mstore (w2n a) w s`, `0`]
+    mp_tac (Q.GENL [`i`, `u`, `lo`] straight_line_single_path_ptr) >>
+  simp[GSYM mk_inst_def, is_terminator_def] >> disch_then irule >>
+  simp[] >> reverse conj_tac >- (irule ptr_inst_ok_mstore >> simp[]) >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, exec_write2_def, eval_operand_def]
 QED
 
 (* Interface audit for the remaining For port (C1.1).
@@ -124,3 +142,27 @@ QED
    owner. The final stmt_frag_ptr obligation is only its old-variable ghost
    frame, not the stronger ghost_kept predicate.
 *)
+
+Theorem mload_zero_path_ptr:
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id MLOAD [Var src] [tmp]) /\
+  ptr_covers G tn src s 32 /\ lookup_var src s = SOME a ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (step_prov PG G (mk_inst id MLOAD [Var src] [tmp])
+      (update_var tmp (mload (w2n a) s) s))
+    (step_taint (mk_inst id MLOAD [Var src] [tmp]) s
+      (update_var tmp (mload (w2n a) s) s) tn)
+    (OK ((update_var tmp (mload (w2n a) s) s) with
+      vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  qspecl_then [`mk_inst id MLOAD [Var src] [tmp]`,
+    `update_var tmp (mload (w2n a) s) s`, `0`]
+    mp_tac (Q.GENL [`i`, `u`, `lo`] straight_line_single_path_ptr) >>
+  simp[GSYM mk_inst_def, is_terminator_def] >> disch_then irule >>
+  simp[] >> reverse conj_tac >- (irule ptr_inst_ok_mload >> simp[]) >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, exec_read1_def, eval_operand_def]
+QED
