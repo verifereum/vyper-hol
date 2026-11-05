@@ -103,6 +103,7 @@ Theorem block_body_frame_sim:
     generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
       spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
     fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     fn_reachable fn bb.bb_label /\
     lineage_state liveness dfg cfg fn
