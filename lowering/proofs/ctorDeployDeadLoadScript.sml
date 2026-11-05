@@ -1,11 +1,10 @@
 (* What a successful load_contract leaves for the deploy dead-transport:
- * its sources and layouts, and the declared types of the target's
- * immutables.
+ * its sources and layouts.
  *)
 Theory ctorDeployDeadLoad
 Ancestors
   ctorDeployDefs vyperInterpreter vyperTypeContractSoundness
-  typedCopyProducer
+  vyperTypeDeploymentMachine typedCopyProducer
 
 Theorem load_contract_sources_layouts:
   !orc gobs am tx mods exps am' rqs.
@@ -13,19 +12,17 @@ Theorem load_contract_sources_layouts:
     am'.sources = (tx.target, mods) :: am.sources /\
     am'.layouts = am.layouts
 Proof
-  cheat
-QED
-
-Theorem load_contract_immutables_typed:
-  !tops am tx gobs am' rqs pre vis name ty slot post tv v.
-    deploy_source_ok tops am tx /\
-    load_contract NONE gobs am tx [(NONE, tops)] [] = INL (am', rqs) /\
-    tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-    FLOOKUP (get_source_immutables NONE (account_immutables am' tx.target))
-      name = SOME (tv,v) ==>
-    evaluate_type (type_env tops) ty = SOME tv
-Proof
-  cheat
+  rpt strip_tac >>
+  `!srcs lay t. (initial_evaluation_context srcs lay t NONE).txn = t` by
+    simp[initial_evaluation_context_def] >>
+  drule load_contract_success_constructor_constants_context >> strip_tac >>
+  `am_ctor.sources = am_c.sources` by
+    (drule_at (Pos (el 2)) call_external_function_deploy_success_cases >>
+     simp[] >> disch_then (qspec_then `am_c` mp_tac) >>
+     impl_tac >- fs[] >> strip_tac >>
+     simp[abstract_machine_from_state_def]) >>
+  drule evaluate_all_constants_preserves_machine_static_components >>
+  simp[]
 QED
 
 Theorem deploy_source_ok_struct_args_unique:

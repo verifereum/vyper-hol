@@ -2,14 +2,14 @@
  * O1 pipeline's result relation with deploy_dead's dead bytes.
  * TOP-LEVEL: deploy_dead_wf, deploy_venom_result_rel_dead (pieces of
  * e2e_deploy_correctness).
- * Helpers: ctorDeployDeadSection (the immutables section's dead bytes),
- * ctorDeployDeadLoad (load_contract's sources and immutable types),
+ * Helpers: ctorDeployDeadSection* (the immutables section's dead bytes),
+ * ctorDeployDeadLoad/ImmTypes (load_contract's sources and immutable types),
  * ctorDeployDeadStorage (storage agreement up to dead bytes).
  *)
 Theory ctorDeployDead
 Ancestors
-  ctorDeployDefs ctorDeployDeadSection ctorDeployDeadLoad
-  ctorDeployDeadStorage ptrDiscipline accountsRelProps compileEnv
+  ctorDeployDefs ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
+  ctorDeployDeadLoad ctorDeployDeadImmTypes ctorDeployDeadStorage ptrDiscipline accountsRelProps compileEnv
   vyperInterpreter list rich_list
 
 Theorem deploy_dead_wf:
