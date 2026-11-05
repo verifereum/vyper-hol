@@ -293,7 +293,8 @@ Resume compile_make_array_vv_case[tuple]:
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
-    metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
+    (`!n t b. MakeArray t b <> Slice n` by simp[] >>
+     metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg]) >>
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
@@ -372,7 +373,8 @@ Resume compile_make_array_vv_case[array]:
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
-    metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
+    (`!n t b. MakeArray t b <> Slice n` by simp[] >>
+     metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg]) >>
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
