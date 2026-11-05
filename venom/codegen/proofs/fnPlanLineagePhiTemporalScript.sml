@@ -1139,3 +1139,109 @@ QED
       lifting remain independent global obligations. Observation-frame and
       stage projections do not prove spill-map equality.
 *)
+
+Theorem do_dup_state_frame:
+  !d ps. SND (do_dup d ps) = ps with
+    <|ps_stack := (SND (do_dup d ps)).ps_stack;
+      ps_alloc := (SND (do_dup d ps)).ps_alloc|>
+Proof
+  rpt gen_tac >> simp[do_dup_def] >>
+  Cases_on `d <= 15` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem do_swap_state_frame:
+  !d ps. SND (do_swap d ps) = ps with
+    <|ps_stack := (SND (do_swap d ps)).ps_stack;
+      ps_alloc := (SND (do_swap d ps)).ps_alloc|>
+Proof
+  rpt gen_tac >> simp[do_swap_def] >>
+  Cases_on `d = 0` >> simp[] >>
+  Cases_on `d <= 16` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem popmany_singleton_state_frame:
+  !ret ps. SND (popmany_plan [ret] ps) = ps with
+    <|ps_stack := (SND (popmany_plan [ret] ps)).ps_stack;
+      ps_alloc := (SND (popmany_plan [ret] ps)).ps_alloc|>
+Proof
+  rpt gen_tac >> Cases_on `stack_get_depth ret ps.ps_stack`
+  >- simp[popmany_plan_def, popmany_individual_def, QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  mp_tac (Q.SPECL [`x`, `ps`] do_swap_state_frame) >>
+  simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+       QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  Cases_on `x = 1` >> simp[] >>
+  Cases_on `x = 0` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem phi_write_phase_state_frame:
+  !inst next d ps. SND (phi_write_phase inst next d ps) = ps with
+    <|ps_stack := (SND (phi_write_phase inst next d ps)).ps_stack;
+      ps_alloc := (SND (phi_write_phase inst next d ps)).ps_alloc|>
+Proof
+  rpt gen_tac >> mp_tac (Q.SPECL [`d`, `ps`] do_dup_state_frame) >>
+  simp[phi_write_phase_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) next` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem generate_phi_plan_state_frame:
+  !inst next halting ps. SND (generate_phi_plan inst next halting ps) = ps with
+    <|ps_stack := (SND (generate_phi_plan inst next halting ps)).ps_stack;
+      ps_alloc := (SND (generate_phi_plan inst next halting ps)).ps_alloc|>
+Proof
+  rpt gen_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  drule generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`next`, `halting`] assume_tac) >>
+  mp_tac (Q.SPECL [`inst`, `next`, `x`, `ps`] phi_write_phase_state_frame) >>
+  Cases_on `phi_write_phase inst next x ps` >> gvs[] >>
+  mp_tac (Q.SPECL [`Var (HD inst.inst_outputs)`, `r`] popmany_singleton_state_frame) >>
+  Cases_on `popmany_plan [Var (HD inst.inst_outputs)] r` >> gvs[] >>
+  Cases_on `halting` >> simp[] >>
+  Cases_on `MEM (HD inst.inst_outputs) next` >> simp[] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem phi_schedule_run_state_frame:
+  !steps ps. SND (phi_schedule_run steps ps) = ps with
+    <|ps_stack := (SND (phi_schedule_run steps ps)).ps_stack;
+      ps_alloc := (SND (phi_schedule_run steps ps)).ps_alloc|>
+Proof
+  Induct >> simp[phi_schedule_run_def] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  mp_tac (Q.SPECL [`h0`, `h1`, `h2`, `ps`] generate_phi_plan_state_frame) >>
+  Cases_on `generate_phi_plan h0 h1 h2 ps` >> gvs[] >>
+  first_x_assum (qspec_then `r` mp_tac) >>
+  simp[phi_schedule_run_def] >>
+  Cases_on `phi_schedule_run steps r` >> gvs[] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem phi_origin_schedule_state_replay:
+  !steps p q cells cells_end ps qs.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    ps.ps_stack = p ++ MAP (phi_cell_value T) cells /\
+    qs.ps_stack = q ++ MAP (phi_cell_value F) cells /\
+    ps.ps_alloc = qs.ps_alloc ==>
+    ?ops al.
+      phi_schedule_run steps ps =
+        (ops, ps with <|ps_stack := p ++ MAP (phi_cell_value T) cells_end; ps_alloc := al|>) /\
+      phi_schedule_run steps qs =
+        (ops, qs with <|ps_stack := q ++ MAP (phi_cell_value F) cells_end; ps_alloc := al|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all phi_origin_schedule_trace >> strip_tac >>
+  drule phi_origin_trace_final_stacks >> strip_tac >>
+  drule_all phi_origin_schedule_replay >> strip_tac >>
+  qspec_then `ps` mp_tac (Q.SPEC `steps` phi_schedule_run_state_frame) >>
+  qspec_then `qs` mp_tac (Q.SPEC `steps` phi_schedule_run_state_frame) >>
+  Cases_on `phi_schedule_run steps ps` >>
+  Cases_on `phi_schedule_run steps qs` >> gvs[] >>
+  rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED

@@ -145,3 +145,49 @@ Proof
   disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
   qexistsl_tac [`cells`, `prefixP`, `prefixQ`, `cells_end`] >> simp[]
 QED
+
+Theorem successful_join_edges_phi_state_replay:
+  !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ entry halting rsP rsQ.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn succ /\ succ <> entry /\ MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block q fn.fn_blocks = SOME qb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) q) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb psP0 = SOME (opsP, psP) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn qb psQ0 = SOME (opsQ, psQ) /\
+  rsP.ps_stack = psP.ps_stack /\ rsQ.ps_stack = psQ.ps_stack /\
+  rsP.ps_alloc = rsQ.ps_alloc ==>
+  ?cells_end prefixP prefixQ ops al.
+    phi_origin_classes (native_phi_class p (collect_phis sb.bb_instructions)) cells_end /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) rsP =
+      (ops, rsP with <|ps_stack := prefixP ++ MAP (phi_cell_value T) cells_end; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) rsQ =
+      (ops, rsQ with <|ps_stack := prefixQ ++ MAP (phi_cell_value F) cells_end; ps_alloc := al|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?cells prefixP prefixQ cells_end.
+    phi_origin_classes (native_phi_class p (collect_phis sb.bb_instructions)) cells /\
+    psP.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+    psQ.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells /\
+    MAP (phi_cell_value T) cells = MAP Var
+      (input_vars_from p sb.bb_instructions (live_vars_at (liveness_analyze fn) succ 0)) /\
+    phi_origin_schedule_ready
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) prefixP prefixQ cells cells_end /\
+    phi_origin_classes (native_phi_class p (collect_phis sb.bb_instructions)) cells_end` by
+    (irule successful_join_edges_phi_schedule_ready >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`dfg`, `opsP`, `opsQ`, `psP0`, `psQ0`, `q`, `qb`] >> simp[]) >>
+  `rsP.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+   rsQ.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells` by simp[] >>
+  drule_all phi_origin_schedule_state_replay >> strip_tac >>
+  qexistsl_tac [`cells_end`, `prefixP`, `prefixQ`, `ops`, `al`] >> simp[]
+QED
