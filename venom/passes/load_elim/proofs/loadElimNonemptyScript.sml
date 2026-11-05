@@ -80,3 +80,18 @@ Proof
   strip_tac >> drule le_analyze_lists_nonempty >>
   simp[le_lists_nonempty_def] >> metis_tac[]
 QED
+
+(* Membership inclusion does not eliminate duplicates: [v;v] is allowed. *)
+Theorem le_nonempty_singleton_members:
+  ws <> [] /\ (!x. MEM x ws ==> MEM x [v]) ==>
+  EVERY (\x. x = v) ws /\ MEM v ws
+Proof
+  Cases_on `ws` >> simp[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem le_lists_nonempty_fold:
+  !insts ll. le_lists_nonempty ll ==>
+    le_lists_nonempty (FOLDL (\a i. load_transfer ctx i a) ll insts)
+Proof
+  Induct >> simp[] >> metis_tac[le_lists_nonempty_transfer]
+QED
