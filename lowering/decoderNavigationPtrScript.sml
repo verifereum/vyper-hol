@@ -4,7 +4,7 @@ Ancestors typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   ptrDiscipline venomInst arithmetic abiEncoder abiDecoderContract
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
-  compileEnv emitHelper abiDecoderReentry
+  compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
 
 Theorem emitted_ptr_offset_frag_ptr:
   !cx ctx PG sa sb id root out off s a G tn total n R.
@@ -199,3 +199,164 @@ Proof
   qexistsl_tac [`H`, `u`] >>
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED
+
+Theorem emit_op_length[local]:
+  emit_op opc ops sa = (out,sb) ==> LENGTH (emitted_insts sa sb) = 1
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> simp[]
+QED
+
+Theorem emit_op_run_index[local]:
+  emit_op opc ops sa = (out,sb) /\ ~is_terminator opc /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t.vs_inst_idx = s.vs_inst_idx
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[run_inst_seq_def, AllCaseEqs()] >>
+  drule step_inst_base_preserves_inst_idx >> simp[mk_inst_def]
+QED
+
+Theorem emit_op_run_pc[local]:
+  emit_op opc ops sa = (out,sb) /\ ~is_terminator opc ==>
+  run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := n) =
+  exec_result_map (\v. v with vs_inst_idx := n)
+    (run_inst_seq (emitted_insts sa sb) s)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  irule run_inst_seq_inst_idx >> simp[mk_inst_def]
+QED
+
+Theorem calldata_ep_source_frag_ptr:
+  !src dyn ao sa ep sb s t p G tn cx ctx PG R.
+    compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,sb) /\
+    eval_operand src s = SOME p /\
+    (!q. src = Var q ==> not_fresh_at sa q) /\
+    op_taint tn src = {} /\ op_prov G src = NONE /\ ~s.vs_halted /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u. op_taint u ep = {} /\ op_prov H ep = NONE /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\
+          v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
+        FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q))
+Proof
+  rpt gen_tac >> Cases_on `dyn`
+  >- suspend "dynamic"
+  >> simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `eval_operand (Lit (n2w ao)) s = SOME (n2w ao) /\
+   op_taint tn (Lit (n2w ao)) = {} /\ op_prov G (Lit (n2w ao)) = NONE` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all emit_scalar_add_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qexistsl_tac [`H`,`u`] >> gvs[ADD1]
+QED
+
+Resume calldata_ep_source_frag_ptr[dynamic]:
+  simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD [src; Lit (n2w ao)] sa = (head,c1)` >>
+  rename1 `emit_op CALLDATALOAD [head] c1 = (off,c2)` >>
+  pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  `eval_operand (Lit (n2w ao)) s = SOME (n2w ao) /\
+   op_taint tn (Lit (n2w ao)) = {} /\ op_prov G (Lit (n2w ao)) = NONE` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.INST [`opc` |-> `ADD`] calldata_binary_repeat)) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa c1) s = OK s1` >>
+  drule_all emit_scalar_add_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  rename1 `op_taint u1 head = {}` >>
+  rename1 `op_prov H1 head = NONE` >>
+  `eval_operand head (s1 with vs_inst_idx := SUC s.vs_inst_idx) = SOME (p + n2w ao)` by simp[] >>
+  drule_all (Q.INST [`s` |-> `s1 with vs_inst_idx := SUC s.vs_inst_idx`] calldata_read_repeat) >>
+  strip_tac >> rename1 `run_inst_seq (emitted_insts c1 c2) _ = OK s2` >>
+  qpat_x_assum `s2 = update_var _ _ _` kall_tac >>
+  drule_all emit_calldata_load_endpoint_ptr >>
+  disch_then (qspecl_then [`H1`,`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  rename1 `op_taint u2 off = {}` >> rename1 `op_prov H2 off = NONE` >>
+  `sa.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
+   cs_extends sa c1 /\ cs_extends c1 c2 /\ cs_extends c2 cs'` by
+    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `!q. not_fresh_at sa q ==> not_fresh_at c1 q` by
+    (simp[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `abi_decoder_operand_live sa.cs_next_var src /\
+   abi_decoder_operand_live c1.cs_next_var src` by
+    (Cases_on `src` >> gvs[abi_decoder_operand_live_def,
+      abi_decoder_older_vars_def, not_fresh_at_def] >> metis_tac[]) >>
+  `eval_operand src s2 = SOME p` by (fs[] >> metis_tac[]) >>
+  `op_taint u2 src = {} /\ op_prov H2 src = NONE` by
+    (Cases_on `src` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  `eval_operand src (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)) = SOME p /\
+   eval_operand off (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+     eval_operand off s2` by simp[] >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.INST [`opc` |-> `ADD`,
+    `s` |-> `s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)`] calldata_binary_repeat)) >>
+  disch_then (qspec_then `s` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts c2 cs') _ = OK s3` >>
+  qpat_assum `emit_op ADD [src;off] c2 = _`
+    (mp_then Any mp_tac emit_scalar_add_endpoint_ptr) >>
+  disch_then (qspecl_then [`s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)`,
+    `s3`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`H2`,`u2`,`cx`,`ctx`,`PG`,`R`] mp_tac) >> simp[] >> strip_tac >>
+  rename1 `op_taint u3 actual_ptr = {}` >> rename1 `op_prov H3 actual_ptr = NONE` >>
+  fs[] >>
+  `frag_exec_ptr cx ctx PG sa c2
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = H2 /\ z = u2 /\ v = (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx))) R` by
+    (irule frag_exec_ptr_seq >> goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `frag_exec_ptr cx ctx PG sa cs'
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = H3 /\ z = u3 /\ v = (s3 with vs_inst_idx := SUC (SUC (SUC s.vs_inst_idx)))) R` by
+    (irule frag_exec_ptr_seq >> goal_assum (drule_at Any) >> metis_tac[cs_extends_trans]) >>
+  suspend "align"
+
+QED
+
+Resume calldata_ep_source_frag_ptr[align]:
+  `s1.vs_inst_idx = s.vs_inst_idx` by
+    (irule emit_op_run_index >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[is_terminator_def]) >>
+  `s1 with vs_inst_idx := s.vs_inst_idx = s1` by simp[venom_state_component_equality] >>
+  `run_inst_seq (emitted_insts c1 c2) s1 = OK (s2 with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `emit_op CALLDATALOAD _ c1 = _` (mp_then Any mp_tac emit_op_run_pc) >>
+     disch_then (qspecl_then [`s1 with vs_inst_idx := SUC s.vs_inst_idx`, `s.vs_inst_idx`] mp_tac) >>
+     simp[is_terminator_def, exec_result_map_def]) >>
+  `run_inst_seq (emitted_insts c2 cs') (s2 with vs_inst_idx := s.vs_inst_idx) =
+    OK (s3 with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `emit_op ADD [src;off] c2 = _` (mp_then Any mp_tac emit_op_run_pc) >>
+     disch_then (qspecl_then [`s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)`, `s.vs_inst_idx`] mp_tac) >>
+     simp[is_terminator_def, exec_result_map_def]) >>
+  `cs'.cs_current_insts = c1.cs_current_insts ++ emitted_insts c1 cs' /\
+   emitted_insts c1 cs' = emitted_insts c1 c2 ++ emitted_insts c2 cs'` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  `run_inst_seq (emitted_insts c1 cs') s1 = OK (s3 with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `run_inst_seq (emitted_insts c1 c2) s1 = _`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts c2 cs'` mp_tac) >> simp[]) >>
+  `t = (s3 with vs_inst_idx := s.vs_inst_idx)` by
+    (`emitted_insts sa cs' = emitted_insts sa c1 ++ emitted_insts c1 cs'` by
+       (qspecl_then [`sa`,`c1`,`cs'`] mp_tac emitted_insts_append >>
+        metis_tac[inst_extends_def, APPEND_ASSOC]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa c1) s = _`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts c1 cs'` mp_tac) >> fs[]) >>
+  `LENGTH (emitted_insts sa cs') = 3` by
+    (`emitted_insts sa cs' = emitted_insts sa c1 ++ emitted_insts c1 cs'` by
+       (qspecl_then [`sa`,`c1`,`cs'`] mp_tac emitted_insts_append >>
+        metis_tac[inst_extends_def, APPEND_ASSOC]) >>
+     `LENGTH (emitted_insts sa c1) = 1 /\
+      LENGTH (emitted_insts c1 c2) = 1 /\
+      LENGTH (emitted_insts c2 cs') = 1` by metis_tac[emit_op_length] >> simp[]) >>
+  qexistsl_tac [`H3`,`u3`] >> simp[] >>
+  conj_tac >- (fs[ADD1] >> metis_tac[]) >>
+  rpt strip_tac >> fs[lookup_var_def] >>
+  `not_fresh_at c1 q /\ not_fresh_at c2 q` by
+    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >> metis_tac[]
+QED
+
+Finalise calldata_ep_source_frag_ptr
