@@ -25,6 +25,7 @@ Theorem codegen_assembly_success_shape:
   codegen_assembly rpolicy unit = SOME prog ==>
   ?cp. generate_context_plan unit.cu_context = SOME cp /\
        assembly_target_safe rpolicy.rpol_target prog /\
+       asm_symbols_ok prog /\
        prog = execute_plan cp.cp_initial_fmp (context_plan_ops cp) ++
               data_segment_asm unit.cu_data_segment ++
               [AsmDataHeader "code_end"]
@@ -136,6 +137,8 @@ Proof
      (entry_venom_state prog cplan es) es` by
     (drule entry_venom_state_first_frame >> disch_then irule >>
      gvs[unit_shape_ok_def]) >>
+  `(entry_venom_state prog cplan es).vs_params = []` by
+    simp[entry_venom_state_def, venomStateTheory.init_venom_state_def] >>
   gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def,
       initial_ctx_rel_def, entry_venom_state_fresh,
       entry_venom_state_frame_fields]

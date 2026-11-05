@@ -259,7 +259,7 @@ Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
 QED
 
-Triviality ssa_form_block_outputs_distinct:
+Theorem ssa_form_block_outputs_distinct:
   !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
 Proof
@@ -536,7 +536,7 @@ Proof
   gvs[instIdxIndepTheory.exec_result_map_def]
 QED
 
-Triviality exec_block_skip_prefix_non_invoke:
+Theorem exec_block_skip_prefix_non_invoke:
   !prefix fuel ctx bb s j s'.
     j + LENGTH prefix <= LENGTH bb.bb_instructions /\
     EVERY (\inst. ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE) prefix /\

@@ -130,7 +130,7 @@ Proof
   Cases_on `h` >> gvs[operand_var_def]
 QED
 
-Theorem operand_var_in_inst_uses[local]:
+Theorem operand_var_in_inst_uses:
   !inst v. MEM (Var v) inst.inst_operands ==>
            MEM v (inst_uses inst)
 Proof
@@ -164,7 +164,7 @@ QED
 
 
 (* Strongest SSA uniqueness: same output var ⇒ same instruction AND same block *)
-Theorem ssa_unique_output_block[local]:
+Theorem ssa_unique_output_block:
   !fn bb1 inst1 bb2 inst2 v.
     ssa_form fn /\
     MEM bb1 fn.fn_blocks /\ MEM inst1 bb1.bb_instructions /\
@@ -251,7 +251,7 @@ Proof
   simp[listTheory.APPEND_eq_NIL]
 QED
 
-Theorem fn_reachable_in_cfg_dfs_pre[local]:
+Theorem fn_reachable_in_cfg_dfs_pre:
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     MEM lbl (cfg_analyze fn).cfg_dfs_pre
 Proof
@@ -398,7 +398,7 @@ Proof
 QED
 
 (* Helper: reachable node along path from reachable start *)
-Theorem is_fn_path_all_reachable[local]:
+Theorem is_fn_path_all_reachable:
   !fn path lbl. is_fn_path fn path /\ path <> [] /\
     fn_reachable fn (HD path) /\ MEM lbl path ==>
     fn_reachable fn lbl
@@ -410,7 +410,7 @@ Proof
 QED
 
 (* Helper: reachable implies has a block (via wf_function) *)
-Theorem fn_reachable_has_block[local]:
+Theorem fn_reachable_has_block:
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     ?bb. lookup_block lbl fn.fn_blocks = SOME bb
 Proof

@@ -1051,7 +1051,7 @@ QED
 
 (* ========== generate_block_plan (recursive instruction suffix) ========== *)
 
-Theorem generate_block_insts_plan_spill_base[local]:
+Theorem generate_block_insts_plan_spill_base:
   !insts liveness dfg cfg fn bb_label is_halting n_params block_len i
    ps ops ps'.
     generate_block_insts_plan liveness dfg cfg fn bb_label is_halting
@@ -1064,7 +1064,7 @@ Proof
   metis_tac[generate_inst_plan_spill_base]
 QED
 
-Theorem generate_block_insts_plan_next_offset[local]:
+Theorem generate_block_insts_plan_next_offset:
   !insts liveness dfg cfg fn bb_label is_halting n_params block_len i
    ps ops ps'.
     generate_block_insts_plan liveness dfg cfg fn bb_label is_halting

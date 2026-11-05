@@ -25,16 +25,27 @@ Ancestors
 
 (* ===== FOLDL Helper Lemmas ===== *)
 
+(* The label test in build_offset_to_pc's step, as a condition. *)
+Theorem botp_label_case:
+  ∀inst (a:'a) b.
+    (case inst of AsmLabel _ => a | _ => b) =
+    if ∃l. inst = AsmLabel l then a else b
+Proof
+  Cases >> simp[]
+QED
+
 (* build_offset_to_pc FOLDL is equivalent to a triple-accumulator FOLDL
    without MAPi (easier for induction). *)
 Theorem botp_equiv:
   ∀prog (k:num) (m0:num|->num) (off0:num).
     FOLDL (λ(m,off) (i,inst:asm_inst).
-             (m |+ (off,i), off + asm_inst_size inst))
+             ((case inst of AsmLabel _ => m |+ (off,i) | _ => m),
+              off + asm_inst_size inst))
       (m0,off0) (MAPi (λi inst. (k + i, inst)) prog) =
     (λ(m,off,pc:num). (m,off))
       (FOLDL (λ(m,off,pc) inst.
-               (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+               ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                off + asm_inst_size inst, pc + 1))
         (m0,off0,k) prog)
 Proof
   Induct >> simp[indexedListsTheory.MAPi_def, combinTheory.o_DEF] >>
@@ -44,9 +55,9 @@ Proof
   pop_assum SUBST_ALL_TAC >>
   first_x_assum
     (qspecl_then [`SUC k`,
-                  `m0 |+ (off0, k)`,
+                  `if ∃l. h = AsmLabel l then m0 |+ (off0, k) else m0`,
                   `off0 + asm_inst_size h`] mp_tac) >>
-  simp[arithmeticTheory.ADD1]
+  simp[arithmeticTheory.ADD1, botp_label_case]
 QED
 
 (* build_offset_to_pc equals FST of the triple FOLDL *)
@@ -54,7 +65,8 @@ Theorem botp_as_triple:
   ∀prog.
     build_offset_to_pc prog =
     FST (FOLDL (λ(m:num|->num,off:num,pc:num) inst.
-                  (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+                  ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                   off + asm_inst_size inst, pc + 1))
            (FEMPTY,0n,0n) prog)
 Proof
   gen_tac >>
@@ -68,7 +80,8 @@ Theorem botp_triple_acc:
   ∀prog (m0:num|->num) (off0:num) (pc0:num).
     let (m, off, pc) =
       FOLDL (λ(m,off,pc) inst.
-               (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+               ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                off + asm_inst_size inst, pc + 1))
         (m0,off0,pc0) prog
     in
       off = off0 + SUM (MAP asm_inst_size prog) ∧
@@ -76,7 +89,7 @@ Theorem botp_triple_acc:
 Proof
   Induct >> simp[] >> rpt gen_tac >> pairarg_tac >> gvs[] >>
   first_x_assum
-    (qspecl_then [`m0 |+ (off0, pc0)`,
+    (qspecl_then [`if ∃l. h = AsmLabel l then m0 |+ (off0, pc0) else m0`,
                   `off0 + asm_inst_size h`, `pc0 + 1`] mp_tac) >>
   pairarg_tac >> gvs[]
 QED
@@ -87,7 +100,8 @@ Theorem botp_preserves_below:
     k < off0 ⇒
     FLOOKUP
       (FST (FOLDL (λ(m,off,pc) inst.
-                     (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+                     ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                      off + asm_inst_size inst, pc + 1))
               (m0,off0,pc0) prog)) k =
     FLOOKUP m0 k
 Proof
@@ -95,18 +109,21 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[Once listTheory.FOLDL] >>
   first_x_assum
-    (qspecl_then [`m0 |+ (off0, pc0)`,
+    (qspecl_then [`if ∃l. h = AsmLabel l then m0 |+ (off0, pc0) else m0`,
                   `off0 + asm_inst_size h`, `pc0 + 1`, `k`] mp_tac) >>
-  simp[FLOOKUP_UPDATE]
+  impl_tac >- simp[] >>
+  simp[] >> strip_tac >>
+  Cases_on `∃l. h = AsmLabel l` >> gvs[FLOOKUP_UPDATE]
 QED
 
-(* Triple FOLDL: entry at position j is correctly recorded *)
+(* Triple FOLDL: the entry of a label at position j is correctly recorded *)
 Theorem botp_main_lemma:
-  ∀prog m0 off0 pc0 j.
-    j < LENGTH prog ∧ 0 < asm_inst_size (EL j prog) ⇒
+  ∀prog m0 off0 pc0 j l.
+    j < LENGTH prog ∧ EL j prog = AsmLabel l ⇒
     FLOOKUP
       (FST (FOLDL (λ(m:num|->num,off:num,pc:num) inst.
-                     (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+                     ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                      off + asm_inst_size inst, pc + 1))
               (m0,off0,pc0) prog))
       (off0 + SUM (MAP asm_inst_size (TAKE j prog))) =
     SOME (pc0 + j)
@@ -117,14 +134,14 @@ Proof
   Cases_on `j` >> gvs[] >| [
     (* j = 0: entry just written, preserved by rest *)
     qspecl_then [`prog`, `m0 |+ (off0, pc0)`,
-                 `off0 + asm_inst_size h`, `pc0 + 1`, `off0`]
+                 `off0 + asm_inst_size (AsmLabel l)`, `pc0 + 1`, `off0`]
       mp_tac botp_preserves_below >>
-    impl_tac >- simp[] >>
+    impl_tac >- simp[asm_inst_size_def] >>
     simp[FLOOKUP_UPDATE],
     (* j = SUC n: IH on tail *)
     first_x_assum
-      (qspecl_then [`m0 |+ (off0, pc0)`,
-                    `off0 + asm_inst_size h`, `pc0 + 1`, `n`] mp_tac) >>
+      (qspecl_then [`if ∃l. h = AsmLabel l then m0 |+ (off0, pc0) else m0`,
+                    `off0 + asm_inst_size h`, `pc0 + 1`, `n`, `l`] mp_tac) >>
     simp[]
   ]
 QED
@@ -224,15 +241,15 @@ QED
 (* ===== Top-Level Structural Lemmas ===== *)
 
 Theorem offset_to_pc_inverse_proof:
-  ∀prog pc.
+  ∀prog pc l.
     pc < LENGTH prog ∧
-    0 < asm_inst_size (EL pc prog) ⇒
+    EL pc prog = AsmLabel l ⇒
     FLOOKUP (build_offset_to_pc prog) (asm_pc_to_offset prog pc) =
       SOME pc
 Proof
   rpt strip_tac >>
   simp[botp_as_triple, asm_pc_to_offset_def] >>
-  qspecl_then [`prog`, `FEMPTY`, `0`, `0`, `pc`] mp_tac botp_main_lemma >>
+  qspecl_then [`prog`, `FEMPTY`, `0`, `0`, `pc`, `l`] mp_tac botp_main_lemma >>
   simp[]
 QED
 
@@ -443,7 +460,8 @@ Theorem botp_small_values_from_init:
   ∀prog (m0:num|->num) off0 pc0 off v.
     FLOOKUP
       (FST (FOLDL (λ(m,off,pc) inst.
-                     (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+                     ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                      off + asm_inst_size inst, pc + 1))
               (m0,off0,pc0) prog)) off = SOME v ∧
     v < pc0 ⇒
     FLOOKUP m0 off = SOME v
@@ -453,11 +471,11 @@ Proof
   >> rpt gen_tac >> strip_tac >>
   gvs[Once listTheory.FOLDL] >>
   first_x_assum
-    (qspecl_then [`m0 |+ (off0, pc0)`,
+    (qspecl_then [`if ∃l. h = AsmLabel l then m0 |+ (off0, pc0) else m0`,
                   `off0 + asm_inst_size h`, `pc0 + 1`,
                   `off`, `v`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  strip_tac >>
+  Cases_on `∃l. h = AsmLabel l` >> gvs[] >>
   Cases_on `off = off0` >> gvs[FLOOKUP_UPDATE]
 QED
 
@@ -472,53 +490,50 @@ Proof
   res_tac >> fs[]
 QED
 
-(* The main range lemma: FOLDL entries with values >= pc0 have canonical offsets *)
+(* The main range lemma: FOLDL entries with values >= pc0 are labels at
+   their canonical offsets *)
 Theorem botp_range_lemma:
   ∀prog (m0:num|->num) off0 pc0 off pc.
     (∀off' pc'. FLOOKUP m0 off' = SOME pc' ⇒ pc' < pc0) ∧
     FLOOKUP
       (FST (FOLDL (λ(m,off,pc) inst.
-                     (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+                     ((if ∃l. inst = AsmLabel l then m |+ (off,pc) else m),
+                      off + asm_inst_size inst, pc + 1))
               (m0,off0,pc0) prog)) off = SOME pc ∧
     pc ≥ pc0 ⇒
     pc < pc0 + LENGTH prog ∧
-    off = off0 + SUM (MAP asm_inst_size (TAKE (pc - pc0) prog))
+    off = off0 + SUM (MAP asm_inst_size (TAKE (pc - pc0) prog)) ∧
+    ∃l. EL (pc - pc0) prog = AsmLabel l
 Proof
   Induct >- (rpt strip_tac >> gvs[] >> res_tac >> gvs[])
   \\ rpt gen_tac \\ strip_tac
   \\ rename1 `h :: prog`
-  (* Unfold FOLDL for h::prog in the FLOOKUP assumption *)
   \\ qpat_x_assum `FLOOKUP (FST (FOLDL _ _ (_::_))) _ = _`
        (mp_tac o ONCE_REWRITE_RULE [listTheory.FOLDL])
-  \\ simp[] \\ strip_tac
-  (* Case split: pc = pc0 or pc > pc0 *)
+  \\ simp[]
+  \\ qabbrev_tac `m1 = if ∃l. h = AsmLabel l then m0 |+ (off0,pc0) else m0`
+  \\ strip_tac
+  \\ `∀off' pc'. FLOOKUP m1 off' = SOME pc' ⇒
+        pc' < pc0 ∨ (pc' = pc0 ∧ off' = off0 ∧ ∃l. h = AsmLabel l)`
+       by (rpt strip_tac >> qunabbrev_tac `m1` >>
+           Cases_on `∃l. h = AsmLabel l` >> gvs[FLOOKUP_UPDATE] >>
+           Cases_on `off' = off0` >> gvs[] >> res_tac >> simp[])
   \\ Cases_on `pc = pc0`
   >- (
     gvs[] >>
-    qspecl_then [`prog`, `m0 |+ (off0, pc)`, `off0 + asm_inst_size h`,
+    qspecl_then [`prog`, `m1`, `off0 + asm_inst_size h`,
                  `pc + 1`, `off`, `pc`]
       mp_tac botp_small_values_from_init >>
     impl_tac >- simp[] >>
-    strip_tac >>
-    Cases_on `off = off0` >- simp[] >>
-    gvs[FLOOKUP_UPDATE] >> res_tac >> gvs[]
+    strip_tac >> res_tac >> gvs[]
   )
-  (* pc ≠ pc0, so pc ≥ pc0 + 1 *)
   \\ `pc ≥ pc0 + 1` by simp[]
   \\ first_x_assum
-       (qspecl_then [`m0 |+ (off0, pc0)`,
-                     `off0 + asm_inst_size h`, `pc0 + 1`,
+       (qspecl_then [`m1`, `off0 + asm_inst_size h`, `pc0 + 1`,
                      `off`, `pc`] mp_tac)
   \\ impl_tac
-  >- (
-    rpt conj_tac
-    >- (rpt strip_tac >> Cases_on `off' = off0` >> gvs[FLOOKUP_UPDATE] >>
-        res_tac >> gvs[])
-    >- (first_assum ACCEPT_TAC)
-    >- simp[]
-  )
+  >- (rpt conj_tac >> simp[] >> rpt strip_tac >> res_tac >> simp[])
   \\ strip_tac
-  \\ conj_tac >- simp[]
   \\ `pc - pc0 = SUC (pc - (pc0 + 1))` by simp[]
   \\ pop_assum SUBST1_TAC
   \\ simp[]
@@ -526,9 +541,7 @@ QED
 
 (* Reverse direction of offset_to_pc_inverse:
    FLOOKUP (build_offset_to_pc prog) off = SOME pc implies
-   pc < LENGTH prog and asm_pc_to_offset prog pc = off.
-   Zero-size instructions may overwrite earlier entries at the same offset;
-   every surviving entry still records the offset of its returned index. *)
+   pc < LENGTH prog and asm_pc_to_offset prog pc = off. *)
 Theorem offset_to_pc_reverse:
   ∀prog off pc.
     FLOOKUP (build_offset_to_pc prog) off = SOME pc ⇒
@@ -539,6 +552,19 @@ Proof
     mp_tac botp_range_lemma >>
   impl_tac >- fs[botp_as_triple, FLOOKUP_EMPTY] >>
   simp[asm_pc_to_offset_def]
+QED
+
+(* Every jump target build_offset_to_pc resolves is a label (a JUMPDEST). *)
+Theorem offset_to_pc_label:
+  ∀prog off pc.
+    FLOOKUP (build_offset_to_pc prog) off = SOME pc ⇒
+    ∃l. EL pc prog = AsmLabel l
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`prog`, `FEMPTY`, `0`, `0`, `off`, `pc`]
+    mp_tac botp_range_lemma >>
+  impl_tac >- fs[botp_as_triple, FLOOKUP_EMPTY] >>
+  simp[]
 QED
 
 (* Word-level roundtrip: word_of_bytes F 0w decodes REVERSE encode_num_bytes.

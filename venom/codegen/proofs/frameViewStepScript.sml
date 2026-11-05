@@ -5,7 +5,7 @@
  * lemmas against frame_view fn ra vs with the assembly memory standing in
  * for the Venom memory.  This theory shows that a non-INVOKE, non-PARAM
  * step commutes with that substitution: return-PC variables are only
- * copied (opaque_use_ok, retpc_shape_ok, SSA), and memory reads see the
+ * copied (opaque_use_ok, SSA), and memory reads see the
  * same bytes when the substituted memory agrees on the bytes the
  * instruction reads.
  *
@@ -27,7 +27,7 @@ Theorem step_inst_frame_view:
     step_inst fuel ctx inst vs = OK vs' /\
     inst.inst_opcode <> INVOKE /\
     ~is_param_opcode inst.inst_opcode /\
-    codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\
+    codegen_ready_fn fn /\ opaque_use_ok fn /\
     MEM inst (fn_insts fn) /\
     (!i. source_memory_read_byte inst vs i ==>
          read_byte i m = read_byte i vs.vs_memory) ==>

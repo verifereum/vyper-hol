@@ -299,6 +299,8 @@ val abi_static_context_safe_eval = EVAL
 val abi_static_assembly_safe_eval = EVAL
   ``assembly_target_safe (^abi_static_rpolicy).rpol_target
       ^abi_static_raw_asm``
+val abi_static_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^abi_static_raw_asm``
 val abi_static_codegen_step0 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def, abi_static_target_wf_eval,
    abi_static_context_safe_eval, abi_static_context_plan_eval,
@@ -308,7 +310,8 @@ val abi_static_codegen_step0 = SIMP_CONV pure_ss
 val abi_static_codegen_step1 = SIMP_CONV pure_ss
   [abi_static_plan_ops_eval, abi_static_initial_fmp_eval,
    abi_static_execute_plan_eval, abi_static_data_asm_eval,
-   abi_static_raw_asm_eval, abi_static_assembly_safe_eval]
+   abi_static_raw_asm_eval, abi_static_assembly_safe_eval,
+   abi_static_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl abi_static_codegen_step0))
 val abi_static_codegen_eval = save_thm
   ("abi_static_codegen_eval",

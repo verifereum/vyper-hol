@@ -273,7 +273,7 @@ Proof
 QED
 
 
-Theorem elem_count_append[local]:
+Theorem elem_count_append:
   !x (xs : 'a list) ys.
     LIST_ELEM_COUNT x (xs ++ ys) =
     LIST_ELEM_COUNT x xs + LIST_ELEM_COUNT x ys
@@ -565,7 +565,7 @@ Proof
   gvs[residual_budget_wf_def]
 QED
 
-Theorem stack_pop_one_elem_count[local]:
+Theorem stack_pop_one_elem_count:
   !x (xs : 'a list).
     xs <> [] ==>
     LIST_ELEM_COUNT x (stack_pop 1 xs) +
@@ -4691,7 +4691,7 @@ Proof
   Cases_on `do_swap (LENGTH target_ops - (idx + 1)) ps1` >> gs[]
 QED
 
-Theorem reorder_place_phase_multiplicity[local]:
+Theorem reorder_place_phase_multiplicity:
   !dfg op dist final_dist ps x.
     dist < LENGTH ps.ps_stack /\ final_dist < LENGTH ps.ps_stack /\
     stack_peek dist ps.ps_stack = op ==>
@@ -4899,7 +4899,7 @@ Proof
   simp[finite_mapTheory.FDOM_DOMSUB]
 QED
 
-Theorem do_swap_spilled_unchanged[local]:
+Theorem do_swap_spilled_unchanged:
   !d ps. (SND (do_swap d ps)).ps_spilled = ps.ps_spilled
 Proof
   rpt gen_tac >> Cases_on `d = 0` >> simp[do_swap_def] >>
@@ -6711,7 +6711,7 @@ Proof
   pairarg_tac >> simp[] >> pairarg_tac >> simp[]
 QED
 
-Theorem plan_steps_cons_result[local]:
+Theorem plan_steps_cons_result:
   !step x xs ps ops ps'.
     plan_steps step (x::xs) ps = (ops,ps') ==>
     ?step_ops ps1 rest_ops.

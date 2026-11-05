@@ -105,7 +105,7 @@ Proof
 QED
 
 (* unit_shape_ok rules out OFFSET, the only source of unbounded push
-   offsets, and call_state_rel bounds the code size, so codegen's output
+   offsets, and codegen_assembly bounds the code size, so codegen's output
    meets asm_encoding_wf. *)
 Theorem generated_entry_code_layout_shape:
   !tops prog am tx es cp policy unit.
@@ -114,8 +114,6 @@ Theorem generated_entry_code_layout_shape:
   code_layout_valid (entry_venom_state prog cp es)
 Proof
   rpt strip_tac >>
-  `LENGTH (assemble prog) < 65536` by
-    gvs[call_state_rel_def, immutableSectionRelTheory.installed_code_rel_def] >>
   drule_all codegen_assembly_asm_encoding_wf >> strip_tac >>
   metis_tac[generated_entry_immutable_code_layout]
 QED
