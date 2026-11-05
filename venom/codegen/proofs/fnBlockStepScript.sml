@@ -3,7 +3,8 @@
  * venomToAsmProps$gen_fn_frame_simulation: one non-entry block, run from
  * a block boundary where fn_frame_inv holds, simulated by its DFS code.
  *
- * TOP-LEVEL (CHEATED, a skeleton piece):
+ * TOP-LEVEL (proved from the admitted block pieces of fnBlockBody,
+ *            fnFrameSteps, fnFrameSinglePred, fnLineageStatic, fnPlanLineage):
  *   fn_block_frame_step - gen_fn_frame_sim_at (SUC fuel) from both
  *                         function theorems at fuel
  *)
@@ -12,7 +13,7 @@ Theory fnBlockStep
 Ancestors
   fnBlockBody fnFrameSinglePred fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
-  venomExecSemantics
+  venomExecSemantics fnBlockStepHelpers contextCodegenRel venomExecProofs
 
 (* run_blocks (SUC fuel) runs the current block with run_block fuel and
    continues with run_blocks fuel from its OK result (run_blocks_unfold);
@@ -37,5 +38,59 @@ Theorem fn_block_frame_step:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel ==>
          gen_fn_frame_sim_at (SUC fuel)
 Proof
-  cheat
+  gen_tac >> strip_tac >> REWRITE_TAC [gen_fn_frame_sim_at_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `generate_context_plan ctx = SOME cpl` >>
+  qspecl_then [`vs`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs
+  >- suspend "ok"
+  >> simp[run_blocks_unfold, run_block_def]
 QED
+
+Resume fn_block_frame_step[ok]:
+  `run_blocks (SUC fuel) ctx fn vs =
+   block_rest fuel ctx fn bb
+     (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    (simp[run_blocks_unfold, run_block_def, block_rest_def] >>
+     Cases_on `exec_block fuel ctx bb
+       (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+     simp[]) >>
+  pop_assum SUBST1_TAC >>
+  `s'.vs_labels = vs.vs_labels /\ s'.vs_call_ctx = vs.vs_call_ctx /\
+   s'.vs_current_bb = vs.vs_current_bb` by
+    (drule eval_phis_only_updates_vs_vars >>
+     disch_then (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  `!inst. active_inst fn inst
+            (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
+          Inv ctx fn inst
+            (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    (rpt strip_tac >>
+     qpat_x_assum `fn_entry_inv _ _ _ _` (irule o REWRITE_RULE [fn_entry_inv_def]) >>
+     simp[enters_block_def]) >>
+  drule lineage_entry_lineage_state >> strip_tac >>
+  drule venomExecPropsTheory.lookup_block_label >> strip_tac >>
+  `dfs_block_state liveness dfg cfg fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+     bb.bb_label ps_dfs` by
+    (qpat_x_assum `bb.bb_label = _` (fn th => REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
+  mp_tac (Q.SPECL [`unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`, `i`, `fn`, `r`,
+    `liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`, `lbl_ctr`,
+    `fn_ops`, `ps_end`, `bb`, `pred`, `ps`, `ps_dfs`, `block_ops`,
+    `ps_dfs_after`, `vs`, `as`, `Inv`, `ra`, `rest`, `mem0`, `s'`]
+    block_step_prefix) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  mp_tac (Q.SPECL [`fuel`, `rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`,
+    `o2pc`, `i`, `fn`, `r`, `liveness`, `dfg`, `cfg`, `ch`, `growth`,
+    `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb`, `ps`, `h`, `promised`,
+    `ps_dfs`, `block_ops`, `ps_dfs_after`, `ps_after`, `prefix_ops`,
+    `rest_ops`, `phi_prefix_length bb.bb_instructions`, `ps1`, `as.as_pc`,
+    `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `as1`,
+    `Inv`, `ra`, `pc_ret`, `rest`, `mem0`] block_body_frame_sim) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  disch_then assume_tac >>
+  match_mp_tac frame_conclusions_prefix >>
+  qexistsl_tac [`n`, `as1`] >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise fn_block_frame_step
