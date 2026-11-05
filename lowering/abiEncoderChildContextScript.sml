@@ -63,32 +63,52 @@ Proof
   qexistsl_tac [`head`, `prepared`] >> asm_simp_tac bool_ss []
 QED
 
-(* The site guard is inherited by the actual recursive compiler invocation,
-   without an assumption about instruction-ID interval credit. *)
-Theorem abi_encoder_static_child_site_guard:
+Definition abi_encoder_hereditary_guard_def:
+  abi_encoder_hereditary_guard G <=>
+    !a p q z. G a z /\ cs_extends a p /\ cs_extends p q /\ cs_extends q z /\
+      a.cs_next_id <= p.cs_next_id /\ q.cs_next_id <= z.cs_next_id ==> G p q
+End
+
+Theorem abi_encoder_hereditary_guard_interval:
+  abi_encoder_hereditary_guard
+    (\st en. first <= st.cs_next_id /\ en.cs_next_id <= last)
+Proof
+  simp_tac bool_ss [abi_encoder_hereditary_guard_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem abi_encoder_hereditary_guard_sites:
+  abi_encoder_hereditary_guard
+    (\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A)
+Proof
+  simp_tac bool_ss [abi_encoder_hereditary_guard_def] >> rpt strip_tac >>
+  irule SUBSET_TRANS >>
+  goal_assum (drule_at (Pat `_ SUBSET A`)) >>
+  irule abi_decoder_emitted_sites_subsegment >> asm_rewrite_tac []
+QED
+
+Theorem abi_encoder_static_child_guard:
+  abi_encoder_hereditary_guard G /\ G st en /\
   compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
-  emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
-  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A ==>
-  abi_decoder_emitted_sites prepared.cs_next_id en.cs_next_id prepared en SUBSET A
+  emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) ==>
+  G prepared en
 Proof
   strip_tac >> drule abi_encode_static_child_trace >> strip_tac >> gvs[] >>
   drule abi_encoder_emit_address_shape >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   `cs_extends prepared en` by (drule cs_extends_abi_encode >> simp[]) >>
-  `st.cs_next_id <= prepared.cs_next_id /\ en.cs_next_id <= en.cs_next_id` by decide_tac >>
   `cs_extends en en` by simp[cs_extends_refl] >>
-  irule SUBSET_TRANS >>
-  qexists_tac `abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en` >>
-  conj_tac >- (irule abi_decoder_emitted_sites_subsegment >> simp[]) >>
-  asm_rewrite_tac[]
+  qpat_x_assum `abi_encoder_hereditary_guard G` mp_tac >>
+  simp_tac bool_ss [abi_encoder_hereditary_guard_def] >>
+  disch_then irule >> asm_rewrite_tac [] >>
+  qexistsl_tac [`st`,`en`] >> asm_rewrite_tac [] >> decide_tac
 QED
 
-Theorem abi_encoder_dynamic_child_site_guard:
+Theorem abi_encoder_dynamic_child_guard:
+  abi_encoder_hereditary_guard G /\ G st en /\
   compile_abi_encode_child dst src ei T offset dp st = (out,en) /\
   abi_encode_child_prefix dst offset dp st = (ops,prepared) /\
-  compile_abi_encode_to_buf (SND (SND ops)) src ei prepared = (len,child_end) /\
-  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A ==>
-  abi_decoder_emitted_sites prepared.cs_next_id child_end.cs_next_id prepared child_end SUBSET A
+  compile_abi_encode_to_buf (SND (SND ops)) src ei prepared = (len,child_end) ==>
+  G prepared child_end
 Proof
   strip_tac >> drule abi_encode_dynamic_child_trace >> strip_tac >> gvs[] >>
   drule abi_encode_child_prefix_shape >> strip_tac >>
@@ -98,9 +118,37 @@ Proof
   `cs_extends child_end en` by
     (irule abi_encoder_straight_extends >> simp[]) >>
   `cs_extends prepared child_end` by (drule cs_extends_abi_encode >> simp[]) >>
-  `st.cs_next_id <= prepared.cs_next_id /\ child_end.cs_next_id <= en.cs_next_id` by decide_tac >>
-  irule SUBSET_TRANS >>
-  qexists_tac `abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en` >>
-  conj_tac >- (irule abi_decoder_emitted_sites_subsegment >> simp[]) >>
-  asm_rewrite_tac[]
+  qpat_x_assum `abi_encoder_hereditary_guard G` mp_tac >>
+  simp_tac bool_ss [abi_encoder_hereditary_guard_def] >>
+  disch_then irule >> asm_rewrite_tac [] >>
+  qexistsl_tac [`st`,`en`] >> asm_rewrite_tac [] >> decide_tac
+QED
+
+(* The site guard is inherited by the actual recursive compiler invocation,
+   without an assumption about instruction-ID interval credit. *)
+Theorem abi_encoder_static_child_site_guard:
+  compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
+  emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A ==>
+  abi_decoder_emitted_sites prepared.cs_next_id en.cs_next_id prepared en SUBSET A
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.INST [`G` |-> `\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A`]
+    (SPEC_ALL abi_encoder_static_child_guard))) >>
+  asm_rewrite_tac [abi_encoder_hereditary_guard_sites] >>
+  metis_tac []
+QED
+
+Theorem abi_encoder_dynamic_child_site_guard:
+  compile_abi_encode_child dst src ei T offset dp st = (out,en) /\
+  abi_encode_child_prefix dst offset dp st = (ops,prepared) /\
+  compile_abi_encode_to_buf (SND (SND ops)) src ei prepared = (len,child_end) /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A ==>
+  abi_decoder_emitted_sites prepared.cs_next_id child_end.cs_next_id prepared child_end SUBSET A
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.INST [`G` |-> `\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A`]
+    (SPEC_ALL abi_encoder_dynamic_child_guard))) >>
+  asm_rewrite_tac [abi_encoder_hereditary_guard_sites] >>
+  metis_tac []
 QED
