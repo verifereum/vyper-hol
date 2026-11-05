@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmContextLength vfmDecreasesGas
-  vfmAccountFrame asmEncodeParse rich_list vfmOperation
+  vfmAccountFrame asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list
 
 Theorem asm_call_child_parent_msgParams:
   step_call op s = (q,e) /\ s.contexts <> [] /\
@@ -71,6 +71,79 @@ Proof
     (irule asm_frame_call_decode >> metis_tac[]) >>
   Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
   PairCases_on `h` >> gvs[asm_evm_rel_def, observable_call_def]
+QED
+
+Theorem asm_call_input_buffer:
+  TAKE sz (DROP off (asm_expand_memory (off + sz) (buffer_to_list mem))) =
+  buffer_read off sz mem
+Proof
+  simp[expanded_slice_padded_range, buffer_read_to_list,
+       take_pad_0_def, PAD_RIGHT, GSYM REPLICATE_GENLIST] >>
+  irule LIST_EQ >> simp[LENGTH_TAKE_EQ] >>
+  rpt strip_tac >>
+  simp[EL_GENLIST, read_byte_def, EL_APPEND_EQN, EL_TAKE, EL_DROP,
+       EL_REPLICATE] >>
+  IF_CASES_TAC >> gvs[LENGTH_TAKE_EQ, EL_DROP, EL_REPLICATE] >>
+  rpt (IF_CASES_TAC >> gvs[EL_REPLICATE])
+QED
+
+Theorem asm_frame_call_request:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "CALL" /\
+  a.as_stack = gas :: addr :: value :: ao :: sz :: ro :: rs :: stk ==>
+  asm_call_request a addr value (w2n ao) (w2n sz) F = request_of es
+Proof
+  strip_tac >>
+  `next_opcode (FST (HD es.contexts)) = SOME Call` by
+    (drule asm_frame_call_decode >>
+     disch_then (qspecl_then [`es`, `data`, `a`] mp_tac) >> simp[]) >>
+  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def] >>
+  simp[request_of_def, asm_call_request_def, GSYM asm_call_input_buffer,
+       expanded_slice_padded_range]
+QED
+
+Theorem asm_frame_staticcall_request:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "STATICCALL" /\
+  a.as_stack = gas :: addr :: ao :: sz :: ro :: rs :: stk ==>
+  asm_call_request a addr 0w (w2n ao) (w2n sz) T = request_of es
+Proof
+  strip_tac >>
+  `next_opcode (FST (HD es.contexts)) = SOME StaticCall` by
+    (drule asm_frame_call_decode >>
+     disch_then (qspecl_then [`es`, `data`, `a`] mp_tac) >> simp[]) >>
+  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def] >>
+  simp[request_of_def, asm_call_request_def, GSYM asm_call_input_buffer,
+       expanded_slice_padded_range]
+QED
+
+Theorem asm_call_underflow:
+  LENGTH a.as_stack < 7 ==>
+  asm_step lo otp (AsmOp "CALL") a = AsmError "call: stack underflow"
+Proof
+  simp[asm_step_call_staticcall_gas] >>
+  Cases_on `a.as_stack` >> simp[asm_exec_call_def] >>
+  Cases_on `t` >> simp[asm_exec_call_def] >>
+  Cases_on `t'` >> simp[asm_exec_call_def] >>
+  Cases_on `t` >> simp[asm_exec_call_def] >>
+  Cases_on `t'` >> simp[asm_exec_call_def] >>
+  Cases_on `t` >> simp[asm_exec_call_def] >>
+  Cases_on `t'` >> simp[asm_exec_call_def]
+QED
+
+Theorem asm_staticcall_underflow:
+  LENGTH a.as_stack < 6 ==>
+  asm_step lo otp (AsmOp "STATICCALL") a = AsmError "staticcall: stack underflow"
+Proof
+  simp[asm_step_call_staticcall_gas] >>
+  Cases_on `a.as_stack` >> simp[asm_exec_staticcall_def] >>
+  Cases_on `t` >> simp[asm_exec_staticcall_def] >>
+  Cases_on `t'` >> simp[asm_exec_staticcall_def] >>
+  Cases_on `t` >> simp[asm_exec_staticcall_def] >>
+  Cases_on `t'` >> simp[asm_exec_staticcall_def] >>
+  Cases_on `t` >> simp[asm_exec_staticcall_def]
 QED
 
 Theorem asm_frame_call_step:
