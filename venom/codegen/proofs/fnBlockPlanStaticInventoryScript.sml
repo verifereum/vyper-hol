@@ -793,6 +793,40 @@ Proof
   Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var v))` >> gvs[] >> decide_tac
 QED
 
+Theorem inventory_filter_count:
+  LENGTH (FILTER (\a. a = op) xs) = LIST_ELEM_COUNT op xs
+Proof
+  simp[LIST_ELEM_COUNT_DEF] >> AP_TERM_TAC >>
+  AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, EQ_SYM_EQ]
+QED
+
+Theorem inventory_reorder_pop_exhausted:
+  LENGTH pending <= 16 /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  (!x. MEM x pending ==> LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+  MEM op pending /\
+  LIST_ELEM_COUNT op ps.ps_stack = LIST_ELEM_COUNT op pending /\
+  reorder_plan dfg pending ps = (ops, qs) ==>
+  ~MEM op (stack_pop (LENGTH pending) qs.ps_stack)
+Proof
+  strip_tac >>
+  `!i. i < LENGTH pending ==>
+    stack_peek (LENGTH pending - 1 - i) qs.ps_stack = EL i pending` by
+    (metis_tac[reorder_plan_materialised_order]) >>
+  `LENGTH pending <= LENGTH qs.ps_stack` by
+    (irule reorder_plan_materialised_length_floor >> metis_tac[]) >>
+  `!x. MEM x pending ==> LIST_ELEM_COUNT x qs.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
+    (metis_tac[reorder_plan_materialised_counts]) >>
+  `qs.ps_stack = stack_pop (LENGTH pending) qs.ps_stack ++ pending` by
+    (irule fixed_suffix_decompose >> simp[]) >>
+  `LIST_ELEM_COUNT op qs.ps_stack = LIST_ELEM_COUNT op ps.ps_stack` by simp[] >>
+  `LIST_ELEM_COUNT op qs.ps_stack =
+    LIST_ELEM_COUNT op (stack_pop (LENGTH pending) qs.ps_stack) +
+    LIST_ELEM_COUNT op pending` by metis_tac[elem_count_append] >>
+  `LIST_ELEM_COUNT op (stack_pop (LENGTH pending) qs.ps_stack) = 0` by decide_tac >>
+  gvs[GSYM inventory_filter_count, GSYM inventory_count_pos]
+QED
+
 (* Bounded contract checks: PHIs replace their unique incoming source,
    and discard a dead output on a non-halting path. *)
 Theorem regional_phi_live_probe:
