@@ -107,8 +107,10 @@ the required coverage shape is:
 !z. z IN WT ==> ?a. a IN W /\ relocation_pair lo positions q a z
 ```
 
-Allocation initialization must be handled separately: joint_writes excludes
-ALLOCA fresh-zero initialization. Future untainted read lifetime/birth machinery
+Allocation birth must be handled separately: joint_writes excludes
+ALLOCA. `exec_alloca_def` updates the cache and output, NOT memory; fresh-zero
+values must not be assumed (the memory's implicit tail is zero only when unread
+addresses lie there). Future untainted read lifetime/birth machinery
 prevents demanding fresh untouched bytes, but that does not prove the target
 step's byte-production rule. External-call writes and return memory need their
 actual `step_writes` boundaries. Do not put coverage inside the state relation.
@@ -208,3 +210,111 @@ in place rather than adding a duplicate near-variant. This remaining proof
 must be owned explicitly before treating all-cache metadata as established.
 
 No frozen wrapper or executable/contract definition was changed by this audit.
+
+## Value/origin producer audit (C0.relocation.consumers.producers.values)
+
+This section specifies unproved local interfaces, not a state simulation.
+The concrete transition rules audited are `origin_frame_reachable` entry,
+next, block, call, ret and `origin_out/step/phis` in `frameOriginUpdates`.
+
+### Lifetime representation and adversarial transition checks
+
+A convenient candidate token is `(activation_birth_index, aid)` rather than
+raw `(b,sz)` or stack depth. The activation birth is zero for entry and the
+successor trace index for each call. Carry a stack of activation births in
+parallel with the saved frames. Within an activation, the cache never deletes
+an ALLOCA entry, so revisiting aid reuses the token. Distinct calls at reused
+depth get distinct birth indices. A local token still denotes its allocation
+while suspended, even when a callee holds a PARAM alias to it. A numeric
+encoding can be introduced later if required; no uniqueness by address is used.
+
+At each activation carry two witness maps/vectors:
+
+* a local cache-token table `ct : (num, token # (num # num)) fmap`;
+* resolved parameter vector `rp : (token # (num # num)) option list`.
+
+A schematic resolution boundary, with `om` the EXISTING tagged origin map and
+`rv` the candidate resolved variable map, is:
+
+```text
+resolve_tag ct rp (OriginLocal aid, site) = lookup ct aid,
+  with any returned entry required to have the same site;
+resolve_tag ct rp (OriginParameter k, site) = EL k rp,
+  guarded by k < LENGTH rp and equality of the returned site;
+resolve_tag ct rp (OriginDynamic, site) = NONE (no DALLOCA domain).
+forall v. FLOOKUP rv v = OPTION_BIND (FLOOKUP om v) (resolve_tag ct rp).
+MAP (OPTION_MAP SND) rp = PG.
+```
+
+All the notation above is specification only.
+Require full resolution on the origin domain, so `SND o_f rv = G`;
+partial resolution alone would silently drop pointer equations.
+
+| Transition challenge | Required producer, not yet proved |
+|---|---|
+| first ALLOCA | insert `(current_activation,inst_id)` in ct with the actual post-cache `(b,sz)`; origin_out labels it OriginLocal |
+| cached ALLOCA | preserve ct token and site; `exec_alloca_cached_site` and `local_cache_ok` provide existing cache boundaries, not token uniqueness |
+| repeated calls at same depth | push activation birth, ct, rp, rv; allocate a new activation birth on every push, never derive it from depth |
+| PARAM passed to PARAM | resolve caller `Var` via caller rv, then `MAP` those operand witnesses into callee rp; callee PARAM follows rp, not callee ct |
+| PHI | selected incoming operand resolves against PRE-entry om/rv; `origin_phis` writes outputs in the tail map but `origin_phi` always reads the original om (parallel semantics) |
+| return output restriction | restore saved ct/rp/activation and `DRESTRICT saved_rv (COMPL outputs)`; `origin_frame_reachable_ret` exports no callee pointer provenance |
+
+Exact algebraic boundary shapes to implement after definitions are approved:
+
+```text
+resolution ct rp om rv ==> resolution ct rp
+  (DRESTRICT om keys) (DRESTRICT rv keys)
+resolution ct rp om rv /\ resolve_tag ct rp tagged = SOME resolved ==>
+  resolution ct rp (origin_set om [v] (SOME tagged))
+                   (rv |+ (v,resolved))
+resolution ct rp om rv /\ op = Var v /\ FLOOKUP om v = SOME tagged ==>
+  FLOOKUP rv v = resolve_tag ct rp tagged
+```
+
+The cache, parameter-vector and PHI cases require more than these algebraic
+facts. In particular the existing `origin_frame_maps` only erases tags; it
+cannot manufacture lifetime resolution. `origin_frame_current_lookup` and
+`origin_frame_saved_lookup` export tags but do not resolve them.
+
+### Value and definedness boundaries
+
+Require `!v. (lookup_var v s = NONE <=> lookup_var v st = NONE)` separately
+from conditional value equations. For one-output updates the reusable
+boundary is: equal lookup domains before update implies equal domains after
+`update_var v x` and `update_var v y`, even when x and y differ. Simultaneous
+PHI evaluation needs equal chosen predecessor labels and definedness of all
+selected PRE-state operands, not sequential updates of the pre-map.
+
+Scalar byte agreement is `word_agree_except (op_taint tn op) x y` with output
+taint produced by the real instruction rule. Untainted scalar operands then
+agree exactly. Pointer equations are modular:
+`y = n2w (target_base token) + (x - n2w b)`; copying preserves that equation.
+For ADD/SUB the nonpointer operand must agree exactly and affine restrictions
+must select the legal pointer position (especially SUB). `fn_ptr_ok` supplies
+`affine_pointer_ops` and forbids Label arithmetic, but these clauses still
+need operand-facing elimination lemmas. Do not use natural offset containment
+for intermediate arithmetic. The old proof's local `word_displ_add` and
+`word_displ_neg` already contain the polymorphic group algebra; generalize/
+export one reusable displacement lemma and refactor those callers, rather
+than adding another near-duplicate.
+
+Returns remove output provenance; it remains to prove via `ptr_use_ok` and
+origin-to-syntactic-pointer coverage that RET operands cannot carry resolved
+pointers. `taint_ok` similarly supplies untainted return/call operands only
+after its opcode disjunctions have been eliminated. Neither is automatic
+from the restriction rule alone.
+
+### ALLOCA byte and taint production (correction to earlier audit)
+
+`exec_alloca_def` NEVER writes or zero-initializes memory: fresh case changes
+`vs_allocas`, `vs_alloca_next`, and one variable; cached case changes just the
+variable. Thus the byte-production boundary is unchanged total `read_byte`
+at EVERY source address, and unchanged target memory for a matched constant
+assignment. Fresh-byte ZERO is NOT an implementation fact. At birth,
+`mem_taint_def` unions `new_site_bytes` into tn.t_mem (then subtracts actual
+step writes); `out_taint` of ALLOCA is empty. Cached reuse adds no new bytes.
+The target constant assignment has no cache birth and no new-site taint, so
+source freshness can justify the target-taint subset, not equality. The
+remaining boundary is demand-lifetime transport across birth, plus pointer
+output relocation and variable-domain agreement. Proving zero memory contents
+is neither necessary nor supported by the actual ALLOCA definition.
