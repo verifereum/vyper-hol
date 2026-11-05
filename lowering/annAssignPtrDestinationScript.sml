@@ -26,6 +26,8 @@ Theorem annassign_store_memory_path_ptr:
  gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
+ (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_inst_idx := s.vs_inst_idx|>) = s /\
  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
    FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
@@ -41,12 +43,14 @@ Proof
      asm_rewrite_tac[] >> strip_tac >>
      drule_all annassign_bytestring_copy_robust_ptr >>
      disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
-     qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[]) >>
+     qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[] >>
+     fs[venom_state_component_equality]) >>
  gvs[compile_store_memory_def] >>
  drule_all annassign_counted_copy_robust_ptr >>
  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
  `tn'.t_imm = tn.t_imm` by
    (qpat_x_assum `(tn' with t_mem := _) = _` mp_tac >>
     simp[taint_component_equality]) >>
- qexistsl [`G`,`tn'`,`s'`] >> simp[op_taint_def])
+ qexistsl [`G`,`tn'`,`s'`] >> simp[op_taint_def] >>
+ fs[venom_state_component_equality])
 QED

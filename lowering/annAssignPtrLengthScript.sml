@@ -102,6 +102,7 @@ Theorem annassign_emit_len_binop_path_ptr:
  gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\ lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+ (sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
  sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
@@ -117,7 +118,7 @@ Proof
  qspecl_then [`PG`,`G`,`tn`,`s`,`sa.cs_next_id`] mp_tac copy_len_binop_ghost_frame >>
  disch_then (qspecl_then [`opc`,`left`,`right`,`out`,`f a b`] mp_tac) >>
  simp[update_var_def, lookup_var_def] >> strip_tac >> gvs[] >>
- simp[FLOOKUP_UPDATE] >>
+ simp[FLOOKUP_UPDATE, venom_state_component_equality] >>
  conj_tac >- simp[step_taint_def, set_var_taint_def, adopt_reset_def,
                   imm_taint_def, mk_inst_def] >>
  rpt strip_tac >>
@@ -135,7 +136,9 @@ Theorem annassign_emit_mload_clean_path_ptr:
  gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\ lookup_var out sf = SOME (mload (w2n a) s) /\
- op_taint tnf (Var out) = {} /\ sf.vs_memory = s.vs_memory /\
+ op_taint tnf (Var out) = {} /\
+ (sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+ sf.vs_memory = s.vs_memory /\
  tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
@@ -155,7 +158,8 @@ Proof
   (simp[Abbr `tnf`, Abbr `t`] >> irule mload_ghost_clean >> simp[eval_operand_def]) >>
  `tnf.t_imm = tn.t_imm` by
   simp[Abbr `tnf`, step_taint_def, set_var_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
- gvs[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+ gvs[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+     venom_state_component_equality] >>
  rpt strip_tac >> `p <> out` by metis_tac[] >>
  simp[Abbr `Gf`, Abbr `tnf`, step_prov_def, set_prov_def,
       out_prov_def, step_taint_def, set_var_taint_def, mk_inst_def,
@@ -206,6 +210,7 @@ Theorem annassign_length_prefix_extend_ptr:
  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
  op_taint tn left = {} /\ op_taint tn right = {} /\
+ (s with <|vs_vars := s0.vs_vars; vs_inst_idx := s0.vs_inst_idx|>) = s0 /\
  s.vs_memory = s0.vs_memory /\ tn.t_mem = tn0.t_mem /\
  tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans /\ tn.t_imm = tn0.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p s = lookup_var p s0 /\
@@ -215,6 +220,7 @@ Theorem annassign_length_prefix_extend_ptr:
  gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sd.cs_current_bb /\ sf.vs_inst_idx = LENGTH sd.cs_current_insts /\
  ~sf.vs_halted /\ lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+ (sf with <|vs_vars := s0.vs_vars; vs_inst_idx := s0.vs_inst_idx|>) = s0 /\
  sf.vs_memory = s0.vs_memory /\ tnf.t_mem = tn0.t_mem /\
  tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s0 /\
@@ -226,8 +232,9 @@ Proof
  qexistsl [`Gf`,`tnf`,`sf`] >>
  conj_tac >-
   (drule_all gas_path_ptr_then >> simp[]) >>
- simp[] >> rpt strip_tac >>
- first_x_assum (qspec_then `p` mp_tac) >> simp[] >>
+ `(sf with <|vs_vars := s0.vs_vars; vs_inst_idx := s0.vs_inst_idx|>) = s0` by
+   fs[venom_state_component_equality] >>
+ simp[] >> rpt strip_tac >> first_x_assum (qspec_then `p` mp_tac) >> simp[] >>
  metis_tac[]
 QED
 
@@ -243,7 +250,9 @@ Theorem annassign_bytestring_copy_len_path_ptr:
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
  eval_operand count_op sf = SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
- op_taint tnf count_op = {} /\ sf.vs_memory = s.vs_memory /\
+ op_taint tnf count_op = {} /\
+ (sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+ sf.vs_memory = s.vs_memory /\
  tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
@@ -284,5 +293,6 @@ Proof
  drule_all (SRULE [] (Q.SPECL [`ADD`,`word_add`] annassign_length_prefix_extend_ptr)) >>
  strip_tac >>
  map_every (Q_TAC (fn t => rpt (WEAKEN_TAC (free_in t)))) [`s3`,`tn3`,`G3`] >>
- qexistsl [`Gf`,`tnf`,`sf`] >> simp[eval_operand_def]
+ qexistsl [`Gf`,`tnf`,`sf`] >> simp[eval_operand_def] >>
+ fs[venom_state_component_equality]
 QED

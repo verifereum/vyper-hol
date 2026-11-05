@@ -90,6 +90,7 @@ Theorem annassign_bytestring_prefix_path_ptr:
  ~sf.vs_halted /\ eval_operand count_op sf = SOME (n2w n) /\ op_taint tnf count_op = {} /\
  lookup_var src sf = SOME a /\ lookup_var dst sf = SOME b /\
  ptr_covers Gf tnf src sf n /\ ptr_covers Gf tnf dst sf n /\
+ (sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
  sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
@@ -125,7 +126,10 @@ Theorem annassign_store_bytestring_path_ptr:
  ?Gf tnf sf.
  gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
- ~sf.vs_halted /\ sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+ ~sf.vs_halted /\
+ (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_inst_idx := s.vs_inst_idx|>) = s /\
+ sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
               {w2n b + i | i < n /\ w2n a + i IN tn.t_mem} /\
@@ -164,7 +168,10 @@ Theorem annassign_bytestring_copy_robust_ptr:
  ?Gf tnf sf.
  gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
- ~sf.vs_halted /\ sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+ ~sf.vs_halted /\
+ (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_inst_idx := s.vs_inst_idx|>) = s /\
+ sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
    FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
