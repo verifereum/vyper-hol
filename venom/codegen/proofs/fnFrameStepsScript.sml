@@ -13,7 +13,7 @@
 
 Theory fnFrameSteps
 Ancestors
-  genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  fnFrameStepsPhi genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
 
