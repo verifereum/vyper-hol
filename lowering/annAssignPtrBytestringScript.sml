@@ -5,7 +5,7 @@ Ancestors
  fragGasPathPtr bodyPtrDefs ptrDiscipline venomInst venomInstProofs
  venomExecSemantics venomState venomMemDefs venomMemProofs
  context emitHelper emitHelperProps finite_map pred_set compileEnv fragExec
- valueCopy vfmConstants arithmetic
+ valueCopy vfmConstants arithmetic annAssignPtrScratch robustCopyTransportPtr valueEncoding valueEncodingProps
 
 Theorem annassign_emit_mcopy_path_ptr:
  !D ctx func PG G tn s dst src count_op a b n k sa sb.
@@ -145,4 +145,48 @@ Proof
   (mcopy (w2n b) (w2n a) n s).vs_memory` by
   simp[mcopy_def, write_memory_with_expansion_def] >>
  gvs[taint_component_equality, op_taint_def]
+QED
+
+(* Robust destination representation and the exterior byte frame depend only
+   on the copy window, not on the arithmetic variables of the length prefix. *)
+Theorem annassign_bytestring_copy_robust_ptr:
+ !D ctx func PG G tn s sa sb src dst a b len n tv v.
+ compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\ fn_has_code sa sb func /\
+ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+ not_fresh_at sa src /\ not_fresh_at sa dst /\
+ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+ n = 32 + 32 * ((len + 31) DIV 32) /\ n < dimword (:256) /\
+ mload (w2n a) s = n2w len /\ ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
+ (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+ val_wf tv v /\ val_footprint tv v <= n /\
+ (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) ==>
+ ?Gf tnf sf.
+ gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+ sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+ ~sf.vs_halted /\ sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+ (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
+   FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
+ (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
+   mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+   (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+ (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory tv v (w2n b) m)
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all annassign_store_bytestring_path_ptr >>
+ disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+ drule annassign_copy_taint_window_ptr >> strip_tac >>
+ `mem_bytes_at (w2n b) n sf.vs_memory = mem_bytes_at (w2n a) n s.vs_memory` by
+   simp[mcopy_mem_bytes_at_same] >>
+ `!i. ~(w2n b <= i /\ i < w2n b+n) ==>
+   mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+   (rpt strip_tac >> simp[] >> irule mcopy_mem_bytes_at_disjoint >> decide_tac) >>
+ `!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+      val_in_memory tv v (w2n b) m` by
+   (rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
+    conj_tac >- simp[] >>
+    qexistsl [`s.vs_memory`,`sf.vs_memory`,`n`,`w2n a`,`tn.t_mem`,`tnf.t_mem`] >>
+    asm_rewrite_tac[]) >>
+ qexistsl [`Gf`,`tnf`,`sf`] >> simp[]
 QED
