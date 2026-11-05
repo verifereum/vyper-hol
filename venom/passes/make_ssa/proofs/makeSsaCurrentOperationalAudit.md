@@ -962,3 +962,162 @@ at another finite-map fold. This bounded diagnostic has therefore specified a
 candidate judgment and isolated its exact remaining transfer obligations; it
 has NOT established inductiveness, either frozen contract, or a counterexample.
 No speculative operational theory or conditional readiness wrapper is installed.
+
+## 11. Replacement ledger-closure test (C1.12.ledger_closure_design)
+
+This replaces the proposed invariant of 10.1/10.5, not their historical evidence.
+Generation freshness is now proved in CompletedOrdinary. E0311 supplies mixed
+actual dispatch, conditional on incoming inserted agreement. No J is installed.
+
+### 11.1 Demand family independent of target success
+
+Requests are pairs (source owner, static target token) at finite certificate
+micro-cuts: entry; ordinary input/output; predecessor exit qualified by next
+edge; incoming PHI snapshot qualified by predecessor; cleanup cursor with the
+source held post-PHI. Roots are ordinary operand selectors, surviving inserted
+PHI incoming selectors, retained PHI selected operands, and cleanup ASSIGN
+source tokens. A request for a destination pulls back across a copy to its
+source; unaffected requests cross unchanged. Ordinary written destinations end
+at their final effective output occurrence; other requests cross unchanged and
+operand requests are added. PHI output requests pull back to selected incoming
+operands simultaneously, never through sequential updated stores. CFG edges
+use the predecessor event's exit selector. Take least backward closure on this
+finite static syntax, not unfolding loops or quantifying over target runs.
+
+Finiteness does NOT establish that these requests belong to the legal selector
+or liveness domain. Proposed missing static interface request_closure_sound:
+under frozen premises, ordinary requests have D subset U from CompletedOrdinary;
+each incoming inserted request has predecessor source demand and the rooted
+selector characterization (exit-live with operand exclusion, or exceptional
+single-definition alternative); each external copy source has its chronological
+rooted token. This interface contains no runtime lookup equality. Existing
+current_ordinary_demand gives only the local operands ++ before_outputs D
+recurrence (JointRuntime:74-92), not this whole closure theorem.
+
+### 11.2 Candidate J (extensional, no future-success field)
+
+Fix certificate, contexts, same actual entry e and initial fuels. J has arguments
+q,Ps,Pt,st,st',V,M,N,L,a and exactly these proposed fields:
+
+1. Both actual continuing prefixes from their CurrentEntry/e starts, ending at
+   q's actual modes and OK states. q is a micro-cut above with certified index
+   alignment. Cleanup advances target only, holding source post-PHI fixed.
+2. Realization of V/M and V/N, both map_below a, equal frame/current/previous
+   labels at aligned semantic cuts, and permanent instruction singleton agreement.
+3. L records completed writes of these prefixes, by phase OCCURRENCE and output
+   ordinal, with token/name, origin, value and witnessed before/after cuts.
+   Every effective source write has its completed paired target write with the
+   same origin. Target administrative writes propagate an actual read origin.
+   Final ordinary slots and first parallel-PHI bindings are distinguished.
+4. Each fully completed earlier insertion visit g has an actual retained-batch
+   or cleanup-copy producer in L. Its origin equals the source owner's origin
+   at that insertion-completion cut. If g has no source output of v, it also
+   equals that visit's exit origin. No producer is asserted for an unexecuted
+   current copy. Current original-PHI re-placement uses the completed current
+   retained event instead of an earlier visit.
+5. All recorded origins have first coordinate below a, with V(origin) equal to
+   their recorded value; their full value projection satisfies archive_valid.
+   Include historical origins shadowed out of current maps.
+
+There is deliberately NO joint_rel on all requests, lookup-ready field, next
+step success, or future-target-run quantifier. Thus J does not conceal readiness
+in a constructor, but its preservation and adequacy are unproved. Archive
+validity alone supplies neither occurrence coverage nor current bindings.
+
+### 11.3 Checked discharge versus exact missing inputs
+
+* current_completed_empty_entry gives empty actual prefixes, realization,
+  bounds, empty archive and singleton agreement, once both fn_entry_state
+  premises for the SAME e hold. Entry alignment/label transport remains needed;
+  empty log and completed-visit coverage are vacuous. It gives no future SOME.
+* current_certificate_completed_ordinary (220-259) gives actual ordinary
+  continuations and updated V/M/N with archive preservation. It REQUIRES joint
+  input agreement on operands ++ before_outputs D and D subset U. Derive that
+  from J plus request projection before applying it; then append final-effective
+  paired records and their new archive values. Generation a is not visit number.
+* current_certificate_mixed_dispatch_continue (115-156) gives both actual
+  dispatches and bounded realized batch bindings. It REQUIRES inserted incoming
+  name agreement/SOME. Its two LIST_REL lists plus singleton VALUE agreement
+  do not by themselves establish paired ORIGIN equality for ledger records.
+  RetainedJoint's incoming origin agreement is needed; equal values need not
+  have equal origins.
+* current_certificate_reinserted_actual_continue (157-174) supplies same-header
+  copy readiness and actual extension from completed retained eval_one_phi,
+  successful completed batch and an actual local cursor interval. It does not
+  supply external inserted producers or arbitrary inter-block no-write slices.
+* Terminators, INVOKE and non-OK results are not covered by CompletedOrdinary;
+  calls cannot be treated as CurrentControl.
+
+### 11.4 Repeated-header and external-producer adversarial test
+
+Consider route entry->d->h->p->h, owner v, inserted token I(v,h).
+First d writes value A with origin o0. The first h producer propagates o0;
+it does not allocate an origin from h's visit number. If p writes v=B with
+fresh ordinary origin o1, the second incoming selector must pick p's original
+token, not the old I(v,h) producer. If p does not change v, the second incoming
+selector may pick I(v,h), but its witness is the LAST COMPLETED h occurrence
+with o0. After the second retained batch/copy it is a NEW producer occurrence,
+possibly still o0. If a later p writes C, its origin o2 supersedes both. Values
+A,B,C are symbolic distinct test values, not a checked concrete counterexample.
+This challenges the proposed invariant, not either frozen theorem.
+
+For external I(v,g) at first entrance h, the rooted scan must place a completed
+g strictly before this h, with no changing site afterward. Coverage field 4
+then identifies g's actual producer occurrence. Value archival protects o but
+does not protect the physical name y. Source no-write transport and target
+owner exclusion must identify CURRENT M[v]=o and N[y]=o separately. Current-h
+retained PHIs and preceding cleanup copies also have to exclude y; transport
+must stop at the current cursor, before executing x<-y. Only then realization
+yields SOME and copy execution may append a new producer. On reentry to h,
+choose last completed changing occurrence, not the first visit or largest origin.
+For g=h selected-self case, the witness can be a previous completed h only;
+a current unexecuted h copy is never its own witness. If current retained PHI
+actually overwrites that physical name, the old witness is not transportable
+and must be replaced by a proved current-batch projection, not silently reused.
+
+### 11.5 First missing implication and acyclic target design
+
+Proposed semantic projection (NOT asserted/proved):
+
+  frozen premises /\ source-initialized J q ... /\ (v,t) in Q(q)
+  ==> ALOOKUP M v = ALOOKUP N (name_H t).
+
+For a demanded read whose source is known SOME, strengthen the conclusion to
+exist o,w with both ALOOKUPs=SOME o and V o=SOME w. A Default request may have
+both lookups NONE at entry, so the SOME version requires actual source
+availability, not just Q membership. This projection is not a new J field.
+Its intended proof splits at the last chronological changing source occurrence,
+extracts the already completed record, and transports through actual no-write
+slices. It is precisely where the present local library stops short.
+
+At incoming surviving inserted PHIs without an original source PHI output,
+InsertionDemand:20-26 derives exit demand (needs no prefix definition of v).
+Actual source predecessor availability supplies SOME. RootedOrigin:20-43 needs
+exit liveness AND global PHI-operand exclusion; InsertionDemand:36-44 needs
+local operand exclusion for liveness. For the excluded case,
+ExceptionalDemandOrigin:8-20 uses source demand and the frozen single-definition
+condition. Thus no license exists simply to use all inserted owners in a
+joint_rel at exit. Static request_closure_sound must discharge these branches,
+then semantic projection must supply the required actual name agreement.
+
+Dependency table (strictly before the next unexecuted read):
+
+| use | legitimate IH witness | additional missing implication |
+| --- | --- | --- |
+| surviving inserted snapshot at h | completed last changing producer on route to p | Q closure/rooted characterization; current source/target no-write projection |
+| external inserted copy x<-y | completed last g producer, g earlier in actual route | producer coverage extraction, g-tail/suffix/current-h exclusion of y |
+| same-header original-PHI copy | current already-completed retained batch | actual interval and common origin projection, then existing reinsertion continuation |
+| ordinary inputs | completed last writer or empty Default | request projection; local recurrence plus D subset U |
+| new inserted producer after successful copy/batch | just-completed event | propagate origin and append coverage, never use it to justify its own read |
+
+Desired induction order is: prior J -> static Q closure -> earlier completed
+record -> no-write/current-origin projection -> incoming readiness -> actual
+batch/copy/ordinary continuation -> append records and next J. No arrow may
+return from current success to its earlier record. This is an acyclic *goal*
+graph, not a completed proof: the semantic request projection and its static
+closure are unproved. In particular the current candidate J cannot be declared
+adequate solely from the three completed continuation theorems. The next design
+choice is whether to formalize occurrence coverage + projection together or
+replace this J with a stronger independently justified source/target SSA-use
+invariant. Stop for strategist review before installing J or another conditional
+readiness wrapper. Neither theorem falsehood nor global inductivity is claimed.
