@@ -6379,3 +6379,126 @@ Proof
   simp[return_def, APPLY_UPDATE_THM] >> EVAL_TAC >>
   simp[return_def] >> EVAL_TAC
 QED
+
+Theorem probe_clear_source_declared_region:
+  !mid name subs tr slot tv.
+    declared_storage_region probe_clear_source_context mid name subs =
+      SOME (tr,slot,tv) <=>
+    mid = NONE /\ subs = [] /\ tr = F /\ name = "outer" /\ slot = 0w /\
+    tv = ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1))
+      (Dynamic 1)) (Dynamic 1)
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[declared_storage_region_def] >> EVAL_TAC >>
+  Cases_on `name = "outer"` >> gvs[] >>
+  Cases_on `subs = []` >> gvs[] >> EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> metis_tac[]
+QED
+
+Theorem probe_clear_source_dead_descendant:
+  !st b. b < 32 /\ lookup_storage 0w st = 0w ==>
+    storage_dead probe_clear_source_context F st 2 b
+Proof
+  rpt strip_tac >>
+  simp[storage_dead_def, probe_clear_source_declared_region,
+       type_slot_size_def, vyperStorageFrameTheory.ranges_disjoint_def,
+       dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  simp[dead_bytes_def, type_slot_size_def]
+QED
+
+Theorem probe_clear_source_dead_store_agree:
+  !st mt v.
+    lookup_storage 0w st = 0w /\
+    storage_agree (storage_dead probe_clear_source_context F st) st mt ==>
+    storage_agree (storage_dead probe_clear_source_context F st) st
+      (update_storage 2w v mt)
+Proof
+  rpt strip_tac >>
+  irule accountsRelPropsTheory.storage_agree_dead_update_right >>
+  simp[probe_clear_source_dead_descendant]
+QED
+
+Theorem probe_clear_source_root_match:
+  !st mt.
+    lookup_storage 0w (update_storage 0w 0w st) =
+    lookup_storage 0w (update_storage 2w 0w (update_storage 0w 0w mt))
+Proof
+  simp[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+Definition probe_clear_source_bt_def:
+  probe_clear_source_bt =
+    SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+End
+
+Theorem probe_clear_source_precall_bounds:
+  eval_base_place probe_clear_source_context probe_clear_source_bt
+    probe_clear_source_after =
+  (INR (Error (RuntimeError "array dynamic length oob")),
+   probe_clear_source_after)
+Proof
+  EVAL_TAC >> simp[return_def]
+QED
+
+Theorem probe_clear_source_syntax:
+  ~target_has_pop (SubscriptTarget probe_clear_source_bt
+      (Literal (BaseT (UintT 256)) (IntL 0))) /\
+  ~expr_has_effect (Literal (BaseT (UintT 256)) (IntL 0)) /\
+  int_calls_target probe_clear_source_bt <> []
+Proof
+  EVAL_TAC
+QED
+
+(* Universal base-contract audit for the clearing candidate (not a proof
+   of target_case or of its negation):
+
+   target_case_def quantifies over ALL env,es satisfying target_pre. With
+   nocalls=F it requires target_sim at each such entry. target_sim_def then
+   quantifies over vt,sa,sb,r,res,es',s0, with compilation, source evaluation,
+   target_res_ok, fn_has_code, distinct instruction IDs and reserved local
+   pointers as antecedents. The remaining obligation is frag_exec from
+   s=s0 /\ stmt_state_rel at entry, ending in the complete target_post on
+   success or expr_exit on the allowed source errors. It is not merely a
+   storage equality at the concrete successful source entry.
+
+   Source branches for this bt: the initial literal-zero access first checks
+   outer's root length/capacity. Its bounds failure occurs BEFORE shrink;
+   probe_clear_source_precall_bounds is a checked control. If that access
+   succeeds it captures the middle-array slot1. The call clears root0 and
+   returns zero; extension then checks slot1's CURRENT length/capacity.
+   This may fail after the call, or return slot2 with the fixed child type.
+   The concrete success and final literal access are checked above. A
+   universal source-evaluation reduction for arbitrary admitted states,
+   including call failures and source scope restoration, remains unproved.
+
+   Aliasing audit: probe_clear_source_declared_region proves the ONLY
+   declared region is outer at root0; the leftover donor layout entry is
+   not a declaration. probe_clear_source_dead_descendant is universal in
+   storage, not limited to the concrete state: once root0=0 all bytes of
+   slot2 are dead. probe_clear_source_dead_store_agree shows an additional
+   machine-only store at slot2 preserves already-established post-clear
+   storage agreement. Thus that store cannot alias another live declared
+   source region in THIS context. probe_clear_source_root_match separately
+   checks the common live root effect of the two specified updates. Neither
+   fact proves transport of the original storage agreement through root
+   clearing or any other conjunct of stmt_state_rel.
+
+   Still outstanding: new context typing/layout/expr_sim_inv admission,
+   exact new compilation environment and actual caller code, universal
+   simulation for all pre-call bounds/error/success branches, root-clearing
+   storage-agreement transport, remaining state/memory/allocation/local
+   frames, and code composition of the arbitrary callee. No old donor-copy
+   admission certificate is silently reused. Only after proving universal
+   target_case for bt can this be a frozen-theorem candidate.
+
+   Frozen antecedent ledger: syntax above checks no-pop and effect-free
+   final literal. int_calls_target is nonempty, so nocalls=T is vacuous for
+   bt but cannot admit the intended outer target. Use nocalls=F. The final
+   literal's universally quantified expr_sim_case and expr_vv_case remain
+   separate unproved requirements. No admitted machine entry and no full
+   frozen-theorem counterexample are established. Stop at the audit boundary
+   for strategist selection, not more entry bookkeeping. *)
