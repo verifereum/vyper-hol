@@ -465,6 +465,22 @@ Proof
               MATCH_ACCEPT_TAC straight_fresh_return,
               IF_CASES_TAC])
 QED
+Theorem ci_mono_array_check_ptr:
+  !idx_op len_op sgn bop dyn ws esz sl.
+    ci_mono sl (SND (comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+      (array_elem_ptr bop idx_op dyn ws esz) sl))
+Proof
+  rpt gen_tac >> Cases_on `sgn` >> Cases_on `dyn` >>
+  rewrite_tac[array_bounds_check_def, array_bounds_valid_def, array_elem_ptr_def] >>
+  simp[] >>
+  rpt (FIRST [irule ci_mono_bind >> conj_tac,
+              irule ci_mono_ignore_bind >> conj_tac,
+              gen_tac >> BETA_TAC,
+              irule ci_mono_emit_op >> NO_TAC,
+              irule ci_mono_emit_void >> NO_TAC,
+              irule ci_mono_comp_return >> NO_TAC])
+QED
+
 
 Theorem compile_array_subscript_oob:
   !base_op idx_op dyn cnt ws esz sgn loader st p st' ss b i len.
