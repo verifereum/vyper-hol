@@ -519,3 +519,116 @@ Proof
        venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
        wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]
 QED
+
+Theorem order_ptr_s20_copy_operands:
+  lookup_var "%10" order_ptr_s20 = SOME 2w /\
+  lookup_var "%2" order_ptr_s20 = SOME 288w /\
+  lookup_var "%0" order_ptr_s20 = SOME 2w
+Proof
+  simp[venomStateTheory.lookup_var_def, order_ptr_s20_def,
+       order_ptr_s19_def, order_ptr_s18_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s17_def, order_ptr_s16_def, order_ptr_s15_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s14_def, order_ptr_s13_def, order_ptr_s12_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s11_def, order_ptr_s10_def, order_ptr_s9_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s8_def, order_ptr_s7_def, order_ptr_s6_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s5_def, order_ptr_s4_def, order_ptr_s3_def,
+       order_ptr_s2_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem order_ptr_s20_accounts:
+  order_ptr_s20.vs_accounts = order_run_start.vs_accounts
+Proof
+  simp[order_ptr_s20_def, order_ptr_s19_def, order_ptr_s18_def] >>
+  simp[order_ptr_s17_def, order_ptr_s16_def, order_ptr_s15_def] >>
+  simp[order_ptr_s14_def, order_ptr_s13_accounts]
+QED
+
+(* Expanded-memory snapshot after copying the observed external-code byte. *)
+Definition order_ptr_s21_def:
+  order_ptr_s21 = order_ptr_s20 with
+    <|vs_memory := TAKE 288 (order_ptr_s20.vs_memory ++ REPLICATE 65 0w) ++
+        [30w] ++ DROP 289 (order_ptr_s20.vs_memory ++ REPLICATE 65 0w);
+      vs_inst_idx := 21|>
+End
+
+Theorem order_ptr_s20_memory_length:
+  LENGTH order_ptr_s20.vs_memory = 224
+Proof
+  simp[order_ptr_s20_def, order_ptr_s19_def, order_ptr_s18_def] >>
+  simp[order_ptr_s17_def, order_ptr_s16_def, order_ptr_s15_def] >>
+  simp[order_ptr_s14_def, order_ptr_s13_def, order_ptr_s12_def] >>
+  simp[order_ptr_s11_def, order_ptr_s10_def, order_ptr_s9_def,
+       order_ptr_s8_memory_length, byteTheory.LENGTH_word_to_bytes,
+       venomMemPropsTheory.dimindex_256]
+QED
+
+Theorem order_ptr_step20:
+  step_inst_base (mk_inst 20 EXTCODECOPY
+    [Var "%10";Var "%2";Var "%0";Lit 1w] []) order_ptr_s20 =
+    OK (order_ptr_s21 with vs_inst_idx := 20)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, order_ptr_s20_copy_operands,
+       order_ptr_s20_accounts] >>
+  `(lookup_account (2w:address) order_run_start.vs_accounts).code =
+     [10w;20w;30w]` by EVAL_TAC >>
+  simp[venomStateTheory.write_memory_with_expansion_def,
+       order_ptr_s20_memory_length] >>
+  simp[order_ptr_s21_def, order_ptr_s20_def]
+QED
+
+(* Snapshot of the final bytestring header store. *)
+Definition order_ptr_s22_def:
+  order_ptr_s22 = order_ptr_s21 with
+    <|vs_memory := TAKE 256 order_ptr_s21.vs_memory ++
+        word_to_bytes (1w:bytes32) T ++ DROP 288 order_ptr_s21.vs_memory;
+      vs_inst_idx := 22|>
+End
+
+Theorem order_ptr_s21_buffer_operand:
+  lookup_var "%1" order_ptr_s21 = SOME 256w
+Proof
+  simp[venomStateTheory.lookup_var_def, order_ptr_s21_def, order_ptr_s20_def,
+       order_ptr_s19_def, order_ptr_s18_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s17_def, order_ptr_s16_def, order_ptr_s15_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s14_def, order_ptr_s13_def, order_ptr_s12_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s11_def, order_ptr_s10_def, order_ptr_s9_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s8_def, order_ptr_s7_def, order_ptr_s6_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s5_def, order_ptr_s4_def, order_ptr_s3_def,
+       order_ptr_s2_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem order_ptr_step21:
+  step_inst_base (mk_inst 21 MSTORE [Var "%1";Lit 1w] []) order_ptr_s21 =
+    OK (order_ptr_s22 with vs_inst_idx := 21)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_write2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, order_ptr_s21_buffer_operand] >>
+  `LENGTH order_ptr_s21.vs_memory = 289` by
+    simp[order_ptr_s21_def, order_ptr_s20_memory_length] >>
+  simp[venomStateTheory.mstore_def,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  simp[order_ptr_s22_def, order_ptr_s21_def]
+QED
+
+Theorem order_ptr_output_byte:
+  read_memory 288 1 order_ptr_s22 = [30w]
+Proof
+  simp[venomStateTheory.read_memory_def, order_ptr_s22_def,
+       listTheory.DROP_APPEND, byteTheory.LENGTH_word_to_bytes,
+       venomMemPropsTheory.dimindex_256] >>
+  simp[order_ptr_s21_def, order_ptr_s20_memory_length,
+       listTheory.DROP_APPEND] >>
+  simp[listTheory.DROP_LENGTH_TOO_LONG, listTheory.LENGTH_TAKE,
+       byteTheory.LENGTH_word_to_bytes, venomMemPropsTheory.dimindex_256,
+       order_ptr_s20_memory_length]
+QED
