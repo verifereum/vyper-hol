@@ -30,18 +30,10 @@ Libs
 
 
 (* ===== Facts from the statement simulation =====
-   Restated from stmtSim (expr_exit_INR_type), stmtSimAssignAttr
-   (struct_field_type, attribute_type_struct_field) and
-   stmtSimAssignAttrStorage (extend_storage_place_attr), so the judgment
+   Restated from stmtSimAssignAttr (alookup_fields_args,
+   attribute_type_struct_field) and stmtSimAssignAttrStorage
+   (extend_storage_place_attr, struct_field_slot_alookup), so the judgment
    does not depend on the statement simulation. *)
-
-Theorem expr_exit_INR_type[local]:
-  !ex rr. expr_exit (INR ex : 'a + exception) rr =
-          expr_exit (INR ex : 'b + exception) rr
-Proof
-  rpt gen_tac >> Cases_on `rr` >> Cases_on `ex` >> simp[expr_exit_def] >>
-  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
-QED
 
 Theorem alookup_fields_args[local]:
   !fields args fld fty.
