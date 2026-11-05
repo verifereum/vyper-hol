@@ -869,3 +869,179 @@ Theorem physical_reduce_dead_keys:
 Proof
   EVAL_TAC
 QED
+
+(* Bounded native ASSIGN-root audit: modes 0/1 alias the live-through a
+   at entry; mode 1 also selects the alias as a PHI incoming operand.
+   Mode 2 aliases the PHI output at the join. *)
+Definition physical_root_fn_def:
+  physical_root_fn (mode:num) = mk_raw_function "physical-root"
+    [<|bb_label := "E"; bb_instructions :=
+      [mk_inst 0 PARAM [Lit 0w] ["c"];
+       mk_inst 1 PARAM [Lit 1w] ["a"];
+       mk_inst 2 PARAM [Lit 2w] ["b"];
+       mk_inst 11 PARAM [Lit 3w] ["k"]] ++
+       (if mode < 2 then [mk_inst 12 ASSIGN [Var "a"] ["d"]] else []) ++
+      [mk_inst 3 JNZ [Var "c"; Label "A"; Label "B"] []]|>;
+     <|bb_label := "A"; bb_instructions := [mk_inst 4 JMP [Label "J"] []]|>;
+     <|bb_label := "B"; bb_instructions := [mk_inst 5 JMP [Label "J"] []]|>;
+     <|bb_label := "J"; bb_instructions :=
+       [mk_inst 6 PHI [Label "A"; Var (if mode = 1 then "d" else "a");
+                       Label "B"; Var "b"] ["x"]] ++
+       (if mode = 2 then [mk_inst 12 ASSIGN [Var "x"] ["d"]] else []) ++
+       [mk_inst 7 MSTORE [Var (if mode = 2 then "d" else "x"); Lit 0w] []] ++
+       (if mode < 2 then [mk_inst 13 MSTORE [Var "a"; Lit 1w] []] else []) ++
+       [mk_inst 8 JNZ [Var "k"; Label "C"; Label "D"] []]|>;
+     <|bb_label := "C"; bb_instructions := [mk_inst 9 STOP [] []]|>;
+     <|bb_label := "D"; bb_instructions := [mk_inst 10 STOP [] []]|>]
+End
+
+Definition physical_root_edge_def:
+  physical_root_edge mode edge = SND (THE (residual_matrix_step (physical_root_fn mode) edge
+    (SND (THE (residual_matrix_step (physical_root_fn mode) "E"
+      (init_cleanup_plan_state NONE [] 0 0))))))
+End
+
+Theorem physical_root_ready:
+  EVERY (\mode. codegen_ready_fn (physical_root_fn mode)) [1; 2]
+Proof
+  simp_tac (srw_ss()) [listTheory.EVERY_DEF] >>
+  conj_tac >- suspend "mode1" >> suspend "mode2"
+QED
+
+Resume physical_root_ready[mode1]:
+  rewrite_tac [codegen_ready_fn_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+Resume physical_root_ready[mode2]:
+  rewrite_tac [codegen_ready_fn_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+Finalise physical_root_ready
+
+Theorem physical_root_success:
+  EVERY (\mode. IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze (physical_root_fn mode)) (dfg_build_function (physical_root_fn mode))
+    (cfg_analyze (physical_root_fn mode)) NONE [] (physical_root_fn mode) 0 0)) [0; 1; 2]
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_root_rejected0:
+  ~phi_operands_ready (physical_root_fn 0) /\
+  MEM "a" (live_vars_at (liveness_analyze (physical_root_fn 0)) "J" 1) /\
+  ~codegen_ready_fn (physical_root_fn 0)
+Proof
+  conj_asm1_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> simp[codegen_ready_fn_def]
+QED
+
+Theorem physical_root_normalization:
+  normalize_operand (dfg_build_function (physical_root_fn 1)) [] (Var "d") = Var "a" /\
+  operand_equiv (dfg_build_function (physical_root_fn 1)) (Var "d") (Var "a") /\
+  normalize_operand (dfg_build_function (physical_root_fn 2)) [] (Var "d") = Var "x"
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_root_join_compare:
+  EVERY (\mode.
+    IS_SOME (residual_matrix_step (physical_root_fn mode) "J" (physical_root_edge mode "A")) /\
+    IS_SOME (residual_matrix_step (physical_root_fn mode) "J" (physical_root_edge mode "B")) /\
+    FST (THE (residual_matrix_step (physical_root_fn mode) "J" (physical_root_edge mode "A"))) =
+    FST (THE (residual_matrix_step (physical_root_fn mode) "J" (physical_root_edge mode "B"))) /\
+    (SND (THE (residual_matrix_step (physical_root_fn mode) "J" (physical_root_edge mode "A")))).ps_alloc =
+    (SND (THE (residual_matrix_step (physical_root_fn mode) "J" (physical_root_edge mode "B")))).ps_alloc) [1; 2]
+Proof
+  simp_tac (srw_ss()) [listTheory.EVERY_DEF] >>
+  conj_tac >- suspend "mode1" >> suspend "mode2"
+QED
+Resume physical_root_join_compare[mode1]:
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+Resume physical_root_join_compare[mode2]:
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+Finalise physical_root_join_compare
+
+
+Theorem physical_root_edge_stacks:
+  (physical_root_edge 1 "A").ps_stack = [Var "k"; Var "a"; Var "d"]
+Proof
+  EVAL_TAC
+QED
+
+Definition physical_root_phi_def:
+  physical_root_phi mode edge = generate_phi_plan
+    (HD (THE (lookup_block "J" (physical_root_fn mode).fn_blocks)).bb_instructions)
+    (live_vars_at (liveness_analyze (physical_root_fn mode)) "J" 1) F
+    (physical_root_edge mode edge)
+End
+
+Theorem physical_root_stage_stacks:
+  ((physical_root_edge 1 "B").ps_stack,
+   (SND (physical_root_phi 1 "A")).ps_stack,
+   (SND (physical_root_phi 1 "B")).ps_stack,
+   (SND (physical_root_phi 2 "A")).ps_stack,
+   (SND (physical_root_phi 2 "B")).ps_stack) =
+  ([Var "k"; Var "a"; Var "b"],
+   [Var "k"; Var "a"; Var "x"], [Var "k"; Var "a"; Var "x"],
+   [Var "k"; Var "x"], [Var "k"; Var "x"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_root_clean_entry:
+  EVERY (\mode. EVERY (\edge.
+    SND (clean_stack_plan (liveness_analyze (physical_root_fn mode))
+      (cfg_analyze (physical_root_fn mode)) (physical_root_fn mode)
+      (THE (lookup_block "J" (physical_root_fn mode).fn_blocks))
+      (physical_root_edge mode edge)) = physical_root_edge mode edge) ["A"; "B"]) [1; 2]
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_root_slot_observations:
+  operand_equiv (dfg_build_function (physical_root_fn 1)) (Var "a")
+    (LAST (physical_root_edge 1 "A").ps_stack) /\
+  ~operand_equiv (dfg_build_function (physical_root_fn 1)) (Var "a")
+    (LAST (physical_root_edge 1 "B").ps_stack) /\
+  ~operand_equiv (dfg_build_function (physical_root_fn 1)) (Var "a")
+    (LAST (SND (physical_root_phi 1 "A")).ps_stack) /\
+  ~operand_equiv (dfg_build_function (physical_root_fn 1)) (Var "a")
+    (LAST (SND (physical_root_phi 1 "B")).ps_stack)
+Proof
+  EVAL_TAC
+QED
+
+(* Native-root diagnostic conclusions (finite, not an invariant):
+   mode 0 is rejected by phi_operands_ready: a PHI incoming a is also live
+   after the PHI.  Modes 1 and 2 are ready and whole-function successful.
+   In mode 1, unequal incoming cells d/b have DIFFERENT equivalence tests
+   against the live-through demand a, although d normalizes to a.  The real
+   PHI overwrites those very cells, leaving identical stacks before MSTORE.
+   Mode 2 also leaves identical stacks before its ASSIGN and ordinary demand.
+   Thus these accepted shallow fixtures leave no unequal residual cells;
+   the conditional depth variant is not triggered.  Name-level exclusion
+   cannot supply root exclusion: readiness accepts mode 1's incoming root
+   collision.  A possible interface would shield only unequal cells that
+   SURVIVE the PHI, not all incoming aliases.  No native universal producer
+   for that premise has been established here.  These are actual local
+   predecessor executions, not witnesses for the frozen DFS/lineage relations. *)
