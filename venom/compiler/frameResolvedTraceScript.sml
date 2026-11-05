@@ -1,5 +1,6 @@
 Theory frameResolvedTrace
-Ancestors frameResolvedOrigins frameActivationLifetime frameOriginCache
+Ancestors frameResolvedOrigins frameActivationLifetime frameActivationCache
+  frameJointTrace frameOriginCache
   frameOriginUpdates ptrDiscipline ptrDisciplineEmptyTaint frameJointTransition venomExecSemantics
   venomState venomInst venomMemProps frameAllocationOwnership frameOriginHistory
   frameOriginReachable frameHistoryDefinitions contextCodegenRel
@@ -439,4 +440,159 @@ Proof
      metis_tac[MEM_EL]) >>
   irule resolved_config_transition >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)
+QED
+
+Theorem resolved_chain_annotations:
+  !es n ids anns q qs r.
+  joint_chain C q es qs r /\ joint_config_reachable vs0 C q /\
+  ~ctx_has_dalloca C /\ resolved_config_ok q ids anns ==>
+  ?ass. HD ass = anns /\ LENGTH ass = SUC (LENGTH es) /\
+    !k. k <= LENGTH es ==>
+      resolved_config_ok (EL k (q::qs))
+        (EL k (lifetime_annotations n ids es)) (EL k ass)
+Proof
+  Induct >> Cases_on `qs` >> simp[joint_chain_def]
+  >- (rpt strip_tac >> qexists_tac `[anns]` >> simp[lifetime_annotations_def]) >>
+  rpt strip_tac >> rename1 `joint_transition C q ev next` >>
+  `?anns1. resolved_config_ok next (lifetime_step n ev ids) anns1` by
+    metis_tac[resolved_reachable_transition] >>
+  `joint_config_reachable vs0 C next` by metis_tac[joint_transition_reachable] >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`SUC n`, `lifetime_step n ev ids`, `anns1`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `anns::ass` >> simp[] >>
+  gen_tac >> Cases_on `k` >> simp[lifetime_annotations_def]
+QED
+
+Theorem joint_trace_resolved_annotations:
+  joint_trace vs0 C q0 es qs q /\ ~ctx_has_dalloca C ==>
+  ?ass. HD ass = [([],FEMPTY)] /\ LENGTH ass = SUC (LENGTH es) /\
+    !k. k <= LENGTH es ==>
+      resolved_config_ok (EL k (q0::qs))
+        (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+Proof
+  simp[joint_trace_def] >> strip_tac >>
+  `resolved_config_ok q0 [0] [([],FEMPTY)]` by metis_tac[resolved_config_initial] >>
+  `joint_config_reachable vs0 C q0` by metis_tac[joint_initial_reachable] >>
+  drule_all resolved_chain_annotations >>
+  disch_then (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem resolved_live_activation_cache:
+  resolved_live ids ((fn,s.vs_allocas)::
+    MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) ((birth,aid),site) /\
+  LENGTH ids = SUC (LENGTH stk) ==>
+  ?k owner. k < LENGTH ids /\ EL k ids = birth /\
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      (LENGTH stk - k) owner aid site
+Proof
+  simp[resolved_live_def] >> rpt strip_tac >>
+  Cases_on `k`
+  >- (qexistsl_tac [`0`, `fn`] >> gvs[activation_cache_current]) >>
+  gvs[EL_MAP] >>
+  qexistsl_tac [`SUC n`, `(EL n stk).cf_fn`] >>
+  simp[activation_cache_saved]
+QED
+
+Theorem resolved_current_lookup:
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\ FLOOKUP om v = SOME (tag,site) ==>
+  ?entry. resolve_tag (resolved_cache birth s.vs_allocas) rp tag site = SOME entry /\
+    FLOOKUP rv v = SOME entry /\ SND entry = site
+Proof
+  strip_tac >> drule resolved_config_current >> simp[] >>
+  simp[resolved_frame_ok_def] >> rpt strip_tac >>
+  drule_all resolution_lookup >> strip_tac >>
+  metis_tac[resolve_tag_site]
+QED
+
+Theorem resolved_current_owner:
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\ FLOOKUP rv v = SOME ((token,aid),site) ==>
+  ?k owner. k < LENGTH (birth::ids) /\ EL k (birth::ids) = token /\
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      (LENGTH stk - k) owner aid site
+Proof
+  strip_tac >> drule resolved_config_lengths >> strip_tac >>
+  drule resolved_config_current >> simp[resolved_frame_ok_def] >> rpt strip_tac >>
+  `resolved_live (birth::ids)
+    ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)
+    ((token,aid),site)` by metis_tac[] >>
+  drule_all resolved_live_activation_cache >> simp[]
+QED
+
+Theorem resolved_stack_frame:
+  !ids stk oms anns frames k.
+  resolved_stack_ok ids stk oms anns frames /\ k < LENGTH stk ==>
+  resolved_frame_ok (EL k ids) (EL k stk).cf_state.vs_allocas
+    (EL k stk).cf_params (EL k stk).cf_prov (EL k oms)
+    (FST (EL k anns)) (SND (EL k anns)) (DROP k ids) (DROP k frames)
+Proof
+  Induct >> Cases_on `stk` >> Cases_on `oms` >> Cases_on `anns` >>
+  simp[resolved_stack_ok_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `k` >> gvs[] >> metis_tac[]
+QED
+
+Theorem resolved_live_drop:
+  !k ids frames entry. resolved_live (DROP k ids) (DROP k frames) entry ==>
+  resolved_live ids frames entry
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  Cases_on `ids` >- simp[resolved_live_def] >>
+  Cases_on `frames` >- simp[resolved_live_def] >>
+  simp[] >> strip_tac >> irule resolved_live_weaken >>
+  first_x_assum irule >> goal_assum (drule_at Any)
+QED
+
+Theorem resolved_config_saved:
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) (ann::anns) ==>
+  resolved_stack_ok ids stk oms anns (MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)
+Proof
+  simp[resolved_config_ok_def]
+QED
+
+Theorem resolved_saved_lookup:
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) (ann::anns) /\ k < LENGTH stk /\
+  FLOOKUP (EL k oms) v = SOME (tag,site) ==>
+  ?entry. resolve_tag
+      (resolved_cache (EL k ids) (EL k stk).cf_state.vs_allocas)
+      (FST (EL k anns)) tag site = SOME entry /\
+    FLOOKUP (SND (EL k anns)) v = SOME entry /\ SND entry = site
+Proof
+  strip_tac >> drule resolved_config_saved >> strip_tac >>
+  drule_all resolved_stack_frame >> simp[resolved_frame_ok_def] >> rpt strip_tac >>
+  drule_all resolution_lookup >> strip_tac >> metis_tac[resolve_tag_site]
+QED
+
+Theorem resolved_saved_owner:
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) (ann::anns) /\ k < LENGTH stk /\
+  FLOOKUP (SND (EL k anns)) v = SOME ((token,aid),site) ==>
+  ?j owner. j < LENGTH (birth::ids) /\ EL j (birth::ids) = token /\
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      (LENGTH stk - j) owner aid site
+Proof
+  strip_tac >> drule resolved_config_lengths >> strip_tac >>
+  drule resolved_config_saved >> strip_tac >>
+  drule_all resolved_stack_frame >> simp[resolved_frame_ok_def] >> rpt strip_tac >>
+  `resolved_live (DROP k ids)
+    (DROP k (MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)) ((token,aid),site)` by
+    metis_tac[] >>
+  drule resolved_live_drop >> strip_tac >>
+  `resolved_live (birth::ids)
+    ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)
+    ((token,aid),site)` by metis_tac[resolved_live_weaken] >>
+  drule_all resolved_live_activation_cache >> simp[]
+QED
+
+Theorem resolved_operand_owner:
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\ resolved_op rv op = SOME ((token,aid),site) ==>
+  ?k owner. k < LENGTH (birth::ids) /\ EL k (birth::ids) = token /\
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      (LENGTH stk - k) owner aid site
+Proof
+  Cases_on `op` >> simp[resolved_op_def] >>
+  strip_tac >> drule_all resolved_current_owner >> simp[]
 QED
