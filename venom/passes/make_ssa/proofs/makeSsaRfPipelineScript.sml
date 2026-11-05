@@ -2,7 +2,8 @@ Theory makeSsaRfPipeline
 Ancestors makeSsaRfFinalBlock makeSsaRfLocalBridge makeSsaRfDomDistinct
   makeSsaRfTreeTrace makeSsaRfWitness makeSsaCurrentDefs makeSsaRfEdgeShape
   makeSsaRfShape makeSsaRfTransport makeSsaRfAnnotations makeSsaRfAllocation
-  makeSsaHelper makeSsaCurrentProps makeSsaRfAssign makeSsaRfRenameTrace list pair
+  makeSsaHelper makeSsaCurrentProps makeSsaRfAssign makeSsaRfRenameTrace
+  venomInst venomWf venomFnScheduleRunner irSupply list pair
 
 Theorem current_event_rf_trace:
   current_event_valid A V ev /\ current_event_trace A finalH ev /\
@@ -303,4 +304,112 @@ Proof
   `EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs''` by
     (irule rf_insert_phis_for_var_supply_wf >> metis_tac[]) >>
   first_x_assum drule_all >> simp[]
+QED
+
+Theorem rf_operand_domain_vars:
+  !ops. EVERY (rf_operand_in V) ops <=>
+    !v. MEM v (venomInst$operand_vars ops) ==> MEM v V
+Proof
+  Induct >> simp[venomInstTheory.operand_vars_def] >> gen_tac >> Cases_on `h` >>
+  simp[venomInstTheory.operand_var_def, rf_operand_in_def] >> metis_tac[]
+QED
+
+Theorem rf_lookup_operand_domain:
+  lookup_block q bbs = SOME bb ==>
+  EVERY (\i. EVERY (rf_operand_in (FLAT (MAP block_ir_vars bbs)))
+    i.inst_operands) bb.bb_instructions
+Proof
+  strip_tac >> drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
+  simp[EVERY_MEM, rf_operand_domain_vars] >> rpt strip_tac >>
+  simp[MEM_FLAT, MEM_MAP] >> qexists_tac `block_ir_vars bb` >>
+  conj_tac >- metis_tac[] >>
+  simp[block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists_tac `inst_ir_vars i` >>
+  simp[inst_ir_vars_def, inst_uses_def] >> metis_tac[]
+QED
+
+Theorem rf_insert_rename_cleanup_certificate:
+  ALL_DISTINCT (MAP basic_block_bb_label bbs) /\
+  ALL_DISTINCT (FLAT (MAP block_ir_inst_ids bbs)) /\
+  ir_supply_inst_ok s /\
+  EVERY (\id. MEM id s.irs_used_inst_ids) (FLAT (MAP block_ir_inst_ids bbs)) /\
+  ssa_vars_covered s (FLAT (MAP block_ir_vars bbs)) /\
+  ssa_vars_covered s (MAP FST defs) /\
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  add_phi_nodes_supply s df pm li bbs defs = (bbs1,s1) /\
+  rename_current_blocks s1 (init_current_rename_state defs) bbs1 sm tree =
+    (ctrs,s2,bbs2) /\
+  lookup_block q bbs = SOME bb /\
+  lookup_block q (simplify_current_phis_if enabled bbs2) = SOME final ==>
+  ?V d. rf_phase_certificate V bb final d
+Proof
+  strip_tac >>
+  `ssa_ids_supply_ok s (FLAT (MAP block_ir_inst_ids bbs))
+      (FLAT (MAP block_ir_inst_ids bbs1)) s1 /\
+   MAP basic_block_bb_label bbs1 = MAP basic_block_bb_label bbs /\
+   ssa_vars_covered s1 (FLAT (MAP block_ir_vars bbs1))` by
+    (irule add_phi_nodes_supply_ok >> metis_tac[]) >>
+  `ssa_vars_covered s1 (MAP FST defs)` by
+    (irule ssa_vars_covered_mono >> qexists_tac `s` >>
+     metis_tac[ssa_ids_supply_ok_extends]) >>
+  `EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs1` by
+    (irule rf_add_phi_nodes_supply_wf >> metis_tac[]) >>
+  drule_all rf_add_phi_nodes_lookup >> strip_tac >>
+  qexistsl_tac [`FLAT (MAP block_ir_vars bbs1)`, `LENGTH pre`] >>
+  `EVERY inst_wf (pre ++ bb.bb_instructions)` by
+    (`MEM (bb with bb_instructions := pre ++ bb.bb_instructions) bbs1` by
+       metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+     qpat_x_assum `EVERY _ bbs1` mp_tac >>
+     simp[EVERY_MEM] >>
+     disch_then (qspec_then `bb with bb_instructions := pre ++ bb.bb_instructions` mp_tac) >>
+     simp[]) >>
+  `EVERY (\i. EVERY (rf_operand_in (FLAT (MAP block_ir_vars bbs1)))
+     i.inst_operands) (pre ++ bb.bb_instructions)` by
+    (drule rf_lookup_operand_domain >> simp[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs1)` by
+    metis_tac[bb_label_eta] >>
+  drule_at (Pat `rename_current_blocks _ _ _ _ _ = _`)
+    rf_rename_cleanup_phase_certificate >>
+  disch_then irule >> simp[] >>
+  qexistsl_tac [`enabled`, `bb with bb_instructions := pre ++ bb.bb_instructions`, `q`] >>
+  simp[]
+QED
+
+Theorem rf_make_ssa_current_fn_certificate:
+  wf_function fn /\ all_reachable fn /\ fn_inst_wf fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') /\
+  lookup_block q fn.fn_blocks = SOME bb /\
+  lookup_block q fn'.fn_blocks = SOME final ==>
+  ?V d. rf_phase_certificate V bb final d
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn`
+  >- (fs[fn_entry_label_def, entry_block_def, AllCaseEqs()] >>
+      Cases_on `fn.fn_blocks` >> fs[wf_function_def, fn_has_entry_def]) >>
+  `ALL_DISTINCT (dom_tree_labels
+     (current_dom_tree_aux (dom_analyze (cfg_analyze fn) fn)
+       (LENGTH (fn_labels fn)) x))` by
+    (drule_all current_actual_tree_labels_distinct >>
+     simp[current_dom_tree_def]) >>
+  qpat_x_assum `make_ssa_current_fn _ _ = _` mp_tac >>
+  simp[make_ssa_current_fn_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `add_phi_nodes_supply _ _ _ _ _ defs = _` >>
+  `ssa_vars_covered s (MAP FST defs)` by
+    (simp[Abbr `defs`] >> irule compute_defs_lookup_blocks_vars_covered >>
+     fs[ir_supply_covers_fn_def, list_subset_def, ssa_vars_covered_def, fn_ir_vars_def]) >>
+  `ALL_DISTINCT (MAP basic_block_bb_label fn.fn_blocks) /\
+   ALL_DISTINCT (FLAT (MAP block_ir_inst_ids fn.fn_blocks)) /\
+   EVERY (\bb. EVERY inst_wf bb.bb_instructions) fn.fn_blocks /\
+   EVERY (\id. MEM id s.irs_used_inst_ids)
+     (FLAT (MAP block_ir_inst_ids fn.fn_blocks)) /\
+   ssa_vars_covered s (FLAT (MAP block_ir_vars fn.fn_blocks))` by
+    (fs[wf_function_def, fn_labels_def, fn_inst_ids_distinct_def,
+       lambdify block_ir_inst_ids_def, fn_inst_wf_def, EVERY_MEM,
+       ir_supply_covers_fn_def, list_subset_def, fn_ir_inst_ids_def,
+       fn_ir_vars_def, ssa_vars_covered_def] >> metis_tac[]) >>
+  drule_at (Pat `add_phi_nodes_supply _ _ _ _ _ _ = _`)
+    rf_insert_rename_cleanup_certificate >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED
