@@ -6,6 +6,8 @@ Ancestors
   concretizePtrValueSelection concretizePtrAffineTransport
   concretizePtrOwnedAssignPrefix concretizePtrSharedFields
   concretizePtrChronologicalHistory concretizePtrRuntimeTotality
+  concretizePtrLayoutOutput staticLayoutCompletionProofs staticLayoutAllocatorProofs
+  concretizeMemLocDefs
   concretizePtrDeletedGapHistory concretizePtrSourceOwnership
   concretizePtrLedgerAlignment concretizeStepStructure
   makeSsaHelper o1PassContract unitTransformDefs
@@ -260,4 +262,54 @@ Proof
   simp[concretizePtrPrefixLedgerTheory.ptr_ledger_block_alignment_def,
     concretize_positions_missing, concretize_positions_unchanged,
     mk_nop_inst_def]
+QED
+
+(* Production completion fills even dead source ALLOCAs. The layout witness,
+   rather than the unconstrained paired-code relation, carries coverage. *)
+Theorem ptr_paired_production_coverage:
+  fn.fn_eom = NONE /\
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
+  ?layout. fn' = apply_context_concretize_layout ctx layout fn /\
+    !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP layout.cl_positions (Allocation inst.inst_id))
+Proof
+  strip_tac >> drule_all ptr_fresh_layout_representation >> strip_tac >>
+  qexists_tac `layout` >> simp[] >> rpt strip_tac >>
+  drule_all static_alloca_items_ALLOCA_exact >> strip_tac >>
+  Cases_on `fn_needs_liveness_allocation fn \/ imported_mems_used ctx fn <> []`
+  >- (gvs[] >> drule_all complete_alloc_positions_with_imports_success >>
+      strip_tac >> drule ptr_mk_layout_positions >> strip_tac >>
+      gvs[] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  gvs[] >> drule complete_alloc_positions_success >> strip_tac >>
+  drule ptr_mk_layout_positions >> strip_tac >>
+  gvs[] >> metis_tac[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem ptr_paired_covered_gap:
+  ptr_ledger_block_alignment positions src tgt indices /\
+  EVERY inst_wf src /\
+  (!inst. MEM inst src /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) /\
+  j < LENGTH indices /\ i < EL j indices /\
+  (j = 0 \/ EL (j-1) indices < i) ==>
+  (EL i src).inst_opcode = NOP
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LENGTH tgt = LENGTH indices /\ EL j indices < LENGTH src` by
+    metis_tac[ptr_ledger_alignment_cursor] >>
+  `i < LENGTH src` by decide_tac >>
+  `MEM (EL i src) src` by simp[EL_MEM] >>
+  `inst_wf (EL i src)` by gvs[EVERY_MEM] >>
+  `(concretize_inst_with_positions positions (EL i src)).inst_opcode = NOP`
+    by metis_tac[ptr_ledger_alignment_gap] >>
+  Cases_on `(EL i src).inst_opcode = ALLOCA`
+  >- (`IS_SOME (FLOOKUP positions (Allocation (EL i src).inst_id))` by
+        metis_tac[] >>
+      `LENGTH (EL i src).inst_outputs = 1` by
+        gvs[venomWfTheory.inst_wf_def] >>
+      Cases_on `(EL i src).inst_outputs` >> gvs[] >>
+      Cases_on `FLOOKUP positions (Allocation (EL i src).inst_id)` >>
+      gvs[concretize_inst_with_positions_def, mk_assign_inst_def] >>
+      metis_tac[optionTheory.IS_SOME_DEF]) >>
+  gvs[concretize_positions_unchanged]
 QED
