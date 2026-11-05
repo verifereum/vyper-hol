@@ -188,7 +188,7 @@ Proof
   reverse conj_tac
   >- (rpt strip_tac >>
       `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
-      drule_all expr_body_pre_eval >> strip_tac >>
+      drule_all exprSimSourceTheory.expr_body_pre_eval >> strip_tac >>
       `env.type_defs = get_tenv cx` by
         gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
       gvs[vyperTypeExprResultTheory.expr_result_typed_def, expr_runtime_typed_def,
@@ -837,7 +837,7 @@ Proof
   simp_tac (srw_ss()) [pairTheory.FORALL_PROD] >>
   map_every qx_gen_tac [`cenv`, `cx`, `env`, `e`, `typ`, `tyv`] >>
   rpt gen_tac >> strip_tac >>
-  drule_all exprSimHypsTheory.expr_body_pre_eval >> strip_tac >>
+  drule_all exprSimSourceTheory.expr_body_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >>
