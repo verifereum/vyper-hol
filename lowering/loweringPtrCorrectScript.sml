@@ -39,7 +39,7 @@ Ancestors typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr ty
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract rawEntryCode entryChecksPtr sourceValueRejection entryCheckIntervals sourceEntrySelection entryDispatchPtr sourceEntryCode entryValueRevertPtr
   loweringShapeProps loweringShapeSource supportedNames supportedDecls
-  entryDispatchProps o1PipelineCorrect
+  entryDispatchProps o1PipelineCorrect selectedBodyCode
 
 val _ = Parse.hide "body";
 
