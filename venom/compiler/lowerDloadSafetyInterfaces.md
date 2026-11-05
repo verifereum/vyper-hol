@@ -545,3 +545,130 @@ effect fields. Source activity is used only for successor sync.
 
 The payload and reduced selected/zero consumer are checked; the four items
 above are precise remaining integration obligations, not claimed proofs.
+
+## 8. Allocation/scratch location-independent diagnostic (.12.7)
+
+### Checked reduced consumer
+
+A temporary `ld_scratch_endpoint_audit` in ScratchOwnership consumed the actual
+`exec_alloca inst f.lf_tgt 32w = OK u` and the exact premises of
+`ld_scratch_alloca_ownership` (covered supply, distinct original ids, private
+site d/ai, maps/global/intervals, source absence, frontier lower bounds and
+stack frontier/charge equations). It selected
+`g=f with <|lf_tgt:=u; lf_E:=d INSERT f.lf_E|>` and obtained the actual fresh OR
+cached ownership outputs. It then transferred them to
+
+```
+h = f with <|lf_src := ss; lf_tgt := ts;
+             lf_E := d INSERT f.lf_E; lf_H := H'; lf_tv := tv'|>
+```
+
+under ONLY these additional structural premises:
+
+```
+ss.vs_allocas = f.lf_src.vs_allocas /\
+ss.vs_alloca_next = f.lf_src.vs_alloca_next /\
+ts.vs_allocas = u.vs_allocas /\ ts.vs_alloca_next = u.vs_alloca_next /\
+(!k. k IN FRANGE H' ==> k IN FDOM A)
+```
+
+The checked conclusion was
+
+```
+ld_maps A h /\ ld_global lo A (h::fs) /\
+ld_slots A (h::fs) = ld_slots A (f::fs) /\
+ld_charge (h::fs) = ld_charge (f::fs) + (if d IN f.lf_E then 0 else 1) /\
+ts.vs_alloca_next = f.lf_tgt.vs_alloca_next +
+  32 * (if d IN f.lf_E then 0 else 1)
+```
+
+Transfer used the existing `ld_head_allocation_update` at g, not at the incoming
+f (their target allocation maps differ!). The experiment built and explicitly
+checked `null(hyp ld_scratch_endpoint_audit)`
+(TO_ld_mem-20261104T190123Z_m7018_t001). It was removed rather than retained as a
+near-duplicate adapter; restored ScratchOwnership and ExpansionGhost build
+(TO_ld_mem-20261104T190123Z_m7025_t001). This is a reduced structural consumer,
+not a proof that the entire expansion has those additional premises.
+
+### Minimal common location-independent output package (not a definition)
+
+For actual final source/target states sn/tt and a single correlated g,A',H',tn',
+the structural portion needed before any successor split is:
+
+```
+ld_maps A' g /\ ld_global lo A' (g::fs) /\
+FDOM A' = ld_slots A' (g::fs) /\
+EVERY (\h. ld_maps A' h /\ ld_vars P A' h) fs /\
+EVERY (\h. ld_erase A' o_f h.lf_H = ld_erase A o_f h.lf_H /\
+  MAP (OPTION_MAP (ld_erase A')) h.lf_Q =
+  MAP (OPTION_MAP (ld_erase A)) h.lf_Q) (f::fs) /\
+ld_intervals lo sn /\ ld_intervals lo tt /\
+(!j. j < LENGTH (g::fs) ==>
+  (EL j (g::fs)).lf_tgt.vs_alloca_next =
+  (EL j (g::fs)).lf_src.vs_alloca_next + 32 * ld_charge (DROP j (g::fs))) /\
+ld_charge (g::fs) <= ctx_dload_count C
+```
+
+Together retain g's serial/fn/supply/Q equations, its actual H'/tv' and sn/tt,
+source/target block-control agreement, PG erasure for g.Q, and unchanged saved
+caller clauses/envelopes. Head vars, memory, nonghost and G' erasure are actual
+effect outputs, not structural assumptions to be smuggled into a final
+trace-to-effect theorem. Reachability and the new head envelope enter only the
+source-active-successor implication. This package is deliberately textual;
+no new predicate or definition is proposed.
+
+### Changed-map/E audit against existing implementations
+
+| Case | A'/E'/slots and saved erasures | Existing producer / exact residual |
+|---|---|---|
+| cached original ALLOCA | A'=A, E'=E, slots unchanged; all saved erasures reflexive; charge unchanged | `ld_cached_alloca_effect` gives actual ss and paired value/byte/ghost effects with no successor premise. Its explicit update_var equations meet `ld_head_allocation_update`. The current advance wrapper unnecessarily requires source successor/envelope; do not use it to obtain unconditional fields. |
+| fresh original ALLOCA | A'=A extended at (serial,inst_id), E'=E; slots insert this key; saved erasures from `ld_global_fresh_erasures`; tail maps/vars from `ld_frames_fresh_update` | `ld_fresh_alloca_dispatch` and `ld_fresh_alloca_effect` supply actual success/effects; `ld_sync_original_site_fresh` derives target/key freshness and not-private from covered sync. Structural proof is already in `ld_sync_fresh_alloca_update` lines 509–568 and must be FACTORED there, not copied. Its current statement hides all unconditional fields behind source reachable/active/envelope premises. |
+| fresh DLOAD scratch | A'=A, E'=d INSERT E, slots unchanged; saved erasures reflexive | `ld_scratch_alloca_ownership` gives actual private allocation, global/maps/intervals and charge/frontier equations. Reduced consumer above transports them to final states with the exact allocation/frontier equalities. Still need actual trace derivation of those equalities, final intervals and support. |
+| cached DLOAD scratch | A'=A, E'=E because d already in E; slots unchanged; saved erasures reflexive | SAME ownership theorem and reduced consumer. Its `ld_private_cache` use proves cache membership iff executed identity. No second charge is added. |
+
+Fresh original insertion also handles size zero: domains/slots still change,
+though frontiers do not. Do not replace the insert equation by unchanged maps
+on the basis of zero size. Global support for a changed H' is discharged from
+the actual effect's FRANGE inclusion. Serial distinctness and saved stack
+length/order persist because no push/pop occurs.
+
+### Ghost compatibility and exact remaining DLOAD obligations
+
+`ld_dload_expansion_ghost_exit` supplies actual source success, vars for
+`H'=set_prov f.lf_H [out] NONE`, tn'=step_taint, nonghost and G' erasure, plus
+source unchanged allocations/frontier and final target index p+3. It does NOT
+supply target allocation/frontier equations relative to u (the scratch ALLOCA
+result), ld_memory, global ownership, selected support or the charge bound.
+The reduced consumer above therefore tests the structural side required by
+that ghost result without claiming their full correlated composition is
+already checked. Its chosen H'/tv' are compatible in shape; derive support
+from incoming global selected support and the actual set_prov deletion.
+
+Remaining exact obligations for assembly:
+
+* Trace preservation from u through ADD/CODECOPY/MLOAD: target allocas/frontier
+  unchanged, source final allocas/frontier unchanged. Transfer intervals and
+  stack frontier equations through those same states, never through arbitrary
+  unrelated witnesses. Scratch ownership already proves the fresh/cached
+  increment; the final `ld_charge(g::fs)<=ctx_dload_count C` still needs the active-stack count
+  budget and d belonging to the configured original DLOAD ids.
+* Private CODECOPY preservation of old live bytes: derive lo<=scratch base,
+  every target original site disjoint from [scratch,scratch+32), including
+  caller sites, from the post-allocation global/private ownership. Use
+  `ld_memory_write_private` for the actual shared payload, not `ld_memory`
+  alone to infer scratch contents. ALLOCA itself does not initialize bytes.
+* The actual scratch bytes read by MLOAD use `ld_codecopy_source_mload` plus
+  ADD evaluation, labels/code-layout and no-wrap. This is a distinct fact
+  from private noninterference; both are needed. Preserve it through the
+  actual intermediate states before final MLOAD success/ghost construction.
+* Relate source DLOAD taint to incoming memory taint (DLOAD is a read, not a
+  public memory write), transport ld_memory to the paired final states,
+  and combine with the SINGLE source ss already produced by ghost exit.
+* Generalize/factor fresh original structural reconstruction once, then use
+  source-forward envelope progression and actual source success for final
+  conditional sync. No target successor activity is available or required.
+
+No unconditional allocation fields were inferred from the conditional fresh
+advance theorem, and no saved-map erasure proof was duplicated. These are the
+remaining producer/factoring obligations for strategist review, not a completed
+allocation endpoint theorem.
