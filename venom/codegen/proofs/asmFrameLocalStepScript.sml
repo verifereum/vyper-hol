@@ -529,6 +529,74 @@ Resume frame_plain_step[fault]:
 QED
 Finalise frame_plain_step
 
+Theorem frame_rel_readings_update[local]:
+  asm_evm_rel p a es ==>
+  asm_evm_rel p (a with as_gas_readings := readings) es
+Proof
+  simp[asm_evm_rel_def]
+QED
+
+Theorem frame_gas_asm_step[local]:
+  a.as_gas_readings = w::readings ==>
+  asm_step labels pc (AsmOp "GAS") a =
+    AsmOK (a with <|as_stack := w::a.as_stack; as_pc := a.as_pc + 1;
+                   as_gas_readings := readings|>)
+Proof
+  simp[asm_step_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+       asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def]
+QED
+
+Theorem frame_gas_step[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog <> AsmOp "CALL" /\
+  EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog = AsmOp "GAS" ==>
+  asm_frame_step_ok prog data es0 a es
+Proof
+  strip_tac >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a es /\ wf_state es` by
+    gvs[asm_frame_rel_def] >>
+  drule_all frame_local_opcode >> strip_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a
+    (es with contexts := [(c,rb)])` by metis_tac[frame_rel_singleton] >>
+  `asm_encoding_wf prog /\ (!j. j <= a.as_pc ==>
+    ~is_data_inst (EL j prog))` by metis_tac[frame_local_instruction] >>
+  `LENGTH (es with contexts := [(c,rb)]).contexts = 1` by simp[] >>
+  drule_all asm_evm_gas_step >> strip_tac
+  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
+      irule frame_starved_lift >> metis_tac[])
+  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
+      irule frame_starved_lift >> metis_tac[]) >>
+  suspend "continue"
+QED
+Resume frame_gas_step[continue]:
+  rename1 `step (es with contexts := [(c,rb)]) = (INL (),t)` >>
+  drule_all frame_continue_transplant >> strip_tac >>
+  `LENGTH es1.contexts = LENGTH es.contexts /\
+   next_opcode (FST (HD es.contexts)) = SOME Gas` by simp[] >>
+  drule_all frame_obs_gas_step >> strip_tac >>
+  `HD (FST (HD es1.contexts)).stack = w` by
+    (qpat_x_assum `asm_evm_rel _ _ es1` mp_tac >>
+     simp[asm_evm_rel_def] >> Cases_on `es1.contexts` >> simp[] >>
+     PairCases_on `h` >> simp[] >> strip_tac >> gvs[]) >>
+  `a.as_gas_readings = w::gas_readings es1` by
+    gvs[asm_frame_rel_def] >>
+  drule frame_gas_asm_step >> strip_tac >>
+  simp[asm_frame_step_ok_def] >> disj2_tac >>
+  goal_assum (drule_at Any) >>
+  irule frame_continue_rel >> simp[] >>
+  conj_tac >- gvs[asm_frame_rel_def] >>
+  conj_tac
+  >- (drule frame_rel_readings_update >>
+      disch_then (qspec_then `gas_readings es1` mp_tac) >> simp[]) >>
+  qexistsl_tac [`a`,`es`] >> simp[]
+QED
+Finalise frame_gas_step
+
 Theorem asm_frame_local_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
