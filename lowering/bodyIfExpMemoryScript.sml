@@ -1400,6 +1400,25 @@ Proof
   drule_all ifexp_scope_pop_effect_domain >> simp[]
 QED
 
+Theorem ifexp_extend_memory_domain[local]:
+  lookup_scopes id es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg)) /\
+  extend_place cx (PlaceR (MemoryPlace id path)) sb es = (INL out,ee) ==>
+  out = PlaceR (MemoryPlace id (path ++ [sb])) /\ ee = es /\
+  (!msg. evaluate_subscripts entry.type entry.value (path ++ [sb]) <> INR (TypeError msg))
+Proof
+  simp[extend_place_def, place_type_value_def, read_place_def, get_scopes_def,
+       bind_def, ignore_bind_def, lift_option_type_def, return_def, raise_def,
+       lift_sum_def, extend_memory_place_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `subscripts_type entry.type path` >> gvs[return_def, raise_def] >>
+  Cases_on `read_memory_path entry path` >> gvs[return_def, raise_def] >>
+  rename1 `evaluate_subscripts tv rv [sb]` >>
+  Cases_on `evaluate_subscripts tv rv [sb]` >> gvs[return_def, raise_def] >>
+  drule_all ifexp_current_extension_domain >> simp[]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
