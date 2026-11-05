@@ -525,6 +525,80 @@ Proof
   Cases_on `v = h` >> gvs[] >> metis_tac[optionTheory.SOME_11]
 QED
 
+Theorem ready_phi_edge_wf[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  phi_edge_uses_wf fn bb phi
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  drule collect_phis_mem >> strip_tac >>
+  gvs[codegen_ready_fn_def, def_dominates_uses_def] >> metis_tac[]
+QED
+
+Theorem ready_phi_var_pairs[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  (MEM (Var v) phi.inst_operands <=>
+   MEM v (MAP SND (phi_pairs phi.inst_operands)))
+Proof
+  strip_tac >> drule_all ready_phi_edge_wf >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >> eq_tac
+  >- (strip_tac >> drule_all phi_well_formed_var_pair >>
+      strip_tac >> simp[MEM_MAP] >> metis_tac[pairTheory.SND]) >>
+  simp[MEM_MAP] >> strip_tac >>
+  rename1 `MEM pair (phi_pairs phi.inst_operands)` >> PairCases_on `pair` >>
+  gvs[] >> metis_tac[phi_pairs_mem_var]
+QED
+
+Theorem ready_phi_external_pred[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  ?p. fn_cfg_edge fn p lbl /\ ~fn_dominates fn lbl p
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `?eb. entry_block fn = SOME eb` by
+    (gvs[wf_function_def, fn_has_entry_def, entry_block_def] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `fn_entry_label fn = SOME eb.bb_label` by simp[fn_entry_label_def] >>
+  `lbl <> eb.bb_label` by metis_tac[ready_entry_no_phis, MEM] >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  drule_all exists_pred_not_dominated >>
+  strip_tac >>
+  metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond,
+    fn_dominates_cfg_analyze]
+QED
+
+Theorem ready_phi_external_value[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  ?v. MEM (Var v) phi.inst_operands /\
+    ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  strip_tac >> drule_all ready_phi_external_pred >>
+  disch_then (qx_choose_then `p` strip_assume_tac) >>
+  `bb.bb_label = lbl /\ MEM bb fn.fn_blocks` by
+    metis_tac[lookup_block_label, lookup_block_MEM] >>
+  drule_all ready_phi_edge_wf >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >>
+  `?v. MEM (p,v) (phi_pairs phi.inst_operands)` by
+    (qpat_x_assum `!pred. fn_cfg_edge _ _ _ <=> _`
+       (qspec_then `p` mp_tac) >> simp[] >>
+     disch_then (qx_choose_then `edge_pair` strip_assume_tac) >>
+     PairCases_on `edge_pair` >> gvs[] >> metis_tac[]) >>
+  rename1 `MEM (p,value) (phi_pairs phi.inst_operands)` >>
+  qexists_tac `value` >>
+  conj_tac >- metis_tac[phi_pairs_mem_var] >>
+  `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = p /\
+    def_available_at fn pb NONE value` by metis_tac[] >>
+  gvs[def_available_at_def] >>
+  irule dominating_def_excludes_outputs >> metis_tac[]
+QED
+
 Theorem input_vars_from_collect[local]:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
