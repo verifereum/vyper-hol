@@ -791,3 +791,39 @@ Proof
     (fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]) >>
   decide_tac
 QED
+
+Theorem aggregate_physical_source_bounds:
+  expr_val_at ce cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  val_footprint tv v = type_memory_size tv /\ 0 < type_memory_size tv /\
+  eval_operand op s = SOME sw /\ stmt_state_rel ctx func ce cx es s /\
+  FLOOKUP s.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
+  b <= dst /\ dst + dlen <= b+k /\
+  (!name a n. local_region ce es.scopes s name a n ==>
+    a+n <= dst \/ dst+dlen <= a) ==>
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  (w2n sw + type_memory_size tv <= dst \/ dst+dlen <= w2n sw)
+Proof
+  strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[exprLoweringPropsTheory.alloca_room_next_lt,
+              exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `local_ptrs_rel func ce es.scopes s` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >- (`alloca_inv s` by
+        gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+      `b'+sz <= s.vs_alloca_next` by
+        (fs[venomMemDefsTheory.alloca_inv_def,
+            venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+      `b'+sz <= b \/ b+k <= b'` by
+        (fs[venomMemDefsTheory.alloca_inv_def,
+            venomMemDefsTheory.allocas_non_overlapping_def] >>
+         `aid <> did` by decide_tac >> metis_tac[]) >> decide_tac)
+  >- (`b' + sz <= s.vs_alloca_next` by
+        (fs[local_ptrs_rel_def, local_region_def] >>
+         first_x_assum drule_all >> strip_tac >> gvs[]) >>
+      first_x_assum drule >> decide_tac) >>
+  simp[wordsTheory.w2n_lt]
+QED
