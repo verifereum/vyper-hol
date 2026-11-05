@@ -1207,6 +1207,103 @@ Proof
   gvs[return_def, raise_def]
 QED
 
+Theorem ifexp_front_domain[local]:
+  !tv vs retained.
+    (!msg. evaluate_subscripts tv (ArrayV (DynArrayV vs)) retained <> INR (TypeError msg)) ==>
+    !msg. evaluate_subscripts tv (ArrayV (DynArrayV (FRONT vs))) retained <> INR (TypeError msg)
+Proof
+  rpt gen_tac >> Cases_on `retained` >> simp[evaluate_subscripts_def] >>
+  Cases_on `h` >> simp[evaluate_subscripts_def] >>
+  Cases_on `v` >> simp[evaluate_subscripts_def] >>
+  Cases_on `vs = []` >- gvs[vyperValueOperationTheory.array_index_def] >>
+  simp[vyperValueOperationTheory.array_index_def, listTheory.oEL_THM,
+       rich_listTheory.LENGTH_FRONT] >>
+  Cases_on `0 <= i` >> simp[] >>
+  Cases_on `Num i < LENGTH vs - 1` >> simp[] >>
+  `EL (Num i) (FRONT vs) = EL (Num i) vs` by
+    (irule rich_listTheory.EL_FRONT >> simp[rich_listTheory.LENGTH_FRONT, listTheory.NULL_EQ]) >> simp[]
+QED
+
+Theorem ifexp_pop_replace_domain[local]:
+  !mutation tv value vs updated retained.
+    evaluate_subscripts tv value mutation = INL (ArrayV (DynArrayV vs)) /\
+    assign_subscripts tv value mutation (Replace (ArrayV (DynArrayV (FRONT vs)))) = INL updated /\
+    (!msg. evaluate_subscripts tv value retained <> INR (TypeError msg)) ==>
+    !msg. evaluate_subscripts tv updated retained <> INR (TypeError msg)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[evaluate_subscripts_def, assign_subscripts_def] >>
+      metis_tac[ifexp_front_domain]) >>
+  Cases_on `h`
+  >- (Cases_on `v` >> Cases_on `value` >>
+      simp[evaluate_subscripts_def, assign_subscripts_def] >> rpt strip_tac >>
+      gvs[AllCaseEqs()] >>
+      `?av. updated = ArrayV av` by
+        (Cases_on `a` >> gvs[vyperValueOperationTheory.array_set_index_def, AllCaseEqs()] >> metis_tac[]) >>
+      gvs[] >> Cases_on `retained` >- gvs[evaluate_subscripts_def] >>
+      Cases_on `h` >> gvs[evaluate_subscripts_def] >>
+      Cases_on `v'` >> gvs[evaluate_subscripts_def] >>
+      Cases_on `i = i'`
+      >- (gvs[] >> drule vyperArrayTheory.array_index_after_set_same >> strip_tac >>
+          gvs[AllCaseEqs()] >> first_x_assum drule_all >> simp[]) >>
+      `array_index tv av i' = array_index tv a i'` by
+        (irule vyperArrayTheory.array_index_after_set_other >> metis_tac[]) >>
+      gvs[]) >>
+  Cases_on `value` >> simp[evaluate_subscripts_def, assign_subscripts_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `retained` >- gvs[evaluate_subscripts_def] >>
+  Cases_on `h`
+  >- (Cases_on `v'` >> gvs[evaluate_subscripts_def]) >>
+  gvs[evaluate_subscripts_def] >> Cases_on `s = s'` >>
+  gvs[alistTheory.AFUPDKEY_ALOOKUP, AllCaseEqs()] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ifexp_pop_retained_domain[local]:
+  lookup_scopes keep es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) /\
+  pop_place cx (MemoryPlace changed mutation) es = (INL result,ee) ==>
+  ?entry'. lookup_scopes keep ee.scopes = SOME entry' /\
+    entry'.type = entry.type /\
+    (!msg. evaluate_subscripts entry'.type entry'.value retained <> INR (TypeError msg))
+Proof
+  strip_tac >> Cases_on `find_containing_scope changed es.scopes`
+  >- gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       lift_sum_def, return_def, raise_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `arr` >> gvs[return_def, raise_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[return_def, raise_def, vyperStateTheory.check_def,
+      ignore_bind_def, bind_def, vyperStateTheory.assert_def] >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, set_scopes_def, return_def, AllCaseEqs(), raise_def] >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
+  Cases_on `changed = keep`
+  >- (gvs[] >>
+      drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >> gvs[] >>
+      drule vyperLookupTheory.find_containing_scope_pre_none >> strip_tac >>
+      simp[vyperLookupTheory.lookup_scopes_update] >>
+      gvs[return_def, raise_def, AllCaseEqs()] >>
+      gvs[read_memory_path_def, return_def, raise_def, AllCaseEqs()] >>
+      Cases_on `evaluate_subscripts entry.type entry.value mutation` >>
+      gvs[return_def, raise_def] >>
+      Cases_on `assign_subscripts entry.type entry.value mutation
+        (Replace (ArrayV (DynArrayV (FRONT l))))` >>
+      gvs[return_def, raise_def] >>
+      Cases_on `replace_popped entry.type mutation
+        (ArrayV (DynArrayV (FRONT l))) entry.popped` >>
+      gvs[return_def, raise_def] >>
+      drule_all ifexp_pop_replace_domain >> simp[]) >>
+  simp[vyperLookupTheory.lookup_scopes_update_other] >> metis_tac[]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
