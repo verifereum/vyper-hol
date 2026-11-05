@@ -191,3 +191,55 @@ Proof
   drule_all phi_origin_schedule_state_replay >> strip_tac >>
   qexistsl_tac [`cells_end`, `prefixP`, `prefixQ`, `ops`, `al`] >> simp[]
 QED
+
+Theorem analyzed_native_phi_endpoint_class_dead:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  native_phi_class p (collect_phis bb.bb_instructions) op = SOME i ==>
+  ~MEM op (MAP Var (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions))))
+Proof
+  strip_tac >> Cases_on `op` >> gvs[native_phi_class_def] >>
+  rename1 `FLOOKUP _ v = SOME i` >>
+  `native_phi_class p (collect_phis bb.bb_instructions) (Var v) = SOME i` by
+    simp[native_phi_class_def] >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    gvs[phi_block_ready_def] >>
+  drule_all native_phi_class_use >> strip_tac >>
+  simp[listTheory.MEM_MAP] >> irule analyzed_native_phi_class_dead_range >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`i`, `p`] >> simp[]
+QED
+
+Theorem analyzed_phi_endpoint_filter_projection:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  phi_origin_classes (native_phi_class p (collect_phis bb.bb_instructions)) cells ==>
+  FILTER (\op. MEM op (MAP Var (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions))))) (MAP (phi_cell_value T) cells) =
+  FILTER (\op. MEM op (MAP Var (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions))))) (MAP (phi_cell_value F) cells)
+Proof
+  strip_tac >> irule phi_origin_classes_filter_projection >>
+  goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[analyzed_native_phi_endpoint_class_dead]
+QED
+
+Theorem analyzed_phi_endpoint_mark_projection:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  phi_origin_classes (native_phi_class p (collect_phis bb.bb_instructions)) cells ==>
+  MAP (\op. if MEM op (MAP Var (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions)))) then op else dead_stack_marker)
+    (MAP (phi_cell_value T) cells) =
+  MAP (\op. if MEM op (MAP Var (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions)))) then op else dead_stack_marker)
+    (MAP (phi_cell_value F) cells)
+Proof
+  strip_tac >> ho_match_mp_tac phi_origin_classes_mark_projection >>
+  goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[analyzed_native_phi_endpoint_class_dead]
+QED

@@ -39,12 +39,13 @@ Proof
   drule_all reachable_phi_prefix_no_output_use_alias >> simp[]
 QED
 
-Theorem analyzed_native_phi_class_dead_after:
+Theorem analyzed_native_phi_class_dead_range:
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
   phi_block_ready (liveness_analyze fn) bb /\
-  native_phi_class p (collect_phis bb.bb_instructions) (Var v) = SOME i ==>
-  ~MEM v (live_vars_at (liveness_analyze fn) lbl (SUC i))
+  native_phi_class p (collect_phis bb.bb_instructions) (Var v) = SOME i /\
+  i < k /\ k <= LENGTH (collect_phis bb.bb_instructions) ==>
+  ~MEM v (live_vars_at (liveness_analyze fn) lbl k)
 Proof
   strip_tac >>
   `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
@@ -52,4 +53,19 @@ Proof
   drule_all native_phi_class_use >> strip_tac >>
   irule analyzed_phi_incoming_dead_after >>
   goal_assum (drule_at Any) >> simp[] >> qexists_tac `i` >> simp[]
+QED
+
+Theorem analyzed_native_phi_class_dead_after:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  native_phi_class p (collect_phis bb.bb_instructions) (Var v) = SOME i ==>
+  ~MEM v (live_vars_at (liveness_analyze fn) lbl (SUC i))
+Proof
+  strip_tac >> irule analyzed_native_phi_class_dead_range >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    gvs[stackPlanGenTheory.phi_block_ready_def] >>
+  drule_all native_phi_class_use >> strip_tac >>
+  qexistsl_tac [`i`, `p`] >> simp[]
 QED
