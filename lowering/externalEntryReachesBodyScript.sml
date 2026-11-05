@@ -24,6 +24,24 @@ val _ = Parse.hide "body";
    in cenv, in the function func that runs it; cenv0 is the compile env
    lower_vyper_runtime_unit packages for the function (supported_program
    rules out raw returns). *)
+(* Notes for the proof (read, not built):
+   - alloca_room at s0: run_lowering checks lowering_context_ok, whose
+     alloca budget bounds the unit's static allocations;
+     allocaFrontierBound's alloca_frontier_inv_entry gives the bound at
+     __entry's entry (vs_alloca_next = 0, no allocas), and
+     step_inst_alloca_budget keeps it along the INVOKE-free dispatch,
+     checks and decode.
+   - fmp_room at s0: initial_venom_state_rel says nothing about vs_fmp, so
+     it must hold vacuously: DALLOCA is emitted only by
+     compile_alloc_dynamic (builtinCreate, and builtinSystem's raw_call of
+     msg.data), and supported_program excludes raw calls and every create
+     form (supported_raw_call_forms_excluded), so no function reachable from
+     __entry has a DALLOCA.
+   - The calldata decode passes hi_op = Lit 0w, so a canonical encoding
+     (valid_vyper_call) meets only the clamps: basetype clamps, bytestring
+     length <= max, dynamic array count <= max, which bind_arguments'
+     well-typed values satisfy.
+   - local_ptrs_reserved: entryLocals' external_entry_locals. *)
 Theorem external_entry_reaches_body:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
