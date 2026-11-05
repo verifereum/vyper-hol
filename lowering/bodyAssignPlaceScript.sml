@@ -70,6 +70,34 @@ Proof
       vyperCompilerTheory.lowering_policy_ok_def]
 QED
 
+Theorem base_assignment_target_induct[local]:
+  !P. (!id. P (NameTarget id)) /\ (!nsid. P (TopLevelNameTarget nsid)) /\
+      (!bt e. P bt ==> P (SubscriptTarget bt e)) /\
+      (!bt s. P bt ==> P (AttributeTarget bt s)) ==> !bt. P bt
+Proof
+  rpt strip_tac >>
+  `(!e:expr. T) /\ !bt. P bt` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >> simp[]
+QED
+
+Theorem body_target_idx_case[local]:
+  !t tops ctx func cenv cx.
+    body_inv tops ctx cenv cx /\ body_base_target_ok cx t ==>
+    target_idx_case F ctx func cenv cx t
+Proof
+  Induct using base_assignment_target_induct >>
+  simp[body_base_target_ok_def, target_idx_case_def] >> rpt strip_tac >>
+  gvs[expr_sim_case_def, expr_vv_case_def, body_expr_ok_def] >> metis_tac[]
+QED
+
+Theorem body_target_case[local]:
+  !tops ctx func cenv cx t.
+    body_inv tops ctx cenv cx /\ body_base_target_ok cx t ==>
+    target_case F ctx func cenv cx t
+Proof
+  metis_tac[body_target_idx_case, target_case_all]
+QED
+
 Theorem body_assign_place_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
