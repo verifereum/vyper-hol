@@ -6,8 +6,81 @@
 Theory exprSimSubscriptMap
 Ancestors
   exprSimMapDefs exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
-  exprSimArrayIndex
+  exprSimArrayIndex exprSimDefs gasContext gasSummary gasSummaryCompose gasExemptCert vyperState
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
+
+(* Counted source sequencing keeps the observation stream available to both
+   operands; in particular the index is forced only after the base succeeds. *)
+Theorem eval_subscript_bind:
+  eval_expr cx (Subscript ann obj idx) =
+    bind (eval_expr cx obj) (\tv.
+      bind (bind (eval_expr cx idx) (read_result cx)) (\v.
+        select_result cx (expr_type obj) tv (ValueSubscript v)))
+Proof
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc]
+QED
+
+Theorem subscript_map_base_admissible:
+  gas_admissible (eval_expr cx (Subscript ann obj idx)) expr_map_res_ok es ==>
+  gas_admissible (eval_expr cx obj) expr_map_res_ok es
+Proof
+  simp[gas_admissible_def] >> rpt strip_tac >>
+  Cases_on `res` >- simp[expr_map_res_ok_def] >>
+  rename1 `INR ex` >>
+  qpat_x_assum `!gs res ee. _ ==> _` (qspec_then `gs` mp_tac) >>
+  rewrite_tac[eval_subscript_bind] >>
+  disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
+  simp[bind_def]
+QED
+
+Theorem subscript_map_index_admissible:
+  gas_admissible (eval_expr cx (Subscript ann obj idx)) expr_map_res_ok es /\
+  gas_marked_exec memory (ctx, func) (eval_expr cx obj)
+    (es, s0) marks (INL tv) mid (OK t) ==>
+  gas_admissible (bind (eval_expr cx idx) (read_result cx))
+    expr_res_ok (mid with gas_obs := [])
+Proof
+  simp[gas_admissible_def, gas_marked_exec_def] >> rpt strip_tac >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  qpat_x_assum `!gs res ee. _ ==> _`
+    (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
+  rewrite_tac[eval_subscript_bind] >>
+  disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
+  gvs[bind_def, expr_map_res_ok_def, expr_res_ok_def]
+QED
+
+(* A counted continuation, including its exemption origin, may follow a
+   completed result-valued source prefix. *)
+Theorem gas_outcome_result_prefix:
+  gas_marked_exec memory (ctx, func)
+    (a : evaluation_state -> eval_result evaluation_result)
+    (es, s0) left (INL v) mid (OK t) /\
+  gas_outcome memory tops (ctx, func) (k v)
+    (mid with gas_obs := [], t) Q R ==>
+  gas_outcome memory tops (ctx, func) (bind a k) (es, s0) Q R
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `out` (qx_choose_then `fin`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac assume_tac)))) >>
+      qexists_tac `left ++ right` >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`out`, `fin`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_bind_normal >>
+                    goal_assum drule >> simp[]) >>
+      first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ right (err, ef) (callee, tf)` >>
+  qexists_tac `left ++ right` >> disj2_tac >>
+  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_bind_result >>
+  qexistsl_tac [`mid`, `t`, `v`] >>
+  simp[GSYM ignore_bind_def]
+QED
 
 (* A top-level mapping variable: compile_expr lowers it to a pointer
    literal holding the mapping's declared slot (env_consistent's hashmap
