@@ -304,3 +304,101 @@ Proof
       exprSimHypsDefsTheory.expr_sim_inv_def]
 QED
 
+
+Theorem builtin_dispatch_not_code:
+  compile_builtin_dispatch_body f cenv rt ty bi args sa = (vv,sb) ==>
+  vv_location vv <> SOME LocCode
+Proof
+  Cases_on `bi` >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), oneline as_stack_val_def, oneline as_ptr_val_def,
+      vv_location_def, mk_ptr_def, base_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), vv_location_def, mk_ptr_def, base_ptr_def]
+  >~ [`compile_literal_vv _ _ _ = _`] >-
+    (Cases_on `rt` >> gvs[compile_literal_vv_def, comp_return_def, vv_location_def]
+     >- (rename1 `BaseT bt` >> Cases_on `bt` >>
+         gvs[compile_literal_vv_def, comp_return_def, vv_location_def] >>
+         rename1 `BytesT bd` >> Cases_on `bd` >>
+         gvs[compile_literal_vv_def, comp_return_def, comp_bind_def] >>
+         rpt (pairarg_tac >> gvs[]) >>
+         gvs[vv_location_def, base_ptr_def]) >>
+     gvs[vv_location_def]) >>
+  qpat_x_assum `_ = (vv,sb)` mp_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[AllCaseEqs(), vv_location_def] >>
+  rpt strip_tac >> gvs[vv_location_def]
+QED
+
+Theorem type_builtin_dispatch_not_code:
+  compile_type_builtin_dispatch_body f cenv vt ty tb rt args sa = (vv,sb) ==>
+  vv_location vv <> SOME LocCode
+Proof
+  Cases_on `tb` >>
+  simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), oneline as_stack_val_def, oneline as_ptr_val_def,
+      vv_location_def, mk_ptr_def, base_ptr_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), vv_location_def, mk_ptr_def, base_ptr_def]
+QED
+
+Theorem builtin_array_not_label:
+  well_typed_expr env (Builtin (ArrayT et bd) bi args) /\
+  compile_builtin_dispatch_body f cenv rt ty bi args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `bi` >>
+  simp[Once well_typed_expr_def, well_typed_builtin_app_def,
+       is_numeric_type_def, is_bool_type_def, is_uint256_type_def,
+       is_bytes32_type_def, is_flag_type_def]
+  >~ [`well_typed_binop _ bop _ _`] >-
+    (Cases_on `bop` >> simp[well_typed_binop_def, is_numeric_type_def,
+       is_int_type_def, is_bool_type_def, is_flag_type_def])
+  >~ [`env_item_type ei`] >- (Cases_on `ei` >> simp[env_item_type_def])
+  >~ [`account_item_type ai`] >- (Cases_on `ai` >> simp[account_item_type_def])
+  >~ [`MakeArray eo bnd`] >-
+    (Cases_on `eo` >> simp[well_typed_builtin_app_def] >>
+     rpt strip_tac >>
+     gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res` >>
+     Cases_on `res` >>
+     gvs[as_ptr_val_def, vv_operand_def, mk_ptr_def, markerTheory.Abbrev_def] >>
+     metis_tac[exprOperandVarTheory.compiler_make_array_result,
+               exprSafeOperandTheory.alloc_buffer_not_label]) >>
+  rpt strip_tac >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res` >>
+  Cases_on `res` >>
+  gvs[as_ptr_val_def, vv_operand_def, mk_ptr_def, markerTheory.Abbrev_def] >>
+  metis_tac[ec_arith_result_not_label]
+QED
+
+Theorem type_builtin_array_not_label:
+  well_typed_expr env (TypeBuiltin (ArrayT et bd) tb target args) /\
+  compile_type_builtin_dispatch_body f cenv vt ty tb target args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `tb` >>
+  simp[Once well_typed_expr_def, type_builtin_result_ok_def,
+       well_typed_type_builtin_args_def, is_numeric_type_def] >>
+  rpt strip_tac >> gvs[is_numeric_type_def]
+  >~ [`valid_conversion src (ArrayT _ _)`] >-
+    (Cases_on `src` >> gvs[valid_conversion_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[valid_conversion_def] >>
+     rename1 `BytesT bnd` >> Cases_on `bnd` >> gvs[valid_conversion_def]) >>
+  rpt strip_tac >>
+  gvs[compile_type_builtin_dispatch_body_def, is_word_type_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[])
+  >~ [`compile_builtin_empty_complex _ _ _ = _`] >-
+    (gvs[vv_operand_def, base_ptr_def] >>
+     metis_tac[compile_empty_not_label]) >>
+  qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res` >>
+  Cases_on `res` >>
+  gvs[as_ptr_val_def, vv_operand_def, mk_ptr_def, markerTheory.Abbrev_def] >>
+  metis_tac[lower_abi_decode_not_label]
+QED
