@@ -2,7 +2,7 @@ Theory fnAliasInvAvailability
 Ancestors
   fnAliasInvLiveness venomWf rich_list list livenessDefs finite_map
   pair indexedLists passSharedDefs o1ContractSimplifyCfg cfgNormBase
-  venomExecProps
+  venomExecProps cfgAnalysisProps cfgHelpers cfgNormSupplySim
 Libs
   venomInstTheory
 
@@ -273,4 +273,80 @@ Proof
   qexists_tac `pred_bb` >> simp[] >>
   irule alias_all_paths_indexed >> simp[] >> qexists_tac `NONE` >> simp[] >>
   irule def_available_on_all_paths >> simp[]
+QED
+
+Theorem alias_available_nondef_backward:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  ~MEM v (inst_defs (EL i bb.bb_instructions)) /\
+  alias_path_available fn l (SUC i) v ==>
+  alias_path_available fn l i v
+Proof
+  simp[alias_path_available_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac
+  >- metis_tac[] >>
+  gvs[] >> disj2_tac >> qexists_tac `j` >> simp[] >>
+  `j <> i` by metis_tac[] >> decide_tac
+QED
+
+Theorem alias_pending_phi_backward:
+  alias_pending_phi fn l (SUC i) v ==> alias_pending_phi fn l i v
+Proof
+  simp[alias_pending_phi_def] >> rpt strip_tac >>
+  qexistsl_tac [`bb`,`inst`] >> simp[] >>
+  qpat_x_assum `MEM inst (DROP (SUC i) _)` mp_tac >>
+  SPEC_TAC (``collect_phis bb.bb_instructions``, ``xs : instruction list``) >>
+  qid_spec_tac `i` >> Induct >> Cases_on `xs` >> simp[]
+QED
+
+Theorem alias_cfg_successor_boundary:
+  wf_function fn /\ MEM s (cfg_succs_of (cfg_analyze fn) l) ==>
+  fn_cfg_edge fn l s /\ ?bb. lookup_block s fn.fn_blocks = SOME bb
+Proof
+  strip_tac >>
+  `MEM l (fn_labels fn)` by
+    (CCONTR_TAC >> gvs[fn_labels_def, cfg_analyze_succs] >>
+     drule cfgHelpersTheory.cfg_succs_of_not_in_labels >>
+     metis_tac[MEM]) >>
+  conj_tac
+  >- (gvs[fn_labels_def, MEM_MAP] >>
+      rename1 `MEM b fn.fn_blocks` >>
+      `cfg_succs_of (cfg_analyze fn) b.bb_label = bb_succs b` by
+        metis_tac[cfg_analyze_preserves_bb_succs] >>
+      gvs[fn_cfg_edge_def] >> metis_tac[]) >>
+  `MEM s (fn_labels fn)` by metis_tac[cfg_analyze_succ_labels] >>
+  gvs[fn_labels_def, MEM_MAP] >>
+  metis_tac[MEM_lookup_block, wf_function_def, fn_labels_def]
+QED
+
+Theorem alias_available_edge_backward:
+  fn_cfg_edge fn l s /\ alias_path_available fn s 0 v ==>
+  alias_path_available fn l (LENGTH (liveness_instrs fn.fn_blocks l)) v
+Proof
+  simp[alias_path_available_def] >> rpt strip_tac >>
+  `is_fn_path fn (SNOC s path)` by
+    simp[supply_path_snoc] >>
+  qpat_x_assum `!path. _` (qspec_then `SNOC s path` mp_tac) >>
+  simp[SNOC_APPEND, LAST_APPEND_CONS] >>
+  (impl_tac >- (Cases_on `path` >> gvs[])) >>
+  strip_tac >>
+  `k < LENGTH path` by decide_tac >>
+  `EL k (path ++ [s]) = EL k path` by simp[EL_APPEND1] >>
+  gvs[] >>
+  Cases_on `k < LENGTH path - 1`
+  >- (disj1_tac >> qexistsl_tac [`k`,`bb`,`inst`] >> simp[]) >>
+  `k = LENGTH path - 1` by decide_tac >>
+  `EL k path = LAST path` by
+    metis_tac[LAST_EL, arithmeticTheory.PRE_SUB1] >>
+  gvs[] >> disj2_tac >>
+  simp[livenessBlockProofsTheory.liveness_instrs_def] >>
+  gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem alias_available_cfg_successor_backward:
+  wf_function fn /\ MEM s (cfg_succs_of (cfg_analyze fn) l) /\
+  alias_path_available fn s 0 v ==>
+  alias_path_available fn l (LENGTH (liveness_instrs fn.fn_blocks l)) v
+Proof
+  metis_tac[alias_cfg_successor_boundary, alias_available_edge_backward]
 QED
