@@ -667,3 +667,20 @@ reachability, static fn_ptr_ok, FDOM support, source taint safety, non-retpc
 operand use, Cover and distinct target block labels. Target step/nonhalting,
 enters_block and activity are the target frame_reachable_block premises.
 The frozen contract remains unfinished.
+
+## 16. Normal phase-zero branch ancillary closure (C1.12.79)
+
+`dload_normal_branch_block` in NormalBlock consumes the tracked branch interface
+once and retains its actual source successor, reachability, control, definedness
+and entry core witnesses. It additionally preserves the inline Stack and Saved
+fields, retains Cover, and derives current/saved provenance and parameter support
+from `frame_reachable_prov_supported` at that actual successor. Stack uses target
+allocation-map stability under jump and PHI entry; Saved uses source call-context
+stability under the same operations. No successor support or source-success
+premise is added. Relational V remains independent of original definedness U.
+
+The checked theorem closes only the singleton phase-zero branch constructor
+interface. The outer induction must still produce that phase/control inversion,
+branch membership, tracked operand use, source safety, Cover and target label
+distinctness. It does not establish the global joint reachability induction or
+the frozen stage contract.
