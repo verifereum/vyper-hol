@@ -58,3 +58,35 @@ Proof
   drule_all raw_log_body_topics_values >> strip_tac >>
   irule raw_log_topics_post_wb >> simp[] >> qexists_tac `topics` >> simp[]
 QED
+
+(* The body induction hypothesis for data is available at a marked topic
+   endpoint, not merely at the unmarked source evaluation. *)
+Theorem raw_log_marked_data_ready:
+  body_inv tops ctx cenv cx /\
+  body_exprs_ok cx
+    [Builtin ann (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] /\
+  LENGTH topics <= n /\
+  expr_sim_inv cenv cx env es /\
+  expr_sim_inv cenv cx env (ee with gas_obs := []) /\
+  (!s. expr_sim_inv cenv cx env s ==> expr_body_pre cenv cx env data s) /\
+  gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
+    marks (INL vs) ee (OK t) ==>
+  expr_sim ctx func cenv cx (expr_type data) data (ee with gas_obs := [])
+Proof
+  strip_tac >>
+  `eval_exprs cx topics
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL vs, ee with gas_obs := [])` by
+    (fs[gas_marked_exec_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule_all raw_log_literal_read_success >>
+  simp[bind_def, AllCaseEqs()] >> strip_tac >>
+  `body_expr_ok cx data` by
+    (qpat_x_assum `!ann'. _` (qspec_then `ann` strip_assume_tac) >>
+     gvs[] >> drule_all raw_log_body_data_after_topics >> simp[]) >>
+  `expr_body_pre cenv cx env data (ee with gas_obs := [])` by
+    (first_x_assum irule >> simp[]) >>
+  qpat_x_assum `body_expr_ok cx data`
+    (assume_tac o PURE_REWRITE_RULE [body_expr_ok_def]) >>
+  metis_tac[]
+QED
