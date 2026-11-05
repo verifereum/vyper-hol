@@ -1,0 +1,756 @@
+(*
+ * Step-for-step correspondence of frame runs under a variable renaming,
+ * and the ghost transport it gives.
+ *
+ * frame_sim (o1PassLift) matches each state a frame of fn' reaches with
+ * some state of fn, one state at a time.  The ghosts frame_reachable
+ * builds along a path (pointer provenance G, taint tn) need more: the
+ * matching input states must form a run themselves.  frame_lockstep asks
+ * for that run, through a relation R between input and output states:
+ *
+ *   R p (inst,s) sg (inst',s')
+ *
+ * sg renames: it maps an output variable to the input variable holding
+ * the same value.  A paired state (p) runs the same instruction on both
+ * sides, its operands renamed by sg; an unpaired one is an output-only
+ * ASSIGN or NOP (a copy a pass inserted), during which the input waits.
+ * Paired states sit at the same block, the output at position
+ * pos label idx of the input's.  After each step sg may only keep what
+ * the step leaves true of every ghost (out_rename_ok, copy_rename_ok,
+ * phis_rename_ok); the pass shows the values agree on what it keeps.
+ *
+ * Every ghost frame_reachable computes is a function of the instruction,
+ * its operands' ghosts and values, and the execution frame, so a
+ * lockstep carries the ghosts: each state frame_reachable reaches in C'
+ * has one in C with equal memory, storage, transient and immutable taint,
+ * and provenance and variable taint related through sg, frame by frame
+ * down the call stack (frame_reachable_lockstep).  The taint bound
+ * follows (taint_within_lockstep).
+ *
+ * TOP-LEVEL: frame_lockstep, lockstep_sim, lockstep_ctx,
+ *   frame_reachable_lockstep, taint_within_lockstep,
+ *   frame_reach_lockstep, lockstep_paired_mem_ranges.
+ *)
+Theory o1FrameLockstep
+Ancestors
+  o1PassLift ptrDiscipline unitMemInv stateFrame contextCodegenRel
+  codegenRel venomExecSemantics venomExecProps venomInst venomState
+  list finite_map option pred_set
+
+(* ===== The renaming ===== *)
+
+(* op' is op with its variable renamed by sg (output name to input
+   name); other operands are kept. *)
+Definition op_rename_def:
+  op_rename (sg:(string,string) fmap) op op' <=>
+    case op' of
+      Var x' => ?x. op = Var x /\ FLOOKUP sg x' = SOME x
+    | _ => op' = op
+End
+
+(* A paired instruction: same opcode and output count, operands renamed.
+   ALLOCA keeps its id, which names its allocation. *)
+Definition inst_pair_def:
+  inst_pair sg inst inst' <=>
+    inst'.inst_opcode = inst.inst_opcode /\
+    LIST_REL (op_rename sg) inst.inst_operands inst'.inst_operands /\
+    LENGTH inst'.inst_outputs = LENGTH inst.inst_outputs /\
+    (inst.inst_opcode = ALLOCA ==> inst'.inst_id = inst.inst_id)
+End
+
+Definition vars_rel_def:
+  vars_rel sg s s' <=>
+    !x' x. FLOOKUP sg x' = SOME x ==> lookup_var x' s' = lookup_var x s
+End
+
+(* Equal but for the variables, which agree through sg. *)
+Definition state_rel_def:
+  state_rel sg s s' <=>
+    execution_frame s' = execution_frame s /\
+    s'.vs_current_bb = s.vs_current_bb /\ s'.vs_prev_bb = s.vs_prev_bb /\
+    vars_rel sg s s'
+End
+
+(* After a paired step: an output pairs with an output, anything else
+   keeps its pairing and is written by neither side. *)
+Definition out_rename_ok_def:
+  out_rename_ok sg outs outs' sg' <=>
+    !x' x. FLOOKUP sg' x' = SOME x ==>
+      (MEM x' outs' /\ MEM x outs) \/
+      (~MEM x' outs' /\ ~MEM x outs /\ FLOOKUP sg x' = SOME x)
+End
+
+(* After an output-only step: an ASSIGN of a variable takes that
+   variable's pairing; anything it doesn't write keeps its own. *)
+Definition copy_rename_ok_def:
+  copy_rename_ok sg inst' sg' <=>
+    !x' x. FLOOKUP sg' x' = SOME x ==>
+      (inst'.inst_opcode = ASSIGN /\ inst'.inst_outputs = [x'] /\
+       ?z'. inst'.inst_operands = [Var z'] /\ FLOOKUP sg z' = SOME x) \/
+      (~MEM x' inst'.inst_outputs /\ FLOOKUP sg x' = SOME x)
+End
+
+(* What the leading PHIs of insts write to x, entering from prev: NONE if
+   none writes it; SOME (SOME op) if the first that does copies op;
+   SOME NONE if it leaves x without a ghost. *)
+Definition phi_read_def:
+  (phi_read prev x [] = NONE) /\
+  (phi_read prev x (inst::rest) =
+     if inst.inst_opcode <> PHI then NONE
+     else if MEM x inst.inst_outputs then
+       SOME (if inst.inst_outputs = [x] then
+               case prev of
+                 NONE => NONE
+               | SOME l => resolve_phi l inst.inst_operands
+             else NONE)
+     else phi_read prev x rest)
+End
+
+(* The operand x holds after the PHIs, read before them. *)
+Definition phi_eff_def:
+  phi_eff prev x insts =
+    case phi_read prev x insts of
+      NONE => SOME (Var x)
+    | SOME r => r
+End
+
+Definition block_insts_def:
+  block_insts fn lbl =
+    case lookup_block lbl fn.fn_blocks of
+      SOME bb => bb.bb_instructions
+    | NONE => []
+End
+
+(* After entering a block: a pairing reads, through the PHIs, operands
+   the old renaming pairs. *)
+Definition phis_rename_ok_def:
+  phis_rename_ok prev sg insts insts' sg1 <=>
+    !x' x. FLOOKUP sg1 x' = SOME x ==>
+      OPTREL (op_rename sg) (phi_eff prev x insts) (phi_eff prev x' insts')
+End
+
+(* ===== The lockstep ===== *)
+
+(* R relates the states of a frame of fn in C with those of a frame of fn'
+   in C' from the same entry state, for entry states with label table L.
+   Every output step is matched: an unpaired one stays at the same input
+   state; a paired one takes the same step there, to an equal execution
+   frame; after a paired INVOKE, matching returns resume in R again. *)
+Definition lockstep_sim_def:
+  lockstep_sim L C C' fn fn' (pos:string -> num -> num) R <=>
+    (!p inst s sg inst' s'.
+       R p (inst,s) sg (inst',s') ==>
+       active_inst fn inst s /\ active_inst fn' inst' s' /\
+       state_rel sg s s' /\
+       (p ==> inst_pair sg inst inst' /\
+              s'.vs_inst_idx = pos s.vs_current_bb s.vs_inst_idx) /\
+       (~p ==> inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP)) /\
+    (!s0 s1' inst'.
+       fn_entry_state fn s0 /\ s0.vs_labels = L /\
+       enters_block fn' s0 s1' /\ active_inst fn' inst' s1' ==>
+       ?p inst s1 sg. enters_block fn s0 s1 /\ R p (inst,s1) sg (inst',s1')) /\
+    (!inst s sg inst' s' t' j' fuel.
+       R F (inst,s) sg (inst',s') /\ step_inst fuel C' inst' s' = OK t' /\
+       active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+       ?p sg'. R p (inst,s) sg' (j', t' with vs_inst_idx := SUC s'.vs_inst_idx) /\
+               copy_rename_ok sg inst' sg') /\
+    (!inst s sg inst' s' fuel t'.
+       R T (inst,s) sg (inst',s') /\ inst'.inst_opcode <> INVOKE /\
+       step_inst fuel C' inst' s' = OK t' ==>
+       ?t. step_inst fuel C inst s = OK t /\
+           execution_frame t' = execution_frame t /\
+           (~is_terminator inst'.inst_opcode ==>
+            !j'. active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+              ?p j sg'.
+                R p (j, t with vs_inst_idx := SUC s.vs_inst_idx) sg'
+                  (j', t' with vs_inst_idx := SUC s'.vs_inst_idx) /\
+                out_rename_ok sg inst.inst_outputs inst'.inst_outputs sg') /\
+           (is_terminator inst'.inst_opcode ==>
+            t'.vs_current_bb = t.vs_current_bb /\
+            t'.vs_prev_bb = t.vs_prev_bb /\
+            !t1' j'. ~t'.vs_halted /\ enters_block fn' t' t1' /\
+                     active_inst fn' j' t1' ==>
+              ?p j t1 sg1. enters_block fn t t1 /\ R p (j,t1) sg1 (j',t1') /\
+                phis_rename_ok t.vs_prev_bb sg
+                  (block_insts fn t.vs_current_bb)
+                  (block_insts fn' t.vs_current_bb) sg1)) /\
+    (!inst s sg inst' s' fuel v e'.
+       R T (inst,s) sg (inst',s') /\ inst'.inst_opcode <> INVOKE /\
+       step_inst fuel C' inst' s' = IntRet v e' ==>
+       ?e. step_inst fuel C inst s = IntRet v e /\
+           execution_frame e' = execution_frame e) /\
+    (!inst s sg inst' s' fuel h'.
+       R T (inst,s) sg (inst',s') /\ inst'.inst_opcode <> INVOKE /\
+       step_inst fuel C' inst' s' = Halt h' ==>
+       ?h. step_inst fuel C inst s = Halt h /\
+           execution_frame h' = execution_frame h) /\
+    (!inst s sg inst' s' ret e e' t' j'.
+       R T (inst,s) sg (inst',s') /\ inst'.inst_opcode = INVOKE /\
+       execution_frame e' = execution_frame e /\
+       bind_outputs inst'.inst_outputs ret.iret_values
+         (adopt_return_fmp ret (merge_callee_state s' e')) = SOME t' /\
+       active_inst fn' j' (t' with vs_inst_idx := SUC s'.vs_inst_idx) ==>
+       ?p j t sg'.
+         bind_outputs inst.inst_outputs ret.iret_values
+           (adopt_return_fmp ret (merge_callee_state s e)) = SOME t /\
+         R p (j, t with vs_inst_idx := SUC s.vs_inst_idx) sg'
+           (j', t' with vs_inst_idx := SUC s'.vs_inst_idx) /\
+         out_rename_ok sg inst.inst_outputs inst'.inst_outputs sg')
+End
+
+(* Positions advance together within a block. *)
+Definition frame_lockstep_def:
+  frame_lockstep L C C' fn fn' pos <=>
+    (!l k. pos l (SUC k) = SUC (pos l k)) /\
+    ?R. lockstep_sim L C C' fn fn' pos R
+End
+
+(* Two stage contexts whose functions are in lockstep pairwise, with a
+   side condition Q on each pair and its position map. *)
+Definition lockstep_ctx_def:
+  lockstep_ctx Q L C C' <=>
+    C'.ctx_entry = C.ctx_entry /\
+    LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
+                       fn_entry_label fn' = fn_entry_label fn /\
+                       ?pos. frame_lockstep L C C' fn fn' pos /\
+                             Q fn fn' pos)
+      C.ctx_functions C'.ctx_functions
+End
+
+(* ===== Ghost relation ===== *)
+
+Definition var_taint_def:
+  var_taint (tv:(string, num set) fmap) x =
+    case FLOOKUP tv x of SOME m => m | NONE => {}
+End
+
+(* Provenance and variable taint agree through sg. *)
+Definition vars_ghost_rel_def:
+  vars_ghost_rel sg (G:(string, num # num) fmap) tv G' tv' <=>
+    !x' x. FLOOKUP sg x' = SOME x ==>
+      FLOOKUP G' x' = FLOOKUP G x /\ var_taint tv' x' = var_taint tv x
+End
+
+(* The ghosts of corresponding states: the byte taints are equal. *)
+Definition ghost_rel_def:
+  ghost_rel sg G tn G' tn' <=>
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    vars_ghost_rel sg G tn.t_var G' tn'.t_var
+End
+
+(* ===== Basic facts ===== *)
+
+Theorem execution_frame_fields:
+  execution_frame s' = execution_frame s ==>
+  s'.vs_labels = s.vs_labels /\ s'.vs_allocas = s.vs_allocas /\
+  s'.vs_alloca_next = s.vs_alloca_next /\ s'.vs_fmp = s.vs_fmp /\
+  s'.vs_initial_fmp = s.vs_initial_fmp /\
+  s'.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+  s'.vs_returndata = s.vs_returndata /\ s'.vs_requests = s.vs_requests /\
+  s'.vs_outcomes = s.vs_outcomes /\ s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_halted = s.vs_halted /\ s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient /\ s'.vs_immutables = s.vs_immutables /\
+  s'.vs_memory = s.vs_memory
+Proof
+  strip_tac >> fs[execution_frame_def, venom_state_component_equality]
+QED
+
+Theorem vars_rel_inst_idx[simp]:
+  (vars_rel sg (s with vs_inst_idx := k) s' <=> vars_rel sg s s') /\
+  (vars_rel sg s (s' with vs_inst_idx := k) <=> vars_rel sg s s')
+Proof
+  simp[vars_rel_def, lookup_var_def]
+QED
+
+Theorem op_rename_not_var:
+  op_rename sg op op' /\ (!x. op <> Var x) ==> op' = op
+Proof
+  Cases_on `op'` >> simp[op_rename_def] >> metis_tac[]
+QED
+
+Theorem op_rename_eval:
+  op_rename sg op op' /\ vars_rel sg s s' /\ s'.vs_labels = s.vs_labels ==>
+  eval_operand op' s' = eval_operand op s
+Proof
+  Cases_on `op'` >> simp[op_rename_def] >> rpt strip_tac >>
+  gvs[eval_operand_def, vars_rel_def]
+QED
+
+Theorem op_rename_ghost:
+  op_rename sg op op' /\ vars_ghost_rel sg G tn.t_var G' tn'.t_var ==>
+  op_prov G' op' = op_prov G op /\ op_taint tn' op' = op_taint tn op
+Proof
+  Cases_on `op'` >> simp[op_rename_def] >> rpt strip_tac >>
+  gvs[op_prov_def, op_taint_def, vars_ghost_rel_def] >>
+  first_x_assum drule >> simp[var_taint_def]
+QED
+
+Theorem op_taint_var:
+  op_taint tn (Var x) = var_taint tn.t_var x
+Proof
+  simp[op_taint_def, var_taint_def]
+QED
+
+Theorem op_rename_label:
+  op_rename sg op (Label l) <=> op = Label l
+Proof
+  simp[op_rename_def] >> metis_tac[]
+QED
+
+Theorem op_rename_lit:
+  op_rename sg op (Lit w) <=> op = Lit w
+Proof
+  simp[op_rename_def] >> metis_tac[]
+QED
+
+Theorem op_rename_lit_src:
+  op_rename sg (Lit w) op' <=> op' = Lit w
+Proof
+  Cases_on `op'` >> simp[op_rename_def]
+QED
+
+Theorem LIST_REL_op_rename_eval:
+  !ops ops'. LIST_REL (op_rename sg) ops ops' /\ vars_rel sg s s' /\
+    s'.vs_labels = s.vs_labels ==>
+    LIST_REL (\op op'. op_rename sg op op' /\
+                       eval_operand op' s' = eval_operand op s) ops ops'
+Proof
+  Induct >> simp[PULL_EXISTS] >> rpt strip_tac >>
+  metis_tac[op_rename_eval]
+QED
+
+Theorem eval_operands_rel:
+  !ops ops'. LIST_REL (\op op'. op_rename sg op op' /\
+                                eval_operand op' s' = eval_operand op s)
+               ops ops' ==>
+    eval_operands ops' s' = eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def, PULL_EXISTS] >> rpt strip_tac >>
+  simp[eval_operands_def]
+QED
+
+Theorem first_prov_rename:
+  !ops ops'. LIST_REL (op_rename sg) ops ops' /\
+    vars_ghost_rel sg G tn.t_var G' tn'.t_var ==>
+    first_prov G' ops' = first_prov G ops
+Proof
+  Induct >> simp[first_prov_def, PULL_EXISTS] >> rpt strip_tac >>
+  drule_all op_rename_ghost >> strip_tac >> simp[first_prov_def]
+QED
+
+Theorem map_op_prov_rename:
+  !ops ops'. LIST_REL (op_rename sg) ops ops' /\
+    vars_ghost_rel sg G tn.t_var G' tn'.t_var ==>
+    MAP (op_prov G') ops' = MAP (op_prov G) ops
+Proof
+  Induct >> simp[PULL_EXISTS] >> rpt strip_tac >>
+  drule_all op_rename_ghost >> simp[]
+QED
+
+Theorem parse_dret_shape_rename:
+  LIST_REL (op_rename sg) inst.inst_operands inst'.inst_operands ==>
+  parse_dret_shape inst' = parse_dret_shape inst
+Proof
+  strip_tac >> imp_res_tac LIST_REL_LENGTH >>
+  simp[dretShapeDefsTheory.parse_dret_shape_def] >>
+  Cases_on `inst.inst_operands` >> Cases_on `inst'.inst_operands` >> gvs[] >>
+  Cases_on `h` >> Cases_on `h'` >> gvs[op_rename_def]
+QED
+
+(* The operands of a paired instruction, with their values. *)
+Definition ops_pair_def:
+  ops_pair sg s s' ops ops' <=>
+    LIST_REL (\op op'. op_rename sg op op' /\
+                       eval_operand op' s' = eval_operand op s) ops ops'
+End
+
+Theorem ops_pair_rename:
+  ops_pair sg s s' ops ops' ==> LIST_REL (op_rename sg) ops ops'
+Proof
+  rw[ops_pair_def] >> irule LIST_REL_mono >>
+  first_assum (irule_at Any) >> simp[]
+QED
+
+Theorem inst_pair_ops:
+  inst_pair sg inst inst' /\ state_rel sg s s' ==>
+  ops_pair sg s s' inst.inst_operands inst'.inst_operands
+Proof
+  rw[inst_pair_def, state_rel_def, ops_pair_def] >>
+  irule LIST_REL_op_rename_eval >> simp[] >>
+  metis_tac[execution_frame_fields]
+QED
+
+Theorem write_ranges_pair:
+  inst'.inst_opcode = inst.inst_opcode /\
+  ops_pair sg s s' inst.inst_operands inst'.inst_operands /\
+  s'.vs_call_entry_fmp = s.vs_call_entry_fmp ==>
+  source_memory_write_ranges inst' s' = source_memory_write_ranges inst s
+Proof
+  strip_tac >>
+  `eval_operands inst'.inst_operands s' = eval_operands inst.inst_operands s` by
+    (irule eval_operands_rel >> fs[ops_pair_def] >> metis_tac[]) >>
+  `parse_dret_shape inst' = parse_dret_shape inst` by
+    metis_tac[parse_dret_shape_rename, ops_pair_rename] >>
+  fs[ops_pair_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  simp[codegenRelTheory.fixed_source_write_range_def,
+       codegenRelTheory.sized_source_write_range_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os3` ["", "o4 os4"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os4` ["", "o5 os5"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os5` ["", "o6 os6"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os6` ["", "o7 os7"] >> gvs[LIST_REL_CONS1] >>
+  Cases_on `os7` >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem read_ranges_other:
+  ~MEM inst.inst_opcode [MLOAD; ILOAD; MCOPY; DRET; RETURN; REVERT; SHA3; LOG;
+                         CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] ==>
+  source_memory_read_ranges inst s = []
+Proof
+  simp[contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  Cases_on `inst.inst_opcode` >> simp[]
+QED
+
+Theorem read_ranges_pair:
+  inst'.inst_opcode = inst.inst_opcode /\
+  ops_pair sg s s' inst.inst_operands inst'.inst_operands ==>
+  source_memory_read_ranges inst' s' = source_memory_read_ranges inst s
+Proof
+  strip_tac >>
+  `eval_operands inst'.inst_operands s' = eval_operands inst.inst_operands s` by
+    (irule eval_operands_rel >> fs[ops_pair_def] >> metis_tac[]) >>
+  `parse_dret_shape inst' = parse_dret_shape inst` by
+    metis_tac[parse_dret_shape_rename, ops_pair_rename] >>
+  fs[ops_pair_def] >>
+  Cases_on `inst.inst_opcode = LOG` >- suspend "log" >>
+  Cases_on `MEM inst.inst_opcode [MLOAD; ILOAD; MCOPY; DRET; RETURN; REVERT;
+              SHA3; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` >>
+  TRY (`source_memory_read_ranges inst s = [] /\
+        source_memory_read_ranges inst' s' = []` by
+         (conj_tac >> irule read_ranges_other >> gvs[]) >> simp[] >> NO_TAC) >>
+  pop_assum (strip_assume_tac o SIMP_RULE list_ss []) >>
+  gvs[contextCodegenRelTheory.source_memory_read_ranges_def,
+      contextCodegenRelTheory.dret_memory_read_ranges_def,
+      contextCodegenRelTheory.memory_range_of_operands_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os3` ["", "o4 os4"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os4` ["", "o5 os5"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os5` ["", "o6 os6"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os6` ["", "o7 os7"] >> gvs[LIST_REL_CONS1] >>
+  Cases_on `os7` >> gvs[LIST_REL_CONS1]
+QED
+
+Resume read_ranges_pair[log]:
+  simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+       contextCodegenRelTheory.memory_range_of_operands_def] >>
+  Cases_on `inst.inst_operands` >> gvs[LIST_REL_CONS1] >>
+  rename1 `op_rename sg h hh` >>
+  qpat_x_assum `op_rename sg h hh` mp_tac >>
+  Cases_on `h` >> Cases_on `hh` >> simp[op_rename_def] >> strip_tac >> gvs[] >>
+  imp_res_tac LIST_REL_LENGTH >> simp[] >> IF_CASES_TAC >> simp[] >>
+  qmatch_asmsub_abbrev_tac `LIST_REL RR t t'` >>
+  `LIST_REL RR (REVERSE t) (REVERSE t')` by simp[] >>
+  `LIST_REL RR (DROP 2 (REVERSE t)) (DROP 2 (REVERSE t'))` by
+    simp[rich_listTheory.EVERY2_DROP] >>
+  `eval_operands (DROP 2 (REVERSE t')) s' =
+   eval_operands (DROP 2 (REVERSE t)) s` by
+    (irule eval_operands_rel >> qexists_tac `sg` >> gvs[Abbr `RR`]) >>
+  `RR (EL 0 (REVERSE t)) (EL 0 (REVERSE t')) /\
+   RR (EL 1 (REVERSE t)) (EL 1 (REVERSE t'))` by
+    (qpat_x_assum `LIST_REL RR (REVERSE t) (REVERSE t')` mp_tac >>
+     rewrite_tac[LIST_REL_EL_EQN, LENGTH_REVERSE] >> strip_tac >>
+     conj_tac >> first_x_assum irule >> simp[]) >>
+  gvs[Abbr `RR`]
+QED
+
+Finalise read_ranges_pair
+
+Theorem inst_mem_ranges_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' ==>
+  inst_mem_ranges inst' s' = inst_mem_ranges inst s
+Proof
+  strip_tac >> drule_all inst_pair_ops >> strip_tac >>
+  fs[inst_pair_def, state_rel_def] >> imp_res_tac execution_frame_fields >>
+  simp[inst_mem_ranges_def] >> metis_tac[read_ranges_pair, write_ranges_pair]
+QED
+
+(* ===== Ghost updates ===== *)
+
+Theorem FLOOKUP_set_prov:
+  FLOOKUP (set_prov G outs p) y =
+    if MEM y outs then (if outs = [y] then p else NONE) else FLOOKUP G y
+Proof
+  Cases_on `outs` >> simp[set_prov_def, FLOOKUP_DRESTRICT] >>
+  Cases_on `t` >> Cases_on `p` >>
+  simp[set_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  rw[] >> gvs[]
+QED
+
+Theorem var_taint_set:
+  var_taint (set_var_taint tv outs m) y =
+    if MEM y outs then (if outs = [y] then m else {}) else var_taint tv y
+Proof
+  Cases_on `outs` >>
+  simp[set_var_taint_def, var_taint_def, FLOOKUP_DRESTRICT] >>
+  Cases_on `t` >>
+  simp[set_var_taint_def, var_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  rw[] >> gvs[]
+QED
+
+Theorem var_taint_DRESTRICT:
+  var_taint (DRESTRICT tv X) y = if y IN X then var_taint tv y else {}
+Proof
+  simp[var_taint_def, FLOOKUP_DRESTRICT] >> rw[]
+QED
+
+Theorem MEM_singleton_length:
+  MEM x l ==> (l = [x] <=> LENGTH l = 1)
+Proof
+  Cases_on `l` >> simp[] >> Cases_on `t` >> simp[] >> metis_tac[]
+QED
+
+(* Writing equal ghosts to paired outputs keeps the relation. *)
+Theorem set_ghost_rel:
+  out_rename_ok sg outs outs' sg' /\ LENGTH outs' = LENGTH outs /\
+  vars_ghost_rel sg G tv G' tv' /\
+  (!x x'. outs = [x] /\ outs' = [x'] /\ FLOOKUP sg' x' = SOME x ==>
+          p' = p /\ m' = m) ==>
+  vars_ghost_rel sg' (set_prov G outs p) (set_var_taint tv outs m)
+                     (set_prov G' outs' p') (set_var_taint tv' outs' m')
+Proof
+  simp[vars_ghost_rel_def, out_rename_ok_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!x' x. FLOOKUP sg' _ = _ ==> _` drule >> strip_tac
+  >- (`(outs' = [x'] <=> LENGTH outs' = 1) /\ (outs = [x] <=> LENGTH outs = 1)`
+        by metis_tac[MEM_singleton_length] >>
+      simp[FLOOKUP_set_prov, var_taint_set] >>
+      Cases_on `LENGTH outs = 1` >> gvs[] >>
+      first_x_assum (qspecl_then [`x`, `x'`] mp_tac) >> simp[]) >>
+  simp[FLOOKUP_set_prov, var_taint_set]
+QED
+
+Theorem ret_ghost_rel:
+  vars_ghost_rel sg G tv G' tv' /\ out_rename_ok sg outs outs' sg' ==>
+  vars_ghost_rel sg' (DRESTRICT G (COMPL (set outs)))
+                     (DRESTRICT tv (COMPL (set outs)))
+                     (DRESTRICT G' (COMPL (set outs')))
+                     (DRESTRICT tv' (COMPL (set outs')))
+Proof
+  rw[vars_ghost_rel_def, out_rename_ok_def] >>
+  first_x_assum drule >> strip_tac >>
+  simp[FLOOKUP_DRESTRICT, var_taint_DRESTRICT] >> metis_tac[]
+QED
+
+(* The operands of a paired instruction carry equal values and ghosts. *)
+Theorem inst_pair_ops_ghost:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\
+  vars_ghost_rel sg G tn.t_var G' tn'.t_var ==>
+  LIST_REL (\op op'. eval_operand op' s' = eval_operand op s /\
+                     op_taint tn' op' = op_taint tn op /\
+                     op_prov G' op' = op_prov G op /\ op_rename sg op op')
+    inst.inst_operands inst'.inst_operands
+Proof
+  strip_tac >> drule_all inst_pair_ops >> rw[ops_pair_def] >>
+  irule LIST_REL_mono >> first_assum (irule_at Any) >> rw[] >>
+  metis_tac[op_rename_ghost]
+QED
+
+Theorem out_taint_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\ ghost_rel sg G tn G' tn' ==>
+  out_taint tn' inst' s' = out_taint tn inst s
+Proof
+  rw[ghost_rel_def] >> drule_all inst_pair_ops_ghost >> strip_tac >>
+  fs[inst_pair_def] >> simp[out_taint_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem written_taint_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\ ghost_rel sg G tn G' tn' ==>
+  written_taint tn' inst' s' = written_taint tn inst s
+Proof
+  rw[ghost_rel_def] >> drule_all inst_pair_ops_ghost >> strip_tac >>
+  fs[inst_pair_def] >> simp[written_taint_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os3` ["", "o4 os4"] >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem store_taint_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\ ghost_rel sg G tn G' tn' ==>
+  store_taint opc tn' inst' s' X = store_taint opc tn inst s X
+Proof
+  rw[ghost_rel_def] >> drule_all inst_pair_ops_ghost >> strip_tac >>
+  fs[inst_pair_def] >> simp[store_taint_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem imm_taint_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\ ghost_rel sg G tn G' tn' ==>
+  imm_taint tn' inst' s' = imm_taint tn inst s
+Proof
+  rw[ghost_rel_def] >> drule_all inst_pair_ops_ghost >> strip_tac >>
+  fs[inst_pair_def] >> simp[imm_taint_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem ret_taint_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\ ghost_rel sg G tn G' tn' ==>
+  ret_taint tn' inst' s' = ret_taint tn inst s
+Proof
+  rw[ghost_rel_def] >> drule_all inst_pair_ops_ghost >> strip_tac >>
+  fs[inst_pair_def] >> simp[ret_taint_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[LIST_REL_CONS1] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem out_prov_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\ ghost_rel sg G tn G' tn' /\
+  execution_frame t' = execution_frame t /\
+  (!x x'. inst.inst_outputs = [x] /\ inst'.inst_outputs = [x'] ==>
+          lookup_var x' t' = lookup_var x t) ==>
+  out_prov PG G' inst' t' = out_prov PG G inst t
+Proof
+  rw[ghost_rel_def] >> drule_all inst_pair_ops_ghost >> strip_tac >>
+  `LIST_REL (op_rename sg) inst.inst_operands inst'.inst_operands` by
+    fs[inst_pair_def] >>
+  `first_prov G' inst'.inst_operands = first_prov G inst.inst_operands` by
+    metis_tac[first_prov_rename] >>
+  imp_res_tac execution_frame_fields >>
+  fs[inst_pair_def] >> simp[out_prov_def] >>
+  Cases_on `inst.inst_opcode = ALLOCA` >> gvs[] >>
+  Cases_on `inst.inst_opcode = DALLOCA` >> gvs[]
+  >- (namedCases_on `inst.inst_outputs` ["", "x xs"] >> gvs[] >>
+      Cases_on `inst'.inst_outputs` >> gvs[] >>
+      Cases_on `xs` >> gvs[] >> Cases_on `t''` >> gvs[]) >>
+  Cases_on `inst.inst_opcode = PARAM` >> gvs[] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[LIST_REL_CONS1] >>
+  rename1 `op_rename sg o1 oo` >>
+  qpat_x_assum `op_rename sg o1 oo` mp_tac >>
+  Cases_on `o1` >> Cases_on `oo` >> simp[op_rename_def] >> rpt strip_tac >>
+  gvs[] >> BasicProvers.every_case_tac >> gvs[]
+QED
+
+Theorem step_writes_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\
+  execution_frame t' = execution_frame t ==>
+  step_writes inst' s' t' = step_writes inst s t
+Proof
+  strip_tac >> drule_all inst_pair_ops >> strip_tac >>
+  imp_res_tac execution_frame_fields >>
+  fs[inst_pair_def, state_rel_def] >> imp_res_tac execution_frame_fields >>
+  `source_memory_write_ranges inst' s' = source_memory_write_ranges inst s` by
+    metis_tac[write_ranges_pair] >>
+  simp[step_writes_def]
+QED
+
+Theorem new_site_bytes_frame:
+  execution_frame s' = execution_frame s /\
+  execution_frame t' = execution_frame t ==>
+  new_site_bytes s' t' = new_site_bytes s t
+Proof
+  strip_tac >> imp_res_tac execution_frame_fields >> simp[new_site_bytes_def]
+QED
+
+(* A paired step updates the ghosts alike. *)
+Theorem step_ghost_pair:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\
+  execution_frame t' = execution_frame t /\ vars_rel sg' t t' /\
+  out_rename_ok sg inst.inst_outputs inst'.inst_outputs sg' /\
+  ghost_rel sg G tn G' tn' ==>
+  ghost_rel sg' (step_prov PG G inst t) (step_taint inst s t tn)
+                (step_prov PG G' inst' t') (step_taint inst' s' t' tn')
+Proof
+  strip_tac >>
+  `out_taint tn' inst' s' = out_taint tn inst s` by metis_tac[out_taint_pair] >>
+  `written_taint tn' inst' s' = written_taint tn inst s` by
+    metis_tac[written_taint_pair] >>
+  `!X opc. store_taint opc tn' inst' s' X = store_taint opc tn inst s X` by
+    metis_tac[store_taint_pair] >>
+  `imm_taint tn' inst' s' = imm_taint tn inst s` by metis_tac[imm_taint_pair] >>
+  `step_writes inst' s' t' = step_writes inst s t` by
+    metis_tac[step_writes_pair] >>
+  `execution_frame s' = execution_frame s` by fs[state_rel_def] >>
+  `new_site_bytes s' t' = new_site_bytes s t` by
+    metis_tac[new_site_bytes_frame] >>
+  imp_res_tac execution_frame_fields >>
+  `inst'.inst_opcode = inst.inst_opcode /\
+   LENGTH inst'.inst_outputs = LENGTH inst.inst_outputs` by fs[inst_pair_def] >>
+  fs[ghost_rel_def] >>
+  simp[step_taint_def, step_prov_def, mem_taint_def, adopt_reset_def] >>
+  irule set_ghost_rel >> simp[] >> reverse conj_tac >- (qexists `sg` >> simp[]) >>
+  rpt strip_tac >>
+  mp_tac (SPEC_ALL out_prov_pair) >> simp[] >> impl_tac >- gvs[ghost_rel_def, vars_rel_def] >>
+  simp[]
+QED
+
+Theorem step_inst_copy:
+  (inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP) /\
+  step_inst fuel C inst' s' = OK t' ==>
+  (inst'.inst_opcode = NOP /\ t' = s') \/
+  (?x' op v. inst'.inst_opcode = ASSIGN /\ inst'.inst_operands = [op] /\
+             inst'.inst_outputs = [x'] /\ eval_operand op s' = SOME v /\
+             t' = update_var x' v s')
+Proof
+  strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]
+QED
+
+Theorem step_inst_copy_not_intret:
+  (inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP) ==>
+  (!v e. step_inst fuel C inst' s' <> IntRet v e) /\
+  (!h. step_inst fuel C inst' s' <> Halt h)
+Proof
+  strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]
+QED
+
+Theorem step_inst_invoke_not_intret:
+  inst.inst_opcode = INVOKE ==> step_inst fuel C inst s <> IntRet v e
+Proof
+  rw[Once step_inst_def] >> BasicProvers.every_case_tac >> simp[]
+QED
+
+(* An output-only copy leaves the frame and all but its output's ghosts. *)
+Theorem step_ghost_copy:
+  (inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP) /\
+  step_inst fuel C inst' s' = OK t' /\
+  copy_rename_ok sg inst' sg' /\ ghost_rel sg G tn G' tn' ==>
+  execution_frame t' = execution_frame s' /\
+  ghost_rel sg' G tn (step_prov PG G' inst' t') (step_taint inst' s' t' tn')
+Proof
+  strip_tac >> drule_at (Pos last) step_inst_copy >> (impl_tac >- fs[]) >>
+  strip_tac >>
+  `inst'.inst_opcode <> MSTORE /\ inst'.inst_opcode <> ISTORE /\
+   inst'.inst_opcode <> MCOPY /\ inst'.inst_opcode <> CALL /\
+   inst'.inst_opcode <> SSTORE /\ inst'.inst_opcode <> TSTORE /\
+   inst'.inst_opcode <> STATICCALL /\ inst'.inst_opcode <> DELEGATECALL` by
+    gvs[] >>
+  `written_taint tn' inst' s' = {}` by
+    (simp[written_taint_def] >> BasicProvers.every_case_tac >> gvs[]) >>
+  `source_memory_write_ranges inst' s' = []` by
+    gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  `new_site_bytes s' t' = {}` by
+    (gvs[new_site_bytes_def, update_var_def, pred_setTheory.EXTENSION,
+         finite_mapTheory.flookup_thm] >> metis_tac[]) >>
+  gvs[update_var_def, step_taint_def, step_prov_def, mem_taint_def,
+      step_writes_def, range_bytes_def, store_taint_def,
+      imm_taint_def, adopt_reset_def, ghost_rel_def] >>
+  gvs[vars_ghost_rel_def, copy_rename_ok_def, FLOOKUP_set_prov,
+      var_taint_set] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  gvs[out_prov_def, out_taint_def, first_prov_def, op_prov_def,
+      eval_operand_def, lookup_var_def, op_taint_var] >>
+  BasicProvers.every_case_tac >> gvs[] >> res_tac >> gvs[]
+QED
