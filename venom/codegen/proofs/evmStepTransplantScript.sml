@@ -811,6 +811,22 @@ Proof
     (simp[vfmContextTheory.execution_state_component_equality]) >> metis_tac[]
 QED
 
+Theorem transplant_step_eq:
+  step s = handle step_inner handle_step s
+Proof
+  simp[step_def, step_inner_def]
+QED
+
+Theorem transplant_singleton_handler_not_inl[local]:
+  s.contexts = [(d,rb)] ==> handle_step e s <> (INL (),t)
+Proof
+  strip_tac >> strip_tac >>
+  `LENGTH s.contexts = 1` by simp[] >>
+  drule_all handle_step_preserves_length_1 >> strip_tac >>
+  `s.contexts <> []` by simp[] >>
+  drule_all handle_step_inl_pops >> simp[]
+QED
+
 Theorem step_transplant_continue:
   es.contexts = (c, rb) :: rest /\ rest <> [] /\ wf_state es /\
   (!op. next_opcode c = SOME op ==>
@@ -819,7 +835,19 @@ Theorem step_transplant_continue:
   ?c'. t.contexts = [(c', rb)] /\
        step es = (INL (), t with contexts := (c', rb) :: rest)
 Proof
-  cheat
+  strip_tac >>
+  `wf_context c` by gvs[wf_state_def] >>
+  Cases_on `step_inner (es with contexts := [(c,rb)])` >>
+  rename1 `step_inner (es with contexts := [(c,rb)]) = (res,u)` >>
+  drule_at (Pat `step_inner _ = _`) transplant_raw_boundary >> simp[] >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  Cases_on `res` >>
+  gvs[transplant_step_eq, handle_def]
+  >- (rename1 `u.contexts = [(d,rb)]` >>
+      `es with contexts := (c,rb)::rest = es` by
+        simp[vfmContextTheory.execution_state_component_equality] >>
+      first_x_assum (qspec_then `rest` mp_tac) >> simp[]) >>
+  metis_tac[transplant_singleton_handler_not_inl]
 QED
 
 (* c' is the head as the single-context run leaves it; the frame's
