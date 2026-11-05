@@ -1187,6 +1187,100 @@ Proof
   simp[] >> strip_tac >> gvs[]
 QED
 
+Theorem asm_run_call_stops_after_step:
+  step s = (r,t) /\ (~ISL r \/ LENGTH t.contexts < LENGTH s.contexts) ==>
+  run_call s = SOME (r,t)
+Proof
+  strip_tac >> drule vfmAccountFrameTheory.run_call_step_equation >>
+  simp[Once WhileTheory.OWHILE_THM] >>
+  Cases_on `ISL r` >> gvs[]
+QED
+
+Theorem asm_handle_step_oog_singleton:
+  t.contexts = [(c,rb)] /\ c.gasUsed <= c.msgParams.gasLimit ==>
+  handle_step (SOME OutOfGas) t =
+    (INR (SOME OutOfGas), t with contexts :=
+      [(c with <| gasUsed := c.msgParams.gasLimit; returnData := [] |>,rb)])
+Proof
+  strip_tac >>
+  simp[handle_step_def, handle_create_def, get_return_data_def,
+       get_output_to_def, get_current_context_def, bind_def,
+       ignore_bind_def, return_def, handle_def, reraise_def] >>
+  Cases_on `c.msgParams.outputTo` >>
+  simp[handle_def, bind_def, ignore_bind_def, return_def, reraise_def,
+       handle_exception_def, get_gas_left_def, get_current_context_def,
+       consume_gas_def, set_current_context_def, set_return_data_def,
+       get_num_contexts_def, assert_def]
+QED
+
+Theorem asm_call_prepare_failure_starved:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\ wf_state s /\
+  ~c.msgParams.static /\ next_opcode c = SOME op /\
+  (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
+  asm_call_prepare op s = (INR e,t) ==>
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_failure_step >> disch_tac >>
+  drule_all asm_call_prepare_failure_view >> strip_tac >>
+  `c.gasUsed <= c.msgParams.gasLimit` by
+    (qpat_x_assum `wf_state s` mp_tac >> simp[wf_state_def, wf_context_def]) >>
+  qmatch_asmsub_abbrev_tac `t.contexts = (popped,rb)::rest` >>
+  `popped.gasUsed <= popped.msgParams.gasLimit` by simp[Abbr `popped`] >>
+  Cases_on `rest`
+  >- suspend "single" >>
+  PairCases_on `h` >>
+  `?mr. c.msgParams.outputTo = Memory mr` by metis_tac[NOT_CONS_NIL] >>
+  pop_assum strip_assume_tac >>
+  `popped.msgParams.outputTo = Memory mr` by simp[Abbr `popped`] >>
+  `LENGTH h0.stack < stack_limit` by
+    (qpat_x_assum `wf_state s` mp_tac >> simp[wf_state_def, stack_room_ok_def]) >>
+  drule_all asm_handle_step_memory >> disch_tac >>
+  `OutOfGas <> Reverted` by simp[] >>
+  drule_all asm_handle_exception_memory_exception >> disch_tac >>
+  suspend "nested"
+QED
+
+Resume asm_call_prepare_failure_starved[single]:
+  drule_all asm_handle_step_oog_singleton >> disch_tac >>
+  `step s = (INR (SOME OutOfGas), t with contexts :=
+    [(popped with <|gasUsed := popped.msgParams.gasLimit; returnData := []|>,rb)])`
+    by metis_tac[] >>
+  drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
+  simp[frame_resource_starved_def, frame_outcome_def] >>
+  qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]
+QED
+
+Resume asm_call_prepare_failure_starved[nested]:
+  `step s = (INL (), t with <| contexts :=
+      (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
+        memory := buffer_write mr.offset [] h0.memory|>,h1)::t'; rollback := rb|>)`
+    by simp[] >>
+  drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
+  simp[frame_resource_starved_def, frame_outcome_def] >>
+  metis_tac[]
+QED
+Finalise asm_call_prepare_failure_starved
+Theorem asm_frame_call_prepare_failure_starved:
+  asm_frame_rel prog data es0 as s /\
+  s.contexts = (c,rb)::rest /\ next_opcode c = SOME op /\
+  (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
+  asm_call_prepare op s = (INR e,t) ==>
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s'
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  simp[asm_frame_rel_def] >> rpt strip_tac >>
+  `~c.msgParams.static` by metis_tac[CONS_11, pairTheory.PAIR_EQ] >>
+  drule_all asm_call_prepare_failure_starved >> strip_tac >>
+  drule_all frame_resource_starved_mid >> metis_tac[]
+QED
+
+
 
 Theorem asm_expand_memory_append_zeros[local]:
   asm_expand_memory n mem =
