@@ -1729,6 +1729,25 @@ Proof
   metis_tac[]
 QED
 
+Theorem alias_regular_plan_holds_live:
+  inst.inst_opcode <> JMP /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) /\
+  MEM x live /\ (plan_holds ps (Var x) \/ MEM x inst.inst_outputs) ==>
+  plan_holds qs (Var x)
+Proof
+  strip_tac >> (drule_all alias_regular_plan_forward_stages >> strip_tac >>
+  reverse (Cases_on `plan_holds ps (Var x)`)
+  >- metis_tac[] >>
+  `PERM (compute_operands inst) selected` by metis_tac[PERM_SYM] >>
+  `LENGTH selected = LENGTH (compute_operands inst)` by metis_tac[PERM_LENGTH] >>
+  `plan_holds (reordered with ps_stack :=
+     stack_pop (LENGTH selected) reordered.ps_stack) (Var x)` by
+    metis_tac[alias_emit_reorder_consume_live] >>
+  metis_tac[])
+QED
+
 Theorem alias_regular_plan_var_support:
   inst.inst_opcode <> JMP /\ alias_var_mass x ps <= 1 /\
   (plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
