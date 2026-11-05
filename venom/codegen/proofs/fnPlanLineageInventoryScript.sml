@@ -273,6 +273,62 @@ Proof
   simp[] >> strip_tac >> ASM_SET_TAC[]
 QED
 
+Theorem release_spill_pairs_domain[local]:
+  !pairs ps.
+    FDOM (FOLDL (\ps' (op,off).
+      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                  ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps pairs).ps_spilled =
+    FDOM ps.ps_spilled DIFF set (MAP FST pairs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
+  simp[FDOM_DOMSUB] >> ASM_SET_TAC[]
+QED
+
+Theorem release_dead_spills_domain:
+  !next ps. FDOM (release_dead_spills next ps).ps_spilled =
+    FDOM ps.ps_spilled INTER set (MAP Var next)
+Proof
+  rpt gen_tac >>
+  simp[release_dead_spills_def, release_spill_pairs_domain, EXTENSION,
+       MEM_MAP, MEM_FILTER, pairTheory.EXISTS_PROD,
+       alistTheory.MEM_pair_fmap_to_alist_FLOOKUP] >>
+  gen_tac >> Cases_on `x` >> simp[] >>
+  gvs[FLOOKUP_DEF] >> metis_tac[]
+QED
+
+(* JMP integration boundary (not a reachable-state replay theorem):
+   compute_operands JMP = [], and a well-formed JMP has no outputs.
+   Thus its input emission and subsequent reorder of [] are identities;
+   consuming zero operands and pushing no outputs do not change the map.
+   generate_emit_ops for JMP changes no persistent spills.  Its join branch
+   restores targets then reorders them, and its no-output postfix releases
+   dead spills, exactly the three map stages below.
+   For an actual edge cur -> target, targets are
+     MAP Var (input_vars_from cur target_bb.bb_instructions
+                (live_vars_at liveness target 0)).
+   The remaining consumer premise is inclusion of MAP Var next_liveness
+   in these targets (at the terminal JMP, next_liveness is the predecessor's
+   analyzed live-out).  This inclusion is not supplied by this generic
+   boundary, nor does empty persistent domain equate scratch allocators
+   or establish temporal PHI shielding of residual stack prefixes. *)
+Theorem restore_reorder_release_spilled_empty:
+  !targets next dfg ps rOps psR qOps psQ.
+    restore_spilled_plan targets ps = (rOps,psR) /\
+    reorder_plan dfg targets psR = (qOps,psQ) /\
+    set (MAP Var next) SUBSET set targets ==>
+    (release_dead_spills next psQ).ps_spilled = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FDOM psR.ps_spilled = FDOM ps.ps_spilled DIFF set targets` by
+    (qspec_then `targets` (qspec_then `ps` mp_tac)
+      restore_spilled_plan_domain >> simp[]) >>
+  simp[GSYM FDOM_EQ_EMPTY, release_dead_spills_domain, EXTENSION] >>
+  gen_tac >> Cases_on `MEM x (MAP Var next)` >> simp[] >>
+  `MEM x targets /\ x NOTIN FDOM psR.ps_spilled` by ASM_SET_TAC[] >>
+  drule_all reorder_plan_pending_not_spilled >>
+  disch_then (qspec_then `dfg` mp_tac) >> simp[]
+QED
+
 Theorem restore_spilled_plan_inventory_exhausted:
   !S ps ops. lineage_inventory S ps /\ S SUBSET set ops ==>
     (SND (restore_spilled_plan ops ps)).ps_spilled = FEMPTY
