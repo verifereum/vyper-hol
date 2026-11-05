@@ -5724,3 +5724,84 @@ Resume eval_expr_nopop_array_selection_after[immutable]:
   qpat_x_assum `!sb err. _ ==> _` drule_all >> simp[] >> metis_tac[]
 QED
 Finalise eval_expr_nopop_array_selection_after
+
+Theorem vv_holds_read_result:
+  vv_holds cenv cx ty pv vv es s ==>
+  ?v. read_result cx pv es = (INL v,es)
+Proof
+  Cases_on `vv` >> simp[vv_holds_def] >> strip_tac >>
+  Cases_on `p.ptr_location` >>
+  gvs[storage_holds_def, immutable_holds_def] >> metis_tac[]
+QED
+
+Theorem eval_expr_nopop_array_read_after:
+  EVERY scope_well_typed s.scopes /\ ~expr_has_pop obj /\ ~expr_has_pop idx /\
+  eval_expr cx obj s = (INL pv,mid) /\ eval_expr cx idx mid = (res,t) /\
+  eval_result_typed (env,cx,t) pv (Type (ArrayT et bd)) /\
+  env.type_defs = get_tenv cx /\ state_well_typed t /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  vv_holds cenv cx (ArrayT et bd) pv vv t q ==>
+  ?av. read_result cx pv t = (INL (ArrayV av),t) /\
+    value_has_type (ArrayTV evt bd) (ArrayV av)
+Proof
+  strip_tac >> drule vv_holds_read_result >> strip_tac >>
+  Cases_on `pv`
+  >- (gvs[eval_result_typed_def, read_result_def, return_def] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def])
+  >- (rename1 `PlaceR p` >> Cases_on `p`
+      >- suspend "storage"
+      >- suspend "memory"
+      >> suspend "immutable") >>
+  gvs[eval_result_typed_def]
+QED
+Resume eval_expr_nopop_array_read_after[storage]:
+  gvs[eval_result_typed_def] >>
+  `value_has_type (ArrayTV evt bd) v` by
+    (irule read_nonmemory_place_success_type >>
+     simp[] >> goal_assum (drule_at Any) >>
+     simp[GSYM read_result_def] >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
+QED
+Resume eval_expr_nopop_array_read_after[memory]:
+  rename1 `MemoryPlace id path` >>
+  `t.scopes = mid.scopes` by
+    (drule_all eval_expr_nopop_scopes >> simp[]) >>
+  `eval_result_typed (env,cx,mid) (PlaceR (MemoryPlace id path))
+     (Type (ArrayT et bd))` by
+    gvs[eval_result_typed_def, vyperPlaceTypingTheory.runtime_place_typed_memory] >>
+  `evaluate_type env.type_defs (ArrayT et bd) = SOME (ArrayTV evt bd)` by simp[] >>
+  drule_all eval_expr_nopop_memory_selection_after >> strip_tac >> gvs[] >>
+  rename1 `value_has_type (ArrayTV evt bd) arr` >>
+  Cases_on `arr` >> gvs[vyperTypingTheory.value_has_type_def]
+QED
+Resume eval_expr_nopop_array_read_after[immutable]:
+  gvs[eval_result_typed_def] >>
+  `value_has_type (ArrayTV evt bd) v` by
+    (irule read_nonmemory_place_success_type >>
+     simp[] >> goal_assum (drule_at Any) >>
+     simp[GSYM read_result_def] >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
+QED
+Finalise eval_expr_nopop_array_read_after
+
+Theorem eval_expr_nopop_array_witnesses_after:
+  EVERY scope_well_typed s.scopes /\ ~expr_has_pop obj /\ ~expr_has_pop idx /\
+  eval_expr cx obj s = (INL pv,mid) /\ eval_expr cx idx mid = (res,t) /\
+  eval_result_typed (env,cx,t) pv (Type (ArrayT et bd)) /\
+  env.type_defs = get_tenv cx /\ state_well_typed t /\
+  vv_holds cenv cx (ArrayT et bd) pv vv t q ==>
+  ?evt av. evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+    read_result cx pv t = (INL (ArrayV av),t) /\
+    value_has_type (ArrayTV evt bd) (ArrayV av) /\
+    bound_length bd < dimword (:256)
+Proof
+  strip_tac >>
+  `?tv. evaluate_type (get_tenv cx) (ArrayT et bd) = SOME tv` by
+    (Cases_on `pv` >> gvs[eval_result_typed_def]) >>
+  `?evt. tv = ArrayTV evt bd` by
+    (qpat_x_assum `evaluate_type _ _ = SOME tv` mp_tac >>
+     simp[Once vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  gvs[] >> drule_all eval_expr_nopop_array_read_after >> strip_tac >>
+  drule evaluate_array_capacity_bound >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
