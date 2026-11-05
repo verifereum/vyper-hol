@@ -4,7 +4,8 @@ Theory bodyMemAssignAttrStorage
 Ancestors
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
   vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
-  exprSimMemUnwrap exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
+  exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
+  exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
 Libs
   monadsyntax
 
@@ -134,6 +135,74 @@ Proof
   `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Theorem vv_post_emit_cursor_mem_src[local]:
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) ==>
+  vv_post ctx func ce cx e es sa sn s0 ee tv vv
+    (update_var x w s with vs_inst_idx := n)
+Proof
+  simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
+QED
+
+Theorem vv_store_bound_frame_mem_src[local]:
+  vv_store_bound cx ty lt es tv vv s /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  s.vs_alloca_next <= t.vs_alloca_next ==>
+  vv_store_bound cx ty lt es tv vv t
+Proof
+  Cases_on `vv` >> simp[vv_operand_def, vv_store_bound_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem vv_post_add_path_mem_src[local]:
+  emit_op ADD [Lit kb; Lit ko] sm = (dst,sn) /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv s /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    vv_post ctx func ce cx e es sa sn s0 ee tv vv t /\
+    vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv t /\
+    eval_operand dst t = SOME (kb + ko) /\
+    (?x. dst = Var x /\ not_fresh_at sn x) /\
+    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sn.cs_current_insts
+Proof
+  strip_tac >>
+  `local_ptrs_reserved ce sm` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  `step_inst_base
+     (mk_inst sm.cs_next_id ADD [Lit kb; Lit ko]
+       [STRING #"%" (toString sm.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sm.cs_next_var)) (kb + ko) s)` by
+    simp[step_inst_base_def, venomInstTheory.mk_inst_def, exec_pure2_def,
+         eval_operand_def, wordsTheory.WORD_ADD_COMM] >>
+  drule_at (Pat `emit_op _ _ _ = _`) emit_op_word_path_frame_mem >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (qspec_then `kb + ko` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexists_tac `t` >> simp[] >> conj_tac
+  >- (gvs[] >> irule vv_post_update_var >>
+      conj_tac >- simp[] >> qexists_tac `sm` >>
+      drule emitted_insts_emit_op >> strip_tac >>
+      simp[] >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
+  irule vv_store_bound_frame_mem_src >> goal_assum (drule_at Any) >>
+  simp[] >> gvs[] >>
+  irule literal_operand_frame >>
+  reverse conj_tac >- simp[update_var_def] >>
+  qexists_tac `sm` >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem body_assign_attr_storage_mem:
