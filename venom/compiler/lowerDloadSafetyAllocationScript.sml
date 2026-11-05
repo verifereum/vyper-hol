@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyAllocation
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyAdvance lowerDloadSafetyUpdates
-  lowerDloadConfiguredOrigins
+  lowerDloadConfiguredOrigins lowerDloadSafetyAmbient
   venomExecSemantics ptrDiscipline lowerDloadSafetyKernel
   venomState venomInst memLocDefs codegenRel finite_map pred_set
 
@@ -469,4 +469,198 @@ Theorem ld_fresh_alloca_dispatch:
 Proof
   strip_tac >> drule_all ld_alloca_step >> strip_tac >>
   gvs[exec_alloca_def] >> simp[ld_alloca_step, exec_alloca_def]
+QED
+
+(* Allocation-changing reconstruction; the value/byte effect is supplied by
+   ld_fresh_alloca_effect, independently of the next instruction location. *)
+Theorem ld_sync_fresh_alloca_update:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
+  (!d. ~ld_private f d inst.inst_id) /\
+  exec_alloca inst s sz = OK ss /\ exec_alloca inst t sz = OK ts /\
+  A' = A |+ ((f.lf_serial,inst.inst_id),
+    (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
+  tt = ts with vs_inst_idx := SUC p /\
+  g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
+  frame_reachable vs0 C stk PG G' tn' fn next sn /\ active_inst fn next sn /\
+  G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
+  ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
+  lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
+  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) /\
+  FRANGE H' SUBSET FDOM A' ==>
+  ld_sync lo P C vs0 stk PG G' tn' fn next sn tt A' (g::fs) N /\
+  ld_global lo A' (g::fs)
+Proof
+  strip_tac >>
+  `f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn` by
+    (drule ld_sync_active >> simp[]) >>
+  `ld_maps A' (f with <|lf_src := ss; lf_tgt := ts|>)` by
+    (gvs[] >> irule ld_maps_fresh_original >> simp[] >>
+     drule ld_sync_active >> simp[]) >>
+  `ld_intervals lo ss /\ ld_intervals lo ts` by
+    (conj_tac >> irule ld_intervals_exec_alloca >>
+     drule ld_sync_active >> simp[] >> metis_tac[]) >>
+  `EVERY (\h. ld_erase A' o_f h.lf_H = ld_erase A o_f h.lf_H /\
+    MAP (OPTION_MAP (ld_erase A')) h.lf_Q =
+      MAP (OPTION_MAP (ld_erase A)) h.lf_Q) (f::fs)` by
+    (qpat_x_assum `A' = _` SUBST1_TAC >>
+     irule ld_global_fresh_erasures >> simp[] >> qexists_tac `lo` >> simp[]) >>
+  `EVERY (\h. ld_maps A' h /\ ld_vars P A' h) fs` by
+    (gvs[] >> irule ld_frames_fresh_update >> simp[] >>
+     gvs[ld_sync_def, listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
+  `ld_global lo A' ((g with lf_H := f.lf_H)::fs)` by
+    (irule ld_global_insert_head >>
+     qexistsl_tac [`A`,`inst.inst_id`,`f`,`w2n sz`] >>
+     gvs[exec_alloca_def, update_var_def]) >>
+  `!source. ld_sites ((g with lf_H := f.lf_H)::fs) source =
+      ld_sites (g::fs) source` by
+    (gen_tac >> simp[NoAsms, ld_sites_def, EXTENSION] >>
+     gen_tac >> PairCases_on `x` >> simp[] >>
+     Cases_on `x0` >> simp[]) >>
+  `g.lf_H = H'` by simp[] >>
+  reverse conj_tac
+  >- (qpat_x_assum `g = _` kall_tac >>
+      qpat_x_assum `A' = _` kall_tac >>
+      qpat_x_assum `ld_global lo A' _` mp_tac >>
+      simp[ld_global_def] >> strip_tac >>
+      conj_tac >- (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `!source j aid b n. _ ==> _ /\ _` drule >> simp[]) >>
+      conj_tac >- (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `!source j aid b n j' aid' b' n'. _` irule >>
+        simp[] >> metis_tac[]) >>
+      rpt gen_tac >> strip_tac >> gvs[SUBSET_DEF] >>
+      metis_tac[]) >>
+  `ld_slots A' (g::fs) = (f.lf_serial,inst.inst_id) INSERT ld_slots A (f::fs)` by
+    (qpat_x_assum `A' = _` SUBST1_TAC >>
+     irule ld_slots_insert_head >>
+     gvs[exec_alloca_def, update_var_def, ld_sync_def, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
+  `ld_maps A' g /\ ld_intervals lo sn /\ ld_intervals lo tt` by
+    (conj_tac
+     >- (qpat_x_assum `ld_maps _ (f with <|lf_src := ss; lf_tgt := ts|>)` mp_tac >>
+         simp[ld_maps_def, ld_private_def] >> strip_tac >> asm_rewrite_tac[]) >>
+     gvs[ld_intervals_def] >> rpt conj_tac >> first_x_assum ACCEPT_TAC) >>
+  `g.lf_serial = f.lf_serial /\ g.lf_fn = fn /\
+    g.lf_supply = f.lf_supply /\ g.lf_Q = f.lf_Q /\ g.lf_E = f.lf_E /\
+    g.lf_src = sn /\ g.lf_tgt = tt /\ g.lf_tv = tn'.t_var /\
+    sn.vs_alloca_next = s.vs_alloca_next + w2n sz /\
+    tt.vs_alloca_next = t.vs_alloca_next + w2n sz /\
+    sn.vs_current_bb = tt.vs_current_bb /\ sn.vs_prev_bb = tt.vs_prev_bb` by
+    (drule ld_sync_control >> gvs[exec_alloca_def, update_var_def]) >>
+  `!xs. ld_charge (g::xs) = ld_charge (f::xs)` by simp[ld_charge_def] >>
+  qpat_x_assum `g = _` kall_tac >>
+  qpat_x_assum `sn = _` kall_tac >> qpat_x_assum `tt = _` kall_tac >>
+  `FDOM A' = (f.lf_serial,inst.inst_id) INSERT FDOM A` by simp[] >>
+  qpat_x_assum `A' = _` kall_tac >>
+  qpat_x_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N` mp_tac >>
+  simp[ld_sync_def] >> strip_tac >>
+  fs[listTheory.EVERY_MEM] >> simp[] >>
+  conj_tac
+  >- (gen_tac >> Cases_on `j`
+      >- (qpat_x_assum `!j. _ ==> (EL j (f::fs)).lf_tgt.vs_alloca_next = _`
+            (qspec_then `0` mp_tac) >> simp[]) >>
+      qpat_x_assum `!j. _ ==> (EL j (f::fs)).lf_tgt.vs_alloca_next = _`
+        (qspec_then `SUC n` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> Cases_on `j` >> simp[]
+      >- metis_tac[] >>
+      qpat_x_assum `!j. _ ==> ?X. ld_envelope _ _ _ _ X _`
+        (qspec_then `SUC n` mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  `MEM (EL j fs) fs` by (irule listTheory.EL_MEM >> simp[]) >>
+  qpat_x_assum `!h. MEM h fs ==> ld_erase _ o_f _ = _ /\ _` drule >>
+  simp[]
+QED
+
+Theorem ld_fresh_alloca_advance:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ ir_supply_covers_fn f.lf_supply fn /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [Lit sz] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  step_inst fuel C' inst t = OK ts /\
+  ss = update_var out (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+
+      (inst.inst_id,(s.vs_alloca_next,w2n sz));
+      vs_alloca_next := s.vs_alloca_next + w2n sz|>) /\
+  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
+  tt = ts with vs_inst_idx := SUC p /\
+  A' = A |+ ((f.lf_serial,inst.inst_id),
+    (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+  g = f with <|lf_src := sn; lf_tgt := tt;
+    lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+    lf_tv := (step_taint inst s ss tn).t_var|> /\
+  active_inst fn next sn /\
+  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) ==>
+  step_inst fuel C inst s = OK ss /\
+  ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+    (step_taint inst s ss tn) fn next sn tt A' (g::fs) N /\
+  ld_global lo A' (g::fs)
+Proof
+  strip_tac >>
+  `lo <= t.vs_alloca_next` by
+    (irule ld_sync_frontier_lower_bound >> simp[] >> metis_tac[]) >>
+  `lo <= s.vs_alloca_next` by
+    (drule ld_sync_source >> strip_tac >>
+     drule_all ld_frame_raw_reachable >> strip_tac >>
+     drule lowerDloadFrontierTheory.ld_raw_reachable_frontier >> gvs[ptr_discipline_def]) >>
+  drule_all ld_sync_original_site_fresh >> strip_tac >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  `FRANGE f.lf_H SUBSET FDOM A` by
+    (simp[SUBSET_DEF] >> rpt strip_tac >>
+     irule ld_global_selected >> qexistsl_tac [`f`,`f::fs`,`lo`] >> simp[]) >>
+  `exec_alloca inst s sz = OK ss /\ exec_alloca inst t sz = OK ts` by
+    (conj_tac >- gvs[exec_alloca_def] >>
+     qpat_x_assum `step_inst fuel C' inst t = OK ts` mp_tac >>
+     simp[ld_alloca_step]) >>
+  qpat_x_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+  drule_all ld_fresh_alloca_effect >>
+  disch_then (qspecl_then [`fuel`,`PG`,`C'`,`C`] strip_assume_tac) >>
+  `frame_reachable vs0 C stk PG (step_prov PG G inst ss)
+     (step_taint inst f.lf_src ss tn) f.lf_fn next sn` by
+    (qpat_assum `sn = _` SUBST1_TAC >>
+     irule frame_reachable_next >> drule ld_sync_source >> strip_tac >>
+     gvs[is_terminator_def] >> qexists_tac `fuel` >> simp[]) >>
+  `ld_vars P A' g` by
+    (gvs[ld_vars_def] >> first_x_assum ACCEPT_TAC) >>
+  `ld_memory lo A' (step_taint inst f.lf_src ss tn) sn tt /\
+   ld_nonghost (step_taint inst f.lf_src ss tn) sn tt` by
+    (gvs[ld_memory_def, ld_nonghost_def] >>
+     rpt conj_tac >> first_x_assum ACCEPT_TAC) >>
+  qpat_assum `ss = _` (SUBST1_TAC o SYM) >>
+  qpat_assum `sn = _` (SUBST1_TAC o SYM) >>
+  qpat_assum `tt = _` (SUBST1_TAC o SYM) >>
+  qpat_assum `A' = _` (SUBST1_TAC o SYM) >>
+  qpat_assum `g = _` (SUBST1_TAC o SYM) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `PG = _` (SUBST1_TAC o SYM) >>
+  qpat_assum `G = _` (SUBST1_TAC o SYM) >>
+  drule (INST_TYPE [alpha |-> ``:256``] ld_sync_fresh_alloca_update) >>
+  disch_then drule >>
+  disch_then irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexists_tac `Y` >> first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexists_tac `out` >> first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexistsl_tac [`p`,`ss`,`sz`,`ts`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))` >>
+    conj_tac >- metis_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
