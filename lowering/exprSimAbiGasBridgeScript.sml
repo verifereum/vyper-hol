@@ -12,7 +12,7 @@ Theory exprSimAbiGasBridge
 Ancestors
   fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
   venomInst venomExecSemantics venomState compileEnv list rich_list
-  fragGasPath gasCount arithmetic venomExecProofs
+  fragGasPath gasCount arithmetic venomExecProofs venomInstProps
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -306,6 +306,53 @@ Theorem frag_observer_off_cut_opcodes:
 Proof
   strip_tac >> drule_all frag_observer_code_provenance >>
   fs[frag_gas_free_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem frag_observer_region_closed:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb ==>
+  observer_region_closed ctx (frag_observer sa sb fn id)
+    (frag_observer_cut sb) (frag_observer_region sa sb)
+Proof
+  strip_tac >> rw[observer_region_closed_def] >>
+  fs[abi_observer_step_def] >>
+  drule_all frag_observer_off_cut_opcodes >> strip_tac
+  >- (drule_all step_preserves_control_flow >> strip_tac >>
+      gvs[frag_observer_region_def] >> metis_tac[LESS_EQ_SUC_REFL, LESS_EQ_TRANS]) >>
+  drule eval_phis_preserves_current_bb >> strip_tac >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    (Cases_on `inst.inst_opcode` >>
+     fs[is_terminator_def] >>
+     gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     pairarg_tac >> gvs[]) >>
+  `middle.vs_current_bb <> sa.cs_current_bb` by
+    (irule frag_observer_jump_no_reentry >>
+     qexistsl_tac [`inst`, `s`] >> metis_tac[step_inst_non_invoke]) >>
+  drule frag_observer_lookup_cases >> strip_tac >>
+  fs[frag_observer_region_def, MEM_MAP] >> metis_tac[]
+QED
+
+(* The general transfer interface asks for PHI agreement even at the cut.
+   A zero-length same-block fragment need not provide that agreement. *)
+Theorem frag_observer_empty_phi_agreement_probe:
+  let sa = st with cs_current_insts := [];
+      original = fn with fn_blocks :=
+        [<|bb_label := sa.cs_current_bb;
+           bb_instructions := [mk_inst 0 PHI [] []]|>] in
+  cs_extends sa sa /\ fn_has_code sa sa original /\ frag_gas_free sa sa /\
+  ~region_code_agrees (frag_observer sa sa original 1) original
+    (frag_observer_cut sa) (frag_observer_region sa sa)
+Proof
+  simp_tac (srw_ss()) [LET_THM] >>
+  conj_tac >- simp[cs_extends_same_block] >>
+  conj_tac
+  >- (simp[fn_has_code_def, emitted_blocks_def, lookup_block_def, FIND_thm]) >>
+  conj_tac
+  >- simp[frag_gas_free_def, frag_code_def, emitted_blocks_def, emitted_insts_def] >>
+  simp[frag_observer_def, emitted_blocks_def] >>
+  strip_tac >> fs[region_code_agrees_def] >>
+  qpat_x_assum `!lbl bb. _` (qspec_then `st.cs_current_bb` mp_tac) >>
+  simp[lookup_block_def, FIND_thm, phi_prefix_length_def, mk_inst_def,
+       frag_observer_region_def, emitted_blocks_def]
 QED
 
 Theorem frag_fn_insts_blocks_member[local]:
