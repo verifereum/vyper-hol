@@ -4593,3 +4593,106 @@ Proof
   rpt strip_tac >> irule select_result_current_memory_error >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
+
+(* Round-trip representation is enough for the entire bounds decision,
+   including a negative signed source index. *)
+Theorem idx_in_range_integer_rep:
+  !sgn (w:bytes32) i len.
+    (if sgn then integer_word$w2i w = i else &w2n w = i) /\
+    len < dimword (:256) ==>
+    (idx_in_range sgn w (n2w len) <=> 0 <= i /\ i < &len)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `sgn`
+  >- (fs[] >> Cases_on `w2i w < 0`
+      >- (gvs[idx_in_range_def, integer_wordTheory.WORD_LTi,
+                  integer_wordTheory.word_0_w2i] >> intLib.ARITH_TAC) >>
+      `~word_msb w` by
+        simp[wordsTheory.word_msb_neg,
+             GSYM integer_wordTheory.w2i_lt_0] >>
+      gvs[integer_wordTheory.w2i_def, idx_in_range_def,
+          integer_wordTheory.WORD_LTi,
+          integer_wordTheory.word_0_w2i]) >>
+  gvs[idx_in_range_def]
+QED
+
+Theorem idx_in_range_typed_integer:
+  !sgn bits i len.
+    value_has_type (BaseTV (if sgn then IntT bits else UintT bits)) (IntV i) /\
+    bits <= 256 /\ len < dimword (:256) ==>
+    (idx_in_range sgn (integer_word$i2w i) (n2w len) <=>
+     0 <= i /\ i < &len)
+Proof
+  rpt strip_tac >> irule idx_in_range_integer_rep >> simp[] >>
+  Cases_on `sgn` >> gvs[vyperTypingTheory.value_has_type_def]
+  >- (irule vyperArithTheory.w2i_i2w_within_signed >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  `?j. i = &j` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
+  gvs[integer_wordTheory.i2w_pos] >>
+  `j < dimword (:256)` by
+    (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `2 ** bits` >> simp[wordsTheory.dimword_def]) >>
+  simp[]
+QED
+
+Theorem typed_array_length_capacity:
+  !etv bd av.
+    value_has_type (ArrayTV etv bd) (ArrayV av) ==>
+    array_length (ArrayTV etv bd) av <= bound_length bd
+Proof
+  Cases_on `bd` >> Cases_on `av` >>
+  simp[vyperTypingTheory.value_has_type_def,
+       vyperValueOperationTheory.array_length_def, vyperASTTheory.bound_length_def]
+QED
+
+Theorem idx_in_range_typed_array:
+  !sgn bits i etv bd av.
+    value_has_type (BaseTV (if sgn then IntT bits else UintT bits)) (IntV i) /\
+    bits <= 256 /\ value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    bound_length bd < dimword (:256) ==>
+    (idx_in_range sgn (integer_word$i2w i)
+       (n2w (array_length (ArrayTV etv bd) av)) <=>
+     valid_index (ArrayTV etv bd) av i)
+Proof
+  rpt strip_tac >>
+  drule typed_array_length_capacity >> strip_tac >>
+  simp[valid_index_def] >> irule idx_in_range_typed_integer >>
+  conj_tac >- decide_tac >> qexists_tac `bits` >> simp[]
+QED
+
+Theorem valid_array_index_word_witness:
+  !etv bd av i.
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    valid_index (ArrayTV etv bd) av i ==>
+    ?j. i = &j /\ (integer_word$i2w i : bytes32) = n2w j /\
+        j < array_length (ArrayTV etv bd) av /\ j < bound_length bd
+Proof
+  rpt strip_tac >> drule typed_array_length_capacity >> strip_tac >>
+  fs[valid_index_def] >>
+  `?j. i = &j` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
+  gvs[integer_wordTheory.i2w_pos] >> qexists_tac `j` >> simp[] >> decide_tac
+QED
+
+(* Consumer form: the AST signedness and evaluated index type are the
+   same ones used by expr_post, with its typed word encoding. *)
+Theorem idx_in_range_array_value:
+  !tenv ty itv i etv bd av.
+    is_int_type ty /\ type_bits ty <= 256 /\
+    evaluate_type tenv ty = SOME itv /\ value_has_type itv (IntV i) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    bound_length bd < dimword (:256) ==>
+    (idx_in_range (is_signed_type ty) (typed_val_to_w256 itv (IntV i))
+       (n2w (array_length (ArrayTV etv bd) av)) <=>
+     valid_index (ArrayTV etv bd) av i)
+Proof
+  Cases_on `ty` >> simp[vyperTypeSystemTheory.is_int_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[vyperTypeSystemTheory.is_int_type_def,
+       vyperValueTheory.evaluate_type_def, type_bits_def,
+       is_signed_type_def, valueEncodingTheory.typed_val_to_w256_def,
+       valueEncodingTheory.val_to_w256_def] >>
+  rpt strip_tac >>
+  drule typed_array_length_capacity >> strip_tac >>
+  irule idx_in_range_typed_integer >>
+  conj_tac >- decide_tac >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
