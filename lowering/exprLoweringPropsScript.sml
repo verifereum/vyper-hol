@@ -2020,7 +2020,7 @@ Proof
   first_x_assum (qspecl_then [`cfn`, `cenv`, `r`] mp_tac) >> simp[]
 QED
 
-Theorem ci_mono_compile_multi_exprs[local]:
+Theorem ci_mono_compile_multi_exprs:
   ∀ cfn cenv es sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_multi_exprs cfn cenv es sa))
@@ -3907,13 +3907,50 @@ Proof
   (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
 QED
 
-(* Cache only the INVALID branches: never normalize the large IntCall /
-   ExtCall bodies while speculatively closing these primitive cases. *)
+Theorem ci_mono_compile_raw_log[local]:
+  !cfn cenv ret_ty ty args default_ret sa.
+    (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawLog args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `topics_e::rest` >> Cases_on `rest`
+  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `topics_e::data_e::tail` >> Cases_on `tail` >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  IF_CASES_TAC >> simp[] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_inst >>
+  rpt (CHANGED_TAC (
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
+      (conj_tac >- simp[])) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_alloc_buffer))) >>
+  irule ci_mono_compile_multi_exprs >> simp[]
+QED
+
+Theorem ci_mono_compile_raw_revert[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawRevert args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >> simp[ci_mono_emit_inst, compile_raw_revert_def, comp_bind_def,
+                        LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_inst >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
+
+(* Cache only the INVALID branch: never normalize the large IntCall /
+   ExtCall bodies while speculatively closing this primitive case. *)
 val ci_mono_invalid_call_tac =
   let
     val invalid_calls = map
       (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [6, 7, 8])
+      (map (fn n => cj n compile_call_def) [8])
   in
     CONV_TAC
       (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
@@ -3930,7 +3967,9 @@ Proof
   TRY (irule ci_mono_compile_create_target_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_send_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_target >> simp[] >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>
