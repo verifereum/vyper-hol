@@ -133,3 +133,78 @@ event and bound tnt.t_stor/t_trans/t_imm and target ret_taint by the source
 bounds, with dead_wf moving D across agreement. Existential forward termination
 alone establishes none of this. The generic call lift must expose both
 directions (or a justified deterministic-prefix reflection interface).
+
+## Numeric producer audit (C0.relocation.consumers.producers.numeric)
+
+The target comparison bound is already stronger than the earlier audit found:
+`concretize_canonical_numeric` in `concretizeLayoutNumericScheduleScript.sml`
+proves `p + sz < dimword (:256)` from the stage, `o1_ctx_shape`, source
+`fn_eom = NONE`, and `canonical_metadata C C' a p sz`. Hence EVERY offset
+`off <= sz`, including one-past, satisfies `p + off < dimword (:256)`.
+No liveness, convergence, or extra stage premise is needed for this numeric
+consequence. The metadata bridge and identification of the comparison's
+resolved token with that canonical site are still necessary. Source comparison
+ranges come from `access_ok_def`; actual operands are words, so their `w2n`
+values are already below dimword. An offset witness is `w2n x - b` when
+`b <= w2n x <= b + sz`. This does not assert nonwrap for arbitrary affine
+intermediate values.
+
+The same numeric theorem proves, for POSITIVE `sz`,
+`EVERY (reserved_intervals_disjoint (p,sz)) C.ctx_global_reserved`.
+Together with `fixed_region_reserved lo C`, this gives `lo <= p`: if
+`p < lo`, take the reserved interval covering byte p; either disjointness
+alternative contradicts `pos <= p < pos + size` and `0 < sz`.
+This is a direct natural-arithmetic boundary lemma to extract, NOT a new
+stage assumption. Its precise reusable signature is:
+
+```sml
+fixed_region_reserved lo C /\ 0 < sz /\
+EVERY (reserved_intervals_disjoint (p,sz)) C.ctx_global_reserved ==>
+lo <= p
+```
+
+### Metadata and position selection (still to implement)
+
+* `activation_cache_source_static_item` in `concretizeAnalysisRuntimeItems`
+  supplies `?items. static_alloca_items owner = SOME items /\
+  MEM (Allocation aid,sz) items`, from reachable joint config, initial
+  `o1_run_state_ok`, `o1_ctx_shape`, global distinct IDs, cache membership,
+  and a byte witness `b <= byte /\ byte < b+sz`.
+* That proof also derives `MEM owner C.ctx_functions` using erasure and
+  `frame_history_cfg_invariant`, but exports only the static item. Exporting
+  the membership boundary, or strengthening that existing theorem in place,
+  avoids copying the history proof into each consumer.
+* `concretize_context_local_numeric_find` supplies a position and a FIND
+  entry for an owner's own item from its successful context transformation.
+  `concretize_stage_lookup` supplies that transformation plus output lookup
+  and the observed context. These facts are sufficient for
+  `canonical_metadata_def` using the source owner, items, and output.
+* Define/select `positions owner aid` from that owner's transformed
+  `fn_mems_used` FIND entry, with an arbitrary default outside the certified
+  domain. The bridge cannot hold for an arbitrary unconstrained positions
+  function. `canonical_metadata_unique` (global distinct IDs) reconciles
+  imported metadata with this chosen position.
+* `joint_trace_edge_at` supplies joint reachability at noninitial indices;
+  index zero requires the trace entry reachability boundary. Do not omit
+  this case by imposing `k > 0` on a final consumer.
+
+### Domain caveat for the previously proposed bridge
+
+The bridge quantified over ALL cache entries, whereas the existing runtime
+item producer requires a byte witness and the reservation-avoidance theorem
+is conditional on positive size. `exec_alloca_def` caches zero sizes too;
+`exact_static_alloca_size_def` and `collect_static_allocas_def` also accept
+zero. Thus neither cited theorem by itself proves the all-cache bridge.
+This is an interface gap, NOT a checked counterexample to either stage theorem.
+For write/demand noncollision the cache entries extracted from
+`relocation_pair_def` have an in-interval byte and therefore positive size;
+the economical consumer refinement is a byte-scoped (or positive-size)
+bridge. Comparison pointers can refer to a zero-size site; they need the
+canonical metadata/nonwrap conjunct, but not reservation separation of an
+empty interval. A full cache-to-item boundary without positivity can instead
+use `o1_frame_source_sizes_lookup` / `o1_frame_source_sizes_saved` and exact
+static instruction collection, generalizing `source_alloca_sizes_positive_item`
+in place rather than adding a duplicate near-variant. This remaining proof
+must be owned explicitly before treating all-cache metadata as established.
+
+No frozen wrapper or executable/contract definition was changed by this audit.
