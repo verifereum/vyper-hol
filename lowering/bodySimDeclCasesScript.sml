@@ -309,6 +309,7 @@ Resume body_annassign_memory[copy]:
     metis_tac[body_annassign_declared_rhs, exprLoweringPropsTheory.compile_expr_grows])
   >>~- ([`value_has_type _ _`],
     rpt gen_tac >> strip_tac >>
+    `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
     `value_runtime_typed env typ v /\
      value_runtime_typed env (lowered_value_type cenv e) v` by
       metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_lowered_typed,
