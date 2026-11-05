@@ -987,6 +987,13 @@ Theorem raw_call_outbuf_zero_run[local]:
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,0) /\
     w2n w < dimword (:256) /\ t.vs_memory = s.vs_memory /\
     wb_frame cenv es sa s t /\
+    (!name b sz. local_region cenv es.scopes t name b sz ==>
+      regions_disjoint (w2n w) 0 b sz) /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      regions_disjoint off (type_memory_size tv) (w2n w) 0) /\
     (!x. ov = Var x ==> not_fresh_at sb x)
 Proof
   simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
@@ -995,7 +1002,31 @@ Proof
   `0 < dimword (:256)` by simp[] >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   qexistsl_tac [`t`, `w`] >> simp[wb_frame_def, locals_kept_def] >>
-  fs[]
+  fs[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
+  pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
+    (qspec_then `mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+      [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>
+  fs[mk_inst_def]
+QED
+
+Theorem raw_call_zero_alloca_sep[local]:
+  stmt_state_rel ctx func cenv cx es t /\
+  FLOOKUP t.vs_allocas fresh = SOME (b,0) /\ cutoff <= fresh ==>
+  !aid lb sz. aid < cutoff /\ FLOOKUP t.vs_allocas aid = SOME (lb,sz) ==>
+    regions_disjoint b 0 lb sz
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `aid <> fresh` by decide_tac >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+    venomMemDefsTheory.allocas_non_overlapping_def] >>
+  strip_tac >> first_x_assum drule_all >>
+  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_outbuf_steps[local]:
@@ -1230,14 +1261,15 @@ Theorem raw_call_outbuf_alloc_path[local]:
         FLOOKUP u.vs_allocas sa.cs_next_id =
           SOME (w2n w, if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
         w2n w + (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword (:256) /\
-        (0 < cap ==> w2n (w+32w) = w2n w+32 /\
-          (!name b sz. local_region cenv es.scopes u name b sz ==>
-            regions_disjoint (w2n w) (((cap+31) DIV 32)*32+32) b sz) /\
-          (cenv.ce_is_ctor ==> !name tv v off.
-            FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-            FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-              | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-            regions_disjoint off (type_memory_size tv) (w2n w) (((cap+31) DIV 32)*32+32)))) /\
+        (0 < cap ==> w2n (w+32w) = w2n w+32) /\
+        (!name b sz. local_region cenv es.scopes u name b sz ==>
+          regions_disjoint (w2n w) (if cap=0 then 0 else ((cap+31) DIV 32)*32+32) b sz) /\
+        (cenv.ce_is_ctor ==> !name tv v off.
+          FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+          FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+            | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+          regions_disjoint off (type_memory_size tv) (w2n w)
+            (if cap=0 then 0 else ((cap+31) DIV 32)*32+32))) /\
       safe_operand sb ov /\ safe_operand sb op /\
       (!x. ov = Var x \/ op = Var x ==> not_fresh_at sb x)) (\r. F)
 Proof
@@ -1256,7 +1288,8 @@ Resume raw_call_outbuf_alloc_path[zero]:
   >- (rpt strip_tac >> Cases_on `p` >>
       gvs[safe_operand_def, eval_operand_def] >>
       irule wb_frame_vars >> qexistsl_tac [`cenv`, `es`, `s`, `sa`] >> simp[]) >>
-  gvs[]
+  gvs[local_region_def, lookup_var_def] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume raw_call_outbuf_alloc_path[positive]:
@@ -1277,8 +1310,9 @@ QED
 
 Finalise raw_call_outbuf_alloc_path
 
-val _ = if null (hyp raw_call_outbuf_alloc_path) then ()
-  else raise Fail "raw_call_outbuf_alloc_path retained hypotheses";
+val _ = if null (hyp raw_call_outbuf_zero_run) andalso
+    null (hyp raw_call_zero_alloca_sep) andalso null (hyp raw_call_outbuf_alloc_path) then ()
+  else raise Fail "raw_call outbuf allocation boundary retained hypotheses";
 
 Theorem raw_call_frame_footprint[local]:
   expr_sim_inv cenv cx env es /\
