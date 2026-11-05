@@ -197,7 +197,7 @@ Theorem alias_emit_reorder_consumed_window:
   emit_input_plan opc inputs nl ps = (iops,prepared) /\
   (!op. MEM op inputs /\ is_var_operand op ==>
     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-  PERM inputs selected /\ LENGTH inputs <= 16 /\
+  PERM inputs selected /\
   reorder_plan dfg selected prepared = (rops,arranged) ==>
   LENGTH selected <= LENGTH prepared.ps_stack /\
   arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected
@@ -225,12 +225,17 @@ Proof
   `!x. LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x prepared.ps_stack` by
     metis_tac[] >>
   `LENGTH selected <= LENGTH prepared.ps_stack` by metis_tac[] >>
-  match_mp_tac fixed_suffix_decompose >> conj_tac
-  >- (irule reorder_plan_materialised_length_floor >>
+  Cases_on `LENGTH selected <= 16`
+  >- (match_mp_tac fixed_suffix_decompose >> conj_tac
+      >- (irule reorder_plan_materialised_length_floor >>
+          simp[] >> qexistsl [`dfg`, `rops`, `prepared`] >> simp[]) >>
+      rpt strip_tac >> irule reorder_plan_materialised_order >>
       simp[] >> qexistsl [`dfg`, `rops`, `prepared`] >> simp[]) >>
-  rpt strip_tac >> irule reorder_plan_materialised_order >>
-  simp[] >> qexistsl [`dfg`, `rops`, `prepared`] >> simp[]
+  `16 < LENGTH selected` by decide_tac >>
+  drule_all alias_reorder_plan_large_materialised >> strip_tac >>
+  qpat_x_assum `arranged.ps_stack = _` mp_tac >> simp[stack_pop_def]
 QED
+
 
 Theorem normalize_operand_non_assign_output:
   !fn inst x visited.
@@ -765,7 +770,7 @@ QED
 Theorem alias_emit_reorder_consume_live:
   emit_input_plan opc inputs nl ps = (iops,prepared) /\
   (!op. MEM op inputs /\ is_var_operand op ==> plan_holds ps op) /\
-  PERM inputs selected /\ LENGTH inputs <= 16 /\
+  PERM inputs selected /\
   reorder_plan dfg selected prepared = (rops,arranged) /\
   MEM x nl /\ plan_holds ps (Var x) ==>
   plan_holds
@@ -780,9 +785,22 @@ Proof
   drule_all emit_input_plan_materialised >> disch_tac >>
   drule perm_operand_counts >> strip_tac >>
   `LENGTH selected = LENGTH inputs` by metis_tac[PERM_LENGTH] >>
+  `!op. LIST_ELEM_COUNT op selected <=
+    LIST_ELEM_COUNT op prepared.ps_stack` by metis_tac[] >>
   `!op. MEM op selected ==>
     LIST_ELEM_COUNT op selected <= LIST_ELEM_COUNT op prepared.ps_stack` by
-    metis_tac[] >>
+    simp[] >>
+  reverse (Cases_on `LENGTH inputs <= 16`)
+  >- (`16 < LENGTH selected` by decide_tac >>
+      drule_all alias_reorder_plan_large_materialised >> strip_tac >>
+      mp_tac (Q.SPECL [`inputs`, `opc`, `nl`, `ps`, `x`]
+        emit_input_plan_live_surplus) >> simp[] >>
+      `0 < alias_var_mass x ps` by simp[alias_var_mass_positive] >>
+      qpat_x_assum `arranged.ps_stack = stack_pop _ _ ++ _`
+        (mp_tac o Q.AP_TERM `LIST_ELEM_COUNT (Var x)`) >>
+      simp[elem_count_append, plan_holds_def, GSYM LIST_ELEM_COUNT_MEM,
+           alias_var_mass_def] >>
+      rpt IF_CASES_TAC >> gvs[alias_var_mass_def] >> decide_tac) >>
   Cases_on `MEM (Var x) selected`
   >- (`LENGTH selected <= 16` by simp[] >>
       drule_all reorder_plan_materialised_counts >>
@@ -1904,7 +1922,6 @@ QED
 Theorem alias_regular_plan_holds_live:
   inst.inst_opcode <> JMP /\
   (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
-  LENGTH (compute_operands inst) <= 16 /\
   generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) /\
   MEM x live /\ (plan_holds ps (Var x) \/ MEM x inst.inst_outputs) ==>
   plan_holds qs (Var x)
