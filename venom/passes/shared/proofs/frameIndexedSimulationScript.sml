@@ -14,17 +14,17 @@ Theorem indexed_finite_simulation:
   (!C i s r. finite_step C i s r ==>
     !C' A R FnPair BlockPair InstPair Q PushRel Admin (g:'g) j t.
     indexed_contract C C' A R FnPair BlockPair InstPair Q PushRel Admin /\
-    indexed_entry A R g s t /\ InstPair g i j ==>
+    indexed_entry A R (g:'g) s t /\ InstPair g i j ==>
     ?h r'. finite_step C' j t r' /\ Q g h r r') /\
   (!C bb s r. finite_block C bb s r ==>
     !C' A R FnPair BlockPair InstPair Q PushRel Admin (g:'g) bb' t.
     indexed_contract C C' A R FnPair BlockPair InstPair Q PushRel Admin /\
-    indexed_entry A R g s t /\ BlockPair bb bb' ==>
+    indexed_entry A R (g:'g) s t /\ BlockPair bb bb' ==>
     ?h r'. finite_block C' bb' t r' /\ Q g h r r') /\
   (!C fn s r. finite_run C fn s r ==>
     !C' A R FnPair BlockPair InstPair Q PushRel Admin (g:'g) fn' t.
     indexed_contract C C' A R FnPair BlockPair InstPair Q PushRel Admin /\
-    indexed_entry A R g s t /\ FnPair fn fn' ==>
+    indexed_entry A R (g:'g) s t /\ FnPair fn fn' ==>
     ?h r'. finite_run C' fn' t r' /\ Q g h r r')
 Proof
   ho_match_mp_tac finite_step_ind >> rpt conj_tac
@@ -182,5 +182,56 @@ Resume indexed_finite_simulation[run_next]:
 QED
 
 Finalise indexed_finite_simulation
+
+Theorem indexed_step_simulation:
+  indexed_contract C C' A R FnPair BlockPair InstPair Q PushRel Admin /\
+  indexed_entry A R (g:'g) s t /\ InstPair g i j /\
+  (!e. step_inst n C i s <> Error e) ==>
+  ?m (h:'g) r'. step_inst m C' j t = r' /\ Q g h (step_inst n C i s) r'
+Proof
+  rpt strip_tac >>
+  `finite_step C i s (step_inst n C i s)` by metis_tac[finite_step_iff] >>
+  drule (cj 1 indexed_finite_simulation) >> disch_then drule_all >> strip_tac >>
+  fs[finite_step_iff] >> metis_tac[]
+QED
+
+Theorem indexed_block_simulation:
+  indexed_contract C C' A R FnPair BlockPair InstPair Q PushRel Admin /\
+  indexed_entry A R (g:'g) s t /\ BlockPair bb bb' /\
+  (!e. exec_block n C bb s <> Error e) ==>
+  ?m (h:'g) r'. exec_block m C' bb' t = r' /\ Q g h (exec_block n C bb s) r'
+Proof
+  rpt strip_tac >>
+  `finite_block C bb s (exec_block n C bb s)` by metis_tac[finite_block_iff] >>
+  drule (cj 2 indexed_finite_simulation) >> disch_then drule_all >> strip_tac >>
+  fs[finite_block_iff] >> metis_tac[]
+QED
+
+Theorem indexed_run_simulation:
+  indexed_contract C C' A R FnPair BlockPair InstPair Q PushRel Admin /\
+  indexed_entry A R (g:'g) s t /\ FnPair fn fn' /\
+  (!e. run_blocks n C fn s <> Error e) ==>
+  ?m (h:'g) r'. run_blocks m C' fn' t = r' /\ Q g h (run_blocks n C fn s) r'
+Proof
+  rpt strip_tac >>
+  `finite_run C fn s (run_blocks n C fn s)` by metis_tac[finite_run_iff] >>
+  drule (cj 3 indexed_finite_simulation) >> disch_then drule_all >> strip_tac >>
+  fs[finite_run_iff] >> metis_tac[]
+QED
+
+Theorem indexed_identity_run_simulation:
+  (!e. run_blocks n C fn s <> Error e) ==>
+  ?m. run_blocks m C fn s = run_blocks n C fn s
+Proof
+  strip_tac >>
+  `indexed_contract C C (\g s. T) (\g s t. s = t)
+     (\fn fn'. fn = fn') (\bb bb'. bb = bb') (\g i j. i = j)
+     identity_outcome identity_push identity_admin` by
+    (pure_rewrite_tac[indexed_contract_def] >> BETA_TAC >>
+     MATCH_ACCEPT_TAC indexed_identity_complete) >>
+  drule indexed_run_simulation >>
+  simp[indexed_entry_def, identity_outcome_def] >>
+  metis_tac[]
+QED
 
 val _ = export_theory();
