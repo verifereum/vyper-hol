@@ -184,3 +184,21 @@ helpers were replaced by family versions, not duplicated. The former four-case
 interface is a specialization of the single export. Pointer-capable arithmetic
 and comparisons, shifts, frame environments and remaining inventory rows are
 still outstanding; this extension supplies no new frame-composition result.
+
+## Checked internal-call environment plumbing
+
+`concretizeLayoutFrameEnvironmentTheory` produces both `relocation_env` and
+`relocation_reader_context` through paired `setup_callee`,
+`merge_callee_state`, `adopt_return_fmp` and successful `bind_outputs`.
+`relocation_environment_return_plumbing` composes the actual return operations
+and constructs successful target binding from its length agreement. Arguments,
+opaque return tokens, return records, output lists and returned values may
+all differ. Merge requires gas-tail equality of the completed callees, not
+just the saved callers. No allocation-field equality is required.
+
+This discharges only supplement preservation through call plumbing. Establishing
+callee execution, related parameter roots, control alignment, external outcomes,
+and the completed-callee gas agreement remains generic frame-composition work;
+the INVOKE row is still delegated and uninstantiated. Verified together with
+local environment and indexed-context reader consumers by holbuild
+(TO_concretize_sim-20261105T054124Z_m10357_t001).
