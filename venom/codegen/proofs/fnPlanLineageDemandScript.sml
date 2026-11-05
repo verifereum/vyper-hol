@@ -226,3 +226,59 @@ Proof
   simp[livenessBlockProofsTheory.liveness_block_other_inst] >>
   gvs[projected_demand_wf_def]
 QED
+
+Theorem projected_demand_fuel:
+  codegen_ready_fn fn ==>
+  !fuel wl st. projected_demand_wf fn st ==>
+    projected_demand_wf fn
+      (SND (wl_iterate_fuel fuel (liveness_changed fn.fn_blocks)
+        (liveness_block fn.fn_blocks (cfg_analyze fn))
+        (cfg_preds_of (cfg_analyze fn)) wl st))
+Proof
+  strip_tac >> Induct >> simp[worklistDefsTheory.wl_iterate_fuel_def] >>
+  rpt strip_tac >> Cases_on `wl` >>
+  simp[worklistDefsTheory.wl_iterate_fuel_def] >>
+  Cases_on `liveness_changed fn.fn_blocks h st
+    (liveness_block fn.fn_blocks (cfg_analyze fn) h st)` >>
+  simp[worklistDefsTheory.wl_step_def, projected_demand_block]
+QED
+
+Theorem projected_demand_recompute:
+  !fn. codegen_ready_fn fn ==> projected_demand_wf fn (liveness_recompute fn)
+Proof
+  rpt strip_tac >>
+  `?fuel. liveness_recompute_fuel fuel fn = liveness_recompute fn` by
+    metis_tac[livenessTerminationProofsTheory.liveness_recompute_fuel_agreement] >>
+  `projected_demand_wf fn (liveness_recompute_fuel fuel fn)` by
+    (simp_tac pure_ss [livenessDefsTheory.liveness_recompute_fuel_def, LET_THM] >>
+     irule projected_demand_fuel >> simp[projected_demand_init]) >>
+  gvs[]
+QED
+
+Theorem analyzed_entry_live_empty:
+  !fn eb. codegen_ready_fn fn /\ entry_block fn = SOME eb ==>
+    live_vars_at (liveness_analyze fn) eb.bb_label 0 = []
+Proof
+  rpt strip_tac >> drule projected_demand_recompute >>
+  simp[projected_demand_wf_def, livenessDefsTheory.liveness_analyze_def,
+       livenessDefsTheory.live_vars_at_def] >> metis_tac[]
+QED
+
+Theorem analyzed_hd_live_empty:
+  !fn. codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+    live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label 0 = []
+Proof
+  rpt strip_tac >> irule analyzed_entry_live_empty >> simp[] >>
+  Cases_on `fn.fn_blocks` >> gvs[venomInstTheory.entry_block_def]
+QED
+
+Theorem post_parameter_demand_ready:
+  !fn. codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+    EVERY (\v. MEM v (MAP (\inst. HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions)))
+      (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))
+Proof
+  rpt strip_tac >> irule post_parameter_demand >>
+  simp[analyzed_hd_live_empty]
+QED
