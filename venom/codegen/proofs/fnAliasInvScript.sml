@@ -20,7 +20,7 @@ Ancestors
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
   venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
-  fnFrameBoundaryEntryParams joinSpillWitness
+  fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
 
 Theorem alias_do_swap_stack:
   dist < LENGTH ps.ps_stack ==>
@@ -255,6 +255,142 @@ Proof
      qexists_tac `x` >> simp[]) >>
   gvs[] >> simp[Once normalize_operand_def]
 QED
+
+(* Value-level copy boundary: neither operand needs a physical planner slot.
+   Normalization transport and root noninterference are separate premises. *)
+Theorem alias_assign_value_boundary:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [src] /\
+  inst.inst_outputs = [x] /\ step_inst fuel ctx inst s = OK s' /\
+  (!l. FLOOKUP s.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  normalize_operand dfg [] (Var x) = normalize_operand dfg [] src /\
+  operand_val (frame_view fn ra s) lo src =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] src) /\
+  operand_val (frame_view fn ra s') lo (normalize_operand dfg [] src) =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] src) ==>
+  operand_val (frame_view fn ra s') lo (Var x) =
+    operand_val (frame_view fn ra s') lo (normalize_operand dfg [] (Var x))
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK s'` by
+    (qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+     simp[Once step_inst_def]) >>
+  `?v. eval_operand src s = SOME v /\ s' = update_var x v s` by
+    (qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+     simp[Once step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
+  `MEM x inst.inst_outputs` by simp[] >>
+  `eval_operand src (frame_view fn ra s) =
+    SOME (if retpc_var fn x then ra else v)` by
+    (drule_all assign_eval_frame_view >>
+     disch_then (qspecl_then [`ra`, `s.vs_memory`] mp_tac) >>
+     Cases_on `src` >>
+     simp[frame_view_def, eval_operand_def, lookup_var_def]) >>
+  `operand_val (frame_view fn ra s) lo src =
+    SOME (if retpc_var fn x then ra else v)` by
+    (Cases_on `src` >> gvs[operand_val_def, eval_operand_def,
+      lookup_var_def, frame_view_def]) >>
+  gvs[frame_view_update_var, operand_val_update_var_eq]
+QED
+
+Theorem alias_phi_output_value_boundary:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = PHI /\ MEM x inst.inst_outputs ==>
+  operand_val (frame_view fn ra s) lo (Var x) =
+    operand_val (frame_view fn ra s) lo
+      (normalize_operand (dfg_build_function fn) [] (Var x))
+Proof
+  strip_tac >>
+  `normalize_operand (dfg_build_function fn) [] (Var x) = Var x` by
+    (irule normalize_operand_non_assign_output >> simp[] >>
+     qexists_tac `inst` >> simp[]) >> simp[]
+QED
+
+(* Semantic-prefix interface probe (C1.20.1).
+
+   Candidate ordinary-prefix assertion, written here rather than installed as a
+   new global predicate until its entry producer has been validated:
+
+     !x. MEM x (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+       operand_val (frame_view fn ra s) lo (Var x) =
+       operand_val (frame_view fn ra s) lo
+         (normalize_operand (dfg_build_function fn) [] (Var x)).
+
+   The index is the NEXT instruction, s.vs_inst_idx = i. The initial state is
+   s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions, where
+   eval_phis entry bb.bb_instructions = OK s_phi. The actual recursion is
+   exec_block (not block_step): at a nonterminator it calls itself on
+   s' with vs_inst_idx := SUC i after step_inst fuel ctx inst s = OK s'.
+   Induct on LENGTH bb.bb_instructions - i, keeping fuel fixed. Terminators
+   stop recursion. Require lookup_block bb.bb_label fn.fn_blocks = SOME bb,
+   fn_reachable fn bb.bb_label, wf_function fn, ssa_form fn and
+   def_dominates_uses fn throughout. This is a proposal, NOT a proved theorem
+   or a claim that the frozen target already supplies its base case.
+
+   Premise ledger:
+
+   * Entry: the frozen ownership and equality premises supply equality only
+     for input_vars_from pred instructions (live_vars_at ... label 0), when
+     entry.vs_prev_bb = SOME pred. To initialize the assertion after PHIs,
+     each live non-PHI output x needs entry equality of x AND preservation
+     of its normalized root through the entire PHI batch. The necessary
+     implication from this entry demand to input_vars_from is UNVALIDATED:
+     input_vars_from uses op_map over all PHI sources and a placed-index
+     deduplication; it is not simply union of the selected sources and the
+     ordinary survivors. Source collisions must be checked, not assumed away.
+
+   * Parallel PHIs: a PHI output is a self root by
+     alias_phi_output_value_boundary, independent of its selected value or
+     physical location. A survivor x instead needs both x and any variable
+     root r excluded from PHI outputs. eval_phis_flookup_not_phi_output and
+     eval_phis_only_updates_vs_vars then preserve the two framed reads;
+     literal/label roots need only unchanged labels. Producing the root
+     exclusion from SSA/dominance at this batch boundary is UNVALIDATED.
+     eval_phis reads EVERY source in entry, not in partially updated states.
+
+   * Skipped physical PHI: E0072 already supplies this case. Runtime PHI
+     equality is reflexive at its self root even if planning skips it. A
+     later ASSIGN consumes semantic source equality, not source heldness,
+     through alias_assign_value_boundary above. No new fixture is needed.
+
+   * Ordinary survivor: backward live transfer supplies liveness at i if x
+     is live at SUC i and is not an output. The proved
+     alias_live_after_root_not_defined excludes its variable root from this
+     instruction's definitions. step_preserves_non_output_vars (for
+     nonterminators) and step_terminator_preserves_vars preserve reads.
+     step_inst_preserves_labels_always preserves label-root reads.
+
+   * New ASSIGN output: alias_assign_value_boundary separates source equality,
+     normalization transport, and root-value preservation. Source liveness
+     at i supplies the first from the prefix assertion. For a variable source,
+     alias_live_root_not_defined supplies root exclusion at i. Literal and
+     label sources use their immediate reads and unchanged labels. Transport
+     across normalize_operand's visited list needs an acyclicity/rank result:
+     normalize_operand_codegen_assign in fnFrameStepsRevertForward provides
+     precisely this interface under codegen_ready_fn, but importing that
+     theory (or relocating its rank infrastructure) is NOT validated here.
+     Do not replace the cycle obligation with a syntactic one-step rewrite.
+
+   * Other new outputs: normalize_operand_non_assign_output is reflexive;
+     no semantic source equality is required. INVOKE belongs here, but old
+     survivors still require step_preserves_non_output_vars, whose step_inst
+     statement includes INVOKE, rather than an assumption that callee execution
+     preserves the caller environment without merge_callee_state/bind_outputs.
+
+   * Frame/retpc: perform the proof on operand_val (frame_view ...), never
+     silently substitute raw vs_vars equality for framed equality. The checked
+     ASSIGN boundary uses assign_eval_frame_view and frame_view_update_var,
+     including the retpc-dependent destination value; labels use the frozen
+     label-map premise, propagated by step_inst_preserves_labels_always.
+
+   * prev = NONE: successful eval_phis forces an empty PHI prefix (otherwise
+     eval_one_phi fails). It DOES NOT supply ordinary live-input equality:
+     the frozen selected-input premise is vacuous. A separate lineage/entry
+     argument or a weaker backward-demand interface is needed for this base
+     case. This gap is not a counterexample to lineage_alias_successor.
+
+   Even a proved live-prefix assertion would not cover final retained dead
+   aliases: those remain the separate retained-name obligation in the PLAN.
+*)
 
 (* Actual single steps followed by normalize_operand, including literal roots. *)
 Definition alias_assign_step_def:
