@@ -844,9 +844,9 @@ Proof
   simp[]
 QED
 
-Theorem reduce_depth_plan_pending_inventory_mono[local]:
+Theorem reduce_depth_plan_inventory_mono:
   !fuel pending target_op f ps ops ps' base x.
-    residual_budget_wf base pending ps /\ MEM x pending /\
+    residual_budget_wf base pending ps /\
     reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
       (ops,ps') ==>
     LIST_ELEM_COUNT x ps.ps_stack +
@@ -2793,7 +2793,7 @@ Proof
     (gen_tac >> strip_tac >> Cases_on `x > 16` >> gvs[] >>
      qspecl_then [`LENGTH ps1.ps_stack`, `pending`, `op`,
        `LENGTH pending - (idx + 1)`, `ps1`, `reduce_ops`, `ps2`,
-       `base'`, `y`] mp_tac reduce_depth_plan_pending_inventory_mono >>
+       `base'`, `y`] mp_tac reduce_depth_plan_inventory_mono >>
      simp[]) >>
   `LENGTH pending <= LENGTH ps2.ps_stack` by
     (Cases_on `x > 16` >> gvs[] >>
