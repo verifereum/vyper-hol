@@ -327,8 +327,7 @@ Theorem target_storage_array_live_range:
   eval_operand base_op s = SOME slot /\
   evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
     SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
-  slots_in_range (get_storage cx es tr) (w2n slot)
-    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
   storage_read_live cx tr (get_storage cx es tr) slot
     (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
   w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
@@ -345,8 +344,7 @@ Proof
   `(dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
    (dyn ==> (if tr then tload slot s else sload slot s) =
       lookup_storage slot (get_storage cx es tr))` by
-    (Cases_on `dyn` >> gvs[] >> conj_tac
-     >- metis_tac[target_storage_array_capacity] >>
+    (Cases_on `dyn` >> gvs[] >>
      `w2n slot + type_slot_size (ArrayTV etv (Dynamic cnt)) <= dimword(:256)` by
        decide_tac >>
      drule_all target_storage_array_len_ok >> simp[]) >>
@@ -357,8 +355,7 @@ Theorem target_storage_array_error_suffix:
   target_post ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
-  slots_in_range (get_storage cx es tr) (w2n slot)
-    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
   storage_read_live cx tr (get_storage cx es tr) slot
     (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
   w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
@@ -399,8 +396,7 @@ Theorem target_storage_array_suffix:
   target_post ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
-  slots_in_range (get_storage cx es tr) (w2n slot)
-    (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
   storage_read_live cx tr (get_storage cx es tr) slot
     (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
   w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
