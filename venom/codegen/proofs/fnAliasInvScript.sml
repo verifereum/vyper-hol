@@ -1271,8 +1271,20 @@ Inductive alias_certificate:
     (!l. FLOOKUP (EL n states).vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
     normalize_operand dfg [] (Var x) = normalize_operand dfg [] src /\
     (!y. normalize_operand dfg [] src = Var y ==> ~MEM y inst.inst_outputs) ==>
-    alias_certificate fn dfg lo ps states (SUC n) (Var x))
+    alias_certificate fn dfg lo ps states (SUC n) (Var x)) /\
+  (!fn dfg lo ps states n at i.
+    alias_certificate fn dfg lo ps states n at /\ SUC n < LENGTH states /\
+    EL (SUC n) states = (EL n states with vs_inst_idx := i) ==>
+    alias_certificate fn dfg lo ps states (SUC n) at)
 End
+
+Theorem alias_certificate_admin_transport:
+  alias_certificate fn dfg lo ps states n at /\ SUC n < LENGTH states /\
+  EL (SUC n) states = (EL n states with vs_inst_idx := i) ==>
+  alias_certificate fn dfg lo ps states (SUC n) at
+Proof
+  metis_tac[alias_certificate_rules]
+QED
 
 Theorem alias_certificate_sound:
   !fn dfg lo ps states n at.
@@ -1289,7 +1301,7 @@ Proof
   >- metis_tac[]
   >- (irule alias_step_survivor_value >> metis_tac[])
   >- (irule alias_phis_survivor_value >> metis_tac[])
-  >> `!y. ~MEM y inst.inst_outputs ==>
+  >- (`!y. ~MEM y inst.inst_outputs ==>
         FLOOKUP (EL (SUC n) states).vs_vars y = FLOOKUP (EL n states).vs_vars y` by
       (Cases_on `is_terminator inst.inst_opcode` >>
        metis_tac[step_preserves_non_output_vars, step_terminator_preserves_vars,
@@ -1298,7 +1310,11 @@ Proof
    operand_val (frame_view fn ra (EL n states)) lo (normalize_operand dfg [] at)` by
     (Cases_on `normalize_operand dfg [] at` >>
      gvs[operand_val_def, frame_view_vars_lookup] >> metis_tac[]) >>
-  irule alias_assign_value_boundary >> metis_tac[]
+  irule alias_assign_value_boundary >> metis_tac[]) >>
+  first_x_assum (qspec_then `ra` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  Cases_on `normalize_operand dfg [] at` >> gvs[] >>
+  Cases_on `at` >> gvs[operand_val_def, frame_view_def]
 QED
 
 (* Universal interface tests: a root write blocks the survival constructor,
@@ -1336,6 +1352,10 @@ QED
      actual ordinary outputs or the entire atomic PHI batch.
    - ASSIGN needs a source certificate at the preceding cut, actual execution,
      labels, SSA/membership, normalization transport and syntactic root stability.
+   - Administrative cuts change only vs_inst_idx, covering PHI-prefix resets
+     and ordinary-step increments. The observation fact already exists as
+     fnBlockStepHelpers$operand_val_frame_view_inst_idx; the soundness case
+     computes this boundary directly to avoid that higher-level dependency.
    The states list fixes common cut identities; execution facts are supplied by
    constructors, not inferred from list indices. No assertion here produces
    these certificates from run_block, planner heldness, or lineage. In particular
