@@ -19,8 +19,9 @@
  *                           immutable case).
  *   imm_target_walk       — the counted walk of such a target with pure
  *                           indices, as target_sim has it for the other
- *                           roots (for pop_nested_immutable_deploy_pure_sim,
- *                           a residual until the invariants change).
+ *                           roots, for pop_nested_immutable_deploy_pure_sim.
+ *                           Admitted pending alan; provable as stated, no
+ *                           invariant change needed.
  *   pop_nested_immutable_deploy_impure_index_case — RESIDUAL, FALSE as
  *                           stated: such a pop with an index that pops or
  *                           calls.
@@ -307,7 +308,8 @@ QED
    constructor's compile env and the root's declared type in it: from s0
    related at es, the target's fragment ends at the place's pointer
    (imm_target_post), the source state unchanged, or exits as the source
-   does. *)
+   does.  Admitted pending alan; provable as stated, no invariant change
+   needed. *)
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
