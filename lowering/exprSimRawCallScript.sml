@@ -42,30 +42,6 @@ Libs
   pairLib
 
 (* The nonreverting result stores the flag inline before the bytes value. *)
-Theorem raw_call_tuple_copy_encoding[local]:
-  val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data)) src s.vs_memory /\
-  mem_word_at p s.vs_memory = bool_to_word success ==>
-  val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
-    (ArrayV (TupleV [BoolV success; BytesV (TAKE n data)])) p
-    (mcopy (p + 32) src (32 + 32 * word_size n) s).vs_memory
-Proof
-  strip_tac >>
-  `val_wf (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data)) /\
-   val_footprint (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data)) <=
-     32 + 32 * word_size n` by
-    (qspec_then `n` assume_tac word_size_capacity >>
-     simp[val_wf_def, val_footprint_def, type_memory_size_def, LENGTH_TAKE_EQ] >>
-     decide_tac) >>
-  drule_all mcopy_val_in_memory >>
-  disch_then (qspec_then `p + 32` assume_tac) >>
-  `mem_bytes_at p 32
-      (mcopy (p + 32) src (32 + 32 * word_size n) s).vs_memory =
-    mem_bytes_at p 32 s.vs_memory` by
-    (irule mem_bytes_at_mcopy_disjoint >> simp[]) >>
-  gvs[val_in_memory_def, type_memory_size_def, mem_word_at_def,
-      mem_bytes_at_def, val_to_w256_def] >>
-  Cases_on `success` >> gvs[bool_to_word_def]
-QED
 
 Theorem raw_call_tuple_memory_encoding[local]:
   val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data)) src s.vs_memory /\
@@ -75,8 +51,14 @@ Theorem raw_call_tuple_memory_encoding[local]:
     (mcopy (p + 32) src (32 + 32 * word_size n)
       (mstore p (bool_to_word success) s)).vs_memory
 Proof
-  strip_tac >> irule raw_call_tuple_copy_encoding >>
-  simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  irule exprSimRawCallCalldataTheory.raw_call_tuple_copy >>
+  simp[valueEncodingPropsTheory.mstore_mem_word_at_same,
+       type_memory_size_def] >>
+  qspec_then `n` assume_tac word_size_capacity >>
+  simp[val_wf_def, type_memory_size_def, LENGTH_TAKE_EQ] >>
+  conj_tac >- (Cases_on `success` >> simp[bool_to_word_def]) >>
+
   `LENGTH (TAKE n data) <= 32 * word_size n` by
     (qspec_then `n` assume_tac word_size_capacity >>
      simp[LENGTH_TAKE_EQ] >> decide_tac) >>
@@ -106,8 +88,7 @@ Proof
 QED
 
 val _ = if List.all (null o hyp)
-  [raw_call_tuple_copy_encoding, raw_call_tuple_memory_encoding,
-   raw_call_tuple_memory_frame]
+  [raw_call_tuple_memory_encoding, raw_call_tuple_memory_frame]
   then print "raw-call tuple encoding/frame: checked, no hypotheses\n"
   else raise Fail "raw-call tuple encoding/frame retained hypotheses";
 

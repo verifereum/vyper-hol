@@ -2159,7 +2159,7 @@ Proof
   conj_tac >- (qexists_tac `vars` >> simp[]) >> gvs[]
 QED
 
-Theorem raw_call_reserved_vars_frame[local]:
+Theorem raw_call_reserved_vars_frame:
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
     eval_operand p (s with vs_vars := V) = SOME v) ==>
@@ -3319,7 +3319,7 @@ Proof
   simp[val_in_memory_def, type_memory_size_def, val_to_w256_def]
 QED
 
-Theorem raw_call_tuple_copy[local]:
+Theorem raw_call_tuple_copy:
   mem_word_at p s.vs_memory = (if success then 1w else 0w) /\
   val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) src s.vs_memory /\
   val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
@@ -3340,7 +3340,7 @@ Proof
   irule mcopy_establishes_val_in_memory >> simp[]
 QED
 
-Theorem raw_call_tuple_copy_frame[local]:
+Theorem raw_call_tuple_copy_frame:
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -3361,7 +3361,7 @@ Proof
   irule raw_call_tuple_copy >> simp[]
 QED
 
-Theorem raw_call_bool_result[local]:
+Theorem raw_call_bool_result:
   ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = 0 /\
   eval_operand op s = SOME (if success then 1w else 0w) ==>
   expr_val_rel cx (raw_call_return_type flags) (BoolV success) op s
@@ -3370,7 +3370,7 @@ Proof
        evaluate_type_def, typed_val_to_w256_def, val_to_w256_def]
 QED
 
-Theorem raw_call_tuple_result[local]:
+Theorem raw_call_tuple_result:
   ~flags.rcf_revert_on_failure /\ 0 < flags.rcf_max_outsize /\
   eval_operand op s = SOME w /\
   mem_word_at (w2n w) s.vs_memory = (if success then 1w else 0w) /\
@@ -3386,7 +3386,7 @@ Proof
   irule raw_call_tuple_memory >> simp[]
 QED
 
-Theorem raw_call_tuple_dst_run[local]:
+Theorem raw_call_tuple_dst_run:
   !sa sb pop dst s w.
   emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
   eval_operand pop s = SOME w ==>
@@ -3559,7 +3559,7 @@ Proof
   simp[mstore_mem_word_at_same]
 QED
 
-Theorem raw_call_tuple_alloc_ready[local]:
+Theorem raw_call_tuple_alloc_ready:
   compile_alloc_buffer (32 + sz) sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand;ok] sm = ((),sb) /\
   stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
@@ -3631,7 +3631,7 @@ Proof
   irule raw_call_bool_result >> simp[]
 QED
 
-Theorem raw_call_tuple_copy_wb[local]:
+Theorem raw_call_tuple_copy_wb:
   wb_frame cenv es0 sf s0 s /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
