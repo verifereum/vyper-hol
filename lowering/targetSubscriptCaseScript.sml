@@ -6,7 +6,7 @@
 
 Theory targetSubscriptCase
 Ancestors
-  targetPlaceSimCasesBase
+  targetPlaceSimCasesBase targetPlaceLive
   exprSimFieldLayout
   exprSimSource
   targetPlaceSimDefs
