@@ -676,6 +676,84 @@ Proof
   simp[vfmContextTheory.context_component_equality]
 QED
 
+Theorem asm_proceed_call_memory_boundary:
+  s.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (res,t) /\
+  stipend <= parent.gasUsed ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    child.msgParams.outputTo = Memory mr /\
+    child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed
+Proof
+  strip_tac >>
+  `s.contexts <> []` by simp[] >>
+  drule_all vfmRunCallTheory.proceed_call_push_structure >> strip_tac >>
+  drule vfmRunCallTheory.proceed_call_parent_gas_ok >>
+  disch_then (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `t.contexts` >- fs[] >>
+  PairCases_on `h` >> gvs[]
+QED
+
+Theorem asm_proceed_call_memory_success:
+  s.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (res,t) /\
+  stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    handle_exception NONE t = (INL (), t with contexts :=
+      (parent with <|
+        gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+        pc := SUC parent.pc; stack := b2w T :: parent.stack;
+        returnData := child.returnData;
+        memory := buffer_write mr.offset (TAKE mr.size child.returnData) parent.memory;
+        logs := parent.logs ++ child.logs;
+        addRefund := parent.addRefund + child.addRefund;
+        subRefund := parent.subRefund + child.subRefund |>,parent_rb)::rest)
+Proof
+  strip_tac >> drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  qexistsl [`child`, `child_rb`] >> conj_tac >- simp[] >>
+  drule_all asm_handle_exception_memory_success >> simp[]
+QED
+
+Theorem asm_proceed_call_memory_reverted:
+  s.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (res,t) /\
+  stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    handle_exception (SOME Reverted) t = (INL (), t with <|
+      contexts := (parent with <|
+        gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+        pc := SUC parent.pc; stack := b2w F :: parent.stack;
+        returnData := child.returnData;
+        memory := buffer_write mr.offset (TAKE mr.size child.returnData) parent.memory
+      |>,parent_rb)::rest; rollback := child_rb |>)
+Proof
+  strip_tac >> drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  qexistsl [`child`, `child_rb`] >> conj_tac >- simp[] >>
+  drule_all asm_handle_exception_memory_reverted >> simp[]
+QED
+
+Theorem asm_proceed_call_memory_exception:
+  s.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (res,t) /\
+  stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit /\
+  exc <> Reverted /\
+  (FST (HD t.contexts)).gasUsed <= (FST (HD t.contexts)).msgParams.gasLimit ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    handle_exception (SOME exc) t = (INL (), t with <|
+      contexts := (parent with <| pc := SUC parent.pc;
+        stack := 0w :: parent.stack; returnData := [];
+        memory := buffer_write mr.offset [] parent.memory |>,parent_rb)::rest;
+      rollback := child_rb |>)
+Proof
+  strip_tac >> drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  qexistsl [`child`, `child_rb`] >> conj_tac >- simp[] >>
+  `child.gasUsed <= child.msgParams.gasLimit` by gvs[] >>
+  drule_all asm_handle_exception_memory_exception >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
