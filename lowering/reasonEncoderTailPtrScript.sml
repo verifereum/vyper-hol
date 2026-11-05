@@ -781,3 +781,87 @@ Proof
   gvs[Abbr `s1`, lookup_var_def, op_taint_def, ptr_covers_def] >>
   rpt strip_tac >> metis_tac[]
 QED
+
+(* Initialized size slots feed the shared pointer setup and payload suffix.
+   The frame keeps the outer buffer operand live for the final REVERT. *)
+Theorem reason_encoder_payload_ptr:
+  emit_inst ADD [Var tuple;Lit 0w] [src] sa = ((),p1) /\
+  emit_inst ADD [Var payload;Lit 0w] [head] p1 = ((),p2) /\
+  emit_inst MLOAD [Var slot] [off] p2 = ((),p3) /\
+  emit_inst ADD [Var payload;Var off] [tail] p3 = ((),sm) /\
+  emit_inst MLOAD [Var src] [len] sm = ((),c1) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp0] c1 = ((),c2) /\
+  emit_inst AND [Var tmp0;Lit (i2w (-32))] [rounded0] c2 = ((),c3) /\
+  emit_inst ADD [Var tail;Var rounded0] [last] c3 = ((),c4) /\
+  emit_void MSTORE [Var last;Lit 0w] c4 = ((),c5) /\
+  emit_inst ADD [Lit 32w;Var len] [cnt] c5 = ((),c6) /\
+  emit_void MCOPY [Var tail;Var src;Var cnt] c6 = ((),c7) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp1] c7 = ((),c8) /\
+  emit_inst AND [Var tmp1;Lit (i2w (-32))] [rounded1] c8 = ((),c9) /\
+  emit_inst ADD [Lit 32w;Var rounded1] [item] c9 = ((),c10) /\
+  emit_void MSTORE [Var head;Var off] c10 = ((),c11) /\
+  emit_inst ADD [Var off;Var item] [size_out] c11 = ((),c12) /\
+  emit_void MSTORE [Var slot;Var size_out] c12 = ((),c13) /\
+  emit_inst MLOAD [Var slot] [encoded] c13 = ((),sb) /\
+  fn_has_code sa p1 func /\ fn_has_code p1 p2 func /\
+  fn_has_code p2 p3 func /\ fn_has_code p3 sm func /\
+  fn_has_code sm c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
+  fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
+  fn_has_code c6 c7 func /\ fn_has_code c7 c8 func /\
+  fn_has_code c8 c9 func /\ fn_has_code c9 c10 func /\
+  fn_has_code c10 c11 func /\ fn_has_code c11 c12 func /\
+  fn_has_code c12 c13 func /\ fn_has_code c13 sb func /\
+  ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s capacity /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n /\
+  lookup_var payload s = SOME b /\ ptr_covers G tn payload s capacity /\
+  lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
+  (!i. w2n addr <= i /\ i < w2n addr + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n addr) s = 32w /\ 32 <= capacity /\
+  w2n b + 32 < dimword (:256) /\
+  w2n (b + 32w) + w2n ((n + 31w) && i2w (-32)) < dimword (:256) /\
+  w2n (32w + n) <= capacity - 32 /\
+  w2n ((n + 31w) && i2w (-32)) + 32 <= capacity - 32 /\
+  (!p. p = payload \/ p = slot ==> p <> src /\ p <> head /\ p <> off) /\
+  slot <> tail /\ src <> head /\ src <> off /\ src <> tail /\
+  head <> off /\ head <> tail /\ off <> tail /\
+  (!p. MEM p [src;tail;head;slot;off] ==>
+    ~MEM p [len;tmp0;rounded0;last;cnt;tmp1;rounded1;item]) /\
+  len <> tmp0 /\ len <> rounded0 /\ len <> last /\ len <> cnt /\
+  slot <> size_out ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var encoded sf = SOME (32w + (32w + ((n + 31w) && i2w (-32)))) /\
+    op_taint tnf (Var encoded) = {} /\
+    (!p. ~MEM p [src;head;off;tail;len;tmp0;rounded0;last;cnt;
+                 tmp1;rounded1;item;size_out;encoded] ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all reason_encoder_pointer_setup_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `lookup_var slot s1 = SOME addr /\ ptr_covers G1 tn1 slot s1 32 /\
+   lookup_var off s1 = SOME 32w /\ op_taint tn1 (Var off) = {} /\
+   ptr_covers G1 tn1 src s1 32 /\
+   ptr_covers G1 tn1 src s1 (w2n (32w + n)) /\
+   ptr_covers G1 tn1 head s1 32 /\
+   mload (w2n a) s1 = n /\
+   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn1.t_mem)` by
+    (gvs[ptr_covers_def, mload_def, op_taint_def] >>
+     rpt conj_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.SUB_LESS_EQ]) >>
+  drule_all reason_encoder_payload_tail_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> fs[] >> metis_tac[]
+QED
