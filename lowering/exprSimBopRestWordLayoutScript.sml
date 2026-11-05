@@ -425,3 +425,53 @@ Theorem rest_word_loop_layout_cond:
 Proof
   simp[rest_word_loop_layout_def] >> metis_tac[]
 QED
+
+Theorem rest_word_loop_layout_found:
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code ==>
+  ?a b. lookup_block h.rw_found fn.fn_blocks = SOME
+    <|bb_label := h.rw_found;
+      bb_instructions := [mk_inst a ASSIGN [Lit 1w] [h.rw_result];
+                          mk_inst b JMP [Label h.rw_exit] []]|>
+Proof
+  simp[rest_word_loop_layout_def] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_incr:
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code ==>
+  ?a b c next. lookup_block h.rw_incr fn.fn_blocks = SOME
+    <|bb_label := h.rw_incr;
+      bb_instructions := [mk_inst a ADD [Var h.rw_idx; Lit 1w] [next];
+                          mk_inst b ASSIGN [Var next] [h.rw_idx];
+                          mk_inst c JMP [Label h.rw_cond] []]|>
+Proof
+  simp[rest_word_loop_layout_def] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_exit:
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code ==>
+  ct.cs_current_bb = h.rw_exit /\
+  ?bb. lookup_block h.rw_exit fn.fn_blocks = SOME bb /\
+       isPREFIX ct.cs_current_insts bb.bb_instructions /\
+       (if is_in then ct.cs_current_insts = [] /\ out = Var h.rw_result
+        else ?a v. ct.cs_current_insts = [mk_inst a ISZERO [Var h.rw_result] [v]] /\
+                   out = Var v)
+Proof
+  simp[rest_word_loop_layout_def] >> rpt strip_tac >> simp[] >>
+  Cases_on `is_in` >> gvs[] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_body:
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code ==>
+  ?a b c d e mul total addr match v.
+    h.rw_addr = Var addr /\
+    lookup_block h.rw_body fn.fn_blocks = SOME
+      <|bb_label := h.rw_body;
+        bb_instructions :=
+          [mk_inst a MUL [Var h.rw_idx; Lit (n2w stride)] [mul]] ++
+          (if 0 < off then [mk_inst b ADD [Lit (n2w off); Var mul] [total]] else []) ++
+          [mk_inst c ADD [arr; if 0 < off then Var total else Var mul] [addr]] ++
+          code ++ [mk_inst d EQ [v; needle] [match];
+                   mk_inst e JNZ [Var match; Label h.rw_found; Label h.rw_incr] []]|>
+Proof
+  simp[rest_word_loop_layout_def] >> metis_tac[]
+QED
