@@ -5,7 +5,7 @@ Ancestors
   stmtSimForArrayLoop stmtSimForArrayParts  stmtLowering compileEnv
   exprLoweringProps fragExec loweringSlice localPtrsProps emitHelperProps
   venomInst venomState venomExecSemantics list rich_list finite_map arithmetic
-  stmtSimForParts
+  stmtSimForParts gasOutcome gasContext stmtSimForRounds vyperInterpreter
 
 Theorem array_declared_reserved[local]:
   declare_local cenv id et st =
@@ -740,8 +740,10 @@ Proof
 QED
 
 Theorem compile_for_array_frag:
-  !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es res es' P.
-  eval_for cx tv id stmts vs es = (res,es') /\ LENGTH vs = n /\
+  !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
+  (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
+          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+  LENGTH vs = n /\
   n < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
   type_memory_bytes cenv et + 64 < dimword (:256) /\ cenv.ce_alloca_locals /\
@@ -757,22 +759,19 @@ Theorem compile_for_array_frag:
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs) (w2n base + k * type_memory_size tv) s.vs_memory /\
         w2n base + k * type_memory_size tv < dimword (:256))) /\
-  (!st0 bc sd ex inc ei k r es2.
+  (!st0 bc sd ex inc ei k.
     declare_local cenv id et st0 = (bc,sd) /\
-    P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
-    eval_stmts cx stmts (ei with scopes :=
-      (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-        :: ei.scopes) = (r,es2) ==>
+    P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs ==>
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
-      (stmts_env bc (InLoop ex inc) ty stmts)
+      (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2) /\
-  (!ei k r es2.
+          :: ei.scopes)) /\
+  (!ei k gs r es2.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
-    eval_stmts cx stmts (ei with scopes :=
+    eval_stmts cx stmts (ei with <| scopes :=
       (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-        :: ei.scopes) = (r,es2) ==>
+        :: ei.scopes; gas_obs := gs |>) = (r,es2) ==>
     (!ex inc. stmt_res_ok (InLoop ex inc) r) /\
     ?sc rest. es2.scopes = sc :: rest /\
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
@@ -780,7 +779,7 @@ Theorem compile_for_array_frag:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts))
-    es res es'
+    (eval_stmt cx (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts)) es
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_def] >>
   rpt gen_tac >> strip_tac >>
