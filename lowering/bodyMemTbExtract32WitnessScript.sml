@@ -121,3 +121,20 @@ Proof
                         rpol_final_assembly := FAP_Optimize |>`, `unit`] >> simp[] >> EVAL_TAC) >>
   EVAL_TAC >> simp[]
 QED
+
+Theorem extract32_initial_state_rel_rejected:
+  !func. ~state_rel func
+    (build_compile_env [] External View "probe" [] NoneT [] F)
+    (empty_evaluation_context with <| sources :=
+      [(empty_evaluation_context.txn.target, [(NONE,[])])]; stk := [(NONE,"probe")] |>)
+    (empty_state with <| scopes := [FEMPTY]; outcomes := SOME [] |>)
+    (init_venom_state "probe")
+Proof
+  gen_tac >> rewrite_tac[compileEnvTheory.state_rel_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem extract32_empty_tx_env_rejected:
+  ~compileEnv$tx_env_ok empty_evaluation_context.txn
+Proof
+  EVAL_TAC
+QED
