@@ -435,7 +435,7 @@ QED
 
 (* The scope of a loop's iteration: the loop variable, declared in the
    compile env and added to the type environment. *)
-Theorem for_pushed_state_well_typed[local]:
+Theorem for_pushed_state_well_typed:
   !st tyv v id.
     state_well_typed st /\ value_has_type tyv v /\
     well_formed_type_value tyv ==>
@@ -457,7 +457,7 @@ Proof
   rw[popped_keys_indexed_def, FLOOKUP_UPDATE] >> gvs[]
 QED
 
-Theorem scopes_CONS_updated[local]:
+Theorem scopes_CONS_updated:
   !es x. es with scopes := x :: es.scopes = es with scopes updated_by CONS x
 Proof
   simp[evaluation_state_component_equality]
@@ -738,7 +738,7 @@ Proof
 QED
 
 (* The source checker validates computed bounds in the loop's integer type. *)
-Theorem body_range_typing[local]:
+Theorem body_range_typing:
   !(env, ret_ty, id, typ, e1, e2, bound, stmts) env'.
     type_stmt env ret_ty (For id typ (Range e1 e2) bound stmts) = SOME env' /\
     ~(?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\
@@ -768,7 +768,7 @@ Proof
 QED
 
 (* A successful typed integer endpoint preserves the loop invariant. *)
-Theorem body_range_endpoint_read[local]:
+Theorem body_range_endpoint_read:
   !(cenv, cx, env, e, typ, tyv) es tv es'.
     expr_body_pre cenv cx env e es /\ is_int_type typ /\
     expr_type e = typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
@@ -825,7 +825,7 @@ Proof
 QED
 
 (* The enclosing For carries both traversal and allocation safety for its body. *)
-Theorem body_for_exprs_ok[local]:
+Theorem body_for_exprs_ok:
   !cenv id typ it n body.
     stmt_exprs_ok cenv (For id typ it n body) ==>
     EVERY (stmt_exprs_ok cenv) body
@@ -1089,7 +1089,7 @@ Proof
   qexists_tac `al` >> fs[Abbr `vs`]
 QED
 
-Theorem array_for_layout_ready[local]:
+Theorem array_for_layout_ready:
   expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
   stmt_exprs_ok cenv (For id typ (Array e) n stmts) ==>
@@ -1148,7 +1148,7 @@ Proof
   metis_tac[frame_ret_ok_same_frame]
 QED
 
-Theorem array_body_scope_shape[local]:
+Theorem array_body_scope_shape:
   !cx stmts ei id tv v r ef.
     lookup_scopes id ei.scopes = NONE /\
     eval_stmts cx stmts
@@ -1168,7 +1168,7 @@ Proof
   disch_then (qspec_then `x` mp_tac) >> simp[]
 QED
 
-Theorem array_body_result_ok[local]:
+Theorem array_body_result_ok:
   !cx stmts cenv env ei id typ tv v ret_ty env_b r ef.
     expr_sim_inv cenv cx env ei /\ id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
@@ -1205,7 +1205,7 @@ Proof
   gvs[stmt_res_ok_def, no_type_error_result_def]
 QED
 
-Theorem array_body_direct_snapshot[local]:
+Theorem array_body_direct_snapshot:
   !tops bindings stmts env id typ name elem bound ret_ty env_b aty
    cx ei tv v r ef sc rest entry.
     supported_stmts tops bindings stmts /\
@@ -1234,7 +1234,7 @@ Proof
   drule scope_projection_lookup >> simp[]
 QED
 
-Theorem array_body_scope_callback[local]:
+Theorem array_body_scope_callback:
   !cenv cx env ei id typ tv v ret_ty stmts env_b r ef tops bindings
    name elem bound aty entry.
     expr_sim_inv cenv cx env ei /\ id NOTIN FDOM env.var_types /\
