@@ -4,6 +4,7 @@ Ancestors
   bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsSeq
   builtinSimple emitHelper emitHelperProps exprSimBufferEmptyExec
   compileEnv context venomInst list exprLoweringProps abiEmptySequence rich_list
+  fragExec fragGasSeqPtr fragGasPathPtr venomState
 
 (* The semantic theory's decomposition is local, so expose this boundary
    for the checked execution port. *)
@@ -60,3 +61,33 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, EVERY_APPEND,
                    EVERY_DEF, mk_inst_def] >> gvs[mk_inst_def]
 QED
+
+Theorem empty_buffer_checked_path:
+  !sz header sa sb buf func s t G tn H th D ctx PG.
+    compile_builtin_empty_complex sz header sa = (buf,sb) /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    gas_path_ptr D 0 ctx func PG G tn s 0 H th
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule compile_builtin_empty_complex_shape >> strip_tac >>
+  drule empty_buffer_no_gas >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    suspend "code" >>
+  drule_all run_inst_seq_gas_path_ptr >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (gvs[EVERY_MEM, FILTER_EQ_NIL]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    (gvs[emitted_insts_def, IS_PREFIX_APPEND] >> simp[]) >> simp[]
+QED
+Resume empty_buffer_checked_path[code]:
+  fs[fn_has_code_def] >>
+  gvs[IS_PREFIX_APPEND, emitted_insts_def] >>
+  simp[DROP_APPEND1, IS_PREFIX_APPEND, GSYM APPEND_ASSOC]
+QED
+Finalise empty_buffer_checked_path
