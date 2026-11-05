@@ -1937,6 +1937,71 @@ Proof
   metis_tac[])
 QED
 
+Theorem stack_poke_retains_other:
+  MEM at stk /\ stack_peek d stk <> at ==>
+  MEM at (stack_poke d ret stk)
+Proof
+  simp[MEM_EL, stack_peek_def, stack_poke_def, EL_LUPDATE] >>
+  metis_tac[]
+QED
+
+Theorem alias_phi_plan_holds_live:
+  MEM x live /\ plan_holds ps (Var x) ==>
+  plan_holds (SND (generate_phi_plan inst live halting ps)) (Var x)
+Proof
+  strip_tac >> Cases_on `stack_get_phi_depth
+    (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  rename1 `_ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >> drule planWfTheory.stack_find_bound >> simp[]) >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) live` >> simp[]
+  >- (Cases_on `do_dup d ps` >> simp[] >>
+      `r.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
+        metis_tac[doSwapSimTheory.do_dup_stack_exact, pairTheory.SND] >>
+      `r.ps_spilled = ps.ps_spilled` by
+        (Cases_on `d <= 15` >>
+         gvs[do_dup_def] >> rpt (pairarg_tac >> gvs[])) >>
+      `plan_holds (r with ps_stack := stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack) (Var x)` by
+        gvs[plan_holds_def, stack_poke_def, LUPDATE_APPEND2] >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> simp[] >>
+          `~MEM (Var x) [Var (HD inst.inst_outputs)]` by
+            (simp[] >> metis_tac[]) >>
+          metis_tac[popmany_plan_plan_holds, pairTheory.SND]) >>
+      gvs[]) >>
+  `stack_peek d ps.ps_stack <> Var x` by
+    (strip_tac >> gvs[operand_to_string_def]) >>
+  `plan_holds (ps with ps_stack := stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack) (Var x)` by
+    (gvs[plan_holds_def] >> metis_tac[stack_poke_retains_other]) >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[] >>
+      `~MEM (Var x) [Var (HD inst.inst_outputs)]` by
+            (simp[] >> metis_tac[]) >>
+      metis_tac[popmany_plan_plan_holds, pairTheory.SND]) >>
+  gvs[]
+QED
+
+Theorem alias_phi_plan_holds_output:
+  inst.inst_outputs = [out] /\ MEM out live /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d ==>
+  plan_holds (SND (generate_phi_plan inst live halting ps)) (Var out)
+Proof
+  strip_tac >>
+  `d < LENGTH ps.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >> drule planWfTheory.stack_find_bound >> simp[]) >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) live` >> simp[]
+  >- (Cases_on `do_dup d ps` >> simp[] >>
+      `r.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
+        metis_tac[doSwapSimTheory.do_dup_stack_exact, pairTheory.SND] >>
+      simp[plan_holds_def, stack_poke_def, LUPDATE_APPEND2]) >>
+  simp[plan_holds_def, stack_poke_def] >>
+  disj1_tac >> irule (iffRL MEM_EL) >>
+  qexists_tac `LENGTH ps.ps_stack - 1 - d` >> simp[EL_LUPDATE]
+QED
+
 Theorem alias_jmp_plan_holds_live:
   inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\
   inst.inst_outputs = [] /\
