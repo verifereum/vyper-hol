@@ -17,6 +17,26 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState fragGasSeq fragGasPath arithmetic venomExecSemantics venomInst exprLoweringProps
 
+Theorem place_store_literal_load[local]:
+  step_inst_base (mk_inst id MLOAD [Lit sw] [tmp]) s =
+  OK (update_var tmp (mload (w2n sw) s) s)
+Proof
+  irule emitHelperPropsTheory.step_MLOAD >> simp[eval_operand_def]
+QED
+
+Theorem place_store_updated_slot[local]:
+  ~s.vs_call_ctx.cc_static ==>
+  step_inst_base
+    (mk_inst id (if tr then TSTORE else SSTORE) [Lit k; Var tmp] [])
+    (update_var tmp w s) =
+  OK ((if tr then tstore else sstore) k w (update_var tmp w s))
+Proof
+  strip_tac >> Cases_on `tr` >>
+  simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operands_def,
+       eval_operand_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* A checked single storage/transient store boundary. *)
 Theorem place_store_slot_path[local]:
   !tr k w s ctx func bb id.
@@ -42,6 +62,38 @@ Proof
       simp[gas_marked_path_def] >>
       metis_tac[gas_path_rules, gas_path_edge_normal, ADD_0])
   >> Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]
+QED
+
+Theorem place_store_load_slot_path[local]:
+  !tr sw k s ctx func bb id tmp.
+    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX
+      [mk_inst id MLOAD [Lit sw] [tmp];
+       mk_inst (id+1) (if tr then TSTORE else SSTORE) [Lit k; Var tmp] []]
+      (DROP s.vs_inst_idx bb.bb_instructions) ==>
+    gas_marked_path F ctx func s 0
+      (OK (((if tr then tstore else sstore) k (mload (w2n sw) s)
+        (update_var tmp (mload (w2n sw) s) s))
+        with vs_inst_idx := s.vs_inst_idx + 2)) /\
+    (!x. x <> tmp ==>
+      lookup_var x ((if tr then tstore else sstore) k (mload (w2n sw) s)
+        (update_var tmp (mload (w2n sw) s) s)) = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (qmatch_asmsub_abbrev_tac `isPREFIX code _` >>
+      `run_inst_seq code s = OK
+         ((if tr then tstore else sstore) k (mload (w2n sw) s)
+           (update_var tmp (mload (w2n sw) s) s))` by
+        simp[Abbr `code`, run_inst_seq_def, place_store_literal_load,
+             place_store_updated_slot] >>
+      drule_at (Pat `run_inst_seq _ _ = _`) tuple_run_inst_seq_gas_path >>
+      simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      Cases_on `tr` >> gvs[gas_marked_path_def, mk_inst_def, is_terminator_def]) >>
+  Cases_on `tr` >>
+  simp[tstore_def, sstore_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* Boundary probe: the second child has three slots (length and two
