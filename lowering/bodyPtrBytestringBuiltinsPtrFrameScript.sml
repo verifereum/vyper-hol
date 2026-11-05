@@ -147,3 +147,20 @@ Proof
        bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_no_internal_calls,
        order_ptr_frame_no_call_safety]
 QED
+
+(* A distinct context retains the empty module but supplies the current owner
+   required by call_evaluation_safe, even for expressions without calls. *)
+Definition order_ptr_cx_def:
+  order_ptr_cx = order_frame_cx with stk := [(NONE, "probe")]
+End
+
+Theorem order_ptr_call_safety:
+  call_evaluation_safe order_ptr_cx []
+Proof
+  simp[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def,
+       order_ptr_cx_def] >>
+  qexists_tac `[]` >> EVAL_TAC >> rw[] >> gvs[AllCaseEqs()] >>
+  fs[vyperInterpreterTheory.lookup_function_def] >>
+  simp[relationTheory.irreflexive_def, Once relationTheory.TC_CASES1,
+       vyperTypeCallGraphSoundnessTheory.call_edge_rel_def]
+QED
