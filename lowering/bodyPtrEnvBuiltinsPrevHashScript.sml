@@ -7,6 +7,9 @@ Ancestors
   vyperInterpreter vyperContext vyperState vyperValue vyperTypeSystem
   exprSimProps emitHelper emitHelperProps builtinProps gasSummary
   venomState venomInst venomExecSemantics finite_map list rich_list
+  valueEncoding exprSimUnopProps exprSimPrecompiles loweringPosts
+  bodyPtrPreds exprPtrUnwrap exprSimHypsDefs gasSummary exprSimEnv
+  stmtFragPtr exprSimWordArgs vyperAST
 
 Theorem prevhash_source_all_tails:
   tx_env_ok cx.txn ==>
@@ -120,4 +123,86 @@ Proof
     (mp_then Any mp_tac emit_scalar_builtin_append) >>
   gvs[MEM] >> disch_then drule_all >>
   disch_then strip_assume_tac >> metis_tac[]
+QED
+
+Theorem prevhash_stack_encoding:
+  typed_val_to_w256 (BaseTV (BytesT (Fixed 32)))
+    (BytesV (word_to_bytes_be (w:bytes32))) = w
+Proof
+  simp[typed_val_to_w256_def, PAD_RIGHT, length_word_to_bytes_be,
+       word_of_bytes_be_to_bytes]
+QED
+
+Theorem prevhash_counted_post:
+  lower_value compile_expr cenv ty (Builtin (env_item_type PrevHash) (Env PrevHash) []) sa = (op,sb) /\
+  fn_has_code sa sb fn /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    expr_post ctx fn cenv cx (Builtin (env_item_type PrevHash) (Env PrevHash) [])
+      es sa sb s (es with gas_obs := [])
+      (BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))) op t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ghost_inv d cenv cx (es with gas_obs := []) G' tn' t /\
+    ptr_val_ok cx (env_item_type PrevHash)
+      (BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))) op G' tn' t /\
+    ghost_kept cenv es sa G tn s G' tn'
+Proof
+  strip_tac >> drule lower_value_env >> strip_tac >>
+  drule_all prevhash_counted_run >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w)) =
+    EL 0 cx.txn.block_hashes` by
+    (simp[EL] >> irule call_ctx_rel_prevhash >>
+     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[ghost_inv_gas_obs, ptr_val_ok_def, env_item_type_def, is_word_type_def] >>
+  irule expr_post_typed_stack_intro >>
+  simp[expr_type_def, env_item_type_def, is_word_type_def,
+       vyperValueTheory.evaluate_type_def, prevhash_stack_encoding] >>
+  irule wb_frame_readonly_tail >>
+  qexistsl_tac [`sa`, `s`] >> simp[wb_frame_refl]
+QED
+
+Theorem compile_prevhash_sim_ptr:
+  expr_sim_ptr d ctx PG fn cenv cx ty
+    (Builtin (env_item_type PrevHash) (Env PrevHash) []) es
+Proof
+  rw[expr_sim_ptr_def] >>
+  drule_all prevhash_counted_post >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  `tx_env_ok cx.txn` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes)))`,
+    `es`, `G'`, `tn'`, `OK t`] >>
+  simp[gas_explicit_def, expr_type_def, env_item_type_def, is_word_type_def,
+       prevhash_source_all_tails] >> gvs[env_item_type_def, EL]
+QED
+
+Theorem compile_prevhash_vv_sim_ptr:
+  expr_vv_sim_ptr d ctx PG fn cenv cx ty
+    (Builtin (env_item_type PrevHash) (Env PrevHash) []) es
+Proof
+  irule expr_vv_sim_ptr_stack >> conj_tac
+  >- (gen_tac >> simp[compile_expr_def] >>
+      Cases_on `compile_env_var PrevHash sa` >> simp[as_stack_val_def]) >>
+  conj_tac >- metis_tac[eval_expr_builtin_value] >>
+  simp[compile_prevhash_sim_ptr]
+QED
+
+Theorem body_prevhash_ptr_case:
+  body_expr_ptr_ok cx (Builtin ann (Env PrevHash) args)
+Proof
+  rw[body_expr_ptr_ok_def] >>
+  `args = [] /\ ann = env_item_type PrevHash` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >> simp[compile_prevhash_sim_ptr, compile_prevhash_vv_sim_ptr]
 QED
