@@ -2387,3 +2387,189 @@ Proof
   qpat_x_assum `!at. MEM at _ <=> _` (qspec_then `op` mp_tac) >>
   metis_tac[]
 QED
+
+(* These marked-wf boundaries cannot be imported from fnFrameCleanStack:
+   that theory depends on this one. *)
+Theorem phi_do_swap_wf_marked:
+  !base ps dist ops next.
+    generated_plan_state_wf_marked base ps /\ dist < LENGTH ps.ps_stack /\
+    do_swap dist ps = (ops,next) ==>
+    generated_plan_state_wf_marked base next
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `generated_plan_state_wf_marked bound ps` >>
+  `plan_slots_bounded bound next` by
+    metis_tac[planSpillBoundsTheory.do_swap_plan_slots_bounded,
+              generated_plan_state_wf_marked_def] >>
+  `sorting$PERM next.ps_stack ps.ps_stack` by
+    metis_tac[doSwapSimTheory.do_swap_stack_perm, pairTheory.SND] >>
+  `next.ps_spilled = ps.ps_spilled /\
+   doSwapSim$spill_alloc_layout_wf next.ps_alloc next.ps_spilled` by
+    metis_tac[doSwapSimTheory.do_swap_layout_wf,
+              generated_plan_state_wf_marked_def, pairTheory.SND] >>
+  gvs[generated_plan_state_wf_marked_def] >> conj_tac
+  >- metis_tac[sortingTheory.PERM_FILTER, sortingTheory.ALL_DISTINCT_PERM] >>
+  fs[pred_setTheory.IN_DISJOINT] >> metis_tac[sortingTheory.PERM_MEM_EQ]
+QED
+
+Theorem phi_wf_marked_pop:
+  !base ps n. generated_plan_state_wf_marked base ps ==>
+    generated_plan_state_wf_marked base
+      (ps with ps_stack := stack_pop n ps.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[generated_plan_state_wf_marked_def, stackModelTheory.stack_pop_def] >>
+  conj_tac
+  >- ( `ps.ps_stack = TAKE (LENGTH ps.ps_stack - n) ps.ps_stack ++
+                     DROP (LENGTH ps.ps_stack - n) ps.ps_stack` by simp[] >>
+       metis_tac[listTheory.FILTER_APPEND_DISTRIB, listTheory.ALL_DISTINCT_APPEND]) >>
+  fs[pred_setTheory.IN_DISJOINT] >> metis_tac[rich_listTheory.MEM_TAKE]
+QED
+
+Theorem phi_popmany_singleton_wf_marked:
+  !base ps v. generated_plan_state_wf_marked base ps ==>
+    generated_plan_state_wf_marked base (SND (popmany_plan [v] ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_depth v ps.ps_stack` >>
+  simp[stackPlanOpsTheory.popmany_plan_def,
+       stackPlanOpsTheory.popmany_individual_def,
+       stackPlanOpsTheory.is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF] >>
+  rename1 `stack_get_depth v ps.ps_stack = SOME d` >>
+  `d < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  Cases_on `d = 1` >> simp[]
+  >- (pairarg_tac >> gvs[] >>
+      metis_tac[phi_do_swap_wf_marked, phi_wf_marked_pop, pairTheory.SND]) >>
+  Cases_on `d = 0` >> simp[]
+  >- metis_tac[phi_wf_marked_pop] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[phi_do_swap_wf_marked, phi_wf_marked_pop, pairTheory.SND]
+QED
+
+Theorem phi_filter_lupdate_distinct:
+  !xs n dst marker.
+    ALL_DISTINCT (FILTER (\x. x <> marker) xs) /\ ~MEM dst xs ==>
+    ALL_DISTINCT (FILTER (\x. x <> marker) (LUPDATE dst n xs))
+Proof
+  Induct >- simp[listTheory.LUPDATE_def] >> rpt gen_tac >> Cases_on `n` >>
+  simp[listTheory.LUPDATE_def] >> rpt strip_tac >>
+  Cases_on `h = marker` >> Cases_on `dst = marker` >>
+  gvs[listTheory.MEM_FILTER] >>
+  metis_tac[listTheory.MEM_LUPDATE_E]
+QED
+
+Theorem phi_wf_marked_poke:
+  !base ps d out.
+    generated_plan_state_wf_marked base ps /\
+    ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled ==>
+    generated_plan_state_wf_marked base
+      (ps with ps_stack := stack_poke d (Var out) ps.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[generated_plan_state_wf_marked_def, stackModelTheory.stack_poke_def] >>
+  conj_tac >- metis_tac[phi_filter_lupdate_distinct] >>
+  fs[pred_setTheory.IN_DISJOINT] >> metis_tac[listTheory.MEM_LUPDATE_E]
+QED
+
+Theorem phi_marked_count:
+  !xs marker src.
+    ALL_DISTINCT (FILTER (\x. x <> marker) xs) /\ src <> marker ==>
+    LIST_ELEM_COUNT src xs <= 1
+Proof
+  Induct >- simp[rich_listTheory.LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> Cases_on `h = marker` >> Cases_on `h = src` >>
+  gvs[rich_listTheory.LIST_ELEM_COUNT_THM, listTheory.MEM_FILTER,
+      GSYM rich_listTheory.LIST_ELEM_COUNT_MEM] >>
+  strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem phi_plan_hit_residents:
+  !base ps inst live halt d ops next.
+    generated_plan_state_wf_marked base ps /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    ~MEM (operand_to_string (stack_peek d ps.ps_stack)) live /\
+    ~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+    Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled /\
+    generate_phi_plan inst live halt ps = (ops,next) ==>
+    generated_plan_state_wf_marked base next /\
+    next.ps_spilled = ps.ps_spilled /\
+    (!at. MEM at next.ps_stack <=>
+      (MEM at ps.ps_stack /\ at <> stack_peek d ps.ps_stack) \/
+      ((halt \/ MEM (HD inst.inst_outputs) live) /\ at = Var (HD inst.inst_outputs)))
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `generated_plan_state_wf_marked bound ps` >>
+  `d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack <> dead_stack_marker` by
+    metis_tac[genBlockSimTheory.stack_get_phi_depth_var_not_marker] >>
+  `LIST_ELEM_COUNT (stack_peek d ps.ps_stack) ps.ps_stack <= 1` by
+    (irule phi_marked_count >> qexists_tac `dead_stack_marker` >>
+     gvs[generated_plan_state_wf_marked_def]) >>
+  `generated_plan_state_wf_marked bound
+    (ps with ps_stack := stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack)` by
+    metis_tac[phi_wf_marked_poke] >>
+  drule_all phi_plan_hit_no_dup >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> simp[]
+  >- (pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+      conj_tac >- metis_tac[phi_popmany_singleton_wf_marked, pairTheory.SND] >>
+      conj_tac >- (drule phi_popmany_spilled >> simp[]) >>
+      gen_tac >> irule phi_stack_poke_pop_mem >> metis_tac[]) >>
+  strip_tac >> gvs[] >> gen_tac >>
+  simp[phi_stack_poke_mem] >> metis_tac[]
+QED
+
+Theorem phi_stack_find_none_mem:
+  !xs p. stack_find p xs = NONE ==> !x. MEM x xs ==> ~p x
+Proof
+  Induct >> simp[stackModelTheory.stack_find_def] >>
+  rpt gen_tac >> Cases_on `p h` >> simp[] >>
+  Cases_on `stack_find p xs` >> simp[] >> metis_tac[]
+QED
+
+Theorem phi_no_hit_selected_absent:
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = NONE /\
+  (!op. resolve_phi pred inst.inst_operands = SOME op ==> is_var_operand op) ==>
+  !at. MEM at ps.ps_stack ==> resolve_phi pred inst.inst_operands <> SOME at
+Proof
+  simp[stackModelTheory.stack_get_phi_depth_def] >> strip_tac >>
+  drule phi_stack_find_none_mem >> simp[listTheory.MEM_REVERSE] >>
+  metis_tac[dftCommutationTheory.resolve_phi_MEM, listTheory.MEM_FILTER]
+QED
+
+Theorem phi_provenance_plan_no_hit:
+  !base pred entry done inst todo ps live halt.
+    phi_stack_provenance base pred entry done (inst::todo) ps /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = NONE /\
+    (!op. resolve_phi pred inst.inst_operands = SOME op ==> is_var_operand op) ==>
+    phi_stack_provenance base pred entry (done ++ [inst]) todo
+      (SND (generate_phi_plan inst live halt ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule phi_plan_no_hit >> simp[] >> strip_tac >>
+  irule phi_stack_provenance_no_change >> simp[] >>
+  metis_tac[phi_no_hit_selected_absent]
+QED
+
+Theorem phi_provenance_plan_hit:
+  !base pred entry done inst todo ps live halt d ops next.
+    phi_stack_provenance base pred entry done (inst::todo) ps /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    resolve_phi pred inst.inst_operands = SOME (stack_peek d ps.ps_stack) /\
+    inst.inst_outputs <> [] /\
+    ~MEM (operand_to_string (stack_peek d ps.ps_stack)) live /\
+    ~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+    Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled /\
+    (!phi op. MEM phi todo /\ is_var_operand op /\ MEM op phi.inst_operands ==>
+      op <> stack_peek d ps.ps_stack /\ op <> Var (HD inst.inst_outputs)) /\
+    generate_phi_plan inst live halt ps = (ops,next) ==>
+    phi_stack_provenance base pred entry (done ++ [inst]) todo next
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `phi_stack_provenance bound pred entry done (inst::todo) ps` >>
+  `generated_plan_state_wf_marked bound ps` by
+    gvs[phi_stack_provenance_def] >>
+  drule_all phi_plan_hit_residents >> strip_tac >>
+  irule phi_provenance_rename >> simp[] >>
+  qexistsl_tac [`halt \/ MEM (HD inst.inst_outputs) live`, `HD inst.inst_outputs`,
+                `ps`] >>
+  simp[] >> Cases_on `inst.inst_outputs` >> gvs[] >> metis_tac[]
+QED
