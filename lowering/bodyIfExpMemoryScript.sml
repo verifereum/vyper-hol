@@ -1083,10 +1083,12 @@ Theorem ifexp_malformed_pop_source[local]:
   ?ee. eval_expr cx (Pop (BaseT BoolT) (NameTarget "x")) es =
     (INL (PlaceR (MemoryPlace "x" [ValueSubscript (IntV 0)])),ee) /\
     read_result cx (PlaceR (MemoryPlace "x" [ValueSubscript (IntV 0)])) ee =
-    (INR (Error (RuntimeError "evaluate_subscripts array_index")),ee)
+    (INR (Error (RuntimeError "evaluate_subscripts array_index")),ee) /\
+    conditional_result cx (PlaceR (MemoryPlace "x" [ValueSubscript (IntV 0)])) ee =
+    (INR (Error (TypeError "place_type_value path")),ee)
 Proof
   Cases_on `es` >> simp[] >> strip_tac >> gvs[] >>
-  simp[evaluate_def, get_scopes_def, type_check_def,
+  simp[evaluate_def, conditional_result_def, place_type_value_def, get_scopes_def, type_check_def,
        vyperStateTheory.assert_def, ignore_bind_def, bind_def, return_def,
        lookup_scopes_def, get_place_def, pop_place_def,
        find_containing_scope_def, read_memory_path_def, evaluate_subscripts_def,
