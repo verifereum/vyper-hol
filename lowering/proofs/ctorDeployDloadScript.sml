@@ -1,0 +1,24 @@
+(* DLOAD offset and headroom invariants of the raw deployment unit (the deploy
+ * counterparts of lower_vyper_runtime_unit_dload_offset_ok/_headroom_ok);
+ * the constructor arguments are the data section.
+ * TOP-LEVEL: deploy_unit_dload_ok (a piece of e2e_deploy_correctness; admitted until proved).
+ *)
+Theory ctorDeployDload
+Ancestors
+  ctorDeployDefs o1PassContract unitMemInv lowerDloadDefs
+
+Theorem deploy_unit_dload_ok:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    gas_variant vs (entry_venom_state prog cplan es) /\
+    code_layout_valid vs /\
+    ~deploy_source_exempt tops (load_contract NONE [] am tx [(NONE, tops)] [])
+    ==>
+    mem_inv dload_offset_ok dunit.cu_context vs /\
+    mem_inv dload_headroom_ok dunit.cu_context vs
+Proof
+  cheat
+QED

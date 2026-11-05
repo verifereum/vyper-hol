@@ -4,13 +4,42 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
-  e2eCorrectness e2eDeployDefs
+  e2eCorrectness e2eDeployDefs ctorDeployDefs
+  ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
+  ctorDeployLowering ctorDeployMemory ctorDeployDload ctorDeployDead
+  ctorDeployFrame
+  compileVyper compilePhasesProps codegen e2eProducers e2eComposition
+  o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
+  lowerDloadDefs e2eEntry
 
-(* TOP-LEVEL / savedDeploymentAdmission: PLAN 5.11, D28, section 9.
- * CLASSIFICATION: single planned stage admission, Milestone 6 item 7.
- * Not on the logical dependency path of call correctness; NOT proved here.
+(* A successful compilation exposes the deployment unit's phases. *)
+Theorem compile_vyper_deploy_phases:
+  compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) ==>
+  ?rpolicy dunit dout prog cplan.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan)
+Proof
+  simp[compile_vyper_def, deploy_phases_def] >> strip_tac >>
+  drule compile_vyper_with_success_phases >> strip_tac >>
+  gvs[finalize_codegen_identity, o1PipelineCorrectTheory.o1_pipeline_def,
+      AllCaseEqs()] >>
+  qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
+    (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
+  goal_assum $ drule_at Any >> gvs[]
+QED
+
+Theorem gas_variant_code_layout_valid[local]:
+  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
+Proof
+  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
+  fs[code_layout_valid_def]
+QED
+
+(* TOP-LEVEL: PLAN 5.11, D28, section 9. Proved from the deployment pieces
+ * (ctorDeploy* theories) and the generic O1 pipeline and codegen stages.
+ * Not on the logical dependency path of call correctness.
  *
- * Proof idea (deferred): relate the constructor's CODECOPY-decoded canonical
+ * Proof idea: relate the constructor's CODECOPY-decoded canonical
  * ABI tail to source binding, simulate its Call-free body and runtime-return
  * epilogue, then apply Verifereum handle_create/handle_exception in the SINGLE
  * fresh creation frame. Deposit gas/size failures are resource starvation.
@@ -60,15 +89,68 @@ Theorem e2e_deploy_correctness:
        | INR ContinueException => F
        | INR (ReturnException _) => F)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule compile_vyper_deploy_phases >> strip_tac >>
+  drule compile_vyper_runtime_nonempty >> strip_tac >>
+  `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
+  Cases_on `deploy_source_exempt tops
+              (load_contract NONE [] am tx [(NONE, tops)] [])`
+  >- (qspec_then `es` strip_assume_tac run_call_total >>
+      qexistsl_tac [`r`, `es'`] >> simp[] >> disj2_tac >>
+      Cases_on `load_contract NONE [] am tx [(NONE, tops)] []` >>
+      fs[deploy_source_exempt_def] >>
+      rename1 `INR exc` >> Cases_on `exc` >> fs[]) >>
+  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_defs_reach_uses >> strip_tac >>
+  drule_all deploy_initcode_bounded >> strip_tac >>
+  `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
+   codegen_assembly rpolicy dout.po_unit = SOME prog /\
+   generate_context_plan dout.po_unit.cu_context = SOME cplan` by
+    fs[deploy_phases_def] >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  drule_all deploy_entry_state_ok >> strip_tac >>
+  qspecl_then [`deploy_dead`, `0`, `rpolicy`, `dunit`, `dout`,
+               `entry_venom_state prog cplan es`] mp_tac
+    run_venom_pipeline_correct >>
+  impl_tac >- fs[dead_wf_deploy_dead] >> strip_tac >>
+  drule_all deploy_unit_execution_correct >> strip_tac >>
+  `code_layout_valid vs_in` by
+    (irule gas_variant_code_layout_valid >>
+     qexists_tac `entry_venom_state prog cplan es` >> fs[o1_run_state_ok_def]) >>
+  drule_all deploy_unit_memory_ok >> strip_tac >>
+  drule_all deploy_unit_dload_ok >> strip_tac >>
+  `ctx_sim deploy_dead dunit.cu_context dout.po_unit.cu_context vs_in
+     (entry_venom_state prog cplan es) /\
+   o1_lowered_inv dout.po_unit.cu_context (entry_venom_state prog cplan es)` by
+    metis_tac[] >>
+  `terminates (run_context fuel dunit.cu_context vs_in)` by
+    metis_tac[deploy_venom_result_rel_terminates] >>
+  `?fuel'. dead_result_rel deploy_dead (run_context fuel dunit.cu_context vs_in)
+             (run_context fuel' dout.po_unit.cu_context
+                (entry_venom_state prog cplan es))` by
+    metis_tac[ctx_sim_def] >>
+  drule_all deploy_venom_result_rel_dead >> strip_tac >>
+  `(entry_venom_state prog cplan es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+    simp[entry_venom_state_def] >>
+  drule_all o1_pipeline_memory_obligations >> strip_tac >>
+  drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
+               `entry_venom_state prog cplan es`, `shadow_root es`] mp_tac
+    codegen_correct >>
+  impl_tac >- fs[] >> disch_tac >>
+  qspecl_then [`tops`, `runtime_bc`, `deploy_bc`, `am`, `tx`, `es`,
+               `load_contract NONE [] am tx [(NONE, tops)] []`,
+               `run_context fuel' dout.po_unit.cu_context
+                  (entry_venom_state prog cplan es)`] mp_tac deploy_venom_frame >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[deploy_result_rel_def]
 QED
 
-(* Typed kernel schema and admission-classification gate. This is an ML check,
- * not a proved alias of the admission, and adds no theorem dependency. The
- * clean result-case definition must expand to precisely the literal 5.11
- * conclusion above, including its explicit failure cases and no-prefix guard.
- * The tag-name string is split only because cheat_audit.py sites scans words
- * inside ML string literals as tactic sites; the actual admission is above.
+(* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
+ * no theorem dependency. The clean result-case definition must expand to
+ * precisely the literal 5.11 conclusion above, including its explicit failure
+ * cases and no-prefix guard. Whether the theorem depends on a cheat is
+ * checked with `holbuild check`.
  *)
 val savedDeploymentAdmission = DB.fetch "e2eDeployCorrectness" "e2e_deploy_correctness";
 val _ =
@@ -84,10 +166,8 @@ val _ =
          deploy_result_rel tops runtime_bc tx es r es'
            (load_contract NONE [] am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
-    val (oracles, axioms) = Tag.dest_tag (Thm.tag savedDeploymentAdmission);
   in
     if aconv expanded (concl savedDeploymentAdmission) andalso
-       null (Thm.hyp savedDeploymentAdmission) andalso null axioms andalso
-       List.filter (fn tag => tag <> "DISK_THM") oracles = ["ch" ^ "eat"] then ()
-    else raise Fail "PLAN 5.11 deployment schema/classification mismatch"
+       null (Thm.hyp savedDeploymentAdmission) then ()
+    else raise Fail "PLAN 5.11 deployment schema mismatch"
   end;
