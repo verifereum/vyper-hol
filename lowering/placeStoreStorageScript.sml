@@ -4519,6 +4519,16 @@ Proof
   simp[pending_alloca_size_def, init_venom_state_def] >> metis_tac[]
 QED
 
+Theorem place_store_typed_normalization_cyclic_metadata:
+  !cenv dst dty src sty.
+    ~is_word_type dty /\
+    ~(is_bytestring_type dty /\ is_bytestring_type sty) /\
+    ~acyclic_struct_metadata cenv.ce_struct_fields ==>
+    compile_store_memory_typed cenv dst dty src sty = emit_void INVALID []
+Proof
+  rpt strip_tac >> simp[Once contextTheory.compile_store_memory_typed_def]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
