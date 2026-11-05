@@ -115,3 +115,31 @@ Proof
   `MEM l pre` by gvs[] >>
   metis_tac[current_chain_prefix_dominated]
 QED
+
+Theorem current_nondeg_actual_exit_tokens_distinct:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM a (fn_labels fn) /\ MEM b (fn_labels fn) /\ MEM d (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+  current_changing_site fn ins v d /\
+  dominates (dom_analyze (cfg_analyze fn) fn) d a /\
+  ~dominates (dom_analyze (cfg_analyze fn) fn) d b ==>
+  current_chain_token fn ins v (REVERSE ps ++ [a]) (CurrentDefault v) <>
+  current_chain_token fn ins v (REVERSE qs ++ [b]) (CurrentDefault v)
+Proof
+  strip_tac >>
+  drule_all current_nondeg_actual_exit_source >>
+  disch_then (qspec_then `CurrentDefault v` strip_assume_tac) >>
+  spose_not_then assume_tac >>
+  qspec_then `REVERSE qs ++ [b]`
+    (qspec_then `CurrentDefault v` strip_assume_tac)
+    current_nondeg_chain_token_local
+  >- metis_tac[current_nondeg_token_at_def] >>
+  `l = l'` by metis_tac[current_nondeg_token_at_unique] >>
+  `dominates (dom_analyze (cfg_analyze fn) fn) l b` by
+    (gvs[] >> Cases_on `l = b` >- (gvs[] >> metis_tac[dom_self]) >>
+     metis_tac[current_actual_chain_membership, strict_dominates_def]) >>
+  `cfg_reachable_of (cfg_analyze fn) b` by
+    metis_tac[makeSsaCurrentAnalysisTheory.current_all_labels_reachable] >>
+  metis_tac[dominates_trans]
+QED
