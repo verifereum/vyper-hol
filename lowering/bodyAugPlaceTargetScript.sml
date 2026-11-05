@@ -1,13 +1,12 @@
 (*
- * The target/place judgment of an augmented assignment's field or element
- * target from the body simulation's premises (#637).  target_case_all needs
- * target_env_ok, which body_inv gives for the main module only; the
- * judgment is the same at a compile environment with every declaration's
- * metadata (aug_place_metadata_completion), since the target's code only
- * reads its root's.
+ * The facts an augmented assignment to a field or element of a place needs
+ * from the body simulation's premises (#637): the target's case judgment
+ * from body_base_target_ok, its indices' expr_body_pre, that a supported
+ * target's root is not an immutable, and what kind of place it evaluates to.
  *
  * TOP-LEVEL:
  *   aug_place_body_target_sim — target_sim from body_base_target_ok
+ *   aug_place_target_indices_pre — the indices' expr_body_pre
  *)
 Theory bodyAugPlaceTarget
 Ancestors
@@ -128,6 +127,81 @@ Proof
   Cases_on `vdecl1` >> Cases_on `vdecl3` >> gvs[] >>
   Cases_on `vdecl0` >> gvs[] >> metis_tac[]
 QED
+
+Theorem aug_place_target_indices_pre:
+  !t.
+    IS_SOME (type_place_target env t) /\
+    IS_SOME (supported_target_info tops bindings t) /\
+    ~supported_target_exists
+      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+    call_evaluation_safe cx (int_calls_target t) /\
+    (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
+              occurs_abi_decode_target target tops) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    target_indices_pre cenv cx env t
+Proof
+  `(!e:expr. T) /\ (!t.
+    IS_SOME (type_place_target env t) /\
+    IS_SOME (supported_target_info tops bindings t) /\
+    ~supported_target_exists
+      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+    call_evaluation_safe cx (int_calls_target t) /\
+    (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
+              occurs_abi_decode_target target tops) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    target_indices_pre cenv cx env t)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def] >>
+  rpt conj_tac >> rpt gen_tac
+  >~ [`IS_SOME (type_place_target env (SubscriptTarget t e))`]
+    >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume aug_place_target_indices_pre[attribute]:
+  simp[Once well_typed_expr_def, supportedTargetsTheory.supported_target_info_def] >>
+  Cases_on `type_place_target env t` >> simp[] >>
+  Cases_on `supported_target_info tops bindings t` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Resume aug_place_target_indices_pre[subscript]:
+  simp[Once well_typed_expr_def, supportedTargetsTheory.supported_target_info_def] >>
+  Cases_on `well_typed_expr env e` >> simp[] >>
+  Cases_on `type_place_target env t` >> simp[] >>
+  Cases_on `supportedExprs$supported_expr tops e` >> simp[] >>
+  Cases_on `supported_target_info tops bindings t` >> simp[] >>
+  rpt strip_tac
+  >- (first_x_assum irule >> simp[] >>
+      metis_tac[call_evaluation_safe_append_left]) >>
+  irule stmt_expr_body_pre >>
+  drule supported_expr_body_calls >> strip_tac >>
+  simp[gasContextTheory.cx_tops_def] >>
+  metis_tac[call_evaluation_safe_append_right, APPEND_NIL]
+QED
+
+Finalise aug_place_target_indices_pre
+
+Theorem aug_place_supported_indices:
+  !t. IS_SOME (supported_target_info tops bindings t) ==>
+    !e. MEM e (target_indices t) ==> supportedExprs$supported_expr tops e
+Proof
+  `(!e:expr. T) /\ (!t.
+    IS_SOME (supported_target_info tops bindings t) ==>
+    !e. MEM e (target_indices t) ==> supportedExprs$supported_expr tops e)`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_def, supportedTargetsTheory.supported_target_info_def] >>
+  rpt conj_tac >> rpt gen_tac >>
+  Cases_on `supported_target_info tops bindings t` >> simp[] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `supportedExprs$supported_expr tops e` >> gvs[] >> metis_tac[]
+QED
+
 
 Theorem aug_place_hashmap_build:
   !tops src id vis tr kt vt slot.
