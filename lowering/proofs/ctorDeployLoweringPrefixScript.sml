@@ -1763,6 +1763,21 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+Theorem deploy_prefix_negative_state_rel:
+  deploy_state_rel ^prefix_tops_tm ^prefix_deploy_bc_tm
+    initial_machine_state ^prefix_tx_tm ^prefix_es_tm
+Proof
+  rewrite_tac[e2eDeployDefsTheory.deploy_state_rel_def] >>
+  qexistsl_tac [`^prefix_ctxt_tm`,
+    `make_rollback initial_machine_state.accounts initial_machine_state.tStorage
+       (^prefix_tx_tm).sender (^prefix_tx_tm).target`, `^prefix_args_tm`] >>
+  simp[deploy_prefix_negative_wf_state, deploy_prefix_negative_call_trace,
+       deploy_prefix_negative_args_encoded, LET_THM,
+       vfmContextTheory.initial_context_simp,
+       vfmContextTheory.initial_msg_params_def] >>
+  EVAL_TAC >> simp[]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
