@@ -26,8 +26,10 @@ Theorem removable_not_preserved_effect_free[local]:
          ~remove_unused_must_preserve_op inst.inst_opcode ==>
          is_effect_free_op inst.inst_opcode \/ inst.inst_opcode = GAS
 Proof
-  (* admitted at base cut: GAS is removable but no longer effect-free after the gas join; needs GAS volatile or must-preserve *)
-  cheat
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_removable_def, remove_unused_must_preserve_op_def,
+      is_volatile_def, is_terminator_def, is_effect_free_op_def]
 QED
 
 (* Per-instruction NOP correctness: if an effect-free instruction
