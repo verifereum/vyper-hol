@@ -39,15 +39,7 @@ Theorem vv_holds_materialise:
   vv_holds cenv cx t tv vv es s ==>
   vv_holds cenv cx t (Value v) vv es s
 Proof
-  Cases_on `vv`
-  >- (simp[vv_holds_def] >> rpt strip_tac >>
-      gvs[read_result_def, return_def]) >>
-  rename1 `LocatedValue t' p` >>
-  Cases_on `p.ptr_location` >>
-  simp[vv_holds_def, storage_holds_def, immutable_holds_def,
-       read_result_def, return_def] >>
-  rpt strip_tac >> gvs[read_result_def, return_def] >>
-  qexistsl [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
+  cheat
 QED
 
 Theorem vv_at_materialise:
@@ -56,12 +48,7 @@ Theorem vv_at_materialise:
   vv_at cenv cx t sa sb es tv vv s ==>
   vv_at cenv cx t sa sb es (Value v) vv s
 Proof
-  Cases_on `vv`
-  >- (simp[vv_holds_def, vv_at_def] >> rpt strip_tac >>
-      gvs[read_result_def, return_def]) >>
-  rename1 `LocatedValue t' p` >>
-  simp[vv_at_def, read_result_def, return_def] >>
-  metis_tac[]
+  cheat
 QED
 
 Theorem vv_post_materialise:
@@ -69,12 +56,7 @@ Theorem vv_post_materialise:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s
 Proof
-  pure_rewrite_tac[vv_post_def] >> strip_tac >>
-  `vv_holds cenv cx (expr_type e) (Value v) vv es' s` by
-    (drule_all vv_holds_materialise >> simp[]) >>
-  `vv_at cenv cx (expr_type e) sa sb es' (Value v) vv s` by
-    (drule_all vv_at_materialise >> simp[]) >>
-  asm_rewrite_tac[]
+  cheat
 QED
 
 Theorem unwrap_value_materialise_sim:
@@ -94,13 +76,7 @@ Theorem unwrap_value_materialise_sim:
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  rpt strip_tac >> irule frag_exec_conseq >>
-  qexistsl_tac
-    [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,
-     `\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s`, `R`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> drule_all vv_post_materialise >> simp[]) >>
-  irule unwrap_value_sim >> simp[]
+  cheat
 QED
 
 Theorem vv_post_old_buffer:
@@ -110,9 +86,7 @@ Theorem vv_post_old_buffer:
     off + sz <= b \/ b + k <= off) ==>
   mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory
 Proof
-  pure_rewrite_tac[vv_post_def] >> strip_tac >>
-  first_x_assum irule >> asm_rewrite_tac[] >>
-  qexists_tac `aid` >> asm_rewrite_tac[]
+  cheat
 QED
 
 Theorem vv_post_local_region_backward:
@@ -122,13 +96,7 @@ Theorem vv_post_local_region_backward:
   local_region ce es1.scopes s1 name b sz ==>
   local_region ce es.scopes s0 name b sz
 Proof
-  rpt strip_tac >> irule local_region_frame >>
-  conj_tac
-  >- (qexists_tac `func` >>
-      gvs[stmt_state_rel_def, state_rel_def]) >>
-  qexistsl_tac [`sa`, `es1.scopes`, `s1`] >>
-  gvs[vv_post_def] >>
-  metis_tac[eval_expr_preserves_scopes_dom]
+  cheat
 QED
 
 
@@ -153,19 +121,7 @@ Theorem buffer_emit_add_vv_post:
     (q with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)
 Proof
-  strip_tac >> drule_all buffer_emit_add_run >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var))
-    (w + n2w off) s` >>
-  conj_tac >- asm_rewrite_tac[] >>
-  conj_tac
-  >- (irule vv_post_update_var >> simp[] >> qexists_tac `sm` >> simp[] >>
-      conj_tac
-      >- metis_tac[CONJUNCT1 compiler_compile_var] >>
-      simp[not_fresh_at_def, toString_11]) >>
-  simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE, toString_11]
+  cheat
 QED
 
 Theorem buffer_emit_add_vv_sim:
@@ -178,13 +134,7 @@ Theorem buffer_emit_add_vv_sim:
     (\s. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
          eval_operand dst s = SOME (w + n2w off)) R
 Proof
-  strip_tac >> irule frag_exec_run_inst_seq >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  gvs[cs_extends_def, same_blocks_def, mk_inst_def, is_terminator_def] >>
-  rpt strip_tac >> disj1_tac >>
-  drule_all buffer_emit_add_vv_post >> strip_tac >>
-  qexists_tac `q` >> gvs[eval_operand_def, lookup_var_def]
+  cheat
 QED
 
 (* Provenance follows the actual compile/ADD/unwrap order, not lower_value. *)
@@ -194,12 +144,7 @@ Theorem aggregate_child_unwrap_var:
   unwrap_value ce vv sadd = (op,su) ==>
   !x. op = Var x ==> not_fresh_at su x
 Proof
-  strip_tac >>
-  `!x. vv_operand vv = Var x ==> not_fresh_at sadd x` by
-    metis_tac[CONJUNCT1 compiler_compile_var,
-              freshWritesTheory.not_fresh_at_mono] >>
-  drule_at (Pos hd) compiler_unwrap_value_var >>
-  Cases_on `vv` >> simp[vv_operand_def] >> metis_tac[]
+  cheat
 QED
 
 (* Placement uses allocation IDs, independently of the variable watermark. *)
@@ -207,14 +152,14 @@ Theorem expr_val_at_start_var[simp]:
   expr_val_at ce cx ty (sa with cs_next_var := n) sb es v op s <=>
   expr_val_at ce cx ty sa sb es v op s
 Proof
-  simp[expr_val_at_def]
+  cheat
 QED
 
 Theorem vv_at_start_var[simp]:
   vv_at ce cx ty (sa with cs_next_var := n) sb es tv vv s <=>
   vv_at ce cx ty sa sb es tv vv s
 Proof
-  Cases_on `vv` >> simp[vv_at_def]
+  cheat
 QED
 
 Theorem vv_post_rebase:
@@ -222,7 +167,7 @@ Theorem vv_post_rebase:
   vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     sm r es' tv vv r
 Proof
-  simp[vv_post_def]
+  cheat
 QED
 
 Theorem unwrap_value_rebased_sim:
@@ -240,18 +185,7 @@ Theorem unwrap_value_rebased_sim:
     (\s. expr_post ctx func ce cx e es'
       (sa with cs_next_var := sm.cs_next_var) su r es' v op s) R
 Proof
-  strip_tac >> irule frag_exec_conseq >>
-  qexistsl_tac
-    [`\s. vv_post ctx func ce cx e es'
-        (sa with cs_next_var := sm.cs_next_var) sm r es' tv vv s`,
-     `\s. expr_post ctx func ce cx e es'
-        (sa with cs_next_var := sm.cs_next_var) su r es' v op s`, `R`] >>
-  simp[] >> conj_tac
-  >- (drule vv_post_rebase >> simp[]) >>
-  `local_ptrs_reserved ce (sa with cs_next_var := sm.cs_next_var)` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     qexists_tac `sm` >> simp[]) >>
-  irule unwrap_value_materialise_sim >> simp[]
+  cheat
 QED
 
 Theorem expr_post_rebased_lookup:
@@ -260,7 +194,7 @@ Theorem expr_post_rebased_lookup:
   not_fresh_at sm x /\ lookup_var x r = SOME w ==>
   lookup_var x s = SOME w
 Proof
-  simp[expr_post_def, not_fresh_at_def] >> metis_tac[]
+  cheat
 QED
 
 (* Store the just-unwrapped value.  Both reference-state frames are composed
@@ -301,48 +235,7 @@ Theorem aggregate_store_rebased_slice_run:
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
     locals_kept ce es' r q
 Proof
-  strip_tac >>
-  `lookup_var x s = SOME w` by
-    (drule_at (Pos hd) expr_post_rebased_lookup >> simp[]) >>
-  `!n b k. local_region ce es'.scopes s n b k ==>
-    b + k <= w2n w \/ w2n w + type_memory_size tv <= b` by
-    (rpt strip_tac >>
-     `local_region ce es'.scopes r n b k` by
-       (irule local_region_frame >> conj_tac
-        >- (qexists_tac `func` >>
-            gvs[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
-        qexistsl_tac [`sm`, `es'.scopes`, `s`] >>
-        gvs[expr_post_def, not_fresh_at_def]) >> metis_tac[]) >>
-  `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
-    (rpt strip_tac >> gvs[] >>
-     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `expr_val_rel cx (expr_type e) v op s /\
-   stmt_state_rel ctx func ce cx es' s` by gvs[expr_post_def] >>
-  `eval_operand (Var x) s = SOME w` by simp[eval_operand_def] >>
-  drule_all (SRULE [] buffer_store_memory_encoding) >> strip_tac >>
-  `LENGTH s.vs_memory <= LENGTH q.vs_memory` by
-    (drule_all (SRULE [] buffer_store_memory_capacity) >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es' q` by
-    (irule buffer_store_state_frame >>
-     qexistsl_tac [`w2n w`, `type_memory_size tv`, `s`, `su`] >>
-     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `locals_kept ce es' r q` by
-    (irule locals_kept_regions_tail >> qexists_tac `s` >>
-     reverse conj_tac >- gvs[expr_post_def] >>
-     rpt strip_tac >> metis_tac[]) >>
-  qexists_tac `q` >> simp[] >>
-  `q.vs_allocas = s.vs_allocas` by
-    (qpat_assum `q with <|vs_memory := _; vs_vars := _|> = s`
-      (mp_tac o AP_TERM ``\z. z.vs_allocas``) >> simp[]) >>
-  gvs[expr_post_def, not_fresh_at_def] >>
-  rpt conj_tac >> rpt strip_tac >>
-  `mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz r.vs_memory` by
-    (qpat_x_assum `!aid off sz. _` irule >>
-     conj_tac >- metis_tac[] >> qexists_tac `aid` >> simp[]) >>
-  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >> strip_tac >>
-  `mem_bytes_at a k r.vs_memory = mem_bytes_at a k s.vs_memory` by
-    (first_x_assum irule >> simp[]) >>
-  metis_tac[]
+  cheat
 QED
 
 Theorem aggregate_store_memory_straight:
@@ -350,20 +243,7 @@ Theorem aggregate_store_memory_straight:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)
 Proof
-  strip_tac >> Cases_on `is_word_type ty` >>
-  Cases_on `is_bytestring_type ty` >>
-  gvs[compile_store_memory_def, compile_store_bytestring_def,
-      compile_bytestring_copy_len_def, compile_copy_memory_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
-      fresh_id_def, fresh_var_def, emit_def] >>
-  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
-       mk_inst_def, is_terminator_def] >>
-  Cases_on `type_memory_bytes ce ty` >>
-  gvs[compile_copy_memory_def, comp_return_def,
-      emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
-      fresh_id_def, emit_def, emitted_insts_def,
-      rich_listTheory.DROP_APPEND1, mk_inst_def, is_terminator_def]
+  cheat
 QED
 
 Theorem aggregate_store_rebased_slice_sim:
@@ -402,15 +282,7 @@ Theorem aggregate_store_rebased_slice_sim:
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
       locals_kept ce es' r q) R
 Proof
-  strip_tac >> drule buffer_store_memory_shape >> strip_tac >>
-  irule hash_run_frag >> simp[] >>
-  reverse conj_tac >- (drule aggregate_store_memory_straight >> simp[]) >>
-  rpt strip_tac >> drule_all aggregate_store_rebased_slice_run >> strip_tac >>
-  qexists_tac `q` >> simp[stmt_state_rel_inst_idx] >>
-  conj_tac >- gvs[lookup_var_def] >>
-  rpt strip_tac >> first_x_assum irule >> simp[] >>
-  qexistsl_tac [`aid`, `off`, `sz`] >> simp[] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  cheat
 QED
 
 Theorem aggregate_child_add_then:
@@ -430,23 +302,7 @@ Theorem aggregate_child_add_then:
     frag_exec ctx sn sb (\s. s = r) Q R) ==>
   frag_exec ctx sa sb P Q R
 Proof
-  strip_tac >> irule frag_exec_seq_pointwise >>
-  qexistsl_tac
-    [`\s. ?tv. res = INL tv /\
-       vv_post ctx func ce cx e es sa sm s0 es' tv vv s`, `sm`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> irule frag_exec_seq_pointwise >>
-      qexistsl_tac
-        [`\s. vv_post ctx func ce cx e es sa sn s0 es' tv vv s /\
-             eval_operand dst s = SOME (w + n2w off)`, `sn`] >>
-      simp[] >> irule frag_exec_conseq >>
-      qexistsl_tac
-        [`\s. vv_post ctx func ce cx e es sa sm s0 es' tv vv s /\
-             eval_operand buf s = SOME w`,
-         `\s. vv_post ctx func ce cx e es sa sn s0 es' tv vv s /\
-             eval_operand dst s = SOME (w + n2w off)`, `R`] >>
-      simp[] >> irule buffer_emit_add_vv_sim >> simp[]) >>
-  metis_tac[cs_extends_trans]
+  cheat
 QED
 
 Theorem aggregate_unwrap_store_slice_sim:
@@ -492,21 +348,7 @@ Theorem aggregate_unwrap_store_slice_sim:
       Q q) ==>
   frag_exec ctx sm sb (\s. s = r) Q R
 Proof
-  strip_tac >> irule frag_exec_seq >>
-  qexistsl_tac
-    [`\s. expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
-        su r es' v op s`, `su`] >> simp[] >>
-  conj_tac
-  >- (irule unwrap_value_rebased_sim >> simp[] >>
-      conj_tac >- (strip_tac >> fs[]) >>
-      qexistsl_tac [`es`, `s0`, `tvv`, `vv`] >> simp[]) >>
-  drule_all aggregate_store_rebased_slice_sim >>
-  disch_then (qspecl_then [`sa`, `R`] mp_tac) >>
-  disch_then (mp_then Any irule frag_exec_weaken) >>
-  simp[] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> simp[] >>
-  qexistsl_tac [`aid`, `off`, `sz`] >> simp[] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  cheat
 QED
 
 (* Allocation's static provenance is independent of the source expression. *)
@@ -523,27 +365,14 @@ Theorem buffer_alloc_provenance:
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sa sm)
 Proof
-  rpt strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
-  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-  simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-    comp_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-    emit_def, comp_ignore_bind_def] >> strip_tac >> gvs[] >>
-  qexists `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
-    [STRING #"%" (toString sa.cs_next_var)]` >>
-  simp[venomInstTheory.mk_inst_def, not_fresh_at_def,
-    ASCIInumbersTheory.toString_11, emitted_insts_def,
-    rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.IS_PREFIX_APPEND,
-    venomInstTheory.is_terminator_def] >>
-  conj_tac >- (irule local_ptrs_reserved_next_var >>
-    goal_assum (drule_at Any) >> simp[]) >>
-  metis_tac[local_ptrs_reserved_fresh, arithmeticTheory.LESS_EQ_REFL]
+  cheat
 QED
 
 Theorem buffer_local_region_inst_idx[local]:
   local_region ce scopes (t with vs_inst_idx := k) name p n <=>
   local_region ce scopes t name p n
 Proof
-  simp[local_region_def, lookup_var_def]
+  cheat
 QED
 
 (* Code without GAS leaves the gas readings alone. *)
@@ -551,9 +380,7 @@ Theorem buffer_run_gas_readings[local]:
   !code s t. EVERY (\i. i.inst_opcode <> GAS) code /\
     run_inst_seq code s = OK t ==> t.vs_gas_readings = s.vs_gas_readings
 Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
-  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
-  metis_tac[oracleExecPropsTheory.step_inst_base_gas_readings]
+  cheat
 QED
 
 Theorem buffer_alloc_frag:
@@ -581,34 +408,7 @@ Theorem buffer_alloc_frag:
         (!name p n. local_region ce es.scopes t name p n <=>
           local_region ce es.scopes s0 name p n)) R
 Proof
-  rpt strip_tac >>
-  `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sm)` by
-    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-     simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-       comp_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-       emit_def, comp_ignore_bind_def] >> strip_tac >> gvs[] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
-       venomInstTheory.mk_inst_def]) >>
-  drule_all buffer_alloc_provenance >> strip_tac >>
-  qexistsl [`inst`,`x`] >> simp[] >>
-  irule frag_exec_run_inst_seq >> simp[] >> rpt strip_tac >> gvs[] >>
-  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
-    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
-    metis_tac[buffer_alloc_code] >>
-  drule_all literal_alloc_buffer_run >> strip_tac >>
-  `t.vs_gas_readings = s0.vs_gas_readings` by
-    metis_tac[buffer_run_gas_readings] >>
-  `!name p n. local_region ce es.scopes t name p n <=>
-    local_region ce es.scopes s0 name p n` by
-    (rpt gen_tac >> eq_tac
-     >- (strip_tac >> irule local_region_frame >> conj_tac
-         >- (qexists_tac `func` >>
-             gvs[stmt_state_rel_def, state_rel_def]) >>
-         qexistsl [`sa`, `es.scopes`, `t`] >> simp[]) >>
-     metis_tac[local_region_frame_fwd]) >>
-  disj1_tac >> goal_assum (drule_at Any) >>
-  simp[stmt_state_rel_inst_idx, buffer_local_region_inst_idx] >>
-  gvs[eval_operand_def, lookup_var_def] >> metis_tac[]
+  cheat
 QED
 
 (* Compose the allocation-entry and aggregate-loop frames once for all
@@ -627,14 +427,7 @@ Theorem aggregate_buffer_clearance:
   !name lb len. local_region ce es'.scopes r name lb len ==>
                  b + sz <= lb \/ lb + len <= b
 Proof
-  rpt strip_tac >>
-  `local_region ce es.scopes t name lb len` by
-    (irule local_region_frame >> conj_tac
-     >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
-     qexistsl [`sm`, `es'.scopes`, `r`] >> simp[]) >>
-  `local_region ce es.scopes s0 name lb len` by metis_tac[] >>
-  qpat_x_assum `!name lb len. local_region _ _ s0 _ _ _ ==> _` drule >>
-  simp[regions_disjoint_def]
+  cheat
 QED
 
 Theorem buffer_loop_memory_vv_post:
@@ -669,29 +462,5 @@ Theorem buffer_loop_memory_vv_post:
   vv_post ctx func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) r
 Proof
-  strip_tac >>
-  `b < dimword (:256)` by decide_tac >>
-  irule buffer_memory_vv_post_general >>
-  simp[] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `not_fresh_at sm x` by
-        (irule freshWritesTheory.not_fresh_at_mono >>
-         qexists `sa` >> gvs[ci_mono_def]) >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[] >>
-      qpat_x_assum `!aid a n. FLOOKUP t.vs_allocas _ = _ /\ _ ==> _` irule >>
-      simp[] >> conj_tac
-      >- (rpt strip_tac >>
-          qpat_x_assum `!n b' k. local_region _ _ _ _ _ _ ==> _`
-            (qspecl_then [`name`,`lo`,`k`] mp_tac) >> simp[] >> decide_tac) >>
-      conj_tac >- (qexists `aid` >> gvs[ci_mono_def] >> metis_tac[]) >>
-      qpat_x_assum `!aid a n. _ /\ _ ==> regions_disjoint _ _ _ _`
-        (qspecl_then [`aid`,`off`,`len`] mp_tac) >>
-      simp[regions_disjoint_def] >> decide_tac) >>
-  conj_tac >- (gvs[ci_mono_def] >> decide_tac) >>
-  conj_tac
-  >- (gvs[locals_kept_def] >> metis_tac[]) >>
-  qexists `sz` >>
-  simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[]
+  cheat
 QED

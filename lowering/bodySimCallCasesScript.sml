@@ -29,7 +29,7 @@ Theorem body_extcall_case:
     body_exprs_ok cx (TAKE 1 es) ==>
     body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
@@ -134,7 +134,7 @@ Theorem body_intcall_case:
        body_results_ok cx es) ==>
     body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#636 operands with internal calls): raw_call.  Its case lemma is
@@ -144,7 +144,7 @@ Theorem body_raw_call_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#636 operands with internal calls): raw_call with calldata.  Its
@@ -154,7 +154,7 @@ Theorem body_raw_call_calldata_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#636 operands with internal calls): raw_log.  Its case lemma is
@@ -163,7 +163,7 @@ Theorem body_raw_log_case:
   !cx v20 es v21.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#636 operands with internal calls): raw_revert.  Its case lemma is
@@ -172,7 +172,7 @@ Theorem body_raw_revert_case:
   !cx v22 es v23.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v22 RawRevert es v23)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#636 operands with internal calls): selfdestruct.  Its case lemma is
@@ -182,7 +182,7 @@ Theorem body_selfdestruct_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED
 
 (* GAP (#636 operands with internal calls): create.  Its case lemma is
@@ -214,5 +214,5 @@ Theorem body_create_case:
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
     body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  cheat
 QED

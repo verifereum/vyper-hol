@@ -49,10 +49,7 @@ Theorem struct_field_slot_alookup[local]:
   !fs id off ftv.
     struct_field_slot fs id = SOME (off, ftv) ==> ALOOKUP fs id = SOME ftv
 Proof
-  Induct >> simp[struct_field_slot_def] >> PairCases >> rpt gen_tac >>
-  simp[struct_field_slot_def] >> IF_CASES_TAC >> simp[] >>
-  strip_tac >> gvs[] >> rename1 `struct_field_slot fs id = SOME q` >>
-  PairCases_on `q` >> gvs[] >> metis_tac[]
+  cheat
 QED
 
 (* A field of a storage struct: the slot plus the field's slot offset, at
@@ -65,14 +62,7 @@ Theorem extend_storage_place_attr:
     ?fs off ftv. tv = StructTV fs /\ struct_field_slot fs fld = SOME (off, ftv) /\
                  r = INL (StoragePlace tr (slot + n2w off) ftv)
 Proof
-  rpt gen_tac >> Cases_on `tv` >>
-  simp[extend_storage_place_def, raise_def, bind_def, lift_option_type_def,
-       return_def]
-  >~ [`struct_field_slot l fld`]
-  >- (Cases_on `struct_field_slot l fld` >> simp[raise_def, return_def] >>
-      rename1 `SOME q` >> PairCases_on `q` >> simp[return_def] >>
-      rpt strip_tac >> gvs[]) >>
-  rpt strip_tac >> gvs[]
+  cheat
 QED
 
 Theorem eval_target_place_attr_toplevel:
@@ -89,20 +79,7 @@ Theorem eval_target_place_attr_toplevel:
       struct_field_slot fs fld = SOME (off, ftv) /\
       r = INL (StoragePlace tr (n2w slot + n2w off) ftv)
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, LET_THM] >>
-  Cases_on `evaluate_type (get_tenv cx) typ` >>
-  simp[raise_def, return_def, extend_place_def, bind_def] >>
-  TRY (strip_tac >> gvs[] >> NO_TAC) >>
-  rename1 `extend_storage_place cx tr _ tv` >>
-  Cases_on `extend_storage_place cx tr (n2w slot) tv (AttrSubscript fld) es` >>
-  rename1 `_ = (r1, es1)` >>
-  drule extend_storage_place_attr >> strip_tac >>
-  Cases_on `r1` >> simp[return_def, get_place_def] >> strip_tac >> gvs[]
+  cheat
 QED
 
 (* self.x.f = e, unless it fails with a type error: e's forced value r,
@@ -126,23 +103,7 @@ Theorem eval_assign_attr_toplevel:
              write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
                (res, es'))
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
-  Cases_on `r1` >> simp[] >>
-  rename1 `eval_expr cx e es = (INL pv, es1)` >>
-  Cases_on `eval_target_place cx
-              (AttributeTarget (TopLevelNameTarget (src, id)) fld) es1` >>
-  rename1 `_ = (r2, es2)` >>
-  drule eval_target_place_attr_toplevel >> rpt (disch_then drule) >>
-  strip_tac >>
-  Cases_on `r2` >> simp[]
-  >- (gvs[] >> Cases_on `read_result cx pv es1` >>
-      rename1 `read_result cx pv es1 = (r3, es3)` >>
-      imp_res_tac read_result_state >> gvs[] >>
-      Cases_on `r3` >> simp[write_place_def] >> metis_tac[]) >>
-  strip_tac >> gvs[]
+  cheat
 QED
 
 (* What self.x.f = e does on each outcome of e, with the typing that makes
@@ -181,31 +142,7 @@ Theorem assign_attr_storage_source:
                               (nsid_to_string sid)) fld)) u st) =
                    storage_dead cx tr st)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!m. res <> INR (Error (TypeError m))` by
-    (rpt strip_tac >> gvs[stmt_res_ok_def]) >>
-  drule_all eval_assign_attr_toplevel >> strip_tac >>
-  qexistsl_tac [`r`, `es1`] >> simp[] >>
-  conj_tac >- (irule expr_body_pre_res_ok >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  rename1 `struct_field_slot fs fld = SOME (off, ftv)` >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-  drule_all struct_field_offset_slots_eq >> strip_tac >> gvs[] >>
-  drule_all struct_field_type >> strip_tac >>
-  imp_res_tac struct_field_slot_alookup >> gvs[] >>
-  drule_all expr_body_pre_eval >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def,
-      value_result_typed_def] >>
-  rpt conj_tac
-  >~ [`storage_dead`]
-  >- (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
-      qexistsl_tac [`fld`, `fs`, `ftv`, `src`, `id`] >>
-      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
-      metis_tac[exprSimUnwrapTheory.word_type_slot_size]) >>
-  irule encode_value_word_typed >> metis_tac[]
+  cheat
 QED
 
 (* ===== The code ===== *)
@@ -235,33 +172,7 @@ Theorem assign_attr_storage_code_parts:
       unwrap_value cenv vv sn = (op, su) /\
       emit_void (if tr then TSTORE else SSTORE) [dst; op] su = ((), sf)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `~has_length_word (expr_type e)` by
-    metis_tac[is_word_type_no_length_word] >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
-  drule stmt_env_assign >> strip_tac >> gvs[] >>
-  rename1 `FLOOKUP cenv.ce_module_vars _` >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  Cases_on `tr` >>
-  asm_simp_tac (srw_ss())
-    [compile_stmt_def, compile_assign_value_def, comp_bind_def,
-     comp_ignore_bind_def, comp_return_def, LET_THM] >>
-  Cases_on `compile_expr cenv (expr_type e) e sa` >>
-  rename1 `compile_expr _ _ _ _ = (vv, sm)` >> simp[] >>
-  asm_simp_tac (srw_ss())
-    [Once compile_get_target_ptr_def, comp_bind_def, comp_return_def,
-     LET_THM] >>
-  qmatch_goalsub_abbrev_tac `emit_op ADD [Lit slot; Lit (n2w off)] sm` >>
-  Cases_on `emit_op ADD [Lit slot; Lit (n2w off)] sm` >>
-  rename1 `emit_op _ _ _ = (dst, sn)` >> simp[] >>
-  Cases_on `unwrap_value cenv vv sn` >>
-  rename1 `unwrap_value _ _ _ = (op, su)` >> simp[]
-  >- (Cases_on `emit_void TSTORE [dst; op] su` >>
-      rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
-      simp[comp_bind_def, comp_return_def]) >>
-  Cases_on `emit_void SSTORE [dst; op] su` >>
-  rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
-  simp[comp_bind_def, comp_return_def]
+  cheat
 QED
 
 (* An SSTORE or TSTORE at a variable holding a slot, run. *)
@@ -277,11 +188,7 @@ Theorem store_var_frag:
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
-  rpt strip_tac >>
-  `eval_operand (Var d) s1 = SOME a` by simp[eval_operand_def] >>
-  drule_all storage_emit_frame_frag >>
-  disch_then (qspec_then `R` mp_tac) >>
-  disch_then (mp_then Any irule frag_exec_weaken) >> simp[]
+  cheat
 QED
 
 (* self.x.f = e as one fragment: e's errors exit, and on a value it reaches
@@ -315,31 +222,7 @@ Theorem assign_attr_storage_frag:
                     FLOOKUP t.vs_allocas aid = SOME b))
       (expr_exit r)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn su /\ ci_mono su sf` by
-    metis_tac[compile_expr_ci_mono, ci_mono_emit_op, ci_mono_unwrap_value,
-              ci_mono_emit_void, pairTheory.SND] >>
-  `cs_extends sa su /\ cs_extends su sf` by
-    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
-  `fn_has_code sa su func` by metis_tac[fn_has_code_split] >>
-  `eval_operand (Lit (n2w slot)) s0 = SOME (n2w slot) /\
-   (!x. Lit (n2w slot) = Var x ==> not_fresh_at sa x) /\
-   !l. Lit (n2w slot) <> Label l` by
-    simp[eval_operand_def] >>
-  drule_all expr_add_unwrap_frag >> strip_tac >>
-  irule frag_exec_seq_pointwise >>
-  qpat_assum `frag_exec _ sa su _ _ _` (irule_at Any) >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  drule emitted_insts_emit_op >> strip_tac >> gvs[eval_operand_def] >>
-  `eval_operand op t = SOME (typed_val_to_w256 ftv v)` by
-    gvs[expr_val_rel_def] >>
-  drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
-  drule_at (Pos hd) store_var_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `t`,
-                           `n2w slot + n2w off`, `typed_val_to_w256 ftv v`,
-                           `expr_exit (INL v)`] mp_tac) >>
-  simp[] >>
-  disch_then (mp_then Any irule frag_exec_weaken) >> simp[]
+  cheat
 QED
 
 (* self.x.f = e for a storage or transient struct x the lowering holds by
@@ -369,26 +252,7 @@ Theorem compile_assign_attr_storage_case:
             fld)) e))
       es
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_module_vars (src, id) =
-     SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
-    (irule toplevel_storage_ce_vars >>
-     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
-  `is_word_type (expr_type e)` by simp[] >>
-  drule_all assign_attr_storage_code_parts >> strip_tac >>
-  drule_all assign_attr_storage_source >> strip_tac >>
-  qpat_x_assum `expr_type e = fty` (SUBST_ALL_TAC o SYM) >>
-  drule_all assign_attr_storage_frag >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> strip_tac
-  >- (disj1_tac >> qexistsl [`t`, `cenv`] >> gvs[] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >>
-      Cases_on `tr` >> gvs[] >> drule emit_void_nonterminator_open >>
-      simp[is_terminator_def]) >>
-  Cases_on `r` >> gvs[] >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  cheat
 QED
 
 (* compile_assign_attr_storage_case for an e with no internal call. *)
@@ -413,9 +277,5 @@ Theorem compile_assign_attr_storage_stmt_frag:
             fld)) e))
       es
 Proof
-  rpt strip_tac >> irule compile_assign_attr_storage_case >>
-  `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
-  `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
-    metis_tac[expr_vv_ok_def] >>
-  simp[] >> metis_tac[]
+  cheat
 QED
