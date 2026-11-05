@@ -747,6 +747,27 @@ Proof
   metis_tac[finite_mapTheory.flookup_thm]
 QED
 
+Theorem alias_var_mass_release_dead_spills:
+  alias_var_mass x (release_dead_spills live ps) <= alias_var_mass x ps
+Proof
+  `(release_dead_spills live ps).ps_stack = ps.ps_stack` by
+    simp[release_dead_spills_def, alias_release_fold_fields] >>
+  simp[alias_var_mass_def, alias_release_dead_spills_domain] >>
+  Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[] >>
+  Cases_on `MEM x live` >> simp[]
+QED
+
+Theorem alias_var_mass_optimistic_swap:
+  alias_var_mass x (SND (optimistic_swap_plan dfg inst live next_term ps)) <=
+  alias_var_mass x ps
+Proof
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> simp[] >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  simp[alias_var_mass_swap]
+QED
+
 Definition alias_probe_phis_def:
   alias_probe_phis =
     [mk_inst 10 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"];
