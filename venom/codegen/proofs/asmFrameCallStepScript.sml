@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
-  vfmAccountDeletion vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
+  vfmPreserves vfmAccountDeletion vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
   wordsLib
 
@@ -5990,6 +5990,272 @@ Proof
   drule_all handle_exception_deletion_projections >> strip_tac >>
   irule asm_call_pending_pop_result >>
   Cases_on `s.contexts` >> gvs[] >> metis_tac[]
+QED
+
+val call_pending_post = ``\pending saved (s:execution_state) t.
+  ^call_pending_inv pending saved t``;
+
+Theorem asm_call_pending_cp_preserves:
+  cp m ==> preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) m
+Proof
+  rewrite_tac[preserves_when_def] >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  drule_all (SRULE [] asm_call_pending_cp) >> simp[]
+QED
+
+Theorem asm_call_pending_bind:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) g /\
+  (!x. preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (f x)) ==>
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (bind g f)
+Proof
+  strip_tac >> irule preserves_when_bind >> simp[]
+QED
+
+Theorem asm_call_pending_ignore_bind:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) g /\
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) f ==>
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (ignore_bind g f)
+Proof
+  simp[ignore_bind_def] >> strip_tac >> irule (SRULE [] asm_call_pending_bind) >> simp[]
+QED
+
+Theorem asm_call_pending_update_accounts:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (update_accounts f)
+Proof
+  simp[preserves_when_def, update_accounts_def, return_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem asm_call_pending_proceed_call_preserves:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved)
+    (proceed_call op sender address value ao az code stipend output)
+Proof
+  simp[preserves_when_def] >> metis_tac[asm_call_pending_proceed_call]
+QED
+
+Theorem asm_call_pending_proceed_create_preserves:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved)
+    (proceed_create sender address value code gas)
+Proof
+  simp[preserves_when_def] >> metis_tac[asm_call_pending_proceed_create]
+QED
+
+Theorem asm_call_pending_step_call:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (step_call op)
+Proof
+  simp[step_call_def] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  pairarg_tac >> simp[] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> reverse conj_tac
+  >- (irule (SRULE [] asm_call_pending_cp_preserves) >> CASE_TAC >> simp[]) >>
+  qx_gen_tac `codecost` >> PairCases_on `codecost` >> simp[] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  pairarg_tac >> simp[] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> conj_tac
+  >- (irule (SRULE [] asm_call_pending_cp_preserves) >> IF_CASES_TAC >> simp[]) >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  IF_CASES_TAC >- (irule (SRULE [] asm_call_pending_cp_preserves) >> simp[]) >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  IF_CASES_TAC >- (irule (SRULE [] asm_call_pending_cp_preserves) >> simp[]) >>
+  simp[SRULE [] asm_call_pending_proceed_call_preserves]
+QED
+
+Theorem asm_call_pending_abort_create:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (abort_create_exists sender)
+Proof
+  simp[abort_create_exists_def] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_update_accounts] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves]
+QED
+
+Theorem asm_call_pending_step_create:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (step_create two)
+Proof
+  simp[step_create_def] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  IF_CASES_TAC >- (irule (SRULE [] asm_call_pending_cp_preserves) >> simp[]) >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  IF_CASES_TAC >- simp[SRULE [] asm_call_pending_abort_create] >>
+  simp[SRULE [] asm_call_pending_proceed_create_preserves]
+QED
+
+Theorem asm_call_pending_add_preserves:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (add_to_delete address)
+Proof
+  simp[preserves_when_def] >> metis_tac[asm_call_pending_add_to_delete]
+QED
+
+Theorem asm_call_pending_self_destruct:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) step_self_destruct
+Proof
+  simp[step_self_destruct_def] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_update_accounts] >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >> gen_tac >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  IF_CASES_TAC >- (irule (SRULE [] asm_call_pending_ignore_bind) >>
+    simp[SRULE [] asm_call_pending_update_accounts, SRULE [] asm_call_pending_add_preserves]) >>
+  irule (SRULE [] asm_call_pending_cp_preserves) >> simp[]
+QED
+
+Theorem asm_call_pending_ordinary_inst:
+  op <> SelfDestruct /\ op <> Create /\ op <> Create2 /\
+  op <> Call /\ op <> CallCode /\ op <> DelegateCall /\ op <> StaticCall ==>
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (step_inst op)
+Proof
+  strip_tac >> drule_all step_inst_deletion_exact >>
+  rewrite_tac[preserves_when_def] >> BETA_TAC >> disch_tac >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  `s.contexts <> [] /\ asm_call_saved_suffix saved s` by
+    (qpat_x_assum `?active. _` mp_tac >>
+     simp[asm_call_saved_suffix_def] >> strip_tac >>
+     conj_tac >- (Cases_on `active` >> gvs[]) >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  `LENGTH s'.contexts = LENGTH s.contexts` by metis_tac[LENGTH_MAP] >>
+  `same_frame_rel s s'` by
+    (irule (INST_TYPE [alpha |-> ``:unit``] same_frame_or_grow_eq_length) >> simp[] >>
+     qexistsl_tac [`step_inst op`,`r`] >> simp[]) >>
+  `asm_call_saved_suffix saved s'` by
+    (irule asm_call_saved_suffix_same_frame >> metis_tac[]) >>
+  drule_all (SRULE [] asm_call_pending_projection) >> simp[]
+QED
+
+Theorem asm_call_pending_step_inst:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) (step_inst op)
+Proof
+  Cases_on `op = SelfDestruct` >- gvs[step_inst_def, SRULE [] asm_call_pending_self_destruct] >>
+  Cases_on `op = Create` >- gvs[step_inst_def, SRULE [] asm_call_pending_step_create] >>
+  Cases_on `op = Create2` >- gvs[step_inst_def, SRULE [] asm_call_pending_step_create] >>
+  Cases_on `op = Call` >- gvs[step_inst_def, SRULE [] asm_call_pending_step_call] >>
+  Cases_on `op = CallCode` >- gvs[step_inst_def, SRULE [] asm_call_pending_step_call] >>
+  Cases_on `op = DelegateCall` >- gvs[step_inst_def, SRULE [] asm_call_pending_step_call] >>
+  Cases_on `op = StaticCall` >- gvs[step_inst_def, SRULE [] asm_call_pending_step_call] >>
+  irule asm_call_pending_ordinary_inst >> simp[]
+QED
+
+Theorem asm_call_pending_step_inner:
+  preserves_when (^call_pending_inv pending saved)
+    (^call_pending_post pending saved) step_inner
+Proof
+  rewrite_tac[step_inner_def, LET_THM] >> BETA_TAC >>
+  irule (SRULE [] asm_call_pending_bind) >> simp[SRULE [] asm_call_pending_cp_preserves] >>
+  qx_gen_tac `ctx` >> Cases_on `FLOOKUP ctx.msgParams.parsed ctx.pc` >> simp[]
+  >- (IF_CASES_TAC >> irule (SRULE [] asm_call_pending_cp_preserves) >> simp[]) >>
+  irule (SRULE [] asm_call_pending_ignore_bind) >>
+  simp[SRULE [] asm_call_pending_step_inst, SRULE [] asm_call_pending_cp_preserves]
+QED
+
+Theorem asm_call_pending_handler_projection:
+  ^call_pending_inv pending saved s /\ asm_call_saved_suffix saved t /\
+  (t.rollback.toDelete = s.rollback.toDelete \/
+   t.rollback.toDelete = (SND (HD s.contexts)).toDelete) /\
+  (MAP (\p. (SND p).toDelete) t.contexts =
+     MAP (\p. (SND p).toDelete) s.contexts \/
+   MAP (\p. (SND p).toDelete) t.contexts =
+     TL (MAP (\p. (SND p).toDelete) s.contexts)) ==>
+  ^call_pending_inv pending saved t
+Proof
+  simp[asm_call_saved_suffix_def] >> strip_tac >>
+  namedCases_on `active` ["", "first others"] >> gvs[] >>
+  `EVERY (\xs. ?added. xs = added ++ pending)
+     (MAP (\p. (SND p).toDelete) active')` suffices_by simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP]
+QED
+
+Theorem asm_call_pending_handle_step:
+  ^call_pending_inv pending saved s /\ handle_step e s = (r,t) ==>
+  ^call_pending_suffix pending t.rollback.toDelete /\
+  (asm_call_saved_suffix saved t ==> ^call_pending_inv pending saved t)
+Proof
+  strip_tac >> `s.contexts <> []` by
+    (qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+     simp[] >> strip_tac >> Cases_on `active` >> gvs[]) >>
+  drule_all handle_step_deletion_projections >> strip_tac >>
+  (conj_tac
+   >- (BETA_TAC >> irule (SRULE [] asm_call_pending_pop_result) >>
+       Cases_on `s.contexts` >> gvs[] >> metis_tac[])) >>
+  strip_tac >> BETA_TAC >> irule (SRULE [] asm_call_pending_handler_projection) >>
+  simp[] >> qexists_tac `s` >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_call_pending_inner_result:
+  ^call_pending_inv pending saved s /\ step_inner s = (r,t) ==>
+  ^call_pending_inv pending saved t
+Proof
+  BETA_TAC >> strip_tac >>
+  irule (SRULE [preserves_when_def] asm_call_pending_step_inner) >>
+  qexistsl_tac [`r`,`s`] >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_call_pending_step_result:
+  ^call_pending_inv pending saved s /\ step s = (r,t) ==>
+  ^call_pending_suffix pending t.rollback.toDelete /\
+  (asm_call_saved_suffix saved t ==> ^call_pending_inv pending saved t)
+Proof
+  strip_tac >> qpat_x_assum `step _ = _` mp_tac >>
+  rewrite_tac[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner s` >> rename1 `step_inner s = (res,mid)` >>
+  `^call_pending_inv pending saved mid` by
+    (irule asm_call_pending_inner_result >> metis_tac[]) >>
+  Cases_on `res` >> simp[] >> disch_tac
+  >- (gvs[] >> simp[] >> metis_tac[]) >>
+  drule_all asm_call_pending_handle_step >> simp[]
+QED
+
+Theorem asm_call_pending_step:
+  wf_state s /\ ^call_pending_inv pending saved s /\ step s = (r,t) /\
+  LENGTH saved < LENGTH t.contexts ==>
+  ^call_pending_inv pending saved t
+Proof
+  strip_tac >>
+  `asm_call_saved_suffix saved s` by
+    (qpat_x_assum `^call_pending_inv pending saved s` mp_tac >>
+     simp[asm_call_saved_suffix_def] >> metis_tac[]) >>
+  `asm_call_saved_suffix saved t` by
+    (drule_all asm_call_saved_suffix_step >> simp[]) >>
+  drule_all asm_call_pending_step_result >> simp[]
 QED
 
 Theorem asm_frame_call_step:
