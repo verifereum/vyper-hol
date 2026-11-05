@@ -130,7 +130,7 @@ Proof
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ entry` >>
   `t = expr_type e /\
    ?w. eval_operand p.ptr_operand entry = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' entry /\
        stmt_state_rel ctx func cenv cx es' entry` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>

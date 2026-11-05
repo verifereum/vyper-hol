@@ -110,7 +110,7 @@ Proof
   irule frag_exec_mem_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
