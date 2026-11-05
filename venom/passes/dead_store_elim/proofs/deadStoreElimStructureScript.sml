@@ -157,6 +157,48 @@ Proof
   Cases_on `fn.fn_blocks` >> simp[]
 QED
 
+Theorem flat_map_occurrence_unique:
+  !xs x y i j.
+    ALL_DISTINCT (FLAT (MAP (MAP f o g) xs)) /\
+    MEM x xs /\ MEM y xs /\ i < LENGTH (g x) /\ j < LENGTH (g y) /\
+    f (EL i (g x)) = f (EL j (g y)) ==> x = y /\ i = j
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt gen_tac >> strip_tac >> gvs[]
+  >- (qpat_x_assum `ALL_DISTINCT (FLAT _)` kall_tac >>
+      drule ALL_DISTINCT_EL_IMP >> simp[EL_MAP] >> metis_tac[])
+  >- (`MEM (f (EL i (g h))) (MAP f (g h))` by
+        (simp[MEM_MAP] >> metis_tac[MEM_EL]) >>
+      `MEM (f (EL j (g y))) (FLAT (MAP (MAP f o g) xs))` by
+        (simp[MEM_FLAT, MEM_MAP] >>
+         qexists_tac `MAP f (g y)` >> conj_tac
+         >- (qexists_tac `y` >> simp[]) >>
+         simp[MEM_MAP] >> qexists_tac `EL j (g y)` >> simp[EL_MEM]) >>
+      metis_tac[])
+  >- (`MEM (f (EL j (g h))) (MAP f (g h))` by
+        (simp[MEM_MAP] >> metis_tac[MEM_EL]) >>
+      `MEM (f (EL i (g x))) (FLAT (MAP (MAP f o g) xs))` by
+        (simp[MEM_FLAT, MEM_MAP] >>
+         qexists_tac `MAP f (g x)` >> conj_tac
+         >- (qexists_tac `x` >> simp[]) >>
+         simp[MEM_MAP] >> qexists_tac `EL i (g x)` >> simp[EL_MEM]) >>
+      metis_tac[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem wf_instruction_occurrence_unique:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ MEM bb' fn.fn_blocks /\
+  i < LENGTH bb.bb_instructions /\ j < LENGTH bb'.bb_instructions /\
+  (EL i bb.bb_instructions).inst_id = (EL j bb'.bb_instructions).inst_id ==>
+  bb = bb' /\ i = j
+Proof
+  strip_tac >>
+  irule (flat_map_occurrence_unique |> Q.GEN `f` |>
+    Q.ISPEC `(\inst. inst.inst_id)` |> Q.GEN `g` |>
+    Q.ISPEC `(\b. b.bb_instructions)`) >> simp[] >>
+  qexists_tac `fn.fn_blocks` >>
+  gvs[wf_function_def, fn_inst_ids_distinct_def, combinTheory.o_DEF]
+QED
+
 Theorem all_dead_stores_occurrence:
   wf_function fn /\ all_dead_stores dead_ids cfg aliases bp space fn /\
   MEM inst (fn_insts fn) /\ inst.inst_id IN dead_ids ==>
@@ -190,6 +232,28 @@ Proof
      drule ALL_DISTINCT_EL_IMP >>
      simp[EL_MAP] >> metis_tac[]) >>
   gvs[] >> qexistsl_tac [`bb`, `inst_idx`] >> simp[markerTheory.Abbrev_def]
+QED
+
+Theorem all_dead_stores_at:
+  wf_function fn /\ all_dead_stores ids cfg aliases bp sp fn /\
+  MEM bb fn.fn_blocks /\ get_instruction bb idx = SOME inst /\
+  inst.inst_id IN ids ==>
+  is_memory_def_opcode sp inst.inst_opcode /\ inst.inst_outputs = [] /\
+  ~(bp_get_write_location bp inst sp).ml_volatile /\
+  ml_is_fixed (bp_get_write_location bp inst sp) /\
+  (bp_get_write_location bp inst sp).ml_size <> SOME 0 /\
+  outputs_unused inst fn /\ effects_in_space sp inst /\
+  ~dse_mem_def_live cfg aliases bp (bp_get_write_location bp inst sp) sp fn bb idx
+Proof
+  strip_tac >> gvs[get_instruction_def, AllCaseEqs()] >>
+  qpat_x_assum `all_dead_stores _ _ _ _ _ _` mp_tac >>
+  simp[all_dead_stores_def] >> disch_then drule >> strip_tac >>
+  `bb = bb' /\ idx = inst_idx` by
+    (irule wf_instruction_occurrence_unique >> simp[] >>
+     qexists_tac `fn` >> simp[]) >>
+  qpat_x_assum `bb = bb'` SUBST_ALL_TAC >>
+  qpat_x_assum `idx = inst_idx` SUBST_ALL_TAC >>
+  asm_rewrite_tac []
 QED
 
 Theorem dse_single_pass_preserves_wf:
