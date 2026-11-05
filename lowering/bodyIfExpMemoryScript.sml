@@ -752,6 +752,73 @@ Proof
        contextTheory.mk_ptr_def, eval_operand_def, read_result_def, return_def]
 QED
 
+(* Concrete producer diagnostic: a Name annotation need not match its entry. *)
+Theorem ifexp_name_literal_ptr_compile_probe[local]:
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Lit w) sz) ==>
+  compile_expr cenv ty (Name (FlagT nsid) id) sa =
+    (LocatedValue (FlagT nsid) (mk_ptr (Lit w) LocMemory),sa) /\
+  lower_value compile_expr cenv ty (Name (FlagT nsid) id) sa =
+    emit_op MLOAD [Lit w] sa
+Proof
+  simp[compile_expr_def, compile_name_vv_def, expr_type_def, lower_value_def,
+       unwrap_value_def, is_word_type_def, contextTheory.mk_ptr_def,
+       contextTheory.compile_ptr_load_def, comp_return_def, comp_bind_def]
+QED
+
+Theorem ifexp_name_source_probe[local]:
+  lookup_scopes id es.scopes = SOME entry ==>
+  eval_expr cx (Name (FlagT nsid) id) es =
+    (INL (PlaceR (MemoryPlace id [])),es) /\
+  bind (eval_expr cx (Name (FlagT nsid) id)) (read_result cx) es =
+    (INL entry.value,es)
+Proof
+  simp[evaluate_def, get_scopes_def, type_check_def,
+       vyperStateTheory.assert_def, ignore_bind_def, bind_def, return_def, read_result_def, read_place_def,
+       lift_option_type_def, lift_sum_def, read_memory_path_def,
+       evaluate_subscripts_def]
+QED
+
+Theorem ifexp_name_forced_admissible_probe[local]:
+  lookup_scopes id es.scopes = SOME entry ==>
+  gas_admissible
+    (bind (eval_expr cx (Name (FlagT nsid) id)) (read_result cx))
+    expr_res_ok es
+Proof
+  strip_tac >> rw[gas_admissible_def] >>
+  `lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
+  drule ifexp_name_source_probe >> strip_tac >> gvs[expr_res_ok_def]
+QED
+
+Theorem gas_outcome_total_success_summary[local]:
+  (!gs. ?v st. source (es with gas_obs := gs) = (INL v,st)) /\
+  gas_outcome memory tops (ctx,func) source (es,s0) Q R ==>
+  ?marks. gas_summary_at memory (ctx,func) marks source (es,s0) Q R
+Proof
+  rw[gas_outcome_def] >- metis_tac[] >>
+  drule gas_exempt_cert_execution >> strip_tac >>
+  qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+  simp[ignore_bind_def, bind_def, return_def] >>
+  first_x_assum (qspec_then `gas_explicit marks s0.vs_gas_readings` strip_assume_tac) >>
+  simp[]
+QED
+
+Theorem ifexp_name_forced_summary_probe[local]:
+  lookup_scopes id es.scopes = SOME entry /\
+  gas_outcome memory tops (ctx,func)
+    (bind (eval_expr cx (Name (FlagT nsid) id)) (read_result cx))
+    (es,s0) Q R ==>
+  ?marks. gas_summary_at memory (ctx,func) marks
+    (bind (eval_expr cx (Name (FlagT nsid) id)) (read_result cx))
+    (es,s0) Q R
+Proof
+  strip_tac >> irule gas_outcome_total_success_summary >>
+  conj_tac
+  >- (gen_tac >>
+      `lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
+      drule ifexp_name_source_probe >> metis_tac[]) >>
+  qexists_tac `tops` >> first_assum ACCEPT_TAC
+QED
+
 (* Successful raw StackValue endpoint: the actual arm emits no unwrap code. *)
 Theorem ifexp_stack_arm_endpoint_mem[local]:
   compile_expr cenv ty e sa = (StackValue st op,sm) /\
