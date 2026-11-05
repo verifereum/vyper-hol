@@ -249,6 +249,64 @@ Proof
   metis_tac[abi_site_members_static_endpoint, ADD_COMM]
 QED
 
+Theorem abi_site_members_dynamic_endpoint:
+  compile_abi_encode_child dst elem_src ei T ho dyn_ptr st = (out,end_st) /\
+  abi_encode_child_prefix dst ho dyn_ptr st = (ops,prepared) /\
+  fn_has_code st end_st func /\
+  (st.cs_blocks = end_st.cs_blocks \/
+    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_site_members_inv ((ei,abi_sz,mem_sz,T)::infos) (ty::tys) (av::avs)
+    pre pvs active dyn_ptr site slot A lo st limit_st
+    src dst sb so ho d hl output_size b cap initial /\
+  abi_site_encoder_input ei ty av st elem_src dst (sb+so) mem_sz d output_size A b cap initial /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\
+  off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
+  abi_encoder_spine_child_output
+    (abi_encoder_member_dynamic_post (ctx,func) (ty,av,sb+so,mem_sz,d+off)
+      (A,b,cap,limit_st) guard (FST ops,FST (SND ops),dyn_ptr,d+ho,off,slot,site))
+    (ei,T,dst,elem_src,ho,dyn_ptr,st,end_st,out) initial actual ==>
+  abi_site_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
+    A lo end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual /\
+  abi_site_encoder_effect A lo end_st.cs_next_id st.cs_next_var
+    limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
+Proof
+  reverse (Cases_on `active`) >- simp[abi_site_members_inv_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_inv_def]) >>
+  drule (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `T`, `active` |-> `T`]
+    abi_site_members_inv_layout)) >> strip_tac >>
+  drule abi_encoder_child_bounds >> strip_tac >>
+  qpat_assum `abi_encoder_cursor _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  `ho+32 <= off /\ off+LENGTH (enc ty av) <= output_size /\
+    mload slot initial = n2w off` by fs[] >>
+  `site IN A` by fs[] >>
+  drule_all abi_encoder_member_dynamic_output_detailed >> strip_tac >>
+  `abi_footprint_disjoint d output_size
+    (abi_decoder_child_scratch (A INTER abi_decoder_ids lo end_st.cs_next_id) b cap initial)` by
+    (irule abi_site_input_owned_output >>
+     goal_assum (drule_at (Pat `abi_site_encoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[]) >>
+  `abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d actual.vs_memory` by
+    (irule abi_scratch_tuple_dynamic_step >> asm_simp_tac bool_ss [] >>
+     qexistsl_tac [`abi_decoder_child_scratch (A INTER abi_decoder_ids lo end_st.cs_next_id) b cap initial`,
+       `initial`, `output_size`] >> gvs[Excl "enc_def"]) >>
+  mp_tac abi_encoder_members_prefix_advance >> (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
+  qpat_assum `mem_word_at slot actual.vs_memory = _`
+    (assume_tac o PURE_REWRITE_RULE [mem_word_at_eq_mload]) >>
+  `abi_encoder_cursor T dyn_ptr site slot 0 lo st
+    (hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))) actual` by
+    (drule_at (Pat `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _`)
+       abi_site_cursor_registered >> disch_then drule >>
+     disch_then irule >> asm_simp_tac bool_ss [ADD_ASSOC, LESS_EQ_REFL]) >>
+  drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
+    abi_scratch_cursor_mono) >> disch_tac >>
+  drule_all (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_site_members_after_child) >>
+  strip_tac >> asm_rewrite_tac []
+QED
+
 Theorem abi_scratch_members_dynamic_endpoint:
   compile_abi_encode_child dst elem_src ei T ho dyn_ptr st = (out,end_st) /\
   abi_encode_child_prefix dst ho dyn_ptr st = (ops,prepared) /\
@@ -271,41 +329,25 @@ Theorem abi_scratch_members_dynamic_endpoint:
   abi_scratch_effect first last lo end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
-  reverse (Cases_on `active`) >- simp[abi_scratch_members_inv_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_scratch_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_inv_def]) >>
-  drule (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `T`, `active` |-> `T`]
-    abi_scratch_members_inv_layout)) >> strip_tac >>
+  `first <= lo /\ lo <= st.cs_next_id` by fs[abi_scratch_members_inv_def] >>
   drule abi_encoder_child_bounds >> strip_tac >>
-  qpat_assum `abi_encoder_cursor _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  `ho+32 <= off /\ off+LENGTH (enc ty av) <= output_size /\
-    mload slot initial = n2w off` by fs[] >>
-  drule_all abi_scratch_member_dynamic_output_detailed >> strip_tac >>
-  `abi_footprint_disjoint d output_size
-    (abi_decoder_child_scratch (abi_decoder_ids lo end_st.cs_next_id) b cap initial)` by
-    (irule abi_scratch_input_owned_output >>
-     goal_assum (drule_at (Pat `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     asm_rewrite_tac []) >>
-  `abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d actual.vs_memory` by
-    (irule abi_scratch_tuple_dynamic_step >> asm_simp_tac bool_ss [] >>
-     qexistsl_tac [`abi_decoder_child_scratch (abi_decoder_ids lo end_st.cs_next_id) b cap initial`,
-       `initial`, `output_size`] >>
-     gvs[Excl "enc_def"]) >>
-  mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qpat_assum `mem_word_at slot actual.vs_memory = _`
-    (assume_tac o PURE_REWRITE_RULE [mem_word_at_eq_mload]) >>
-  mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`,
-    `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`,
-    `next_off` |-> `hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))`,
-    `sz` |-> `output_size:num`, `owned_lo` |-> `lo:num`, `owned_hi` |-> `end_st.cs_next_id`,
-    `next` |-> `st.cs_next_var`] abi_scratch_cursor_registered) >>
-  impl_tac >- asm_simp_tac bool_ss [ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
-  drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
-    abi_scratch_cursor_mono) >> disch_tac >>
-  drule_all (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_scratch_members_after_child) >>
-  strip_tac >> asm_rewrite_tac []
+  `st.cs_next_id <= last` by decide_tac >>
+  gs[GSYM abi_site_members_inv_interval, GSYM abi_site_encoder_input_interval,
+    GSYM abi_site_encoder_effect_interval] >>
+  `abi_encoder_spine_child_output
+    (abi_encoder_member_dynamic_post (ctx,func) (ty,av,sb+so,mem_sz,d+off)
+      (abi_decoder_ids first last,b,cap,limit_st)
+      (\st en. first <= st.cs_next_id /\ en.cs_next_id <= last)
+      (FST ops,FST (SND ops),dyn_ptr,d+ho,off,slot,site))
+    (ei,T,dst,elem_src,ho,dyn_ptr,st,end_st,out) initial actual` by
+    (fs[abi_encoder_spine_child_output_def] >>
+     rpt (goal_assum (drule_at Any) >> asm_rewrite_tac []) >>
+     irule abi_scratch_member_dynamic_post_bridge >> asm_rewrite_tac []) >>
+  drule_at (Pat `abi_encoder_spine_child_output
+    (abi_encoder_member_dynamic_post _ _ _ _ _) _ _ _`) abi_site_members_dynamic_endpoint >>
+  disch_then (drule_at (Pat `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  asm_simp_tac bool_ss [ADD_COMM] >> metis_tac[]
 QED
 
 (* Universal transport at the shared generator's physical source-ADD endpoint. *)
