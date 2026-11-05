@@ -3654,6 +3654,469 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+(* Restricted-ownership probe requested by C1.21.2.6.5. *)
+Definition alias_diamond_fn_def:
+  alias_diamond_fn = mk_raw_function "alias_diamond"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["seed"];
+          mk_inst 1 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 2 PHI [Label "entry"; Var "seed"; Label "backedge"; Var "z"] ["t"];
+          mk_inst 3 CALLDATASIZE [] ["r"];
+          mk_inst 4 ADD [Var "t"; Var "r"] ["c"];
+          mk_inst 5 JNZ [Var "c"; Label "left"; Label "right"] []] |>;
+     <| bb_label := "left"; bb_instructions :=
+         [mk_inst 6 ASSIGN [Var "r"] ["u"];
+          mk_inst 7 ASSIGN [Var "c"] ["u2"];
+          mk_inst 8 JMP [Label "join"] []] |>;
+     <| bb_label := "right"; bb_instructions :=
+         [mk_inst 9 ASSIGN [Var "r"] ["v"];
+          mk_inst 10 ASSIGN [Var "c"] ["v2"];
+          mk_inst 11 JMP [Label "join"] []] |>;
+     <| bb_label := "join"; bb_instructions :=
+         [mk_inst 12 PHI [Label "left"; Var "u"; Label "right"; Var "v"] ["p"];
+          mk_inst 13 PHI [Label "left"; Var "u2"; Label "right"; Var "v2"] ["q"];
+          mk_inst 14 ADD [Var "p"; Var "q"] ["w"];
+          mk_inst 15 ISZERO [Var "w"] ["z"];
+          mk_inst 16 JNZ [Var "z"; Label "backedge"; Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 17 STOP [] []] |>;
+     <| bb_label := "backedge"; bb_instructions :=
+         [mk_inst 18 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_diamond_entries_ready:
+  block_entries_ready (cfg_analyze alias_diamond_fn) alias_diamond_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_diamond_ready:
+  codegen_ready_fn alias_diamond_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_diamond_no_retpc:
+  !x. ~retpc_var alias_diamond_fn x
+Proof
+  simp[retpc_var_def] >> irule copy_phi_var_no_seed >>
+  EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
+
+Theorem alias_diamond_no_return:
+  !inst. MEM inst (fn_insts alias_diamond_fn) ==>
+    ~MEM inst.inst_opcode [RET; RETFMP; DRET]
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
+
+Theorem alias_diamond_shapes:
+  retpc_shape_ok alias_diamond_fn /\ opaque_use_ok alias_diamond_fn
+Proof
+  simp[retpc_shape_ok_def, opaque_use_ok_def, alias_diamond_no_retpc] >>
+  conj_tac
+  >- (rpt strip_tac >> drule reachable_fn_insts_nonphi >> simp[] >>
+      strip_tac >> drule alias_diamond_no_return >> simp[]) >>
+  metis_tac[reachable_retpc_var, alias_diamond_no_retpc]
+QED
+
+Definition alias_diamond_plan_def:
+  alias_diamond_plan n ps =
+    generate_block_plan (liveness_analyze alias_diamond_fn)
+      (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn)
+      alias_diamond_fn (EL n alias_diamond_fn.fn_blocks) ps
+End
+
+Definition alias_diamond_e_def:
+  alias_diamond_e = THE (alias_diamond_plan 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Theorem alias_diamond_e_fields:
+  IS_SOME (alias_diamond_plan 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+  (SND alias_diamond_e).ps_stack = [Var "seed"] /\
+  (SND alias_diamond_e).ps_spilled = FEMPTY
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_diamond_h_def:
+  alias_diamond_h = THE (alias_diamond_plan 1 (SND alias_diamond_e))
+End
+
+Theorem alias_diamond_h_fields:
+  IS_SOME (alias_diamond_plan 1 (SND alias_diamond_e)) /\
+  (SND alias_diamond_h).ps_stack = [Var "r"; Var "c"] /\
+  (SND alias_diamond_h).ps_spilled = FEMPTY
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_diamond_h_state:
+  SND alias_diamond_h =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "r"; Var "c"])
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_diamond_l_def:
+  alias_diamond_l = THE (alias_diamond_plan 2 (SND alias_diamond_h))
+End
+
+Definition alias_diamond_r_def:
+  alias_diamond_r = THE (alias_diamond_plan 3 (SND alias_diamond_h))
+End
+
+Theorem alias_diamond_branches:
+  IS_SOME (alias_diamond_plan 2 (SND alias_diamond_h)) /\
+  IS_SOME (alias_diamond_plan 3 (SND alias_diamond_h)) /\
+  (SND alias_diamond_l).ps_stack = [Var "u2"; Var "u"] /\
+  (SND alias_diamond_r).ps_stack = [Var "v2"; Var "v"] /\
+  (SND alias_diamond_l).ps_spilled = FEMPTY /\
+  (SND alias_diamond_r).ps_spilled = FEMPTY
+Proof
+  rewrite_tac[alias_diamond_l_def, alias_diamond_r_def, alias_diamond_h_state] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem alias_diamond_branch_states:
+  SND alias_diamond_l =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "u2"; Var "u"]) /\
+  SND alias_diamond_r =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "v2"; Var "v"])
+Proof
+  rewrite_tac[alias_diamond_l_def, alias_diamond_r_def, alias_diamond_h_state] >>
+  conj_tac >> EVAL_TAC
+QED
+
+Definition alias_diamond_jl_def:
+  alias_diamond_jl = THE (alias_diamond_plan 4 (SND alias_diamond_l))
+End
+
+Definition alias_diamond_jr_def:
+  alias_diamond_jr = THE (alias_diamond_plan 4 (SND alias_diamond_r))
+End
+
+Theorem alias_diamond_joins:
+  IS_SOME (alias_diamond_plan 4 (SND alias_diamond_l)) /\
+  IS_SOME (alias_diamond_plan 4 (SND alias_diamond_r)) /\
+  FST alias_diamond_jl = FST alias_diamond_jr /\
+  (SND alias_diamond_jl).ps_stack = [Var "z"] /\
+  (SND alias_diamond_jr).ps_stack = [Var "z"] /\
+  (SND alias_diamond_jl).ps_spilled = FEMPTY /\
+  (SND alias_diamond_jr).ps_spilled = FEMPTY
+Proof
+  rewrite_tac[alias_diamond_jl_def, alias_diamond_jr_def, alias_diamond_branch_states] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem alias_diamond_join_state:
+  SND alias_diamond_jl =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "z"]) /\
+  SND alias_diamond_jr =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "z"])
+Proof
+  rewrite_tac[alias_diamond_jl_def, alias_diamond_jr_def, alias_diamond_branch_states] >>
+  conj_tac >> EVAL_TAC
+QED
+
+Definition alias_diamond_back_def:
+  alias_diamond_back = THE (alias_diamond_plan 6 (SND alias_diamond_jl))
+End
+
+Theorem alias_diamond_back_fields:
+  IS_SOME (alias_diamond_plan 6 (SND alias_diamond_jl)) /\
+  (SND alias_diamond_back).ps_stack = [Var "z"] /\
+  (SND alias_diamond_back).ps_spilled = FEMPTY
+Proof
+  rewrite_tac[alias_diamond_back_def, alias_diamond_join_state] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_edges:
+  cfg_succs_of (cfg_analyze alias_diamond_fn) "entry" = ["header"] /\
+  cfg_succs_of (cfg_analyze alias_diamond_fn) "header" = ["right"; "left"] /\
+  cfg_succs_of (cfg_analyze alias_diamond_fn) "right" = ["join"] /\
+  cfg_succs_of (cfg_analyze alias_diamond_fn) "join" = ["exit"; "backedge"] /\
+  cfg_succs_of (cfg_analyze alias_diamond_fn) "backedge" = ["header"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_diamond_plans:
+  alias_diamond_plan 0 (init_cleanup_plan_state NONE [] 0 0) = SOME alias_diamond_e /\
+  alias_diamond_plan 1 (SND alias_diamond_e) = SOME alias_diamond_h /\
+  alias_diamond_plan 3 (SND alias_diamond_h) = SOME alias_diamond_r /\
+  alias_diamond_plan 4 (SND alias_diamond_r) = SOME alias_diamond_jr
+Proof
+  rpt conj_tac
+  >- (mp_tac alias_diamond_e_fields >>
+      Cases_on `alias_diamond_plan 0 (init_cleanup_plan_state NONE [] 0 0)` >>
+      simp[alias_diamond_e_def])
+  >- (mp_tac alias_diamond_h_fields >>
+      Cases_on `alias_diamond_plan 1 (SND alias_diamond_e)` >>
+      simp[alias_diamond_h_def])
+  >- (mp_tac alias_diamond_branches >>
+      Cases_on `alias_diamond_plan 3 (SND alias_diamond_h)` >>
+      simp[alias_diamond_r_def]) >>
+  mp_tac alias_diamond_joins >>
+  Cases_on `alias_diamond_plan 4 (SND alias_diamond_r)` >>
+  simp[alias_diamond_jr_def]
+QED
+
+Theorem alias_diamond_dfs_h:
+  dfs_aux_call (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["header"] ["entry"] (SND alias_diamond_e)
+Proof
+  `SND alias_diamond_e = (SND alias_diamond_e) with
+    <|ps_stack := (SND alias_diamond_e).ps_stack;
+      ps_spilled := (SND alias_diamond_e).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  rewrite_tac[GSYM (cj 1 alias_diamond_edges)] >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 0 alias_diamond_fn.fn_blocks`, `FST alias_diamond_e`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans] >>
+  conj_tac >- EVAL_TAC >> irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_diamond_dfs_r:
+  dfs_aux_call (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["right"] ["header"; "entry"] (SND alias_diamond_h)
+Proof
+  `SND alias_diamond_h = (SND alias_diamond_h) with
+    <|ps_stack := (SND alias_diamond_h).ps_stack;
+      ps_spilled := (SND alias_diamond_h).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `["left"]` >>
+  rewrite_tac[GSYM (cj 2 alias_diamond_edges)] >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 1 alias_diamond_fn.fn_blocks`, `FST alias_diamond_h`,
+    `SND alias_diamond_e`, `[]`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_h] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_dfs_j:
+  dfs_aux_call (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["join"] ["right"; "header"; "entry"] (SND alias_diamond_r)
+Proof
+  `SND alias_diamond_r = (SND alias_diamond_r) with
+    <|ps_stack := (SND alias_diamond_r).ps_stack;
+      ps_spilled := (SND alias_diamond_r).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  rewrite_tac[GSYM (cj 3 alias_diamond_edges)] >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 3 alias_diamond_fn.fn_blocks`, `FST alias_diamond_r`,
+    `SND alias_diamond_h`, `[]`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_r] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_exit_dfs_result:
+  generate_fn_plan_aux (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    ["exit"] ["join"; "right"; "header"; "entry"] (SND alias_diamond_jr) =
+    SOME ([SOLabel "exit"; SOPop 1; SOEmit "STOP"],
+      ["exit"; "join"; "right"; "header"; "entry"], init_cleanup_plan_state NONE [] 0 0)
+Proof
+  rewrite_tac[alias_diamond_jr_def, alias_diamond_branch_states] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_dfs_back:
+  dfs_aux_call (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["backedge"]
+    ["exit"; "join"; "right"; "header"; "entry"] (SND alias_diamond_jr)
+Proof
+  `SND alias_diamond_jr = (SND alias_diamond_jr) with
+    <|ps_stack := (SND alias_diamond_jr).ps_stack;
+      ps_spilled := (SND alias_diamond_jr).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `SND alias_diamond_jr = (SND alias_diamond_jr) with
+    <|ps_alloc := (init_cleanup_plan_state NONE [] 0 0).ps_alloc with
+        sa_free_slots := (SND alias_diamond_jr).ps_alloc.sa_free_slots;
+      ps_label_counter := (init_cleanup_plan_state NONE [] 0 0).ps_label_counter|>` by
+    (rewrite_tac[alias_diamond_jr_def, alias_diamond_branch_states] >> EVAL_TAC) >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_sibling >>
+  qexistsl_tac [`[SOLabel "exit"; SOPop 1; SOEmit "STOP"]`,
+    `"exit"`, `["join"; "right"; "header"; "entry"]`] >>
+  simp[alias_diamond_exit_dfs_result] >>
+  rewrite_tac[GSYM (cj 4 alias_diamond_edges)] >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 4 alias_diamond_fn.fn_blocks`, `FST alias_diamond_jr`,
+    `SND alias_diamond_r`, `[]`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_j] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_dfs_states:
+  dfs_block_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "entry" (init_cleanup_plan_state NONE [] 0 0) /\
+  dfs_block_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" (SND alias_diamond_e) /\
+  dfs_block_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "right" (SND alias_diamond_h) /\
+  dfs_block_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "join" (SND alias_diamond_r) /\
+  dfs_block_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" (SND alias_diamond_jr)
+Proof
+  rewrite_tac[dfs_block_state_def] >> rpt conj_tac
+  >- (qexistsl_tac [`[]`, `[]`] >> simp[] >> irule dfs_aux_call_entry >> EVAL_TAC)
+  >- (qexistsl_tac [`[]`, `["entry"]`] >> simp[alias_diamond_dfs_h])
+  >- (qexistsl_tac [`[]`, `["header"; "entry"]`] >> simp[alias_diamond_dfs_r])
+  >- (qexistsl_tac [`[]`, `["right"; "header"; "entry"]`] >> simp[alias_diamond_dfs_j]) >>
+  qexistsl_tac [`[]`, `["exit"; "join"; "right"; "header"; "entry"]`] >>
+  simp[alias_diamond_dfs_back]
+QED
+
+Theorem alias_diamond_lineage_header:
+  lineage_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" (SND alias_diamond_e)
+Proof
+  `SND alias_diamond_e = (SND alias_diamond_e) with
+    <|ps_stack := (SND alias_diamond_e).ps_stack;
+      ps_spilled := (SND alias_diamond_e).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_diamond_dfs_states] >>
+  qexistsl_tac [`EL 0 alias_diamond_fn.fn_blocks`, `FST alias_diamond_e`, `NONE`, `"entry"`, `F`,
+    `init_cleanup_plan_state NONE [] 0 0`, `init_cleanup_plan_state NONE [] 0 0`,
+    `SND alias_diamond_e`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_states,
+       alias_diamond_edges] >> conj_tac >- EVAL_TAC >>
+  reverse conj_tac >- (irule lineage_state_entry >> EVAL_TAC) >>
+  `init_cleanup_plan_state NONE [] 0 0 with
+    <|ps_cleanup_height := NONE; ps_cleanup_promised := F|> =
+    init_cleanup_plan_state NONE [] 0 0` by simp[init_cleanup_plan_state_def] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans]
+QED
+
+Theorem alias_diamond_lineage_right:
+  lineage_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "right" (SND alias_diamond_h)
+Proof
+  `SND alias_diamond_h = (SND alias_diamond_h) with
+    <|ps_stack := (SND alias_diamond_h).ps_stack;
+      ps_spilled := (SND alias_diamond_h).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_diamond_dfs_states] >>
+  qexistsl_tac [`EL 1 alias_diamond_fn.fn_blocks`, `FST alias_diamond_h`, `NONE`, `"header"`, `F`,
+    `SND alias_diamond_e`, `SND alias_diamond_e`, `SND alias_diamond_h`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_states,
+       alias_diamond_edges, alias_diamond_lineage_header] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_lineage_join:
+  lineage_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "join" (SND alias_diamond_r)
+Proof
+  `SND alias_diamond_r = (SND alias_diamond_r) with
+    <|ps_stack := (SND alias_diamond_r).ps_stack;
+      ps_spilled := (SND alias_diamond_r).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_diamond_dfs_states] >>
+  qexistsl_tac [`EL 3 alias_diamond_fn.fn_blocks`, `FST alias_diamond_r`, `NONE`, `"right"`, `F`,
+    `SND alias_diamond_h`, `SND alias_diamond_h`, `SND alias_diamond_r`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_states,
+       alias_diamond_edges, alias_diamond_lineage_right] >>
+  rewrite_tac[alias_diamond_h_state, alias_diamond_r_def] >>
+  rewrite_tac[alias_diamond_h_state] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_lineage_backedge:
+  lineage_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" (SND alias_diamond_jr)
+Proof
+  `SND alias_diamond_jr = (SND alias_diamond_jr) with
+    <|ps_stack := (SND alias_diamond_jr).ps_stack;
+      ps_spilled := (SND alias_diamond_jr).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_diamond_dfs_states] >>
+  qexistsl_tac [`EL 4 alias_diamond_fn.fn_blocks`, `FST alias_diamond_jr`, `NONE`, `"join"`, `F`,
+    `SND alias_diamond_r`, `SND alias_diamond_r`, `SND alias_diamond_jr`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_states,
+       alias_diamond_edges, alias_diamond_lineage_join] >>
+  rewrite_tac[alias_diamond_branch_states, alias_diamond_jr_def] >>
+  rewrite_tac[alias_diamond_branch_states] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_back_plan:
+  alias_diamond_plan 6 (SND alias_diamond_jr) =
+    SOME (FST alias_diamond_back, SND alias_diamond_jr)
+Proof
+  rewrite_tac[alias_diamond_back_def, alias_diamond_join_state] >> EVAL_TAC
+QED
+
+Definition alias_diamond_loop_entry_def:
+  alias_diamond_loop_entry = SND alias_diamond_e with
+    <|ps_stack := (SND alias_diamond_jr).ps_stack;
+      ps_spilled := (SND alias_diamond_jr).ps_spilled|>
+End
+
+Theorem alias_diamond_lineage_loop:
+  lineage_state (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn) alias_diamond_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" alias_diamond_loop_entry
+Proof
+  rewrite_tac[alias_diamond_loop_entry_def] >> irule lineage_state_step >>
+  simp[alias_diamond_dfs_states] >>
+  qexistsl_tac [`EL 6 alias_diamond_fn.fn_blocks`, `FST alias_diamond_back`, `NONE`, `"backedge"`, `F`,
+    `SND alias_diamond_jr`, `SND alias_diamond_jr`, `SND alias_diamond_jr`] >>
+  simp[GSYM alias_diamond_plan_def, alias_diamond_back_plan, alias_diamond_dfs_states,
+       alias_diamond_edges, alias_diamond_lineage_backedge] >>
+  rewrite_tac[alias_diamond_join_state, alias_diamond_back_def] >>
+  rewrite_tac[alias_diamond_join_state] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_loop_fields:
+  alias_diamond_loop_entry =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "z"]) /\
+  normalize_operand (dfg_build_function alias_diamond_fn) [] (Var "u") = Var "r" /\
+  normalize_operand (dfg_build_function alias_diamond_fn) [] (Var "v") = Var "r" /\
+  ~plan_holds alias_diamond_loop_entry (Var "u") /\
+  ~plan_holds alias_diamond_loop_entry (Var "v")
+Proof
+  rewrite_tac[alias_diamond_loop_entry_def, alias_diamond_join_state] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Definition alias_diamond_header_phi_def:
+  alias_diamond_header_phi =
+    generate_phi_plan (EL 0 (EL 1 alias_diamond_fn.fn_blocks).bb_instructions)
+      (live_vars_at (liveness_analyze alias_diamond_fn) "header" 1) F
+      alias_diamond_loop_entry
+End
+
+Theorem alias_diamond_header_phi_fields:
+  (SND alias_diamond_header_phi).ps_stack = [Var "t"] /\
+  (SND alias_diamond_header_phi).ps_spilled = FEMPTY
+Proof
+  rewrite_tac[alias_diamond_header_phi_def, alias_diamond_loop_fields] >> EVAL_TAC
+QED
+
+Theorem alias_diamond_header_root_prefix:
+  IS_SOME (generate_block_insts_plan (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn)
+    alias_diamond_fn "header" F 0 2 0
+    (TAKE 2 (EL 1 alias_diamond_fn.fn_blocks).bb_instructions) alias_diamond_loop_entry) /\
+  (SND (THE (generate_block_insts_plan (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn)
+    alias_diamond_fn "header" F 0 2 0
+    (TAKE 2 (EL 1 alias_diamond_fn.fn_blocks).bb_instructions) alias_diamond_loop_entry))).ps_stack =
+    [Var "r"; Var "t"]
+Proof
+  rewrite_tac[alias_diamond_loop_fields] >> conj_tac >> EVAL_TAC
+QED
+
+Theorem alias_diamond_header_replay:
+  alias_diamond_plan 1 alias_diamond_loop_entry = SOME alias_diamond_h
+Proof
+  rewrite_tac[alias_diamond_loop_fields] >> EVAL_TAC
+QED
+
 Theorem eval_one_phi_without_predecessor:
   s.vs_prev_bb = NONE ==> eval_one_phi s inst = NONE
 Proof
