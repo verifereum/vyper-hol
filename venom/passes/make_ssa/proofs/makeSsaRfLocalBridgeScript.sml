@@ -1,5 +1,5 @@
 Theory makeSsaRfLocalBridge
-Ancestors makeSsaRfRenameTrace makeSsaRfAllocation makeSsaRfAssign
+Ancestors makeSsaRfRenameTrace makeSsaRfAllocation makeSsaRfAssign makeSsaRfWitness
   makeSsaCurrentDefs venomInst list pair
 
 Theorem current_outputs_trace_nonoutput:
@@ -77,4 +77,35 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!v. MEM v V /\ ~MEM v inst.inst_outputs ==> _` drule_all >>
   metis_tac[]
+QED
+
+Theorem current_local_trace_rf_back_trace:
+  !annss insts s rs H E insts' s' rs' H' E'.
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
+  current_annotations_ok V H (FLAT annss) /\
+  current_allocation_consistent V H s rs /\ current_env_realizes H E rs V /\
+  current_env_owned V H E /\
+  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
+    EVERY (rf_operand_in V) i.inst_operands) insts ==>
+  rf_back_trace V (latest_current_name rs) (latest_current_name rs')
+    (REVERSE insts) (REVERSE insts')
+Proof
+  Induct >> simp[current_local_trace_def, rf_back_trace_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `current_annotations_ok V H h` by
+    metis_tac[current_annotations_split, FLAT] >>
+  `current_allocation_consistent V H1 s1 rs1 /\ current_env_realizes H1 E1 rs1 V` by
+    (irule current_inst_trace_preserves >> metis_tac[]) >>
+  `current_env_owned V H1 E1` by metis_tac[current_inst_trace_owned] >>
+  `current_annotations_ok V H1 (FLAT annss)` by
+    (fs[current_inst_trace_def] >>
+     irule current_outputs_trace_remaining >> metis_tac[FLAT]) >>
+  `rf_back_trace V (latest_current_name rs1) (latest_current_name rs')
+     (REVERSE rest) (REVERSE rest1)` by
+    (first_x_assum irule >> metis_tac[]) >>
+  `rf_local_step V (latest_current_name rs) (latest_current_name rs1) inst inst1` by
+    (irule current_inst_trace_rf_step >> metis_tac[]) >>
+  simp[REVERSE_DEF] >> irule rf_back_trace_append >>
+  qexists_tac `latest_current_name rs1` >>
+  simp[rf_back_trace_def] >> metis_tac[]
 QED
