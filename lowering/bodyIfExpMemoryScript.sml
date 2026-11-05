@@ -1038,6 +1038,67 @@ Proof
   simp[next_gas_reading_def, raise_def]
 QED
 
+(* Operational prefix decomposition: exhaustion is not a replay claim. *)
+Theorem ifexp_source_prefix_bind[local]:
+  (!s gs res t.
+     f (s with gas_obs := gs) = (res,t) ==>
+     (?used. gs = used ++ t.gas_obs /\
+       !tail. f (s with gas_obs := used ++ tail) =
+         (res,t with gas_obs := tail)) \/
+     (res = INR (Error (RuntimeError "msg.gas: no gas reading")) /\
+      t.gas_obs = [])) /\
+  (!x s gs res t.
+     g x (s with gas_obs := gs) = (res,t) ==>
+     (?used. gs = used ++ t.gas_obs /\
+       !tail. g x (s with gas_obs := used ++ tail) =
+         (res,t with gas_obs := tail)) \/
+     (res = INR (Error (RuntimeError "msg.gas: no gas reading")) /\
+      t.gas_obs = [])) ==>
+  !s gs res t.
+    bind f g (s with gas_obs := gs) = (res,t) ==>
+    (?used. gs = used ++ t.gas_obs /\
+      !tail. bind f g (s with gas_obs := used ++ tail) =
+        (res,t with gas_obs := tail)) \/
+    (res = INR (Error (RuntimeError "msg.gas: no gas reading")) /\
+     t.gas_obs = [])
+Proof
+  rpt strip_tac >>
+  Cases_on `f (s with gas_obs := gs)` >>
+  rename1 `f _ = (fr,mid)` >>
+  qpat_assum `!s gs res t. _` drule >> strip_tac
+  >- suspend "uniform"
+  >> Cases_on `fr` >> gvs[bind_def]
+QED
+
+Resume ifexp_source_prefix_bind[uniform]:
+  Cases_on `fr` >> gvs[bind_def]
+  >- (qpat_x_assum `!x s gs res t. _`
+        (qspecl_then [`x`,`mid`,`mid.gas_obs`] mp_tac) >>
+      disch_then (drule o SRULE []) >> strip_tac
+      >- (disj1_tac >> qexists_tac `used ++ used'` >>
+          simp[APPEND_ASSOC] >>
+          pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[]) >>
+      simp[]) >>
+  disj1_tac >> qexists_tac `used` >> simp[]
+QED
+
+Finalise ifexp_source_prefix_bind
+
+Theorem ifexp_next_gas_prefix[local]:
+  !s gs res t.
+    next_gas_reading (s with gas_obs := gs) = (res,t) ==>
+    (?used. gs = used ++ t.gas_obs /\
+      !tail. next_gas_reading (s with gas_obs := used ++ tail) =
+        (res,t with gas_obs := tail)) \/
+    (res = INR (Error (RuntimeError "msg.gas: no gas reading")) /\
+     t.gas_obs = [])
+Proof
+  rpt gen_tac >> Cases_on `gs`
+  >- (simp[ifexp_next_gas_exhausted] >> strip_tac >> gvs[]) >>
+  simp[ifexp_next_gas_tail] >> strip_tac >> gvs[] >>
+  simp[ifexp_next_gas_tail]
+QED
+
 Theorem ifexp_gas_zero_test_source[local]:
   es.gas_obs = w::ws ==>
   eval_expr cx
