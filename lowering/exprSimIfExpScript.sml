@@ -1777,6 +1777,40 @@ Resume ifexp_forced_arm_body_pre[call]:
 QED
 Finalise ifexp_forced_arm_body_pre
 
+(* Arm interface shared by the legacy layout path and the body-pre path. *)
+Theorem ifexp_forced_arm[local]:
+  expr_sim ctx func ce cx ty e es /\ expr_vv_sim ctx func ce cx ty e es /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  ((~is_word_type (expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e) /\
+      ?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp) \/
+   (acyclic_struct_metadata ce.ce_struct_fields /\ ?env. expr_body_pre ce cx env e es)) /\
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+     ~is_word_type (expr_type e) ==> type_memory_size tvt < 2 ** 64) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\ expr_res_ok res /\
+  (!v. res = INL v ==>
+     ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\s. ?v. res = INL v /\
+      expr_post ctx func ce cx (IfExp (expr_type e) c a b) es sa sb s0 es' v op s)
+    (expr_exit res)
+Proof
+  strip_tac
+  >- (irule ifexp_forced_arm_typed >>
+      qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >> simp[]) >>
+  irule ifexp_forced_arm_body_pre >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 (* What compile_expr emits for an IfExp. *)
 Theorem compile_expr_ifexp:
   !cenv ty t c a b st vv st'.
@@ -2502,14 +2536,17 @@ Theorem compile_ifexp_forced_frag[local]:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (~is_word_type t ==>
-     !e. (e = a \/ e = b) ==>
-         lowered_value_type cenv e = expr_type e \/
+     !e tv es1. (e = a \/ e = b) /\
+         (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+         (lowered_value_type cenv e = expr_type e \/
          is_bytestring_type (expr_type e) /\
          is_bytestring_type (lowered_value_type cenv e) /\
          arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
          (same_memory_layout cenv (lowered_value_type cenv e) (expr_type e) /\
           arg_type_fits (lowered_value_type cenv e) (expr_type e) /\
-          (?tvp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvp))) /\
+          (?tvp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvp))) \/
+         (acyclic_struct_metadata cenv.ce_struct_fields /\
+          ?env. expr_body_pre cenv cx env e es1)) /\
     (!ty' tv'. evaluate_type (get_tenv cx) ty' = SOME tv' ==>
        type_memory_bytes cenv ty' = type_memory_size tv') /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
@@ -2582,7 +2619,7 @@ Resume compile_ifexp_forced_frag[then_arm]:
   qpat_assum `(do result <- eval_expr cx c; read_result cx result od) es = _` (irule_at Any) >>
   qexistsl_tac [`s7`, `tl`] >> simp[cs_extends_refl] >>
   conj_tac >- metis_tac[] >>
-  rpt strip_tac >> gvs[] >> irule ifexp_forced_arm_typed >>
+  rpt strip_tac >> gvs[] >> irule ifexp_forced_arm >>
   qpat_assum `compile_expr _ _ a s7 = _` (irule_at Any) >> simp[] >>
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[] >>
@@ -2612,7 +2649,7 @@ Resume compile_ifexp_forced_frag[else_arm]:
   conj_tac >- metis_tac[] >>
   rpt strip_tac >> gvs[] >>
   qpat_assum `expr_type b = expr_type a` (fn th => once_rewrite_tac[GSYM th]) >>
-  irule ifexp_forced_arm_typed >>
+  irule ifexp_forced_arm >>
   qpat_assum `compile_expr _ _ b s11 = _` (irule_at Any) >> simp[] >>
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[] >>
@@ -2633,14 +2670,17 @@ Theorem compile_ifexp_vv_sim:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (~is_word_type t ==>
-     !e. (e = a \/ e = b) ==>
-         lowered_value_type cenv e = expr_type e \/
+     !e tv es1. (e = a \/ e = b) /\
+         (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+         (lowered_value_type cenv e = expr_type e \/
          is_bytestring_type (expr_type e) /\
          is_bytestring_type (lowered_value_type cenv e) /\
          arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
          (same_memory_layout cenv (lowered_value_type cenv e) (expr_type e) /\
           arg_type_fits (lowered_value_type cenv e) (expr_type e) /\
-          (?tvp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvp))) /\
+          (?tvp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvp))) \/
+         (acyclic_struct_metadata cenv.ce_struct_fields /\
+          ?env. expr_body_pre cenv cx env e es1)) /\
     (!ty' tv'. evaluate_type (get_tenv cx) ty' = SOME tv' ==>
        type_memory_bytes cenv ty' = type_memory_size tv') /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>

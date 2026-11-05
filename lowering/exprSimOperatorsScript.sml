@@ -963,7 +963,8 @@ Theorem compile_ifexp_aggregate_case:
     (~nocalls ==>
      !e. (e = a \/ e = b) ==>
          int_calls_expr e = [] \/
-         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e) \/
+         acyclic_struct_metadata cenv.ce_struct_fields) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
@@ -984,7 +985,12 @@ Proof
     mp_tac compile_ifexp_vv_sim >>
   impl_tac
   >- (simp[] >> rpt conj_tac
-      >- (rpt gen_tac >> disch_tac >> irule ifexp_body_pre_lowered_type_compatible >>
+      >- (rpt gen_tac >> disch_tac >>
+          Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+          >- (disj2_tac >> simp[] >>
+              qpat_x_assum `_ /\ _` strip_assume_tac >>
+              drule_all expr_body_pre_eval >> strip_tac >> metis_tac[]) >>
+          disj1_tac >> irule ifexp_body_pre_lowered_type_compatible >>
           conj_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
           qexistsl_tac [`env`, `es`] >>
           `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
@@ -1025,7 +1031,8 @@ Theorem compile_ifexp_case:
     (~nocalls ==>
      !e. (e = a \/ e = b) ==>
          int_calls_expr e = [] \/
-         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e) \/
+         acyclic_struct_metadata cenv.ce_struct_fields) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
