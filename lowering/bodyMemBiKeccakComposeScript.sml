@@ -5,7 +5,7 @@ Ancestors
   allocaFootprint abiBuiltinAllocation venomMemDefs venomInst finite_map words exprSimHash exprOperandVar
   exprSimMemDefs exprSimProps fragGasSeqMem allocaHistoryFragment
   vyperTyping vyperValue builtinHashing vyperTypeSystem compileEnv
-  loweringPosts exprLoweringProps
+  loweringPosts exprLoweringProps exprSimAlloc context emitHelper list rich_list exprSimVVFrame fragExec entrySinkExtraction
 
 Theorem keccak_typed_suffix_mem_ok:
   expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
@@ -69,4 +69,83 @@ Proof
   drule_at (Pos hd) keccak_string_post_bounds >> simp[] >> strip_tac >>
   irule keccak_memory_suffix_mem_ok >>
   qexistsl_tac [`b`, `LENGTH s'`, `op`, `x`] >> simp[]
+QED
+
+Theorem keccak_typed_suffix_no_gas:
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  (if is_bytestring_type (expr_type e) then compile_keccak256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_keccak256_bytesm x m sm
+   | _ => compile_keccak256_word x sm) = (op,sb) ==>
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb) = []
+Proof
+  strip_tac >> Cases_on `bty` >>
+  gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+       gvs[is_bytestring_type_def]) >>
+  gvs[compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+      compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
+      fresh_var_def, emit_def] >>
+  simp[emitted_insts_def, DROP_APPEND, mk_inst_def]
+QED
+
+Theorem keccak_typed_suffix_counted:
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if is_bytestring_type (expr_type e) then compile_keccak256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_keccak256_bytesm x m sm
+   | _ => compile_keccak256_word x sm) = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  ~block_is_terminated sm /\ expr_store_bound cx (expr_type e) v x s /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t r. gas_path_mem ctx func s 0 (OK t) /\
+    builtin_result cx es'.accounts (BaseT (BytesT (Fixed 32)))
+      Keccak256 [expr_type e] [v] = INL r /\
+    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
+      es sa sb s0 es' (Value r) (StackValue (BaseT (BytesT (Fixed 32))) op) t /\
+    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  drule_all keccak_typed_post_run >> strip_tac >>
+  drule_all keccak_typed_suffix_mem_ok >> strip_tac >>
+  drule_all keccak_typed_suffix_shape >> strip_tac >>
+  drule_all keccak_typed_suffix_no_gas >> strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts` by
+    (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+     simp[DROP_APPEND]) >>
+  `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
+  `alloca_inv s` by fs[expr_post_def, stmt_state_rel_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+    fs[EVERY_MEM] >>
+  drule_all alloca_history_run_inst_seq >> simp[] >> strip_tac >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  fs[same_blocks_def] >>
+  `!a. x = Var a ==> not_fresh_at sm a` by
+    metis_tac[compile_lower_value_var] >>
+  Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def, is_bytestring_type_def]
+  >~ [`expr_type e = BaseT (BytesT bd)`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def]
+      >- metis_tac[keccak_fixed_suffix_frontier] >>
+      drule_at (Pos hd) keccak_dynamic_post_bounds >> simp[] >> strip_tac >>
+      drule_all keccak_memory_suffix_frontier >> simp[]) >>
+  drule_at (Pos hd) keccak_string_post_bounds >> simp[] >> strip_tac >>
+  drule_at (Pos hd) (Q.INST [`bs` |-> `MAP (n2w o ORD) s'`] keccak_memory_suffix_frontier) >>
+  simp[] >> disch_then drule_all >> simp[]
 QED
