@@ -6,9 +6,9 @@ Ancestors
   fragGasPathMem fragGasMode fragGasSeqMem allocaHistoryFragment
   exprLoweringProps loweringSlice emitHelper emitHelperProps exprLowering
   compileEnv context venomState venomExecSemantics venomInst freshWrites
-  valueEncoding valueEncodingProps valueTypingMemoryProps finite_map list
+  valueEncoding valueEncodingProps valueTypingMemoryProps finite_map list rich_list
   localPtrsProps stmtSimDefs stmtSimProps fragExec fragExecMem bodyMemoryDefs
-  loweringPosts vyperTyping
+  loweringPosts vyperTyping instMemFrontier stmtSimReturn tupleLoadProps stmtLowering
 Libs
   monadsyntax
 
@@ -232,4 +232,131 @@ Proof
       qexistsl_tac [`w2n w`, `type_memory_size_list tvs`] >> simp[] >> metis_tac[]) >>
   gvs[comp_return_def] >> qexistsl_tac [`s`, `sw`] >> simp[cj 1 gas_path_mem_rules] >>
   qexistsl_tac [`b`, `sz`] >> simp[] >> metis_tac[]
+QED
+
+(* Memory check for the ADD / optional MLOAD head used by tupleLoadProps. *)
+Theorem tuple_elem_load_head_mem_ok[local]:
+  emit_op ADD [bop; Lit off] sa = (pv, sm) /\
+  compile_load_memory pv load sm = (v, sb) /\
+  eval_operand bop s = SOME w /\
+  (load ==> w2n (w + off) + 32 <= s.vs_alloca_next) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> Cases_on `load` >>
+  gvs[contextTheory.compile_load_memory_def, emit_op_def, comp_bind_def,
+      comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  simp[emitted_insts_def, DROP_APPEND1, venomInstTheory.mk_inst_def,
+       run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
+       below_frontier_no_ranges, below_frontier_MLOAD] >>
+  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
+       bind_outputs_def, lookup_var_update_var] >>
+  gvs[eval_operand_def] >>
+  simp[GSYM venomInstTheory.mk_inst_def, below_frontier_MLOAD,
+       eval_operand_def, lookup_var_update_var, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem compile_tuple_load_all_mem_ok:
+  !tys cenv bop off sa elems sb s w.
+    compile_tuple_load_all cenv bop tys off sa = (elems,sb) /\
+    (!x. bop = Var x ==> not_fresh_at sa x) /\
+    eval_operand bop s = SOME w /\
+    EVERY (\ty. is_word_type ty ==> 32 <= type_memory_bytes cenv ty) tys /\
+    w2n w + off + SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256) /\
+    w2n w + off + SUM (MAP (type_memory_bytes cenv) tys) <= s.vs_alloca_next ==>
+    run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  Induct
+  >- simp[compile_tuple_load_all_def, comp_return_def, emitted_insts_def,
+          run_inst_seq_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` mp_tac >>
+  simp[compile_tuple_load_all_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD _ sa = (pv,sm)` >>
+  rename1 `compile_load_memory _ _ sm = (v,sh)` >>
+  rename1 `compile_tuple_load_all _ _ _ _ sh = (rest,sf)` >>
+  drule_all tuple_elem_load_head_run >> strip_tac >> gvs[] >>
+  `w2n (w + n2w off) = w2n w + off` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sh) s` by
+    (irule tuple_elem_load_head_mem_ok >>
+     goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_load_memory _ _ _ = _`)) >>
+     simp[] >> strip_tac >> gvs[] >> decide_tac) >>
+  `(!x. bop = Var x ==> not_fresh_at sh x) /\
+   eval_operand bop (s with vs_vars := vs) = SOME w` by
+    (conj_tac >- (rpt strip_tac >> irule not_fresh_at_mono >>
+       qexists `sa` >> simp[]) >>
+     `eval_operand bop (s with vs_vars := vs) = eval_operand bop s` by
+       (irule eval_operand_old_vars >> simp[] >> qexists `sa` >> simp[]) >> simp[]) >>
+  `sf.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sf /\
+   same_blocks sh sf` by
+    (drule_all compile_tuple_load_all_run >> simp[]) >>
+  `emitted_insts sa sf = emitted_insts sa sh ++ emitted_insts sh sf` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
+  rpt strip_tac >> gvs[] >> first_x_assum irule >>
+  goal_assum (drule_at (Pat `compile_tuple_load_all _ _ _ _ _ = _`)) >>
+  simp[] >> decide_tac
+QED
+
+Theorem compile_tuple_load_all_no_gas[local]:
+  !tys cenv bop off sa elems sb.
+    compile_tuple_load_all cenv bop tys off sa = (elems,sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  Induct
+  >- simp[compile_tuple_load_all_def, comp_return_def, emitted_insts_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` mp_tac >>
+  simp[compile_tuple_load_all_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD _ sa = (pv,sm)` >>
+  rename1 `compile_load_memory _ _ sm = (v,sh)` >>
+  rename1 `compile_tuple_load_all _ _ _ _ sh = (rest,sf)` >>
+  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh /\
+   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sh)` by
+    (Cases_on `is_word_type h` >>
+     gvs[contextTheory.compile_load_memory_def, emit_op_def, comp_bind_def,
+         comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+     simp[emitted_insts_def, DROP_APPEND1, venomInstTheory.mk_inst_def]) >>
+  first_x_assum drule >> strip_tac >>
+  `emitted_insts sa sf = emitted_insts sa sh ++ emitted_insts sh sf` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[]
+QED
+
+Theorem compile_tuple_load_all_path_mem:
+  !tys cenv bop off sa elems sb s w ctx func t.
+    compile_tuple_load_all cenv bop tys off sa = (elems,sb) /\
+    (!x. bop = Var x ==> not_fresh_at sa x) /\
+    eval_operand bop s = SOME w /\
+    EVERY (\ty. is_word_type ty ==> 32 <= type_memory_bytes cenv ty) tys /\
+    w2n w + off + SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256) /\
+    w2n w + off + SUM (MAP (type_memory_bytes cenv) tys) <= s.vs_alloca_next /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    gas_path_mem ctx func s 0
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_tuple_load_all_mem_ok >> strip_tac >>
+  drule_all compile_tuple_load_all_run >> strip_tac >>
+  drule compile_tuple_load_all_no_gas >> strip_tac >>
+  `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
+    (gvs[fragExecTheory.fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+     rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    simp[] >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND3] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (gvs[EVERY_FILTER, FILTER_EQ_NIL, EVERY_MEM]) >>
+  drule_all run_inst_seq_gas_path_mem >>
+  disch_then (qspec_then `ctx` mp_tac) >> gvs[]
 QED
