@@ -222,3 +222,210 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`a`, `b`, `lenop`] >> simp[]
 QED
+
+(* The only semantic oracle in this compiled-loop boundary is the located
+   element load.  In particular it does not assume any loop transitions. *)
+Theorem rest_word_compiled_search:
+  compile_array_membership_loop needleop arrop lenop stride off
+    (context$compile_ptr_load ctor imm loc) is_in cs = (out,ct) /\
+  fn_has_code cs ct fn /\ loc <> LocCalldata /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sm.cs_next_var <= cs.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!z. needleop = Var z \/ arrop = Var z \/ lenop = Var z ==> not_fresh_at cs z) /\
+  len < dimword (:256) /\
+  (!h cl cm v i p.
+    rest_word_loop_prefix needleop arrop lenop stride off cs = (h,cl) /\
+    context$compile_ptr_load ctor imm loc h.rw_addr cl = (v,cm) /\ i < len /\
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+      needleop needle lenop len p /\
+    eval_operand h.rw_addr p = SOME (baseword + n2w (off + i * stride)) ==>
+    ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
+        eval_operand v q = SOME (elem i) /\
+        (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)) /\
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len s /\ eval_operand arrop s = SOME baseword /\
+  s.vs_current_bb = cs.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
+  ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
+    t.vs_current_bb = ct.cs_current_bb /\
+    t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+      needleop needle lenop len t /\ eval_operand arrop t = SOME baseword /\
+    eval_operand out t = SOME (bool_to_word
+      (if is_in then (?j. j < len /\ elem j = needle)
+       else ~(?j. j < len /\ elem j = needle)))
+Proof
+  strip_tac >> drule_all exprSimBopRestWordLayoutTheory.rest_word_ptr_loop_layout_safe >>
+  disch_then (qx_choose_then `h` (qx_choose_then `cl`
+    (qx_choose_then `cm` (qx_choose_then `v` strip_assume_tac)))) >>
+  qabbrev_tac `R = \u. rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len u /\ eval_operand arrop u = SOME baseword` >>
+  `!u x w. R u /\ ~not_fresh_at cs x ==> R (update_var x w u)` by
+    (rpt gen_tac >> simp[Abbr `R`] >> strip_tac >> conj_tac
+     >- (irule rest_word_search_rep_update >> simp[] >>
+         metis_tac[not_fresh_at_mono]) >>
+     Cases_on `arrop` >>
+     gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `!u lbl. R u ==> R (jump_to lbl u)` by
+    (simp[Abbr `R`, rest_word_search_rep_control] >>
+     Cases_on `arrop` >> simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def, venomStateTheory.jump_to_def]) >>
+  `!u k. R u ==> R (u with vs_inst_idx := k)` by
+    (simp[Abbr `R`, rest_word_search_rep_control] >>
+     Cases_on `arrop` >> simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]) >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_allocation >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_idx_result >> strip_tac >>
+  drule_all exprSimBopRestWordLayoutTheory.rest_word_loop_ptr_protected >> strip_tac >>
+  `cs.cs_next_var <= cl.cs_next_var /\ cl.cs_next_var <= cm.cs_next_var` by
+    (qspec_then `cl` mp_tac (Q.SPECL [`ctor`, `imm`, `loc`, `h.rw_addr`]
+       exprLoweringPropsTheory.ci_mono_compile_ptr_load) >>
+     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  `!z. not_fresh_at cs z ==> not_fresh_at cl z` by metis_tac[not_fresh_at_mono] >>
+  `~not_fresh_at cs h.rw_idx /\ ~not_fresh_at cs h.rw_result` by
+    simp[compileEnvTheory.not_fresh_at_def] >>
+  qpat_x_assum `h.rw_idx = _` kall_tac >>
+  qpat_x_assum `h.rw_result = _` kall_tac >>
+  qpat_x_assum `h.rw_entry = _` kall_tac >>
+  qpat_x_assum `h.rw_cond = _` kall_tac >>
+  qpat_x_assum `h.rw_body = _` kall_tac >>
+  qpat_x_assum `h.rw_found = _` kall_tac >>
+  qpat_x_assum `h.rw_incr = _` kall_tac >>
+  qpat_x_assum `h.rw_exit = _` kall_tac >>
+  qpat_x_assum `cl.cs_next_var = _` kall_tac >>
+  qpat_x_assum `cl.cs_next_label = _` kall_tac >>
+  qpat_x_assum `cl.cs_next_id = _` kall_tac >>
+  `!i u. rest_word_membership_inv h.rw_idx h.rw_result len needle elem R i u /\
+    u.vs_current_bb = h.rw_cond /\ u.vs_inst_idx = 0 /\ ~u.vs_halted ==>
+    ?t. gas_marked_path memory execctx fn u 0 (OK t) /\
+      t.vs_current_bb = h.rw_exit /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      eval_operand (Var h.rw_result) t =
+        SOME (bool_to_word (?j. j < len /\ elem j = needle)) /\ R t` by
+    (ho_match_mp_tac (Q.INST [`body_lbl` |-> `h.rw_body`,
+       `found` |-> `h.rw_found`, `incr` |-> `h.rw_incr`] rest_word_search_iteration) >> rpt conj_tac
+     >- suspend "cond"
+     >- suspend "body"
+     >- suspend "found"
+     >- suspend "incr") >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_safe_forget >> strip_tac >>
+  `R s` by simp[Abbr `R`] >>
+  `gas_marked_path memory execctx fn s 0 (OK (jump_to h.rw_entry s))` by
+    (drule_all rest_word_layout_caller_path >> simp[]) >>
+  `?u. gas_marked_path memory execctx fn (jump_to h.rw_entry s) 0 (OK u) /\
+    u.vs_current_bb = h.rw_cond /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+    rest_word_membership_inv h.rw_idx h.rw_result len needle elem R 0 u` by
+    (irule rest_word_layout_entry_path >> simp[venomStateTheory.jump_to_def] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!i u. _` drule_all >> strip_tac >>
+  `?w. gas_marked_path memory execctx fn t 0 (OK w) /\
+    w.vs_current_bb = ct.cs_current_bb /\
+    w.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~w.vs_halted /\
+    eval_operand out w = SOME (bool_to_word
+      (if is_in then (?j. j < len /\ elem j = needle)
+       else ~(?j. j < len /\ elem j = needle))) /\ R w` by
+    (irule rest_word_layout_exit_path >> goal_assum (drule_at Any) >> simp[] >>
+     rpt strip_tac >>
+     drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_safe_exit >>
+     strip_tac >> gvs[] >> metis_tac[]) >>
+  qexists `w` >> simp[GSYM CONJ_ASSOC] >>
+  `gas_marked_path memory execctx fn s 0 (OK w)` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
+  fs[Abbr `R`]
+QED
+
+Resume rest_word_compiled_search[cond]:
+  rpt gen_tac >> strip_tac >>
+  `eval_operand lenop u = SOME (n2w len)` by
+    fs[rest_word_membership_inv_def, Abbr `R`, rest_word_search_rep_def] >>
+  drule_all rest_word_safe_cond_probe >> simp[]
+QED
+
+Resume rest_word_compiled_search[found]:
+  rpt gen_tac >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_safe_forget >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_found >> strip_tac >>
+  `R (update_var h.rw_result 1w u)` by metis_tac[] >>
+  irule rest_word_found_path >> simp[] >> qexistsl [`a`, `b`] >> simp[]
+QED
+
+Resume rest_word_compiled_search[incr]:
+  rpt gen_tac >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_safe_incr >> strip_tac >>
+  `~not_fresh_at cs next /\ next <> h.rw_result` by metis_tac[] >>
+  `R u` by fs[rest_word_membership_inv_def] >>
+  `R (update_var h.rw_idx (n2w (i+1)) (update_var next (n2w (i+1)) u))` by
+    metis_tac[] >>
+  irule rest_word_incr_path >> simp[] >> qexistsl [`a`, `b`, `c`, `next`] >> simp[]
+QED
+
+Resume rest_word_compiled_search[body]:
+  rpt gen_tac >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_safe_body >> strip_tac >>
+  `R u` by fs[rest_word_membership_inv_def] >>
+  `~not_fresh_at cs mulvar /\ ~not_fresh_at cs totalvar /\
+   ~not_fresh_at cs addr /\ ~not_fresh_at cs matched /\
+   matched <> h.rw_idx /\ matched <> h.rw_result` by metis_tac[] >>
+  qabbrev_tac `p = update_var addr (baseword + n2w (off + i * stride))
+    (if 0 < off then update_var totalvar (n2w (off + i * stride))
+      (update_var mulvar (n2w (i * stride)) u)
+     else update_var mulvar (n2w (i * stride)) u)` >>
+  `R p` by (Cases_on `0 < off` >> simp[Abbr `p`] >> metis_tac[]) >>
+  `eval_operand h.rw_addr p = SOME (baseword + n2w (off + i * stride))` by
+    simp[Abbr `p`, venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
+       eval_operand v q = SOME (elem i) /\
+       (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)` by
+    (`rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+        needleop needle lenop len p` by fs[Abbr `R`] >>
+     qpat_x_assum `!h cl cm v i p. _` drule_all >> simp[]) >>
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+      needleop needle lenop len p` by fs[Abbr `R`] >>
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+      needleop needle lenop len q` by
+    (`sm.cs_next_var <= cl.cs_next_var` by decide_tac >>
+     `(!z. needleop = Var z ==> not_fresh_at cl z) /\
+      (!z. lenop = Var z ==> not_fresh_at cl z)` by metis_tac[] >>
+     drule_all rest_word_search_rep_load >> simp[]) >>
+  drule_all exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_run_frame >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_ptr_load_fresh >> strip_tac >>
+  `not_fresh_at cl h.rw_idx /\ not_fresh_at cl h.rw_result` by
+    metis_tac[exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_handles_old] >>
+  `FLOOKUP q.vs_vars h.rw_idx = FLOOKUP p.vs_vars h.rw_idx /\
+   FLOOKUP q.vs_vars h.rw_result = FLOOKUP p.vs_vars h.rw_result` by
+    (conj_tac >>
+     qpat_assum `!x. (!i. _) ==> FLOOKUP _ _ = _` irule >>
+     fs[listTheory.EVERY_MEM]) >>
+  `!z. arrop = Var z ==> FLOOKUP q.vs_vars z = FLOOKUP p.vs_vars z` by
+    (rpt strip_tac >>
+     qpat_assum `!x. (!i. _) ==> FLOOKUP _ _ = _` irule >>
+     `not_fresh_at cl z` by metis_tac[] >> fs[listTheory.EVERY_MEM]) >>
+  `eval_operand arrop p = SOME baseword` by fs[Abbr `R`] >>
+  `eval_operand arrop q = SOME baseword` by
+    (`q.vs_labels = p.vs_labels` by
+       (qpat_assum `q = p with vs_vars := _`
+          (mp_tac o AP_TERM ``\(st:venom_state). st.vs_labels``) >> simp[]) >>
+     Cases_on `arrop` >> fs[venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def]) >>
+  `R q` by simp[Abbr `R`] >>
+  `R (update_var matched (bool_to_word (elem i = needle)) q)` by metis_tac[] >>
+  drule_all exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_code >> strip_tac >>
+  `EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
+          j.inst_opcode <> GAS) (emitted_insts cl cm)` by
+    (qpat_x_assum `EVERY (\i. MEM i.inst_opcode _) _` mp_tac >>
+     pure_rewrite_tac[listTheory.EVERY_MEM] >>
+     disch_then (fn th => gen_tac >> strip_tac >> drule th) >>
+     simp[] >> strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  irule rest_word_body_loaded_path >> simp[] >>
+  qexistsl [`a`, `addr`, `arrop`, `b`, `baseword`, `c`, `d`, `e'`,
+    `emitted_insts cl cm`, `matched`, `mulvar`, `needleop`, `off`, `q`, `stride`, `totalvar`, `v`] >>
+  simp[] >>
+  `arrop <> Var mulvar /\ arrop <> Var totalvar` by
+    (rpt strip_tac >> metis_tac[]) >>
+  `~q.vs_halted /\ q.vs_current_bb = p.vs_current_bb` by
+    (qpat_assum `q = p with vs_vars := _` SUBST1_TAC >>
+     Cases_on `0 < off` >> simp[Abbr `p`, venomStateTheory.update_var_def]) >>
+  fs[Abbr `R`, rest_word_search_rep_def]
+QED
+
+Finalise rest_word_compiled_search
