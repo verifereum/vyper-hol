@@ -1239,6 +1239,108 @@ Proof
   gvs[operand_val_def, frame_view_vars_lookup] >> metis_tac[]
 QED
 
+(* Certificates describe actual state boundaries; existence is a separate static
+   obligation. PHI transitions are atomic. No value equality is a constructor. *)
+Inductive alias_certificate:
+  (!fn dfg lo ps states n at.
+    n < LENGTH states /\ normalize_operand dfg [] at = at ==>
+    alias_certificate fn dfg lo ps states n at) /\
+  (!fn dfg lo ps states at.
+    0 < LENGTH states /\ (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) ==>
+    alias_certificate fn dfg lo ps states 0 at) /\
+  (!fn dfg lo ps states n at fuel ctx inst.
+    alias_certificate fn dfg lo ps states n at /\ SUC n < LENGTH states /\
+    step_inst fuel ctx inst (EL n states) = OK (EL (SUC n) states) /\
+    (!x. at = Var x ==> ~MEM x inst.inst_outputs) /\
+    (!x. normalize_operand dfg [] at = Var x ==> ~MEM x inst.inst_outputs) ==>
+    alias_certificate fn dfg lo ps states (SUC n) at) /\
+  (!fn dfg lo ps states n at instructions.
+    alias_certificate fn dfg lo ps states n at /\ SUC n < LENGTH states /\
+    eval_phis (EL n states) instructions = OK (EL (SUC n) states) /\
+    (!x inst. at = Var x /\ MEM inst instructions /\ inst.inst_opcode = PHI ==>
+      ~MEM x inst.inst_outputs) /\
+    (!x inst. normalize_operand dfg [] at = Var x /\
+      MEM inst instructions /\ inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
+    alias_certificate fn dfg lo ps states (SUC n) at) /\
+  (!fn dfg lo ps states n src x fuel ctx inst.
+    alias_certificate fn dfg lo ps states n src /\ SUC n < LENGTH states /\
+    ssa_form fn /\ MEM inst (fn_insts fn) /\
+    inst.inst_opcode = ASSIGN /\ inst.inst_operands = [src] /\
+    inst.inst_outputs = [x] /\
+    step_inst fuel ctx inst (EL n states) = OK (EL (SUC n) states) /\
+    (!l. FLOOKUP (EL n states).vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    normalize_operand dfg [] (Var x) = normalize_operand dfg [] src /\
+    (!y. normalize_operand dfg [] src = Var y ==> ~MEM y inst.inst_outputs) ==>
+    alias_certificate fn dfg lo ps states (SUC n) (Var x))
+End
+
+Theorem alias_certificate_sound:
+  !fn dfg lo ps states n at.
+    alias_certificate fn dfg lo ps states n at ==>
+    !ra. (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+      operand_val (frame_view fn ra (EL 0 states)) lo op =
+      operand_val (frame_view fn ra (EL 0 states)) lo (normalize_operand dfg [] op)) ==>
+    operand_val (frame_view fn ra (EL n states)) lo at =
+    operand_val (frame_view fn ra (EL n states)) lo (normalize_operand dfg [] at)
+Proof
+  ho_match_mp_tac alias_certificate_ind >> rpt strip_tac
+  >- simp[]
+  >- metis_tac[]
+  >- metis_tac[]
+  >- (irule alias_step_survivor_value >> metis_tac[])
+  >- (irule alias_phis_survivor_value >> metis_tac[])
+  >> `!y. ~MEM y inst.inst_outputs ==>
+        FLOOKUP (EL (SUC n) states).vs_vars y = FLOOKUP (EL n states).vs_vars y` by
+      (Cases_on `is_terminator inst.inst_opcode` >>
+       metis_tac[step_preserves_non_output_vars, step_terminator_preserves_vars,
+                 lookup_var_def]) >>
+  `operand_val (frame_view fn ra (EL (SUC n) states)) lo (normalize_operand dfg [] at) =
+   operand_val (frame_view fn ra (EL n states)) lo (normalize_operand dfg [] at)` by
+    (Cases_on `normalize_operand dfg [] at` >>
+     gvs[operand_val_def, frame_view_vars_lookup] >> metis_tac[]) >>
+  irule alias_assign_value_boundary >> metis_tac[]
+QED
+
+(* Universal interface tests: a root write blocks the survival constructor,
+   but a subsequent ASSIGN may repair the destination from a reflexive source,
+   without needing any certificate for the destination at the preceding cut. *)
+Theorem alias_certificate_root_write_blocks_survival:
+  normalize_operand dfg [] at = Var x /\ MEM x inst.inst_outputs ==>
+  ~(!y. normalize_operand dfg [] at = Var y ==> ~MEM y inst.inst_outputs)
+Proof
+  metis_tac[]
+QED
+
+Theorem alias_certificate_self_root_repair:
+  SUC n < LENGTH states /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [src] /\
+  inst.inst_outputs = [x] /\
+  step_inst fuel ctx inst (EL n states) = OK (EL (SUC n) states) /\
+  (!l. FLOOKUP (EL n states).vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  normalize_operand dfg [] src = src /\ normalize_operand dfg [] (Var x) = src /\
+  (!y. src = Var y ==> ~MEM y inst.inst_outputs) ==>
+  alias_certificate fn dfg lo ps states (SUC n) (Var x)
+Proof
+  strip_tac >>
+  `alias_certificate fn dfg lo ps states n src` by
+    (irule (cj 1 alias_certificate_rules) >> simp[] >> decide_tac) >>
+  irule (cj 5 alias_certificate_rules) >> metis_tac[]
+QED
+
+(* Certificate producer ledger:
+   - Entry constructor needs actual stack/spill ownership at cut zero, not
+     just liveness or selected-edge membership.
+   - Reflexive constructor needs a checked normalization equation (non-ASSIGN
+     outputs have normalize_operand_non_assign_output).
+   - Each survivor needs exclusion of BOTH the operand and its root from the
+     actual ordinary outputs or the entire atomic PHI batch.
+   - ASSIGN needs a source certificate at the preceding cut, actual execution,
+     labels, SSA/membership, normalization transport and syntactic root stability.
+   The states list fixes common cut identities; execution facts are supplied by
+   constructors, not inferred from list indices. No assertion here produces
+   these certificates from run_block, planner heldness, or lineage. In particular
+   loop root writes require deletion or later repair, not SSA alone. *)
+
 (* Pointwise demand interface ledger (C1.21.2.3).
    Both survivor boundaries quantify over arbitrary operands and arbitrary dfg;
    neither assumes liveness nor physical ownership, so dead retained names are
