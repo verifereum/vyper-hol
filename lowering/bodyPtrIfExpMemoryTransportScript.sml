@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpMemoryTransport
 Ancestors
-  bodyPtrDefs
+  bodyPtrDefs valueCopyBytes
 
 (* Interpretation transport does not follow merely from buffer capacity. *)
 Theorem ptr_mem_ok_transport:
@@ -29,3 +29,22 @@ Proof
   qexists_tac `src` >> simp[]
 QED
 
+Theorem ptr_mem_ok_bytestring_transport:
+  !cx src dst sv dv v op G tn s.
+    is_bytestring_type src /\ is_bytestring_type dst /\
+    evaluate_type (get_tenv cx) src = SOME sv /\
+    evaluate_type (get_tenv cx) dst = SOME dv /\
+    value_has_type sv v /\ value_has_type dv v /\
+    ptr_mem_ok cx src v op G tn s ==>
+    ptr_mem_ok cx dst v op G tn s
+Proof
+  rpt strip_tac >>
+  `val_footprint sv v = val_footprint dv v` by
+    (metis_tac[bytestring_val_footprint_eq]) >>
+  `val_store_size sv v = val_store_size dv v` by
+    (metis_tac[bytestring_val_store_size_eq]) >>
+  gvs[ptr_mem_ok_def] >> rpt strip_tac
+  >- (first_x_assum drule >> strip_tac >>
+      metis_tac[bytestring_val_in_memory_transfer]) >>
+  metis_tac[]
+QED
