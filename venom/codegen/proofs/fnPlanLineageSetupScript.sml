@@ -270,3 +270,41 @@ Theorem output_push_core_coverage:
 Proof
   simp[parameter_push_fold, MEM_MAP] >> metis_tac[]
 QED
+
+Theorem regular_post_emit_tail_sets:
+  !ps outputs live halting dfg inst term deleted ps8 ps9 final.
+    ALL_DISTINCT ps.ps_stack /\
+    deleted = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then MAP Var (FILTER (\v. ~MEM v live) outputs) else []) /\
+    ps8 = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v live) outputs)) ps)
+      else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []
+      then SND (optimistic_swap_plan dfg inst live term ps8) else ps8) /\
+    final = release_dead_spills live ps9 ==>
+    ALL_DISTINCT final.ps_stack /\
+    set final.ps_stack = set ps.ps_stack DIFF set deleted /\
+    FDOM final.ps_spilled = FDOM ps.ps_spilled INTER set (MAP Var live)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT ps8.ps_stack /\
+    set ps8.ps_stack = set ps.ps_stack DIFF set deleted /\
+    ps8.ps_spilled = ps.ps_spilled` by
+    (Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)` >> gvs[] >>
+     `ps.ps_stack = [] ++ ps.ps_stack` by simp[] >>
+     drule popmany_plan_core >>
+     disch_then (qspec_then `MAP Var (FILTER (\v. ~MEM v live) outputs)` mp_tac) >>
+     simp[popmany_plan_spilled_unchanged] >> metis_tac[]) >>
+  `ALL_DISTINCT ps9.ps_stack /\ set ps9.ps_stack = set ps8.ps_stack /\
+    ps9.ps_spilled = ps8.ps_spilled` by
+    (Cases_on `outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []` >>
+     gvs[] >> drule optimistic_swap_plan_inventory >> simp[]) >>
+  `final.ps_stack = ps9.ps_stack` by
+    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
+     rpt (pop_assum kall_tac) >> simp[release_dead_spills_def] >>
+     qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v live | Label v => T)
+       (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
+     qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
+     Cases_on `h` >> simp[]) >>
+  gvs[release_dead_spills_domain]
+QED
