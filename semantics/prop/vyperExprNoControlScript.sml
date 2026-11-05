@@ -667,6 +667,18 @@ val NO_CONTROL_MONAD_TAC =
 
 (* ===== Case 18: ExtCall and Send ===== *)
 
+Theorem eval_ext_call_effects_no_control:
+  eval_ext_call_effects cx target_addr calldata value_opt gas accounts st =
+    (INR exc, st') ==>
+  no_control_exc exc
+Proof
+  `no_control_monad
+     (eval_ext_call_effects cx target_addr calldata value_opt gas accounts)`
+    suffices_by metis_tac[no_control_monad_def] >>
+  simp_tac bool_ss [eval_ext_call_effects_def, LET_THM] >>
+  NO_CONTROL_MONAD_TAC
+QED
+
 Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc

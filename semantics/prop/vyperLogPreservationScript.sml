@@ -2017,6 +2017,16 @@ in
      case_eval_expr_results_nil_logs, case_eval_expr_results_cons_logs]
 end
 
+Theorem conjunction_guard_specialize_probe[local]:
+  (!x y. f x = a /\ g y = b ==> P x y) ==>
+  f u = a ==>
+  g v = b ==>
+  P u v
+Proof
+  rpt strip_tac >>
+  first_x_assum (specialize_guard_then 2 MATCH_ACCEPT_TAC)
+QED
+
 val PLACE_LOG_CASE_TAC =
   rpt strip_tac >>
   FIRST [qpat_x_assum `eval_stmt _ (Assign _ _) _ = _` mp_tac,

@@ -143,63 +143,6 @@ Proof
   metis_tac[]
 QED
 
-(* The actual TASK028 continuation equations isolate the pre-take code check. *)
-(* Retained for storage/suffix clients. Prove the legacy checked-tail
-   equation locally: main no longer exports ExtCall_outcome_continue. *)
-Theorem ExtCall_outcome_checked_tail:
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st =
-  if ret_type = NoneT /\ NULL (lookup_account target st.accounts).code then
-    (INR (Error (RuntimeError "ExtCall target has no code")),st)
-  else (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st
-Proof
-  Cases_on `ret_type = NoneT` >>
-  Cases_on `NULL (lookup_account target st.accounts).code` >>
-  simp[bind_def, ignore_bind_def, get_accounts_def, check_def, assert_def,
-       return_def, raise_def]
-QED
-
-Theorem ExtCall_outcome_transport:
-  (!s. R s s) /\
-  (!s t u. R s t /\ R t u ==> R s u) /\
-  (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs deletions.
-    R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs;
-                  pending_deletions := deletions ++ s.pending_deletions|>)) /\
-  (!bs s res t. k bs s = (res,t) ==> R s t) /\
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st = (res,st') ==>
-  R st st'
-Proof
-  REWRITE_TAC [ExtCall_outcome_checked_tail] >>
-  Cases_on `ret_type = NoneT /\ NULL (lookup_account target st.accounts).code` >>
-  simp[] >> rpt strip_tac >> gvs[] >>
-  drule_all (checked_call_outcome_transport |>
-    SRULE [evaluation_state_fupdcanon]) >> simp[]
-QED
-
 Theorem Send_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\

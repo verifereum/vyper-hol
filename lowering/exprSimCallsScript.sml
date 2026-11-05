@@ -38,12 +38,19 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
+ *   - compile_create_sim, once the create lowerings are wired in, for a
+ *     second reason: a create adds its run's pending deletions to the
+ *     source queue (eval_create), which state_rel requires equal to
+ *     Venom's, while Venom's create result (extract_venom_result) drops
+ *     them.
+ *
  * RawLog, RawRevert, SelfDestructTarget and both raw_call forms are wired
  * into compile_call.
  * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit
  * now covers HaltException by Halt with empty returndata only; full
  * terminal effects correctness is the separate loweringHalt/e2e bridge's
  * responsibility.
+ *
  * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e),
  * since the source runs them on the EVM even with the outcome oracle, so
  * compile_raw_call_sim, compile_raw_call_calldata_sim and

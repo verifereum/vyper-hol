@@ -418,11 +418,12 @@ Definition logs_correspond_def:
       vyper_logs evm_logs
 End
 
-(* ===== Frame-aware result: outcomes in, requests compared ONLY on success ===== *)
+(* ===== Frame-aware result: outcomes in, requests compared ONLY on success or halt ===== *)
 
-(* On success, the EVM's final accounts, transient storage and requests
-   agree with the source's: equal except at storage bytes the source
-   leaves dead (accounts_agree, compileEnv). *)
+(* On success or halt, the EVM's final accounts (after processing the
+   pending deletions), transient storage and requests agree with the
+   source's: equal except at storage bytes the source leaves dead
+   (accounts_agree, compileEnv). *)
 
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
