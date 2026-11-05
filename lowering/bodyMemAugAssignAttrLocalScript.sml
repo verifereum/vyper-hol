@@ -424,32 +424,36 @@ Proof
   drule emit_op_same_blocks >> strip_tac >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
   `run_inst_seq (emitted_insts sa sb) s0 = OK (update_var out w s0)` by
-    gvs[run_inst_seq_def] >>
+    (FULL_SIMP_TAC std_ss [run_inst_seq_def, exec_result_case_def, markerTheory.Abbrev_def]) >>
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by simp[mk_inst_def] >>
+     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    ASM_SIMP_TAC list_ss [mk_inst_def, instruction_accfupds] >>
   `gas_path_mem ctx func s0 0
      (OK (update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
    ~(update_var out w s0).vs_halted /\
    (update_var out w s0).vs_current_bb = sb.cs_current_bb` by
-    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
-  `alloca_inv s0` by fs[stmt_state_rel_def] >>
+    (irule body_decl_cursor_path >> ASM_SIMP_TAC std_ss [] >>
+     qexists_tac `sa` >> ASM_SIMP_TAC std_ss []) >>
+  `alloca_inv s0` by FULL_SIMP_TAC std_ss [stmt_state_rel_def] >>
   `alloca_history func
      (update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (irule body_store_memory_history >> simp[] >>
-     qexistsl_tac [`s0`, `sa`] >> simp[mk_inst_def]) >>
+    (irule body_store_memory_history >> ASM_SIMP_TAC std_ss [] >>
+     qexistsl_tac [`s0`, `sa`] >> ASM_SIMP_TAC list_ss [mk_inst_def, instruction_accfupds]) >>
   `not_local_ptr cenv es.scopes out` by
-    (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
-     qexists_tac `sa` >> simp[]) >>
+    (FULL_SIMP_TAC std_ss [markerTheory.Abbrev_def] >>
+     irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> ASM_SIMP_TAC std_ss []) >>
   `local_ptrs_reserved cenv sb` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> ASM_SIMP_TAC std_ss []) >>
   `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
-    (irule stmt_state_rel_update_var >> simp[]) >>
+    (irule stmt_state_rel_update_var >> ASM_SIMP_TAC std_ss []) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
-  gvs[update_var_def] >>
-  simp[Abbr `out`, lookup_var_def, FLOOKUP_UPDATE] >>
-  rw[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
-  gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  ASM_SIMP_TAC std_ss [gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def,
+    update_var_def, venom_state_accfupds, lookup_var_def, FLOOKUP_UPDATE,
+    markerTheory.Abbrev_def, not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  rpt strip_tac >> FULL_SIMP_TAC std_ss [markerTheory.Abbrev_def,
+    not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  qexists_tac `STRING #"%" (toString sa.cs_next_var)` >>
+  ASM_SIMP_TAC arith_ss [listTheory.CONS_11, ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem augassign_field_add_path_mem[local]:
