@@ -78,10 +78,10 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 | INVOKE | base default Error; step_inst setup/run/merge/bind / OK,Halt,Abort,Error | delegated | Generic frame lifting, fuel, callee lookup/metadata, argument roots incl opaque pc, static call context, saved state/gas/params, returned values, lifetime/demand. Not an ordinary base step. |
 | FMP_PARAM | vs_params index / OK | excluded | fn_ptr_ok_def excludes FMP_PARAM. |
 | RETPC_PARAM | update_var vs_return_pc_token / OK | B10; missing local adapter | Tokens may differ; guard opaque output, origin erase, actual taint and independent T, no equality of LAST args. |
-| CALLER, ADDRESS, CALLVALUE | exec_read0 call context / OK | missing | Same relevant call-context field; scalar fresh result G/T and D/O. Obs does not supply it. |
+| CALLER, ADDRESS, CALLVALUE | exec_read0 call context / OK | complete | concretize_env_reader_local_complete consumes relocation_env (not inferred from Obs), actual ordinary event and independent taint order; constructs fresh clean result, actual G/T, successor D/O and environment. |
 | ORIGIN, GASPRICE, CHAINID | exec_read0 tx context / OK | missing | Same relevant tx-context field; read0 family producer. |
 | COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, BLOBBASEFEE | exec_read0 block context / OK | missing | Same relevant block-context field; read0 family producer. |
-| GAS | exec_gas / OK | missing | Equal vs_gas_readings, consume same head (empty gives 0), preserve equality of tails; fresh clean result G/T; Obs contains no gas-stream equality. |
+| GAS | exec_gas / OK | complete | Reachable environment adapter consumes relocation_env with equal vs_gas_readings, consumes the same head (empty gives 0), preserves tails, constructs clean G/T and successor D/O. Obs alone supplies no gas-stream equality. |
 | BLOCKHASH | exec_read1 blockhash / OK | missing | Clean scalar index plus equal blockhash function; read1 family producer. |
 | BLOBHASH | exec_read1 indexed tx blobhashes / OK | missing | Clean scalar index plus equal blobhashes list including OOB zero case. |
 | BALANCE | exec_read1 account balance / OK | missing | Clean scalar address; accounts_agree_except should preserve balances despite dead storage; do not require equal accounts. |
@@ -159,16 +159,16 @@ taint order and execution environment. This is not full dispatch/frame
 composition. Binary clean-value cases, CALLVALUE/GAS reachable adapters and all
 other outstanding inventory rows retain their previous conditional status.
 
-## Checked reachable CALLVALUE/GAS adapter
+## Checked reachable call-context/GAS adapter
 
 `concretizeLayoutLocalEnvironmentTheory.concretize_env_reader_local_complete`
-covers both environment readers at an ordinary joint-trace event. It derives
+covers CALLER, ADDRESS, CALLVALUE and GAS at an ordinary joint-trace event. It derives
 successor demand restriction from no writes and the explicit initial empty
 allocation cache. It consumes current `relocation_env`, guarded `local_rel`,
 independent taint order, one output and successful source execution; no operand
 arity or cleanliness assumption is needed. It returns target execution,
 successor guarded relation with actual source ghosts, provenance erasure,
-independent target taint order and successor environment. CALLVALUE/GAS are
+independent target taint order and successor environment. These four readers are
 therefore no longer merely conditional on arbitrary demand inclusion. This
 does not produce the incoming environment at frame push/pop, cover other
 execution readers, or close the remaining dispatch inventory.
