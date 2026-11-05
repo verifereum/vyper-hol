@@ -386,8 +386,6 @@ Proof
     MEM (Var y) i.inst_operands` by
     (rpt strip_tac >> qpat_x_assum `MAP _ _ = _` (SUBST1_TAC o SYM) >>
      simp[listTheory.MEM_MAP] >> qexists_tac `Var z` >> simp[]) >>
-  conj_tac
-  >- metis_tac[sue_projection_gas_use, opaque_use_ok_gas_use] >>
   metis_tac[sue_projection_retpc_use, opaque_use_ok_retpc_use]
 QED
 

@@ -110,7 +110,7 @@ Theorem compile_log_ready_stmt_frag:
     !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
       R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) /\
-  R args es /\ eval_stmt cx (Log id args) es = (res,es') /\
+  R args es /\
   expr_sim_inv cenv cx env es /\ well_typed_exprs env args /\
   (!id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
@@ -121,7 +121,8 @@ Theorem compile_log_ready_stmt_frag:
   SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) < dimword (:256) /\
   abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
   stmt_frag ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ty (Log id args)) es res es'
+    (stmt_env cenv lctx ty (Log id args))
+      (eval_stmt cx (Log id args)) es
 Proof
   strip_tac >>
   (* A static frame has no related target state. *)

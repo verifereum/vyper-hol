@@ -9,7 +9,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeInvariants vyperTypeAssignContext
   vyperTypeStoragePreservation vyperStorageLayoutSafety vyperStorageBackend
   vyperEvalOutcomeSuffix bodyStoragePreservation stmtPoppedKeys placeTypingProps
-  finite_map list exprLoweringProps
+  finite_map list exprLoweringProps compileVyper
   exprSimHypsDefs gasContext vyperABI
   supportedExprTraverse supportedExprs supportedDecls supportedStmts
   vyperTypeCallGraph vyperTypeCallStackSoundness

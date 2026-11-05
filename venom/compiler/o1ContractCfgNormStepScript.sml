@@ -36,14 +36,7 @@ Proof
     metis_tac[supply_inst_image_nonphi_vars] >>
   `MEM x (irSupply$fn_ir_vars fn)` by
     metis_tac[supply_inst_operand_ir_var] >>
-  conj_tac >> strip_tac
-  >- (`copy_phi_var GAS fn x` by
-        (irule insert_split_supply_copy_phi_old_var >>
-         simp[] >> goal_assum (drule_at Any) >>
-         gvs[gas_var_def] >> metis_tac[]) >>
-      irule supply_inst_image_gas_use >> goal_assum (drule_at Any) >>
-      irule opaque_use_ok_gas_use >> simp[gas_var_def] >>
-      goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >>
   `copy_phi_var RETPC_PARAM fn x` by
     (irule insert_split_supply_copy_phi_old_var >>
      simp[] >> goal_assum (drule_at Any) >>

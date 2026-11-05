@@ -781,7 +781,7 @@ Theorem compile_for_array_frag:
     (stmt_env cenv lctx ty (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts))
     (eval_stmt cx (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts)) es
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_def] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,

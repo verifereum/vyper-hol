@@ -75,7 +75,6 @@ End
      stmt_state_rel's allocation facts keep apart from every live local. *)
 Theorem compile_log_stmt_frag:
   !ctx func cx lctx RetQ cenv ty id args es res es' Inv h tys flags env.
-    eval_stmt cx (Log id args) es = (res, es') /\
     cenv.ce_event_info (nsid_to_string id) = SOME (h, tys, flags) /\
     lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
       SOME (h, tys, flags) /\
@@ -90,7 +89,8 @@ Theorem compile_log_stmt_frag:
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Log id args)) es res es'
+      (stmt_env cenv lctx ty (Log id args))
+      (eval_stmt cx (Log id args)) es
 Proof
   rpt gen_tac >> strip_tac >> irule compile_log_ready_stmt_frag >>
   reverse conj_tac >- (simp[] >> metis_tac[LENGTH_MAP]) >>

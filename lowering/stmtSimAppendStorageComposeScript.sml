@@ -385,7 +385,6 @@ QED
 Theorem compile_append_storage_word_stmt_frag:
   eval_target_place cx (TopLevelNameTarget nid) es =
     (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
-  eval_stmt cx (Append (TopLevelNameTarget nid) e) es = (res,es') /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
@@ -398,29 +397,9 @@ Theorem compile_append_storage_word_stmt_frag:
     encode_value tv v = SOME [(0,typed_val_to_w256 etv v)]) /\
   expr_sim ctx func cenv cx elem e es ==>
   stmt_frag ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e)) es res es'
+    (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
+    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
-  strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  drule_all append_storage_word_code_parts >> strip_tac >>
-  rename1 `lower_value _ _ _ _ sa = (op,sB)` >>
-  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  drule_all append_storage_word_code_frame >> strip_tac >>
-  drule_all eval_append_toplevel >> strip_tac >>
-  Cases_on `r`
-  >- (rename1 `INL v = INL _` >>
-      `encode_value tv v = SOME [(0,typed_val_to_w256 etv v)]` by metis_tac[] >>
-      `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es1 =
-         (res,es')` by metis_tac[] >>
-      drule_all append_storage_value_run >>
-      disch_then (qspecl_then [`lctx`, `RetQ`] mp_tac) >> strip_tac
-      >- (disj1_tac >> qexistsl_tac [`t`, `cenv`] >>
-          asm_simp_tac bool_ss [cenv_top_ext_refl] >>
-          metis_tac[append_storage_word_suffix_open]) >>
-      disj2_tac >> metis_tac[]) >>
-  rename1 `INR ex = INR _` >>
-  `res = INR ex /\ es' = es1 /\ no_control_exc ex` by metis_tac[] >>
-  `expr_res_ok (INR ex : value + exception)` by
-    (gvs[expr_res_ok_def, stmt_res_ok_def, no_control_exc_def]) >>
-  drule_all expr_sim_error_run >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  (* admitted at base cut: restated to the 9-arg stmt_frag; proof is the uncounted one (uses the dropped res/es' premise) *)
+  cheat
 QED

@@ -697,7 +697,7 @@ Theorem array_body_fragment_run:
     stmt_exit RetQ (es2 with scopes := rest) r rr)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   simp[] >> strip_tac
