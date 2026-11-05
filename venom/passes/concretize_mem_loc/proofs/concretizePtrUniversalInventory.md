@@ -1017,3 +1017,19 @@ another opcode-by-opcode wrapper queue in place of this interface repair.
 Verification: holbuild on concretizePtrPairedPrefixTheory and
 concretizePtrOpaqueRetpcTheory passed (TO_concretize_ptr-20261105T174221Z_m11527_t001).
 This audit introduces no HOL definition, theorem, duplicate lemma or admission.
+
+## Mixed parallel-PHI boundary (C1.10.9)
+
+`concretizePtrMixedPhiTheory.ptr_mixed_eval_phis` now derives source success
+from target success for the same leading-PHI list, preserving mixed variables
+under the actual `phis_prov` and `phis_taint` updates and preserving core shared
+fields. It requires explicit predecessor equality (core shared fields provide
+labels, not `vs_prev_bb`). The parallel recursion selects every operand in the
+original prestate and applies head bindings after tail bindings, matching the
+provenance and taint recursions even for repeated outputs. Own opaque tokens
+remain independent; no arbitrary final-mask compatibility premise is added.
+
+Still outstanding: production observation shape and source/target leading-PHI
+correspondence, discharge of predecessor equality from paired cursor alignment,
+ordinary return equality, byte/read recovery and universal source-prefix
+construction. This local boundary is not a proof of the frozen static theorem.
