@@ -109,3 +109,24 @@ Proof
     simp[mk_inst_def, exec_pure2_def]) >>
   irule typedCopyPtrTheory.ptr_inst_ok_copy_len_binop >> simp[]
 QED
+
+Theorem reason_copy_mload_path_ptr:
+  emit_inst MLOAD [Var src] [out] sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s 32 ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+      (update_var out (mload (w2n a) s) s))
+    (step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
+      (update_var out (mload (w2n a) s) s) tn)
+    (OK (update_var out (mload (w2n a) s) s with
+      vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >> irule reason_encoder_emit_path_ptr >>
+  simp[is_terminator_def] >> conj_tac
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+  irule ptr_inst_ok_mload >> simp[]
+QED
