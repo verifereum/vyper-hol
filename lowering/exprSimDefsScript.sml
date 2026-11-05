@@ -6,7 +6,7 @@ Ancestors
 
 Definition expr_exit_def:
   (expr_exit (INR (Error (RuntimeError m))) (Abort a s) <=> T) /\
-  (expr_exit (INR (Error (RevertData d))) (Abort a s) <=> T) /\
+  (expr_exit (INR (Error (RevertData d))) (Abort a s) <=> a = Revert_abort) /\
   (expr_exit (INR (AssertException str)) (Abort a s) <=>
      a = Revert_abort \/ (a = ExHalt_abort /\ str = "UNREACHABLE")) /\
   (expr_exit _ _ <=> F)
