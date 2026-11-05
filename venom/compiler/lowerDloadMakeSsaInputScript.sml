@@ -543,5 +543,14 @@ Theorem lower_dload_fn_pass_step_make_ssa_input_ok:
   fn_inst_ids_distinct fn /\ fn_inst_wf fn /\ make_ssa_input_ok fn ==>
   make_ssa_input_ok out.fpo_function
 Proof
-  cheat
+  strip_tac >> drule lower_dload_step_supply >> strip_tac >>
+  gvs[make_ssa_input_ok_def] >> rpt conj_tac
+  >- metis_tac[lower_dload_all_reachable]
+  >- metis_tac[lower_dload_defs_reach_uses]
+  >- metis_tac[lower_dload_phi_operands_single_def]
+  >- metis_tac[lower_dload_phis_cover_preds]
+  >- metis_tac[lower_dload_phi_outputs_single_def]
+  >- metis_tac[lower_dload_phis_non_degenerate] >>
+  match_mp_tac (GEN_ALL lower_dload_phi_edges) >>
+  goal_assum (drule_at Any) >> first_assum ACCEPT_TAC
 QED
