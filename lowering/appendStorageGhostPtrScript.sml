@@ -2,7 +2,7 @@
 Theory appendStorageGhostPtr
 Ancestors
   bodyPtrDefs appendStorageRel accountsRelProps ptrDiscipline
-  compileEnv venomState vyperStorage words pred_set
+  compileEnv venomState vyperStorage words pred_set stmtFragPtr loweringPosts
 
 Theorem storage_dead_key_taint_empty:
   X SUBSET {(k,b) | storage_dead cx tr st (w2n k) b} /\
@@ -82,4 +82,69 @@ Proof
   gvs[stor_taint_ok_def, cx_dead_def, sstore_def, tstore_def,
       contract_storage_def, contract_transient_def,
       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem ptr_covers_old_transport:
+  ptr_covers G tn p s sz /\ not_fresh_at sa p /\
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x) /\
+       lookup_var x s' = lookup_var x s) ==>
+  ptr_covers G' tn' p s' sz
+Proof
+  rw[ptr_covers_def] >> metis_tac[]
+QED
+
+Theorem ghost_inv_old_transport:
+  ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s /\
+  return_buf_frame d cenv sa s /\
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x) /\
+       lookup_var x s' = lookup_var x s) /\
+  es'.scopes = es.scopes /\ s'.vs_memory = s.vs_memory /\
+  tn'.t_mem = tn.t_mem /\ stor_taint_ok cx tn' s' ==>
+  ghost_inv d cenv cx es' G' tn' s'
+Proof
+  strip_tac >> fs[ghost_inv_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+      qpat_x_assum `!name entry p sz. _` drule >>
+      disch_then drule >> strip_tac >>
+      conj_tac
+      >- (irule ptr_covers_old_transport >>
+          goal_assum (drule_at Any) >>
+          goal_assum (drule_at Any) >> simp[]) >>
+      rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases_on `d` >> fs[return_buf_frame_def, return_buf_ptr_def] >>
+      PairCases_on `x` >>
+      gvs[return_buf_frame_def, return_buf_ptr_def] >>
+      metis_tac[ptr_covers_old_transport]) >>
+  simp[] >> metis_tac[ret_pc_ok_def]
+QED
+
+Theorem ghost_kept_old_transport:
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  tn'.t_mem SUBSET tn.t_mem ==>
+  ghost_kept cenv es sa G tn s G' tn'
+Proof
+  rw[ghost_kept_def] >> fs[SUBSET_DEF]
+QED
+
+Theorem ghost_kept_suffix_compose:
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  (!x. not_fresh_at sb x ==>
+       FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  tn'.t_mem SUBSET tn.t_mem ==>
+  ghost_kept cenv es sa G0 tn0 s0 G' tn'
+Proof
+  rw[ghost_kept_def] >> fs[SUBSET_DEF] >>
+  metis_tac[not_fresh_at_mono]
 QED
