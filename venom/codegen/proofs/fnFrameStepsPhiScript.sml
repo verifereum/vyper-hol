@@ -425,3 +425,133 @@ Proof
   simp[lineage_entry_def] >> rpt strip_tac >> gvs[] >>
   drule_all phi_jmp_block_spills_empty >> simp[]
 QED
+
+Theorem phi_cfg_entry_reachable[local]:
+  wf_function fn /\ fn_entry_label fn = SOME lbl ==>
+  cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  simp[fn_entry_label_def, AllCaseEqs()] >> strip_tac >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability >>
+  simp[cfg_path_def, relationTheory.RTC_REFL]
+QED
+
+Theorem phi_cfg_reachable_successor[local]:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) lbl /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
+  cfg_reachable_of (cfg_analyze fn) succ
+Proof
+  strip_tac >>
+  Cases_on `entry_block fn` >- gvs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def,
+        entry_block_def, listTheory.NULL_EQ] >>
+  rename1 `entry_block fn = SOME entry` >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability >>
+  strip_tac >>
+  qpat_assum `!lbl. _` (qspec_then `lbl` assume_tac) >>
+  qpat_x_assum `!lbl. _` (qspec_then `succ` mp_tac) >>
+  simp[] >> strip_tac >> gvs[cfg_path_def] >>
+  irule (cj 2 relationTheory.RTC_RULES_RIGHT1) >>
+  qexists_tac `lbl` >> gvs[cfg_path_def]
+QED
+
+Theorem phi_lineage_state_reachable:
+  !liveness dfg cfg fn ps0 lbl ps.
+    lineage_state liveness dfg cfg fn ps0 lbl ps ==>
+    wf_function fn /\ cfg = cfg_analyze fn ==>
+    cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  ntac 5 gen_tac >> ho_match_mp_tac lineage_state_ind >> rpt strip_tac
+  >- (drule_all phi_cfg_entry_reachable >> simp[]) >>
+  gvs[] >> drule_all phi_cfg_reachable_successor >> simp[]
+QED
+
+Theorem phi_join_predecessor_jmp[local]:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1 /\
+  MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb ==>
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP
+Proof
+  strip_tac >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    gvs[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    (Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label)` >>
+     gvs[listTheory.LENGTH_EQ_0] >> decide_tac) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  gvs[codegen_ready_fn_def, block_entries_ready_def, listTheory.EVERY_MEM] >>
+  qpat_x_assum `!b. MEM b fn.fn_blocks ==> _ \/ _`
+    (qspec_then `bb` mp_tac) >> simp[] >>
+  disch_then (qspec_then `pred` mp_tac) >> simp[listTheory.NULL_EQ]
+QED
+
+Theorem phi_ready_jmp_edge_shape[local]:
+  codegen_ready_fn fn /\ lookup_block pred fn.fn_blocks = SOME pb /\
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) ==>
+  (LAST pb.bb_instructions).inst_operands = [Label succ] /\
+  (LAST pb.bb_instructions).inst_outputs = [] /\
+  cfg_succs_of (cfg_analyze fn) pred = [succ]
+Proof
+  strip_tac >>
+  `MEM pb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `pb.bb_label = pred` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
+  `venomWf$inst_wf (LAST pb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+     first_x_assum irule >> qexists_tac `pb` >>
+     simp[rich_listTheory.MEM_LAST_NOT_NIL]) >>
+  gvs[venomWfTheory.inst_wf_def] >>
+  `cfg_succs_of (cfg_analyze fn) pb.bb_label = bb_succs pb` by
+    (irule cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+     gvs[codegen_ready_fn_def]) >>
+  Cases_on `pb.bb_instructions` >>
+  gvs[bb_succs_def, get_successors_def, is_terminator_def, get_label_def,
+      listTheory.nub_def]
+QED
+
+Theorem phi_single_successor_live_coverage[local]:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pb.bb_label /\
+  lookup_block pb.bb_label fn.fn_blocks = SOME pb /\
+  cfg_succs_of (cfg_analyze fn) pb.bb_label = [succ] /\
+  lookup_block succ fn.fn_blocks = SOME bb ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) pb.bb_label
+                   (LENGTH pb.bb_instructions)) ==>
+      MEM v (input_vars_from pb.bb_label bb.bb_instructions
+                    (live_vars_at (liveness_analyze fn) succ 0))
+Proof
+  strip_tac >> drule_all livenessProofsTheory.liveness_convergence >>
+  simp[livenessBlockProofsTheory.liveness_instrs_def,
+       livenessBlockProofsTheory.liveness_out_def,
+       liveness_edge_transfer_def, live_vars_at_def,
+       dfHelperDefsTheory.list_union_def, same_vars_def,
+       listTheory.EVERY_MEM]
+QED
+
+Theorem phi_join_lineage_spills_empty:
+  liveness = liveness_analyze fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+  lineage_entry liveness dfg cfg fn ps0 pred bb.bb_label ps ==>
+  ps.ps_spilled = FEMPTY
+Proof
+  strip_tac >> gvs[] >>
+  qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [lineage_entry_def]) >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `pb.bb_label = pred` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    (drule phi_lineage_state_reachable >> simp[]) >>
+  `pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP` by
+    (drule_all phi_join_predecessor_jmp >> simp[]) >>
+  drule_all phi_ready_jmp_edge_shape >> strip_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) pb.bb_label
+                (LENGTH pb.bb_instructions)) ==>
+       MEM v (input_vars_from pb.bb_label bb.bb_instructions
+                (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+    (rpt strip_tac >> irule phi_single_successor_live_coverage >> simp[]) >>
+  irule phi_lineage_entry_spills_empty >>
+  goal_assum (drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `lookup_block _ _ = SOME _`)) >>
+  simp[join_target_ops_def, listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
