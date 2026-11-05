@@ -161,12 +161,14 @@ QED
 (* ===== S6: output shape without new compiler checks ===== *)
 
 (* S6 -- Milestone 3, from the per-pass contracts.
- * Premise added from the original admission: unit_entry_no_params, as
- * S4. *)
+ * Premises added from the original admission: unit_entry_no_params,
+ * unit_defs_reach_uses and unit_fmp_unsealed, as S4: the walk's runs
+ * read their function rows (o1_fn_row), which start from these. *)
 Theorem run_venom_pipeline_output_shape:
   !rpolicy unit out.
     o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
-    unit_entry_no_params unit
+    unit_entry_no_params unit /\ unit_defs_reach_uses unit /\
+    unit_fmp_unsealed unit
     ==> unit_shape_ok out.po_unit
 Proof
   rpt strip_tac >> fs[o1_pipeline_def] >>

@@ -22,13 +22,18 @@ Proof
   metis_tac[dftScheduleOrderTheory.dft_fn_block_rel]
 QED
 
-(* dft_fn keeps every opcode, so row 7 gives row 8 (no ALLOCA). *)
+(* dft_fn keeps every opcode, so row 7 gives row 8 (no ALLOCA), and like
+   every pass but FmpLowering it keeps the FMP convention. *)
 Theorem dft_step_row:
   fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ o1_fn_row 7 fn ==>
   o1_fn_row 8 out.fpo_function
 Proof
-  simp[fn_pass_step_def] >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     gvs[o1_fn_row_def, fn_pass_tag_def]) >>
+  fs[fn_pass_step_def] >> gvs[] >>
   `MEM fn observed.cu_context.ctx_functions` by
     metis_tac[lookup_unique_function_member] >>
   `o1_fn_shape observed.cu_context fn` by

@@ -65,7 +65,7 @@ QED
 
 Theorem o1_ctx_shape_transport:
   o1_ctx_shape ctx /\ ctx_fn_names ctx' = ctx_fn_names ctx /\
-  ctx'.ctx_entry = ctx.ctx_entry /\
+  ctx'.ctx_entry = ctx.ctx_entry /\ ctx_inst_ids_distinct ctx' /\
   EVERY (o1_fn_shape ctx) ctx'.ctx_functions ==>
   o1_ctx_shape ctx'
 Proof
