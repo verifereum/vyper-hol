@@ -47,6 +47,6 @@ Proof
        vyperASTTheory.expr_type_def, eval_operand_def,
        typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
        locals_kept_mem, is_word_type_def, read_result_def, return_def,
-       expr_store_bound_word]
+       expr_store_bound_word, vv_store_bound_stack_word]
 QED
 
