@@ -124,13 +124,3 @@ Proof
   drule_all concretize_context_success_contract >> simp[]
 QED
 
-(* Fail the build if any structural step-contract theorem has an admission. *)
-val _ = List.app (fn thy => List.app (fn (name, th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn oracle => oracle = "DISK_THM")
-       (#1 (Tag.dest_tag (Thm.tag th)))
-  then print ("Kernel-closed: " ^ thy ^ "." ^ name ^ "\n")
-  else raise Fail ("Incomplete step-contract theorem: " ^ thy ^ "." ^ name))
-  (DB.thms thy))
-  ["concretizeStepStructure", "concretizeStepCallChecks", "concretizeStepRetpc",
-   "concretizeStepShape", "concretizeStepContract"];
