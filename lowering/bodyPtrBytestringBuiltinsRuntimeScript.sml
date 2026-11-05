@@ -1,6 +1,6 @@
 Theory bodyPtrBytestringBuiltinsRuntime
 Ancestors
-  bodyPtrBytestringBuiltinsPtrFrame bodyPtrDefs
+  bodyPtrBytestringBuiltinsPtrFrame bodyPtrDefs valueEncodingProofs
 
 Theorem order_ptr_runtime_tx_obstruction:
   order_ptr_cx.txn.block_number = 0 /\
@@ -41,3 +41,26 @@ Proof
   EVAL_TAC >> rw[] >> gvs[]
 QED
 
+Theorem order_runtime_array_wf:
+  val_wf (ArrayTV (BaseTV AddressT) (Dynamic 2))
+    (ArrayV (DynArrayV [AddressV 1w; AddressV 2w]))
+Proof
+  EVAL_TAC
+QED
+
+Theorem order_runtime_array_memory:
+  val_in_memory (ArrayTV (BaseTV AddressT) (Dynamic 2))
+    (ArrayV (DynArrayV [AddressV 1w; AddressV 2w]))
+    128 order_runtime_start.vs_memory
+Proof
+  simp_tac pure_ss [order_runtime_start_def,
+    venomStateTheory.venom_state_accfupds, combinTheory.K_THM] >>
+  simp[valueEncodingTheory.val_in_memory_def,
+       valueEncodingTheory.type_memory_size_def,
+       valueEncodingPropsTheory.mem_word_at_eq_mload,
+       bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_start_array] >>
+  simp[valueEncodingTheory.typed_val_to_w256_def,
+       GSYM valueEncodingProofsTheory.word_to_bytes_w2w_address,
+       byteTheory.word_of_bytes_be_def,
+       vfmTypesTheory.word_to_bytes_word_of_bytes_256, wordsTheory.w2w_n2w]
+QED
