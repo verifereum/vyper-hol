@@ -1,5 +1,6 @@
 Theory makeSsaRfLocalBridge
-Ancestors makeSsaRfRenameTrace makeSsaRfAllocation makeSsaRfAssign makeSsaRfWitness
+Ancestors makeSsaCurrentAllocation makeSsaCurrentRenameTrace
+  makeSsaRfRenameTrace makeSsaRfAllocation makeSsaRfAssign makeSsaRfWitness
   makeSsaCurrentDefs venomInst list pair
 
 Theorem current_outputs_trace_nonoutput:

@@ -1,5 +1,6 @@
 Theory makeSsaRfTransport
-Ancestors makeSsaRfShape makeSsaRfWitness makeSsaRfAssign contextCodegenRel
+Ancestors makeSsaCurrentCleanupShape
+  makeSsaRfShape makeSsaRfWitness makeSsaRfAssign contextCodegenRel
           venomInst venomWf list rich_list
 
 Theorem rf_resolve_assigns_shape:

@@ -1,5 +1,6 @@
 Theory makeSsaRfAnnotations
-Ancestors makeSsaRfRenameTrace makeSsaHelper venomInst irSupply list alist pair arithmetic
+Ancestors makeSsaCurrentRenameTrace makeSsaCurrentTokens makeSsaCurrentTreeTrace
+  makeSsaRfRenameTrace makeSsaHelper venomInst irSupply list alist pair arithmetic
 
 Definition rf_output_annotations_def:
   (rf_output_annotations l i j [] = []) /\
@@ -137,110 +138,15 @@ Proof
   metis_tac[rf_block_annotations_nondefault, rf_block_annotations_owner]
 QED
 
-Definition current_annotation_map_def:
-  current_annotation_map bbs
-    (annsss : (current_token # string) list list list) l =
-    case ALOOKUP (ZIP (MAP (\bb. bb.bb_label) bbs,annsss)) l of
-      NONE => [] | SOME anns => anns
-End
 
-Definition current_unvisited_annotations_def:
-  current_unvisited_annotations A visited bbs <=>
-    !l bb. ~MEM l visited /\ lookup_block l bbs = SOME bb ==>
-      LIST_REL (\a inst. MAP SND a = inst.inst_outputs) (A l) bb.bb_instructions
-End
 
-Definition current_pending_annotations_def:
-  current_pending_annotations V A (H : (current_token # string # string) list) visited <=>
-    !l. ~MEM l visited ==> current_annotations_ok V H (FLAT (A l))
-End
 
-Definition current_annotation_separation_def:
-  current_annotation_separation (A : string -> (current_token # string) list list) <=>
-    !l k t. MEM t (MAP FST (FLAT (A l))) /\
-      MEM t (MAP FST (FLAT (A k))) ==> l = k
-End
 
-Theorem current_annotation_map_owners:
-  !bbs annsss.
-    LIST_REL (\bb anns.
-      LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
-      bbs annsss ==>
-    !l bb. lookup_block l bbs = SOME bb ==>
-      LIST_REL (\a inst. MAP SND a = inst.inst_outputs)
-        (current_annotation_map bbs annsss l) bb.bb_instructions
-Proof
-  Induct >> Cases_on `annsss` >>
-  simp[lookup_block_def, FIND_thm, current_annotation_map_def] >>
-  rpt strip_tac >> rename1 `old.bb_label = l` >>
-  Cases_on `old.bb_label = l` >> gvs[] >>
-  first_x_assum drule >> simp[current_annotation_map_def, lookup_block_def]
-QED
 
-Theorem current_annotation_map_initial:
-  LIST_REL (\bb anns.
-    LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
-    bbs annsss ==>
-  current_unvisited_annotations (current_annotation_map bbs annsss) [] bbs
-Proof
-  simp[current_unvisited_annotations_def] >>
-  metis_tac[current_annotation_map_owners]
-QED
 
-Theorem current_annotation_map_keys_bound:
-  !bbs annsss l t.
-    LENGTH bbs = LENGTH annsss /\
-    MEM t (MAP FST (FLAT (current_annotation_map bbs annsss l))) ==>
-    MEM t (MAP FST (FLAT (FLAT annsss)))
-Proof
-  Induct >> Cases_on `annsss` >>
-  simp[current_annotation_map_def, MAP_APPEND] >> rpt gen_tac >> strip_tac >>
-  Cases_on `h'.bb_label = l` >> gvs[] >>
-  disj2_tac >> first_x_assum irule >> simp[] >>
-  qexists_tac `l` >> simp[current_annotation_map_def]
-QED
 
-Theorem current_annotation_map_separation:
-  !bbs annsss.
-    LENGTH bbs = LENGTH annsss /\
-    ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) ==>
-    current_annotation_separation (current_annotation_map bbs annsss)
-Proof
-  Induct >> Cases_on `annsss` >>
-  simp[current_annotation_map_def, current_annotation_separation_def, MAP_APPEND,
-    ALL_DISTINCT_APPEND] >> rpt gen_tac >> strip_tac >>
-  `current_annotation_separation (current_annotation_map bbs t)` by
-    (first_x_assum irule >> simp[]) >>
-  qspecl_then [`bbs`, `t`] mp_tac current_annotation_map_keys_bound >>
-  simp[current_annotation_map_def] >> strip_tac >>
-  rpt gen_tac >>
-  Cases_on `h'.bb_label = l` >> Cases_on `h'.bb_label = k` >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  fs[current_annotation_map_def, current_annotation_separation_def] >> metis_tac[]
-QED
 
-Theorem current_annotation_map_ok:
-  !bbs annsss V H.
-    LENGTH bbs = LENGTH annsss /\
-    current_annotations_ok V H (FLAT (FLAT annsss)) ==>
-    !l. current_annotations_ok V H (FLAT (current_annotation_map bbs annsss l))
-Proof
-  Induct >> Cases_on `annsss` >> simp[current_annotation_map_def,
-    current_annotations_ok_def, MAP_APPEND, ALL_DISTINCT_APPEND] >>
-  rpt gen_tac >> strip_tac >> gen_tac >>
-  Cases_on `h'.bb_label = l` >> gvs[] >>
-  first_x_assum (qspecl_then [`t`, `V`, `H`] mp_tac) >>
-  simp[current_annotation_map_def, current_annotations_ok_def] >>
-  disch_then (qspec_then `l` ACCEPT_TAC)
-QED
 
-Theorem current_annotation_map_pending:
-  LENGTH bbs = LENGTH annsss /\
-  current_annotations_ok V H (FLAT (FLAT annsss)) ==>
-  current_pending_annotations V (current_annotation_map bbs annsss) H visited
-Proof
-  simp[current_pending_annotations_def] >> metis_tac[current_annotation_map_ok]
-QED
 
 Theorem rf_block_annotation_map_initial:
   current_unvisited_annotations

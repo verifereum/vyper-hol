@@ -1,12 +1,13 @@
 Theory makeSsaRfPipeline
-Ancestors makeSsaRfFinalBlock makeSsaRfLocalBridge makeSsaRfDomDistinct
+Ancestors makeSsaCurrentAllocation makeSsaCurrentCleanupShape makeSsaCurrentFinalBlock makeSsaCurrentRenameTrace makeSsaCurrentSourceCuts makeSsaCurrentTokens makeSsaCurrentTreeTrace
+  makeSsaRfFinalBlock makeSsaRfLocalBridge makeSsaRfDomDistinct
   makeSsaRfTreeTrace makeSsaRfWitness makeSsaCurrentDefs makeSsaRfEdgeShape
   makeSsaRfShape makeSsaRfTransport makeSsaRfAnnotations makeSsaRfAllocation
   makeSsaHelper makeSsaCurrentProps makeSsaRfAssign makeSsaRfRenameTrace
   venomInst venomWf venomFnScheduleRunner irSupply list pair
 
 Theorem current_event_rf_trace:
-  current_event_valid A V ev /\ current_event_trace A finalH ev /\
+  rf_current_event_valid A V ev /\ current_event_trace A finalH ev /\
   EVERY (\i. EVERY (rf_operand_in V) i.inst_operands)
     (current_event_input_block ev).bb_instructions ==>
   ?f g. rf_back_trace V f g
@@ -14,7 +15,7 @@ Theorem current_event_rf_trace:
     (REVERSE (current_event_renamed_block ev).bb_instructions)
 Proof
   PairCases_on `ev` >>
-  simp[current_event_valid_def, current_event_trace_def,
+  simp[rf_current_event_valid_def, current_event_trace_def,
     current_event_input_block_def, current_event_renamed_block_def] >>
   strip_tac >>
   qexistsl_tac [`latest_current_name (ev3,ev4)`,
@@ -61,7 +62,7 @@ Theorem rf_initial_tree_events_valid:
   current_tree_trace (current_annotation_map bbs (rf_block_annotations bbs))
     sm tree s (init_current_rename_state defs) bbs [] CurrentDefault []
     ctrs' s' bbs' H' visited' events ==>
-  EVERY (current_event_valid
+  EVERY (rf_current_event_valid
     (current_annotation_map bbs (rf_block_annotations bbs)) V) events
 Proof
   strip_tac >>
@@ -71,7 +72,7 @@ Proof
   `current_annotation_separation
     (current_annotation_map bbs (rf_block_annotations bbs))` by
     metis_tac[rf_block_annotation_map_separation] >>
-  drule (cj 1 current_tree_trace_events_valid) >> simp[] >>
+  drule (cj 1 rf_current_tree_trace_events_valid) >> simp[] >>
   disch_then (qspec_then `V` mp_tac) >>
   simp[current_env_owned_initial] >> metis_tac[rf_init_allocation]
 QED
@@ -119,7 +120,7 @@ Proof
 QED
 
 Theorem current_event_source_rf_trace:
-  current_event_valid A V ev /\ current_event_trace A finalH ev /\
+  rf_current_event_valid A V ev /\ current_event_trace A finalH ev /\
   current_edge_shape old (current_event_input_block ev) /\
   EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
   ?f g. rf_back_trace V f g (REVERSE old.bb_instructions)
@@ -127,7 +128,7 @@ Theorem current_event_source_rf_trace:
 Proof
   strip_tac >> drule current_edge_shape_copy_shape >> strip_tac >>
   PairCases_on `ev` >>
-  gvs[current_event_valid_def, current_event_trace_def,
+  gvs[rf_current_event_valid_def, current_event_trace_def,
     current_event_input_block_def, current_event_renamed_block_def] >>
   qexistsl_tac [`latest_current_name (ev3,ev4)`,
     `latest_current_name (ev9,ev10)`] >>
@@ -160,8 +161,8 @@ Theorem rf_trace_final_block_boundary:
   current_tree_trace A sm tree s rs bbs H E visited
     ctrs' s' bbs' H' visited' events /\
   ALL_DISTINCT (dom_tree_labels tree) /\
-  EVERY (current_event_valid A V) events /\
-  EVERY (current_event_names H' V) events /\
+  EVERY (rf_current_event_valid A V) events /\
+  EVERY (rf_current_event_names H' V) events /\
   lookup_block q bbs = SOME old /\ lookup_block q bbs' = SOME final /\
   EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
   ?renamed f g.
@@ -173,7 +174,7 @@ Proof
   >- (qexistsl_tac [`old`, `I`, `I`] >> conj_tac
       >- (irule rf_back_trace_identity >> fs[EVERY_MEM] >> metis_tac[]) >>
       metis_tac[current_edge_shape_copy_shape]) >>
-  `current_event_valid A V ev` by fs[EVERY_MEM] >>
+  `rf_current_event_valid A V ev` by fs[EVERY_MEM] >>
   `?f g. rf_back_trace V f g (REVERSE old.bb_instructions)
      (REVERSE (current_event_renamed_block ev).bb_instructions)` by
     (irule current_event_source_rf_trace >> metis_tac[]) >>
@@ -205,7 +206,7 @@ Proof
       ctrs1 s1 bbs1 H' visited' events` by
     (irule (cj 1 current_tree_trace_exists) >> simp[]) >>
   drule (cj 1 current_tree_trace_projection) >> strip_tac >> gvs[] >>
-  `EVERY (current_event_valid
+  `EVERY (rf_current_event_valid
       (current_annotation_map bbs (rf_block_annotations bbs)) V) events` by
     (irule rf_initial_tree_events_valid >> metis_tac[]) >>
   `current_allocation_consistent V [] s (init_current_rename_state defs) /\
@@ -215,9 +216,9 @@ Proof
   `current_annotations_ok V ([] : (current_token # string # string) list)
      (FLAT (FLAT (rf_block_annotations bbs)))` by
     metis_tac[rf_block_annotations_ok] >>
-  `EVERY (current_event_names H' V) events` by
+  `EVERY (rf_current_event_names H' V) events` by
     (drule_at (Pat `current_tree_trace _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-       current_annotated_tree_names >>
+       rf_current_annotated_tree_names >>
      simp[current_env_owned_initial] >>
      disch_then (qspec_then `V` mp_tac) >>
      fs[rf_block_annotations_def]) >>
@@ -390,7 +391,7 @@ Proof
   `ALL_DISTINCT (dom_tree_labels
      (current_dom_tree_aux (dom_analyze (cfg_analyze fn) fn)
        (LENGTH (fn_labels fn)) x))` by
-    (drule_all current_actual_tree_labels_distinct >>
+    (drule_all rf_current_actual_tree_labels_distinct >>
      simp[current_dom_tree_def]) >>
   qpat_x_assum `make_ssa_current_fn _ _ = _` mp_tac >>
   simp[make_ssa_current_fn_def] >>
