@@ -2326,11 +2326,13 @@ Resume imm_target_walk[subscript]:
 QED
 Resume imm_target_walk[attribute]:
   fs[targetPlaceLiveTheory.target_indices_def] >>
-  irule imm_target_attr_step >> simp[] >> qexists_tac `env` >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> simp[] >> conj_tac
-  >- (qexists_tac `env` >> fs[target_indices_pre_def]) >>
-  qexists_tac `nocalls` >>
-  fs[target_idx_case_def, vyperTypeCallGraphTheory.int_calls_expr_def]
+  irule imm_target_attr_step >> simp[] >> qexists_tac `env` >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> conj_tac
+      >- (qexists_tac `env` >> fs[target_indices_pre_def]) >>
+      qexists_tac `nocalls` >>
+      fs[target_idx_case_def, vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise imm_target_walk
 
