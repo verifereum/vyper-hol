@@ -4,6 +4,7 @@ Ancestors
   revertReasonLayout allocationPtr typedCopyPtr fragExec fragGasSeqPtr ghostPcTransportPtr
   loweringSlice exprLoweringProps bodyPtrDefs fragExecPtr venomExecSemantics venomInst venomState
   ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv instIdxIndep
+  normalizationAllocPtr decoderGhostFramePtr loweringPosts
 
 Theorem alloca_store_offset_alloca_checks:
   stmt_state_rel ctx func cenv cx es s /\
@@ -393,4 +394,58 @@ Proof
        [`0`, `1`]) >> gvs[ADD_COMM]) >>
   disch_then irule >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem alloca_step_ptr_mem_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx t sa sb es v op s /\ ~is_word_type t /\
+  ptr_mem_ok cx t v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\ n < dimword(:256) /\
+  (!p. op = Var p ==> p <> out) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
+  ptr_mem_ok cx t v op
+    (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
+    (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_operand op s1 = eval_operand op s` by
+    (irule alloca_step_operand_preserved >> metis_tac[]) >>
+  drule_all alloca_step_site >> strip_tac >>
+  simp[ptr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  `eval_operand op s = SOME w` by metis_tac[] >>
+  `val_wf tv v` by (fs[expr_val_at_def] >> metis_tac[]) >>
+  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_mem_ok_def] >>
+  disch_then (qspecl_then [`tv`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  conj_tac >-
+    (rpt strip_tac >> irule alloca_step_expr_robust_preserved >>
+     simp[] >> metis_tac[]) >>
+  strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  qexistsl_tac [`x`, `b'`, `sz`] >> simp[] >>
+  `x <> out` by metis_tac[] >>
+  simp[step_prov_other_output, mk_inst_def]
+QED
+
+Theorem alloca_step_ptr_val_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx t sa sb es v op s /\ ptr_val_ok cx t v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\ n < dimword(:256) /\
+  (!p. op = Var p ==> p <> out) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
+  ptr_val_ok cx t v op
+    (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
+    (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `ptr_val_ok _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_val_ok_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac >-
+    (Cases_on `op` >> gvs[] >>
+     simp[step_taint_other_output, mk_inst_def, op_taint_def]) >>
+  strip_tac >> irule alloca_step_ptr_mem_ok >> simp[] >> metis_tac[]
 QED
