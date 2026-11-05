@@ -34,6 +34,7 @@ Ancestors
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map
   callLayoutDefs fmpWfDefs list rich_list reorderSim planWf stackModel
+  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps
 
 Theorem invoke_source_ok:
   inst.inst_opcode = INVOKE /\
@@ -117,4 +118,121 @@ Proof
   >- (gvs[] >> metis_tac[]) >>
   gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   metis_tac[]
+QED
+
+Theorem invoke_closure_subset:
+  !ctx cp caller callee b.
+  fn_directly_calls ctx caller callee /\
+  closure_spill_byte ctx cp callee b ==>
+  closure_spill_byte ctx cp caller b
+Proof
+  rw[closure_spill_byte_def, fcg_path_def] >>
+  qexists `r` >> simp[] >>
+  metis_tac[relationTheory.RTC_RULES, relationTheory.RTC_TRANSITIVE,
+            relationTheory.transitive_def]
+QED
+
+Theorem invoke_ordered_regions_overlap:
+  !rs r s b.
+    ordered_spill_regions rs /\ MEM r rs /\ MEM s rs /\
+    r.sr_spill_base <= b /\ b < r.sr_spill_end /\
+    s.sr_spill_base <= b /\ b < s.sr_spill_end ==> r = s
+Proof
+  Induct >> simp[ordered_spill_regions_def, EVERY_MEM] >>
+  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS,
+    arithmeticTheory.NOT_LESS]
+QED
+
+Theorem invoke_caller_region_outside_callee:
+  !ctx cp caller callee r b.
+    ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+    r.sr_fn_name = caller /\ r.sr_spill_base <= b /\ b < r.sr_spill_end /\
+    fn_directly_calls ctx caller callee /\
+    ~TC (fn_directly_calls ctx) caller caller ==>
+    ~closure_spill_byte ctx cp callee b
+Proof
+  rpt strip_tac >> gvs[closure_spill_byte_def] >>
+  rename1 `fcg_path ctx callee other.sr_fn_name` >>
+  `r = other` by metis_tac[invoke_ordered_regions_overlap] >>
+  gvs[fcg_path_def] >>
+  qpat_x_assum `~TC _ _ _` mp_tac >>
+  simp[Once relationTheory.TC_CASES1] >>
+  metis_tac[relationTheory.RTC_CASES_TC]
+QED
+
+Theorem invoke_return_preserves_caller_spills:
+  !ctx cp caller callee r off vs cas ras.
+    ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+    r.sr_fn_name = caller /\ r.sr_spill_base <= off /\
+    off + 32 <= r.sr_spill_end /\
+    fn_directly_calls ctx caller callee.fn_name /\
+    ~TC (fn_directly_calls ctx) caller caller /\
+    fn_return_state_rel ctx cp callee vs cas ras ==>
+    word_of_bytes T (0w:bytes32) (TAKE 32 (DROP off ras.as_memory)) =
+    word_of_bytes T (0w:bytes32) (TAKE 32 (DROP off cas.as_memory))
+Proof
+  rpt strip_tac >> irule spill_window_byte_frame >> rpt strip_tac >>
+  rename1 `fn_return_state_rel ctx plan callee vs cas ras` >>
+  `r.sr_spill_base <= i /\ i < r.sr_spill_end` by decide_tac >>
+  `~closure_spill_byte ctx plan callee.fn_name i` by
+    metis_tac[invoke_caller_region_outside_callee] >>
+  gvs[fn_return_state_rel_def] >> first_x_assum irule >>
+  simp[context_spill_byte_def] >> qexists `r` >> simp[] >> decide_tac
+QED
+
+Theorem invoke_lowered_targets_wf:
+  fmp_lowered_context_wf ctx ==> wf_invoke_targets ctx
+Proof
+  rw[fmp_lowered_context_wf_def, wf_invoke_targets_def] >>
+  first_x_assum drule_all >>
+  simp[invoke_layout_wf_def] >> strip_tac >>
+  metis_tac[lookup_function_mem, ctx_fn_names_def]
+QED
+
+Theorem invoke_context_no_cycle:
+  !Inv ctx cp name.
+    codegen_context_obligations Inv ctx cp /\
+    MEM name (fcg_analyze ctx).fcg_reachable ==>
+    ~TC (fn_directly_calls ctx) name name
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule reachable_fcg_acyclic_no_reachable_cycle >>
+  gvs[codegen_context_obligations_def, reachable_call_graph_acyclic_def,
+      fcg_is_reachable_def] >>
+  `wf_invoke_targets ctx` by metis_tac[invoke_lowered_targets_wf] >>
+  gvs[ctx_wf_def, ctx_has_entry_def] >> metis_tac[]
+QED
+
+Theorem invoke_direct_call:
+  ctx_wf ctx /\ MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops ==>
+  fn_directly_calls ctx fn.fn_name nm
+Proof
+  strip_tac >>
+  `lookup_function fn.fn_name ctx.ctx_functions = SOME fn` by
+    (irule fmp_lookup_function_self >>
+     gvs[ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def]) >>
+  simp[fn_directly_calls_def] >> metis_tac[]
+QED
+
+Theorem invoke_generated_return_spills:
+  !Inv ctx cp fn inst nm arg_ops callee r off vs cas ras.
+    codegen_context_obligations Inv ctx cp /\
+    MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+    inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label nm :: arg_ops /\ callee.fn_name = nm /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
+    fn_return_state_rel ctx cp callee vs cas ras ==>
+    word_of_bytes T (0w:bytes32) (TAKE 32 (DROP off ras.as_memory)) =
+    word_of_bytes T (0w:bytes32) (TAKE 32 (DROP off cas.as_memory))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name` by
+    metis_tac[invoke_context_no_cycle] >>
+  irule invoke_return_preserves_caller_spills >>
+  gvs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
+  metis_tac[invoke_direct_call]
 QED
