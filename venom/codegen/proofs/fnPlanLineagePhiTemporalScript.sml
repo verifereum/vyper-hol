@@ -986,10 +986,110 @@ Proof
   conj_tac >- metis_tac[] >> qexistsl_tac [`class_of`, `k`] >> simp[]
 QED
 
+Theorem phi_origin_stage_from_classes:
+  !class_of cells inst next halting k cell p q.
+    phi_origin_classes class_of cells /\
+    (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+          class_of op = SOME k) /\
+    class_of (Var (HD inst.inst_outputs)) = NONE /\
+    (!op. class_of op = SOME k ==> ~MEM (operand_to_string op) next) /\
+    MEM cell cells /\ class_of (phi_cell_value T cell) = SOME k ==>
+    ?cells'. phi_origin_stage inst next halting p q cells cells' /\
+      phi_origin_classes class_of cells' /\
+      (!x j. MEM x cells /\ class_of (phi_cell_value T x) = SOME j /\ j <> k ==>
+        MEM x cells')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all phi_origin_classes_incoming_covered >>
+  disch_then (qspecl_then [`p`, `q`] strip_assume_tac) >>
+  `phi_origin_incoming inst p q cells d` by simp[phi_origin_incoming_def] >>
+  `stack_get_depth T (MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
+       (p ++ MAP (phi_cell_value T) cells)) = SOME d` by
+    (`stack_get_depth T (MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
+          (p ++ MAP (phi_cell_value T) cells)) =
+       stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+          (p ++ MAP (phi_cell_value T) cells)` by
+       (rewrite_tac[stack_get_depth_def, stack_get_phi_depth_def] >>
+        irule stack_find_predicate_vector >>
+        simp[listTheory.MAP_REVERSE, listTheory.MAP_MAP_o, combinTheory.o_DEF]) >> simp[]) >>
+  drule stack_get_depth_props >> strip_tac >>
+  `class_of (phi_cell_value T (stack_peek d cells)) = SOME k` by
+    (qpat_x_assum `stack_peek d (MAP _ _) = T` mp_tac >>
+     `MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands))
+        (p ++ MAP (phi_cell_value T) cells) =
+      MAP (\op. MEM op (FILTER is_var_operand inst.inst_operands)) p ++
+      MAP (\c. MEM (phi_cell_value T c) (FILTER is_var_operand inst.inst_operands)) cells`
+       by simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+     simp[stack_peek_suffix_map]) >>
+  `phi_origin_selected next p q cells d F` by
+    (irule phi_origin_classes_selected >> goal_assum (drule_at Any) >>
+     qexistsl_tac [`class_of`, `k`] >> simp[]) >>
+  `EVERY (\c. !slot a b. c = PhiOriginal slot a b ==>
+      a = b \/ (a <> Var (HD inst.inst_outputs) /\
+                b <> Var (HD inst.inst_outputs))) cells` by
+    (irule phi_origin_classes_output_safe >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all phi_origin_write_output_shield >>
+  disch_then (qspecl_then [`F`, `p`, `q`] strip_assume_tac) >>
+  drule_all phi_origin_classes_edits >> strip_tac >>
+  `!x j. MEM x cells /\ class_of (phi_cell_value T x) = SOME j /\ j <> k ==>
+     MEM x (phi_origin_write F d (Var (HD inst.inst_outputs)) cells) /\
+     MEM x (phi_origin_pop e (phi_origin_write F d (Var (HD inst.inst_outputs)) cells))` by
+    (rpt gen_tac >> strip_tac >>
+     irule (INST_TYPE [alpha |-> numSyntax.num] phi_origin_future_member_survives) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     conj_tac >- (qexistsl_tac [`class_of`, `j`, `k`] >> simp[]) >>
+     qexists_tac `p` >> simp[]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (qexists_tac `phi_origin_pop e (phi_origin_write F d
+        (Var (HD inst.inst_outputs)) cells)` >> simp[] >>
+      simp[phi_origin_stage_def] >> qexistsl_tac [`d`, `F`] >> simp[] >> metis_tac[]) >>
+  qexists_tac `phi_origin_write F d (Var (HD inst.inst_outputs)) cells` >>
+  simp[] >> simp[phi_origin_stage_def] >> qexistsl_tac [`d`, `F`] >> simp[]
+QED
+
+Theorem phi_origin_schedule_from_classes:
+  !steps n class_of cells p q.
+    phi_origin_classes class_of cells /\
+    (!i inst next halting. i < LENGTH steps /\ EL i steps = (inst,next,halting) ==>
+      (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+            class_of op = SOME (n+i)) /\
+      class_of (Var (HD inst.inst_outputs)) = NONE /\
+      (!op. class_of op = SOME (n+i) ==> ~MEM (operand_to_string op) next)) /\
+    (!i. i < LENGTH steps ==> ?cell. MEM cell cells /\
+      class_of (phi_cell_value T cell) = SOME (n+i)) ==>
+    ?cells_end. phi_origin_schedule_ready steps p q cells cells_end /\
+      phi_origin_classes class_of cells_end
+Proof
+  Induct >- simp[phi_origin_schedule_ready_def] >>
+  Cases_on `h` >> Cases_on `r` >> rename1 `(inst,next,halting)::steps` >>
+  rpt gen_tac >> strip_tac >>
+  `(!op. MEM op (FILTER is_var_operand inst.inst_operands) <=> class_of op = SOME n) /\
+   class_of (Var (HD inst.inst_outputs)) = NONE /\
+   (!op. class_of op = SOME n ==> ~MEM (operand_to_string op) next)` by
+    (qpat_x_assum `!i inst next halting. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `?cell. MEM cell cells /\ class_of (phi_cell_value T cell) = SOME n` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  drule_all phi_origin_stage_from_classes >>
+  disch_then (qspecl_then [`halting`, `p`, `q`] strip_assume_tac) >>
+  first_x_assum (qspecl_then [`SUC n`, `class_of`, `cells'`, `p`, `q`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          qpat_x_assum `!i inst next halting. _` (qspec_then `SUC i` mp_tac) >>
+          simp[arithmeticTheory.ADD_CLAUSES]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!i. i < LENGTH (_::_) ==> _` (qspec_then `SUC i` mp_tac) >>
+      simp[arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
+      qexists_tac `cell'` >> simp[] >>
+      first_x_assum irule >> qexists_tac `SUC (n+i)` >> simp[]) >>
+  strip_tac >> qexists_tac `cells_end` >> simp[phi_origin_schedule_ready_def] >>
+  qexists_tac `cells'` >> simp[]
+QED
+
 (* Alias-free symbolic validation ledger (supersedes the open local
    output-ordering question recorded above; NOT global schedule production).
 
-   Proposed induction certificate:
+   Static induction certificate (abstract producer checked above):
    - one fixed operand-to-incoming-class map class_of; each unequal Original
      retains two representatives of its indexed class, while equal originals
      and Common cells are unrestricted (phi_origin_classes);
@@ -1028,10 +1128,12 @@ QED
       reachable_phi_prefix_no_output_use_alias, and derive current class death
       using analyzed_phi_incoming_dead_after. The abstract class premises in
       the lemmas above do NOT discharge these analyzed producer obligations.
-   4. Assemble current search's selected-cell class fact and the native
-      analyzed schedule; preserve coverage for every remaining class using
-      future_member_survives, then induct. Predicate safety alone is not
-      coverage and is not a universal schedule producer.
+   4. phi_origin_stage_from_classes now derives the selected-cell class,
+      common searches and preservation of every other-class member.
+      phi_origin_schedule_from_classes composes these stages for arbitrary
+      schedules from static coverage, exactness, output exclusion and death.
+      Instantiating those premises for the native analyzed schedule remains
+      separate work; predicate safety alone is not entry coverage.
    5. Final physical suffix, live-through layout, cleanup/window bounds,
       persistent spill maps, allocation history, join reset and DFS/lineage
       lifting remain independent global obligations. Observation-frame and
