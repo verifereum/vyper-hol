@@ -504,3 +504,174 @@ Resume revert_reason_seven_checks[frame_finish]:
 QED
 
 Finalise revert_reason_seven_checks
+
+Theorem revert_reason_suffix_checks:
+  lookup_var b s = SOME B /\ lookup_var p s = SOME P /\
+  lookup_var q s = SOME Q /\
+  ptr_covers G tn b s (64+ms) /\
+  ptr_covers G tn p s (32+ms) /\ ptr_covers G tn q s ms /\
+  mload (w2n Q) s = n2w L /\
+  (!j. w2n Q <= j /\ j < w2n Q+32 ==> j NOTIN tn.t_mem) /\
+  32 + contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
+  64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
+  w2n P+32+ms < dimword(:256) /\
+  (!k. 4 <= k /\ k <= 20 ==>
+    b <> STRING #"%" (toString ((v:num)+k)) /\
+    p <> STRING #"%" (toString (v+k)) /\
+    q <> STRING #"%" (toString (v+k))) /\
+  ~ctx_has_dalloca ctx /\
+  (FLOOKUP s.vs_allocas (id+5) = NONE ==>
+     s.vs_alloca_next+32 < dimword(:256)) /\
+  (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>
+     sz=32 /\ a+32 < dimword(:256)) /\
+  step_inst_base (mk_inst (id+5) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (v+4))]) s = OK sa /\
+  FLOOKUP sa.vs_allocas (id+5) = SOME (c,32) /\
+  (w2n Q+32 <= c \/ c+32 <= w2n Q) /\
+  run_inst_seq (TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t ==>
+  ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
+    (revert_reason_suffix id v (Var b) (Var p) (Var q)) s Gf tnf
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `xs = TAKE 7 (revert_reason_suffix id v (Var b) (Var p) (Var q))` >>
+  qabbrev_tac `ys = TAKE 15 (DROP 7 (revert_reason_suffix id v (Var b) (Var p) (Var q)))` >>
+  `TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q)) = xs ++ ys` by
+    simp[NoAsms, Abbr `xs`, Abbr `ys`, revert_reason_suffix_def] >>
+  `?s7. run_inst_seq xs s = OK s7 /\ run_inst_seq ys s7 = OK t` by
+    (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
+  `run_inst_seq (TAKE 7 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK s7` by
+    metis_tac[] >>
+  drule_all revert_reason_seven_checks >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] mp_tac) >>
+  disch_then (qx_choose_then `g7` (qx_choose_then `tn7` strip_assume_tac)) >>
+  qpat_x_assum `!a sz. FLOOKUP s.vs_allocas _ = _ ==> _` kall_tac >>
+  qpat_x_assum `FLOOKUP s.vs_allocas _ = NONE ==> _` kall_tac >>
+  suspend "round"
+QED
+
+Resume revert_reason_suffix_checks[round]:
+  qpat_x_assum `lookup_var b s = _` kall_tac >>
+  qpat_x_assum `lookup_var p s = _` kall_tac >>
+  qpat_x_assum `lookup_var q s = _` kall_tac >>
+  qpat_x_assum `ptr_covers G tn b s _` kall_tac >>
+  qpat_x_assum `ptr_covers G tn p s _` kall_tac >>
+  qpat_x_assum `ptr_covers G tn q s _` kall_tac >>
+  qpat_x_assum `mload _ s = _` kall_tac >>
+  qpat_x_assum `!j. _ ==> j NOTIN tn.t_mem` kall_tac >>
+  qabbrev_tac `rs = TAKE 2 ys` >>
+  qabbrev_tac `zs = DROP 2 ys` >>
+  `ys = rs ++ zs` by simp[NoAsms, Abbr `rs`, Abbr `zs`] >>
+  `?s9. run_inst_seq rs s7 = OK s9 /\ run_inst_seq zs s9 = OK t` by
+    (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
+  qabbrev_tac `s7c = s7 with vs_inst_idx := s.vs_inst_idx+7` >>
+  qabbrev_tac `s9c = s9 with vs_inst_idx := s.vs_inst_idx+7` >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) rs` by
+    simp[NoAsms, Abbr `rs`, Abbr `ys`, revert_reason_suffix_def,
+      mk_inst_def, is_terminator_def] >>
+  `run_inst_seq rs s7c = OK s9c` by
+    simp[Abbr `s7c`, Abbr `s9c`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  suspend "round_post"
+QED
+
+Resume revert_reason_suffix_checks[round_post]:
+  qabbrev_tac `tmp = STRING #"%" (toString (v+10))` >>
+  qabbrev_tac `rnd = STRING #"%" (toString (v+11))` >>
+  `?g9 tn9.
+    inst_seq_ptr D 0 ctx fn PG g7 tn7 rs s7c g9 tn9 /\
+    op_taint tn9 (Var rnd) = {} /\ tn9.t_mem = tn7.t_mem /\
+    (!u. run_inst_seq rs s7c = OK u ==>
+      lookup_var rnd u = SOME (n2w (contractABI$ceil32 L)) /\
+      (!a. mload a u = mload a s7c) /\
+      (!x. x <> tmp /\ x <> rnd ==>
+        lookup_var x u = lookup_var x s7c /\
+        op_taint tn9 (Var x) = op_taint tn7 (Var x) /\
+        (!C. ptr_covers g7 tn7 x s7c C ==> ptr_covers g9 tn9 x u C)))` by
+    (simp[NoAsms, Abbr `rs`, Abbr `ys`, revert_reason_suffix_def,
+       Abbr `tmp`, Abbr `rnd`] >>
+     irule (SRULE [GSYM ADD_ASSOC]
+       (Q.INST [`id` |-> `id+12`] round_ceil32_checks)) >>
+     fs[Abbr `s7c`, lookup_var_def]) >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  suspend "round_frames"
+QED
+
+Resume revert_reason_suffix_checks[round_frames]:
+  `!x. x = b \/ x = p \/ x = q \/
+       (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
+     x <> tmp /\ x <> rnd` by
+    (rpt gen_tac >> strip_tac >>
+     fs[Abbr `tmp`, Abbr `rnd`, ASCIInumbersTheory.toString_inj] >>
+     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `10` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `11` assume_tac) >>
+     fs[]) >>
+  `!x. x = b \/ x = p \/ x = q \/
+       (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
+     lookup_var x s9 = lookup_var x s7 /\
+     op_taint tn9 (Var x) = op_taint tn7 (Var x) /\
+     (!C. ptr_covers g7 tn7 x s7 C ==> ptr_covers g9 tn9 x s9 C)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!x. x <> tmp /\ x <> rnd ==> _` (qspec_then `x` mp_tac) >>
+     simp[Abbr `s9c`, Abbr `s7c`, lookup_var_def] >> metis_tac[]) >>
+  qpat_x_assum `!x. x <> tmp /\ x <> rnd ==> _` kall_tac >>
+  qpat_x_assum `!x. x = b \/ _ ==> x <> tmp /\ _` kall_tac >>
+  suspend "padding_entry"
+QED
+
+Resume revert_reason_suffix_checks[padding_entry]:
+  qabbrev_tac `pad = TAKE 4 zs` >>
+  qabbrev_tac `rest = DROP 4 zs` >>
+  `zs = pad ++ rest` by simp[NoAsms, Abbr `pad`, Abbr `rest`] >>
+  `?s13. run_inst_seq pad s9 = OK s13 /\ run_inst_seq rest s13 = OK t` by
+    (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
+  qabbrev_tac `s9d = s9 with vs_inst_idx := s.vs_inst_idx+9` >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) pad` by
+    simp[NoAsms, Abbr `pad`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
+      mk_inst_def, is_terminator_def] >>
+  `run_inst_seq pad s9d = OK (s13 with vs_inst_idx := s.vs_inst_idx+9)` by
+    simp[Abbr `s9d`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  suspend "padding_post"
+QED
+
+Resume revert_reason_suffix_checks[padding_post]:
+  qabbrev_tac `endvar = STRING #"%" (toString (v+12))` >>
+  qabbrev_tac `countvar = STRING #"%" (toString (v+13))` >>
+  `!k. 4 <= k /\ k <= 9 ==>
+     lookup_var (STRING #"%" (toString (v+k))) s9 =
+       lookup_var (STRING #"%" (toString (v+k))) s7 /\
+     op_taint tn9 (Var (STRING #"%" (toString (v+k)))) =
+       op_taint tn7 (Var (STRING #"%" (toString (v+k)))) /\
+     (!C. ptr_covers g7 tn7 (STRING #"%" (toString (v+k))) s7 C ==>
+       ptr_covers g9 tn9 (STRING #"%" (toString (v+k))) s9 C)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!x. x = b \/ _ ==> _`
+       (qspec_then `STRING #"%" (toString (v+k))` mp_tac) >>
+     impl_tac >- (disj2_tac >> disj2_tac >> disj2_tac >> qexists `k` >> simp[]) >>
+     simp[]) >>
+  qpat_assum `!k. 4 <= k /\ k <= 9 ==> _` (qspec_then `5` assume_tac) >>
+  qpat_assum `!k. 4 <= k /\ k <= 9 ==> _` (qspec_then `8` assume_tac) >>
+  qpat_assum `!k. 4 <= k /\ k <= 9 ==> _` (qspec_then `9` assume_tac) >>
+  `L <= contractABI$ceil32 L` by simp[contractABITheory.le_ceil32] >>
+  `?g13 tn13. inst_seq_ptr D 0 ctx fn PG g9 tn9 pad s9d g13 tn13 /\
+    (!u. run_inst_seq pad s9d = OK u ==>
+      (!x. x <> endvar /\ x <> countvar ==>
+        lookup_var x u = lookup_var x s9d /\
+        op_taint tn13 (Var x) = op_taint tn9 (Var x) /\
+        (!C. ptr_covers g9 tn9 x s9d C ==> ptr_covers g13 tn13 x u C)))` by
+    (simp[NoAsms, Abbr `pad`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
+       Abbr `endvar`, Abbr `countvar`] >>
+     irule (SRULE [GSYM ADD_ASSOC]
+       (Q.INST [`id` |-> `id+14`, `capbytes` |-> `ms`,
+          `R` |-> `contractABI$ceil32 L`, `a` |-> `P+32w`] zero_pad_copy_checks)) >>
+     fs[Abbr `rnd`, ASCIInumbersTheory.toString_inj] >>
+     qexistsl [`L`, `P`, `ms`] >>
+     simp[Abbr `s9d`, Abbr `s9c`, lookup_var_def] >>
+     FAIL_TAC "padding bounds") >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  suspend "padding_frames"
+QED
+
+Resume revert_reason_suffix_checks[padding_frames]:
+  FAIL_TAC "padding frames"
+QED
+
+Finalise revert_reason_suffix_checks
