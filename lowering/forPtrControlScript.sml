@@ -92,15 +92,14 @@ Theorem for_counter_test_path_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  lookup_var ctr s = SOME (n2w k) /\ eval_operand bound s = SOME (n2w n) /\
-  k <= n /\ n < dimword(:256) /\
+  lookup_var ctr s = SOME w /\ eval_operand bound s = SOME z /\
   op_taint tn (Var ctr) = {} /\ op_taint tn bound = {} /\
   op_prov G (Var ctr) = NONE /\ op_prov G bound = NONE ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{}))
-    (OK (jump_to (if k = n then exit else looplbl)
-      (update_var out (if k = n then 1w else 0w) s)))
+    (OK (jump_to (if w = z then exit else looplbl)
+      (update_var out (if w = z then 1w else 0w) s)))
 Proof
   strip_tac >>
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
@@ -111,26 +110,26 @@ Proof
      qexists_tac `bb` >> simp[] >>
      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `step_inst_base (mk_inst id EQ [Var ctr;bound] [out]) s =
-    OK (update_var out (if k = n then 1w else 0w) s)` by
+    OK (update_var out (if w = z then 1w else 0w) s)` by
     (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      simp[mk_inst_def, exec_pure2_def, eval_operand_def] >>
-     Cases_on `k = n` >> simp[bool_to_word_def]) >>
+     Cases_on `w = z` >> simp[bool_to_word_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{}))
-    (OK ((update_var out (if k = n then 1w else 0w) s)
+    (OK ((update_var out (if w = z then 1w else 0w) s)
       with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_at (Pat `step_inst_base _ _ = _`) eq_zero_path_ptr >>
      simp[for_eq_scalar_ghost]) >>
   `gas_path_ptr D 0 ctx fn PG
     (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{}))
-    ((update_var out (if k = n then 1w else 0w) s)
+    ((update_var out (if w = z then 1w else 0w) s)
       with vs_inst_idx := SUC s.vs_inst_idx) 0
     (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{}))
-    (OK (jump_to (if k = n then exit else looplbl)
-      ((update_var out (if k = n then 1w else 0w) s)
+    (OK (jump_to (if w = z then exit else looplbl)
+      ((update_var out (if w = z then 1w else 0w) s)
         with vs_inst_idx := SUC s.vs_inst_idx)))` by
     (irule assert_jnz_zero_path_ptr >>
      simp[update_var_def] >>
