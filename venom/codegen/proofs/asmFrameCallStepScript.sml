@@ -378,6 +378,174 @@ Proof
        bind_def, return_def]
 QED
 
+Theorem asm_call_prepare_collect_eq:
+  !s c rb rest d op vo args gas address value ao az ro rs range newSize mxCost
+   expansion ac t accounts target code dc u vc cc cg charge.
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  vo = (if call_has_value op then 1 else 0) /\
+  args = TAKE (6 + vo) c.stack /\ gas = w2n (EL 0 args) /\
+  address = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rs = w2n (EL (5 + vo) args) /\
+  range = max_expansion_range (ao,az) (ro,rs) /\
+  newSize = (if 0 < SND range then word_size (FST range + SND range) * 32 else 0) /\
+  mxCost = memory_expansion_cost (buffer_length c.memory) newSize /\
+  expansion = MAX (buffer_length c.memory) newSize - buffer_length c.memory /\
+  ac = (if fIN address s.rollback.accesses.addresses
+        then warm_access_cost else cold_access_cost) /\
+  t = s with <| contexts := (c with stack := DROP (6 + vo) c.stack,rb)::rest;
+       rollback := s.rollback with accesses := s.rollback.accesses with
+         addresses := fINSERT address s.rollback.accesses.addresses;
+       msdomain := Collect (d with addresses updated_by fINSERT address) |> /\
+  accounts = s.rollback.accounts /\ target = lookup_account address accounts /\
+  (code,dc,u) = (case get_delegate target.code of
+     NONE => (target.code,0,t)
+   | SOME delegate =>
+       ((lookup_account delegate accounts).code,
+        (if fIN delegate t.rollback.accesses.addresses
+         then warm_access_cost else cold_access_cost),
+        t with <| rollback := t.rollback with accesses := t.rollback.accesses with
+                    addresses := fINSERT delegate t.rollback.accesses.addresses;
+                  msdomain := Collect (d with addresses updated_by
+                    (fINSERT delegate o fINSERT address)) |>)) /\
+  vc = (if 0 < value then call_value_cost else 0) /\
+  cc = (if op = Call /\ 0 < value /\ account_empty target then new_account_cost else 0) /\
+  cg = call_gas value gas (c.msgParams.gasLimit - c.gasUsed) mxCost (ac+vc+cc+dc) /\
+  charge = static_gas op + FST cg + mxCost ==>
+  asm_call_prepare op s =
+    if c.msgParams.gasLimit < c.gasUsed + charge
+    then (INR (SOME OutOfGas),u)
+    else (INL (c.msgParams.callee,address,value,ao,az,code,SND cg,ro,rs,accounts),
+          u with contexts :=
+            (c with <| stack := DROP (6 + vo) c.stack;
+                       gasUsed := c.gasUsed + charge;
+                       memory := buffer_extend expansion c.memory |>,rb)::rest)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `pop_stack (6+vo) s =
+     (INL args,s with contexts := (c with stack := DROP (6+vo) c.stack,rb)::rest)` by
+    (drule_all asm_pop_stack_state >> fs[]) >>
+  pure_rewrite_tac[asm_call_prepare_def, LET_THM, asm_uncurry_projection] >>
+  BETA_TAC >>
+  qpat_assum `vo = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  pure_once_rewrite_tac[bind_def] >>
+  qpat_assum `pop_stack _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `gas = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `address = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `value = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `ao = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `az = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `ro = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `rs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `gas = _` (fn th => rewrite_tac[GSYM (SRULE [] th)]) >>
+  rename1 `range' = max_expansion_range (ao,az) (ro,rs)` >>
+  qpat_assum `range' = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qabbrev_tac `popped = s with contexts := (c with stack := DROP (6+vo) c.stack,rb)::rest` >>
+  `popped.contexts = (c with stack := DROP (6+vo) c.stack,rb)::rest` by simp[Abbr `popped`] >>
+  `memory_expansion_info (FST range') (SND range') popped =
+     (INL <|cost := mxCost; expand_by := expansion|>,popped)` by
+    (drule asm_memory_expansion_info_state >>
+     disch_then (qspecl_then [`SND range'`,`FST range'`] mp_tac) >>
+     fs[]) >>
+  pure_once_rewrite_tac[bind_def] >>
+  qpat_assum `memory_expansion_info _ _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  suspend "warmed"
+QED
+
+Resume asm_call_prepare_collect_eq[warmed]:
+  `popped.msdomain = Collect d` by simp[Abbr `popped`] >>
+  `access_address address popped = (INL ac,t)` by
+    (drule asm_access_address_collect >>
+     disch_then (qspec_then `address` mp_tac) >>
+     simp[Abbr `popped`]) >>
+  pure_once_rewrite_tac[bind_def] >>
+  qpat_assum `access_address _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  `t.rollback.accounts = accounts` by simp[] >>
+  pure_once_rewrite_tac[bind_def] >>
+  simp_tac (srw_ss()) [get_accounts_def, return_def] >>
+  qpat_assum `t.rollback.accounts = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `target = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `vc = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `cc = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  `t.msdomain = Collect (d with addresses updated_by fINSERT address)` by simp[] >>
+  `(case get_delegate target.code of
+      NONE => return (target.code,0)
+    | SOME delegate => do cost <- access_address delegate;
+                          return ((lookup_account delegate accounts).code,cost) od) t =
+     (INL (code,dc),u)` by
+    (Cases_on `get_delegate target.code`
+     >- (qpat_x_assum `(code,dc,u) = _` mp_tac >>
+         simp_tac (srw_ss()) [return_def] >> strip_tac >> simp[]) >>
+     drule asm_access_address_collect >>
+     disch_then (qspec_then `x` assume_tac) >>
+     qpat_x_assum `(code,dc,u) = _` mp_tac >>
+     simp_tac (srw_ss()) [] >> strip_tac >>
+     simp[bind_def, return_def]) >>
+  pure_once_rewrite_tac[bind_def] >>
+  qpat_assum `_ t = (INL (code,dc),u)` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  `u.contexts = (c with stack := DROP (6+vo) c.stack,rb)::rest` by
+    (Cases_on `get_delegate target.code` >>
+     qpat_x_assum `(code,dc,u) = _` mp_tac >>
+     simp_tac (srw_ss()) [] >> strip_tac >> simp[]) >>
+  suspend "gas"
+QED
+
+Resume asm_call_prepare_collect_eq[gas]:
+  `get_gas_left u = (INL (c.msgParams.gasLimit - c.gasUsed),u)` by
+    simp[get_gas_left_def, get_current_context_def, bind_def, return_def] >>
+  pure_once_rewrite_tac[bind_def] >>
+  qpat_assum `get_gas_left u = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `cg = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `charge = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  Cases_on `c.msgParams.gasLimit < c.gasUsed + charge`
+  >- (`consume_gas charge u = (INR (SOME OutOfGas),u)` by
+        (drule asm_consume_gas_out_of_gas >>
+         disch_then (qspec_then `charge` mp_tac) >>
+         qpat_assum `c.msgParams.gasLimit < _`
+           (fn th => simp_tac (srw_ss()) [th])) >>
+      pure_once_rewrite_tac[ignore_bind_def] >>
+      pure_once_rewrite_tac[bind_def] >>
+      qpat_assum `consume_gas charge u = _` (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `c.msgParams.gasLimit < _`
+        (fn th => simp_tac (srw_ss()) [th])) >>
+  `consume_gas charge u =
+     (INL (),u with contexts :=
+        (c with <|stack := DROP (6+vo) c.stack; gasUsed := c.gasUsed+charge|>,rb)::rest)` by
+    (drule asm_consume_gas_state >>
+     disch_then (qspec_then `charge` mp_tac) >>
+     qpat_assum `~(c.msgParams.gasLimit < _)`
+       (fn th => simp_tac (srw_ss() ++ numSimps.ARITH_ss) [th])) >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+      pure_once_rewrite_tac[bind_def] >>
+  qpat_assum `consume_gas charge u = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qabbrev_tac `paid = u with contexts :=
+    (c with <|stack := DROP (6+vo) c.stack; gasUsed := c.gasUsed+charge|>,rb)::rest` >>
+  `paid.contexts =
+    (c with <|stack := DROP (6+vo) c.stack; gasUsed := c.gasUsed+charge|>,rb)::rest` by
+    simp[Abbr `paid`] >>
+  drule asm_expand_memory_state >>
+  disch_then (qspec_then `expansion` assume_tac) >>
+  qunabbrev_tac `paid` >>
+  qpat_assum `~c.msgParams.static` (fn ns =>
+    qpat_assum `~(c.msgParams.gasLimit < _)` (fn ng =>
+      qpat_assum `expand_memory expansion _ = _` (fn ex =>
+        simp_tac (srw_ss())
+          [ns,ng,SRULE [] ex,COND_RATOR,assert_not_static_def,get_static_def,
+           get_current_context_def,assert_def,bind_def,ignore_bind_def,
+           return_def,get_callee_def])))
+QED
+
+Finalise asm_call_prepare_collect_eq
+
 Theorem asm_pop_and_incorporate_context_state:
   s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
   child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
