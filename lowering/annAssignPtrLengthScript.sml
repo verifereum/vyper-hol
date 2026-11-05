@@ -196,3 +196,93 @@ Proof
  rpt strip_tac >> decide_tac
 QED
 
+
+Theorem annassign_length_prefix_extend_ptr:
+ !opc f D ctx func PG G0 tn0 s0 sa G tn s sc sd left right out a b.
+ gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 G tn (OK s) /\
+ (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
+ emit_op opc [left;right] sc = (Var out,sd) /\ fn_has_code sc sd func /\
+ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+ eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+ op_taint tn left = {} /\ op_taint tn right = {} /\
+ s.vs_memory = s0.vs_memory /\ tn.t_mem = tn0.t_mem /\
+ tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans /\ tn.t_imm = tn0.t_imm /\
+ (!p. not_fresh_at sa p ==> lookup_var p s = lookup_var p s0 /\
+   FLOOKUP G p = FLOOKUP G0 p /\ op_taint tn (Var p) = op_taint tn0 (Var p)) /\
+ (!p. not_fresh_at sa p ==> not_fresh_at sc p) ==>
+ ?Gf tnf sf.
+ gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 Gf tnf (OK sf) /\
+ sf.vs_current_bb = sd.cs_current_bb /\ sf.vs_inst_idx = LENGTH sd.cs_current_insts /\
+ ~sf.vs_halted /\ lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+ sf.vs_memory = s0.vs_memory /\ tnf.t_mem = tn0.t_mem /\
+ tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
+ (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s0 /\
+   FLOOKUP Gf p = FLOOKUP G0 p /\ op_taint tnf (Var p) = op_taint tn0 (Var p))
+Proof
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule_all annassign_emit_len_binop_path_ptr >>
+ disch_then (qspecl_then [`D`,`PG`,`G`] strip_assume_tac) >>
+ qexistsl [`Gf`,`tnf`,`sf`] >>
+ conj_tac >-
+  (drule_all gas_path_ptr_then >> simp[]) >>
+ simp[] >> rpt strip_tac >>
+ first_x_assum (qspec_then `p` mp_tac) >> simp[] >>
+ metis_tac[]
+QED
+
+Theorem annassign_bytestring_copy_len_path_ptr:
+ !D ctx func PG G tn s sa sb src count_op a.
+ compile_bytestring_copy_len (Var src) sa = (count_op,sb) /\ fn_has_code sa sb func /\
+ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+ ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
+ (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+ ?Gf tnf sf.
+ gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+ sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+ ~sf.vs_halted /\
+ eval_operand count_op sf = SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
+ op_taint tnf count_op = {} /\ sf.vs_memory = s.vs_memory /\
+ tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+ (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
+   FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule annassign_copy_len_decompose_ptr >> strip_tac >> gvs[] >>
+ `fn_has_code sa sc1 func /\ fn_has_code sc1 sc2 func /\
+  fn_has_code sc2 sc3 func /\ fn_has_code sc3 sb func` by
+  metis_tac[fn_has_code_split, cs_extends_trans] >>
+ `(!p. not_fresh_at sa p ==> not_fresh_at sc1 p) /\
+  (!p. not_fresh_at sa p ==> not_fresh_at sc2 p) /\
+  (!p. not_fresh_at sa p ==> not_fresh_at sc3 p)` by metis_tac[] >>
+ drule_all annassign_emit_mload_clean_path_ptr >>
+ disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+ rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1 (OK s1)` >>
+ qpat_x_assum `compile_bytestring_copy_len _ _ = _` kall_tac >>
+ qpat_x_assum `emit_op MLOAD _ _ = _` kall_tac >>
+ qpat_x_assum `ptr_covers _ _ _ _ _` kall_tac >>
+ qpat_x_assum `!i. _ ==> i NOTIN _` kall_tac >>
+ `eval_operand (Var v1) s1 = SOME (mload (w2n a) s) /\
+  eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
+  simp[eval_operand_def, op_taint_def] >>
+ drule_all (SRULE [] (Q.SPECL [`ADD`,`word_add`] annassign_length_prefix_extend_ptr)) >>
+ strip_tac >>
+ map_every (Q_TAC (fn t => rpt (WEAKEN_TAC (free_in t)))) [`s1`,`tn1`,`G1`] >>
+ rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 G2 tn2 (OK s2)` >>
+ `eval_operand (Var v2) s2 = SOME (mload (w2n a) s + 31w) /\
+  eval_operand (Lit (i2w (-32))) s2 = SOME (i2w (-32)) /\
+  op_taint tn2 (Lit (i2w (-32))) = {}` by simp[eval_operand_def, op_taint_def] >>
+ drule_all (SRULE [] (Q.SPECL [`AND`,`word_and`] annassign_length_prefix_extend_ptr)) >>
+ strip_tac >>
+ map_every (Q_TAC (fn t => rpt (WEAKEN_TAC (free_in t)))) [`s2`,`tn2`,`G2`] >>
+ rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 G3 tn3 (OK s3)` >>
+ `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && i2w (-32)) /\
+  eval_operand (Lit 32w) s3 = SOME 32w /\ op_taint tn3 (Lit 32w) = {}` by
+  simp[eval_operand_def, op_taint_def] >>
+ drule_all (SRULE [] (Q.SPECL [`ADD`,`word_add`] annassign_length_prefix_extend_ptr)) >>
+ strip_tac >>
+ map_every (Q_TAC (fn t => rpt (WEAKEN_TAC (free_in t)))) [`s3`,`tn3`,`G3`] >>
+ qexistsl [`Gf`,`tnf`,`sf`] >> simp[eval_operand_def]
+QED
