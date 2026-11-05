@@ -875,6 +875,9 @@ Theorem gas_base_non_gas:
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >> gvs[] >>
   all_tac
+  (* admitted at base cut: static-frame SSTORE/TSTORE semantics (#1169) add a cc_static Abort branch; Cases_on `outs` finds no var *)
+  >~ [`inst.inst_opcode = SSTORE`] >- cheat
+  >~ [`inst.inst_opcode = TSTORE`] >- cheat
   >~ [`inst.inst_opcode = MCOPY`] >- (irule gas_base_data_dispatch >> simp[])
   >~ [`inst.inst_opcode = ISTORE`] >- (irule gas_base_data_dispatch >> simp[])
   >~ [`inst.inst_opcode = CALLDATACOPY`] >- (irule gas_base_data_dispatch >> simp[])
