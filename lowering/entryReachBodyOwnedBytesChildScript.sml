@@ -102,6 +102,9 @@ Theorem entry_owned_bytes_child:
     entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d cap t /\
     t.vs_current_bb = last.cs_current_bb /\
     t.vs_inst_idx = LENGTH last.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand (FST ops) t = SOME (n2w j) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    abi_decode_frame (d+32+j*type_memory_bytes ce ty) (type_memory_bytes ce ty) s t /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op t = SOME w)
 Proof
@@ -156,7 +159,7 @@ Resume entry_owned_bytes_child[endpoint]:
      `abi_decoder_metadata _ _ ty tv _ _ _`,
      `mem_bytes_at sb _ _ = _`, `mem_bytes_at (_ + abi_array_child_offset _ _ _ _) _ _ = _`,
      `j < LENGTH xs`, `is_dynamic _`, `eval_operand ip s = _`, `mload _ s = _`,
-     `eval_operand (FST ops) prepared = _`, `eval_operand (FST (SND ops)) prepared = _`,
+     `eval_operand (FST (SND ops)) prepared = _`,
      `eval_operand (SND (SND ops)) prepared = _`,
      `EL j avs = _`, `LENGTH bs <= n`, `enc _ _ = enc _ _`,
      `type_memory_bytes ce ty = _`, `!d mem. val_in_memory _ _ _ _ <=> _`,
@@ -179,6 +182,7 @@ Resume entry_owned_bytes_child[endpoint]:
   suspend "endpoint_finish"
 QED
 Resume entry_owned_bytes_child[endpoint_finish]:
+  `eval_operand (FST ops) actual = SOME (n2w j)` by metis_tac[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st last)` by
     (irule abi_decoder_emitted_every_append >>
@@ -217,6 +221,7 @@ Resume entry_owned_bytes_child[endpoint_finish]:
     (irule owned_sequence_endpoint >> asm_rewrite_tac[] >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
   qexists_tac `actual with vs_inst_idx := LENGTH last.cs_current_insts` >>
-  asm_simp_tac (srw_ss()) [eval_operand_def, lookup_var_def]
+  asm_simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
+  fs[abi_decode_frame_def] >> first_assum ACCEPT_TAC
 QED
 Finalise entry_owned_bytes_child

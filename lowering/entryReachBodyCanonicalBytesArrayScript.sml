@@ -286,14 +286,14 @@ Definition entry_bytes_array_inv_def:
     mem_word_at d u.vs_memory = n2w ncount
 End
 
-Theorem entry_bytes_array_inv_init[local]:
+Theorem entry_bytes_array_inv_init:
   fresh_vars_wrt limit_st prepared /\ mem_word_at d prepared.vs_memory = n2w ncount ==>
   entry_bytes_array_inv next limit_st d outsz q ncount prepared prepared
 Proof
   simp[entry_bytes_array_inv_def, entry_loop_fields_def, abi_decode_footprint_frame_refl]
 QED
 
-Theorem entry_bytes_array_inv_header[local]:
+Theorem entry_bytes_array_inv_header:
   next + 4 <= limit_st.cs_next_var /\
   entry_bytes_array_inv next limit_st d outsz q ncount prepared u ==>
   entry_bytes_array_inv next limit_st d outsz q ncount prepared
@@ -309,7 +309,7 @@ Proof
     jump_to_def, abi_decode_header_state_def, update_var_def]
 QED
 
-Theorem entry_bytes_array_inv_backedge[local]:
+Theorem entry_bytes_array_inv_backedge:
   next <= nv /\ nv < limit_st.cs_next_var /\ (d+32 <= q \/ q+32 <= d) /\
   entry_bytes_array_inv next limit_st d outsz q ncount prepared u ==>
   entry_bytes_array_inv next limit_st d outsz q ncount prepared
@@ -339,7 +339,7 @@ Proof
      lookup_var_def]
 QED
 
-Theorem entry_bytes_array_inv_child[local]:
+Theorem entry_bytes_array_inv_child:
   entry_bytes_array_inv next limit_st d outsz q ncount prepared u /\
   t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next /\
   entry_loop_fields u t /\ fresh_vars_wrt limit_st t /\
@@ -366,7 +366,7 @@ Proof
 QED
 
 (* Readiness supplies the ncounter observation; it is not inferred from J. *)
-Theorem entry_bytes_header_inputs[local]:
+Theorem entry_bytes_header_inputs:
   abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr ncount j s /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap s /\
   abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
@@ -1005,7 +1005,7 @@ Proof
   metis_tac[arithmeticTheory.LESS_ADD]
 QED
 
-Theorem entry_array_initializer_final_fresh[local]:
+Theorem entry_array_initializer_final_fresh:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     (setup,loop_st) /\
   run_inst_seq (emitted_insts st loop_st) s = OK t /\
@@ -1112,7 +1112,7 @@ Proof
   simp_tac bool_ss [entry_bytes_array_resources_def] >> metis_tac[]
 QED
 
-Theorem entry_bytes_array_compile_phases[local]:
+Theorem entry_bytes_array_compile_phases:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
     (DecDynArray (DecBytestring n) asz msz T maxn) start = ((),final) /\
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz start =
@@ -1198,7 +1198,7 @@ Proof
   drule_all fn_has_code_split >> simp[]
 QED
 
-Theorem entry_bytes_array_phase_layout[local]:
+Theorem entry_bytes_array_phase_layout:
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (DecBytestring n) asz msz body_st = (ops,middle) /\
@@ -1286,7 +1286,7 @@ Proof
   asm_rewrite_tac[] >> simp[] >> metis_tac[]
 QED
 
-Theorem entry_bytes_array_initial_live[local]:
+Theorem entry_bytes_array_initial_live:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
     ((ip,cnt),loop_st) /\
   abi_decoder_operand_live st.cs_next_var src /\
