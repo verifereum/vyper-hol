@@ -84,22 +84,36 @@ Proof
   gvs[EL_APPEND2]
 QED
 
+Theorem canonical_after_fmp_split:
+  !k insts. canonical_after_fmp k insts ==>
+    ?xs ys. insts = xs ++ ys /\
+      EVERY (\i. is_param_opcode i.inst_opcode) xs /\ no_param_insts ys
+Proof
+  Cases_on `insts`
+  >- (rpt strip_tac >> qexistsl [`[]`, `[]`] >> simp[no_param_insts_def]) >>
+  rpt gen_tac >> simp[canonical_after_fmp_def] >>
+  Cases_on `h.inst_opcode = RETPC_PARAM` >> fs[] >> strip_tac
+  >- (qexistsl [`[h]`, `t`] >> gvs[param_inst_at_def]) >>
+  qexistsl [`[]`, `h::t`] >> gvs[]
+QED
+
 Theorem canonical_entry_params_split:
   !k insts. canonical_entry_params_from k insts ==>
     ?xs ys. insts = xs ++ ys /\
       EVERY (\i. is_param_opcode i.inst_opcode) xs /\ no_param_insts ys
 Proof
-  Induct_on `insts` >> simp[canonical_entry_params_from_def] >>
-  rpt gen_tac >> rpt IF_CASES_TAC >> strip_tac
+  Induct_on `insts`
+  >- (rpt strip_tac >> qexistsl [`[]`, `[]`] >> simp[no_param_insts_def]) >>
+  rpt gen_tac >> simp[canonical_entry_params_from_def] >>
+  Cases_on `h.inst_opcode = PARAM` >> fs[] >> strip_tac
   >- (first_x_assum drule >> strip_tac >>
-      qexistsl [`h::xs`, `ys`] >> gvs[is_param_opcode_def])
-  >- (Cases_on `insts` >> gvs[canonical_after_fmp_def]
-      >- (qexistsl [`[h]`, `[]`] >> gvs[is_param_opcode_def, no_param_insts_def])
-      >> Cases_on `h'.inst_opcode = RETPC_PARAM` >> gvs[]
-      >- (qexistsl [`[h; h']`, `t`] >> gvs[is_param_opcode_def])
-      >> qexistsl [`[h]`, `h'::t`] >> gvs[is_param_opcode_def])
-  >- (qexistsl [`[h]`, `insts`] >> gvs[is_param_opcode_def])
-  >> qexistsl [`[]`, `h::insts`] >> simp[]
+      qexistsl [`h::xs`, `ys`] >> gvs[param_inst_at_def]) >>
+  Cases_on `h.inst_opcode = FMP_PARAM` >> gvs[]
+  >- (drule canonical_after_fmp_split >> strip_tac >>
+      qexistsl [`h::xs`, `ys`] >> gvs[param_inst_at_def]) >>
+  Cases_on `h.inst_opcode = RETPC_PARAM` >> gvs[]
+  >- (qexistsl [`[h]`, `insts`] >> gvs[param_inst_at_def]) >>
+  qexistsl [`[]`, `h::insts`] >> gvs[]
 QED
 
 (* The canonical parameter prefix, with no PHI in the first block and the
