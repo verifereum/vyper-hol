@@ -439,3 +439,76 @@ Proof
   qexistsl [`A`,`B`,`Z`] >> simp[] >>
   rpt gen_tac >> strip_tac >> irule dft_pending_retired_mono >> metis_tac[]
 QED
+
+Theorem dft_pending_saved_event:
+  dft_pos_pending_saved zs saved /\
+  MEM (inst,addr) (dft_pos_pending_gas_events zs) ==>
+  ?path visit. MEM (path,visit) saved /\ addr = path ++ [(visit,inst.inst_id)]
+Proof
+  qid_spec_tac `saved` >> Induct_on `zs`
+  >- simp[dft_pos_pending_gas_events_def] >>
+  qx_gen_tac `z` >> gen_tac >>
+  Cases_on `saved` >- simp[dft_pos_pending_saved_def] >>
+  Cases_on `z`
+  >- (simp[dft_pos_pending_saved_def, dft_pos_pending_gas_events_def] >>
+      metis_tac[dft_pos_pending_saved_def]) >>
+  PairCases_on `x` >>
+  simp[dft_pos_pending_saved_def, dft_pos_pending_gas_events_def] >>
+  metis_tac[dft_pos_pending_saved_def, pairTheory.PAIR]
+QED
+
+Theorem dft_pending_residual_classification:
+  (!n. n <= A n) /\
+  (!n inst addr. dft_pending_segment_hits C w (A n) l inst addr =
+    dft_pending_segment_hits D w (B n) r inst addr +
+    dft_pending_ledger_hits (P n ++ H n) inst addr) /\
+  (!i j e. i <= j /\ MEM e (H i) ==> MEM e (H j)) /\
+  dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j l) /\
+  (!k. ~dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w D) k r)) ==>
+  (?N. !n. N <= n ==> MEM (inst,addr) (H n)) \/
+  ((!n. ~MEM (inst,addr) (H n)) /\
+   (!n. SUC j <= n ==> MEM (inst,addr) (P n)))
+Proof
+  strip_tac >> Cases_on `?N. MEM (inst,addr) (H N)`
+  >- (disj1_tac >> pop_assum strip_assume_tac >> qexists `N` >> metis_tac[]) >>
+  disj2_tac >> conj_tac >- metis_tac[] >> rpt strip_tac >>
+  `j < A n` by (qpat_x_assum `!n. n <= A n` (qspec_then `n` mp_tac) >> decide_tac) >>
+  qspec_then `\n. P n ++ H n` mp_tac
+    (Q.GEN `ledger` dft_pending_left_event_residual) >>
+  simp[] >> disch_then (qspec_then `n` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_pending_residual_saved_classification:
+  (!n. n <= A n) /\
+  (!n inst addr. dft_pending_segment_hits C w (A n) l inst addr =
+    dft_pending_segment_hits D w (B n) r inst addr +
+    dft_pending_ledger_hits
+      (dft_pos_pending_gas_events (FST (Z n)) ++ SND (Z n)) inst addr) /\
+  (!i j e. i <= j /\ MEM e (SND (Z i)) ==> MEM e (SND (Z j))) /\
+  (!n. dft_pos_pending_aligned_phase w C D fi bi pre gas call post
+    (FST (Z n)) (SND (Z n))
+    (FUNPOW (dft_occ_oracle_next w C) (A n) l)
+    (FUNPOW (dft_occ_oracle_next w D) (B n) r)) /\
+  dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j l) /\
+  (!k. ~dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w D) k r)) ==>
+  (?N. !n. N <= n ==> MEM (inst,addr) (SND (Z n))) \/
+  ((!n. ~MEM (inst,addr) (SND (Z n))) /\
+   (!n. SUC j <= n ==>
+     MEM (inst,addr) (dft_pos_pending_gas_events (FST (Z n))) /\
+     ?path visit.
+       MEM (path,visit)
+         (FUNPOW (dft_occ_oracle_next w C) (A n) l).dft_occ_saved /\
+       addr = path ++ [(visit,inst.inst_id)]))
+Proof
+  strip_tac >>
+  qspecl_then [`\n. dft_pos_pending_gas_events (FST (Z n))`, `\n. SND (Z n)`]
+    mp_tac (Q.GENL [`P`,`H`] dft_pending_residual_classification) >>
+  simp[] >> impl_tac >- metis_tac[] >> strip_tac
+  >- (disj1_tac >> metis_tac[]) >>
+  disj2_tac >> conj_tac >- simp[] >> rpt strip_tac >>
+  `MEM (inst,addr) (dft_pos_pending_gas_events (FST (Z n)))` by metis_tac[] >>
+  simp[] >> irule dft_pending_saved_event >>
+  qexists `FST (Z n)` >> simp[] >>
+  qpat_x_assum `!n. dft_pos_pending_aligned_phase _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `n` mp_tac) >> simp[dft_pos_pending_aligned_phase_def]
+QED
