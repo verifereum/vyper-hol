@@ -2962,6 +2962,36 @@ Proof
   drule_all vfmStepLengthTheory.proceed_create_returns_inl >> simp[]
 QED
 
+Theorem asm_call_safe_binop:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_binop op f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_binop_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_pop_stack] >>
+  metis_tac[asm_call_safe_charge_push]
+QED
+
+Theorem asm_call_safe_exp:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_exp s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_exp_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_pop_stack] >>
+  metis_tac[asm_call_safe_charge_push]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
