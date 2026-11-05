@@ -17,6 +17,18 @@ Ancestors
 Libs
   monadsyntax
 
+(* A bytestring type takes memory. *)
+Theorem bytestring_tv_size_pos[local]:
+  !t tenv tv.
+    is_bytestring_type t /\ evaluate_type tenv t = SOME tv ==>
+    0 < type_memory_size tv
+Proof
+  Cases >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_bytestring_type_def]) >>
+  rw[vyperValueTheory.evaluate_type_def] >> simp[valueEncodingTheory.type_memory_size_def]
+QED
+
 (* The staged copy into a bytestring destination: a buffer of the source's
    own size, the copy of the source into it, and the store at the
    destination's type (compile_store_memory copies a bytestring the same
@@ -229,8 +241,12 @@ Proof
     metis_tac[bytestring_val_in_memory_transfer] >>
   `val_store_size tyv v = val_store_size etv v` by
     metis_tac[bytestring_val_store_size_eq] >>
+  `0 < type_memory_size etv` by metis_tac[bytestring_tv_size_pos] >>
   `w2n sw + val_store_size tyv v <= s.vs_alloca_next` by
-    gvs[expr_store_bound_def] >>
+    (`0 < val_store_size etv v` by simp[val_store_size_pos] >>
+     qpat_x_assum `expr_store_bound _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_store_bound_def]) >>
+     disch_then (qspecl_then [`etv`, `sw`] mp_tac) >> gvs[]) >>
   `sa.cs_next_var <= sb.cs_next_var` by metis_tac[cj 2 compile_expr_grows] >>
   `not_fresh_at sb p` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
