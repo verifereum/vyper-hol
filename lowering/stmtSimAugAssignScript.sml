@@ -249,7 +249,7 @@ QED
 (* The checked augmented operand satisfies the ordinary builtin gate too. *)
 Theorem augassign_builtin_operands:
   augassign_operand_ok ty bop e ==>
-  builtin_operands_ok ty (Bop bop) [Name ty id; e]
+  builtin_operands_ok ty (Bop bop) [lhs; e]
 Proof
   Cases_on `bop` >>
   simp[augassign_operand_ok_def, builtin_operands_ok_def,

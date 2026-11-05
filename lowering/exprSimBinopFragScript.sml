@@ -12,8 +12,9 @@
  *   binop_frag_pow        — checked Exp with actual literal/value provenance
  *   binop_frag_word_typed — non-Exp operators on typed word operands
  *
+ *   binop_frag_expmod     — pow_mod, vacuously: no ExpMod is well typed
+ *
  * Cheated, the operators those lemmas do not cover:
- *   binop_frag_expmod     — pow_mod (#572); checked ** is proved separately
  *   binop_frag_shift_572  — << of an integer narrower than 256 bits, and
  *                           shifts by a negative amount (#572)
  *   binop_frag_shr_narrow — >> of an integer narrower than 256 bits, which
@@ -241,7 +242,8 @@ Proof
 QED
 *)
 
-(* ExpMod remains separate: it falls through compile_binop to INVALID. *)
+(* ExpMod falls through compile_binop to INVALID, but the type system
+   rejects every ExpMod. *)
 Theorem binop_frag_expmod:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     bop = ExpMod /\ well_typed_binop ann bop t1 t2 /\
@@ -249,7 +251,7 @@ Theorem binop_frag_expmod:
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
     binop_frag ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
-  cheat
+  rpt strip_tac >> gvs[well_typed_binop_def]
 QED
 
 (* Value-level power interface: literal options describe the actual operands.

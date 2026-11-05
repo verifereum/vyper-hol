@@ -249,6 +249,24 @@ val () = app (fn (label,bad) => rejects label (fn () => ignore
    ("invented qualifier",program [variable (qualify "immutable" (name "uint256")) bin])];
 val () = rejects "loader/original mismatch" (fn () => ignore
   (sourceOrdinaryClaimsLib.pair_program loader (program []) annotated_program));
+(* reentrant() is erased like the other qualifiers. *)
+val reentrant_program = program
+  [variable (qualify "reentrant" (qualify "public" (name "uint256"))) JSON.NULL];
+val () = ignore (sourceOrdinaryClaimsLib.pair_program (loaded reentrant_program)
+  reentrant_program (program [put "is_reentrant" (JSON.BOOL true)
+    (put "is_public" (JSON.BOOL true) (variable (name "uint256") JSON.NULL))]));
+(* implements: pairs the original annotation with the annotated children. *)
+fun implements_source ann = ast "ImplementsDecl" [("node_id",JSON.INT 2),("annotation",ann)];
+fun implements_annotated children =
+  ast "ImplementsDecl" [("node_id",JSON.INT 2),("children",arr children)];
+fun pairs_implements ann children = sourceOrdinaryClaimsLib.pair_program
+  (loaded (program [implements_source ann])) (program [implements_source ann])
+  (program [implements_annotated children]);
+val () = ignore (pairs_implements (name "I") [name "I"]);
+val () = ignore (pairs_implements
+  (ast "Tuple" [("elements",arr [name "I",name "J"])]) [name "I",name "J"]);
+val () = rejects "implements: interface mismatch" (fn () => ignore
+  (pairs_implements (name "I") [name "J"]));
 (* Program zipper uses the same Decimal-only rule and restores the original
    before decoding its source projection, including nested executable nodes. *)
 val decimal_program = program [variable (qualify "constant" (name "decimal"))

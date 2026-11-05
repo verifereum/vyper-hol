@@ -61,8 +61,18 @@ fun nullable_field k key = List.exists (fn p => p = (k,key))
 (* Python serializes a prefixless relative ImportFrom as "", whereas the
    annotated Vyper AST uses null. Both denote the same REQUIRED empty prefix;
    do not generalize this equivalence to other source strings or absence. *)
+(* Annotated JSON stores implements: interfaces in children, since
+   ImplementsDecl pops its annotation; the Python AST capture keeps it. Pair
+   one child with the annotation, and several with its Tuple's elements. *)
 fun source_field k key json = if k = "ImportFrom" andalso key = "module" then
     (case get key json of JSON.NULL => JSON.STRING "" | value => value)
+  else if k = "ImplementsDecl" andalso key = "annotation" then
+    (case optional key raw json of SOME value => value | NONE =>
+      case get "children" json of
+        JSON.ARRAY [child] => child
+      | JSON.ARRAY children => JSON.OBJECT [("ast_type",JSON.STRING "Tuple"),
+          ("elements",JSON.ARRAY children)]
+      | _ => raise Fail "ordinary claims: ImplementsDecl children invariant")
   else if nullable_field k key then
     (case optional key raw json of NONE => JSON.NULL | SOME v => v)
   else get key json
@@ -70,7 +80,7 @@ fun qualifier json = if kind json <> "Call" then NONE else let
   val callee = get "func" json
   val name = if kind callee = "Name" then
     JSONDecode.decode (required "id" string) callee else ""
-in if List.exists (fn n => name = n) ["constant","immutable","public","transient"]
+in if List.exists (fn n => name = n) ["constant","immutable","public","transient","reentrant"]
   then case (get "args" json,get "keywords" json) of
       (JSON.ARRAY [inner],JSON.ARRAY []) => SOME (name,inner)
     | _ => NONE

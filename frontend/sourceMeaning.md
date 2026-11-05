@@ -198,5 +198,5 @@ transport, staged eager errors versus runtime short-circuiting, aggregates,
 defaults/constructors and imported dispatch. Their export audits reject open
 hypotheses, axioms and oracle tags other than `DISK_THM` bookkeeping. Such an
 audit is not a force-rebuild or certification of the backend dependency closure;
-test examples do not establish universal frontend completeness. See the
-location-sensitive document for the fixed body-inventory contract.
+test examples do not establish universal frontend completeness. The fixed
+body inventory is in `tests/sourceMeaningWitnessTestScript.sml`.
