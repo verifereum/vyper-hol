@@ -311,3 +311,26 @@ Proof
      simp[]) >>
   rpt strip_tac >> simp[valueEncodingTheory.val_in_memory_def]
 QED
+
+Theorem robust_pair_mcopy:
+  val_wf ht hv /\ val_footprint ht hv <= type_memory_size ht /\
+  val_wf tt tv /\ val_footprint tt tv <= n /\
+  (!m. mem_agree_outside dirty s.vs_memory m ==> val_in_memory ht hv b m) /\
+  (!m. mem_agree_outside dirty s.vs_memory m ==> val_in_memory tt tv a m) ==>
+  !m. mem_agree_outside
+    ((dirty DIFF {i | b+type_memory_size ht <= i /\ i < b+type_memory_size ht+n})
+      UNION {b+type_memory_size ht+i | i < n /\ a+i IN dirty})
+    (mcopy (b+type_memory_size ht) a n s).vs_memory m ==>
+    val_in_memory (TupleTV [ht;tt]) (ArrayV (TupleV [hv;tv])) b m
+Proof
+  rpt strip_tac >> irule robust_pair_copied_suffix >>
+  simp[] >>
+  goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)) >>
+  qexistsl_tac [`a`, `dirty`, `s.vs_memory`, `n`] >>
+  simp[mcopy_mem_bytes_at_same] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[] >>
+      decide_tac)
+  >- (rpt strip_tac >> irule mcopy_mem_bytes_at_disjoint >> decide_tac) >>
+  rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[] >> decide_tac
+QED
