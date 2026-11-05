@@ -3,7 +3,10 @@
    memory (S1's body_assign_toplevel_copy). *)
 Theory bodyMemAssignTopCopy
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemAssignTopCopyOutcome bodyMemAssignTopCopyFacts
+  supportedProgram supportedStmts supportedTypes bodySim exprSimDefs
+  vyperStorageLayoutSafety vyperTypeEnv exprSimHypsDefs
+  vyperLookupStorage bodyStorageMetadata supportedDecls
 
 Theorem body_assign_toplevel_copy_mem:
   !cx nsid e mut ty slot d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -28,5 +31,32 @@ Theorem body_assign_toplevel_copy_mem:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> Cases_on `nsid` >>
+  rename1 `supported_variable_decl tops (src,id)` >> strip_tac >>
+  `supported_expr tops e` by
+    gvs[supported_stmt_def, supported_assignment_def] >>
+  drule_at (Pos (el 2)) topcopy_target >>
+  disch_then drule >> simp[] >> disch_then drule >>
+  disch_then drule >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule topcopy_rhs_pre >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all topcopy_memory_size >> strip_tac >>
+  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
+  `storage_var_info cx NONE id = SOME (tr,off,tvt)` by
+    simp[storage_var_info_def] >>
+  drule_all topcopy_region >> strip_tac >>
+  `supported_storage_type tops (expr_type e)` by
+    (`supported_program tops` by fs[body_inv_def] >>
+     drule supported_variable_decl_mem >> strip_tac >>
+     drule_all supportedProgramTheory.supported_program_declaration >>
+     gvs[supported_declaration_header_def]) >>
+  `lowered_value_type cenv e = expr_type e` by
+    metis_tac[topcopy_rhs_lowered_type] >>
+  `~is_bytestring_type (expr_type e) /\ ~has_length_word (expr_type e)` by
+    metis_tac[topcopy_not_bytestring, topcopy_no_length_word] >>
+  `expr_sim_mem ctx func cenv cx (expr_type e) e es` by
+    metis_tac[topcopy_rhs_memory] >>
+  irule compile_assign_storage_copy_stmt_frag_mem >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> metis_tac[topcopy_rhs_value_typed, pairTheory.PAIR_EQ]
 QED
