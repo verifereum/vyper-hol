@@ -1039,6 +1039,100 @@ Proof
   EVAL_TAC
 QED
 
+val prefix_tops_tm = ``[FunctionDecl Deploy Payable F F "__init__"
+  [("x", BaseT (UintT 256))] [] NoneT []]``;
+val prefix_tx_tm = ``empty_call_txn with
+  <|function_name := "__init__"; args := [IntV (-1)];
+    block_number := 1; block_hashes := [0w]|>``;
+val prefix_args_tm = rhs (concl (computeLib.EVAL_CONV
+  ``enc (Tuple [Uint 256]) (ListV [NumV (Num (-1))])``));
+val prefix_es_tm = ``
+  let tx = ^prefix_tx_tm in
+  let rb = make_rollback initial_machine_state.accounts
+    initial_machine_state.tStorage tx.sender tx.target in
+  let ctxt = vfmContext$initial_context tx.target
+    (^prefix_deploy_bc_tm ++ ^prefix_args_tm) F (Code tx.target)
+    (make_sub_tx tx.sender tx.target tx.value 100000 []) in
+  <|contexts := [(ctxt,rb)]; rollback := rb; originalAccounts := rb.accounts;
+    msdomain := Collect empty_domain;
+    txParams := (<|origin := tx.origin; gasPrice := tx.gas_price;
+      baseFeePerGas := tx.base_fee; baseFeePerBlobGas := tx.blob_base_fee;
+      blockNumber := tx.block_number; blockTimeStamp := tx.time_stamp;
+      blockCoinBase := tx.coinbase; blockGasLimit := tx.gas_limit;
+      prevRandao := n2w tx.prev_randao; prevHashes := tx.block_hashes;
+      blobHashes := tx.blob_hashes; chainId := tx.chain_id; authRefund := 0|>)|>``;
+
+Theorem deploy_prefix_negative_args_encoded:
+  constructor_args_encode ^prefix_tops_tm ^prefix_tx_tm ^prefix_args_tm
+Proof
+  EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_tx_env:
+  tx_env_ok ^prefix_tx_tm
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_source_ready:
+  deploy_source_ok ^prefix_tops_tm initial_machine_state ^prefix_tx_tm /\
+  (!gobs. load_contract NONE gobs initial_machine_state ^prefix_tx_tm
+     [(NONE,^prefix_tops_tm)] [] = INR (Error (RuntimeError "call bind_arguments")))
+Proof
+  EVAL_TAC >>
+  simp[vyperStateTheory.find_var_decl_by_name_def,
+       supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+       vyperStateTheory.raise_def, COND_RAND, COND_RATOR]
+QED
+
+
+val prefix_ctxt_tm = ``vfmContext$initial_context (^prefix_tx_tm).target
+  (^prefix_deploy_bc_tm ++ ^prefix_args_tm) F (Code (^prefix_tx_tm).target)
+  (make_sub_tx (^prefix_tx_tm).sender (^prefix_tx_tm).target
+     (^prefix_tx_tm).value 100000 [])``;
+
+Theorem deploy_prefix_negative_context_projections:
+  (^prefix_ctxt_tm).pc = 0 /\ (^prefix_ctxt_tm).stack = [] /\
+  (^prefix_ctxt_tm).memory = empty_buffer /\
+  (^prefix_ctxt_tm).msgParams.parsed =
+    parse_code 0 FEMPTY (^prefix_deploy_bc_tm ++ ^prefix_args_tm)
+Proof
+  simp[vfmContextTheory.initial_context_simp,
+       vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem deploy_prefix_parse_empty_diagnostic[local]:
+  parse_code 0 FEMPTY [] = parse_code 0 FEMPTY []
+Proof
+  CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >>
+  goal_term (fn tm => (print (term_to_string tm ^ "\n"); all_tac)) >>
+  CONV_TAC (RHS_CONV computeLib.EVAL_CONV) >> REFL_TAC
+QED
+
+Theorem deploy_prefix_empty_buffer_diagnostic[local]:
+  empty_buffer = empty_buffer
+Proof
+  CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >>
+  goal_term (fn tm => (print (term_to_string tm ^ "\n"); all_tac)) >>
+  CONV_TAC (RHS_CONV computeLib.EVAL_CONV) >> REFL_TAC
+QED
+
+Theorem deploy_prefix_buffer_list_diagnostic[local]:
+  buffer_of_list [] = buffer_of_list []
+Proof
+  CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >>
+  goal_term (fn tm => (print (term_to_string tm ^ "\n"); all_tac)) >>
+  CONV_TAC (RHS_CONV computeLib.EVAL_CONV) >> REFL_TAC
+QED
+
+Theorem deploy_prefix_domain_diagnostic[local]:
+  Collect empty_domain = Collect empty_domain
+Proof
+  CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >>
+  goal_term (fn tm => (print (term_to_string tm ^ "\n"); all_tac)) >>
+  CONV_TAC (RHS_CONV computeLib.EVAL_CONV) >> REFL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
