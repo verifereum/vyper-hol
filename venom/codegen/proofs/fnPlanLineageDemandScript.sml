@@ -282,3 +282,19 @@ Proof
   rpt strip_tac >> irule post_parameter_demand >>
   simp[analyzed_hd_live_empty]
 QED
+
+Theorem projected_demand_ordinary_suffix:
+  !fn st bb i.
+    wf_function fn /\ def_dominates_uses fn /\ projected_demand_wf fn st /\
+    MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i <= LENGTH bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode <> PHI) (DROP i bb.bb_instructions) ==>
+    EVERY (demand_available fn bb i)
+      (df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn) bb.bb_label st) bb.bb_label i)
+Proof
+  rpt strip_tac >> irule liveness_block_ordinary_suffix_demand >> simp[] >>
+  conj_tac
+  >- (irule venomExecProofsTheory.MEM_lookup_block >>
+      gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
+  irule projected_demand_live_out >> simp[]
+QED

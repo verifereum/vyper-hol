@@ -322,3 +322,45 @@ Proof
   irule liveness_block_backward_demand >> simp[] >>
   qexistsl_tac [`cfg`, `st`] >> simp[]
 QED
+
+(* Once the PHI prefix is past, no raw-PHI exception is needed. *)
+Theorem liveness_block_ordinary_suffix_demand:
+  !fn bb cfg st i.
+    wf_function fn /\ def_dominates_uses fn /\ MEM bb fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    i <= LENGTH bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode <> PHI) (DROP i bb.bb_instructions) /\
+    EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+      (liveness_out fn.fn_blocks cfg bb.bb_label st) ==>
+    EVERY (demand_available fn bb i)
+      (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st) bb.bb_label i)
+Proof
+  rpt gen_tac >> measureInduct_on `LENGTH bb.bb_instructions - i` >> rpt strip_tac >>
+  `liveness_instrs fn.fn_blocks bb.bb_label = bb.bb_instructions` by
+    simp[liveness_instrs_def] >>
+  Cases_on `i = LENGTH bb.bb_instructions`
+  >- gvs[GSYM liveness_block_exit] >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  simp[EVERY_MEM] >> rpt strip_tac >> rename1 `MEM v (df_at _ _ _ i)` >>
+  `MEM v (liveness_transfer fn.fn_blocks (EL i bb.bb_instructions)
+     (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st)
+        bb.bb_label (SUC i)))` by metis_tac[liveness_block_transfer] >>
+  `(EL i bb.bb_instructions).inst_opcode <> PHI /\
+    EVERY (\inst. inst.inst_opcode <> PHI) (DROP (SUC i) bb.bb_instructions)` by
+    (Cases_on `DROP i bb.bb_instructions` >- gvs[] >>
+     drule DROP_CONS_EL >> strip_tac >> gvs[]) >>
+  Cases_on `MEM v (inst_uses (EL i bb.bb_instructions))`
+  >- (`MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+      qpat_x_assum `def_dominates_uses fn` mp_tac >>
+      simp[def_dominates_uses_def] >>
+      disch_then (drule_then drule) >> simp[] >> strip_tac >>
+      irule demand_available_before_use >> simp[] >>
+      first_x_assum irule >> gvs[inst_uses_def] >>
+      metis_tac[MEM_operand_vars_eq_Var]) >>
+  gvs[liveness_transfer_def, live_update_def, MEM_FILTER, MEM_APPEND, inst_defs_def] >>
+  `EVERY (demand_available fn bb (SUC i))
+     (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st) bb.bb_label (SUC i))` by
+    (first_x_assum irule >> simp[] >> decide_tac) >>
+  `demand_available fn bb (SUC i) v` by metis_tac[EVERY_MEM] >>
+  metis_tac[demand_available_step_back]
+QED
