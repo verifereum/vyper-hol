@@ -18,8 +18,8 @@ Ancestors
   exprSimFieldLayout
   exprSimSource
   targetPlaceSimDefs
-  stmtSimProps gasSummary gasSummaryCompose gasContext gasExemptCert
-  exprSimProps
+  stmtSimProps gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
+  exprSimProps exprBopSimProps
   exprSimHypsDefs
   exprSimDefs
   loweringPosts
@@ -35,6 +35,122 @@ Ancestors
   venomState venomInst
 Libs
   pairLib
+
+(* Index evaluation need only preserve pointer values that already exist. *)
+Theorem target_place_ptr_values_frame:
+  place_ptr_rel cenv cx s pv w loc vt /\ local_ptrs_reserved cenv sa /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
+         lookup_var x t = SOME v) ==>
+  place_ptr_rel cenv cx t pv w loc vt
+Proof
+  Cases_on `pv` >> simp[place_ptr_rel_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> simp[place_ptr_rel_def] >>
+  rpt strip_tac >> gvs[] >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  metis_tac[]
+QED
+
+Theorem target_post_index_frame:
+  target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+  expr_post ctx func cenv cx e es1 sm sn t es2 v ix u /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  place_readable cx es2 pv /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
+  target_post ctx func cenv cx es sa sn s0 es2 pv vt rb u
+Proof
+  simp[target_post_def, expr_post_def] >> strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    metis_tac[not_fresh_at_mono] >>
+  `!x. not_fresh_at sm x ==> not_fresh_at sn x` by
+    metis_tac[not_fresh_at_mono] >>
+  simp[] >> rpt conj_tac
+  >- (qexists `w` >> conj_tac
+      >- (irule eval_operand_frame >> simp[] >> qexistsl [`sm`, `t`] >> simp[]) >>
+      irule target_place_ptr_values_frame >> qexistsl [`t`, `sm`] >> simp[])
+  >- (rpt strip_tac >>
+      `local_ptrs_rel func cenv es.scopes s0` by
+        fs[stmt_state_rel_def, state_rel_def] >>
+      `!n b sz'. local_region cenv es1.scopes t n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off` by
+        (rpt strip_tac >>
+         qpat_x_assum `!n b sz'. local_region cenv es.scopes s0 _ _ _ ==> _` irule >>
+         qexists `n` >> irule local_region_frame >>
+         conj_tac >- (qexists `func` >> simp[]) >>
+         qexistsl [`sa`, `es1.scopes`, `t`] >> simp[]) >>
+      `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      `aid < sm.cs_next_id` by decide_tac >> metis_tac[]) >>
+  irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >> simp[]
+QED
+
+Theorem target_subscript_index_sim:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  eval_base_place cx bt es = (INL pv,es1) /\
+  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e) ==>
+  expr_sim ctx func cenv cx ty e es1 /\
+  expr_vv_sim ctx func cenv cx ty e es1
+Proof
+  strip_tac >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `expr_sim_inv cenv cx env es1` by metis_tac[eval_base_place_sim_inv] >>
+  `expr_body_pre cenv cx env e es1` by
+    fs[target_pre_def, target_indices_pre_def] >>
+  `expr_sim_case nocalls ctx func cenv cx e /\
+   expr_vv_case nocalls ctx func cenv cx e` by metis_tac[] >>
+  gvs[expr_sim_case_def, expr_vv_case_def, int_calls_expr_def] >>
+  metis_tac[]
+QED
+
+(* The counted index keeps the original source computation and error post.
+   Readability is a source preservation premise, supplied separately by the
+   local no-Pop or storage pure-index boundary. *)
+Theorem target_index_outcome:
+  target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+  expr_sim ctx func cenv cx (expr_type e) e es1 /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es1 /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  (!gs v ee. bind (eval_expr cx e) (read_result cx)
+       (es1 with gas_obs := gs) = (INL v,ee) ==> place_readable cx ee pv) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (es1,t)
+    (\res ee u. ?v. res = INL v /\
+       target_post ctx func cenv cx es sa sn s0 ee pv vt rb u /\
+       expr_post ctx func cenv cx e es1 sm sn t ee v ix u /\
+       u.vs_current_bb = sn.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sn.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_def] >>
+  disch_then (qspecl_then [`sm`, `sn`, `ix`, `t`] mp_tac) >>
+  impl_tac >- fs[target_post_def] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (qexists `marks` >> disj1_tac >> gvs[] >>
+      qexistsl [`INL v`, `es_end`, `OK t'`] >> simp[] >>
+      `place_readable cx (es_end with gas_obs := []) pv` by
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+         simp[gas_marked_exec_def] >> strip_tac >>
+         first_x_assum (qspec_then `[]` mp_tac) >>
+         metis_tac[]) >>
+      drule_all target_post_index_frame >> simp[]) 
+  >- (qexists `marks` >> disj1_tac >>
+      qexistsl [`res`, `es_end`, `r`] >> simp[]) >>
+  qexists `marks` >> disj2_tac >> metis_tac[]
+QED
 
 Theorem target_subscript_base_exempt_cert:
   gas_exempt_cert memory tops (ctx, func)
