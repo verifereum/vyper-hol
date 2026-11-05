@@ -786,5 +786,5 @@ Proof
   TRY (qexists_tac `sig` >>
        qpat_x_assum `!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> _` drule >>
        simp[] >> NO_TAC) >>
-  metis_tac[]
+  metis_tac[target_mutable_static_maps_transfer]
 QED

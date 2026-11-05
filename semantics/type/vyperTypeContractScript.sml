@@ -920,7 +920,14 @@ Definition check_toplevel_body_def:
     | FunctionDecl vis mut nr _ fn args dflts ret body =>
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
-        check_function_body layouts addr mods art src mut nr args dflts ret body
+        check_function_body layouts addr mods art src mut nr args dflts ret body /\
+        (* The pin permits immutable projections only in the constructor, not
+           in external/internal runtime functions, even during deploy checking.
+           Retain the ordinary body judgment for existing transport clients. *)
+        (vis <> Deploy ==>
+         check_function_body layouts addr mods
+           (art with cta_bare_global_assignable := FEMPTY)
+           src mut nr args dflts ret body)
     | _ => T
 End
 
