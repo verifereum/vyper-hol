@@ -1,6 +1,6 @@
 Theory concretizePtrOpaqueRetpc
 Ancestors
-  concretizePtrSharedFields concretizePtrValueSelection
+  concretizePtrSharedFields concretizePtrValueSelection concretizePtrValueTransport
   concretizeStepRetpc concretizeStepShape unitShapeDefs
   venomExecSemantics venomState finite_map list words
 
@@ -103,4 +103,148 @@ Ancestors
    non-opaque operand exclusion and ordinary return-value transport.
    No proof of opaque/pointer-tag disjointness is assumed here. No final
    frozen theorem or full paired-certificate counterexample is claimed.
+*)
+
+Definition ptr_core_shared_def:
+  ptr_core_shared s t <=>
+    ptr_shared_fields (s with vs_return_pc_token := 0w)
+      (t with vs_return_pc_token := 0w)
+End
+
+Definition ptr_opaque_env_def:
+  ptr_opaque_env fn s <=>
+    !x v. retpc_var fn x /\ FLOOKUP s.vs_vars x = SOME v ==>
+      v = s.vs_return_pc_token
+End
+
+Theorem ptr_core_shared_setup:
+  ptr_core_shared s t /\
+  (NULL f.fn_blocks <=> NULL g.fn_blocks) /\
+  setup_callee g argst t = SOME ct ==>
+  ?cs. setup_callee f args s = SOME cs /\ ptr_core_shared cs ct
+Proof
+  simp[setup_callee_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[ptr_core_shared_def, ptr_shared_fields_def]
+QED
+
+Theorem ptr_opaque_env_setup:
+  setup_callee fn args s = SOME cs ==> ptr_opaque_env fn cs
+Proof
+  simp[setup_callee_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  simp[ptr_opaque_env_def]
+QED
+
+Theorem ptr_core_shared_merge:
+  ptr_core_shared s t /\ ptr_core_shared u v ==>
+  ptr_core_shared (merge_callee_state s u) (merge_callee_state t v)
+Proof
+  simp[ptr_core_shared_def, ptr_shared_fields_def, merge_callee_state_def]
+QED
+
+Theorem ptr_opaque_env_merge:
+  ptr_opaque_env fn (merge_callee_state s u) <=> ptr_opaque_env fn s
+Proof
+  simp[ptr_opaque_env_def, merge_callee_state_frame]
+QED
+
+Theorem ptr_core_shared_adopt_none:
+  ptr_core_shared s t /\ r.iret_adopt_fmp = NONE /\ rt.iret_adopt_fmp = NONE ==>
+  ptr_core_shared (adopt_return_fmp r s) (adopt_return_fmp rt t)
+Proof
+  simp[adopt_return_fmp_def]
+QED
+
+Theorem ptr_opaque_env_adopt:
+  ptr_opaque_env fn (adopt_return_fmp r s) <=> ptr_opaque_env fn s
+Proof
+  Cases_on `r.iret_adopt_fmp` >>
+  simp[ptr_opaque_env_def, adopt_return_fmp_def]
+QED
+
+Theorem ptr_opaque_final_operand:
+  ptr_opaque_env fn s /\ retpc_var fn x /\
+  FLOOKUP s.vs_vars x = SOME v ==>
+  eval_operand (Var x) s = SOME s.vs_return_pc_token
+Proof
+  simp[ptr_opaque_env_def, eval_operand_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem ptr_opaque_retpc_step:
+  step_inst_base (mk_inst id RETPC_PARAM [Lit idx] [out]) s =
+    OK (update_var out s.vs_return_pc_token s)
+Proof
+  simp[step_inst_base_def, venomInstTheory.mk_inst_def]
+QED
+
+Theorem ptr_opaque_env_retpc_update:
+  ptr_opaque_env fn s ==>
+  ptr_opaque_env fn (update_var out s.vs_return_pc_token s)
+Proof
+  simp[ptr_opaque_env_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `x = out` >> gvs[] >> metis_tac[]
+QED
+
+(* Each side writes its OWN token: no equal-token premise. *)
+Theorem ptr_opaque_retpc_pair:
+  ptr_core_shared s t /\ ptr_opaque_env f s /\ ptr_opaque_env g t ==>
+  step_inst_base (mk_inst id RETPC_PARAM [Lit idx] [out]) s =
+    OK (update_var out s.vs_return_pc_token s) /\
+  step_inst_base (mk_inst id RETPC_PARAM [Lit idx] [out]) t =
+    OK (update_var out t.vs_return_pc_token t) /\
+  ptr_core_shared (update_var out s.vs_return_pc_token s)
+    (update_var out t.vs_return_pc_token t) /\
+  ptr_opaque_env f (update_var out s.vs_return_pc_token s) /\
+  ptr_opaque_env g (update_var out t.vs_return_pc_token t)
+Proof
+  simp[ptr_opaque_retpc_step, ptr_opaque_env_retpc_update,
+       ptr_core_shared_def, ptr_shared_fields_def, update_var_def]
+QED
+
+Theorem ptr_opaque_retpc_not_unrestricted:
+  s.vs_return_pc_token <> t.vs_return_pc_token ==>
+  ~ptr_vars_transport births positions FEMPTY (tn with t_var := FEMPTY)
+    (update_var out s.vs_return_pc_token s)
+    (update_var out t.vs_return_pc_token t)
+Proof
+  strip_tac >> simp[ptr_vars_transport_def] >> qexists_tac `out` >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE, ptr_lookup_transport_def,
+       ptrDisciplineTheory.op_taint_def, ptr_value_transport_scalar_empty]
+QED
+
+Theorem ptr_opaque_nested_restore_probe:
+  ~NULL f.fn_blocks ==>
+  ?cs ct ds dt.
+    setup_callee f [3w] (s with vs_return_pc_token := 1w) = SOME cs /\
+    setup_callee f [4w] (s with vs_return_pc_token := 2w) = SOME ct /\
+    setup_callee f [5w] cs = SOME ds /\
+    setup_callee f [6w] ct = SOME dt /\
+    (merge_callee_state cs ds).vs_return_pc_token = 3w /\
+    (merge_callee_state ct dt).vs_return_pc_token = 4w /\
+    (merge_callee_state (s with vs_return_pc_token := 1w)
+      (merge_callee_state cs ds)).vs_return_pc_token = 1w /\
+    (merge_callee_state (s with vs_return_pc_token := 2w)
+      (merge_callee_state ct dt)).vs_return_pc_token = 2w
+Proof
+  simp[setup_callee_def, merge_callee_state_frame]
+QED
+
+(* Proposed mixed relation for parent review (NOT installed):
+
+   classification premise:
+     !x. retpc_var f x <=> retpc_var g x
+
+   mixed_vars births positions TG tn f g s t <=>
+     ptr_opaque_env f s /\ ptr_opaque_env g t /\
+     (!x. retpc_var f x ==>
+          (FLOOKUP s.vs_vars x = NONE <=> FLOOKUP t.vs_vars x = NONE)) /\
+     (!x. ~retpc_var f x ==>
+          ptr_lookup_transport births positions (FLOOKUP TG x)
+            (op_taint tn (Var x)) (lookup_var x s) (lookup_var x t))
+
+   Own-token interpretation alone does not synchronize definedness.
+   Need both clauses above, since successful eval on the target must
+   supply a successful source eval. For ordinary operands this comes
+   from ptr_lookup_transport; opaque operands require the extra NONE iff.
+   This is a variable-class relation, never a relation renaming all words.
+   Parent migration list and unresolved obligations are in the audit above.
 *)
