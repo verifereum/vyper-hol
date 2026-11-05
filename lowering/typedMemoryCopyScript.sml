@@ -765,7 +765,7 @@ Proof
   strip_tac >> drule_all typed_copy_word_raw_frag >>
   disch_then (qspec_then `ctx` (mp_then Any irule frag_exec_conseq)) >> simp[] >>
   conj_tac
-  >- (drule_all entryDecodePropsTheory.val_in_memory_word >> strip_tac >>
+  >- (drule_all exprSimTheory.val_in_memory_word >> strip_tac >>
       simp[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload]) >>
   simp[typed_copy_word_state_frame]
 QED
@@ -3447,7 +3447,7 @@ Proof
          gvs[is_word_type_def, evaluate_type_def, type_memory_size_def,
              AllCaseEqs()]) >>
       `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
-        metis_tac[entryDecodePropsTheory.val_in_memory_word] >>
+        metis_tac[exprSimTheory.val_in_memory_word] >>
       drule_all typed_copy_word_frag >> simp[]) >>
   Cases_on `is_bytestring_type dty`
   >- (drule_all typed_copy_bytestring_source >> strip_tac >>
@@ -3580,6 +3580,11 @@ Proof
   qexists_tac `t` >> gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
   metis_tac[]
 QED
+
+(* Keep typed-copy correctness usable by expression-case proofs. *)
+val _ = if List.exists (fn name => name = "exprSimIfExp") (ancestry "-")
+        then raise Fail "Typed-copy infrastructure depends on IfExp"
+        else ();
 
 (* Every exported copy boundary must be closed, including the recursive
    execution theorem: an old public admission must never be a dependency. *)
