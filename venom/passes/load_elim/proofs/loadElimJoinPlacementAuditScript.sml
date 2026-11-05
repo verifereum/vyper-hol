@@ -2,7 +2,7 @@ Theory loadElimJoinPlacementAudit
 Ancestors
   loadElimJoinPlacement loadElimOccurrenceCoverage loadElimSolverProvenance
   loadElimSingletonCurrentness loadElimPhiCapture cfgAnalysisProps
-  finite_map
+  loadElimPhiProbes loadElimJoinProps loadElimDefs cfgDefs dfAnalyzeDefs finite_map
 
 (* A finite path need not contain the backward walk's result. This is a
    graph-only interface test, NOT a counterexample to pass correctness. *)
@@ -34,7 +34,7 @@ QED
    le_active_terminator_edge. cfg_analyze_preserves_bb_succs and
    cfg_edge_symmetry_uncond convert that edge into predecessor membership.
 
-   Candidate graph bridge (NOT YET PROVED):
+   Graph bridge (subsequently proved as le_fn_path_pred_path):
      wf_function fn /\ is_fn_path fn xs ==>
        le_pred_path (cfg_analyze fn) xs.
    This uses fn_cfg_edge_def, member-block successor correctness, and
@@ -106,4 +106,120 @@ QED
    Finally captured-output persistence and key-read persistence to the
    consumer are separate unresolved obligations; original PhiOcc p is
    not the transformed state to which le_compute_phi_action_capture applies.
+*)
+
+(* Isolated update tests: arbitrary old boundaries are intentionally NOT
+   claimed reachable from init_df_state. They test the algebraic interface. *)
+Theorem le_audit_entry_injection:
+  df_joined_val Forward NONE load_join load_edge_transfer ctx
+    (SOME ("entry", SOME FEMPTY)) le_entry_escape_cfg st "entry" =
+      SOME FEMPTY
+Proof
+  simp[df_joined_val_def] >>
+  Cases_on `df_boundary NONE st "outside"` >>
+  simp[load_edge_transfer_def, le_entry_escape_cfg_def,
+       cfg_preds_of_def, fmap_lookup_list_def, load_join_def,
+       load_join_raw_def, FUN_FMAP_EMPTY, FLOOKUP_UPDATE]
+QED
+
+Theorem le_audit_old_boundary_accumulation:
+  df_boundary NONE
+    (df_process_block Forward NONE load_join load_transfer load_edge_transfer
+      ctx NONE le_entry_escape_cfg [] "entry"
+      <| ds_inst := FEMPTY; ds_boundary := FEMPTY |++
+          [("outside", diamond_values [Var "y"]);
+           ("entry", diamond_values [Var "x"])] |>) "entry" =
+    diamond_values [Var "x"; Var "y"]
+Proof
+  EVAL_TAC >> simp[fmap_EXT, FAPPLY_FUPDATE_THM, FUN_FMAP_DEF] >>
+  EVAL_TAC >> simp[fmap_EXT, FAPPLY_FUPDATE_THM, FUN_FMAP_DEF]
+QED
+
+Theorem le_audit_entry_resets_old_boundary:
+  df_boundary NONE
+    (df_process_block Forward NONE load_join load_transfer load_edge_transfer
+      ctx (SOME ("entry", SOME FEMPTY)) le_entry_escape_cfg [] "entry"
+      <| ds_inst := FEMPTY; ds_boundary := FEMPTY |++
+          [("outside", diamond_values [Var "y"]);
+           ("entry", diamond_values [Var "x"])] |>) "entry" = SOME FEMPTY
+Proof
+  EVAL_TAC >> simp[FUN_FMAP_EMPTY] >> EVAL_TAC
+QED
+
+(* C1.P.4.2.3.3: accumulated-boundary diagnostic.
+
+   Exact implementation equations (dfAnalyzeDefs):
+   init_df_state initializes every label boundary to NONE; df_analyze then
+   updates only entry to SOME FEMPTY. df_process_block computes joined via
+   predecessor boundaries (load_edge_transfer is identity), folds instructions,
+   and replaces boundary b by load_join (old boundary b) (fresh exit b).
+   An equal result leaves the state unchanged. No instruction values are
+   populated until AFTER worklist convergence; df_populate_inst does not
+   change boundaries. load_analyze supplies precisely this Forward solver.
+   le_solver_entry_init / le_solver_iterate_supported validate the actual
+   initial state and reachable solver states for finite-support invariants;
+   those invariants do not express the operand-origin relation needed here.
+
+   Checked tests, reusing existing tests rather than duplicating them:
+   * entry_backedge_analysis_probe: actual entry with a backedge and SLOAD
+     has empty index-zero input and no generated PHI actions. Its singleton
+     load output does not turn the entry input into a multivalue fact.
+   * diamond_step2_probe through diamond_step8_probe: actual worklist runs
+     the join and its unique-predecessor successor with [y] first, then
+     revisits the join after the other arm, obtaining [y;x]. The old y
+     survives accumulation; the successor is subsequently updated to [y;x].
+     diamond_load_input_probe / diamond_actions_exact_probe certify the
+     resulting multivalue consumer and the chosen join.
+   * loop_step2_probe / loop_header_stable_probe: the loop header's load
+     always overwrites with [x], although its input later joins [a] and [x].
+     Thus accumulated header exits remain [x], not the header input union.
+     loop_iteration_probe and loop_analysis_probe certify actual convergence.
+   * le_audit_old_boundary_accumulation above: an ARBITRARY old [x] and
+     fresh unique-predecessor exit [y] yield [x;y]. This is deliberately not
+     a reachable-state claim. It refutes the unconditional local rule
+     'multivalue boundary implies multivalue fresh exit'. Entry injection
+     and resetting the old boundary are tested separately above.
+
+   Candidate induction interface (PROPOSAL, NOT A PROVED INVARIANT):
+   For each fixed key, classify a whole static block fold, for ALL inputs,
+   as either (1) always overwriting with the SAME singleton [op], (2) always
+   deleting the key, or (3) preserving exactly its input lookup. This is
+   stronger than the existing per-execution retain/delete/generate disjunction:
+   the classification must be independent of solver state. All transfer
+   branches in load_transfer are syntactic, so the last overwrite/deletion
+   determines the class. NONE input must remain a separate case, because
+   unwrap NONE is empty, and even identity instructions wrap the result.
+
+   Needed two-time solver fact: if a later boundary has a key, each earlier
+   SOME boundary has that key, and every earlier operand belongs to the
+   later list. Old NONE contributes no operands; after a key disappears
+   from SOME it cannot return, because load_join intersects key domains.
+   For a preserving single-predecessor block b with predecessor p, collect
+   the operands contributed at every processing of b. Whenever the CURRENT
+   boundary p contains the key, each such contribution is contained in it,
+   using the two-time fact. Initially b is NONE (or empty at entry).
+   At the final fixpoint, a retained key at b forces the fresh exit and p
+   to contain the key (and p <> NONE on reached nonempty blocks). Hence
+   set(boundary b[key]) SUBSET set(boundary p[key]). This is the REVERSE
+   inclusion missing from the existing absorption interfaces. A constant
+   singleton block instead has only that singleton throughout all updates.
+
+   Proposed placement use: trace two DISTINCT operands back along the
+   unique-predecessor chain. Constant/deleting blocks cannot carry both;
+   preserving blocks pass both backwards by the reverse inclusion above.
+   Entry input is always empty, even with a backedge; a constant entry
+   exit is at most singleton. Therefore the backwards chain cannot escape
+   through entry while carrying both operands. Existing finite-route
+   placement then puts find_join_block on the reached route. This argument
+   must use distinct operands, NOT merely list length > 1 unless the
+   solver's no-duplicate invariant has been established.
+
+   Missing certification: the static uniform-fold classification and the
+   two-time/collected-contributions relation have NOT been proved. The
+   existing le_solver_inv support/rank invariant does not imply either.
+   In particular absorption alone cannot establish the reverse inclusion,
+   as the arbitrary-old-boundary computation demonstrates. A strategist
+   must authorize a suitable reachable-iteration interface before semantic
+   integration. None of these tests is a full-premise counterexample to
+   the frozen correctness theorem. No second runtime history is proposed.
 *)
