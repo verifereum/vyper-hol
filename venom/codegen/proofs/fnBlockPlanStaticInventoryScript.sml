@@ -582,6 +582,79 @@ Proof
   metis_tac[ALL_DISTINCT_EL_IMP, MEM_EL]
 QED
 
+
+Theorem inventory_phi_transition[local]:
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ ALL_DISTINCT ps.ps_stack /\ ~MEM (Var out) ps.ps_stack ==>
+  ALL_DISTINCT (SND (generate_phi_plan inst nl F ps)).ps_stack /\
+  (SND (generate_phi_plan inst nl F ps)).ps_spilled = ps.ps_spilled /\
+  (!x. MEM x (SND (generate_phi_plan inst nl F ps)).ps_stack <=>
+       (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (stack_poke d (Var out) ps.ps_stack)` by
+    (irule inventory_poke_distinct >> simp[]) >>
+  drule_all inventory_poke_mem >> disch_then (qspec_then `Var out` assume_tac) >>
+  simp[generate_phi_plan_def, LET_THM, stackPlanTypesTheory.operand_to_string_def] >>
+  Cases_on `MEM out nl` >> simp[]
+  >- metis_tac[] >>
+  qmatch_goalsub_abbrev_tac `popmany_plan [Var out] poked` >>
+  `ALL_DISTINCT poked.ps_stack` by simp[Abbr `poked`] >>
+  drule inventory_popmany >> disch_then (qspec_then `[Var out]` assume_tac) >>
+  mp_tac (Q.SPECL [`[Var out]`, `poked`] rf_popmany_spilled) >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  gvs[Abbr `poked`] >> metis_tac[]
+QED
+Theorem inventory_phi_mem:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ ALL_DISTINCT ps.ps_stack /\ ~MEM (Var out) ps.ps_stack ==>
+  !x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl)
+Proof
+  strip_tac >> drule_all inventory_phi_transition >> gvs[]
+QED
+
+Theorem inventory_phi_spilled:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ ALL_DISTINCT ps.ps_stack /\ ~MEM (Var out) ps.ps_stack ==>
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> drule_all inventory_phi_transition >> gvs[]
+QED
+
+Theorem inventory_phi_distinct:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ ALL_DISTINCT ps.ps_stack /\ ~MEM (Var out) ps.ps_stack ==>
+  ALL_DISTINCT qs.ps_stack
+Proof
+  strip_tac >> drule_all inventory_phi_transition >> gvs[]
+QED
+
+Theorem inventory_phi_disjoint:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ ALL_DISTINCT ps.ps_stack /\ ~MEM (Var out) ps.ps_stack /\
+  Var out NOTIN FDOM ps.ps_spilled /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  strip_tac >> drule_all inventory_phi_transition >>
+  gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[]
+QED
+
 (* Bounded contract checks: PHIs replace their unique incoming source,
    and discard a dead output on a non-halting path. *)
 Theorem regional_phi_live_probe:
