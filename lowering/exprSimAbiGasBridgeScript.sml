@@ -1210,6 +1210,108 @@ Definition frag_ops_free_def:
                i.inst_opcode <> RETURN) (frag_code sa sb)
 End
 
+(* Checked diagnostic for the predecessor-label transport boundary. *)
+Definition relabel_probe_bad_def:
+  relabel_probe_bad = mk_inst 0 ADD [] []
+End
+
+Definition relabel_probe_jump_def:
+  relabel_probe_jump = mk_inst 1 JMP [Label "A"] []
+End
+
+Definition relabel_probe_block_def:
+  relabel_probe_block = <|bb_label := "A";
+    bb_instructions := [relabel_probe_bad; relabel_probe_jump]|>
+End
+
+Definition relabel_probe_sa_def:
+  relabel_probe_sa = (ARB:compile_state) with
+    <|cs_blocks := []; cs_current_bb := "A";
+      cs_current_insts := [relabel_probe_bad]|>
+End
+
+Definition relabel_probe_sb_def:
+  relabel_probe_sb = (ARB:compile_state) with
+    <|cs_blocks := [relabel_probe_block]; cs_current_bb := "A";
+      cs_current_insts := []|>
+End
+
+Definition relabel_probe_fn_def:
+  relabel_probe_fn = (ARB:ir_function) with
+    fn_blocks := [relabel_probe_block]
+End
+
+Definition relabel_probe_s_def:
+  relabel_probe_s = (ARB:venom_state) with
+    <|vs_halted := F; vs_current_bb := "A";
+      vs_inst_idx := 1; vs_prev_bb := SOME "A"|>
+End
+
+Theorem relabel_probe_structure:
+  relabel_probe_sa.cs_blocks <> relabel_probe_sb.cs_blocks /\
+  cs_extends relabel_probe_sa relabel_probe_sb /\
+  frag_code relabel_probe_sa relabel_probe_sb = [relabel_probe_jump] /\
+  frag_ops_free relabel_probe_sa relabel_probe_sb /\
+  ~MEM relabel_probe_sb.cs_current_bb
+    (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks relabel_probe_sa relabel_probe_sb))) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code relabel_probe_sa relabel_probe_sb)) /\
+  fn_has_code relabel_probe_sa relabel_probe_sb relabel_probe_fn /\
+  (!bb. lookup_block relabel_probe_sb.cs_current_bb relabel_probe_fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0)
+Proof
+  simp[relabel_probe_sa_def, relabel_probe_sb_def, relabel_probe_fn_def,
+    relabel_probe_block_def, relabel_probe_bad_def, relabel_probe_jump_def,
+    cs_extends_def, frag_code_def, frag_ops_free_def, emitted_blocks_def,
+    fn_has_code_def, lookup_block_def, FIND_thm, mk_inst_def,
+    phi_prefix_length_def]
+QED
+
+Theorem relabel_probe_bad_step:
+  !fuel ctx id s.
+    step_inst fuel ctx (mk_inst id ADD [] []) s = Error "pure2 requires 2 operands"
+Proof
+  rpt gen_tac >> EVAL_TAC
+QED
+
+Theorem relabel_probe_swap:
+  !L ids.
+    (start_relabel L ids relabel_probe_sa).cs_current_bb = L /\
+    (start_relabel L ids relabel_probe_sa).cs_current_insts =
+      MAP (\id. mk_inst id NOP [] []) ids /\
+    (start_swap relabel_probe_sa L ids relabel_probe_sb).cs_current_bb = "A" /\
+    (start_swap relabel_probe_sa L ids relabel_probe_sb).cs_current_insts = [] /\
+    emitted_blocks (start_relabel L ids relabel_probe_sa)
+      (start_swap relabel_probe_sa L ids relabel_probe_sb) =
+      [<|bb_label := L; bb_instructions :=
+        MAP (\id. mk_inst id NOP [] []) ids ++ [relabel_probe_jump]|>]
+Proof
+  simp[start_relabel_def, start_swap_def, relabel_probe_sa_def,
+    relabel_probe_sb_def, relabel_probe_block_def, emitted_blocks_def]
+QED
+
+Theorem relabel_probe_bad_block:
+  !fuel ctx s rest.
+    s.vs_inst_idx = 0 ==>
+    exec_block fuel ctx
+      <|bb_label := "A"; bb_instructions := relabel_probe_bad :: rest|> s =
+      Error "pure2 requires 2 operands"
+Proof
+  rpt strip_tac >> once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, relabel_probe_bad_def, relabel_probe_bad_step]
+QED
+
+Theorem relabel_probe_start:
+  ~relabel_probe_s.vs_halted /\
+  relabel_probe_s.vs_current_bb = relabel_probe_sa.cs_current_bb /\
+  relabel_probe_s.vs_inst_idx = LENGTH relabel_probe_sa.cs_current_insts /\
+  relabel_probe_s.vs_prev_bb = SOME "A" /\
+  (!t rd. t.vs_prev_bb <> SOME "A" ==>
+      (t with vs_returndata := rd).vs_prev_bb <> SOME "A") /\
+  ("B" <> "A")
+Proof
+  simp[relabel_probe_s_def, relabel_probe_sa_def]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
