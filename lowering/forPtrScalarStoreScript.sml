@@ -71,3 +71,32 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+
+Theorem scalar_mstore_binding_endpoint:
+  lookup_var dst s = SOME a /\
+  eval_operand value s = SOME (val_to_w256 v) /\
+  op_taint tn value = {} /\ ptr_covers G tn dst s 32 /\
+  ((?x. v = BoolV x) \/ (?x. v = IntV x) \/
+   (?x. v = FlagV x) \/ (?x. v = DecimalV x)) ==>
+  ptr_covers G
+    (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
+      (mstore (w2n a) (val_to_w256 v) s) tn) dst
+    (mstore (w2n a) (val_to_w256 v) s) 32 /\
+  !mem. mem_agree_outside
+    (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
+      (mstore (w2n a) (val_to_w256 v) s) tn).t_mem
+    (mstore (w2n a) (val_to_w256 v) s).vs_memory mem ==>
+    val_in_memory tv v (w2n a) mem
+Proof
+  strip_tac >>
+  (conj_tac
+   >- (gvs[ptr_covers_def, op_taint_def] >>
+       simp[mstore_def, step_taint_def, set_var_taint_def, mk_inst_def,
+            finite_mapTheory.DRESTRICT_UNIV]) >>
+   rpt strip_tac >> irule scalar_mstore_robust >>
+   conj_tac >- simp[] >>
+   goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)) >>
+   gen_tac >> strip_tac >> irule mstore_word_clean >>
+   goal_assum (drule_at (Pat `op_taint _ _ = {}`)) >>
+   simp[eval_operand_def] >> metis_tac[])
+QED
