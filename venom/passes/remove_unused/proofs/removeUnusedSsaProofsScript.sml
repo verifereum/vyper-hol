@@ -251,7 +251,7 @@ Proof
   simp[listTheory.APPEND_eq_NIL]
 QED
 
-Theorem fn_reachable_in_cfg_dfs_pre[local]:
+Theorem fn_reachable_in_cfg_dfs_pre:
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     MEM lbl (cfg_analyze fn).cfg_dfs_pre
 Proof

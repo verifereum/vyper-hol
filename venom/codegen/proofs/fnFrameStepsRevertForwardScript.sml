@@ -2007,3 +2007,66 @@ Proof
   `def_available_at fn bb (SOME inst) x` by metis_tac[] >>
   gvs[def_available_at_def, fn_dominates_def]
 QED
+
+Theorem rf_live_use_ready_liveness:
+  codegen_ready_fn fn /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r inst. k <= r /\ r <= j /\ get_instruction bb r = SOME inst ==>
+     inst.inst_opcode <> PHI) /\
+  rf_live_use bb k j (Var x) ==>
+  MEM x (live_vars_at (liveness_analyze fn) bb.bb_label k)
+Proof
+  strip_tac >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  `MEM bb fn.fn_blocks` by
+    metis_tac[lookup_block_MEM] >>
+  `fn_reachable fn bb.bb_label` by
+    (qpat_x_assum `rf_live_use _ _ _ _` mp_tac >>
+     simp[rf_live_use_def] >> strip_tac >>
+     irule ready_ordinary_use_reachable >>
+     simp[] >> qexistsl_tac [`inst`, `x`] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (gvs[get_instruction_def] >> metis_tac[EL_MEM]) >>
+     qpat_x_assum `MEM _ (compute_operands _)` mp_tac >>
+     simp[compute_operands_def] >>
+     rpt (IF_CASES_TAC >> simp[asmIRTheory.get_non_label_operands_def, MEM_FILTER]) >>
+     metis_tac[MEM_TL]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
+  metis_tac[rf_live_use_liveness]
+QED
+
+Theorem rf_copy_ready_future_owned:
+  codegen_ready_fn fn /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+     ti.inst_opcode <> PHI) /\
+  get_instruction bb k = SOME inst /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  k <= j /\
+  generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  !op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> gvs[stackPlanTypesTheory.is_var_operand_def] >>
+  rename1 `rf_live_use bb (SUC k) j (Var x)` >>
+  `MEM x (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))` by
+    (irule rf_live_use_ready_liveness >> simp[] >> qexists_tac `j` >> metis_tac[]) >>
+  `rf_live_use bb k j (Var x)` by
+    (irule rf_live_use_backward >> simp[] >> metis_tac[MEM]) >>
+  `!at. MEM at (compute_operands inst) /\ is_var_operand at ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled` by
+    metis_tac[stackPlanTypesTheory.is_var_operand_def] >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    rf_copy_plan_live_retained >> simp[]
+QED
