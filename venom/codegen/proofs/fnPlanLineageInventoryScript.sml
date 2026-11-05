@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay reorderSim doSwapSim stackPlanGen stackModel list rich_list
+  fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay genericInputReady reorderSim doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -1951,4 +1951,88 @@ Proof
   qpat_x_assum `lineage_inventory _ _` mp_tac >>
   simp[lineage_inventory_def, lineage_core_def] >>
   rpt strip_tac >> gvs[EXTENSION] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem do_dup_bottom_frame:
+  !d ps prefix ops qs.
+    d < LENGTH ps.ps_stack /\ do_dup d ps = (ops,qs) ==>
+    do_dup d (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `d < LENGTH core`) do_dup_prefix_replay >>
+  disch_then (qspecl_then [`[]`, `prefix`, `ps`,
+    `ps with ps_stack := prefix ++ ps.ps_stack`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem emit_one_input_bottom_frame:
+  !op prefix opc nl ps.
+    EVERY (\x. ~is_var_operand x) prefix ==>
+    emit_one_input opc nl op (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (FST (emit_one_input opc nl op ps),
+       (SND (emit_one_input opc nl op ps)) with ps_stack :=
+         prefix ++ (SND (emit_one_input opc nl op ps)).ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `op` >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+       stack_push_def, SNOC_APPEND, APPEND_ASSOC] >>
+  TRY (IF_CASES_TAC >> simp[] >> NO_TAC) >>
+  rename1 `MEM v nl` >>
+  `~MEM (Var v) prefix` by
+    (gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_var_operand_def]) >>
+  Cases_on `FLOOKUP ps.ps_spilled (Var v)` >>
+  simp[do_restore_def, stack_push_def, SNOC_APPEND, APPEND_ASSOC,
+       stack_get_depth_bottom_excluded] >>
+  Cases_on `MEM v nl` >> simp[] >>
+  TRY (rename1 `SOME off` >>
+       simp[stack_get_depth_def, REVERSE_APPEND, stack_find_def, do_dup_def,
+            stack_dup_def, stack_peek_def, EL_APPEND2, SNOC_APPEND, APPEND_ASSOC] >>
+       NO_TAC) >>
+  Cases_on `stack_get_depth (Var v) ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth _ _ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  Cases_on `do_dup d ps` >> drule_all do_dup_bottom_frame >> simp[]
+QED
+
+Theorem emit_input_plan_bottom_frame:
+  !operands prefix opc nl ps ops qs.
+    EVERY (\x. ~is_var_operand x) prefix /\
+    emit_input_plan opc operands nl ps = (ops,qs) ==>
+    emit_input_plan opc operands nl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct_on `operands` >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule emit_one_input_bottom_frame >>
+  disch_then (qspecl_then [`h`, `opc`, `operand_vars operands ++ nl`, `ps`]
+    assume_tac) >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
+  Cases_on `emit_input_plan opc operands nl mid` >>
+  gvs[emit_input_plan_cons] >>
+  first_x_assum drule >> disch_then drule >> simp[]
+QED
+
+Theorem emit_input_plan_marker_core_budget:
+  !ps m core base pending opc operands nl ops qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base pending (ps with ps_stack := core) /\
+    emit_input_plan opc operands nl ps = (ops,qs) ==>
+    ?core'. qs.ps_stack = REPLICATE m dead_stack_marker ++ core' /\
+      residual_budget_wf base (pending ++ operands)
+        (qs with ps_stack := core')
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `emit_input_plan opc operands nl (ps with ps_stack := core)` >>
+  rename1 `emit_input_plan _ _ _ _ = (core_ops, core_state)` >>
+  `EVERY (\x. ~is_var_operand x) (REPLICATE m dead_stack_marker)` by
+    simp[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
+  drule_all emit_input_plan_bottom_frame >> simp[] >> strip_tac >>
+  drule_all emit_input_plan_residual_budget_wf >> strip_tac >>
+  `ps with ps_stack := REPLICATE m dead_stack_marker ++ core = ps` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  gvs[] >> qexists_tac `core_state.ps_stack` >> simp[]
 QED
