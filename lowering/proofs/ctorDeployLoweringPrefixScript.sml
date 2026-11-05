@@ -847,6 +847,57 @@ Proof
        venomInstTheory.fn_labels_def, wordsTheory.dimword_def] >> EVAL_TAC
 QED
 
+val prefix_plan_ctx_tm = ``(^prefix_final_unit_tm).cu_context``;
+val prefix_plan_fcg_tm = ``fcgDefs$fcg_analyze ^prefix_plan_ctx_tm``;
+val prefix_plan_init_tm = ``stackPlanGen$init_cleanup_plan_state
+  (stackPlanGen$cleanup_caller_height 1 ^prefix_plan_ctx_tm ^prefix_plan_fcg_tm "__deploy")
+  (stackPlanGen$cleanup_growth_table ^prefix_plan_ctx_tm ^prefix_plan_fcg_tm) 32 0``;
+val prefix_plan_dfg_tm = ``dfgDefs$dfg_build_function ^prefix_final_fn_tm``;
+
+Theorem deploy_prefix_negative_emit_first:
+  !live. stackPlanGen$emit_input_plan ASSIGN [Lit 32w] live ^prefix_plan_init_tm =
+    ([SOPush (Lit 32w)], ^prefix_plan_init_tm with ps_stack := [Lit 32w])
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_reorder_first:
+  stackPlanOps$reorder_plan ^prefix_plan_dfg_tm [Lit 32w]
+    (^prefix_plan_init_tm with ps_stack := [Lit 32w]) =
+    ([], ^prefix_plan_init_tm with ps_stack := [Lit 32w])
+Proof
+  EVAL_TAC
+QED
+val prefix_plan_live_tm = ``livenessDefs$liveness_analyze ^prefix_final_fn_tm``;
+val prefix_plan_cfg_tm = ``cfgDefs$cfg_analyze ^prefix_final_fn_tm``;
+val prefix_plan_after_first_tm = ``^prefix_plan_init_tm with ps_stack := [Var "formal_var_4"]``;
+
+Theorem deploy_prefix_negative_first_instruction:
+  stackPlanGen$generate_inst_plan ^prefix_plan_live_tm ^prefix_plan_dfg_tm
+    ^prefix_plan_cfg_tm ^prefix_final_fn_tm
+    (HD ^prefix_dft_insts_tm)
+    (livenessDefs$live_vars_at ^prefix_plan_live_tm "__deploy" 1)
+    T F "__deploy" ^prefix_plan_init_tm =
+  SOME ([SOPush (Lit 32w)], ^prefix_plan_after_first_tm)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem deploy_prefix_negative_emit_second:
+  !live. stackPlanGen$emit_input_plan ASSIGN [Lit 0w] live ^prefix_plan_after_first_tm =
+    ([SOPush (Lit 0w)], ^prefix_plan_after_first_tm with ps_stack := [Var "formal_var_4"; Lit 0w])
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_reorder_second:
+  stackPlanOps$reorder_plan ^prefix_plan_dfg_tm [Lit 0w]
+    (^prefix_plan_after_first_tm with ps_stack := [Var "formal_var_4"; Lit 0w]) =
+    ([], ^prefix_plan_after_first_tm with ps_stack := [Var "formal_var_4"; Lit 0w])
+Proof
+  EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
