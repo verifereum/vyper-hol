@@ -5,15 +5,14 @@
  * A cleanup elision (clean_stack_plan's mark_dead_stack) leaves the marker
  * in several stack slots.  reorderSim's residual_budget_wf allows each
  * operand at most one stack copy beyond its pending ones, which repeated
- * markers break.  The _marked budgets below exempt the marker from that
- * count, and keep it out of the spill map; the marker is never an operand
+ * markers break.  The _marked budgets (deepResidualBudget) exempt the
+ * marker from that count, and keep it out of the spill map; the marker is
+ * never an operand
  * or a reorder target, and plan_stack_rel doesn't read its slots.  The
  * lemmas are their unmarked namesakes over these budgets; the simulation
  * is the numeric one, which needs no stack depth bound.
  *
  * TOP-LEVEL:
- *   residual_budget_wf_marked, plan_state_residual_wf_marked
- *                                             - the marker-tolerant budgets
  *   generated_plan_state_wf_marked_residual_nil
  *                                             - the block-level wf gives one
  *   emit_input_plan_prepared_sim_marked       - input emission
@@ -25,38 +24,10 @@
 
 Theory deepResidualSim
 Ancestors
-  deepResidualBudget fnPlanPrefix preparedPrefixSim generatedPrefixSim generatedReorderSim
-  genericInputReady reorderSim doSwapSim codegenRel asmSem planExec
+  deepResidualBudget fnPlanPrefix preparedPrefixSim generatedPrefixSim
+  generatedReorderSim genericInputReady reorderSim doSwapSim codegenRel asmSem planExec
   stackPlanGen stackPlanOps stackPlanTypes stackModel blockSimHelpers
   list rich_list arithmetic
-
-Definition residual_budget_wf_marked_def:
-  residual_budget_wf_marked base pending (ps : plan_state) <=>
-    plan_slots_bounded base ps /\
-    doSwapSim$spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-    dead_stack_marker NOTIN FDOM ps.ps_spilled /\
-    (!op. op <> dead_stack_marker ==>
-          LIST_ELEM_COUNT op ps.ps_stack <=
-          SUC (LIST_ELEM_COUNT op pending)) /\
-    (!op. op IN FDOM ps.ps_spilled ==>
-          LIST_ELEM_COUNT op ps.ps_stack <= LIST_ELEM_COUNT op pending)
-End
-
-Definition plan_state_residual_wf_marked_def:
-  plan_state_residual_wf_marked base pending fixed (ps : plan_state) <=>
-    plan_slots_bounded base ps /\
-    doSwapSim$spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-    dead_stack_marker NOTIN FDOM ps.ps_spilled /\
-    LENGTH pending <= LENGTH ps.ps_stack /\
-    fixed <= LENGTH pending /\
-    (!i. i < fixed ==>
-       stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
-    (!op. op <> dead_stack_marker ==>
-          LIST_ELEM_COUNT op ps.ps_stack <=
-          SUC (LIST_ELEM_COUNT op pending)) /\
-    (!op. op IN FDOM ps.ps_spilled ==>
-          LIST_ELEM_COUNT op ps.ps_stack <= LIST_ELEM_COUNT op pending)
-End
 
 Theorem filter_distinct_elem_count_le_one[local]:
   !l (x : 'a) P.
@@ -120,7 +91,7 @@ Theorem reorder_plan_venom_asm_rel_numeric_marked:
     pending_inventory_wf target_ops ps /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker) target_ops /\
-    LENGTH target_ops <= LENGTH ps.ps_stack /\ LENGTH target_ops <= 16 /\
+    LENGTH target_ops <= LENGTH ps.ps_stack /\
     EVERY (\s. case s of SOSpill off => off < dimword(:256)
       | SORestore off => off < dimword(:256) | _ => T) ops /\
     reorder_plan dfg target_ops ps = (ops,ps') /\

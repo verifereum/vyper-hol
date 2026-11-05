@@ -8,7 +8,7 @@ Location: venom/codegen/proofs/ (theorems in deepResidualSimScript.sml; helpers 
 
 ## Theorem Statement (FROZEN)
 
-In `venom/codegen/proofs/deepResidualSimScript.sml`, the five theorems below, currently `cheat`. Their definitions `residual_budget_wf_marked_def` and `plan_state_residual_wf_marked_def` (same file) are frozen too, as is the proved `generated_plan_state_wf_marked_residual_nil`.
+In `venom/codegen/proofs/deepResidualSimScript.sml`, the five theorems below, currently `cheat`. Their definitions `residual_budget_wf_marked_def` and `plan_state_residual_wf_marked_def` (in `deepResidualBudgetScript.sml`) are frozen too, as is the proved `generated_plan_state_wf_marked_residual_nil`.
 
 Do not modify these statements. Prove them as-is, or produce a counterexample.
 
@@ -66,7 +66,7 @@ Theorem reorder_plan_venom_asm_rel_numeric_marked:
     pending_inventory_wf target_ops ps /\
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker) target_ops /\
-    LENGTH target_ops <= LENGTH ps.ps_stack /\ LENGTH target_ops <= 16 /\
+    LENGTH target_ops <= LENGTH ps.ps_stack /\
     EVERY (\s. case s of SOSpill off => off < dimword(:256)
       | SORestore off => off < dimword(:256) | _ => T) ops /\
     reorder_plan dfg target_ops ps = (ops,ps') /\
@@ -156,6 +156,8 @@ Statement-check notes (not a proof plan; verify yourself):
 - The marker never enters `ps_spilled`. The only insertion is `do_spill_tos` via `do_spill_at`, called by `reduce_depth_plan` on a slot `select_spill_candidate` chose, which requires `is_var_operand`. `do_restore` only removes. `do_swap`, `do_dup` and `stack_poke` don't touch the spill map.
 - The budget preservation lemmas in `reorderSimScript.sml` (about lines 485-1000: `residual_budget_wf_extend_pending`, `_push`, `_restore`, `_do_swap`, `_dup`, `_stack_poke_exchange`, `_do_spill_at`, `emit_one_input_residual_budget_wf`) reason one operand at a time. `residual_budget_wf_do_spill_at` bounds the spilled item `stack_peek d`, which is a var, so not the marker.
 - The asm simulations (`emit_input_plan_venom_asm_rel_numeric`, `reduce_depth_plan_venom_asm_rel_numeric`, `do_swap/do_dup_venom_asm_rel_numeric`) need only `spill_alloc_layout_wf` from the budget.
+- `reorder_plan_venom_asm_rel_numeric_marked` has no `LENGTH target_ops <= 16` (a join block can have more than 16 live inputs). In the unmarked chain that bound is only used to keep `LENGTH pending <= LENGTH ps.ps_stack` after `reduce_depth_plan`, via `reduce_depth_plan_length_floor` (reorderSim, about line 2614) at generatedReorderSim:212 and reorderSim:2675/2801. `select_spill_candidate` only picks offsets in `[target_len, 16]`, so `target_len <= LENGTH ps.ps_stack` survives reduce_depth_plan directly. `do_swap_venom_asm_rel_numeric` handles any `dist < LENGTH`.
+- Already proved in `deepResidualBudget` (use them): `residual_budget_wf_marked_pad` / `residual_budget_wf_unpad` (the marked budget is the unmarked one with the stack's markers appended to pending), `residual_budget_wf_marked_perm`, `emit_one_input_residual_budget_wf_marked`, `emit_input_plan_residual_budget_wf_marked`, `emit_one_input_not_spilled`, `emit_input_plan_not_spilled`, `do_dup_spilled_eq`, `var_operand_not_marker`, `elem_count_replicate`.
 - `materialised_emit_resources_marked`: the stack is `pop ++ selected`, so non-marker counts in `pop` are at most 1. The pushed `Var out` is fresh and isn't the marker.
 
 ## Domain Constraints
