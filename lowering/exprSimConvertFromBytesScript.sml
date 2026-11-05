@@ -1,6 +1,7 @@
-(* Dynamic-source conversion simulation before the exact source-exemption lift. *)
+(* Dynamic-source conversion simulation. *)
 Theory exprSimConvertFromBytes
 Ancestors
+  exprSimHypsDefs exprSimSource
   exprSimDefs exprSimProps exprSimStack loweringPosts
   exprSimConvert exprSimHyps  exprLowering compileEnv
   exprSimBuffer valueEncoding valueEncodingProofs
@@ -1592,7 +1593,6 @@ Theorem dynamic_scalar_run_exact:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   convert_result cx src dst v = res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   fresh_vars_wrt sa ss /\ eval_operand op ss = SOME a /\
   w2n a + 32 < dimword (:256) /\
@@ -2185,7 +2185,6 @@ Theorem dynamic_scalar_frag_abort[local]:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   convert_result cx src dst v = INR ex /\
-  INR ex <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
   frag_exec ctx sa sb
@@ -2223,7 +2222,6 @@ Theorem dynamic_scalar_fragment:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   convert_result cx src dst v = res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
@@ -2325,8 +2323,7 @@ Theorem dynamic_empty_scalar_convert:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   (v = BytesV [] \/ v = StringV "") /\
-  convert_result cx src dst v = res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) ==>
+  convert_result cx src dst v = res ==>
   ?vout dtv. res = INL vout /\
     evaluate_type (get_tenv cx) dst = SOME dtv /\
     typed_val_to_w256 dtv vout = 0w
@@ -2402,7 +2399,6 @@ Theorem dynamic_convert_lower_case:
   lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (op,sb) /\
   (do raw <- eval_expr cx (TypeBuiltin ann Convert t [e1]);
       read_result cx raw od) es = (res,es') /\ expr_res_ok res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa ==>
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
@@ -2498,7 +2494,6 @@ Theorem compile_convert_from_bytestring_case:
       compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (vv, sb) /\
       eval_expr cx (TypeBuiltin ann Convert t [e1]) es = (res, es') /\
       expr_vv_res_ok res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)

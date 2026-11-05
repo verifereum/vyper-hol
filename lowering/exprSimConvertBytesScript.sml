@@ -1,6 +1,7 @@
 (* Shared conversion simulation for dynamic Bytes and String results. *)
 Theory exprSimConvertBytes
 Ancestors
+  exprSimHypsDefs exprSimSource
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv

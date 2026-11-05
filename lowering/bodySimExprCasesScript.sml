@@ -146,6 +146,25 @@ Proof
   cheat
 QED
 
+(* A conversion whose operand is an internal call whose type widens its
+   callee's return type: the conversion's lowering sizes the operand by the
+   callee's return type, so, as for body_struct_lit_widened_call_elem,
+   describing the operand's value at that type is the internal-call
+   simulation's work (body_intcall_case). *)
+Theorem body_convert_widened_call_arg:
+  !cx v11 typ e1.
+    body_exprs_ok cx [e1] ==>
+    !tops ctx func cenv env ty st.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (TypeBuiltin v11 Convert typ [e1]) st /\
+      (?a f cargs d. e1 = Call a (IntCall f) cargs d) /\
+      lowered_value_type cenv e1 <> expr_type e1 ==>
+      expr_sim ctx func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st /\
+      expr_vv_sim ctx func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st
+Proof
+  cheat
+QED
+
 (* exprSimAggregates' compile_struct_lit_case. *)
 Theorem body_structlit_case:
   !cx v7 src_id_opt id kes.
@@ -387,6 +406,11 @@ Proof
       simp[]) >>
   `body_exprs_ok cx es` by
     (first_x_assum irule >> simp[type_check_def, assert_def]) >>
+  Cases_on `tb = Convert /\
+            ?e1 a f cargs d. es = [e1] /\ e1 = Call a (IntCall f) cargs d /\
+                             lowered_value_type cenv e1 <> expr_type e1`
+  >- (gvs[] >> rw[expr_sim_case_def, expr_vv_case_def] >>
+      metis_tac[body_convert_widened_call_arg]) >>
   irule compile_type_builtin_case >> metis_tac[body_exprs_ok_case]
 QED
 
