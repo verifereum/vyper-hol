@@ -1,6 +1,6 @@
 Theory concretizePtrWriteFootprint
 Ancestors concretizePtrPrefixLedger ptrDiscipline codegenRel venomExecSemantics
-  venomState venomInst arithmetic pred_set finite_map
+  venomState venomInst arithmetic pred_set finite_map list
 
 (* Footprints require successful evaluation of the VALUE as well as address.
    This checked probe refutes address-only interval characterization. *)
@@ -95,4 +95,16 @@ Proof
        w2n y <= j /\ j < w2n y + 32` by
     metis_tac[ptr_mstore_footprint_interval] >>
   simp[] >> decide_tac
+QED
+
+Theorem ptr_copy_footprint_interval:
+  MEM ti.inst_opcode [MCOPY; CALLDATACOPY; RETURNDATACOPY; DLOADBYTES; CODECOPY] /\
+  ti.inst_operands = [dst;src;cnt] /\
+  eval_operand dst ts = SOME y /\ eval_operand src ts = SOME z /\
+  eval_operand cnt ts = SOME n ==>
+  (i IN range_bytes (step_writes ti ts post) <=> w2n y <= i /\ i < w2n y + w2n n)
+Proof
+  simp[MEM] >> strip_tac >>
+  simp[step_writes_def, source_memory_write_ranges_def,
+    sized_source_write_range_def, range_bytes_def]
 QED
