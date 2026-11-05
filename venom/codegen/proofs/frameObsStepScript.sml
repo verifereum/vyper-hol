@@ -126,7 +126,11 @@ Theorem frame_obs_terminal:
   step es = (r, es1) /\ (ISR r \/ LENGTH es1.contexts < LENGTH es.contexts) ==>
   call_trace es = [] /\ gas_readings es = []
 Proof
-  cheat
+  strip_tac >>
+  simp[call_trace_def, gas_readings_def, frame_obs_def] >>
+  once_rewrite_tac[frame_obs_tr_def] >>
+  Cases_on `r` >> gvs[observe_def]
+
 QED
 
 (* ===== run_call ===== *)
