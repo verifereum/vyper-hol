@@ -626,4 +626,14 @@ Proof
   CONV_TAC (computeLib.CBV_CONV stage_cs)
 QED
 
+Theorem deploy_ctor_noninit_start_body:
+  tx.function_name = "__init__" /\
+  deploy_ctor_start ^deploy_tops am tx (mut,nr,body',am_c,es0) ==>
+  body' = []
+Proof
+  simp[deploy_ctor_start_def] >>
+  rpt strip_tac >>
+  gvs[deploy_ctor_noninit_selection_probe]
+QED
+
 end
