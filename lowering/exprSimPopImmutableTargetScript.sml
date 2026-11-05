@@ -357,6 +357,35 @@ Proof
   simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
+Theorem imm_typed_path_memory[local]:
+  !path tv v k ptv pv b mem.
+    value_has_type tv v /\ well_formed_type_value tv /\
+    mem_path_offset tv path = SOME (k,ptv) /\
+    evaluate_subscripts tv v path = INL pv /\
+    val_in_memory tv v b mem ==>
+    val_in_memory ptv pv (b+k) mem
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def, evaluate_subscripts_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), pairTheory.EXISTS_PROD] >>
+  `mem_path_offset tv [h] = SOME (p_1,p_2)` by
+    simp[mem_path_offset_def] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >>
+  simp[vyperStateTheory.subscripts_type_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  drule vyperPlaceStatePreservationTheory.evaluate_subscripts_cons_typed >>
+  disch_then (qspecl_then [`path`, `v`] mp_tac) >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  `val_in_memory p_2 v' (b + p_1) mem` by
+    (irule imm_typed_step_memory >> goal_assum (drule_at Any) >> simp[]) >>
+  `value_has_type p_2 v' /\ well_formed_type_value p_2` by
+    (metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+       vyperPlaceStatePreservationTheory.subscripts_type_well_formed,
+       exprSimPropsTheory.mem_path_offset_sound]) >>
+  first_x_assum drule_all >>
+  rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
 (* The counted walk of a target rooted at an immutable in the
    constructor, with pure indices, given their judgments, the
    constructor's compile env and the root's declared type in it: from s0
