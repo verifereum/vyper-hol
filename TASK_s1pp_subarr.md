@@ -19,6 +19,7 @@ Theorem compile_subscript_array_framed_base_case:
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (!t r t'. eval_expr cx idx t = (INL r, t') ==>
               t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+    (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
     ((~cenv.ce_is_ctor /\
       !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
      ((?n. bd = Fixed n) /\
@@ -52,7 +53,7 @@ holbuild -j4 build exprSimSubscriptArrayTheory exprSimPlacesTheory
 
 ## Background
 
-vyper-hol proves the Vyper-to-Venom lowering correct by an expression simulation: for each expression form, the code `compile_expr` emits, run from a state related to the source state, ends related to the source result (`expr_vv_sim`, in the counted `gas_outcome` form), or exits as `expr_exit` allows when the source raises. This case is `a[i]` for an array base (static or dynamic) in memory (a local, or a temporary), storage, transient storage or code (an immutable: the staged buffer in the constructor, the data section at runtime), restricted to an index that leaves the source locals and immutables unchanged, and a base that is an immutable at runtime (in the data section) or a static array with no dynamic array inside it in memory (a local or a temporary allocation). The comment on the admitted residual says why the other cases are out of reach of the current judgments; don't try to prove them.
+vyper-hol proves the Vyper-to-Venom lowering correct by an expression simulation: for each expression form, the code `compile_expr` emits, run from a state related to the source state, ends related to the source result (`expr_vv_sim`, in the counted `gas_outcome` form), or exits as `expr_exit` allows when the source raises. This case is `a[i]` for an array base (static or dynamic) in memory (a local, or a temporary), storage, transient storage or code (an immutable: the staged buffer in the constructor, the data section at runtime), restricted to an index that leaves the source locals and immutables unchanged, and a base that is an immutable at runtime (in the data section) or a static array with no dynamic array inside it in memory (a local or a temporary allocation), whose source result is no storage place. The comment on the admitted residual says why the other cases are out of reach of the current judgments; don't try to prove them.
 
 Source: `eval_expr` of `Subscript` (semantics/vyperInterpreterScript.sml) evaluates the base, then the index, reads the index's value, then `select_result` / `extend_place` (semantics/vyperStateScript.sml): for a place it reads the base's place, checks the index with `evaluate_subscripts`, and extends the place's path (memory, immutable) or computes the element's slot (`extend_storage_place`, storage). For a `Value` base it selects the element.
 

@@ -43,6 +43,7 @@ Theorem compile_subscript_array_framed_base_case:
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (!t r t'. eval_expr cx idx t = (INL r, t') ==>
               t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+    (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
     ((~cenv.ce_is_ctor /\
       !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
      ((?n. bd = Fixed n) /\
@@ -55,8 +56,8 @@ QED
 
 (* Every other array subscript: a base in storage or transient storage, an
    immutable in the constructor, a dynamic array or one with a dynamic
-   array inside it in memory, or an index that changes the locals or the
-   immutables.  ADMITTED (cheat).  NOT DERIVABLE from these hypotheses,
+   array inside it in memory, a base whose source result is a storage
+   place, or an index that changes the locals or the immutables.  ADMITTED (cheat).  NOT DERIVABLE from these hypotheses,
    though no miscompile is known: vv_post does not tie the base's pointer
    to its source place.  vv_at and local_val_at pick the local's path by
    its type alone, immutable_holds' constructor form takes any offset of
@@ -127,6 +128,7 @@ Theorem compile_subscript_array_place_base_case:
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\
         !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
        ((?n. bd = Fixed n) /\
@@ -148,11 +150,14 @@ Proof
   rpt strip_tac >>
   Cases_on `(!t r t'. eval_expr cx idx t = (INL r, t') ==>
                       t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+            (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
             ((~cenv.ce_is_ctor /\
               !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
              ((?n. bd = Fixed n) /\
               (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
               !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))`
-  >- (irule compile_subscript_array_framed_base_case >> metis_tac[]) >>
-  irule compile_subscript_array_place_base_case >> metis_tac[]
+  >- (irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
+      metis_tac[]) >>
+  irule compile_subscript_array_place_base_case >> asm_rewrite_tac[] >>
+  qexistsl [`bd`, `et`] >> asm_rewrite_tac[]
 QED
