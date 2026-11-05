@@ -87,14 +87,6 @@ Theorem gen_inst_halt_frame_sim:
         asm_steps lo o2pc prog n as = AsmHalt as' /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED (codegen skeleton): the SELFDESTRUCT case no
-   longer closes against the base cut (static frames split its static
-   guard).  Repair piece; the original proof, unchanged:
-
-Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   gen_tac >> disch_tac >>
   SUBGOAL_THEN ``inst.inst_opcode = STOP \/ inst.inst_opcode = RETURN \/
@@ -147,7 +139,10 @@ QED
 Resume gen_inst_halt_frame_sim[selfdestruct]:
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
   simp[Once step_inst_def, step_inst_base_def, AllCaseEqs()] >>
-  strip_tac >>
+  strip_tac
+  (* the static guard's other disjunct: the operand evaluates, so
+     eval_operands can't be NONE *)
+  >~ [`eval_operands _ _ = NONE`] >- gvs[eval_operands_def] >>
   `name = "SELFDESTRUCT"` by fs[venom_to_evm_name_def] >>
   `asm_block_at prog mid.as_pc [AsmOp "SELFDESTRUCT"]` by metis_tac[] >>
   `mid.as_stack = addr :: DROP 1 mid.as_stack` by
@@ -162,7 +157,6 @@ Resume gen_inst_halt_frame_sim[selfdestruct]:
 QED
 
 Finalise gen_inst_halt_frame_sim
-*)
 
 (* Used for an instruction whose step Aborts (REVERT, ASSERT,
    ASSERT_UNREACHABLE, INVALID, a faulting RETURNDATACOPY or CREATE) in
