@@ -33,6 +33,7 @@ Theorem toplevel_storage_value_post:
   read_storage_slot cx tr (n2w slot) tvt es = (INL v,es) /\
   slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt /\
   (!st. storage_read_live cx tr st (n2w slot) tvt) /\
+  w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s0 ==>
   vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
     (es with gas_obs := []) (PlaceR (StoragePlace tr (n2w slot) tvt))
@@ -47,6 +48,14 @@ Proof
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
+  `storage_range_agree (get_storage cx es tr)
+    (if tr then contract_transient s0 else contract_storage s0)
+    (n2w slot) tvt` by
+    (irule storage_range_agree_of_live >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cx`, `tr`] >> simp[] >> Cases_on `tr` >>
+     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+         transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+         vfmStateTheory.lookup_account_def]) >>
   Cases_on `tr` >>
   gvs[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
       mk_ptr_def, eval_operand_def, vyperASTTheory.expr_type_def,
@@ -67,6 +76,11 @@ Proof
   `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
     (irule toplevel_storage_slots_in_range >>
      gvs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
+    simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+  `storage_layout_safe cx` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
+  `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
+    (drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >> simp[]) >>
   `typ = ann` by
     (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
      metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_storage_decl_type_eq]) >>
