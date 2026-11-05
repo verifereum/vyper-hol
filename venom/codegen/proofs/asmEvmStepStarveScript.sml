@@ -653,6 +653,168 @@ Proof
     [step_modop_def, LET_THM, wordsTheory.w2n_eq_0]
 QED
 
+Theorem starve_pop:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "POP" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_pop as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_pop_def] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = Pop` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  simp[step_inst_def, step_pop_def, pop_stack_def, consume_gas_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> disj2_tac >>
+      simp[inc_pc_or_jump_def, LET_THM, bind_def,
+           get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def] >> strip_tac >>
+      simp[asm_evm_rel_def, asm_next_def] >>
+      once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+      simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
+Theorem starve_msize:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "MSIZE" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    ?es1. step es = (INL (), es1) /\ LENGTH es1.contexts = 1 /\
+      asm_evm_rel prog (asm_next (as with as_stack :=
+        n2w (LENGTH as.as_memory) :: as.as_stack)) es1
+Proof
+  rpt strip_tac >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = MSize` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  simp[step_inst_def, step_context_def, consume_gas_def, push_stack_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> Cases_on `LENGTH as.as_stack < stack_limit`
+      >- (fs[] >> simp[] >> disj2_tac >>
+          simp[inc_pc_or_jump_def, LET_THM, bind_def,
+               get_current_context_def, return_def,
+               set_current_context_def, is_call_def] >>
+          qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+          simp[asm_evm_rel_def] >> strip_tac >>
+          simp[asm_evm_rel_def, asm_next_def] >>
+          once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+          simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>
+      fs[] >> disj1_tac >> irule starve_handle_resource >> simp[]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
+Theorem starve_tload:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "TLOAD" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_tload as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_tload_def, LET_THM] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = TLoad` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  simp[step_inst_def, step_sload_def, pop_stack_def, consume_gas_def,
+       push_stack_def, get_callee_def, get_tStorage_def,
+       lookup_transient_storage_def, vfmStateTheory.lookup_storage_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> Cases_on `LENGTH t < stack_limit`
+      >- (fs[] >> simp[] >> disj2_tac >>
+          simp[inc_pc_or_jump_def, LET_THM, bind_def,
+               get_current_context_def, return_def,
+               set_current_context_def, is_call_def] >>
+          qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+          simp[asm_evm_rel_def] >> strip_tac >>
+          simp[asm_evm_rel_def, asm_next_def] >>
+          once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+          simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>
+      fs[] >> disj1_tac >> irule starve_handle_resource >> simp[]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
+Theorem starve_tstore:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    ~(FST (HD es.contexts)).msgParams.static /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "TSTORE" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_tstore as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_tstore_def, LET_THM] >>
+  Cases_on `t` >> simp[] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = TStore` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  simp[step_inst_def, step_sstore_def, pop_stack_def, consume_gas_def,
+       get_callee_def, get_tStorage_def, get_static_def, assert_not_static_def,
+       write_transient_storage_def, set_tStorage_def,
+       lookup_transient_storage_def, update_transient_storage_def,
+       vfmStateTheory.update_storage_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >> fs[] >>
+  IF_CASES_TAC
+  >- (simp[] >> disj2_tac >>
+      simp[inc_pc_or_jump_def, LET_THM, bind_def,
+           get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def] >> strip_tac >>
+      simp[asm_evm_rel_def, asm_next_def] >>
+      once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+      simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
