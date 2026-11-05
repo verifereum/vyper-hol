@@ -98,7 +98,7 @@ Ancestors
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext
-  valueEncoding valueEncodingProofs vyperTypeSystem
+  valueEncoding valueEncodingProofs vyperTypeSystem vyperValue vyperTyping
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend accountsRelProps
 Libs
@@ -944,6 +944,23 @@ Proof
 QED
 
 (* A value of a word type in memory: its word is the typed encoding. *)
+(* Word memory representation is independent of entry decoding. *)
+Theorem val_in_memory_word:
+  !tenv ty tv v off mem.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    value_has_type tv v ==>
+    (val_in_memory tv v off mem <=>
+     mem_word_at off mem = typed_val_to_w256 tv v)
+Proof
+  rpt gen_tac >> Cases_on `ty` >> simp[is_word_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
+      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
+      simp[evaluate_type_def] >> rw[] >> Cases_on `v` >>
+      gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]) >>
+  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >> Cases_on `v` >>
+  gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]
+QED
+
 Theorem val_in_memory_word_type:
   !tenv t tvt v off mem.
     is_word_type t /\ evaluate_type tenv t = SOME tvt /\

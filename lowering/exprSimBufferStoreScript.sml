@@ -20,6 +20,7 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSim
   loweringPosts
   exprSimBuffer exprSimLiteralBuffer words integer_word vfmConstants emitHelperProps
   exprLoweringProps context venomExecSemantics venomState compileEnv

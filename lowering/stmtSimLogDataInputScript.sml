@@ -1,5 +1,6 @@
 Theory stmtSimLogDataInput
 Ancestors
+  exprSim
   stmtSimLogDataRun stmtSimLogSource abiEncoderSourceCorrect
   abiBuiltinEncodeWord entryDecodeProps entryDecodeStaticProps
   supportedTypes vyperTyping vyperABI contractABI vyperValue words integer arithmetic typedCopyMetadata

@@ -258,13 +258,12 @@ Proof
   irule ifexp_abi_members_bound >> simp[]
 QED
 
-Theorem ifexp_lowered_type_classify[local]:
+Theorem ifexp_lowered_type_classify:
   !ce e env.
   well_typed_expr env e /\
   (!id t. FLOOKUP env.var_types id = SOME t ==>
           well_formed_type env.type_defs t) /\
-  sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
-  (int_calls_expr e = [] \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
+  sfields_tenv_consistent ce.ce_struct_fields env.type_defs ==>
   lowered_value_type ce e = expr_type e \/
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
