@@ -1069,3 +1069,18 @@ Proof
   drule_all regular_post_emit_tail_core_resource >> strip_tac >>
   qexists_tac `rest'` >> simp[lineage_core_def]
 QED
+
+(* Every native regular return passes through spill release, independently of
+   stack resources, opcode shape, or the initial spill domain. *)
+Theorem native_regular_spilled_live_upper:
+  !lv dfg cfg fn inst next halting term lbl ps ops qs v.
+    generate_regular_inst_plan lv dfg cfg fn inst next halting term lbl ps = (ops,qs) /\
+    Var v IN FDOM qs.ps_spilled ==> MEM v next
+Proof
+  rpt gen_tac >>
+  simp_tac bool_ss [generate_regular_inst_plan_def, LET_THM,
+    pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
+  rpt pairarg_tac >>
+  Cases_on `inst.inst_outputs = []` >> simp[] >>
+  rpt strip_tac >> gvs[release_dead_spills_domain, MEM_MAP]
+QED
