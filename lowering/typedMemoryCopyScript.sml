@@ -3303,7 +3303,7 @@ Proof
                  decide_tac)) >> simp[]
 QED
 
-Theorem typed_copy_struct_values[local]:
+Theorem typed_copy_struct_values:
   !names tvs fields.
     LENGTH names = LENGTH tvs /\
     struct_has_type (ZIP (names,tvs)) fields /\
@@ -3318,7 +3318,7 @@ Proof
   qexists_tac `h'1::vs` >> simp[value_has_type_def, val_wf_def]
 QED
 
-Theorem typed_copy_struct_field_bytes[local]:
+Theorem typed_copy_struct_field_bytes:
   !fields tvs.
     OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
     EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
