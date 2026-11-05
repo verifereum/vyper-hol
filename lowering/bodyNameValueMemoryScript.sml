@@ -71,6 +71,9 @@ Proof
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
           Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def] >>
-  disj1_tac >> simp[] >> irule name_value_post >> simp[]
+  disj1_tac >> simp[] >> conj_tac
+  >- (irule name_value_post >> simp[]) >>
+  simp[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
+  irule name_vv_store_bound >> simp[] >> qexists_tac `sz` >> simp[]
 QED
 

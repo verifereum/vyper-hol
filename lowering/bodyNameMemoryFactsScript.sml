@@ -1,7 +1,7 @@
 (* Typed local regions used by memory-safe Name compilation. *)
 Theory bodyNameMemoryFacts
 Ancestors
-  exprSimSource exprSimHypsDefs exprSimDefs exprSimProps bodyMemoryDefs
+  exprSimSource exprSimHypsDefs exprSimDefs exprSimProps exprSimMemDefs bodyMemoryDefs
   exprSimMemoryValues exprSimMemoryStack fragGasSeqMem fragGasPathMem
   gasNormalPrefix gasSummary gasContext gasCount fragGasMode loweringPosts
   exprSimNameWord exprSimNameValue loweringSlice exprLowering exprLoweringProps
@@ -83,3 +83,25 @@ Proof
   qexistsl [`entry`, `p`, `sz`, `w`] >> simp[]
 QED
 
+
+(* A local's pointer, its type-sized region and its rounded value footprint
+   lie below the frontier. *)
+Theorem name_vv_store_bound:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_type (get_tenv cx) ann = SOME entry.type /\
+  val_wf entry.type entry.value /\ lookup_var p s = SOME w /\
+  type_memory_size entry.type <= sz /\ w2n w + sz <= s.vs_alloca_next ==>
+  vv_store_bound cx ann ann (es with gas_obs := []) (PlaceR (MemoryPlace id []))
+    (LocatedValue ann (mk_ptr (Var p) LocMemory)) s
+Proof
+  simp[vv_store_bound_def, contextTheory.mk_ptr_def, eval_operand_def] >>
+  rpt strip_tac >~ [`val_store_size`]
+  >- (`read_result cx (PlaceR (MemoryPlace id [])) (es with gas_obs := []) =
+         (INL entry.value, es with gas_obs := [])` by
+        (qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := []`, `entry`]
+           mp_tac eval_name_word >>
+         simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+              type_check_def, assert_def, check_def, ignore_bind_def]) >>
+      gvs[] >> drule val_store_size_le >> decide_tac) >>
+  gvs[]
+QED
