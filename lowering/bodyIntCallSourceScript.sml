@@ -2,7 +2,7 @@
 Theory bodyIntCallSource
 Ancestors
   bodySim supportedProgram supportedDecls bodyIntCallReturn
-  vyperTypeContractStaticMaps vyperInterpreter list
+  vyperTypeContractStaticMaps vyperInterpreter list exprSimHypsDefs
 
 Theorem supported_runtime_callable:
   supported_program tops /\
@@ -24,9 +24,31 @@ Proof
   goal_assum (drule_at Any)
 QED
 
-Theorem body_inv_runtime_callable:
-  body_inv tops ctx cenv cx /\
-  lookup_callable_function cx.in_deploy name tops =
+(* The supported declaration rules out the synthetic deployment fallback. *)
+Theorem supported_internal_lookup:
+  !tops name mut nr rr args dflts ret ss.
+    supported_function_decl tops (NONE,name) Internal =
+      SOME (mut,nr,rr,args,dflts,ret,ss) ==>
+    lookup_function NONE name Internal tops =
+      SOME (mut,nr,args,dflts,ret,ss)
+Proof
+  Induct_on `tops` >- simp[supported_function_decl_def] >>
+  Cases_on `h` >>
+  simp[supported_function_decl_def, lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()]
+  >~ [`lookup_function _ _ _ (VariableDecl _ _ _ _ _ :: _)`]
+    >- (rename1 `VariableDecl vis _ _ _ _` >> Cases_on `vis` >>
+        simp[lookup_function_def] >> metis_tac[])
+  >~ [`lookup_function _ _ _ (HashMapDecl _ _ _ _ _ _ :: _)`]
+    >- (rename1 `HashMapDecl vis _ _ _ _ _` >> Cases_on `vis` >>
+        simp[lookup_function_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem supported_internal_callable:
+  supported_program tops /\
+  IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
+  lookup_callable_function in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) ==>
   nr = F /\ dflts = [] /\
   (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
@@ -35,15 +57,21 @@ Theorem body_inv_runtime_callable:
   supported_function_body tops Internal args ss /\
   supported_return_layouts ret ss
 Proof
-  strip_tac >> irule supported_runtime_callable >>
-  gvs[body_inv_def]
+  strip_tac >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `supported_function_decl _ _ _ = SOME decl` >>
+  PairCases_on `decl` >>
+  drule supported_internal_lookup >> strip_tac >>
+  gvs[lookup_callable_function_def] >>
+  drule_all (REWRITE_RULE [lookup_callable_function_F] supported_runtime_callable) >>
+  simp[]
 QED
 
 Theorem expr_body_pre_intcall_main:
   expr_body_pre cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
   src = NONE
 Proof
-  simp[exprSimHypsTheory.expr_body_pre_def,
+  simp[expr_body_pre_def,
        vyperTypeCallGraphTheory.int_calls_expr_def] >>
   strip_tac >> gvs[]
 QED
@@ -80,8 +108,8 @@ Proof
   strip_tac >>
   `well_typed_expr env (Call ty (IntCall (src,name)) es dflt) /\
    fn_sigs_consistent env.fn_sigs cx` by
-    gvs[exprSimHypsTheory.expr_body_pre_def,
-        exprSimHypsTheory.expr_sim_inv_def,
+    gvs[expr_body_pre_def,
+        expr_sim_inv_def,
         vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
   drule_all typed_intcall_source_signature >> simp[]
@@ -108,7 +136,11 @@ Proof
   drule expr_body_pre_intcall_main >> strip_tac >> gvs[] >>
   drule expr_body_pre_intcall_signature >> strip_tac >>
   `get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
-  gvs[] >> drule_all body_inv_runtime_callable >> strip_tac >> gvs[] >>
+  `IS_SOME (supported_function_decl tops (NONE,name) Internal)` by
+    gvs[expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  gvs[] >>
+  `supported_program tops` by gvs[body_inv_def] >>
+  drule_all supported_internal_callable >> strip_tac >> gvs[] >>
   `LENGTH es = LENGTH args` by decide_tac >>
   gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
