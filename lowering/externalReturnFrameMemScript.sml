@@ -4,6 +4,7 @@
    statement contract. *)
 Theory externalReturnFrameMem
 Ancestors
+  externalReturnPrefix externalReturnValueMem externalReturnWidenedCallMem
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   nonreentrantExit
   stmtSimDefs loweringPosts
@@ -97,5 +98,17 @@ Theorem external_frame_ret_run_mem:
        ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
                 mem_safe_run fuel unit.cu_context func t)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt conj_tac
+  >- metis_tac[return_value_code_prefix]
+  >- (rpt strip_tac >> drule_all external_package_frame_exit >> strip_tac >>
+      irule return_none_external_run_mem >> metis_tac[])
+  >> rpt strip_tac >>
+  Cases_on `lowered_value_type cenv' e = expr_type e \/
+            is_bytestring_type (expr_type e) /\
+            is_bytestring_type (lowered_value_type cenv' e) /\
+            arg_type_fits (lowered_value_type cenv' e) (expr_type e)`
+  >- (drule_all external_frame_ret_value_run_mem >> disch_then irule >>
+      metis_tac[])
+  >> drule_all external_frame_ret_widened_call_mem >> disch_then irule >>
+  metis_tac[]
 QED
