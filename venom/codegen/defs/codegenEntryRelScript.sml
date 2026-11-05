@@ -126,8 +126,7 @@ Definition initial_ctx_rel_def:
       ~ctxt.msgParams.static /\
       ctxt.msgParams.code = assemble prog ++ vs.vs_data_section /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
-      LENGTH ctxt.msgParams.code <= 24576 /\
-      vs.vs_vars = FEMPTY /\
+      vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\ ctxt.logs = [] /\
       (!l. FLOOKUP vs.vs_labels l =
            OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
       vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = [] /\
