@@ -85,6 +85,7 @@ Definition ctx_labels_bound_def:
     !fn inst l.
       MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
       MEM (Label l) inst.inst_operands /\ inst.inst_opcode <> INVOKE /\
+      inst.inst_opcode <> CODECOPY /\
       ~is_terminator inst.inst_opcode /\ ~is_pseudo inst.inst_opcode ==>
       l IN FDOM L
 End
@@ -531,6 +532,7 @@ Definition dft_remaining_inv_def:
        v IN FDOM s.vs_vars) /\
     (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
        ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+       i.inst_opcode <> CODECOPY /\
        MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels)
 End
 
@@ -581,7 +583,7 @@ Theorem dft_remaining_inv_ready:
   dft_remaining_inv fn bb (pre ++ y::post) s /\ pre <> [] /\
   EVERY (\x. ~dft_must_order x y) pre ==>
   (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
-  (y.inst_opcode <> INVOKE ==>
+  (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
     !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)
 Proof
   strip_tac >> drule dft_remaining_inv_head_order >> strip_tac >>
@@ -842,6 +844,7 @@ Theorem dft_remaining_inv_initial:
      MEM v d.inst_outputs ==> v IN FDOM s.vs_vars) /\
   (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
      ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+       i.inst_opcode <> CODECOPY /\
      MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels) ==>
   dft_remaining_inv fn bb
     (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) s
@@ -911,6 +914,7 @@ Theorem dft_remaining_inv_initialized:
   bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
   (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
      ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+       i.inst_opcode <> CODECOPY /\
      MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels) /\
   eval_phis s (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) = OK u /\
   FOLDR (dft_exec_cons fuel C) OK
@@ -1873,7 +1877,7 @@ Proof
      qexistsl_tac [`C`, `fuel`, `a`] >> simp[] >>
      metis_tac[dft_swap_output_frame]) >>
   `step_inst fuel C b s = OK s` by
-    (irule dft_assert_ok_replay >> qexists_tac `sa` >> simp[]) >>
+    (irule dft_assert_ok_replay >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
   simp[]
 QED
 
@@ -2441,7 +2445,7 @@ QED
 
 Theorem dft_nongas_suffix_swap_halt:
   dft_gas_swap_pair x y /\ ~gas_pair x.inst_opcode y.inst_opcode /\ inst_wf y /\
-  (y.inst_opcode <> INVOKE ==>
+  (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
    !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) /\
   (step_inst fuel C x s = Halt t \/
    (?sx. step_inst fuel C x s = OK sx /\
@@ -2456,6 +2460,8 @@ Proof
   >- (`x.inst_opcode = INVOKE` by metis_tac[dft_swap_nonterminator_halt_invoke] >>
       drule_all dft_swap_invoke_partner_class >> strip_tac >>
       `y.inst_opcode <> INVOKE` by (strip_tac >> gvs[opcode_fail_class_def]) >>
+      `y.inst_opcode <> CODECOPY` by
+        (strip_tac >> gvs[write_effects_def, empty_effects_def]) >>
       `?sy. step_inst fuel C y s = OK sy` by metis_tac[dft_swap_guarded_nofail_total] >>
       irule dft_nongas_suffix_first_invoke_halt >> metis_tac[]) >>
   `y.inst_opcode = INVOKE` by metis_tac[dft_swap_nonterminator_halt_invoke] >>
@@ -2605,7 +2611,7 @@ Theorem dft_nongas_suffix_swap:
   dft_gas_swap_pair x y /\ ~gas_pair x.inst_opcode y.inst_opcode /\
   inst_wf x /\ inst_wf y /\ ~s.vs_call_ctx.cc_static /\
   (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
-  (y.inst_opcode <> INVOKE ==>
+  (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
     !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) /\
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
     write_effects x.inst_opcode = empty_effects) ==>
@@ -2615,7 +2621,7 @@ Proof
   strip_tac >>
   `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode` by
     gvs[dft_gas_swap_pair_def] >>
-  `(y.inst_opcode <> INVOKE ==>
+  `(y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
     !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v)` by
     metis_tac[dft_swap_operand_defined] >>
   reverse (Cases_on `step_inst fuel C x s`)
@@ -2699,7 +2705,7 @@ QED
 Theorem dft_suffix_swap_variant:
   dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\ ~s'.vs_call_ctx.cc_static /\
   (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s'.vs_vars) /\
-  (y.inst_opcode <> INVOKE ==>
+  (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
     !l. MEM (Label l) y.inst_operands ==> l IN FDOM s'.vs_labels) /\
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
     write_effects x.inst_opcode = empty_effects) ==>
@@ -2719,7 +2725,7 @@ Theorem dft_prefix_swap_variant:
     write_effects x.inst_opcode = empty_effects) /\
   (!t. FOLDR (dft_exec_cons fuel C) OK pre s' = OK t ==>
     (!v. MEM (Var v) y.inst_operands ==> v IN FDOM t.vs_vars) /\
-    (y.inst_opcode <> INVOKE ==>
+    (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
       !l. MEM (Label l) y.inst_operands ==> l IN FDOM t.vs_labels)) ==>
   ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
     dft_res_rel (dft_exec_suffix fuel C (pre ++ x::y::tail) s)
@@ -2799,7 +2805,7 @@ Proof
      write_effects h.inst_opcode = empty_effects)` by
     (irule dft_crossing_swap_pair >> fs[] >> metis_tac[]) >>
   `(!v. MEM (Var v) y.inst_operands ==> v IN FDOM s'.vs_vars) /\
-   (y.inst_opcode <> INVOKE ==>
+   (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
     !l. MEM (Label l) y.inst_operands ==> l IN FDOM s'.vs_labels)` by
     (irule dft_remaining_inv_ready >> qexistsl_tac [`bb`, `fn`, `post`, `h::pre`] >>
      simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
@@ -2926,6 +2932,7 @@ Theorem dft_run_block_gas:
   ~s'.vs_call_ctx.cc_static /\
   (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
      ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+       i.inst_opcode <> CODECOPY /\
      MEM (Label l) i.inst_operands ==> l IN FDOM s'.vs_labels) /\
   (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
     ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
