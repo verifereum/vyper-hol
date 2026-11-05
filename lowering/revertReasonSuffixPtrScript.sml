@@ -4,7 +4,7 @@ Theory revertReasonSuffixPtr
 Ancestors
   mstoreOperandStep revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
   typedCopyPtr fragGasSeqPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr exprLoweringProps
-  venomMemProps
+  venomMemProps fragExec fragGasPathPtr gasCount ptrSafeRun typedCopyLoopHeaderPtr
   venomInst venomExecSemantics venomState ptrDiscipline words arithmetic finite_map
 
 Theorem alloca_store_literal_checks:
@@ -255,3 +255,114 @@ Resume alias_pair_load_checks[second]:
 QED
 
 Finalise alias_pair_load_checks
+
+(* Both ABI offset stores and the size-cell update write clean controls. *)
+Theorem mstore_clean_checks:
+  ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME a /\
+  eval_operand value s = SOME w /\ op_taint tn value = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MSTORE [Var dst;value] []] s Gf tnf /\
+    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnf.t_mem) /\
+    tnf.t_mem SUBSET tn.t_mem /\
+    (!x C. ptr_covers G tn x s C ==>
+      ptr_covers Gf tnf x (mstore (w2n a) w s) C)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MSTORE [Var dst;value] []) s =
+     OK (mstore (w2n a) w s)` by
+    (irule step_mstore_operands >> simp[eval_operand_def]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn
+     (mk_inst id MSTORE [Var dst;value] []) s` by
+    (irule ptr_inst_ok_mstore >> simp[]) >>
+  simp[inst_seq_ptr_def] >>
+  ` (step_taint (mk_inst id MSTORE [Var dst;value] []) s
+      (mstore (w2n a) w s) tn).t_mem =
+      tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}` by
+    (irule (cj 5 mstore_ghost_frame) >> simp[]) >>
+  simp[pred_setTheory.SUBSET_DEF] >>
+  rpt strip_tac >> irule ptr_covers_step_frame >>
+  simp[mk_inst_def, mstore_def, lookup_var_def]
+QED
+
+Theorem revert_operand_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id REVERT [Var p;len] []) /\
+  ptr_covers G tn p s (w2n n) /\
+  eval_operand len s = SOME n /\ op_taint tn len = {} /\
+  ~ctx_has_dalloca ctx /\
+  step_inst_base (mk_inst id REVERT [Var p;len] []) s = Abort a t ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (Abort a t)
+Proof
+  strip_tac >>
+  `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id REVERT [Var p;len] []) s` by
+    (irule ptr_inst_ok_revert >> simp[]) >>
+  irule (cj 3 gas_path_ptr_rules) >> simp[exit_result_def] >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+  qexists_tac `0` >>
+  simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
+       exit_result_def, ptr_safe_step_def] >>
+  gvs[mk_inst_def]
+QED
+
+Theorem revert_abi_tail_checks:
+  lookup_var buf s = SOME a /\ lookup_var szvar s = SOME (n2w k) /\
+  ptr_covers G tn buf s capbytes /\ op_taint tn (Var szvar) = {} /\
+  28 < capbytes /\ 28+(k+4) <= capbytes /\
+  w2n a+28 < dimword(:256) /\ k+4 < dimword(:256) /\
+  buf <> retptr /\ szvar <> retptr /\ retptr <> retlen /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ADD [Var buf;Lit 28w] [retptr];
+     mk_inst (id+1) ADD [Lit 4w;Var szvar] [retlen];
+     mk_inst (id+2) REVERT [Var retptr;Var retlen] []] s Gf tnf
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;l] _ _ _` >>
+  `op_taint tn (Var buf) = {}` by fs[ptr_covers_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `step_inst_base i s = OK (update_var retptr (a+28w) s)` by
+    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
+  `ptr_covers g1 t1 retptr s1 (k+4)` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`, Abbr `i`] >>
+     irule typed_copy_loop_dynamic_offset_covers >> simp[eval_operand_def] >>
+     qexists_tac `capbytes` >> simp[]) >>
+  `lookup_var szvar s1 = SOME (n2w k)` by
+    fs[Abbr `s1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `op_taint t1 (Var szvar) = {}` by
+    (simp[Abbr `t1`, Abbr `i`, step_taint_def, set_var_taint_def,
+       op_taint_def, mk_inst_def, FLOOKUP_UPDATE] >> fs[op_taint_def]) >>
+  suspend "length"
+QED
+
+Resume revert_abi_tail_checks[length]:
+  `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
+    (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `step_inst_base j s1 = OK (update_var retlen (n2w (k+4)) s1)` by
+    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def, GSYM word_add_n2w, WORD_ADD_COMM]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
+  `ptr_covers g2 t2 retptr s2 (k+4)` by
+    (simp[Abbr `g2`, Abbr `t2`, Abbr `s2`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  `op_taint t2 (Var retlen) = {}` by
+    simp[Abbr `t2`, Abbr `j`, cj 1 copy_len_binop_ghost_frame] >>
+  `lookup_var retlen s2 = SOME (n2w (k+4))` by
+    simp[Abbr `s2`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ptr_inst_ok D 0 0 ctx fn g2 t2 l s2` by
+    (simp[Abbr `l`] >> irule ptr_inst_ok_revert >>
+     simp[eval_operand_def, w2n_n2w, LESS_MOD]) >>
+  Cases_on `step_inst_base l s2` >> simp[inst_seq_ptr_def]
+QED
+
+Finalise revert_abi_tail_checks
