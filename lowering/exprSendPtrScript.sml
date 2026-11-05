@@ -247,3 +247,98 @@ Proof
     simp[is_terminator_def] >>
   drule_all gas_path_ptr_step >> simp[]
 QED
+
+Theorem call_assert_code_lookup:
+  emit_op CALL ops sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\ fn_has_code sm sb fn ==>
+  ?out bb. success = Var out /\
+    lookup_block sm.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sm.cs_current_insts) =
+      SOME (mk_inst sm.cs_next_id CALL ops [out]) /\
+    get_instruction bb (SUC (LENGTH sm.cs_current_insts)) =
+      SOME (mk_inst (sm.cs_next_id + 1) ASSERT [Var out] [])
+Proof
+  strip_tac >> drule_all send_tail_shape >> strip_tac >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  qexistsl_tac [`out`, `bb`] >> simp[] >>
+  first_assum (qspec_then `0` mp_tac) >>
+  first_x_assum (qspec_then `1` mp_tac) >> simp[arithmeticTheory.ADD1]
+QED
+
+(* Read-result correspondence for any zero-region CALL, not just an emitted id. *)
+Theorem send_read_call_step:
+  stmt_state_rel ctx fn cenv cx es s /\
+  outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
+  IS_SOME (eval_operand gas s) /\
+  eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es = (res, es') ==>
+  ?s'. s' = s with <| vs_outcomes := s'.vs_outcomes;
+                      vs_requests := s'.vs_requests;
+                      vs_accounts := s'.vs_accounts;
+                      vs_transient := s'.vs_transient;
+                      vs_logs := s'.vs_logs;
+                      vs_pending_deletions := s'.vs_pending_deletions;
+                      vs_returndata := s'.vs_returndata |> /\
+    ((res = INL NoneV /\ step_inst_base inst s = OK (update_var out 1w s') /\
+      state_rel fn cenv cx es' s') \/
+     (res = INR (Error (RuntimeError "send failed")) /\
+      step_inst_base inst s = OK (update_var out 0w s')))
+Proof
+  strip_tac >> drule eval_send_read >> strip_tac >>
+  `state_rel fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `?os. es.outcomes = SOME os` by fs[compileEnvTheory.state_rel_def] >>
+  drule_all eval_send_outcome_typed >> strip_tac >>
+  drule_all extCallOracleStepTheory.send_call_oracle_step >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem send_read_checked_tail:
+  stmt_state_rel ctx fn cenv cx es s /\ stor_taint_ok cx tn s /\
+  outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
+  op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
+  eval_operand gas s = SOME gw /\
+  eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es = (res, es') ==>
+  ?t u w.
+    t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
+                  vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
+                  vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
+                  vs_returndata := t.vs_returndata |> /\
+    u = update_var out w t /\ step_inst_base inst s = OK u /\
+    eval_operand (Var out) u = SOME w /\
+    ((res = INL NoneV /\ w = 1w /\ state_rel fn cenv cx es' t /\
+      gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0
+        (step_prov PG G inst u) (step_taint inst s u tn)
+        (OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)))) \/
+     (res = INR (Error (RuntimeError "send failed")) /\ w = 0w /\
+      gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0
+        (step_prov PG G inst u) (step_taint inst s u tn)
+        (Abort Revert_abort (revert_state
+          (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx))))))
+Proof
+  strip_tac >>
+  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn inst s` by
+    (irule ptr_inst_ok_send_call >> metis_tac[]) >>
+  `IS_SOME (eval_operand gas s)` by simp[] >>
+  `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
+    simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  drule_all send_read_call_step >> strip_tac
+  >- (qexistsl_tac [`s'`, `update_var out 1w s'`, `1w`] >> simp[] >>
+      irule call_assert_ok_path_ptr >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`s'`, `update_var out 0w s'`, `0w`] >> simp[] >>
+  irule call_assert_fail_path_ptr >> simp[] >> metis_tac[]
+QED
