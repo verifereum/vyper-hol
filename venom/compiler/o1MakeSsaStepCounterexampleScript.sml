@@ -70,3 +70,16 @@ Theorem row_boundary_rows:
 Proof
   EVAL_TAC
 QED
+
+(* The frozen contract quantifies over every k, not just scheduled MakeSSA
+   positions. At k=2 it demands elimination of ALLOCA, which MakeSSA does
+   not perform. Excluding k=2, or requiring no ALLOCA already at that row,
+   removes this obstruction only; neither change proves the other clauses. *)
+Theorem make_ssa_step_contract_at_counterexample:
+  ~o1_step_contract_at 2 rpolicy (CFP_Simple VP_MakeSSA)
+Proof
+  simp[o1_step_contract_at_def] >>
+  qexistsl_tac [`row_boundary_unit`, `row_boundary_supply`,
+               `row_boundary_fn`, `row_boundary_out`] >>
+  simp[row_boundary_step, row_boundary_shape, row_boundary_rows]
+QED
