@@ -954,3 +954,50 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all toplevel_copy_body_ordinary >> simp[]
 QED
+
+Theorem toplevel_copy_backedge_path:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label hdr] []) ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to hdr s)) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn (jump_to hdr s)
+Proof
+  strip_tac >> irule toplevel_copy_jump_inv_path >>
+  simp[] >>
+  simp[step_inst_base_def, mk_inst_def, ptr_inst_ok_def, access_ok_def,
+       taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+  simp[step_inst_non_invoke, step_inst_base_def,
+       mk_inst_def, jump_to_def, op_taint_def]
+QED
+
+Theorem toplevel_copy_test_inv:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
+  cv <> tv /\ dst <> tv /\ (!x. src = Var x ==> x <> tv) /\ MEM tv ds ==>
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k
+    (step_prov PG G (mk_inst id EQ [Var cv; Lit (n2w n)] [tv])
+      (update_var tv (bool_to_word (k=n)) s))
+    (step_taint (mk_inst id EQ [Var cv; Lit (n2w n)] [tv]) s
+      (update_var tv (bool_to_word (k=n)) s) tn)
+    (update_var tv (bool_to_word (k=n)) s)
+Proof
+  strip_tac >>
+  `!x. ~MEM x ds ==> x <> tv /\ tv <> x` by metis_tac[] >>
+  gvs[toplevel_copy_inv_def, storage_copy_inv_def, storage_copy_frame_def,
+       copy_prefix_def, copy_static_def, ptr_covers_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+       step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, first_prov_def, op_prov_def,
+       adopt_reset_def, store_taint_def, imm_taint_def,
+       mem_taint_def, new_site_bytes_def, written_taint_def, step_writes_def,
+       range_bytes_def] >>
+  Cases_on `src` >>
+  gvs[eval_operand_def, op_taint_def, lookup_var_def, FLOOKUP_UPDATE,
+      source_memory_write_ranges_def] >>
+  `{i | ?aid b' sz. aid NOTIN FDOM s.vs_allocas /\
+      FLOOKUP s.vs_allocas aid = SOME (b',sz) /\ b' <= i /\ i < b'+sz} = {}` by
+    (simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  gvs[] >> metis_tac[]
+QED
