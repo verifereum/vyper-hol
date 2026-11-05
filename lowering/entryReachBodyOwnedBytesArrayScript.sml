@@ -44,7 +44,10 @@ Theorem owned_array_initializer[local]:
     entry_loop_fields initial t /\ fresh_vars_wrt limit_st t /\ ~t.vs_halted /\
     t.vs_current_bb = loop_st.cs_current_bb /\
     t.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
-    (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op initial)
+    (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op initial) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (if FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = initial.vs_alloca_next+32 else t.vs_alloca_next = initial.vs_alloca_next)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   SUBGOAL_THEN ``d+sz <= p \/ p+32 <= d`` assume_tac
@@ -96,7 +99,6 @@ Resume owned_array_initializer[pc_frame]:
      `abi_alloca_history _ initial`, `fn_has_code _ _ _`,
      `run_inst_seq _ initial = _`, `entry_owned_region _ _ _ _ _ initial`,
      `d+sz <= p \/ p+32 <= d`,
-     `!id. id <> _ ==> _`, `if _ then _ else _`,
      `abi_decode_footprint_frame _ _ _`] >>
   fs[entry_owned_loop_resources_def, entry_owned_region_def,
      abi_encoder_registered_effect_def, entry_loop_fields_def,
@@ -369,7 +371,10 @@ Theorem owned_array_canonical_initializer[local]:
     abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
       (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap t /\
     mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
-      (abi_decode_source CALLDATALOAD t) = enc (Array NONE aty) (ListV avs)
+      (abi_decode_source CALLDATALOAD t) = enc (Array NONE aty) (ListV avs) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (if FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = initial.vs_alloca_next+32 else t.vs_alloca_next = initial.vs_alloca_next)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
@@ -465,7 +470,12 @@ Theorem entry_owned_canonical_bytes_array_execution:
       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
     entry_loop_fields initial t /\ entry_decode_path ctx fn initial t /\
     abi_encoder_registered_effect {header_st.cs_next_id}
-      [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))] initial t
+      [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))] initial t /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
+       eval_operand op t = SOME w) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (if FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = initial.vs_alloca_next+32 else t.vs_alloca_next = initial.vs_alloca_next)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `entry_array_init_resources _ _ _ _ _ _`
@@ -540,6 +550,12 @@ Resume entry_owned_canonical_bytes_array_execution[configured]:
   drule owned_bytes_loop_endpoint >> simp[Excl "enc_def"] >>
   disch_then drule_all >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `(!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
+       eval_operand op t = SOME w) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (if FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = initial.vs_alloca_next+32 else t.vs_alloca_next = initial.vs_alloca_next)` by
+    suspend "producer_frame" >>
   qexists_tac `t` >> simp[Excl "enc_def"] >> suspend "final_frame"
 QED
 
@@ -574,5 +590,19 @@ Resume entry_owned_canonical_bytes_array_execution[final_frame]:
      simp[] >> rpt strip_tac >> decide_tac) >>
   metis_tac[entryReachBodyRegisteredChildTheory.entry_registered_fields_trans, entry_decode_path_trans,
             abi_encoder_registered_effect_trans]
+QED
+Resume entry_owned_canonical_bytes_array_execution[producer_frame]:
+  markerLib.RESUME_TAC >>
+  `st.cs_next_var <= loop_st.cs_next_var` by
+    (drule abi_decode_array_loop_init_shape >> simp[abi_decode_source_opcode_def]) >>
+  qpat_x_assum `entry_bytes_array_inv _ _ _ _ _ _ _ t` mp_tac >>
+  qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _` mp_tac >>
+  qpat_x_assum `!id. id <> header_st.cs_next_id ==> _` mp_tac >>
+  qpat_x_assum `if FLOOKUP initial.vs_allocas _ = NONE then _ else _` mp_tac >>
+  qpat_x_assum `st.cs_next_var <= loop_st.cs_next_var` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp_tac (srw_ss()) [entry_bytes_array_inv_def, jump_to_def] >>
+  rpt strip_tac >>
+  metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono]
 QED
 Finalise entry_owned_canonical_bytes_array_execution

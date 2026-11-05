@@ -9,6 +9,22 @@ Ancestors
   venomMemDefs venomState compileEnv finite_map words list arithmetic
   context ctorAbiActualArrayRun
 
+(* Checked one-slot arena regression: reuse executes at the arena end,
+   where the former unconditional fresh-slot margin is false. *)
+Theorem nested_counter_arena_end_probe[local]:
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit 32w] /\
+  inst.inst_outputs = [out] /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,32) /\
+  s.vs_alloca_next = b+32 ==>
+  (FLOOKUP s.vs_allocas inst.inst_id = NONE ==> s.vs_alloca_next+32 <= b+32) /\
+  ~ (s.vs_alloca_next+32 <= b+32) /\
+  ?t. step_inst_base inst s = OK t /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = b+32
+Proof
+  strip_tac >> simp[] >>
+  drule_all actualAllocExecTheory.actual_word_alloca_reuse_run >>
+  metis_tac[]
+QED
+
 Theorem nested_initializer_resources[local]:
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
@@ -17,7 +33,7 @@ Theorem nested_initializer_resources[local]:
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
   entry_owned_loop_resources ctx fn site cid p oid root extent d sz s /\
   d <= cell /\ cell+csz <= d+sz /\ 32 <= csz /\
-  b <= s.vs_alloca_next /\ s.vs_alloca_next+32 <= b+cap /\
+  b <= s.vs_alloca_next /\ (FLOOKUP s.vs_allocas header_st.cs_next_id = NONE ==> s.vs_alloca_next+32 <= b+cap) /\
   (!q. FLOOKUP s.vs_allocas header_st.cs_next_id = SOME (q,32) ==>
     b <= q /\ q+32 <= b+cap) ==>
   ?q. entry_array_init_resources dst src maxn abi_sz
@@ -87,10 +103,12 @@ Theorem entry_nested_owned_initializer_boundary:
   abi_decode_index_init header_st = (iip,loop_st) /\
   (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts fn)) /\
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
-  b <= s.vs_alloca_next /\ s.vs_alloca_next+32 <= b+cap /\
+  b <= s.vs_alloca_next /\ (FLOOKUP s.vs_allocas header_st.cs_next_id = NONE ==> s.vs_alloca_next+32 <= b+cap) /\
   (!q. FLOOKUP s.vs_allocas header_st.cs_next_id = SOME (q,32) ==>
     b <= q /\ q+32 <= b+cap) ==>
-  ?u q. abi_decoder_address_frame st.cs_next_var s u /\
+  ?u q. eval_operand (FST ops) u = SOME (n2w j) /\
+    abi_decoder_operand_live middle.cs_next_var (FST ops) /\
+    abi_decoder_address_frame st.cs_next_var s u /\
     entry_decode_path ctx fn s u /\ entry_loop_fields s u /\
     ~u.vs_halted /\ u.vs_current_bb = middle.cs_current_bb /\
     u.vs_inst_idx = LENGTH middle.cs_current_insts /\ fresh_vars_wrt limit_st u /\

@@ -44,7 +44,7 @@ Theorem entry_nested_owned_bytes_execution:
   abi_decode_index_init header_st = (iip,loop_st) /\
   (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts fn)) /\
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
-  b <= s.vs_alloca_next /\ s.vs_alloca_next+32 <= b+cap /\
+  b <= s.vs_alloca_next /\ (FLOOKUP s.vs_allocas header_st.cs_next_id = NONE ==> s.vs_alloca_next+32 <= b+cap) /\
   (!q. FLOOKUP s.vs_allocas header_st.cs_next_id = SOME (q,32) ==>
     b <= q /\ q+32 <= b+cap) /\
   EL j avs = ListV iavs /\ EL j xs = ArrayV (DynArrayV ixs) /\
@@ -72,7 +72,13 @@ Theorem entry_nested_owned_bytes_execution:
     entry_owned_loop_resources ctx fn site header_st.cs_next_id q oid root extent
       (d+32+j*type_memory_bytes ce ity) (type_memory_bytes ce ity) t /\
     abi_encoder_registered_effect {header_st.cs_next_id}
-      [(d+32+j*type_memory_bytes ce ity,type_memory_bytes ce ity)] s t
+      [(d+32+j*type_memory_bytes ce ity,type_memory_bytes ce ity)] s t /\
+    eval_operand (FST ops) t = SOME (n2w j) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+       eval_operand op t = SOME w) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (if FLOOKUP s.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = s.vs_alloca_next+32 else t.vs_alloca_next = s.vs_alloca_next)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all entry_nested_owned_initializer_boundary >>
@@ -81,6 +87,9 @@ Proof
 QED
 
 Resume entry_nested_owned_bytes_execution[inner]:
+  `st.cs_next_var <= middle.cs_next_var` by
+    (drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
+     simp_tac bool_ss []) >>
   map_every (fn q => qpat_x_assum q kall_tac)
     [`abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`,
      `abi_decoder_coherent _ _ _ (ArrayT _ (Dynamic outer)) _`,
@@ -97,6 +106,13 @@ Resume entry_nested_owned_bytes_execution[inner]:
   suspend "compose"
 QED
 Resume entry_nested_owned_bytes_execution[compose]:
+  `eval_operand (FST ops) t = SOME (n2w j) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+       eval_operand op t = SOME w) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (if FLOOKUP s.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = s.vs_alloca_next+32 else t.vs_alloca_next = s.vs_alloca_next)` by
+    suspend "producer_frames" >>
   `entry_decode_path ctx fn s t` by metis_tac[entry_decode_path_trans] >>
   `entry_loop_fields s t` by
     metis_tac[entryReachBodyRegisteredChildTheory.entry_registered_fields_trans] >>
@@ -111,5 +127,17 @@ Resume entry_nested_owned_bytes_execution[compose]:
   POP_ASSUM_LIST (K all_tac) >>
   simp_tac (srw_ss()) [AC ADD_ASSOC ADD_COMM] >>
   metis_tac[abi_encoder_registered_effect_trans]
+QED
+Resume entry_nested_owned_bytes_execution[producer_frames]:
+  qpat_x_assum `abi_decoder_address_frame _ s u` mp_tac >>
+  qpat_x_assum `st.cs_next_var <= middle.cs_next_var` mp_tac >>
+  qpat_x_assum `eval_operand (FST ops) u = _` mp_tac >>
+  qpat_x_assum `abi_decoder_operand_live middle.cs_next_var (FST ops)` mp_tac >>
+  qpat_x_assum `!op w. abi_decoder_operand_live middle.cs_next_var op /\ _ ==> _` mp_tac >>
+  qpat_x_assum `!id. id <> header_st.cs_next_id ==> _` mp_tac >>
+  qpat_x_assum `if FLOOKUP u.vs_allocas _ = NONE then _ else _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp_tac (srw_ss()) [abi_decoder_address_frame_def] >> rpt strip_tac >>
+  metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono]
 QED
 Finalise entry_nested_owned_bytes_execution
