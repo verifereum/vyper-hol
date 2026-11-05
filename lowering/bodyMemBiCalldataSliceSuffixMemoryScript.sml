@@ -5,7 +5,8 @@ Ancestors
   venomState venomInst venomExecSemantics venomMemDefs
   fragExec compileEnv emitHelper emitHelperProps context loweringSlice
   words list builtinBytes exprLoweringProps freshWrites exprSimDefs arithmetic
-  exprSimAlloc loweringPosts finite_map
+  exprSimAlloc loweringPosts finite_map valueTypingMemoryProps builtinBytesMemory
+  venomMemProps venomMemProofs venomInstProps
 
 Theorem calldata_slice_copy_store_mem:
   eval_operand dst s = SOME wd /\ eval_operand src s = SOME wa /\
@@ -24,17 +25,6 @@ Proof
        write_memory_def, eval_operand_def]
 QED
 
-Theorem calldata_slice_bounds_mem:
-  compile_assert_slice_bounds a num_op limit sa = ((),sb) ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  simp[compile_assert_slice_bounds_def, comp_bind_def, comp_ignore_bind_def,
-       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
-       emit_def, comp_return_def] >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
-  irule run_inst_seq_mem_ok_every >>
-  simp[mk_inst_def, below_frontier_no_ranges]
-QED
 
 (* Same pure-prefix boundary as slice_bounds_writes_fresh in the
    non-exporting exprSimCalldataSlice theory. *)
@@ -90,24 +80,15 @@ Theorem calldata_slice_checked_tail_mem:
 Proof
   strip_tac >>
   `sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm` by
-    (qpat_x_assum `compile_assert_slice_bounds _ _ _ _ = _` mp_tac >>
-     simp[compile_assert_slice_bounds_def, comp_bind_def, comp_ignore_bind_def,
-          emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
-          emit_def, comp_return_def] >> strip_tac >> gvs[] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
+    (drule calldata_slice_bounds_extends >> simp[inst_extends_def]) >>
   `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb` by
-    (qpat_x_assum `sm.cs_current_insts = _` kall_tac >>
-     qpat_x_assum `emit_void CALLDATACOPY _ _ = _` mp_tac >>
-     qpat_x_assum `emit_void MSTORE _ _ = _` mp_tac >>
-     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
-          fresh_id_def, emit_def, comp_return_def] >>
-     rpt strip_tac >> gvs[] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
+    (imp_res_tac inst_extends_emit_void >>
+     metis_tac[inst_extends_trans, inst_extends_def]) >>
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
     (irule emitted_insts_append >> simp[]) >>
   pop_assum SUBST1_TAC >>
   `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
-    (irule calldata_slice_bounds_mem >> goal_assum drule) >>
+    (irule compile_assert_slice_bounds_mem_ok >> goal_assum drule) >>
   irule run_inst_seq_mem_ok_append >> simp[] >> rpt strip_tac >>
   drule calldata_slice_bounds_fresh >> strip_tac >>
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
@@ -166,16 +147,9 @@ Theorem calldata_slice_after_alloc_mem:
 Proof
   strip_tac >> drule_all calldata_slice_address_size_mem >> strip_tac >>
   `sb.cs_current_insts = s2.cs_current_insts ++ emitted_insts s2 sb` by
-    (qpat_x_assum `s2.cs_current_insts = _` kall_tac >>
-     qpat_x_assum `compile_assert_slice_bounds _ _ _ _ = _` mp_tac >>
-     qpat_x_assum `emit_void CALLDATACOPY _ _ = _` mp_tac >>
-     qpat_x_assum `emit_void MSTORE _ _ = _` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[compile_assert_slice_bounds_def, comp_bind_def, comp_ignore_bind_def,
-          emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
-          emit_def, comp_return_def] >> rpt strip_tac >>
-     rpt (first_x_assum (SUBST_ALL_TAC o SYM)) >>
-     simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
+    (imp_res_tac inst_extends_emit_void >>
+     drule calldata_slice_bounds_extends >> strip_tac >>
+     metis_tac[inst_extends_trans, inst_extends_def]) >>
   `emitted_insts sa sb = emitted_insts sa s2 ++ emitted_insts s2 sb` by
     (irule emitted_insts_append >> simp[]) >>
   pop_assum SUBST1_TAC >> irule run_inst_seq_mem_ok_append >> simp[] >>
@@ -199,3 +173,73 @@ Proof
   disch_then irule >> metis_tac[]
 QED
 
+
+Theorem calldata_slice_seq_mem:
+  !func cenv cx es n start_op sa sb buf_op s ctx wa.
+    compile_slice_calldata start_op (Lit (n2w n))
+      (32 + 32 * word_size n) sa = (buf_op,sb) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    32 + 32 * word_size n < dimword (:256) /\ 0 < n /\
+    eval_operand start_op s = SOME wa /\
+    (!x. start_op = Var x ==> not_fresh_at sa x) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA
+      [Lit (n2w (32 + 32 * word_size n))]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+    run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule slice_calldata_parts >> strip_tac >> gvs[] >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule calldata_slice_allocation_split >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >>
+  irule run_inst_seq_mem_ok_append >>
+  reverse conj_tac
+  >- (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+      simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> strip_tac >> gvs[] >>
+      drule emitted_insts_emit_op >> strip_tac >>
+      simp[run_inst_seq_mem_ok_last, mk_inst_def, below_frontier_no_ranges]) >>
+  simp[] >>
+  `w2n w + (32 + 32 * word_size n) <= t.vs_alloca_next` by
+    (`alloca_inv t` by fs[stmt_state_rel_def] >>
+     fs[alloca_inv_def, alloca_next_valid_def] >>
+     first_x_assum drule >> simp[]) >>
+  `n <= 32 * word_size n` by simp[valueTypingMemoryPropsTheory.word_size_capacity] >>
+  `t.vs_labels = s.vs_labels` by metis_tac[hash_alloc_buffer_labels] >>
+  `eval_operand start_op t = SOME wa` by
+    (Cases_on `start_op` >> gvs[eval_operand_def, lookup_var_def]) >>
+  `sm.cs_next_var = sa.cs_next_var + 1` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     drule emitted_insts_emit_op >> simp[]) >>
+  `!x. start_op = Var x ==> not_fresh_at sm x` by
+    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  drule calldata_slice_after_alloc_mem >>
+  disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >>
+  simp[] >> disch_then irule >>
+  conj_tac >- metis_tac[] >> qexists_tac `w` >> gvs[] >> decide_tac
+QED
+
+Theorem calldata_slice_seq_frontier:
+  !insts s t.
+    EVERY (\i. i.inst_opcode <> INVOKE) insts /\
+    run_inst_seq insts s = OK t ==>
+    s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  Induct >> simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  `s.vs_alloca_next <= v.vs_alloca_next` by
+    (Cases_on `h.inst_opcode = ALLOCA`
+     >- (irule venomMemPropsTheory.step_inst_alloca_alloca_next_mono >>
+         qexistsl_tac [`ARB`, `0`, `h`] >>
+         simp[venomExecSemanticsTheory.step_inst_non_invoke,
+              venomInstTheory.is_alloca_op_def]) >>
+     `v.vs_alloca_next = s.vs_alloca_next` by
+       metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_next] >> simp[]) >>
+  first_x_assum drule >> simp[]
+QED
