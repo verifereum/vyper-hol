@@ -109,3 +109,36 @@ Proof
   PairCases_on `x` >>
   simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
 QED
+
+(* Read-only suffixes need no semantic local-value frame premise. *)
+Theorem hash_readonly_ghost_inv:
+  !d cenv cx es G tn s t G' tn' sa.
+    ghost_inv d cenv cx es G tn s /\
+    (t with vs_vars := s.vs_vars) = s /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    local_ptrs_reserved cenv sa /\
+    (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+    (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p)) ==>
+    ghost_inv d cenv cx es G' tn' t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient` by
+    (qpat_x_assum `(t with vs_vars := s.vs_vars) = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `!p k. not_fresh_at sa p /\ ptr_covers G tn p s k ==>
+    ptr_covers G' tn' p t k` by
+    (rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ghost_inv_def] >> strip_tac >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+    conj_tac >- metis_tac[] >> metis_tac[]) >>
+  conj_tac >- (Cases_on `d` >> gvs[return_buf_ptr_def] >>
+    PairCases_on `x` >> gvs[return_buf_ptr_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >> gvs[stor_taint_ok_def]
+QED
