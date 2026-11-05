@@ -8,7 +8,7 @@ Ancestors
 
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -34,10 +34,10 @@ val C = ``\ty tv.
  actual.vs_labels = initial.vs_labels``;
 
 Theorem ctor_actual_array_header_reach:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD (Lit 0w) hi
     hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-    sb d slot b cap next initial /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+    0 sb d slot b cap next initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   ctor_actual_array_observation ctx func site ids D N d outsz next limit_st
@@ -50,9 +50,9 @@ Theorem ctor_actual_array_header_reach:
 Proof
   strip_tac >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
     (fs[abi_decoder_ranges_def, Excl "enc_def"] >>
@@ -65,15 +65,23 @@ Proof
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb : bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  fs[abi_decode_position_header_delta_def] >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid ip src DLOAD
+     (STRING #"%" (toString header_var))
+     (STRING #"%" (toString (header_var+1)))
+     (STRING #"%" (toString (header_var+2)))
+     (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_loop_cfg_def, abi_decode_position_loop_cfg_def,
+       abi_decode_position_header_zero] >>
   drule_all ctor_actual_array_header_run >> simp[]
 QED
 
 (* Pure shared hypotheses for header/body composition. *)
 val P = ``
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD (Lit 0w) hi
     hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-    sb d slot b cap next initial /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+    0 sb d slot b cap next initial /\
   fn_inst_ids_distinct func /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
@@ -102,9 +110,9 @@ Proof
   drule abi_decoder_recursive_data_facts >> strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `32 + LENGTH vs * type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
     (asm_simp_tac bool_ss [] >> simp[]) >>

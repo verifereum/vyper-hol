@@ -6,16 +6,16 @@ Ancestors
 
 Theorem abi_decoder_pre_destination:
   eval_operand dst' s = eval_operand dst s ==>
-  (abi_decoder_pre ce env ty tv di av v st last src dst' opc hi sb d b cap s <=>
-   abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s)
+  (abi_decoder_pre ce env ty tv di av v st last src dst' opc base_op hi src_base sb d b cap s <=>
+   abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s)
 Proof
   simp[abi_decoder_pre_def, abi_decoder_ranges_def]
 QED
 
 Theorem abi_decoder_pre_destination_value:
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s /\
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s /\
   eval_operand dst' s = SOME (n2w d) ==>
-  abi_decoder_pre ce env ty tv di av v st last src dst' opc hi sb d b cap s
+  abi_decoder_pre ce env ty tv di av v st last src dst' opc base_op hi src_base sb d b cap s
 Proof
   rw[abi_decoder_pre_def, abi_decoder_ranges_def]
 QED

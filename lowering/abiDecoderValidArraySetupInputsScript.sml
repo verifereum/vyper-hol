@@ -150,14 +150,15 @@ Theorem abi_decoder_valid_array_child_pre:
     (dec (Array NONE at) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE at) bs /\ j < LENGTH vs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
-  abi_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
   eval_operand childsrc s = SOME (n2w (sb + off)) /\
   eval_operand childdst s = SOME (n2w (d + 32 + j * type_memory_bytes ce ty)) /\
   abi_decoder_operand_live st.cs_next_var childsrc /\
-  abi_decoder_operand_live st.cs_next_var childdst /\ abi_decoder_operand_live st.cs_next_var hi ==>
-  abi_decoder_valid_pre ce env sf ty tv childbs (EL j vs) st childsrc childdst opc hi
+  abi_decoder_operand_live st.cs_next_var childdst /\ abi_decoder_operand_live st.cs_next_var base_op /\
+  abi_decoder_operand_live st.cs_next_var hi ==>
+  abi_decoder_valid_pre ce env sf ty tv childbs (EL j vs) st childsrc childdst opc base_op hi B
     (sb + off) (d + 32 + j * type_memory_bytes ce ty) b cap s
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -168,7 +169,7 @@ Proof
     `vyper_to_abi_type env ty`, `DROP 32 (bs:word8 list)`, `DROP 32 (bs:word8 list)`]
     abi_decode_array_member_EL) >> impl_tac >- asm_simp_tac bool_ss [] >>
   disch_then (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  `sb + LENGTH bs < dimword (:256)` by fs[abi_decoder_ranges_def] >>
+  `B + sb + LENGTH bs < dimword (:256)` by fs[abi_decoder_ranges_def] >>
   drule_all (SIMP_RULE arith_ss [LET_THM] abi_valid_array_child_window) >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `j * type_memory_bytes ce ty + type_memory_bytes ce ty <= maxn * type_memory_bytes ce ty`
@@ -193,12 +194,12 @@ Theorem abi_decoder_valid_array_setup_inputs:
   abi_decoder_coherent ce env sf ty tv /\ is_dynamic at /\
   (!elem. at <> Array (SOME 0) elem) /\
   vyper_decode_valid_enc (Array NONE at) bs /\ j < abi_head_word bs /\
-  abi_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs ==>
+  abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs) d outsz b cap initial /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs ==>
   abi_decoder_dynamic (type_to_abi_dec_info sf ce ty) /\
   dec_info_needs_offset (type_to_abi_dec_info sf ce ty) /\ abi_decode_source_opcode opc /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  abi_decode_load opc (n2w (sb + 32 + j * asz):bytes32) initial = n2w rel /\
+  abi_decode_load opc (n2w (B + sb + 32 + j * asz):bytes32) initial = n2w rel /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb + 32 + rel + asz <= hb /\ hb < dimword (:256))
 Proof
@@ -208,11 +209,12 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_header_def]) >>
   drule abi_decoder_coherent_dynamic >> strip_tac >>
   drule_all abi_decoder_nonempty_type_offset >> strip_tac >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   mp_tac (SIMP_RULE arith_ss [LET_THM]
-    (Q.INST [`at` |-> `vyper_to_abi_type env ty`, `s` |-> `initial:venom_state`]
-      abi_valid_array_child_window)) >> impl_tac >- asm_simp_tac bool_ss [] >>
+    (Q.INST [`at` |-> `vyper_to_abi_type env ty`, `s` |-> `initial:venom_state`,
+      `sb` |-> `B + sb`]
+      abi_valid_array_child_window)) >> impl_tac >- asm_simp_tac arith_ss [] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `is_abi_dynamic ce.ce_struct_fields ty /\
     abi_decoder_dynamic (type_to_abi_dec_info sf ce ty)` by metis_tac[] >>

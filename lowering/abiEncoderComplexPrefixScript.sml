@@ -5,7 +5,7 @@ Ancestors
   emitHelperProps exprLoweringProps compileEnv emitHelper context venomExecSemantics
   venomMemProps venomState venomInst finite_map words list rich_list arithmetic abiDecoderLoop
   fragExec instIdxIndep abiDecoderEffect abiDecoderProtectedScratch
-  abiDecoderPrimitiveLoopFrames abiDecoderFrameCompose pred_set
+  abiDecoderPrimitiveLoopFrames abiDecoderFrameCompose pred_set abiDecoderRange
 
 (* ===== Encoder Complex Prefix ===== *)
 

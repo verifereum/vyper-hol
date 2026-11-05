@@ -330,7 +330,7 @@ Proof
   irule freshWritesTheory.not_fresh_at_mono >>
   rename1 `compile_alloc_buffer _ _ = (buf,sm)` >>
   qexists `sm` >> reverse conj_tac >- metis_tac[] >>
-  rename1 `compile_abi_decode_to_buf _ _ _ _ info se = ((),sf)` >>
+  rename1 `compile_abi_decode_to_buf _ _ _ _ _ info se = ((),sf)` >>
   `se.cs_next_var <= sf.cs_next_var` by
     metis_tac[cj 1 ci_mono_compile_abi_decode, ci_mono_def, pairTheory.SND] >>
   qpat_x_assum `emit_op ADD _ sm = _` mp_tac >>

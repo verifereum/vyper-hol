@@ -16,16 +16,17 @@ QED
 
 Theorem abi_decoder_tuple_inputs:
   abi_decoder_recursive_pre ce env sf (TupleT tys) (TupleTV tvs) di av v
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) ==>
+    st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) ==>
   ?avs vs. av = ListV avs /\ v = ArrayV (TupleV vs) /\
     abi_decoder_members ce env sf tys tvs avs vs /\
     type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys) /\
-    abi_decoder_ranges opc hi src dst sb
+    abi_decoder_ranges opc base_op hi src dst B sb
       (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
       d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial /\
-    mem_bytes_at sb (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
+    mem_bytes_at (B + sb) (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
       (abi_decode_source opc initial) = enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+    abi_decoder_operand_live st.cs_next_var base_op /\
     abi_decoder_operand_live st.cs_next_var hi
 Proof
   strip_tac >> drule abi_decoder_pre_observations >> strip_tac >>

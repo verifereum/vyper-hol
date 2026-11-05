@@ -4,23 +4,23 @@
 Theory abiDecoderMemberSetup
 Ancestors
   abiDecoderReentryPointer abiDecoderReentryAddress abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderGuards abiDecoderContract abiDecoderDynamic
+  abiDecoderReentry abiDecoderGuards abiDecoderContract abiDecoderDynamic abiDecoderRange
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState venomInst words list rich_list arithmetic
 
 Definition abi_decode_member_setup_def:
-  abi_decode_member_setup dst src opc hi dyn ao vo =
-    do child_src <- compile_getelemptr_abi src dyn ao opc hi;
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo =
+    do child_src <- compile_getelemptr_abi src dyn ao opc base_op hi;
        child_dst <- emit_op ADD [dst; Lit (n2w vo)];
        return (child_src,child_dst)
     od
 End
 
 Theorem abi_decode_complex_member_phases:
-  compile_abi_decode_complex_elems dst src opc hi ((di,asz,msz)::rest) ao vo =
-    do ops <- abi_decode_member_setup dst src opc hi (dec_info_needs_offset di) ao vo;
-       compile_abi_decode_to_buf (SND ops) (FST ops) opc hi di;
-       compile_abi_decode_complex_elems dst src opc hi rest (ao + asz) (vo + msz)
+  compile_abi_decode_complex_elems dst src opc base_op hi ((di,asz,msz)::rest) ao vo =
+    do ops <- abi_decode_member_setup dst src opc base_op hi (dec_info_needs_offset di) ao vo;
+       compile_abi_decode_to_buf (SND ops) (FST ops) opc base_op hi di;
+       compile_abi_decode_complex_elems dst src opc base_op hi rest (ao + asz) (vo + msz)
     od
 Proof
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [compile_abi_decode_to_buf_def])) >>
@@ -31,29 +31,32 @@ Proof
 QED
 
 Theorem abi_decode_member_setup_counters:
-  abi_decode_member_setup dst src opc hi dyn ao vo st = (ops,st') ==>
-  st'.cs_next_var = st.cs_next_var + (if dyn then if hi = Lit 0w then 4 else 6 else 2) /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo st = (ops,st') ==>
+  st'.cs_next_var = st.cs_next_var + (if dyn then (if hi = Lit 0w then 4 else 6) +
+    (if base_op = Lit 0w then 0 else 1) else 2) /\
   abi_decoder_operand_live st'.cs_next_var (FST ops) /\
   abi_decoder_operand_live st'.cs_next_var (SND ops)
 Proof
   simp[abi_decode_member_setup_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `compile_getelemptr_abi src dyn ao opc hi st = (child_src,middle)` >>
+  rename1 `compile_getelemptr_abi src dyn ao opc base_op hi st = (child_src,middle)` >>
   rename1 `emit_op ADD [dst; Lit (n2w vo)] middle = (child_dst,st')` >>
   imp_res_tac abi_decoder_member_pointer_counters >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac abi_decoder_operand_live_emit >>
   `middle.cs_next_var <= st'.cs_next_var` by simp[] >>
-  conj_tac >- (Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> gvs[]) >>
+  conj_tac >- (Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
 
 Theorem abi_decode_member_setup_reentry:
-  abi_decode_member_setup dst src opc hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo st = (ops,st') /\
   abi_decode_source_opcode opc /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
-  (dyn ==> abi_decode_load opc (n2w (sb + ao) : bytes32) s = n2w payload_off /\
+  (dyn ==> eval_operand base_op s = SOME (n2w B) /\
+    abi_decode_load opc (n2w (B + (sb + ao)) : bytes32) s = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     eval_operand (FST ops) t = SOME (n2w (sb + if dyn then payload_off else ao)) /\
@@ -65,17 +68,17 @@ Theorem abi_decode_member_setup_reentry:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decode_member_setup_counters >> strip_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_member_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `compile_getelemptr_abi src dyn ao opc hi st = (child_src,middle)` >>
+  rename1 `compile_getelemptr_abi src dyn ao opc base_op hi st = (child_src,middle)` >>
   rename1 `emit_op ADD [dst; Lit (n2w vo)] middle = (child_dst,st')` >>
   drule abi_decoder_member_pointer_counters >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   `st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= limit_st.cs_next_var`
-    by (Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> gvs[]) >>
+    by (Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
   mp_tac (Q.INST [`off` |-> `ao:num`, `st'` |-> `middle`,
-    `member_op` |-> `child_src`, `initial` |-> `s:venom_state`]
+    `member_op` |-> `child_src`, `src_base` |-> `B`, `initial` |-> `s:venom_state`]
     abi_decoder_member_pointer_reentry) >>
   impl_tac >- asm_simp_tac bool_ss [ADD_COMM] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st middle) s = OK prepared` >>
@@ -85,7 +88,7 @@ Proof
     `s` |-> `prepared:venom_state`, `lhs` |-> `dst`, `rhs` |-> `Lit (n2w vo)`,
     `out` |-> `child_dst`, `a` |-> `n2w d:bytes32`, `b` |-> `n2w vo:bytes32`]
     abi_decoder_binary_reentry)) >>
-  impl_tac >- (Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> gvs[]) >>
+  impl_tac >- (Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
   strip_tac >> rename1 `run_inst_seq (emitted_insts middle st') prepared = OK t` >>
   `eval_operand child_src t = SOME (n2w (sb + if dyn then payload_off else ao))` by metis_tac[] >>
   `abi_decoder_address_frame st.cs_next_var s prepared /\

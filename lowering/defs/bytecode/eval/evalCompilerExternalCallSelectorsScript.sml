@@ -12,20 +12,12 @@ val () = computeLib.upd_compset (computeLib.add_thms
 val fixture_root = "../external-calls/oracle"
 
 val i15_iface_ret_iface_direct = memoryStoreWitnessLib.evaluate fixture_root "i15_iface_ret_iface_direct"
-Theorem i15_iface_ret_iface_direct_matches_python_oracle:
-  ^(#term i15_iface_ret_iface_direct) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "i15_iface_ret_iface_direct")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation i15_iface_ret_iface_direct))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "i15_iface_ret_iface_direct" i15_iface_ret_iface_direct
 
 val i09_iface_ret_iface = memoryStoreWitnessLib.evaluate fixture_root "i09_iface_ret_iface"
-Theorem i09_iface_ret_iface_matches_python_oracle:
-  ^(#term i09_iface_ret_iface) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "i09_iface_ret_iface")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation i09_iface_ret_iface))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "i09_iface_ret_iface" i09_iface_ret_iface
 
 val c03_iface_address_attr = memoryStoreWitnessLib.evaluate fixture_root "c03_iface_address_attr"
 Theorem c03_iface_address_attr_matches_python_oracle:
@@ -36,25 +28,13 @@ Proof
 QED
 
 val i02_iface_default_param = memoryStoreWitnessLib.evaluate fixture_root "i02_iface_default_param"
-Theorem i02_iface_default_param_matches_python_oracle:
-  ^(#term i02_iface_default_param) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "i02_iface_default_param")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation i02_iface_default_param))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "i02_iface_default_param" i02_iface_default_param
 
 val i03_two_ifaces_same_name = memoryStoreWitnessLib.evaluate fixture_root "i03_two_ifaces_same_name"
-Theorem i03_two_ifaces_same_name_matches_python_oracle:
-  ^(#term i03_two_ifaces_same_name) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "i03_two_ifaces_same_name")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation i03_two_ifaces_same_name))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "i03_two_ifaces_same_name" i03_two_ifaces_same_name
 
 val i13_ext_fn_before_iface = memoryStoreWitnessLib.evaluate fixture_root "i13_ext_fn_before_iface"
-Theorem i13_ext_fn_before_iface_matches_python_oracle:
-  ^(#term i13_ext_fn_before_iface) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "i13_ext_fn_before_iface")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation i13_ext_fn_before_iface))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "i13_ext_fn_before_iface" i13_ext_fn_before_iface

@@ -7,7 +7,7 @@ Ancestors
   valueEncoding words list
 
 Theorem ctor_actual_word_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -27,7 +27,8 @@ Proof
   `mem_bytes_at sb 32 (abi_decode_source DLOAD s) =
     enc (vyper_to_abi_type env ty) av` by simp[abi_decode_source_def] >>
   drule_all abi_decoder_primitive_clamp >> strip_tac >>
-  drule_all abi_decoder_clamped_word_copied_window >> strip_tac >>
+  drule_all (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`]
+    abi_decoder_clamped_word_copied_window |> SIMP_RULE (srw_ss()) [eval_operand_def]) >> strip_tac >>
   qexists `t` >> simp[] >>
   irule abi_decoder_primitive_canonical_layout >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -35,7 +36,7 @@ Proof
 QED
 
 Theorem ctor_actual_word_reentry:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\

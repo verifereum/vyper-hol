@@ -9,15 +9,15 @@ Ancestors
   fragExec venomState venomInst words arithmetic list rich_list
 
 Theorem abi_decoder_typed_clamped_word_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap s /\
-  abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w sb : bytes32) s) ==>
+    st last src dst opc base_op hi src_base sb d b cap s /\
+  abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w (src_base + sb) : bytes32) s) ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post tv v st' d 32 b cap s t
 Proof
   strip_tac >>
-  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[abi_decoder_recursive_pre_def, abi_decoder_pre_def] >> strip_tac >>
   qpat_x_assum `DecPrimWord clamp = type_to_abi_dec_info sf ce ty`
     (assume_tac o SYM) >>
@@ -25,14 +25,14 @@ Proof
   asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
     (drule_all abi_decoder_descended_encoding_length >> asm_simp_tac bool_ss []) >>
   qpat_assum `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` (fn len_th =>
     qpat_assum `type_memory_bytes ce ty = 32` (fn size_th =>
       RULE_ASSUM_TAC (PURE_REWRITE_RULE [len_th, size_th]))) >>
-  `sb < dimword (:256) /\ d < dimword (:256)` by
+  `src_base + sb < dimword (:256) /\ d < dimword (:256)` by
     (conj_tac >> irule (DECIDE ``!a b:num. a + 32 < b ==> a < b``) >>
      first_assum ACCEPT_TAC) >>
   drule_all abi_decoder_clamped_word_copied_window >> strip_tac >>
@@ -75,16 +75,16 @@ Proof
 QED
 
 Theorem abi_decoder_typed_numeric_word_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap s /\
+    st last src dst opc base_op hi src_base sb d b cap s /\
   ((?bits. ty = BaseT (UintT bits)) \/ ty = BaseT AddressT \/
    ty = BaseT BoolT \/ (?nsid. ty = FlagT nsid)) ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post tv v st' d 32 b cap s t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE
       [abi_decoder_recursive_pre_def, abi_decoder_pre_def]) >>
   qpat_x_assum `DecPrimWord clamp = type_to_abi_dec_info sf ce ty`
@@ -95,10 +95,10 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
   `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
     (drule_all abi_decoder_descended_encoding_length >> asm_simp_tac bool_ss []) >>
-  `mem_bytes_at sb 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av`
+  `mem_bytes_at (src_base + sb) 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av`
     by metis_tac[] >>
-  `sb < dimword (:256)` by
-    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  `src_base + sb < dimword (:256)` by
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[abi_decoder_ranges_def] >> rpt strip_tac >>
      gvs[] >> decide_tac) >>
   drule_all abi_decoder_numeric_primitive_clamp >> strip_tac >>
@@ -106,9 +106,9 @@ Proof
 QED
 
 Theorem abi_decoder_typed_numeric_word_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap initial /\
+    st last src dst opc base_op hi src_base sb d b cap initial /\
   ((?bits. ty = BaseT (UintT bits)) \/ ty = BaseT AddressT \/
    ty = BaseT BoolT \/ (?nsid. ty = FlagT nsid)) ==>
   frag_exec ctx st st' (\s. s = initial)
@@ -126,10 +126,10 @@ Proof
 QED
 
 Theorem abi_decoder_typed_clamped_word_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap initial /\
-  abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w sb : bytes32) initial) ==>
+    st last src dst opc base_op hi src_base sb d b cap initial /\
+  abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w (src_base + sb) : bytes32) initial) ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post tv v st' d 32 b cap initial) (K F)
 Proof
