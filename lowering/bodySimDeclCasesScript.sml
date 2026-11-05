@@ -704,7 +704,7 @@ Proof
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def] >>
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
   MATCH_MP_TAC
     (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei`
                   compile_for_range_lit_frag)) >>
@@ -832,7 +832,8 @@ Theorem body_for_exprs_ok[local]:
     EVERY (stmt_exprs_ok cenv) body
 Proof
   simp[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
-       supported_stmt_expr_exists_def, alloc_limits_stmt_def]
+       supported_stmt_expr_exists_def, alloc_limits_stmt_def,
+       stmt_valued_return_def]
 QED
 
 (* Normalize only a paired outer binder at theorem application boundaries. *)
@@ -1308,7 +1309,7 @@ Proof
    get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def] >>
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   rename1 `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ap) az)` >>
