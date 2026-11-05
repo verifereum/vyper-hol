@@ -273,3 +273,86 @@ val () = List.app (fn th =>
         ifexp_observer_has_code, ifexp_observer_stop,
         ifexp_observer_region_closed, ifexp_observer_region_safe,
         ifexp_observer_region_readonly, ifexp_observer_start_ok];
+
+(* Diagnostic variants only: alias the initial block and final empty cut.
+   Shared concrete endpoints keep the lookup and compilation probes identical. *)
+Definition ifexp_collision_start_def:
+  ifexp_collision_start = ifexp_observer_start with cs_current_bb := "@exit_2"
+End
+
+Definition ifexp_collision_end_def:
+  ifexp_collision_end = ifexp_observer_end with cs_blocks :=
+    MAP (\bb. bb with bb_label :=
+      if bb.bb_label = "entry" then "@exit_2" else bb.bb_label)
+      ifexp_observer_end.cs_blocks
+End
+
+Theorem ifexp_collision_compile_probe:
+  compile_expr ce (BaseT (UintT 256))
+    (IfExp (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))
+      (Literal (BaseT (UintT 256)) (IntL 7))
+      (Literal (BaseT (UintT 256)) (IntL 9))) ifexp_collision_start =
+    (StackValue (BaseT (UintT 256)) (Var "%0"),ifexp_collision_end)
+Proof
+  simp[ifexp_collision_start_def, ifexp_collision_end_def,
+       ifexp_observer_start_def, ifexp_observer_end_def,
+       Once compile_expr_def, lower_value_def, expr_type_def,
+       is_word_type_def, fresh_var_def, fresh_label_def, fresh_label_output_def,
+       emit_inst_def, emit_def, fresh_id_def, new_block_def,
+       compile_ifexp_arm_def] >>
+  simp[compile_expr_def, compile_literal_vv_def, unwrap_value_def,
+       is_word_type_def, expr_type_def, comp_return_def, comp_bind_def,
+       fresh_id_def, emit_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem ifexp_collision_has_code:
+  fn_has_code ifexp_collision_start ifexp_collision_end
+    (template with fn_blocks := emitted_blocks ifexp_collision_start ifexp_collision_end)
+Proof
+  simp[fn_has_code_def, ifexp_collision_start_def, ifexp_collision_end_def,
+       ifexp_observer_start_def, ifexp_observer_end_def, emitted_blocks_def,
+       lookup_block_def, FIND_thm] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ifexp_collision_ids_distinct:
+  fn_inst_ids_distinct
+    (template with fn_blocks := emitted_blocks ifexp_collision_start ifexp_collision_end)
+Proof
+  simp[fn_inst_ids_distinct_def, fn_insts_def, ifexp_collision_start_def,
+       ifexp_collision_end_def, ifexp_observer_start_def,
+       ifexp_observer_end_def, emitted_blocks_def, mk_inst_def]
+QED
+
+Theorem ifexp_collision_no_stop:
+  fn_has_code ifexp_collision_start ifexp_collision_end fn ==>
+  ~(?bb id. lookup_block ifexp_collision_end.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH ifexp_collision_end.cs_current_insts) =
+      SOME (mk_inst id STOP [] []))
+Proof
+  simp[fn_has_code_def, ifexp_collision_start_def, ifexp_collision_end_def,
+       ifexp_observer_start_def, ifexp_observer_end_def, emitted_blocks_def] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then
+    `<|bb_label := "@exit_2"; bb_instructions :=
+        [mk_inst 0 SSTORE [Lit 0w; Lit 1w] [];
+         mk_inst 1 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []]|>` mp_tac) >>
+  simp[] >> strip_tac >> gvs[get_instruction_def, mk_inst_def]
+QED
+
+Theorem ifexp_collision_stop_package_fails:
+  ~fn_has_code ifexp_collision_start ifexp_collision_end
+    (expr_stop_function ifexp_collision_start ifexp_collision_end id template)
+Proof
+  strip_tac >> drule ifexp_collision_no_stop >>
+  metis_tac[expr_stop_function_stop]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Collision diagnostic has unproved dependencies"
+  end) [ifexp_collision_compile_probe, ifexp_collision_has_code,
+        ifexp_collision_ids_distinct, ifexp_collision_no_stop,
+        ifexp_collision_stop_package_fails];
