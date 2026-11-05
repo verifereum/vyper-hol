@@ -7,7 +7,7 @@ Ancestors calldataDecodePtr calldataWordPtr robustCopyTransportPtr exprSimMemory
   abiDecoderBytes abiDecoderBytesTyped abiCanonicalBytes abiDecoderGuards exprSim
   contractABI vyperValue vyperTyping arithmetic abiDecoderClampedTyped
   abiDecoderCoherence abiDecoderTypedContract abiDecoderWordTyped abiDecoderClamp
-  valueEncodingTyping
+  valueEncodingTyping abiDecoderReentryPointer abiDecoderPreObservations abiDecoderReentry
 
 Theorem clean_footprint_val_in_memory_robust:
   !tv v p mem tainted.
@@ -247,4 +247,53 @@ Proof
   strip_tac >> irule calldata_typed_clamped_word_robust >> simp[] >>
   goal_assum (drule_at Any) >>
   simp[abi_decoder_clamp_valid_def]
+QED
+
+(* Ordinary reentry and ghost execution share the original, unpruned state.
+   The second endpoint differs only in its instruction index. *)
+Theorem calldata_primitive_reentry_ptr_endpoint:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+    (DecPrimWord clamp) st = ((),st') /\
+  abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
+    st last src (Var p) CALLDATALOAD (Lit 0w) sb d b cap
+    (abi_decoder_prune_vars st.cs_next_var initial) /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ptr_covers G tn p initial 32 /\ op_taint tn src = {} /\
+  fn_has_code st st' fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual endpoint G' tn'.
+    run_inst_seq (emitted_insts st st') initial = OK actual /\
+    val_in_memory tv v d actual.vs_memory /\ fresh_vars_wrt limit_st actual /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
+    abi_decode_frame d 32 initial actual /\
+    actual.vs_allocas = initial.vs_allocas /\
+    actual.vs_alloca_next = initial.vs_alloca_next /\
+    actual.vs_halted = initial.vs_halted /\
+    endpoint = actual with vs_inst_idx := LENGTH st'.cs_current_insts /\
+    ~endpoint.vs_halted /\ endpoint.vs_current_bb = st'.cs_current_bb /\
+    endpoint.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    ptr_covers G' tn' p endpoint 32 /\
+    (!i. d <= i /\ i < d + 32 ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' endpoint) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn initial)
+Proof
+  strip_tac >> drule_all abi_decoder_primitive_reentry_sequence >> strip_tac >>
+  drule abi_decoder_pre_observations >> strip_tac >>
+  `eval_operand (Var p) initial = SOME (n2w d) /\
+   eval_operand src initial = SOME (n2w sb) /\ d < dimword (:256)` by
+    (fs[abi_decoder_ranges_def] >> decide_tac) >>
+  `not_fresh_at st p /\ (!x. src = Var x ==> not_fresh_at st x)` by
+    (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+     Cases_on `src` >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def]) >>
+  drule_all calldata_word_overwrite_prefix >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qpat_x_assum `run_inst_seq _ _ = OK (_ with vs_inst_idx := _)` kall_tac >>
+  qexistsl_tac [`actual`, `s'`, `G'`, `tn'`] >> simp[]
 QED
