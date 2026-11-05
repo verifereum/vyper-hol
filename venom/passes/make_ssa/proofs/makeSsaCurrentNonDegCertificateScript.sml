@@ -1,7 +1,7 @@
 Theory makeSsaCurrentNonDegCertificate
 Ancestors
   makeSsaCurrentTraceCertificate makeSsaCurrentTreeTrace
-  makeSsaCurrentAllocation makeSsaCurrentCertificate
+  makeSsaCurrentAllocation makeSsaCurrentCertificate makeSsaCurrentAnalysis
   makeSsaCurrentDefs makeSsaCurrentProps venomWf venomInst list
 
 Theorem current_nondeg_actual_initial_trace_names:
@@ -51,4 +51,46 @@ Proof
   drule_all current_provenance_initial_tree_names >> strip_tac >>
   qexistsl_tac [`annsss`, `H'`, `visited'`, `events`] >>
   fs[current_allocation_consistent_def]
+QED
+
+Theorem current_nondeg_actual_static_slots:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME bb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  defs = compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))) /\
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) fn.fn_blocks defs = (bbs1,s1) /\
+  rename_current_blocks s1 (init_current_rename_state defs) bbs1
+    (current_succ_map fn) (current_dom_tree fn) = (ctrs',s',bbs') ==>
+  ?H. current_history_valid (FLAT (MAP block_ir_vars bbs1)) H /\
+    (!h old p v k slots i.
+      lookup_block h bbs1 = SOME old /\ fn_cfg_edge fn p h /\
+      k < LENGTH old.bb_instructions /\
+      (EL k old.bb_instructions).inst_opcode = PHI /\
+      (EL k old.bb_instructions).inst_operands = current_phi_slots slots /\
+      i < LENGTH slots /\ EL i slots = (p,v) ==>
+      ?new path n. lookup_block h bbs' = SOME new /\
+        current_tree_ancestor_path (current_dom_tree fn) p path /\
+        current_token_name H
+          (current_block_token fn (current_actual_inserted fn) v p
+            (current_inherited_token fn (current_actual_inserted fn) v path)) = SOME n /\
+        LENGTH new.bb_instructions = LENGTH old.bb_instructions /\
+        k < LENGTH new.bb_instructions /\
+        (EL k new.bb_instructions).inst_opcode = PHI /\
+        EL (2 * i) (EL k new.bb_instructions).inst_operands = Label p /\
+        EL (2 * i + 1) (EL k new.bb_instructions).inst_operands = Var n)
+Proof
+  strip_tac >> drule_all current_nondeg_actual_initial_trace_names >> strip_tac >>
+  qexists `H'` >> conj_tac >- simp[] >> rpt strip_tac >>
+  `MEM p (fn_labels fn)` by
+    (fs[fn_cfg_edge_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM p (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_label_member] >>
+  `MEM h (case ALOOKUP (current_succ_map fn) p of NONE => [] | SOME ss => ss)` by
+    simp[ALOOKUP_current_succ_map, GSYM current_cfg_edge_succs] >>
+  `MEM v (FLAT (MAP block_ir_vars bbs1))` by
+    metis_tac[current_initial_slot_var_covered] >>
+  irule current_provenance_tree_static_slot >>
+  metis_tac[current_actual_succs_distinct]
 QED
