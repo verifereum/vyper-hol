@@ -4,6 +4,7 @@ Theory bodyIfExpMemoryAdapter
 Ancestors
   bodyMemoryDefs loweringPosts instMemFrontier compileEnv
   finite_map arithmetic abiBuiltinAllocation exprSimHyps
+  exprLowering fragGasPathMem
 
 Theorem ifexp_located_footprint_frontier:
   vv_at ce cx t sa sb es raw (LocatedValue t' p) s /\
@@ -52,4 +53,18 @@ Theorem ifexp_fresh_alloc_padding_probe:
 Proof
   simp[venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
        venomStateTheory.update_var_def, wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
+(* The two no-code unwrap cases share the same checked identity boundary. *)
+Theorem ifexp_unwrap_identity_path:
+  (vv = StackValue ty op \/
+   ?p. vv = LocatedValue ty p /\ ~is_word_type ty /\
+       p.ptr_location = LocMemory /\ p.ptr_operand = op) /\
+  ~s.vs_halted /\ alloca_history func s ==>
+  unwrap_value ce vv sa = (op,sa) /\
+  gas_path_mem ctx func s 0 (OK s) /\
+  alloca_history func s /\ s.vs_alloca_next <= s.vs_alloca_next
+Proof
+  strip_tac >> gvs[unwrap_value_def, comp_return_def] >>
+  irule (cj 1 gas_path_mem_rules) >> simp[]
 QED
