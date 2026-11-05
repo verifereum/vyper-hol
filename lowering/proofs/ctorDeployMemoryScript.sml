@@ -21,7 +21,7 @@ Theorem deploy_unit_memory_ok:
     ==>
     raw_unit_memory_ok dunit.cu_context vs /\
     ptr_discipline (imm_len tops) dunit.cu_context vs /\
-    taint_within deploy_dead dunit.cu_context vs
+    taint_within (deploy_dead tops runtime_bc am tx) dunit.cu_context vs
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_unit_run_entry >> strip_tac >>
@@ -32,7 +32,7 @@ Proof
   >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`,
                    `lbl`, `vs`] mp_tac lowered_unit_raw_memory_ok_from >>
       simp[] >> disch_then irule >> decide_tac) >>
-  qspecl_then [`deploy_dead`, `imm_len tops`, `dunit.cu_context`,
+  qspecl_then [`deploy_dead tops runtime_bc am tx`, `imm_len tops`, `dunit.cu_context`,
                `"__deploy"`, `fn`, `lbl`, `vs`] mp_tac lowered_unit_ptr_taint >>
   simp[]
 QED
