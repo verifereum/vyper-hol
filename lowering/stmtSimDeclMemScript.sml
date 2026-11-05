@@ -872,8 +872,7 @@ QED
    local_ptrs_rel_write_local binds the local, as
    stmt_state_rel_declare_store does for one word. *)
 Theorem compile_annassign_memory_widen_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv tyv ltv.
-    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id vtyp e es etv tyv ltv.
     cenv.ce_alloca_locals /\
     ~is_word_type vtyp /\ ~(has_length_word vtyp /\ is_empty_value_expr e) /\
     lookup_scopes id es.scopes = NONE /\
@@ -892,14 +891,17 @@ Theorem compile_annassign_memory_widen_stmt_frag:
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
     type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
     0 < type_memory_size ltv /\ type_memory_size ltv < dimword (:256) /\
-    (!v es1. (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v, es1) ==>
-              value_has_type tyv v /\ value_has_type ltv v) /\
+    (!gs v es1.
+       (do tv <- eval_expr cx e; read_result cx tv od) (es with gas_obs := gs) =
+         (INL v, es1) ==>
+       value_has_type tyv v /\ value_has_type ltv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
                   cs_extends sa sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -983,8 +985,7 @@ Finalise compile_annassign_memory_widen_stmt_frag
    length) and is not the empty-value form; the sizes as
    compile_annassign_memory_widen_stmt_frag. *)
 Theorem compile_annassign_memory_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' tyv.
-    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id vtyp e es tyv.
     cenv.ce_alloca_locals /\
     ~is_word_type vtyp /\ ~(has_length_word vtyp /\ is_empty_value_expr e) /\
     lookup_scopes id es.scopes = NONE /\
@@ -993,14 +994,15 @@ Theorem compile_annassign_memory_stmt_frag:
     evaluate_type (get_tenv cx) vtyp = SOME tyv /\
     type_memory_bytes cenv vtyp = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-              ?v. tv = Value v /\ value_has_type tyv v) /\
+    (!gs tv es1. eval_expr cx e (es with gas_obs := gs) = (INL tv, es1) ==>
+                 ?v. tv = Value v /\ value_has_type tyv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
                   cs_extends sa sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt strip_tac >> irule compile_annassign_memory_widen_stmt_frag >>
   gvs[] >> rw[bind_def] >> gvs[AllCaseEqs()] >> res_tac >>
