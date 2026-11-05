@@ -12,14 +12,15 @@ Ancestors
    provenance and taint through ghost_rel, equal memory ranges
    (write_ranges_pair, read_ranges_pair, inst_pair_ops_ghost); the
    revert exemptions carry by the two implications.  Unpaired states
-   (~p) run an ASSIGN or a NOP: no memory range, no comparison, and
-   taint_ok allows ASSIGN any operand. *)
+   (~p) run an ASSIGN or an operand-free NOP: no memory range, no
+   comparison, and taint_ok allows ASSIGN any operand. *)
 Theorem lockstep_ptr_rows:
   lockstep_sim L C C' fn fn' pos R /\ R p (inst,s) sg (inst',s') /\
   ghost_rel sg G tn G' tn' /\
   access_ok lo G fn inst s /\ taint_ok fn tn inst s /\
   (p /\ in_revert_forward fn s ==> in_revert_forward fn' s') /\
-  (p /\ about_to_revert fn inst s ==> about_to_revert fn' inst' s') ==>
+  (p /\ about_to_revert fn inst s ==> about_to_revert fn' inst' s') /\
+  (~p /\ inst'.inst_opcode = NOP ==> inst'.inst_operands = []) ==>
   access_ok lo G' fn' inst' s' /\ taint_ok fn' tn' inst' s'
 Proof
   cheat

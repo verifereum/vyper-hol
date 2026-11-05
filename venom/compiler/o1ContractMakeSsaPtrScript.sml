@@ -113,5 +113,7 @@ Proof
   `p /\ about_to_revert fn inst s ==> about_to_revert fn2 inst2 s2` by
     (Cases_on `p` >> simp[] >>
      drule_all make_ssa_lockstep_revert >> simp[]) >>
+  `~p /\ inst2.inst_opcode = NOP ==> inst2.inst_operands = []` by
+    (strip_tac >> gvs[]) >>
   drule_all lockstep_ptr_rows >> simp[]
 QED
