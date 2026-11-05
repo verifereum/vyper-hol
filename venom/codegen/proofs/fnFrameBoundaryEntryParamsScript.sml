@@ -343,7 +343,7 @@ Proof
        is_unlowered_fmp_opcode_def, is_raw_fmp_opcode_def,
        is_unlowered_internal_call_opcode_def, dead_stack_marker_def,
        compute_operands_def, python_stack_operands_def,
-       ir_specific_operand_order_def]
+       ir_specific_operand_order_def, get_label_def]
 QED
 
 Theorem entry_ret_family_single[local]:
