@@ -21,6 +21,22 @@ Ancestors
   venomInst venomInstProps venomWf venomExecProps venomExecProofs list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
   fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
+  livenessConvergenceProofs livenessBlockProofs
+
+Theorem alias_single_successor_liveout:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  cfg_succs_of (cfg_analyze fn) pred = [lbl] ==>
+  set (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) =
+  set (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  strip_tac >> drule_all liveness_recompute_convergence >>
+  simp[same_vars_set, liveness_instrs_def, liveness_out_def,
+       liveness_edge_transfer_def, live_vars_at_def, liveness_analyze_def,
+       livenessTransferProofsTheory.list_union_set]
+QED
 
 (* A final successful JMP checks its target suffix; block finalization leaves
    that checked state unchanged.  No coverage assumption on entry is needed. *)
