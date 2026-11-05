@@ -551,3 +551,30 @@ Proof
        venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
        wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]
 QED
+
+Theorem order_run_s20_copy_operands:
+  lookup_var "%10" order_run_s20 = SOME 2w /\
+  lookup_var "%2" order_run_s20 = SOME 288w /\
+  lookup_var "%0" order_run_s20 = SOME 2w
+Proof
+  simp[venomStateTheory.lookup_var_def, order_run_s20_def,
+       order_run_s19_def, order_run_s18_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s17_def, order_run_s16_def, order_run_s15_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s14_def, order_run_s13_def, order_run_s12_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s11_def, order_run_s10_def, order_run_s9_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s8_def, order_run_s7_def, order_run_s6_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s5_def, order_run_s4_def, order_run_s3_def,
+       order_run_s2_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem order_run_s20_accounts:
+  order_run_s20.vs_accounts = order_run_start.vs_accounts
+Proof
+  simp[order_run_s20_def, order_run_s19_def, order_run_s18_def] >>
+  simp[order_run_s17_def, order_run_s16_def, order_run_s15_def] >>
+  simp[order_run_s14_def, order_run_s13_accounts]
+QED
