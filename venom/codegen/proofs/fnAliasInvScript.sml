@@ -60,6 +60,24 @@ Proof
   simp[] >> qexistsl [`dfg`, `rops`, `prepared`] >> simp[]
 QED
 
+Theorem normalize_operand_non_assign_output:
+  !fn inst x visited.
+    ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+    inst.inst_opcode <> ASSIGN ==>
+    normalize_operand (dfg_build_function fn) visited (Var x) = Var x
+Proof
+  rpt strip_tac >> Cases_on `MEM x visited` >> simp[Once normalize_operand_def] >>
+  Cases_on `dfg_get_def (dfg_build_function fn) x` >>
+  gvs[dfg_get_def_def] >>
+  rename1 `FLOOKUP (dfg_build_function fn).dfg_defs x = SOME def` >>
+  `dfg_get_def (dfg_build_function fn) x = SOME def` by simp[dfg_get_def_def] >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `def = inst` by
+    (irule ssa_unique_output >> conj_tac >- (qexists_tac `fn` >> simp[]) >>
+     qexists_tac `x` >> simp[]) >>
+  gvs[] >> simp[Once normalize_operand_def]
+QED
+
 (* Actual single steps followed by normalize_operand, including literal roots. *)
 Definition alias_assign_step_def:
   alias_assign_step dfg at src <=>
