@@ -9,6 +9,7 @@ Ancestors
   exprSimUnwrapProps exprSimMemoryPath
   exprLowering exprLoweringProps emitHelper emitHelperProps
   fragExec fragExecMem instMemFrontier allocaHistoryFragment
+  fragGasSeqMem fragGasPathMem
   venomInst venomExecSemantics vyperAST vyperTyping vyperInterpreter
   vyperTypeSystem vyperTypeInvariants allocLimits bodyMemoryDefs vyperState
   vyperTypeExprSoundness vyperAssignPreservesType
@@ -671,4 +672,60 @@ Proof
     simp[evaluate_subscripts_def] >>
   drule_all body_attribute_name_source_tail >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem attr_add_gas_path:
+  emit_op ADD ops sm = (dst,sn) /\ fn_has_code sm sn func /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  run_inst_seq (emitted_insts sm sn) s = OK q ==>
+  gas_path_mem ctx func s 0
+    (OK (q with vs_inst_idx := LENGTH sn.cs_current_insts))
+Proof
+  rpt strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sn ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sm sn) = LENGTH sn.cs_current_insts` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+         emitted_insts_def, fn_has_code_def, IS_PREFIX_APPEND] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+  drule attr_add_prefix_mem_ok >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `isPREFIX (emitted_insts sm sn) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm sn)` by simp[mk_inst_def, is_terminator_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sm sn) s` by simp[] >>
+  drule_all run_inst_seq_gas_path_mem >> simp[mk_inst_def]
+QED
+
+Theorem attr_add_counted_post:
+  compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      vv_post ctx func cenv cx e es sa sn s0 es' tv vv t /\
+      eval_operand (vv_operand vv) t = SOME w /\
+      eval_operand dst t = SOME (w + n2w off) /\
+      t.vs_current_bb = sn.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~t.vs_halted /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> drule_all buffer_emit_add_run >> strip_tac >>
+  drule_all attr_add_run_post >> strip_tac >>
+  `alloca_inv s` by fs[vv_post_def, stmt_state_rel_def] >>
+  drule_all attr_add_history >> strip_tac >>
+  drule_all attr_add_gas_path >> strip_tac >>
+  qexists_tac `q with vs_inst_idx := LENGTH sn.cs_current_insts` >>
+  simp[eval_operand_def, lookup_var_def] >>
+  drule_all buffer_emit_add_run >> strip_tac >> gvs[] >>
+  drule emit_op_extends >> strip_tac >>
+  gvs[same_blocks_def, update_var_def]
 QED
