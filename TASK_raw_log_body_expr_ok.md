@@ -100,3 +100,7 @@ Ancestors of the raw_log files with admitted (cheated) proofs in this
 worktree are a local overlay hidden from git; never edit or commit them.
 The expression case (raw_log_expr_vv_ok) is proved by a separate run in
 another worktree; don't work on it.
+In this worktree lowering/exprSimCallRawLogScript.sml is a local stub
+(its theorem admitted, hidden from git) so the consumer build reaches
+bodySimExprCases and bodySimCallCases; the real proof is the separate
+run's. It now builds; don't edit it.
