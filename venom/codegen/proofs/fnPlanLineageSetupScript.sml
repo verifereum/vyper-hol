@@ -4,6 +4,38 @@ Ancestors
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory fnPlanLineageReplayTheory doSwapSimTheory planSpillBoundsTheory
 
+Theorem optimistic_swap_plan_core_step[local]:
+  !ps m core dfg inst live term qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    qs = SND (optimistic_swap_plan dfg inst live term ps) ==>
+    qs = ps \/ ?d. d < LENGTH core /\ qs = SND (do_swap d ps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
+  disj2_tac >> qexists_tac `x` >> simp[] >>
+  `Var (LAST live) <> dead_stack_marker` by simp[dead_stack_marker_def] >>
+  `stack_get_depth (Var (LAST live)) core = SOME x` by
+    metis_tac[stack_get_depth_bottom_dead] >>
+  metis_tac[stack_get_depth_props]
+QED
+
+Theorem optimistic_swap_plan_core_inventory:
+  !ps m core dfg inst live term qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    ALL_DISTINCT core /\
+    qs = SND (optimistic_swap_plan dfg inst live term ps) ==>
+    ?rest. qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      ALL_DISTINCT rest /\ set rest = set core /\ qs.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all optimistic_swap_plan_core_step >> strip_tac
+  >- (gvs[] >> qexists_tac `core` >> simp[]) >>
+  qexists_tac `stack_swap d core` >>
+  drule_all do_swap_core >> simp[do_swap_spilled_unchanged]
+QED
+
 Theorem optimistic_swap_plan_inventory:
   !dfg inst live term ps.
     ALL_DISTINCT ps.ps_stack ==>
@@ -12,13 +44,8 @@ Theorem optimistic_swap_plan_inventory:
     (SND (optimistic_swap_plan dfg inst live term ps)).ps_spilled = ps.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[optimistic_swap_plan_def, LET_THM] >>
-  rpt IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> simp[] >>
-  drule stack_get_depth_props >> strip_tac >>
-  `ps.ps_stack = [] ++ ps.ps_stack` by simp[] >>
-  drule_all do_swap_core >> simp[] >>
-  metis_tac[do_swap_spilled_unchanged]
+  `ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` by simp[] >>
+  drule optimistic_swap_plan_core_inventory >> simp[]
 QED
 
 Theorem parameter_push_fold:
@@ -271,6 +298,47 @@ Proof
   simp[parameter_push_fold, MEM_MAP] >> metis_tac[]
 QED
 
+Theorem regular_post_emit_tail_core_sets:
+  !ps m core outputs live halting dfg inst term deleted ps8 ps9 final.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\ ALL_DISTINCT core /\
+    deleted = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then MAP Var (FILTER (\v. ~MEM v live) outputs) else []) /\
+    ps8 = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v live) outputs)) ps)
+      else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []
+      then SND (optimistic_swap_plan dfg inst live term ps8) else ps8) /\
+    final = release_dead_spills live ps9 ==>
+    ?rest. final.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      ALL_DISTINCT rest /\ set rest = set core DIFF set deleted /\
+      FDOM final.ps_spilled = FDOM ps.ps_spilled INTER set (MAP Var live)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?core8. ps8.ps_stack = REPLICATE m dead_stack_marker ++ core8 /\
+     ALL_DISTINCT core8 /\ set core8 = set core DIFF set deleted /\
+     ps8.ps_spilled = ps.ps_spilled` by
+    (Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)`
+     >- (gvs[] >> drule popmany_plan_core >>
+         disch_then (qspec_then `MAP Var (FILTER (\v. ~MEM v live) outputs)` mp_tac) >>
+         simp[DISJOINT_DEF, EXTENSION, MEM_MAP, dead_stack_marker_def,
+              popmany_plan_spilled_unchanged]) >>
+     gvs[] >> qexists_tac `core` >> simp[]) >>
+  `?core9. ps9.ps_stack = REPLICATE m dead_stack_marker ++ core9 /\
+     ALL_DISTINCT core9 /\ set core9 = set core8 /\
+     ps9.ps_spilled = ps8.ps_spilled` by
+    (Cases_on `outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []` >> gvs[]
+     >- (drule optimistic_swap_plan_core_inventory >> simp[]) >>
+     qexists_tac `core8` >> simp[]) >>
+  `final.ps_stack = ps9.ps_stack` by
+    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
+     rpt (pop_assum kall_tac) >> simp[release_dead_spills_def] >>
+     qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v live | Label v => T)
+       (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
+     qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
+     Cases_on `h` >> simp[]) >>
+  qexists_tac `core9` >> gvs[release_dead_spills_domain]
+QED
+
 Theorem regular_post_emit_tail_sets:
   !ps outputs live halting dfg inst term deleted ps8 ps9 final.
     ALL_DISTINCT ps.ps_stack /\
@@ -287,26 +355,8 @@ Theorem regular_post_emit_tail_sets:
     FDOM final.ps_spilled = FDOM ps.ps_spilled INTER set (MAP Var live)
 Proof
   rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT ps8.ps_stack /\
-    set ps8.ps_stack = set ps.ps_stack DIFF set deleted /\
-    ps8.ps_spilled = ps.ps_spilled` by
-    (Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)` >> gvs[] >>
-     `ps.ps_stack = [] ++ ps.ps_stack` by simp[] >>
-     drule popmany_plan_core >>
-     disch_then (qspec_then `MAP Var (FILTER (\v. ~MEM v live) outputs)` mp_tac) >>
-     simp[popmany_plan_spilled_unchanged] >> metis_tac[]) >>
-  `ALL_DISTINCT ps9.ps_stack /\ set ps9.ps_stack = set ps8.ps_stack /\
-    ps9.ps_spilled = ps8.ps_spilled` by
-    (Cases_on `outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []` >>
-     gvs[] >> drule optimistic_swap_plan_inventory >> simp[]) >>
-  `final.ps_stack = ps9.ps_stack` by
-    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
-     rpt (pop_assum kall_tac) >> simp[release_dead_spills_def] >>
-     qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v live | Label v => T)
-       (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
-     qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
-     Cases_on `h` >> simp[]) >>
-  gvs[release_dead_spills_domain]
+  `ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` by simp[] >>
+  drule_all regular_post_emit_tail_core_sets >> simp[]
 QED
 
 (* Deep swaps use scratch allocation; it is not an unchanged-state field. *)
@@ -346,13 +396,9 @@ Theorem optimistic_swap_plan_core_resource:
       residual_budget_wf base [] (qs with ps_stack := rest)
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[optimistic_swap_plan_def, LET_THM] >>
-  rpt IF_CASES_TAC >> gvs[] >> TRY (qexists_tac `core` >> simp[] >> NO_TAC) >>
-  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
-  `Var (LAST live) <> dead_stack_marker` by simp[dead_stack_marker_def] >>
-  `stack_get_depth (Var (LAST live)) core = SOME x` by
-    metis_tac[stack_get_depth_bottom_dead] >>
-  `x < LENGTH core` by metis_tac[stack_get_depth_props] >>
+  drule_all optimistic_swap_plan_core_step >> strip_tac
+  >- (gvs[] >> qexists_tac `core` >> simp[]) >>
+  rename1 `x < LENGTH core` >> gvs[] >>
   qexists_tac `stack_swap x core` >>
   `!op. LIST_ELEM_COUNT op (stack_swap x core) = LIST_ELEM_COUNT op core` by
     (gen_tac >> qspecl_then [`x`, `ps`, `op`] mp_tac do_swap_multiplicity >>
