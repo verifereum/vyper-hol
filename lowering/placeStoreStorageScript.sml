@@ -4632,6 +4632,53 @@ Proof
   qexists `<|bb_label := "@wcopy_exit_5"; bb_instructions := []|>` >> simp[]
 QED
 
+Theorem place_store_wrap_probe_value_memory:
+  value_has_type (ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 1))
+    (ArrayV (SArrayV [(0,BytesV [2w])])) /\
+  val_in_memory (ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 1))
+    (ArrayV (SArrayV [(0,BytesV [2w])])) 0
+    (byte$word_to_bytes (1w:bytes32) T ++ (2w:byte) :: REPLICATE 31 0w)
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
+
+Theorem place_store_wrap_probe_expr_value:
+  !cx s.
+    s.vs_memory = byte$word_to_bytes (1w:bytes32) T ++
+      (2w:byte) :: REPLICATE 31 0w ==>
+    expr_val_rel cx
+      (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1))
+      (ArrayV (SArrayV [(0,BytesV [2w])])) (Lit 0w) s
+Proof
+  rpt strip_tac >>
+  simp[loweringPostsTheory.expr_val_rel_def, eval_operand_def,
+       evaluate_type_def, is_word_type_def, type_slot_size_def,
+       vfmConstantsTheory.word_size_def] >>
+  metis_tac[place_store_wrap_probe_value_memory]
+QED
+
+Theorem place_store_wrap_probe_write_success:
+  !cx es.
+    ~cx.txn.is_static ==>
+    ?ff. write_place cx
+      (StoragePlace F 0w (ArrayTV
+        (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)))
+      (ArrayV (SArrayV [(0,BytesV [2w])])) es = (INL (),ff)
+Proof
+  rpt strip_tac >>
+  `value_has_type (ArrayTV
+      (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+      (ArrayV (SArrayV [(0,BytesV [2w])]))` by EVAL_TAC >>
+  drule (cj 1 vyperTypingTheory.value_has_type_equiv) >>
+  Cases_on `encode_value (ArrayTV
+      (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+      (ArrayV (SArrayV [(0,BytesV [2w])]))` >>
+  gvs[vyperStateTheory.write_place_def,
+      vyperStorageBackendTheory.write_storage_slot_eq] >>
+  qpat_x_assum `SOME _ = encode_value _ _`
+    (fn th => rewrite_tac[GSYM th]) >> simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
