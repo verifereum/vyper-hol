@@ -48,7 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  valueEncodingProps
+  valueEncodingProps bodyAssignTupleOther
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -1810,6 +1810,7 @@ Theorem body_assign_tuple_other:
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
     ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
@@ -1827,7 +1828,19 @@ Theorem body_assign_tuple_other:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  qspecl_then [`cx`, `gs`, `e`, `tops`, `bindings`, `ctx`, `func`, `cenv`,
+               `env`, `env'`, `ret_ty`, `lctx`, `RetQ`, `es`] mp_tac
+    bodyAssignTupleOtherTheory.body_assign_tuple_places >>
+  impl_tac >- (
+    rpt conj_tac
+    >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy]
+    >~ [`expr_body_pre _ _ _ _ _`]
+    >- (irule body_assign_tuple_rhs_pre >> metis_tac[])
+    >~ [`type_memory_size _ < _`]
+    >- (rpt strip_tac >> irule tuple_staging_bound >> metis_tac[])
+    >> metis_tac[]) >>
+  simp[]
 QED
 
 (* RESIDUAL (#767): a tuple target assigned an internal call whose return

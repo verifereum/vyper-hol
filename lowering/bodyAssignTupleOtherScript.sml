@@ -1,9 +1,17 @@
 (* The residual tuple assignments of bodySimStmtCases' body_assign_tuple_other:
    the element shapes left once body_assign_tuple_locals and
-   body_assign_tuple_targets have taken theirs.
-   TOP-LEVEL: assign_tuple_other_shapes. *)
+   body_assign_tuple_targets have taken theirs.  Every element is then a
+   place outside an immutable, which stmtSimAssignTuplePlaces' root
+   assigns, except two cases left admitted: an immutable assigned in the
+   constructor, and an element of a storage array or mapping whose index is
+   not pure.
+   TOP-LEVEL: assign_tuple_other_shapes, body_assign_tuple_places;
+   immutable_deploy_tuple_assign, tuple_assign_effectful_index,
+   body_tuple_target_env_ok (RESIDUAL). *)
 Theory bodyAssignTupleOther
 Ancestors
+  stmtSimAssignTuplePlaces targetPlaceSimCases targetPlaceSim bodySimExprCases
+  bodyExprPreFacts bodySim
   exprSimAggregateLayout exprSimHypsDefs bodyStorageMetadata
   supportedStmts supportedDecls vyperTypeSystem vyperTypeInvariants vyperTypeEnv
   list finite_map
@@ -80,4 +88,95 @@ Proof
   >- (Cases_on `t` >> gvs[])
   >~ [`AttributeTarget t fld`]
   >- (Cases_on `t` >> gvs[] >> metis_tac[])
+QED
+
+(* RESIDUAL: an immutable among the targets, assigned in the constructor.
+   The lowering keeps it in code (LocCode), which nothing relates to the
+   source's immutables yet (targetPlaceSim's immutable_root); it waits on a
+   strengthening of immutable_alloca_sep and body_inv. *)
+Theorem immutable_deploy_tuple_assign:
+  !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                       cx.in_deploy /\
+                       IS_SOME (supported_immutable_type tops nsid)) gs ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  cheat
+QED
+
+(* RESIDUAL: an element of a storage array or mapping whose index is not
+   pure, which may make an internal call between the stores (as
+   exprSimPopNested's pop_nested_storage_effectful_sim). *)
+Theorem tuple_assign_effectful_index:
+  !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    EXISTS (\g. ?nsid key.
+                  g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
+                  ~supported_pure_expr tops key) gs ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  cheat
+QED
+
+(* RESIDUAL (target metadata): target_env_ok asks for every module's
+   storage and mapping declarations, body_inv gives the main module's
+   (exprSimPopNested's body_pop_nested_target_frag has the same gap). *)
+Theorem body_tuple_target_env_ok:
+  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> target_env_ok cenv cx
+Proof
+  cheat
+QED
+
+(* body_assign_tuple_other for an RHS lowered at its own type: the two
+   residual cases, and otherwise every element is a place outside an
+   immutable with pure indices, which compile_assign_tuple_places_stmt_frag
+   assigns.  The last three premises are what bodySimStmtCases' local
+   helpers give (body_inv_mcopy, body_assign_tuple_rhs_pre,
+   tuple_staging_bound). *)
+Theorem body_assign_tuple_places:
+  !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
+    cenv.ce_target CapMcopy /\ expr_body_pre cenv cx env e es /\
+    (!tys tvs. expr_type e = TupleT tys /\
+       evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+       is_memory_view e ==>
+       type_memory_size (TupleTV tvs) < dimword (:256)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  cheat
 QED
