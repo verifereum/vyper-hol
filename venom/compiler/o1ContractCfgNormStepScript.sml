@@ -1101,6 +1101,15 @@ Definition supply_o1_inv_def:
     ir_supply_covers_fn s fn /\ ir_supply_inst_ok s
 End
 
+(* A split rewrites only the blocks, so it keeps the FMP convention. *)
+Theorem insert_split_supply_fmp_signature:
+  insert_split_supply s fn pred target = (fn',s') ==>
+  fn'.fn_fmp_signature = fn.fn_fmp_signature
+Proof
+  Cases_on `build_split_block_supply s pred target` >> PairCases_on `r` >>
+  simp[insert_split_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem insert_split_supply_o1_inv:
   supply_o1_inv ctx s fn /\
   MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
@@ -1112,6 +1121,9 @@ Proof
   `o1_fn_shape ctx fn'` by metis_tac[insert_split_supply_o1_fn_shape] >>
   `ir_supply_covers_fn s' fn' /\ ir_supply_inst_ok s'` by
     metis_tac[insert_split_supply_ir_covered] >>
+  `fmp_sig_no_param fn'` by
+    (drule insert_split_supply_fmp_signature >>
+     gvs[o1_fn_row_def, fmp_sig_no_param_def]) >>
   simp[] >> gvs[o1_fn_row_def] >>
   ho_match_mp_tac insert_split_supply_opcode_property >>
   gvs[o1_fn_shape_def] >> metis_tac[]

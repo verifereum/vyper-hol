@@ -34,59 +34,11 @@ Ancestors
   unitShapeDefs venomWf contextCodegenRel irSupply venomFnScheduleRunnerProps
   o1DretDesugarContract fmpStepContract o1ComposeSupport
 
-Theorem fmp_opcode_info_raw[local]:
-  (fmp_opcode_needs_fmp op ==> is_raw_fmp_opcode op) /\
-  (fmp_opcode_publishes_fmp op ==> is_raw_fmp_opcode op)
-Proof
-  rw[fmp_opcode_needs_fmp_def, fmp_opcode_publishes_fmp_def] >>
-  simp[is_raw_fmp_opcode_def]
-QED
-
-Theorem fmp_scan_insts_no_raw[local]:
-  !insts. EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode) insts ==>
-          fmp_scan_insts insts = fmp_info_bottom
-Proof
-  Induct >> rw[fmp_scan_insts_def] >>
-  `~fmp_opcode_needs_fmp h.inst_opcode /\
-   ~fmp_opcode_publishes_fmp h.inst_opcode` by metis_tac[fmp_opcode_info_raw] >>
-  simp[fmp_info_join_def, fmp_info_bottom_def]
-QED
-
-Theorem fmp_direct_info_no_raw[local]:
-  no_raw_fmp_ops fn ==> fmp_direct_info fn = fmp_info_bottom
-Proof
-  rw[no_raw_fmp_ops_def, fmp_direct_info_def] >>
-  irule fmp_scan_insts_no_raw >> simp[EVERY_MEM]
-QED
-
-Theorem fmp_collect_invokes_targets[local]:
-  !insts targets t.
-    fmp_collect_invokes insts = SOME targets /\ MEM t targets ==>
-    MEM t (MAP FST (get_invoke_targets insts))
-Proof
-  Induct >> simp[fmp_collect_invokes_def, get_invoke_targets_def] >>
-  rw[fmp_invoke_target_def] >> gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
 Theorem fmp_resolve_targets_some[local]:
   !targets t. fmp_resolve_targets ctx targets /\ MEM t targets ==>
               IS_SOME (lookup_function t ctx.ctx_functions)
 Proof
   Induct >> rw[fmp_resolve_targets_def] >> gvs[]
-QED
-
-Theorem fmp_join_target_info_unneeded[local]:
-  !targets acc out.
-    fmp_join_target_info infos targets acc = SOME out /\
-    (!t. MEM t targets ==>
-         ?i. FLOOKUP infos t = SOME i /\ ~i.fi_needs_fmp) ==>
-    out.fi_needs_fmp = acc.fi_needs_fmp /\
-    out.fi_publishes_fmp = acc.fi_publishes_fmp
-Proof
-  Induct >> simp[fmp_join_target_info_def] >> rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  `~info.fi_needs_fmp` by (first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
-  first_x_assum drule >> simp[fmp_info_join_def]
 QED
 
 (* The analysis gives an FMP-free function with sealed F/F callees no
@@ -155,15 +107,6 @@ Proof
        fn_pass_effects_hold_def, fn_abi_effect_holds_def,
        fn_pass_abi_effect_def, fn_fmp_convention_eq_def, fn_pass_tag_def] >>
   rw[] >> gvs[]
-QED
-
-Theorem get_invoke_targets_mem[local]:
-  !insts name. MEM name (MAP FST (get_invoke_targets insts)) ==>
-    ?inst rest. MEM inst insts /\ inst.inst_opcode = INVOKE /\
-                inst.inst_operands = Label name :: rest
-Proof
-  Induct >> rw[get_invoke_targets_def] >> BasicProvers.EVERY_CASE_TAC >> gvs[] >>
-  metis_tac[]
 QED
 
 (* A callee named by an output function of the stage resolves there. *)
