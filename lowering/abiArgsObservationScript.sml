@@ -92,6 +92,13 @@ Proof
   Cases_on `inst.inst_outputs` >> abi_result_shape_simp
 QED
 
+Theorem abi_exec_gas_labels[local]:
+  abi_result_labels s.vs_labels (exec_gas inst s)
+Proof
+  simp[exec_gas_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[abi_result_labels_def, update_var_def]
+QED
+
 Theorem abi_step_base_labels:
   abi_result_labels s.vs_labels (step_inst_base inst s)
 Proof
@@ -101,7 +108,8 @@ Proof
        exec_read0_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, exec_ext_call_def] >>
   abi_result_shape_simp >>
-  simp[REWRITE_RULE [abi_result_labels_def] abi_delegatecall_labels,
+  simp[REWRITE_RULE [abi_result_labels_def] abi_exec_gas_labels,
+       REWRITE_RULE [abi_result_labels_def] abi_delegatecall_labels,
        REWRITE_RULE [abi_result_labels_def] abi_create_labels] >>
   abi_result_shape_simp
   >- (strip_tac >>
