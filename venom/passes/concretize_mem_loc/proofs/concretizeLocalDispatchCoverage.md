@@ -48,8 +48,8 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 
 | Constructor(s) | Semantic helper / non-Error outcomes | Existing boundary; status | Reachable premises and outstanding obligations |
 |---|---|---|---|
-| ADD | exec_pure2 word_add / OK | B2,B3; conditional | Scalar/pointer-left/pointer-right split from fn_ptr_ok and resolved origin; clean scalar from taint_ok and nonopaque use; G/D/T adapters. |
-| SUB | exec_pure2 word_sub / OK | B2,B3; conditional | Pointer-left or scalar only under affine discipline; do not assume arbitrary pointer subtraction covered; G/D/T adapters. |
+| ADD | exec_pure2 word_add / OK | reachable producer checked | concretizeLayoutLocalAffine.concretize_affine_local_complete covers scalar, pointer-left and pointer-right cases; derives pair shape, classification and cleanliness, preserves actual G, restricted successor D, independent target T and both environments. |
+| SUB | exec_pure2 word_sub / OK | reachable producer checked | Same grouped concretize_affine_local_complete; reachable resolved support and affine discipline exclude a right pointer. No arbitrary pointer subtraction is claimed. |
 | MUL, Div, SDIV, Mod, SMOD, Exp | exec_pure2 / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete derives clean inputs from discipline and supplies actual G/D/O/T; binary operand envelope and full incoming interface retained. |
 | ADDMOD, MULMOD | exec_pure3 / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete handles the three-operand envelope, actual ghost updates and independent target taint; see interface below. |
 | EQ, LT, GT | exec_pure2 / OK | B2,B4; conditional | Scalar or same-site pointer pair; same lifetime token and numeric bounds must be derived; no mere numeric-origin inversion; D/T adapters. |
