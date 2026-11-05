@@ -45,9 +45,9 @@ Default tactic timeout and memory limits. Many ancestor theories are admitted by
 
 Obliviousness. The compile primitives (`compileEnvScript.sml`: `emit`, `fresh_var`, `fresh_id`, `fresh_label`, `new_block`) never read `cs_current_bb` or the IDs of `cs_current_insts`, with two exceptions to watch:
 - `new_block` returns the old `cs_current_bb`. A program that discards that result is oblivious; one that uses it in emitted code is not. Find whether the encoder uses it.
-- `block_is_terminated` reads the opcode of the last current instruction. `start_relabel` keeps opcodes and operands and changes only the IDs, so that check is unaffected.
+- `block_is_terminated` reads the opcode of the last current instruction, and `start_relabel` replaces the pre-fragment instructions with NOPs. The encoder never calls it: only `emit_jmp_if_not_terminated` (`emitHelper`) does, and that is used only by statement and module lowering.
 
-A direct induction on single primitives won't work, since `start_swap` describes the end state relative to the start. The natural route is a more general invariant over the compile monad, e.g. "running from `start_relabel L ids sa` gives the same result and the end state related to the original by renaming the entry block's label (in `cs_current_bb` while the entry block is open, else in that one finished block) and the prefix IDs". Prove that invariant for the primitives and the monad's bind/return/case/if, then for `compile_abi_encode_to_buf` by its recursion, and conclude.
+A direct induction on single primitives won't work, since `start_swap` describes the end state relative to the start. The natural route is a more general invariant over the compile monad, e.g. "running from `start_relabel L ids sa` gives the same result and the end state related to the original by renaming the entry block's label (in `cs_current_bb` while the entry block is open, else in that one finished block) and replacing its pre-fragment prefix". Prove that invariant for the primitives and the monad's bind/return/case/if, then for `compile_abi_encode_to_buf` by its recursion, and conclude.
 
 Facts.
 - `ALL_DISTINCT` IDs: every emitted instruction gets its ID from `fresh_id`, strictly increasing `cs_next_id`.

@@ -93,19 +93,18 @@ QED
 (* ===== Relabeled entry block ===== *)
 
 (* The entry block renamed to L, with its pre-fragment instructions
-   given the IDs ids (opcodes and operands kept). *)
+   replaced by NOPs with the IDs ids. *)
 Definition start_relabel_def:
   start_relabel L ids (sa:compile_state) =
     sa with <| cs_current_bb := L;
-               cs_current_insts :=
-                 MAP2 (\n i. i with inst_id := n) ids sa.cs_current_insts |>
+               cs_current_insts := MAP (\id. mk_inst id NOP [] []) ids |>
 End
 
 (* What a fragment run from start_relabel L ids sa ends in, given that
    the run from sa ends in sb. *)
 Definition start_swap_def:
   start_swap (sa:compile_state) L ids (sb:compile_state) =
-    let pre = MAP2 (\n i. i with inst_id := n) ids sa.cs_current_insts in
+    let pre = MAP (\id. mk_inst id NOP [] []) ids in
     let p = LENGTH sa.cs_current_insts in
     let new = emitted_blocks sa sb in
     if NULL new then
@@ -120,7 +119,7 @@ Definition start_swap_def:
 End
 
 (* A fragment's code does not depend on its entry block's label or on the
-   IDs of the instructions already in it. *)
+   instructions already in it. *)
 Definition frag_start_oblivious_def:
   frag_start_oblivious (m : compile_state -> 'a # compile_state) <=>
     !sa x sb L ids.
@@ -141,7 +140,9 @@ Theorem frag_exec_gas_path_relabel:
     (!L ids fn'.
        LENGTH ids = LENGTH sa.cs_current_insts /\
        fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb) fn' /\
-       fn_inst_ids_distinct fn' /\
+       fn_inst_ids_distinct fn' /\ fn'.fn_name = fn.fn_name /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
+            i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
        (sb.cs_current_insts <> [] \/
         !bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
              phi_prefix_length bb.bb_instructions = 0) ==>
@@ -176,7 +177,9 @@ Theorem abi_decode_sim_gas_path_relabel:
     (!L ids fn'.
        LENGTH ids = LENGTH sa.cs_current_insts /\
        fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb) fn' /\
-       fn_inst_ids_distinct fn' /\
+       fn_inst_ids_distinct fn' /\ fn'.fn_name = fn.fn_name /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
+            i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
        (!bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
              phi_prefix_length bb.bb_instructions = 0) ==>
        ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
