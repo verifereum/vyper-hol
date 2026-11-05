@@ -375,7 +375,7 @@ Theorem window_structural_member_static_run_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
   EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
-  (observe ==> window_observed_contract ei) /\
+  (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_child dst child_src ei F
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -387,7 +387,7 @@ Theorem window_structural_member_static_run_core[local]:
       eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
       (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
         FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
@@ -408,8 +408,8 @@ Proof
     eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
     (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
       FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
-    (Cases_on `observe`
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
+    (Cases_on `obsv`
      >- (gvs[] >> drule_all window_static_child_run_observed >> simp[]) >>
      simp[] >> drule_all window_static_child_run >> simp[]) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
@@ -438,7 +438,7 @@ Theorem window_structural_member_static_run:
         FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
   strip_tac >>
-  drule_all (SRULE [] (Q.INST [`observe` |-> `F`] (SPEC_ALL window_structural_member_static_run_core))) >>
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `F`] (SPEC_ALL window_structural_member_static_run_core))) >>
   simp[]
 QED
 
@@ -460,7 +460,7 @@ Theorem window_structural_member_static_run_observed:
       (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SRULE [] (Q.INST [`observe` |-> `T`] (SPEC_ALL window_structural_member_static_run_core))) >>
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `T`] (SPEC_ALL window_structural_member_static_run_core))) >>
   simp[]
 QED
 
@@ -514,7 +514,7 @@ Theorem window_structural_member_dynamic_run_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
   EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
-  (observe ==> window_observed_contract ei) /\
+  (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_child dst child_src ei T
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -529,7 +529,7 @@ Theorem window_structural_member_dynamic_run_core[local]:
       eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
       (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
         FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all window_structural_members_inv_dynamic_cursor >>
   disch_then (CONJUNCTS_THEN2 STRIP_ASSUME_TAC (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
@@ -555,8 +555,8 @@ Proof
     eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
     (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
       FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
-    (Cases_on `observe`
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
+    (Cases_on `obsv`
      >- (`window_observed_contract ei` by metis_tac[] >>
          drule_all window_dynamic_child_run_observed >> simp[]) >>
      simp[] >> drule_all window_dynamic_child_run >> simp[]) >>
@@ -589,7 +589,7 @@ Theorem window_structural_member_dynamic_run:
         FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
   strip_tac >>
-  drule_all (SRULE [] (Q.INST [`observe` |-> `F`]
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_structural_member_dynamic_run_core))) >> simp[]
 QED
 
@@ -614,7 +614,7 @@ Theorem window_structural_member_dynamic_run_observed:
       (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SRULE [] (Q.INST [`observe` |-> `T`]
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_structural_member_dynamic_run_core))) >> simp[]
 QED
 
@@ -817,7 +817,7 @@ Theorem window_structural_member_static_step_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
   EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
-  (observe ==> window_observed_contract ei) /\
+  (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_child dst child_src ei F
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -835,7 +835,7 @@ Theorem window_structural_member_static_step_run_sizes_core[local]:
         sb cap d mid en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
@@ -901,7 +901,7 @@ Theorem window_structural_member_static_step_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  strip_tac >> drule_all (SRULE [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SRULE [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_structural_member_static_step_run_sizes_core))) >> simp[]
 QED
 
@@ -929,7 +929,7 @@ Theorem window_structural_member_static_step_run_sizes_observed:
       (!x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SRULE [] (Q.INST [`observe` |-> `T`]
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_structural_member_static_step_run_sizes_core))) >> simp[]
 QED
 
@@ -961,7 +961,7 @@ Theorem window_structural_member_dynamic_step_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
   EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
-  (observe ==> window_observed_contract ei) /\
+  (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_child dst child_src ei T
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -980,7 +980,7 @@ Theorem window_structural_member_dynamic_step_run_sizes_core[local]:
         sb cap d mid en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
@@ -1036,7 +1036,7 @@ Theorem window_structural_member_dynamic_step_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_structural_member_dynamic_step_run_sizes_core))) >> simp[]
 QED
 
@@ -1065,7 +1065,7 @@ Theorem window_structural_member_dynamic_step_run_sizes_observed:
       (!x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_structural_member_dynamic_step_run_sizes_core))) >> simp[]
 QED
 
@@ -1114,7 +1114,7 @@ QED
 Theorem window_structural_members_cons_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ DROP k infos = (h0,h1,h2,h3)::rest /\
-  window_strong_contract h0 /\ (observe ==> window_observed_contract h0) /\
+  window_strong_contract h0 /\ (obsv ==> window_observed_contract h0) /\
   compile_abi_encode_complex_elems dst src ((h0,h1,h2,h3)::rest)
     (abi_encoder_member_span (TAKE k infos))
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
@@ -1131,7 +1131,7 @@ Theorem window_structural_members_cons_run_sizes_core[local]:
     window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en) /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s)
 Proof
   strip_tac >>
   `fn_has_code st en func` by
@@ -1177,7 +1177,7 @@ Proof
     EVERY (\(b,n). d <= b /\ b+n <= d+LENGTH (enc at (ListV avs))) outs /\
     (!R. (!i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    (observe ==> !x. ~not_fresh_at mid x ==> lookup_var x u = lookup_var x t)` by
+    (obsv ==> !x. ~not_fresh_at mid x ==> lookup_var x u = lookup_var x t)` by
     suspend "child" >>
   suspend "compose"
 QED
@@ -1238,7 +1238,7 @@ Resume window_structural_members_cons_run_sizes_core[compose]:
    window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en)` by
     (simp_tac (srw_ss()) [window_alloca_sites_def, abiEncoderPropsTheory.frag_ids_def,
        SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
-  `observe ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s` by
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s` by
     (rpt strip_tac >>
      `~not_fresh_at mid x /\ ~not_fresh_at ready x` by
        metis_tac[freshWritesTheory.not_fresh_at_mono, LESS_EQ_TRANS] >>
@@ -1282,7 +1282,7 @@ Theorem window_structural_members_cons_run_sizes:
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_structural_members_cons_run_sizes_core))) >> simp[]
 QED
 
@@ -1309,7 +1309,7 @@ Theorem window_structural_members_cons_run_sizes_observed:
     (!x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_structural_members_cons_run_sizes_core))) >> simp[]
 QED
 Theorem window_structural_members_cons_run:
@@ -1340,7 +1340,7 @@ Theorem window_structural_members_remaining_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ DROP k infos = rest /\
   (!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei) /\
-  (observe ==> !ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei) /\
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei) /\
   compile_abi_encode_complex_elems dst src rest
     (abi_encoder_member_span (TAKE k infos))
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
@@ -1352,7 +1352,7 @@ Theorem window_structural_members_remaining_run_sizes_core[local]:
         sb cap d en en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   Induct_on `rest`
   >- (rpt gen_tac >>
@@ -1367,10 +1367,10 @@ Proof
       qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> PairCases_on `h` >>
-  `window_strong_contract h0 /\ (observe ==> window_observed_contract h0)` by metis_tac[MEM] >>
+  `window_strong_contract h0 /\ (obsv ==> window_observed_contract h0)` by metis_tac[MEM] >>
   drule_all window_structural_members_cons_run_sizes_core >> strip_tac >>
   `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei` by metis_tac[MEM] >>
-  `(observe ==> !ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei)` by metis_tac[MEM] >>
+  `(obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei)` by metis_tac[MEM] >>
   first_x_assum drule_all >> strip_tac >>
   `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
        !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
@@ -1378,7 +1378,7 @@ Proof
      qpat_x_assum `!R. _ ==> !i b sz. _ /\ FLOOKUP u.vs_allocas i = _ ==> _`
        (qspec_then `R` mp_tac) >> asm_rewrite_tac[] >> disch_tac >>
      qpat_x_assum `!R. _` (qspec_then `R` mp_tac) >> asm_rewrite_tac[]) >>
-  `observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by metis_tac[] >>
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by metis_tac[] >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   rpt (qpat_x_assum `!R. _` kall_tac) >>
   irule window_phase_chain >>
@@ -1410,7 +1410,7 @@ Theorem window_structural_members_remaining_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  rpt gen_tac >> strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_structural_members_remaining_run_sizes_core))) >> simp[]
 QED
 
@@ -1435,7 +1435,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei` by
     metis_tac[window_observed_contract_strong] >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_structural_members_remaining_run_sizes_core))) >> simp[]
 QED
 
@@ -1469,7 +1469,7 @@ Theorem window_structural_members_initialized_run_sizes_core[local]:
   (EXISTS (\(_,_,_,dyn). dyn) infos ==>
     mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
   (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) /\
-  (observe ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
   compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
   ?t. window_phase ctx func st en
         (window_alloca_sites func (frag_ids st en) UNION
@@ -1480,13 +1480,13 @@ Theorem window_structural_members_initialized_run_sizes_core[local]:
       mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `window_structural_members_inv ctx func infos at ats avs 0 src dst dp site slot
      sb cap d st en s` by metis_tac[window_structural_members_inv_entry] >>
   drule window_structural_members_remaining_run_sizes_core >>
-  disch_then (qspecl_then [`observe`, `infos`, `out`] mp_tac) >>
+  disch_then (qspecl_then [`obsv`, `infos`, `out`] mp_tac) >>
   simp[abi_encoder_member_span_def] >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   `mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs)` by
@@ -1516,7 +1516,7 @@ Theorem window_structural_members_initialized_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_structural_members_initialized_run_sizes_core))) >> simp[]
 QED
 
@@ -1546,7 +1546,7 @@ Proof
   strip_tac >>
   `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei` by
     metis_tac[window_observed_contract_strong] >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_structural_members_initialized_run_sizes_core))) >> simp[]
 QED
 
@@ -1616,7 +1616,7 @@ Theorem window_complex_initialized_run_sizes_core:
   (EXISTS (\(_,_,_,dyn). dyn) infos ==>
     mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
   (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) /\
-  (observe ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
   compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
   ?t. window_phase ctx func st en
         (window_alloca_sites func (frag_ids st en) UNION
@@ -1627,7 +1627,7 @@ Theorem window_complex_initialized_run_sizes_core:
         mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))) /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb cap s.vs_memory` by
@@ -1670,7 +1670,7 @@ Theorem window_complex_initialized_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_complex_initialized_run_sizes_core))) >> simp[]
 QED
 
@@ -1697,7 +1697,7 @@ Proof
   strip_tac >>
   `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei` by
     metis_tac[window_observed_contract_strong] >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_complex_initialized_run_sizes_core))) >> simp[]
 QED
 

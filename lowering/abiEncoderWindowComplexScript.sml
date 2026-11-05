@@ -381,9 +381,9 @@ Theorem window_complex_finish_load_core[local]:
   emit_op MLOAD [dp] load = (out,en) /\ fn_has_code load en func /\
   (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
     FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-  (observe ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s) ==>
+  (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s) ==>
   ?t. window_strong_result ctx func st en out at av d s t /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   drule window_phase_resources >> strip_tac >>
@@ -424,7 +424,7 @@ Theorem window_complex_finish_load:
     FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
   ?t. window_strong_result ctx func st en out at av d s t
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_complex_finish_load_core))) >> simp[]
 QED
 
@@ -442,7 +442,7 @@ Theorem window_complex_finish_load_observed:
   ?t. window_strong_result ctx func st en out at av d s t /\
     (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_complex_finish_load_core))) >> simp[]
 QED
 
@@ -498,12 +498,12 @@ QED
 
 Theorem window_complex_contract_core[local]:
   (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) /\
-  (observe ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) ==>
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) ==>
   !dst src st out st' ctx func s at av sb cap d.
     compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src (AbiComplex infos) at av sb cap d s ==>
     ?t. window_strong_result ctx func st st' out at av d s t /\
-      (observe ==> !x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+      (obsv ==> !x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -608,7 +608,7 @@ Resume window_complex_contract_core[dynamic]:
        `window_alloca_sites func (frag_ids ready load) UNION {st.cs_next_id}`,
        `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
      asm_rewrite_tac[] >> simp[EVERY_DEF, UNION_SUBSET, INSERT_SUBSET]) >>
-  `observe ==> !x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s` by
+  `obsv ==> !x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s` by
     (rpt strip_tac >>
      `~not_fresh_at load x /\ ~not_fresh_at ready x` by
        metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def, LESS_EQ_TRANS] >>
@@ -678,7 +678,7 @@ Theorem window_complex_strong_contract:
 Proof
   strip_tac >> simp_tac bool_ss [window_strong_contract_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_complex_contract_core))) >> simp[]
 QED
 
@@ -690,6 +690,6 @@ Proof
   `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei` by
     metis_tac[window_observed_contract_strong] >>
   simp_tac bool_ss [window_observed_contract_def] >> rpt gen_tac >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_complex_contract_core))) >> simp[]
 QED

@@ -504,18 +504,18 @@ Theorem window_array_element_run_core[local]:
   off+LENGTH (enc ty (EL j avs)) <= LENGTH (enc (Array NONE ty) (ListV avs)) /\
   ~s.vs_halted /\ s.vs_current_bb = ready.cs_current_bb /\
   s.vs_inst_idx = LENGTH ready.cs_current_insts /\
-  window_strong_contract ei /\ (observe ==> window_observed_contract ei) /\
+  window_strong_contract ei /\ (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_to_buf child_dst child_src ei ready = (out,en) ==>
   ?t. window_array_transition ctx func owner
       (window_alloca_sites func (frag_ids ready en))
       [(d+off,LENGTH (enc ty (EL j avs)))] s t /\
     window_strong_result ctx func ready en out ty (EL j avs) (d+off) s t /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all window_array_root_live_pre >> strip_tac >>
   `?t. window_strong_result ctx func ready en out ty (EL j avs) (d+off) s t /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
-    (Cases_on `observe`
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
+    (Cases_on `obsv`
      >- (gvs[] >> qpat_x_assum `window_observed_contract ei` mp_tac >>
          rewrite_tac[window_observed_contract_def] >> disch_then drule_all >> simp[]) >>
      gvs[] >> qpat_x_assum `window_strong_contract ei` mp_tac >>
@@ -542,7 +542,7 @@ Theorem window_array_element_run:
       [(d+off,LENGTH (enc ty (EL j avs)))] s t /\
     window_strong_result ctx func ready en out ty (EL j avs) (d+off) s t
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_array_element_run_core))) >> simp[]
 QED
 
@@ -566,7 +566,7 @@ Theorem window_array_element_run_observed:
     (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_array_element_run_core))) >> simp[]
 QED
 
@@ -618,14 +618,14 @@ Theorem window_array_static_element_run_core[local]:
   (!x. child_src = Var x \/ child_dst = Var x ==> not_fresh_at ready x) /\
   ~s.vs_halted /\ s.vs_current_bb = ready.cs_current_bb /\
   s.vs_inst_idx = LENGTH ready.cs_current_insts /\
-  window_strong_contract ei /\ (observe ==> window_observed_contract ei) /\
+  window_strong_contract ei /\ (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_static_info child_dst child_src ei ready = (out,en) ==>
   ?t. window_array_transition ctx func owner
       (window_alloca_sites func (frag_ids ready en))
       [(d+32+j*asz,LENGTH (enc ty (EL j avs)))] s t /\
     window_strong_result ctx func ready en out ty (EL j avs) (d+32+j*asz) s t /\
     abi_encoder_array_prefix ty avs (SUC j) d t.vs_memory /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `abi_encoder_admissible (AbiDynArray ei asz msz F) /\
@@ -647,7 +647,7 @@ Proof
       (window_alloca_sites func (frag_ids ready en))
       [(d+(32+j*asz),LENGTH (enc ty (EL j avs)))] s t /\
     window_strong_result ctx func ready en out ty (EL j avs) (d+(32+j*asz)) s t /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
     (irule window_array_element_run_core >> asm_rewrite_tac[] >>
      qexistsl_tac [`F`, `asz`, `cap`, `child_dst`, `child_src`, `dst`, `ei`,
        `ids`, `msz`, `sb`, `src`] >> asm_rewrite_tac[ADD_ASSOC]) >>
@@ -680,7 +680,7 @@ Theorem window_array_static_element_run:
     window_strong_result ctx func ready en out ty (EL j avs) (d+32+j*asz) s t /\
     abi_encoder_array_prefix ty avs (SUC j) d t.vs_memory
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_array_static_element_run_core))) >> simp[]
 QED
 
@@ -705,7 +705,7 @@ Theorem window_array_static_element_run_observed:
     (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_array_static_element_run_core))) >> simp[]
 QED
 
@@ -763,7 +763,7 @@ Theorem window_array_static_body_run_core[local]:
   abi_encode_array_static_body ip src dst ei asz msz st = (out,en) /\
   window_alloca_sites func (frag_ids st en) SUBSET ids /\
   fn_has_code st en func /\ window_strong_contract ei /\
-  (observe ==> window_observed_contract ei) /\
+  (obsv ==> window_observed_contract ei) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. window_array_transition ctx func st
@@ -773,7 +773,7 @@ Theorem window_array_static_body_run_core[local]:
     eval_operand out t = SOME (n2w j) /\
     t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `abi_encoder_static_leaf ei` by
@@ -812,7 +812,7 @@ Proof
     window_strong_result ctx func prepared en ignored ty (EL j avs)
       (d+32+j*asz) p t /\
     abi_encoder_array_prefix ty avs (SUC j) d t.vs_memory /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x p)` by
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x p)` by
     (`st.cs_next_var <= prepared.cs_next_var /\
        ~p.vs_halted /\ p.vs_current_bb = prepared.cs_current_bb /\
        p.vs_inst_idx = LENGTH prepared.cs_current_insts /\
@@ -843,7 +843,7 @@ Proof
      qexists_tac `en` >> asm_rewrite_tac[]) >>
   `prepared.cs_next_var <= en.cs_next_var` by
     metis_tac[window_phase_def, window_seq_mono] >>
-  `observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by
     metis_tac[not_fresh_at_mono] >>
   qexists_tac `t` >>
   full_simp_tac bool_ss [AC ADD_COMM ADD_ASSOC, MULT_COMM] >>
@@ -868,7 +868,7 @@ Theorem window_array_static_body_run:
     t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_array_static_body_run_core))) >> simp[]
 QED
 
@@ -892,7 +892,7 @@ Theorem window_array_static_body_run_observed:
     (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_array_static_body_run_core))) >> simp[]
 QED
 
@@ -1233,7 +1233,7 @@ Theorem window_array_dynamic_child_finish_core[local]:
   venomMemDefs$regions_disjoint (b,n) (slot,32) /\
   owner.cs_next_var <= prepared.cs_next_var /\
   prepared.cs_next_var <= child_end.cs_next_var /\
-  (observe ==> !x. ~not_fresh_at child_end x ==> lookup_var x r = lookup_var x q) ==>
+  (obsv ==> !x. ~not_fresh_at child_end x ==> lookup_var x r = lookup_var x q) ==>
   ?t. window_array_transition ctx func owner (child_ids UNION {site})
       [(h,32);(b,n)] q t /\
     mem_bytes_at b n t.vs_memory = enc ty av /\
@@ -1242,7 +1242,7 @@ Theorem window_array_dynamic_child_finish_core[local]:
     eval_operand idx t = SOME (n2w j) /\
     t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x q)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x q)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `window_phase ctx func prepared child_end
@@ -1279,7 +1279,7 @@ Proof
     (irule window_phase_eval >> metis_tac[window_phase_labels, not_fresh_at_mono]) >>
   `child_end.cs_next_var <= en.cs_next_var` by
     (drule abiEncoderChildCodeTheory.abi_encode_child_suffix_shape >> simp[]) >>
-  `observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x q` by
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x q` by
     metis_tac[not_fresh_at_mono] >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   irule window_array_phase_transition >> conj_tac
@@ -1300,7 +1300,7 @@ Theorem window_array_dynamic_body_run_core[local]:
   window_alloca_sites func (frag_ids st en) SUBSET ids /\ site IN ids /\
   site NOTIN window_alloca_sites func (frag_ids st en) /\
   fn_has_code st en func /\ window_strong_contract ei /\
-  (observe ==> window_observed_contract ei) /\
+  (obsv ==> window_observed_contract ei) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. window_array_transition ctx func st
@@ -1312,7 +1312,7 @@ Theorem window_array_dynamic_body_run_core[local]:
     eval_operand out t = SOME (n2w j) /\
     t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   drule_all abi_encode_array_dynamic_body_context >> strip_tac >>
@@ -1343,7 +1343,7 @@ Proof
       [(d+(32+off),LENGTH (enc ty (EL j avs)))] q r /\
     window_strong_result ctx func prepared child_end child_len ty (EL j avs)
       (d+(32+off)) q r /\
-    (observe ==> !x. ~not_fresh_at child_end x ==> lookup_var x r = lookup_var x q)` by
+    (obsv ==> !x. ~not_fresh_at child_end x ==> lookup_var x r = lookup_var x q)` by
     (`st.cs_next_var <= prepared.cs_next_var /\
       ~q.vs_halted /\ q.vs_current_bb = prepared.cs_current_bb /\
       q.vs_inst_idx = LENGTH prepared.cs_current_insts` by
@@ -1387,7 +1387,7 @@ Proof
     eval_operand (FST (FST coords)) t = SOME (n2w j) /\
     t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    (observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x q)` by
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x q)` by
     (`site NOTIN window_alloca_sites func (frag_ids prepared child_end)` by
        metis_tac[SUBSET_DEF] >>
      irule window_array_dynamic_child_finish_core >>
@@ -1418,7 +1418,7 @@ Proof
          metis_tac[window_array_transition_sizes]) >>
      qexists_tac `en` >> asm_rewrite_tac[]) >>
   `prepared.cs_next_var <= en.cs_next_var` by decide_tac >>
-  `observe ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by
     metis_tac[not_fresh_at_mono] >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
@@ -1469,7 +1469,7 @@ Theorem window_array_dynamic_body_run:
     t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_array_dynamic_body_run_core))) >> simp[]
 QED
 
@@ -1500,7 +1500,7 @@ Theorem window_array_dynamic_body_run_observed:
     (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule window_observed_contract_strong >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_array_dynamic_body_run_core))) >> simp[]
 QED
 
@@ -1563,6 +1563,6 @@ Theorem window_array_dynamic_child_finish[local]:
     t.vs_inst_idx = LENGTH en.cs_current_insts
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_array_dynamic_child_finish_core))) >> simp[]
 QED

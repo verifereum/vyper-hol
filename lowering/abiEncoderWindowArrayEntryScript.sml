@@ -1114,7 +1114,7 @@ Theorem window_array_entry_from_init_core[local]:
   abi_encoder_array_prefix ty avs 0 d s.vs_memory /\
   window_array_cursor T st pp psite pslot 0 sb cap d
     (LENGTH (enc (Array NONE ty) (ListV avs))) s /\
-  (observe ==> !x. ~not_fresh_at owner x ==> lookup_var x t = lookup_var x s) /\
+  (obsv ==> !x. ~not_fresh_at owner x ==> lookup_var x t = lookup_var x s) /\
   window_phase ctx func st owner sites [] s t /\
   window_array_transition ctx func st sites [] s t /\
   sites SUBSET ids /\ psite NOTIN sites /\
@@ -1134,7 +1134,7 @@ Theorem window_array_entry_from_init_core[local]:
     (jump_to (FST labels) t) /\
   window_array_cursor T owner pp psite pslot 0 sb cap d
     (LENGTH (enc (Array NONE ty) (ListV avs))) (jump_to (FST labels) t) /\
-  (observe ==> !x. ~not_fresh_at owner x ==>
+  (obsv ==> !x. ~not_fresh_at owner x ==>
     lookup_var x (jump_to (FST labels) t) = lookup_var x s)
 Proof
   strip_tac >>
@@ -1184,7 +1184,7 @@ Theorem window_array_entry_from_init:
   window_array_cursor T owner pp psite pslot 0 sb cap d
     (LENGTH (enc (Array NONE ty) (ListV avs))) (jump_to (FST labels) t)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
     (SPEC_ALL window_array_entry_from_init_core))) >> asm_rewrite_tac[]
 QED
 
@@ -1216,7 +1216,7 @@ Theorem window_array_entry_from_init_observed:
   (!x. ~not_fresh_at owner x ==>
     lookup_var x (jump_to (FST labels) t) = lookup_var x s)
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
     (SPEC_ALL window_array_entry_from_init_core))) >> asm_rewrite_tac[]
 QED
 
