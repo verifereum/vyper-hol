@@ -10,7 +10,7 @@ Theory o1ContractSimplifyCfgParams
 Ancestors
   o1PassContract simplifyCfgCollapseShape simplifyCfgInvariant
   simplifyCfgDefs callLayoutDefs venomWf venomInst cfgTransform
-  list rich_list
+  list rich_list arithmetic
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -26,6 +26,117 @@ Ancestors
    and the PHI fixup puts the remaining PHIs first (fix_phis_in_block),
    so with no parameters its pseudos are exactly its leading PHIs.  The
    block-label substitution leaves bb_label and opcodes alone. *)
+Theorem scfg_entry_layout_iff[local]:
+  fn.fn_blocks <> [] /\ ALL_DISTINCT (fn_labels fn) /\
+  (HD fn.fn_blocks).bb_label = e ==>
+  ((EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) <=>
+    EVERY (\bb. bb.bb_label <> e ==> no_param_insts bb.bb_instructions)
+      fn.fn_blocks) /\
+   (first_block_no_phi fn <=>
+    EVERY (\bb. bb.bb_label = e ==>
+      EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions) fn.fn_blocks))
+Proof
+  Cases_on `fn.fn_blocks` >> simp[fn_labels_def, first_block_no_phi_def] >>
+  rpt strip_tac >> gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem scfg_pseudos_prefix_map[local]:
+  (!i. MEM i bb.bb_instructions ==>
+       (is_pseudo (f i).inst_opcode <=> is_pseudo i.inst_opcode)) /\
+  pseudos_prefix bb ==>
+  pseudos_prefix (bb with bb_instructions := MAP f bb.bb_instructions)
+Proof
+  simp[pseudos_prefix_def, EL_MAP] >> rpt strip_tac >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions /\
+   MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+    simp[EL_MEM] >>
+  gvs[EL_MAP] >> metis_tac[]
+QED
+
+Theorem scfg_pseudos_prefix_merge[local]:
+  pseudos_prefix a /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) b.bb_instructions ==>
+  pseudos_prefix (merge_blocks a b)
+Proof
+  simp[pseudos_prefix_def, merge_blocks_def] >> rpt strip_tac >>
+  Cases_on `j < LENGTH (FRONT a.bb_instructions)`
+  >- (`i < LENGTH (FRONT a.bb_instructions)` by decide_tac >>
+      `a.bb_instructions <> []` by
+        (Cases_on `a.bb_instructions` >> gvs[]) >>
+      `j < LENGTH a.bb_instructions` by
+        (gvs[LENGTH_FRONT] >> decide_tac) >>
+      `EL i (FRONT a.bb_instructions) = EL i a.bb_instructions` by
+        (irule EL_FRONT >> simp[NULL_EQ]) >>
+      `EL j (FRONT a.bb_instructions) = EL j a.bb_instructions` by
+        (irule EL_FRONT >> simp[NULL_EQ]) >>
+      gvs[EL_APPEND_EQN] >> metis_tac[]) >>
+  gvs[EL_APPEND_EQN, EVERY_EL] >>
+  `j - LENGTH (FRONT a.bb_instructions) < LENGTH b.bb_instructions` by
+    decide_tac >> metis_tac[]
+QED
+
+Theorem scfg_fix_phis_no_phis[local]:
+  no_phis bb ==> fix_phis_in_block ps bb = bb
+Proof
+  simp[no_phis_def, fix_phis_in_block_def] >> strip_tac >>
+  `MAP (fix_phi_inst ps) bb.bb_instructions = bb.bb_instructions` by
+    (`MAP (fix_phi_inst ps) bb.bb_instructions = MAP I bb.bb_instructions`
+       suffices_by simp[] >>
+     irule MAP_CONG >> simp[] >> gvs[EVERY_MEM] >>
+     rpt strip_tac >> simp[fix_phi_inst_def]) >>
+  simp[] >>
+  `FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions = []` by
+    gvs[FILTER_EQ_NIL, EVERY_MEM] >>
+  `FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions = bb.bb_instructions` by
+    gvs[FILTER_EQ_ID] >> simp[]
+QED
+
+Theorem scfg_pseudo_classification[local]:
+  is_pseudo op <=> op = PHI \/ is_param_opcode op
+Proof
+  Cases_on `op` >> simp[is_pseudo_def, is_param_opcode_def]
+QED
+
+Theorem scfg_fix_phi_no_param[local]:
+  ~is_param_opcode i.inst_opcode ==>
+  ~is_param_opcode (fix_phi_inst ps i).inst_opcode
+Proof
+  simp[fix_phi_inst_def] >> strip_tac >>
+  Cases_on `i.inst_opcode = PHI` >> simp[] >>
+  Cases_on `filter_phi_ops ps i.inst_operands` >>
+  simp[is_param_opcode_def] >>
+  rename1 `h::t` >> Cases_on `t` >> simp[is_param_opcode_def] >>
+  rename1 `h'::t'` >> Cases_on `t'` >> simp[is_param_opcode_def]
+QED
+
+Theorem scfg_fix_phis_layout[local]:
+  no_param_insts bb.bb_instructions ==>
+  no_param_insts (fix_phis_in_block ps bb).bb_instructions /\
+  pseudos_prefix (fix_phis_in_block ps bb)
+Proof
+  strip_tac >>
+  `EVERY (\i. ~is_param_opcode i.inst_opcode)
+    (MAP (fix_phi_inst ps) bb.bb_instructions)` by
+    (gvs[no_param_insts_def, EVERY_MAP, EVERY_MEM] >>
+     metis_tac[scfg_fix_phi_no_param]) >>
+  conj_tac
+  >- (simp[fix_phis_in_block_def, no_param_insts_def, EVERY_FILTER,
+           EVERY_MEM, MEM_FILTER] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  simp[fix_phis_in_block_def, pseudos_prefix_def] >> rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `phis ++ others` >>
+  `EVERY (\i. i.inst_opcode = PHI) phis` by
+    simp[Abbr `phis`, EVERY_FILTER, EVERY_MEM, MEM_FILTER] >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) others` by
+    (simp[Abbr `others`, EVERY_MEM, MEM_FILTER, scfg_pseudo_classification] >>
+     gvs[EVERY_MEM]) >>
+  Cases_on `j < LENGTH phis`
+  >- (`i < LENGTH phis` by decide_tac >>
+      gvs[EL_APPEND_EQN, EVERY_EL] >> simp[scfg_pseudo_classification]) >>
+  `j - LENGTH phis < LENGTH others` by decide_tac >>
+  gvs[EL_APPEND_EQN, EVERY_EL]
+QED
+
 Theorem simplify_cfg_fn_param_prefix:
   o1_fn_shape C fn /\ fn_pseudos_prefix fn /\
   EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
