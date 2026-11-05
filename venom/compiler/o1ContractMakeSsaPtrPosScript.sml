@@ -393,5 +393,30 @@ Theorem make_ssa_lockstep_revert:
   (in_revert_forward fn s ==> in_revert_forward fn' s') /\
   (about_to_revert fn inst s ==> about_to_revert fn' inst' s')
 Proof
-  cheat
+  strip_tac >> drule_all lockstep_rel >> strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn'.fn_blocks)` by
+    metis_tac[make_ssa_current_fn_labels] >>
+  `?bb'. lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb'` by
+    (gvs[active_inst_def, state_rel_def] >>
+     metis_tac[MEM_lookup_block]) >>
+  conj_tac
+  >- (rw[in_revert_forward_def] >>
+      drule_all make_ssa_current_fn_revert_forward_at >> strip_tac >>
+      gvs[state_rel_def, make_ssa_pos_def] >> metis_tac[]) >>
+  rw[about_to_revert_def]
+  >- gvs[inst_pair_def] >>
+  disj2_tac >> conj_tac >- gvs[inst_pair_def] >>
+  `s'.vs_current_bb = s.vs_current_bb` by metis_tac[state_rel_def] >>
+  qpat_x_assum `state_rel _ _ _` kall_tac >>
+  gvs[active_inst_def] >>
+  rename1 `(EL (SUC s.vs_inst_idx) next.bb_instructions).inst_opcode = REVERT` >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME next` by
+    (drule_all MEM_lookup_block >> simp[]) >>
+  drule_all make_ssa_pos_revert >> strip_tac >>
+  qexists_tac `EL (make_ssa_pos fn fn' s.vs_current_bb (SUC s.vs_inst_idx))
+                  bb'.bb_instructions` >>
+  simp[] >> qexists_tac `bb'` >>
+  metis_tac[lookup_block_MEM, lookup_block_label, make_ssa_pos_suc]
 QED
