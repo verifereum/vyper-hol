@@ -808,5 +808,77 @@ Theorem body_assign_local_memory_mem:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
+  drule_all body_assign_local_rhs_pre >> strip_tac >>
+  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty = type_memory_size entry.type` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  Cases_on `has_length_word (expr_type e) /\ is_empty_value_expr e`
+  >- (`has_length_word ty` by metis_tac[type_widens_to_has_length_word] >>
+      irule compile_assign_local_empty_stmt_frag_mem >> simp[] >>
+      qexists_tac `ty` >> simp[] >>
+      gen_tac >>
+      irule (CONV_RULE (DEPTH_CONV ETA_CONV) memory_rhs_empty_read_destination) >> simp[] >>
+      qexistsl [`env`, `ty`] >> simp[]) >>
+  `expr_type e = ty \/ is_bytestring_type ty` by
+    metis_tac[assign_local_memory_type_cases] >>
+  `((ty = expr_type e /\ ty = lowered_value_type cenv e) \/
+     is_bytestring_type ty /\ is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e))` by
+    metis_tac[type_widens_to_def, arg_type_fits_bytestring_source] >>
+  `~is_word_type (expr_type e)` by
+    (Cases_on `expr_type e` >> fs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `is_bytestring_type (BaseT b)` >> Cases_on `b` >>
+     fs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `is_bytestring_type (BaseT (BytesT bd))` >> Cases_on `bd` >>
+     fs[is_bytestring_type_def, is_word_type_def]) >>
+  `0 < type_memory_bytes cenv ty /\ type_memory_bytes cenv ty < 2 ** 64 /\
+   0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
+   type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_bytes cenv ty` by
+    metis_tac[assign_local_memory_sizes] >>
+  drule expr_body_pre_type_evaluates >>
+  disch_then (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME etv` >>
+  `type_memory_bytes cenv (expr_type e) = type_memory_size etv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `type_memory_bytes cenv (lowered_value_type cenv e) < 2 ** 64` by decide_tac >>
+  drule_all memory_rhs_lowered_runtime_layout >> strip_tac >>
+  `type_memory_size entry.type + 64 < dimword (:256)` by
+    metis_tac[allocation_limit_word_room] >>
+  `type_memory_size etv < 2 ** 64` by
+    ( `alloc_limits_expr cenv e` by fs[expr_body_pre_def] >>
+      drule exprSimHypsTheory.alloc_limits_expr_type_alloc_ok >>
+      fs[allocLimitsTheory.type_alloc_ok_def]) >>
+  `0 < type_memory_size etv` by
+    (drule_all lowered_value_type_memory_bound >> decide_tac) >>
+  `0 < type_memory_size ltv /\ type_memory_size ltv < dimword (:256)` by
+    ( `type_memory_size ltv + 64 < dimword (:256)` by
+        metis_tac[allocation_limit_word_room] >> decide_tac) >>
+  `!gs v es1 ent.
+     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, es1) /\
+     lookup_scopes id es1.scopes = SOME ent ==>
+     ent.type = entry.type /\ value_has_type entry.type v /\
+     value_has_type etv v /\ value_has_type ltv v` by
+    (rpt gen_tac >> strip_tac >>
+     `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+     `ent.type = entry.type` by
+       metis_tac[CONV_RULE (DEPTH_CONV ETA_CONV) memory_rhs_read_local_type] >>
+     `value_runtime_typed env ty v` by
+       metis_tac[CONV_RULE (DEPTH_CONV ETA_CONV) memory_rhs_read_destination_typed] >>
+     `value_runtime_typed env (expr_type e) v` by
+       metis_tac[CONV_RULE (DEPTH_CONV ETA_CONV) memory_rhs_read_destination_typed,
+                 type_widens_to_def] >>
+     `value_runtime_typed env (lowered_value_type cenv e) v` by
+       metis_tac[CONV_RULE (DEPTH_CONV ETA_CONV) memory_rhs_read_lowered_typed] >>
+     `expr_sim_inv cenv cx env (es with gas_obs := gs)` by simp[] >>
+     metis_tac[memory_rhs_runtime_layout, optionTheory.SOME_11]) >>
+  irule compile_assign_local_memory_widen_stmt_frag_mem >>
+  fs[] >> metis_tac[]
 QED
