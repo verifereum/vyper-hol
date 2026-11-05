@@ -4,7 +4,7 @@ Ancestors
   bodyMemTbConvertZeroProbe compileVyper venomCompilerTypes venomPolicyTypes
   vyperTypeInvariants vyperState vyperContext vyperTypeCallStackSoundness
   vyperStorageLayoutSafety vyperLookupStorage exprSimHypsDefs compileEnv placeTypingProps
-  vyperTypeStoragePreservation
+  vyperTypeStoragePreservation bodySim
 
 Theorem convert_zero_empty_unit_exists:
   IS_SOME (lower_vyper_runtime_unit []
@@ -127,4 +127,46 @@ Proof
        get_module_code_def, empty_evaluation_context_def, empty_call_txn_def,
        vyperStateTheory.find_var_decl_by_name_def, SF boolSimps.COND_elim_ss] >>
   EVAL_TAC >> simp[]
+QED
+
+Theorem convert_zero_body_environment_exists:
+  ?ctx cenv.
+    body_inv [] ctx cenv
+      (empty_evaluation_context with
+        <| sources := [(0w, [(NONE, [])])]; stk := [(NONE, "")] |> ) /\
+    cenv.ce_struct_fields = FEMPTY
+Proof
+  qexistsl_tac
+    [`(THE (lower_vyper_runtime_unit []
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>)).cu_context`,
+     `(ARB : compile_env) with
+       <| ce_target := all_capabilities;
+          ce_func_ids := build_func_ids 0 [];
+          ce_func_param_types := build_func_param_types [];
+          ce_func_info := build_func_info (get_struct_fields (make_struct_fields_map [])) [];
+          ce_func_return_type := build_func_return_type [];
+          ce_event_info := build_event_info (type_env []) [] (K NONE);
+          ce_struct_fields := make_struct_fields_map [];
+          ce_is_ctor := F; ce_alloca_locals := T;
+          ce_hashmap_info := build_hashmap_info [];
+          ce_module_dynarray_capacity := build_dynarray_capacity (collect_module_vars []);
+          ce_module_var_type := build_var_type_map [] |> `] >>
+  simp[body_inv_def, empty_evaluation_context_def, empty_call_txn_def,
+       get_module_code_def] >>
+  simp[compileVyperTheory.make_struct_fields_map_def,
+       typedCopyDomainTheory.acyclic_struct_metadata_def] >>
+  reverse conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  reverse conj_tac >- (EVAL_TAC >> simp[]) >>
+  qexistsl_tac
+    [`<| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>`,
+     `THE (lower_vyper_runtime_unit []
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>)`] >>
+  mp_tac convert_zero_empty_unit_exists >>
+  Cases_on `lower_vyper_runtime_unit []
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>` >> simp[]
 QED
