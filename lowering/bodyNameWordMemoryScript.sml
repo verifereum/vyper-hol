@@ -113,7 +113,10 @@ Theorem compile_name_word_body_sim_mem:
     expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann ==>
     expr_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
-  rpt strip_tac >> irule expr_sim_mem_values >> rpt strip_tac >>
+  rpt strip_tac >> irule expr_sim_mem_word_values >> reverse conj_tac
+  >- (simp[vyperASTTheory.expr_type_def] >>
+      metis_tac[word_value_type_word]) >>
+  rpt strip_tac >>
   drule_all body_name_word_mem_prefix >> strip_tac >>
   qexistsl [`[]`, `v`, `es`, `t`] >> simp[]
 QED

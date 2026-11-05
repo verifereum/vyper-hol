@@ -45,7 +45,9 @@ Theorem compile_literal_word_body_sim_mem:
     expr_sim_mem ctx func cenv cx ty (Literal ann l) es
 Proof
   rpt gen_tac >> strip_tac >>
-  irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_mem_word_values >>
+  reverse conj_tac >- simp[vyperASTTheory.expr_type_def] >>
+  rpt gen_tac >> strip_tac >>
   qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >>
   irule body_literal_word_mem_prefix >> metis_tac[]
 QED

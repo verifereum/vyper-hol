@@ -45,7 +45,7 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
-  loweringMemEntryRevert loweringMemBodyRun
+  gasSummary loweringMemEntryRevert loweringMemBodyRun
 
 val _ = Parse.hide "body";
 
@@ -66,7 +66,9 @@ Theorem lower_vyper_runtime_unit_run_mem_safe:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
     ==>
@@ -75,6 +77,8 @@ Theorem lower_vyper_runtime_unit_run_mem_safe:
                          vs_inst_idx := 0 |>)
 Proof
   rpt gen_tac >> strip_tac >>
+  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
+    metis_tac[gas_explicit_nil] >>
   `?mut args fbody.
      lookup_function NONE tx.function_name External tops =
        SOME (mut, F, args, [], ret, fbody) /\
@@ -110,7 +114,9 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     ~ctx_has_dalloca unit.cu_context
     ==> ptr_discipline 0 unit.cu_context vs /\
         taint_within
@@ -118,6 +124,8 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
           unit.cu_context vs
 Proof
   rpt strip_tac >>
+  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
+    metis_tac[gas_explicit_nil] >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> strip_tac >>
   drule run_lowering_entry >> strip_tac >>
@@ -155,7 +163,9 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     ~ctx_has_dalloca unit.cu_context
     ==> raw_unit_memory_ok unit.cu_context vs /\
         EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -221,7 +231,9 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
     code_layout_valid vs /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx))
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
   rpt strip_tac >>

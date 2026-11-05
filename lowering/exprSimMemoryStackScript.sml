@@ -11,6 +11,7 @@ Theorem expr_stack_outcome_mem:
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee u. ?v. res = INL v /\
       expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_store_bound cx (expr_type e) v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
