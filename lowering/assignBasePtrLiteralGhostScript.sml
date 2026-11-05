@@ -539,3 +539,79 @@ Proof
   simp[ptr_buf_ok_def, assignBasePtrLiteralSourceTheory.assign_base_ptr_one_byte_buffer_size, eval_operand_def] >>
   metis_tac[]
 QED
+
+(* Compose the actual ALLOCA endpoint and its supplied initialization run.
+   The caller supplies code-layout/fresh-output facts, not a second execution. *)
+Theorem assign_base_ptr_alloca_init_ghost:
+  !D lo ctx func PG G tn s u t G' tn' p q i j k l d cenv cx es sa.
+    p <> q /\ stmt_state_rel ctx func cenv cx es s /\
+    fn_inst_ids_distinct func /\ ghost_inv d cenv cx es G tn s /\
+    MEM (mk_inst i ALLOCA [Lit 64w] [p]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes q /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> p /\ x <> q) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> p /\ x <> q) /\
+    (!x. not_fresh_at sa x ==> x <> p /\ x <> q) /\
+    step_inst_base (mk_inst i ALLOCA [Lit 64w] [p]) s = OK u /\
+    run_inst_seq
+      [mk_inst j MSTORE [Var p; Lit 1w] [];
+       mk_inst k ADD [Var p; Lit 32w] [q];
+       mk_inst l MSTORE [Var q; Lit (n2w (2 ** 248))] []] u = OK t /\
+    inst_seq_ptr D lo ctx func PG
+      (step_prov PG G (mk_inst i ALLOCA [Lit 64w] [p]) u)
+      (step_taint (mk_inst i ALLOCA [Lit 64w] [p]) s u tn)
+      [mk_inst j MSTORE [Var p; Lit 1w] [];
+       mk_inst k ADD [Var p; Lit 32w] [q];
+       mk_inst l MSTORE [Var q; Lit (n2w (2 ** 248))] []] u G' tn' ==>
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es sa G tn s G' tn' /\
+    ?a. lookup_var p t = SOME a /\ w2n a + 64 < dimword (:256) /\
+      (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
+        val_in_memory (BaseTV (BytesT (Dynamic 64))) (BytesV [1w]) (w2n a) m)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `64 < dimword (:256)` by simp[dimword_def] >>
+  `exec_alloca (mk_inst i ALLOCA [Lit 64w] [p]) s (64w:bytes32) = OK u` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+  ` (mk_inst i ALLOCA [Lit 64w] [p]).inst_opcode = ALLOCA /\
+    (mk_inst i ALLOCA [Lit 64w] [p]).inst_operands = [Lit 64w] /\
+    (mk_inst i ALLOCA [Lit 64w] [p]).inst_outputs = [p]` by simp[mk_inst_def] >>
+  drule_all assign_base_ptr_alloca_endpoint >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes u` by fs[stmt_state_rel_def, state_rel_def] >>
+  `w2n w + 64 < dimword (:256)` by fs[dimword_def] >>
+  conj_tac >- suspend "invariant" >>
+  conj_tac >- suspend "kept" >>
+  qexists_tac `w` >> conj_tac >- suspend "lookup" >>
+  simp[] >> drule_at (Pat `inst_seq_ptr`) assign_base_ptr_one_byte_init_robust >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Resume assign_base_ptr_alloca_init_ghost[invariant]:
+  `ghost_inv d cenv cx es
+     (step_prov PG G (mk_inst i ALLOCA [Lit 64w] [p]) u)
+     (step_taint (mk_inst i ALLOCA [Lit 64w] [p]) s u tn) u` by
+    (irule assign_base_ptr_alloca_inv >>
+     simp[] >> metis_tac[]) >>
+  drule_at (Pat `inst_seq_ptr`) assign_base_ptr_one_byte_init_inv >>
+  simp[] >> disch_then (qspecl_then [`d`, `cenv`, `cx`, `es`] mp_tac) >>
+  (impl_tac >- (simp[] >> fs[dimword_def] >> metis_tac[])) >> strip_tac >>
+  drule_all assign_base_ptr_one_byte_init_endpoint >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
+Resume assign_base_ptr_alloca_init_ghost[kept]:
+  `ghost_kept cenv es sa G tn s
+     (step_prov PG G (mk_inst i ALLOCA [Lit 64w] [p]) u)
+     (step_taint (mk_inst i ALLOCA [Lit 64w] [p]) s u tn)` by
+    (irule assign_base_ptr_alloca_kept >>
+     simp[] >> metis_tac[]) >>
+  drule_at (Pat `inst_seq_ptr`) assign_base_ptr_one_byte_init_kept >>
+  simp[] >> metis_tac[]
+QED
+
+Resume assign_base_ptr_alloca_init_ghost[lookup]:
+  drule_all assign_base_ptr_one_byte_init_endpoint >> strip_tac >>
+  drule assign_base_ptr_one_byte_init_frame >> strip_tac >> metis_tac[]
+QED
+
+Finalise assign_base_ptr_alloca_init_ghost
