@@ -909,7 +909,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem inventory_reorder_one_physical_origin:
+Theorem inventory_reorder_one_physical_origin[local]:
   LENGTH pending <= 16 /\ reorder_one dfg pending idx op ps = (ops,qs) ==>
   !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ x = op
 Proof
@@ -959,7 +959,7 @@ Proof
   qpat_x_assum `!ps ops qs pending dfg. _` drule >> simp[] >> metis_tac[]
 QED
 
-Theorem inventory_reorder_physical_origin:
+Theorem inventory_reorder_bounded_physical_origin[local]:
   LENGTH pending <= 16 /\ reorder_plan dfg pending ps = (ops,qs) ==>
   !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ MEM x pending
 Proof
@@ -1191,7 +1191,7 @@ Proof
   `!op. MEM op mid.ps_stack ==> MEM op ps.ps_stack \/ MEM op operands` by
     metis_tac[inventory_emit_physical_origin] >>
   `!op. MEM op arranged.ps_stack ==> MEM op mid.ps_stack \/ MEM op pending` by
-    metis_tac[inventory_reorder_physical_origin] >>
+    metis_tac[inventory_reorder_bounded_physical_origin] >>
   `!op. MEM op (stack_pop (LENGTH operands) arranged.ps_stack) ==>
     MEM op arranged.ps_stack` by
     metis_tac[stack_pop_def, rich_listTheory.MEM_TAKE] >>
@@ -1594,18 +1594,6 @@ Proof
   gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[PERM_MEM_EQ]
 QED
 
-Theorem inventory_two_swaps_partition[local]:
-  d < LENGTH ps.ps_stack /\ f <= 16 /\
-  do_swap d ps = (ops,mid) /\ do_swap f mid = (ops',qs) /\
-  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
-  ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
-Proof
-  strip_tac >>
-  `ALL_DISTINCT mid.ps_stack /\ DISJOINT (set mid.ps_stack) (FDOM mid.ps_spilled)` by
-    metis_tac[inventory_swap_partition] >>
-  metis_tac[inventory_swap_partition]
-QED
-
 Theorem inventory_exchange_partition[local]:
   d < LENGTH stk /\ e < LENGTH stk /\ stack_peek d stk = op /\
   ALL_DISTINCT stk /\ DISJOINT (set stk) dom ==>
@@ -1752,82 +1740,67 @@ Proof
   simp[SUBSET_DEF]
 QED
 
-Theorem inventory_reorder_one_partition:
-  LENGTH pending <= 16 /\ reorder_one dfg pending idx op ps = (ops,qs) /\
-  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
-  ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
-Proof
-  strip_tac >> qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [reorder_one_def, LET_THM] >> pairarg_tac >>
-  `ALL_DISTINCT ps1.ps_stack /\ DISJOINT (set ps1.ps_stack) (FDOM ps1.ps_spilled)` by
-    (gvs[AllCaseEqs()] >> metis_tac[inventory_do_restore_partition]) >>
-  qmatch_goalsub_abbrev_tac `stack_get_unfixed_depth op f n` >>
-  `f <= 16` by (simp[Abbr `f`, Abbr `n`] >> decide_tac) >>
-  Cases_on `stack_get_unfixed_depth op f n ps1.ps_stack`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >>
-  simp[] >> pairarg_tac >>
-  `ALL_DISTINCT ps2.ps_stack /\ DISJOINT (set ps2.ps_stack) (FDOM ps2.ps_spilled)` by
-    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
-     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
-     metis_tac[inventory_reduce_partition]) >>
-  Cases_on `stack_get_unfixed_depth op f n ps2.ps_stack`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >>
-  rename1 `stack_get_unfixed_depth op f n ps2.ps_stack = SOME dist` >>
-  `dist < LENGTH ps2.ps_stack /\ stack_peek dist ps2.ps_stack = op` by
-    metis_tac[stack_get_unfixed_depth_props] >>
-  simp_tac (srw_ss()) [] >> Cases_on `dist = f`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >>
-  Cases_on `f < LENGTH ps2.ps_stack` >> simp[] >>
-  TRY (rename1 `operand_equiv dfg op _` >>
-       Cases_on `operand_equiv dfg op (stack_peek f ps2.ps_stack)` >> simp[]) >>
-  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[]
-  >~ [`ALL_DISTINCT (stack_poke _ _ _)`]
-  >- metis_tac[inventory_exchange_distinct]
-  >~ [`DISJOINT (set (stack_poke _ _ _)) _`]
-  >- metis_tac[inventory_exchange_partition] >>
-  metis_tac[inventory_two_swaps_partition]
-QED
-
 Theorem inventory_reorder_steps_partition[local]:
   !items ps ops qs pending dfg.
-  LENGTH pending <= 16 /\
+  EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) items /\
+  ALL_DISTINCT pending /\ set pending SUBSET set ps.ps_stack /\
   plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,qs) /\
   ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
-  ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+  set pending SUBSET set qs.ps_stack /\ ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled) /\
+  set qs.ps_stack SUBSET set ps.ps_stack
 Proof
   Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
   PairCases_on `h` >> simp[] >> strip_tac >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `reorder_one dfg pending idx op ps = (step_ops,mid)` >>
-  `ALL_DISTINCT mid.ps_stack /\ DISJOINT (set mid.ps_stack) (FDOM mid.ps_spilled)` by
-    metis_tac[inventory_reorder_one_partition] >>
-  qpat_x_assum `!ps ops qs pending dfg. _` drule >> simp[] >> metis_tac[]
+  `set pending SUBSET set mid.ps_stack /\ ALL_DISTINCT mid.ps_stack /\
+   DISJOINT (set mid.ps_stack) (FDOM mid.ps_spilled) /\
+   set mid.ps_stack SUBSET set ps.ps_stack` by
+    metis_tac[inventory_reorder_one_physical] >>
+  qpat_x_assum `!ps ops qs pending dfg. _` drule >> simp[] >>
+  metis_tac[SUBSET_TRANS]
 QED
 
 Theorem inventory_reorder_partition:
-  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
-  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  ALL_DISTINCT target /\ set target SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
   reorder_plan dfg target ps = (ops,qs) ==>
-  ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+  set target SUBSET set qs.ps_stack /\ ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled) /\
+  set qs.ps_stack SUBSET set ps.ps_stack
 Proof
-  simp[reorder_plan_eq_plan_steps] >> metis_tac[inventory_reorder_steps_partition]
+  strip_tac >>
+  `EVERY (\(idx,op). idx < LENGTH target /\ MEM op target)
+    (MAPi (\i op. (i,op)) target)` by
+    simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi, EL_MEM] >>
+  gvs[reorder_plan_eq_plan_steps] >> metis_tac[inventory_reorder_steps_partition]
 QED
 
 Theorem inventory_reorder_distinct:
-  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
-  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  ALL_DISTINCT target /\ set target SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
   reorder_plan dfg target ps = (ops,qs) ==> ALL_DISTINCT qs.ps_stack
 Proof
   metis_tac[inventory_reorder_partition]
 QED
 
 Theorem inventory_reorder_disjoint:
-  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
-  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  ALL_DISTINCT target /\ set target SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
   reorder_plan dfg target ps = (ops,qs) ==>
   DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
 Proof
   metis_tac[inventory_reorder_partition]
+QED
+
+Theorem inventory_reorder_physical_origin:
+  ALL_DISTINCT target /\ set target SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  reorder_plan dfg target ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  strip_tac >> drule_all inventory_reorder_partition >> simp[SUBSET_DEF]
 QED
 
 Theorem inventory_distinct_supported_suffix:
@@ -1844,7 +1817,9 @@ Proof
 QED
 
 Theorem inventory_join_pipeline_exact:
-  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
+  ALL_DISTINCT target /\
+  (!x. MEM x target ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT ps.ps_stack /\
   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
   EVERY (\x. MEM x target) ps.ps_stack /\
   restore_spilled_plan target ps = (restore_ops,mid) /\
@@ -1855,17 +1830,22 @@ Proof
   strip_tac >>
   `ALL_DISTINCT mid.ps_stack /\ DISJOINT (set mid.ps_stack) (FDOM mid.ps_spilled)` by
     metis_tac[inventory_restore_distinct, inventory_restore_disjoint] >>
+  `set target SUBSET set mid.ps_stack` by
+    (simp[SUBSET_DEF] >> metis_tac[inventory_restore_requested]) >>
   `ALL_DISTINCT qs.ps_stack` by metis_tac[inventory_reorder_distinct] >>
   `EVERY (\x. MEM x target) mid.ps_stack` by
     (irule inventory_restore_support >> goal_assum (drule_at Any) >> simp[EVERY_MEM]) >>
+  `set qs.ps_stack SUBSET set mid.ps_stack` by
+    metis_tac[inventory_reorder_partition] >>
   `EVERY (\x. MEM x target) qs.ps_stack` by
-    (drule inventory_reorder_physical_origin >> simp[] >>
-     gvs[EVERY_MEM] >> metis_tac[]) >>
+    (gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]) >>
   metis_tac[inventory_distinct_supported_suffix]
 QED
 
 Theorem inventory_join_reached_exact:
-  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
+  ALL_DISTINCT target /\
+  (!x. MEM x target ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT ps.ps_stack /\
   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
   EVERY (\x. MEM x target) ps.ps_stack /\
   restore_spilled_plan target ps = (restore_ops,mid) /\
@@ -1877,7 +1857,9 @@ Proof
 QED
 
 Theorem inventory_join_reached_length:
-  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
+  ALL_DISTINCT target /\
+  (!x. MEM x target ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT ps.ps_stack /\
   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
   EVERY (\x. MEM x target) ps.ps_stack /\
   restore_spilled_plan target ps = (restore_ops,mid) /\
