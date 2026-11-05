@@ -6,7 +6,8 @@ Ancestors
   abiDecoderSequenceReach abiDecoderContract abiEncoder compileEnv emitHelper
   emitHelperProps exprLoweringProps venomState venomInst instIdxIndep
   abiDecoderSiteEffect abiDecoderBytestringOutcome actualDecoderSites
-  abiValidMembers abiDecodeRanges vyperABI contractABI rich_list
+  abiValidMembers abiDecodeRanges vyperABI contractABI rich_list fragExec
+  exprSimAbiDecodeChildBounds abiDecoderReentry abiValidAggregateHeads
   finite_map pred_set words list arithmetic
 
 Theorem abi_decode_member_setup_reach:
@@ -118,33 +119,11 @@ Proof
        DROP_DROP_T, ADD_COMM]
 QED
 
-Theorem abi_decode_empty_tuple_static[local]:
-  !ats. vyper_decode_valid_enc_tuple ats ([]:byte list) [] ==>
-    ~EXISTS is_dynamic ats
-Proof
-  Induct >- simp[] >> rpt strip_tac >>
-  drule abi_valid_member_cons >> strip_tac >>
-  Cases_on `is_dynamic h` >>
-  gvs[abi_member_head_size_def, Excl "vyper_decode_valid_enc_def",
-      Excl "dec_def"] >>
-  fs[EVERY_MEM, EXISTS_MEM, combinTheory.o_DEF] >> metis_tac[]
-QED
-
 Theorem abi_decode_dynamic_empty_reject:
   is_dynamic at /\ (!elem. at <> Array (SOME 0) elem) ==>
   ~vyper_decode_valid_enc at ([]:byte list)
 Proof
-  Cases_on `at` >>
-  simp[Once is_dynamic_def, Once vyper_decode_valid_enc_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-  >- (Cases_on `o'` >> gvs[is_dynamic_def, vyper_decode_valid_enc_def])
-  >- gvs[Once vyper_decode_valid_enc_def]
-  >- (Cases_on `o'`
-      >- gvs[Once vyper_decode_valid_enc_def] >>
-      gvs[] >> rename1 `Array (SOME n) a` >> Cases_on `n` >>
-      gvs[vyper_decode_valid_enc_def]) >>
-  disj2_tac >> strip_tac >> drule abi_decode_empty_tuple_static >>
-  simp[GSYM any_dynamic_EXISTS]
+  rpt strip_tac >> drule_all abi_valid_dynamic_head_min >> simp[]
 QED
 
 Theorem abi_decode_member_wrap_source_reject:
@@ -163,4 +142,196 @@ Proof
     (irule abi_decode_dynamic_empty_reject >> simp[]) >>
   qpat_x_assum `delta = _` (fn th => rewrite_tac[abi_decode_member_bytes_def, GSYM th]) >>
   pure_asm_rewrite_tac[] >> simp[]
+QED
+
+Definition abi_decode_entry_def:
+  abi_decode_entry st s <=>
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts
+End
+
+Definition abi_decode_code_context_def:
+  abi_decode_code_context func fn st last <=>
+    fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+    (!i. MEM i (fn_insts fn) /\ i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==>
+      MEM i (fn_insts func)) /\
+    (st.cs_blocks = last.cs_blocks \/ last.cs_current_insts <> [] \/
+     !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+       phi_prefix_length bb.bb_instructions = 0)
+End
+
+Definition abi_decode_source_accepts_def:
+  abi_decode_source_accepts env ty view v <=>
+    vyper_decode_valid_enc (vyper_to_abi_type env ty) view /\
+    abi_to_vyper env ty (dec (vyper_to_abi_type env ty) view) = SOME v
+End
+
+Definition abi_decode_context_pre_def:
+  abi_decode_context_pre ctx func ce env ty tv limit_st next writes sites
+    st dst src base_op hi B bs pos d s <=>
+    abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+    assignable_type env ty /\ abi_decode_bytes_widths env ty /\
+    next <= st.cs_next_var /\ st.cs_next_var <= limit_st.cs_next_var /\
+    EVERY (abi_decoder_operand_live st.cs_next_var) [dst;src;base_op;hi] /\
+    base_op <> Lit 0w /\ hi <> Lit 0w /\
+    eval_operand src s = SOME(n2w pos) /\ eval_operand dst s = SOME(n2w d) /\
+    eval_operand base_op s = SOME(n2w B) /\
+    eval_operand hi s = SOME(n2w(LENGTH bs)) /\
+    pos < dimword(:256) /\ B+LENGTH bs < dimword(:256) /\
+    d+type_memory_bytes ce ty < dimword(:256) /\
+    (!clamp. type_to_abi_dec_info ce.ce_struct_fields ce ty = DecPrimWord clamp ==>
+      pos+32 <= LENGTH bs) /\
+    bs = mem_bytes_at B (LENGTH bs) s.vs_memory /\
+    B+LENGTH bs <= s.vs_alloca_next /\
+    abi_footprint_disjoint B (LENGTH bs) [(d,type_memory_bytes ce ty)] /\
+    (!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = SOME(b,sz) ==>
+      abi_footprint_disjoint B (LENGTH bs) [(b,sz)]) /\
+    abi_decode_site_writes sites d (type_memory_bytes ce ty) s SUBSET writes /\
+    (!a. B <= a /\ a < B+LENGTH bs ==> a NOTIN writes) /\
+    decode_site_resources ctx func s /\ fn_inst_ids_distinct func /\
+    fresh_vars_wrt limit_st s /\ abi_decode_entry st s
+End
+
+Definition abi_decode_context_result_def:
+  abi_decode_context_result ctx func fn tv limit_st next writes sites last
+    view env ty d s <=>
+    (?t v. Dreach ctx fn s t /\ abi_decode_source_accepts env ty view v /\
+      val_in_memory tv v d t.vs_memory /\ fresh_vars_wrt limit_st t /\
+      decode_site_effect ctx func next writes s t /\
+      abi_decode_alloc_progress sites s t /\ abi_decode_entry last t) \/
+    (?u. Dabort ctx fn s Revert_abort u /\
+      ~(?v. abi_decode_source_accepts env ty view v))
+End
+
+Definition abi_decode_child_contract_def:
+  abi_decode_child_contract ce env ty tv <=>
+    !ctx func fn limit_st next writes sites st last dst src base_op hi B bs pos d s.
+    compile_abi_decode_to_buf dst src MLOAD base_op hi
+      (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
+    abi_decode_code_context func fn st last /\
+    last.cs_next_var <= limit_st.cs_next_var /\
+    abi_decode_sites st.cs_next_id last.cs_next_id SUBSET sites /\
+    abi_decode_context_pre ctx func ce env ty tv limit_st next writes sites
+      st dst src base_op hi B bs pos d s ==>
+    abi_decode_context_result ctx func fn tv limit_st next writes
+      (abi_decode_sites st.cs_next_id last.cs_next_id) last
+      (abi_decode_source_view (vyper_to_abi_type env ty) bs pos) env ty d s
+End
+
+Theorem abi_decode_entry_not_halted:
+  abi_decode_entry st s ==> ~s.vs_halted
+Proof
+  simp[abi_decode_entry_def]
+QED
+
+Theorem abi_decode_source_accepts_unique:
+  abi_decode_source_accepts env ty view v /\
+  abi_decode_source_accepts env ty view w ==> v = w
+Proof
+  strip_tac >> gvs[abi_decode_source_accepts_def]
+QED
+
+Theorem abi_decode_context_reject:
+  Dabort ctx fn s Revert_abort u /\
+  ~vyper_decode_valid_enc (vyper_to_abi_type env ty) view ==>
+  abi_decode_context_result ctx func fn tv limit_st next writes sites last
+    view env ty d s
+Proof
+  simp[abi_decode_context_result_def, abi_decode_source_accepts_def] >>
+  metis_tac[]
+QED
+
+Theorem abi_decode_context_result_prefix:
+  Dreach ctx fn s t /\ decode_site_effect ctx func next writes s t /\
+  abi_decode_alloc_progress sites s t /\ child_sites SUBSET sites /\
+  abi_decode_context_result ctx func fn tv limit_st next writes child_sites last
+    view env ty d t ==>
+  abi_decode_context_result ctx func fn tv limit_st next writes sites last
+    view env ty d s
+Proof
+  simp_tac bool_ss [abi_decode_context_result_def] >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`t'`, `v`] >>
+      `abi_decode_alloc_progress sites t t'` by
+        (irule abi_decode_alloc_progress_widen >> metis_tac[]) >>
+      conj_tac >- (irule Dreach_trans >> qexists_tac `t` >> simp[]) >>
+      simp[] >> conj_tac
+      >- metis_tac[decode_site_effect_trans, UNION_IDEMPOT] >>
+      irule abi_decode_alloc_progress_trans >> qexists_tac `t` >> simp[]) >>
+  disj2_tac >> metis_tac[Dreach_abort]
+QED
+
+Theorem abi_decode_code_context_after_setup:
+  abi_decode_code_context func fn st last /\ cs_extends st middle /\
+  cs_extends middle last /\ st.cs_blocks = middle.cs_blocks ==>
+  abi_decode_code_context func fn middle last
+Proof
+  simp_tac bool_ss [abi_decode_code_context_def] >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >> gvs[]
+QED
+
+Definition abi_decode_member_pre_def:
+  abi_decode_member_pre ctx func ce env ty tv limit_st next writes sites
+    st dst src base_op hi B bs p d ao vo delta s <=>
+    abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+    assignable_type env ty /\ abi_decode_bytes_widths env ty /\
+    next <= st.cs_next_var /\ st.cs_next_var <= limit_st.cs_next_var /\
+    EVERY (abi_decoder_operand_live st.cs_next_var) [dst;src;base_op;hi] /\
+    base_op <> Lit 0w /\ hi <> Lit 0w /\
+    eval_operand src s = SOME(n2w p) /\ eval_operand dst s = SOME(n2w d) /\
+    eval_operand base_op s = SOME(n2w B) /\
+    eval_operand hi s = SOME(n2w(LENGTH bs)) /\
+    p < dimword(:256) /\ B+LENGTH bs < dimword(:256) /\
+    d+vo+type_memory_bytes ce ty < dimword(:256) /\
+    (!clamp. type_to_abi_dec_info ce.ce_struct_fields ce ty = DecPrimWord clamp ==>
+      p+ao+32 <= LENGTH bs) /\
+    bs = mem_bytes_at B (LENGTH bs) s.vs_memory /\
+    B+LENGTH bs <= s.vs_alloca_next /\
+    abi_footprint_disjoint B (LENGTH bs) [(d+vo,type_memory_bytes ce ty)] /\
+    (!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = SOME(b,sz) ==>
+      abi_footprint_disjoint B (LENGTH bs) [(b,sz)]) /\
+    abi_decode_site_writes sites (d+vo) (type_memory_bytes ce ty) s SUBSET writes /\
+    (!a. B <= a /\ a < B+LENGTH bs ==> a NOTIN writes) /\
+    decode_site_resources ctx func s /\ fn_inst_ids_distinct func /\
+    fresh_vars_wrt limit_st s /\ abi_decode_entry st s /\
+    (is_dynamic (vyper_to_abi_type env ty) ==> p+ao+32 <= LENGTH bs) /\
+    (~is_dynamic (vyper_to_abi_type env ty) ==> p+ao < dimword(:256)) /\
+    delta = abi_head_word (DROP ao (DROP p bs)) /\
+    (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem)
+End
+
+Theorem abi_decode_member_child_pre:
+  abi_decode_member_pre ctx func ce env ty tv limit_st next writes sites
+    st dst src base_op hi B bs p d ao vo delta s /\
+  abi_decode_member_setup dst src MLOAD base_op hi
+    (is_dynamic (vyper_to_abi_type env ty)) ao vo st = (ops,middle) /\
+  middle.cs_next_var <= limit_st.cs_next_var /\
+  p+(if is_dynamic (vyper_to_abi_type env ty) then delta else ao) < dimword(:256) /\
+  eval_operand (FST ops) t =
+    SOME(n2w(p+if is_dynamic (vyper_to_abi_type env ty) then delta else ao)) /\
+  eval_operand (SND ops) t = SOME(n2w(d+vo)) /\
+  abi_decoder_operand_live middle.cs_next_var (FST ops) /\
+  abi_decoder_operand_live middle.cs_next_var (SND ops) /\
+  fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
+  decode_site_effect ctx func st.cs_next_var writes s t /\
+  abi_decode_entry middle t ==>
+  abi_decode_context_pre ctx func ce env ty tv limit_st next writes sites
+    middle (SND ops) (FST ops) base_op hi B bs
+    (p+if is_dynamic (vyper_to_abi_type env ty) then delta else ao) (d+vo) t
+Proof
+  simp_tac bool_ss [abi_decode_member_pre_def] >> strip_tac >>
+  drule abi_decode_member_setup_shape >> strip_tac >>
+  `st.cs_next_var <= middle.cs_next_var` by
+    (drule abi_decode_member_setup_counters >> simp[]) >>
+  `abi_decoder_operand_live middle.cs_next_var base_op /\
+   abi_decoder_operand_live middle.cs_next_var hi` by
+    (fs[] >> conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[]) >>
+  `decode_site_resources ctx func t` by
+    (drule decode_site_effect_resources >> simp[]) >>
+  simp_tac bool_ss [abi_decode_context_pre_def] >>
+  fs[abi_decoder_address_frame_def, abi_decode_site_writes_def] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >> drule_all abi_decode_scalar_member_head >>
+  strip_tac >> fs[]
 QED
