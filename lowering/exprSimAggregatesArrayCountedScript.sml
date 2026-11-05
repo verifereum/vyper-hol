@@ -16,7 +16,78 @@ Ancestors
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
   fragGasMode fragGasPath fragGasSeq fragExec stmtSimDeclPath
   exprLowering exprLoweringProps compileEnv valueEncoding
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState venomState
+
+Theorem array_header_store_state_rel[local]:
+  stmt_state_rel ctx func ce cx es s /\
+  (!name lo sz. local_region ce es.scopes s name lo sz ==>
+     lo + sz <= b \/ b + 32 <= lo) /\
+  (ce.ce_is_ctor ==> !name tv v io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint io (type_memory_size tv) b 32) ==>
+  stmt_state_rel ctx func ce cx es (mstore b w s)
+Proof
+  strip_tac >>
+  `local_ptrs_rel func ce es.scopes (mstore b w s)` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
+     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  `immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es (mstore b w s)` by
+    (irule loweringSliceTheory.immutables_rel_mem_agree >>
+     qexists_tac `s` >> conj_tac
+     >- (simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+               arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
+     conj_tac >- simp[mstore_def] >>
+     reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+     rpt strip_tac >> first_x_assum drule_all >>
+     simp[regions_disjoint_def] >> strip_tac >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> simp[]) >>
+  irule stmt_state_rel_allocas_frame >> conj_tac
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
+      gvs[stmt_state_rel_def, mstore_def, lookup_var_def]) >>
+  conj_tac
+  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+      gvs[stmt_state_rel_def, mstore_def, local_region_def, lookup_var_def] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`es`, `s`] >>
+      gvs[stmt_state_rel_def, mstore_def]) >>
+  qexistsl_tac [`es`, `s`] >> simp[mstore_def]
+QED
+
+Theorem array_header_store_boundary[local]:
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
+  not_local_ptr ce es.scopes x /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\ 32 <= asz /\
+  (ce.ce_is_ctor ==> !name tv v io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint io (type_memory_size tv) b 32) ==>
+  stmt_state_rel ctx func ce cx es (mstore b w s) /\
+  locals_kept ce es s (mstore b w s) /\
+  mem_word_at b (mstore b w s).vs_memory = w /\
+  (!p n. p+n <= b \/ b+32 <= p ==>
+    mem_bytes_at p n (mstore b w s).vs_memory = mem_bytes_at p n s.vs_memory)
+Proof
+  strip_tac >>
+  `!name lo sz. local_region ce es.scopes s name lo sz ==>
+     lo + sz <= b \/ b + 32 <= lo` by
+    (rpt strip_tac >>
+     drule_all (SRULE [] (Q.INST [`off` |-> `0`, `n` |-> `32`]
+       aggregate_alloca_slice_excludes_local)) >> simp[]) >>
+  conj_tac >- (irule array_header_store_state_rel >> metis_tac[]) >>
+  conj_tac
+  >- (simp[locals_kept_def] >> rpt strip_tac >>
+      irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+      first_x_assum drule >> strip_tac >> decide_tac) >>
+  conj_tac >- simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  decide_tac
+QED
 
 Theorem aggregate_make_array_elems_counted:
   !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx nocalls.
