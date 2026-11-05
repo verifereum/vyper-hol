@@ -3,15 +3,16 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the call targets
  * but internal calls.  Proved: send (compile_send_sim, by exprSimSend's
- * compile_send_case_sim, row 2 of #636's Calls table).  Cheated, for the
- * later #636 PRs, by row of that table:
+ * compile_send_case_sim, row 2 of #636's Calls table) and the creates
+ * (compile_create_sim, vacuously: expr_sim_pre excludes them, below).
+ * Each other lemma is its piece in a leaf theory exprSimCall*, by row of
+ * that table:
  *   1 extcall/staticcall in SOME oracle mode, including reverts and
  *     default_return_value (#553): compile_extcall_sim
  *   3 raw_call (#554): compile_raw_call_sim; raw_call of msg.data:
  *     compile_raw_call_calldata_sim
  *   4 raw_log, raw_revert, selfdestruct: compile_raw_log_sim,
  *     compile_raw_revert_sim, compile_selfdestruct_sim
- *   5 the creates: compile_create_sim
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
@@ -44,13 +45,15 @@
 Theory exprSimCalls
 Ancestors
   list  exprSimHyps exprSimSend vyperAST
+  exprSimCallExtcall exprSimCallRawCall exprSimCallRawCallCalldata
+  exprSimCallRawLog exprSimCallRawRevert exprSimCallSelfDestruct
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
     expr_sim_below cenv (expr_size (Call ann (ExtCall is_static skip sig opts) args dflt)) ==>
     expr_vv_ok cenv (Call ann (ExtCall is_static skip sig opts) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC extcall_expr_vv_ok
 QED
 
 Theorem compile_send_sim:
@@ -66,7 +69,7 @@ Theorem compile_raw_call_sim:
     expr_sim_below cenv (expr_size (Call ann (RawCallTarget flags) args dflt)) ==>
     expr_vv_ok cenv (Call ann (RawCallTarget flags) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC raw_call_expr_vv_ok
 QED
 
 Theorem compile_raw_call_calldata_sim:
@@ -74,7 +77,7 @@ Theorem compile_raw_call_calldata_sim:
     expr_sim_below cenv (expr_size (Call ann (RawCallCalldataTarget flags) args dflt)) ==>
     expr_vv_ok cenv (Call ann (RawCallCalldataTarget flags) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC raw_call_calldata_expr_vv_ok
 QED
 
 Theorem compile_raw_log_sim:
@@ -82,7 +85,7 @@ Theorem compile_raw_log_sim:
     expr_sim_below cenv (expr_size (Call ann (RawLog) args dflt)) ==>
     expr_vv_ok cenv (Call ann (RawLog) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC raw_log_expr_vv_ok
 QED
 
 Theorem compile_raw_revert_sim:
@@ -90,7 +93,7 @@ Theorem compile_raw_revert_sim:
     expr_sim_below cenv (expr_size (Call ann (RawRevert) args dflt)) ==>
     expr_vv_ok cenv (Call ann (RawRevert) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC raw_revert_expr_vv_ok
 QED
 
 Theorem compile_selfdestruct_sim:
@@ -98,7 +101,7 @@ Theorem compile_selfdestruct_sim:
     expr_sim_below cenv (expr_size (Call ann (SelfDestructTarget) args dflt)) ==>
     expr_vv_ok cenv (Call ann (SelfDestructTarget) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC selfdestruct_expr_vv_ok
 QED
 
 Theorem compile_create_sim:
@@ -106,5 +109,7 @@ Theorem compile_create_sim:
     expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof order) args dflt)) ==>
     expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof order) args dflt)
 Proof
-  cheat
+  rw[expr_vv_ok_def, expr_sim_pre_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
+     supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
