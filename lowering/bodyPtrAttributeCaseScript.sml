@@ -1,6 +1,7 @@
 Theory bodyPtrAttributeCase
 Ancestors
   bodyPtrAttributeAdd bodyPtrAttributeFields exprSimAttribute exprSimVVFrame
+  exprSimFieldLayout vyperStoragePlaceRegion
   exprOperandVar freshWrites ASCIInumbers emitHelperProps bodyPtrDefs
   exprLoweringProps exprSimAttributeProps exprLowering context compileEnv venomState ptrDiscipline ptrSafeRun finite_map list arithmetic
 
@@ -99,4 +100,62 @@ Proof
   Cases_on `vv` >>
   simp[ptr_vv_ok_def, ptr_val_ok_def, is_word_type_def, vv_operand_def,
        vv_loc_def, vv_location_def] >> rpt strip_tac >> gvs[]
+QED
+
+(* Restrict a located storage/transient pointer's dead bytes to a field.
+   Code pointers impose no storage condition. *)
+Theorem attribute_nonmemory_field_ptr:
+  ptr_vv_ok cx (StructT sid) tv vv ee G tn s /\ vv_loc vv <> LocMemory /\
+  evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+  evaluate_type (get_tenv cx) ann = SOME ftv /\
+  struct_field_slot fs fld = SOME (off,ftv) /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  eval_operand dst t = SOME (w + n2w off) /\
+  w2n (w + n2w off) = w2n w + off /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
+  t.vs_transient = s.vs_transient /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  op_taint tn' dst = {} ==>
+  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' H tn' t
+Proof
+  strip_tac >> irule ptr_vv_ok_nonmemory >>
+  simp[mk_ptr_def] >> rpt strip_tac >> gvs[] >>
+  drule struct_field_slot_end_bound >> strip_tac >>
+  `w2n w <= w2n k /\ w2n k < w2n w + type_slot_size (StructTV fs)` by decide_tac >>
+  Cases_on `vv` >> gvs[vv_loc_def, vv_location_def] >>
+  gvs[ptr_vv_ok_def, vv_operand_def] >>
+  `w2n w <= w2n k /\ w2n k < w2n w + type_slot_size (StructTV fs)` by decide_tac >>
+  `w2n w + off <= w2n k /\ w2n k < w2n w + off + type_slot_size ftv` by decide_tac >>
+  metis_tac[struct_field_dead_bytes_iff, ADD_COMM]
+QED
+
+Theorem attribute_memory_field_ptr:
+  ptr_vv_ok cx (StructT sid) tv vv ee G tn s /\ vv_loc vv = LocMemory /\
+  read_result cx tv ee = (INL (StructV vals), ee) /\
+  read_result cx tv' ee = (INL fv, ee) /\
+  evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+  evaluate_type (get_tenv cx) ann = SOME ftv /\
+  fields_layout fields fs /\ struct_has_type fs vals /\
+  ALOOKUP vals fld = SOME fv /\ ALOOKUP fs fld = SOME ftv /\ val_wf ftv fv /\
+  type_memory_bytes cenv (lowered_value_type cenv fldexpr) = type_memory_size ftv /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  eval_operand dst t = SOME (w + n2w (struct_field_offset fields fld)) /\
+  w2n (w + n2w (struct_field_offset fields fld)) = w2n w + struct_field_offset fields fld /\
+  t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\ op_taint tn' dst = {} /\
+  (!x b sz. vv_operand vv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
+     ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
+  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst LocMemory)) ee H tn' t /\
+  ptr_buf_ok cenv fldexpr dst H t
+Proof
+  strip_tac >>
+  `ptr_mem_ok cx (StructT sid) (StructV vals) (vv_operand vv) G tn s` by
+    (drule_all attribute_base_ptr_memory >> simp[]) >>
+  `!u. eval_operand dst t = SOME u ==>
+     u = w + n2w (struct_field_offset fields fld)` by (rpt strip_tac >> gvs[]) >>
+  conj_tac
+  >- (irule ptr_vv_ok_memory >> simp[mk_ptr_def] >>
+      drule_all struct_ptr_mem_ok_field >> simp[]) >>
+  irule struct_ptr_mem_ok_field_buffer >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  drule_all struct_field_offset_le >> simp[valueEncodingTheory.type_memory_size_def]
 QED
