@@ -26,7 +26,7 @@ Ancestors
   lowerDloadDefs venomPassSchedule list venomInst venomWf
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
   venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
-  o1ContractLowerDloadPtr o1ContractLowerDloadTaint
+  o1ContractLowerDloadPtr o1ContractLowerDloadTaint lowerDloadMakeSsaInput
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -238,11 +238,20 @@ QED
 Theorem lower_dload_stage_make_ssa_input_ok:
   !rpolicy view C C'.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    o1_ctx_shape C /\
     EVERY make_ssa_input_ok C.ctx_functions ==>
     EVERY make_ssa_input_ok C'.ctx_functions
 Proof
-  (* admitted at base cut: new make_ssa_input_ok row of o1_inv 2 (argon's interface ruling) *)
-  cheat
+  rw[ctx_pass_stage_def, EVERY_EL, LIST_REL_EL_EQN] >>
+  rename1 `n < LENGTH C.ctx_functions` >>
+  qpat_x_assum `!n. n < LENGTH C.ctx_functions ==> ?observed. _`
+    (qspec_then `n` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `fn_inst_ids_distinct (EL n C.ctx_functions) /\
+   fn_inst_wf (EL n C.ctx_functions)` by
+    gvs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_EL] >>
+  `make_ssa_input_ok (EL n C.ctx_functions)` by gvs[] >>
+  metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
 QED
 
 Theorem lower_dload_run_contract:
@@ -267,7 +276,8 @@ Proof
   `callee_first names C'.ctx_functions` by
     metis_tac[lower_dload_stage_callee_first] >>
   `EVERY make_ssa_input_ok C'.ctx_functions` by
-    metis_tac[lower_dload_stage_make_ssa_input_ok] >>
+    (irule lower_dload_stage_make_ssa_input_ok >> fs[o1_src_inv_def] >>
+     metis_tac[]) >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
     (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
