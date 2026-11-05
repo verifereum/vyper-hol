@@ -225,3 +225,75 @@ The existing affine, selection and concretizeStagePtr targets were rebuilt
 successfully for this audit. This confirms the cited local source is buildable,
 NOT that frozen final obligations have been discharged. No HOL source or frozen
 statement was edited by this audit.
+
+## Production comparison diagnostic (C1.5.90.21)
+
+`concretizePtrComparisonProbeTheory` now checks production transformation and
+actual `step_inst` computations (raw allocator starts at 64, not zero).
+For sizes `[0;0;32]`, `[0;32;0]`, and `[32;0;0]`, all three production
+positions are 0; metadata preserves the respective sizes. Comparing p and q
+by EQ/LT/GT gives respectively `(1,0,0)`, `(1,0,0)`, `(0,1,0)` in the source,
+and `(1,0,0)` in all three outputs. Thus the third *production* computation
+has a changed decision, not just an arbitrary-map relation countermodel.
+Per the checkpoint's stop rule, closed-endpoint experiments are deferred to
+strategist review rather than proceeding with universal prefix transport.
+
+This is NOT a counterexample to either frozen theorem. In the changed-decision
+case p's numerical provenance is `(64,32)` and q's is `(96,0)`. The comparison
+clause of `access_ok_def` requires the SAME `(b,sz)` for both operands and
+therefore excludes this source comparison from a pointer-disciplined execution.
+Zero-sized ALLOCA itself is not forbidden by `inst_wf_def` (only a literal
+operand and one output are required). The probe does not assert the full frozen
+antecedent. The diagnostic correctly distinguishes executable syntax from the
+semantic discipline.
+
+Premise audit for ComparisonTransport: source ownership gives tag erasure and
+birth support, but does not identify tags when numerical sites coincide.
+Half-open allocation-table disjointness gives no zero-size uniqueness. In the
+checked `[0;0;32]` case p and q have distinct zero-size births with identical
+raw base 64 and identical production position 0, so comparisons agree there;
+this does not prove universal equality of production positions for coincident
+births. Common displacement for the two comparison operands remains an
+integration obligation. Source closed bounds are supplied by the comparison
+clause of `access_ok`, not by arbitrary pointer arithmetic. Strict target
+endpoint bounds must come from successful checked layout: the production
+completion checks `pos + sz < dimword (:256)` and rejects overflow, whereas
+`ctx_eom_bounded eom C'` with unconstrained natural eom alone cannot imply it.
+No universal compatibility or target-prefix coverage claim is discharged.
+
+Verification: holbuild on ComparisonProbe and StagePtr succeeds; the latter is
+only a regression check and still contains its pre-existing unresolved cheats.
+No frozen statement, executable definition or pointer-discipline definition
+was changed.
+
+### Premise-filtered follow-up
+
+Strategist review classified the differing-site test above as excluded and
+reauthorized the remaining finite diagnostics. `ptr_cmp_live_zero_births`
+places a positive allocation before two consecutive zero-size births, with
+MSTORE through the positive pointer after all comparisons. Its production
+metadata is `[(20,0,32);(21,0,0);(22,0,0)]` (keys are Allocation ids).
+The actual raw birth records are `(64,32),(96,0),(96,0)`; both zero-size
+pointers evaluate to 96 raw and 0 after production transformation. EQ/LT/GT
+agree as `(1,0,0)`. `ptr_cmp_live_birth_records` also checks inst_wf for this
+function and all three earlier examples. These are not full ctx shape/SSA/
+reachability/ptr_discipline certifications.
+
+`ptr_cmp_closed_endpoint_decisions` executes EQ/LT/GT on 64/96 versus 0/32
+and on the reversed pairs, obtaining respectively `(0,1,0)` and `(0,0,1)`.
+The zero-size coincident pair 96/96 versus 0/0 gives `(1,0,0)`.
+Both target endpoints 32 and 0 are checked strictly below dimword(:256).
+These endpoint tests use one common displacement -64 (or -96 for the
+zero-size case); unlike the live-birth experiment they are local operand
+computations, not an entire production-transformed function.
+`ptr_cmp_common_site_access` separately checks access_ok for each comparison
+on the common source site (64,32), in both operand orders, and on (96,0).
+No semantic premise is inferred from syntactic well-formedness alone.
+
+Still missing for universal use: deriving equal displacement for coincident
+numerical sites with distinct owner tags in arbitrary production contexts;
+deriving the relevant owner's strict layout endpoint bound; constructing the
+source prefix before invoking source discipline; transporting variable values
+and taint, control, memory reads and calls. None is supplied as an assumption
+of a purported universal theorem here. No checked common-site example changes
+a decision, and no frozen-theorem counterexample is claimed.
