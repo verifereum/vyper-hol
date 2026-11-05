@@ -16,7 +16,7 @@
  *)
 Theory o1ContractSimplifyCfg
 Ancestors
-  o1ContractSimplifyCfgSrcStatic o1ContractSimplifyCfgSrcFrame o1ContractSimplifyCfgSrcHeadroom o1ContractSimplifyCfgStep o1PassContract o1ComposeSupport o1PassLift simplifyCfgCorrectness simplifyCfgProof
+  o1ContractSimplifyCfgParams o1ContractSimplifyCfgSrcStatic o1ContractSimplifyCfgSrcFrame o1ContractSimplifyCfgSrcHeadroom o1ContractSimplifyCfgStep o1PassContract o1ComposeSupport o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs unitMemInv venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
   opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic simplifyCfgPhiProps allocaRemapSSA venomInst
@@ -543,5 +543,18 @@ Proof
   irule o1_step_contract_at_preserve >>
   simp[simplify_cfg_step_contract, o1_fn_row_def] >> rpt strip_tac >>
   drule simplify_cfg_pass_step_function >> strip_tac >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    (gvs[fn_pass_step_def] >>
+     metis_tac[venomFnScheduleRunnerPropsTheory.lookup_unique_function_member]) >>
+  `o1_fn_shape observed.cu_context fn` by gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  `fn_pseudos_prefix (simplify_cfg_fn fn) /\
+   EVERY (\bb. no_param_insts bb.bb_instructions)
+     (TL (simplify_cfg_fn fn).fn_blocks)` by
+    (drule simplify_cfg_fn_param_prefix >> simp[]) >>
+  `wf_ssa (simplify_cfg_fn fn)` by
+    (irule simplify_cfg_preserves_wf_ssa >> gvs[o1_fn_shape_def] >>
+     irule simplify_cfg_fn_ok_ssa >> gvs[o1_fn_shape_def]) >>
+  `all_reachable (simplify_cfg_fn fn)` by
+    (irule simplify_cfg_establishes_all_reachable >> gvs[o1_fn_shape_def]) >>
   gvs[simplify_cfg_fn_no_alloca]
 QED
