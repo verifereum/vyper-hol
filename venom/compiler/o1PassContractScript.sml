@@ -365,11 +365,14 @@ Definition o1_fn_shape_def:
        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
 End
 
-(* venom_wf without global instruction-id distinctness, which is the IR
-   supply's concern and not a pass's. *)
+(* Instruction ids are distinct across the context, as Python's global
+   counter makes them: ConcretizeMemLoc keys imported callee allocations
+   by ALLOCA id.  A pass keeps ids distinct within its function
+   (wf_function); across functions the IR supply keeps them apart. *)
 Definition o1_ctx_shape_def:
   o1_ctx_shape ctx <=>
-    ctx_wf ctx /\ EVERY (o1_fn_shape ctx) ctx.ctx_functions
+    ctx_wf ctx /\ ctx_inst_ids_distinct ctx /\
+    EVERY (o1_fn_shape ctx) ctx.ctx_functions
 End
 
 (* ===== Step contract: structural, per run ===== *)
@@ -666,13 +669,16 @@ End
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to.  Up to FmpLowering, which seals a
    function after its callees, the functions are in a callee-first
-   order. *)
+   order.  Rows 1 and 2 are in SSA form (MakeSSA's first run establishes
+   it, LowerDload's fresh variables keep it), which ConcretizeMemLoc's
+   pointer provenance needs. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k = 0 then
       (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k <= 2 then
       (\C vs. o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
