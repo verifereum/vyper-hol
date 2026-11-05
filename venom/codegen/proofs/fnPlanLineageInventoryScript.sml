@@ -1765,3 +1765,61 @@ QED
    Native initialization, live-set transport, and preservation for all
    opcode branches remain unproved, as does suffix-local recursive fuel.
 *)
+
+Theorem init_cleanup_residual_budget:
+  !ch growth spill_base lbl_ctr.
+    residual_budget_wf spill_base []
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+Proof
+  rpt gen_tac >>
+  simp[residual_budget_wf_def, planSpillBoundsTheory.plan_slots_bounded_def,
+       planSpillBoundsTheory.alloc_slots_bounded_def,
+       spill_alloc_layout_wf_def, init_cleanup_plan_state_def,
+       stackPlanTypesTheory.init_plan_state_def,
+       stackPlanTypesTheory.init_spill_alloc_def, LIST_ELEM_COUNT_THM]
+QED
+
+(* Native initialization audit (C3.3.native_initialization).
+   init_cleanup_residual_budget proves only an upper budget on the EMPTY
+   initial state, uniformly in all cleanup/label parameters.
+
+   stackPlanGen generate_fn_plan_with_cleanup_analyzed (1291-1301) calls
+   generate_fn_plan_aux at fn_entry_label with this state. The first
+   generate_block_plan call (796-817) does NOT immediately emit an ordinary
+   instruction: for HD fn.fn_blocks it first calls prepare_params_plan.
+   PARAM/RETPC_PARAM are filtered out by non_param_insts (762-765); their
+   native setup (530-558) pushes Var(HD inst_outputs) for get_params and
+   uses live_vars_at lr entry.bb_label (LENGTH params) for dead pops and
+   optimistic swap. Thus ordinary coverage must be proved AFTER setup;
+   it cannot be inferred from the empty input stack alone.
+
+   A sufficient analysis-side entry obligation, not yet proved here, is:
+     codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+       live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label 0 = []
+   A separate post-PARAM demand obligation is:
+     EVERY (\v. MEM v (MAP (\inst. HD inst.inst_outputs)
+                           (get_params (HD fn.fn_blocks).bb_instructions)))
+       (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+          (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))
+   (under the same readiness assumptions). It must then be transported
+   through setup's dead pops and optimistic swap, not merely asserted as
+   a fact about the initial state. For first non-param inst::rest, the
+   actual input demand is operand_vars(compute_operands inst), while
+   generate_block_insts_plan (773-794) supplies next_live at n_params+1,
+   or at block_len when rest=[]; those are distinct from entry live-in.
+   Entry has no predecessors under block_entries_ready, so its clean_stack
+   branch is disabled; successor entries use a different edge boundary.
+
+   Available analysis interfaces searched:
+   livenessProofs.liveness_sound_proof: wf_function /\ live membership
+     yields a cfg_exec_path with used_before_defined (18-28).
+   livenessProofs.live_vars_at_transfer: reachable block/lookup/index plus
+     wf_function gives the backward instruction transfer equation (49-61).
+   live_at_entry_in_boundary identifies boundary storage, NOT emptiness.
+   These signatures alone do not rule out a use-before-definition witness
+   from entry: that requires the SSA/dominance/path argument. Likewise the
+   post-param membership obligation requires transport across the canonical
+   param prefix. No existing empty-entry theorem was found in the liveness
+   API. This checkpoint deliberately does not create new liveness machinery
+   or claim that residual_budget_wf supplies lower coverage.
+*)
