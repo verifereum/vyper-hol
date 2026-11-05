@@ -585,6 +585,106 @@ Proof
   Cases_on `call_has_value op` >> gvs[] >> simp[bind_def]
 QED
 
+Theorem asm_call_prepare_success_view:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  let vo = if call_has_value op then 1 else 0 in
+  let args = TAKE (6 + vo) c.stack in
+  6 + vo <= LENGTH c.stack /\
+  sender = c.msgParams.callee /\ accounts = s.rollback.accounts /\
+  address = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rs = w2n (EL (5 + vo) args) /\
+  ?charge acc d'.
+    stipend <= charge /\ c.gasUsed + charge <= c.msgParams.gasLimit /\
+    u = s with <| contexts :=
+      (c with <| stack := DROP (6 + vo) c.stack;
+                  gasUsed := c.gasUsed + charge;
+                  memory := buffer_extend
+                    (MAX (buffer_length c.memory)
+                      (let range = max_expansion_range (ao,az) (ro,rs) in
+                       if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+                     - buffer_length c.memory) c.memory |>,rb)::rest;
+      rollback := s.rollback with accesses := acc;
+      msdomain := Collect d' |>
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_stack >> disch_tac >>
+  qabbrev_tac `vo:num = if call_has_value op then 1 else 0` >>
+  qabbrev_tac `args = TAKE (6 + vo) c.stack` >>
+  qabbrev_tac `gas = w2n (EL 0 args)` >>
+  qabbrev_tac `address' = w2w (EL 1 args) : address` >>
+  qabbrev_tac `value' = if 0 < vo then w2n (EL 2 args) else 0` >>
+  qabbrev_tac `ao' = w2n (EL (2 + vo) args)` >>
+  qabbrev_tac `az' = w2n (EL (3 + vo) args)` >>
+  qabbrev_tac `ro' = w2n (EL (4 + vo) args)` >>
+  qabbrev_tac `rs' = w2n (EL (5 + vo) args)` >>
+  qabbrev_tac `range' = max_expansion_range (ao',az') (ro',rs')` >>
+  qabbrev_tac `newSize = if 0 < SND range' then word_size (FST range' + SND range') * 32 else 0` >>
+  qabbrev_tac `mxCost = memory_expansion_cost (buffer_length c.memory) newSize` >>
+  qabbrev_tac `expansion = MAX (buffer_length c.memory) newSize - buffer_length c.memory` >>
+  qabbrev_tac `ac = if fIN address' s.rollback.accesses.addresses then warm_access_cost else cold_access_cost` >>
+  qabbrev_tac `t = s with <| contexts := (c with stack := DROP (6 + vo) c.stack,rb)::rest;
+    rollback := s.rollback with accesses := s.rollback.accesses with
+      addresses := fINSERT address' s.rollback.accesses.addresses;
+    msdomain := Collect (d with addresses updated_by fINSERT address') |>` >>
+  qabbrev_tac `accounts' = s.rollback.accounts` >>
+  qabbrev_tac `target = lookup_account address' accounts'` >>
+  qabbrev_tac `resolved = case get_delegate target.code of
+    NONE => (target.code,0,t)
+  | SOME delegate => ((lookup_account delegate accounts').code,
+      (if fIN delegate t.rollback.accesses.addresses then warm_access_cost else cold_access_cost),
+      t with <| rollback := t.rollback with accesses := t.rollback.accesses with
+        addresses := fINSERT delegate t.rollback.accesses.addresses;
+        msdomain := Collect (d with addresses updated_by (fINSERT delegate o fINSERT address')) |>)` >>
+  PairCases_on `resolved` >>
+  suspend "named"
+QED
+
+Resume asm_call_prepare_success_view[named]:
+  qabbrev_tac `vc = if 0 < value' then call_value_cost else 0` >>
+  qabbrev_tac `cc = if op = Call /\ 0 < value' /\ account_empty target then new_account_cost else 0` >>
+  qabbrev_tac `cg = call_gas value' gas (c.msgParams.gasLimit - c.gasUsed) mxCost (ac+vc+cc+resolved1)` >>
+  qabbrev_tac `charge = static_gas op + FST cg + mxCost` >>
+  rule_assum_tac (REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by metis_tac[] >>
+  drule_all asm_call_prepare_collect_eq >>
+  qpat_x_assum `asm_call_prepare _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  Cases_on `c.msgParams.gasLimit < c.gasUsed + charge`
+  >- (qpat_assum `c.msgParams.gasLimit < _` (fn th => simp_tac (srw_ss()) [th])) >>
+  qpat_assum `~(c.msgParams.gasLimit < _)` (fn th => simp_tac (srw_ss()) [th]) >>
+  strip_tac >>
+  drule_all asm_call_stipend_le_charge >> disch_tac >>
+  suspend "project"
+QED
+
+Resume asm_call_prepare_success_view[project]:
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
+    [`args = _`, `address' = _`, `value' = _`, `ao' = _`, `az' = _`,
+     `ro' = _`, `rs' = _`, `range' = _`, `newSize = _`, `expansion = _`] >>
+  qpat_assum `6 + vo <= _` (fn th => simp_tac (srw_ss()) [th]) >>
+  qexists_tac `charge` >>
+  `c.gasUsed + charge <= c.msgParams.gasLimit` by decide_tac >>
+  qpat_assum `SND cg <= charge` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `c.gasUsed + charge <= _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  Cases_on `get_delegate target.code` >>
+  qpat_x_assum `(resolved0,resolved1,resolved2) = _` mp_tac >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  qpat_x_assum `resolved2 = _` SUBST_ALL_TAC >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  simp_tac (srw_ss()) [] >>
+  qmatch_goalsub_abbrev_tac `Collect domain0` >>
+  qmatch_goalsub_abbrev_tac `s.rollback with accesses := access0` >>
+  qexistsl_tac [`access0`,`domain0`] >> simp_tac (srw_ss()) []
+QED
+
+Finalise asm_call_prepare_success_view
+
 Theorem asm_pop_and_incorporate_context_state:
   s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
   child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
