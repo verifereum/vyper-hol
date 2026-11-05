@@ -1,6 +1,6 @@
 Theory concretizePtrWriteClassification
 Ancestors concretizePtrWriteFootprint ptrDiscipline codegenRel venomState
-  venomInst arithmetic pred_set list words pair
+  venomInst memLocDefs arithmetic pred_set list words pair
 
 Theorem ptr_step_write_range:
   x IN range_bytes (step_writes inst s post) <=>
@@ -112,4 +112,18 @@ Proof
   simp[ptr_step_write_range] >> rpt strip_tac >>
   drule (iffLR ptr_source_write_classification) >>
   simp[ptr_classified_write_range_def] >> metis_tac[]
+QED
+
+Theorem ptr_step_write_max_containment:
+  mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+  eval_operand ops.iao_ofst t = SOME y /\
+  eval_operand sizeop t = SOME z ==>
+  !q. q IN range_bytes (step_writes inst t post) ==>
+    w2n y <= q /\ q < w2n y + w2n z
+Proof
+  strip_tac >> simp[ptr_step_write_range] >> rpt strip_tac >>
+  drule (iffLR ptr_source_write_classification) >>
+  simp[ptr_classified_write_range_def] >> strip_tac >>
+  gvs[mem_write_ops_def, eval_operand_def, dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  gvs[MIN_DEF] >> decide_tac
 QED
