@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringFrame
 Ancestors
-  ctorDeployLoweringDefs ctorDeployLoweringBudget o1PassContract bodySim e2eDefs callTrace
+  ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
 
 (* body_stmts_sim's premises for the constructor body at its start, and the
    side conditions of constructor_frame_ret_ok and constructor_exit_run. *)

@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
-  ctorDeployLoweringDefs ctorDeployLoweringBudget o1PassContract gasSummary
+  ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
 
 (* Without a constructor, load_contract runs the synthetic empty one, and the
    unit is compile_simple_deploy's. *)
