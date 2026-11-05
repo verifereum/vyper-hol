@@ -35,7 +35,8 @@ Ancestors
 
    Why it should hold: the lineage entry from pred leaves pred's PHI
    operands on top of the stack (the JMP reorder to input_vars_from pred),
-   with only dead_stack_marker entries below them
+   with only dead_stack_marker entries below them, and no other stack or
+   spill entry is or normalizes to an output of the block
    (fnPlanLineageJoin$lineage_entry_join_stack), each holding the value
    resolve_phi pred reads (fn_frame_inv), with return-PC PHIs reading ra
    on both sides (retpc_shape_ok).  Each PHI pokes that slot into its
@@ -107,6 +108,12 @@ Proof
                `lbl_ctr`, `pred`, `bb`, `vs.vs_current_bb`, `ps_l`, `h`,
                `promised`, `ps`, `phis`, `body'`]
     mp_tac fnFrameStepsPhiTheory.phi_join_entry_hits >>
+  impl_tac >- asm_rewrite_tac[] >>
+  strip_tac >>
+  qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,
+               `lbl_ctr`, `pred`, `bb`, `vs.vs_current_bb`, `ps_l`, `h`,
+               `promised`, `ps`, `phis`, `body'`]
+    mp_tac fnFrameStepsPhiTheory.phi_join_entry_fresh >>
   impl_tac >- asm_rewrite_tac[] >>
   strip_tac >>
   qspecl_then [`ctx`, `cp'`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`, `cfg`,

@@ -305,7 +305,7 @@ Proof
   IF_CASES_TAC >> simp[collect_phis_def]
 QED
 
-Theorem phi_pair_updates_lookup[local]:
+Theorem phi_pair_updates_lookup:
   !pairs m idx v.
     FLOOKUP (FOLDL (\m (lbl,w). m |+ (w,idx)) m pairs) v =
     if MEM v (MAP SND pairs) then SOME idx else FLOOKUP m v

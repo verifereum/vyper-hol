@@ -398,7 +398,7 @@ Proof
 QED
 
 (* Helper: reachable node along path from reachable start *)
-Theorem is_fn_path_all_reachable[local]:
+Theorem is_fn_path_all_reachable:
   !fn path lbl. is_fn_path fn path /\ path <> [] /\
     fn_reachable fn (HD path) /\ MEM lbl path ==>
     fn_reachable fn lbl
@@ -410,7 +410,7 @@ Proof
 QED
 
 (* Helper: reachable implies has a block (via wf_function) *)
-Theorem fn_reachable_has_block[local]:
+Theorem fn_reachable_has_block:
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     ?bb. lookup_block lbl fn.fn_blocks = SOME bb
 Proof
