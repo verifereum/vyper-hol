@@ -424,6 +424,23 @@ Proof
   gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
 QED
 
+(* An operand that isn't of the account-code type is never a slice's
+   .code source. *)
+Theorem expr_sim_pre_builtin_typed_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_type e <> BaseT (BytesT (Dynamic 24576)) /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_sim_pre cenv cx env e es'
+Proof
+  rpt strip_tac >> irule expr_sim_pre_builtin_arg >> simp[] >>
+  qexistsl_tac [`ann`, `args`, `bi`, `es`] >> simp[] >> disj2_tac >>
+  strip_tac >> qpat_x_assum `expr_type e <> _` mp_tac >> simp[] >>
+  irule well_typed_extcode_type >> simp[] >> qexists_tac `env` >>
+  irule well_typed_exprs_member >> qexists_tac `args` >>
+  gvs[expr_sim_pre_def, well_typed_expr_def]
+QED
+
 Theorem int_calls_exprs_mem:
   !args e. int_calls_exprs args = [] /\ MEM e args ==> int_calls_expr e = []
 Proof

@@ -1186,8 +1186,8 @@ Definition immutables_rel_def:
         SOME (ImmutableLoc byte_offset) /\
       FLOOKUP interp_imms name = SOME (tv,v) ==>
       immutable_value_admissible tv v /\
-      byte_offset + type_memory_size tv <=
-        LENGTH (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
+      (~is_ctor ==>
+         byte_offset + type_memory_size tv <= LENGTH ss.vs_data_section) /\
       val_in_memory tv v byte_offset
         (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
       immutable_value_bytes_rel tv v
