@@ -3,6 +3,8 @@ Theory assignBasePtrLiteralGhost
 Ancestors assignBasePtrLiteralPost typedCopyPtr robustCopyTransportPtr
   allocationPtr loweringHalt exprLoweringProps localPtrsProps bodyPtrDefs ptrDiscipline venomInst venomExecSemantics
   venomState valueEncodingProps exprSimProps compileEnv finite_map pred_set
+  fragGasSeqPtr ghostPcTransportPtr instIdxIndep representationCleanPtr
+  emitHelperProps words
 
 Theorem assign_base_ptr_mstore_imm_taint[local]:
   !tn s id dst value a w.
@@ -302,4 +304,67 @@ Proof
   `tn'.t_imm = tn.t_imm` by
     simp[Abbr `tn'`, Abbr `t`, assign_base_ptr_binop_imm_taint] >>
   fs[stor_taint_ok_def, Abbr `t`, update_var_def] >> metis_tac[])
+QED
+
+Theorem assign_base_ptr_binop_kept:
+  !cenv es sa G0 tn0 s0 PG G tn s id opc left right out w.
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\ (opc = ADD \/ opc = AND) /\
+    (!x. not_fresh_at sa x ==> x <> out) ==>
+    ghost_kept cenv es sa G0 tn0 s0
+      (step_prov PG G (mk_inst id opc [left;right] [out]) (update_var out w s))
+      (step_taint (mk_inst id opc [left;right] [out]) s (update_var out w s) tn)
+Proof
+  rpt gen_tac >> strip_tac >> (
+  qmatch_goalsub_abbrev_tac `ghost_kept cenv es sa G0 tn0 s0 G' tn'` >>
+  `op_taint tn' (Var out) = {} /\ tn'.t_mem = tn.t_mem /\
+   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+   (!p. p <> out ==> FLOOKUP G' p = FLOOKUP G p /\
+     op_taint tn' (Var p) = op_taint tn (Var p))` by
+    (simp[Abbr `G'`, Abbr `tn'`] >>
+     irule copy_len_binop_ghost_frame >> simp[]) >>
+  fs[ghost_kept_def] >> metis_tac[])
+QED
+
+Theorem assign_base_ptr_one_byte_init_clean:
+  !D lo ctx func PG G tn s G' tn' p q a i j k.
+    p <> q /\ lookup_var p s = SOME a /\ w2n a + 64 < dimword (:256) /\
+    inst_seq_ptr D lo ctx func PG G tn
+      [mk_inst i MSTORE [Var p; Lit 1w] [];
+       mk_inst j ADD [Var p; Lit 32w] [q];
+       mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s G' tn' ==>
+    !b. w2n a <= b /\ b < w2n a + 64 ==> b NOTIN tn'.t_mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n a) 1w s` >>
+  qabbrev_tac `v = update_var q (a + 32w) u` >>
+  qabbrev_tac `t = mstore (w2n (a + 32w)) (n2w (2 ** 248)) v` >>
+  `lookup_var p u = SOME a /\ lookup_var q v = SOME (a + 32w)` by
+    (simp[Abbr `u`, Abbr `v`, lookup_var_def, mstore_def,
+      update_var_def, FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `step_inst_base (mk_inst i MSTORE [Var p; Lit 1w] []) s = OK u` by
+    (simp[Abbr `u`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j ADD [Var p; Lit 32w] [q]) u = OK v` by
+    (simp[Abbr `v`] >> irule step_ADD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []) v = OK t` by
+    (simp[Abbr `t`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+  qabbrev_tac `tn1 = step_taint (mk_inst i MSTORE [Var p; Lit 1w] []) s u tn` >>
+  qabbrev_tac `tn2 = step_taint (mk_inst j ADD [Var p; Lit 32w] [q]) u v tn1` >>
+  `tn1.t_mem = tn.t_mem DIFF {b | w2n a <= b /\ b < w2n a + 32}` by
+    (simp[Abbr `tn1`, Abbr `u`] >> irule (cj 5 mstore_ghost_frame) >>
+     simp[eval_operand_def, op_taint_def]) >>
+  `tn2.t_mem = tn1.t_mem` by
+    (simp[NoAsms, Abbr `tn2`, Abbr `v`] >> irule (cj 2 copy_len_binop_ghost_frame) >> simp[]) >>
+  `(step_taint (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []) v t tn2).t_mem =
+     tn2.t_mem DIFF {b | w2n (a + 32w) <= b /\ b < w2n (a + 32w) + 32}` by
+    (simp[NoAsms, Abbr `t`] >> irule (cj 5 mstore_ghost_frame) >>
+     simp[eval_operand_def, op_taint_def]) >>
+  `w2n (a + 32w) = w2n a + 32` by
+    (irule EQ_TRANS >> qexists_tac `w2n a + w2n (32w:bytes32)` >>
+     conj_tac >- (irule w2n_add_2 >> fs[dimword_def] >> decide_tac) >> simp[]) >>
+  `~is_terminator (mk_inst j ADD [Var p; Lit 32w] [q]).inst_opcode /\
+   ~is_terminator (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  fs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
+     Abbr `tn1`, Abbr `tn2`] >>
+  rpt strip_tac >> fs[] >> decide_tac
 QED
