@@ -8,6 +8,84 @@ Ancestors
   o1FrameLockstep ptrDiscipline contextCodegenRel codegenRel
   makeSsaCurrentDefs makeSsaCurrentOrigin o1PassContract venomWf
 
+Theorem lockstep_taint_operands[local]:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\
+  ghost_rel sg G tn G' tn' /\ taint_ok fn tn inst s ==>
+  !op. MEM op inst'.inst_operands /\ op_taint tn' op <> {} ==>
+    inst'.inst_opcode = ASSIGN \/
+    ((inst'.inst_opcode = SHL \/ inst'.inst_opcode = SHR \/
+      inst'.inst_opcode = SAR) /\
+     ?n. inst'.inst_operands = [n; op] /\ op_taint tn' n = {}) \/
+    ((inst'.inst_opcode = MSTORE \/ inst'.inst_opcode = SSTORE \/
+      inst'.inst_opcode = TSTORE \/ inst'.inst_opcode = ISTORE) /\
+     ?a. inst'.inst_operands = [a; op] /\ op_taint tn' a = {})
+Proof
+  rpt strip_tac >>
+  `vars_ghost_rel sg G tn.t_var G' tn'.t_var` by gvs[ghost_rel_def] >>
+  drule_all inst_pair_ops_ghost >> strip_tac >>
+  drule_all listTheory.LIST_REL_MEM_IMP_R >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `taint_ok _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [taint_ok_def]) >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  gvs[inst_pair_def, listTheory.LIST_REL_CONS1]
+QED
+
+Theorem lockstep_access_comparison[local]:
+  inst_pair sg inst inst' /\ state_rel sg s s' /\
+  ghost_rel sg G tn G' tn' /\ access_ok lo G fn inst s ==>
+  !u w. (inst'.inst_opcode = LT \/ inst'.inst_opcode = GT \/
+          inst'.inst_opcode = EQ) /\
+    inst'.inst_operands = [Var u; Var w] /\
+    (u IN FDOM G' \/ w IN FDOM G') ==>
+    ?b sz x y. FLOOKUP G' u = SOME (b,sz) /\ FLOOKUP G' w = SOME (b,sz) /\
+      0 < sz /\ eval_operand (Var u) s' = SOME x /\
+      eval_operand (Var w) s' = SOME y /\
+      b <= w2n x /\ w2n x <= b + sz /\ b <= w2n y /\ w2n y <= b + sz
+Proof
+  strip_tac >>
+  `vars_ghost_rel sg G tn.t_var G' tn'.t_var` by gvs[ghost_rel_def] >>
+  drule_all inst_pair_ops_ghost >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[inst_pair_def, listTheory.LIST_REL_CONS2, op_rename_def] >>
+  rename1 `inst.inst_operands = [Var v; Var z]` >>
+  `FLOOKUP G' u = FLOOKUP G v /\ FLOOKUP G' w = FLOOKUP G z` by
+    metis_tac[vars_ghost_rel_def] >>
+  `v IN FDOM G \/ z IN FDOM G` by
+    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+  gvs[access_ok_def] >> metis_tac[]
+QED
+
+Theorem inst_pair_write_offset[local]:
+  inst_pair sg inst inst' /\ mem_write_ops inst' = SOME ops' ==>
+  ?ops. mem_write_ops inst = SOME ops /\
+        op_rename sg ops.iao_ofst ops'.iao_ofst
+Proof
+  strip_tac >>
+  gvs[inst_pair_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[memLocDefsTheory.mem_write_ops_def, AllCaseEqs(),
+      listTheory.LIST_REL_CONS2]
+QED
+
+Theorem inst_pair_read_offset[local]:
+  inst_pair sg inst inst' /\ mem_read_ops inst' = SOME ops' ==>
+  ?ops. mem_read_ops inst = SOME ops /\
+        op_rename sg ops.iao_ofst ops'.iao_ofst
+Proof
+  strip_tac >>
+  gvs[inst_pair_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[memLocDefsTheory.mem_read_ops_def, AllCaseEqs(),
+      listTheory.LIST_REL_CONS2] >>
+  `LIST_REL (op_rename sg) (REVERSE inst.inst_operands)
+     (REVERSE inst'.inst_operands)` by
+    metis_tac[listTheory.LIST_REL_REVERSE] >>
+  qpat_x_assum `LIST_REL _ (REVERSE _) _` mp_tac >>
+  asm_rewrite_tac[] >>
+  simp_tac pure_ss [listTheory.LIST_REL_CONS2] >>
+  strip_tac >> gvs[]
+QED
+
 (* Paired states (p): same opcode, operands renamed by sg, equal values,
    provenance and taint through ghost_rel, equal memory ranges
    (write_ranges_pair, read_ranges_pair, inst_pair_ops_ghost); the
