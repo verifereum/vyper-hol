@@ -19,6 +19,7 @@
 Theory fnBlockPlanStatic
 Ancestors
   fnLineageStatic fnPlanPrefix fnPlanLineage reorderSim contextCodegenRel
+  fnBlockPlanStaticRet
   stackPlanGen stackPlanOps stackPlanTypes venomExecSemantics venomWf
   livenessDefs dfgDefs cfgDefs
 
@@ -40,6 +41,103 @@ Definition block_plan_state_def:
         (k - LENGTH (get_params bb.bb_instructions))
         (non_param_insts bb) ps2 = SOME (pre_ops, ps)
 End
+
+(* Checked counterexample evidence; independent of the admitted theorem below.
+   entry: OFFSET 0, entry -> x; RET [Label "use"]
+   use:   ASSERT x; STOP
+   RET's label induces a CFG successor, so x is live after RET. Planning RET
+   consumes its label operand but retains x. All frozen antecedents hold.
+   A narrow contract repair would forbid label operands on RET; alternatively,
+   CFG successor extraction could ignore labels for non-branching terminators.
+   Neither repair is implemented here; the frozen statement is unchanged. *)
+Theorem ret_label_probe_block_state:
+  block_plan_state
+    (liveness_analyze ret_label_probe_fn) (dfg_build_function ret_label_probe_fn)
+    (cfg_analyze ret_label_probe_fn) ret_label_probe_fn
+    (HD ret_label_probe_fn.fn_blocks) (init_cleanup_plan_state NONE [] 0 0)
+    1 ret_label_probe_before
+Proof
+  rewrite_tac[block_plan_state_def] >>
+  qexistsl_tac [`[]`, `init_cleanup_plan_state NONE [] 0 0`,
+               `[]`, `init_cleanup_plan_state NONE [] 0 0`] >>
+  qexists_tac `[SOPushOfst "entry" 0]` >> simp[] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem block_plan_state_static_ret_counterexample:
+  ?liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
+   ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
+   next_is_term.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lineage_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    generate_block_plan liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (block_ops, ps_after) /\
+    block_plan_state liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+      k ps /\
+    phi_prefix_length bb.bb_instructions <= k /\
+    k < LENGTH bb.bb_instructions /\
+    EL k bb.bb_instructions = inst /\
+    next_live = live_vars_at liveness bb.bb_label (k + 1) /\
+    next_is_term =
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode) /\
+    inst.inst_opcode = RET /\
+    ?ops ps'.
+      generate_inst_plan liveness dfg cfg fn inst next_live (bb_is_halting bb)
+        next_is_term bb.bb_label ps = SOME (ops, ps') /\ ps'.ps_stack <> []
+Proof
+  mp_tac ret_label_probe_function_success >>
+  pure_rewrite_tac[optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD] >>
+  strip_tac >>
+  rename1 `generate_fn_plan_with_cleanup_analyzed _ _ _ _ _ _ _ _ = SOME result` >>
+  PairCases_on `result` >>
+  rename1 `generate_fn_plan_with_cleanup_analyzed _ _ _ _ _ _ _ _ =
+    SOME (fn_ops, ps_end)` >>
+  mp_tac ret_label_probe_block_result >> strip_tac >>
+  rename1 `generate_block_plan _ _ _ _ _ _ = SOME (block_ops, ps_after)` >>
+  qexistsl_tac [`liveness_analyze ret_label_probe_fn`,
+    `dfg_build_function ret_label_probe_fn`, `cfg_analyze ret_label_probe_fn`,
+    `NONE`, `[]`, `0`, `0`, `ret_label_probe_fn`, `fn_ops`, `ps_end`,
+    `"entry"`, `HD ret_label_probe_fn.fn_blocks`,
+    `init_cleanup_plan_state NONE [] 0 0`, `init_cleanup_plan_state NONE [] 0 0`,
+    `ps_after`, `(init_cleanup_plan_state NONE [] 0 0).ps_cleanup_height`,
+    `(init_cleanup_plan_state NONE [] 0 0).ps_cleanup_promised`,
+    `block_ops`, `ps_after`, `1`, `ret_label_probe_before`,
+    `mk_inst 1 RET [Label "use"] []`,
+    `live_vars_at (liveness_analyze ret_label_probe_fn) "entry" 2`, `F`] >>
+  `init_cleanup_plan_state NONE [] 0 0 with ps_cleanup_height := NONE =
+   init_cleanup_plan_state NONE [] 0 0` by EVAL_TAC >>
+  simp[ret_label_probe_ready_and_edge, ret_label_probe_entry_states,
+       ret_label_probe_block_state] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  `(HD ret_label_probe_fn.fn_blocks).bb_label = "entry"` by EVAL_TAC >>
+  `bb_is_halting (HD ret_label_probe_fn.fn_blocks) = F` by EVAL_TAC >>
+  mp_tac ret_label_probe_ret_nonempty >> simp[] >> strip_tac >>
+  rename1 `SOME (ret_ops, ret_after) = generate_inst_plan _ _ _ _ _ _ _ _ _ _` >>
+  qexistsl_tac [`ret_ops`, `ret_after`] >> simp[]
+QED
 
 (* Used at each instruction of the block body's induction, for the
    planner-only premises of the step it takes there.  next_live and
