@@ -545,3 +545,155 @@ collapsed-copy consumer, classifying each physical y writer by owner-v changing
 sites, linking completed source instruction events to the target origin ledger,
 and the first successful copy/return-epoch induction. No target success, lookup
 SOME, equal-store clause, or copy-readiness assumption was added to this test.
+
+## 9. Writer exclusion / return-epoch design (C1.12.writer_epoch_design)
+
+This is a worked interface audit, not a new operational theorem. E0298 now
+proves section 8's exceptional token equality in ExceptionalDemandOrigin.
+No target success or value equality follows from it alone.
+
+### 9.1 Physical ownership is already classified
+
+RestrictedRuntime:115-151 classifies ALL outputs of a cleaned block, including
+ASSIGN cleanup outputs, as history allocations whose owner changes at that
+block. Do not add another writer-classification theory.
+
+For a collapsed inserted PHI at h, use exactly CollapsedOrigin:110-139:
+its hypotheses include the replayed operand list over the actual predecessor
+map, output [x], and simplify_current_phi producing ASSIGN [Var y]. It supplies
+x<>y and a STATIC event ev with exit token t, not default(v) and not inserted(v,h),
+and token_name H t = SOME y. This ev need not be the executed predecessor.
+
+The ownership discharge is as follows (assembly not yet a named theorem):
+* Choose U with history_valid and event_valid/event_names using
+  current_certificate_owner_universe (RuntimeOwners:121). Use this SAME U.
+* Obtain the insertion annotation (CurrentInserted v h,v) in A h from the
+  actual insertion prefix/annotation boundary, as done in
+  current_certificate_inserted_exit_token_name (CollapsedOrigin:95-107).
+  Event validity and current_event_annotation_owner_covered give MEM v U.
+  This does not require v to be an original instruction output.
+* Unpack the certificate's tree trace, start with
+  current_env_history_owners_default and use current_tree_trace_history_owners
+  (ActualRetention:185). This gives EVERY exit-env history ownership for the
+  final H. The certificate adapter for this fact is not exported separately;
+  it is the same trace extraction already used in ReinsertionNames:395-400.
+* At ev, env_history_owners says t=CurrentDefault v OR
+  exists n. MEM(t,v,n) H. Eliminate the first using CollapsedOrigin. Thus
+  current_history_owner_covered is an alternative check of MEM v U.
+  With history_valid, current_env_history_owner_name and token_name H t=SOME y
+  give current_owner_name H v y (ActualRetention:163-175).
+
+This composition does not use token spelling to infer owner. In particular
+y=v is permitted by current_owner_name_def. Classification plus owner separation
+now excludes a write to y in any non-changing block. Required certificate,
+wf_function, all_reachable, entry and supply facts are all frozen hypotheses.
+
+### 9.2 Exact chronological suffix boundary
+
+For the actual predecessor p, derive a ROOTED LRC route from the source prefix,
+not from the static event ev. To identify its scan with the p event's exit token,
+use RootedTokens in the operand-excluded case (exit liveness required), or
+ExceptionalDemandOrigin in the PHI-operand case (exit demand required). Demand
+or liveness at THIS p for the insertion at h still needs a consumer theorem;
+it is not implied by the existence of CollapsedOrigin's static ev.
+
+If the resulting token is inserted(v,h),
+current_chronological_inserted_inverse (ChronologicalOrigin:79-103) splits
+route++[p] = pre ++ h::post. The h block has no original v output; every block
+in post is non-changing for v. Lookup coverage follows from the rooted route.
+If post is nonempty, its consecutive CFG edges, lookups and non-changing facts
+are precisely current_restricted_path fn v post. If post=[], do NOT invoke
+that definition (it explicitly requires nonempty); use the empty phase prefix
+identity. post excludes the completed h block and excludes the new h entrance.
+
+For target phases wholly inside post, the remaining interface obligation is an
+actual paired-history slice with EVERY phase's label in post (Control allowed).
+Then current_restricted_prefix_owner_exclusion excludes owner-v outputs,
+including y. This theorem does not require successful next-copy execution.
+A completed target slice already obtained by induction can be transported by
+current_restricted_actual_prefix_origin_transport, but that corollary protects
+a SELECTED ENTRY name. It cannot be instantiated with arbitrary y without
+proving selected=latest_current_name(entry_rs ev2) v for some event ev2.
+Alternatively use its underlying current_actual_prefix_origin_transport with
+the just-derived physical exclusion; no new wrapper is needed.
+
+There are TWO boundary pieces outside post: the tail of the last h visit after
+its copy and the retained batch/earlier copies of the current h visit. Whole-
+block non-changing exclusion cannot cover either because insertion makes h a
+changing site. Need local output distinctness/nonclobber, not inclusion of h
+in restricted_path. For external y, allocated-name uniqueness and output
+classification localize its writer away from h. For local original-PHI y,
+use ReinsertedReady instead and keep its newly produced source version.
+
+### 9.3 Proposed induction judgment and worked steps
+
+Use induction on already completed paired semantic visits, with an inner
+induction on the ordered cleanup copy index k. Its state carries actual source
+and constructed target prefixes, phase/control alignment, equal execution
+frames, current_origin_realizes Val Ms source and Val Mt target, demanded
+agreement, and a history of COMPLETED copy seeds. A seed records visit, h, v,
+x,y and origin o at its successful completion, with Ms[v]=Mt[x]=Mt[y]=o and
+Val(o)=SOME value there. Seeds are past witnesses, not unconditional assertions
+that allocated names remain current. A seed's validity at another cut must be
+DERIVED by no-write slices; it is not assumed in the judgment for a future
+copy. This judgment is proposed only; its initialization/transfer is unproved.
+
+First entrance, non-original-PHI-output v:
+1. Derive actual p demand/liveness as above. DemandOrigin excludes defaults in
+   the operand-excluded case; in the exceptional case the singleton canonical
+   token cannot be default. This eliminates BOTH v=x and v=y default spelling
+   collisions without name injectivity. FirstArrival excludes inserted(v,h).
+   Collapsed predecessor trichotomy therefore leaves the nonself token t.
+2. Rooted equality plus chronological nondefault origin gives a completed last
+   changing block d. A local ordinary writer t=Original h i j on this FIRST
+   entrance cannot be that completed site: no earlier h occurred. This needs
+   an original-token chronological inversion (nondefault_origin alone states
+   only equality with block_token at d, not d=the token's block).
+3. For external original t, its effective source output event must have an
+   already paired target write with the same dynamic origin; for external
+   inserted t, use its already completed retained PHI/copy event. Neither
+   conclusion follows merely from membership in certificate history H.
+4. Last-site suffix exclusion protects y and source v from d to p; local
+   nonclobber protects y to index k. Read origin o and Val(o)=SOME value from
+   the completed event, execute x<-y using CleanupRuntime, record a new seed.
+   This is a design for first success, not a proof that step 3 is exhaustive.
+
+Self return:
+1. Rooted equality and inserted_inverse select the latest completed h visit,
+   with no original v writes there and no changing sites in post. Induction
+   supplies its SUCCESSFUL copy seed, not the current copy's success.
+2. Preserve its source origin and Mt[y] through that visit's remaining tail,
+   post blocks, and current pre-copy prefix by the exclusions in 9.2. Thus
+   Ms[v]=Mt[y]=o and Val(o)=SOME value at the current read. Val extension must
+   preserve o; RestrictedRuntime's protected-origins clause supports this for
+   completed slices, not for a yet unconstructed slice.
+3. CleanupRuntime executes the current copy and updates Mt[x] to o, re-seeding
+   this visit. Current retained original-PHI output is a different case:
+   ReinsertedReady:66 explicitly retains its writer before the copy and proves
+   readiness conditional on the already constructed retained batch and earlier
+   copies. It wants the NEW PHI version, not the old self-return epoch.
+
+### 9.4 Smallest unresolved implications / adversarial checks
+
+The first missing consumer implication is: actual dispatch p->h plus the
+certified collapsed insertion for v yields the exact demanded/live predecessor
+exit premise needed by the rooted equalities, with a split for original PHI
+output v. Insertion pruning gives selected post-PHI liveness; LiveTransport
+needs absence of leading-PHI v definition and operand exclusion in its ordinary
+branch. This discharge has not been assembled here.
+
+After that, the missing DYNAMIC implication is: the chronological final token's
+last effective writer has an already completed paired target event (or a
+retained PHI in the current batch) with the current source origin. It must be
+proved by the proposed execution induction, not added as an assumption hiding
+copy readiness. A static H allocation is not such an event.
+
+Adversarial checks: post=[] requires no restricted_path; repeated h visits use
+the latest seed; an intervening external alias copy is a changing site and
+cannot lie in post; a source no-write suffix alone would not exclude it; default
+names remain physically collidable until demand excludes their tokens; current
+h is never admitted to non-changing post; duplicate ordinary output slots need
+the canonical FINAL slot; original PHIs use snapshot/first-write semantics and
+the frozen output-uniqueness premise, not ordinary sequential-write reasoning.
+No concrete task counterexample is asserted. No new operational invariant or
+conditional runtime theorem is installed by this audit.
