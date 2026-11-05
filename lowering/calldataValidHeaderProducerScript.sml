@@ -4,7 +4,7 @@ Ancestors
   calldataValidInitHeader calldataValidArrayInputs actualScratchSelection
   abiDecoderArrayInit abiDecoderArrayLoopInit abiDecoderIndexInit calldataDynInit
   abiDecoderContract abiDecoderTypedContract abiDecoderValidContract abiDecodeRanges fragExec exprLoweringProps emitHelperProps
-  venomInst venomExecSemantics compileEnv list rich_list arithmetic
+  venomInst venomExecSemantics compileEnv list rich_list arithmetic fragExecMem
 
 Theorem header_index_insts_in_function[local]:
   fn_has_code st loop_st fn /\ inst_extends header_st loop_st ==>
@@ -114,6 +114,9 @@ Theorem calldata_valid_header_producer:
     abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (ip,loop_st) /\
     run_inst_seq (emitted_insts st loop_st) initial = OK t /\
+    run_inst_seq_mem_ok (emitted_insts st loop_st) initial /\
+    ((!fuel. mem_safe_run fuel ctx fn (jump_to hdr t)) ==>
+      !fuel. mem_safe_run fuel ctx fn initial) /\
     H header_st p 0 (jump_to hdr t) [(p,32)] /\
     (!fuel r. run_from fuel ctx fn (jump_to hdr t) = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_from fuel' ctx fn initial = r /\

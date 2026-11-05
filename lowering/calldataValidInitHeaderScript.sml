@@ -3,7 +3,7 @@ Theory calldataValidInitHeader
 Ancestors
   calldataInitOwnedPost calldataInitSequence calldataInitEntry calldataValidOwnedLoop
   abiDecoderFrame abiDecoderTypedContract abiDecoderContract venomState
-  exprLoweringProps allocaFrontierBound calldataDynOwned compileEnv
+  exprLoweringProps allocaFrontierBound calldataDynOwned compileEnv fragExecMem list calldataInitializerSafety
 
 Theorem calldata_valid_init_header:
   let Own = \s. !id q k.
@@ -73,6 +73,9 @@ Theorem calldata_valid_init_header:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. run_inst_seq (emitted_insts st loop_st) initial = OK t /\
+    run_inst_seq_mem_ok (emitted_insts st loop_st) initial /\
+    ((!fuel. mem_safe_run fuel ctx fn (jump_to hdr t)) ==>
+      !fuel. mem_safe_run fuel ctx fn initial) /\
     H 0 (jump_to hdr t) [(p,32)] /\
     (!fuel r. run_from fuel ctx fn (jump_to hdr t) = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_from fuel' ctx fn initial = r /\
@@ -86,7 +89,15 @@ Proof
   `w2n (abi_decode_load CALLDATALOAD srcword initial) <= maxn` by simp[] >>
   `32 <= 32+maxn*type_memory_size tv` by decide_tac >>
   drule_all calldata_array_loop_init_repeat_sequence >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts st loop_st) initial` by
+    (irule run_inst_seq_mem_ok_of_prefix_safe >>
+     asm_rewrite_tac[] >> fs[EVERY_MEM]) >>
   drule_all calldata_executed_init_to_header >> strip_tac >>
+  `(!fuel. mem_safe_run fuel ctx fn (jump_to hdr t)) ==>
+    !fuel. mem_safe_run fuel ctx fn initial` by
+    (ho_match_mp_tac (GEN_ALL calldata_executed_init_all_fuel_pullback) >>
+     qexistsl_tac [`st`, `src`, `loop_st`, `ip`, `exit_lbl`, `prefix_st`, `body_lbl`] >>
+     asm_rewrite_tac[] >> fs[EVERY_MEM]) >>
   `alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
    initial.vs_alloca_next <= t.vs_alloca_next /\
    (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
