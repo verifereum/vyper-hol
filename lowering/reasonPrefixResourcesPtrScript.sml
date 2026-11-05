@@ -502,3 +502,70 @@ Resume reason_encoder_selector_resources[reserved]:
 QED
 
 Finalise reason_encoder_selector_resources
+
+(* Read-only encoder arithmetic writes a fresh compiler temporary. *)
+Theorem reason_encoder_fresh_update_post:
+  !ctx func cenv cx e es sa sb s0 es' v op s cc x w.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    local_ptrs_reserved cenv cc /\ sa.cs_next_var <= cc.cs_next_var /\
+    ~not_fresh_at cc x /\
+    eval_operand op (update_var x w s) = eval_operand op s ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' v op (update_var x w s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `not_local_ptr cenv es'.scopes x` by
+    (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+  irule reason_encoder_readonly_post >>
+  conj_tac
+  >- (irule stmt_state_rel_update_var >> gvs[expr_post_def]) >>
+  qexistsl_tac [`cc`, `s`] >> simp[update_var_def] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> `x <> x'` by metis_tac[] >>
+      gvs[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rpt strip_tac >>
+  simp[local_region_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[not_local_ptr_def] >> metis_tac[]
+QED
+
+Theorem reason_encoder_add_post:
+  !ctx func cenv cx e es sa sb s0 es' v op s cc cd src result a d.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    local_ptrs_reserved cenv cc /\ sa.cs_next_var <= cc.cs_next_var /\
+    fresh_vars_wrt cc s /\
+    emit_op ADD [src; Lit d] cc = (result,cd) /\
+    eval_operand src s = SOME a /\
+    (!z. op = Var z ==> not_fresh_at cc z) ==>
+    ?t. run_inst_seq (emitted_insts cc cd) s = OK t /\
+      eval_operand result t = SOME (a + d) /\ fresh_vars_wrt cd t /\
+      local_ptrs_reserved cenv cd /\
+      eval_operand op t = eval_operand op s /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `result = Var x` >>
+  `~not_fresh_at cc x` by simp[Abbr `x`, not_fresh_at_def] >>
+  `step_inst_base (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s =
+    OK (update_var x (a + d) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  `run_inst_seq (emitted_insts cc cd) s = OK (update_var x (a + d) s)` by
+    simp[run_inst_seq_def] >>
+  `eval_operand (Lit d) s = SOME d` by simp[eval_operand_def] >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  `ss' = update_var x (a + d) s` by
+    (qpat_x_assum `run_inst_seq _ _ = OK (update_var _ _ _)` mp_tac >>
+     simp[]) >>
+  qpat_x_assum `ss' = _` SUBST_ALL_TAC >>
+  `eval_operand op (update_var x (a + d) s) = eval_operand op s` by
+    (Cases_on `op` >> simp[eval_operand_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `local_ptrs_reserved cenv cd` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `cc` >> simp[]) >>
+  `expr_post ctx func cenv cx e es sa sb s0 es' v op
+     (update_var x (a + d) s)` by
+    (irule reason_encoder_fresh_update_post >> simp[] >>
+     qexists_tac `cc` >> simp[]) >>
+  qexists_tac `update_var x (a + d) s` >> simp[update_var_def]
+QED
