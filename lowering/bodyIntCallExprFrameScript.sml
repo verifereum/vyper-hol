@@ -227,6 +227,42 @@ Proof
   literal_vv_storage_frame_tac
 QED
 
+Theorem unwrap_runtime_immutable_word_storage_frame_frag:
+  emit_op DLOAD [p.ptr_operand] sm = (op,sb) /\
+  p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ is_word_type t /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+           (LocatedValue t p) s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  strip_tac >> irule frag_exec_pointwise >> rw[] >>
+  rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s1 = SOME w /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       stmt_state_rel ctx func cenv cx es' s1` by
+    gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  drule_all immutable_holds_dload >> strip_tac >>
+  irule frag_exec_conseq >> irule_at Any emit_op_storage_frame_frag >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+  qexistsl [`word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n w) s1.vs_data_section ++ REPLICATE 32 0w))`,
+       `s1`, `func`, `es'`, `cx`] >>
+  qexists `R` >> simp[is_terminator_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[step_inst_base_def, exec_read1_def]) >>
+  rpt strip_tac
+  >~ [`expr_post`]
+  >- (irule expr_post_of_vv_post_load >> simp[] >>
+      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[]) >>
+  gvs[]
+QED
+
 Theorem unwrap_storage_word_storage_frame_frag:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
@@ -269,6 +305,72 @@ Proof
       simp[]) >>
   gvs[])
 QED
+Theorem unwrap_noncopy_runtime_storage_frame_frag:
+  unwrap_value cenv vv sm = (op,sb) /\ ~cenv.ce_is_ctor /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (case vv of StackValue t operand => T
+    | LocatedValue t p => p.ptr_location = LocMemory \/ is_word_type t) ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  strip_tac >> Cases_on `vv`
+  >- (irule unwrap_memory_stack_storage_frame_frag >> gvs[]) >>
+  rename1 `LocatedValue t p` >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (irule unwrap_memory_stack_storage_frame_frag >> gvs[]) >>
+  gvs[] >> Cases_on `p.ptr_location = LocCalldata`
+  >- (irule frag_exec_conseq >> qexistsl [`\s. F`, `\s. F`, `R`] >>
+      gvs[frag_exec_false_pre, vv_post_calldata]) >>
+  Cases_on `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+  >- (irule unwrap_storage_word_storage_frame_frag >> simp[]) >>
+  `p.ptr_location = LocCode` by (Cases_on `p.ptr_location` >> gvs[]) >>
+  irule unwrap_runtime_immutable_word_storage_frame_frag >>
+  gvs[unwrap_value_def, contextTheory.compile_ptr_load_def,
+      contextTheory.compile_imm_load_word_def]
+QED
+
+(* This boundary excludes aggregate copies from storage, transient storage
+   and code. Exceptions and failed reads are handled by the transfer. *)
+Theorem raw_to_forced_noncopy_runtime_storage_frame_frag:
+  compile_expr cenv ty e sa = (vv,sm) /\
+  unwrap_value cenv vv sm = (op,sb) /\
+  eval_expr cx e es = (rawres,est) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\
+  expr_res_ok res /\ ~cenv.ce_is_ctor /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (case vv of StackValue t operand => T
+    | LocatedValue t p => p.ptr_location = LocMemory \/ is_word_type t) /\
+  frag_exec ctx sa sm P
+    (\s. ?raw. rawres = INL raw /\
+         vv_post ctx func cenv cx e es sa sm s0 est raw vv s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (expr_exit rawres) ==>
+  frag_exec ctx sa sb P
+    (\s. ?v. res = INL v /\
+         expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (expr_exit res)
+Proof
+  strip_tac >> irule raw_to_forced_storage_frame_frag >> simp[] >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+  simp[] >> rpt strip_tac >>
+  irule unwrap_noncopy_runtime_storage_frame_frag >> simp[]
+QED
+
+val _ = List.app (fn th =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Noncopy forcing has unproved dependencies"
+  end) [unwrap_runtime_immutable_word_storage_frame_frag,
+        unwrap_noncopy_runtime_storage_frame_frag,
+        raw_to_forced_noncopy_runtime_storage_frame_frag];
+
 
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
