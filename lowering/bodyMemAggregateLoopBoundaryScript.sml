@@ -2,6 +2,8 @@
 Theory bodyMemAggregateLoopBoundary
 Ancestors
   bodyMemoryPreds gasSummary gasOutcome gasSummaryCompose gasExemptCert vyperState
+  exprSimHyps vyperEvalExprPreservesScopesDom vyperImmutableMetadataFrame
+  loweringPosts exprSimSource exprLoweringProps compileEnv
 
 Theorem aggregate_body_exprs_mem_tail:
   body_exprs_mem_ok cx (e::args) /\
@@ -107,4 +109,92 @@ Proof
       qpat_x_assum `!res ee r. R1 _ _ _ ==> _` drule >>
       Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def]) >>
   disj2_tac >> metis_tac[]
+QED
+
+Theorem aggregate_tuple_marked_child_source_any:
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec memory (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tv) mid (OK t) ==>
+  expr_sim_inv ce cx env (mid with gas_obs := []) /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+  immutable_metadata_frame es (mid with gas_obs := []) /\
+  ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    eval_result_typed (env,cx,mid with gas_obs := []) tv (Type (expr_type e)) /\
+    (!v. read_result cx tv (mid with gas_obs := []) =
+           (INL v,mid with gas_obs := []) ==> value_has_type tvt v)
+Proof
+  strip_tac >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL tv,mid with gas_obs := [])` by
+    (fs[gas_marked_exec_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_body_pre ce cx env e
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all expr_body_pre_eval_result >> strip_tac >>
+  drule_all expr_body_pre_runtime_typed >> strip_tac >>
+  drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+  drule vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame >>
+  simp[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
+  metis_tac[]
+QED
+
+Theorem aggregate_tuple_marked_footprint_any:
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec memory (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tv) mid (OK t) /\
+  (ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+        SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) b n) ==>
+  (ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP mid.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+        SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) b n)
+Proof
+  strip_tac >> drule_all aggregate_tuple_marked_child_source_any >> strip_tac >>
+  rpt strip_tac >>
+  Cases_on `ALOOKUP mid.immutables cx.txn.target` >> gvs[] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target`
+  >- (fs[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
+      qpat_x_assum `!addr. IS_SOME _ <=> IS_SOME _`
+        (qspec_then `cx.txn.target` mp_tac) >> simp[]) >>
+  gvs[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME old` >>
+  qpat_x_assum `!addr imms imms' src id. _`
+    (drule_all_then (qspecl_then [`ce.ce_module`, `name`] mp_tac)) >>
+  Cases_on `FLOOKUP (get_source_immutables ce.ce_module old) name` >>
+  simp[] >>
+  rename1 `FLOOKUP (get_source_immutables ce.ce_module old) name = SOME entry` >>
+  PairCases_on `entry` >> simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem aggregate_alloca_immutable_sep_mem:
+  stmt_state_rel ctx func cenv cx es t /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  cenv.ce_is_ctor ==>
+  !name itv iv io.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) b sz
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem aggregate_regions_disjoint_slice:
+  regions_disjoint io k b sz /\ off + n <= sz ==>
+  regions_disjoint io k (b+off) n
+Proof
+  simp[regions_disjoint_def] >> decide_tac
 QED
