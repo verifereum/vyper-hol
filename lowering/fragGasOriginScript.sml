@@ -63,6 +63,27 @@ Inductive gas_origin_focus:
      gas_origin_focus memory explicit (ctx,func) s marks (leaf,t))
 End
 
+Theorem gas_mem_edge_origin:
+  gas_path_mem_edge ctx func s n r /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id GAS [] [out]) ==>
+  gas_origin_edge memory explicit ctx func s [(func.fn_name,id) IN explicit] r
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_path_mem_edge _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_path_mem_edge_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  disch_then (qx_choose_then `fuel` (qx_choose_then `bb'`
+    (qx_choose_then `inst` (qx_choose_then `middle` mp_tac)))) >>
+  ntac 5 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  disch_tac >>
+  `bb' = bb` by metis_tac[optionTheory.SOME_11] >>
+  `inst = mk_inst id GAS [] [out]` by metis_tac[optionTheory.SOME_11] >>
+  rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+  qexistsl_tac [`fuel`, `bb'`, `inst`, `middle`] >>
+  gvs[gas_events_step_def, mk_inst_def, is_terminator_def]
+QED
+
 Theorem gas_origin_edge_erase:
   gas_origin_edge memory explicit ctx func s marks r ==>
   gas_path_edge ctx func s (LENGTH marks) r /\
