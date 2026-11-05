@@ -61,7 +61,7 @@ Proof
   qexistsl_tac [`clamp`, `sf`] >> asm_rewrite_tac[]
 QED
 
-Theorem valid_word_owned_sequence[local]:
+Theorem valid_word_owned_sequence:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\

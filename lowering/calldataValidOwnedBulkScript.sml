@@ -68,7 +68,7 @@ Proof
   drule_all abi_decoder_valid_pre_prefix >> asm_rewrite_tac[]
 QED
 
-Theorem valid_bulk_owned_sequence[local]:
+Theorem valid_bulk_owned_sequence:
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
     (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
     sb d b cap initial /\
