@@ -1754,3 +1754,102 @@ Proof
  simp[cse_history_points_append, cse_history_points_def, APPEND_ASSOC,
       arithmeticTheory.ADD1]
 QED
+
+(* Synchronization audit (C2.7.2.8.6). These are proposed obligations,
+   NOT theorems or assumptions of the projection results above.
+
+   Abbreviations below are textual: D = dfg_build_function fn,
+   C = compute_canon D (avail_analyze fn) fn, and
+   A = ae_lookup_inst fn bb.bb_label s.vs_inst_idx.
+
+   Candidate consumer boundary (universally quantified free variables):
+
+     wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+     (!i. MEM i (fn_insts fn) ==> i.inst_opcode <> ALLOCA) /\
+     cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+     get_instruction bb s.vs_inst_idx = SOME use /\
+     ~cse_skip_opcode use.inst_opcode /\
+     ~is_terminator use.inst_opcode /\ use.inst_opcode <> INVOKE /\
+     ~is_nonidempotent use.inst_opcode /\
+     cse_lookup C D A use = SOME (src,e)
+     ==>
+     ?pre post m sb u v pi.
+       events = pre ++ [CseStep m sb src u v] ++ post /\
+       cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+       EVERY (cse_event_survives e) post /\
+       src.inst_opcode = use.inst_opcode /\
+       LENGTH src.inst_operands = LENGTH use.inst_operands /\
+       (pi = GENLIST I (LENGTH use.inst_operands) \/
+        (is_commutative use.inst_opcode /\
+         LENGTH use.inst_operands = 2 /\ pi = [1;0])) /\
+       (!k. k < LENGTH use.inst_operands ==>
+          eval_operand (EL k use.inst_operands) s =
+          eval_operand (EL (EL k pi) src.inst_operands) u)
+
+   This existential chooses a suitable historical source occurrence, not
+   every occurrence with the same instruction ID. Its event number is
+   LENGTH pre, and its input cut is pre; the consumer cut is events.
+   Source/output binding persistence is a SEPARATE needed boundary:
+
+     same hypotheses and chosen witness, src.inst_outputs = [out] ==>
+       lookup_var out s = lookup_var out v.
+
+   Present facts supply birth plus root-effect-free suffix
+   (cse_prefix_exec_avail_history), static representative occurrences on
+   each projected cut (compute_canon_representative_occurrence), numbered
+   points (cse_history_points_cut/covers), and last-write lookup transport
+   (cse_prefix_ordinary_use_last_write). They do NOT supply the equalities
+   of eval_operand in the candidate or a write-free suffix for out.
+
+   Exact missing alignment shape, for a representative static ID r:
+     ?j. j < LENGTH pre /\
+         cse_event_covers (EL j events) rb rk ri /\ ri.inst_id = r /\
+         (* the operand's ASSIGN derivation reaches THIS occurrence *)
+         eval_operand source_op u = representative_value /\
+         eval_operand consumer_op s = representative_value.
+   The two equalities here are the obligation, not admissible additional
+   hypotheses. Existing preorder theorems only supply separate witnesses
+   j_source and j_consumer and cannot equate representative_value.
+
+   Adversarial trace: R_0; copy_0 := R_0; source_0 := f(copy_0);
+   R_1; consumer := f(R_1). Static operand_producer(copy) and
+   operand_producer(R) agree while values need not. This is a diagnostic
+   trace, not a verified CFG counterexample: all-path availability may
+   exclude it. To exclude it formally needs a source-availability barrier
+   at R_1 plus strict static order R < copy < source. Projected points
+   alone do not assert availability of source at that intermediate cut.
+   Replacing R by a canonical-equivalent instruction adds the independent
+   canonical-fold collision interpretation obligation.
+
+   Cases still requiring proof:
+   - ASSIGN: resolve the operand at the copy INPUT cut, not the later
+     consumer cut; carry its defining write occurrence through the chain.
+   - PHI: all output slots share one event number but different k. Incoming
+     values use cse_phi_reads at the pre-batch/predecessor snapshot, never
+     the output of an earlier syntactically expanded PHI. Incoming last
+     writes are available via cse_prefix_phi_incoming_last_write.
+   - NONE producer: literal values follow mk_expr matching/permutation,
+     NOT operand_ids_match alone. Labels evaluate through vs_labels, not
+     as word literals. Undefined Var operands require wf_ssa/use dominance
+     plus DFG completeness to rule out, not an empty initial map premise.
+   - Canonical fold: identity/skip cases are structural; recording an
+     expression match requires the semantic alignment above recursively.
+     Later map updates preserve static order but not yet a value meaning.
+   Constructor audit: entry has no available source; ordinary steps need
+   the alignment/barrier argument before replay; PHI needs atomic incoming
+   alignment; branch needs transport across the selected edge. Root-effect
+   survival alone closes none of these variable epoch obligations.
+   No closed induction invariant is claimed by this audit. *)
+
+(* Numbered last-write sub-interface needed at each variable operand:
+     cse_prefix ctx fn fuel0 s0 cut (CseExec n bb s) /\
+     wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+     get_instruction bb s.vs_inst_idx = SOME inst /\
+     inst.inst_opcode <> PHI /\ MEM (Var x) inst.inst_operands ==>
+     ?j. j < LENGTH cut /\ cse_event_writes (EL j cut) x /\
+       EVERY (\ev. ~cse_event_writes ev x) (DROP (SUC j) cut) /\
+       lookup_var x s = lookup_var x (cse_event_output (EL j cut)).
+   This is a numbered reformulation of the proved ordinary-use last-write
+   theorem. Apply independently to cut=pre and cut=events. It identifies
+   the two LAST writes, not the earlier representative occurrence reached
+   through ASSIGN; equality between those derivations remains missing. *)
