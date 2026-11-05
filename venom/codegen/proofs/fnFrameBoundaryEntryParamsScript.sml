@@ -1,6 +1,6 @@
 Theory fnFrameBoundaryEntryParams
 Ancestors
-  allocMono frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
+  asmFrame allocMono frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
@@ -2102,4 +2102,28 @@ Proof
   qexists `st''` >> conj_tac
   >- (simp[] >> irule asm_steps_compose_ok >> qexists `st'` >> simp[]) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem entry_local_run_frame_inv:
+  !a top rest lo o2pc prog n t cplan ps fn ra vp ctx r.
+    a.as_stack = top ++ rest /\
+    asm_steps lo o2pc prog n (a with as_stack := top) = AsmOK t /\
+    context_venom_asm_rel cplan lo ps (frame_view fn ra vp) t /\
+    ~vp.vs_halted /\ n2w cplan.cp_initial_fmp = vp.vs_initial_fmp /\
+    (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      read_byte b t.as_memory = read_byte b a.as_memory) /\
+    MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+    ?a'. asm_steps lo o2pc prog n a = AsmOK a' /\
+      a'.as_pc = t.as_pc /\
+      fn_frame_inv ctx cplan lo fn ra rest a.as_memory ps vp a'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule asm_steps_frame >> disch_then (qspec_then `rest` assume_tac) >>
+  `a with as_stack := top ++ rest = a` by
+    simp[asm_state_component_equality] >>
+  qexists `t with as_stack := t.as_stack ++ rest` >>
+  conj_tac >- metis_tac[] >>
+  simp[fn_frame_inv_def] >> qexists `r` >> simp[]
 QED
