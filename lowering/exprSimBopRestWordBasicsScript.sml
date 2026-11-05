@@ -1,5 +1,5 @@
-(* Small representation and dispatch probes for variable-array membership. *)
-Theory exprSimBopRestWordProbe
+(* Basic representation and dispatch facts for variable-array membership. *)
+Theory exprSimBopRestWordBasics
 Ancestors
   exprLowering context compileEnv vyperValueOperation vyperValue
   loweringPosts exprSimMemorySource vyperLookupStorage vyperStorage list words

@@ -409,7 +409,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >> strip_tac >>
   `vv_holds cenv cx (expr_type e2) tv arr_vv (fin with gas_obs := []) u` by
     fs[loweringPostsTheory.vv_post_def] >>
-  drule exprSimBopRestWordProbeTheory.rest_word_vv_read_suffix >>
+  drule exprSimBopRestWordBasicsTheory.rest_word_vv_read_suffix >>
   simp[] >> disch_then (qx_choose_then `v2` assume_tac) >>
   `value_has_type tvt v2` by metis_tac[] >>
   `?et. tvt = ArrayTV et bd /\

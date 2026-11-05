@@ -1,7 +1,7 @@
 (* Header and located-array composition for nonliteral word membership. *)
 Theory exprSimBopRestWordTail
 Ancestors
-  exprSimBopRestWordIterate exprSimBopRestWordProbe
+  exprSimBopRestWordIterate exprSimBopRestWordBasics
   exprSimBopRestWordIndex exprSimBopRestWordStorageLoads
 
 (* Located representations depend on the value read, not the syntax of the
