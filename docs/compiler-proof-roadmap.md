@@ -64,7 +64,7 @@ caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
 **Off the runtime call path:** `venomToAsmProps.gen_fn_simulation` is separately
-ADMITTED (4.2); meaningful `e2eCorrectness.e2e_deploy_correctness` is separately
+ADMITTED (4.2); meaningful `e2eDeployCorrectness.e2e_deploy_correctness` is separately
 ADMITTED (6 item 7), not the old proved `T` placeholder. Current top/generic
 logical closures contain neither, nor any retired API.
 
@@ -634,7 +634,7 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    `raw_create` are excluded, not future missing cases of S1. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
 7. **H6-deploy / owner Milestone 6 item7:** prove actual separately ADMITTED
-   `e2eCorrectness.e2e_deploy_correctness` using
+   `e2eDeployCorrectness.e2e_deploy_correctness` using
    [e2eDeployDefs](../lowering/e2eDeployDefsScript.sml): `constructor_args_encode`,
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,

@@ -158,7 +158,7 @@ producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts
 
-`e2eCorrectness.e2e_deploy_correctness` is a meaningful **ADMITTED** single-frame
+`e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful **ADMITTED** single-frame
 creation statement (Milestone 6 item7), not the old proved `T` placeholder.
 It requires Call-free constructor bodies, canonical arguments, actual deployment
 typing/storage/pre-constant readiness and an uninstalled source target; success
