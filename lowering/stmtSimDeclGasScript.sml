@@ -63,7 +63,8 @@ Proof
   >- (irule gas_exempt_cert_cleanup >> qexists `mid` >> simp[])
   >- (irule gas_exempt_cert_handler >> qexists `mid` >> simp[])
   >- (irule gas_exempt_cert_get_scopes >> simp[])
-  >> metis_tac[gas_exempt_cert_invoke]
+  >- metis_tac[gas_exempt_cert_invoke]
+  >> metis_tac[gas_exempt_cert_unforce_result]
 QED
 
 Theorem gas_marked_return_prefix[local]:
