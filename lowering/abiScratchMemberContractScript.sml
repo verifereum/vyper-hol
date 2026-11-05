@@ -1,6 +1,7 @@
 (* Genuine physical child contract for the shared member certificate generator. *)
 Theory abiScratchMemberContract
 Ancestors
+  abiEncoderChildCapability abiSiteEncoderContract abiSiteAllocation
   abiEncoderMemberSpine abiScratchEncoderContract abiScratchEncoderRun abiScratchEffect
   abiDecoderContract abiDecoderLoop abiDecoderAllocation abiDecoderReentry
   abiEncoderCounters abiEncoderResultLive
@@ -30,17 +31,35 @@ Definition abi_scratch_member_core_post_def:
     ~t.vs_halted /\ abi_decode_sim ctx func s t
 End
 
+Theorem abi_scratch_member_pre_ready[local]:
+  abi_scratch_member_core_pre (at,av,sb,source_cap,d)
+    (first,last,b,cap,limit_st) (ei,dst,src,st,en,out) s ==>
+  abi_encoder_child_ready (at,av,sb,source_cap,d)
+    (abi_decoder_ids first last,b,cap,limit_st)
+    (\st en. first <= st.cs_next_id /\ en.cs_next_id <= last)
+    (ei,dst,src,st,en,out) s
+Proof
+  simp_tac bool_ss [abi_scratch_member_core_pre_def, abi_encoder_child_ready_def,
+    abi_encoder_child_pre_def, abi_site_encoder_input_interval, abi_site_budget_interval] >>
+  strip_tac >> asm_simp_tac bool_ss [] >>
+  irule abi_encoder_child_capability_interval >> simp[]
+QED
+
 Theorem abi_scratch_member_core_run:
   abi_encoder_spine_core_code func c /\ abi_scratch_member_core_pre value resources c s ==>
   ?t. abi_decode_sim ctx func s t /\
     abi_scratch_member_core_post (ctx,func) value resources c s t
 Proof
   PairCases_on `c` >> PairCases_on `value` >> PairCases_on `resources` >>
-  simp_tac bool_ss [abi_encoder_spine_core_code_def, abi_scratch_member_core_pre_def,
-    abi_scratch_member_core_post_def] >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_encoder_run >> disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qexists_tac `actual` >> asm_rewrite_tac []
+  strip_tac >>
+  drule abi_scratch_member_pre_ready >> disch_tac >>
+  drule_all abi_encoder_child_ready_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  `resources0 <= c3.cs_next_id /\ c4.cs_next_id <= resources1` by
+    fs[abi_scratch_member_core_pre_def] >>
+  fs[abi_scratch_member_core_post_def, abi_encoder_child_post_def,
+     abi_site_encoder_effect_interval]
 QED
 
 Theorem abi_scratch_member_child_run:
@@ -172,3 +191,10 @@ Proof
   qexistsl_tac [`h`,`slot`,`off`,`LENGTH (enc at av)`] >>
   fs[abi_scratch_member_core_post_def]
 QED
+
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean member contract: " ^ name)
+  end) (DB.thms "abiScratchMemberContract");
