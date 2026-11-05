@@ -2031,6 +2031,47 @@ Proof
   metis_tac[pairTheory.PAIR]
 QED
 
+Theorem asm_frame_call_same_depth_effects_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  step s = (INL (),t) /\ observable_call c /\
+  t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
+  ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
+  out = FST (take_outcome (request_of s)
+    (outcome_of (request_of s).cr_kind t (LENGTH c.logs)
+      (LENGTH s.rollback.toDelete)::MAP SND (call_trace t))) /\
+  ct.stack = (if out.co_success then 1w else 0w)::
+    DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+  ct.returnData = out.co_returnData /\
+  buffer_to_list ct.memory = TAKE ro (asm_call_memory ao az ro rs a.as_memory) ++
+    TAKE rs out.co_returnData ++
+    DROP (ro + LENGTH (TAKE rs out.co_returnData))
+      (asm_call_memory ao az ro rs a.as_memory) /\
+  adopt_outcome (request_of s) out (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
+    t.rollback.toDelete ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `wf_state s` by fs[asm_frame_rel_def] >>
+  `LENGTH t.contexts = LENGTH s.contexts` by simp[] >>
+  `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
+  drule_all asm_frame_call_same_depth_transport >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  `take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t))` by
+    metis_tac[] >>
+  `asm_call_memory ao az ro rs a.as_memory =
+     asm_call_memory ao az ro rs a.as_memory` by simp[] >>
+  drule_all asm_frame_call_effects_step_ok >> simp[]
+QED
+
 Theorem asm_frame_call_terminal_exception:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
   a.as_pc < LENGTH prog /\
