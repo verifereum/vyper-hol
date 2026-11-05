@@ -14,7 +14,8 @@ Ancestors
   fnFrameBoundary fnFrameBoundaryEntryParams frameRel contextCodegenRel
   stackPlanGen stackPlanTypes venomExecSemantics venomState venomInst
   venomWf livenessDefs dfgDefs list contextCodegenRelProps
-  planExec stackOpSim blockSimHelpers
+  planExec stackOpSim blockSimHelpers stackPlanOps stackModel reorderSim
+  planWf
 
 (* block_entries_ready: the entry block has no PHIs, so eval_phis leaves
    the state alone and the PHI prefix is empty. *)
@@ -151,6 +152,119 @@ Proof
   drule_at (Pat `step_inst _ _ _ _ = _`) reachability_closed_next >>
   simp[] >> disch_then irule >> simp[] >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem entry_shallow_swap_inventory[local]:
+  d <= 16 /\ do_swap d ps = (ops, ps') ==>
+  !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  simp[do_swap_def] >> rpt IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `ps.ps_stack = []` >- gvs[stack_swap_def, LUPDATE_def] >>
+  `LENGTH ps.ps_stack - 1 < LENGTH ps.ps_stack /\
+   LENGTH ps.ps_stack - (d + 1) < LENGTH ps.ps_stack` by
+    (Cases_on `ps.ps_stack` >> gvs[]) >>
+  `MEM (EL (LENGTH ps.ps_stack - 1) ps.ps_stack) ps.ps_stack /\
+   MEM (EL (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack) ps.ps_stack` by
+    (conj_tac >> metis_tac[listTheory.EL_MEM]) >>
+  gvs[stack_swap_def, MEM_LUPDATE, EL_LUPDATE] >> metis_tac[listTheory.EL_MEM]
+QED
+
+Theorem entry_pop_fold_inventory[local]:
+  !items ops ps at.
+    MEM at (SND (FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+          let (swap_ops, ps') =
+            if dist = 0 then ([], ps) else do_swap dist ps in
+          (ops ++ swap_ops ++ [SOPop 1],
+           ps' with ps_stack := stack_pop 1 ps'.ps_stack)) (ops, ps) items)).ps_stack \/
+    at IN FDOM (SND (FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+          let (swap_ops, ps') =
+            if dist = 0 then ([], ps) else do_swap dist ps in
+          (ops ++ swap_ops ++ [SOPop 1],
+           ps' with ps_stack := stack_pop 1 ps'.ps_stack)) (ops, ps) items)).ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  Induct >> simp[LET_THM] >> rpt gen_tac >>
+  RULE_ASSUM_TAC (REWRITE_RULE [LET_THM]) >>
+  Cases_on `stack_get_depth h ps.ps_stack` >> simp[]
+  >- metis_tac[] >>
+  rename1 `stack_get_depth h ps.ps_stack = SOME dist` >>
+  Cases_on `dist = 0` >> simp[]
+  >- (first_x_assum (qspecl_then
+        [`ops ++ [SOPop 1]`, `ps with ps_stack := stack_pop 1 ps.ps_stack`, `at`] mp_tac) >>
+      simp[stack_pop_def] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+  Cases_on `do_swap dist ps` >> rename1 `do_swap dist ps = (sops, next)` >>
+  simp[] >>
+  first_x_assum (qspecl_then
+    [`ops ++ sops ++ [SOPop 1]`, `next with ps_stack := stack_pop 1 next.ps_stack`, `at`] mp_tac) >>
+  simp[stack_pop_def] >> rpt strip_tac >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  drule_at (Pat `do_swap _ _ = _`) do_swap_inventory_subset >>
+  simp[] >> disch_then (qspec_then `at` mp_tac) >>
+  metis_tac[rich_listTheory.MEM_TAKE]
+QED
+
+Theorem entry_popmany_inventory[local]:
+  popmany_plan items ps = (ops, ps') ==>
+  !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  Cases_on `items` >> simp[popmany_plan_def] >>
+  rpt IF_CASES_TAC >>
+  simp[popmany_individual_def, LET_THM]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      `SUC (LENGTH t) <= 16` by gvs[is_contiguous_top_def] >>
+      drule_at (Pat `do_swap _ _ = _`) entry_shallow_swap_inventory >>
+      simp[] >> strip_tac >> gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `at` irule) >>
+      gvs[stack_pop_def] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+  strip_tac >> gen_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f initial sorted` >>
+  qspec_then `sorted` (qspecl_then [`[]`, `ps`] mp_tac) entry_pop_fold_inventory >>
+  gvs[Abbr `f`, Abbr `initial`] >> metis_tac[]
+QED
+
+Theorem entry_params_inventory[local]:
+  !ps0 ch growth spill_base lbl_ctr liveness fn ops ps1.
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (ops, ps1) ==>
+    !at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+      MEM at (MAP (\i. Var (HD i.inst_outputs))
+        (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ps0.ps_stack = [] /\ ps0.ps_spilled = FEMPTY` by
+    gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
+  qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  simp[prepare_params_plan_def, parameter_stack_fold] >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  qmatch_goalsub_abbrev_tac `popmany_plan dead installed` >>
+  Cases_on `popmany_plan dead installed` >>
+  rename1 `popmany_plan dead installed = (pops, next)` >>
+  simp[] >>
+  `!at. MEM at next.ps_stack \/ at IN FDOM next.ps_spilled ==>
+    MEM at (MAP (\i. Var (HD i.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions))` by
+    (drule entry_popmany_inventory >>
+     simp[Abbr `installed`]) >>
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >- (simp[] >> strip_tac >> gvs[])) >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST (live_vars_at liveness
+    (HD fn.fn_blocks).bb_label (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))))) next.ps_stack` >>
+  simp[] >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_depth _ next.ps_stack = SOME dist` >>
+  Cases_on `do_swap dist next` >> rename1 `do_swap dist next = (sops, final)` >>
+  simp[] >> strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
+  `dist < LENGTH next.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  drule_at (Pat `do_swap _ _ = _`) do_swap_inventory_subset >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem entry_prefix_asm[local]:
