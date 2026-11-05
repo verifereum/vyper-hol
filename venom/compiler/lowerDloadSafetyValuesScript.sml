@@ -3,6 +3,7 @@ Theory lowerDloadSafetyValues
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel ptrDiscipline
   venomState venomInst irSupply unitLabelMapIdentity finite_map pred_set list arithmetic words
+  memLocDefs pointerConfinedDefs
 
 Theorem ld_vars_operand_defined:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
@@ -306,3 +307,45 @@ Proof
   disj2_tac >> qexists_tac `w2n x-b` >>
   simp[] >> decide_tac
 QED
+
+(* BUMP's explicit base is a scalar under the source discipline. *)
+Theorem ld_vars_bump_operands_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
+  MEM inst (fn_insts f.lf_fn) /\ inst.inst_opcode = BUMP /\
+  taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv ==>
+  eval_operands inst.inst_operands f.lf_src =
+  eval_operands inst.inst_operands f.lf_tgt
+Proof
+  strip_tac >> irule ld_vars_numeric_operands_equal >>
+  simp[] >> conj_tac
+  >- (qexistsl_tac [`A`, `P`] >> simp[] >>
+      qx_gen_tac `v` >> strip_tac >> conj_tac
+      >- metis_tac[ld_inst_input_ir] >>
+      irule ld_ptr_use_scalar >> simp[] >> qexists_tac `inst` >>
+      simp[mem_write_ops_def, mem_read_ops_def, is_pointer_preserving_op_def] >>
+      metis_tac[]) >>
+  qexists_tac `tn` >> simp[]
+QED
+
+Theorem ld_nonghost_initial_fmp:
+  ld_nonghost tn s t ==> s.vs_initial_fmp = t.vs_initial_fmp
+Proof
+  simp[ld_nonghost_def]
+QED
+
+(* No distinctness of the two output names is needed. *)
+Theorem ld_bump_output_ghosts:
+  inst.inst_opcode = BUMP /\ inst.inst_outputs = [x;y] ==>
+  step_prov PG G inst s' = DRESTRICT G (COMPL {x;y}) /\
+  (step_taint inst s s' tn).t_var =
+    DRESTRICT tn.t_var (COMPL {x;y})
+Proof
+  simp[step_prov_def, out_prov_def, set_prov_def,
+       step_taint_def, set_var_taint_def]
+QED
+
+val _ = if null (hyp ld_vars_bump_operands_equal) andalso
+           null (hyp ld_nonghost_initial_fmp) andalso
+           null (hyp ld_bump_output_ghosts) then ()
+        else raise Fail "residual scalar boundary has hypotheses";

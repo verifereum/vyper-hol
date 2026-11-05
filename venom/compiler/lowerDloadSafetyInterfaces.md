@@ -852,3 +852,55 @@ LOG,DELEGATECALL,CREATE,CREATE2 (generalizing shared write/oracle interfaces in
 place where appropriate); discharge the explicit exclusions and malformed
 shape contradictions. The checked common consumer establishes the endpoint
 assembly interface, not these remaining producer semantics or full coverage.
+
+## Residual family boundary audit (checked scalar probes)
+
+The diagnostic does not establish any residual effect producer or dispatcher.
+
+* `ld_vars_bump_operands_equal` in SafetyValues builds from fn_ptr_ok,
+  fn_shape_ok, taint_ok and ld_vars, with label equality. BUMP is neither
+  pointer-preserving nor a memory reader/writer, so both operands are scalars.
+  `ld_bump_output_ghosts` checks that step_prov and step_taint.t_var restrict
+  away both outputs, even when their names coincide. Semantics writes ptr_out
+  first and next_out second; coincident names therefore retain base+size.
+  A full effect still needs a two-write ld_vars construction with empty output
+  taint and restricted H; a one-output read producer is not a direct adapter.
+* `ld_nonghost_initial_fmp` checks the literal initial-fmp equality needed
+  by INITIAL_FMP. This is not an equality of current alloca frontiers.
+* Shared byte observation already has one general boundary:
+  `ld_observed_memory_read` (OracleCallAssembly, 226-249). Its required
+  premises include access_ok, taint_ok, NOT about_to_revert, NOT
+  in_revert_forward, a mem_read_ops witness, a source range, selected offset
+  relation, and target map bounds. It excludes MLOAD/ILOAD/MCOPY/RETURN.
+  Thus SHA3, LOG, DELEGATECALL and CREATE-family byte observations should
+  use this boundary, not a new copy of the read proof. Zero length is handled
+  there. SHA3's inline TAKE/DROP expression must be connected to read_memory.
+* CALLDATACOPY/RETURNDATACOPY use common calldata/returndata from
+  ld_nonghost; EXTCODECOPY uses account code agreement. Source offsets and
+  lengths must agree as scalars; only destination relocates. RETURNDATACOPY
+  target OK also supplies the source OOB guard after returndata equality.
+  `ld_memory_write_low/slot` supply overwrite transport once equal payload
+  lengths/bytes, classified destination, disjoint map bounds and the actual
+  step_taint overwrite equation are established. MCOPY's accepted producer
+  is snapshot-copy-specific and should not be cloned for these public copies.
+* OracleCallAssembly scalar/dispatch/range assembly is explicitly limited
+  to CALL/STATICCALL. ExternalBoundary's consume/adoption proof also has
+  that restriction. Equal outcome queues alone do not establish any input
+  equivalence. CREATE/CREATE2 use venom_create_request (data, value, salt,
+  accounts, transient) and consume_create_outcome; their exact current
+  request equality can be obtained from observed bytes, scalar value/salt,
+  and empty storage/transient taint. taint_ok supplies those empty masks;
+  ld_nonghost_accounts_empty/transient_empty supplies actual state equality.
+  Missing: a create-specific consume/effect boundary retaining nonghost
+  equality without demanding historical request/log equality.
+* DELEGATECALL does NOT consume the create/call oracle in current semantics:
+  exec_delegatecall builds make_venom_delegatecall_state and runs EVM code.
+  Its inputs require current calldata bytes, target code, gas, static/call
+  context, full accounts and transient equality. Empty taint obtains the
+  latter two. Missing: a boundary proving equal constructed EVM states and
+  correlated extract_venom_result at relocated return destinations. Treating
+  DELEGATECALL as a renamed CALL would be unsound.
+
+No additional frozen hypotheses are proposed by this audit. Full effects must
+obtain the observation premises from source reachability/ambient boundaries;
+this diagnostic has not proved those family-specific derivations.
