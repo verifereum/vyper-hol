@@ -3397,6 +3397,71 @@ Proof
       typedMemoryCopyTheory.typed_copy_frame_def] >> metis_tac[]
 QED
 
+Theorem place_store_storage_destination:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
+  storage_place_region cx p ==>
+  ?tr dtv mid var_name keys root tv path delta.
+    p = StoragePlace tr w dtv /\ loc = slot_loc tr /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    declared_storage_region cx mid var_name keys = SOME (tr,root,tv) /\
+    storage_subregion tv path delta dtv /\ w = root + n2w delta
+Proof
+  strip_tac >> Cases_on `p` >>
+  gvs[place_ptr_rel_def, vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+  metis_tac[]
+QED
+
+Theorem place_store_storage_compile:
+  (!et n. dty <> ArrayT et (Dynamic n)) /\
+  compile_assign_value cenv dst (slot_loc tr) src (is_word_type dty)
+    src_loc dty sty
+    (case dty of ArrayT et (Dynamic _) =>
+       SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
+     | _ => NONE) (type_memory_bytes cenv dty) sa = ((), sb) ==>
+  ?src' sc.
+    (((~is_word_type dty /\ dty <> sty /\
+       ~(is_bytestring_type dty /\ is_bytestring_type sty)) /\
+      ?a sm. compile_alloc_buffer (type_memory_bytes cenv dty) sa = (a,sm) /\
+        compile_store_memory_typed cenv a.buf_operand dty src sty sm = ((),sc) /\
+        src' = a.buf_operand) \/
+     ((is_word_type dty \/ dty = sty \/
+       (is_bytestring_type dty /\ is_bytestring_type sty)) /\ src' = src /\ sc = sa)) /\
+    (if is_word_type dty then
+       emit_void (if tr then TSTORE else SSTORE) [dst;src'] sc = ((),sb)
+     else if (if is_bytestring_type dty then type_memory_bytes cenv sty
+              else type_memory_bytes cenv dty) <= 32 then
+       ?loaded sd. emit_op MLOAD [src'] sc = (loaded,sd) /\
+         emit_void (if tr then TSTORE else SSTORE) [dst;loaded] sd = ((),sb)
+     else ?r. (if tr then compile_memory_to_transient else compile_memory_to_storage)
+       src' dst ((if is_bytestring_type dty then type_memory_bytes cenv sty
+                  else type_memory_bytes cenv dty) DIV 32) sc = (r,sb))
+Proof
+  strip_tac >>
+  `!et bd. dty = ArrayT et bd ==> !n. bd <> Dynamic n` by metis_tac[] >>
+  ` (case dty of ArrayT et (Dynamic _) =>
+       SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
+     | _ => NONE) = NONE` by
+    (Cases_on `dty` >> simp[] >> rename1 `ArrayT et bd` >>
+     Cases_on `bd` >> gvs[]) >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `tr` >>
+  simp[slot_loc_def, stmtLoweringTheory.compile_assign_value_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `~is_word_type dty /\ dty <> sty /\
+    ~(is_bytestring_type dty /\ is_bytestring_type sty)` >>
+  gvs[] >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `is_word_type dty` >> gvs[] >>
+  Cases_on `(if is_bytestring_type dty then type_memory_bytes cenv sty
+             else type_memory_bytes cenv dty) <= 32` >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  IF_CASES_TAC >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
