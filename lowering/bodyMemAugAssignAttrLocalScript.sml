@@ -1644,3 +1644,40 @@ Proof
   fs[wordsTheory.INT_MIN_def, wordsTheory.INT_MAX_def] >> intLib.ARITH_TAC
 QED
 
+
+Theorem integer_power_word_mem_src[local]:
+  !a:int n. (n2w (w2n (i2w a : bytes32) ** n) : bytes32) = i2w (a ** n)
+Proof
+  gen_tac >> Induct >>
+  simp[arithmeticTheory.EXP, integerTheory.INT_POW,
+       GSYM wordsTheory.word_mul_n2w, integer_wordTheory.word_i2w_mul] >>
+  EVAL_TAC
+QED
+
+Theorem literal_exponent_value_word_mem_src[local]:
+  !bits signed b. 0 < bits /\ bits <= 256 /\
+    within_int_bound (if signed then Signed bits else Unsigned bits) b /\ 0 <= b ==>
+    w2n (i2w b : bytes32) = Num b
+Proof
+  rpt strip_tac >>
+  `~(b < 0)` by intLib.ARITH_TAC >>
+  `Num b < 2 ** bits` by
+    (Cases_on `signed` >> gvs[within_int_bound_def] >>
+     `2 ** (bits - 1) <= 2 ** bits` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
+     decide_tac) >>
+  `2 ** bits <= 2 ** 256` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
+  `Num b < 2 ** 256` by decide_tac >>
+  `b = &(Num b)` by simp[] >> pop_assum SUBST_ALL_TAC >>
+  fs[integer_wordTheory.i2w_pos, wordsTheory.w2n_n2w, wordsTheory.dimword_def]
+QED
+
+Theorem literal_exponent_exp_word_mem_src[local]:
+  !bits signed a b. 0 < bits /\ bits <= 256 /\
+    within_int_bound (if signed then Signed bits else Unsigned bits) b /\ 0 <= b ==>
+    word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)
+Proof
+  rpt strip_tac >>
+  drule_all literal_exponent_value_word_mem_src >> strip_tac >>
+  simp[wordsTheory.word_exp_def, integer_power_word_mem_src]
+QED
+
