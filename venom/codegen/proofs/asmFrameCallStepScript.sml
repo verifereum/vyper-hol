@@ -1422,6 +1422,57 @@ QED
 
 
 
+Theorem asm_frame_call_prepare_failure_step_ok:
+  asm_frame_rel prog data es0 a s /\
+  s.contexts = (c,rb)::rest /\ next_opcode c = SOME op /\
+  (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  asm_call_prepare op s = (INR e,t) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `?mr. c.msgParams.outputTo = Memory mr` by
+    (fs[asm_frame_rel_def, asm_evm_rel_def] >>
+     Cases_on `c.msgParams.outputTo` >> gvs[]) >>
+  (Q.SUBGOAL_THEN `rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)`
+     assume_tac >- metis_tac[]) >>
+  drule_all asm_frame_call_prepare_failure_starved >>
+  strip_tac >> simp[asm_frame_step_ok_def] >> metis_tac[]
+QED
+
+Theorem asm_frame_call_prepare_exit:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s = (INR e,t) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `c.stack = a.as_stack` by fs[asm_frame_rel_def, asm_evm_rel_def] >>
+  Cases_on `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack`
+  >- (`asm_evm_rel (prog ++ [AsmDataItem data]) a s` by
+        fs[asm_frame_rel_def] >>
+      `next_opcode c = SOME op` by
+        (drule_all asm_frame_call_decode >> simp[]) >>
+      (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
+        >- (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[])) >>
+      drule_all asm_frame_call_prepare_failure_step_ok >> simp[]) >>
+  Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
+  gvs[call_has_value_def]
+  >- (`LENGTH a.as_stack < 7` by simp[] >>
+      drule asm_call_underflow >>
+      disch_then (qspecl_then [`build_offset_to_pc prog`,
+        `SND (compute_label_offsets prog)`] assume_tac) >>
+      simp[asm_frame_step_ok_def]) >>
+  `LENGTH a.as_stack < 6` by simp[] >>
+  drule asm_staticcall_underflow >>
+  disch_then (qspecl_then [`build_offset_to_pc prog`,
+    `SND (compute_label_offsets prog)`] assume_tac) >>
+  simp[asm_frame_step_ok_def]
+QED
+
 Theorem asm_expand_memory_append_zeros[local]:
   asm_expand_memory n mem =
     mem ++ REPLICATE (MAX (LENGTH mem) (((n + 31) DIV 32) * 32) - LENGTH mem) 0w
