@@ -5523,6 +5523,154 @@ Proof
   simp[mk_inst_def] >> disch_then drule >> simp[]
 QED
 
+Theorem place_store_wrap_probe_phase_entry_assign_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\ s.vs_current_bb = "entry" /\
+    s.vs_inst_idx = 1 /\
+    lookup_block "entry" func.fn_blocks = SOME
+      <|bb_label := "entry"; bb_instructions := [
+        mk_inst 0 ALLOCA [Lit 0w] ["%0"];
+        mk_inst 1 ASSIGN [Lit 0w] ["%1"];
+        mk_inst 2 JMP [Label "@typed_sa_cond_0"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule place_store_gas_edge_nonterminator_preserves >>
+  goal_assum (drule_at Any) >> simp[get_instruction_def] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  gvs[SRULE [mk_inst_def] place_store_step_assign, eval_operand_def] >>
+  drule_all place_store_wrap_probe_phase_entry_assign >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_jmp_edge:
+  !ctx func s n t bb id lbl.
+    place_store_wrap_probe_phase s /\
+    ((s.vs_current_bb = "entry" /\ s.vs_inst_idx = 2 /\
+      lbl = "@typed_sa_cond_0") \/
+     (s.vs_current_bb = "@typed_sa_body_1" /\ s.vs_inst_idx = 11 /\
+      lbl = "@typed_sa_cond_0") \/
+     (s.vs_current_bb = "@typed_sa_exit_2" /\ s.vs_inst_idx = 1 /\
+      lbl = "@wcopy_cond_3")) /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
+    (!l b u. lookup_block l func.fn_blocks = SOME b ==>
+       eval_phis u b.bb_instructions = OK u /\
+       phi_prefix_length b.bb_instructions = 0) /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  (irule place_store_gas_edge_terminator_preserves >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `mk_inst id JMP [Label lbl] []` >>
+  gvs[mk_inst_def, is_terminator_def] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  gen_tac >> disch_tac >>
+  gvs[SRULE [mk_inst_def] place_store_step_jmp] >>
+  reverse conj_tac >- simp[jump_to_def] >>
+  metis_tac[place_store_wrap_probe_phase_entry_jump,
+    SRULE [place_store_step_jmp] place_store_wrap_probe_phase_body_jump,
+    SRULE [place_store_step_jmp] place_store_wrap_probe_phase_typed_exit_jump])
+QED
+
+Theorem place_store_wrap_probe_phase_typed_exit_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_exit_2" /\ s.vs_inst_idx = 0 /\
+    lookup_block "@typed_sa_exit_2" func.fn_blocks = SOME
+      <|bb_label := "@typed_sa_exit_2"; bb_instructions := [
+        mk_inst 18 ASSIGN [Lit 0w] ["%13"];
+        mk_inst 19 JMP [Label "@wcopy_cond_3"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule place_store_gas_edge_nonterminator_preserves >>
+  goal_assum (drule_at Any) >> simp[get_instruction_def] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_typed_exit) >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_cond_jump_edge:
+  !ctx func s n t bb.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_cond_0" /\ s.vs_inst_idx = 2 /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb 2 = SOME (mk_inst 5 JNZ
+      [Var "%3"; Label "@typed_sa_exit_2"; Label "@typed_sa_body_1"] []) /\
+    (!l b u. lookup_block l func.fn_blocks = SOME b ==>
+       eval_phis u b.bb_instructions = OK u /\
+       phi_prefix_length b.bb_instructions = 0) /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule place_store_gas_edge_terminator_preserves >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[mk_inst_def, is_terminator_def] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  gen_tac >> disch_tac >> conj_tac
+  >- (drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_cond_jump) >>
+      simp[] >> disch_then drule >> simp[]) >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  fs[SRULE [mk_inst_def] place_store_step_jnz,
+     eval_operand_def] >>
+  gvs[AllCaseEqs(), jump_to_def]
+QED
+
+Theorem place_store_wrap_probe_phase_body_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_body_1" /\ s.vs_inst_idx < 11 /\
+    lookup_block "@typed_sa_body_1" func.fn_blocks = SOME
+      <|bb_label := "@typed_sa_body_1"; bb_instructions := [
+        mk_inst 6 MUL [Var "%1"; Lit 64w] ["%4"];
+        mk_inst 7 MUL [Var "%1"; Lit 0w] ["%5"];
+        mk_inst 8 ADD [Lit 0w; Var "%4"] ["%6"];
+        mk_inst 9 ADD [Var "%0"; Var "%5"] ["%7"];
+        mk_inst 10 MLOAD [Var "%6"] ["%8"];
+        mk_inst 11 ADD [Var "%8"; Lit 31w] ["%9"];
+        mk_inst 12 AND [Var "%9"; Lit (-32w)] ["%10"];
+        mk_inst 13 ADD [Var "%10"; Lit 32w] ["%11"];
+        mk_inst 14 MCOPY [Var "%7"; Var "%6"; Var "%11"] [];
+        mk_inst 15 ADD [Var "%1"; Lit 1w] ["%12"];
+        mk_inst 16 ASSIGN [Var "%12"] ["%1"];
+        mk_inst 17 JMP [Label "@typed_sa_cond_0"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `s.vs_inst_idx < 8`
+  >- (`s.vs_inst_idx = 0 \/ s.vs_inst_idx = 1 \/ s.vs_inst_idx = 2 \/
+       s.vs_inst_idx = 3 \/ s.vs_inst_idx = 4 \/ s.vs_inst_idx = 5 \/
+       s.vs_inst_idx = 6 \/ s.vs_inst_idx = 7` by decide_tac >>
+      (irule place_store_gas_edge_nonterminator_preserves >>
+       goal_assum (drule_at Any) >> simp[] >>
+       gvs[get_instruction_def] >>
+       simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+       drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_body_pure) >>
+       simp[] >> disch_then drule >> simp[])) >>
+  Cases_on `s.vs_inst_idx = 8`
+  >- (irule place_store_gas_edge_nonterminator_preserves >>
+      goal_assum (drule_at Any) >> simp[] >>
+      gvs[get_instruction_def] >>
+      simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+      drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_body_mcopy) >>
+      simp[] >> disch_then drule >> simp[]) >>
+  `s.vs_inst_idx = 9 \/ s.vs_inst_idx = 10` by decide_tac >>
+  (irule place_store_gas_edge_nonterminator_preserves >>
+   goal_assum (drule_at Any) >> simp[] >>
+   gvs[get_instruction_def] >>
+   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+   drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_body_tail) >>
+   simp[] >> disch_then drule >> simp[])
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
