@@ -7,7 +7,8 @@ Ancestors
   loweringPosts
   list pair fragExec  bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
-  e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
+  e2eDefs supportedProgram supportedDecls supportedExprForms supportedStmts
+  vyperLoweringCorrect rawReturnHeader
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
