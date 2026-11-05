@@ -4,6 +4,7 @@ Ancestors
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
+  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
 
 Theorem ptr_inst_ok_assert:
   ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
@@ -342,3 +343,143 @@ Proof
   qexistsl_tac [`s'`, `update_var out 0w s'`, `0w`] >> simp[] >>
   irule call_assert_fail_path_ptr >> simp[] >> metis_tac[]
 QED
+
+Theorem send_tail_none_post:
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  ~not_fresh_at sm out /\ expr_type e = NoneT /\
+  es'.scopes = es1.scopes /\ es'.immutables = es1.immutables /\
+  state_rel fn cenv cx es' t /\
+  t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
+                vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
+                vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
+                vs_returndata := t.vs_returndata |> ==>
+  expr_post ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w)
+    ((update_var out w t) with vs_inst_idx := k)
+Proof
+  strip_tac >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_fmp = s.vs_fmp /\ t.vs_memory = s.vs_memory /\
+   t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+  reverse conj_tac
+  >- (irule stmt_state_rel_update_var >> conj_tac
+      >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
+      `immutable_alloca_sep fn cenv cx es' t` by
+        (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es1`] >>
+         gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
+         gvs[local_region_def, lookup_var_def]) >>
+      `immutable_base_zero cenv t` by
+        (irule immutable_base_zero_frame >> qexists_tac `s` >>
+         fs[stmt_state_rel_def, lookup_var_def]) >>
+      irule stmt_state_rel_allocas_frame >> simp[] >>
+      qexistsl_tac [`es1`, `s`] >> simp[]) >>
+  irule wb_frame_readonly_tail >> qexists_tac `sm` >>
+  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem send_tail_path_ptr:
+  emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  ghost_inv d cenv cx es1 G tn s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
+  op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
+  eval_operand gas s = SOME gw /\
+  eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') /\ expr_type e = NoneT ==>
+  ?G' tn' r. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' r /\
+    ((?z. r = OK z /\ res = INL NoneV /\
+          expr_post ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
+          ghost_inv d cenv cx es' G' tn' z /\
+          ghost_kept cenv es sa G tn s G' tn' /\
+          z.vs_current_bb = sb.cs_current_bb /\
+          z.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r /\ expr_exit res r))
+Proof
+  strip_tac >> drule_all call_assert_code_lookup >> strip_tac >>
+  drule_all send_tail_shape >> strip_tac >>
+  `~not_fresh_at sm out /\ ~not_fresh_at sa out` by
+    (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qabbrev_tac `inst = mk_inst sm.cs_next_id CALL
+    [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out]` >>
+  `inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
+   get_instruction bb s.vs_inst_idx = SOME inst /\
+   get_instruction bb (SUC s.vs_inst_idx) =
+     SOME (mk_inst (sm.cs_next_id + 1) ASSERT [Var out] []) /\
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    simp[Abbr `inst`, mk_inst_def] >>
+  `stor_taint_ok cx tn s` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
+  `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
+    (drule eval_send_read >> strip_tac >>
+     drule vyperInterpreterTheory.eval_send_preserves_non_accounts >> simp[]) >>
+  drule_all send_read_checked_tail >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
+  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+  qpat_x_assum `outcomes_accounts_typed _` kall_tac >>
+  qpat_x_assum `accounts_runtime_well_typed _` kall_tac >>
+  qpat_x_assum `LENGTH gas_vs = _` kall_tac >>
+  qpat_x_assum `(do tv <- _; _ od) _ = _` kall_tac >>
+  qpat_x_assum `_ = STRING _ _` kall_tac >>
+  rpt (qpat_x_assum `get_instruction _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `op_taint _ _ = _` kall_tac) >>
+  qpat_x_assum `dest_AddressV _ = _` kall_tac >>
+  qpat_x_assum `dest_NumV _ = _` kall_tac >>
+  qpat_x_assum `cs_extends _ _` kall_tac >>
+  gvs[]
+  >- suspend "normal"
+  >> suspend "failed"
+QED
+
+Resume send_tail_path_ptr[normal]:
+  qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
+  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `ghost_inv d cenv cx es' (step_prov PG G inst u)
+     (step_taint inst s u tn) u` by
+    (irule send_call_ghost_inv >> simp[] >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `ghost_kept cenv es sa G tn s (step_prov PG G inst u)
+     (step_taint inst s u tn)` by
+    (irule send_call_ghost_kept >> metis_tac[]) >>
+  `ghost_inv d cenv cx es' (step_prov PG G inst u)
+     (step_taint inst s u tn)
+     (u with <| vs_prev_bb := u.vs_prev_bb; vs_current_bb := u.vs_current_bb;
+                vs_inst_idx := SUC (SUC s.vs_inst_idx) |>)` by
+    simp[stmtFragPtrTheory.ghost_inv_jump_to] >>
+  `(u with <| vs_prev_bb := u.vs_prev_bb; vs_current_bb := u.vs_current_bb;
+               vs_inst_idx := SUC (SUC s.vs_inst_idx) |>) =
+   (u with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by
+    simp[venom_state_component_equality] >>
+  fs[] >>
+  qexistsl_tac [`step_prov PG G inst u`, `step_taint inst s u tn`,
+                `OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx))`] >>
+  simp[] >> conj_tac
+  >- (simp[Abbr `u`] >> irule send_tail_none_post >> simp[] >>
+      conj_tac >- (qexists_tac `sm` >> simp[]) >>
+      qexistsl_tac [`es1`, `s`] >> simp[]) >>
+  `t.vs_current_bb = sm.cs_current_bb` by
+    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  gvs[Abbr `u`, update_var_def, arithmeticTheory.ADD1]
+QED
+
+Resume send_tail_path_ptr[failed]:
+  goal_assum (drule_at Any) >>
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
+QED
+
+Finalise send_tail_path_ptr
