@@ -112,7 +112,7 @@ Proof
   gvs[no_phis_def, EVERY_MAP, EVERY_MEM, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem bypass_source_inst_no_phi[local]:
+Theorem bypass_source_inst_no_phi:
   inst.inst_opcode <> PHI ==>
   (if ~is_terminator inst.inst_opcode then inst
    else canon_jnz_inst (subst_label_inst old new inst)).inst_opcode <> PHI
@@ -151,7 +151,7 @@ Proof
   metis_tac[lookup_block_member_label, EVERY_MEM]
 QED
 
-Theorem try_bypass_no_phi[local]:
+Theorem try_bypass_no_phi:
   !succs fn lm bb fn' lm' success.
     EVERY no_phis fn.fn_blocks /\ no_phis bb /\
     try_bypass fn lm bb succs = (fn',lm',success) ==>
@@ -177,7 +177,7 @@ Proof
   strip_tac >> first_x_assum drule_all >> simp[]
 QED
 
-Theorem chain_merge_no_phi[local]:
+Theorem chain_merge_no_phi:
   EVERY no_phis fn.fn_blocks /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   lookup_block next_lbl fn.fn_blocks = SOME next ==>
@@ -256,7 +256,7 @@ QED
 
 Finalise collapse_no_phi_joint
 
-Theorem collapse_dfs_no_phi[local]:
+Theorem collapse_dfs_no_phi:
   EVERY no_phis fn.fn_blocks ==>
   EVERY no_phis (FST (collapse_dfs fn lm vis lbl)).fn_blocks
 Proof
@@ -264,7 +264,7 @@ Proof
   simp[collapse_dfs_result_def]
 QED
 
-Theorem remove_unreachable_blocks_no_phi[local]:
+Theorem remove_unreachable_blocks_no_phi:
   EVERY no_phis fn.fn_blocks ==>
   EVERY no_phis (remove_unreachable_blocks fn).fn_blocks
 Proof
@@ -272,7 +272,7 @@ Proof
   simp[remove_unreachable_blocks_def, EVERY_MEM, MEM_FILTER]
 QED
 
-Theorem simplify_cfg_round_no_phi[local]:
+Theorem simplify_cfg_round_no_phi:
   EVERY no_phis fn.fn_blocks ==>
   EVERY no_phis (FST (simplify_cfg_round_with_labels fn)).fn_blocks
 Proof
