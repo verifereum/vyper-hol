@@ -876,10 +876,13 @@ Proof
   `wb_args_shape cenv arg_ty args` by metis_tac[typed_word_args_shape] >>
   irule compile_word_builtin_sim >> simp[] >>
   qexistsl_tac [`expr_sim_inv cenv cx env`, `arg_ty`, `code`] >> simp[] >>
-  conj_tac >- gvs[expr_body_pre_def] >> conj_tac
+  rpt conj_tac
+  >~ [`cs_extends`]
   >- (rpt strip_tac >> first_x_assum (qspec_then `xs` mp_tac) >>
       simp[straight_fresh_def] >> disch_then drule >> strip_tac >>
-      simp[cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
+      simp[cs_extends_def] >> qexists_tac `[]` >> simp[])
+  >~ [`expr_sim_inv cenv cx env es`]
+  >- gvs[expr_body_pre_def] >>
   rpt strip_tac >> first_x_assum irule >>
   irule word_args_values_typed >> goal_assum (drule_at Any) >>
   qexistsl_tac [`cenv`, `env`] >> conj_tac

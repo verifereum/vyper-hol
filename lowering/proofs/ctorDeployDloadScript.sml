@@ -6,6 +6,7 @@
 Theory ctorDeployDload
 Ancestors
   ctorDeployDefs o1PassContract gasSummary unitMemInv lowerDloadDefs
+  ctorDeployMemoryFrontier ctorDeployMemoryRunMem ctorDeployImmBudget
 
 Theorem deploy_unit_dload_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
@@ -22,5 +23,11 @@ Theorem deploy_unit_dload_ok:
     mem_inv dload_offset_ok dunit.cu_context vs /\
     mem_inv dload_headroom_ok dunit.cu_context vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_unit_run_entry >> strip_tac >>
+  drule_all deploy_unit_run_mem_safe >> strip_tac >>
+  drule deploy_imm_budget_ok >> strip_tac >>
+  conj_tac
+  >- (irule lowered_unit_dload_offset_ok >> metis_tac[]) >>
+  irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
 QED

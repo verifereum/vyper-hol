@@ -11,7 +11,7 @@ Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
-  list immutableSectionRel
+  list immutableSectionRel compileEnv callTrace
 
 (* ===== Canonical constructor ABI and syntactic Call exclusion ===== *)
 
@@ -108,7 +108,8 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
-      tx.function_name = "__init__" /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\
+      call_outcomes_ok am tx (MAP SND (call_trace es)) /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
 
@@ -117,12 +118,15 @@ End
 (* This named case expression is for clean focused boundary clients. The stage
  * theorem keeps the literal PLAN 5.11 expression in its conclusion. Source
  * installation is not EVM bytecode installation: compare the target modulo
- * code, all other accounts exactly, plus transient storage and ordered logs.
+ * code, with its storage modulo storage_dead, all other accounts exactly,
+ * transient storage modulo storage_dead, and ordered logs (as the runtime's
+ * accounts_agree/transient_agree).
  *)
 Definition deploy_result_rel_def:
   deploy_result_rel tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?section lgs.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
           frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -131,8 +135,14 @@ Definition deploy_result_rel_def:
                lookup_account a es'.rollback.accounts =
                lookup_account a am'.accounts) /\
           (lookup_account tx.target es'.rollback.accounts) with code := [] =
-          (lookup_account tx.target am'.accounts) with code := [] /\
-          es'.rollback.tStorage = am'.tStorage /\
+          (lookup_account tx.target am'.accounts) with
+            <| code := [];
+               storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+          storage_agree
+            (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+            (lookup_account tx.target am'.accounts).storage
+            (lookup_account tx.target es'.rollback.accounts).storage /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs
     | INR (AssertException s) =>
