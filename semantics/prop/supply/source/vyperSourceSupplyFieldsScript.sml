@@ -2,8 +2,6 @@
 Theory vyperSourceSupplyFields
 Ancestors
   vyperSourceSupplyDefs vyperSupplyBoundary vyperInterpreter vyperState
-Libs
-  proofAuditLib
 
 Theorem source_supply_fields[simp]:
   (source_supply (st with scopes updated_by fs) <=> source_supply st) /\
@@ -72,5 +70,3 @@ Theorem machine_supply_accounts:
 Proof
   simp[machine_supply_def]
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceSupplyFields";

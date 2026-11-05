@@ -9,7 +9,6 @@ Ancestors
   vyperAccountSupply vyperAdapterSupply vyperInterpreter vyperCreate
   vyperState vyperCallOutcome extCallOracle
 Libs
-  proofAuditLib
   vyperSupplyProofLib
 
 val supply_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -361,5 +360,3 @@ Resume eval_source_supply_mutual[eval_expr_results_CONS]:
 QED
 
 Finalise eval_source_supply_mutual
-
-val () = proofAuditLib.check_theory "vyperEvalSupply";

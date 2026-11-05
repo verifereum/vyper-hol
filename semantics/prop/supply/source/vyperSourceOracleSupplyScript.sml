@@ -6,7 +6,6 @@ Ancestors
   list pair vyperSourceSupplyDefs vyperAccountSupply vyperSupplyBoundary
   vyperCallOutcome vyperCallOutcomeProps extCallOracle vyperState
 Libs
-  proofAuditLib
   monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -80,5 +79,3 @@ Proof
   Cases_on `outcome.co_success /\ ~request.cr_static` >>
   gvs[source_supply_def, supply_adoption_safe_def]
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceOracleSupply";

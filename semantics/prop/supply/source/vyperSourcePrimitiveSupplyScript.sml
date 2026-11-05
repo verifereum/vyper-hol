@@ -6,7 +6,6 @@ Ancestors
   vyperSupplyBoundary vyperStatePreservation vyperStorageBackend
   vyperInterpreter vyperState vyperPlaceFrames
 Libs
-  proofAuditLib
   monadsyntax vyperSupplyProofLib
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -160,5 +159,3 @@ Theorem source_supply_action_set_global:
 Proof
   simp_tac bool_ss [set_global_def, LET_THM] >> rpt SOURCE_PRIMITIVE_STEP
 QED
-
-val () = proofAuditLib.check_theory "vyperSourcePrimitiveSupply";

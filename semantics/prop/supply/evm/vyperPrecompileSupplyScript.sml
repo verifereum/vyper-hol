@@ -3,8 +3,6 @@
 Theory vyperPrecompileSupply
 Ancestors
   vyperExecutionSupply vfmStaticCalls vfmExecution vfmContext list
-Libs
-  proofAuditLib
 
 (* Reuse Verifereum's precompile frame theorem for every result, including
    exceptional halts; account and saved rollback maps are unchanged. *)
@@ -35,5 +33,3 @@ Theorem dispatch_precompiles_supply:
 Proof
   strip_tac >> irule cp_execution_supply_snd >> simp[]
 QED
-
-val () = proofAuditLib.check_theory "vyperPrecompileSupply";

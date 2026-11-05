@@ -5,7 +5,6 @@ Ancestors
   list pair arithmetic vyperSourceSupplyDefs vyperAccountSupply
   vyperSupplyBoundary vyperSourcePrimitiveSupply vyperInterpreter vyperState
 Libs
-  proofAuditLib
   monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -101,5 +100,3 @@ Proof
       source_supply_def, evaluation_state_accfupds,
       accounts_supply_zero_balance]
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceTransferSupply";

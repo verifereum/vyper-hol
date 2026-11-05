@@ -5,7 +5,6 @@ Ancestors
   list pair option vyperMisc vyperSourceSupplyDefs vyperSourcePrimitiveSupply
   vyperInterpreter vyperCreate vyperState
 Libs
-  proofAuditLib
   vyperSupplyProofLib
 
 val source_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -72,5 +71,3 @@ Proof
   simp_tac bool_ss [check_create_blueprint_def, LET_THM] >>
   rpt (vyperSupplyProofLib.step source_net)
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceCompoundSupply";

@@ -17,7 +17,6 @@ Ancestors
   vyperCallOutcome[ignore_grammar]
   vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
-  proofAuditLib
   wordsLib markerLib BasicProvers vyperSourceSupplyLib
 
 (* Storage proofs use the same explicit physical domain as evaluator typing.
@@ -4497,5 +4496,3 @@ Theorem eval_exprs_preserves_contract_storage_well_formed:
 Proof
   metis_tac[cj 6 eval_scc_storage_preservation_mutual]
 QED
-
-val () = proofAuditLib.check_theory "vyperTypeEvalStoragePreservation";

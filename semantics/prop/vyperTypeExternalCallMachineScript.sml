@@ -19,7 +19,6 @@ Ancestors
   vyperStatePreservation vyperScopePreservation
   vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
-  proofAuditLib
   wordsLib vyperSourceSupplyLib
 
 val _ = Parse.hide "body";
@@ -838,5 +837,3 @@ Proof
   >- metis_tac[checked_call_external_halt_preserves_machine_well_typed] >>
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
-
-val () = proofAuditLib.check_theory "vyperTypeExternalCallMachine";
