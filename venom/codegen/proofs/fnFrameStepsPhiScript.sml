@@ -716,6 +716,53 @@ Proof
   simp[finite_mapTheory.FLOOKUP_UPDATE] >> decide_tac
 QED
 
+(* The no-hit branch does not inspect or modify spill ownership. *)
+Theorem phi_plan_no_hit:
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+    ps.ps_stack = NONE ==>
+  generate_phi_plan inst live halting ps = ([], ps)
+Proof
+  simp[generate_phi_plan_def]
+QED
+
+Theorem phi_plan_hit_no_dup:
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+    ps.ps_stack = SOME dist /\
+  ~MEM (operand_to_string (stack_peek dist ps.ps_stack)) live ==>
+  generate_phi_plan inst live halting ps =
+    let ret = Var (HD inst.inst_outputs) in
+    let p = ps with ps_stack := stack_poke dist ret ps.ps_stack in
+    if ~halting /\ ~MEM (HD inst.inst_outputs) live then
+      let (pop_ops,p') = popmany_plan [ret] p in
+      (SOPoke dist ret :: pop_ops, p')
+    else ([SOPoke dist ret], p)
+Proof
+  simp[generate_phi_plan_def]
+QED
+
+(* Value support boundary, including arbitrary resident spill keys. *)
+Theorem phi_eval_preserves_lookup:
+  !insts s s' v.
+    eval_phis s insts = OK s' /\
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts)) ==>
+    FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v
+Proof
+  Induct >- simp[eval_phis_def] >>
+  rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >- (
+    simp[eval_phis_def] >> strip_tac >>
+    Cases_on `eval_one_phi s h` >> gvs[] >>
+    rename1 `eval_one_phi s h = SOME result` >> PairCases_on `result` >>
+    Cases_on `eval_phis s insts` >> gvs[] >>
+    `MEM result0 h.inst_outputs` by
+      (qpat_x_assum `eval_one_phi _ _ = _` mp_tac >>
+       simp[eval_one_phi_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+    `result0 <> v` by metis_tac[] >>
+    simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    first_x_assum irule >> simp[]) >>
+  simp[eval_phis_def]
+QED
+
 (* ===== The PHI prefix from any entry stack ===== *)
 
 (* phi_prefix_frame_sim without the join-entry facts: it assumes only that
