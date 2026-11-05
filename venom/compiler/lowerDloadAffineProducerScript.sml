@@ -1,5 +1,6 @@
 Theory lowerDloadAffineProducer
 Ancestors
+  lowerDloadPureEffects
   lowerDloadProvenanceSupport lowerDloadOrdinaryExecution lowerDloadOwnership
   lowerDloadReachableDiscipline ptrDiscipline pointerConfinedDefs
   contextCodegenRel memLocDefs venomInst list pred_set
@@ -77,13 +78,8 @@ Theorem ld_affine_update:
   i.inst_outputs = [out] /\ step_inst fuel C i s = OK s' ==>
   ?w. s' = update_var out w s
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst fuel C i s = OK s'` mp_tac >>
-  simp[Once step_inst_non_invoke, SimpLHS] >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
-  simp[exec_pure2_def, SimpLHS] >>
-  strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+  strip_tac >> irule ld_pure_update >>
+  simp[MEM] >> metis_tac[]
 QED
 
 Theorem ld_affine_restore:
@@ -123,11 +119,8 @@ Theorem ld_affine_taint_nonvar:
   (step_taint i s s' tn).t_trans = tn.t_trans /\
   (step_taint i s s' tn).t_imm = tn.t_imm
 Proof
-  strip_tac >> `?w. s' = update_var out w s` by metis_tac[ld_affine_update] >> gvs[] >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
-    written_taint_def, step_writes_def, source_memory_write_ranges_def,
-    store_taint_def, imm_taint_def, adopt_reset_def, update_var_def,
-    range_bytes_def, EXTENSION, FLOOKUP_DEF] >> simp[SF CONJ_ss]
+  strip_tac >> irule ld_pure_taint_nonvar >>
+  simp[MEM] >> metis_tac[]
 QED
 
 Theorem ld_affine_certificate_backward:
