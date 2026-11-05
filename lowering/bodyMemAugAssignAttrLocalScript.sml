@@ -10,7 +10,12 @@ Ancestors
   exprBopSimDefs exprBopSimProps exprSimSource exprSimDefs stmtSimDefs
   exprSimFieldLayout exprSimAttributeFields exprSimHypsDefs
   vyperTypeInvariants vyperTypeSystem vyperTyping vyperTypeEnv
-  finite_map alist
+  finite_map alist compileEnv
+  bodyFieldMemoryProps bodyDeclMemoryCounted bodyDeclMemoryCore
+  allocaFootprint fragGasSeqMem stmtSimProps localPtrsProps
+  exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps
+  venomExecSemantics venomInst venomState
+  fragExec fragExecMem allocLimits valueEncoding freshWrites
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs
@@ -384,6 +389,192 @@ Theorem augassign_attr_typing_mem_src[local]:
   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
 Proof
   simp[type_stmt_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* Single fresh-output instruction boundary used by both load phases. *)
+Theorem augassign_field_emit_path_mem[local]:
+  emit_op opc args sa = (op,sb) /\ opc <> GAS /\ opc <> INVOKE /\
+  ~is_terminator opc /\
+  run_inst_seq_mem_ok (emitted_insts sa sb) s0 /\
+  step_inst_base
+    (mk_inst sa.cs_next_id opc args [STRING #"%" (toString sa.cs_next_var)])
+    s0 = OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s0) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  alloca_history func s0 ==>
+  ?t. gas_marked_path T ctx func s0 0 (OK t) /\
+    eval_operand op t = SOME w /\ stmt_state_rel ctx func cenv cx es t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ alloca_history func t /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  `run_inst_seq (emitted_insts sa sb) s0 = OK (update_var out w s0)` by
+    gvs[run_inst_seq_def] >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by simp[mk_inst_def] >>
+  `gas_path_mem ctx func s0 0
+     (OK (update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+   ~(update_var out w s0).vs_halted /\
+   (update_var out w s0).vs_current_bb = sb.cs_current_bb` by
+    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
+  `alloca_inv s0` by fs[stmt_state_rel_def] >>
+  `alloca_history func
+     (update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule body_store_memory_history >> simp[] >>
+     qexistsl_tac [`s0`, `sa`] >> simp[mk_inst_def]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
+     qexists_tac `sa` >> simp[]) >>
+  `local_ptrs_reserved cenv sb` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
+  qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
+  gvs[update_var_def] >>
+  simp[Abbr `out`, lookup_var_def, FLOOKUP_UPDATE] >>
+  rw[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+QED
+
+Theorem augassign_field_add_path_mem[local]:
+  emit_op ADD [Var p; Lit (n2w off)] sa = (dst,sn) /\
+  lookup_var p s0 = SOME w /\
+  fn_has_code sa sn func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  alloca_history func s0 ==>
+  ?t. gas_marked_path T ctx func s0 0 (OK t) /\
+    eval_operand dst t = SOME (w + n2w off) /\ stmt_state_rel ctx func cenv cx es t /\
+    ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sn.cs_current_insts /\
+    local_ptrs_reserved cenv sn /\ alloca_history func t /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
+    sa.cs_next_var <= sn.cs_next_var /\
+    (?out. dst = Var out /\ not_fresh_at sn out)
+Proof
+  strip_tac >> irule augassign_field_emit_path_mem >>
+  simp[] >> reverse conj_tac
+  >- (irule attr_add_prefix_mem_ok >> metis_tac[]) >>
+  qexistsl_tac [`[Var p; Lit (n2w off)]`, `ADD`] >>
+  simp[is_terminator_def, step_inst_base_def, mk_inst_def,
+       exec_pure2_def, eval_operand_def, wordsTheory.WORD_ADD_COMM]
+QED
+
+Theorem augassign_field_read_path_mem[local]:
+  emit_op MLOAD [dst] sa = (cur,sb) /\
+  eval_operand dst s0 = SOME addr /\ w2n addr + 32 <= s0.vs_alloca_next /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  alloca_history func s0 ==>
+  ?t. gas_marked_path T ctx func s0 0 (OK t) /\
+    eval_operand cur t = SOME (mload (w2n addr) s0) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ alloca_history func t /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (?out. cur = Var out /\ not_fresh_at sb out)
+Proof
+  strip_tac >> irule augassign_field_emit_path_mem >>
+  simp[] >> reverse conj_tac
+  >- (irule emit_mload_mem_ok >> metis_tac[]) >>
+  qexistsl_tac [`[dst]`, `MLOAD`] >>
+  simp[is_terminator_def, step_inst_base_def, mk_inst_def, exec_read1_def]
+QED
+
+Theorem augassign_field_address_bound_mem[local]:
+  stmt_state_rel ctx func cenv cx es s /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s = SOME wbase /\ lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ fields_layout fields fs /\
+  ALOOKUP fs fld = SOME ftv /\ word_value_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME ftv ==>
+  w2n (wbase + n2w (struct_field_offset fields fld)) + 32 <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `w2n wbase + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `w2n wbase + type_memory_size_fields fs <= s.vs_alloca_next` by
+    gvs[type_memory_size_def] >>
+  `type_memory_size ftv = 32` by metis_tac[word_value_type_memory_size] >>
+  drule_all body_field_address_no_wrap >>
+  drule_all body_field_region_frontier >> simp[]
+QED
+
+Theorem augassign_attr_local_load_mem[local]:
+  emit_op ADD [Var p; Lit (n2w (struct_field_offset fields fld))] sa = (dst,sn) /\
+  emit_op MLOAD [dst] sn = (cur,sb) /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s0 = SOME w0 /\ lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  fields_layout fields fs /\ struct_has_type fs vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  word_value_type ty /\ evaluate_type (get_tenv cx) ty = SOME ftv /\
+  value_has_type ftv fv /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  alloca_history func s0 ==>
+  ?t. gas_marked_path T ctx func s0 0 (OK t) /\
+    eval_operand dst t = SOME (w0 + n2w (struct_field_offset fields fld)) /\
+    eval_operand cur t = SOME (typed_val_to_w256 ftv fv) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ alloca_history func t /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (?out. cur = Var out /\ not_fresh_at sb out) /\
+    (?dv. dst = Var dv /\ not_fresh_at sb dv)
+Proof
+  strip_tac >>
+  `cs_extends sa sn /\ cs_extends sn sb` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `fn_has_code sa sn func /\ fn_has_code sn sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `w2n (w0 + n2w (struct_field_offset fields fld)) + 32 <= s0.vs_alloca_next` by
+    (irule augassign_field_address_bound_mem >> metis_tac[]) >>
+  `mload (w2n (w0 + n2w (struct_field_offset fields fld))) s0 =
+    typed_val_to_w256 ftv fv` by
+    (irule stmt_state_rel_field_word >> metis_tac[word_value_type_word]) >>
+  drule_all augassign_field_add_path_mem >> strip_tac >>
+  rename1 `gas_marked_path T ctx func s0 0 (OK t1)` >>
+  `w2n (w0 + n2w (struct_field_offset fields fld)) + 32 <= t1.vs_alloca_next` by
+    simp[] >>
+  drule_all augassign_field_read_path_mem >> strip_tac >>
+  rename1 `gas_marked_path T ctx func t1 0 (OK t2)` >>
+  `gas_marked_path T ctx func s0 0 (OK t2)` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  `!rp. not_fresh_at sa rp ==> not_fresh_at sn rp` by
+    metis_tac[not_fresh_at_mono] >>
+  qexists_tac `t2` >> gvs[eval_operand_def, mload_def] >>
+  metis_tac[not_fresh_at_mono]
 QED
 
 Theorem body_augassign_attr_local_mem:
