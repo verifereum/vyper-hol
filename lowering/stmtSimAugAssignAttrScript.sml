@@ -480,7 +480,7 @@ Proof
   irule val_in_memory_word_type >> metis_tac[]
 QED
 
-Theorem attr_add_marked_path[local]:
+Theorem attr_add_marked_path:
   emit_op ADD [arg; Lit (n2w off)] sa = (dst,sn) /\
   fn_has_code sa sn func /\ local_ptrs_reserved cenv sa /\
   stmt_state_rel ctx func cenv cx es s /\ eval_operand arg s = SOME w /\
@@ -739,7 +739,7 @@ Proof
   fs[expr_post_def, word_value_type_word]
 QED
 
-Theorem augassign_attr_operator_counted[local]:
+Theorem augassign_attr_operator_counted:
   expr_body_pre cenv cx env e es /\
   evaluate_type (get_tenv cx) ty = SOME ftv /\ value_has_type ftv fv /\
   (bop = Exp ==> nonneg_int_literal e) /\
