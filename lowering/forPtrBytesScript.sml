@@ -445,3 +445,184 @@ Theorem for_ptr_covers_transport:
 Proof
   simp[ptr_covers_def]
 QED
+
+Theorem for_bytes_runtime_extent:
+  len <= cap /\ 32 + 32 * word_size cap < dimword (:256) ==>
+  w2n ((((n2w len:bytes32) + 31w) && i2w (-32)) + 32w) =
+    32 + 32 * word_size len /\
+  32 + 32 * word_size len <= 32 + 32 * word_size cap /\
+  32 + 32 * word_size len < dimword (:256)
+Proof
+  strip_tac >>
+  `word_size len <= word_size cap` by
+    (irule exprSimHypsTheory.word_size_monotone >> simp[]) >>
+  `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
+  simp[buffer_round_size]
+QED
+
+Theorem for_bytes_copy_endpoint:
+  pre = [mk_inst id MLOAD [Var src] [t0];
+         mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
+         mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+         mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] /\
+  n = (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) /\
+  32 <= w2n n /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx /\ val_wf tv v /\ val_footprint tv v <= w2n n /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n a) m) ==>
+  ?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      (pre ++ [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []])
+      (s with vs_inst_idx := k) gf tf) /\
+    run_inst_seq (pre ++ [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]) s = OK sf /\
+    mem_agree_outside {i | w2n b <= i /\ i < w2n b + w2n n}
+      sf.vs_memory s.vs_memory /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. p <> t0 /\ p <> t1 /\ p <> t2 /\ p <> t3 ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p)) /\
+    (!m. mem_agree_outside tf.t_mem sf.vs_memory m ==>
+      val_in_memory tv v (w2n b) m)
+Proof
+  strip_tac >>
+  `ptr_covers G tn src s 32` by
+    (gvs[ptr_covers_def] >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all for_bytes_length_prefix >> disch_then (strip_assume_tac o SPEC_ALL) >>
+  `lookup_var src sf = SOME a /\ lookup_var dst sf = SOME b /\
+   ptr_covers gf tf src sf (w2n n) /\ ptr_covers gf tf dst sf (w2n n)` by
+    (simp[] >> conj_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
+  `?tfinal sfinal.
+    inst_seq_ptr D 0 ctx fn PG gf tf
+      [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []] sf gf tfinal /\
+    run_inst_seq [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []] sf = OK sfinal /\
+    mem_agree_outside {i | w2n b <= i /\ i < w2n b+w2n n} sfinal.vs_memory sf.vs_memory /\
+    tfinal.t_stor = tf.t_stor /\ tfinal.t_trans = tf.t_trans /\
+    (!p. lookup_var p sfinal = lookup_var p sf /\ op_taint tfinal (Var p) = op_taint tf (Var p)) /\
+    (!m. mem_agree_outside tfinal.t_mem sfinal.vs_memory m ==> val_in_memory tv v (w2n b) m)` by
+    (irule for_bulk_copy_robust_checked >> simp[eval_operand_def] >> metis_tac[]) >>
+  `!k. inst_seq_ptr D 0 ctx fn PG gf tf
+     [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]
+     (sf with vs_inst_idx := k) gf tfinal` by
+    (`step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) sf =
+       OK (mcopy (w2n b) (w2n a) (w2n n) sf)` by
+       (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
+     qpat_x_assum `step_inst_base _ sf = _` (fn th =>
+       qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [_] _ _ _`
+         (strip_assume_tac o SRULE [inst_seq_ptr_def, th])) >>
+     qpat_x_assum `tfinal = _` SUBST1_TAC >>
+     irule for_bulk_copy_checked_uniform >> simp[eval_operand_def]) >>
+  qexistsl [`sfinal`, `gf`, `tfinal`] >> conj_tac
+  >- (irule for_inst_seq_ptr_append_uniform >>
+      reverse conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+      qexistsl [`gf`, `sf`, `tf`] >> simp[]) >>
+  conj_tac
+  >- (rev_drule run_inst_seq_append >>
+      disch_then (qspec_then `[mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]` mp_tac) >>
+      simp[]) >> gvs[]
+QED
+
+Theorem for_bytes_typed_layout:
+  is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v ==>
+  ?len cap.
+    ((?bs. tv = BaseTV (BytesT (Dynamic cap)) /\ v = BytesV bs /\ len = LENGTH bs) \/
+     (?str. tv = BaseTV (StringT cap) /\ v = StringV str /\ len = LENGTH str)) /\
+    len <= cap /\ type_memory_size tv = 32 + 32 * word_size cap /\
+    val_footprint tv v <= 32 + 32 * word_size len
+Proof
+  strip_tac >> drule_all bytestring_type_value >> strip_tac >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def,
+    val_footprint_def, type_memory_size_def] >>
+  simp[valueTypingMemoryPropsTheory.word_size_capacity]
+QED
+
+Theorem for_compile_bytes_copy_checked:
+  compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_size tv < dimword (:256) /\
+  ptr_covers G tn src s (type_memory_size tv) /\
+  ptr_covers G tn dst s (type_memory_size tv) /\
+  ~ctx_has_dalloca ctx /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n a) m) ==>
+  ?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) gf tf) /\
+    run_inst_seq (emitted_insts sa sb) s = OK sf /\
+    mem_agree_outside {i | w2n b <= i /\ i < w2n b + type_memory_size tv}
+      sf.vs_memory s.vs_memory /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p)) /\
+    (!m. mem_agree_outside tf.t_mem sf.vs_memory m ==>
+      val_in_memory tv v (w2n b) m)
+Proof
+  strip_tac >> drule_all for_bytes_typed_layout >> strip_tac >>
+  `mload (w2n a) s = n2w len /\
+   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem)` by
+    (irule for_bytes_copy_header >> metis_tac[]) >>
+  `32 + 32 * word_size cap < dimword (:256)` by metis_tac[] >>
+  drule_all for_bytes_runtime_extent >> strip_tac >>
+  drule for_bytes_copy_code >> strip_tac >>
+  `src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+   dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3` by metis_tac[] >>
+  qabbrev_tac `pre = [mk_inst sa.cs_next_id MLOAD [Var src] [t0];
+    mk_inst (sa.cs_next_id+1) ADD [Var t0; Lit 31w] [t1];
+    mk_inst (sa.cs_next_id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+    mk_inst (sa.cs_next_id+3) ADD [Var t2; Lit 32w] [t3]]` >>
+  `pre = [mk_inst sa.cs_next_id MLOAD [Var src] [t0];
+    mk_inst (sa.cs_next_id+1) ADD [Var t0; Lit 31w] [t1];
+    mk_inst (sa.cs_next_id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+    mk_inst (sa.cs_next_id+3) ADD [Var t2; Lit 32w] [t3]]` by simp[Abbr `pre`] >>
+  qabbrev_tac `n = (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)` >>
+  `n = (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)` by simp[Abbr `n`] >>
+  `32 <= w2n n /\ w2n n <= type_memory_size tv /\ val_footprint tv v <= w2n n` by
+    (gvs[Abbr `n`]) >>
+  `ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n)` by
+    (gvs[ptr_covers_def] >> conj_tac >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all for_bytes_copy_endpoint >> disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl [`sf`, `gf`, `tf`] >> gvs[Abbr `pre`] >>
+  gvs[mem_agree_outside_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem for_iter_bytes_copy_checked:
+  is_bytestring_type ty /\
+  compile_iter_elem_copy cenv (Var src) (Var dst) stride LocMemory F ty ty
+    sa = ((),sb) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  type_memory_size tv < dimword (:256) /\
+  ptr_covers G tn src s (type_memory_size tv) /\
+  ptr_covers G tn dst s (type_memory_size tv) /\
+  ~ctx_has_dalloca ctx /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n a) m) ==>
+  ?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) gf tf) /\
+    run_inst_seq (emitted_insts sa sb) s = OK sf /\
+    mem_agree_outside {i | w2n b <= i /\ i < w2n b + type_memory_size tv}
+      sf.vs_memory s.vs_memory /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p)) /\
+    (!m. mem_agree_outside tf.t_mem sf.vs_memory m ==>
+      val_in_memory tv v (w2n b) m)
+Proof
+  strip_tac >>
+  `~is_word_type ty` by metis_tac[is_bytestring_word_type] >>
+  `compile_store_bytestring (Var src) (Var dst) sa = ((),sb)` by
+    gvs[forPtrCopyInterfaceTheory.for_memory_element_copy_dispatch] >>
+  irule for_compile_bytes_copy_checked >> simp[] >> metis_tac[]
+QED

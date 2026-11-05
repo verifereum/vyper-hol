@@ -8,18 +8,19 @@ Ancestors forPtrCopyInterface forPtrWord typedCopyPtr fragGasSeqPtr
 Theorem for_bulk_copy_checked_seq:
   ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
   ~ctx_has_dalloca ctx ==>
   inst_seq_ptr D 0 ctx fn PG G tn
-    [mk_inst id MCOPY [Var dst; Var src; Lit n] []] s G
-    (step_taint (mk_inst id MCOPY [Var dst; Var src; Lit n] []) s
+    [mk_inst id MCOPY [Var dst; Var src; count_op] []] s G
+    (step_taint (mk_inst id MCOPY [Var dst; Var src; count_op] []) s
        (mcopy (w2n b) (w2n a) (w2n n) s) tn)
 Proof
   strip_tac >>
-  `step_inst_base (mk_inst id MCOPY [Var dst; Var src; Lit n] []) s =
+  `step_inst_base (mk_inst id MCOPY [Var dst; Var src; count_op] []) s =
     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
     (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      simp[mk_inst_def, eval_operand_def]) >>
-  `step_prov PG G (mk_inst id MCOPY [Var dst; Var src; Lit n] [])
+  `step_prov PG G (mk_inst id MCOPY [Var dst; Var src; count_op] [])
      (mcopy (w2n b) (w2n a) (w2n n) s) = G` by
     (irule (cj 1 mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
   simp[inst_seq_ptr_def] >> irule ptr_inst_ok_mcopy_operand >>
@@ -51,13 +52,14 @@ QED
 Theorem for_bulk_copy_robust_checked:
   ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
   ~ctx_has_dalloca ctx /\ val_wf tv v /\ val_footprint tv v <= w2n n /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n a) m) ==>
   ?tf sf.
     inst_seq_ptr D 0 ctx fn PG G tn
-      [mk_inst id MCOPY [Var dst; Var src; Lit n] []] s G tf /\
-    run_inst_seq [mk_inst id MCOPY [Var dst; Var src; Lit n] []] s = OK sf /\
+      [mk_inst id MCOPY [Var dst; Var src; count_op] []] s G tf /\
+    run_inst_seq [mk_inst id MCOPY [Var dst; Var src; count_op] []] s = OK sf /\
     mem_agree_outside {i | w2n b <= i /\ i < w2n b + w2n n}
       sf.vs_memory s.vs_memory /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
@@ -69,7 +71,7 @@ Proof
   strip_tac >>
   qabbrev_tac `sf = mcopy (w2n b) (w2n a) (w2n n) s` >>
   qabbrev_tac `tf = step_taint
-    (mk_inst id MCOPY [Var dst; Var src; Lit n] []) s sf tn` >>
+    (mk_inst id MCOPY [Var dst; Var src; count_op] []) s sf tn` >>
   `tf.t_var = tn.t_var /\ tf.t_stor = tn.t_stor /\
    tf.t_trans = tn.t_trans /\
    tf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+w2n n}) UNION
@@ -144,8 +146,9 @@ Proof
   gvs[] >>
   `w2n (n2w n:256 word) = n` by simp[] >>
   qspecl_then [`(n2w n:256 word)`, `sa.cs_next_id`] mp_tac
-    (Q.GENL [`n`, `id`] for_bulk_copy_robust_checked) >>
-  simp[]
+    (Q.GENL [`n`, `id`] (Q.INST [`count_op` |-> `Lit n`]
+      for_bulk_copy_robust_checked)) >>
+  simp[eval_operand_def, op_taint_def]
 QED
 
 Theorem for_iter_bulk_copy_checked:
@@ -174,4 +177,23 @@ Proof
     gvs[for_memory_element_copy_dispatch] >>
   irule for_compile_bulk_copy_checked >> simp[] >>
   qexistsl [`a`, `dst`, `src`] >> simp[]
+QED
+
+Theorem for_bulk_copy_checked_uniform:
+  ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
+  ~ctx_has_dalloca ctx ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id MCOPY [Var dst; Var src; count_op] []]
+    (s with vs_inst_idx := k) G
+    (step_taint (mk_inst id MCOPY [Var dst; Var src; count_op] []) s
+       (mcopy (w2n b) (w2n a) (w2n n) s) tn)
+Proof
+  strip_tac >> gen_tac >>
+  `mcopy (w2n b) (w2n a) (w2n n) (s with vs_inst_idx := k) =
+    (mcopy (w2n b) (w2n a) (w2n n) s) with vs_inst_idx := k` by
+    simp[mcopy_def, write_memory_with_expansion_def] >>
+  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
+    for_bulk_copy_checked_seq) >> gvs[lookup_var_def]
 QED
