@@ -185,3 +185,56 @@ Proof
   `n * 1 <= n * type_slot_size tv` by simp[arithmeticTheory.LE_MULT_LCANCEL] >>
   decide_tac
 QED
+
+Theorem framed_array_index_post_view:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_type obj = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (expr_type idx) = SOME tv /\
+  value_has_type tv iv /\
+  expr_post ctx func cenv cx idx t sm sc u ee iv iop q ==>
+  ?i iw. iv = IntV i /\ eval_operand iop q = SOME iw /\
+    i = (if is_signed_type (expr_type idx) then w2i iw else &(w2n iw))
+Proof
+  strip_tac >>
+  `is_int_type (expr_type idx)` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[exprSimHypsDefsTheory.expr_body_pre_def,
+          Once vyperTypeSystemTheory.well_typed_expr_def] >>
+     strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
+     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     strip_tac >> Cases_on `vt` >>
+     gvs[vyperTypeSystemTheory.vtype_annotation_ok_def,
+         vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
+  Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[vyperTypeSystemTheory.is_int_type_def,
+      vyperValueTheory.evaluate_type_def, vyperTypingTheory.value_has_type_def,
+      vyperTypeSystemTheory.well_formed_type_def] >>
+  Cases_on `iv` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
+     vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+     compileEnvTheory.is_word_type_def,
+     valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def] >>
+  mp_tac exprSimArithTheory.math_val_i2w >>
+  disch_then (qspec_then `expr_type idx` (qspec_then `i` mp_tac)) >>
+  gvs[arithmeticPropsTheory.math_val_def, compileEnvTheory.is_signed_type_def,
+      compileEnvTheory.type_bits_def, vyperValueTheory.within_int_bound_def]
+QED
+
+(* Runtime code-array header, independent of the particular length loader. *)
+Theorem framed_array_code_length_view:
+  stmt_state_rel ctx func cenv cx ee q /\ ~cenv.ce_is_ctor /\
+  immutable_holds cenv cx (ArrayT et (Dynamic cap)) r w ee u /\
+  evaluate_type (get_tenv cx) et = SOME etv /\
+  read_result cx r ee = (INL (ArrayV av),ee) /\
+  value_has_type (ArrayTV etv (Dynamic cap)) (ArrayV av) ==>
+  word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n w) q.vs_data_section ++ REPLICATE 32 0w)) =
+  n2w (array_length (ArrayTV etv (Dynamic cap)) av)
+Proof
+  strip_tac >> drule_all immutable_holds_data >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_dynarray,
+      mem_word_at_def, vyperValueOperationTheory.array_length_def]
+QED
