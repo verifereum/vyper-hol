@@ -648,3 +648,70 @@ Proof
     (irule allocaRemapSSATheory.ssa_unique_output >> metis_tac[]) >>
   gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
 QED
+
+(* Forward edge selection uses both maps, rather than reversing the exported
+   input_vars_from membership theorem. *)
+Theorem phi_pair_find_selected[local]:
+  !pairs pred v.
+    ALL_DISTINCT (MAP FST pairs) /\ MEM (pred,v) pairs ==>
+    FIND (\(l,w). l = pred) pairs = SOME (pred,v)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[listTheory.FIND_thm] >> strip_tac >> gvs[] >>
+  Cases_on `h0 = pred` >> gvs[] >>
+  metis_tac[listTheory.MEM_MAP, pairTheory.FST]
+QED
+
+Theorem phi_pair_updates_lookup[local]:
+  !pairs m n v.
+    FLOOKUP (FOLDL (\m (l,w). m |+ (w,n)) m pairs) v =
+    if MEM v (MAP SND pairs) then SOME n else FLOOKUP m v
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[] >> Cases_on `v = h1` >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `MEM v (MAP SND pairs)` >> simp[]
+QED
+
+Definition phi_edge_maps_acc_def:
+  phi_edge_maps_acc pred n phis acc =
+    FOLDL (\(op_map,matching) (j,phi).
+      (FOLDL (\m (l,w). m |+ (w,j)) op_map (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+         NONE => matching | SOME (_,w) => matching |+ (j,w)))
+      acc (MAPi (\k phi. (n+k,phi)) phis)
+End
+
+Theorem phi_edge_maps_acc_cons[local]:
+  phi_edge_maps_acc pred n (phi::phis) (op_map,matching) =
+    phi_edge_maps_acc pred (SUC n) phis
+      (FOLDL (\m (l,w). m |+ (w,n)) op_map (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+         NONE => matching | SOME (_,w) => matching |+ (n,w))
+Proof
+  simp[phi_edge_maps_acc_def, indexedListsTheory.MAPi_def, combinTheory.o_DEF] >>
+  AP_TERM_TAC >> irule indexedListsTheory.MAPi_CONG >> simp[]
+QED
+
+Theorem phi_edge_maps_acc_preserves[local]:
+  !phis n op_map matching pred v i.
+    i < n /\
+    EVERY (\phi. ~MEM v (MAP SND (phi_pairs phi.inst_operands))) phis ==>
+    FLOOKUP (FST (phi_edge_maps_acc pred n phis (op_map,matching))) v =
+      FLOOKUP op_map v /\
+    FLOOKUP (SND (phi_edge_maps_acc pred n phis (op_map,matching))) i =
+      FLOOKUP matching i
+Proof
+  Induct >- simp[phi_edge_maps_acc_def] >>
+  rpt gen_tac >> simp[phi_edge_maps_acc_cons] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `phi_edge_maps_acc pred (SUC n) phis acc` >>
+  `FLOOKUP (FST (phi_edge_maps_acc pred (SUC n) phis acc)) v =
+      FLOOKUP (FST acc) v /\
+   FLOOKUP (SND (phi_edge_maps_acc pred (SUC n) phis acc)) i =
+      FLOOKUP (SND acc) i` by
+    (Cases_on `acc` >> simp[] >> first_x_assum irule >> simp[]) >>
+  simp[Abbr `acc`, phi_pair_updates_lookup] >>
+  Cases_on `FIND (\(l,w). l = pred) (phi_pairs h.inst_operands)`
+  >- simp[] >>
+  rename1 `_ = SOME pair` >> Cases_on `pair` >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> decide_tac
+QED
