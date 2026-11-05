@@ -219,3 +219,30 @@ Proof
   simp[current_block_token_def] >>
   irule current_nondeg_original_resets_inserted >> metis_tac[]
 QED
+
+Theorem current_nondeg_dominated_exit_nonself:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM a (fn_labels fn) /\ MEM d (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  dominates (dom_analyze (cfg_analyze fn) fn) d a /\
+  current_changing_site fn ins v d /\
+  ~dominates (dom_analyze (cfg_analyze fn) fn) d h ==>
+  current_chain_token fn ins v (REVERSE ps ++ [a]) t <> CurrentInserted w h
+Proof
+  strip_tac >> drule_all current_nondeg_actual_exit_source >>
+  disch_then (qspec_then `t` strip_assume_tac) >>
+  spose_not_then assume_tac >> gvs[current_nondeg_token_at_def]
+QED
+
+Theorem current_nondeg_outside_exit_nonself:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM b (fn_labels fn) /\ MEM h (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+  ~dominates (dom_analyze (cfg_analyze fn) fn) h b ==>
+  current_chain_token fn ins v (REVERSE qs ++ [b]) (CurrentDefault v) <>
+    CurrentInserted w h
+Proof
+  strip_tac >> irule current_nondeg_chain_preserves_noninserted >> simp[] >>
+  Cases_on `h = b` >- metis_tac[dom_self] >>
+  metis_tac[current_actual_chain_membership, strict_dominates_def]
+QED
