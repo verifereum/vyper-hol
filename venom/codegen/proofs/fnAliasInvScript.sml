@@ -364,6 +364,99 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+(* Boundary fixtures distinguish transient duplicates from retained ownership. *)
+Theorem alias_probe_assign_ownership:
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ASSIGN [Var "a"] ["z"])
+    ["a"; "z"] F T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "a"; Var "z"] /\
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ASSIGN [Var "a"] ["z"])
+    ["z"] F T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "z"] /\
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ASSIGN [Var "a"] ["z"])
+    ["a"] F T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "a"] /\
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ASSIGN [Var "a"] ["z"])
+    [] F T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack = []
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem alias_probe_repeated_operands:
+  (SND (emit_input_plan ADD [Var "a"; Var "a"] []
+    ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "a"; Var "a"] /\
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ADD [Var "a"; Var "a"] ["z"])
+    [] F T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack = [] /\
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ADD [Var "a"; Var "a"] ["z"])
+    ["a"] F T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "a"]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem alias_probe_live_then_dead:
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 5 ISZERO [Var "a"] ["q"])
+    ["z"] F T "entry"
+    (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+      ARB alias_probe_fn (mk_inst 4 ASSIGN [Var "a"] ["z"])
+      ["a"; "z"] F T "entry"
+      ((init_plan_state 0) with ps_stack := [Var "a"]))))).ps_stack = [Var "z"]
+Proof
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem alias_probe_spill_restore_ownership:
+  (SND (emit_input_plan ADD [Var "a"; Var "a"] []
+    ((init_plan_state 0) with ps_spilled := FEMPTY |+ (Var "a",0)))).ps_stack =
+    [Var "a"; Var "a"] /\
+  (SND (emit_input_plan ADD [Var "a"; Var "a"] []
+    ((init_plan_state 0) with ps_spilled := FEMPTY |+ (Var "a",0)))).ps_spilled = FEMPTY /\
+  (SND (emit_one_input ADD ["a"] (Var "a")
+    ((init_plan_state 0) with ps_stack := Var "a" :: REPLICATE 16 (Lit 0w)))).ps_stack =
+    (Var "a" :: REPLICATE 16 (Lit 0w)) ++ [Var "a"] /\
+  (SND (emit_one_input ADD ["a"] (Var "a")
+    ((init_plan_state 0) with ps_stack := Var "a" :: REPLICATE 16 (Lit 0w)))).ps_spilled = FEMPTY
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* Candidate interface (not yet a reachable-state invariant):
+   At ordinary boundaries each variable has at most one owner, either one
+   stack occurrence or a spill key. Constants/markers may repeat freely.
+   Inputs actually read must be covered. Emission needs the transient bound
+     count x stack <= count x pending + 1
+   and, for spilled x, count x stack <= count x pending; these are the
+   occurrence clauses of reorderSim.residual_budget_wf. Its slot/allocator
+   clauses are extra obligations, not consequences of coverage.
+   emit_input_plan_pending_inventory gives a LOWER bound from coverage;
+   emit_input_plan_inventory_accumulation is also a LOWER bound and cannot
+   establish the desired upper bound. reorder_one_pending_inventory_wf
+   preserves that lower bound only assuming residual_budget_wf and pending
+   length <= 16. Thus none of these three is a uniqueness theorem.
+   Missing transfer: covered demand + per-variable one-owner + fresh outputs
+   + valid spill allocation must yield one-owner after reorder/pop/output,
+   with dead nontrivial aliases absent except for untouched branch residuals.
+   Support for those residuals is edge/cleanup dependent, not plain liveness.
+   OFFSET introduces a fresh root even when dead; PARAM introduces no planner
+   operand at dispatch. Halting may retain a dead single output. Restrict live
+   support to nontrivial aliases at nonhalting boundaries, not all held names.
+   These tests validate the local candidate only, not the lineage induction. *)
+Theorem alias_probe_halting_retention:
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ASSIGN [Var "a"] ["z"])
+    [] T T "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "z"]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Definition alias_probe_clean_def:
   alias_probe_clean inputs stk height promised =
     clean_stack_plan
