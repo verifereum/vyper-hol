@@ -5007,6 +5007,63 @@ Proof
   EVAL_TAC
 QED
 
+(* Only observations and registers consumed by future instructions are retained. *)
+Definition place_store_wrap_probe_phase_def:
+  place_store_wrap_probe_phase s <=>
+    ~s.vs_halted /\ mload 0 s = 1w /\
+    EL 0 (word_to_bytes (lookup_storage 1w (contract_storage s)) T) = 0w /\
+    (s.vs_current_bb <> "entry" \/ s.vs_inst_idx <> 0 ==>
+      lookup_var "%0" s = SOME (n2w (dimword (:256)-32))) /\
+    (let i = s.vs_inst_idx in
+     let r = \n w. lookup_var n s = SOME w in
+     if s.vs_current_bb = "entry" then
+       i <= 2 /\ (i = 0 ==> s.vs_alloca_next = dimword (:256)-32) /\
+       (i = 2 ==> r "%1" 0w)
+     else if s.vs_current_bb = "@typed_sa_cond_0" then
+       i <= 2 /\ ?k. k <= 1 /\ r "%1" (n2w k) /\
+         (1 <= i ==> r "%2" (if k < 1 then 1w else 0w)) /\
+         (2 <= i ==> r "%3" (if k < 1 then 0w else 1w))
+     else if s.vs_current_bb = "@typed_sa_body_1" then
+       i <= 11 /\ r "%1" (if i <= 10 then 0w else 1w) /\
+       (1 <= i ==> r "%4" 0w) /\ (2 <= i ==> r "%5" 0w) /\
+       (3 <= i ==> r "%6" 0w) /\
+       (4 <= i ==> r "%7" (n2w (dimword (:256)-32))) /\
+       (5 <= i ==> r "%8" 1w) /\ (6 <= i ==> r "%9" 32w) /\
+       (7 <= i ==> r "%10" 32w) /\ (8 <= i ==> r "%11" 64w) /\
+       (10 <= i ==> r "%12" 1w)
+     else if s.vs_current_bb = "@typed_sa_exit_2" then
+       i <= 1 /\ (1 <= i ==> r "%13" 0w)
+     else if s.vs_current_bb = "@wcopy_cond_3" then
+       i <= 1 /\ ?j. j <= dimword (:256) DIV 32 /\ r "%13" (n2w j) /\
+         (1 <= i ==> r "%14" (if j = dimword (:256) DIV 32 then 1w else 0w))
+     else if s.vs_current_bb = "@wcopy_body_4" then
+       i <= 7 /\ ?j. j < dimword (:256) DIV 32 /\
+         r "%13" (if i <= 6 then n2w j else n2w (j+1)) /\
+         (1 <= i ==> r "%15" (n2w (32*j))) /\
+         (2 <= i ==> r "%16" (n2w (dimword (:256)-32+32*j))) /\
+         (3 <= i /\ j = 1 ==> r "%17" 1w) /\
+         (4 <= i ==> r "%18" (n2w j)) /\
+         (6 <= i ==> r "%19" (n2w (j+1)))
+     else s.vs_current_bb = "@wcopy_exit_5" /\ i = 0)
+End
+
+Theorem place_store_wrap_probe_phase_initial:
+  !cc tc bc.
+    place_store_wrap_probe_phase
+      ((init_venom_state "entry") with
+        <|vs_memory := byte$word_to_bytes (1w:bytes32) T ++
+            (2w:byte) :: REPLICATE 31 0w;
+          vs_alloca_next := dimword (:256)-32;
+          vs_call_ctx := cc with cc_static := F;
+          vs_tx_ctx := tc; vs_block_ctx := bc|>)
+Proof
+  rpt gen_tac >>
+  simp[place_store_wrap_probe_phase_def, init_venom_state_def,
+       mload_def, contract_storage_def, vfmStateTheory.lookup_account_def,
+       vfmStateTheory.lookup_storage_def] >>
+  EVAL_TAC
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
