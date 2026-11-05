@@ -1092,6 +1092,43 @@ Proof
   simp[read_memory_path_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem ifexp_pop_conditional_readback[local]:
+  pop_place cx (MemoryPlace id path) es =
+    (INL (PlaceR (MemoryPlace outid outpath)),ee) /\
+  conditional_result cx (PlaceR (MemoryPlace outid outpath)) ee = (INL tv,ee) ==>
+  ?v. read_result cx (PlaceR (MemoryPlace outid outpath)) ee = (INL v,ee)
+Proof
+  strip_tac >> Cases_on `find_containing_scope id es.scopes`
+  >- gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       lift_sum_def, return_def, raise_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >> gvs[return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `arr` >> gvs[return_def, raise_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[return_def, raise_def, vyperStateTheory.check_def,
+      ignore_bind_def, bind_def, vyperStateTheory.assert_def] >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, set_scopes_def, return_def, AllCaseEqs(), raise_def] >>
+  drule vyperLookupTheory.find_containing_scope_pre_none >> strip_tac >>
+  gvs[conditional_result_def, place_type_value_def, bind_def, get_scopes_def,
+      vyperLookupTheory.lookup_scopes_update, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `subscripts_type x2.type (path ++ [ValueSubscript (IntV &(LENGTH l - 1))])` >>
+  gvs[return_def, raise_def] >>
+  simp[read_result_def, read_place_def, get_scopes_def, bind_def,
+       vyperLookupTheory.lookup_scopes_update, lift_option_type_def,
+       return_def, read_memory_path_def, record_pop_def] >>
+  simp[read_popped_def, evaluate_subscripts_def, lift_sum_def,
+       return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `evaluate_subscripts x2.type x0' (path ++ [ValueSubscript (IntV &(LENGTH l - 1))])` >>
+  simp[return_def]
+QED
+
 Theorem ifexp_malformed_pop_source[local]:
   es.scopes =
     [FEMPTY |+ ("x", <| assignable := T; type := BaseTV BoolT;
