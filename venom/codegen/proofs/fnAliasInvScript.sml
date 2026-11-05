@@ -1198,6 +1198,15 @@ QED
 
 Finalise alias_regular_plan_support
 
+Theorem alias_distinct_output_count:
+  !xs:string list. !x. ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1
+Proof
+  Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
+  Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
+  >- (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
 Theorem alias_regular_plan_budget:
   inst.inst_opcode <> JMP /\ alias_var_budget [] ps /\
   (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
@@ -1236,11 +1245,7 @@ Proof
 QED
 
 Resume alias_regular_plan_budget[outputs]:
-  `!xs:string list. !x. ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1` by
-    (Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
-     Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
-     >- (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
-     first_x_assum (qspec_then `x` mp_tac) >> simp[]) >>
+  assume_tac alias_distinct_output_count >>
   `!x. alias_var_mass x ps7 <= 1` by
     (gen_tac >>
      qpat_x_assum `generate_emit_ops _ _ _ = _`
@@ -1288,6 +1293,88 @@ Resume alias_regular_plan_budget[post]:
 QED
 
 Finalise alias_regular_plan_budget
+
+Theorem alias_regular_plan_live_support:
+  inst.inst_opcode <> JMP /\ alias_var_budget [] ps /\
+  (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  ALL_DISTINCT inst.inst_outputs /\
+  (!x. MEM x inst.inst_outputs ==>
+    ~plan_holds ps (Var x) /\ ~MEM (Var x) (compute_operands inst)) /\
+  (~is_halting \/ 1 < LENGTH inst.inst_outputs) /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) ==>
+  !x. plan_holds qs (Var x) ==> MEM x live
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  gen_tac >> strip_tac >> spose_not_then assume_tac >>
+  `MEM x inst.inst_outputs` by
+    (drule_all alias_regular_plan_support >> simp[]) >>
+  `alias_var_mass x ps = 0` by metis_tac[alias_var_mass_zero] >>
+  `is_halting ==> 1 < LENGTH inst.inst_outputs` by metis_tac[] >>
+  qpat_x_assum `~is_halting \/ _` kall_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def] >>
+  pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics` >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  pairarg_tac >> simp[] >>
+  `?targets. PERM targets (compute_operands inst) /\
+     reorder_plan dfg targets ps1 = (reorder_ops,ps4)` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- (pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+         IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+         >- metis_tac[PERM_REFL] >>
+         `2 <= LENGTH (compute_operands inst)` by decide_tac >>
+         drule last_two_reorder_perm >> metis_tac[PERM_SYM]) >>
+     metis_tac[PERM_REFL]) >>
+  `alias_var_mass x
+    (ps4 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack) = 0` by
+    (qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+     drule_all alias_emit_reorder_pop_mass >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  pairarg_tac >> simp[] >> suspend "output"
+QED
+
+Resume alias_regular_plan_live_support[output]:
+  qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+  qmatch_asmsub_abbrev_tac `alias_var_mass x residual = 0` >>
+  `alias_var_mass x ps7 <= 1` by
+    (qpat_assum `generate_emit_ops _ _ _ = _`
+       (mp_tac o AP_TERM ``\p:stack_op list # plan_state. alias_var_mass x (SND p)``) >>
+     simp[alias_var_mass_emit_ops, alias_var_mass_outputs] >>
+     strip_tac >> drule alias_distinct_output_count >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  `Var x NOTIN FDOM ps7.ps_spilled` by
+    (`!outs p. (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+       p outs).ps_spilled = p.ps_spilled` by (Induct >> simp[]) >>
+     `Var x NOTIN FDOM residual.ps_spilled` by
+       (qpat_x_assum `alias_var_mass x residual = 0` mp_tac >>
+        simp[alias_var_mass_def] >> IF_CASES_TAC >> simp[]) >>
+     qpat_assum `generate_emit_ops _ _ _ = _`
+       (mp_tac o AP_TERM ``\p:stack_op list # plan_state. (SND p).ps_spilled``) >>
+     simp[alias_emit_ops_inventory] >> metis_tac[]) >>
+  `inst.inst_outputs <> []` by (strip_tac >> fs[]) >>
+  `~is_halting \/ LENGTH inst.inst_outputs > 1` by
+    (Cases_on `is_halting` >> fs[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  `alias_var_mass x ps8 = 0` by
+    (`MEM (Var x) (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs))` by
+       simp[MEM_MAP, MEM_FILTER] >>
+     drule_all alias_popmany_plan_mass_zero >> simp[]) >>
+  pairarg_tac >> simp[] >>
+  `alias_var_mass x ps9 = 0` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     mp_tac (Q.INST [`ps` |-> `ps8`] alias_var_mass_optimistic_swap) >>
+     simp[] >> metis_tac[pairTheory.SND]) >>
+  strip_tac >> gvs[] >>
+  mp_tac (Q.INST [`ps` |-> `ps9`] alias_var_mass_release_dead_spills) >>
+  simp[] >> metis_tac[alias_var_mass_zero]
+QED
+
+Finalise alias_regular_plan_live_support
 
 Definition alias_probe_phis_def:
   alias_probe_phis =
