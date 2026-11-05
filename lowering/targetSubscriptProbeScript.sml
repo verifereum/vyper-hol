@@ -6123,3 +6123,106 @@ QED
      checked by probe_descendant_outer_index_no_effect. Neither excludes
      effects inside bt.
    No proof of the remaining universal base judgment has been selected. *)
+
+(* Repaired-context probe: both functions occur in the same context. *)
+Definition probe_descendant_ctx_def:
+  probe_descendant_ctx ctx = ctx with ctx_functions :=
+    [probe_descendant_outer_caller; probe_descendant_function]
+End
+
+Theorem probe_descendant_ctx_lookups:
+  lookup_function "caller" (probe_descendant_ctx ctx).ctx_functions =
+    SOME probe_descendant_outer_caller /\
+  lookup_function "internal 0 shrink()_runtime"
+    (probe_descendant_ctx ctx).ctx_functions = SOME probe_descendant_function
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_descendant_ctx_outer_execution:
+  case run_blocks 5 (probe_descendant_ctx ctx)
+    probe_descendant_outer_caller probe_deep_empty_donor_machine of
+    Abort Revert_abort s => lookup_var "%19" s = SOME 2w /\
+      sload 1w s = 1w /\ sload 2w s = 0w
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_descendant_ctx_base_execution:
+  case run_blocks 5 (probe_descendant_ctx ctx)
+    probe_descendant_caller probe_deep_empty_donor_machine of
+    Halt s => lookup_var "%19" s = SOME 2w /\
+      sload 1w s = 1w /\ sload 2w s = 0w
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_descendant_ctx_direct_calls:
+  !ctx a b. fn_directly_calls (probe_descendant_ctx ctx) a b <=>
+    a = "caller" /\ b = "internal 0 shrink()_runtime"
+Proof
+  rpt gen_tac >>
+  Cases_on `a = "caller"` >>
+  Cases_on `a = "internal 0 shrink()_runtime"` >> gvs[] >>
+  simp[fcgDefsTheory.fn_directly_calls_def, probe_descendant_ctx_def,
+       venomInstTheory.lookup_function_def, listTheory.FIND_thm,
+       probe_descendant_outer_caller_def, probe_descendant_function_def,
+       mk_raw_function_def] >>
+  EVAL_TAC >> simp[RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, EXISTS_OR_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem probe_descendant_ctx_reachable:
+  !ctx a b. TC (fn_directly_calls (probe_descendant_ctx ctx)) a b <=>
+    a = "caller" /\ b = "internal 0 shrink()_runtime"
+Proof
+  gen_tac >>
+  `!a b. TC (fn_directly_calls (probe_descendant_ctx ctx)) a b ==>
+    a = "caller" /\ b = "internal 0 shrink()_runtime"` by
+    (ho_match_mp_tac relationTheory.TC_INDUCT >>
+     simp[probe_descendant_ctx_direct_calls] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> eq_tac >- (strip_tac >> first_x_assum drule >> simp[]) >>
+  strip_tac >> irule relationTheory.TC_SUBSET >>
+  pure_rewrite_tac[probe_descendant_ctx_direct_calls] >> asm_rewrite_tac[]
+QED
+
+Theorem probe_descendant_ctx_alloca_room:
+  !ctx. alloca_room (probe_descendant_ctx ctx)
+    probe_descendant_outer_caller probe_deep_empty_donor_machine
+Proof
+  gen_tac >>
+  simp[alloca_room_def, probe_descendant_ctx_reachable,
+       probe_descendant_ctx_lookups] >>
+  EVAL_TAC >>
+  `{g | g = "internal 0 shrink()_runtime"} =
+    {"internal 0 shrink()_runtime"}` by simp[pred_setTheory.EXTENSION] >>
+  simp[]
+QED
+
+Theorem probe_descendant_outer_has_base_code:
+  fn_has_code (initial_compile_state "entry") (SND probe_descendant_base)
+    probe_descendant_outer_caller
+Proof
+  rewrite_tac[fn_has_code_def] >> conj_tac
+  >- (EVAL_TAC >> simp[]) >>
+  qexists_tac `HD probe_descendant_outer_caller.fn_blocks` >> EVAL_TAC
+QED
+
+(* Caller-inclusive checkpoint: probe_descendant_ctx_lookups and
+   probe_descendant_ctx_alloca_room remove the singleton-context lookup
+   exclusion. The repaired context has exactly one direct/reachable edge,
+   caller -> shrink, and allocation budget 32 + 1*32 < 2^256.
+   probe_descendant_ctx_outer_execution checks the full outer caller there.
+   probe_descendant_ctx_base_execution checks the compiled base prefix
+   (with STOP appended) in that SAME context; the final outer caller has
+   exactly that compiled base code by probe_descendant_outer_has_base_code.
+
+   STILL OPEN: every state_rel conjunct, alloca_inv, immutable_alloca_sep,
+   ALLOCA size consistency, fn_inst_ids_distinct, local_ptrs_reserved,
+   concrete typing, literal universal cases and especially universal
+   target_case for bt. alloca_room alone is not stmt_state_rel. Neither
+   successful execution nor source entry admission proves the universal
+   base simulation. Unconditional root clearing is not correct source
+   copying on arbitrary nonempty donors. No frozen counterexample yet. *)
