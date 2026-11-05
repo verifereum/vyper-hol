@@ -3,7 +3,7 @@ Ancestors
   extRetCountedProbePtr entryHaltPtr fragGasPathPtr fragExec
   stmtLowering compileEnv emitHelper contextCodegenRelProps
   loweringHalt ptrSafeRun ptrDiscipline gasCount venomExecSemantics
-  fragExecPtr venomInst venomState
+  fragExecPtr venomInst venomState fragGasSeqPtr bodyPtrDefs venomInstProofs emitHelperProps abiBuiltinAllocation finite_map allocaFootprint arithmetic
 
 Theorem compile_return_none_external_gas_path_ptr:
   compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
@@ -79,4 +79,151 @@ Proof
   >- (irule ptr_inst_ok_return >> simp[]) >>
   pure_once_rewrite_tac[step_inst_base_def] >>
   simp[mk_inst_def, eval_operand_def]
+QED
+
+Theorem mstore_return_word_gas_path_ptr:
+  !cx ctx fn PG G tn s bb id p v w a.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MSTORE [Var p; v] []) /\
+    get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (id + 1) RETURN [Var p; Lit 32w] []) /\
+    lookup_var p s = SOME a /\ ptr_covers G tn p s 32 /\
+    eval_operand v s = SOME w /\ op_taint tn v = {} /\
+    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
+    let u = mstore (w2n a) w s in
+    let t = u with vs_inst_idx := SUC s.vs_inst_idx in
+    ?G' tn'. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn'
+      (Halt (halt_state (set_returndata
+        (TAKE 32 (DROP (w2n a) t.vs_memory ++ REPLICATE 32 0w)) t)))
+Proof
+  rpt gen_tac >> strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  qabbrev_tac `i = mk_inst id MSTORE [Var p; v] []` >>
+  qabbrev_tac `u = mstore (w2n a) w s` >>
+  qabbrev_tac `tn' = step_taint i s u tn` >>
+  qabbrev_tac `t = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `step_inst_base i s = OK u` by
+    simp[Abbr `i`, Abbr `u`, step_MSTORE, eval_operand_def] >>
+  `ptr_covers G tn' p t 32 /\ stor_taint_ok cx tn' t` by
+    gvs[ptr_covers_def, stor_taint_ok_def, Abbr `tn'`, Abbr `i`,
+        Abbr `t`, Abbr `u`, mstore_def, lookup_var_def,
+        step_taint_def, set_var_taint_def, out_taint_def,
+        store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def,
+        op_taint_def, finite_mapTheory.DRESTRICT_UNIV] >>
+  `!j. w2n a <= j /\ j < w2n a + 32 ==> j NOTIN tn'.t_mem` by
+    (gen_tac >> disch_tac >> simp[Abbr `tn'`, Abbr `i`] >>
+     irule mstore_word_clean >> simp[eval_operand_def] >> metis_tac[]) >>
+  `gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn' t 0 G tn'
+     (Halt (halt_state (set_returndata
+       (TAKE 32 (DROP (w2n a) t.vs_memory ++ REPLICATE 32 0w)) t)))` by
+    (`~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = s.vs_inst_idx + 1 /\ lookup_var p t = SOME a` by
+       fs[Abbr `t`, Abbr `u`, mstore_def, lookup_var_def,
+            arithmeticTheory.ADD1] >>
+     irule (return_lit_size_gas_path_ptr |> SPEC_ALL |>
+       Q.INST [`n` |-> `32w`] |> SRULE [wordsTheory.dimword_def]) >>
+     simp[] >> qexistsl_tac [`id + 1`, `p`] >> simp[]) >>
+  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_mstore >> simp[]) >>
+  qexistsl_tac [`G`, `tn'`] >>
+  irule (gas_path_ptr_step |> SPEC_ALL |>
+    Q.INST [`i` |-> `mk_inst id MSTORE [Var p; v] []`] |>
+    SRULE [mk_inst_def, is_terminator_def]) >>
+  simp[] >> qexistsl_tac [`id`, `p`, `u`, `v`] >>
+  gvs[Abbr `t`, Abbr `tn'`, Abbr `i`, step_prov_def,
+      set_prov_def, mk_inst_def, finite_mapTheory.DRESTRICT_UNIV]
+QED
+
+Theorem alloca_return_word_gas_path_ptr:
+  !cx ctx fn PG G tn s bb id buf op w base.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id ALLOCA [Lit 32w] [buf]) /\
+    get_instruction bb (s.vs_inst_idx + 1) =
+      SOME (mk_inst (id + 1) MSTORE [Var buf; op] []) /\
+    get_instruction bb (s.vs_inst_idx + 2) =
+      SOME (mk_inst (id + 2) RETURN [Var buf; Lit 32w] []) /\
+    FLOOKUP (abi_builtin_allocate_state id 32 s).vs_allocas id =
+      SOME (base,32) /\ base < dimword (:256) /\
+    eval_operand op s = SOME w /\ op <> Var buf /\
+    op_taint tn op = {} /\ stor_taint_ok cx tn s /\
+    ~ctx_has_dalloca ctx ==>
+    ?G' tn' t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' (Halt t)
+Proof
+  rpt strip_tac >> rename1 `SOME (addr,32)` >>
+  qabbrev_tac `i = mk_inst id ALLOCA [Lit 32w] [buf]` >>
+  qabbrev_tac `u = update_var buf (n2w addr)
+    (abi_builtin_allocate_state id 32 s)` >>
+  `step_inst_base i s = OK u` by
+    (simp[Abbr `i`, Abbr `u`] >>
+     irule step_alloca_site >> simp[wordsTheory.dimword_def]) >>
+  qabbrev_tac `G1 = step_prov PG G i u` >>
+  qabbrev_tac `tn1 = step_taint i s u tn` >>
+  qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `ptr_covers G1 tn1 buf s1 32` by
+    (simp[ptr_covers_def, Abbr `G1`, Abbr `tn1`, Abbr `i`,
+          step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+          set_var_taint_def, out_taint_def, mk_inst_def, eval_operand_def,
+          op_taint_def, Abbr `s1`, Abbr `u`, update_var_def, lookup_var_def,
+          FLOOKUP_UPDATE, LESS_MOD] >> metis_tac[]) >>
+  `eval_operand op s1 = SOME w /\ op_taint tn1 op = {}` by
+    (Cases_on `op` >>
+     gvs[Abbr `tn1`, Abbr `i`, Abbr `s1`, Abbr `u`,
+         abi_builtin_allocate_state_def, update_var_def, eval_operand_def,
+         lookup_var_def, op_taint_def, step_taint_def, set_var_taint_def,
+         out_taint_def, mk_inst_def, FLOOKUP_UPDATE]) >>
+  `stor_taint_ok cx tn1 s1 /\ s1.vs_current_bb = s.vs_current_bb /\
+   s1.vs_inst_idx = s.vs_inst_idx + 1 /\ ~s1.vs_halted /\
+   lookup_var buf s1 = SOME (n2w addr)` by
+    (Cases_on `FLOOKUP s.vs_allocas id = NONE` >>
+     fs[stor_taint_ok_def, Abbr `tn1`, Abbr `i`, Abbr `s1`, Abbr `u`,
+        step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+        abi_builtin_allocate_state_def, update_var_def, lookup_var_def,
+        mk_inst_def, arithmeticTheory.ADD1, FLOOKUP_UPDATE]) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx =
+     SOME (mk_inst (id + 1) MSTORE [Var buf; op] []) /\
+   get_instruction bb (s1.vs_inst_idx + 1) =
+     SOME (mk_inst ((id + 1) + 1) RETURN [Var buf; Lit 32w] [])` by simp[] >>
+  drule_all mstore_return_word_gas_path_ptr >> simp[] >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Halt h)` >>
+  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_alloca >> simp[]) >>
+  qexistsl_tac [`G'`, `tn'`, `h`] >>
+  irule (gas_path_ptr_step |> SPEC_ALL |>
+    Q.INST [`i` |-> `mk_inst id ALLOCA [Lit 32w] [buf]`] |>
+    SRULE [mk_inst_def, is_terminator_def]) >>
+  simp[] >> qexistsl_tac [`buf`, `id`, `u`] >>
+  gvs[Abbr `s1`, Abbr `G1`, Abbr `tn1`, Abbr `i`, mk_inst_def]
+QED
+
+Theorem compile_external_return_word_gas_path_ptr:
+  !cx ctx fn PG G tn s op ei msz nkey ut iv st x st' w base.
+    compile_external_return (SOME op) T F ei msz F nkey ut iv st = (x,st') /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
+    fn_has_code st st' fn /\ ~block_is_terminated st /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    eval_operand op s = SOME w /\ op_taint tn op = {} /\
+    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx /\
+    FLOOKUP (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas
+      st.cs_next_id = SOME (base,32) /\ base < dimword (:256) ==>
+    ?G' tn' t. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' (Halt t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule compile_external_return_word_parts >> simp[] >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `op <> Var buf` by metis_tac[] >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst st.cs_next_id ALLOCA [Lit 32w] [buf]) /\
+   get_instruction bb (s.vs_inst_idx + 1) =
+     SOME (mk_inst (st.cs_next_id + 1) MSTORE [Var buf; op] []) /\
+   get_instruction bb (s.vs_inst_idx + 2) =
+     SOME (mk_inst (st.cs_next_id + 2) RETURN [Var buf; Lit 32w] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >> simp[]) >>
+  irule alloca_return_word_gas_path_ptr >> simp[] >> metis_tac[]
 QED
