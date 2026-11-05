@@ -75,7 +75,7 @@ All paths are relative to this directory (the vyper-hol project root).
 |----------|----------|-------------|
 | Piece theory | `lowering/bodyPtrAssignCasesScript.sml` | The frozen target |
 | Predicates | `lowering/bodyPtrPredsScript.sml` | `body_stmt_ptr_ok`, `body_expr_ptr_ok`, `body_base_target_ptr_ok`, `body_tuple_target_ptr_ok` |
-| Judgments | `lowering/bodyPtrDefsScript.sml` | `stmt_frag_ptr`, `expr_sim_ptr`, `expr_vv_sim_ptr`, `frame_ret_ok_ptr`, `ghost_inv`, `ghost_kept`, `ptr_covers`, `ptr_val_ok`, `ptr_vv_ok`, `ptr_mem_ok` (bound `val_store_size`), `stor_taint_ok`, `cx_dead`, `stmt_exit_ptr` |
+| Judgments | `lowering/bodyPtrDefsScript.sml` | `stmt_frag_ptr`, `expr_sim_ptr`, `expr_vv_sim_ptr`, `frame_ret_ok_ptr`, `ghost_inv`, `ghost_kept`, `ptr_covers`, `ptr_val_ok`, `ptr_vv_ok`, `ptr_mem_ok` (bound `val_store_size`), `ptr_buf_ok` (a memory value's site covers its lowered type's whole buffer), `stor_taint_ok`, `cx_dead`, `stmt_exit_ptr` |
 | Counted ptr paths | `lowering/fragGasPathPtrScript.sml` | `gas_path_ptr_edge`, `gas_path_ptr`, `gas_summary_ptr_at`, `gas_outcome_ptr`, `gas_path_ptr_then` |
 | Composition | `lowering/gasSummaryComposePtrScript.sml` | `gas_marked_exec_ptr*`, `gas_outcome_ptr_bind`, `_bind_normal`, `_prefix`, `_conseq`, `_erase` |
 | Straight-line runs | `lowering/fragGasSeqPtrScript.sml` | `run_inst_seq_gas_path_ptr`, `inst_seq_ptr`, `gas_path_ptr_step`, aborts |
@@ -88,5 +88,6 @@ All paths are relative to this directory (the vyper-hol project root).
 
 ## Notes
 
+- A non-word RHS in memory is read whole by `compile_assign_value`: the memory-to-memory staging copies, and a bytestring copy to storage/transient reads, `type_memory_bytes cenv (lowered_value_type cenv e)` bytes from the RHS pointer. `ptr_buf_ok` in `expr_sim_ptr`'s / `expr_vv_sim_ptr`'s post covers exactly that read (`ptr_mem_ok`'s `val_store_size` bound alone doesn't).
 - A storage aggregate copy (`body_assign_toplevel_copy`) reads the RHS from memory and SSTOREs words: the stored words must be untainted, or land only in dead bytes, to keep `stor_taint_ok`; the RHS's `ptr_mem_ok` says its value is in memory whatever its tainted bytes hold.
 - The RESIDUAL lemmas of `lowering/bodyPtrAssignResidualScript.sml` are frozen and admitted: dispatch to them exactly where S1 dispatches to the S1 lemma of the same name (minus `_ptr`), and don't prove or restate them.
