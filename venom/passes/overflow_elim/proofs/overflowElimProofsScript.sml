@@ -48,61 +48,6 @@ val _ = temp_delsimps ["dfg_block_local_def", "dfg_tracked_opcode_def"];
    Per-block simulation
    ================================================================ *)
 
-(* Helper: the transformed block has the same length as the original *)
-Triviality bt_length[local]:
-  !ra dfg bb.
-    let bt = analysis_block_transform_widen NONE ra
-               (\v inst. [overflow_elim_inst_v dfg (range_unwrap v) inst]) in
-    LENGTH (bt bb).bb_instructions = LENGTH bb.bb_instructions
-Proof
-  rpt gen_tac >> simp[analysis_block_transform_widen_def, FLAT_MAPi_SING] >>
-  simp[LENGTH_MAPi]
-QED
-
-(* Helper: the transformed block instruction at index idx *)
-Triviality bt_el[local]:
-  !ra dfg bb idx.
-    let bt = analysis_block_transform_widen NONE ra
-               (\v inst. [overflow_elim_inst_v dfg (range_unwrap v) inst]) in
-    idx < LENGTH bb.bb_instructions ==>
-    EL idx (bt bb).bb_instructions =
-      overflow_elim_inst_v dfg
-        (range_unwrap (df_widen_at NONE ra bb.bb_label idx))
-        (EL idx bb.bb_instructions)
-Proof
-  rpt strip_tac >> simp[analysis_block_transform_widen_def, FLAT_MAPi_SING] >>
-  simp[EL_MAPi]
-QED
-
-(* Helper: the transformed block preserves label *)
-Triviality bt_label[local]:
-  !ra dfg bb.
-    let bt = analysis_block_transform_widen NONE ra
-               (\v inst. [overflow_elim_inst_v dfg (range_unwrap v) inst]) in
-    (bt bb).bb_label = bb.bb_label
-Proof
-  simp[analysis_block_transform_widen_def]
-QED
-
-(* Helper: executor output FLOOKUP implies FDOM membership. *)
-Triviality exec_pure1_output_in_fdom[local]:
-  !f inst s s' out.
-    exec_pure1 f inst s = OK s' /\
-    inst.inst_outputs = [out] ==>
-    out IN FDOM s'.vs_vars
-Proof
-  metis_tac[exec_pure1_flookup, FDOM_FLOOKUP]
-QED
-
-Triviality exec_pure2_output_in_fdom[local]:
-  !f inst s s' out.
-    exec_pure2 f inst s = OK s' /\
-    inst.inst_outputs = [out] ==>
-    out IN FDOM s'.vs_vars
-Proof
-  metis_tac[exec_pure2_flookup, FDOM_FLOOKUP]
-QED
-
 Triviality step_assign_output_in_fdom[local]:
   !inst s s' out.
     inst.inst_opcode = ASSIGN /\

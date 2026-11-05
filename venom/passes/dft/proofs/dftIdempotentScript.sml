@@ -53,26 +53,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[] >> metis_tac[]
 QED
 
-(* For an instruction at the head that does NOT define var,
-   producing_inst skips it *)
-Triviality producing_inst_skip:
-  !h rest var.
-    ~MEM var h.inst_outputs ==>
-    producing_inst (h :: rest) var = producing_inst rest var
-Proof
-  rw[producing_inst_def]
-QED
-
-(* For an instruction at the head that DOES define var,
-   producing_inst returns it *)
-Triviality producing_inst_hit:
-  !h rest var.
-    MEM var h.inst_outputs ==>
-    producing_inst (h :: rest) var = SOME h
-Proof
-  rw[producing_inst_def]
-QED
-
 (* Key: if there is a unique definer in the list, producing_inst finds it
    regardless of position *)
 Theorem producing_inst_unique_definer:
@@ -88,17 +68,6 @@ Proof
 QED
 
 (* ===== flip_operands preserves key properties ===== *)
-
-(* flip_operands preserves inst_opcode for non-comparators *)
-Triviality flip_operands_opcode_non_comp:
-  !i. ~is_comparator i.inst_opcode ==>
-      (flip_operands i).inst_opcode = i.inst_opcode
-Proof
-  rw[flip_operands_def] >>
-  Cases_on `i.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[LET_THM]
-QED
 
 (* flip_operands preserves write_effects and read_effects *)
 Triviality flip_operands_write_effects:
@@ -240,22 +209,6 @@ Definition et_equiv_via_def:
     | (SOME _, NONE) => F  (* et1 has readers but et2 doesn't *)
     )
 End
-
-(* Identity gives reflexivity *)
-Triviality et_equiv_via_id:
-  !et. et_equiv_via I et et
-Proof
-  rw[et_equiv_via_def] >> rpt strip_tac >>
-  Cases_on `FLOOKUP et.et_last_write eff` >> simp[] >>
-  Cases_on `FLOOKUP et.et_all_reads eff` >> simp[MAP_ID]
-QED
-
-(* Empty tracking states are equivalent via any f *)
-Triviality et_equiv_via_empty:
-  !f. et_equiv_via f empty_effect_track empty_effect_track
-Proof
-  rw[et_equiv_via_def, empty_effect_track_def, FLOOKUP_DEF, FDOM_FEMPTY]
-QED
 
 (* Helper: et_get_reads under et_equiv_via *)
 Triviality et_get_reads_via:
@@ -494,18 +447,6 @@ Proof
 QED
 
 (* ===== Main Idempotency Result ===== *)
-
-(* Two blocks with the same bb_instructions and bb_label produce
-   the same dft_block output. *)
-Triviality dft_block_only_depends_on_insts:
-  !order bb1 bb2.
-    bb1.bb_instructions = bb2.bb_instructions /\
-    bb1.bb_label = bb2.bb_label ==>
-    dft_block order bb1 = dft_block order bb2
-Proof
-  rw[dft_block_def, LET_THM] >>
-  simp[basic_block_component_equality]
-QED
 
 (* Counterexample: dft_block_idempotent is FALSE without unique_defs.
    Two instructions with duplicate outputs get reordered by dft_block,

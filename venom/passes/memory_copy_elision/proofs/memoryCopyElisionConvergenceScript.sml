@@ -605,19 +605,6 @@ QED
 
 (* ===== cf_joined boundary equality ===== *)
 
-Triviality cf_joined_boundary_eq[local]:
-  !ctx fn st bnd di.
-    (!x. df_boundary NONE (st with <| ds_inst := di; ds_boundary := bnd |>) x =
-         df_boundary NONE st x) ==>
-    !x. copy_fact_joined ctx fn
-          (st with <| ds_inst := di; ds_boundary := bnd |>) x =
-        copy_fact_joined ctx fn st x
-Proof
-  rpt strip_tac >>
-  simp[copy_fact_joined_def, df_joined_val_def, LET_THM,
-       direction_case_def, copy_fact_edge_transfer_def]
-QED
-
 (* ===== Invariant preservation ===== *)
 
 (* df_fold_block preserves FDOM bound for inst slots — via df_fold_block_forward_invariant *)

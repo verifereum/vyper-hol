@@ -22,39 +22,6 @@ Definition wl_rank_def:
     (b - m (SND p), LENGTH (FST p))
 End
 
-(* Well-foundedness of the ranking order *)
-Theorem wl_rank_wf[local]:
-  WF (inv_image ($< LEX $<) (wl_rank m b))
-Proof
-  irule relationTheory.WF_inv_image >>
-  irule pairTheory.WF_LEX >> rw[prim_recTheory.WF_LESS]
-QED
-
-(* Core: wl_step decreases the ranking when the worklist is non-empty
-   and P is maintained *)
-Theorem wl_step_decreases[local]:
-  !(leq : 'a -> 'a -> bool) m b changed
-   (process : 'b -> 'a -> 'a) deps (P : 'a -> bool) p.
-    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
-    (!lbl st. P st ==> leq st (process lbl st)) /\
-    (!lbl st. P st ==> P (process lbl st)) /\
-    bounded_measure P leq m b /\
-    P (SND p) /\ FST p <> [] ==>
-    (inv_image ($< LEX $<) (wl_rank m b))
-      (wl_step changed process deps p) p
-Proof
-  rw[wl_step_def, wl_rank_def, relationTheory.inv_image_def,
-     pairTheory.LEX_DEF_THM] >>
-  Cases_on `p` >> Cases_on `q` >> fs[] >>
-  Cases_on `process h r = r` >> fs[] >>
-  DISJ1_TAC >>
-  fs[latticeDefsTheory.bounded_measure_def] >>
-  `m r < m (process h r)` by (first_x_assum irule >> rw[] >> metis_tac[]) >>
-  `m r <= b` by metis_tac[] >>
-  `m (process h r) <= b` by metis_tac[] >>
-  fs[]
-QED
-
 (* Termination: ∃n. worklist is empty after n steps.
    Nested complete induction: outer on b - m(SND s), inner on LENGTH(FST s).
    Change-step: b - m decreases. No-change step: LENGTH decreases. *)

@@ -52,45 +52,6 @@ Proof
   metis_tac[]
 QED
 
-(* df_process_block never modifies ds_inst (only ds_boundary) *)
-Triviality df_process_block_keys:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st k.
-    k IN FDOM (df_process_block dir bottom join transfer edge_transfer
-                 ctx entry_val cfg bbs lbl st).ds_inst ==>
-    FST k = lbl \/ k IN FDOM st.ds_inst
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `k IN _` mp_tac >>
-  simp[df_process_block_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  IF_CASES_TAC >> simp[]
-QED
-
-(* Two-sided join FOLDL soundness: when all list elements are
-   universally sound and join preserves soundness from both sides. *)
-Triviality foldl_sound_two_sided:
-  !l (bottom : 'a) join sound.
-    (!s. sound bottom s) /\
-    (!a b s. sound a s /\ sound b s ==> sound (join a b) s) /\
-    EVERY (\v. !s. sound v s) l ==>
-    !s. sound (FOLDL join bottom l) s
-Proof
-  Induct
-  >- (rpt strip_tac >> simp_tac (srw_ss()) [] >>
-      qpat_x_assum `!s. sound bottom s` (fn th => ACCEPT_TAC (SPEC_ALL th)))
-  >> rpt strip_tac >> simp_tac (srw_ss()) [] >>
-  first_x_assum irule >> rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (rpt strip_tac >> qpat_assum `!a b s. _` irule >> rpt conj_tac
-      >- (qpat_x_assum `!s. sound bottom s`
-            (fn th => ACCEPT_TAC (SPEC_ALL th)))
-      >> qpat_x_assum `EVERY _ _` mp_tac >>
-      simp_tac (srw_ss()) [] >> strip_tac >>
-      qpat_x_assum `!s. sound h s` (fn th => ACCEPT_TAC (SPEC_ALL th)))
-  >> qpat_x_assum `EVERY _ _` mp_tac >>
-  simp_tac (srw_ss()) []
-QED
-
 (* Transfer-sound chain: running original block from sound entry gives
    sound exit value. Uses the same idx-0 trick as analysis_block_sim. *)
 (* Helper: terminator step_inst_base is idx-independent for OK results *)
