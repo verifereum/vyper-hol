@@ -229,6 +229,24 @@ Proof
   EVAL_TAC >> simp[venomInstTheory.fn_insts_blocks_def] >> EVAL_TAC
 QED
 
+Theorem deploy_prefix_negative_ssa_artifact:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  let unit = THE (lower_vyper_deploy_unit tops rp []) in
+  let (pre,supply) = THE (venomPipelineRunner$run_pipeline_stages rp
+    venomPassSchedule$o1_pipeline_spec.ps_pre_walk_stages unit
+    (irSupply$init_ir_supply unit)) in
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass rp
+    [CFP_Simple VP_MakeSSA] "__deploy" pre supply = SOME (pre,supply)
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  pure_rewrite_tac[deploy_prefix_negative_prewalk_artifact |>
+                    SIMP_RULE bool_ss [LET_THM]] >>
+  EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
