@@ -106,12 +106,87 @@ Proof
   gvs[supported_string_reason_def]
 QED
 
+Theorem no_effect_call_operands:
+  !e. ~expr_has_effect e ==>
+      ~supported_expr_exists call_operands_effect_root e
+Proof
+  `!e. call_operands_effect_root e ==> expr_effect_root e` by
+    (Cases >> simp[call_operands_effect_root_def, expr_effect_root_def] >>
+     rename1 `Call ty target args dflt` >> Cases_on `target` >>
+     simp[call_operands_effect_root_def, expr_effect_root_def]) >>
+  rw[expr_has_effect_def] >>
+  metis_tac[supported_expr_exists_mono]
+QED
+
+Theorem supported_pure_list_call_operands[local]:
+  supported_pure_exprs tops args ==>
+  EVERY (\e. ~expr_has_effect e) args /\
+  EVERY (\e. ~supported_expr_exists call_operands_effect_root e) args
+Proof
+  simp[supported_pure_exprs_every, listTheory.EVERY_MEM] >> strip_tac >>
+  conj_tac >> rpt strip_tac >>
+  `supported_pure_expr tops e` by (first_x_assum irule >> simp[]) >>
+  drule supported_pure_expr_effect_free >>
+  metis_tac[no_effect_call_operands]
+QED
+
+Theorem effect_free_drop[local]:
+  EVERY (\e. ~expr_has_effect e) args ==>
+  ~EXISTS expr_has_effect (DROP n args)
+Proof
+  rw[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
+  drule rich_listTheory.MEM_DROP_IMP >> metis_tac[]
+QED
+
+Theorem supported_effect_no_call_operand_effects[local]:
+  (!tops e. supported_effect_expr tops e ==>
+    ~supported_expr_exists call_operands_effect_root e) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+    ~supported_expr_exists call_operands_effect_root e)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >>
+  simp[supported_effect_expr_def, supported_expr_exists_def,
+       call_operands_effect_root_def] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  imp_res_tac supported_pure_no_effect >>
+  gvs[GSYM expr_has_effect_def] >>
+  imp_res_tac supported_pure_list_call_operands >>
+  imp_res_tac effect_free_drop >>
+  imp_res_tac supported_pure_expr_effect_free >>
+  imp_res_tac no_effect_call_operands >>
+  gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM,
+      listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem supported_expr_no_call_operand_effects:
+  supported_expr tops e ==>
+  ~supported_expr_exists call_operands_effect_root e
+Proof
+  rw[supported_expr_def] >>
+  metis_tac[supported_pure_expr_effect_free, no_effect_call_operands,
+            supported_effect_no_call_operand_effects]
+QED
+
+Theorem supported_string_reason_no_call_operand_effects:
+  supported_string_reason tops e ==>
+  ~supported_expr_exists call_operands_effect_root e
+Proof
+  strip_tac >> Cases_on `?t str. e = Literal t (StringL str)`
+  >- gvs[supported_expr_exists_def, call_operands_effect_root_def] >>
+  irule supported_expr_no_call_operand_effects >> qexists_tac `tops` >>
+  simp[supported_expr_def] >> Cases_on `e` >>
+  gvs[supported_string_reason_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  gvs[supported_string_reason_def]
+QED
+
 (* A statement's expression meets expr_body_pre. *)
 Theorem stmt_expr_body_pre:
   !cenv cx env e es calls.
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+    ~supported_expr_exists call_operands_effect_root e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
@@ -120,7 +195,7 @@ Theorem stmt_expr_body_pre:
 Proof
   rpt gen_tac >> strip_tac >>
   `byte_widths_expr e /\ alloc_limits_expr cenv e` by
-    (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
+    (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e` mp_tac >>
      simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
     metis_tac[call_evaluation_safe_append_left] >>

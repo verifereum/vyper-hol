@@ -357,6 +357,8 @@ Proof
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       builtin_operands_ok_def, int_literal_value_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.call_operands_effect_root_def,
       vyperASTTheory.expr_type_def] >>
   metis_tac[]
 QED

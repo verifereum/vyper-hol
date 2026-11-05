@@ -154,6 +154,8 @@ Proof
   rw[same_frame_def] >>
   `c.ce_struct_fields = cenv.ce_struct_fields` by
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
+  `c.ce_func_return_type = cenv.ce_func_return_type` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>
   `c.ce_event_info = cenv.ce_event_info` by
@@ -445,6 +447,7 @@ Proof
   rw[body_stmt_ok_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -504,6 +507,7 @@ Proof
   rw[body_stmt_ok_def, frame_ret_ok_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -616,6 +620,7 @@ Proof
   `supported_string_reason tops e` by
     gvs[supported_stmt_def, supported_raise_reason_def] >>
   drule_then strip_assume_tac supported_string_reason_body_calls >>
+  drule_then assume_tac supported_string_reason_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -674,6 +679,7 @@ Theorem assert_reason_vv_sim[local]:
     body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\
+    ~supported_expr_exists call_operands_effect_root se /\
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
     (do raw <- eval_expr cx e; read_result cx raw od) es =
@@ -687,7 +693,8 @@ Proof
   `body_expr_ok cx se` by metis_tac[] >>
   `expr_body_pre cenv cx env se es1` by
     (gvs[expr_body_pre_def, expr_sim_pre_def] >>
-     CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
+     CCONTR_TAC >>
+     qpat_x_assum `~supported_expr_exists (\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) se` mp_tac >>
      simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
   metis_tac[body_expr_ok_def]
 QED
@@ -707,10 +714,13 @@ Proof
   `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
   `supported_expr tops e` by simp[supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `~expr_has_evm_run se` by
     metis_tac[supported_string_reason_body_calls] >>
+  `~supported_expr_exists call_operands_effect_root se` by
+    metis_tac[supported_string_reason_no_call_operand_effects] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
@@ -831,6 +841,7 @@ Proof
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
      Cases_on `asg` >> gvs[] >> metis_tac[type_widens_to_word]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -958,6 +969,7 @@ Proof
   gvs[] >> rename1 `FLOOKUP env.toplevel_vtypes _ = SOME (Type ty)` >>
   `expr_type e = ty` by metis_tac[type_widens_to_word] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -1010,6 +1022,7 @@ Proof
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   simp[] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   irule stmt_expr_body_pre >>
@@ -1140,6 +1153,7 @@ Proof
          vyperTypeEnvTheory.type_place_target_NameTarget] >>
      metis_tac[type_widens_to_word]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -1236,6 +1250,7 @@ Proof
                     (nsid_to_string sid)) fld = SOME (expr_type e, fsz)` by
     metis_tac[attribute_type_struct_field] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
@@ -1264,6 +1279,7 @@ Proof
   `well_typed_expr env e` by
     gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   irule stmt_expr_body_pre >>
@@ -1798,6 +1814,7 @@ Proof
         LIST_REL_EL_EQN, EL_MAP, well_typed_target_def,
         well_typed_expr_def, AllCaseEqs()] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -1885,6 +1902,7 @@ Proof
     gvs[supported_stmt_def, supported_assignment_def] >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   irule stmt_expr_body_pre >>
@@ -2255,6 +2273,7 @@ Theorem body_augassign_local[local]:
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2315,6 +2334,7 @@ Theorem body_augassign_attr_local[local]:
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2375,6 +2395,7 @@ Theorem body_augassign_toplevel_word[local]:
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
   rename1 `MEM (VariableDecl vis mut id dty init) tops` >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
@@ -2459,6 +2480,7 @@ Theorem body_augassign_attr_storage[local]:
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT
@@ -2589,6 +2611,7 @@ Proof
       stmt_exprs_ok_def, supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
   `supported_expr tops e` by simp[supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2632,6 +2655,7 @@ Proof
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by

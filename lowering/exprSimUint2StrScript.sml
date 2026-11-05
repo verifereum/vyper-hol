@@ -2345,7 +2345,8 @@ Theorem vv_post_located_mk_ptr:
   vv_post ctx func cenv cx e es sa sb s0 es' tv
     (LocatedValue ty (mk_ptr p.ptr_operand p.ptr_location)) s
 Proof
-  simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def]
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_place_ptr_rel_def,
+       contextTheory.mk_ptr_def]
 QED
 
 Theorem uint2str_numeric_suffix:

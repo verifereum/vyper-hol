@@ -120,6 +120,7 @@ Proof
   `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
   `supported_expr tops e` by simp[supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   irule stmt_expr_body_pre >> simp[] >> qexists_tac `calls` >> gvs[]
 QED
 

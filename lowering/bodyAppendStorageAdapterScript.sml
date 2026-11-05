@@ -18,6 +18,7 @@ Theorem body_append_expr_pre:
   expr_body_pre cenv cx env e es
 Proof
   strip_tac >> drule supported_expr_body_calls >> strip_tac >>
+  drule supported_expr_no_call_operand_effects >> strip_tac >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     fs[body_inv_def] >>
   irule stmt_expr_body_pre >>

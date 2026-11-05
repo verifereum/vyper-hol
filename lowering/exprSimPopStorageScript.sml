@@ -455,6 +455,9 @@ Theorem pop_storage_vv_post:
   stmt_state_rel ctx func cenv cx es' u /\
   storage_holds cx tr ann tv slot es' u /\
   lookup_var x u = SOME slot /\
+  (!p. tv = PlaceR p ==>
+    vv_place_ptr_rel cenv cx es' p
+      (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u) /\
   u.vs_memory = s0.vs_memory /\ u.vs_allocas = s0.vs_allocas /\
   (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s0) ==>
   vv_post ctx func cenv cx (Pop ann tgt) es sa sb s0 es' tv
@@ -720,6 +723,14 @@ Resume compile_pop_storage_normalized_sim[positive]:
   simp[exprSimHashTheory.vv_post_inst_idx] >>
   irule pop_storage_vv_post >>
   conj_tac >- simp[] >>
+  conj_tac >-
+    (rpt strip_tac >> gvs[exprSimTheory.vv_place_ptr_rel_storage,
+       contextTheory.mk_ptr_def, eval_operand_def,
+       placeProvenanceTheory.slot_loc_def] >>
+     PURE_ASM_REWRITE_TAC [] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     pure_rewrite_tac[wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >>
+     AP_TERM_TAC >> decide_tac) >>
   conj_tac >- (qpat_x_assum `u = _` mp_tac >> Cases_on `tr` >>
               simp[sstore_def, tstore_def, venom_state_component_equality]) >>
   conj_tac >- (qpat_x_assum `u = _` mp_tac >> Cases_on `tr` >>

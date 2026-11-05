@@ -144,6 +144,7 @@ Proof
     (gvs[type_stmt_def, AllCaseEqs()] >> metis_tac[type_widens_to_word]) >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -196,6 +197,7 @@ Theorem body_annassign_rhs_pre[local]:
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac supported_expr_no_call_operand_effects >>
   irule stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
@@ -912,6 +914,9 @@ Proof
      rename1 `Range _ (Literal a' lit')` >> Cases_on `lit'` >> gvs[]) >>
   `supported_expr tops e1 /\ supported_expr tops e2` by
     simp[supportedExprsTheory.supported_expr_def] >>
+  `~supported_expr_exists call_operands_effect_root e1 /\
+   ~supported_expr_exists call_operands_effect_root e2` by
+    metis_tac[supported_expr_no_call_operand_effects] >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `expr_body_pre cenv cx env e1 es` by
     (irule stmt_expr_body_pre >>

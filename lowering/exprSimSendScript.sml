@@ -264,7 +264,11 @@ Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def] >>
   imp_res_tac int_calls_exprs_every_mem >>
-  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.call_operands_effect_root_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every,
+      listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
