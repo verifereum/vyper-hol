@@ -5017,7 +5017,8 @@ Definition place_store_wrap_probe_phase_def:
     (let i = s.vs_inst_idx in
      let r = \n w. lookup_var n s = SOME w in
      if s.vs_current_bb = "entry" then
-       i <= 2 /\ (i = 0 ==> s.vs_alloca_next = dimword (:256)-32) /\
+       i <= 2 /\ (i = 0 ==> s.vs_alloca_next = dimword (:256)-32 /\
+         FLOOKUP s.vs_allocas 0 = NONE) /\
        (i = 2 ==> r "%1" 0w)
      else if s.vs_current_bb = "@typed_sa_cond_0" then
        i <= 2 /\ ?k. k <= 1 /\ r "%1" (n2w k) /\
@@ -5062,6 +5063,50 @@ Proof
        mload_def, contract_storage_def, vfmStateTheory.lookup_account_def,
        vfmStateTheory.lookup_storage_def] >>
   EVAL_TAC
+QED
+
+Theorem place_store_wrap_probe_phase_alloca:
+  !s t.
+    place_store_wrap_probe_phase s /\ s.vs_current_bb = "entry" /\
+    s.vs_inst_idx = 0 /\
+    exec_alloca (mk_inst 0 ALLOCA [Lit 0w] ["%0"]) s 0w = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := 1)
+Proof
+  rpt gen_tac >>
+  simp[place_store_wrap_probe_phase_def, exec_alloca_def, mk_inst_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      mload_def, contract_storage_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem place_store_wrap_probe_phase_observations:
+  !s. place_store_wrap_probe_phase s ==>
+    ~s.vs_halted /\ mload 0 s = 1w /\
+    EL 0 (word_to_bytes (lookup_storage 1w (contract_storage s)) T) = 0w
+Proof
+  simp[place_store_wrap_probe_phase_def]
+QED
+
+Theorem place_store_wrap_probe_phase_entry_assign:
+  !s. place_store_wrap_probe_phase s /\ s.vs_current_bb = "entry" /\
+    s.vs_inst_idx = 1 ==>
+    place_store_wrap_probe_phase
+      ((update_var "%1" 0w s) with vs_inst_idx := 2)
+Proof
+  rpt strip_tac >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      mload_def, contract_storage_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem place_store_wrap_probe_phase_entry_jump:
+  !s. place_store_wrap_probe_phase s /\ s.vs_current_bb = "entry" /\
+    s.vs_inst_idx = 2 ==>
+    place_store_wrap_probe_phase (jump_to "@typed_sa_cond_0" s)
+Proof
+  rpt strip_tac >>
+  gvs[place_store_wrap_probe_phase_def, jump_to_def, mload_def,
+      contract_storage_def] >>
+  qexists_tac `0` >> simp[]
 QED
 
 Theorem place_store_value_storage_run:
