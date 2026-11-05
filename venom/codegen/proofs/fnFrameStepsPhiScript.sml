@@ -1628,3 +1628,94 @@ Proof
   drule_all phi_selected_input_vars >>
   simp[liveness_analyze_def, live_vars_at_def]
 QED
+
+Theorem phi_unkilled_exit_live[local]:
+  wf_function fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions)) /\
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions)) /\ i <= LENGTH bb.bb_instructions ==>
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)
+Proof
+  strip_tac >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
+  goal_assum drule >> simp[] >> qexists_tac `LENGTH bb.bb_instructions` >>
+  simp[] >> rpt strip_tac >>
+  `MEM (EL k bb.bb_instructions) bb.bb_instructions` by simp[listTheory.EL_MEM] >>
+  qpat_x_assum `~MEM v (FLAT _)` mp_tac >>
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  metis_tac[venomInstTheory.inst_defs_def]
+QED
+
+Theorem phi_live_out_backward_edge:
+  codegen_ready_fn fn /\ fn_reachable fn p /\ fn_cfg_edge fn p q /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block q fn.fn_blocks = SOME qb /\
+  ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) qb.bb_instructions)) /\
+  MEM v (live_vars_at (liveness_analyze fn) q (LENGTH qb.bb_instructions)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions))
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `qb.bb_label = q /\ pb.bb_label = p` by
+    metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `MEM qb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `fn_reachable fn q` by
+    (gvs[venomWfTheory.fn_reachable_def] >>
+     metis_tac[relationTheory.RTC_RULES_RIGHT1]) >>
+  `MEM p (cfg_analyze fn).cfg_dfs_pre /\ MEM q (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  `MEM q (cfg_succs_of (cfg_analyze fn) p)` by
+    (gvs[venomWfTheory.fn_cfg_edge_def] >>
+     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
+  `!i. i <= LENGTH qb.bb_instructions ==>
+    MEM v (live_vars_at (liveness_analyze fn) q i)` by
+    (rpt strip_tac >>
+     qpat_assum `qb.bb_label = q` (rewrite_tac o single o SYM) >>
+     irule phi_unkilled_exit_live >> simp[]) >>
+  `LENGTH (collect_phis qb.bb_instructions) <= LENGTH qb.bb_instructions` by
+    (Q.SPEC_TAC (`qb.bb_instructions`, `insts`) >> Induct >>
+     simp[collect_phis_def] >> rw[]) >>
+  irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_cross_block) >>
+  goal_assum drule >> simp[] >> qexistsl_tac [`qb`, `q`] >> simp[] >>
+  rpt strip_tac >>
+  `MEM v (inst_uses inst)` by
+    (gvs[inst_uses_def, phi_operand_vars_mem, listTheory.MEM_MAP,
+         pairTheory.EXISTS_PROD] >> metis_tac[phi_pairs_mem_var_operand]) >>
+  drule_all phi_codegen_input_dead_after_prefix >> metis_tac[]
+QED
+
+Theorem phi_live_out_backward_path:
+  !path fn v first_bb last_bb.
+    codegen_ready_fn fn /\ is_fn_path fn path /\ path <> [] /\
+    fn_reachable fn (HD path) /\
+    lookup_block (HD path) fn.fn_blocks = SOME first_bb /\
+    lookup_block (LAST path) fn.fn_blocks = SOME last_bb /\
+    (!lbl. MEM lbl path ==> ?bb. lookup_block lbl fn.fn_blocks = SOME bb) /\
+    (!lbl bb. MEM lbl (TL path) /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+      ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+    MEM v (live_vars_at (liveness_analyze fn) (LAST path)
+      (LENGTH last_bb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) (HD path)
+      (LENGTH first_bb.bb_instructions))
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `is_fn_path fn (head::tail)` >> Cases_on `tail`
+  >- (strip_tac >> gvs[]) >>
+  rename1 `is_fn_path fn (head::next::rest)` >>
+  simp[venomWfTheory.is_fn_path_def] >> strip_tac >>
+  `?next_bb. lookup_block next fn.fn_blocks = SOME next_bb` by metis_tac[] >>
+  `fn_reachable fn next` by
+    (gvs[venomWfTheory.fn_reachable_def] >>
+     metis_tac[relationTheory.RTC_RULES_RIGHT1]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) next
+      (LENGTH next_bb.bb_instructions))` by
+    (qpat_x_assum `!fn v first_bb last_bb. _`
+       (qspecl_then [`fn`, `v`, `next_bb`, `last_bb`] mp_tac) >>
+     simp[] >> impl_tac >- (rpt conj_tac >> metis_tac[listTheory.MEM]) >>
+     simp[]) >>
+  irule phi_live_out_backward_edge >> goal_assum drule >>
+  simp[] >> qexistsl_tac [`next`, `next_bb`] >> simp[] >> metis_tac[]
+QED
