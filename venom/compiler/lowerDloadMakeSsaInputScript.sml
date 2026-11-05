@@ -18,6 +18,23 @@ Ancestors
   o1ContractLowerDload o1PassContract lowerDloadDefs venomPassDispatcher
   venomFnScheduleRunner irSupply venomWf cfgWf venomInst list
 
+Theorem lower_dload_step_supply[local]:
+  fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out ==>
+  ir_supply_covers_fn s fn /\
+  ?s'. lower_dload_function_supply s fn = (out.fpo_function,s')
+Proof
+  strip_tac >> gvs[fn_pass_step_def, AllCaseEqs()] >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    (gvs[lookup_unique_function_def, AllCaseEqs()] >>
+     `MEM fn (FILTER (\f. f.fn_name = fn.fn_name)
+               observed.cu_context.ctx_functions)` by simp[] >>
+     gvs[MEM_FILTER]) >>
+  gvs[ir_supply_covers_unit_def, ir_supply_covers_fn_def,
+      list_subset_def, unit_ir_inst_ids_def, unit_ir_vars_def,
+      unit_ir_labels_def, EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
 (* Intuition, per conjunct of make_ssa_input_ok:
    - all_reachable and the PHI rows: the CFG (labels, edges, entry) is the
      same, and PHIs are kept unchanged in their same-labelled block
