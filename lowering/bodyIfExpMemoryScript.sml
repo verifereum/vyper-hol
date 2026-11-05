@@ -1962,6 +1962,51 @@ Proof
 QED
 
 
+Theorem ifexp_entry_pop_trace_read_invariant[local]:
+  !events entry final retained.
+    entry_pop_trace entry events final /\
+    (subscripts_type entry.type retained = NONE \/
+     ?v. read_memory_path entry retained = INL v) ==>
+    subscripts_type final.type retained = NONE \/
+    ?w. read_memory_path final retained = INL w
+Proof
+  Induct >- simp[vyperPlaceResultTypingTheory.entry_pop_trace_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[vyperPlaceResultTypingTheory.entry_pop_trace_def] >> strip_tac >> gvs[] >>
+  drule ifexp_entry_pop_read_invariant >> simp[] >> strip_tac >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ifexp_scope_pop_trace_read_invariant[local]:
+  scope_pop_trace sc events final /\ lookup_scopes keep sc = SOME entry /\
+  (subscripts_type entry.type retained = NONE \/
+   ?v. read_memory_path entry retained = INL v) ==>
+  ?entry'. lookup_scopes keep final = SOME entry' /\ entry'.type = entry.type /\
+    (subscripts_type entry'.type retained = NONE \/
+     ?w. read_memory_path entry' retained = INL w)
+Proof
+  strip_tac >>
+  drule_all vyperPlaceResultTypingTheory.scope_pop_trace_lookup >> strip_tac >>
+  drule vyperPlaceResultTypingTheory.entry_pop_trace_metadata >> strip_tac >>
+  drule ifexp_entry_pop_trace_read_invariant >> simp[] >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ifexp_scope_pop_effect_read_invariant[local]:
+  scope_pop_effect f /\ f es = (res,ee) /\
+  lookup_scopes keep es.scopes = SOME entry /\
+  (subscripts_type entry.type retained = NONE \/
+   ?v. read_memory_path entry retained = INL v) ==>
+  ?entry'. lookup_scopes keep ee.scopes = SOME entry' /\ entry'.type = entry.type /\
+    (subscripts_type entry'.type retained = NONE \/
+     ?w. read_memory_path entry' retained = INL w)
+Proof
+  simp[vyperPlaceResultTypingTheory.scope_pop_effect_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule ifexp_scope_pop_trace_read_invariant >>
+  disch_then drule >> simp[]
+QED
+
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
   (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
