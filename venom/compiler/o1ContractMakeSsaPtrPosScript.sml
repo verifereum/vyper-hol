@@ -242,6 +242,84 @@ Proof
   metis_tac[ptr_block_last_list_trans]
 QED
 
+Theorem reassign_current_inst_ids_opcodes[local]:
+  !ids insts. MAP (\i. i.inst_opcode) (reassign_current_inst_ids ids insts) =
+    MAP (\i. i.inst_opcode) insts
+Proof
+  recInduct reassign_current_inst_ids_ind >> simp[reassign_current_inst_ids_def]
+QED
+
+Theorem ptr_last_nonterminator_prefix[local]:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  pre ++ rest <> [] /\ is_terminator (LAST (pre ++ rest)).inst_opcode ==>
+  rest <> []
+Proof
+  Cases_on `rest` >- (rpt strip_tac >> gvs[] >>
+    gvs[listTheory.EVERY_MEM] >>
+    metis_tac[rich_listTheory.LAST_MEM]) >> simp[]
+QED
+
+Theorem reassign_current_inst_ids_last[local]:
+  insts <> [] ==>
+  (LAST (reassign_current_inst_ids ids insts)).inst_opcode =
+  (LAST insts).inst_opcode
+Proof
+  strip_tac >>
+  qspecl_then [`ids`, `insts`] mp_tac reassign_current_inst_ids_opcodes >>
+  disch_then (mp_tac o Q.AP_TERM `LAST`) >>
+  Cases_on `insts` >> Cases_on `ids` >>
+  simp[reassign_current_inst_ids_def, listTheory.LAST_MAP]
+QED
+
+Theorem simplify_current_phi_prefix_last[local]:
+  insts <> [] /\ is_terminator (LAST insts).inst_opcode ==>
+  (LAST (simplify_current_phi_prefix insts)).inst_opcode =
+    (LAST insts).inst_opcode
+Proof
+  strip_tac >> simp[simplify_current_phi_prefix_def] >>
+  pairarg_tac >> gvs[] >>
+  drule simplify_current_phi_prefix_parts_shape >> strip_tac >>
+  `rest <> []` by metis_tac[ptr_last_nonterminator_prefix] >>
+  simp[reassign_current_inst_ids_last] >>
+  Cases_on `rest` >> gvs[listTheory.LAST_APPEND_CONS]
+QED
+
+Theorem simplify_current_phi_block_last[local]:
+  ptr_block_last_rel bb (simplify_current_phi_block bb)
+Proof
+  simp[ptr_block_last_rel_def] >>
+  `LENGTH (simplify_current_phi_block bb).bb_instructions =
+   LENGTH bb.bb_instructions` by
+    (mp_tac (Q.AP_TERM `LENGTH` simplify_current_phi_block_ids) >>
+     pure_rewrite_tac[irSupplyTheory.block_ir_inst_ids_def,
+                      listTheory.LENGTH_MAP] >> simp[]) >>
+  simp[] >> strip_tac >>
+  simp[simplify_current_phi_block_def] >> CASE_TAC >> gvs[] >>
+  IF_CASES_TAC >> simp[simplify_current_phi_prefix_last]
+QED
+
+Theorem simplify_current_phis_if_block_last[local]:
+  LIST_REL ptr_block_last_rel bbs (simplify_current_phis_if enabled bbs)
+Proof
+  `LIST_REL ptr_block_last_rel bbs (MAP simplify_current_phi_block bbs)` by
+    (Induct_on `bbs` >> simp[simplify_current_phi_block_last]) >>
+  rw[simplify_current_phis_if_def, simplify_current_phis_def,
+     ptr_block_last_list_refl]
+QED
+
+Theorem make_ssa_current_fn_block_last_rel[local]:
+  make_ssa_current_fn s fn = (fn',s') /\ ALL_DISTINCT (fn_labels fn) ==>
+  LIST_REL ptr_block_last_rel fn.fn_blocks fn'.fn_blocks
+Proof
+  simp[make_ssa_current_fn_def] >> rpt CASE_TAC >> gvs[ptr_block_last_list_refl] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  drule add_phi_nodes_supply_block_last >> strip_tac >>
+  drule (CONJUNCT1 rename_current_blocks_block_last) >>
+  impl_tac >- metis_tac[ptr_block_last_list_labels, fn_labels_def] >>
+  strip_tac >>
+  metis_tac[ptr_block_last_list_trans, simplify_current_phis_if_block_last]
+QED
+
 (* PHI insertion only lengthens blocks at their heads;
    rename_current_blocks keeps each instruction's opcode and the block
    lengths, and simplify_current_phis_if only rewrites the leading PHIs
@@ -255,7 +333,13 @@ Theorem make_ssa_current_fn_block_last:
   (LAST bb'.bb_instructions).inst_opcode =
   (LAST bb.bb_instructions).inst_opcode
 Proof
-  cheat
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
+  drule_all make_ssa_current_fn_block_last_rel >> strip_tac >>
+  drule_all ptr_block_last_lookup >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  gvs[ptr_block_last_rel_def, bb_well_formed_def]
 QED
 
 Theorem make_ssa_pos_revert:
