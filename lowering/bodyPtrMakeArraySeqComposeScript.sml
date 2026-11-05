@@ -1,7 +1,7 @@
 (* Checked append keeps the suffix at its actual advanced cursor. *)
 Theory bodyPtrMakeArraySeqCompose
 Ancestors
-  fragGasSeqPtr fragExec ghostPcTransportPtr instIdxIndep
+  fragGasSeqPtr fragExec ghostPcTransportPtr instIdxIndep exprSimCopy
   exprLoweringProps venomExecSemantics venomInst venomState list arithmetic
 
 Theorem inst_seq_ptr_append_shifted:
@@ -25,4 +25,30 @@ Proof
   goal_assum (drule_at Any) >>
   qexistsl_tac [`G1`, `tn1`] >>
   gvs[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem copy_runtime_checked_append_uniform:
+  copy_runtime_frame sa s sb u /\ copy_runtime_frame sb u sc v /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  (!j. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
+    (s with vs_inst_idx := j) G1 tn1) /\
+  (!j. inst_seq_ptr D lo ctx fn PG G1 tn1 (emitted_insts sb sc)
+    (u with vs_inst_idx := j) G2 tn2) ==>
+  copy_runtime_frame sa s sc v /\
+  (!j. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sc)
+    (s with vs_inst_idx := j) G2 tn2)
+Proof
+  strip_tac >>
+  `copy_runtime_frame sa s sc v` by metis_tac[copy_runtime_frame_trans] >>
+  simp[] >>
+  `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc` by
+    (irule emitted_insts_append >> fs[copy_runtime_frame_def]) >>
+  simp[] >> gen_tac >> irule inst_seq_ptr_append_shifted >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`G1`, `tn1`, `u with vs_inst_idx := j`] >> simp[] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    fs[EVERY_MEM] >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+  fs[copy_runtime_frame_def, exec_result_map_def]
 QED
