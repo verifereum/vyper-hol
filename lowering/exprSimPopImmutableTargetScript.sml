@@ -813,6 +813,57 @@ Proof
   simp[evaluate_subscripts_def]
 QED
 
+Theorem imm_attr_place_step[local]:
+  !cenv cx env es pv w sid fld fty res ee.
+    expr_sim_inv cenv cx env es /\
+    imm_place_at cenv cx es pv w (StructT sid) /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME fty /\
+    extend_place cx pv (AttrSubscript fld) es = (res,ee) /\
+    (!m. res <> INR (Error (TypeError m))) ==>
+    ee = es /\
+    ?pv'. res = INL pv' /\
+      imm_place_at cenv cx es pv'
+        (w + n2w (target_field_offset cenv (SOME LocCode)
+                    (SOME (ValPT (StructT sid))) fld)) fty
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >> strip_tac >>
+  Cases_on `pv` >> gvs[imm_place_at_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> gvs[imm_place_at_def] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  drule_all imm_extend_place_attr >> strip_tac >> gvs[] >>
+  drule_all exprSimFieldLayoutTheory.struct_fields_layout >> strip_tac >> gvs[] >>
+  drule_all exprSimAttributeFieldsTheory.struct_field_type >> strip_tac >>
+  drule_all exprSimAttributeFieldsTheory.mem_field_offset_layout >> strip_tac >>
+  `mem_step_offset (StructTV fs) (AttrSubscript fld) =
+     SOME (struct_field_offset (get_struct_fields cenv.ce_struct_fields
+             (nsid_to_string sid)) fld, ftv)` by
+    simp[mem_step_offset_def] >>
+  drule_all exprSimPropsTheory.mem_path_offset_snoc >> strip_tac >>
+  simp[target_field_offset_def, imm_place_at_def] >>
+  pure_rewrite_tac[wordsTheory.word_add_n2w, arithmeticTheory.ADD_ASSOC] >>
+  REFL_TAC
+QED
+
+Theorem imm_attr_source_tail[local]:
+  !cenv cx es pv w ty fld res ee.
+    imm_place_at cenv cx es pv w ty /\
+    extend_place cx pv (AttrSubscript fld) es = (res,ee) /\
+    (!m. res <> INR (Error (TypeError m))) ==>
+    !gs. extend_place cx pv (AttrSubscript fld) (es with gas_obs := gs) =
+      (res,ee with gas_obs := gs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `pv` >> gvs[imm_place_at_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> gvs[imm_place_at_def] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  drule_all imm_extend_place_attr >> strip_tac >> gvs[] >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[AttrSubscript fld]` assume_tac) >>
+  gen_tac >> irule imm_extend_place_step >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem imm_target_post_add[local]:
   !ctx func cenv cx es sa sm sb s0 ee pv ty rb s dst w0 off pv' ty'.
     imm_target_post ctx func cenv cx es sa sm s0 ee pv ty rb s /\
@@ -891,6 +942,154 @@ Proof
       irule emitHelperPropsTheory.step_ADD >> simp[eval_operand_def]) >>
   gvs[emitHelperTheory.emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
       comp_ignore_bind_def, comp_return_def, emit_def, update_var_def]
+QED
+
+Theorem imm_attr_walk_compose[local]:
+  !ctx func cenv cx env es sa sm sb s0 bt sid fld fty rb dst.
+    expr_sim_inv cenv cx env (es with gas_obs := []) /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME fty /\
+    local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [FST rb; Lit (n2w (target_field_offset cenv
+      (FST (SND rb)) (SND (SND rb)) fld))] sm = (dst,sb) /\
+    fn_has_code sm sb func /\
+    gas_admissible (bind (eval_base_place cx bt)
+      (\pv. extend_place cx pv (AttrSubscript fld))) target_res_ok es /\
+    gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+      (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+        imm_target_post ctx func cenv cx es sa sm s0 ee pv (StructT sid) rb t /\
+        t.vs_current_bb = sm.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sm.cs_current_insts)
+      (\res ee r. expr_exit res r) ==>
+    gas_outcome F (cx_tops cx) (ctx,func)
+      (bind (eval_base_place cx bt) (\pv. extend_place cx pv (AttrSubscript fld)))
+      (es,s0)
+      (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+        imm_target_post ctx func cenv cx es sa sb s0 ee pv fty
+          (dst,FST (SND rb),target_field_type cenv (SND (SND rb)) fld) t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- suspend "summary" >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_result >> fs[ignore_bind_def]
+QED
+
+Resume imm_attr_walk_compose[summary]:
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
+  >~ [`exit_result r`]
+  >- (Cases_on `res` >> gvs[expr_exit_def] >>
+      simp[gas_summary_at_def] >>
+      qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
+      irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `eval_base_place cx bt
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+       (INL pv, es with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  Cases_on `extend_place cx pv (AttrSubscript fld) (es with gas_obs := [])` >>
+  rename1 `extend_place _ _ _ _ = (res1,es2)` >>
+  `!m. res1 <> INR (Error (TypeError m))` by
+    (qpat_x_assum `gas_admissible _ _ _`
+       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
+     simp[bind_def] >> rpt strip_tac >> gvs[target_res_ok_def]) >>
+  `?w0. eval_operand (FST rb) t = SOME w0 /\
+        imm_place_at cenv cx (es with gas_obs := []) pv w0 (StructT sid)` by
+    (fs[imm_target_post_def] >> metis_tac[]) >>
+  `FST (SND rb) = SOME LocCode /\
+   SND (SND rb) = SOME (ValPT (StructT sid))` by
+    fs[imm_target_post_def] >>
+  `target_field_type cenv (SND (SND rb)) fld = SOME (ValPT fty)` by
+    (drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >>
+     strip_tac >> simp[target_field_type_def]) >>
+  drule_all imm_attr_source_tail >> strip_tac >>
+  `expr_sim_inv cenv cx env (es with gas_obs := [])` by simp[] >>
+  drule_all imm_attr_place_step >> strip_tac >> gvs[] >>
+  drule_at (Pat `emit_op _ _ _ = _`) imm_attr_add_path >>
+  disch_then (drule_at (Pat `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL pv'`, `es_end`, `OK q`] >> simp[] >>
+  irule (Q.INST [`right` |-> `[]`]
+    gasSummaryComposeTheory.gas_marked_exec_bind_normal
+    |> REWRITE_RULE [listTheory.APPEND_NIL]) >>
+  qexistsl_tac [`es_end`, `t`, `pv`] >>
+  simp[gas_marked_exec_def, gas_explicit_nil] >>
+  gen_tac >>
+  `es_end with gas_obs := tail = es with gas_obs := tail` by
+    (qpat_x_assum `es_end with gas_obs := [] = _`
+      (mp_tac o Q.AP_TERM `\zz:evaluation_state. zz with gas_obs := tail`) >>
+     simp[]) >>
+  simp[]
+QED
+
+Finalise imm_attr_walk_compose
+
+Theorem imm_target_attr_step[local]:
+  !ctx func cenv cx env es sa sb s0 bt fld fty r.
+    expr_sim_inv cenv cx env es /\ local_ptrs_reserved cenv sa /\
+    type_place_target env (AttributeTarget bt fld) = SOME (Type fty) /\
+    compile_get_target_ptr compile_expr cenv (AttributeTarget bt fld) sa = (r,sb) /\
+    fn_has_code sa sb func /\
+    gas_admissible (eval_base_place cx (AttributeTarget bt fld)) target_res_ok es /\
+    (!bty sm rb.
+      type_place_target env bt = SOME (Type bty) /\
+      compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+      fn_has_code sa sm func /\
+      gas_admissible (eval_base_place cx bt) target_res_ok es ==>
+      gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+        (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+          imm_target_post ctx func cenv cx es sa sm s0 ee pv bty rb t /\
+          t.vs_current_bb = sm.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sm.cs_current_insts)
+        (\res ee r. expr_exit res r)) ==>
+    gas_outcome F (cx_tops cx) (ctx,func)
+      (eval_base_place cx (AttributeTarget bt fld)) (es,s0)
+      (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+        imm_target_post ctx func cenv cx es sa sb s0 ee pv fty r t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ _ = _` mp_tac >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `attribute_type _ bty fld = SOME fty` >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?sid. bty = StructT sid` by
+    (Cases_on `bty` >> gvs[attribute_type_def]) >> gvs[] >>
+  drule compile_get_target_ptr_attr >> strip_tac >> gvs[] >>
+  `ci_mono sa sm` by
+    metis_tac[stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr, pairTheory.SND] >>
+  `ci_mono sm sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `cs_extends sa sm /\ cs_extends sm sb /\ sa.cs_next_var <= sm.cs_next_var`
+    by fs[ci_mono_def] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `eval_base_place cx (AttributeTarget bt fld) =
+     bind (eval_base_place cx bt) (\pv. extend_place cx pv (AttrSubscript fld))`
+    by simp[FUN_EQ_THM, Once evaluate_def] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, bind_def] >> rpt strip_tac >>
+     Cases_on `res` >> simp[target_res_ok_def] >>
+     first_x_assum (qspec_then `gs` mp_tac) >> simp[target_res_ok_def]) >>
+  irule imm_attr_walk_compose >> simp[] >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexistsl_tac [`sid`, `sm`] >> simp[]
 QED
 
 (* The counted walk of a target rooted at an immutable in the
