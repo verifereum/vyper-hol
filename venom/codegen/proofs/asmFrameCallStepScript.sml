@@ -4308,6 +4308,32 @@ Proof
   metis_tac[asm_call_safe_get_accounts, asm_call_safe_self_destruct_transfer]
 QED
 
+Theorem asm_call_safe_ordinary_step_inst:
+  ~is_call op /\ s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_inst op s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `op` >>
+  simp[is_call_def, step_inst_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  FIRST (map (drule_at (Pat `_ _ = (_,_)`)) [
+       asm_call_safe_binop, asm_call_safe_monop, asm_call_safe_modop,
+       asm_call_safe_exp, asm_call_safe_stop, asm_call_safe_keccak256,
+       asm_call_safe_msgParams, asm_call_safe_txParams, asm_call_safe_context,
+       asm_call_safe_balance, asm_call_safe_call_data_load,
+       asm_call_safe_step_call_data_copy, asm_call_safe_step_code_copy,
+       asm_call_safe_ext_code_size, asm_call_safe_ext_code_copy,
+       asm_call_safe_return_data_copy, asm_call_safe_ext_code_hash,
+       asm_call_safe_block_hash, asm_call_safe_blob_hash, asm_call_safe_self_balance,
+       asm_call_safe_pop, asm_call_safe_mload, asm_call_safe_mstore,
+       asm_call_safe_sload, asm_call_safe_sstore, asm_call_safe_jump,
+       asm_call_safe_jumpi, asm_call_safe_step_mcopy, asm_call_safe_consume_gas,
+       asm_call_safe_push, asm_call_safe_dup, asm_call_safe_swap,
+       asm_call_safe_log, asm_call_safe_step_return, asm_call_safe_self_destruct,
+       asm_call_safe_fail]) >> simp[vfm_abort_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
