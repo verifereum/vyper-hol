@@ -3,7 +3,7 @@ Ancestors
   exprSimPopNestedLocalLayout exprSimPopNestedLocalPath exprSimPop exprSimProps
   valueEncoding valueEncodingProps loweringPosts
   vyperState vyperTyping vyperPlaceWriteSoundness vyperTypeInvariants
-  venomState vyperAssignPreservesType arithmetic
+  venomState vyperAssignPreservesType arithmetic exprSimAggregateEncoding
 
 Theorem val_in_memory_pop_path:
   !path tv a base k etv n vs updated s.
@@ -144,3 +144,25 @@ Resume val_in_memory_mutable_path[struct_step]:
 QED
 
 Finalise val_in_memory_mutable_path
+
+Theorem pop_path_elem_in_memory:
+  !path tv a locbase k etv n vs s.
+    mutable_place_path tv path /\ value_has_type tv a /\
+    well_formed_type_value tv /\ val_wf tv a /\
+    val_in_memory tv a locbase s.vs_memory /\
+    mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] ==>
+    val_in_memory etv (LAST vs)
+      (locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+      (mstore (locbase + k) (n2w (LENGTH vs - 1)) s).vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> drule_all val_in_memory_mutable_path >>
+  simp[val_wf_def, val_in_memory_def] >> strip_tac >>
+  `elems_in_memory vs (locbase + k + 32) etv
+     (mstore (locbase + k) (n2w (LENGTH vs - 1)) s).vs_memory` by
+    (irule elems_in_memory_mstore_before >> simp[]) >>
+  drule elems_in_memory_EL >>
+  disch_then (qspec_then `LENGTH vs - 1` mp_tac) >>
+  `0 < LENGTH vs` by (Cases_on `vs` >> gvs[]) >>
+  simp[listTheory.LAST_EL, PRE_SUB1]
+QED
