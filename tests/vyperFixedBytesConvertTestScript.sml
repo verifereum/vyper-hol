@@ -188,9 +188,9 @@ QED
 
 Theorem convert_empty_bytes_regressions:
   evaluate_convert FEMPTY (BytesV []) (BaseT (IntT 8)) =
-    INR (RuntimeError "convert empty bytes to signed") /\
+    INL (IntV 0) /\
   evaluate_convert FEMPTY (BytesV []) (BaseT DecimalT) =
-    INR (RuntimeError "convert empty bytes to signed") /\
+    INL (DecimalV 0) /\
   evaluate_convert FEMPTY (BytesV []) (BaseT (UintT 8)) = INL (IntV 0)
 Proof
   EVAL_TAC

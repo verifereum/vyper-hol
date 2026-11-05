@@ -317,6 +317,27 @@ Termination
   fs[]
 End
 
+(* ABI decoding admits Python's bytes1 through bytes32, including inside
+   aggregates. General assignability alone also permits bytes0. *)
+Definition abi_decode_bytes_widths_def:
+  abi_decode_bytes_widths tenv (BaseT bt) =
+    (case bt of BytesT (Fixed n) => 0 < n | _ => T) /\
+  abi_decode_bytes_widths tenv (TupleT tys) =
+    EVERY (abi_decode_bytes_widths tenv) tys /\
+  abi_decode_bytes_widths tenv (ArrayT elem bd) =
+    abi_decode_bytes_widths tenv elem /\
+  abi_decode_bytes_widths tenv (StructT nsid) =
+    (case FLOOKUP tenv nsid of
+       SOME (StructArgs args) =>
+         EVERY (abi_decode_bytes_widths (tenv \\ nsid) o SND) args
+     | _ => F) /\
+  abi_decode_bytes_widths tenv (FlagT nsid) = T /\
+  abi_decode_bytes_widths tenv NoneT = T
+Termination
+  WF_REL_TAC `inv_image ($< LEX $<) (\(tenv, ty). (CARD (FDOM tenv), type_size ty))` >>
+  rw[FLOOKUP_DEF] >> disj1_tac >> CCONTR_TAC >> fs[]
+End
+
 Theorem assignable_type_not_NoneT:
   !tenv ty. assignable_type tenv ty ==> ty <> NoneT
 Proof
@@ -565,7 +586,7 @@ Definition well_typed_type_builtin_args_def:
     (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
-    (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
+    (LENGTH ts = 1 /\ ?n. HD ts = BaseT (BytesT (Dynamic n))) /\
   well_typed_type_builtin_args (AbiEncode _ method_id) target_ty ts =
     (ts <> [] /\ target_ty = TupleT ts /\
      case method_id of NONE => T | SOME bs => LENGTH bs = 4)
@@ -594,7 +615,9 @@ Definition type_builtin_result_ok_def:
   type_builtin_result_ok tenv Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Convert result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Extract32 result_ty target_ty arg_tys = (result_ty = target_ty) ∧
-  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
+  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys =
+    (result_ty = target_ty /\ assignable_type tenv target_ty /\
+     abi_decode_bytes_widths tenv target_ty)
 End
 
 Definition bound_at_most_def[simp]:
