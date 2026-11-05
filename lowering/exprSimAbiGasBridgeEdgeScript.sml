@@ -126,6 +126,111 @@ Proof
   simp[frag_relabel_state_def, jump_to_def, venom_state_component_equality])
 QED
 
+Theorem frag_edge_successful_terminator_jump[local]:
+  step_inst 0 ctx inst s = OK middle /\ ~middle.vs_halted /\
+  is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> STOP /\ inst.inst_opcode <> RETURN ==>
+  MEM inst.inst_opcode [JMP; JNZ; DJMP]
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem frag_relabel_edge_region_entry_bound:
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  LENGTH ids = LENGTH sa.cs_current_insts ==>
+  (u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)
+Proof
+  simp[frag_observer_region_def, start_relabel_def] >> metis_tac[]
+QED
+
+Theorem frag_relabel_edge_off_cut_opcodes:
+  frag_relabel_edge_context sa sb L ids fn /\
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  (u.vs_current_bb,u.vs_inst_idx) <> frag_observer_cut sb /\
+  lookup_block u.vs_current_bb (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME inst ==>
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> STOP /\ inst.inst_opcode <> RETURN
+Proof
+  strip_tac >> fs[frag_relabel_edge_context_def] >>
+  `(u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)` by
+    metis_tac[frag_relabel_edge_region_entry_bound] >>
+  drule_all frag_relabel_code_provenance >> strip_tac >>
+  fs[frag_ops_free_def, EVERY_MEM]
+QED
+
+Theorem frag_relabel_edge_region_closed:
+  frag_relabel_edge_context sa sb L ids fn ==>
+  observer_region_closed ctx (frag_relabel_observer sa sb L ids fn id)
+    (frag_observer_cut sb)
+    (frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb))
+Proof
+  strip_tac >> rw[observer_region_closed_def] >>
+  fs[abi_observer_step_def] >>
+  drule_all frag_relabel_edge_off_cut_opcodes >> strip_tac
+  >- (drule_all step_preserves_control_flow >> strip_tac >>
+      gvs[frag_observer_region_def] >> metis_tac[LESS_EQ_SUC_REFL, LESS_EQ_TRANS]) >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_edge_successful_terminator_jump] >>
+  `middle.vs_current_bb <> L` by
+    (`(s.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= s.vs_inst_idx)` by
+       (fs[frag_relabel_edge_context_def] >> metis_tac[frag_relabel_edge_region_entry_bound]) >>
+     `step_inst_base inst s = OK middle` by metis_tac[step_inst_non_invoke] >>
+     fs[frag_relabel_edge_context_def, EVERY_MEM] >>
+     metis_tac[frag_relabel_jump_no_reentry, MEM]) >>
+  drule eval_phis_preserves_current_bb >> strip_tac >>
+  drule frag_relabel_observer_lookup_cases >> strip_tac >>
+  fs[frag_relabel_edge_context_def] >> drule_all start_swap_fields >> strip_tac >>
+  gvs[frag_observer_region_def, start_relabel_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem frag_relabel_edge_step:
+  frag_relabel_edge_context sa sb L ids fn /\
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  frag_relabel_state L sa.cs_current_bb u v /\
+  abi_observer_step ctx (frag_relabel_observer sa sb L ids fn id)
+    (frag_observer_cut sb) u u' ==>
+  ?v'. gas_path_edge ctx fn v 0 (OK v') /\ frag_relabel_state L sa.cs_current_bb u' v'
+Proof
+  strip_tac >> fs[abi_observer_step_def] >>
+  drule_all frag_relabel_edge_off_cut_opcodes >> strip_tac >>
+  `(u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)` by
+    (fs[frag_relabel_edge_context_def] >> metis_tac[frag_relabel_edge_region_entry_bound]) >>
+  `?original. lookup_block
+    (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb)
+      fn.fn_blocks = SOME original /\
+    get_instruction original u.vs_inst_idx = SOME inst` by
+    (fs[frag_relabel_edge_context_def] >> drule_all frag_relabel_instruction_agrees >> simp[]) >>
+  `step_inst_base inst u = OK middle` by metis_tac[step_inst_non_invoke] >>
+  drule frag_relabel_state_fields >> strip_tac
+  >- (irule frag_relabel_edge_ordinary >> goal_assum (drule_at Any) >> gvs[]) >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_edge_successful_terminator_jump] >>
+  `middle.vs_current_bb <> L` by
+    (fs[frag_relabel_edge_context_def, EVERY_MEM] >>
+     metis_tac[frag_relabel_jump_no_reentry, MEM]) >>
+  `phi_prefix_length target.bb_instructions = 0` by
+    (fs[frag_relabel_edge_context_def] >> metis_tac[frag_relabel_edge_observer_phis]) >>
+  qpat_x_assum `eval_phis _ _ = _` mp_tac >>
+  once_rewrite_tac[GSYM eval_phis_prefix] >> simp[eval_phis_def] >> strip_tac >> gvs[] >>
+  rename1 `step_inst_base inst u = OK jumped` >>
+  `jumped = jump_to jumped.vs_current_bb u` by
+    (gvs[MEM] >>
+     gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     simp[jump_to_def]) >>
+  `jumped.vs_inst_idx = 0` by
+    (qpat_x_assum `jumped = jump_to _ _` mp_tac >>
+     simp[jump_to_def, venom_state_component_equality] >> metis_tac[]) >>
+  `jumped with vs_inst_idx := 0 = jumped` by
+    simp[venom_state_component_equality] >>
+  gvs[] >> metis_tac[frag_relabel_edge_raw_jump, MEM]
+QED
+
 Theorem frag_exec_gas_path_relabel_edge:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
