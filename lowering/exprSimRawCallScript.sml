@@ -4466,6 +4466,208 @@ Proof
        expand_memory_def, arithmeticTheory.MIN_COMM]
 QED
 
+Theorem raw_call_outbuf_zero_tail_vv_path[local]:
+  cap = 0 /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ci_mono initial sa /\ wb_frame cenv initial_es initial s0 s /\
+  stmt_state_rel ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
+  MAP FDOM initial_es.scopes = MAP FDOM es.scopes /\
+  eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand val_op s = SOME val_word /\
+  safe_operand sa to_op /\ safe_operand sa dp /\ safe_operand sa dl /\
+  safe_operand sa gas_op /\ safe_operand sa val_op /\
+  w2w aw = target /\
+  w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
+  stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
+  cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
+  (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
+  flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
+  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
+      vv_post ctx func cenv cx e initial_es initial sb s0
+        (SND (adopt_call_outcome rq outcome es1))
+        (Value (if flags.rcf_revert_on_failure then
+          if cap = 0 then NoneV else BytesV (TAKE cap outcome.co_returnData)
+         else if cap = 0 then BoolV outcome.co_success
+         else ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE cap outcome.co_returnData)])))
+        (if cap = 0 then StackValue ann result
+         else LocatedValue (expr_type e) (mk_ptr result LocMemory)) u)
+    (\r. ?u. flags.rcf_revert_on_failure /\ ~outcome.co_success /\
+      r = Abort Revert_abort u /\ u.vs_returndata = outcome.co_returnData)
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by metis_tac[ci_mono_compile_raw_call_outbuf, pairTheory.SND] >>
+  `ci_mono sm sb` by metis_tac[ci_mono_compile_raw_call_finish, pairTheory.SND] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by fs[ci_mono_def] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `0 < cap ==> ((cap+31) DIV 32)*32+32 < dimword (:256)` by
+    (strip_tac >> qpat_x_assum `0 < cap ==> 64 + _ < _` drule >> decide_tac) >>
+  qpat_assum `stmt_state_rel _ _ _ _ es s`
+    (mp_then Any mp_tac raw_call_outbuf_alloc_path) >>
+  disch_then drule_all >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `frag_path ctx sa sm _ Alloc _` >>
+  irule frag_path_seq >> qexistsl_tac [`Alloc`,`sm`] >> simp[] >>
+  conj_tac
+  >- (irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >> simp[]) >>
+  irule frag_path_pointwise >> simp[Abbr `Alloc`] >> rpt strip_tac >>
+  rename1 `stmt_state_rel ctx func cenv cx es t` >>
+  qpat_x_assum `frag_path _ sa sm _ _ _` kall_tac >>
+  qmatch_goalsub_abbrev_tac `frag_path ctx sm sb _ Post Exit` >>
+  `wb_frame cenv initial_es initial s0 t` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
+     >- (qexistsl_tac [`es`,`sa`,`s`] >> fs[ci_mono_def]) >>
+     metis_tac[]) >>
+  `eval_operand gas_op t = SOME gas /\ eval_operand to_op t = SOME aw /\
+   eval_operand dp t = SOME ao /\ eval_operand dl t = SOME az /\
+   eval_operand val_op t = SOME val_word` by metis_tac[] >>
+  `take_call_outcome target (read_memory (w2n ao) (w2n az) t) value_opt es =
+    (INL (rq,outcome),es1)` by fs[read_memory_def] >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  suspend "oracle"
+QED
+
+Resume raw_call_outbuf_zero_tail_vv_path[oracle]:
+  Cases_on `emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sm` >>
+  rename1 `emit_op _ _ sm = (ok,sc)` >>
+  `ci_mono sm sc` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  fs[] >>
+  `initial.cs_next_id <= sa.cs_next_id /\ initial.cs_next_var <= sm.cs_next_var` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  qpat_assum `stmt_state_rel _ _ _ _ es t`
+    (mp_then Any mp_tac raw_call_zero_alloca_sep) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  disch_then (qspec_then `initial.cs_next_id` mp_tac) >> simp[] >> strip_tac >>
+  `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
+    regions_disjoint (w2n w) 0 b sz` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes t name b sz` by
+       (irule exprSimPropsTheory.local_region_frame_fwd >>
+        qexistsl_tac [`s0`,`initial`,`initial_es.scopes`] >>
+        fs[wb_frame_def]) >>
+     metis_tac[]) >>
+  suspend "call"
+QED
+
+Resume raw_call_outbuf_zero_tail_vv_path[call]:
+  gvs[] >>
+  qpat_assum `stmt_state_rel _ _ _ _ es t`
+    (mp_then Any mp_tac raw_call_oracle_path) >>
+  disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  simp[compileEnvTheory.regions_disjoint_def] >>
+  disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
+  impl_tac >- (fs[compileEnvTheory.regions_disjoint_def] >>
+    rpt conj_tac >> metis_tac[]) >>
+  strip_tac >>
+  `cs_extends sm sc` by fs[ci_mono_def] >>
+  qmatch_asmsub_abbrev_tac `frag_path ctx sm sc _ OraclePost _` >>
+  match_mp_tac frag_path_seq >> qexistsl_tac [`sc`,`OraclePost`] >>
+  conj_tac
+  >- (irule frag_path_conseq >>
+      goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >> simp[]) >>
+  conj_tac
+  >- (irule frag_path_pointwise >> simp[Abbr `OraclePost`] >> rpt strip_tac >>
+      rename1 `eval_operand ok u = SOME _` >> suspend "finish") >>
+  simp[] >> suspend "call_metadata"
+QED
+
+Resume raw_call_outbuf_zero_tail_vv_path[call_metadata]:
+  qpat_x_assum `emit_op _ _ sm = _` mp_tac >>
+  qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  Cases_on `value_opt = NONE` >> fs[] >>
+  Cases_on `flags.rcf_revert_on_failure` >>
+  gvs[compile_raw_call_finish_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[cs_extends_refl] >>
+  rename1 `fresh_label "call_failed" sc = (fl,s2)` >>
+  rename1 `fresh_label "call_ok" s2 = (kl,s3)` >>
+  rename1 `emit_inst JNZ _ _ s3 = ((),s4)` >>
+  rename1 `new_block fl s4 = (_,s5)` >>
+  rename1 `emit_op RETURNDATASIZE [] s5 = (_,s6)` >>
+  rename1 `compile_alloc_buffer 0 s6 = (_,s7)` >>
+  rename1 `emit_void RETURNDATACOPY _ s7 = ((),s8)` >>
+  rename1 `emit_inst REVERT _ _ s8 = ((),s9)` >>
+  rename1 `new_block kl s9 = (_,s10)` >>
+  `ci_mono sc s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
+   ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
+   ci_mono s7 s8 /\ ci_mono s8 s9 /\ ci_mono s9 s10` by
+    (rpt conj_tac >> metis_tac[ci_mono_fresh_label, ci_mono_emit_inst,
+      ci_mono_new_block, ci_mono_emit_op, ci_mono_compile_alloc_buffer,
+      ci_mono_emit_void, pairTheory.SND]) >>
+  fs[ci_mono_def] >> metis_tac[cs_extends_trans]
+QED
+
+Resume raw_call_outbuf_zero_tail_vv_path[finish]:
+  `LENGTH u.vs_returndata < dimword (:256)` by fs[] >>
+  `initial.cs_next_var <= sc.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
+  `local_ptrs_reserved cenv sc` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> fs[ci_mono_def]) >>
+  simp[Abbr `Post`, Abbr `Exit`] >>
+  qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op _ _ sm = _` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ u` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ u` mp_tac >>
+  qpat_x_assum `eval_operand ok u = _` mp_tac >>
+  qpat_x_assum `LENGTH u.vs_returndata < _` mp_tac >>
+  qpat_x_assum `u.vs_returndata = _` mp_tac >>
+  qpat_x_assum `expr_type e = _` mp_tac >>
+  qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
+  qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
+  qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  Cases_on `flags.rcf_revert_on_failure`
+  >- suspend "revert_zero" >>
+  fs[] >> drule raw_call_nonrevert_finish_code >>
+  simp[] >> strip_tac >>
+  `sc' = sc /\ ok' = ok` by (Cases_on `value_opt = NONE` >> gvs[]) >>
+  gvs[comp_return_def] >>
+  irule frag_path_run_inst_seq >>
+  simp[emitted_insts_def, run_inst_seq_def] >>
+  irule raw_call_bool_post >>
+  fs[raw_call_return_type_def, stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx] >>
+  simp[expr_val_rel_def, expr_val_at_def, instIdxIndepTheory.eval_op_inst_idx,
+       vyperValueTheory.evaluate_type_def, bool_to_word_def,
+       is_word_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  Cases_on `outcome.co_success` >> simp[bool_to_word_def]
+QED
+
+Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
+  fs[] >> drule raw_call_revert_finish_path >>
+  disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  disch_then (qspecl_then [`outcome.co_success`,`u`,`ctx`,`0w`] mp_tac) >>
+  simp[] >>
+  impl_tac
+  >- (Cases_on `outcome.co_success` >> gvs[bool_to_word_def]) >>
+  disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  match_mp_tac raw_call_none_post >>
+  conj_tac >- gvs[raw_call_return_type_def] >>
+  conj_tac
+  >- (irule raw_call_finish_state_rel_aged >>
+      qexistsl_tac [`0w`,`0`,`0w`,`sc`,`u`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
+  irule raw_call_finish_frame_aged >>
+  qexistsl_tac [`0w`,`0`,`0w`,`sc`,`u`] >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+Finalise raw_call_outbuf_zero_tail_vv_path
+
+val _ = if null (hyp raw_call_outbuf_zero_tail_vv_path) then ()
+  else raise Fail "raw_call_outbuf_zero_tail_vv_path retained hypotheses";
+
 Theorem raw_call_outbuf_tail_vv_frag[local]:
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
