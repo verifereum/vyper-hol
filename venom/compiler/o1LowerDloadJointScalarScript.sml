@@ -64,6 +64,59 @@ Proof
   metis_tac[opaque_use_ok_retpc_use]
 QED
 
+Theorem ld_joint_nonaddress_no_provenance:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  active_inst fn inst s /\ MEM op inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ ~is_pointer_preserving_op inst.inst_opcode /\
+  ~MEM inst.inst_opcode [LT;GT;EQ] /\
+  (FILTER ($= op) inst.inst_operands = [op] ==>
+    !ops. mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops ==>
+      ops.iao_ofst <> op) ==>
+  op_prov H op = NONE
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_def] >>
+  `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
+    metis_tac[frame_reachable_prov_support] >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (fs[EVERY_MEM, fn_ptr_ok_def] >>
+     `MEM inst (fn_insts fn)` by
+       (fs[active_inst_def, fn_insts_def,
+           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+     metis_tac[]) >>
+  `op_prov G op = NONE` by
+    (Cases_on `op` >> simp[op_prov_def] >> rename1 `FLOOKUP G vv` >>
+     Cases_on `FLOOKUP G vv` >> simp[] >>
+     `vv IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+     gvs[ptr_use_ok_def] >> metis_tac[]) >>
+  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
+  drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
+  Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]
+QED
+
+Theorem ld_joint_nonaddress_operand:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ MEM op inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ ~is_pointer_preserving_op inst.inst_opcode /\
+  ~MEM inst.inst_opcode [LT;GT;EQ] /\ op_taint tn op = {} /\
+  (!v. ~retpc_use_ok inst v) /\
+  (FILTER ($= op) inst.inst_operands = [op] ==>
+    !ops. mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops ==>
+      ops.iao_ofst <> op) ==>
+  eval_operand op s = eval_operand op t
+Proof
+  strip_tac >>
+  `op_prov H op = NONE` by
+    (irule ld_joint_nonaddress_no_provenance >> metis_tac[]) >>
+  irule ld_joint_operand_clean >>
+  metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc]
+QED
+
 Theorem ld_joint_scalar_no_provenance:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\

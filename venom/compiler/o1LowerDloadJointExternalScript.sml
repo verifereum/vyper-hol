@@ -62,26 +62,9 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_def] >>
-  `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
-    metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
-  `ptr_use_ok P (fn_pv P fn) inst` by
-    (fs[EVERY_MEM, fn_ptr_ok_def] >>
-     `MEM inst (fn_insts fn)` by
-       (fs[active_inst_def, fn_insts_def,
-           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
-     metis_tac[]) >>
-  `op_prov G op = NONE` by
-    (Cases_on `op` >> simp[op_prov_def] >> rename1 `FLOOKUP G vv` >>
-     Cases_on `FLOOKUP G vv` >> simp[] >>
-     `vv IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
-     qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
-     gvs[ptr_use_ok_def, is_pointer_preserving_op_def] >> metis_tac[]) >>
   `op_prov H op = NONE` by
-    (`occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
-       fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
-     drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
-     Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>
+    (drule ld_joint_nonaddress_no_provenance >> disch_then irule >>
+     gvs[is_pointer_preserving_op_def] >> metis_tac[]) >>
   `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
   `op_taint tn op = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
