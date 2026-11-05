@@ -486,3 +486,97 @@ Proof
   drule method_id_output_buffer_mem_ok_unrestricted >> disch_then irule >>
   metis_tac[]
 QED
+
+Theorem method_id_runtime_hash_split:
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
+  compile_method_id_hash (expr_type e) x sm = (hash,sh) ==>
+  emitted_insts sm sb = emitted_insts sm sh ++ emitted_insts sh sb
+Proof
+  strip_tac >> irule emitted_insts_append >>
+  drule_all method_id_tail_shape >> strip_tac >>
+  reverse conj_tac >- simp[] >>
+  metis_tac[method_id_hash_as_keccak, keccak_typed_suffix_shape]
+QED
+
+(* Pending endpoint proof preserved for C1.3.2.2.
+Theorem method_id_runtime_typed_post_run_mem:
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  expr_store_bound cx (expr_type e) v x s /\ ~block_is_terminated sm ==>
+  ?t r. run_inst_seq (emitted_insts sm sb) s = OK t /\
+    run_inst_seq_mem_ok (emitted_insts sm sb) s /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    builtin_result cx es'.accounts
+      (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
+      MethodId [expr_type e] [v] = INL r /\
+    vv_post ctx func cenv cx
+      (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
+      es sa sb s0 es' (Value r)
+      (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
+       LocatedValue (BaseT (BytesT (Dynamic 4)))
+         <|ptr_location := LocMemory; ptr_operand := op|>) t /\
+    vv_store_bound cx
+      (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
+      (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
+      es' (Value r)
+      (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
+       LocatedValue (BaseT (BytesT (Dynamic 4)))
+         <|ptr_location := LocMemory; ptr_operand := op|>) t
+Proof
+  strip_tac >>
+  drule_all method_id_runtime_typed_post_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sm sb) s` by
+    (drule_all method_id_runtime_typed_mem_ok >> simp[]) >>
+  `s.vs_alloca_next <= t.vs_alloca_next` by
+    (irule method_id_sequence_frontier >> goal_assum (drule_at Any) >>
+     qpat_x_assum `compile_method_id_runtime _ _ _ _ = _` mp_tac >>
+     Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
+     TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+     Cases_on `fixed` >>
+     simp[compile_method_id_runtime_def, compile_method_id_hash_def,
+       compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+       compile_alloc_buffer_def, emit_op_def, emit_void_def,
+       fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt strip_tac >> gvs[] >>
+     simp_tac (srw_ss()) [emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     simp_tac (srw_ss()) [mk_inst_def, is_terminator_def, is_ext_call_op_def]) >>
+  qexistsl_tac [`t`, `r`] >> simp[] >>
+  Cases_on `fixed` >> gvs[]
+  >- (irule vv_store_bound_stack_word >> simp[is_word_type_def]) >>
+  drule_all hash_method_id_runtime_cut >> strip_tac >> gvs[] >>
+  drule_all hash_method_id_hash_cut >> strip_tac >>
+  drule (Q.INST [`sh` |-> `sm'`, `hash` |-> `hash`]
+    method_id_hash_typed_post_run) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sm') s = OK hashed` >>
+  `sa.cs_next_var <= sm'.cs_next_var` by
+    (drule (cj 2 compile_expr_grows) >> strip_tac >>
+     drule_all method_id_hash_grows >> strip_tac >> decide_tac) >>
+  `local_ptrs_reserved cenv sm'` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  drule_all hash_method_id_mask_cut >> strip_tac >>
+  drule_all method_id_dynamic_suffix_frame >> strip_tac >>
+  `sm'.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sm' /\
+   sb.cs_current_insts = sm'.cs_current_insts ++ emitted_insts sm' sb` by
+    (drule_all method_id_tail_shape >> strip_tac >>
+     metis_tac[method_id_hash_as_keccak, keccak_typed_suffix_shape]) >>
+  `emitted_insts sm sb = emitted_insts sm sm' ++ emitted_insts sm' sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `t' = t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sm sb) s = _` mp_tac >>
+     asm_rewrite_tac[run_inst_seq_append] >> simp[]) >>
+  gvs[] >>
+  `w2n p + 64 <= t.vs_alloca_next` by
+    (fs[stmt_state_rel_def] >> drule_all alloca_site_registered_below >> simp[]) >>
+  FAIL_TAC "bound simplification"
+QED
+*)
