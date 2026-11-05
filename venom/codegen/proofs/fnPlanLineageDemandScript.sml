@@ -140,3 +140,89 @@ Proof
   `pred_bb = pb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
   gvs[]
 QED
+
+Definition projected_demand_wf_def:
+  projected_demand_wf fn st <=>
+    (!pb bb. MEM pb fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+       fn_reachable fn pb.bb_label /\ fn_cfg_edge fn pb.bb_label bb.bb_label ==>
+       EVERY (def_available_at fn pb NONE)
+         (input_vars_from pb.bb_label bb.bb_instructions
+           (df_at [] st bb.bb_label 0))) /\
+    (!eb. entry_block fn = SOME eb ==> df_at [] st eb.bb_label 0 = [])
+End
+
+Theorem projected_demand_live_out:
+  !fn st bb.
+    wf_function fn /\ projected_demand_wf fn st /\
+    MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label ==>
+    EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+      (liveness_out fn.fn_blocks (cfg_analyze fn) bb.bb_label st)
+Proof
+  rpt strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all demand_available_endpoint >> disch_then (rewrite_tac o single) >>
+  qpat_x_assum `MEM v _` mp_tac >>
+  simp[livenessBlockProofsTheory.liveness_out_def,
+       livenessTransferProofsTheory.mem_foldl_list_union, MEM_MAP] >>
+  strip_tac >>
+  `MEM s (bb_succs bb)` by metis_tac[cfg_analyze_preserves_bb_succs] >>
+  `MEM s (fn_labels fn)` by metis_tac[wf_function_def, fn_succs_closed_def] >>
+  gvs[venomInstTheory.fn_labels_def, MEM_MAP] >>
+  rename1 `MEM succ_bb fn.fn_blocks` >>
+  `lookup_block succ_bb.bb_label fn.fn_blocks = SOME succ_bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
+  gvs[livenessDefsTheory.liveness_edge_transfer_def] >>
+  gvs[projected_demand_wf_def, EVERY_MEM] >>
+  first_x_assum irule >> simp[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem projected_demand_init:
+  !fn labels. projected_demand_wf fn (init_df_state [] labels)
+Proof
+  simp[projected_demand_wf_def, dfAnalyzeDefsTheory.init_df_state_def,
+       dfAnalyzeDefsTheory.df_at_def,
+       livenessDefsTheory.input_vars_from_def] >>
+  rpt strip_tac >> Cases_on `NULL (collect_phis bb.bb_instructions)` >> simp[]
+QED
+
+Theorem projected_demand_block:
+  !fn st lbl.
+    codegen_ready_fn fn /\ projected_demand_wf fn st ==>
+    projected_demand_wf fn
+      (liveness_block fn.fn_blocks (cfg_analyze fn) lbl st)
+Proof
+  rpt strip_tac >>
+  `wf_function fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  simp[projected_demand_wf_def] >> conj_tac
+  >- (rpt strip_tac >> Cases_on `bb.bb_label = lbl`
+      >- (gvs[] >> simp[EVERY_MEM] >> rpt strip_tac >>
+          irule liveness_block_projected_demand >>
+          simp[] >> qexistsl_tac [`bb`, `cfg_analyze fn`, `st`] >> simp[] >>
+          irule projected_demand_live_out >> simp[] >>
+          metis_tac[venomExecProofsTheory.fn_reachable_step]) >>
+      simp[livenessBlockProofsTheory.liveness_block_other_inst] >>
+      gvs[projected_demand_wf_def] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `eb.bb_label = lbl`
+  >- (gvs[] >>
+      `MEM eb fn.fn_blocks /\ fn_reachable fn eb.bb_label` by
+        (Cases_on `fn.fn_blocks` >>
+         gvs[venomInstTheory.entry_block_def, fn_reachable_def,
+             venomInstTheory.fn_entry_label_def]) >>
+      `collect_phis eb.bb_instructions = []` by
+        (gvs[codegen_ready_fn_def, block_entries_ready_def, NULL_EQ]) >>
+      `EVERY (demand_available fn eb (LENGTH eb.bb_instructions))
+        (liveness_out fn.fn_blocks (cfg_analyze fn) eb.bb_label st)` by
+        (irule projected_demand_live_out >> simp[]) >>
+      Cases_on `df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn)
+        eb.bb_label st) eb.bb_label 0 = []` >> simp[] >>
+      `?v. MEM v (df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn)
+        eb.bb_label st) eb.bb_label 0)` by
+        (Cases_on `df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn)
+           eb.bb_label st) eb.bb_label 0` >> gvs[] >>
+         qexists_tac `h` >> simp[]) >>
+      drule_all liveness_block_entry_demand >>
+      simp[raw_phi_inputs_def] >> strip_tac >>
+      metis_tac[demand_available_entry]) >>
+  simp[livenessBlockProofsTheory.liveness_block_other_inst] >>
+  gvs[projected_demand_wf_def]
+QED
