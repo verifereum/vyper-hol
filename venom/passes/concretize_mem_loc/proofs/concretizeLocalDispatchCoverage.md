@@ -243,3 +243,17 @@ control alignment and generic execution composition remain open. In particular
 no callee execution or full INVOKE simulation is asserted. Build checked with
 parameter and frame-environment theories
 (TO_concretize_sim-20261105T054124Z_m10411_t001).
+
+## Checked disciplined callee roots
+
+`concretizeLayoutCalleeRootsTheory` normalizes the caller value roots to
+`clean_resolved_root L` indexed by `MAP (resolved_op rv) ops` for a decoded
+INVOKE. Discipline excludes opaque and tainted call arguments. Origin-free
+roots give equality; resolved pointer roots retain token-specific displacement,
+not equal values. `disciplined_invoke_setup_roots` installs these roots through
+paired setup. The existing `resolution_arguments_erasure` identifies the erased
+resolved argument vector with actual raw parameter provenance; it is reused,
+not restated. The frozen call ghost clears variable taint rather than installing
+a new parameter-taint vector. PARAM output preservation, callee local relation,
+control and execution composition remain open. Build checked by holbuild
+(TO_concretize_sim-20261105T054124Z_m10439_t001).
