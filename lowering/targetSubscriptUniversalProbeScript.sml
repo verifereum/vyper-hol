@@ -4,6 +4,7 @@ Ancestors
   vyperInterpreter vyperContext vyperValue vfmState
   venomExecSemantics venomState venomInst calleeTransport
   exprSimLeaves exprSimHyps vyperTypeCallGraph compileEnv exprLoweringProps
+  venomMemDefs
 Libs
   pairLib
 
@@ -340,4 +341,69 @@ Proof
   qpat_x_assum `storage_agree _ _ _` mp_tac >>
   simp[storage_agree_def] >>
   disch_then irule >> simp[clear_entry_child_not_dead]
+QED
+
+Theorem clear_root_accounts[local]:
+  !cx es ss.
+    accounts_rel cx es ss /\ ss.vs_call_ctx.cc_address = cx.txn.target ==>
+    accounts_rel cx
+      (set_storage cx es F (update_storage 0w 0w (get_storage cx es F)))
+      (sstore 0w 0w ss)
+Proof
+  rpt strip_tac >> irule accountsRelPropsTheory.accounts_rel_sstore >>
+  simp[] >> qexists_tac `es` >>
+  simp[set_storage_backend_eq, get_storage_def, lookup_account_def] >>
+  rpt strip_tac >>
+  irule accountsRelPropsTheory.storage_dead_update_zero >> simp[]
+QED
+
+Theorem clear_root_stmt[local]:
+  !k es ss.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss ==>
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context
+      (set_storage probe_clear_source_context es F
+        (update_storage 0w 0w (get_storage probe_clear_source_context es F)))
+      (sstore 0w 0w ss)
+Proof
+  rpt strip_tac >>
+  `ss.vs_call_ctx.cc_address = probe_clear_source_context.txn.target` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `accounts_rel probe_clear_source_context
+    (set_storage probe_clear_source_context es F
+      (update_storage 0w 0w (get_storage probe_clear_source_context es F)))
+    (sstore 0w 0w ss)` by
+    (irule clear_root_accounts >>
+     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+  drule accountsRelPropsTheory.accounts_rel_storage_transient >>
+  simp[sstore_def] >> strip_tac >>
+  gvs[stmt_state_rel_def, state_rel_def, sstore_def,
+      local_ptrs_rel_def, local_backed_def, local_region_def, lookup_var_def,
+      immutables_rel_def, logs_rel_def, alloca_inv_def, alloca_room_def,
+      pending_alloca_size_def, immutable_alloca_sep_def, set_storage_def,
+      allocas_non_overlapping_def, alloca_next_valid_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem clear_stmt_transport:
+  !k es ss.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss ==>
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context
+      (set_storage probe_clear_source_context es F
+        (update_storage 0w 0w (get_storage probe_clear_source_context es F)))
+      (sstore 2w 0w (sstore 0w 0w ss))
+Proof
+  rpt strip_tac >>
+  drule clear_root_stmt >> strip_tac >>
+  `ss.vs_call_ctx.cc_address = probe_clear_source_context.txn.target` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  irule targetSubscriptSimTheory.stmt_state_rel_sstore_dead_right >>
+  simp[sstore_def, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> rpt strip_tac >>
+  irule probe_clear_source_dead_descendant >>
+  simp[set_storage_def, lookup_account_def,
+       lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
