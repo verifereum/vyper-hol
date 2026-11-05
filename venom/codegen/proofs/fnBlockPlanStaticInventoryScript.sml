@@ -2,6 +2,7 @@ Theory fnBlockPlanStaticInventory
 Ancestors
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst
+  fnBlockPlanStaticRetRegion
 
 Theorem inventory_do_swap_promised:
   !d ps. (SND (do_swap d ps)).ps_cleanup_promised = ps.ps_cleanup_promised
@@ -425,4 +426,127 @@ Proof
        (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))` mp_tac) >>
      gvs[] >> metis_tac[]) >>
   gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_not_safe:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target ==>
+  !n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n
+Proof
+  rpt strip_tac >> gvs[] >> drule_all ret_reaching_cleanup_not_safe >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_mem:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\ ALL_DISTINCT ps.ps_stack /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))) ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  (MEM (Var v) qs.ps_stack <=> MEM (Var v) ps.ps_stack /\
+    MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+Proof
+  strip_tac >> irule inventory_cleanup_mem >>
+  drule_all inventory_ret_cleanup_not_safe >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_distinct:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\ ALL_DISTINCT ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  ALL_DISTINCT qs.ps_stack
+Proof
+  strip_tac >> drule_all inventory_ret_cleanup_not_safe >>
+  disch_then (qspec_then `ps` assume_tac) >>
+  irule inventory_cleanup_distinct >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_spilled:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\ clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> drule_all inventory_ret_cleanup_not_safe >>
+  disch_then (qspec_then `ps` assume_tac) >>
+  irule inventory_cleanup_spilled >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_promised:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\ clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  ~qs.ps_cleanup_promised
+Proof
+  strip_tac >> drule_all inventory_ret_cleanup_not_safe >>
+  disch_then (qspec_then `ps` assume_tac) >>
+  irule inventory_cleanup_promised >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_support:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\ ALL_DISTINCT ps.ps_stack /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))) ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+    qs.ps_stack
+Proof
+  strip_tac >> drule_all inventory_ret_cleanup_not_safe >>
+  disch_then (qspec_then `ps` assume_tac) >>
+  irule inventory_cleanup_support >> metis_tac[]
+QED
+
+Theorem inventory_ret_cleanup_marker:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  ~ps.ps_cleanup_promised /\ ALL_DISTINCT ps.ps_stack /\
+  ~MEM dead_stack_marker ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >> drule_all inventory_ret_cleanup_not_safe >>
+  disch_then (qspec_then `ps` assume_tac) >>
+  drule_all inventory_cleanup_branch >>
+  disch_then (qspec_then `lv` assume_tac) >>
+  drule inventory_popmany >>
+  disch_then (qspec_then `MAP Var (FILTER (\v. ~MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+    (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))` mp_tac) >>
+  gvs[] >> metis_tac[]
 QED
