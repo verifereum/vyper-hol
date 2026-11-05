@@ -3,6 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsBoundary fragGasSeqPtr
           emitHelperProps ptrSafeRun ptrDiscipline venomInstProofs
           venomExecSemantics venomInst venomState finite_map
           contextCodegenRel codegenRel memLocDefs exprSimHash
+          decoderGhostFramePtr
 
 Theorem gas_ptr_inst_ok:
   allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
@@ -28,11 +29,8 @@ Theorem gas_ptr_covers:
   ptr_covers (step_prov PG G (mk_inst id GAS [] [out]) t)
     (step_taint (mk_inst id GAS [] [out]) s t tn) p t sz
 Proof
-  strip_tac >> gvs[step_GAS] >>
-  gvs[bodyPtrDefsTheory.ptr_covers_def, step_prov_def, set_prov_def,
-      out_prov_def, step_taint_def, op_taint_def, set_var_taint_def,
-      out_taint_def, mk_inst_def, lookup_var_def, update_var_def,
-      FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+  strip_tac >> irule ptr_covers_step_frame >> simp[mk_inst_def] >>
+  gvs[step_GAS, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem assert_ptr_inst_ok:
@@ -85,4 +83,17 @@ Proof
        mk_inst_def, update_var_def] >>
   simp[finite_mapTheory.FLOOKUP_DEF, taint_component_equality,
        pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem assert_step_ghost:
+  step_prov PG G (mk_inst id ASSERT [op] []) s = G /\
+  step_taint (mk_inst id ASSERT [op] []) s s tn = tn
+Proof
+  simp[step_prov_def, set_prov_def, step_taint_def, mem_taint_def,
+       new_site_bytes_def, step_writes_def, written_taint_def,
+       source_memory_write_ranges_def, range_bytes_def, set_var_taint_def,
+       store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def,
+       DRESTRICT_UNIV, FLOOKUP_DEF, taint_component_equality,
+       pred_setTheory.EXTENSION] >>
+  metis_tac[]
 QED
