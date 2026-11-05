@@ -151,3 +151,100 @@ Proof
     drule le_transfer_fold_multivalue_origin >> simp[] >>
     strip_tac >> gvs[unwrap_load_lattice_def]) >> simp[])
 QED
+
+(* A class is uniform in the input lattice, including NONE. *)
+Definition le_fold_preserves_def:
+  le_fold_preserves ctx insts k <=>
+    !a. FLOOKUP (unwrap_load_lattice
+      (FOLDL (\ll i. load_transfer ctx i ll) a insts)) k =
+      FLOOKUP (unwrap_load_lattice a) k
+End
+
+Definition le_fold_deletes_def:
+  le_fold_deletes ctx insts k <=>
+    !a. FLOOKUP (unwrap_load_lattice
+      (FOLDL (\ll i. load_transfer ctx i ll) a insts)) k = NONE
+End
+
+Definition le_fold_constant_def:
+  le_fold_constant ctx insts k v <=>
+    !a. FLOOKUP (unwrap_load_lattice
+      (FOLDL (\ll i. load_transfer ctx i ll) a insts)) k = SOME [v]
+End
+
+Theorem le_invalidate_uniform_lookup[local]:
+  (!ll. FLOOKUP (load_invalidate aliases bp space ll key) k = FLOOKUP ll k) \/
+  (!ll. FLOOKUP (load_invalidate aliases bp space ll key) k = NONE)
+Proof
+  Cases_on `load_key_to_memloc bp space key = ml_undefined` >>
+  simp[load_invalidate_def, FLOOKUP_DRESTRICT] >>
+  Cases_on `load_key_to_memloc bp space k <> ml_undefined /\
+    ~ma_may_alias aliases (load_key_to_memloc bp space k)
+      (load_key_to_memloc bp space key)` >> simp[]
+QED
+
+Theorem le_transfer_uniform_lookup:
+  (!a. FLOOKUP (unwrap_load_lattice (load_transfer ctx inst a)) k =
+       FLOOKUP (unwrap_load_lattice a) k) \/
+  (!a. FLOOKUP (unwrap_load_lattice (load_transfer ctx inst a)) k = NONE) \/
+  (?v. !a. FLOOKUP (unwrap_load_lattice (load_transfer ctx inst a)) k = SOME [v])
+Proof
+  Cases_on `inst.inst_opcode = ctx.lctx_config.lc_load`
+  >- (simp[load_transfer_def, unwrap_load_lattice_def] >>
+      Cases_on `inst.inst_operands` >- simp[] >>
+      Cases_on `t` >- (
+        Cases_on `inst.inst_outputs` >- simp[] >>
+        Cases_on `t` >> simp[FLOOKUP_UPDATE] >>
+        Cases_on `load_get_read_key ctx.lctx_bp ctx.lctx_addr_space
+          (normalize_operand ctx.lctx_dfg []) inst = k` >> simp[]) >>
+      Cases_on `inst.inst_outputs` >> simp[] >>
+      rename1 `inst.inst_outputs = z::zs` >> Cases_on `zs` >> simp[]) >>
+  Cases_on `ctx.lctx_config.lc_store` >>
+  simp[load_transfer_def, unwrap_load_lattice_def] >>
+  Cases_on `inst.inst_opcode = x` >> simp[]
+  >- (Cases_on `inst.inst_operands` >- simp[] >>
+      Cases_on `t` >- simp[] >>
+      Cases_on `t'` >> simp[] >>
+      simp[FLOOKUP_UPDATE] >>
+      Cases_on `load_get_write_key ctx.lctx_bp ctx.lctx_addr_space
+        (normalize_operand ctx.lctx_dfg []) inst = k` >- simp[] >>
+      simp[] >> metis_tac[le_invalidate_uniform_lookup]) >>
+  Cases_on `(case ctx.lctx_addr_space of
+      AddrSp_Memory => Eff_MEMORY | AddrSp_Storage => Eff_STORAGE |
+      AddrSp_Transient => Eff_TRANSIENT | _ => Eff_MEMORY)
+        IN write_effects inst.inst_opcode` >> simp[]
+QED
+
+Theorem le_fold_lookup_classification:
+  !insts. le_fold_preserves ctx insts k \/ le_fold_deletes ctx insts k \/
+    ?v. le_fold_constant ctx insts k v
+Proof
+  Induct >- simp[le_fold_preserves_def] >> gen_tac >>
+  fs[le_fold_preserves_def, le_fold_deletes_def, le_fold_constant_def] >>
+  metis_tac[le_transfer_uniform_lookup]
+QED
+
+Theorem le_fold_preserves_lookup:
+  le_fold_preserves ctx insts k ==>
+  FLOOKUP (unwrap_load_lattice
+    (FOLDL (\ll i. load_transfer ctx i ll) a insts)) k =
+  FLOOKUP (unwrap_load_lattice a) k
+Proof
+  simp[le_fold_preserves_def]
+QED
+
+Theorem le_fold_deletes_lookup:
+  le_fold_deletes ctx insts k ==>
+  FLOOKUP (unwrap_load_lattice
+    (FOLDL (\ll i. load_transfer ctx i ll) a insts)) k = NONE
+Proof
+  simp[le_fold_deletes_def]
+QED
+
+Theorem le_fold_constant_lookup:
+  le_fold_constant ctx insts k v ==>
+  FLOOKUP (unwrap_load_lattice
+    (FOLDL (\ll i. load_transfer ctx i ll) a insts)) k = SOME [v]
+Proof
+  simp[le_fold_constant_def]
+QED
