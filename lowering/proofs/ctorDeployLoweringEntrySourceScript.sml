@@ -4,6 +4,7 @@ Ancestors
   ctorDeployLoweringDefs e2eDeployDefs emitHelperProps compileVyper
   vyperInterpreter vyperTypeContract supportedProgram
   venomInst venomWf venomState
+Libs finite_mapLib
 
 Theorem deploy_ctor_start_nonreentrant_false:
   !tops deploy_bc am tx es mut nr body am_c es0.
@@ -86,13 +87,7 @@ Proof
   simp[venomInstTheory.fn_insts_blocks_def, venomWfTheory.bb_well_formed_def,
        venomWfTheory.inst_wf_def, venomInstTheory.fn_labels_def,
        venomStateTheory.get_label_def, venomInstTheory.is_terminator_def] >>
-  EVAL_TAC >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `i = 0 \/ i = 1 \/ i = 2` by decide_tac >>
-      gvs[venomInstTheory.is_terminator_def]) >>
-  rpt strip_tac >>
-  `j = 0 \/ j = 1 \/ j = 2` by decide_tac >> gvs[]
+  EVAL_TAC
 QED
 
 Theorem deploy_ctor_noninit_raw_inputs_probe:
@@ -158,6 +153,7 @@ Proof
 QED
 
 local
+  val _ = load "wordsLib";
   val stage_cs = computeLib.add_thms
     [listTheory.SET_TO_LIST_EMPTY,
      venomPipelineRunnerTheory.run_callee_first_def,
@@ -169,6 +165,11 @@ local
      irSupplyTheory.fn_ir_vars_def,
      irSupplyTheory.fn_ir_labels_def]
     (computeLib.copy (computeLib.the_compset ()));
+  val stage_cs = finite_mapLib.add_finite_map_compset stage_cs;
+  val stage_cs = computeLib.add_thms
+    [alistTheory.fmap_to_alist_FEMPTY,
+     finite_mapTheory.DRESTRICT_FUPDATE, finite_mapTheory.DRESTRICT_FEMPTY,
+     pred_setTheory.IN_COMPL, pred_setTheory.IN_SING] stage_cs;
 in
 Theorem deploy_ctor_noninit_simplify_probe:
   IS_SOME (run_pipeline_stage
@@ -479,5 +480,117 @@ Proof
   CONV_TAC (computeLib.CBV_CONV stage_cs)
 QED
 
+
+Theorem deploy_ctor_codegen_computation_probe:
+  SET_TO_LIST (FDOM (FEMPTY : operand |-> num)) = [] /\
+  DRESTRICT ((FEMPTY : operand |-> num) |+ (Var "x",0))
+    (COMPL {Var "x"}) = FEMPTY
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_max_eom_eq:
+  max_live_eom (^final_unit).cu_context = SOME 0
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_stack_find_probe:
+  stack_find (\x. x = Var "x") [Var "y"; Var "x"] = SOME 1
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val final_ctx = ``(^final_unit).cu_context``;
+val final_fn = ``HD (^final_ctx).ctx_functions``;
+val final_fcg = ``fcg_analyze ^final_ctx``;
+val final_growth = ``cleanup_growth_table ^final_ctx ^final_fcg``;
+val final_ch = ``cleanup_caller_height (LENGTH (^final_ctx).ctx_functions)
+                  ^final_ctx ^final_fcg "__deploy"``;
+
+Theorem deploy_ctor_empty_operand_set_probe:
+  SET_TO_LIST (EMPTY : operand set) = []
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_empty_spillmap_probe:
+  fmap_to_alist (FEMPTY : operand |-> num) = []
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val stage_cs = computeLib.add_thms
+  [deploy_ctor_empty_operand_set_probe, deploy_ctor_empty_spillmap_probe] stage_cs;
+
+
+Theorem deploy_ctor_noninit_fnplan_probe:
+  IS_SOME (generate_fn_plan_with_cleanup ^final_ch ^final_growth ^final_fn 0 0)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs) >>
+  rewrite_tac[deploy_ctor_empty_operand_set_probe,
+              deploy_ctor_empty_spillmap_probe] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs) >>
+  rewrite_tac[deploy_ctor_empty_operand_set_probe,
+              deploy_ctor_empty_spillmap_probe] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val final_ops = ``[SOLabel "__deploy"; SOPush (Lit 0w); SOPush (Lit 0w);
+    SODup 1; SOPushLabel "runtime_begin"; SOSwap 1; SOEmit "CODECOPY";
+    SOPush (Lit 0w); SOEmit "RETURN"]``;
+val final_ps = ``<|ps_stack := []; ps_spilled := FEMPTY;
+    ps_alloc := <|sa_free_slots := []; sa_next_offset := 0; sa_spill_base := 0|>;
+    ps_label_counter := 0; ps_cleanup_height := SOME 0;
+    ps_cleanup_growth := [("__deploy",SOME 10)]; ps_cleanup_promised := F|>``;
+
+Theorem deploy_ctor_noninit_fnplan_eq:
+  generate_fn_plan_with_cleanup ^final_ch ^final_growth ^final_fn 0 0 =
+    SOME (^final_ops, ^final_ps)
+Proof
+  CONV_TAC (LAND_CONV (computeLib.CBV_CONV stage_cs)) >>
+  rewrite_tac[deploy_ctor_empty_operand_set_probe,
+              deploy_ctor_empty_spillmap_probe] >>
+  CONV_TAC (LAND_CONV (computeLib.CBV_CONV stage_cs)) >>
+  rewrite_tac[deploy_ctor_empty_operand_set_probe,
+              deploy_ctor_empty_spillmap_probe] >>
+  CONV_TAC (LAND_CONV (computeLib.CBV_CONV stage_cs)) >>
+  REFL_TAC
+QED
+
+val final_plan = ``<|cp_regions :=
+    [<|sr_fn_name := "__deploy"; sr_spill_base := 0; sr_spill_end := 0;
+       sr_plan := ^final_ops|>];
+    cp_max_static_eom := 0; cp_peak_spill_end := 0; cp_initial_fmp := 0|>``;
+
+Theorem deploy_ctor_noninit_plan_eq:
+  generate_context_plan ^final_ctx = SOME ^final_plan
+Proof
+  rewrite_tac[stackPlanGenTheory.generate_context_plan_def,
+    stackPlanGenTheory.generate_context_plan_with_def,
+    deploy_ctor_noninit_max_eom_eq] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_fn_plan_with_cleanup``]) >>
+  rewrite_tac[CONV_RULE
+    (computeLib.RESTR_EVAL_CONV [``generate_fn_plan_with_cleanup``])
+    deploy_ctor_noninit_fnplan_eq] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs) >>
+  simp[wordsTheory.dimword_def]
+QED
+
+Theorem deploy_ctor_noninit_codegen_eq:
+  codegen_assembly
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> ^final_unit =
+  SOME (execute_plan 0 (context_plan_ops ^final_plan) ++
+        data_segment_asm (^final_unit).cu_data_segment ++
+        [AsmDataHeader "code_end"])
+Proof
+  rewrite_tac[codegenTheory.codegen_assembly_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_context_plan``]) >>
+  rewrite_tac[CONV_RULE
+    (computeLib.RESTR_EVAL_CONV [``generate_context_plan``])
+    deploy_ctor_noninit_plan_eq] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
 
 end
