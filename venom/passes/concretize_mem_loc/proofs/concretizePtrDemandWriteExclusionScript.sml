@@ -11,6 +11,7 @@ Ancestors concretizePtrProtectedLivesets concretizePtrTokenInterval
   concretizePtrImportOrigins concretizePtrStagePlacements
   concretizePtrLayoutOutput concretizePtrTaggedOrigins
   concretizePtrCallSeparation concretizePtrStackImports
+  concretizePtrOwnershipErasure ptrDiscipline
   concretizePtrRuntimeGeneration concretizePtrProductionCoverage
   concretizeAnalysisBoundary concretizeAnalysisScanCoverage
   concretizeAnalysisWriteSafety basePtrDefs
@@ -690,3 +691,74 @@ Resume ptr_demand_other_owner_separation[distinct_depths]:
 QED
 
 Finalise ptr_demand_other_owner_separation
+
+(* Conditional paired ordinary-write consumer. Operand classification, word
+   bounds, and paired CALL returndata lengths are inputs, not consequences
+   of the structural transcript. The initializing writer w is unchanged. *)
+Theorem ptr_demand_ordinary_write_exclusion:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
+  EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  fixed_region_reserved lo C /\
+  ptr_vars_transport bj positions TGj (EL j h).po_taint src tgt /\
+  src.vs_labels = tgt.vs_labels /\
+  mem_write_ops (EL j h).po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+  ((?u. ops.iao_ofst = Var u) \/ (?y. ops.iao_ofst = Lit y)) /\
+  ((?u. sizeop = Var u) \/ (?y. sizeop = Lit y)) /\
+  eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
+  op_prov TGj sizeop = NONE /\ op_taint (EL j h).po_taint sizeop = {} /\
+  (MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
+    LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
+  (b+k IN range_bytes (step_writes (EL j h).po_inst src posts) <=>
+    ptr_chrono_write C (b+k) (EL j h)) /\
+  ((op_prov TGj ops.iao_ofst = NONE /\
+    op_taint (EL j h).po_taint ops.iao_ofst = {} /\ w2n x + w2n z <= lo) \/
+   (?dv tokB bid db sb pb.
+     ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (tokB,bid) /\
+     FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
+     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
+     db <= w2n x /\ w2n x + w2n z <= db+sb /\ pb+sb < dimword(:256))) ==>
+  pa+k NOTIN range_bytes (step_writes (EL j h).po_inst tgt postt)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `_ \/ _` strip_assume_tac
+  >- (drule_all ptr_demand_fixed_write_exclusion >> simp[]) >>
+  drule_all ptr_demand_interval_snapshot >> strip_tac >>
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions`
+    by fs[ptr_demand_interval_def] >>
+  `FLOOKUP bj (tokB,bid) = SOME (db,sb)` by
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >> strip_tac >>
+     qpat_x_assum `!v. FLOOKUP (EL j h).po_prov v = _`
+       (qspec_then `dv` mp_tac) >> simp[ptr_owner_project_def]) >>
+  `op_prov TGj ops.iao_ofst = SOME (tokB,bid)` by simp[op_prov_def] >>
+  Cases_on `tokB = token /\ bid = aid`
+  >- (qpat_x_assum `tokB = token /\ bid = aid` strip_assume_tac >>
+      qpat_x_assum `tokB = token` SUBST_ALL_TAC >>
+      qpat_x_assum `bid = aid` SUBST_ALL_TAC >>
+      `db = b /\ sb = sz /\ pb = pa` by metis_tac[SOME_11, PAIR_EQ] >>
+      qpat_x_assum `db = b` SUBST_ALL_TAC >>
+      qpat_x_assum `sb = sz` SUBST_ALL_TAC >>
+      qpat_x_assum `pb = pa` SUBST_ALL_TAC >>
+      drule_all ptr_demand_same_owner_write_exclusion >> simp[]) >>
+  spose_not_then assume_tac >>
+  drule_all ptr_write_transport_owner_containment >> strip_tac >>
+  first_x_assum (qspec_then `postt` strip_assume_tac) >>
+  `pb <= pa+k /\ pa+k < pb+sb /\ 0 < sb` by
+    (first_x_assum drule >> decide_tac) >>
+  `inst_write_op (EL j h).po_inst = SOME (Var dv)` by
+    simp[inst_write_op_def] >>
+  `reserved_intervals_disjoint (pa,sz) (pb,sb)` by
+    (irule ptr_demand_other_owner_separation >> simp[] >>
+     goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `inst_write_op _ = SOME _`)) >>
+     goal_assum (drule_at (Pat `EL _ H = _`)) >>
+     goal_assum (drule_at (Pat `ptr_stage_placements _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  pop_assum mp_tac >>
+  simp[staticLayoutDefsTheory.reserved_intervals_disjoint_def] >>
+  `k < sz` by fs[ptr_demand_interval_def] >> decide_tac
+QED
