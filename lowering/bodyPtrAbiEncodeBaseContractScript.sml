@@ -7,6 +7,8 @@ Ancestors
   venomState venomExecSemantics valueEncodingProofs valueEncoding valueEncodingProps
   abiEncoder abiEncoderInput abiEncoderOpenInput contractABI
   abiEncoderLeaves abiEncoderPrimitiveEffect
+  fragExecPtr typedCopyPtr ghostPcTransportPtr fragGasSeqPtr
+  emitHelperProps emitHelper fragExec venomInst
   words finite_map pred_set list arithmetic
 
 Theorem abi_encode_empty_strong_endpoint:
@@ -111,4 +113,123 @@ Proof
   disch_then (qspecl_then [`B`, `sz`, `LENGTH en.cs_current_insts`, `D`] mp_tac) >>
   simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
   simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+(* The semantic read capacity, rather than the encoded size, owns the source. *)
+Theorem abi_encode_copy_entry_check:
+  !B cap D C.
+  abi_encoder_window_pre ctx fn st en (Var dst) src (AbiCopy sz) at av B cap D s /\
+  ~ctx_has_dalloca ctx /\ op_taint tn src = {} /\
+  op_taint tn (Var dst) = {} /\
+  LENGTH (enc at av) <= C /\ sz < dimword(:256) /\
+  (0 < C ==> ptr_covers G tn dst s C) /\
+  (0 < cap ==> ?q. src = Var q /\ ptr_covers G tn q s cap) ==>
+  ptr_inst_ok gasD 0 fuel ctx fn G tn
+    (mk_inst id MCOPY [Var dst;src;Lit (n2w sz)] []) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sz <= cap /\ LENGTH (enc at av) = sz /\
+   eval_operand src s = SOME (n2w B) /\
+   eval_operand (Var dst) s = SOME (n2w D)` by
+    (fs[abi_encoder_window_pre_def, abi_encoder_window_copy_iff] >>
+     metis_tac[LENGTH_mem_bytes_at_proof]) >>
+  Cases_on `sz = 0`
+  >- (gvs[] >> irule ptr_inst_ok_mcopy_zero >> metis_tac[]) >>
+  `0 < cap /\ 0 < C` by decide_tac >>
+  `?q. src = Var q /\ ptr_covers G tn q s cap` by metis_tac[] >>
+  `ptr_covers G tn dst s sz /\ ptr_covers G tn q s sz` by
+    (fs[ptr_covers_def] >> rpt conj_tac >>
+     rpt (first_assum $ irule_at Any) >> decide_tac) >>
+  gvs[] >> irule ptr_inst_ok_mcopy >> simp[w2n_n2w, LESS_MOD]
+QED
+
+Theorem abi_encode_copy_fetch:
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,en) /\
+  fn_has_code st en fn ==>
+  en.cs_current_bb = st.cs_current_bb /\
+  LENGTH en.cs_current_insts = SUC (LENGTH st.cs_current_insts) /\
+  ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH st.cs_current_insts) =
+      SOME (mk_inst st.cs_next_id MCOPY [dst;src;Lit (n2w sz)] [])
+Proof
+  strip_tac >> drule abi_encode_copy_code >> strip_tac >>
+  `en.cs_current_bb = st.cs_current_bb /\
+   en.cs_current_insts = st.cs_current_insts ++
+     [mk_inst st.cs_next_id MCOPY [dst;src;Lit (n2w sz)] []]` by
+    gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def] >>
+  simp[] >> drule_all fn_has_code_same_block >> strip_tac >>
+  qexists_tac `bb` >> simp[] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem abi_encode_copy_counted_endpoint:
+  !B cap D.
+  compile_abi_encode_to_buf (Var dst) src (AbiCopy sz) st = (out,en) /\
+  abi_encoder_window_pre ctx fn st en (Var dst) src (AbiCopy sz) at av B cap D s /\
+  B < dimword(:256) /\ D < dimword(:256) /\ sz < dimword(:256) /\
+  ptr_inst_ok gasD 0 0 ctx fn G tn
+    (mk_inst st.cs_next_id MCOPY [Var dst;src;Lit (n2w sz)] []) s ==>
+  gas_path_ptr gasD 0 ctx fn PG G tn s 0 G
+    (step_taint (mk_inst st.cs_next_id MCOPY [Var dst;src;Lit (n2w sz)] [])
+      s (mcopy D B sz s) tn)
+    (OK ((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code st en fn /\ ~s.vs_halted /\
+   s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts /\
+   eval_operand src s = SOME (n2w B) /\
+   eval_operand (Var dst) s = SOME (n2w D)` by
+    fs[abi_encoder_window_pre_def] >>
+  drule_all abi_encode_copy_fetch >> strip_tac >>
+  `step_inst_base (mk_inst st.cs_next_id MCOPY
+     [Var dst;src;Lit (n2w sz)] []) s = OK (mcopy D B sz s)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def, w2n_n2w]) >>
+  `step_prov PG G (mk_inst st.cs_next_id MCOPY
+     [Var dst;src;Lit (n2w sz)] []) (mcopy D B sz s) = G` by
+    simp[step_prov_def, set_prov_def, out_prov_def, mk_inst_def,
+         DRESTRICT_UNIV] >>
+  `gas_path_ptr_edge gasD 0 ctx fn PG G tn s 0 G
+    (step_taint (mk_inst st.cs_next_id MCOPY [Var dst;src;Lit (n2w sz)] [])
+      s (mcopy D B sz s) tn)
+    (OK ((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts))` by
+    (`(mk_inst st.cs_next_id MCOPY [Var dst;src;Lit (n2w sz)] []).inst_opcode <> INVOKE /\
+      ~is_terminator (mk_inst st.cs_next_id MCOPY [Var dst;src;Lit (n2w sz)] []).inst_opcode` by
+       simp[mk_inst_def, is_terminator_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME
+        (mk_inst st.cs_next_id MCOPY [Var dst;src;Lit (n2w sz)] [])` by simp[] >>
+     drule_all straight_line_ptr_edge >>
+     disch_then (qspec_then `PG` mp_tac) >>
+     asm_rewrite_tac[] >> simp[mk_inst_def]) >>
+  `~((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts).vs_halted` by
+    simp[mcopy_def, write_memory_with_expansion_def] >>
+  metis_tac[gas_path_ptr_rules, ADD_CLAUSES]
+QED
+
+Theorem abi_encode_copy_taint_endpoint:
+  !B D sz.
+  eval_operand dst s = SOME (n2w D) /\ eval_operand src s = SOME (n2w B) /\
+  B < dimword(:256) /\ D < dimword(:256) /\ sz < dimword(:256) /\
+  (!i. B <= i /\ i < B+sz ==> i NOTIN tn.t_mem) ==>
+  (step_taint (mk_inst id MCOPY [dst;src;Lit (n2w sz)] [])
+    s (mcopy D B sz s) tn).t_var = tn.t_var /\
+  (step_taint (mk_inst id MCOPY [dst;src;Lit (n2w sz)] [])
+    s (mcopy D B sz s) tn).t_mem =
+      tn.t_mem DIFF {i | D <= i /\ i < D+sz}
+Proof
+  rpt gen_tac >> strip_tac >>
+  `eval_operand (Lit (n2w sz)) s = SOME (n2w sz:bytes32)` by
+    simp[eval_operand_def] >>
+  qpat_assum `eval_operand dst s = _`
+    (mp_then (Pos hd) mp_tac mcopy_operand_ghost_frame) >>
+  disch_then (fn th => qpat_assum `eval_operand src s = _`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `eval_operand (Lit _) s = _`
+    (mp_then (Pos hd) mp_tac th)) >>
+  simp[w2n_n2w] >> strip_tac >> simp[] >>
+  `{D+i | i < sz /\ B+i IN tn.t_mem} = {}` by
+    (simp[EXTENSION] >> rpt strip_tac >>
+     first_x_assum (qspec_then `B+i` mp_tac) >> simp[] >> metis_tac[]) >>
+  metis_tac[UNION_EMPTY]
 QED
