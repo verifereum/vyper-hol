@@ -43,7 +43,7 @@ Theorem compile_assign_place_case:
      arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     ((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
      target_case F ctx func cenv cx bt) /\
-    target_env_ok cenv cx /\ ~immutable_root cx bt /\
+    ~immutable_root cx bt /\
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
@@ -68,7 +68,7 @@ Theorem assign_place_effectful_index_case:
      arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     ((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
      target_case F ctx func cenv cx bt) /\
-    target_env_ok cenv cx /\ ~immutable_root cx bt /\
+    ~immutable_root cx bt /\
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
@@ -92,15 +92,6 @@ Theorem immutable_deploy_assign_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
-Proof
-  cheat
-QED
-
-(* ADMITTED: body_inv relates only the main module's storage and mapping
-   declarations, and target_env_ok asks for every module's; waiting on
-   the same change to body_inv as immutable_deploy_assign_case. *)
-Theorem body_inv_target_env_ok:
-  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> target_env_ok cenv cx
 Proof
   cheat
 QED
