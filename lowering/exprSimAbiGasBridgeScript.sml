@@ -143,6 +143,7 @@ Theorem frag_exec_gas_path_relabel:
        fn_inst_ids_distinct fn' /\ fn'.fn_name = fn.fn_name /\
        (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
             i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
+       (!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE) /\
        (sb.cs_current_insts <> [] \/
         !bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
              phi_prefix_length bb.bb_instructions = 0) ==>
@@ -183,6 +184,7 @@ Theorem abi_decode_sim_gas_path_relabel:
        fn_inst_ids_distinct fn' /\ fn'.fn_name = fn.fn_name /\
        (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
             i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
+       (!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE) /\
        (!bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
              phi_prefix_length bb.bb_instructions = 0) ==>
        ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
