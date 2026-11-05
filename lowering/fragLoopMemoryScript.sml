@@ -20,8 +20,7 @@ Proof
   `exec_block (SUC fuel) ctx bb s = OK (jump_to lbl s)` by
     simp[Once exec_block_def, step_inst_non_invoke, jump_to_def] >>
   `inst_dload_in_section inst s` by
-    (simp[inst_dload_in_section_def] >> rpt strip_tac >>
-     gvs[is_terminator_def]) >>
+    (rw[inst_dload_in_section_def] >> gvs[is_terminator_def]) >>
   `mem_safe_block (SUC fuel) ctx bb s` by
     simp[Once mem_safe_block_def, mem_safe_step_non_invoke,
          step_inst_non_invoke] >>
