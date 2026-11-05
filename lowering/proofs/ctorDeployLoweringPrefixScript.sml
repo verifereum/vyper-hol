@@ -13,8 +13,7 @@ Theorem deploy_ctor_prefix_fail:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs
-      (entry_venom_state prog cplan es with vs_alloca_next := ctor_imm_len tops) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
     classify_functions tops = (exts, ints, fb, SOME cf) /\
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) ==>

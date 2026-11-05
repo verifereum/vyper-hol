@@ -17,8 +17,7 @@ Theorem deploy_ctor_entry_reaches_body:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs
-      (entry_venom_state prog cplan es with vs_alloca_next := ctor_imm_len tops) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

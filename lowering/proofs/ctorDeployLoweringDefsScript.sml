@@ -2,8 +2,6 @@
  * constructor's S1, ctorDeployLowering).  They name the facts the pieces
  * exchange; none of them is a correctness claim.
  *
- * ctor_imm_len: the immutables section length lower_vyper_deploy_unit
- *   reserves (its immutables_len).
  * deploy_ctor_start: the source state es0 where the constructor body starts
  *   in load_contract, with outcomes NONE: the selected constructor, its
  *   bound arguments, the machine am_c after constant evaluation, then the
@@ -21,12 +19,6 @@ Theory ctorDeployLoweringDefs
 Ancestors
   ctorDeployDefs e2eDeployDefs fragExec compileVyper moduleLowering
   stmtLowering compileEnv vyperInterpreter vyperState
-
-Definition ctor_imm_len_def:
-  ctor_imm_len tops =
-    compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
-      tops
-End
 
 Definition deploy_ctor_start_def:
   deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) <=>
@@ -75,7 +67,7 @@ Definition deploy_ctor_code_def:
       set_constructor_package_target rpolicy.rpol_target
         (package_constructor tops F (assign_nkeys tops 0) cf) =
         (cenv0, pos_args, is_payable, nr, nkey, ut, body, ret) /\
-      cap = ctor_imm_len tops /\
+      cap = imm_len tops /\
       (if is_payable then comp_return ()
        else comp_bind (emit_op CALLVALUE [])
               (\cv. comp_bind (emit_op ISZERO [cv])

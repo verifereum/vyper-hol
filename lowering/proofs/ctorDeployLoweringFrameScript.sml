@@ -13,18 +13,17 @@ Theorem deploy_ctor_body_frame:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs
-      (entry_venom_state prog cplan es with vs_alloca_next := ctor_imm_len tops) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) ==>
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx) /\
     cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
-    LENGTH runtime_bc + ctor_imm_len tops < dimword(:256) /\
+    LENGTH runtime_bc + imm_len tops < dimword(:256) /\
     (nr ==> ut /\ storage_layout_safe (deploy_evaluation_context tops am tx) /\
             (deploy_evaluation_context tops am tx).nonreentrant_slot = SOME nkey) /\
-    (ctor_imm_len tops <> 0 ==>
+    (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
     ?bindings env_t env'.
