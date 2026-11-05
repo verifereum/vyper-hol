@@ -666,7 +666,11 @@ Definition install_immutable_reservation_def:
     ctx with ctx_global_reserved :=
       (if immutables_len = 0 then [] else [(0, immutables_len)])
 End
-(* Deploy lowering owns both the runtime size and runtime data installation. *)
+(* Deploy lowering owns both the runtime size and runtime data installation.
+   The constructor's immutables occupy [0, immutables_len), and the unit's
+   alloca frontier starts past them, so the budget check also leaves room
+   for that region below 2^256; and the epilogue returns runtime_size +
+   immutables_len bytes, so it leaves room for the runtime code too. *)
 Definition run_deploy_lowering_def:
   run_deploy_lowering has_constructor (rpolicy : resolved_compiler_policy)
                        (runtime_bytecode : byte list) immutables_len
@@ -684,7 +688,13 @@ Definition run_deploy_lowering_def:
         NONE => NONE
       | SOME (ctx, data) =>
           let ctx' = install_immutable_reservation immutables_len ctx in
-          if lowering_context_ok ctx' then
+          if lowering_context_ok ctx' /\
+             LENGTH runtime_bytecode + immutables_len +
+               unit_alloca_budget ctx' +
+               32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                              (FLAT (MAP fn_insts ctx'.ctx_functions))) <
+               dimword (:256)
+          then
             SOME <| cu_context := ctx';
                     cu_data_segment :=
                       data ++

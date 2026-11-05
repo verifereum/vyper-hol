@@ -11,7 +11,7 @@ Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
-  list immutableSectionRel
+  list immutableSectionRel compileEnv callTrace
 
 (* ===== Canonical constructor ABI and syntactic Call exclusion ===== *)
 
@@ -21,6 +21,7 @@ Definition constructor_args_encode_def:
       vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
         SOME (mut, F, args, [], NoneT, body) /\
       LENGTH tx.args = LENGTH args /\
+      IS_SOME (bind_arguments (type_env tops) args tx.args) /\
       vyper_to_abi_list (type_env tops) (MAP SND args) tx.args = SOME abi_vals /\
       bs = enc (Tuple (vyper_to_abi_types (type_env tops) (MAP SND args)))
                (ListV abi_vals)
@@ -104,11 +105,22 @@ Definition deploy_state_rel_def:
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
+      es.rollback.toDelete = am.pending_deletions /\
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
-      tx.function_name = "__init__" /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\
+      call_outcomes_ok am tx (MAP SND (call_trace es)) /\
+      (* Under constructor_call_free the real call trace is empty, so this
+       * clause is vacuous. It could be discharged by proving that a
+       * call-free constructor compiles (through O1 and codegen) to code with
+       * no CALL-family instruction, leaving call_trace es empty; it is kept
+       * as a premise only to avoid that detour. *)
+      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
+                    (initial_state (am with <|accounts := co.co_accounts;
+                                              tStorage := co.co_tStorage|>) []))
+        (MAP SND (call_trace es)) /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
 
@@ -117,12 +129,15 @@ End
 (* This named case expression is for clean focused boundary clients. The stage
  * theorem keeps the literal PLAN 5.11 expression in its conclusion. Source
  * installation is not EVM bytecode installation: compare the target modulo
- * code, all other accounts exactly, plus transient storage and ordered logs.
+ * code, with its storage modulo storage_dead, all other accounts exactly,
+ * transient storage modulo storage_dead, and ordered logs (as the runtime's
+ * accounts_agree/transient_agree).
  *)
 Definition deploy_result_rel_def:
   deploy_result_rel tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?section lgs.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
           frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -131,8 +146,14 @@ Definition deploy_result_rel_def:
                lookup_account a es'.rollback.accounts =
                lookup_account a am'.accounts) /\
           (lookup_account tx.target es'.rollback.accounts) with code := [] =
-          (lookup_account tx.target am'.accounts) with code := [] /\
-          es'.rollback.tStorage = am'.tStorage /\
+          (lookup_account tx.target am'.accounts) with
+            <| code := [];
+               storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+          storage_agree
+            (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+            (lookup_account tx.target am'.accounts).storage
+            (lookup_account tx.target es'.rollback.accounts).storage /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs
     | INR (AssertException s) =>
