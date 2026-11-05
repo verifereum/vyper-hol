@@ -13,6 +13,7 @@ Ancestors
   fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
   venomInst venomExecSemantics venomState compileEnv list rich_list
   fragGasPath gasCount arithmetic venomExecProofs venomInstProps venomWf
+  jumpIndep
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -1726,6 +1727,27 @@ Proof
   simp[start_relabel_def, frag_observer_cut_def]
 QED
 
+Definition frag_relabel_state_def:
+  frag_relabel_state L entry u v <=>
+    ?p. v = u with
+      <|vs_current_bb := (if u.vs_current_bb = L then entry else u.vs_current_bb);
+        vs_prev_bb := p|>
+End
+
+Theorem frag_relabel_base_ordinary:
+  ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\ step_inst_base inst s = OK t ==>
+  step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
+    OK (t with <|vs_current_bb := b; vs_prev_bb := p|>)
+Proof
+  strip_tac >>
+  `t.vs_inst_idx = s.vs_inst_idx` by
+    metis_tac[step_inst_base_preserves_inst_idx] >>
+  drule_all step_inst_base_jump_indep >>
+  disch_then (qspecl_then [`p`, `b`, `s.vs_inst_idx`] mp_tac) >>
+  simp[instIdxIndepTheory.exec_result_map_def]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
@@ -1734,6 +1756,7 @@ Theorem frag_exec_gas_path_relabel:
        fn_inst_ids_distinct fn' /\ fn'.fn_name = fn.fn_name /\
        (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
             i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
+       (!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE) /\
        (sb.cs_current_insts <> [] \/
         !bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
              phi_prefix_length bb.bb_instructions = 0) ==>
@@ -1774,6 +1797,7 @@ Theorem abi_decode_sim_gas_path_relabel:
        fn_inst_ids_distinct fn' /\ fn'.fn_name = fn.fn_name /\
        (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
             i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
+       (!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE) /\
        (!bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
              phi_prefix_length bb.bb_instructions = 0) ==>
        ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
