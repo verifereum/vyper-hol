@@ -39,6 +39,8 @@ Ancestors
   fragExec exprSim exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim targetSubscriptSim exprSimMappingHash
   exprNoEffectStorage supportedExprTraverse
+  accountsRelProps vyperStoragePlaceProvenance vyperStorageLayoutSafety
+  vyperStorageBackend vyperLookupStorage
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
@@ -762,4 +764,28 @@ Proof
   qid_spec_tac `bt` >> recInduct base_assignment_target_induct >>
   simp[target_indices_def, supported_expr_exists_def,
        expr_has_effect_def, listTheory.EXISTS_APPEND]
+QED
+
+(* Declared storage roots carry independent live-byte and typed-slot facts. *)
+Theorem eval_base_place_global_storage_invariant:
+  !nsid cenv cx env es tr slot tv es'.
+    target_pre cenv cx env (TopLevelNameTarget nsid) es /\
+    eval_base_place cx (TopLevelNameTarget nsid) es =
+      (INL (PlaceR (StoragePlace tr slot tv)),es') ==>
+    storage_read_live cx tr (get_storage cx es' tr) slot tv /\
+    slots_in_range (get_storage cx es' tr) (w2n slot) tv
+Proof
+  rpt gen_tac >> Cases_on `nsid` >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  drule lookup_global_storage_region >> strip_tac >>
+  conj_tac
+  >- (irule declared_storage_region_read_live >> goal_assum (drule_at Any)) >>
+  `expr_sim_inv cenv cx env es'` by
+    (irule eval_base_place_sim_inv >>
+     qexists_tac `TopLevelNameTarget (q,r)` >> simp[Once evaluate_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `contract_storage_well_formed cx es'` by gvs[expr_sim_inv_def] >>
+  irule contract_storage_well_formed_region >>
+  goal_assum (drule_at Any) >> simp[get_storage_backend_eq] >>
+  qexists_tac `tr` >> goal_assum (drule_at Any) >> simp[]
 QED
