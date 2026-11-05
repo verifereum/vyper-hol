@@ -25,8 +25,7 @@
  *     after the call value is accepted, composed from the entry bridge,
  *     the body and the frame's returns below
  *   body_stmts_sim_mem (bodyMemory) -- body_stmts_sim with memory (#641's
- *     body footprint), given lookup_function_abi_decode_target
- *     (loweringMemAbiTarget) for its abi_decode target premise
+ *     body footprint)
  *   external_entry_value_revert_mem (loweringMemEntryRevert),
  *   external_entry_reaches_body_mem (loweringMemEntryReach) -- S1's entry
  *     bridge with memory (#639, #867)
