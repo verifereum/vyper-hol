@@ -764,6 +764,135 @@ Proof
   simp[wordsTheory.word_add_n2w, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
+Theorem imm_extend_place_step[local]:
+  !cx es src id path itv iv tv v sub ev.
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+        SOME (itv,iv) /\
+    subscripts_type itv path = SOME tv /\
+    evaluate_subscripts itv iv path = INL v /\
+    evaluate_subscripts tv v [sub] = INL ev ==>
+    extend_place cx (PlaceR (ImmutablePlace src id path)) sub es =
+      (INL (PlaceR (ImmutablePlace src id (path ++ [sub]))), es)
+Proof
+  rpt strip_tac >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_immutables_def, get_address_immutables_def, bind_def,
+       ignore_bind_def, lift_option_type_def, lift_sum_def, return_def,
+       extend_memory_place_def]
+QED
+
+Theorem imm_extend_place_attr[local]:
+  !cx es src id path itv iv tv v fld res ee.
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+        SOME (itv,iv) /\
+    subscripts_type itv path = SOME tv /\
+    evaluate_subscripts itv iv path = INL v /\
+    extend_place cx (PlaceR (ImmutablePlace src id path))
+      (AttrSubscript fld) es = (res,ee) /\
+    (!m. res <> INR (Error (TypeError m))) ==>
+    ee = es /\
+    res = INL (PlaceR (ImmutablePlace src id (path ++ [AttrSubscript fld]))) /\
+    ?ev. evaluate_subscripts itv iv (path ++ [AttrSubscript fld]) = INL ev
+Proof
+  rpt strip_tac >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_immutables_def, get_address_immutables_def, bind_def,
+       ignore_bind_def, lift_option_type_def, lift_sum_def, return_def,
+       extend_memory_place_def] >>
+  Cases_on `v` >> simp[evaluate_subscripts_def, raise_def, return_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `ALOOKUP vals fld` >> Cases_on `ALOOKUP vals fld` >>
+  gvs[raise_def, return_def] >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[AttrSubscript fld]` mp_tac) >>
+  simp[evaluate_subscripts_def]
+QED
+
+Theorem imm_target_post_add[local]:
+  !ctx func cenv cx es sa sm sb s0 ee pv ty rb s dst w0 off pv' ty'.
+    imm_target_post ctx func cenv cx es sa sm s0 ee pv ty rb s /\
+    local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
+    eval_operand (FST rb) s = SOME w0 /\
+    imm_place_at cenv cx ee pv' (w0 + n2w off) ty' ==>
+    ?q. run_inst_seq (emitted_insts sm sb) s = OK q /\
+        imm_target_post ctx func cenv cx es sa sb s0 ee pv' ty'
+          (dst, SOME LocCode, SOME (ValPT ty')) q
+Proof
+  rpt strip_tac >> drule_all emitHelperPropsTheory.buffer_emit_add_run >> strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  qabbrev_tac `x = STRING #"%" (toString sm.cs_next_var)` >>
+  qexists_tac `update_var x (w0 + n2w off) s` >> simp[] >>
+  `!z. not_fresh_at sa z ==> z <> x` by
+    (rw[Abbr `x`, not_fresh_at_def] >> strip_tac >> gvs[] >>
+     first_x_assum (qspec_then `sm.cs_next_var` mp_tac) >> simp[]) >>
+  `!z. not_fresh_at sa z ==>
+       lookup_var z (update_var x (w0 + n2w off) s) = lookup_var z s` by
+    metis_tac[emitHelperPropsTheory.lookup_var_update_var] >>
+  `not_local_ptr cenv ee.scopes x` by
+    (rw[not_local_ptr_def] >> strip_tac >>
+     metis_tac[local_ptrs_reserved_def]) >>
+  fs[imm_target_post_def] >>
+  `stmt_state_rel ctx func cenv cx ee (update_var x (w0 + n2w off) s)` by
+    metis_tac[stmt_state_rel_update_var] >>
+  simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >> rpt conj_tac
+  >~ [`not_fresh_at sb _`]
+  >- simp[Abbr `x`, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  >~ [`locals_kept _ _ _ (update_var _ _ _)`]
+  >- (irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >> simp[update_var_def]) >>
+  simp[update_var_def] >> metis_tac[]
+QED
+
+Theorem imm_target_post_inst_idx[local,simp]:
+  !ctx func cenv cx es sa sb s0 ee pv ty r s n.
+    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r
+      (s with vs_inst_idx := n) <=>
+    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s
+Proof
+  rpt gen_tac >>
+  `!q. eval_operand q (s with vs_inst_idx := n) = eval_operand q s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  simp[imm_target_post_def, stmt_state_rel_inst_idx, lookup_var_def,
+       locals_kept_def]
+QED
+
+Theorem imm_attr_add_path[local]:
+  !ctx func cenv cx es sa sm sb s0 ee pv ty rb dst off pv' ty' t w0.
+    imm_target_post ctx func cenv cx es sa sm s0 ee pv ty rb t /\
+    local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
+    fn_has_code sm sb func /\ ~t.vs_halted /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    eval_operand (FST rb) t = SOME w0 /\
+    imm_place_at cenv cx ee pv' (w0 + n2w off) ty' ==>
+    ?q. gas_marked_path F ctx func t 0 (OK q) /\
+        imm_target_post ctx func cenv cx es sa sb s0 ee pv' ty'
+          (dst, SOME LocCode, SOME (ValPT ty')) q /\
+        q.vs_current_bb = sb.cs_current_bb /\
+        q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >>
+  drule_all imm_target_post_add >> strip_tac >>
+  drule_all emitHelperPropsTheory.buffer_emit_add_run >> strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var))
+                 (w0 + n2w off) t with vs_inst_idx := SUC t.vs_inst_idx` >>
+  simp[] >> rpt conj_tac
+  >- (pure_rewrite_tac[gas_marked_path_def, COND_CLAUSES] >>
+      qpat_assum `t.vs_inst_idx = _` (SUBST1_TAC o SYM) >>
+      irule emitHelperPropsTheory.emit_op_zero_path >> simp[] >>
+      qexistsl_tac [`[FST rb; Lit (n2w off)]`, `dst`, `ADD`, `sb`] >>
+      simp[venomInstTheory.is_terminator_def] >> gen_tac >>
+      irule emitHelperPropsTheory.step_ADD >> simp[eval_operand_def]) >>
+  gvs[emitHelperTheory.emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+      comp_ignore_bind_def, comp_return_def, emit_def, update_var_def]
+QED
+
 (* The counted walk of a target rooted at an immutable in the
    constructor, with pure indices, given their judgments, the
    constructor's compile env and the root's declared type in it: from s0
