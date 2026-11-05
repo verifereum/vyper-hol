@@ -20,7 +20,7 @@ Ancestors
   o1LowerDloadJointCompare o1LowerDloadRangeTransport
   o1LowerDloadJointRangeCopy o1LowerDloadJointCleanWrite
   o1LowerDloadJointRangeRead o1LowerDloadForwardAbort o1LowerDloadJointReturn
-  o1LowerDloadJointPop
+  o1LowerDloadJointPop o1LowerDloadJointRestore
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
