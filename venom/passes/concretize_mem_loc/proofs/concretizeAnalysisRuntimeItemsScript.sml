@@ -2,9 +2,9 @@ Theory concretizeAnalysisRuntimeItems
 Ancestors concretizeAnalysisOpenCallSummary concretizeAnalysisStageSizes
   concretizeAnalysisOwnership concretizeAnalysisCollection frameHistoryCfg
   concretizeAnalysisSizes staticLayoutAllocatorProofs concretizeMemLocDefs
-  frameOpenCall frameActivationCache frameJointTransition frameJointTrace frameOriginHistory
+  frameDemandOwnership frameOpenCall frameActivationCache frameJointTransition frameJointTrace frameOriginHistory
   frameOriginReachable frameExecutionHistory frameAllocationSizes
-  o1PassContract venomWf venomInst venomExecProps removeUnusedSsaProofs
+  contextCodegenRel o1PassContract venomWf venomInst venomExecProps removeUnusedSsaProofs
   finite_map list pred_set arithmetic
 
 Theorem source_alloca_sizes_positive_item:
@@ -32,18 +32,79 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
-Theorem activation_cache_static_item:
+Theorem activation_cache_source_owner:
+  joint_config_reachable vs0 C q /\ o1_ctx_shape C /\
+  activation_cache q d owner aid (b,sz) ==>
+  MEM owner C.ctx_functions
+Proof
+  strip_tac >>
+  `EVERY wf_function C.ctx_functions` by
+    (gvs[EVERY_MEM, o1_ctx_shape_def] >> metis_tac[o1_fn_shape_def]) >>
+  Cases_on `q` >> gvs[joint_config_reachable_def] >>
+  drule joint_origin_history_erasure >> strip_tac >>
+  drule origin_frame_erasure >> strip_tac >>
+  drule frame_reachable_has_history >> strip_tac >>
+  drule_all frame_history_cfg_invariant >> strip_tac >>
+  qpat_x_assum `activation_cache _ _ _ _ _` mp_tac >>
+  simp[activation_cache_def] >> strip_tac >> gvs[] >>
+  gvs[LIST_REL_EL_EQN] >>
+  `LENGTH l - SUC d < LENGTH l` by decide_tac >> metis_tac[]
+QED
+
+Theorem allocation_birth_source_instruction:
+  joint_transition C q ev q' /\ allocation_birth C q ev d owner aid site ==>
+  ?inst. MEM inst (fn_insts owner) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_id = aid
+Proof
+  Cases_on `q` >>
+  simp[allocation_birth_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
+  simp[Once joint_transition_cases] >> strip_tac >> gvs[] >>
+  rename1 `inst.inst_opcode = ALLOCA` >>
+  rename1 `active_inst owner inst pre` >>
+  `MEM inst (fn_insts owner)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat,
+         MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM]) >>
+  metis_tac[]
+QED
+
+Theorem runtime_chain_endpoint[local]:
+  !es q0 qs q. joint_chain C q0 es qs q ==>
+    EL (LENGTH es) (q0::qs) = q
+Proof
+  Induct >> Cases_on `qs` >> simp[joint_chain_def] >> metis_tac[]
+QED
+
+Theorem activation_cache_source_instruction:
+  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  activation_cache q d owner aid site ==>
+  ?inst. MEM inst (fn_insts owner) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_id = aid
+Proof
+  strip_tac >>
+  `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  `?q0 es qs. joint_trace vs0 C q0 es qs q` by
+    metis_tac[joint_reachable_iff_trace] >>
+  `LENGTH es = LENGTH qs` by
+    metis_tac[joint_trace_def, joint_chain_length] >>
+  `EL (LENGTH es) (q0::qs) = q` by
+    metis_tac[joint_trace_def, runtime_chain_endpoint] >>
+  `?t. t < LENGTH es /\
+    allocation_birth C (EL t (q0::qs)) (EL t es) d owner aid site` by
+    metis_tac[joint_cache_birth, LESS_EQ_REFL] >>
+  drule_all joint_trace_edge_at >> strip_tac >>
+  metis_tac[allocation_birth_source_instruction]
+QED
+
+Theorem activation_cache_source_size:
   joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
   EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions /\
-  activation_cache q d owner aid (b,sz) /\ b <= byte /\ byte < b + sz /\
-  static_alloca_items owner = SOME items ==>
-  MEM (Allocation aid,sz) items
+  activation_cache q d owner aid (b,sz) ==>
+  FLOOKUP (source_alloca_sizes owner) aid = SOME sz
 Proof
   Cases_on `q` >> simp[joint_config_reachable_def] >> strip_tac >>
-  drule joint_origin_history_erasure >> strip_tac >> drule origin_frame_erasure >> strip_tac >>
-  `0 < sz` by decide_tac >>
-  irule source_alloca_sizes_positive_item >> simp[] >>
-  goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >> simp[] >>
+  drule joint_origin_history_erasure >> strip_tac >>
+  drule origin_frame_erasure >> strip_tac >>
   qpat_x_assum `activation_cache _ _ _ _ _` mp_tac >>
   simp[activation_cache_def] >> strip_tac >> gvs[]
   >- metis_tac[o1_frame_source_sizes_lookup] >>
@@ -51,6 +112,47 @@ Proof
   `MEM (EL (LENGTH l - SUC d) l) l` by metis_tac[EL_MEM] >>
   drule_all o1_frame_source_sizes_saved >>
   metis_tac[cache_sizes_ok_lookup]
+QED
+
+Theorem activation_cache_static_item:
+  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions /\
+  activation_cache q d owner aid (b,sz) /\ b <= byte /\ byte < b + sz /\
+  static_alloca_items owner = SOME items ==>
+  MEM (Allocation aid,sz) items
+Proof
+  strip_tac >>
+  `0 < sz` by decide_tac >>
+  drule_all activation_cache_source_size >> strip_tac >>
+  metis_tac[source_alloca_sizes_positive_item]
+QED
+
+Theorem activation_cache_source_allocation:
+  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  activation_cache q d owner aid (b,sz) ==>
+  MEM owner C.ctx_functions /\
+  ?inst n. MEM inst (fn_insts owner) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = aid /\ inst.inst_operands = [Lit n] /\ w2n n = sz
+Proof
+  strip_tac >>
+  `MEM owner C.ctx_functions` by metis_tac[activation_cache_source_owner] >>
+  simp[] >>
+  `EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions` by
+    (gvs[EVERY_MEM, o1_ctx_shape_def] >> rpt strip_tac >>
+     metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
+  `?inst. MEM inst (fn_insts owner) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_id = aid` by
+    metis_tac[activation_cache_source_instruction] >>
+  `fn_inst_wf owner /\ fn_inst_ids_distinct owner` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `?n. inst.inst_operands = [Lit n]` by
+    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_flat,
+         EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     `inst_wf inst` by metis_tac[] >> gvs[inst_wf_def]) >>
+  `FLOOKUP (source_alloca_sizes owner) aid = SOME sz` by
+    metis_tac[activation_cache_source_size] >>
+  drule_all source_alloca_sizes_literal >> strip_tac >>
+  qexistsl_tac [`inst`, `n`] >> gvs[]
 QED
 
 Theorem activation_cache_source_static_item:
@@ -66,16 +168,7 @@ Proof
      metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
   `EVERY wf_function C.ctx_functions` by
     (gvs[EVERY_MEM, o1_ctx_shape_def] >> metis_tac[o1_fn_shape_def]) >>
-  `MEM owner C.ctx_functions` by
-    (Cases_on `q` >> gvs[joint_config_reachable_def] >>
-     drule joint_origin_history_erasure >> strip_tac >>
-     drule origin_frame_erasure >> strip_tac >>
-     drule frame_reachable_has_history >> strip_tac >>
-     drule_all frame_history_cfg_invariant >> strip_tac >>
-     qpat_x_assum `activation_cache _ _ _ _ _` mp_tac >>
-     simp[activation_cache_def] >> strip_tac >> gvs[] >>
-     gvs[LIST_REL_EL_EQN] >>
-     `LENGTH l - SUC d < LENGTH l` by decide_tac >> metis_tac[]) >>
+  `MEM owner C.ctx_functions` by metis_tac[activation_cache_source_owner] >>
   drule_all source_static_alloca_items_total >> strip_tac >>
   goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >>
   irule activation_cache_static_item >>
