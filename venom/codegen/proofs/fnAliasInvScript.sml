@@ -380,6 +380,71 @@ Proof
   gvs[] >> simp[LAST_EL] >> irule EL_MEM >> Cases_on `path` >> gvs[]
 QED
 
+Theorem alias_path_snoc_invert:
+  !path fn l. is_fn_path fn (path ++ [l]) /\ path <> [] ==>
+    is_fn_path fn path /\ fn_cfg_edge fn (LAST path) l
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `path`
+  >- simp[is_fn_path_def] >>
+  simp[is_fn_path_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`fn`,`l`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[is_fn_path_def]
+QED
+
+Theorem alias_ready_phi_nonlocal_source:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  k < LENGTH (collect_phis bb.bb_instructions) ==>
+  ?v. MEM v (inst_uses (EL k (collect_phis bb.bb_instructions))) /\
+    (?edge. MEM (edge,v)
+      (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands)) /\
+    (!j. j < LENGTH bb.bb_instructions ==>
+      ~MEM v (inst_defs (EL j bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `wf_function fn /\ ssa_form fn /\ def_dominates_uses fn` by
+    gvs[codegen_ready_fn_def] >>
+  `bb.bb_label = lbl /\ MEM bb fn.fn_blocks` by
+    metis_tac[lookup_block_label, lookup_block_MEM] >>
+  `MEM (EL k (collect_phis bb.bb_instructions)) bb.bb_instructions /\
+   (EL k (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
+    metis_tac[EL_MEM, livenessProofsTheory.collect_phis_mem] >>
+  drule alias_reachable_first_visit >> strip_tac >>
+  `?pre. path = pre ++ [lbl]` by
+    metis_tac[SNOC_CASES, SNOC_APPEND, LAST_SNOC] >>
+  gvs[] >>
+  Cases_on `pre = []`
+  >- (gvs[codegen_ready_fn_def, block_entries_ready_def,
+          fn_entry_label_def, NULL_EQ, AllCaseEqs()] >>
+      `MEM bb' fn.fn_blocks` by
+        (Cases_on `fn.fn_blocks` >> gvs[entry_block_def]) >>
+      `lookup_block bb'.bb_label fn.fn_blocks = SOME bb'` by
+        (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+      gvs[]) >>
+  drule_all alias_path_snoc_invert >> strip_tac >>
+  `~MEM bb.bb_label pre` by
+    (simp[MEM_EL] >> rpt strip_tac >>
+     first_x_assum (qspec_then `n` mp_tac) >> simp[EL_APPEND_EQN]) >>
+  `phi_edge_uses_wf fn bb (EL k (collect_phis bb.bb_instructions))` by
+    metis_tac[def_dominates_uses_def] >>
+  `?v. MEM (LAST pre,v)
+     (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands)` by
+    (gvs[phi_edge_uses_wf_def] >> PairCases_on `p` >> gvs[] >>
+     metis_tac[]) >>
+  drule_all alias_phi_edge_available >> strip_tac >>
+  qexists_tac `v` >> conj_tac
+  >- (simp[inst_uses_def] >> irule alias_phi_pairs_subset_uses >>
+      simp[MEM_MAP] >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `MEM bb.bb_label pre` by
+    (irule alias_available_definition_visit >>
+     simp[] >> qexistsl_tac [`bb`, `fn`] >> simp[] >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     Cases_on `pre` >> gvs[] >> metis_tac[]) >> gvs[]
+QED
+
 Theorem alias_definition_excludes_other_block:
   wf_function fn /\ ssa_form fn /\
   lookup_block d fn.fn_blocks = SOME db /\ j < LENGTH db.bb_instructions /\
@@ -656,6 +721,175 @@ Proof
   Cases_on `build_phi_maps pred (collect_phis instrs)` >> gvs[] >>
   simp[Once pairTheory.UNCURRY] >> irule alias_input_fold_trigger >>
   simp[] >> metis_tac[]
+QED
+
+Theorem alias_phi_pair_fold_lookup:
+  !pairs m v j.
+  FLOOKUP (FOLDL (\m (l,w). m |+ (w,j)) m pairs) v =
+    if MEM v (MAP SND pairs) then SOME j else FLOOKUP m v
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> rpt gen_tac >>
+  Cases_on `h1 = v` >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_phi_maps_fold_op_lookup:
+  !indexed op_map matching pred v k.
+  (!j phi. MEM (j,phi) indexed /\
+      MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = k) ==>
+  FLOOKUP (FST (FOLDL (\(op_map,matching) (j,phi).
+    (FOLDL (\m (l,w). m |+ (w,j)) op_map (phi_pairs phi.inst_operands),
+     case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+       NONE => matching | SOME (l,w) => matching |+ (j,w)))
+    (op_map,matching) indexed)) v =
+  if EXISTS (\(j,phi). MEM v (MAP SND (phi_pairs phi.inst_operands))) indexed
+  then SOME k else FLOOKUP op_map v
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  `!j phi. MEM (j,phi) indexed /\
+      MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = k` by
+    metis_tac[] >>
+  simp[Once FOLDL] >>
+  last_x_assum drule >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[alias_phi_pair_fold_lookup] >>
+  Cases_on `MEM v (MAP SND (phi_pairs h1.inst_operands))` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem alias_phi_uses_disjoint_index:
+  !phis i j v. phi_uses_disjoint phis /\ i < LENGTH phis /\
+    j < LENGTH phis /\ MEM v (inst_uses (EL i phis)) /\
+    MEM v (inst_uses (EL j phis)) ==> i = j
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[phi_uses_disjoint_def, EVERY_MEM] >>
+  Cases_on `i` >> Cases_on `j` >> gvs[] >> metis_tac[EL_MEM]
+QED
+
+Theorem alias_build_phi_maps_op_index:
+  phi_uses_disjoint phis /\ k < LENGTH phis /\
+  MEM (edge,v) (phi_pairs (EL k phis).inst_operands) ==>
+  FLOOKUP (FST (build_phi_maps pred phis)) v = SOME k
+Proof
+  strip_tac >> simp[build_phi_maps_def] >>
+  `!j phi. MEM (j,phi) (MAPi (\i phi. (i,phi)) phis) /\
+      MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = k` by
+    (simp[indexedListsTheory.MEM_MAPi] >> rpt strip_tac >> gvs[] >>
+     irule alias_phi_uses_disjoint_index >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `v` >> conj_tac
+     >- (simp[inst_uses_def] >> irule alias_phi_pairs_subset_uses >> simp[]) >>
+     simp[inst_uses_def] >> irule alias_phi_pairs_subset_uses >>
+     simp[MEM_MAP] >> goal_assum (drule_at Any) >> simp[]) >>
+  drule alias_phi_maps_fold_op_lookup >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[EXISTS_MEM, indexedListsTheory.MEM_MAPi] >>
+  `?i. i < LENGTH phis /\ MEM v (MAP SND (phi_pairs (EL i phis).inst_operands))` by
+    (qexists_tac `k` >> simp[MEM_MAP] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qexists_tac `(i, EL i phis)` >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_phi_maps_fold_matching_lookup:
+  !indexed op_map matching pred k x.
+  (!phi. MEM (k,phi) indexed ==>
+    FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) = SOME (pred,x)) ==>
+  FLOOKUP (SND (FOLDL (\(op_map,matching) (j,phi).
+    (FOLDL (\m (l,w). m |+ (w,j)) op_map (phi_pairs phi.inst_operands),
+     case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+       NONE => matching | SOME (l,w) => matching |+ (j,w)))
+    (op_map,matching) indexed)) k =
+  if MEM k (MAP FST indexed) then SOME x else FLOOKUP matching k
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  rpt gen_tac >> strip_tac >>
+  `!phi. MEM (k,phi) indexed ==>
+    FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) = SOME (pred,x)` by
+    metis_tac[] >>
+  simp[Once FOLDL] >>
+  last_x_assum drule >> disch_then (fn th => rewrite_tac[th]) >>
+  Cases_on `h0 = k` >> gvs[]
+  >- (Cases_on `MEM k (MAP FST indexed)` >> simp[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  Cases_on `FIND (\(l,w). l = pred) (phi_pairs h1.inst_operands)` >> simp[] >>
+  PairCases_on `x'` >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `MEM k (MAP FST indexed)` >> simp[]
+QED
+
+Theorem alias_phi_pair_find:
+  !pairs pred x. ALL_DISTINCT (MAP FST pairs) /\ MEM (pred,x) pairs ==>
+    FIND (\(l,w). l = pred) pairs = SOME (pred,x)
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `h0 = pred` >> gvs[FIND_thm, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem alias_build_phi_maps_matching_index:
+  k < LENGTH phis /\
+  ALL_DISTINCT (MAP FST (phi_pairs (EL k phis).inst_operands)) /\
+  MEM (pred,x) (phi_pairs (EL k phis).inst_operands) ==>
+  FLOOKUP (SND (build_phi_maps pred phis)) k = SOME x
+Proof
+  strip_tac >> simp[build_phi_maps_def] >>
+  `!phi. MEM (k,phi) (MAPi (\i phi. (i,phi)) phis) ==>
+    FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) = SOME (pred,x)` by
+    (simp[indexedListsTheory.MEM_MAPi] >> rpt strip_tac >> gvs[] >>
+     irule alias_phi_pair_find >> simp[]) >>
+  drule alias_phi_maps_fold_matching_lookup >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  `MEM k (MAP FST (MAPi (\i phi. (i,phi)) phis))` by
+    (simp[MEM_MAP, indexedListsTheory.MEM_MAPi] >>
+     qexists_tac `(k, EL k phis)` >> simp[]) >> simp[]
+QED
+
+Theorem alias_ready_phi_input_member:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  k < LENGTH (collect_phis bb.bb_instructions) /\
+  MEM (pred,x)
+    (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands) ==>
+  MEM x (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  strip_tac >>
+  drule_all alias_ready_phi_nonlocal_source >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (`cfg_reachable_of (cfg_analyze fn) lbl` by
+       metis_tac[fn_reachable_cfg_analyze] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `?tail. bb.bb_instructions = collect_phis bb.bb_instructions ++ tail` by
+    metis_tac[alias_collect_phis_prefix] >>
+  `k < LENGTH bb.bb_instructions /\
+   EL k (collect_phis bb.bb_instructions) = EL k bb.bb_instructions` by
+    (conj_tac
+     >- (qpat_assum `bb.bb_instructions = _`
+           (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
+     qpat_assum `bb.bb_instructions = _`
+       (fn th => CONV_TAC (RHS_CONV (RAND_CONV (REWR_CONV th)))) >>
+     simp[EL_APPEND_EQN]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl k)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `k` >> simp[]) >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, phi_operands_ready_def, phi_block_ready_def,
+         EVERY_MEM, NULL_EQ, phi_uses_disjoint_def] >>
+     metis_tac[lookup_block_MEM, phi_uses_disjoint_def]) >>
+  `ALL_DISTINCT (MAP FST
+    (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands))` by
+    (`phi_edge_uses_wf fn bb (EL k (collect_phis bb.bb_instructions))` by
+       (gvs[codegen_ready_fn_def, def_dominates_uses_def] >>
+        metis_tac[lookup_block_MEM, livenessProofsTheory.collect_phis_mem, EL_MEM]) >>
+     gvs[phi_edge_uses_wf_def]) >>
+  irule alias_input_vars_trigger_intro >>
+  goal_assum (drule_at Any) >> qexists_tac `k` >> conj_tac
+  >- (irule alias_build_phi_maps_matching_index >> simp[]) >>
+  irule alias_build_phi_maps_op_index >> metis_tac[]
 QED
 
 Theorem alias_lineage_join_ordinary_coverage:
