@@ -790,16 +790,17 @@ Proof
 QED
 
 Theorem gas_outcome_total_success_summary[local]:
-  (!gs. ?v st. source (es with gas_obs := gs) = (INL v,st)) /\
+  (!prefix. ?tail v st.
+     source (es with gas_obs := prefix ++ tail) = (INL v,st)) /\
   gas_outcome memory tops (ctx,func) source (es,s0) Q R ==>
   ?marks. gas_summary_at memory (ctx,func) marks source (es,s0) Q R
 Proof
   rw[gas_outcome_def] >- metis_tac[] >>
   drule gas_exempt_cert_execution >> strip_tac >>
-  qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
-  simp[ignore_bind_def, bind_def, return_def] >>
-  first_x_assum (qspec_then `gas_explicit marks s0.vs_gas_readings` strip_assume_tac) >>
-  simp[]
+  qpat_x_assum `!prefix. ?tail v st. _`
+    (qspec_then `gas_explicit marks s0.vs_gas_readings` strip_assume_tac) >>
+  qpat_x_assum `!tail. _` (qspec_then `tail` mp_tac) >>
+  simp[ignore_bind_def, bind_def, return_def]
 QED
 
 Theorem ifexp_name_forced_summary_probe[local]:
@@ -813,8 +814,8 @@ Theorem ifexp_name_forced_summary_probe[local]:
 Proof
   strip_tac >> irule gas_outcome_total_success_summary >>
   conj_tac
-  >- (gen_tac >>
-      `lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
+  >- (gen_tac >> qexists_tac `[]` >> simp[] >>
+      `lookup_scopes id (es with gas_obs := prefix).scopes = SOME entry` by simp[] >>
       drule ifexp_name_source_probe >> metis_tac[]) >>
   qexists_tac `tops` >> first_assum ACCEPT_TAC
 QED
@@ -899,6 +900,102 @@ Proof
         w2n w + 32 <= u.vs_alloca_next` by simp[] >>
   drule_all bodyFieldMemoryPropsTheory.body_unwrap_memory_counted_read >>
   strip_tac >> goal_assum (drule_at Any) >> simp[expr_store_bound_word]
+QED
+
+Theorem ifexp_gas_explicit_empty[local]:
+  !marks. gas_explicit marks [] = REPLICATE (LENGTH (FILTER I marks)) 0w
+Proof
+  Induct >> simp[gas_explicit_cons] >> Cases_on `h` >> simp[gas_explicit_cons]
+QED
+
+(* The all-zero target observation stream cannot hide a bad zero-gas arm
+   behind a different choice of explicit marks.  This is an obstruction
+   to the proposed single-GAS, total-raw-success witness family. *)
+Theorem ifexp_zero_stream_raw_sim_obstruction[local]:
+  (!prefix. ?tail raw ee.
+     eval_expr cx e (es with gas_obs := prefix ++ tail) = (INL raw,ee)) /\
+  (!n raw ee. eval_expr cx e (es with gas_obs := REPLICATE n 0w) =
+       (INL raw,ee) ==>
+     ~(?v. read_result cx raw (ee with gas_obs := []) =
+            (INL v,ee with gas_obs := []))) /\
+  compile_expr cenv ty e sa = (vv,sb) /\
+  s0.vs_gas_readings = [] /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  alloca_history func s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ~expr_vv_sim_mem ctx func cenv cx ty e es
+Proof
+  strip_tac >> strip_tac >>
+  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_mem_def] >>
+  disch_then (qspecl_then [`sa`,`sb`,`vv`,`s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all gas_outcome_total_success_summary >> strip_tac >>
+  gvs[gas_summary_at_def, gas_marked_exec_def]
+  >- (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+      simp[ifexp_gas_explicit_empty] >> strip_tac >>
+      qpat_x_assum `!n raw ee. _` drule >>
+      simp[] >>
+      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+      Cases_on `vv`
+      >- (simp[vv_post_def, vv_holds_def] >> metis_tac[]) >>
+      Cases_on `p.ptr_location` >>
+      simp[vv_post_def, vv_holds_def, storage_holds_def, immutable_holds_def] >>
+      metis_tac[]) >>
+  qpat_x_assum `!prefix. ?tail raw ee. _`
+    (qspec_then `gas_explicit marks []` strip_assume_tac) >>
+  qpat_x_assum `!tail. _` (qspec_then `tail` mp_tac) >>
+  simp[] >> strip_tac >> gvs[expr_exit_def]
+QED
+
+Theorem ifexp_gas_zero_test_source[local]:
+  es.gas_obs = w::ws ==>
+  eval_expr cx
+    (Builtin (BaseT BoolT) (Bop Eq)
+      [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
+       Literal (BaseT (UintT 256)) (IntL 0)]) es =
+  (INL (Value (BoolV (HD (es.gas_obs ++ [0w]) = 0w))),
+   es with gas_obs := TL es.gas_obs)
+Proof
+  strip_tac >>
+  simp[evaluate_def, next_gas_reading_def, bind_def, return_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       vyperContextTheory.builtin_args_length_ok_def,
+       read_result_def] >>
+  simp[get_accounts_def, vyperContextTheory.evaluate_builtin_def,
+       expr_type_def, vyperValueOperationTheory.evaluate_literal_def,
+       vyperValueOperationTheory.evaluate_binop_def, lift_sum_def,
+       return_def, bind_def]
+QED
+
+Theorem ifexp_malformed_subscript_source[local]:
+  es.scopes =
+    [FEMPTY |+ ("x", <| assignable := T;
+       type := ArrayTV (ArrayTV (BaseTV BoolT) (Fixed 1)) (Fixed 1);
+       value := BoolV F; popped := [] |>)] ==>
+  eval_expr cx
+    (Subscript (FlagT nsid)
+      (Name (ArrayT (ArrayT (BaseT BoolT) (Fixed 1)) (Fixed 1)) "x")
+      (Literal (BaseT (UintT 256)) (IntL 0))) es =
+  (INR (Error (TypeError "evaluate_subscripts type")),es)
+Proof
+  strip_tac >>
+  simp[evaluate_def, select_result_def, extend_place_def,
+       get_scopes_def, type_check_def, vyperStateTheory.assert_def,
+       ignore_bind_def, bind_def, return_def, lookup_scopes_def,
+       read_result_def, vyperValueOperationTheory.evaluate_literal_def,
+       place_type_value_def, read_place_def, read_memory_path_def,
+       evaluate_subscripts_def, lift_option_type_def, lift_sum_def,
+       finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY] >>
+  gvs[lookup_scopes_def, read_popped_def, lift_option_type_def, lift_sum_def,
+      bind_def, return_def, raise_def] >> EVAL_TAC >>
+  simp[lookup_scopes_def, lift_option_type_def, lift_sum_def,
+       bind_def, return_def, raise_def] >> EVAL_TAC
 QED
 
 Theorem compile_ifexp_vv_sim_mem:
