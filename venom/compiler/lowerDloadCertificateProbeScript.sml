@@ -555,3 +555,17 @@ by this inventory; revert-forward and observation production remain open.
    table congruence lemmas do not produce that temporal agreement. No whole
    call completion or memory restoration follows from these selector facts.
 *)
+
+(* Saved-table support checkpoint: lowerDloadTableSupport proves projection
+   of every saved-live support into the current live set, then reuses
+   ld_alloca_owner_extension to transport OLD snapshot agreement through the
+   concrete fresh/cached ALLOCA table update. ld_return_pruned_snapshot and
+   ld_return_pruned_entries retain the actual restored-live support under
+   DRESTRICT, including older suspended frames. No global table-domain bound
+   is required: annotated serial freshness is needed only on live owners.
+   The remaining temporal execution induction must carry agreement with each
+   saved snapshot, use identity on unchanged tables, allocation transport on
+   ALLOCA and retention on return. These local transitions do not establish
+   whole-call completion, successor representation for a newly allocated
+   owner, or full macro/observation closure. No saved memory is restored.
+*)
