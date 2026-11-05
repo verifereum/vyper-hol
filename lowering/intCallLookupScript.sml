@@ -82,7 +82,7 @@ Proof
   rw[internal_fn_matches_descriptor_def] >> gvs[internal_fn_matches_descriptor_def]
 QED
 
-Theorem lookup_function_distinct_mem[local]:
+Theorem lookup_function_distinct_mem:
   !fns f.
     ALL_DISTINCT (MAP (\f. f.fn_name) fns) /\ MEM f fns ==>
     lookup_function f.fn_name fns = SOME f
@@ -123,7 +123,7 @@ Proof
   simp[mk_internal_function_metadata]
 QED
 
-Theorem run_lowering_descriptors_distinct[local]:
+Theorem run_lowering_descriptors_distinct:
   !selectors external_fns internal_fns fallback_fn rpolicy bucket_count
    fn_metadata_bytes dense_buckets entry_info entry_label unit.
     run_lowering selectors external_fns internal_fns fallback_fn rpolicy
