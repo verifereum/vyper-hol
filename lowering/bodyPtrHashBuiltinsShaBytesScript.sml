@@ -176,3 +176,19 @@ Resume hash_sha256_bytes_abort_path[compose]:
   drule_all gas_path_ptr_then >> simp[]
 QED
 Finalise hash_sha256_bytes_abort_path
+
+Theorem hash_sha256_alloc_tail_nonterminators:
+  compile_alloc_buffer 32 sm = (buf,sn) /\
+  emit_op GAS [] sn = (gas_op,sg) /\
+  emit_op STATICCALL [gas_op;Lit 2w;ptr_op;len_op;buf.buf_operand;Lit 32w] sg = (success_op,sc) /\
+  emit_void ASSERT [success_op] sc = ((),sh) /\
+  emit_op MLOAD [buf.buf_operand] sh = (op,sb) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)
+Proof
+  simp[compile_alloc_buffer_def, emit_op_def, emit_void_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+    fresh_id_def, emit_def] >> rpt strip_tac >>
+  gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def]
+QED
