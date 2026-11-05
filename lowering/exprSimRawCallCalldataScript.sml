@@ -2708,7 +2708,7 @@ QED
 
 (* The branch boundary is independent of the origin of the input bytes and
    of the success continuation's chosen value representation. *)
-Theorem raw_call_finish_branch_guarded_frag[local]:
+Theorem raw_call_finish_branch_guarded_frag:
   !ctx sa sx sf sz sp sc se sk sb cond ok fl x y z rb s success Q R.
     emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
     new_block fl sx = (x,sf) /\

@@ -3273,6 +3273,42 @@ Finalise raw_call_success_run_aged
 val _ = if null (hyp raw_call_success_run_aged) then ()
   else raise Fail "raw_call_success_run_aged retained hypotheses";
 
+(* Counted success suffix: no SETFMP is emitted by RawCallTarget. *)
+Theorem raw_call_success_suffix_path[local]:
+  (if 0 < n then
+     do z <- emit_op RETURNDATASIZE [];
+        cmp <- emit_op LT [z;Lit (n2w n)];
+        cap <- compile_select cmp z (Lit (n2w n));
+        emit_void MSTORE [ov;cap]; return ov od
+   else return (Lit 0w)) sa = (result,sb) /\
+  (0 < n ==> eval_operand ov s = SOME addr /\
+    (!x. ov = Var x ==> not_fresh_at sa x)) /\
+  n < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\t. (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
+          eval_operand a s = SOME w ==> eval_operand a t = SOME w) /\
+      (if 0 < n then result = ov /\ eval_operand result t = SOME addr /\
+         raw_call_finish_view t = raw_call_finish_view
+           (mstore (w2n addr) (n2w (MIN (LENGTH s.vs_returndata) n)) s)
+       else result = Lit 0w /\ eval_operand result t = SOME 0w /\
+         raw_call_finish_view t = raw_call_finish_view s)) R
+Proof
+  strip_tac >> Cases_on `0 < n`
+  >- (fs[] >> drule raw_call_success_code >> strip_tac >>
+      `n < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256)` by fs[] >>
+      drule_all raw_call_success_run_aged >> strip_tac >>
+      irule frag_path_run_inst_seq >>
+      fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+      simp[raw_call_finish_view_control] >>
+      gvs[eval_operand_def, lookup_var_def]) >>
+  gvs[comp_return_def] >> irule frag_path_run_inst_seq >>
+  simp[emitted_insts_def, run_inst_seq_def, raw_call_finish_view_control,
+       instIdxIndepTheory.eval_op_inst_idx, eval_operand_def, lookup_var_def]
+QED
+
+val _ = if null (hyp raw_call_success_suffix_path) then ()
+  else raise Fail "raw_call_success_suffix_path retained hypotheses";
+
 Theorem raw_call_success_frag_aged[local]:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
@@ -3686,6 +3722,106 @@ Finalise raw_call_finish_frag_aged
 
 val _ = if null (hyp raw_call_finish_frag_aged) then ()
   else raise Fail "raw_call_finish_frag_aged retained hypotheses";
+
+Theorem raw_call_revert_finish_path[local]:
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    (if stat then StaticCall else RegularCall) n T ov op sa = (result,sb) /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+  eval_operand ok s = SOME (if success then 1w else 0w) /\
+  n < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) /\
+  (0 < n ==> eval_operand ov s = SOME addr /\
+    (!x. ov = Var x ==> not_fresh_at sc x)) ==>
+  frag_path ctx sc sb (\u. u = s)
+    (\u. success /\
+      (!a w. (!x. a = Var x ==> not_fresh_at sc x) /\
+        eval_operand a s = SOME w ==> eval_operand a u = SOME w) /\
+      (if 0 < n then result = ov /\ eval_operand result u = SOME addr /\
+         raw_call_finish_view u = raw_call_finish_view
+           (mstore (w2n addr) (n2w (MIN (LENGTH s.vs_returndata) n)) s)
+       else result = Lit 0w /\ eval_operand result u = SOME 0w /\
+         raw_call_finish_view u = raw_call_finish_view s))
+    (\r. ?u. ~success /\ r = Abort Revert_abort u /\
+       u.vs_returndata = s.vs_returndata)
+Proof
+  strip_tac >> drule raw_call_finish_revert_compile >>
+  simp[arithmeticTheory.GREATER_DEF] >> strip_tac >>
+  rename1 `fresh_label "call_failed" ce = (fl,s2)` >>
+  rename1 `fresh_label "call_ok" s2 = (kl,s3)` >>
+  `ce = sc /\ success' = ok` by (Cases_on `stat` >> gvs[]) >> gvs[] >>
+  qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `(case _ of RegularCall => _ | DelegateCall => _ | StaticCall => _) = _` kall_tac >>
+  qmatch_goalsub_abbrev_tac `frag_path ctx sc sb P Q R` >>
+  `ci_mono sc s3 /\ ci_mono s3 s10 /\ cs_extends s5 s9 /\ cs_extends s10 sb` by
+    suspend "metadata" >>
+  `cs_extends sc s3 /\ cs_extends s3 sb` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  irule frag_path_seq >>
+  qexistsl_tac [`\u. u = s with vs_inst_idx := LENGTH s3.cs_current_insts`,`s3`] >>
+  simp[] >> conj_tac >- suspend "entry" >> suspend "branch"
+QED
+
+Resume raw_call_revert_finish_path[metadata]:
+  `ci_mono sc s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
+   ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
+   ci_mono s7 s8 /\ ci_mono s8 s9 /\ ci_mono s9 s10` by
+    (rpt conj_tac >> metis_tac[ci_mono_fresh_label, ci_mono_emit_inst,
+      ci_mono_new_block, ci_mono_emit_op, ci_mono_compile_alloc_buffer,
+      ci_mono_emit_void, pairTheory.SND]) >>
+  `cs_extends s10 sb` by
+    (Cases_on `0 < n` >> fs[comp_return_def]
+     >- (drule raw_call_success_code >> strip_tac >>
+         irule cs_extends_same_block >>
+         fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+     gvs[] >> simp[cs_extends_refl]) >>
+  fs[ci_mono_def] >> rpt conj_tac >> metis_tac[cs_extends_trans]
+QED
+
+Resume raw_call_revert_finish_path[entry]:
+  imp_res_tac fresh_label_props >>
+  irule frag_path_run_inst_seq >>
+  simp[Abbr `P`, emitted_insts_def, run_inst_seq_def]
+QED
+
+Resume raw_call_revert_finish_path[branch]:
+  irule raw_call_finish_branch_guarded_frag >>
+  conj_tac >- simp[] >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst REVERT _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_void RETURNDATACOPY _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op RETURNDATASIZE _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  qexists_tac `success` >>
+  simp[instIdxIndepTheory.eval_op_inst_idx, Abbr `R`] >>
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `frag_path ctx s10 sb (\u. u = entry) Q R` >>
+  `sc.cs_next_var <= s10.cs_next_var` by fs[ci_mono_def] >>
+  `n < dimword (:256) /\ LENGTH entry.vs_returndata < dimword (:256) /\
+   (0 < n ==> eval_operand ov entry = SOME addr /\
+     (!x. ov = Var x ==> not_fresh_at s10 x))` by
+    (simp[Abbr `entry`, jump_to_def, instIdxIndepTheory.eval_op_inst_idx] >>
+     rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sc` >> fs[]) >>
+  drule_all raw_call_success_suffix_path >>
+  disch_then (qspecl_then [`ctx`,`R`] assume_tac) >>
+  irule frag_path_conseq >>
+  goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
+  simp[] >> rpt strip_tac >>
+  simp[Abbr `Q`] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      simp[Abbr `entry`, jump_to_def, instIdxIndepTheory.eval_op_inst_idx] >>
+      rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `sc` >> simp[]) >>
+  gvs[Abbr `entry`, raw_call_finish_view_def, jump_to_def, mstore_def]
+QED
+
+Finalise raw_call_revert_finish_path
+
+val _ = if null (hyp raw_call_revert_finish_path) then ()
+  else raise Fail "raw_call_revert_finish_path retained hypotheses";
 
 Theorem raw_call_finish_related_frag_aged[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
