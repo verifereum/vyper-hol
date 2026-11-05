@@ -172,3 +172,117 @@ Resume reason_encoder_offset_path_ptr[frame]:
 QED
 
 Finalise reason_encoder_offset_path_ptr
+
+(* The encoder reads its dynamic tuple offset from the size slot, then adds
+   that clean scalar to the payload pointer. *)
+Theorem reason_encoder_load_offset_ptr:
+  emit_inst MLOAD [Var slot] [off] sa = ((),sm) /\
+  emit_inst ADD [Var root;Var off] [out] sm = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
+  (!i. w2n addr <= i /\ i < w2n addr + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n addr) s = d /\ lookup_var root s = SOME a /\
+  ptr_covers G tn root s capacity /\ root <> off /\
+  w2n d + k <= capacity /\ w2n a + w2n d < dimword (:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (a + d) /\ ptr_covers Gf tnf out sf k /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    (!p. p <> off /\ p <> out ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all reason_copy_mload_resources_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `lookup_var root s1 = SOME a /\ ptr_covers G1 tn1 root s1 capacity` by
+    (gvs[ptr_covers_def, op_taint_def] >> metis_tac[]) >>
+  `eval_operand (Var off) s1 = SOME d` by simp[eval_operand_def] >>
+  drule_all reason_encoder_offset_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> metis_tac[]
+QED
+
+(* The four pointer-setup instructions after size-slot initialization. *)
+Theorem reason_encoder_pointer_setup_ptr:
+  emit_inst ADD [Var tuple;Lit 0w] [src] sa = ((),c1) /\
+  emit_inst ADD [Var payload;Lit 0w] [head] c1 = ((),c2) /\
+  emit_inst MLOAD [Var slot] [off] c2 = ((),c3) /\
+  emit_inst ADD [Var payload;Var off] [tail] c3 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 c3 func /\ fn_has_code c3 sb func /\
+  ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s capacity /\
+  lookup_var payload s = SOME b /\ ptr_covers G tn payload s capacity /\
+  lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
+  (!i. w2n addr <= i /\ i < w2n addr + 32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n addr) s = 32w /\ 32 <= capacity /\
+  w2n b + 32 < dimword (:256) /\
+  (!p. p = payload \/ p = slot ==> p <> src /\ p <> head /\ p <> off) /\
+  src <> head /\ src <> off /\ src <> tail /\
+  head <> off /\ head <> tail ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var src sf = SOME a /\ ptr_covers Gf tnf src sf capacity /\
+    lookup_var head sf = SOME b /\ ptr_covers Gf tnf head sf capacity /\
+    lookup_var tail sf = SOME (b + 32w) /\
+    ptr_covers Gf tnf tail sf (capacity - 32) /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    (!p. p <> src /\ p <> head /\ p <> off /\ p <> tail ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  drule_all (SRULE [eval_operand_def, op_taint_def, w2n_lt]
+    (Q.INST [`offset` |-> `Lit 0w`, `d` |-> `0w`, `k` |-> `capacity`]
+      reason_encoder_offset_path_ptr)) >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `lookup_var payload s1 = SOME b /\ ptr_covers G1 tn1 payload s1 capacity` by
+    (gvs[ptr_covers_def, op_taint_def] >> metis_tac[]) >>
+  drule_all (SRULE [eval_operand_def, op_taint_def, w2n_lt]
+    (Q.INST [`offset` |-> `Lit 0w`, `d` |-> `0w`, `k` |-> `capacity`]
+      reason_encoder_offset_path_ptr)) >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  `lookup_var payload s2 = SOME b /\ ptr_covers G2 tn2 payload s2 capacity /\
+   lookup_var slot s2 = SOME addr /\ ptr_covers G2 tn2 slot s2 32 /\
+   mload (w2n addr) s2 = 32w /\
+   (!i. w2n addr <= i /\ i < w2n addr + 32 ==> i NOTIN tn2.t_mem)` by
+    (gvs[ptr_covers_def, mload_def, op_taint_def] >> metis_tac[]) >>
+  `payload <> off /\ 32 + (capacity - 32) <= capacity` by
+    (conj_tac >- metis_tac[] >> decide_tac) >>
+  `w2n (32w : bytes32) = 32` by simp[w2n_n2w, dimword_def] >>
+  qpat_assum `w2n (32w : bytes32) = 32` (fn th =>
+    drule_all (SRULE [th] (Q.INST
+      [`d` |-> `32w`, `k` |-> `capacity - 32`] reason_encoder_load_offset_ptr))) >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G3`
+    (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
+  qexistsl_tac [`G3`, `tn3`, `s3`] >> conj_tac
+  >- suspend "path" >> suspend "resources"
+QED
+
+Resume reason_encoder_pointer_setup_ptr[path]:
+  metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Resume reason_encoder_pointer_setup_ptr[resources]:
+  simp[] >> rpt strip_tac >>
+  gvs[ptr_covers_def, op_taint_def, WORD_ADD_0] >> metis_tac[]
+QED
+
+Finalise reason_encoder_pointer_setup_ptr
