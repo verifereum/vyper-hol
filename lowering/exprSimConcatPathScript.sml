@@ -8,7 +8,8 @@
 Theory exprSimConcatPath
 Ancestors
   exprSimConcatStep exprSimConcatStore concatMemory fragGasSeq fragGasPath
-  fragExec exprLoweringProps emitHelperProps emitHelper context compileEnv
+  fragExec exprLowering exprLoweringProps emitHelperProps emitHelper context
+  compileEnv
   venomInst venomState venomExecSemantics words arithmetic list rich_list
 Libs
   monadsyntax
@@ -169,4 +170,39 @@ Theorem concat_bytes_split:
 Proof
   simp[comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_void_def,
        fresh_id_def, fresh_var_def, emit_def, comp_return_def]
+QED
+
+(* One operand of compile_concat: its value, its store arm, the rest. *)
+Theorem compile_concat_bytes_cons:
+  compile_concat cfn cenv (e::es) data_ptr ((T,m)::infos) off_ptr sa = (x, sb) ==>
+  ?mem_ptr s1 s2.
+    lower_value cfn cenv (expr_type e) e sa = (mem_ptr, s1) /\
+    (do arg_len <- emit_op MLOAD [mem_ptr];
+        arg_data <- emit_op ADD [mem_ptr; Lit 32w];
+        offset_op <- emit_op MLOAD [off_ptr];
+        dst <- emit_op ADD [data_ptr; offset_op];
+        emit_void MCOPY [dst; arg_data; arg_len];
+        new_offset <- emit_op ADD [offset_op; arg_len];
+        emit_void MSTORE [off_ptr; new_offset]
+     od) s1 = ((), s2) /\
+    compile_concat cfn cenv es data_ptr infos off_ptr s2 = (x, sb)
+Proof
+  simp[compile_concat_def, Once comp_bind_def] >> pairarg_tac >> simp[] >>
+  strip_tac >> drule concat_bytes_split >> strip_tac >> metis_tac[]
+QED
+
+Theorem compile_concat_fixed_cons:
+  compile_concat cfn cenv (e::es) data_ptr ((F,m)::infos) off_ptr sa = (x, sb) ==>
+  ?v s1 s2.
+    lower_value cfn cenv (expr_type e) e sa = (v, s1) /\
+    (do offset_op <- emit_op MLOAD [off_ptr];
+        dst <- emit_op ADD [data_ptr; offset_op];
+        emit_void MSTORE [dst; v];
+        new_offset <- emit_op ADD [offset_op; Lit (n2w m)];
+        emit_void MSTORE [off_ptr; new_offset]
+     od) s1 = ((), s2) /\
+    compile_concat cfn cenv es data_ptr infos off_ptr s2 = (x, sb)
+Proof
+  simp[compile_concat_def, Once comp_bind_def] >> pairarg_tac >> simp[] >>
+  strip_tac >> drule concat_fixed_split >> strip_tac >> metis_tac[]
 QED
