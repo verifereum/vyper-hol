@@ -2,7 +2,7 @@
 Theory exprSimBopRestWordLoads
 Ancestors
   exprSimBopRestWordIndex exprSimAggregateEncoding valueEncodingProps vyperTyping
-  compileEnv loweringPosts exprSimUnwrapProps exprLoweringProps venomMemDefs
+  compileEnv loweringPosts exprSimUnwrap exprLoweringProps venomMemDefs
   valueEncodingProofs valueEncoding vyperValueOperation vyperValue list alist
 
 Theorem rest_word_array_memory_index:
@@ -63,12 +63,12 @@ Proof
   decide_tac
 QED
 
-Theorem rest_word_located_memory_bound:
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av))
-    (LocatedValue ty p) s /\ p.ptr_location = LocMemory /\
+Theorem rest_word_vv_memory_bound:
+  vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
   expr_type e = ArrayT et bd /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  eval_operand p.ptr_operand s = SOME w ==>
+  eval_operand (vv_operand vv) s = SOME w ==>
   w2n w + type_memory_size tv < dimword (:256)
 Proof
   strip_tac >>
@@ -82,14 +82,18 @@ Proof
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_at_def, val_footprint_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >>
-  disch_then (qspec_then `tv` mp_tac) >>
-  simp[] >> strip_tac >>
+  Cases_on `vv` >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def,
+      vv_at_def, expr_val_at_def, is_word_type_def,
+      val_footprint_def, vyperStateTheory.read_result_def,
+      vyperStateTheory.return_def] >>
+  strip_tac >>
   gvs[alloca_next_valid_def, local_region_def, local_ptrs_rel_def]
-  >- (qpat_x_assum `!aid base sz. _` drule >> decide_tac)
-  >- (qpat_x_assum `!name entry p sz. _` drule >>
-      disch_then drule >> strip_tac >> gvs[] >> decide_tac) >>
+  >>~- ([`sa.cs_next_id <= aid`],
+        qpat_x_assum `!aid base sz. _` drule >> decide_tac)
+  >>~- ([`local_val_at cenv cx n k tv (ArrayV av)`],
+        qpat_x_assum `!name entry p sz. _` drule >>
+        disch_then drule >> strip_tac >> gvs[] >> decide_tac) >>
   simp[wordsTheory.w2n_lt]
 QED
 
@@ -115,4 +119,125 @@ Proof
   rpt strip_tac >>
   first_x_assum drule >> strip_tac >> first_x_assum drule >>
   simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]
+QED
+
+(* Transport both immutable representation alternatives through an array index. *)
+Theorem rest_word_array_immutable_index:
+  immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  array_index (ArrayTV et bd) av (&i) = SOME v ==>
+  immutable_holds cenv cx ty (Value v)
+    (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) es s
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT ty bd) = SOME (ArrayTV et bd)` by
+    (fs[immutable_holds_def, evaluate_type_def, AllCaseEqs()]) >>
+  irule exprSimPropsTheory.immutable_holds_sub >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `well_formed_type_value et` by metis_tac[evaluate_type_well_formed] >>
+  `value_has_type et v` by
+    (irule vyperAssignPreservesTypeTheory.array_index_has_type >> metis_tac[]) >>
+  `sub_layout (ArrayTV et bd) (ArrayV av)
+     ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) et v` by
+    (irule rest_word_array_sub_layout >> simp[]) >>
+  qexistsl [`et`, `v`, `ArrayTV et bd`, `ArrayV av`, `ArrayT ty bd`,
+            `Value (ArrayV av)`] >>
+  simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def]
+QED
+
+Theorem rest_word_vv_memory_rep:
+  vv_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) vv es s /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+  evaluate_type (get_tenv cx) (ArrayT ty bd) = SOME (ArrayTV et bd) /\
+  eval_operand (vv_operand vv) s = SOME w ==>
+  val_in_memory (ArrayTV et bd) (ArrayV av) (w2n w) s.vs_memory
+Proof
+  Cases_on `vv` >>
+  simp[vv_holds_def, contextTheory.vv_location_def, contextTheory.vv_operand_def, expr_val_rel_def,
+       is_word_type_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem rest_word_vv_memory_index:
+  vv_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) vv es s /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+  evaluate_type (get_tenv cx) (ArrayT ty bd) = SOME (ArrayTV et bd) /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  array_index (ArrayTV et bd) av (&i) = SOME v ==>
+  mem_word_at (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) +
+               i * 32) s.vs_memory = typed_val_to_w256 et v
+Proof
+  strip_tac >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `val_in_memory (ArrayTV et bd) (ArrayV av) (w2n w) s.vs_memory` by
+    metis_tac[rest_word_vv_memory_rep] >>
+  drule_all rest_word_array_memory_load >> simp[]
+QED
+
+(* A read-only loop load is a zero-count path; its state change is explicit. *)
+Theorem rest_word_memory_load_path:
+  context$compile_ptr_load ctor imm LocMemory addr sa = (op, sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand addr s = SOME a /\
+  mem_word_at (w2n a) s.vs_memory = value ==>
+  gas_path ctx func s 0
+    (OK ((update_var (STRING #"%" (toString sa.cs_next_var)) value s)
+      with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  pure_rewrite_tac[contextTheory.compile_ptr_load_def] >> strip_tac >>
+  irule emitHelperPropsTheory.emit_op_zero_path >>
+  simp[] >>
+  qexistsl [`[addr]`, `op`, `MLOAD`, `sb`] >>
+  simp[venomInstTheory.is_terminator_def] >>
+  gen_tac >> drule emitHelperPropsTheory.step_MLOAD >>
+  simp[GSYM mem_word_at_eq_mload]
+QED
+
+Theorem rest_word_array_immutable_load:
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  array_index (ArrayTV et bd) av (&i) = SOME v ==>
+  (if cenv.ce_is_ctor then
+     mload (w2n (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32))) s
+   else word_of_bytes T (0w:bytes32)
+     (TAKE 32 (DROP (w2n (w + n2w
+       ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)))
+       s.vs_data_section ++ REPLICATE 32 0w))) = typed_val_to_w256 et v
+Proof
+  strip_tac >> drule_all rest_word_array_immutable_index >> strip_tac >>
+  Cases_on `cenv.ce_is_ctor`
+  >- (drule_all immutable_holds_iload >> simp[]) >>
+  drule_all immutable_holds_dload >> simp[]
+QED
+
+Theorem rest_word_vv_memory_offset:
+  vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+  expr_type e = ArrayT ty bd /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av ==>
+  w2n (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) =
+  w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32
+Proof
+  strip_tac >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `w2n w + type_memory_size (ArrayTV et bd) < dimword (:256)` by
+    metis_tac[rest_word_vv_memory_bound] >>
+  drule_all rest_word_array_element_extent >> strip_tac >>
+  simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC] >>
+  irule exprSimPropsTheory.buffer_offset_no_wrap >>
+  qexists_tac `type_memory_size (ArrayTV et bd)` >> simp[]
 QED
