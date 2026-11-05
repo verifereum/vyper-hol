@@ -2,7 +2,7 @@ Theory concretizePtrSourceOwnership
 Ancestors
   concretizePtrActivationBirths concretizePtrOwnershipErasure
   concretizePtrActivationChronology concretizePtrChronologicalHistory
-  ptrDiscipline venomExecSemantics venomInst finite_map list pred_set
+  ptrDiscipline venomExecSemantics venomInst finite_map list pred_set arithmetic
 
 (* Only allocation creates a tag. All other instructions use the already
    checked, polymorphic copying operations. The post-cache lookup covers
@@ -329,4 +329,264 @@ Theorem ptr_source_ownership_saved_prov:
   ptr_ledger_erases births (SND (EL n saved)) (EL n a.po_stack).cf_prov
 Proof
   metis_tac[ptr_source_ownership_saved_erases, ptr_saved_erases_def]
+QED
+
+(* Operational tag support is distinct from persistent birth-table support:
+   retired births remain recorded but cannot appear in a live frame's tags. *)
+Definition ptr_tag_live_def:
+  ptr_tag_live (tokens:num list) (p:(num # num) option) <=>
+    case p of NONE => T | SOME owner => MEM (FST owner) tokens
+End
+
+Definition ptr_tags_live_def:
+  ptr_tags_live tokens PT (TG:(string,num # num) fmap) <=>
+    EVERY (ptr_tag_live tokens) PT /\
+    !v. ptr_tag_live tokens (FLOOKUP TG v)
+End
+
+Definition ptr_saved_live_def:
+  ptr_saved_live tokens saved <=>
+    !n. n < LENGTH saved ==>
+      ptr_tags_live (DROP (SUC n) tokens) (FST (EL n saved)) (SND (EL n saved))
+End
+
+Theorem ptr_live_op[local]:
+  (!v. ptr_tag_live tokens (FLOOKUP TG v)) ==>
+  ptr_tag_live tokens (op_prov TG op)
+Proof
+  Cases_on `op` >> simp[op_prov_def, ptr_tag_live_def]
+QED
+
+Theorem ptr_live_first[local]:
+  (!v. ptr_tag_live tokens (FLOOKUP TG v)) ==>
+  ptr_tag_live tokens (first_prov TG ops)
+Proof
+  Induct_on `ops`
+  >- simp[first_prov_def, ptr_tag_live_def] >>
+  strip_tac >> strip_tac >> simp[first_prov_def] >>
+  drule ptr_live_op >> disch_then (qspec_then `h` mp_tac) >>
+  Cases_on `op_prov TG h` >> gvs[ptr_tag_live_def]
+QED
+
+Theorem ptr_live_set[local]:
+  (!v. ptr_tag_live tokens (FLOOKUP TG v)) /\ ptr_tag_live tokens p ==>
+  !v. ptr_tag_live tokens (FLOOKUP (set_prov TG outs p) v)
+Proof
+  strip_tac >>
+  `!keep v. ptr_tag_live tokens (FLOOKUP (DRESTRICT TG keep) v)` by
+    (simp[FLOOKUP_DRESTRICT] >> rpt gen_tac >>
+     Cases_on `v IN keep` >> simp[ptr_tag_live_def] >>
+     metis_tac[ptr_tag_live_def]) >>
+  Cases_on `outs` >- simp[set_prov_def] >>
+  Cases_on `t` >- (Cases_on `p` >> simp[set_prov_def, FLOOKUP_UPDATE] >>
+    gen_tac >> Cases_on `h = v` >> gvs[]) >>
+  Cases_on `p` >> simp[set_prov_def]
+QED
+
+Theorem ptr_live_tagged_step[local]:
+  ptr_tags_live tokens PT TG /\ MEM token tokens /\
+  inst.inst_opcode <> DALLOCA ==>
+  ptr_tags_live tokens PT (ptr_tagged_step token PT TG inst s)
+Proof
+  strip_tac >> gvs[ptr_tags_live_def] >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (simp[ptr_tagged_step_def] >> irule ptr_live_set >> simp[] >>
+      Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> simp[ptr_tag_live_def]) >>
+  simp[ptr_tagged_step_def, step_prov_def] >> irule ptr_live_set >> simp[] >>
+  simp[out_prov_def] >>
+  Cases_on `inst.inst_opcode = PARAM`
+  >- (simp[] >> Cases_on `inst.inst_operands` >>
+      simp[ptr_tag_live_def] >> Cases_on `t` >> simp[ptr_tag_live_def] >>
+      Cases_on `h` >> simp[ptr_tag_live_def] >>
+      IF_CASES_TAC >> simp[ptr_tag_live_def] >>
+      metis_tac[EVERY_EL, ptr_tag_live_def]) >>
+  simp[] >> IF_CASES_TAC >> simp[ptr_tag_live_def, ptr_live_first]
+QED
+
+Theorem ptr_live_entry[local]:
+  (!v. ptr_tag_live tokens (FLOOKUP TG v)) ==>
+  !v. ptr_tag_live tokens (FLOOKUP (entry_prov fn s TG) v)
+Proof
+  strip_tac >>
+  `!inst. ptr_tag_live tokens (phi_prov s.vs_prev_bb TG inst)` by
+    (gen_tac >> simp[phi_prov_def] >> Cases_on `s.vs_prev_bb` >>
+     simp[ptr_tag_live_def] >>
+     Cases_on `resolve_phi x inst.inst_operands` >>
+     simp[ptr_tag_live_def] >> metis_tac[ptr_live_op, ptr_tag_live_def]) >>
+  `!is. !v. ptr_tag_live tokens (FLOOKUP (phis_prov s.vs_prev_bb TG is) v)` by
+    (Induct >> simp[phis_prov_def] >> rpt gen_tac >> IF_CASES_TAC >> simp[] >>
+     irule ptr_live_set >> simp[]) >>
+  simp[entry_prov_def] >> Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[]
+QED
+
+Theorem ptr_live_restrict[local]:
+  ptr_tags_live tokens PT TG ==>
+  ptr_tags_live tokens PT (DRESTRICT TG keep)
+Proof
+  simp[ptr_tags_live_def, FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+  Cases_on `v IN keep` >> simp[ptr_tag_live_def] >>
+  metis_tac[ptr_tag_live_def]
+QED
+
+Theorem ptr_live_mono[local]:
+  ptr_tags_live tokens PT TG /\
+  (!t. MEM t tokens ==> MEM t tokens') ==>
+  ptr_tags_live tokens' PT TG
+Proof
+  simp[ptr_tags_live_def, EVERY_MEM] >> rpt strip_tac
+  >- (first_x_assum drule >> Cases_on `e` >> simp[ptr_tag_live_def] >> metis_tac[]) >>
+  first_x_assum (qspec_then `v` mp_tac) >>
+  Cases_on `FLOOKUP TG v` >> simp[ptr_tag_live_def] >> metis_tac[]
+QED
+
+Theorem ptr_saved_live_cons[local]:
+  ptr_saved_live tokens ((PT,TG)::saved) <=>
+  ptr_tags_live (TL tokens) PT TG /\ ptr_saved_live (TL tokens) saved
+Proof
+  Cases_on `tokens` >> simp[ptr_saved_live_def] >> eq_tac
+  >- (strip_tac >> conj_tac
+      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+      rpt strip_tac >> first_x_assum (qspec_then `SUC n` mp_tac) >> simp[])
+  >- (strip_tac >> gen_tac >> Cases_on `n` >> simp[])
+  >- (strip_tac >> conj_tac
+      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+      rpt strip_tac >> first_x_assum (qspec_then `SUC n` mp_tac) >> simp[]) >>
+  strip_tac >> gen_tac >> Cases_on `n` >> simp[]
+QED
+
+Theorem ptr_tagged_chrono_step_live[local]:
+  !C token a b PT TG saved PT' TG' saved'.
+  ptr_tagged_chrono_step C token a b PT TG saved PT' TG' saved' ==>
+  !(h:ptr_observation list) tokens.
+  LENGTH tokens = SUC (LENGTH a.po_stack) /\ token = HD tokens /\
+  a.po_inst.inst_opcode <> DALLOCA /\
+  ptr_tags_live tokens PT TG /\ ptr_saved_live tokens saved ==>
+  ptr_tags_live (ptr_activation_tokens h a b tokens) PT' TG' /\
+  ptr_saved_live (ptr_activation_tokens h a b tokens) saved'
+Proof
+  ho_match_mp_tac ptr_tagged_chrono_step_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[ptr_observe_def, ptr_activation_tokens_def] >> strip_tac
+  >- (irule ptr_live_tagged_step >> simp[] >> Cases_on `tokens` >> gvs[])
+  >- (gvs[ptr_tags_live_def] >> metis_tac[ptr_live_entry])
+  >- (simp[ptr_saved_live_cons] >>
+      `ptr_tags_live tokens (MAP (op_prov TG) ops) FEMPTY` by
+        (gvs[ptr_tags_live_def, EVERY_MAP, EVERY_MEM, ptr_tag_live_def] >>
+         metis_tac[ptr_live_op, ptr_tag_live_def]) >>
+      irule ptr_live_mono >> qexists_tac `tokens` >> simp[])
+  >> gvs[ptr_saved_live_cons] >> irule ptr_live_restrict >> simp[]
+QED
+
+Theorem ptr_source_ownership_live_invariant[local]:
+  !vs0 C h a tokens registry births PT TG saved.
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+    ptr_tags_live tokens PT TG /\ ptr_saved_live tokens saved)
+Proof
+  ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[ptr_source_ownership_rules] >>
+      simp[ptr_tags_live_def, ptr_saved_live_def, ptr_tag_live_def]) >>
+  rpt gen_tac >> strip_tac >>
+  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >> strip_tac >>
+  `ptr_source_birth_caches vs0 C h a tokens registry births` by
+    metis_tac[ptr_source_ownership_caches] >>
+  `ptr_ledger_source_activations vs0 C h a tokens registry` by
+    metis_tac[ptr_source_birth_caches_activations] >>
+  `a.po_inst.inst_opcode <> DALLOCA` by
+    metis_tac[ptr_source_activations_sound, ptr_birth_reachable_no_dalloca] >>
+  drule ptr_tagged_chrono_step_live >>
+  disch_then (qspecl_then [`h`,`tokens`] mp_tac) >>
+  simp[] >> metis_tac[ptr_source_activations_length]
+QED
+
+Theorem ptr_source_ownership_live:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_tags_live tokens PT TG
+Proof
+  metis_tac[ptr_source_ownership_live_invariant]
+QED
+
+Theorem ptr_source_ownership_saved_live:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_saved_live tokens saved
+Proof
+  metis_tac[ptr_source_ownership_live_invariant]
+QED
+
+Theorem ptr_source_ownership_live_prov:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  FLOOKUP TG v = SOME (token,aid) ==> MEM token tokens
+Proof
+  strip_tac >> drule_all ptr_source_ownership_live >>
+  simp[ptr_tags_live_def] >> strip_tac >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp[ptr_tag_live_def]
+QED
+
+Theorem ptr_source_ownership_live_param:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  MEM (SOME (token,aid)) PT ==> MEM token tokens
+Proof
+  strip_tac >> drule_all ptr_source_ownership_live >>
+  simp[ptr_tags_live_def, EVERY_MEM] >>
+  strip_tac >> first_x_assum (qspec_then `SOME (token,aid)` mp_tac) >>
+  simp[ptr_tag_live_def]
+QED
+
+Theorem ptr_source_ownership_saved_live_prov:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  n < LENGTH saved /\ FLOOKUP (SND (EL n saved)) v = SOME (token,aid) ==>
+  MEM token (DROP (SUC n) tokens)
+Proof
+  strip_tac >> drule_all ptr_source_ownership_saved_live >>
+  simp[ptr_saved_live_def] >> disch_then (qspec_then `n` mp_tac) >>
+  simp[ptr_tags_live_def] >> strip_tac >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp[ptr_tag_live_def]
+QED
+
+Theorem ptr_source_ownership_saved_live_param:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  n < LENGTH saved /\ MEM (SOME (token,aid)) (FST (EL n saved)) ==>
+  MEM token (DROP (SUC n) tokens)
+Proof
+  strip_tac >> drule_all ptr_source_ownership_saved_live >>
+  simp[ptr_saved_live_def] >> disch_then (qspec_then `n` mp_tac) >>
+  simp[ptr_tags_live_def, EVERY_MEM] >>
+  strip_tac >> first_x_assum (qspec_then `SOME (token,aid)` mp_tac) >>
+  simp[ptr_tag_live_def]
+QED
+
+Theorem ptr_source_ownership_live_cache:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  FLOOKUP TG v = SOME (token,aid) /\
+  FLOOKUP a.po_prov v = SOME (srcbase,sz) ==>
+  ?d. d <= LENGTH a.po_stack /\
+      EL (LENGTH a.po_stack - d) tokens = token /\
+      FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (srcbase,sz)
+Proof
+  strip_tac >>
+  `MEM token tokens` by metis_tac[ptr_source_ownership_live_prov] >>
+  `LENGTH tokens = SUC (LENGTH a.po_stack)` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations,
+      ptr_source_activations_length] >>
+  `FLOOKUP births (token,aid) = SOME (srcbase,sz)` by
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >> strip_tac >>
+     qpat_x_assum `!v. FLOOKUP a.po_prov v = _`
+       (qspec_then `v` mp_tac) >> simp[ptr_owner_project_def]) >>
+  `ptr_birth_slices a tokens births` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_slices] >>
+  gvs[MEM_EL] >> rename1 `n < SUC (LENGTH a.po_stack)` >>
+  qexists_tac `LENGTH a.po_stack - n` >>
+  `LENGTH a.po_stack - (LENGTH a.po_stack - n) = n` by decide_tac >>
+  simp[] >> gvs[ptr_birth_slices_def] >>
+  first_x_assum (qspecl_then [`LENGTH a.po_stack - n`,`aid`] mp_tac) >> simp[]
 QED
