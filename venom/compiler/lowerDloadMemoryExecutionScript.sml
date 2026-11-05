@@ -158,3 +158,47 @@ Proof
   rpt strip_tac >>
   drule_all ld_owned_mload_range >> simp[]
 QED
+
+Theorem ld_mstore8_execution_backward:
+  i.inst_opcode = MSTORE8 /\ i.inst_operands = [dst;value] /\
+  eval_operand dst s = SOME p /\ eval_operand value s = SOME v /\
+  eval_operand dst t = SOME q /\ eval_operand value t = SOME w /\
+  step_inst fuelT CT i t = OK t' ==>
+  step_inst fuelS CS i s = OK (mstore8 (w2n p) v s) /\
+  t' = mstore8 (w2n q) w t
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  asm_rewrite_tac[step_inst_base_def, venomInstTheory.opcode_case_def, exec_write2_def] >>
+  simp[]
+QED
+
+Theorem ld_mcopy_execution_backward:
+  i.inst_opcode = MCOPY /\ i.inst_operands = [dst;src;sz] /\
+  eval_operand dst s = SOME p /\ eval_operand src s = SOME r /\
+  eval_operand sz s = SOME n /\
+  eval_operand dst t = SOME q /\ eval_operand src t = SOME u /\
+  eval_operand sz t = SOME n /\ step_inst fuelT CT i t = OK t' ==>
+  step_inst fuelS CS i s = OK (mcopy (w2n p) (w2n r) (w2n n) s) /\
+  t' = mcopy (w2n q) (w2n u) (w2n n) t
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  asm_rewrite_tac[step_inst_base_def, venomInstTheory.opcode_case_def] >> simp[]
+QED
+
+Theorem ld_mstore8_memory_restore:
+  (mstore8 p v s with vs_memory := s.vs_memory) = s
+Proof
+  simp[mstore8_def, write_memory_with_expansion_def,
+       expand_memory_def, write_memory_def]
+QED
+
+Theorem ld_mcopy_memory_restore:
+  (mcopy p r n s with vs_memory := s.vs_memory) = s
+Proof
+  simp[mcopy_def, write_memory_with_expansion_def,
+       expand_memory_def, write_memory_def]
+QED
