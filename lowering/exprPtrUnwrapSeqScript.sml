@@ -26,3 +26,16 @@ Proof
    SUC (LENGTH prefix) + s.vs_inst_idx` by decide_tac >>
   asm_rewrite_tac[]
 QED
+
+Theorem inst_seq_ptr_cons_compose:
+  run_inst_seq [i] s = OK t /\ ~is_terminator i.inst_opcode /\
+  inst_seq_ptr D lo ctx fn PG G tn [i] s Gm tnm /\
+  inst_seq_ptr D lo ctx fn PG Gm tnm tail
+    (t with vs_inst_idx := SUC s.vs_inst_idx) Gf tnf ==>
+  inst_seq_ptr D lo ctx fn PG G tn (i::tail) s Gf tnf
+Proof
+  strip_tac >>
+  irule (SRULE [] (Q.INST [`prefix` |-> `[i]`]
+    (SPEC_ALL inst_seq_ptr_append))) >>
+  fs[ADD1] >> metis_tac[]
+QED

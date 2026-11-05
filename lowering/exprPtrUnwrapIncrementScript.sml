@@ -1,7 +1,8 @@
 (* The final two nonterminating instructions of the bounded copy body. *)
 Theory exprPtrUnwrapIncrement
 Ancestors
-  exprPtrUnwrapScalarSegments exprPtrUnwrapSeq fragGasSeqPtr fragExec
+  exprPtrUnwrapScalarSegments exprPtrUnwrapSeq exprPtrUnwrapFrames
+  ghostPcTransportPtr fragGasSeqPtr fragExec
   ptrDiscipline ptrSafeRun typedCopyPtr venomExecSemantics venomInst venomState
   finite_map exprLoweringProps slotCopyExecution
 
@@ -21,7 +22,10 @@ Theorem copy_increment_segment:
     tnf.t_trans = tn.t_trans /\
     (!p. p <> counter /\ p <> next ==>
       FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!p n. p <> counter /\ p <> next /\ ptr_covers G tn p s n ==>
+      ptr_covers Gf tnf p t n)
 Proof
   strip_tac >>
   `eval_operand (Lit 1w) s = SOME 1w /\ op_taint tn (Lit 1w) = {}` by
@@ -49,12 +53,9 @@ Proof
           exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
           FLOOKUP_UPDATE] >>
   conj_tac
-  >- (irule (SRULE [] (Q.INST
-        [`prefix` |-> `[mk_inst id ADD [Var counter;Lit 1w] [next]]`,
-         `suffix` |-> `[mk_inst aid ASSIGN [Var next] [counter]]`]
-        (SPEC_ALL inst_seq_ptr_append))) >>
-      simp[is_terminator_def] >>
-      qexistsl_tac [`Gm`, `tnm`] >>
-      gvs[Abbr `v`]) >>
-  simp[] >> metis_tac[]
+  >- (irule inst_seq_ptr_cons_compose >>
+      conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+      qexistsl_tac [`Gm`, `u`, `tnm`] >>
+      gvs[Abbr `v`, mk_inst_def, is_terminator_def, arithmeticTheory.ADD1]) >>
+  gvs[Abbr `v`, Abbr `u`] >> metis_tac[]
 QED
