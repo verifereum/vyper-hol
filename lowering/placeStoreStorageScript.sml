@@ -4108,6 +4108,244 @@ Proof
   simp[call_ctx_rel_def] >> gen_tac >> Cases_on `n = 0` >> simp[]
 QED
 
+(* Transaction observations used by the source invariant do not inspect the
+   block number or block-hash window. *)
+Theorem place_store_block_update_projections[local,simp]:
+  get_tenv (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+    get_tenv cx /\
+  get_module_code (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+    get_module_code cx /\
+  current_module (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+    current_module cx /\
+  context_function_live (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+    context_function_live cx /\
+  lookup_var_slot_from_layout
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+    lookup_var_slot_from_layout cx
+Proof
+  rpt conj_tac >> simp[FUN_EQ_THM, vyperContextTheory.get_tenv_def,
+    vyperContextTheory.get_module_code_def, vyperContextTheory.current_module_def,
+    vyperTypeContractTheory.context_function_live_def,
+    lookup_var_slot_from_layout_def]
+QED
+
+Theorem place_store_block_update_fn_sigs_consistent[local,simp]:
+  fn_sigs_consistent sigs
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  fn_sigs_consistent sigs cx
+Proof
+  simp[vyperTypeInvariantsTheory.fn_sigs_consistent_def]
+QED
+
+Theorem place_store_block_update_fn_sigs_live[local,simp]:
+  fn_sigs_live sigs
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  fn_sigs_live sigs cx
+Proof
+  simp[vyperTypeInvariantsTheory.fn_sigs_live_def]
+QED
+
+Theorem place_store_block_update_fn_sigs_declared_complete[local,simp]:
+  fn_sigs_declared_complete sigs
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  fn_sigs_declared_complete sigs cx
+Proof
+  simp[vyperTypeInvariantsTheory.fn_sigs_declared_complete_def]
+QED
+
+Theorem place_store_block_update_toplevel_vtypes[local,simp]:
+  toplevel_vtypes_complete vtypes
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  toplevel_vtypes_complete vtypes cx
+Proof
+  simp[vyperTypeInvariantsTheory.toplevel_vtypes_complete_def]
+QED
+
+Theorem place_store_block_update_bare_globals[local,simp]:
+  bare_globals_complete globals
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  bare_globals_complete globals cx
+Proof
+  simp[vyperTypeInvariantsTheory.bare_globals_complete_def]
+QED
+
+Theorem place_store_block_update_bare_assignable[local,simp]:
+  bare_global_assignable_complete globals
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  bare_global_assignable_complete globals cx
+Proof
+  simp[vyperTypeInvariantsTheory.bare_global_assignable_complete_def]
+QED
+
+Theorem place_store_block_update_flag_members[local,simp]:
+  flag_members_complete members
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  flag_members_complete members cx
+Proof
+  simp[vyperTypeInvariantsTheory.flag_members_complete_def]
+QED
+
+Theorem place_store_block_update_env_context[local,simp]:
+  env_context_consistent env
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  env_context_consistent env cx
+Proof
+  simp[vyperTypeInvariantsTheory.env_context_consistent_def]
+QED
+
+Theorem place_store_block_update_env_scopes[local,simp]:
+  env_scopes_consistent env
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es =
+  env_scopes_consistent env cx es
+Proof
+  simp[vyperTypeInvariantsTheory.env_scopes_consistent_def]
+QED
+
+Theorem place_store_block_update_env_immutables[local,simp]:
+  env_immutables_consistent env
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es =
+  env_immutables_consistent env cx es
+Proof
+  simp[vyperTypeInvariantsTheory.env_immutables_consistent_def]
+QED
+
+Theorem place_store_block_update_env[local,simp]:
+  env_consistent env
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es =
+  env_consistent env cx es
+Proof
+  simp[vyperTypeInvariantsTheory.env_consistent_def]
+QED
+
+Theorem place_store_block_update_functions[local,simp]:
+  functions_well_typed
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  functions_well_typed cx
+Proof
+  simp[vyperTypeInvariantsTheory.functions_well_typed_def]
+QED
+
+Theorem place_store_block_update_storage_var_info[local,simp]:
+  storage_var_info
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) mid id =
+  storage_var_info cx mid id
+Proof
+  simp[vyperLookupStorageTheory.storage_var_info_def]
+QED
+
+Theorem place_store_block_update_declared_region[local,simp]:
+  declared_storage_region
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) mid id subs =
+  declared_storage_region cx mid id subs
+Proof
+  simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]
+QED
+
+Theorem place_store_block_update_storage_backend[local,simp]:
+  get_storage_backend
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) b =
+  get_storage_backend cx b
+Proof
+  Cases_on `b` >> simp[get_storage_backend_def]
+QED
+
+Theorem place_store_block_update_get_storage[local,simp]:
+  get_storage
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es b =
+  get_storage cx es b
+Proof
+  Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem place_store_block_update_well_formed_storage[local,simp]:
+  well_formed_storage
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es =
+  well_formed_storage cx es
+Proof
+  simp[vyperLookupStorageTheory.well_formed_storage_def,
+    vyperLookupStorageTheory.storage_var_in_range_def]
+QED
+
+Theorem place_store_block_update_well_formed_layout[local,simp]:
+  well_formed_layout
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  well_formed_layout cx
+Proof
+  simp[vyperLookupStorageTheory.well_formed_layout_def]
+QED
+
+Theorem place_store_block_update_nonreentrant[local,simp]:
+  nonreentrant_slot_separated
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  nonreentrant_slot_separated cx
+Proof
+  simp[vyperStorageLayoutSafetyTheory.nonreentrant_slot_separated_def]
+QED
+
+Theorem place_store_block_update_contract_storage[local,simp]:
+  contract_storage_well_formed
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es =
+  contract_storage_well_formed cx es
+Proof
+  simp[vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def]
+QED
+
+Theorem place_store_block_update_storage_layout[local,simp]:
+  storage_layout_safe
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) =
+  storage_layout_safe cx
+Proof
+  simp[vyperStorageLayoutSafetyTheory.storage_layout_safe_def]
+QED
+
+Theorem place_store_block_update_oracle_storage[local,simp]:
+  oracle_storage_ok
+    (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>) es =
+  oracle_storage_ok cx es
+Proof
+  simp[vyperTypeStoragePreservationTheory.oracle_storage_ok_def]
+QED
+
+Theorem place_store_expr_sim_inv_block_update:
+  !cenv cx env es n hs.
+    expr_sim_inv cenv cx env es /\ n < 2 ** 256 ==>
+    expr_sim_inv cenv
+      (cx with txn := cx.txn with <|block_number := n; block_hashes := hs|>)
+      env es
+Proof
+  simp[expr_sim_inv_def, vyperTypeInvariantsTheory.context_well_typed_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem place_store_wrap_probe_source_transaction_realizable:
+  let cx1 = place_store_wrap_probe_context with txn :=
+    (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) in
+  ?cenv env dtv.
+    expr_sim_inv cenv cx1 env
+      (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>) /\
+    evaluate_type (get_tenv cx1)
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) =
+      SOME dtv /\
+    storage_place_region cx1 (StoragePlace F 0w dtv)
+Proof
+  simp[] >>
+  mp_tac place_store_wrap_probe_source_realizable >> strip_tac >>
+  qexistsl_tac [`cenv`, `env`, `dtv`] >>
+  `place_store_wrap_probe_context.txn = empty_call_txn` by
+    simp[place_store_wrap_probe_context_def,
+      vyperContextTheory.empty_evaluation_context_def] >>
+  qmatch_goalsub_abbrev_tac `expr_sim_inv cenv cx1 env _` >>
+  `cx1 = place_store_wrap_probe_context with txn :=
+    place_store_wrap_probe_context.txn with
+      <|block_number := 1; block_hashes := [0w]|>` by simp[Abbr `cx1`] >>
+  qpat_x_assum `cx1 = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `place_store_wrap_probe_context.txn = _` kall_tac >>
+  conj_tac
+  >- (irule place_store_expr_sim_inv_block_update >> simp[]) >>
+  fs[vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+  rpt (goal_assum $ drule_at Any)
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
