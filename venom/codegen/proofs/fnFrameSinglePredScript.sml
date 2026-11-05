@@ -4,16 +4,43 @@
  * (possibly empty: nothing keeps PHIs out of such a block).  The join
  * case, with no cleanup, is fnFrameSteps$phi_prefix_frame_sim.
  *
+ * The cleanup is fnFrameCleanStack$clean_stack_plan_frame_sim; the PHI
+ * prefix is the shared fnFrameStepsPhi$phi_prefix_hits_frame_sim, whose
+ * stack premise single_pred_phi_hits gives for any stack.
+ *
  * TOP-LEVEL:
- *   single_pred_prefix_frame_sim - CHEATED (a piece)
+ *   single_pred_phi_hits         - CHEATED (a piece helper)
+ *   single_pred_prefix_frame_sim - the cleanup, then the PHI prefix
  *)
 
 Theory fnFrameSinglePred
 Ancestors
-  fnPlanPrefix fnFrameSteps genFrameSim fnPlanLineage frameRel
+  fnFrameCleanStack fnFrameStepsPhi allocMono stackOpSim fnPlanPrefix fnFrameSteps genFrameSim fnPlanLineage frameRel
   contextCodegenRel codegenRel unitShapeDefs genBlockSim stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   livenessDefs dfgDefs cfgDefs
+
+(* In a block whose only predecessor is pred, each PHI is `phi pred, %v`
+   (venomWf$phi_edge_uses_wf, from def_dominates_uses: its labels are
+   distinct and exactly the CFG predecessors), so its only variable operand
+   is the one resolve_phi pred reads, and wherever stack_get_phi_depth finds
+   it, stack_peek returns it. *)
+Theorem single_pred_phi_hits:
+  !cfg fn lbl bb pred phis body inst stk dist.
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) = 1 /\
+    MEM bb.bb_label (cfg_succs_of cfg pred) /\
+    non_param_insts bb = phis ++ body /\
+    LENGTH phis = phi_prefix_length bb.bb_instructions /\
+    MEM inst phis /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) stk =
+      SOME dist ==>
+    resolve_phi pred inst.inst_operands = SOME (stack_peek dist stk)
+Proof
+  cheat
+QED
 
 (* Used at the start of a non-entry block whose only predecessor is pred
    (so generate_block_plan runs clean_stack_plan before its instructions).
@@ -89,5 +116,49 @@ Theorem single_pred_prefix_frame_sim:
          operand_val (frame_view fn ra s_phi) lo at =
          operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
 Proof
-  cheat
+  rpt strip_tac >>
+  `MEM bb.bb_label (cfg_succs_of cfg pred)` by
+    (qpat_x_assum `lineage_entry _ _ _ _ _ _ _ _` mp_tac >>
+     simp[lineage_entry_def] >> strip_tac) >>
+  `ps2.ps_alloc.sa_spill_base = ps3.ps_alloc.sa_spill_base /\
+   ps2.ps_alloc.sa_next_offset <= ps3.ps_alloc.sa_next_offset` by
+    (drule generate_block_insts_plan_spill_base >>
+     drule generate_block_insts_plan_next_offset >> simp[]) >>
+  qpat_x_assum `asm_block_at _ _ _`
+    (strip_assume_tac o REWRITE_RULE [execute_plan_append, asm_block_at_append]) >>
+  `r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+   ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by simp[] >>
+  `!off. MEM (SOSpill off) clean_ops \/ MEM (SORestore off) clean_ops ==>
+         off < dimword (:256)` by
+    (rpt strip_tac >> qpat_x_assum `!off. _ ==> off < dimword (:256)` irule >>
+     simp[]) >>
+  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+         off < dimword (:256)` by
+    (rpt strip_tac >> qpat_x_assum `!off. MEM _ (_ ++ _) \/ _ ==> _` irule >>
+     simp[]) >>
+  drule_all clean_stack_plan_frame_sim >> strip_tac >>
+  `!inst. MEM inst phis ==>
+     !dist. stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+              ps2.ps_stack = SOME dist ==>
+            resolve_phi pred inst.inst_operands =
+              SOME (stack_peek dist ps2.ps_stack)` by
+    (rpt strip_tac >> drule_all single_pred_phi_hits >> simp[]) >>
+  `normalize_operand dfg [] dead_stack_marker = dead_stack_marker` by
+    simp[dead_stack_marker_def, normalize_operand_def] >>
+  `!op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
+     ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+                     (collect_phis bb.bb_instructions))) /\
+     normalize_operand dfg [] op = Var v ==>
+     ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    metis_tac[operand_distinct] >>
+  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+     operand_val (frame_view fn ra vs) lo at =
+     operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)` by
+    metis_tac[] >>
+  `asm_block_at prog as2.as_pc (execute_plan cp.cp_initial_fmp ops)` by
+    simp[] >>
+  drule_all phi_prefix_hits_frame_sim >> strip_tac >>
+  qexistsl_tac [`phi_ops`, `ps1`, `body_ops`, `n + n'`, `as'`] >>
+  gvs[execute_plan_append] >>
+  irule asm_steps_add_ok >> simp[]
 QED
