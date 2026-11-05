@@ -592,6 +592,27 @@ QED
 
 Finalise reason_encoder_add_post
 
+(* Offset arithmetic inherits the input allocation site, including at zero. *)
+Theorem reason_encoder_offset_covers:
+  !PG G tn s id root out a total off k.
+    ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
+    off + k <= total /\ w2n a + off < dimword (:256) ==>
+    ptr_covers
+      (step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out])
+        (update_var out (a + n2w off) s))
+      (step_taint (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s
+        (update_var out (a + n2w off) s) tn)
+      out (update_var out (a + n2w off) s) k
+Proof
+  rpt gen_tac >> strip_tac >>
+  `off < dimword (:256)` by decide_tac >>
+  gvs[ptr_covers_def] >>
+  simp[copy_len_binop_ghost_frame, step_prov_def, set_prov_def, out_prov_def,
+       first_prov_def, op_prov_def, mk_inst_def, finite_mapTheory.FLOOKUP_UPDATE,
+       lookup_var_def, update_var_def, wordsTheory.w2n_add_2,
+       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
+QED
+
 (* The original source interval survives all four prefix operations. *)
 Theorem reason_encoder_prefix_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 c3 c4 buf payload tuple n m tv ow PG G tn.
@@ -613,7 +634,7 @@ Theorem reason_encoder_prefix_post:
     (!z. op = Var z ==> not_fresh_at cc z) /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
       val_in_memory tv v (w2n ow) mem) ==>
-    ?t out b G1 tn1 u tn2 r x z out2 b2.
+    ?t out b G1 tn1 u tn2 r x z out2 b2 G2 tn3 G3 tn4.
       buf.buf_operand = Var out /\
       step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
       G1 = step_prov PG G (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) t /\
@@ -629,7 +650,17 @@ Theorem reason_encoder_prefix_post:
       eval_operand tuple.buf_operand z = SOME (n2w b2) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
       fresh_vars_wrt c4 z /\ local_ptrs_reserved cenv c4 /\
-      eval_operand op z = SOME ow
+      eval_operand op z = SOME ow /\
+      G2 = step_prov PG G1 (mk_inst c2.cs_next_id ADD [buf.buf_operand; Lit 32w] [x]) r /\
+      tn3 = step_taint (mk_inst c2.cs_next_id ADD [buf.buf_operand; Lit 32w] [x]) u r tn2 /\
+      G3 = step_prov PG G2 (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) z /\
+      tn4 = step_taint (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) r z tn3 /\
+      ptr_covers G3 tn4 out2 z m /\
+      ptr_covers G3 tn4 out z n /\ ptr_covers G3 tn4 x z (n - 32) /\
+      (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
+        ptr_covers G3 tn4 p z k) /\
+      (!mem. mem_agree_outside tn4.t_mem z.vs_memory mem ==>
+        val_in_memory tv v (w2n ow) mem)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all reason_encoder_selector_resources >>
@@ -656,12 +687,68 @@ Resume reason_encoder_prefix_post[allocate]:
   pure_asm_rewrite_tac[] >>
   `sa.cs_next_var <= c3.cs_next_var` by
     (drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
-  drule_all reason_encoder_alloc_buffer_post >> strip_tac >>
-  qpat_assum `compile_alloc_buffer m c3 = _`
-    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
-  qexistsl_tac [`t''`, `STRING #"%" (toString c3.cs_next_var)`, `w2n w`] >> simp[] >>
+  `sb.cs_next_id <= c3.cs_next_id` by
+    (drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  qabbrev_tac `ai = mk_inst c2.cs_next_id ADD [buf.buf_operand; Lit 32w] [x]` >>
+  qabbrev_tac `G2 = step_prov PG G1 ai t'` >>
+  qabbrev_tac `tn3 = step_taint ai u t' tn2` >>
+  `eval_operand op t' = SOME ow` by simp[] >>
+  `!mem. mem_agree_outside tn3.t_mem t'.vs_memory mem ==>
+     val_in_memory tv v (w2n ow) mem` by
+    (simp[Abbr `tn3`, Abbr `ai`] >> metis_tac[]) >>
+  `not_fresh_at c2 out` by suspend "out_fresh" >>
+  `ptr_covers G2 tn3 out t' n` by suspend "buffer" >>
+  `ptr_covers G2 tn3 x t' (n - 32)` by suspend "payload" >>
+  `!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
+     ptr_covers G2 tn3 p t' k` by suspend "oldptr" >>
+  drule_all reason_encoder_alloc_buffer_resources >>
+  disch_then (qspecl_then [`PG`, `G2`] strip_assume_tac) >>
+  `ptr_covers G1' tn1' out t'' n /\
+   ptr_covers G1' tn1' x t'' (n - 32) /\
+   (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
+     ptr_covers G1' tn1' p t'' k)` by metis_tac[] >>
+  qexistsl_tac [`t''`, `out'`, `b'`, `G2`, `tn3`, `G1'`, `tn1'`] >>
+  pure_asm_rewrite_tac[] >>
   qpat_x_assum `t' = update_var _ _ _` SUBST_ALL_TAC >>
-  qpat_x_assum `u = mstore _ _ _` SUBST_ALL_TAC >> simp[]
+  qpat_x_assum `u = mstore _ _ _` SUBST_ALL_TAC >>
+  qpat_x_assum `i = mk_inst _ _ _ _` SUBST_ALL_TAC >>
+  simp[Abbr `G2`, Abbr `tn3`, Abbr `ai`]
+QED
+
+Resume reason_encoder_prefix_post[out_fresh]:
+  qpat_assum `compile_alloc_buffer n cc = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  gvs[not_fresh_at_def]
+QED
+
+Resume reason_encoder_prefix_post[buffer]:
+  simp[Abbr `G2`, Abbr `tn3`] >>
+  qpat_x_assum `!PG G tn. _` (qspecl_then [`PG`, `G1`, `tn2`] mp_tac) >>
+  simp[]
+QED
+
+Resume reason_encoder_prefix_post[payload]:
+  `lookup_var out u = SOME (n2w b)` by
+    (qpat_x_assum `eval_operand buf.buf_operand u = _` mp_tac >>
+     simp[eval_operand_def]) >>
+  `w2n (n2w b : bytes32) + 32 < dimword (:256)` by simp[] >>
+  simp[Abbr `G2`, Abbr `tn3`, Abbr `ai`] >>
+  qpat_x_assum `t' = update_var _ _ _` SUBST_ALL_TAC >>
+  pure_asm_rewrite_tac[] >>
+  irule reason_encoder_offset_covers >> simp[] >>
+  conj_tac >- metis_tac[eval_operand_def] >>
+  qexists_tac `n` >> simp[] >> metis_tac[]
+QED
+
+Resume reason_encoder_prefix_post[oldptr]:
+  rpt strip_tac >>
+  `not_fresh_at c2 p` by
+    (gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `ptr_covers G1 tn2 p u k` by metis_tac[] >>
+  simp[Abbr `G2`, Abbr `tn3`] >>
+  qpat_x_assum `!PG G tn. _` (qspecl_then [`PG`, `G1`, `tn2`] mp_tac) >>
+  simp[]
 QED
 
 Finalise reason_encoder_prefix_post
