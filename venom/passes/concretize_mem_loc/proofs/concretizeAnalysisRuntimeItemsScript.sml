@@ -3,7 +3,7 @@ Ancestors concretizeAnalysisOpenCallSummary concretizeAnalysisStageSizes
   concretizeAnalysisOwnership concretizeAnalysisCollection frameHistoryCfg
   concretizeAnalysisSizes staticLayoutAllocatorProofs concretizeMemLocDefs
   frameDemandOwnership frameOpenCall frameActivationCache frameJointTransition frameJointTrace frameOriginHistory
-  frameOriginReachable frameExecutionHistory frameAllocationSizes
+  frameOriginReachable frameExecutionHistory frameAllocationSizes frameResolvedTrace
   contextCodegenRel o1PassContract venomWf venomInst venomExecProps removeUnusedSsaProofs
   finite_map list pred_set arithmetic
 
@@ -251,4 +251,60 @@ Proof
   goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ caller invoke _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
   simp[] >> metis_tac[LESS_EQ_TRANS]
+QED
+
+
+Theorem resolved_current_source_allocation:
+  joint_config_reachable vs0 C
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  o1_run_state_ok vs0 /\ o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  FLOOKUP rv v = SOME ((token,aid),(b,sz)) ==>
+  ?k owner ai n. k < LENGTH (birth::ids) /\ EL k (birth::ids) = token /\
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      (LENGTH stk - k) owner aid (b,sz) /\
+    MEM owner C.ctx_functions /\ MEM ai (fn_insts owner) /\
+    ai.inst_opcode = ALLOCA /\ ai.inst_id = aid /\
+    ai.inst_operands = [Lit n] /\ w2n n = sz
+Proof
+  strip_tac >> drule_all resolved_current_owner >> strip_tac >>
+  drule_all activation_cache_source_allocation >> strip_tac >>
+  gvs[] >> goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem resolved_saved_source_allocation:
+  joint_config_reachable vs0 C
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  o1_run_state_ok vs0 /\ o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) (ann::anns) /\ k < LENGTH stk /\
+  FLOOKUP (SND (EL k anns)) v = SOME ((token,aid),(b,sz)) ==>
+  ?j owner ai n. j < LENGTH (birth::ids) /\ EL j (birth::ids) = token /\
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      (LENGTH stk - j) owner aid (b,sz) /\
+    MEM owner C.ctx_functions /\ MEM ai (fn_insts owner) /\
+    ai.inst_opcode = ALLOCA /\ ai.inst_id = aid /\
+    ai.inst_operands = [Lit n] /\ w2n n = sz
+Proof
+  strip_tac >> drule_all resolved_saved_owner >> strip_tac >>
+  drule_all activation_cache_source_allocation >> strip_tac >>
+  gvs[] >> goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem joint_trace_prefix_source_allocation:
+  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es /\
+  o1_run_state_ok vs0 /\ o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
+  MEM owner C.ctx_functions /\
+  ?ai n. MEM ai (fn_insts owner) /\ ai.inst_opcode = ALLOCA /\
+    ai.inst_id = aid /\ ai.inst_operands = [Lit n] /\ w2n n = sz
+Proof
+  strip_tac >>
+  `LENGTH qs = LENGTH es` by metis_tac[joint_trace_def, joint_chain_length] >>
+  drule joint_trace_prefix_reachable >> rewrite_tac[EVERY_EL] >>
+  disch_then (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
+  drule_all activation_cache_source_allocation >> simp[]
 QED
