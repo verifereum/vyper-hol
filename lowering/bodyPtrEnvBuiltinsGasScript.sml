@@ -6,7 +6,7 @@ Ancestors
   ptrDiscipline ptrSafeRun emitHelper emitHelperProps exprLoweringProps
   compileEnv exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
   venomInst venomState venomExecSemantics finite_map pred_set list rich_list
-  vyperAST vyperTypeSystem vyperValue valueEncoding codegenRel
+  vyperAST vyperTypeSystem vyperValue valueEncoding codegenRel exprSimHypsDefs
 
 Theorem gas_builtin_base_step:
   ?w. gas_prefix 1 s.vs_gas_readings = [w] /\
@@ -145,4 +145,39 @@ Proof
   gvs[update_var_def, ptr_val_ok_def, env_item_type_def, is_word_type_def,
       arithmeticTheory.ADD1, ghost_inv_gas_obs] >>
   irule scalar_builtin_output_clean >> simp[MEM]
+QED
+
+Theorem compile_msg_gas_sim_ptr:
+  expr_sim_ptr d ctx PG fn cenv cx ty
+    (Builtin (env_item_type MsgGas) (Env MsgGas) []) es
+Proof
+  rw[expr_sim_ptr_def] >>
+  drule lower_value_env >> strip_tac >>
+  drule_all gas_builtin_counted_post >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[T]` >> disj1_tac >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (IntV (&w2n w))`, `es`, `G'`, `tn'`, `OK t`] >>
+  simp[gas_explicit_def, msg_gas_source] >>
+  gvs[expr_type_def, env_item_type_def, is_word_type_def]
+QED
+
+Theorem compile_msg_gas_vv_sim_ptr:
+  expr_vv_sim_ptr d ctx PG fn cenv cx ty
+    (Builtin (env_item_type MsgGas) (Env MsgGas) []) es
+Proof
+  irule expr_vv_sim_ptr_stack >> conj_tac
+  >- (gen_tac >> simp[compile_expr_def] >>
+      Cases_on `compile_env_var MsgGas sa` >> simp[as_stack_val_def]) >>
+  conj_tac >- metis_tac[eval_expr_builtin_value] >>
+  simp[compile_msg_gas_sim_ptr]
+QED
+
+Theorem body_msg_gas_ptr_case:
+  body_expr_ptr_ok cx (Builtin ann (Env MsgGas) args)
+Proof
+  rw[body_expr_ptr_ok_def] >>
+  `args = [] /\ ann = env_item_type MsgGas` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >> simp[compile_msg_gas_sim_ptr, compile_msg_gas_vv_sim_ptr]
 QED
