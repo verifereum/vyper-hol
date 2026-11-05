@@ -2,6 +2,26 @@ Theory makeSsaCurrentNonDegCleanup
 Ancestors
   makeSsaCurrentCleanupBoundary makeSsaCurrentDefs unitShapeDefs venomInst venomWf list pair
 
+Definition current_nondeg_block_shape_def:
+  current_nondeg_block_shape bb <=>
+    (!i j. i < j /\ j < LENGTH bb.bb_instructions /\
+      (EL j bb.bb_instructions).inst_opcode = PHI ==>
+      (EL i bb.bb_instructions).inst_opcode = PHI) /\
+    EVERY (\inst. inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)
+      bb.bb_instructions
+End
+
+Theorem current_nondeg_input_shape:
+  wf_function fn /\ fn_inst_wf fn ==>
+  EVERY current_nondeg_block_shape fn.fn_blocks
+Proof
+  simp[EVERY_MEM, current_nondeg_block_shape_def] >>
+  rpt strip_tac
+  >- (fs[wf_function_def, bb_well_formed_def] >> metis_tac[]) >>
+  `inst_wf inst` by metis_tac[fn_inst_wf_def] >>
+  gvs[inst_wf_def]
+QED
+
 Theorem current_nondeg_retained_slots:
   inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
   inst.inst_operands = current_phi_slots slots /\
@@ -121,16 +141,14 @@ Proof
 QED
 
 Theorem current_nondeg_clean_block:
-  bb_well_formed bb /\
-  EVERY (\inst. inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)
-    bb.bb_instructions ==>
+  current_nondeg_block_shape bb ==>
   EVERY (\inst. !out. inst.inst_opcode = PHI /\ inst.inst_outputs = [out] ==>
     ?p a q b. MEM (p,a) (phi_pairs inst.inst_operands) /\
       MEM (q,b) (phi_pairs inst.inst_operands) /\
       a <> out /\ b <> out /\ a <> b)
     (simplify_current_phi_block bb).bb_instructions
 Proof
-  strip_tac >>
+  rewrite_tac[current_nondeg_block_shape_def] >> strip_tac >>
   `?prefix suffix. bb.bb_instructions = prefix ++ suffix /\
     EVERY (\inst. inst.inst_opcode = PHI) prefix /\
     EVERY (\inst. inst.inst_opcode <> PHI) suffix` by
@@ -154,9 +172,7 @@ Proof
 QED
 
 Theorem current_nondeg_clean_blocks:
-  EVERY (\bb. bb_well_formed bb /\
-    EVERY (\inst. inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)
-      bb.bb_instructions) bbs ==>
+  EVERY current_nondeg_block_shape bbs ==>
   EVERY (\bb. EVERY (\inst. !out.
     inst.inst_opcode = PHI /\ inst.inst_outputs = [out] ==>
     ?p a q b. MEM (p,a) (phi_pairs inst.inst_operands) /\
@@ -166,16 +182,12 @@ Theorem current_nondeg_clean_blocks:
 Proof
   rewrite_tac[simplify_current_phis_if_def, current_nondeg_cleanup_map, EVERY_MAP] >>
   strip_tac >> irule EVERY_MONOTONIC >>
-  qexists_tac `\bb. bb_well_formed bb /\
-    EVERY (\inst. inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)
-      bb.bb_instructions` >>
+  qexists_tac `current_nondeg_block_shape` >>
   simp[] >> metis_tac[current_nondeg_clean_block]
 QED
 
 Theorem current_nondeg_clean_function:
-  EVERY (\bb. bb_well_formed bb /\
-    EVERY (\inst. inst.inst_opcode = PHI ==> phi_well_formed inst.inst_operands)
-      bb.bb_instructions) fn.fn_blocks ==>
+  EVERY current_nondeg_block_shape fn.fn_blocks ==>
   fn_phis_non_degenerate
     (fn with fn_blocks := simplify_current_phis_if T fn.fn_blocks)
 Proof
