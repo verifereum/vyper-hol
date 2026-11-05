@@ -153,3 +153,119 @@ Proof
        venomStateTheory.update_var_def] >>
   simp[order_run_start_def, venomStateTheory.init_venom_state_def]
 QED
+
+(* Snapshot after computing the output payload address. *)
+Definition order_run_s3_def:
+  order_run_s3 = order_run_s2 with
+    <|vs_vars := order_run_s2.vs_vars |+ ("%2",288w); vs_inst_idx := 3|>
+End
+
+Theorem order_run_step2:
+  step_inst_base (mk_inst 2 ADD [Var "%1";Lit 32w] ["%2"]) order_run_s2 =
+    OK (order_run_s3 with vs_inst_idx := 2)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_run_s3_def, order_run_s2_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.word_add_n2w]
+QED
+
+(* Second length read still precedes the mutation of the array. *)
+Definition order_run_s4_def:
+  order_run_s4 = order_run_s3 with
+    <|vs_vars := order_run_s3.vs_vars |+ ("%3",2w); vs_inst_idx := 4|>
+End
+
+Theorem order_run_s3_array:
+  mload 128 order_run_s3 = 2w
+Proof
+  mp_tac (cj 1 order_run_start_array) >>
+  simp[order_run_s3_def, order_run_s2_def, venomStateTheory.mload_def,
+       venomStateTheory.read_memory_def]
+QED
+
+Theorem order_run_step3:
+  step_inst_base (mk_inst 3 MLOAD [Lit 128w] ["%3"]) order_run_s3 =
+    OK (order_run_s4 with vs_inst_idx := 3)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256, order_run_s3_array] >>
+  simp[order_run_s4_def, venomStateTheory.update_var_def, order_run_s3_def]
+QED
+
+(* Boolean tests of the nonempty array length. *)
+Definition order_run_s5_def:
+  order_run_s5 = order_run_s4 with
+    <|vs_vars := order_run_s4.vs_vars |+ ("%4",0w); vs_inst_idx := 5|>
+End
+
+Theorem order_run_step4:
+  step_inst_base (mk_inst 4 ISZERO [Var "%3"] ["%4"]) order_run_s4 =
+    OK (order_run_s5 with vs_inst_idx := 4)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_run_s5_def, order_run_s4_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, venomExecSemanticsTheory.bool_to_word_def,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]
+QED
+
+(* Assertion operand after the second zero test. *)
+Definition order_run_s6_def:
+  order_run_s6 = order_run_s5 with
+    <|vs_vars := order_run_s5.vs_vars |+ ("%5",1w); vs_inst_idx := 6|>
+End
+
+Theorem order_run_step5:
+  step_inst_base (mk_inst 5 ISZERO [Var "%4"] ["%5"]) order_run_s5 =
+    OK (order_run_s6 with vs_inst_idx := 5)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_run_s6_def, order_run_s5_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, venomExecSemanticsTheory.bool_to_word_def]
+QED
+
+(* Successful assertion changes only the instruction cursor. *)
+Definition order_run_s7_def:
+  order_run_s7 = order_run_s6 with vs_inst_idx := 7
+End
+
+Theorem order_run_step6:
+  step_inst_base (mk_inst 6 ASSERT [Var "%5"] []) order_run_s6 =
+    OK (order_run_s7 with vs_inst_idx := 6)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_run_s7_def, order_run_s6_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]
+QED
+
+(* Decremented length is one, before it is stored back to the array. *)
+Definition order_run_s8_def:
+  order_run_s8 = order_run_s7 with
+    <|vs_vars := order_run_s7.vs_vars |+ ("%6",1w); vs_inst_idx := 8|>
+End
+
+Theorem order_run_step7:
+  step_inst_base (mk_inst 7 SUB [Var "%3";Lit 1w] ["%6"]) order_run_s7 =
+    OK (order_run_s8 with vs_inst_idx := 7)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_run_s8_def, order_run_s7_def, order_run_s6_def,
+       order_run_s5_def, order_run_s4_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  CONV_TAC (DEPTH_CONV wordsLib.WORD_EVAL_CONV)
+QED
