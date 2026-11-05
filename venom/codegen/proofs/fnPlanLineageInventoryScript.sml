@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanLineageSort fnPlanLineageReplay reorderSim doSwapSim stackPlanGen stackModel list rich_list
+  fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay reorderSim doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -1641,3 +1641,127 @@ Proof
   rpt (goal_assum (drule_at Any)) >>
   simp[stackPlanTypesTheory.plan_state_component_equality]
 QED
+
+(* A native spill removes exactly the selected top cell, not earlier copies. *)
+Theorem do_spill_tos_append:
+  alloc_spill_slot ps.ps_alloc = (off,alloc') ==>
+  do_spill_tos (ps with ps_stack := prefix ++ [op]) =
+    ([SOSpill off], ps with <| ps_stack := prefix;
+      ps_spilled := ps.ps_spilled |+ (op,off); ps_alloc := alloc' |>)
+Proof
+  strip_tac >>
+  simp[do_spill_tos_def, stack_peek_def, stack_pop_def,
+       EL_APPEND2, TAKE_APPEND]
+QED
+
+Theorem do_restore_exact:
+  FLOOKUP ps.ps_spilled op = SOME off ==>
+  do_restore op ps =
+    ([SORestore off], ps with <|
+      ps_stack := ps.ps_stack ++ [op];
+      ps_spilled := ps.ps_spilled \\ op;
+      ps_alloc := free_spill_slot off ps.ps_alloc |> )
+Proof
+  simp[do_restore_def, stack_push_def, SNOC_APPEND]
+QED
+
+Theorem do_spill_at_suffix_stack:
+  d < LENGTH suffix /\ d <= 16 ==>
+  (SND (do_spill_at d (ps with ps_stack := prefix ++ suffix))).ps_stack =
+    prefix ++ stack_pop 1 (stack_swap d suffix)
+Proof
+  strip_tac >> Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  Cases_on `d = 0`
+  >- gvs[do_spill_at_def, do_spill_tos_def,
+         stack_pop_def, stack_swap_def, LUPDATE_SAME,
+         TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+  simp[do_spill_at_def, do_spill_tos_def, stack_swap_bottom_extension,
+       stack_pop_def, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+QED
+
+(* The pending-use set in the native cons equation is already exposed by
+   stackPlanGen.emit_input_plan_cons. Repeated operands therefore force
+   the first occurrence to be retained, even when absent from next. *)
+Theorem emit_one_repeated_var_restored:
+  FLOOKUP ps.ps_spilled (Var v) = SOME off ==>
+  emit_one_input opc (v :: uses) (Var v) ps =
+    ([SORestore off; SODup 1], ps with <|
+      ps_stack := ps.ps_stack ++ [Var v; Var v];
+      ps_spilled := ps.ps_spilled \\ (Var v);
+      ps_alloc := free_spill_slot off ps.ps_alloc |> )
+Proof
+  strip_tac >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+       do_restore_def, stack_push_def, SNOC_APPEND,
+       stack_get_depth_def, REVERSE_APPEND, stack_find_def,
+       do_dup_def, stack_dup_def, stack_peek_def, EL_APPEND2] >>
+  rewrite_tac[GSYM APPEND_ASSOC, APPEND]
+QED
+
+(* Moved from LowerPrefix: one shared native input boundary. *)
+Theorem emit_one_input_suffix_shallow:
+  stack_get_depth (Var v) suffix = SOME d /\ d <= 15 /\
+  MEM v next /\ FLOOKUP ps.ps_spilled (Var v) = NONE ==>
+  emit_one_input opc next (Var v) (ps with ps_stack := prefix ++ suffix) =
+    ([SODup (d+1)], ps with ps_stack := prefix ++ (suffix ++ [Var v]))
+Proof
+  strip_tac >>
+  `stack_get_depth (Var v) (prefix ++ suffix) = SOME d` by
+    metis_tac[stack_get_depth_suffix_hit] >>
+  drule stack_get_depth_props >> strip_tac >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def, do_dup_def,
+       stack_dup_def, listTheory.SNOC_APPEND]
+QED
+
+Theorem emit_input_repeated_var_shallow:
+  stack_get_depth (Var v) suffix = SOME d /\ d <= 15 /\
+  ~MEM v next /\ FLOOKUP ps.ps_spilled (Var v) = NONE ==>
+  emit_input_plan opc [Var v; Var v] next
+    (ps with ps_stack := prefix ++ suffix) =
+    ([SODup (d+1)], ps with ps_stack := prefix ++ (suffix ++ [Var v]))
+Proof
+  strip_tac >>
+  `emit_one_input opc (v :: next) (Var v)
+    (ps with ps_stack := prefix ++ suffix) =
+    ([SODup (d+1)], ps with ps_stack := prefix ++ (suffix ++ [Var v]))` by
+    (irule emit_one_input_suffix_shallow >> simp[]) >>
+  simp[emit_input_plan_def, dfgDefsTheory.operand_vars_def,
+       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+       dfgDefsTheory.operand_var_def] >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def]
+QED
+
+Theorem emit_input_repeated_var_restored:
+  FLOOKUP ps.ps_spilled (Var v) = SOME off /\ ~MEM v next ==>
+  emit_input_plan opc [Var v; Var v] next ps =
+    ([SORestore off; SODup 1], ps with <|
+      ps_stack := ps.ps_stack ++ [Var v; Var v];
+      ps_spilled := ps.ps_spilled \\ (Var v);
+      ps_alloc := free_spill_slot off ps.ps_alloc |> )
+Proof
+  strip_tac >> drule emit_one_repeated_var_restored >>
+  disch_then (qspecl_then [`next`, `opc`] assume_tac) >>
+  simp[emit_input_plan_def, dfgDefsTheory.operand_vars_def,
+       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+       dfgDefsTheory.operand_var_def] >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+       DOMSUB_FLOOKUP_THM]
+QED
+
+(* Operation checkpoint: do_spill_tos_append retains every earlier copy;
+   do_spill_at_suffix_stack frames the prefix but does not erase its keys.
+   Hence a no-stale premise must be produced before spilling, not inferred
+   from membership in the new spill map. The exported, strengthened
+   reorderSim.select_spill_candidate_not_pending protects exact pending
+   keys (including duplicates), and its stack-count theorems account for
+   exactly one removed occurrence. emit_input_plan_cons is the existing
+   general pending-use transition, with operand_vars rest ++ next_liveness.
+   The repeated-input equations above show the transient extra copy both
+   from a shallow suffix hit and from persistent storage, even for a key
+   dead in next_liveness. They do not assert uniqueness at an instruction
+   boundary: later operand consumption must discharge this reserve.
+   Thus multiplicity with a pending reserve is locally compatible with
+   these equations; unconditional spilled-key absence is rejected.
+   Native initialization, live-set transport, and preservation for all
+   opcode branches remain unproved, as does suffix-local recursive fuel.
+*)

@@ -3,21 +3,7 @@ Ancestors
   fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineagePhiTemporal stackPlanGen stackPlanOps
   stackModel venomInst finite_map list rich_list
 
-(* A suffix hit supplies both the actual search depth and the element used
-   by shallow DUP.  No property of the lower prefix is needed. *)
-Theorem emit_one_input_suffix_shallow:
-  stack_get_depth (Var v) suffix = SOME d /\ d <= 15 /\
-  MEM v next /\ FLOOKUP ps.ps_spilled (Var v) = NONE ==>
-  emit_one_input opc next (Var v) (ps with ps_stack := prefix ++ suffix) =
-    ([SODup (d+1)], ps with ps_stack := prefix ++ (suffix ++ [Var v]))
-Proof
-  strip_tac >>
-  `stack_get_depth (Var v) (prefix ++ suffix) = SOME d` by
-    metis_tac[stack_get_depth_suffix_hit] >>
-  drule stack_get_depth_props >> strip_tac >>
-  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def, do_dup_def,
-       stack_dup_def, listTheory.SNOC_APPEND]
-QED
+(* Shallow input boundary is shared from fnPlanLineageInventory. *)
 
 (* Equal singleton suffixes do not in themselves shield optimistic_swap.
    The first state has a hidden occurrence of scheduled y; the second has

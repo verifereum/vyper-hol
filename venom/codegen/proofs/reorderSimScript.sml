@@ -757,12 +757,13 @@ Proof
      simp[stack_poke_exchange_multiplicity]
 QED
 
-Theorem select_spill_candidate_not_pending[local]:
+Theorem select_spill_candidate_not_pending:
   !stk pending target_dist target_len cand.
     select_spill_candidate stk pending target_dist target_len = SOME cand ==>
-    ~MEM (stack_peek cand stk) pending
+    ~MEM (stack_peek cand stk) pending /\
+    is_var_operand (stack_peek cand stk)
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   fs[select_spill_candidate_def, LET_THM] >>
   imp_res_tac FIND_SOME_MEM >> gvs[]
 QED
