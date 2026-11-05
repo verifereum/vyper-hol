@@ -6,7 +6,8 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["lowering/msgGasOriginPostScript.sml",
+roots = ["venom/codegen/proofs/fnLineageInvReadinessProbeScript.sml",
+         "lowering/msgGasOriginPostScript.sml",
          "lowering/generatedGasOriginScript.sml",
          "lowering/msgGasOriginScript.sml",
          "lowering/stmtSimDeclComposeScript.sml",
