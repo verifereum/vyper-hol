@@ -103,3 +103,55 @@ Proof
   drule venomInstProofsTheory.step_preserves_halted >>
   gvs[mk_inst_def, is_terminator_def]
 QED
+
+Theorem mstore_raw_ghost_frame:
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w ==>
+  step_prov PG G (mk_inst id MSTORE [Var dst; value] [])
+    (mstore (w2n a) w s) = G /\
+  (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn).t_var = tn.t_var /\
+  (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn).t_stor = tn.t_stor /\
+  (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn).t_trans = tn.t_trans /\
+  (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn).t_imm = tn.t_imm /\
+  (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn).t_mem =
+      (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}) UNION
+      {w2n a + k | k IN op_taint tn value}
+Proof
+  strip_tac >>
+  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       mk_inst_def, set_var_taint_def, finite_mapTheory.DRESTRICT_UNIV,
+       store_taint_def, imm_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, fixed_source_write_range_def,
+       eval_operand_def, written_taint_def, range_bytes_def, new_site_bytes_def,
+       mstore_def, finite_mapTheory.FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem mstore_raw_old_coverage:
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  ptr_covers G tn p s n ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id MSTORE [Var dst; value] []) (mstore (w2n a) w s))
+    (step_taint (mk_inst id MSTORE [Var dst; value] []) s (mstore (w2n a) w s) tn)
+    p ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx) n
+Proof
+  strip_tac >> drule_all mstore_raw_ghost_frame >> strip_tac >>
+  gvs[ptr_covers_def, op_taint_def, lookup_var_def, mstore_def, allocas_from_def]
+QED
+
+(* A raw variable taint map need not be byte-bounded; loaded words are.
+   Keep that necessary bound explicit in the outside-word corollary. *)
+Theorem mstore_raw_outside_taint:
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  (!k. k IN op_taint tn value ==> k < 32) /\
+  (i < w2n a \/ w2n a + 32 <= i) ==>
+  (i IN (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn).t_mem <=> i IN tn.t_mem)
+Proof
+  strip_tac >> drule_all mstore_raw_ghost_frame >> strip_tac >>
+  simp[] >> simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF] >>
+  eq_tac >> rpt strip_tac >> gvs[] >> res_tac >> decide_tac
+QED
