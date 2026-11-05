@@ -12,7 +12,7 @@ Theory exprSimAbiGasBridge
 Ancestors
   fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
   venomInst venomExecSemantics venomState compileEnv list rich_list
-  fragGasPath gasCount arithmetic
+  fragGasPath gasCount arithmetic venomExecProofs
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -196,6 +196,155 @@ Proof
     bb_instructions := [mk_inst 0 STOP [] []; mk_inst 1 INVOKE [] [];
                         mk_inst 2 JMP [Label "bridge-end"] []]|>]` >>
   simp[mk_inst_def, IS_PREFIX_APPEND]
+QED
+
+Theorem frag_observer_lookup_cases:
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb ==>
+  (lbl = sb.cs_current_bb /\
+   bb = <|bb_label := sb.cs_current_bb;
+          bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>) \/
+  (lbl <> sb.cs_current_bb /\ MEM bb (emitted_blocks sa sb) /\
+   bb.bb_label = lbl)
+Proof
+  Cases_on `lbl = sb.cs_current_bb`
+  >- simp[frag_observer_cut_lookup] >>
+  simp[frag_observer_def, lookup_block_def, FIND_thm] >> strip_tac >>
+  drule FIND_MEM >> simp[MEM_FILTER] >> strip_tac >>
+  drule FIND_P >> simp[]
+QED
+
+Theorem frag_extends_emitted_shape:
+  cs_extends sa sb ==>
+  if emitted_blocks sa sb = [] then
+    sa.cs_blocks = sb.cs_blocks /\ sa.cs_current_bb = sb.cs_current_bb /\
+    isPREFIX sa.cs_current_insts sb.cs_current_insts
+  else
+    (LAST (emitted_blocks sa sb)).bb_label = sa.cs_current_bb /\
+    isPREFIX sa.cs_current_insts
+      (LAST (emitted_blocks sa sb)).bb_instructions
+Proof
+  rw[cs_extends_def] >> drule emitted_blocks_append >> strip_tac >> gvs[]
+QED
+
+Theorem frag_instruction_drop_member[local]:
+  get_instruction bb idx = SOME inst /\ n <= idx ==>
+  MEM inst (DROP n bb.bb_instructions)
+Proof
+  simp[get_instruction_def] >> strip_tac >> gvs[] >>
+  simp[MEM_EL] >> qexists_tac `idx - n` >> simp[EL_DROP]
+QED
+
+Theorem frag_emitted_front_member[local]:
+  new <> [] /\ MEM bb new /\ bb <> LAST new ==> MEM bb (FRONT new)
+Proof
+  strip_tac >>
+  `new = FRONT new ++ [LAST new]` by simp[APPEND_FRONT_LAST] >>
+  metis_tac[MEM_APPEND, MEM]
+QED
+
+Theorem frag_emitted_start_block[local]:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\
+  MEM bb (emitted_blocks sa sb) /\ bb.bb_label = sa.cs_current_bb ==>
+  bb = LAST (emitted_blocks sa sb)
+Proof
+  strip_tac >>
+  `emitted_blocks sa sb <> []` by (strip_tac >> gvs[]) >>
+  drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+  fs[fn_has_code_def] >>
+  `MEM (LAST (emitted_blocks sa sb)) (emitted_blocks sa sb)` by
+    simp[MEM_LAST_NOT_NIL] >>
+  metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem frag_observer_code_provenance:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (lbl,idx) IN frag_observer_region sa sb /\
+  (lbl,idx) <> frag_observer_cut sb /\
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst ==>
+  MEM inst (frag_code sa sb)
+Proof
+  strip_tac >> drule frag_observer_lookup_cases >> strip_tac
+  >- (gvs[frag_observer_cut_def, frag_observer_region_def] >>
+      fs[get_instruction_def, EL_APPEND_EQN] >>
+      `idx < LENGTH sb.cs_current_insts` by decide_tac >>
+      gvs[] >>
+      Cases_on `emitted_blocks sa sb = []`
+      >- (drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+          simp[frag_code_def, emitted_insts_def] >>
+          simp[MEM_EL] >> qexists_tac `idx - LENGTH sa.cs_current_insts` >>
+          fs[EL_DROP]) >>
+      simp[frag_code_def, NULL_EQ, MEM_APPEND] >>
+      disj2_tac >> simp[MEM_EL] >> metis_tac[]) >>
+  Cases_on `bb.bb_label = sa.cs_current_bb`
+  >- (drule_all frag_emitted_start_block >> strip_tac >> gvs[] >>
+      fs[frag_observer_region_def] >>
+      `emitted_blocks sa sb <> []` by (strip_tac >> gvs[]) >>
+      simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj1_tac >> disj1_tac >>
+      irule frag_instruction_drop_member >> goal_assum (drule_at Any) >> simp[]) >>
+  `emitted_blocks sa sb <> []` by (strip_tac >> gvs[]) >>
+  `bb <> LAST (emitted_blocks sa sb)` by
+    (drule frag_extends_emitted_shape >> simp[] >> metis_tac[]) >>
+  `MEM bb (FRONT (emitted_blocks sa sb))` by
+    metis_tac[frag_emitted_front_member] >>
+  simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj1_tac >> disj2_tac >>
+  `MEM inst bb.bb_instructions` by
+    metis_tac[frag_instruction_drop_member, DROP_0, ZERO_LESS_EQ] >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem frag_observer_off_cut_opcodes:
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  (lbl,idx) IN frag_observer_region sa sb /\
+  (lbl,idx) <> frag_observer_cut sb /\
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst ==>
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> STOP /\
+  inst.inst_opcode <> RETURN /\
+  ~MEM (Label sa.cs_current_bb) inst.inst_operands
+Proof
+  strip_tac >> drule_all frag_observer_code_provenance >>
+  fs[frag_gas_free_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem frag_fn_insts_blocks_member[local]:
+  !blocks inst. MEM inst (fn_insts_blocks blocks) <=>
+    ?bb. MEM bb blocks /\ MEM inst bb.bb_instructions
+Proof
+  Induct >> simp[fn_insts_blocks_def, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem frag_observer_nonstop_inclusion:
+  fn_has_code sa sb fn /\
+  MEM inst (fn_insts (frag_observer sa sb fn id)) /\ inst.inst_opcode <> STOP ==>
+  MEM inst (fn_insts fn)
+Proof
+  rw[fn_insts_def, frag_observer_def, frag_fn_insts_blocks_member] >> gvs[]
+  >- (fs[MEM_APPEND, fn_has_code_def] >>
+      `MEM inst bb.bb_instructions` by
+        metis_tac[IS_PREFIX_APPEND, MEM_APPEND] >>
+      drule lookup_block_MEM >> strip_tac >> metis_tac[]) >>
+  fs[MEM_FILTER] >> metis_tac[]
+QED
+
+(* SINK is permitted by the frozen opcode filter, but is a Halt step.
+   Thus the existing observer_region_safe interface is strictly too strong. *)
+Theorem frag_observer_sink_safety_probe:
+  let sa = st with cs_current_insts := [];
+      sb = sa with cs_current_insts := [mk_inst 0 SINK [] []] in
+  cs_extends sa sb /\ frag_gas_free sa sb /\
+  ~observer_region_safe (frag_observer sa sb fn 1)
+    (frag_observer_cut sb) (frag_observer_region sa sb)
+Proof
+  simp[cs_extends_same_block, frag_gas_free_def, frag_code_def,
+       emitted_blocks_def, emitted_insts_def] >>
+  simp[observer_region_safe_def, frag_observer_cut_def,
+       frag_observer_region_def, frag_observer_def, lookup_block_def,
+       FIND_thm, get_instruction_def, mk_inst_def, emitted_blocks_def] >>
+  qexists_tac `0` >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs] >>
+  qexists_tac `s with vs_halted := F` >> simp[]
 QED
 
 Theorem abi_observer_step_zero_edge:
