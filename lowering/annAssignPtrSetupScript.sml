@@ -4,6 +4,7 @@ Ancestors
   annAssignPtrFacts bodyPtrDefs allocationPtr fragGasSeqPtr
   exprSimProps loweringPosts finite_map fragExecPtr venomInst venomExecSemantics
   fragGasPathPtr venomInstProofs venomState stmtSimProps compileEnv
+  annAssignPtrAllocGhost fragExec emitHelper emitHelperProps
 
 Theorem annassign_declared_pointer_after_rhs_ptr:
   !cenv es sa G0 tn0 s0 G tn s p sz.
@@ -114,4 +115,20 @@ Proof
         (qspecl_then [`name`, `entry`, `p`, `sz`] mp_tac) >> simp[]) >>
   simp[] >> Cases_on `d` >> gvs[return_buf_ptr_def] >>
   PairCases_on `x` >> gvs[return_buf_ptr_def]
+QED
+
+Theorem annassign_emit_instruction_ptr[local]:
+  !opc args outs st st1 func.
+    emit_inst opc args outs st = ((),st1) /\ fn_has_code st st1 func ==>
+    ?bb. lookup_block st.cs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb (LENGTH st.cs_current_insts) =
+        SOME (mk_inst st.cs_next_id opc args outs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `st1.cs_current_bb = st.cs_current_bb /\
+   st1.cs_current_insts = st.cs_current_insts ++
+      [mk_inst st.cs_next_id opc args outs]` by
+    gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >> qexists `bb` >> simp[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
