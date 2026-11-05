@@ -1,6 +1,6 @@
 Theory fnFrameBoundaryEntryParams
 Ancestors
-  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers
+  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
@@ -1711,4 +1711,126 @@ Proof
   >- (simp[execute_plan_def] >> irule asm_steps_compose_ok >>
       qexists `st'` >> gvs[execute_plan_def]) >>
   gvs[apply_simple_op_def, execute_plan_def, stack_pop_def]
+QED
+
+Theorem entry_pop_steps_sim:
+  !items ps ops ps' lo o2pc prog vs st initial_fmp.
+    plan_steps pop_one_step items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  Induct
+  >- (rpt gen_tac >> simp[plan_steps_def] >> strip_tac >>
+      gvs[] >> qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `pop_one_step h ps` >>
+  rename1 `pop_one_step h ps = (ops1, ps1)` >>
+  Cases_on `plan_steps pop_one_step items ps1` >>
+  rename1 `plan_steps pop_one_step items ps1 = (ops2, ps2)` >>
+  gvs[plan_steps_def] >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[execute_plan_append, asm_block_at_append] >> strip_tac >>
+  `!off. MEM (SOSpill off) ops1 ==> off < dimword (:256)` by gvs[] >>
+  `!off. MEM (SOSpill off) ops2 ==> off < dimword (:256)` by gvs[] >>
+  drule_all entry_pop_one_step_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `asm_block_at prog st'.as_pc (execute_plan initial_fmp ops2)` by gvs[] >>
+  qpat_x_assum `!off. MEM (SOSpill off) ops2 ==> _` (assume_tac o SRULE []) >>
+  first_x_assum drule_all >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists `st''` >> simp[] >> irule asm_steps_compose_ok >>
+  qexists `st'` >> simp[]
+QED
+
+Theorem entry_pop_fold_sim:
+  !items ps ops ps' lo o2pc prog vs st initial_fmp.
+    FOLDL pop_foldl_body ([],ps) items = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  pure_rewrite_tac[pop_foldl_body_eq_foldl_body, GSYM plan_steps_eq_foldl] >>
+  ACCEPT_TAC entry_pop_steps_sim
+QED
+
+Theorem popmany_individual_sim_structural:
+  !items ps ops ps' lo o2pc prog vs st initial_fmp.
+    popmany_individual items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[popmany_individual_eq_foldl] >>
+  strip_tac >> drule_all entry_pop_fold_sim >> simp[]
+QED
+
+Theorem popmany_plan_sim_structural:
+  !items ps ops ps' lo o2pc prog vs st initial_fmp.
+    popmany_plan items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `items = []`
+  >- (gvs[popmany_plan_def] >> qexists `st` >>
+      simp[execute_plan_def, asm_steps_def]) >>
+  Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
+  >- ( qpat_x_assum `_ /\ _` strip_assume_tac >>
+       `LENGTH items < LENGTH ps.ps_stack` by
+        (irule contiguous_top_stack_bound >> simp[]) >>
+       `LENGTH items <= 16` by gvs[is_contiguous_top_def] >>
+       drule_all popmany_plan_contiguous_sim >>
+       disch_then (qspec_then `o2pc` strip_assume_tac) >>
+       qexists `st'` >> simp[] >>
+       qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+       Cases_on `items` >- gvs[] >>
+       simp[popmany_plan_def] >>
+       Cases_on `do_swap (LENGTH (h::t)) ps` >>
+       rename1 `do_swap _ ps = (swap_ops, ps2)` >>
+       strip_tac >> gvs[] >>
+       drule_all do_swap_structural_layout_wf >> strip_tac >>
+       gvs[stack_pop_def, ALL_DISTINCT_TAKE] >>
+       gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_TAKE]) >>
+  `popmany_individual items ps = (ops,ps')` by
+    (drule_all popmany_plan_noncontig_new >> simp[]) >>
+  drule_all popmany_individual_sim_structural >> simp[]
 QED
