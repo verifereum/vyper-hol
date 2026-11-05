@@ -24,12 +24,10 @@
  * code (LocCode), which nothing relates to the source's immutables yet
  * (exprSimLeaves' compile_toplevel_immutable_sim).
  *
+ * The offsets (mem_path_offset and its steps) are exprSim's, which the
+ * live-locals frame locals_kept uses too.
+ *
  * TOP-LEVEL:
- *   mem_field_offset, mem_step_offset, mem_path_offset — the byte offset of
- *                          a field, an element and a path in a type's
- *                          memory layout
- *   mem_path_offset_sound — a path's offset is where subscripts_type puts
- *                          it, inside the type's bytes
  *   place_ptr_rel, place_readable, target_post, target_res_ok,
  *   target_sim             — the judgment
  *   target_env_ok, target_root, immutable_root, target_indices_pre,
@@ -42,7 +40,7 @@
  * The steps (fields, subscripts) and the induction over targets are in
  * targetPlaceSimCases.
  *
- * Helpers: mem_field_offset_layout, mem_path_offset_snoc, target_pre_sub,
+ * Helpers: target_pre_sub,
  *   expr_sim_inv_local, target_post_refl, toplevel_decl_ce_vars, toplevel_target_decl
  *)
 
@@ -58,96 +56,7 @@ Ancestors
 Libs
   pairLib
 
-
-Theorem mem_path_offset_snoc:
-  !path tv k ptv sb k2 etv.
-    mem_path_offset tv path = SOME (k,ptv) /\
-    mem_step_offset ptv sb = SOME (k2,etv) ==>
-    mem_path_offset tv (path ++ [sb]) = SOME (k + k2,etv)
-Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- gvs[mem_path_offset_def] >>
-  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
-  first_x_assum drule_all >> simp[]
-QED
-
-(* A field of a struct ce_struct_fields lays out as its type value: its
-   offset is struct_field_offset's. *)
-Theorem mem_field_offset_layout:
-  !flds fs fld ftv.
-    fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
-    mem_field_offset fs fld = SOME (struct_field_offset flds fld, ftv)
-Proof
-  simp[fields_layout_def] >>
-  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
-  PairCases_on `h` >>
-  simp[struct_field_offset_def, mem_field_offset_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> IF_CASES_TAC >> gvs[] >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Theorem mem_field_offset_sound[local]:
-  !fs fld k ftv.
-    mem_field_offset fs fld = SOME (k,ftv) ==>
-    ALOOKUP fs fld = SOME ftv /\
-    k + type_memory_size ftv <= type_memory_size_fields fs
-Proof
-  Induct >> simp[mem_field_offset_def] >> PairCases >>
-  simp[mem_field_offset_def, type_memory_size_def] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[PULL_EXISTS, FORALL_PROD] >>
-  rpt strip_tac >> res_tac >> simp[]
-QED
-
-Theorem type_memory_size_list_take_el[local]:
-  !tvs n. n < LENGTH tvs ==>
-    type_memory_size_list (TAKE n tvs) + type_memory_size (EL n tvs) <=
-    type_memory_size_list tvs
-Proof
-  Induct >> simp[] >> rpt gen_tac >> Cases_on `n` >>
-  simp[type_memory_size_def] >> strip_tac >> res_tac >> simp[]
-QED
-
-Theorem mul_succ_le[local]:
-  !i n. i < n ==> !s. i * s + s <= n * s
-Proof
-  rpt strip_tac >> REWRITE_TAC [GSYM arithmeticTheory.MULT] >>
-  irule arithmeticTheory.LESS_MONO_MULT >> simp[]
-QED
-
-Theorem mem_step_offset_sound[local]:
-  !tv sb k etv.
-    mem_step_offset tv sb = SOME (k,etv) ==>
-    subscript_type tv sb = SOME etv /\
-    k + type_memory_size etv <= type_memory_size tv
-Proof
-  rpt gen_tac >> Cases_on `tv` >> Cases_on `sb` >>
-  TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
-  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
-  simp[mem_step_offset_def, subscript_type_def, type_memory_size_def] >>
-  rw[] >> gvs[] >>
-  TRY (drule mem_field_offset_sound >> simp[] >> NO_TAC) >>
-  TRY (drule type_memory_size_list_take_el >> simp[] >> NO_TAC) >>
-  qpat_x_assum `Num _ < _` (mp_tac o MATCH_MP mul_succ_le) >>
-  disch_then (qspec_then `type_memory_size etv` mp_tac) >> simp[]
-QED
-
-(* A path's offset is where the source's subscripts_type puts the path, and
-   the place's bytes lie inside the type's. *)
-Theorem mem_path_offset_sound:
-  !path tv k ptv.
-    mem_path_offset tv path = SOME (k,ptv) ==>
-    subscripts_type tv path = SOME ptv /\
-    k + type_memory_size ptv <= type_memory_size tv
-Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- gvs[mem_path_offset_def, subscripts_type_def] >>
-  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
-  drule mem_step_offset_sound >> strip_tac >>
-  first_x_assum drule >> strip_tac >> simp[subscripts_type_def]
-QED
-
 (* ===== The judgment ===== *)
-
 
 (* The source results the judgment speaks of: a place or a mapping, an
    error other than a type error, or an assertion. *)

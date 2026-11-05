@@ -49,31 +49,136 @@ Definition val_footprint_def:
     | _ => type_memory_size tv
 End
 
-(* A dynamic array type: its memory layout starts with the length word. *)
-Definition dynarray_type_def:
-  dynarray_type t <=> ?et n. t = ArrayT et (Dynamic n)
+(* ===== Offsets in a local's memory ===== *)
+
+(* The byte offset of a field in a struct's memory layout, and its type:
+   the preceding fields' sizes, as struct_field_slot sums slots. *)
+Definition mem_field_offset_def:
+  mem_field_offset [] id = NONE /\
+  mem_field_offset ((name,tv)::fields) id =
+    if name = id then SOME (0n,tv)
+    else OPTION_MAP (\(off,ftv). (type_memory_size tv + off,ftv))
+           (mem_field_offset fields id)
 End
 
-(* The local n is a dynamic array, by the compile environment's type of it,
-   which expr_sim_inv makes the local's type. *)
-Definition dynarray_local_def:
-  dynarray_local cenv n <=> ?t. cenv.ce_var_type n = SOME t /\ dynarray_type t
+(* One step of a path: a field, or an element of an array (past the length
+   word of a DynArray) or a tuple, where subscript_type has it. *)
+Definition mem_step_offset_def:
+  mem_step_offset (StructTV fields) (AttrSubscript id) =
+    mem_field_offset fields id /\
+  mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then SOME (Num i * type_memory_size etv, etv)
+     else NONE) /\
+  mem_step_offset (ArrayTV etv (Dynamic n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then SOME (32 + Num i * type_memory_size etv, etv)
+     else NONE) /\
+  mem_step_offset (TupleTV tvs) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < LENGTH tvs then
+       SOME (type_memory_size_list (TAKE (Num i) tvs), EL (Num i) tvs)
+     else NONE) /\
+  mem_step_offset _ _ = NONE
 End
+
+Definition mem_path_offset_def:
+  mem_path_offset tv [] = SOME (0n,tv) /\
+  mem_path_offset tv (sb::path) =
+    case mem_step_offset tv sb of
+    | NONE => NONE
+    | SOME (k,etv) =>
+        OPTION_MAP (\(k',ptv). (k + k',ptv)) (mem_path_offset etv path)
+End
+
+(* The cenv twin of mem_step_offset and mem_path_offset, over declared
+   types and read off the compile environment alone: a field sits at
+   struct_field_offset of its struct's ce_struct_fields entry, as
+   attr_offset places it, an element at its index times the element type's
+   type_memory_bytes.  Under expr_sim_inv a path's offset here is its
+   mem_path_offset in the evaluated type (type_path_offset_mem, in
+   exprSimAttributeFields). *)
+Definition type_step_offset_def:
+  type_step_offset cenv (StructT nsid) (AttrSubscript id) =
+    (let fields = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid)
+     in OPTION_MAP (\(fty,sz). (struct_field_offset fields id, fty))
+          (ALOOKUP fields id)) /\
+  type_step_offset cenv (ArrayT et (Fixed n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then
+       SOME (Num i * type_memory_bytes cenv et, et)
+     else NONE) /\
+  type_step_offset cenv (ArrayT et (Dynamic n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then
+       SOME (32 + Num i * type_memory_bytes cenv et, et)
+     else NONE) /\
+  type_step_offset cenv (TupleT tys) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < LENGTH tys then
+       SOME (SUM (MAP (type_memory_bytes cenv) (TAKE (Num i) tys)),
+             EL (Num i) tys)
+     else NONE) /\
+  type_step_offset cenv _ _ = NONE
+End
+
+Definition type_path_offset_def:
+  type_path_offset cenv t [] = SOME (0n,t) /\
+  type_path_offset cenv t (sb::path) =
+    case type_step_offset cenv t sb of
+    | NONE => NONE
+    | SOME (k,et) =>
+        OPTION_MAP (\(k',pt). (k + k',pt)) (type_path_offset cenv et path)
+End
+
+(* k is the offset of a dynamic array's length word in the local n's
+   region: a path through n's declared type reaches a dynamic array at k,
+   k = 0 for a dynamic array local itself. *)
+Definition dynarray_len_at_def:
+  dynarray_len_at cenv n k <=>
+    ?t0 path et m.
+      cenv.ce_var_type n = SOME t0 /\
+      type_path_offset cenv t0 path = SOME (k, ArrayT et (Dynamic m))
+End
+
+(* A value of type tv sits at offset k of the local n's region: a path
+   through the type value of n's declared type reaches tv at k. *)
+Definition local_path_at_def:
+  local_path_at cenv cx n k tv <=>
+    ?t0 tv0 path.
+      cenv.ce_var_type n = SOME t0 /\
+      evaluate_type (get_tenv cx) t0 = SOME tv0 /\
+      mem_path_offset tv0 path = SOME (k, tv)
+End
+
+(* A value v of type tv sits at offset k of the local n's region: where
+   local_path_at puts tv, or, for a base value (a bytestring convert
+   reinterprets one in place), where it puts a base type whose bytes cover
+   v's. *)
+Definition local_val_at_def:
+  local_val_at cenv cx n k tv v <=>
+    local_path_at cenv cx n k tv \/
+    ?bt bt0. tv = BaseTV bt /\ local_path_at cenv cx n k (BaseTV bt0) /\
+             val_footprint tv v <= type_memory_size (BaseTV bt0)
+End
+
+(* No path through tv reaches a dynamic array: no part of a value of type
+   tv is a length word that a pop writes. *)
+Definition dynarray_free_def:
+  dynarray_free tv <=>
+    !path k etv m. mem_path_offset tv path <> SOME (k, ArrayTV etv (Dynamic m))
+End
+
+(* ===== The posts ===== *)
 
 (* Code run from s0 to s leaves the live locals' memory alone, but for the
-   length word of a dynamic array local: the bytes of every live local's
-   region at es, from its second word on for a dynamic array, are kept.
-   The only memory of a local an expression writes is the length word of
-   the array x.pop() pops (exprSimPop).  A pop on a nested place
-   (x.f.pop(), x[i].pop()) would write a length word inside the region,
-   which this frame does not exempt; its lowering is wrong as it stands
-   (exprSimPlaces's compile_pop_other_sim), and lowering it right means
-   exempting the length words of nested dynamic arrays here too. *)
+   length words of their dynamic arrays: the bytes of every live local's
+   region at es apart from each dynamic array length word inside it
+   (dynarray_len_at, the root's and the nested ones') are kept.  The only
+   memory of a local an expression writes is the length word of the array
+   a pop pops (exprSimPop for a local x.pop(); a pop on a nested place,
+   x.f.pop() or x[i].pop(), writes the length word at its offset in x's
+   declared type). *)
 Definition locals_kept_def:
   locals_kept cenv es s0 s <=>
     !n b sz off len.
       local_region cenv es.scopes s0 n b sz /\ b <= off /\
-      off + len <= b + sz /\ (dynarray_local cenv n ==> b + 32 <= off) ==>
+      off + len <= b + sz /\
+      (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
 End
 
@@ -83,17 +188,20 @@ End
    - an allocation of one of the expression's own ALLOCAs (instruction id
      in [sa.cs_next_id, sb.cs_next_id)), clear of every live local's
      region, or
-   - the region of a live local at es, past its length word where the
-     local is a dynamic array and t is not (an element, or the popped one,
-     of the array; the array itself starts at the length word),
+   - the region of a live local at es, at the offset of a path through
+     the local's declared type that reaches the value's type (the local
+     itself, a field or element of it, or the element a pop popped) or,
+     for a base value, a base type covering its bytes (a bytestring
+     convert keeps its operand's pointer) (local_val_at),
    or it occupies no bytes (a NoneV, the result of send, has
    val_footprint 0 and sits nowhere: the lowering hands out Lit 0w).
    An operator's proof needs this to keep a first operand's value through
    the second operand's fragment: an allocation of the first is below the
    second's start counter and clear of the live locals, and expr_post
    keeps such allocations' bytes;
-   a local's region it keeps but for a dynamic array's length word
-   (locals_kept). *)
+   a local's region it keeps but for its dynamic arrays' length words
+   (locals_kept), which the path keeps apart from a value with no dynamic
+   array in it. *)
 Definition expr_val_at_def:
   expr_val_at cenv cx t sa sb es v op s <=>
     !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
@@ -106,8 +214,7 @@ Definition expr_val_at_def:
                                    b + sz <= lb \/ lb + lsz <= b)) \/
            (?n b sz. local_region cenv es.scopes s n b sz /\
                      b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
-                     (dynarray_local cenv n /\ ~dynarray_type t ==>
-                      b + 32 <= w2n w)) \/
+                     local_val_at cenv cx n (w2n w - b) tv v) \/
            val_footprint tv v = 0)
 End
 
@@ -177,9 +284,9 @@ QED
      stmt_state_rel at es' says what the locals hold.
    The rest are the buffers of the expressions lowered before e, so a
    value an earlier operand left in memory survives e's fragment.  And the
-   live locals' regions kept but for a dynamic array's length word
+   live locals' regions kept but for their dynamic arrays' length words
    (locals_kept), so a value an earlier operand left in a local survives
-   too, where it does not cover that word (expr_val_at). *)
+   too, where it covers no such word (expr_val_at). *)
 Definition expr_post_def:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
     stmt_state_rel ctx func cenv cx es' s /\
@@ -297,8 +404,7 @@ Definition vv_at_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
                       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      (dynarray_local cenv n /\ ~dynarray_type t ==>
-                       b + 32 <= w2n w)) \/
+                      local_val_at cenv cx n (w2n w - b) tvt v) \/
             val_footprint tvt v = 0))
 End
 
@@ -318,47 +424,6 @@ Definition vv_post_def:
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es s0 s
-End
-
-(* The byte offset of a field in a struct's memory layout, and its type:
-   the preceding fields' sizes, as struct_field_slot sums slots. *)
-Definition mem_field_offset_def:
-  mem_field_offset [] id = NONE /\
-  mem_field_offset ((name,tv)::fields) id =
-    if name = id then SOME (0n,tv)
-    else OPTION_MAP (\(off,ftv). (type_memory_size tv + off,ftv))
-           (mem_field_offset fields id)
-End
-
-(* One step of a path: a field, or an element of an array (past the length
-   word of a DynArray) or a tuple, where subscript_type has it. *)
-Definition mem_step_offset_def:
-  mem_step_offset (StructTV fields) (AttrSubscript id) =
-    mem_field_offset fields id /\
-  mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < n then SOME (Num i * type_memory_size etv, etv)
-     else NONE) /\
-  mem_step_offset (ArrayTV etv (Dynamic n)) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < n then SOME (32 + Num i * type_memory_size etv, etv)
-     else NONE) /\
-  mem_step_offset (TupleTV tvs) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < LENGTH tvs then
-       SOME (type_memory_size_list (TAKE (Num i) tvs), EL (Num i) tvs)
-     else NONE) /\
-  mem_step_offset _ _ = NONE
-End
-
-(* ===== Offsets in memory ===== *)
-
-
-
-Definition mem_path_offset_def:
-  mem_path_offset tv [] = SOME (0n,tv) /\
-  mem_path_offset tv (sb::path) =
-    case mem_step_offset tv sb of
-    | NONE => NONE
-    | SOME (k,etv) =>
-        OPTION_MAP (\(k',ptv). (k + k',ptv)) (mem_path_offset etv path)
 End
 
 (* The location of a storage or transient place. *)
@@ -404,10 +469,8 @@ End
    fragment's end, so code lowered after it keeps it.  The frame is
    vv_post's: the variables and allocations from before, the memory of the
    allocations made before the fragment's start but those holding a local,
-   and the live locals' memory but their root DynArray length words.
-   Nested length words are not exempt: indices that pop nested arrays
-   require a repair of the shared expression/target frame (see
-   target_subscript_case). *)
+   and the live locals' memory but their dynamic arrays' length words
+   (locals_kept), the root's and the nested ones'. *)
 Definition target_post_def:
   target_post ctx func cenv cx es sa sb s0 es' pv vt
     (r : operand # data_location option # place_ty option) s <=>
