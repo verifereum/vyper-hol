@@ -834,6 +834,45 @@ Proof
   simp[vfmContextTheory.context_component_equality]
 QED
 
+Theorem asm_proceed_call_contexts_wf:
+  s.contexts <> [] /\ EVERY (wf_context o FST) s.contexts /\
+  proceed_call op sender address value ao az code stipend outputTo s = (res,t) ==>
+  t.contexts <> [] /\ EVERY (wf_context o FST) t.contexts
+Proof
+  strip_tac >>
+  `stipend < SUC stipend` by simp[] >>
+  drule decreases_gas_cred_proceed_call >>
+  rewrite_tac[decreases_gas_cred_def] >>
+  disch_tac >> metis_tac[pairTheory.SND]
+QED
+
+Theorem asm_proceed_call_child_gas:
+  s.contexts <> [] /\ EVERY (wf_context o FST) s.contexts /\
+  proceed_call op sender address value ao az code stipend outputTo s = (res,t) ==>
+  (FST (HD t.contexts)).gasUsed <= (FST (HD t.contexts)).msgParams.gasLimit
+Proof
+  strip_tac >> drule_all asm_proceed_call_contexts_wf >>
+  Cases_on `t.contexts` >> simp[wf_context_def]
+QED
+
+Theorem asm_call_prepare_proceed_child_gas:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  EVERY (wf_context o FST) s.contexts /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  proceed_call op sender address value ao az code stipend (Memory mr) u = (res,t) ==>
+  (FST (HD t.contexts)).gasUsed <= (FST (HD t.contexts)).msgParams.gasLimit
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `EVERY (wf_context o FST) u.contexts` by
+    (drule_all asm_call_prepare_contexts_wf >> simp[]) >>
+  `u.contexts <> []` by
+    (drule_all asm_call_prepare_success_view >>
+     simp_tac (srw_ss()) [LET_THM] >> strip_tac >> gvs[]) >>
+  drule_all asm_proceed_call_child_gas >> simp[]
+QED
+
 Theorem asm_proceed_call_memory_boundary:
   s.contexts = (parent,parent_rb)::rest /\
   proceed_call op sender address value ao az code stipend (Memory mr) s = (res,t) /\
