@@ -2,7 +2,8 @@ Theory stmtForArrayMemoryRoundSupport
 Ancestors
   stmtSimForArrayLoop stmtForArrayMemoryBodyEntry bodyMemoryDefs
   loweringPosts compileEnv venomState allocaHistory
-  finite_map list gasSummaryCompose gasExemptCert stmtSimForRounds
+  finite_map list gasSummary gasOutcome gasSummaryCompose gasExemptCert stmtSimForRounds
+  fragGasMode fragGasPathMem stmtSimDeclGas
   vyperInterpreter vyperState
 Libs
   monadsyntax
@@ -77,3 +78,76 @@ Proof
   Cases_on `y = ContinueException` >> simp[return_def, raise_def] >>
   Cases_on `y = BreakException` >> simp[return_def, raise_def]
 QED
+
+Theorem array_round_exempt_cleanup:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmts cx stmts) (return ())) (ep,s)
+    marks (err,ee) (leaf,fin) /\ ee.scopes = sc :: rest ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind
+      (finally (try (ignore_bind (eval_stmts cx stmts) (return F))
+        handle_loop_exception) pop_scope) (return ())) (ep,s)
+    marks (err,ee with scopes := rest) (leaf,fin)
+Proof
+  strip_tac >>
+  rewrite_tac[ignore_bind_finally_unit, ignore_bind_try_unit,
+    ignore_bind_return_twice] >>
+  irule gas_exempt_cert_cleanup >> qexists_tac `ee` >>
+  conj_tac
+  >- simp[pop_scope_def, return_def, evaluation_state_fn_updates] >>
+  irule gas_exempt_cert_handler >> qexists_tac `ee` >>
+  simp[handle_loop_exception_def, raise_def, ignore_bind_def, bind_def]
+QED
+
+Theorem array_round_marked_exec:
+  gas_marked_exec memory (ctx,func) (eval_stmts cx stmts)
+    (ei with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes,s) marks r ee rr /\ ee.scopes = sc :: rest ==>
+  gas_marked_exec memory (ctx,func)
+    (do push_scope_with_var id tv v;
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od) (ei,s) marks
+    (case r of INL u => INL F
+       | INR e => if e = ContinueException then INL F
+                  else if e = BreakException then INL T else INR e)
+    (ee with scopes := rest) rr
+Proof
+  simp[gas_marked_exec_def] >> strip_tac >> gen_tac >>
+  irule array_round_source_result >>
+  simp[evaluation_state_fn_updates] >>
+  first_x_assum (qspec_then `tail` mp_tac) >>
+  simp[evaluation_state_fn_updates]
+QED
+
+Theorem array_round_exempt:
+  ~s.vs_halted /\
+  gas_exempt_cert T tops (ctx,func)
+    (ignore_bind (eval_stmts cx stmts) (return ()))
+    (ei with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes,s) marks (err,ee) (leaf,fin) /\
+  ee.scopes = sc :: rest ==>
+  gas_exempt_cert T tops (ctx,func)
+    (ignore_bind (do push_scope_with_var id tv v;
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od) (return ())) (ei,s)
+    marks (err,ee with scopes := rest) (leaf,fin)
+Proof
+  strip_tac >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_exempt_cert_bind_unit))) >>
+  qexistsl_tac [
+    `ei with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+        :: ei.scopes`, `s`] >>
+  simp[] >> reverse conj_tac
+  >- (simp[gas_marked_exec_def, push_scope_with_var_def, return_def, evaluation_state_component_equality,
+        gas_marked_path_def] >> irule (cj 1 gas_path_mem_rules) >> simp[]) >>
+  rewrite_tac[GSYM ignore_bind_def] >>
+  irule array_round_exempt_cleanup >>
+  simp[] >>
+  drule gas_exempt_cert_start_gas_obs >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[]
+QED
+
