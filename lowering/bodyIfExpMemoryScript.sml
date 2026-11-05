@@ -998,6 +998,65 @@ Proof
        bind_def, return_def, raise_def] >> EVAL_TAC
 QED
 
+Theorem ifexp_malformed_pop_source[local]:
+  es.scopes =
+    [FEMPTY |+ ("x", <| assignable := T; type := BaseTV BoolT;
+       value := ArrayV (DynArrayV [BoolV F]); popped := [] |>)] ==>
+  ?ee. eval_expr cx (Pop (BaseT BoolT) (NameTarget "x")) es =
+    (INL (PlaceR (MemoryPlace "x" [ValueSubscript (IntV 0)])),ee) /\
+    read_result cx (PlaceR (MemoryPlace "x" [ValueSubscript (IntV 0)])) ee =
+    (INR (Error (RuntimeError "evaluate_subscripts array_index")),ee)
+Proof
+  Cases_on `es` >> simp[] >> strip_tac >> gvs[] >>
+  simp[evaluate_def, get_scopes_def, type_check_def,
+       vyperStateTheory.assert_def, ignore_bind_def, bind_def, return_def,
+       lookup_scopes_def, get_place_def, pop_place_def,
+       find_containing_scope_def, read_memory_path_def, evaluate_subscripts_def,
+       lift_option_type_def, lift_sum_def, read_result_def, read_place_def,
+       set_scopes_def, record_pop_def, read_popped_def, subscripts_type_def] >>
+  gvs[] >> EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+
+Theorem ifexp_pop_index_source[local]:
+  es.scopes =
+    [FEMPTY |+ ("x", <| assignable := T;
+       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 1);
+       value := ArrayV (DynArrayV [IntV 0]); popped := [] |>)] ==>
+  ?ee. eval_expr cx
+    (Subscript (BaseT (UintT 256))
+      (Name (ArrayT (BaseT (UintT 256)) (Dynamic 1)) "x")
+      (Pop (BaseT (UintT 256)) (NameTarget "x"))) es =
+    (INR (Error (RuntimeError "evaluate_subscripts array_index")),ee)
+Proof
+  Cases_on `es` >> simp[] >> strip_tac >> gvs[] >>
+  simp[evaluate_def, get_scopes_def, type_check_def,
+       vyperStateTheory.assert_def, ignore_bind_def, bind_def, return_def,
+       lookup_scopes_def, get_place_def, pop_place_def,
+       find_containing_scope_def, read_memory_path_def, evaluate_subscripts_def,
+       lift_option_type_def, lift_sum_def, read_result_def, read_place_def,
+       set_scopes_def, record_pop_def, read_popped_def, subscripts_type_def,
+       select_result_def, extend_place_def, place_type_value_def,
+       extend_memory_place_def] >> EVAL_TAC >> simp[] >> EVAL_TAC >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >> simp[]
+QED
+
+Theorem ifexp_raw_admissible_force_boundary[local]:
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+  (!gs p ee res ef.
+    eval_expr cx e (es with gas_obs := gs) = (INL (PlaceR p),ee) /\
+    read_result cx (PlaceR p) ee = (res,ef) ==> expr_res_ok res) ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def, bind_def, AllCaseEqs()]
+  >- (Cases_on `x`
+      >- gvs[read_result_def, return_def, expr_res_ok_def]
+      >- (qpat_x_assum `!gs p ee res ef. _` drule_all >> simp[]) >>
+      qpat_x_assum `!gs res ee. _` drule >>
+      simp[expr_vv_res_ok_def]) >>
+  qpat_x_assum `!gs res ee. _` drule >>
+  simp[expr_vv_res_ok_def, expr_res_ok_def]
+QED
+
 (* Actual source producer: syntax annotations alone do not exclude mappings.
    This is a read-totality diagnostic, not a simulation counterexample. *)
 Theorem ifexp_mapping_producer_unreadable[local]:
