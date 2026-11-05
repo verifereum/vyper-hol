@@ -943,6 +943,63 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
+Theorem asm_call_prepare_abort_state:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  LENGTH c.stack <= stack_limit /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
+  let vo = if call_has_value op then 1 else 0 in
+  ?charge acc d'.
+    stipend <= charge /\ c.gasUsed + charge <= c.msgParams.gasLimit /\
+    step_call op s = (INL (), s with <| contexts :=
+      (c with <| stack := 0w :: DROP (6 + vo) c.stack;
+                  gasUsed := c.gasUsed + charge - stipend;
+                  returnData := []; pc updated_by SUC;
+                  memory := buffer_extend
+                    (MAX (buffer_length c.memory)
+                      (let range = max_expansion_range (ao,az) (ro,rs) in
+                       if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+                     - buffer_length c.memory) c.memory |>,rb)::rest;
+      rollback := s.rollback with accesses := acc;
+      msdomain := Collect d' |>)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `buffer_extend expansion c.memory` >>
+  qexistsl_tac [`charge`,`acc`,`d'`] >>
+  qpat_assum `stipend <= charge` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `c.gasUsed + charge <= _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qabbrev_tac `prepared = c with <|
+    stack := DROP (6 + (if call_has_value op then 1 else 0)) c.stack;
+    gasUsed := c.gasUsed + charge; memory := buffer_extend expansion c.memory |>` >>
+  `u.contexts = (prepared,rb)::rest` by simp[Abbr `prepared`] >>
+  `LENGTH prepared.stack < stack_limit` by
+    (fs[Abbr `prepared`, vfmConstantsTheory.stack_limit_def] >> decide_tac) >>
+  `stipend <= prepared.gasUsed` by (simp[Abbr `prepared`] >> decide_tac) >>
+  `asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (), u with contexts :=
+      (prepared with <| stack := 0w :: prepared.stack; returnData := [];
+        gasUsed := prepared.gasUsed - stipend; pc updated_by SUC |>,rb)::rest)` by
+    (`LENGTH u.contexts = LENGTH s.contexts` by simp[] >>
+     Cases_on `(lookup_account sender accounts).balance < value`
+     >- (drule_all asm_call_finish_balance >>
+         disch_then (fn th => simp_tac (srw_ss()) [th])) >>
+     `value <= (lookup_account sender accounts).balance` by decide_tac >>
+     `1024 < LENGTH u.contexts` by metis_tac[] >>
+     drule_all asm_call_finish_depth >>
+     disch_then (fn th => simp_tac (srw_ss()) [th])) >>
+  rewrite_tac[asm_step_call_factor, Once bind_def] >>
+  qpat_assum `asm_call_prepare _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `asm_call_finish _ _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `u = _` (fn th => pure_rewrite_tac[th]) >>
+  simp[Abbr `prepared`]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
