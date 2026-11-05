@@ -68,7 +68,10 @@ Theorem assign_base_ptr_alloc_buffer_sequence:
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\
-      (?p. buf.buf_operand = Var p /\ ptr_covers G' tn' p t sz)
+      (?p. buf.buf_operand = Var p /\ ptr_covers G' tn' p t sz) /\
+      (!p k. buf.buf_operand <> Var p /\ ptr_covers G tn p s k ==>
+         ptr_covers G' tn' p t k) /\
+      (!op. op <> buf.buf_operand ==> eval_operand op t = eval_operand op s)
 Proof
   rpt strip_tac >> drule_all literal_alloc_buffer_run >> strip_tac >>
   qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
@@ -84,7 +87,11 @@ Proof
         [STRING #"%" (toString sa.cs_next_var)]) t`,
      `step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
         [STRING #"%" (toString sa.cs_next_var)]) s t tn`] >>
-  simp[inst_seq_ptr_def, ptr_inst_ok_alloca]
+  simp[inst_seq_ptr_def, ptr_inst_ok_alloca] >> conj_tac
+  >- (rpt strip_tac >> irule alloca_step_old_ptr_covers >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> irule alloca_step_operand_preserved >>
+  goal_assum (drule_at Any) >> rpt strip_tac >> gvs[]
 QED
 
 Theorem assign_base_ptr_bytelike_counted_path:
@@ -234,7 +241,10 @@ Theorem assign_base_ptr_alloc_buffer_counted_path:
       w2n w + sz < dimword (:256) /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-      (?p. buf.buf_operand = Var p /\ ptr_covers G' tn' p t sz)
+      (?p. buf.buf_operand = Var p /\ ptr_covers G' tn' p t sz) /\
+      (!p k. buf.buf_operand <> Var p /\ ptr_covers G tn p s k ==>
+         ptr_covers G' tn' p t k) /\
+      (!op. op <> buf.buf_operand ==> eval_operand op t = eval_operand op s)
 Proof
   rpt strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all assign_base_ptr_alloc_buffer_sequence >>
