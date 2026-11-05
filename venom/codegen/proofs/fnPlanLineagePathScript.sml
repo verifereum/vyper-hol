@@ -1,6 +1,6 @@
 Theory fnPlanLineagePath
 Ancestors
-  fnPlanLineagePhiActivation fnPlanLineageLiveness stackPlanGen livenessDefs
+  fnPlanLineagePhiActivation fnPlanLineageLiveness fnPlanLineageDemandSupport stackPlanGen livenessDefs
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
   removeUnusedSsaProofs codegenReadyCompute
 
@@ -343,3 +343,80 @@ Proof
   qpat_x_assum `!e. MEM e fn.fn_blocks ==> _`
     (qspec_then `bb` mp_tac) >> simp[] >> metis_tac[]
 QED
+
+(* Position-local SSA exclusion, not a claim about a replay residual prefix. *)
+Theorem current_output_not_demand_available:
+  !fn bb i v.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
+    MEM v (EL i bb.bb_instructions).inst_outputs ==>
+    ~demand_available fn bb i v
+Proof
+  rpt strip_tac >> gvs[demand_available_def] >>
+  `?j. j < LENGTH db.bb_instructions /\ EL j db.bb_instructions = di` by
+    metis_tac[listTheory.MEM_EL] >>
+  `db = bb /\ j = i` by metis_tac[ssa_form_position] >>
+  gvs[] >>
+  `k < LENGTH bb.bb_instructions` by decide_tac >>
+  `k = i` by metis_tac[ssa_form_position] >> decide_tac
+QED
+
+(* Native premise audit (C3.3.native_premise_audit).
+ *
+ * Checked above: ssa_form alone excludes a current output from
+ * demand_available fn bb i. This is static position exclusion, not freshness
+ * in an arbitrary residual prefix on a loop revisit.
+ *
+ * Missing public-query producer (not assumed here): for a ready function,
+ * reachable member block bb, i <= LENGTH bb.bb_instructions and a PHI-free
+ * DROP i bb.bb_instructions, prove
+ *   EVERY (demand_available fn bb i)
+ *     (live_vars_at (liveness_analyze fn) bb.bb_label i).
+ * projected_demand_ordinary_suffix currently proves this only for
+ *   df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn) bb.bb_label
+ *              (liveness_recompute fn)) bb.bb_label i.
+ * livenessConvergenceProofs.liveness_recompute_convergence identifies only
+ * endpoint SETS: same_vars (df_at [] (liveness_recompute fn) lbl
+ * (LENGTH (liveness_instrs fn.fn_blocks lbl)))
+ * (liveness_out fn.fn_blocks (cfg_analyze fn) lbl (liveness_recompute fn)).
+ * It does not directly identify all interior queries. A position-wise
+ * same_vars bridge would suffice, or a direct backward proof using public
+ * live_vars_at_transfer, endpoint convergence and projected_demand_live_out.
+ *
+ * Actual regular callers: stackPlanGen.generate_block_insts_plan supplies
+ * next_live at i+n_params+1 (or block_len for the last instruction), with
+ * n_params = LENGTH (get_params bb.bb_instructions), and a suffix from
+ * non_param_insts bb. Position alignment still needs a wf/parameter-prefix
+ * producer. Readiness gives the <=16 bound and operand marker exclusion;
+ * compute_operands branches through get_non_label_operands, TL for LOG,
+ * or python_stack_operands. Its variable-support-in-inst_uses bridge must
+ * be supplied before applying public liveness transfer. Distinct outputs
+ * already have genBlockSim.codegen_ready_inst_outputs_distinct; do not copy
+ * that theorem into a planner leaf merely to avoid its heavy imports.
+ *
+ * Native upper support is a separate missing producer: marker-free core
+ * and spilled variables must be supported by the appropriate demand/live
+ * set. Only then does current_output_not_demand_available yield dynamic
+ * core/spill freshness. residual_budget_wf alone does not supply support.
+ * Native_regular_live_inventory also needs support bounded by current
+ * operand variables UNION next-live; transfer is needed to supply this.
+ *
+ * IMPORTANT: halting is bb_is_halting bb for EVERY instruction in the
+ * block, not just the terminator. generate_regular_inst_plan retains a
+ * dead singleton output whenever that flag is true. Thus the premise
+ * (~halting \/ LENGTH outputs > 1 \/ EVERY (MEM-in-nl) outputs) is not
+ * supplied by the caller, even at interior positions. Terminal-only weaker
+ * endpoints alone do not address dead outputs of earlier instructions in
+ * a halting block. A future producer must account for these retained dead
+ * names (or show they are impossible from the actual source contract);
+ * do not silently assert exact live inventory at those intermediate states.
+ * This is not a counterexample to lineage_state_block_plan.
+ *
+ * Consumers checked: fnBlockPlanStatic.block_plan_state_static requests
+ * generated_plan_state_wf_marked and output absence at k < block length,
+ * including in halting blocks. fnLineageStatic.lineage_state_static requests
+ * it at block entry. fnPlanPrefix's predicate is structural (distinct
+ * non-markers, disjoint spill domain, allocator bounds), not exact liveness.
+ * Therefore structural resources can remain useful for retained dead
+ * outputs, but the exact-live upper invariant needs redesign/qualification
+ * before global instruction induction. No frozen theorem/definition changed.
+ *)
