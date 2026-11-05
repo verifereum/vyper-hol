@@ -2412,3 +2412,187 @@ val _ = List.app (fn th =>
     else raise Fail "Typed runtime forcing has unproved dependencies"
   end) [unwrap_typed_runtime_storage_frame_frag,
         raw_to_forced_typed_runtime_storage_frame_frag];
+
+Theorem mapping_string_key_post_hash_frag:
+  expr_post ctx func cenv cx e es sa sm s0 es' (StringV str) key mid /\
+  expr_type e = BaseT (StringT cap) /\
+  evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (BaseTV (StringT cap)) /\
+  compile_keccak256_key key F sm = (out,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sm sb (\s. s = mid)
+    (\t. eval_operand out t = SOME
+          (encode_hashmap_key (BaseT (StringT cap)) (StringV str)) /\
+      stmt_state_rel ctx func cenv cx es' t /\
+      t.vs_memory = mid.vs_memory /\ t.vs_allocas = mid.vs_allocas /\
+      contract_storage t = contract_storage mid /\
+      contract_transient t = contract_transient mid /\
+      (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x mid)) R
+Proof
+  strip_tac >>
+  drule_all exprSimHashTheory.hash_string_post_view >> strip_tac >>
+  `n2w_o_ORD = (n2w o ORD):char -> word8` by
+    simp[FUN_EQ_THM, vyperMiscTheory.n2w_o_ORD_def] >>
+  simp[vyperStorageTheory.encode_hashmap_key_def, byteTheory.word_of_bytes_be_def] >>
+  irule compile_keccak256_key_bytes_frame_frag >> simp[] >>
+  reverse conj_tac >- gvs[expr_post_def] >>
+  qexistsl [`key`, `n2w b`] >>
+  simp[GSYM mem_word_at_eq_mload, abiDecodeStaticPropsTheory.w2n_add_n2w_lt]
+QED
+
+val () =
+  let val th = mapping_string_key_post_hash_frag
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping string key has unproved dependencies"
+  end;
+
+(* Task-local PLACE interface: mapping references have no expr_val_rel or
+   expr_val_at.  The caller-owned allocation/local frame is the same one
+   carried by expr_post, so constructor callbacks share one boundary. *)
+Definition mapping_place_post_def:
+  mapping_place_post ctx func cenv cx kt vt es sa sb s0 es' r vv s <=>
+    stmt_state_rel ctx func cenv cx es' s /\
+    (?w. eval_operand (vv_operand vv) s = SOME w /\
+         place_ptr_rel cenv cx s r w (vv_location vv) (HashMapT kt vt)) /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sb x) /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x s = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!aid off sz.
+       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off) ==>
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
+    locals_kept cenv es s0 s /\
+    contract_storage s = contract_storage s0 /\
+    contract_transient s = contract_transient s0
+End
+
+Theorem mapping_place_post_refl:
+  stmt_state_rel ctx func cenv cx es s /\
+  (?w. eval_operand (vv_operand vv) s = SOME w /\
+       place_ptr_rel cenv cx s r w (vv_location vv) (HashMapT kt vt)) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sb x) ==>
+  mapping_place_post ctx func cenv cx kt vt es sa sb s es r vv s
+Proof
+  simp[mapping_place_post_def, locals_kept_def]
+QED
+
+Theorem compile_hashmap_root_place_frag:
+  FLOOKUP cenv.ce_module_vars nsid =
+    SOME (if tr then TransientLoc slot else StorageLoc slot) /\
+  compile_expr cenv ty (TopLevelName ann nsid) sa = (vv,sb) ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (mapping_place_post ctx func cenv cx kt vt es sa sb s0 es
+      (HashMapRef tr slot kt vt) vv) R
+Proof
+  strip_tac >> drule compile_toplevel_slot_vv_shape >> strip_tac >> gvs[] >>
+  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
+  irule mapping_place_post_refl >>
+  simp[contextTheory.vv_operand_def, contextTheory.vv_location_def,
+       contextTheory.mk_ptr_def, eval_operand_def, hashmap_root_place_ptr_rel]
+QED
+
+(* Conditional rebase: locality transport is an obligation of the reachable
+   producer, not a consequence of either child postcondition alone. *)
+Theorem mapping_place_post_compose:
+  mapping_place_post ctx func cenv cx kt0 vt0 es sa sm s0 esm r0 vv0 mid /\
+  mapping_place_post ctx func cenv cx kt vt esm sm sb mid es' r vv s /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!n b sz. local_region cenv es.scopes s0 n b sz <=>
+            local_region cenv esm.scopes mid n b sz) ==>
+  mapping_place_post ctx func cenv cx kt vt es sa sb s0 es' r vv s
+Proof
+  rewrite_tac[mapping_place_post_def] >> strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[]
+  >- metis_tac[]
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      metis_tac[])
+  >- metis_tac[]
+  >- (rpt strip_tac >>
+      `aid < sm.cs_next_id` by decide_tac >>
+      metis_tac[])
+  >- (gvs[locals_kept_def] >> metis_tac[])
+  >- metis_tac[] >>
+  metis_tac[]
+QED
+
+Theorem mapping_key_post_keeps_place:
+  expr_post ctx func cenv cx e esm sm sn mid es' v key s /\
+  safe_operand sm (vv_operand bvv) /\
+  (?w. eval_operand (vv_operand bvv) mid = SOME w /\
+       place_ptr_rel cenv cx mid (HashMapRef tr slot kt vt)
+         w (vv_location bvv) (HashMapT kt vt)) /\
+  (!x. vv_operand bvv = Var x ==> not_fresh_at sm x) /\
+  sm.cs_next_var <= sn.cs_next_var /\
+  contract_storage s = contract_storage mid /\
+  contract_transient s = contract_transient mid ==>
+  mapping_place_post ctx func cenv cx kt vt esm sm sn mid es'
+    (HashMapRef tr slot kt vt) bvv s
+Proof
+  rewrite_tac[expr_post_def, mapping_place_post_def, place_ptr_rel_def] >>
+  strip_tac >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (simp[] >> Cases_on `vv_operand bvv` >>
+      gvs[eval_operand_def, exprSafeOperandTheory.safe_operand_def] >>
+      first_x_assum irule >> simp[])
+  >- (rpt strip_tac >> gvs[not_fresh_at_def] >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem compile_mapping_subscript_place_frag:
+  compile_mapping_subscript bop key sa = (out,sb) /\
+  fn_has_code sa sb func /\
+  eval_operand bop s0 = SOME slot /\ eval_operand key s0 = SOME kw /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (mapping_place_post ctx func cenv cx kt vt es sa sb s0 es
+      (HashMapRef tr (hashmap_slot slot kw) kt vt)
+      (LocatedValue ann (mk_ptr out (slot_loc tr)))) R
+Proof
+  strip_tac >>
+  `!x. out = Var x ==> not_fresh_at sb x` by
+    metis_tac[compiler_subscript_ops_var] >>
+  irule frag_exec_conseq >>
+  irule_at Any compile_mapping_subscript_frame_frag >>
+  goal_assum (drule_at (Pat `compile_mapping_subscript _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand bop _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand key _ = _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  qexists `R` >> simp[] >> rpt strip_tac >>
+  simp[mapping_place_post_def, contextTheory.vv_operand_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def,
+       place_ptr_rel_def] >>
+  conj_tac >- metis_tac[] >>
+  irule locals_kept_regions >> metis_tac[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping PLACE boundary has unproved dependencies"
+  end)
+  [mapping_place_post_refl, compile_hashmap_root_place_frag,
+   mapping_place_post_compose, mapping_key_post_keeps_place,
+   compile_mapping_subscript_place_frag];
