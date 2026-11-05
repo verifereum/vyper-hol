@@ -5,8 +5,10 @@ Ancestors
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
   emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
   exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
-  freshWrites fragGasFresh moduleLoweringProps venomState
+  freshWrites fragGasFresh moduleLoweringProps venomState exprSimUnopProps
   fragExec fragGasSeq fragGasMode venomInst list rich_list finite_map
+Libs
+  emitTacticsLib
 
 (* The runtime loader of a code array's length word: a DLOAD of the data
    section at the base. *)
@@ -339,4 +341,262 @@ Proof
   rpt strip_tac >> drule_all straight_fresh_clean_abort_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexistsl_tac [`t'`, `j`] >> drule_all gas_marked_path_then >> simp[]
+QED
+
+Theorem fixed_array_subscript_counted_ok:
+  compile_array_subscript base_op idx_op F cnt ws esz sgn loader sa = (op,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!z. base_op = Var z ==> not_fresh_at sa z) /\
+  (!z. idx_op = Var z ==> not_fresh_at sa z) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  idx_in_range sgn i (n2w cnt) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    eval_operand op t = SOME (b + i * n2w esz) /\
+    (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `eval_operand base_op (drop_fresh sa s) = SOME b /\
+   eval_operand idx_op (drop_fresh sa s) = SOME i` by
+    metis_tac[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[varsExtTheory.fresh_vars_wrt_drop_fresh] >>
+  `array_len_ok F cnt loader base_op (drop_fresh sa s) (n2w cnt)` by
+    simp[array_len_ok_static] >>
+  drule_all compile_array_subscript_ok >> strip_tac >>
+  `straight_fresh (compile_array_subscript base_op idx_op F cnt ws esz sgn loader)` by
+    simp[straight_fresh_compile_array_subscript] >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem fixed_array_subscript_counted_oob:
+  compile_array_subscript base_op idx_op F cnt ws esz sgn loader sa = (op,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!z. base_op = Var z ==> not_fresh_at sa z) /\
+  (!z. idx_op = Var z ==> not_fresh_at sa z) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  ~idx_in_range sgn i (n2w cnt) ==>
+  ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
+Proof
+  strip_tac >>
+  `eval_operand base_op (drop_fresh sa s) = SOME b /\
+   eval_operand idx_op (drop_fresh sa s) = SOME i` by
+    metis_tac[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[varsExtTheory.fresh_vars_wrt_drop_fresh] >>
+  `array_len_ok F cnt loader base_op (drop_fresh sa s) (n2w cnt)` by
+    simp[array_len_ok_static] >>
+  drule_all compile_array_subscript_oob >> strip_tac >>
+  `straight_fresh (compile_array_subscript base_op idx_op F cnt ws esz sgn loader)` by
+    simp[straight_fresh_compile_array_subscript] >>
+  drule_all straight_fresh_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >> metis_tac[]
+QED
+
+Theorem array_check_ptr_run:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz) sa = (op,sb) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  eval_operand len_op s = SOME len /\ fresh_vars_wrt sa s /\
+  idx_in_range sgn i len ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
+Proof
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[oneTheory.one] >>
+  drule_all array_bounds_check_ok >> strip_tac >>
+  forward_all_evals >> drule_all array_elem_ptr_run >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem array_check_ptr_oob:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz) sa = (op,sb) /\
+  eval_operand idx_op s = SOME i /\ eval_operand len_op s = SOME len /\
+  fresh_vars_wrt sa s /\ ~idx_in_range sgn i len ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[oneTheory.one] >>
+  drule_all array_bounds_check_oob >> strip_tac >>
+  `straight_fresh (array_bounds_check idx_op len_op sgn)` by
+    (rw[array_bounds_check_def, array_bounds_valid_def] >>
+     rpt (FIRST [irule straight_fresh_bind >> conj_tac,
+                 gen_tac >> BETA_TAC,
+                 irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+                 irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC,
+                 MATCH_ACCEPT_TAC straight_fresh_return,
+                 IF_CASES_TAC])) >>
+  `straight_fresh (array_elem_ptr base_op idx_op dyn ws esz)` by
+    (rw[array_elem_ptr_def] >>
+     rpt (FIRST [irule straight_fresh_bind >> conj_tac,
+                 gen_tac >> BETA_TAC,
+                 irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+                 MATCH_ACCEPT_TAC straight_fresh_return,
+                 IF_CASES_TAC])) >>
+  gvs[straight_fresh_def] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qspecl_then [`sa`, `cs'`, `sb`, `s`] mp_tac
+    arithmeticPropsTheory.abort_propagates >> simp[]
+QED
+
+Theorem runtime_array_subscript_counted_oob:
+  compile_array_subscript base_op idx_op T cnt ws esz sgn
+    (compile_imm_load_word F imm) sa = (op,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!z. base_op = Var z ==> not_fresh_at sa z) /\
+  (!z. idx_op = Var z ==> not_fresh_at sa z) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  ~idx_in_range sgn i (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) ==>
+  ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
+Proof
+  simp[compile_array_subscript_split, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_imm_load_word F imm base_op sa = (lop,sm)` >>
+  `straight_fresh (comp_ignore_bind (array_bounds_check idx_op lop sgn)
+      (array_elem_ptr base_op idx_op T ws esz))` by
+    simp[straight_fresh_array_check_ptr] >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
+    (qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+     drule emit_op_extends >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> simp[] >>
+     irule cs_extends_same_block >>
+     gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3]) >>
+  `cs_extends sm sb` by metis_tac[straight_fresh_cs_extends] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all compile_imm_load_word_runtime_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `eval_operand lop t = SOME len` >>
+  `eval_operand idx_op t = SOME i /\
+   (!z. idx_op = Var z ==> not_fresh_at sm z) /\
+   (!z. lop = Var z ==> not_fresh_at sm z)` by
+    (drule_all compile_imm_load_word_runtime_run >> strip_tac >>
+     qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+     conj_tac
+     >- (Cases_on `idx_op` >> gvs[eval_operand_def] >>
+         drule lookup_var_update_not_fresh >> simp[]) >>
+     simp[not_fresh_at_def] >> rpt strip_tac >>
+     qpat_x_assum `!z. idx_op = Var z ==> _` drule >>
+     simp[not_fresh_at_def] >> disch_then irule >> decide_tac) >>
+  qabbrev_tac `u = t with vs_inst_idx := LENGTH sm.cs_current_insts` >>
+  `eval_operand idx_op (drop_fresh sm u) = SOME i /\
+   eval_operand lop (drop_fresh sm u) = SOME len /\
+   fresh_vars_wrt sm (drop_fresh sm u)` by
+    (simp[varsExtTheory.fresh_vars_wrt_drop_fresh,
+          eval_operand_drop_fresh, Abbr `u`]) >>
+  drule_all array_check_ptr_oob >> strip_tac >>
+  `~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sm.cs_current_insts` by simp[Abbr `u`] >>
+  drule_all straight_fresh_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `gas_marked_path F ctx func s 0 (OK u)` by simp[Abbr `u`] >>
+  drule_all gas_marked_path_then >> simp[] >> metis_tac[]
+QED
+
+Theorem runtime_array_subscript_counted_ok:
+  compile_array_subscript base_op idx_op T cnt ws esz sgn
+    (compile_imm_load_word F imm) sa = (op,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!z. base_op = Var z ==> not_fresh_at sa z) /\
+  (!z. idx_op = Var z ==> not_fresh_at sa z) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  idx_in_range sgn i (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    eval_operand op t = SOME ((b + n2w ws) + i * n2w esz) /\
+    (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  simp[compile_array_subscript_split, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_imm_load_word F imm base_op sa = (lop,sm)` >>
+  `straight_fresh (comp_ignore_bind (array_bounds_check idx_op lop sgn)
+      (array_elem_ptr base_op idx_op T ws esz))` by
+    simp[straight_fresh_array_check_ptr] >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
+    (qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+     drule emit_op_extends >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> simp[] >>
+     irule cs_extends_same_block >>
+     gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3]) >>
+  `cs_extends sm sb` by metis_tac[straight_fresh_cs_extends] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all compile_imm_load_word_runtime_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `eval_operand lop t = SOME len` >>
+  `eval_operand base_op t = SOME b /\ eval_operand idx_op t = SOME i /\
+   (!z. base_op = Var z ==> not_fresh_at sm z) /\
+   (!z. idx_op = Var z ==> not_fresh_at sm z) /\
+   (!z. lop = Var z ==> not_fresh_at sm z) /\
+   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
+   stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (drule_all compile_imm_load_word_runtime_run >> strip_tac >> gvs[] >>
+     drule_all compile_imm_load_word_runtime_frame >>
+     disch_then (qspec_then `len` strip_assume_tac) >>
+     qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+     conj_tac
+     >- (Cases_on `base_op` >> gvs[eval_operand_def] >>
+         drule lookup_var_update_not_fresh >> simp[]) >>
+     conj_tac
+     >- (Cases_on `idx_op` >> gvs[eval_operand_def] >>
+         drule lookup_var_update_not_fresh >> simp[]) >>
+     simp[not_fresh_at_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     rpt conj_tac >> rpt strip_tac
+     >- (qpat_x_assum `!z. base_op = Var z ==> _` drule >>
+         simp[not_fresh_at_def] >> disch_then irule >> decide_tac)
+     >- (qpat_x_assum `!z. idx_op = Var z ==> _` drule >>
+         simp[not_fresh_at_def] >> disch_then irule >> decide_tac) >>
+     qpat_x_assum `!n. _ <= n ==> _` (qspec_then `sa.cs_next_var` mp_tac) >> simp[]) >>
+  qabbrev_tac `u = t with vs_inst_idx := LENGTH sm.cs_current_insts` >>
+  `eval_operand base_op (drop_fresh sm u) = SOME b /\
+   eval_operand idx_op (drop_fresh sm u) = SOME i /\
+   eval_operand lop (drop_fresh sm u) = SOME len /\
+   fresh_vars_wrt sm (drop_fresh sm u)` by
+    simp[varsExtTheory.fresh_vars_wrt_drop_fresh,
+         eval_operand_drop_fresh, Abbr `u`] >>
+  drule_all array_check_ptr_run >> strip_tac >>
+  `~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sm.cs_current_insts` by simp[Abbr `u`] >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx func cenv cx es u` by simp[Abbr `u`] >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  `gas_marked_path F ctx func s 0 (OK (t'' with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  qexists_tac `t'' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[Abbr `u`] >> rpt strip_tac >>
+  qpat_x_assum `!z v. not_fresh_at sm z /\ _ ==> _`
+    (qspecl_then [`z`, `v`] irule) >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `!z. not_fresh_at sa z ==> _` drule >>
+      simp[lookup_var_def]) >>
+  irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]
 QED
