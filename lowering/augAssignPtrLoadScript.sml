@@ -6,6 +6,7 @@ Ancestors
   finite_map vyperValue emitHelperProps exprSimMemoryPath
   emitHelper compileEnv fragExec loweringPosts ptrDiscipline codegenRel
   loweringSlice exprLoweringProps valueEncodingProps exprSimNameWord stmtFragPtr
+  accountsRelProps contextCodegenRel
 
 Theorem mload_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
@@ -219,4 +220,34 @@ Proof
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   simp[not_fresh_at_def]
+QED
+
+Theorem live_storage_head_clean:
+  stor_taint_ok cx tn s /\
+  (!st. storage_read_live cx tr st slot tv) /\ 0 < type_slot_size tv ==>
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}
+Proof
+  strip_tac >>
+  `!st b. ~storage_dead cx tr st (w2n slot) b` by
+    metis_tac[storage_read_live_head] >>
+  Cases_on `tr` >>
+  Cases_on `s.vs_call_ctx.cc_address = cx.txn.target` >>
+  gvs[stor_taint_ok_def, cx_dead_def, key_taint_def,
+      pred_setTheory.SUBSET_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[pairTheory.PAIR_EQ]
+QED
+
+Theorem ptr_inst_ok_storage_load:
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [out]) s
+Proof
+  strip_tac >> Cases_on `tr` >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
+       op_taint_def, step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_read1_def, eval_operand_def, update_var_def]
 QED
