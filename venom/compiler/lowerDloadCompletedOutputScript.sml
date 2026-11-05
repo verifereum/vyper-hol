@@ -1,7 +1,7 @@
 Theory lowerDloadCompletedOutput
 Ancestors
-  o1ContractLowerDloadTaint lowerDloadMacroBoundary lowerDloadPhaseBoundary
-  ptrDiscipline venomExecSemantics venomState finite_map list words lowerDloadDefs
+  lowerDloadCleanCopy lowerDloadMacroBoundary lowerDloadPhaseBoundary
+  ptrDiscipline venomExecSemantics venomState finite_map list words lowerDloadDefs pred_set
   lowerDloadCopyReadback lowerDloadPairedBoundary lowerDloadOwnership
   venomInstProofs venomExecProofs venomInst lowerDloadOperand
 
@@ -12,14 +12,24 @@ Theorem ld_load_completed_output_clean:
   FLOOKUP u.t_var out = SOME {}
 Proof
   strip_tac >>
-  qpat_x_assum `ld_target_prefix _ _ _ _ _ _ _` mp_tac >>
-  simp[Once ld_target_prefix_step_iff] >> strip_tac >>
-  qpat_x_assum `ld_target_prefix _ _ _ _ _ _ _` mp_tac >>
-  simp[SRULE [] (Q.INST [`n` |-> `2`] ld_target_prefix_step_iff)] >>
-  strip_tac >>
-  drule_all codecopy_mload_cleared >>
+  drule_all ld_load_fourth_prefix >> disch_then (fn th => gvs[th]) >>
+  drule_all (SRULE [] ld_load_third_prefix) >> disch_then (fn th => gvs[th]) >>
+  `p = p'` by
+    (gvs[ld_macro_operand_pc, eval_operand_def, lookup_var_def,
+         write_memory_with_expansion_def]) >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `step_taint c r z w'` >>
+  `step_inst 0 C c r = OK z` by
+    (drule_all ld_macro_copy_step >> disch_then (fn th => rewrite_tac[th]) >>
+     simp[Abbr `z`, eval_operand_def, dimword_def] >>
+     gvs[eval_operand_def]) >>
+  `eval_operand (Lit 32w) r = SOME 32w` by simp[eval_operand_def] >>
+  `c.inst_opcode IN {DLOADBYTES; CODECOPY}` by simp[] >>
+  drule_all ld_clean_copy_mem_taint >>
   disch_then (qspec_then `w'` assume_tac) >>
-  `out_taint w d v = {}` by gvs[out_taint_def, ld_macro_operand_pc] >>
+  `eval_operand (Var av) z = SOME p` by metis_tac[ld_macro_operand_pc] >>
+  `out_taint (step_taint c r z w') d (z with vs_inst_idx := SUC r.vs_inst_idx) = {}` by
+    (simp[out_taint_def, ld_macro_operand_pc, mem_word_taint_def,
+          EXTENSION, dimword_def] >> decide_tac) >>
   simp[step_taint_def, set_var_taint_def, FLOOKUP_UPDATE]
 QED
 
