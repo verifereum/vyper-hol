@@ -1131,5 +1131,36 @@ Theorem abi_decode_sim_gas_path:
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  cheat
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `?id. !inst. MEM inst (fn_insts fn) ==> inst.inst_id <> id` by
+    metis_tac[frag_observer_fresh_id] >>
+  qpat_x_assum `!fn'. _` (qspec_then `frag_observer sa sb fn id` mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- metis_tac[frag_observer_has_code]
+      >- metis_tac[frag_observer_ids_distinct]
+      >- metis_tac[frag_observer_nonstop_inclusion] >>
+      metis_tac[frag_observer_end_phi_zero]) >>
+  strip_tac >> rename1 `Q t` >>
+  `?fuel. run_from fuel ctx (frag_observer sa sb fn id) s = Halt (stop_view t)` by
+    (irule abi_decode_sim_stop_run >> simp[] >>
+     qexistsl_tac [`<|bb_label := sb.cs_current_bb;
+       bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>`, `id`] >>
+     simp[frag_observer_cut_lookup, frag_observer_cut_instruction]) >>
+  `(s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb` by
+    metis_tac[frag_observer_start_region] >>
+  `(stop_view t).vs_current_bb = sb.cs_current_bb /\
+   (stop_view t).vs_inst_idx = LENGTH sb.cs_current_insts` by
+    simp[stop_view_def, halt_state_def] >>
+  `?u. local_prefix ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s u /\
+       stop_view u = stop_view t` by
+    (irule frag_observer_halt_cut_prefix >> simp[frag_observer_cut_def] >>
+     metis_tac[]) >>
+  `gas_path ctx fn s 0 (OK u)` by
+    (drule frag_observer_prefix_zero_path >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  drule local_prefix_endpoint >> strip_tac >>
+  qexists_tac `u` >> simp[gas_marked_path_def] >>
+  `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
+  gvs[frag_observer_cut_def]
 QED
