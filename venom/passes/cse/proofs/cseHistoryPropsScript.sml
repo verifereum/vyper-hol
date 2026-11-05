@@ -3160,13 +3160,12 @@ Proof
  qexistsl [`events`, `events`, `[]`] >> simp[]
 QED
 
-Theorem cse_prefix_copy_use_distinct:
+Theorem cse_prefix_def_use_distinct:
  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
  cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
  get_instruction bb s.vs_inst_idx = SOME use /\
  use.inst_opcode <> PHI /\ MEM (Var y) use.inst_operands /\
- MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
- copy.inst_outputs = [y] ==>
+ MEM copy (fn_insts fn) /\ MEM y copy.inst_outputs ==>
  copy.inst_id <> use.inst_id
 Proof
  strip_tac >>
@@ -3209,13 +3208,12 @@ Proof
      `i' = j` by metis_tac[cse_point_has_id_injective, pairTheory.PAIR_EQ] >> decide_tac
 QED
 
-Theorem cse_prefix_copy_use_order:
+Theorem cse_prefix_def_use_order:
  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
  cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
  get_instruction bb s.vs_inst_idx = SOME use /\
  use.inst_opcode <> PHI /\ MEM (Var y) use.inst_operands /\
- MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
- copy.inst_outputs = [y] ==>
+ MEM copy (fn_insts fn) /\ MEM y copy.inst_outputs ==>
  cse_path_preorder fn copy.inst_id use.inst_id
 Proof
  strip_tac >>
@@ -3245,6 +3243,30 @@ Proof
  irule cse_dominates_local_order_preorder >> simp[] >>
  qexistsl_tac [`bb`, `def_bb`] >> simp[] >>
  qpat_x_assum `def_bb = bb ==> _` mp_tac >> simp[]
+QED
+
+Theorem cse_prefix_copy_use_distinct:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var y) use.inst_operands /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] ==>
+ copy.inst_id <> use.inst_id
+Proof
+ strip_tac >> irule cse_prefix_def_use_distinct >> metis_tac[MEM]
+QED
+
+Theorem cse_prefix_copy_use_order:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var y) use.inst_operands /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] ==>
+ cse_path_preorder fn copy.inst_id use.inst_id
+Proof
+ strip_tac >> irule cse_prefix_def_use_order >> metis_tac[MEM]
 QED
 
 Theorem cse_prefix_assign_use_rewind_predecessors:
@@ -3281,4 +3303,129 @@ Proof
     drule_all cse_prefix_live_copy_predecessor_nonwriting >> simp[]) >>
  qexistsl_tac [`pre`, `post`, `m`, `cb`, `u`, `t`, `value`] >>
  gvs[EVERY_DEF] >> first_assum ACCEPT_TAC
+QED
+
+Theorem cse_fn_insts_id_injective[local]:
+ wf_function fn /\ MEM a (fn_insts fn) /\ MEM b (fn_insts fn) /\
+ a.inst_id = b.inst_id ==> a = b
+Proof
+ strip_tac >>
+ `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
+   FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
+   (Induct >> simp[fn_insts_blocks_def]) >>
+ `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
+   gvs[wf_function_def, fn_inst_ids_distinct_def, fn_insts_def] >>
+ qpat_x_assum `ALL_DISTINCT (MAP _ _)` mp_tac >>
+ qpat_x_assum `MEM a (fn_insts fn)` mp_tac >>
+ qpat_x_assum `MEM b (fn_insts fn)` mp_tac >>
+ qspec_tac (`fn_insts fn`, `xs`) >>
+ Induct >> simp[] >> rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem cse_prefix_some_operand_current_binding_aux[local]:
+ !d seen op. !fn ctx fuel0 s0 events n bb s use k.
+ d = dfg_build_function fn /\
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer d seen op = SOME k ==>
+ ?v definer.
+ FLOOKUP (dfg_build_function fn).dfg_defs v = SOME definer /\
+ definer.inst_opcode <> ASSIGN /\ definer.inst_id = k /\
+ MEM definer (fn_insts fn) /\ MEM v definer.inst_outputs /\
+ eval_operand op s = lookup_var v s /\
+ cse_path_preorder fn definer.inst_id use.inst_id
+Proof
+ recInduct cseDefsTheory.operand_producer_ind >> rpt strip_tac >>
+ gvs[Once cseDefsTheory.operand_producer_def, AllCaseEqs()]
+ >- (drule_all cse_dfg_assign_shape >> gvs[])
+ >- suspend "copy"
+ >- (drule_all cse_dfg_assign_shape >> gvs[]) >>
+ `dfg_get_def (dfg_build_function fn) v = SOME inst` by
+   simp[dfgDefsTheory.dfg_get_def_def] >>
+ drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+ `MEM inst (fn_insts fn)` by gvs[fn_insts_def] >>
+ `cse_path_preorder fn inst.inst_id use.inst_id` by
+   (drule_all cse_prefix_def_use_order >> simp[]) >>
+ qexistsl_tac [`v`, `inst`] >> simp[eval_operand_def]
+QED
+
+Resume cse_prefix_some_operand_current_binding_aux[copy]:
+ drule_all cse_dfg_assign_shape >> strip_tac >> gvs[] >>
+ `dfg_get_def (dfg_build_function fn) v = SOME inst` by
+   simp[dfgDefsTheory.dfg_get_def_def] >>
+ drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+ `MEM inst (fn_insts fn)` by gvs[fn_insts_def] >>
+ drule_all cse_prefix_assign_use_rewind_predecessors >> strip_tac >>
+ `inst.inst_opcode <> PHI /\ MEM arg inst.inst_operands` by simp[] >>
+ first_x_assum (qspec_then `fn` (mp_tac o SRULE [])) >>
+ disch_then drule_all >> strip_tac >>
+ `definer.inst_id <> inst.inst_id` by
+   (strip_tac >> `definer = inst` by
+      (irule cse_fn_insts_id_injective >> metis_tac[]) >> gvs[]) >>
+ `lookup_var v' s = lookup_var v' u` by metis_tac[] >>
+ `cse_path_preorder fn inst.inst_id use.inst_id` by
+   (drule_all cse_prefix_copy_use_order >> simp[]) >>
+ `cse_path_preorder fn definer.inst_id use.inst_id` by
+   metis_tac[cse_path_preorder_transitive, relationTheory.transitive_def] >>
+ qexistsl_tac [`v'`, `definer`] >> simp[] >> metis_tac[]
+QED
+Finalise cse_prefix_some_operand_current_binding_aux
+
+Theorem cse_prefix_some_operand_current_binding:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) seen op = SOME k ==>
+ ?v definer.
+ FLOOKUP (dfg_build_function fn).dfg_defs v = SOME definer /\
+ definer.inst_opcode <> ASSIGN /\ definer.inst_id = k /\
+ MEM definer (fn_insts fn) /\ MEM v definer.inst_outputs /\
+ eval_operand op s = lookup_var v s /\
+ cse_path_preorder fn definer.inst_id use.inst_id
+Proof
+ strip_tac >> irule cse_prefix_some_operand_current_binding_aux >> metis_tac[]
+QED
+
+Theorem cse_prefix_some_operand_single_output_binding:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) seen op = SOME d.inst_id /\
+ MEM d (fn_insts fn) /\ d.inst_outputs = [x] ==>
+ eval_operand op s = lookup_var x s
+Proof
+ strip_tac >> drule_all cse_prefix_some_operand_current_binding >> strip_tac >>
+ `definer = d` by (irule cse_fn_insts_id_injective >> metis_tac[]) >>
+ gvs[]
+QED
+
+Theorem cse_source_interval_same_producer_operands_equal:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ events = pre ++ [CseStep m sb src u v] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+ get_instruction sb u.vs_inst_idx = SOME src /\
+ src.inst_opcode <> PHI /\ MEM sop src.inst_operands /\
+ MEM src (fn_insts fn) /\ MEM d (fn_insts fn) /\ d.inst_outputs = [x] /\
+ operand_producer (dfg_build_function fn) {} op = SOME d.inst_id /\
+ operand_producer (dfg_build_function fn) {} sop = SOME d.inst_id /\
+ cse_path_preorder fn d.inst_id src.inst_id /\ d.inst_id <> src.inst_id /\
+ (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+   cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+   cse_phase_has_source fn ph e src) ==>
+ eval_operand op s = eval_operand sop u
+Proof
+ strip_tac >>
+ `eval_operand op s = lookup_var x s` by
+   (irule cse_prefix_some_operand_single_output_binding >> metis_tac[]) >>
+ `eval_operand sop u = lookup_var x u` by
+   (irule cse_prefix_some_operand_single_output_binding >> metis_tac[]) >>
+ `MEM x d.inst_outputs` by simp[] >>
+ drule_all cse_source_interval_predecessor_binding_all >> simp[]
 QED
