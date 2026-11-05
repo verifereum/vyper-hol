@@ -10,6 +10,60 @@
 Theory fnPlanLineageJoin
 Ancestors
   fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
+  cfgAnalysisProps venomWf venomInst list rich_list simplifyCfgDefs
+
+Theorem join_predecessor_jmp_shape:
+  !fn pred pb bb.
+    codegen_ready_fn fn /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1 ==>
+    pb.bb_label = pred /\ pb.bb_instructions <> [] /\
+    (LAST pb.bb_instructions).inst_opcode = JMP
+Proof
+  rpt gen_tac >> strip_tac >>
+  imp_res_tac lookup_block_member_label >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    metis_tac[cfg_edge_symmetry_uncond] >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    (`cfg_preds_of (cfg_analyze fn) bb.bb_label <> []` by
+       (strip_tac >> gvs[]) >>
+     `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 0` by
+       metis_tac[LENGTH_NIL] >> decide_tac) >>
+  gvs[codegen_ready_fn_def, block_entries_ready_def, EVERY_MEM] >>
+  qpat_x_assum `!blk. MEM blk fn.fn_blocks ==> (_ \/ _)` (qspec_then `bb` mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspec_then `pb.bb_label` mp_tac) >>
+  simp[NULL_EQ]
+QED
+
+Theorem join_predecessor_single_successor:
+  !fn pred pb bb.
+    codegen_ready_fn fn /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1 ==>
+    (LAST pb.bb_instructions).inst_operands = [Label bb.bb_label] /\
+    cfg_succs_of (cfg_analyze fn) pred = [bb.bb_label]
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all join_predecessor_jmp_shape >> strip_tac >>
+  imp_res_tac lookup_block_member_label >>
+  `wf_function fn /\ fn_inst_wf fn` by
+    gvs[codegen_ready_fn_def] >>
+  `inst_wf (LAST pb.bb_instructions)` by
+    (gvs[fn_inst_wf_def] >> first_x_assum irule >>
+     qexists_tac `pb` >> simp[] >>
+     Cases_on `pb.bb_instructions` >> gvs[MEM_LAST]) >>
+  `cfg_succs_of (cfg_analyze fn) pred = bb_succs pb` by
+    metis_tac[cfg_analyze_preserves_bb_succs] >>
+  gvs[inst_wf_def] >>
+  Cases_on `pb.bb_instructions` >>
+  gvs[bb_succs_def, get_successors_def, is_terminator_def,
+      venomStateTheory.get_label_def, nub_def]
+QED
 
 (* Used by fnFrameStepsPhi for phi_prefix_frame_sim: the PHI prefix reads
    pred's PHI operands from the top of the stack, and nothing below them
