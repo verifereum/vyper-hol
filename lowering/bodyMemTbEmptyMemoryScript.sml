@@ -1,5 +1,5 @@
-(* Memory case of the body induction for empty(T) of a non-word type: a
-   fresh zeroed buffer (admitted; its own piece). *)
+(* Memory case of the body induction for empty(T) of a non-word type:
+   a fresh zeroed buffer with a counted memory-safe initialization path. *)
 Theory bodyMemTbEmptyMemory
 Ancestors
   bodyMemoryPreds compileEnv bodyEmptyBufferMemory exprSimAggregates
@@ -9,7 +9,7 @@ Ancestors
   vyperTypeSystem vyperContext vyperValue vyperInterpreter vyperState
   vyperAST venomState gasContext exprSimHyps allocLimits words
   context valueEncodingProofs arithmetic exprSimVVFrame venomMemDefs
-  gasOutcome venomInstProofs venomExecSemantics list fragGasMode
+  gasOutcome venomInstProofs venomExecSemantics list fragGasMode exprSimMemUnwrap
 
 Theorem memory_value_post_gas_obs[local]:
   p.ptr_location = LocMemory /\
@@ -132,5 +132,21 @@ Theorem body_type_builtin_empty_memory_mem_case:
     ~is_word_type typ ==>
     body_expr_mem_ok cx (TypeBuiltin v11 Empty typ es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_vv_sim_mem ctx func cenv cx ty (TypeBuiltin v11 Empty typ es) es'` by
+    (irule empty_memory_vv_sim >> metis_tac[]) >>
+  simp[] >> irule expr_sim_mem_of_vv_sim_mem >> simp[] >>
+  `v11 = typ /\ es = []` by
+    gvs[expr_body_pre_def, well_typed_expr_def, type_builtin_result_ok_def,
+        well_typed_type_builtin_args_def] >>
+  gvs[expr_type_def] >> conj_tac
+  >- (rpt gen_tac >>
+      simp[compile_expr_type_builtin_dispatch, Once compile_expr_def,
+           comp_bind_def, comp_return_def] >>
+      pairarg_tac >> simp[]) >>
+  rpt strip_tac >>
+  `expr_sim_inv cenv cx env es'` by fs[expr_body_pre_def] >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >> simp[] >>
+  fs[expr_body_pre_def, alloc_limits_expr_def]
 QED
