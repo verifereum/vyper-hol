@@ -189,6 +189,20 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+Theorem lower_dload_blocks_supply_used_vars_mono:
+  !u cs v. lower_dload_blocks_supply u bs = (cs,v) /\
+    MEM w u.irs_used_vars ==> MEM w v.irs_used_vars
+Proof
+  Induct_on `bs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> strip_tac >>
+  first_x_assum (qspec_then `s1` irule) >>
+  qexists_tac `bbs'` >> simp[] >>
+  drule lower_dload_insts_supply_used_vars_mono >> metis_tac[]
+QED
+
 Theorem lower_dload_blocks_supply_lookup:
   !u cs v. lower_dload_blocks_supply u bs = (cs,v) /\
   lookup_block label bs = SOME b ==>

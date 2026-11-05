@@ -3,7 +3,9 @@ Theory lowerDloadReturnAlignment
 Ancestors
   lowerDloadReturnInterfaceProbe lowerDloadConfiguredOrigins
   lowerDloadExpansionEndpoint lowerDloadSafetyLocations lowerDloadSafetyKernel
-  venomExecSemantics venomInst venomWf o1ContractLowerDload list
+  venomExecSemantics venomInst venomWf o1ContractLowerDload
+  stepWriteFootprintForward memSafeRun ptrDiscipline contextCodegenRel
+  venomExecProofs o1PassContract irSupply passSharedDefs venomFnScheduleRunner list
 Libs
   lowerDloadReturnPackageLib
 
@@ -77,4 +79,51 @@ Proof
         drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
      drule_all ld_active_lookup >> simp[get_instruction_def] >> metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_guard_non_revert:
+  ^ld_probe_guard C k bb t ==> ~revert_forward_at bb t.vs_inst_idx
+Proof
+  simp[] >> strip_tac >> strip_tac >>
+  drule revert_forward_at_no_normal >> metis_tac[]
+QED
+
+Theorem ld_envelope_revert_forward:
+  lower_dload_function_supply u fn = (g,v) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  EVERY inst_wf (fn_insts fn) /\ ir_supply_covers_fn u fn /\
+  ld_envelope u fn s s.vs_inst_idx X p /\ in_revert_forward fn s /\
+  t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = p ==>
+  in_revert_forward g t
+Proof
+  simp[ld_envelope_def, in_revert_forward_def] >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME (EL bi fn.fn_blocks)` by
+    (irule MEM_lookup_block >> simp[MEM_EL] >> metis_tac[]) >>
+  gvs[] >> drule lower_dload_function_supply_block_at >>
+  disch_then (qspec_then `bi` mp_tac) >> simp[] >> strip_tac >>
+  `MEM (EL bi fn.fn_blocks) fn.fn_blocks` by
+    (simp[MEM_EL] >> metis_tac[]) >>
+  `EVERY inst_wf (EL bi fn.fn_blocks).bb_instructions` by
+    (gvs[fn_insts_def, fn_insts_blocks_def, EVERY_MEM] >>
+     metis_tac[fn_insts_blocks_MEM]) >>
+  `!inst w. MEM inst (EL bi fn.fn_blocks).bb_instructions /\
+     MEM (Var w) inst.inst_operands ==> MEM w u0.irs_used_vars` by
+    (rpt strip_tac >> irule lower_dload_blocks_supply_used_vars_mono >>
+     goal_assum (drule_at Any) >>
+     fs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+     first_x_assum irule >>
+     simp[fn_ir_vars_def, block_ir_vars_def, inst_ir_vars_def,
+          MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     qexistsl_tac [`EL bi fn.fn_blocks`,`inst`] >>
+     simp[inst_uses_def, MEM_operand_vars_eq_Var]) >>
+  Cases_on `lower_dload_insts_supply u0
+    (TAKE s.vs_inst_idx (EL bi fn.fn_blocks).bb_instructions)` >>
+  drule_all lower_dload_insts_supply_revert_at >> strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) g.fn_blocks)` by
+    (drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
+  qexists_tac `(EL bi fn.fn_blocks) with bb_instructions := is` >>
+  conj_tac
+  >- (irule MEM_lookup_block >> simp[] >>
+      qpat_x_assum `g.fn_blocks = _` SUBST1_TAC >> simp[]) >>
+  fs[]
 QED
