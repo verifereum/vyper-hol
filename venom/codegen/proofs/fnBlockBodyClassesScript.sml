@@ -559,20 +559,6 @@ QED
 
 (* ===== INVOKE ===== *)
 
-(* gen_invoke_frame_sim_deep's statement reads codegen_assembly as a free
-   variable (codegen isn't among fnFrameDeepInvoke's ancestors), so the
-   theorem holds for every function there; take the constant. *)
-val invoke_deep =
-  let
-    val th = gen_invoke_frame_sim_deep
-    val v = Lib.first (fn v => fst (dest_var v) = "codegen_assembly")
-                      (free_vars (concl th))
-    val c = ``codegen_assembly``
-    val theta = match_type (type_of v) (type_of c)
-  in
-    INST [inst theta v |-> c] (INST_TYPE theta th)
-  end;
-
 Theorem body_invoke_step:
   gen_fn_sim_at fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
@@ -625,7 +611,7 @@ Proof
      `k + 1 < LENGTH bb.bb_instructions /\
       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`,
      `bb.bb_label`, `spill_base`, `ps`, `vs`, `as`, `ops`, `ps'`, `r`, `ra`,
-     `rest`, `mem0`, `nm`, `arg_ops`] mp_tac invoke_deep >>
+     `rest`, `mem0`, `nm`, `arg_ops`] mp_tac gen_invoke_frame_sim_deep >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> rpt conj_tac
   >- (rpt strip_tac >>

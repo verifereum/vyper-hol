@@ -28,21 +28,34 @@ Definition block_rest_def:
     | res => res
 End
 
-(* ===== Facts the codegen preconditions don't carry yet ===== *)
+(* ===== Facts from the codegen preconditions ===== *)
 
-(* DUP and SWAP reach 16 slots.  To come from codegen_ready_inst, whose
-   operand-count conjunct is pending. *)
+Theorem codegen_ready_fn_inst[local]:
+  !fn inst.
+    codegen_ready_fn fn /\ MEM inst (fn_insts fn) ==> codegen_ready_inst inst
+Proof
+  simp[stackPlanGenTheory.codegen_ready_fn_def, venomInstTheory.fn_insts_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `EVERY _ fn.fn_blocks` mp_tac >>
+  qpat_x_assum `MEM _ _` mp_tac >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[listTheory.EVERY_MEM]
+QED
+
+(* DUP and SWAP reach 16 slots. *)
 Theorem body_operands_le_16[local]:
   !fn inst.
     codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode <> PHI ==>
     LENGTH (compute_operands inst) <= 16
 Proof
-  cheat
+  rpt strip_tac >>
+  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  gvs[stackPlanGenTheory.codegen_ready_inst_def]
 QED
 
-(* The EVM has LOG0 to LOG4.  To come from codegen_ready_inst, in this
-   form, with the same pending commit. *)
+(* The EVM has LOG0 to LOG4. *)
 Theorem body_log_topics[local]:
   !fn inst.
     codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
@@ -50,7 +63,9 @@ Theorem body_log_topics[local]:
     (inst.inst_opcode = LOG ==>
      case inst.inst_operands of Lit tc :: _ => w2n tc <= 4 | _ => F)
 Proof
-  cheat
+  rpt strip_tac >>
+  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  gvs[stackPlanGenTheory.codegen_ready_inst_def]
 QED
 
 (* A revert forwarding's code neither spills nor restores:
