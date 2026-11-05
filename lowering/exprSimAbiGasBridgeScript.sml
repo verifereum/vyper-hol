@@ -1554,6 +1554,178 @@ Proof
   metis_tac[frag_relabel_observer_phi_zero]
 QED
 
+Theorem frag_relabel_observer_lookup_cases:
+  lookup_block lbl (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb ==>
+  (lbl = sb.cs_current_bb /\
+   bb = <|bb_label := sb.cs_current_bb;
+          bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>) \/
+  (lbl <> sb.cs_current_bb /\
+   MEM bb (emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)) /\
+   bb.bb_label = lbl)
+Proof
+  Cases_on `lbl = sb.cs_current_bb`
+  >- simp[frag_relabel_observer_cut] >>
+  simp[frag_relabel_observer_def, lookup_block_def, FIND_thm] >> strip_tac >>
+  drule FIND_MEM >> strip_tac >> drule FIND_P >> simp[]
+QED
+
+Theorem frag_relabel_entry_instruction:
+  LENGTH ids = LENGTH old /\ isPREFIX old bb.bb_instructions /\ LENGTH old <= idx ==>
+  get_instruction
+    (bb with <|bb_label := L;
+      bb_instructions := MAP (\id. mk_inst id NOP [] []) ids ++
+        DROP (LENGTH old) bb.bb_instructions|>) idx = get_instruction bb idx
+Proof
+  strip_tac >> fs[IS_PREFIX_APPEND] >>
+  simp[get_instruction_def, DROP_LENGTH_APPEND, EL_APPEND_EQN]
+QED
+
+Theorem frag_relabel_instruction_agrees:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ fn_has_code sa sb fn /\
+  LENGTH ids = LENGTH sa.cs_current_insts /\ L <> sb.cs_current_bb /\
+  ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
+  (lbl = L ==> LENGTH sa.cs_current_insts <= idx) /\
+  (lbl,idx) <> frag_observer_cut sb /\
+  lookup_block lbl (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst ==>
+  ?original. lookup_block (if lbl = L then sa.cs_current_bb else lbl) fn.fn_blocks =
+               SOME original /\ get_instruction original idx = SOME inst
+Proof
+  strip_tac >> drule frag_relabel_observer_lookup_cases >> strip_tac
+  >- (gvs[] >>
+      `idx < LENGTH sb.cs_current_insts` by
+        (fs[get_instruction_def, frag_observer_cut_def] >> decide_tac) >>
+      fs[fn_has_code_def] >>
+      fs[IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN]) >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  drule_all start_swap_emitted_blocks >> strip_tac >>
+  fs[MEM_APPEND] >> gvs[]
+  >- (`MEM bb (emitted_blocks sa sb)` by
+        (`emitted_blocks sa sb = FRONT (emitted_blocks sa sb) ++
+           [LAST (emitted_blocks sa sb)]` by simp[APPEND_FRONT_LAST] >>
+         metis_tac[MEM_APPEND]) >>
+      `bb.bb_label <> L` by (fs[MEM_MAP] >> metis_tac[]) >>
+      fs[fn_has_code_def] >> metis_tac[]) >>
+  drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+  qexists_tac `LAST (emitted_blocks sa sb)` >>
+  conj_tac >- (fs[fn_has_code_def] >> metis_tac[MEM_LAST_NOT_NIL]) >>
+  drule_all frag_relabel_entry_instruction >>
+  disch_then (qspec_then `L` mp_tac) >> simp[]
+QED
+
+Theorem frag_relabel_code_provenance:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\
+  LENGTH ids = LENGTH sa.cs_current_insts /\
+  (lbl = L ==> LENGTH sa.cs_current_insts <= idx) /\
+  (lbl,idx) <> frag_observer_cut sb /\
+  lookup_block lbl (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst ==>
+  MEM inst (frag_code sa sb)
+Proof
+  strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  drule frag_relabel_observer_lookup_cases >> strip_tac
+  >- (gvs[] >>
+      `idx < LENGTH sb.cs_current_insts` by
+        (fs[get_instruction_def, frag_observer_cut_def] >> decide_tac) >>
+      simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj2_tac >>
+      fs[get_instruction_def, EL_APPEND_EQN] >> metis_tac[MEM_EL]) >>
+  drule_all start_swap_emitted_blocks >> strip_tac >>
+  fs[MEM_APPEND] >> gvs[]
+  >- (simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj1_tac >> disj2_tac >>
+      `MEM inst bb.bb_instructions` by
+        metis_tac[frag_instruction_drop_member, DROP_0, ZERO_LESS_EQ] >>
+      simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj1_tac >> disj1_tac >>
+  drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+  drule_all frag_relabel_entry_instruction >>
+  disch_then (qspec_then `L` mp_tac) >> strip_tac >>
+  irule frag_instruction_drop_member >> goal_assum (drule_at Any) >> gvs[]
+QED
+
+Theorem frag_relabel_front_nonphi:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb /\
+  MEM bb (FRONT (emitted_blocks sa sb)) ==>
+  EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions
+Proof
+  strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `MEM i (FLAT (MAP (\bb. bb.bb_instructions) (FRONT (emitted_blocks sa sb))))` by
+    (simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  fs[frag_ops_free_def, frag_code_def, NULL_EQ, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem frag_relabel_target_phis:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb /\
+  fn_has_code sa sb fn /\ lbl <> L /\
+  (sb.cs_current_insts <> [] \/
+   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  lookup_block lbl (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb ==>
+  ?original. lookup_block lbl fn.fn_blocks = SOME original /\
+    phi_prefix_length original.bb_instructions = 0 /\
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >>
+  (`emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  drule frag_relabel_observer_lookup_cases >> strip_tac
+  >- (gvs[] >>
+      `EVERY (\i. i.inst_opcode <> PHI) sb.cs_current_insts` by
+        (fs[frag_ops_free_def, frag_code_def, NULL_EQ, EVERY_APPEND, EVERY_MEM] >>
+         metis_tac[]) >>
+      fs[fn_has_code_def, IS_PREFIX_APPEND] >>
+      Cases_on `sb.cs_current_insts` >>
+      fs[phi_prefix_length_def, mk_inst_def]) >>
+  drule_all start_swap_emitted_blocks >> strip_tac >> fs[MEM_APPEND] >> gvs[] >>
+  `MEM bb (emitted_blocks sa sb)` by
+    (`emitted_blocks sa sb = FRONT (emitted_blocks sa sb) ++
+       [LAST (emitted_blocks sa sb)]` by simp[APPEND_FRONT_LAST] >>
+     metis_tac[MEM_APPEND]) >>
+  drule_all frag_relabel_front_nonphi >> strip_tac >>
+  qexists_tac `bb` >> conj_tac >- (fs[fn_has_code_def] >> metis_tac[]) >>
+  Cases_on `bb.bb_instructions` >> fs[phi_prefix_length_def])
+QED
+
+Theorem frag_relabel_jump_no_reentry:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\
+  LENGTH ids = LENGTH sa.cs_current_insts /\
+  (lbl = L ==> LENGTH sa.cs_current_insts <= idx) /\
+  (lbl,idx) <> frag_observer_cut sb /\
+  lookup_block lbl (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst /\
+  (!i. MEM i (frag_code sa sb) ==> ~MEM (Label L) i.inst_operands) /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst_base inst s = OK u ==>
+  u.vs_current_bb <> L
+Proof
+  strip_tac >>
+  drule_all frag_relabel_code_provenance >> strip_tac >>
+  irule frag_observer_jump_no_reentry >> metis_tac[]
+QED
+
+Theorem frag_relabel_position_boundaries:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\
+  L <> sb.cs_current_bb /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  LENGTH ids = LENGTH sa.cs_current_insts ==>
+  (s with vs_current_bb := L).vs_inst_idx =
+    LENGTH (start_relabel L ids sa).cs_current_insts /\
+  (if (s with vs_current_bb := L).vs_current_bb = L
+   then sa.cs_current_bb else (s with vs_current_bb := L).vs_current_bb) =
+    s.vs_current_bb /\
+  (if sb.cs_current_bb = L then sa.cs_current_bb else sb.cs_current_bb) =
+    sb.cs_current_bb /\
+  frag_observer_cut (start_swap sa L ids sb) = frag_observer_cut sb
+Proof
+  strip_tac >> drule_all start_swap_fields >> strip_tac >>
+  simp[start_relabel_def, frag_observer_cut_def]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
