@@ -1629,7 +1629,7 @@ Proof
 QED
 
 (* resolve_phi = OPTION_MAP Var o ALOOKUP (phi_pairs ops) when phi_well_formed *)
-Theorem resolve_phi_phi_pairs[local]:
+Theorem resolve_phi_phi_pairs:
   !ops l. phi_well_formed ops ==>
     resolve_phi l ops = OPTION_MAP Var (ALOOKUP (phi_pairs ops) l)
 Proof
