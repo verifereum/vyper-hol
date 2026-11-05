@@ -168,3 +168,89 @@ Proof
       metis_tac[ao_cmp_flip_cert_intro, ao_cmp_insert_cert_intro]) >>
   gvs[]
 QED
+
+Theorem ao_cmp_flip_scan_origins:
+  !xs dfg fs rs ins.
+    ao_cmp_flip_scan dfg xs = (fs,rs,ins) ==>
+    ao_cmp_origins dfg xs fs rs ins
+Proof
+  Induct >> rpt gen_tac
+  >- simp[ao_cmp_flip_scan_def, ao_cmp_origins_empty] >>
+  Cases_on `ao_cmp_flip_scan dfg xs` >>
+  rename1 `ao_cmp_flip_scan dfg xs = (fs0, rest)` >>
+  Cases_on `rest` >> strip_tac >>
+  irule ao_cmp_origins_head >> metis_tac[]
+QED
+
+Theorem ao_cmp_flip_scan_flip_origin:
+  !dfg xs flips removes inserts id opc w' op.
+    ao_cmp_flip_scan dfg xs = (flips, removes, inserts) /\
+    MEM (id,opc,w',op) flips ==>
+    ?inst w v after lo never hi.
+      MEM inst xs /\ inst.inst_id = id /\
+      is_comparator inst.inst_opcode /\
+      inst.inst_operands = [op; Lit w] /\ inst.inst_outputs = [v] /\
+      dfg_get_uses dfg v = [after] /\
+      (after.inst_opcode = ISZERO \/ after.inst_opcode = ASSERT) /\
+      opc = flip_comparison_opcode inst.inst_opcode /\
+      w' = (if inst.inst_opcode = GT \/ inst.inst_opcode = SGT
+            then w + 1w else w - 1w) /\
+      (if inst.inst_opcode = SGT \/ inst.inst_opcode = SLT
+       then ao_signed_boundaries (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+       else ao_unsigned_boundaries (inst.inst_opcode = GT \/ inst.inst_opcode = SGT))
+        = (lo,never,hi) /\ w <> never
+Proof
+  rpt strip_tac >> drule ao_cmp_flip_scan_origins >>
+  simp[ao_cmp_origins_def, EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule ao_cmp_flip_cert_origin >> strip_tac >>
+  qexists_tac `i` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ao_cmp_flip_scan_remove_origin:
+  !dfg xs flips removes inserts id.
+    ao_cmp_flip_scan dfg xs = (flips,removes,inserts) /\ MEM id removes ==>
+    ?inst op w v after iz_out lo never hi.
+      MEM inst xs /\ is_comparator inst.inst_opcode /\
+      inst.inst_operands = [op; Lit w] /\ inst.inst_outputs = [v] /\
+      dfg_get_uses dfg v = [after] /\
+      after.inst_opcode = ISZERO /\ after.inst_id = id /\
+      after.inst_outputs = [iz_out] /\
+      LENGTH (dfg_get_uses dfg iz_out) = 1 /\
+      (HD (dfg_get_uses dfg iz_out)).inst_opcode <> ASSERT /\
+      (if inst.inst_opcode = SGT \/ inst.inst_opcode = SLT
+       then ao_signed_boundaries (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+       else ao_unsigned_boundaries (inst.inst_opcode = GT \/ inst.inst_opcode = SGT))
+        = (lo,never,hi) /\ w <> never
+Proof
+  rpt strip_tac >> drule ao_cmp_flip_scan_origins >>
+  simp[ao_cmp_origins_def, EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `ao_cmp_remove_cert _ _ _` mp_tac >>
+  simp[ao_cmp_remove_cert_def, ao_cmp_source_def] >> strip_tac >>
+  qexists_tac `i` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ao_cmp_flip_scan_insert_origin:
+  !dfg xs flips removes inserts id v cmp_id.
+    ao_cmp_flip_scan dfg xs = (flips,removes,inserts) /\
+    MEM (id,v,cmp_id) inserts ==>
+    ?inst op w after lo never hi.
+      MEM inst xs /\ inst.inst_id = cmp_id /\
+      is_comparator inst.inst_opcode /\
+      inst.inst_operands = [op; Lit w] /\ inst.inst_outputs = [v] /\
+      dfg_get_uses dfg v = [after] /\
+      after.inst_opcode = ASSERT /\ after.inst_id = id /\
+      (if inst.inst_opcode = SGT \/ inst.inst_opcode = SLT
+       then ao_signed_boundaries (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+       else ao_unsigned_boundaries (inst.inst_opcode = GT \/ inst.inst_opcode = SGT))
+        = (lo,never,hi) /\ w <> never
+Proof
+  rpt strip_tac >> drule ao_cmp_flip_scan_origins >>
+  simp[ao_cmp_origins_def, EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `ao_cmp_insert_cert _ _ _` mp_tac >>
+  simp[ao_cmp_insert_cert_def, ao_cmp_source_def] >> strip_tac >>
+  qexists_tac `i` >> gvs[] >> metis_tac[]
+QED
+
