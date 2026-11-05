@@ -346,7 +346,7 @@ Proof
   ASM_SIMP_TAC bool_ss [frame_pred_cond]
 QED
 
-Theorem frame_asm_group_observers[local]:
+Theorem frame_asm_group_observers:
   name <> "GAS" /\ ~is_evm_call_name name /\ name <> "SELFDESTRUCT" /\
   MEM (SOME r) [asm_step_arith name a; asm_step_compare name a;
     asm_step_bitwise name a; asm_step_memory name a;
@@ -412,7 +412,7 @@ Resume frame_asm_group_observers[context]:
      metis_tac[frame_asm_stack_observers, MEM])) >>
   disch_then (qspecl_then [`r`,`a1`] mp_tac) >> simp[]
 QED
-Finalise frame_asm_group_observers
+Finalise frame_asm_group_observers[local]
 
 Theorem frame_asm_step_observers[local]:
   (!name. inst = AsmOp name ==>
@@ -458,7 +458,7 @@ Proof
   metis_tac[frame_rel_singleton]
 QED
 
-Theorem frame_plain_step[local]:
+Theorem frame_plain_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
@@ -527,7 +527,7 @@ Resume frame_plain_step[fault]:
   drule_all (SRULE [MEM] frame_terminal_lift) >> strip_tac >>
   disj2_tac >> metis_tac[]
 QED
-Finalise frame_plain_step
+Finalise frame_plain_step[local]
 
 Theorem frame_rel_readings_update[local]:
   asm_evm_rel p a es ==>
@@ -548,7 +548,7 @@ Proof
        asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def]
 QED
 
-Theorem frame_gas_step[local]:
+Theorem frame_gas_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
@@ -595,7 +595,7 @@ Resume frame_gas_step[continue]:
       disch_then (qspec_then `gas_readings es1` mp_tac) >> simp[]) >>
   qexistsl_tac [`a`,`es`] >> simp[]
 QED
-Finalise frame_gas_step
+Finalise frame_gas_step[local]
 
 Theorem asm_frame_local_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
@@ -603,5 +603,7 @@ Theorem asm_frame_local_step:
   EL as.as_pc prog <> AsmOp "CALL" /\ EL as.as_pc prog <> AsmOp "STATICCALL" ==>
   asm_frame_step_ok prog data es0 as es
 Proof
-  cheat
+  Cases_on `EL as.as_pc prog = AsmOp "GAS"`
+  >- metis_tac[frame_gas_step] >>
+  metis_tac[frame_plain_step]
 QED
