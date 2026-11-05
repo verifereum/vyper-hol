@@ -3222,3 +3222,115 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[] >>
   gvs[] >> metis_tac[]
 QED
+
+(* Exact copy from fnAliasStep.foldl_plan_inventory_subset; owner-approved
+   independent copy avoids fnAliasStep -> fnAliasInv -> fnPlanLineage. *)
+Theorem foldl_plan_inventory_subset[local]:
+  !(f : 'a # plan_state -> 'b -> 'a # plan_state) items acc.
+    (!acc x at.
+       MEM at (SND (f acc x)).ps_stack \/ at IN FDOM (SND (f acc x)).ps_spilled ==>
+       MEM at (SND acc).ps_stack \/ at IN FDOM (SND acc).ps_spilled) ==>
+    !at. MEM at (SND (FOLDL f acc items)).ps_stack \/
+         at IN FDOM (SND (FOLDL f acc items)).ps_spilled ==>
+         MEM at (SND acc).ps_stack \/ at IN FDOM (SND acc).ps_spilled
+Proof
+  ntac 2 gen_tac >> Induct_on `items` >> simp[] >> metis_tac[]
+QED
+
+(* Exact copy from fnAliasStep.popmany_individual_inventory_subset. *)
+Theorem popmany_individual_inventory_subset:
+  !to_pop ps ops ps'.
+    popmany_individual to_pop ps = (ops,ps') ==>
+    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[popmany_individual_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f acc0 sorted` >>
+  `ps' = SND (FOLDL f acc0 sorted) /\ ps = SND acc0` by
+    gvs[Abbr `acc0`] >>
+  pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
+  match_mp_tac foldl_plan_inventory_subset >>
+  simp[Abbr `f`, pairTheory.FORALL_PROD] >>
+  rpt gen_tac >>
+  Cases_on `stack_get_depth x p_2.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth x p_2.ps_stack = SOME dist` >>
+  drule stack_get_depth_props >> strip_tac >>
+  Cases_on `dist = 0` >> simp[]
+  >- (simp[stack_pop_def] >> metis_tac[MEM_TAKE]) >>
+  pairarg_tac >> simp[stack_pop_def] >> strip_tac >>
+  `MEM at ps''.ps_stack \/ at IN FDOM ps''.ps_spilled` by
+    metis_tac[MEM_TAKE] >>
+  metis_tac[do_swap_inventory_subset]
+QED
+
+(* Exact copy from fnAliasStep.popmany_plan_inventory_subset. *)
+Theorem popmany_plan_inventory_subset:
+  !to_pop ps ops ps'.
+    popmany_plan to_pop ps = (ops,ps') ==>
+    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  Cases
+  >- (simp[popmany_plan_def] >> rpt strip_tac >> gvs[]) >>
+  simp[popmany_plan_def] >> rpt gen_tac >>
+  reverse IF_CASES_TAC
+  >- metis_tac[popmany_individual_inventory_subset] >>
+  reverse IF_CASES_TAC
+  >- metis_tac[popmany_individual_inventory_subset] >>
+  qmatch_asmsub_abbrev_tac `is_contiguous_top depths` >>
+  `!v. IS_SOME (stack_get_depth v ps.ps_stack) ==>
+       THE (stack_get_depth v ps.ps_stack) < LENGTH ps.ps_stack` by
+    (rpt strip_tac >> Cases_on `stack_get_depth v ps.ps_stack` >> gvs[] >>
+     drule stack_get_depth_props >> simp[]) >>
+  `!d. MEM d depths ==> d < LENGTH ps.ps_stack` by
+    (simp[Abbr `depths`, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+     gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  `MEM (SUC (LENGTH t)) depths` by
+    (`LENGTH depths = SUC (LENGTH t)` by simp[Abbr `depths`] >>
+     `MEM (SUC (LENGTH t)) (QSORT (\a b. a <= b) depths)` by
+       gvs[is_contiguous_top_def, LET_THM, MEM_GENLIST] >>
+     metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]) >>
+  `SUC (LENGTH t) < LENGTH ps.ps_stack` by metis_tac[] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[stack_pop_def] >>
+  rpt strip_tac >>
+  `MEM at ps''.ps_stack \/ at IN FDOM ps''.ps_spilled` by
+    metis_tac[MEM_TAKE] >>
+  metis_tac[do_swap_inventory_subset]
+QED
+
+(* Exact copy from fnAliasStep.optimistic_swap_plan_inventory_subset. *)
+Theorem optimistic_swap_plan_inventory_subset:
+  !dfg inst nl nt ps ops ps'.
+    optimistic_swap_plan dfg inst nl nt ps = (ops,ps') ==>
+    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[optimistic_swap_plan_def] >>
+  strip_tac >> gen_tac >> disch_tac >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  metis_tac[do_swap_inventory_subset]
+QED
+
+(* Exact copy from fnAliasStep.release_dead_spills_inventory_subset. *)
+Theorem release_dead_spills_inventory_subset:
+  !nl ps at.
+    MEM at (release_dead_spills nl ps).ps_stack \/
+    at IN FDOM (release_dead_spills nl ps).ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  `!(f : plan_state -> operand # num -> plan_state) l ps.
+     (!ps x. (f ps x).ps_stack = ps.ps_stack /\
+             FDOM (f ps x).ps_spilled SUBSET FDOM ps.ps_spilled) ==>
+     (FOLDL f ps l).ps_stack = ps.ps_stack /\
+     FDOM (FOLDL f ps l).ps_spilled SUBSET FDOM ps.ps_spilled` by
+    (ntac 2 gen_tac >> Induct_on `l` >> simp[] >> rpt strip_tac >>
+     metis_tac[SUBSET_TRANS]) >>
+  rpt gen_tac >> simp[release_dead_spills_def] >>
+  qmatch_goalsub_abbrev_tac `FOLDL f ps dead` >>
+  `(FOLDL f ps dead).ps_stack = ps.ps_stack /\
+   FDOM (FOLDL f ps dead).ps_spilled SUBSET FDOM ps.ps_spilled` by
+    (first_x_assum irule >>
+     simp[Abbr `f`, pairTheory.FORALL_PROD, SUBSET_DEF]) >>
+  gvs[SUBSET_DEF] >> metis_tac[]
+QED
