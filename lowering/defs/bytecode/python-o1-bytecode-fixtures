@@ -168,7 +168,9 @@ case "$mode" in
                   evalCompilerBytecodeAbiExternalCallsTheory \
                   evalCompilerBytecodeFunctionModesTheory \
                   evalCompilerBytecodeAssertRaiseTheory \
+                  evalCompilerBytecodeAssertReasonTheory \
                   evalCompilerBytecodeRaiseBareTheory \
+                  evalCompilerBytecodeRaiseReasonTheory \
                   evalCompilerBytecodeLoopsTheory \
                   evalCompilerBytecodeScalarWidthsTheory \
                   evalCompilerBytecodeScalarLiteralsTheory \

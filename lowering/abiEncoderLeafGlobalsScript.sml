@@ -6,13 +6,16 @@ Ancestors
   valueEncoding list rich_list pred_set words arithmetic
 
 Theorem abi_encoder_leaf_step_globals:
-  inst.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND} /\
+  inst.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT} /\
   step_inst_base inst s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
   t.vs_pending_deletions = s.vs_pending_deletions
 Proof
-  simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >> strip_tac >>
+  simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >> strip_tac
+  >~ [`inst.inst_opcode = NOT`]
+  >- (gvs[Once step_inst_base_def] >> gvs[exec_pure1_def, AllCaseEqs()] >>
+      simp[update_var_def]) >>
   gvs[Once step_inst_base_def] >>
   gvs[exec_pure2_def, exec_read1_def, exec_write2_def, AllCaseEqs()] >>
   simp[update_var_def, mstore_def, mcopy_def, write_memory_with_expansion_def]
@@ -20,7 +23,7 @@ QED
 
 Theorem abi_encoder_leaf_sequence_globals:
   !insts s t.
-  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) insts /\
+  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}) insts /\
   run_inst_seq insts s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
@@ -36,7 +39,7 @@ QED
 
 Theorem abi_encoder_word_global_code:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>
-  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) (emitted_insts st st')
+  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}) (emitted_insts st st')
 Proof
   simp[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -48,7 +51,7 @@ QED
 
 Theorem abi_encoder_copy_global_code:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') ==>
-  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) (emitted_insts st st')
+  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}) (emitted_insts st st')
 Proof
   simp[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -60,7 +63,7 @@ QED
 
 Theorem abi_encoder_bytes_global_code:
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') ==>
-  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}) (emitted_insts st st')
+  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}) (emitted_insts st st')
 Proof
   simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
