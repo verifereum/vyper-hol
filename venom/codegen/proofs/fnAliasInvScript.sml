@@ -169,6 +169,56 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+Definition alias_probe_loop_fn_def:
+  alias_probe_loop_fn = mk_raw_function "loop_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 1 CALLDATASIZE [] ["r"];
+          mk_inst 2 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+         [mk_inst 3 ASSIGN [Var "r"] ["a"];
+          mk_inst 4 ISZERO [Var "a"] ["z"];
+          mk_inst 5 JNZ [Var "z"; Label "header"; Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 6 STOP [] []] |>]
+End
+
+Theorem alias_probe_loop_liveness:
+  ~MEM "a" (live_vars_at (liveness_analyze alias_probe_loop_fn) "header" 0) /\
+  MEM "a" (live_vars_at (liveness_analyze alias_probe_loop_fn) "body" 1) /\
+  ~MEM "a" (live_vars_at (liveness_analyze alias_probe_loop_fn) "body" 2) /\
+  normalize_operand (dfg_build_function alias_probe_loop_fn) [] (Var "a") = Var "r"
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* Without dominance, liveness alone admits a stale alias at a root write. *)
+Definition alias_probe_bad_loop_fn_def:
+  alias_probe_bad_loop_fn = mk_raw_function "bad_loop_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 1 CALLDATASIZE [] ["r"];
+          mk_inst 2 ISZERO [Var "a"] ["z"];
+          mk_inst 3 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+         [mk_inst 4 ASSIGN [Var "r"] ["a"];
+          mk_inst 5 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_probe_bad_loop_liveness:
+  MEM "a" (live_vars_at (liveness_analyze alias_probe_bad_loop_fn) "header" 0) /\
+  normalize_operand (dfg_build_function alias_probe_bad_loop_fn) [] (Var "a") = Var "r"
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem eval_one_phi_without_predecessor:
+  s.vs_prev_bb = NONE ==> eval_one_phi s inst = NONE
+Proof
+  simp[eval_one_phi_def] >> Cases_on `inst.inst_outputs` >> simp[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
