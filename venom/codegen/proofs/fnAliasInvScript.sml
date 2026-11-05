@@ -99,6 +99,29 @@ Definition alias_probe_fn_def:
        mk_inst 2 STOP [] []] |>]
 End
 
+(* The published path predicate permits inter-block exits before the terminator.
+   This witnesses only an interface limitation, not analyzed liveness. *)
+Definition alias_path_probe_fn_def:
+  alias_path_probe_fn = mk_raw_function "path_probe"
+    [<| bb_label := "A"; bb_instructions :=
+       [mk_inst 0 PARAM [] ["r"];
+        mk_inst 1 ASSIGN [Var "r"] ["a"];
+        mk_inst 2 JMP [Label "B"] []] |>;
+     <| bb_label := "B"; bb_instructions :=
+       [mk_inst 3 ADD [Var "a"; Lit 1w] ["b"];
+        mk_inst 4 STOP [] []] |>]
+End
+
+Theorem alias_path_probe_early_exit:
+  cfg_exec_path (cfg_analyze alias_path_probe_fn) [("A",0);("B",0)] /\
+  used_before_defined alias_path_probe_fn.fn_blocks "a" [("A",0);("B",0)] /\
+  normalize_operand (dfg_build_function alias_path_probe_fn) [] (Var "a") =
+    Var "r" /\
+  ~MEM "a" (live_vars_at (liveness_analyze alias_path_probe_fn) "A" 0)
+Proof
+  EVAL_TAC >> qexists_tac `1` >> simp[] >> EVAL_TAC
+QED
+
 Theorem alias_probe_normalize:
   normalize_operand (dfg_build_function alias_probe_fn) [] (Var "a") = Var "r"
 Proof
