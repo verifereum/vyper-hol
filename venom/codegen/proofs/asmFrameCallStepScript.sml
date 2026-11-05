@@ -545,6 +545,28 @@ Resume asm_call_prepare_collect_eq[gas]:
 QED
 
 Finalise asm_call_prepare_collect_eq
+Theorem asm_call_stipend_le_charge:
+  vc = (if 0 < value then call_value_cost else 0) /\
+  cg = call_gas value gas gasLeft mxCost (ac + vc + cc + dc) /\
+  charge = static_gas op + FST cg + mxCost ==>
+  SND cg <= charge
+Proof
+  strip_tac >>
+  `(if 0 < value then call_stipend else 0) <= (ac + vc + cc + dc) + mxCost` by
+    (Cases_on `0 < value` >>
+     fs[vfmConstantsTheory.call_stipend_def, vfmConstantsTheory.call_value_cost_def]) >>
+  PairCases_on `cg` >>
+  qpat_x_assum `(_,_) = call_gas _ _ _ _ _` (assume_tac o SYM) >>
+  drule_all vfmRunCallTheory.call_gas_stipend_le_consumed >> simp[]
+QED
+
+Theorem asm_call_unused_gas_le_paid:
+  (stipend:num) <= charge /\ childLimit <= stipend ==>
+  childLimit - childUsed <= oldUsed + charge
+Proof
+  decide_tac
+QED
+
 
 Theorem asm_pop_and_incorporate_context_state:
   s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
