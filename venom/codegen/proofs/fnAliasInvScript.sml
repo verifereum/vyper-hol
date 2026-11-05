@@ -1464,6 +1464,50 @@ Definition alias_probe_fn_def:
        mk_inst 2 STOP [] []] |>]
 End
 
+(* Demand diagnostics use analyzed liveness of this actual function. *)
+Definition alias_demand_probe_fn_def:
+  alias_demand_probe_fn = mk_raw_function "demand_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 PARAM [] ["r"];
+       mk_inst 1 PARAM [] ["k"];
+       mk_inst 2 ADD [Var "r"; Var "r"] ["z"];
+       mk_inst 3 ADD [Var "z"; Var "k"] ["result"];
+       mk_inst 4 STOP [] []] |>]
+End
+
+Theorem alias_demand_probe_entry_preparation:
+  ~plan_holds (init_cleanup_plan_state NONE [] 0 0) (Var "r") /\
+  ~plan_holds (init_cleanup_plan_state NONE [] 0 0) (Var "k") /\
+  MEM "r" (live_vars_at (liveness_analyze alias_demand_probe_fn) "entry" 2) /\
+  MEM "k" (live_vars_at (liveness_analyze alias_demand_probe_fn) "entry" 2) /\
+  (!x. MEM x ["r"; "k"] ==>
+    plan_holds (SND (prepare_params_plan (liveness_analyze alias_demand_probe_fn)
+      alias_demand_probe_fn (init_cleanup_plan_state NONE [] 0 0))) (Var x))
+Proof
+  EVAL_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_demand_probe_regular_distinct_live:
+  MEM "k" (live_vars_at (liveness_analyze alias_demand_probe_fn) "entry" 3) /\
+  (!x. MEM x ["z"; "k"] ==>
+    plan_holds (SND (generate_regular_inst_plan
+      (liveness_analyze alias_demand_probe_fn) (dfg_build_function alias_demand_probe_fn)
+      (cfg_analyze alias_demand_probe_fn) alias_demand_probe_fn
+      (mk_inst 2 ADD [Var "r"; Var "r"] ["z"])
+      (live_vars_at (liveness_analyze alias_demand_probe_fn) "entry" 3)
+      T F "entry" ((init_plan_state 0) with ps_stack := [Var "k"; Var "r"]))) (Var x)) /\
+  (!x. MEM x ["z"; "k"] ==>
+    plan_holds (SND (generate_regular_inst_plan
+      (liveness_analyze alias_demand_probe_fn) (dfg_build_function alias_demand_probe_fn)
+      (cfg_analyze alias_demand_probe_fn) alias_demand_probe_fn
+      (mk_inst 2 ADD [Var "r"; Var "r"] ["z"])
+      (live_vars_at (liveness_analyze alias_demand_probe_fn) "entry" 3)
+      T F "entry" ((init_plan_state 0) with <| ps_stack := [Var "r"];
+        ps_spilled := FEMPTY |+ (Var "k",0) |>))) (Var x))
+Proof
+  EVAL_TAC >> simp[] >> metis_tac[]
+QED
+
 (* The published path predicate permits inter-block exits before the terminator.
    This witnesses only an interface limitation, not analyzed liveness. *)
 Definition alias_path_probe_fn_def:
