@@ -8,6 +8,21 @@ Ancestors
   exprSimMapDefs exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
   exprSimArrayIndex
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
+  exprSimTopLevelProps compileEnv finite_map
+
+Theorem toplevel_storage_ce_vars_decl:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (d,id_str) /\
+  lookup_var_slot_from_layout cx (var_decl_transient d) src id_str = SOME slot ==>
+  FLOOKUP cenv.ce_module_vars (src,id) =
+    SOME (if var_decl_transient d then TransientLoc (n2w slot)
+          else StorageLoc (n2w slot))
+Proof
+  strip_tac >> Cases_on `var_decl_transient d` >>
+  gvs[storage_vars_rel_def, transient_vars_rel_def] >>
+  first_x_assum irule >> simp[]
+QED
 
 (* A top-level mapping variable: compile_expr lowers it to a pointer
    literal holding the mapping's declared slot (env_consistent's hashmap
