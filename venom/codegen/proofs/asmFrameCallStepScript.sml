@@ -5024,6 +5024,102 @@ Proof
        asm_call_static_prefix_create, asm_call_static_prefix_step_call]
 QED
 
+Theorem asm_call_static_prefix_inner:
+  asm_call_static_prefix saved a ts ds s /\
+  (do
+    ctxt <- get_current_context;
+    case FLOOKUP ctxt.msgParams.parsed ctxt.pc of
+    | SOME op => do step_inst op; inc_pc_or_jump op od
+    | NONE => if LENGTH ctxt.msgParams.code <= ctxt.pc then step_inst Stop
+              else step_inst Invalid
+  od) s = (r,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >> drule asm_call_static_prefix_head >> strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  gvs[bind_def, get_current_context_def, return_def] >>
+  Cases_on `FLOOKUP h0.msgParams.parsed h0.pc` >> gvs[]
+  >- (Cases_on `LENGTH h0.msgParams.code <= h0.pc` >> gvs[] >>
+      drule_at (Pos (el 3)) asm_call_static_prefix_cp >> simp[]) >>
+  gvs[ignore_bind_def, bind_def] >>
+  drule asm_call_static_prefix_step_inst >>
+  disch_then (qspec_then `x` assume_tac) >>
+  Cases_on `step_inst x s` >> Cases_on `q` >> gvs[] >>
+  metis_tac[asm_call_static_prefix_cp, cp_inc_pc_or_jump]
+QED
+
+Theorem asm_call_static_prefix_internal_pop:
+  asm_call_static_prefix saved a ts ds s /\
+  LENGTH saved + 1 < LENGTH s.contexts /\
+  LENGTH (FST (HD (TL s.contexts))).stack < stack_limit /\
+  (FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed <=
+    (FST (HD (TL s.contexts))).gasUsed /\
+  (ex <> NONE /\ ex <> SOME Reverted ==>
+    (FST (HD s.contexts)).gasUsed <= (FST (HD s.contexts)).msgParams.gasLimit) /\
+  handle_exception ex s = (q,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >> fs[asm_call_static_prefix_def] >>
+  Cases_on `active` >> gvs[] >> PairCases_on `h` >> fs[] >>
+  Cases_on `t'` >> gvs[] >> PairCases_on `h` >> fs[] >>
+  Cases_on `h0.msgParams.outputTo` >> fs[] >>
+  Cases_on `ex`
+  >- (drule asm_handle_exception_memory_success >> simp[] >>
+      strip_tac >> gvs[asm_call_static_prefix_def]) >>
+  Cases_on `x = Reverted`
+  >- (qpat_x_assum `x = Reverted` SUBST_ALL_TAC >>
+      drule asm_handle_exception_memory_reverted >> simp[] >>
+      strip_tac >> gvs[asm_call_static_prefix_def]) >>
+  drule asm_handle_exception_memory_exception >> simp[] >>
+  strip_tac >> gvs[asm_call_static_prefix_def]
+QED
+
+Theorem asm_call_memory_pop_bounds:
+  2 <= LENGTH s.contexts /\ EVERY (wf_context o FST) s.contexts /\
+  stack_room_ok s /\ gas_stack_ok s ==>
+  LENGTH (FST (HD (TL s.contexts))).stack < stack_limit /\
+  (FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed <=
+    (FST (HD (TL s.contexts))).gasUsed /\
+  (FST (HD s.contexts)).gasUsed <= (FST (HD s.contexts)).msgParams.gasLimit
+Proof
+  strip_tac >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  Cases_on `t` >> gvs[] >> PairCases_on `h` >>
+  fs[stack_room_ok_def, wf_context_def] >>
+  qpat_x_assum `gas_stack_ok _` mp_tac >> simp[gas_stack_ok_def] >>
+  disch_then (qspec_then `0` mp_tac) >> simp[unused_gas_def]
+QED
+
+Theorem asm_call_static_prefix_internal_pop_safe:
+  asm_call_static_prefix saved a ts ds s /\
+  LENGTH saved + 1 < LENGTH s.contexts /\
+  EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
+  handle_exception ex s = (q,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >>
+  `2 <= LENGTH s.contexts` by decide_tac >>
+  drule_all asm_call_memory_pop_bounds >> strip_tac >>
+  drule_at (Pat `handle_exception _ _ = _`) asm_call_static_prefix_internal_pop >>
+  simp[]
+QED
+
+Theorem asm_call_static_prefix_step_inner:
+  asm_call_static_prefix saved a ts ds s /\ step_inner s = (r,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  simp[step_inner_def] >> metis_tac[asm_call_static_prefix_inner]
+QED
+
+Theorem asm_call_step_inner_pop_invariants:
+  wf_state s /\ step_inner s = (r,t) ==>
+  EVERY (wf_context o FST) t.contexts /\ stack_room_ok t /\ gas_stack_ok t
+Proof
+  strip_tac >> drule_all step_inner_preserves_stack_room_gas_ok >> strip_tac >>
+  simp[] >> mp_tac decreases_gas_cred_step_inner >>
+  simp[decreases_gas_cred_def] >> disch_then (qspec_then `s` mp_tac) >>
+  simp[wf_state_def] >> strip_tac >> gvs[wf_state_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
