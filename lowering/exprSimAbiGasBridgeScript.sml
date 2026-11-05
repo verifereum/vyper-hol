@@ -10,7 +10,7 @@
 
 Theory exprSimAbiGasBridge
 Ancestors
-  fragGasMode fragExec exprLoweringProps abiDecoderLoop
+  fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -24,12 +24,14 @@ Definition frag_code_def:
          sb.cs_current_insts
 End
 
-(* The fragment runs no GAS, INVOKE or PHI, never jumps back to the block
-   it starts in, and leaves open a block of a label it did not finish. *)
+(* The fragment runs no GAS, INVOKE, PHI, STOP or RETURN, never jumps back
+   to the block it starts in, and leaves open a block of a label it did not
+   finish. *)
 Definition frag_gas_free_def:
   frag_gas_free (sa:compile_state) (sb:compile_state) <=>
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               i.inst_opcode <> PHI /\
+               i.inst_opcode <> PHI /\ i.inst_opcode <> STOP /\
+               i.inst_opcode <> RETURN /\
                ~MEM (Label sa.cs_current_bb) i.inst_operands)
           (frag_code sa sb) /\
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks sa sb))
@@ -44,7 +46,11 @@ Theorem frag_exec_gas_path:
   !ctx sa sb P Q R fn s.
     frag_exec ctx sa sb P Q R /\ cs_extends sa sb /\ frag_gas_free sa sb /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\ (!h. ~R (Halt h)) /\
-    fn_has_code sa sb fn /\ P s /\ ~s.vs_halted /\
+    fn_has_code sa sb fn /\
+    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
+    P s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     (?t. gas_marked_path F ctx fn s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
@@ -59,13 +65,22 @@ QED
    ABI encoder and decoder executions. *)
 Theorem abi_decode_sim_gas_path:
   !ctx sa sb Q fn s.
-    (!fn. fn_has_code sa sb fn ==>
+    (!fn'. fn_has_code sa sb fn' /\ fn_inst_ids_distinct fn' /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP ==>
+            MEM i (fn_insts fn)) /\
+       (sa.cs_blocks = sb.cs_blocks \/
+        !bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
+             phi_prefix_length bb.bb_instructions = 0) ==>
        ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
            t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-           abi_decode_sim ctx fn s t) /\
+           abi_decode_sim ctx fn' s t) /\
     cs_extends sa sb /\ frag_gas_free sa sb /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+    fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
+    ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx fn s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
