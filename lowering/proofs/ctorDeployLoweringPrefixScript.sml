@@ -872,6 +872,44 @@ val prefix_plan_live_tm = ``livenessDefs$liveness_analyze ^prefix_final_fn_tm``;
 val prefix_plan_cfg_tm = ``cfgDefs$cfg_analyze ^prefix_final_fn_tm``;
 val prefix_plan_after_first_tm = ``^prefix_plan_init_tm with ps_stack := [Var "formal_var_4"]``;
 
+Theorem deploy_prefix_release_empty_spills[local]:
+  !next_liveness ps. ps.ps_spilled = FEMPTY ==>
+    stackPlanOps$release_dead_spills next_liveness ps = ps
+Proof
+  rpt strip_tac >>
+  simp[stackPlanOpsTheory.release_dead_spills_def,
+       alistTheory.fmap_to_alist_FEMPTY]
+QED
+
+val prefix_plan_release_restr_conv = computeLib.RESTR_EVAL_CONV
+  [``stackPlanOps$release_dead_spills``];
+
+val prefix_release_const = ``stackPlanOps$release_dead_spills``;
+val prefix_plan_rules = List.concat (List.concat (map
+  (fn (_,xs) => map (fn clauses.RRules ths => ths
+                      | clauses.Conversion _ => []) xs)
+  (computeLib.listItems (computeLib.the_compset ()))));
+val prefix_plan_cs = computeLib.copy (computeLib.the_compset ());
+val prefix_plan_cs = computeLib.scrub_const prefix_plan_cs prefix_release_const;
+val prefix_plan_cs = computeLib.add_conv
+  (prefix_release_const, 2,
+   SIMP_CONV (srw_ss()) [deploy_prefix_release_empty_spills]) prefix_plan_cs;
+fun prefix_reinstall_callers heads rules cs =
+  let fun depends th =
+        let val (_,body) = strip_forall (concl th)
+            val (_,r) = dest_eq body
+        in List.exists (fn h => can (find_term (same_const h)) r) heads end
+      val (callers,rest) = List.partition depends rules
+      val new_heads = map (fn th => th |> concl |> strip_forall |> snd |>
+        dest_eq |> fst |> strip_comb |> fst) callers
+  in if null callers then cs
+     else prefix_reinstall_callers new_heads rest
+            (computeLib.add_thms callers cs)
+  end;
+val prefix_plan_cs = prefix_reinstall_callers [prefix_release_const]
+  prefix_plan_rules prefix_plan_cs;
+val prefix_plan_eval_conv = computeLib.CBV_CONV prefix_plan_cs;
+
 Theorem deploy_prefix_negative_first_instruction:
   stackPlanGen$generate_inst_plan ^prefix_plan_live_tm ^prefix_plan_dfg_tm
     ^prefix_plan_cfg_tm ^prefix_final_fn_tm
@@ -880,7 +918,7 @@ Theorem deploy_prefix_negative_first_instruction:
     T F "__deploy" ^prefix_plan_init_tm =
   SOME ([SOPush (Lit 32w)], ^prefix_plan_after_first_tm)
 Proof
-  EVAL_TAC >> simp[]
+  CONV_TAC prefix_plan_eval_conv
 QED
 
 Theorem deploy_prefix_negative_emit_second:
@@ -897,7 +935,6 @@ Theorem deploy_prefix_negative_reorder_second:
 Proof
   EVAL_TAC
 QED
-
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
