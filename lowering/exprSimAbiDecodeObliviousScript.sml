@@ -18,7 +18,8 @@ Theorem lower_abi_decode_frag_facts:
     cs_extends sa sb /\ frag_ops_free sa sb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
-    (sa.cs_blocks = sb.cs_blocks ==> frag_gas_free sa sb)
+    (sa.cs_blocks = sb.cs_blocks /\ data <> Label sa.cs_current_bb ==>
+     frag_gas_free sa sb)
 Proof
   cheat
 QED
