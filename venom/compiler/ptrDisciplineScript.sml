@@ -112,6 +112,14 @@ End
    Forced alloca positions are taken as given by the layout, so two forced
    allocas that are live together can overlap; the lowering never forces
    any.
+   Every definition of a pointer variable is a pointer definition: a
+   root, or pointer arithmetic, ASSIGN or PHI on a pointer.  The pointer
+   variables are a set of names, so a name with a non-pointer definition
+   on a path the run never takes is a pointer, and MakeSSA would split
+   that definition into a non-pointer the inserted PHI merges with the
+   pointer.  Likewise a DALLOCA or pointer PARAM output is no ALLOCA
+   output, so renaming cannot separate an alloca root from a parameter
+   root that shares its name.
    A PHI that merges a pointer merges only pointers.  A value may derive
    from both an ALLOCA and a PARAM or DALLOCA (an aggregate IfExp whose
    arms are a memory-passed argument and a literal), but it is never a
@@ -136,7 +144,17 @@ Definition fn_ptr_ok_def:
        MEM inst (fn_insts fn) /\ mem_write_ops inst = SOME ops /\
        ops.iao_ofst = Var v ==>
        ~(v IN pointer_derived_vars fn (alloca_roots fn) /\
-         v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)))
+         v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn))) /\
+    (!inst v.
+       MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs /\
+       v IN fn_pv P fn ==>
+       inst.inst_opcode = ALLOCA \/
+       ((inst.inst_opcode = DALLOCA \/
+         (inst.inst_opcode = PARAM /\
+          ?idx. inst.inst_operands = [Lit idx] /\ w2n idx IN P fn.fn_name)) /\
+        v NOTIN alloca_roots fn) \/
+       (is_pointer_preserving_op inst.inst_opcode /\
+        ?u. MEM (Var u) inst.inst_operands /\ u IN fn_pv P fn))
 End
 
 

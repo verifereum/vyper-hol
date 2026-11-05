@@ -180,16 +180,44 @@ Proof
   simp[addr_operand_is_alt] >> rpt strip_tac >> gvs[ptr_cmp_exempt_alt]
 QED
 
+Theorem lit_case[local]:
+  !ops P. (case ops of [Lit idx] => P idx | _ => F) <=>
+          ?idx. ops = [Lit idx] /\ P idx
+Proof
+  rpt gen_tac >> Cases_on `ops` >- simp[] >>
+  rename1 `op1::rest` >> Cases_on `op1` >> simp[] >>
+  Cases_on `rest` >> simp[]
+QED
+
+Theorem pv_def_check_sound[local]:
+  !pl ar pv inst v.
+    pv_def_check pl ar pv inst /\ MEM v inst.inst_outputs /\ MEM v pv ==>
+    inst.inst_opcode = ALLOCA \/
+    ((inst.inst_opcode = DALLOCA \/
+      (inst.inst_opcode = PARAM /\
+       ?idx. inst.inst_operands = [Lit idx] /\ MEM (w2n idx) pl)) /\
+     ~MEM v ar) \/
+    (is_pointer_preserving_op inst.inst_opcode /\
+     ?u. MEM (Var u) inst.inst_operands /\ MEM u pv)
+Proof
+  rpt strip_tac >> fs[pv_def_check_def, EVERY_MEM] >>
+  first_x_assum drule_all >> simp[lit_case, EXISTS_MEM] >>
+  strip_tac >> gvs[] >>
+  Cases_on `op` >> gvs[] >> metis_tac[]
+QED
+
 Theorem fn_ptr_ok_check_sound_aux[local]:
-  !PL fn pv pva pvo.
+  !PL fn pv pva pvo ar.
     pointer_derived_vars fn (ptr_roots (\nm. set (PL nm)) fn) = set pv /\
     pointer_derived_vars fn (alloca_roots fn) = set pva /\
     pointer_derived_vars fn
       (ptr_roots (\nm. set (PL nm)) fn DIFF alloca_roots fn) = set pvo /\
+    set ar = alloca_roots fn /\
     fn.fn_forced_alloc_positions = FEMPTY /\
     (!inst. MEM inst (fn_insts fn) ==>
             inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
-            phi_check pv inst /\ write_excl_check pva pvo inst) ==>
+            phi_check pv inst /\ write_excl_check pva pvo inst /\
+            pv_def_check (PL fn.fn_name) ar pv inst) ==>
     fn_ptr_ok (\nm. set (PL nm)) fn
 Proof
   rpt gen_tac >> strip_tac >>
@@ -219,10 +247,14 @@ Proof
       gvs[phi_check_def, EXISTS_MEM, EVERY_MEM, PULL_EXISTS] >>
       first_x_assum drule >> simp[] >> strip_tac >> rpt strip_tac
       >- (first_x_assum drule >> simp[]) >>
-      first_x_assum drule >> Cases_on `op` >> simp[]) >>
+      first_x_assum drule >> Cases_on `op` >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      `write_excl_check pva pvo inst` by metis_tac[] >>
+      gvs[write_excl_check_def]) >>
   rpt gen_tac >> strip_tac >>
-  `write_excl_check pva pvo inst` by metis_tac[] >>
-  gvs[write_excl_check_def]
+  `pv_def_check (PL fn.fn_name) ar pv inst` by metis_tac[] >>
+  drule_all pv_def_check_sound >> qpat_x_assum `set ar = _` (SUBST1_TAC o SYM) >>
+  simp[]
 QED
 
 Theorem fn_ptr_ok_check_sound:
@@ -246,7 +278,7 @@ Proof
   rename1 `pv_closure fn (opcode_root_list ALLOCA fn ++ _) = SOME pv_all` >>
   rename1 `pv_closure fn (opcode_root_list ALLOCA fn) = SOME pv_a` >>
   rename1 `pv_closure fn (FILTER _ _) = SOME pv_o` >>
-  qexistsl_tac [`pv_all`, `pv_a`, `pv_o`] >>
+  qexistsl_tac [`opcode_root_list ALLOCA fn`, `pv_all`, `pv_a`, `pv_o`] >>
   imp_res_tac pv_closure_set >>
   conj_tac >- fs[EVERY_MEM] >>
   rpt conj_tac >> metis_tac[]
