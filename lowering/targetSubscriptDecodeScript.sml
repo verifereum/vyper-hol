@@ -331,3 +331,20 @@ Proof
   simp[target_result_decodable_def] >> strip_tac >>
   drule target_storage_decodable_capacity >> simp[]
 QED
+
+Theorem target_subscript_pure_capacity:
+  contract_storage_well_formed cx es0 /\
+  EVERY pure_expr (target_indices bt) /\ pure_expr e /\
+  eval_base_place cx bt es0 =
+    (INL (PlaceR (StoragePlace tr slot
+      (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)))),es1) /\
+  eval_expr cx e es1 = (INL iv,es2) /\
+  read_result cx iv es2 = (INL key,es) ==>
+  (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)
+Proof
+  rpt strip_tac >> gvs[] >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
+  drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  drule_all target_eval_base_header_capacity >> simp[]
+QED
