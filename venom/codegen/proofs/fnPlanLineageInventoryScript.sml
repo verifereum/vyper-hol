@@ -3182,3 +3182,43 @@ Proof
        stack_find_def, do_swap_def] >>
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >> simp[]
 QED
+
+Theorem emit_reorder_pop_marker_variable_origins:
+  !ps m core base operands selected opc nl dfg iops ps1 rops ps2 qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
+    (!v. MEM (Var v) operands ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) /\
+    qs = ps2 with ps_stack := stack_pop (LENGTH operands) ps2.ps_stack ==>
+    !v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/ MEM (Var v) operands
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all emit_reorder_pop_marker_execution >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op (ps with ps_stack := core).ps_stack \/
+      op IN FDOM (ps with ps_stack := core).ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def,
+                 MEM_REPLICATE, dead_stack_marker_def] >> metis_tac[]) >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule_all emit_input_plan_residual_budget_wf >> simp[] >> strip_tac >>
+  `residual_budget_wf base' selected cs1` by
+    metis_tac[residual_budget_wf_perm] >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `LENGTH selected <= LENGTH cs1.ps_stack /\ LENGTH selected <= 16` by simp[] >>
+  `!x. MEM x cs2.ps_stack \/ x IN FDOM cs2.ps_spilled ==>
+    MEM x cs1.ps_stack \/ x IN FDOM cs1.ps_spilled` by
+    metis_tac[reorder_plan_inventory_subset] >>
+  rpt strip_tac >>
+  `MEM (Var v) cs2.ps_stack \/ Var v IN FDOM cs2.ps_spilled` by
+    (gvs[MEM_REPLICATE, dead_stack_marker_def, stack_pop_def] >>
+     metis_tac[MEM_TAKE]) >>
+  `MEM (Var v) cs1.ps_stack \/ Var v IN FDOM cs1.ps_spilled` by metis_tac[] >>
+  drule emit_input_plan_variable_origins >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >>
+  gvs[] >> metis_tac[]
+QED
