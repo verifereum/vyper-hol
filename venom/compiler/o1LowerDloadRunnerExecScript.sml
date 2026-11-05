@@ -2,7 +2,7 @@ Theory o1LowerDloadRunnerExec
 Ancestors
   o1LowerDloadRunner o1LowerDloadNonCallContinuation
   o1LowerDloadRunnerEndpoints o1LowerDloadUnchangedFetch
-  o1LowerDloadRunnerBoundary o1ContractSimplifyCfg o1PassContract ptrDiscipline
+  o1LowerDloadRunnerBoundary o1ContractSimplifyCfg o1ContractSimplifyCfgSrcFrame o1PassContract ptrDiscipline
   dretDesugarDefs opcodeClass o1PassLift
   o1LowerDloadJointRelation o1LowerDloadOccurrence
   passSimulationDefs venomExecSemantics venomExecProps venomInstProps

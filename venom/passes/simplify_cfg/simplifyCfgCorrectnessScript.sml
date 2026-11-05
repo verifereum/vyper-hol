@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof simplifyCfgPhi2 simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist
+  simplifyCfgProof simplifyCfgPhi2 simplifyCfgPhiLabels simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist
   simplifyCfgReach simplifyCfgReachuses simplifyCfgWfssa simplifyCfgDefs cfgWf unitShapeDefs
   venomInst
 
@@ -104,7 +104,14 @@ Theorem simplify_cfg_phi_labels_distinct:
   !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
          ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))
 Proof
-  cheat
+  strip_tac >>
+  simp[simplifyCfgDefsTheory.simplify_cfg_fn_def,
+       simplifyCfgDefsTheory.simplify_cfg_fn_with_labels_def] >>
+  mp_tac (Q.SPECL [`LENGTH fn.fn_blocks`, `fn`] simplify_cfg_iter_phi_distinct) >>
+  gvs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def,
+      venomWfTheory.fn_inst_wf_def, listTheory.EVERY_MEM,
+      venomInstTheory.fn_insts_def, simplifyCfgLabelPropsTheory.fn_insts_blocks_mem] >>
+  metis_tac[]
 QED
 
 (* A bypass that makes a JNZ's targets meet turns it into a JMP

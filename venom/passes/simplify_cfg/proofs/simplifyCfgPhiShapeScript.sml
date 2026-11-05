@@ -393,7 +393,7 @@ Proof
   Cases_on `ok = old` >> gvs[]
 QED
 
-Theorem chain_merge_phi_origin[local]:
+Theorem chain_merge_phi_origin:
   no_phis b /\ MEM a bs /\
   MEM bb (replace_block a.bb_label (merge_blocks a b)
     (remove_block b.bb_label bs)) /\
@@ -485,7 +485,7 @@ Proof
   gvs[subst_label_inst_def, is_terminator_def]
 QED
 
-Theorem do_merge_jump_phi_origin[local]:
+Theorem do_merge_jump_phi_origin:
   ALL_DISTINCT (fn_labels f) /\
   lookup_block a.bb_label f.fn_blocks = SOME a /\
   do_merge_jump f a b lm = SOME (g,lm') /\
