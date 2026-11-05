@@ -89,3 +89,11 @@ Theorem order_ptr_frame_accounts_typed:
 Proof
   EVAL_TAC >> rw[] >> EVAL_TAC
 QED
+
+Theorem order_ptr_frame_outcomes:
+  exprSimHypsDefs$outcomes_accounts_typed order_ptr_source.outcomes /\
+  IS_SOME order_ptr_source.outcomes /\
+  exprSimHypsDefs$popped_keys_indexed order_ptr_source.scopes
+Proof
+  EVAL_TAC >> rw[] >> gvs[]
+QED
