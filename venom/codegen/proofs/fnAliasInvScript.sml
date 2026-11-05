@@ -149,6 +149,43 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem alias_phi_ready_ordinary_input:
+  phi_block_ready liveness bb /\
+  MEM v (live_vars_at liveness bb.bb_label 0) /\
+  MEM v (live_vars_at liveness bb.bb_label
+    (LENGTH (collect_phis bb.bb_instructions))) ==>
+  MEM v (input_vars_from pred bb.bb_instructions
+    (live_vars_at liveness bb.bb_label 0))
+Proof
+  strip_tac >> irule alias_input_vars_ordinary_intro >>
+  gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem alias_lineage_join_ordinary_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) /\
+  MEM v (live_vars_at liveness lbl 0) /\
+  MEM v (live_vars_at liveness lbl
+    (LENGTH (collect_phis bb.bb_instructions))) ==>
+  MEM (Var v) ps.ps_stack
+Proof
+  strip_tac >>
+  drule_all alias_lineage_join_historical_coverage >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  first_x_assum irule >>
+  Cases_on `NULL (collect_phis bb.bb_instructions)`
+  >- gvs[input_vars_from_def] >>
+  `phi_block_ready (liveness_analyze fn) bb` by
+    (gvs[codegen_ready_fn_def, phi_operands_ready_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  metis_tac[alias_phi_ready_ordinary_input]
+QED
+
 Theorem alias_do_swap_stack:
   dist < LENGTH ps.ps_stack ==>
   (SND (do_swap dist ps)).ps_stack = stack_swap dist ps.ps_stack

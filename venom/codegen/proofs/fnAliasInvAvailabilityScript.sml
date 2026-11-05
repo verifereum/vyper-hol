@@ -202,6 +202,38 @@ Proof
   drule_all phi_well_formed_var_pair >> metis_tac[]
 QED
 
+(* The corresponding local livenessTransferProofs adapter is not exported. *)
+Theorem alias_phi_pairs_subset_uses:
+  !ops v. MEM v (MAP SND (phi_pairs ops)) ==>
+    MEM v (venomInst$operand_vars ops)
+Proof
+  ho_match_mp_tac phi_pairs_ind >>
+  simp[phi_pairs_def, venomInstTheory.operand_vars_def,
+       venomInstTheory.operand_var_def] >>
+  rpt strip_tac >>
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+  Cases_on `venomInst$operand_var v1` >> gvs[]
+QED
+
+Theorem alias_input_vars_ordinary_intro:
+  MEM v live /\
+  (!phi. MEM phi (collect_phis instrs) ==> ~MEM v (inst_uses phi)) ==>
+  MEM v (input_vars_from pred instrs live)
+Proof
+  strip_tac >>
+  `FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = NONE` by
+    (simp[alias_build_phi_maps_absent] >> rpt strip_tac >>
+     `MEM v (venomInst$operand_vars phi.inst_operands)` by
+       (irule alias_phi_pairs_subset_uses >> simp[MEM_MAP] >>
+        qexists_tac `(l,v)` >> simp[]) >>
+     gvs[inst_uses_def] >> metis_tac[]) >>
+  simp[input_vars_from_def] >>
+  Cases_on `NULL (collect_phis instrs)` >- simp[] >>
+  Cases_on `build_phi_maps pred (collect_phis instrs)` >> gvs[] >>
+  simp[Once UNCURRY] >>
+  irule livenessTransferProofsTheory.foldl_passthrough >> simp[]
+QED
+
 (* Representation adapter only: dominance-to-all-paths is imported from
    o1ContractSimplifyCfg, rather than reproved in this leaf. *)
 Theorem alias_all_paths_indexed:
