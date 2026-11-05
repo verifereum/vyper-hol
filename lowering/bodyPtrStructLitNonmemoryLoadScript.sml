@@ -3,7 +3,7 @@ Theory bodyPtrStructLitNonmemoryLoad
 Ancestors
   bodyPtrStructLitMemoryUnwrap fragGasSeqPtr fragGasPathPtr ptrSafeRun
   ptrDiscipline venomExecSemantics venomInstProofs venomInst venomState list
-  memLocDefs contextCodegenRel codegenRel
+  memLocDefs contextCodegenRel codegenRel accountsRelProps bodyPtrDefs
 
 Theorem nonmemory_word_load_ptr_inst_ok:
   MEM opc [SLOAD; TLOAD; CALLDATALOAD; DLOAD] /\
@@ -49,4 +49,60 @@ Proof
   disch_then (qspec_then `PG` assume_tac) >>
   drule (cj 2 gas_path_ptr_rules) >>
   simp[gas_path_ptr_rules]
+QED
+
+Theorem nonmemory_word_load_clean:
+  MEM opc [SLOAD; TLOAD; CALLDATALOAD; DLOAD] /\
+  eval_operand src s = SOME a /\
+  (opc = SLOAD ==> key_taint tn.t_stor a = {}) /\
+  (opc = TLOAD ==> key_taint tn.t_trans a = {}) ==>
+  op_taint (step_taint (mk_inst id opc [src] [out]) s u tn)
+    (Var out) = {}
+Proof
+  simp[MEM] >> strip_tac >> gvs[] >>
+  simp[op_taint_def, step_taint_def, set_var_taint_def, out_taint_def,
+       mk_inst_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem located_storage_base_key_clean:
+  ptr_vv_ok cx t tv (LocatedValue t' p) es G tn s /\
+  eval_operand p.ptr_operand s = SOME a /\
+  evaluate_type (get_tenv cx) t = SOME ty /\
+  0 < type_slot_size ty /\ p.ptr_location = LocStorage ==>
+  key_taint tn.t_stor a = {}
+Proof
+  simp[ptr_vv_ok_def, key_taint_def, pred_setTheory.EXTENSION] >>
+  rpt strip_tac >> simp[] >>
+  spose_not_then strip_assume_tac >>
+  first_x_assum (qspecl_then [`a`, `ty`, `a`, `x`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule (cj 1 dead_bytes_range) >> simp[]
+QED
+
+Theorem located_transient_base_key_clean:
+  ptr_vv_ok cx t tv (LocatedValue t' p) es G tn s /\
+  eval_operand p.ptr_operand s = SOME a /\
+  evaluate_type (get_tenv cx) t = SOME ty /\
+  0 < type_slot_size ty /\ p.ptr_location = LocTransient ==>
+  key_taint tn.t_trans a = {}
+Proof
+  simp[ptr_vv_ok_def, key_taint_def, pred_setTheory.EXTENSION] >>
+  rpt strip_tac >> simp[] >>
+  spose_not_then strip_assume_tac >>
+  first_x_assum (qspecl_then [`a`, `ty`, `a`, `x`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule (cj 1 dead_bytes_range) >> simp[]
+QED
+
+Theorem nonmemory_word_load_ptr_val_ok:
+  MEM opc [SLOAD; TLOAD; CALLDATALOAD; DLOAD] /\
+  eval_operand src s = SOME a /\
+  (opc = SLOAD ==> key_taint tn.t_stor a = {}) /\
+  (opc = TLOAD ==> key_taint tn.t_trans a = {}) /\
+  is_word_type t ==>
+  ptr_val_ok cx t v (Var out) G'
+    (step_taint (mk_inst id opc [src] [out]) s u tn) s'
+Proof
+  strip_tac >> simp[ptr_val_ok_def] >>
+  irule nonmemory_word_load_clean >> simp[] >> metis_tac[]
 QED
