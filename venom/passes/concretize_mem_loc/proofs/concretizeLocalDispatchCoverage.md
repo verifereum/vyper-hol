@@ -172,3 +172,15 @@ independent target taint order and successor environment. CALLVALUE/GAS are
 therefore no longer merely conditional on arbitrary demand inclusion. This
 does not produce the incoming environment at frame push/pop, cover other
 execution readers, or close the remaining dispatch inventory.
+
+## Checked nonpointer clean-family extension
+
+`concretize_clean_value_local_complete` is generalized in place to
+`clean_value_shape inst` excluding ADD/SUB/EQ/LT/GT, with the same incoming
+and outgoing interfaces. In addition to ISZERO/NOT/ADDMOD/MULMOD it now covers
+two-operand MUL, Div, Mod, SDIV, SMOD, Exp, SLT, SGT, AND, OR, XOR,
+SIGNEXTEND and BYTE. The local classification, origin-exclusion and no-write
+helpers were replaced by family versions, not duplicated. The former four-case
+interface is a specialization of the single export. Pointer-capable arithmetic
+and comparisons, shifts, frame environments and remaining inventory rows are
+still outstanding; this extension supplies no new frame-composition result.

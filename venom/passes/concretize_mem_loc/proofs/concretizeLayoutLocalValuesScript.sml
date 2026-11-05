@@ -6,27 +6,27 @@ Ancestors frameRelocationCleanValueSteps frameRelocationEnvironment
   frameResolvedTrace frameJointTaint frameOriginReachable frameOriginHistory
   ptrDiscipline codegenRel finite_map pred_set list
 
-Theorem clean_four_classification[local]:
-  MEM inst.inst_opcode [ISZERO; NOT; ADDMOD; MULMOD] ==>
+Theorem nonpointer_clean_classification[local]:
+  clean_value_shape inst /\ ~MEM inst.inst_opcode [ADD; SUB; EQ; LT; GT] ==>
   ~is_pointer_preserving_op inst.inst_opcode /\
   inst.inst_opcode <> INVOKE /\
   ~MEM inst.inst_opcode [LT; GT; EQ] /\
   mem_write_ops inst = NONE /\ mem_read_ops inst = NONE /\
   ~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]
 Proof
-  simp[MEM] >> strip_tac >>
+  simp[clean_value_shape_def, frameRelocationScalarStepsTheory.scalar_binary_opcode_def, MEM] >> strip_tac >>
   simp[is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def,
        step_writes_def, source_memory_write_ranges_def, range_bytes_def]
 QED
 
-Theorem clean_four_origins_absent[local]:
-  MEM inst.inst_opcode [ISZERO; NOT; ADDMOD; MULMOD] /\
+Theorem nonpointer_clean_origins_absent[local]:
+  clean_value_shape inst /\ ~MEM inst.inst_opcode [ADD; SUB; EQ; LT; GT] /\
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
   MEM (Var w) inst.inst_operands ==>
   FLOOKUP rv w = NONE
 Proof
-  strip_tac >> drule clean_four_classification >> strip_tac >>
+  strip_tac >> drule nonpointer_clean_classification >> strip_tac >>
   spose_not_then assume_tac >>
   `w IN fn_pv P fn` by metis_tac[] >>
   `ptr_use_ok P (fn_pv P fn) inst` by
@@ -36,11 +36,11 @@ Proof
     (qspec_then `w` mp_tac) >> simp[]
 QED
 
-Theorem clean_four_no_writes[local]:
-  MEM inst.inst_opcode [ISZERO; NOT; ADDMOD; MULMOD] ==>
+Theorem nonpointer_clean_no_writes[local]:
+  clean_value_shape inst /\ ~MEM inst.inst_opcode [ADD; SUB; EQ; LT; GT] ==>
   step_writes inst s post = []
 Proof
-  simp[MEM] >> strip_tac >>
+  simp[clean_value_shape_def, frameRelocationScalarStepsTheory.scalar_binary_opcode_def, MEM] >> strip_tac >>
   simp[step_writes_def, source_memory_write_ranges_def]
 QED
 
@@ -54,9 +54,7 @@ Theorem concretize_clean_value_local_complete:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode [ISZERO; NOT; ADDMOD; MULMOD] /\
-  ((MEM inst.inst_opcode [ISZERO; NOT] /\ LENGTH inst.inst_operands = 1) \/
-   (MEM inst.inst_opcode [ADDMOD; MULMOD] /\ LENGTH inst.inst_operands = 3)) /\
+  clean_value_shape inst /\ ~MEM inst.inst_opcode [ADD; SUB; EQ; LT; GT] /\
   inst.inst_outputs = [v] /\ step_inst_base inst s = OK post /\
   relocation_env s t /\
   local_rel (\u. F)
@@ -98,16 +96,15 @@ Proof
        clean_scalar (retpc_var fn) rv tn w` by
     (rpt strip_tac >>
      `FLOOKUP rv w = NONE` by
-       (irule clean_four_origins_absent >> metis_tac[]) >>
+       (irule nonpointer_clean_origins_absent >> metis_tac[]) >>
      `~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by
-       metis_tac[clean_four_classification] >>
+       metis_tac[nonpointer_clean_classification] >>
      drule_all disciplined_clean_scalar >> simp[]) >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>
      goal_assum (drule_at Any) >>
-     simp[joint_writes_def, clean_four_no_writes, range_bytes_def] >> metis_tac[]) >>
-  `clean_value_shape inst` by (fs[clean_value_shape_def, MEM] >> metis_tac[]) >>
+     simp[joint_writes_def, nonpointer_clean_no_writes, range_bytes_def] >> metis_tac[]) >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   drule_all guarded_clean_value_step >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
