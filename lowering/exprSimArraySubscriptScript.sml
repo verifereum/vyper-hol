@@ -5268,3 +5268,122 @@ Resume eval_expr_storage_result_location[Attribute]:
 QED
 
 Finalise eval_expr_storage_result_location
+
+Theorem compile_array_endpoint_post:
+  expr_vv_case nocalls ctx func cenv cx obj /\
+  expr_body_pre cenv cx env (Subscript ann obj idx) es0 /\
+  expr_body_pre cenv cx env obj es0 /\ expr_body_pre cenv cx env idx es /\
+  expr_type obj = ArrayT et bd /\ ~expr_has_pop obj /\ ~expr_has_pop idx /\
+  eval_expr cx obj es0 = (INL tv,es) /\ eval_expr cx idx es = (res,es') /\
+  compile_expr cenv ty obj sa = (bvv,sm) /\
+  lower_value compile_expr cenv ity idx sm = (iop,sn) /\
+  (!ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
+              is_slot_addressed l ==> ~expr_has_effect idx) /\
+  (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode ==>
+             ~cenv.ce_is_ctor /\ ~expr_has_effect idx) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es0 s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  vv_post ctx func cenv cx obj es0 sa sm s0 es tv bvv q0 /\
+  expr_post ctx func cenv cx idx es sm sn q0 es' iv iop q1 ==>
+  vv_post ctx func cenv cx obj es0 sa sn s0 es' tv bvv q1
+Proof
+  strip_tac >>
+  `!tr slot vt. tv = PlaceR (StoragePlace tr slot vt) ==>
+     ~expr_has_effect idx` by suspend "storage_effect" >>
+  `!nm path. tv = PlaceR (ImmutablePlace NONE nm path) ==>
+     int_calls_expr idx = []` by suspend "immutable_calls" >>
+  `es.scopes = es0.scopes /\ es'.scopes = es.scopes` by
+    metis_tac[eval_expr_nopop_scopes] >>
+  `local_ptrs_reserved cenv sm` by
+    (drule_all compile_expr_local_ptrs_reserved >> simp[]) >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+   sm.cs_next_id <= sn.cs_next_id` by
+    (drule (cj 1 compile_expr_grows) >>
+     drule (cj 2 compile_expr_grows) >> simp[]) >>
+  `!w. eval_operand (vv_operand bvv) q0 = SOME w ==>
+       eval_operand (vv_operand bvv) q1 = SOME w` by
+    (drule_at (Pat `compile_expr _ _ _ _ = _`)
+       compile_array_expr_operand_expr_post_frame >> simp[] >> metis_tac[]) >>
+  `!n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+              lookup_var q q0 = SOME w ==> lookup_var q q1 = SOME w` by
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       expr_post_cenv_ptr_vars >> simp[]) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `local_ptrs_rel func cenv es.scopes q0 /\
+   local_ptrs_rel func cenv es'.scopes q1 /\ locals_kept cenv es q0 q1` by
+    fs[vv_post_def, expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  `!n b sz. local_region cenv es.scopes q0 n b sz ==>
+    mem_bytes_at b sz q1.vs_memory = mem_bytes_at b sz q0.vs_memory` by
+    (drule_at (Pat `locals_kept _ _ _ _`)
+       expr_sim_inv_unchanged_scopes_complete_regions >> simp[] >> metis_tac[]) >>
+  `!v. read_result cx tv es' = (INL v,es') <=>
+       read_result cx tv es = (INL v,es)` by suspend "read" >>
+  `!tr w. vv_location bvv = SOME (if tr then LocTransient else LocStorage) /\
+          storage_holds cx tr (expr_type obj) tv w es ==>
+          storage_holds cx tr (expr_type obj) tv w es'` by suspend "storage" >>
+  `!w. vv_location bvv = SOME LocCode /\
+        immutable_holds cenv cx (expr_type obj) tv w es ==>
+        immutable_holds cenv cx (expr_type obj) tv w es'` by suspend "immutable" >>
+  irule vv_post_expr_post_nonword_frame >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[is_word_type_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Resume compile_array_endpoint_post[read]:
+  gen_tac >> Cases_on `tv`
+  >~ [`read_result _ (PlaceR p) _`]
+  >- (Cases_on `p`
+      >~ [`ImmutablePlace md nm path`]
+      >- (Cases_on `md`
+          >- (irule read_result_immutable_callfree_nopop >>
+              goal_assum (drule_at Any) >> simp[]) >>
+          irule expr_body_pre_foreign_immutable_read >> simp[] >>
+          qexistsl [`cenv`, `idx`, `env`, `res`] >> simp[]) >>
+      irule read_result_source_components >> simp[] >>
+      rpt strip_tac >> gvs[] >>
+      drule_all eval_expr_noeffect_storage >> simp[]) >>
+  simp[read_result_def, return_def, raise_def]
+QED
+Resume compile_array_endpoint_post[storage]:
+  rpt gen_tac >> strip_tac >>
+  `~expr_has_effect idx` by
+    (qpat_x_assum `!ty st l. _` (qspecl_then [`ty`, `sa`] mp_tac) >>
+     Cases_on `tr` >> simp[is_slot_addressed_def] >> metis_tac[]) >>
+  irule storage_holds_source_frame >> goal_assum (drule_at Any) >>
+  simp[] >> drule_all eval_expr_noeffect_storage >> simp[]
+QED
+Resume compile_array_endpoint_post[immutable]:
+  gen_tac >> strip_tac >>
+  `~expr_has_effect idx` by
+    (qpat_x_assum `!ty st. _` (qspecl_then [`ty`, `sa`] mp_tac) >> simp[]) >>
+  `int_calls_expr idx = []` by metis_tac[expr_no_effect_int_calls] >>
+  `es'.immutables = es.immutables` by
+    (drule_all eval_expr_callfree_nopop_immutables >> simp[]) >>
+  irule immutable_holds_source_frame >> goal_assum (drule_at Any) >> simp[]
+QED
+Resume compile_array_endpoint_post[storage_effect]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `vv_location (FST (compile_expr cenv ty obj sa)) =
+     SOME (if tr then LocTransient else LocStorage)` by
+    (irule eval_expr_storage_result_location >> simp[] >>
+     qexistsl [`cx`, `PlaceR (StoragePlace tr slot vt)`, `es0`, `es`] >> simp[]) >>
+  qpat_x_assum `!ty st l. _` (qspecl_then [`ty`, `sa`] mp_tac) >>
+  Cases_on `tr` >> simp[is_slot_addressed_def] >> metis_tac[]
+QED
+Resume compile_array_endpoint_post[immutable_calls]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qsuff_tac `~(?c. MEM c (int_calls_expr idx))`
+  >- (Cases_on `int_calls_expr idx` >> simp[] >> metis_tac[]) >>
+  simp[] >> qx_gen_tac `callee` >> strip_tac >> PairCases_on `callee` >>
+  `callee0 = NONE` by
+    (qpat_x_assum `expr_body_pre cenv cx env idx es` mp_tac >>
+     simp[expr_body_pre_def, listTheory.EVERY_MEM] >>
+     strip_tac >> first_x_assum drule >> simp[]) >>
+  gvs[] >> drule_all expr_vv_case_called_main_immutable_array_excluded >> simp[]
+QED
+Finalise compile_array_endpoint_post
