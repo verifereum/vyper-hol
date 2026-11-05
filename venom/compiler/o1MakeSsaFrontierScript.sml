@@ -101,3 +101,19 @@ Proof
   strip_tac >> drule_all current_frontier_target_count >> strip_tac >>
   strip_tac >> drule_all current_entry_preds_empty >> strip_tac >> gvs[]
 QED
+
+Theorem phi_pairs_build_phi_inst_supply:
+  !preds. phi_pairs (build_phi_inst_supply id var preds).inst_operands =
+    MAP (\l. (l,var)) preds
+Proof
+  Induct >> gvs[build_phi_inst_supply_def, phi_pairs_def]
+QED
+
+Theorem build_phi_inst_supply_shape:
+  !preds. 2 <= LENGTH preds /\ ALL_DISTINCT preds ==>
+  inst_shape_ok (build_phi_inst_supply id var preds)
+Proof
+  simp[inst_shape_ok_def, phi_pairs_build_phi_inst_supply,
+       build_phi_inst_supply_def, label_positions_ok_def, is_read0_opcode_def,
+       MAP_MAP_o, combinTheory.o_DEF]
+QED
