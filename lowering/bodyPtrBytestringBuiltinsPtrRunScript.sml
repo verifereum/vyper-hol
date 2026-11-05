@@ -387,3 +387,79 @@ Proof
     EVAL_TAC >>
   simp[order_ptr_s14_def, order_ptr_s13_def, venomStateTheory.update_var_def]
 QED
+
+(* Bounds still use the length read before Pop. *)
+Definition order_ptr_s15_def:
+  order_ptr_s15 = order_ptr_s14 with
+    <|vs_vars := order_ptr_s14.vs_vars |+ ("%12",3w); vs_inst_idx := 15|>
+End
+
+Theorem order_ptr_s14_start_operand:
+  lookup_var "%0" order_ptr_s14 = SOME 2w
+Proof
+  simp[venomStateTheory.lookup_var_def, order_ptr_s14_def,
+       order_ptr_s13_def, order_ptr_s12_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s11_def, order_ptr_s10_def, order_ptr_s9_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s8_def, order_ptr_s7_def, order_ptr_s6_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_ptr_s5_def, order_ptr_s4_def, order_ptr_s3_def,
+       order_ptr_s2_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem order_ptr_step14:
+  step_inst_base (mk_inst 14 ADD [Var "%0";Lit 1w] ["%12"]) order_ptr_s14 =
+    OK (order_ptr_s15 with vs_inst_idx := 14)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, order_ptr_s14_start_operand,
+       wordsTheory.word_add_n2w] >>
+  simp[order_ptr_s15_def, order_ptr_s14_def, venomStateTheory.update_var_def]
+QED
+
+Definition order_ptr_s16_def:
+  order_ptr_s16 = order_ptr_s15 with
+    <|vs_vars := order_ptr_s15.vs_vars |+ ("%13",0w); vs_inst_idx := 16|>
+End
+
+Theorem order_ptr_step15:
+  step_inst_base (mk_inst 15 LT [Var "%12";Var "%0"] ["%13"]) order_ptr_s15 =
+    OK (order_ptr_s16 with vs_inst_idx := 15)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%12" order_ptr_s15 = SOME 3w` by
+    simp[order_ptr_s15_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_var "%0" order_ptr_s15 = SOME 2w` by
+    (mp_tac order_ptr_s14_start_operand >>
+     simp[order_ptr_s15_def, venomStateTheory.lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[] >>
+  simp[order_ptr_s16_def, order_ptr_s15_def, venomStateTheory.update_var_def]
+QED
+
+(* The requested end equals the external code size. *)
+Definition order_ptr_s17_def:
+  order_ptr_s17 = order_ptr_s16 with
+    <|vs_vars := order_ptr_s16.vs_vars |+ ("%14",0w); vs_inst_idx := 17|>
+End
+
+Theorem order_ptr_step16:
+  step_inst_base (mk_inst 16 GT [Var "%12";Var "%11"] ["%14"]) order_ptr_s16 =
+    OK (order_ptr_s17 with vs_inst_idx := 16)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%12" order_ptr_s16 = SOME 3w` by
+    simp[order_ptr_s16_def, order_ptr_s15_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_var "%11" order_ptr_s16 = SOME 3w` by
+    simp[order_ptr_s16_def, order_ptr_s15_def, order_ptr_s14_def,
+         venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >>
+  simp[order_ptr_s17_def, order_ptr_s16_def, venomStateTheory.update_var_def]
+QED
