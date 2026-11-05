@@ -354,6 +354,170 @@ Proof
   rpt strip_tac >> qexists `[]` >> simp[]
 QED
 
+Theorem reassign_current_inst_ids_projection:
+  !ids xs.
+  MAP (\i. (i.inst_opcode,LENGTH i.inst_outputs))
+    (reassign_current_inst_ids ids xs) =
+  MAP (\i. (i.inst_opcode,LENGTH i.inst_outputs)) xs
+Proof
+  Induct >> Cases_on `xs` >> simp[reassign_current_inst_ids_def]
+QED
+
+Theorem reassign_current_inst_ids_phi_prefix:
+  !ids xs. phi_prefix_length (reassign_current_inst_ids ids xs) =
+           phi_prefix_length xs
+Proof
+  Induct >> Cases_on `xs` >>
+  simp[reassign_current_inst_ids_def, phi_prefix_length_def]
+QED
+
+Theorem phi_prefix_length_drop:
+  !xs. phi_prefix_length (DROP (phi_prefix_length xs) xs) = 0
+Proof
+  Induct >- simp[phi_prefix_length_def] >> gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
+QED
+
+Theorem simplify_current_phi_parts_prefix:
+  simplify_current_phi_prefix_parts xs = (phis,ord) ==>
+  phi_prefix_length (phis ++ ord) = LENGTH phis
+Proof
+  strip_tac >> drule simplify_current_phi_prefix_partition >> strip_tac >>
+  simp[phi_prefix_length_prepend] >>
+  Cases_on `copies` >> gvs[phi_prefix_length_drop, phi_prefix_length_def]
+QED
+
+Theorem reassign_current_inst_ids_length:
+  LENGTH (reassign_current_inst_ids ids xs) = LENGTH xs
+Proof
+  mp_tac (Q.SPECL [`ids`, `xs`] reassign_current_inst_ids_projection) >>
+  disch_then (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]
+QED
+
+Theorem reassign_current_inst_ids_EL:
+  k < LENGTH xs ==>
+  (EL k (reassign_current_inst_ids ids xs)).inst_opcode = (EL k xs).inst_opcode /\
+  LENGTH (EL k (reassign_current_inst_ids ids xs)).inst_outputs =
+  LENGTH (EL k xs).inst_outputs
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`ids`, `xs`] reassign_current_inst_ids_projection) >>
+  disch_then (mp_tac o Q.AP_TERM `EL k`) >>
+  simp[EL_MAP, reassign_current_inst_ids_length]
+QED
+
+Theorem simplify_current_phi_prefix_length:
+  LENGTH (simplify_current_phi_prefix xs) = LENGTH xs
+Proof
+  metis_tac[LENGTH_MAP, MAP_simplify_current_phi_prefix_ids]
+QED
+
+Theorem simplify_current_phi_prefix_bound:
+  phi_prefix_length (simplify_current_phi_prefix xs) <= phi_prefix_length xs
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  simp[reassign_current_inst_ids_phi_prefix] >>
+  drule simplify_current_phi_parts_prefix >> strip_tac >> simp[] >>
+  drule simplify_current_phi_prefix_partition >> strip_tac >> simp[]
+QED
+
+Theorem simplify_current_phi_prefix_copies:
+  phi_prefix_length (simplify_current_phi_prefix xs) <= j /\
+  j < phi_prefix_length xs ==>
+  (EL j (simplify_current_phi_prefix xs)).inst_opcode = ASSIGN \/
+  (EL j (simplify_current_phi_prefix xs)).inst_opcode = NOP
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  drule simplify_current_phi_parts_prefix >> strip_tac >>
+  drule simplify_current_phi_prefix_partition >> strip_tac >>
+  simp[reassign_current_inst_ids_phi_prefix] >> rpt strip_tac >>
+  `j < LENGTH (phis ++ ordinary)` by
+    (drule simplify_current_phi_prefix_parts_length >> strip_tac >>
+     mp_tac (Q.SPEC `xs` phi_prefix_length_bound) >> simp[]) >>
+  drule reassign_current_inst_ids_EL >>
+  disch_then (qspec_then `MAP (\i. i.inst_id) xs` strip_assume_tac) >>
+  gvs[] >>
+  `j - LENGTH phis < LENGTH copies` by simp[] >>
+  `j >= LENGTH phis` by simp[] >>
+  simp[EL_APPEND_EQN] >>
+  gvs[EVERY_EL] >> first_x_assum drule >> simp[]
+QED
+
+Theorem simplify_current_phi_prefix_suffix:
+  phi_prefix_length xs <= k /\ k < LENGTH xs ==>
+  (EL k (simplify_current_phi_prefix xs)).inst_opcode = (EL k xs).inst_opcode /\
+  (EL k (simplify_current_phi_prefix xs)).inst_id = (EL k xs).inst_id /\
+  LENGTH (EL k (simplify_current_phi_prefix xs)).inst_outputs =
+    LENGTH (EL k xs).inst_outputs
+Proof
+  strip_tac >>
+  `(EL k (simplify_current_phi_prefix xs)).inst_id = (EL k xs).inst_id` by
+    (qspec_then `xs` mp_tac (GEN_ALL MAP_simplify_current_phi_prefix_ids) >>
+     disch_then (mp_tac o Q.AP_TERM `EL k`) >>
+     simp[EL_MAP, simplify_current_phi_prefix_length]) >>
+  simp[] >>
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  drule simplify_current_phi_prefix_parts_length >> strip_tac >>
+  drule simplify_current_phi_prefix_partition >> strip_tac >>
+  `k < LENGTH (phis ++ ordinary)` by simp[] >>
+  drule reassign_current_inst_ids_EL >>
+  disch_then (qspec_then `MAP (\i. i.inst_id) xs` strip_assume_tac) >>
+  `EL k (phis ++ ordinary) = EL k xs` by
+    (gvs[] >>
+     `k - LENGTH phis - LENGTH copies = k - phi_prefix_length xs` by decide_tac >>
+     simp[EL_APPEND_EQN, EL_DROP]) >>
+  metis_tac[]
+QED
+
+Theorem simplify_current_phi_block_shape:
+  LENGTH (simplify_current_phi_block b).bb_instructions = LENGTH b.bb_instructions /\
+  phi_prefix_length (simplify_current_phi_block b).bb_instructions <=
+    phi_prefix_length b.bb_instructions /\
+  (!j. phi_prefix_length (simplify_current_phi_block b).bb_instructions <= j /\
+       j < phi_prefix_length b.bb_instructions ==>
+       (EL j (simplify_current_phi_block b).bb_instructions).inst_opcode = ASSIGN \/
+       (EL j (simplify_current_phi_block b).bb_instructions).inst_opcode = NOP) /\
+  (!k. phi_prefix_length b.bb_instructions <= k /\ k < LENGTH b.bb_instructions ==>
+       (EL k (simplify_current_phi_block b).bb_instructions).inst_opcode =
+         (EL k b.bb_instructions).inst_opcode /\
+       (EL k (simplify_current_phi_block b).bb_instructions).inst_id =
+         (EL k b.bb_instructions).inst_id /\
+       LENGTH (EL k (simplify_current_phi_block b).bb_instructions).inst_outputs =
+         LENGTH (EL k b.bb_instructions).inst_outputs)
+Proof
+  Cases_on `b.bb_instructions` >> simp[simplify_current_phi_block_def] >>
+  IF_CASES_TAC >> simp[] >>
+  simp[simplify_current_phi_prefix_length, simplify_current_phi_prefix_bound,
+       simplify_current_phi_prefix_copies] >>
+  rpt strip_tac >> drule simplify_current_phi_prefix_suffix >> simp[]
+QED
+
+Theorem simplify_current_phis_if_lookup_shape:
+  lookup_block l bs = SOME b ==>
+  ?b'. lookup_block l (simplify_current_phis_if enabled bs) = SOME b' /\
+    LENGTH b'.bb_instructions = LENGTH b.bb_instructions /\
+    phi_prefix_length b'.bb_instructions <= phi_prefix_length b.bb_instructions /\
+    (!j. phi_prefix_length b'.bb_instructions <= j /\
+         j < phi_prefix_length b.bb_instructions ==>
+         (EL j b'.bb_instructions).inst_opcode = ASSIGN \/
+         (EL j b'.bb_instructions).inst_opcode = NOP) /\
+    (!k. phi_prefix_length b.bb_instructions <= k /\ k < LENGTH b.bb_instructions ==>
+         (EL k b'.bb_instructions).inst_opcode = (EL k b.bb_instructions).inst_opcode /\
+         (EL k b'.bb_instructions).inst_id = (EL k b.bb_instructions).inst_id /\
+         LENGTH (EL k b'.bb_instructions).inst_outputs =
+           LENGTH (EL k b.bb_instructions).inst_outputs)
+Proof
+  strip_tac >> Cases_on `enabled` >>
+  simp[simplify_current_phis_if_def, simplify_current_phis_def]
+  >- (Cases_on `blocks_have_leading_phi bs` >> simp[]
+      >- (drule_at Any lookup_block_map_relation >>
+          disch_then (qspec_then `simplify_current_phi_block` mp_tac) >>
+          simp[] >> strip_tac >>
+          simp[simplify_current_phi_block_shape]) >>
+      qexists `b` >> simp[]) >>
+  qexists `b` >> simp[]
+QED
+
 Theorem make_ssa_current_fn_block_shape:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
