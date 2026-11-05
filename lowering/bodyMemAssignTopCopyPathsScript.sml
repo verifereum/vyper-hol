@@ -1,7 +1,7 @@
 (* Frame boundaries for counted memory-to-storage execution. *)
 Theory bodyMemAssignTopCopyPaths
 Ancestors
-  bodyMemAssignTopCopyLoop stmtSimStoreCopy fragGasSeqMem fragGasMode fragGasPathMem
+  bodyMemAssignTopCopyCompiler bodyMemAssignTopCopyLoop stmtSimStoreCopy fragGasSeqMem fragGasMode fragGasPathMem
   context compileEnv emitHelper emitHelperProps exprLoweringProps
   fragExec venomExecSemantics venomState venomInst
   words arithmetic list rich_list finite_map
@@ -684,3 +684,125 @@ Proof
   gvs[Abbr `u`, ADD1, eval_operand_def, lookup_var_update_var, update_var_def,
       lookup_var_def, FLOOKUP_UPDATE]
 QED
+
+Theorem topcopy_compile_loop_path:
+  !ctx func loc src dst n sa u sb sbase b k.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    compile_word_copy_loop src dst n LocMemory loc F sa = (u,sb) /\
+    fn_has_code sa sb func /\ n < dimword (:256) /\
+    w2n b + 32*n <= sbase.vs_alloca_next /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME b /\ eval_operand dst sbase = SOME k /\
+    ~sbase.vs_halted /\ ~sbase.vs_call_ctx.cc_static /\
+    sbase.vs_current_bb = sa.cs_current_bb /\
+    sbase.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path T ctx func sbase 0 (OK t) /\
+      store_copy_frame sa loc b k sbase n t /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all topcopy_code_certificate >> strip_tac >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`compile_word_copy_loop _ _ _ _ _ _ _ = _`, `fn_has_code _ _ _`] >>
+  `!j s. j <= n /\ store_copy_frame sa loc b k sbase j s /\
+     eval_operand (Var cv) s = SOME (n2w j) /\ ~s.vs_halted /\
+     s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+     ?t. gas_marked_path T ctx func s 0 (OK t) /\
+       store_copy_frame sa loc b k sbase j t /\
+       eval_operand (Var cv) t = SOME (n2w j) /\ ~t.vs_halted /\
+       t.vs_current_bb = (if j=n then exit else loop_body) /\ t.vs_inst_idx = 0` by
+    (suspend "header") >>
+  `!j s. j < n /\ store_copy_frame sa loc b k sbase j s /\
+     eval_operand (Var cv) s = SOME (n2w j) /\ ~s.vs_halted /\
+     s.vs_current_bb = loop_body /\ s.vs_inst_idx = 0 ==>
+     ?t. gas_marked_path T ctx func s 0 (OK t) /\
+       store_copy_frame sa loc b k sbase (SUC j) t /\
+       eval_operand (Var cv) t = SOME (n2w (SUC j)) /\ ~t.vs_halted /\
+       t.vs_current_bb = hdr /\ t.vs_inst_idx = 0` by
+    (suspend "body") >>
+  suspend "entry"
+QED
+
+Resume topcopy_compile_loop_path[header]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!j. j < 8 ==> _` kall_tac >>
+  qpat_x_assum `!j. j < 2 ==> get_instruction ebb _ = _` kall_tac >>
+  `cv <> tv /\ (!x. not_fresh_at sa x ==> x <> tv)` by
+    (fs[ALL_DISTINCT] >> metis_tac[]) >>
+  `get_instruction hbb s.vs_inst_idx = SOME (mk_inst hi EQ [Var cv;Lit (n2w n)] [tv])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `get_instruction hbb (SUC s.vs_inst_idx) =
+     SOME (mk_inst (hi+1) JNZ [Var tv;Label exit;Label loop_body] [])` by
+    (qpat_x_assum `!j. j < 2 ==> _` (qspec_then `1` mp_tac) >> simp[]) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME hbb` by simp[] >>
+  drule_all topcopy_header_path >>
+  disch_then (qspec_then `ctx` mp_tac) >> metis_tac[]
+QED
+
+Resume topcopy_compile_loop_path[body]:
+  qpat_x_assum `!j s. j <= n /\ _ ==> _` kall_tac >>
+  qpat_x_assum `!j. j < 2 ==> get_instruction ebb _ = _` kall_tac >>
+  qpat_x_assum `!j. j < 2 ==> get_instruction hbb _ = _` kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  `?r. gas_marked_path T ctx func s 0 (OK r) /\
+       store_copy_frame sa loc b k sbase (SUC j) r /\
+       eval_operand (Var cv) r = SOME (n2w (SUC j)) /\
+       r.vs_current_bb = s.vs_current_bb /\
+       r.vs_inst_idx = s.vs_inst_idx+7 /\ ~r.vs_halted` by
+    (`w2n b + 32*(j+1) <= sbase.vs_alloca_next` by decide_tac >>
+     irule topcopy_body_path >> simp[] >>
+     qexistsl_tac [`dst`, `dv`, `bi`, `mv`, `nv`, `src`, `sv`, `vv`] >>
+     simp[] >> fs[ALL_DISTINCT] >> metis_tac[]) >>
+  `gas_marked_path T ctx func r 0 (OK (jump_to hdr r))` by
+    (irule topcopy_jump_path >>
+     simp[mk_inst_def, stepInstBaseLib.simp_opcode_clause ``JMP``]) >>
+  qexists_tac `jump_to hdr r` >> conj_tac
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `r` >> simp[]) >>
+  gvs[jump_to_def, eval_operand_def, lookup_var_def]
+QED
+
+Resume topcopy_compile_loop_path[entry]:
+  qpat_x_assum `!j. j < 8 ==> _` kall_tac >>
+  qpat_x_assum `!j. j < 2 ==> get_instruction hbb _ = _` kall_tac >>
+  `!x. not_fresh_at sa x ==> x <> cv` by (fs[] >> metis_tac[]) >>
+  `~not_fresh_at sa cv` by metis_tac[] >>
+  qpat_assum `!j. j < 2 ==> _` (qspec_then `0` (assume_tac o SRULE [])) >>
+  qpat_assum `!j. j < 2 ==> _` (qspec_then `1` (assume_tac o SRULE [])) >>
+  `?r. gas_marked_path T ctx func sbase 0 (OK r) /\
+       store_copy_frame sa loc b k sbase 0 r /\
+       eval_operand (Var cv) r = SOME 0w /\
+       r.vs_current_bb = sbase.vs_current_bb /\
+       r.vs_inst_idx = SUC sbase.vs_inst_idx /\ ~r.vs_halted` by
+    (irule topcopy_init_path >> simp[] >> qexists_tac `ei` >> simp[]) >>
+  `gas_marked_path T ctx func r 0 (OK (jump_to hdr r))` by
+    (irule topcopy_jump_path >>
+     simp[ADD1, mk_inst_def, stepInstBaseLib.simp_opcode_clause ``JMP``]) >>
+  `?t. gas_marked_path T ctx func (jump_to hdr r) 0 (OK t) /\
+       store_copy_frame sa loc b k sbase n t /\ ~t.vs_halted /\
+       t.vs_current_bb = exit /\ t.vs_inst_idx = 0` by
+    (irule topcopy_loop_induction >>
+     conj_tac >- simp[jump_to_def] >>
+     conj_tac >- simp[jump_to_def] >>
+     qexistsl_tac [`cv`, `hdr`, `0`, `loop_body`, `n`] >>
+     simp[] >> gvs[jump_to_def, eval_operand_def, lookup_var_def]) >>
+  qexists_tac `t` >> simp[] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+  qexists_tac `r` >> simp[] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+  qexists_tac `jump_to hdr r` >> simp[]
+QED
+
+Finalise topcopy_compile_loop_path
+
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
+    then print (name ^ ": kernel dependency audit passed\n")
+    else raise Fail (name ^ " has oracle or axiom dependencies")
+  end)
+  [("topcopy_compile_loop_path", topcopy_compile_loop_path),
+   ("topcopy_singleton_path", topcopy_singleton_path),
+   ("topcopy_code_certificate", topcopy_code_certificate)];
