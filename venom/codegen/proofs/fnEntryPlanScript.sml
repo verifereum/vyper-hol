@@ -11,7 +11,7 @@
 
 Theory fnEntryPlan
 Ancestors
-  fnBlockBody fnPlanLineage fnPlanPlaceFnRegion allocMono stackPlanGen
+  fnBlockBody fnPlanPrefix fnPlanLineage fnPlanPlaceFnRegion allocMono stackPlanGen
   stackPlanTypes fcgDefs livenessDefs dfgDefs cfgDefs venomInst venomWf
   list rich_list arithmetic
 
@@ -140,7 +140,7 @@ Proof
   qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
-  simp[block_plan_state_def, generate_block_insts_plan_def] >>
+  simp[block_plan_state_def, generate_block_insts_prefix_def] >>
   metis_tac[]
 QED
 

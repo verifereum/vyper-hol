@@ -12,7 +12,7 @@ Theory fnEntryStep
 Ancestors
   fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
-  venomExecSemantics fnBlockBody fnEntryPlan fnEntryPc fnEntryParams fnRunFields
+  venomExecSemantics fnBlockBody fnEntryPlan fnEntryParams fnRunFields
   unitShapeDefs contextPlanLayoutProps planSpillBounds contextCodegenRel stackPlanGen
   stackPlanTypes
 
@@ -174,9 +174,8 @@ QED
    for some label counter (fnEntryPlan$region_fn_plan) and starts with
    the entry block's code, planned from the initial state ps0: its label,
    its parameter code, then its instructions' code
-   (fnEntryPlan$entry_block_plan).  The premise's asm_block_at puts that
-   code at as.as_pc, which is where the entry label resolves
-   (fnEntryPc$entry_pc_placed).  The entry block has no PHIs
+   (fnEntryPlan$entry_block_plan), and the premise's asm_block_at puts
+   that code at as.as_pc.  The entry block has no PHIs
    (fnEntryParams$entry_run_block), and the parameter prefix turns
    fn_entry_state_rel into fn_frame_inv at ps1 with mem0 = as.as_memory
    (fnEntryParams$entry_prefix_frame_sim, which also gives Inv, the
