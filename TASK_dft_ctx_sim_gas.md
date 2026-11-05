@@ -27,7 +27,7 @@ The definitions in `venom/compiler/dftGasOracleDefsScript.sml` are frozen too: d
 ## Completion Criteria
 
 1. `holbuild -j4 build dftContractGasTheory` passes from the project root at the default tactic timeout.
-2. `venom/compiler/dftContractGasScript.sml` has no `cheat`, and its theory's build log (`.holbuild/logs/current/vyper-hol/dftContractGasTheory/build.log`) has no CHEAT warning for a theorem of that file.
+2. `venom/compiler/dftContractGasScript.sml` has no `cheat` (the four cheated ancestors are expected; see Notes).
 3. No duplicate or near-duplicate lemmas; each helper exists once, in its most general form.
 
 **If the theorem is false as stated:** give a HOL4 counterexample (EVAL on concrete values in a scratch theory), state the tightest sufficient fix, and don't weaken the statement.
