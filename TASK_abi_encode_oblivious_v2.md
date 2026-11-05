@@ -15,7 +15,8 @@ Theorem lower_abi_encode_start_oblivious:
 
 Theorem lower_abi_encode_frag_facts:
   !ensure mid src info maxlen sa out sb.
-    lower_abi_encode ensure mid src info maxlen sa = (out,sb) ==>
+    lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+    (!l. src <> Label l) ==>
     cs_extends sa sb /\ frag_ops_free sa sb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
@@ -40,6 +41,8 @@ holbuild -j4 build exprSimAbiEncodeObliviousTheory
 Default tactic timeout and memory limits. Many ancestor theories are admitted by a local overlay (cheated in the work tree, skip-worktree); inherited admissions from them are expected. Do not edit, commit or un-skip those files. The relabeled bridge theorems in `exprSimAbiGasBridge` are admitted here (another job proves them); this task only uses its definitions.
 
 ## Background
+
+A previous run refuted the facts lemma without the `src` premise: with `src = Label sa.cs_current_bb` and no blocks emitted, the encoder's `MLOAD [src]` breaks `frag_gas_free`. The premise excludes that; the case's `src` is always a `Var`.
 
 `lower_abi_encode` (`lowering/defs/builtinAbiScript.sml`) is a compile-monad program: `compile_alloc_buffer`, `emit_op`/`emit_void`, and `compile_abi_encode_to_buf` (`lowering/defs/abiEncoderScript.sml`, recursive over the ABI encoding info, with loops that open blocks through `new_block` and fresh labels).
 
