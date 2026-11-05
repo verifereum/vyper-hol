@@ -10,6 +10,7 @@
 Theory bodyPtrIntCallEq
 Ancestors
   bodyPtrIntCallSource bodyPtrIntCallWriteFrame bodyPtrIntCallTaintBounds
+  bodyPtrIntCallAllocation
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
