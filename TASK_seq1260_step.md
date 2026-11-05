@@ -49,7 +49,7 @@ Part of the codegen (Venom to assembly) correctness proof in vyper-hol: the fuel
 |---|---|---|
 | Target theories | venom/codegen/proofs/fnEntryPlanScript.sml, fnEntryParamsScript.sml, fnRunFieldsScript.sml, fnEntryStepScript.sml | entry-step lemmas and the piece |
 | Spec | venom/codegen/proofs/fnSimSpecScript.sml | gen_fn_sim_at, gen_fn_frame_sim_at |
-| Block body | venom/codegen/proofs/fnBlockBodyScript.sml | block_rest, block_plan_state, block_body_frame_sim (admitted) |
+| Block body | venom/codegen/proofs/fnBlockBodyScript.sml, fnPlanPrefixScript.sml | block_rest, block_plan_state, block_body_frame_sim (admitted) |
 | Frame relation | venom/codegen/defs/frameRelScript.sml | fn_frame_inv, fn_entry_state_rel, fn_return_state_rel, shared_state_rel |
 | Entry params | venom/codegen/proofs/fnFrameBoundaryScript.sml, fnFrameBoundaryEntryParamsScript.sml | entry_params_frame_sim and its helpers |
 | Planner | venom/codegen/defs/stackPlanGenScript.sml | generate_context_plan, generate_fn_plan_with_cleanup_analyzed, generate_fn_plan_aux, generate_block_plan, prepare_params_plan, codegen_ready_fn, block_entries_ready |
