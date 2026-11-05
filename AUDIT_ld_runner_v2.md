@@ -95,7 +95,7 @@ Candidate exec predicate:
 ```
 !k ctx bb s.
   !stk PG G tn fn i t n a U B HP H sites X ts r.
-    ctx = C /\ A /\ opaque_use_ok fn /\
+    ctx = C /\ A /\ opaque_use_ok fn /\ ~s.vs_halted /\
     J(stk,PG,G,tn,fn,i,s,t,n,a,U,B,HP,H,sites,X,ts) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME i /\
@@ -116,7 +116,7 @@ Candidate run predicate (BEFORE PHI entry):
 ```
 !k ctx fn s0.
   !stk PG G tn i s1 t0 t1 n a U B HP H sites X ts r.
-    ctx = C /\ A /\ opaque_use_ok fn /\
+    ctx = C /\ A /\ opaque_use_ok fn /\ ~s0.vs_halted /\
     enters_block fn s0 s1 /\
     (?fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
            enters_block fn' t0 t1) /\
@@ -139,7 +139,7 @@ an invalid same-instruction target step claim for DLOAD expansions:
 ```
 !k ctx callinst s.
   !stk PG G tn fn t n a U B HP H sites X ts r.
-    ctx = C /\ A /\ opaque_use_ok fn /\
+    ctx = C /\ A /\ opaque_use_ok fn /\ ~s.vs_halted /\
     J(stk,PG,G,tn,fn,callinst,s,t,n,a,U,B,HP,H,sites,X,ts) /\
     active_inst fn callinst s /\ callinst.inst_opcode = INVOKE /\
     step_inst k C callinst s = r /\ terminates r ==>
@@ -155,8 +155,8 @@ an invalid same-instruction target step claim for DLOAD expansions:
              active_inst fn next
                (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
              s1.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address
-       | Halt se => dead_result_rel D r r'
-       | Abort ab se => dead_result_rel D r r'
+       | Halt se => (?te. r' = Halt te /\ dead_result_rel D r r')
+       | Abort ab se => (?te. r' = Abort ab te /\ dead_result_rel D r r')
        | IntRet ir se => F
        | Error e => F)
 ```
@@ -258,3 +258,62 @@ result packet or equivalent CPS interface; dead_result_rel alone cannot be
 the mutual IH. Strategist should review the shallow C1.5 subtree rather than
 append more opcode descendants. No definitions, theorem statements, or SML
 files were changed during this diagnostic.
+
+## 6. Checked endpoint consumer checkpoint (C1.5.7)
+
+`o1LowerDloadEndpointConsumerTheory` now checks two existential packet
+consumers, without asserting existence of any callee run:
+
+* `ld_return_endpoint_consume`: supplied actual source RET equation, target RET
+  equation and whole pre-RET J, with fixed saved head `f`, owner `a`, `ofr`,
+  and saved target `caller'`. The packet address equals A0 and A0 equals the
+  saved source caller address. A successful actual source bind, saved INVOKE
+  activity, `wf_function f.cf_fn`, pointer discipline and callee opaque-use
+  validity suffice. `ld_ret_endpoint` derives `se=sr`; the INVOKE successor
+  lemma derives the caller's next instruction. The return boundary reconstructs
+  the actual target bind and the full caller successor J. No target callee run
+  is inferred from an entry state. The target `jr` supplied in the packet is
+  identified with the reconstructed RET result by the two actual step equations.
+* `ld_branch_endpoint_consume`: supplied actual branch OK equations, pre-branch
+  J and matching target control, source `wf_function`, successful source
+  `enters_block fn se s1` and nonhalted `se` suffice. Entry fetch supplies the
+  actual `next` and source block/fetch equations; branch entry constructs target
+  entry and post-PHI J. It also propagates the address A0 and nonhaltedness to
+  `s1`. This is precisely the preentry run-mode interface, not a second PHI
+  evaluation on `s1`.
+
+Both consumers retain the endpoint's `n`, `G`, `tn`, `B`, `H`, `sites`, `X`:
+these names denote the *evolved* packet parameters. Return restricts the maps
+and restores the saved caller frame owner/parameters; branch applies entry
+provenance/taint updates. Neither consumer resets fresh counters. No extra
+counter monotonicity premise was needed for these compositions. This does not
+prove that the execution induction can construct every packet; in particular,
+any counter/scope requirements of call and allocation kernels still have to
+be matched against J by that induction.
+
+The three candidate modes above now explicitly require nonhalted source input:
+exec and step use `~s.vs_halted`, run uses `~s0.vs_halted`. Root entry discharges
+this; `ld_step_ok_halted` and `ld_enters_block_halted` propagate it. Step Halt
+and Abort alternatives now pin the target constructor and the SAME abort tag,
+just like R. An already-halted OK block result is therefore not silently
+classified as a branch endpoint.
+
+Packet RET and branch equations are fuel independent by the existing
+`step_inst_non_invoke` (venomExecSemantics:1829-1834): each equals
+`step_inst_base inst s` when the opcode is not INVOKE. RET and all three branch
+opcodes meet this condition. This is why the consumer's common `kb` in the two
+branch equations is legitimate even when assembled from different local fuel
+witnesses. Do not apply this fact to INVOKE or use it to lift an Error run.
+
+Result coverage remains exactly the table in section 4: nonterminator OK
+continues with whole J; branch OK returns a pre-branch packet; RET returns a
+pre-RET packet; Halt/Abort preserve constructor/tag and observations; Error is
+excluded by termination; run never returns OK. Successful INVOKE binds the
+actual internal return, whereas callee Halt/Abort propagate without restoring
+caller locals. Revert-forward suffix execution remains a separate exec case.
+
+The earlier 'Review request' is historical diagnostic context. Local address,
+root entry, saved caller successor and endpoint consumption are now checked;
+the common three-mode simulation itself is still unproved and must receive
+strategist review before implementation. The original frozen main cheat is
+unchanged. No new relation definition was introduced.
