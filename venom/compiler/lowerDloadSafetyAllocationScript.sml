@@ -482,7 +482,7 @@ QED
 
 (* Allocation-changing reconstruction; the value/byte effect is supplied by
    ld_fresh_alloca_effect, independently of the next instruction location. *)
-Theorem ld_sync_fresh_alloca_update:
+Theorem ld_fresh_alloca_structure:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\
   inst.inst_outputs = [out] /\
@@ -496,14 +496,21 @@ Theorem ld_sync_fresh_alloca_update:
   sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
   tt = ts with vs_inst_idx := SUC p /\
   g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
-  frame_reachable vs0 C stk PG G' tn' fn next sn /\ active_inst fn next sn /\
   G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
   ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
   lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
-  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) /\
   FRANGE H' SUBSET FDOM A' ==>
-  ld_sync lo P C vs0 stk PG G' tn' fn next sn tt A' (g::fs) N /\
-  ld_global lo A' (g::fs)
+  ld_maps A' g /\ ld_global lo A' (g::fs) /\
+  FDOM A' = ld_slots A' (g::fs) /\
+  EVERY (\h. ld_maps A' h /\ ld_vars P A' h) fs /\
+  EVERY (\h. ld_erase A' o_f h.lf_H = ld_erase A o_f h.lf_H /\
+    MAP (OPTION_MAP (ld_erase A')) h.lf_Q =
+      MAP (OPTION_MAP (ld_erase A)) h.lf_Q) (f::fs) /\
+  ld_intervals lo sn /\ ld_intervals lo tt /\
+  (!j. j < LENGTH (g::fs) ==>
+    (EL j (g::fs)).lf_tgt.vs_alloca_next =
+    (EL j (g::fs)).lf_src.vs_alloca_next + 32 * ld_charge (DROP j (g::fs))) /\
+  ld_charge (g::fs) <= ctx_dload_count C
 Proof
   strip_tac >>
   `f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn` by
@@ -533,8 +540,8 @@ Proof
      gen_tac >> PairCases_on `x` >> simp[] >>
      Cases_on `x0` >> simp[]) >>
   `g.lf_H = H'` by simp[] >>
-  reverse conj_tac
-  >- (qpat_x_assum `g = _` kall_tac >>
+  `ld_global lo A' (g::fs)` by
+     (qpat_x_assum `g = _` kall_tac >>
       qpat_x_assum `A' = _` kall_tac >>
       qpat_x_assum `ld_global lo A' _` mp_tac >>
       simp[ld_global_def] >> strip_tac >>
@@ -570,12 +577,52 @@ Proof
   qpat_x_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N` mp_tac >>
   simp[ld_sync_def] >> strip_tac >>
   fs[listTheory.EVERY_MEM] >> simp[] >>
-  conj_tac
-  >- (gen_tac >> Cases_on `j`
-      >- (qpat_x_assum `!j. _ ==> (EL j (f::fs)).lf_tgt.vs_alloca_next = _`
-            (qspec_then `0` mp_tac) >> simp[]) >>
-      qpat_x_assum `!j. _ ==> (EL j (f::fs)).lf_tgt.vs_alloca_next = _`
-        (qspec_then `SUC n` mp_tac) >> simp[]) >>
+  gen_tac >> Cases_on `j`
+  >- (qpat_x_assum `!j. _ ==> (EL j (f::fs)).lf_tgt.vs_alloca_next = _`
+        (qspec_then `0` mp_tac) >> simp[]) >>
+  qpat_x_assum `!j. _ ==> (EL j (f::fs)).lf_tgt.vs_alloca_next = _`
+    (qspec_then `SUC n` mp_tac) >> simp[]
+QED
+
+Theorem ld_sync_fresh_alloca_update:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
+  (!d. ~ld_private f d inst.inst_id) /\
+  exec_alloca inst s sz = OK ss /\ exec_alloca inst t sz = OK ts /\
+  A' = A |+ ((f.lf_serial,inst.inst_id),
+    (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
+  tt = ts with vs_inst_idx := SUC p /\
+  g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
+  frame_reachable vs0 C stk PG G' tn' fn next sn /\ active_inst fn next sn /\
+  G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
+  ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
+  lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
+  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) /\
+  FRANGE H' SUBSET FDOM A' ==>
+  ld_sync lo P C vs0 stk PG G' tn' fn next sn tt A' (g::fs) N /\
+  ld_global lo A' (g::fs)
+Proof
+  strip_tac >>
+  drule_all ld_fresh_alloca_structure >> strip_tac >>
+  `f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn` by
+    (drule ld_sync_active >> simp[]) >>
+  `sn.vs_current_bb = tt.vs_current_bb /\ sn.vs_prev_bb = tt.vs_prev_bb` by
+    (drule ld_sync_control >> gvs[exec_alloca_def, update_var_def]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  `g.lf_serial = f.lf_serial /\ g.lf_fn = fn /\
+    g.lf_supply = f.lf_supply /\ g.lf_Q = f.lf_Q /\ g.lf_E = f.lf_E /\
+    g.lf_src = sn /\ g.lf_tgt = tt /\ g.lf_H = H' /\ g.lf_tv = tn'.t_var` by simp[] >>
+  qpat_x_assum `g = _` kall_tac >>
+  qpat_x_assum `sn = _` kall_tac >> qpat_x_assum `tt = _` kall_tac >>
+  qpat_x_assum `A' = _` kall_tac >>
+  qpat_x_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N` mp_tac >>
+  simp[ld_sync_def] >> strip_tac >>
+  fs[listTheory.EVERY_MEM] >> simp[] >>
   conj_tac
   >- (gen_tac >> Cases_on `j` >> simp[]
       >- metis_tac[] >>
@@ -677,5 +724,7 @@ QED
 (* Exported allocation interfaces must be closed kernel theorems. *)
 val _ = List.app (fn (name, th) =>
   if null (hyp th) then () else raise Fail ("nonclosed " ^ name))
-  [("ld_cached_alloca_advance", ld_cached_alloca_advance),
+  [("ld_fresh_alloca_structure", ld_fresh_alloca_structure),
+   ("ld_sync_fresh_alloca_update", ld_sync_fresh_alloca_update),
+   ("ld_cached_alloca_advance", ld_cached_alloca_advance),
    ("ld_fresh_alloca_advance", ld_fresh_alloca_advance)];
