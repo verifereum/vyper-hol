@@ -2700,6 +2700,54 @@ Proof
     (qspec_then `0` mp_tac) >> simp[]
 QED
 
+Theorem expr_vv_case_global_lookup_present:
+  expr_vv_case nocalls ctx func cenv cx (TopLevelName ann (md,nm)) /\
+  expr_body_pre cenv cx env (TopLevelName ann (md,nm)) es /\
+  eval_expr cx (TopLevelName ann (md,nm)) es = (INL tv,es') /\
+  compile_expr cenv ty (TopLevelName ann (md,nm)) sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?vl. FLOOKUP cenv.ce_module_vars (md,nm) = SOME vl /\
+       (is_slot_addressed (var_location_loc vl) \/ var_location_loc vl = LocCode)
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `compile_expr cenv ty (TopLevelName ann (md,nm)) sa =
+    (StackValue ann (Lit 0w),
+     SND (emit_inst INVALID [] [] sa))` by
+    (Cases_on `emit_inst INVALID [] [] sa` >>
+     Cases_on `FLOOKUP cenv.ce_module_vars (md,nm)` >>
+     gvs[Once exprLoweringTheory.compile_expr_def] >>
+     simp[Once exprLoweringTheory.compile_expr_def, vyperASTTheory.expr_type_def] >>
+     rename1 `FLOOKUP _ _ = SOME vl` >> Cases_on `vl` >>
+     gvs[var_location_loc_def, is_slot_addressed_def]) >>
+  qpat_x_assum `expr_vv_case _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_vv_case_def] >>
+  disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >>
+  (impl_tac >- simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  pure_rewrite_tac[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `vv`, `INL tv`, `es'`, `s0`] mp_tac) >>
+  (impl_tac >- (simp[expr_vv_res_ok_def] >>
+    drule_all expr_body_pre_eval_result >> strip_tac >>
+    Cases_on `tv` >> gvs[eval_result_typed_def])) >>
+  simp[expr_exit_def] >> strip_tac >>
+  `frag_exec ctx sa sb (\s. s = s0)
+     (\s. vv_post ctx func cenv cx (TopLevelName ann (md,nm)) es
+              sa sb s0 es' tv vv s) (\r. F)` by
+    (qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+     simp[frag_exec_def]) >>
+  gvs[emitHelperTheory.emit_inst_def, compileEnvTheory.fresh_id_def,
+      compileEnvTheory.emit_def, comp_bind_def, comp_return_def] >>
+  qmatch_asmsub_abbrev_tac
+    `frag_exec ctx sa sbx (\s. s = s0) Q (\r. F)` >>
+  qspecl_then [`ctx`, `sa`, `sbx`, `s0`] mp_tac
+    frag_exec_invalid_no_normal_probe >>
+  disch_then (qspec_then `Q` mp_tac) >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  simp[Abbr `sbx`]
+QED
+
 Theorem compile_attribute_code_origin:
   vv_location (FST (compile_attribute cfn cenv rt ty obj fld sc)) = SOME LocCode ==>
   vv_location (FST (cfn cenv ty obj sc)) = SOME LocCode
@@ -3795,90 +3843,72 @@ Proof
   qexists `0w` >> simp[]
 QED
 
-Theorem compile_expr_code_empty_path_root:
-  !e cenv cx ty sc vv sc' es md nm t.
-  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-  ~expr_has_pop e /\ compile_expr cenv ty e sc = (vv,sc') /\
-  vv_location vv = SOME LocCode /\
-  eval_expr cx e es = (INL (PlaceR (ImmutablePlace md nm [])),t) ==>
-  ?ann off. e = TopLevelName ann (md,nm) /\
-    FLOOKUP cenv.ce_module_vars (md,nm) = SOME (ImmutableLoc off) /\
-    vv = LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode) /\
-    sc' = sc /\ t = es
+Theorem lookup_global_immutable_origin:
+  lookup_global cx src id es =
+    (INL (PlaceR (ImmutablePlace md nm path)),mid) ==>
+  md = src /\ nm = id /\ path = [] /\
+  ?tops. get_module_code cx src = SOME tops /\
+         find_var_decl_by_name id tops = NONE
+Proof
+  disch_tac >>
+  gvs[lookup_global_def, bind_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  rename1 `get_module_code cx src = SOME tops` >>
+  Cases_on `find_var_decl_by_name id tops`
+  >- (gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+      Cases_on `FLOOKUP imms id` >> gvs[return_def, raise_def]) >>
+  rename1 `find_var_decl_by_name id tops = SOME dcl` >>
+  PairCases_on `dcl` >> Cases_on `dcl0` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem eval_expr_immutable_empty_path_root:
+  !e cx es md nm mid.
+    ~expr_has_pop e /\
+    eval_expr cx e es = (INL (PlaceR (ImmutablePlace md nm [])),mid) ==>
+    ?ann. e = TopLevelName ann (md,nm)
 Proof
   Cases >> rpt gen_tac >> strip_tac >>
-  all_tac >~ [`compile_expr _ _ (Name _ _) _ = _`] >- suspend "Name" >~
-  [`compile_expr _ _ (TopLevelName _ _) _ = _`] >- suspend "Global" >~
-  [`compile_expr _ _ (FlagMember _ _ _) _ = _`] >- suspend "Flag" >~
-  [`compile_expr _ _ (IfExp _ _ _ _) _ = _`] >- suspend "If" >~
-  [`compile_expr _ _ (Literal _ _) _ = _`] >- suspend "Literal" >~
-  [`compile_expr _ _ (StructLit _ _ _) _ = _`] >- suspend "Struct" >~
-  [`compile_expr _ _ (Subscript _ _ _) _ = _`] >- suspend "Subscript" >~
-  [`compile_expr _ _ (Attribute _ _ _) _ = _`] >- suspend "Attribute" >~
-  [`compile_expr _ _ (Builtin _ _ _) _ = _`] >- suspend "Builtin" >~
-  [`compile_expr _ _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "TypeBuiltin" >~
-  [`compile_expr _ _ (Pop _ _) _ = _`] >- suspend "Pop" >>
+  all_tac >~ [`eval_expr _ (Name _ _) _ = _`] >-
+    gvs[Once evaluate_def, get_scopes_def, type_check_def, bind_def,
+        ignore_bind_def, return_def, raise_def, assert_def, AllCaseEqs()] >~
+  [`eval_expr _ (TopLevelName _ _) _ = _`] >- suspend "Global" >~
+  [`eval_expr _ (FlagMember _ _ _) _ = _`] >-
+    (rename1 `FlagMember ann nsid fld` >> PairCases_on `nsid` >>
+     gvs[Once evaluate_def, lookup_flag_mem_def, bind_def, return_def,
+         raise_def, lift_sum_def, lift_option_type_def,
+         vyperMiscTheory.option_CASE_rator, AllCaseEqs()]) >~
+  [`eval_expr _ (IfExp _ _ _ _) _ = _`] >-
+    (gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+     drule conditional_result_value_or_memory >> simp[]) >~
+  [`eval_expr _ (Literal _ _) _ = _`] >-
+    (drule eval_expr_literal_value >> simp[]) >~
+  [`eval_expr _ (StructLit _ _ _) _ = _`] >-
+    (rename1 `StructLit ann nsid fields` >> PairCases_on `nsid` >>
+     gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]) >~
+  [`eval_expr _ (Subscript _ _ _) _ = _`] >-
+    (gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+     drule select_result_immutable_origin >> simp[]) >~
+  [`eval_expr _ (Attribute _ _ _) _ = _`] >-
+    (gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+     drule select_result_immutable_origin >> simp[]) >~
+  [`eval_expr _ (Builtin _ _ _) _ = _`] >-
+    (drule eval_expr_builtin_value >> simp[]) >~
+  [`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`] >-
+    gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >~
+  [`eval_expr _ (Pop _ _) _ = _`] >-
+    gvs[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def] >>
   suspend "Call"
 QED
 
-Resume compile_expr_code_empty_path_root[Name]:
-  rename1 `Name ann name` >>
-  Cases_on `FLOOKUP cenv.ce_vars name` >>
-  gvs[Once exprLoweringTheory.compile_expr_def,
-       exprLoweringTheory.compile_name_vv_def, comp_return_def,
-       comp_bind_def, comp_ignore_bind_def,
-       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
-  rename1 `FLOOKUP cenv.ce_vars name = SOME vl` >> Cases_on `vl` >>
-  gvs[comp_return_def, comp_bind_def,
-       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def]
-QED
-
-Resume compile_expr_code_empty_path_root[Global]:
+Resume eval_expr_immutable_empty_path_root[Global]:
   rename1 `TopLevelName ann nsid` >> PairCases_on `nsid` >>
-  Cases_on `FLOOKUP cenv.ce_module_vars (nsid0,nsid1)` >>
-  gvs[Once exprLoweringTheory.compile_expr_def,
-       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
-  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME vl` >> Cases_on `vl` >>
-  gvs[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
-  drule_all related_global_code_result_origin >> strip_tac >>
-  gvs[vyperASTTheory.expr_type_def]
+  gvs[Once evaluate_def] >>
+  drule lookup_global_immutable_origin >> simp[] >> rpt strip_tac >> gvs[]
 QED
 
-Resume compile_expr_code_empty_path_root[Flag]:
-  gvs[Once exprLoweringTheory.compile_expr_def, contextTheory.vv_location_def]
-QED
-Resume compile_expr_code_empty_path_root[If]:
-  gvs[] >> metis_tac[exprSimIfExpTheory.compile_expr_ifexp_not_code, pairTheory.FST]
-QED
-Resume compile_expr_code_empty_path_root[Literal]:
-  drule eval_expr_literal_value >> simp[]
-QED
-Resume compile_expr_code_empty_path_root[Struct]:
-  rename1 `StructLit ann nsid fields` >> PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]
-QED
-Resume compile_expr_code_empty_path_root[Subscript]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  drule select_result_immutable_origin >> simp[]
-QED
-Resume compile_expr_code_empty_path_root[Attribute]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  drule select_result_immutable_origin >> simp[]
-QED
-Resume compile_expr_code_empty_path_root[Builtin]:
-  drule eval_expr_builtin_value >> simp[]
-QED
-Resume compile_expr_code_empty_path_root[TypeBuiltin]:
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
-QED
-Resume compile_expr_code_empty_path_root[Pop]:
-  gvs[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def]
-QED
-Resume compile_expr_code_empty_path_root[Call]:
+Resume eval_expr_immutable_empty_path_root[Call]:
   rename1 `eval_expr cx (Call ann target args kws) st = _` >>
   Cases_on `target` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
@@ -3891,9 +3921,9 @@ Resume compile_expr_code_empty_path_root[Call]:
   >~ [`eval_ext_call _ _ _ _ _ _ _ = _`]
   >- (drule eval_ext_call_value >> simp[])
   >~ [`eval_send _ _ _ _ = _`]
-  >- (rename1 `eval_send cx has_gas vs mid = _` >>
+  >- (rename1 `eval_send cx has_gas vs send_st = _` >>
       Cases_on `vs` >- gvs[eval_send_def, raise_def] >>
-      rename1 `eval_send cx has_gas (to_v::rest) mid = _` >>
+      rename1 `eval_send cx has_gas (to_v::rest) send_st = _` >>
       Cases_on `rest` >>
       gvs[eval_send_def, bind_def, ignore_bind_def, return_def, raise_def,
           vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
@@ -3906,7 +3936,31 @@ Resume compile_expr_code_empty_path_root[Call]:
   Cases_on `kind` >> gvs[bind_def, AllCaseEqs()] >>
   drule eval_create_value >> simp[]
 QED
-Finalise compile_expr_code_empty_path_root
+Finalise eval_expr_immutable_empty_path_root
+
+Theorem compile_expr_code_empty_path_root:
+  !e cenv cx ty sc vv sc' es md nm t.
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop e /\ compile_expr cenv ty e sc = (vv,sc') /\
+  vv_location vv = SOME LocCode /\
+  eval_expr cx e es = (INL (PlaceR (ImmutablePlace md nm [])),t) ==>
+  ?ann off. e = TopLevelName ann (md,nm) /\
+    FLOOKUP cenv.ce_module_vars (md,nm) = SOME (ImmutableLoc off) /\
+    vv = LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode) /\
+    sc' = sc /\ t = es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all eval_expr_immutable_empty_path_root >> strip_tac >> gvs[] >>
+  Cases_on `FLOOKUP cenv.ce_module_vars (md,nm)` >>
+  gvs[Once exprLoweringTheory.compile_expr_def,
+      contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME vl` >> Cases_on `vl` >>
+  gvs[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
+  drule_all related_global_code_result_origin >> strip_tac >>
+  gvs[vyperASTTheory.expr_type_def]
+QED
 
 (* Rebuild a current-module root at a later state from its own declaration,
    not from an unrelated existential immutable_holds witness. No frame for
@@ -3977,26 +4031,6 @@ Proof
      gvs[AllCaseEqs(), return_def, raise_def]) >>
   irule flat_runtime_type_array_path >> goal_assum (drule_at Any) >>
   gvs[]
-QED
-
-Theorem lookup_global_immutable_origin:
-  lookup_global cx src id es =
-    (INL (PlaceR (ImmutablePlace md nm path)),mid) ==>
-  md = src /\ nm = id /\ path = [] /\
-  ?tops. get_module_code cx src = SOME tops /\
-         find_var_decl_by_name id tops = NONE
-Proof
-  disch_tac >>
-  gvs[lookup_global_def, bind_def, lift_option_type_def,
-      return_def, raise_def, AllCaseEqs()] >>
-  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  rename1 `get_module_code cx src = SOME tops` >>
-  Cases_on `find_var_decl_by_name id tops`
-  >- (gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
-      Cases_on `FLOOKUP imms id` >> gvs[return_def, raise_def]) >>
-  rename1 `find_var_decl_by_name id tops = SOME dcl` >>
-  PairCases_on `dcl` >> Cases_on `dcl0` >>
-  gvs[bind_def, return_def, raise_def, AllCaseEqs()]
 QED
 
 (* Immutable places can only originate at a statically known bare global.
@@ -4905,4 +4939,49 @@ Proof
     (qpat_x_assum `!n q sz w. _` drule_all >> simp[])) >>
   rpt (all_tac >~ [`mem_bytes_at b sz q1.vs_memory = _`] >-
     (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule_all >> simp[]))
+QED
+
+(* An actual main-module call cannot follow a successfully simulated
+   immutable array base under the no-effect location premises. *)
+Theorem expr_vv_case_called_main_immutable_array_excluded:
+  expr_vv_case nocalls ctx func cenv cx obj /\
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_type obj = ArrayT et bd /\ ~expr_has_pop obj /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace NONE nm path)),mid) /\
+  MEM (NONE,callee) (int_calls_expr idx) /\
+  (!ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
+              is_slot_addressed l ==> ~expr_has_effect idx) /\
+  (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode ==>
+             ~cenv.ce_is_ctor /\ ~expr_has_effect idx) /\
+  compile_expr cenv ty obj sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==> F
+Proof
+  strip_tac >>
+  drule_all expr_body_pre_called_main_array_path >> strip_tac >> gvs[] >>
+  drule_all eval_expr_immutable_empty_path_root >> strip_tac >> gvs[] >>
+  rename1 `TopLevelName a (NONE,nm)` >>
+  `expr_body_pre cenv cx env (TopLevelName a (NONE,nm)) es` by
+    (drule_all expr_body_pre_subscript_array_base >> simp[]) >>
+  drule_all expr_vv_case_global_lookup_present >> strip_tac >>
+  Cases_on `vl` >> gvs[var_location_loc_def, is_slot_addressed_def,
+    Once exprLoweringTheory.compile_expr_def] >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once exprLoweringTheory.compile_expr_def] >> rpt strip_tac >> gvs[] >>
+  all_tac >~ [`FLOOKUP _ _ = SOME (ImmutableLoc off)`]
+  >- (`~expr_has_effect idx` by
+        (qpat_x_assum `!ty st. _ ==> ~cenv.ce_is_ctor /\ _`
+          (qspecl_then [`ty`, `sa`] mp_tac) >>
+         simp[Once exprLoweringTheory.compile_expr_def,
+              contextTheory.vv_location_def, contextTheory.mk_ptr_def]) >>
+      drule expr_no_effect_int_calls >> simp[] >> strip_tac >> gvs[]) >>
+  `~expr_has_effect idx` by
+    (qpat_x_assum `!ty st. _ ==> ~cenv.ce_is_ctor /\ _` kall_tac >>
+     qpat_x_assum `!l. _` mp_tac >>
+     simp[Once exprLoweringTheory.compile_expr_def,
+          contextTheory.vv_location_def, contextTheory.mk_ptr_def,
+          is_slot_addressed_def]) >>
+  drule expr_no_effect_int_calls >> simp[] >> strip_tac >> gvs[]
 QED
