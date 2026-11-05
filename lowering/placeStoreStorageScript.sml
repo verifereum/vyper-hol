@@ -4368,6 +4368,157 @@ Proof
   EVAL_TAC >> simp[var_decl_transient_def]
 QED
 
+Theorem place_store_expr_sim_inv_empty_immutables:
+  !cenv cx env es.
+    expr_sim_inv cenv cx env es /\ es.immutables = [] ==>
+    env.bare_globals = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_sim_inv_def] >> strip_tac >>
+  qpat_x_assum `env_consistent _ _ _` mp_tac >>
+  pure_rewrite_tac[vyperTypeInvariantsTheory.env_consistent_def] >> strip_tac >>
+  qpat_x_assum `env_immutables_consistent _ _ _` mp_tac >>
+  simp[vyperTypeInvariantsTheory.env_immutables_consistent_def] >> strip_tac >>
+  simp[finite_mapTheory.fmap_eq_flookup] >>
+  Cases >> Cases_on `FLOOKUP env.bare_globals (q,r)` >> simp[] >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals _ = SOME _ ==> IS_SOME _`
+    drule >> EVAL_TAC
+QED
+
+Theorem place_store_expr_sim_inv_backend_fields:
+  !cenv cx env es target ctor imm mods.
+    expr_sim_inv cenv cx env es /\ env.bare_globals = FEMPTY ==>
+    expr_sim_inv (cenv with <|ce_target := target; ce_module_vars := mods;
+      ce_is_ctor := ctor; ce_imm_alloca := imm|>) cx env es
+Proof
+  simp[expr_sim_inv_def,
+    placeTypingPropsTheory.place_map_tables_agree_on_defined_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem place_store_wrap_probe_module_layout:
+  !cenv txn.
+    cenv.ce_module_vars = FEMPTY |+ ((NONE,"wrapped"), StorageLoc 0w) /\
+    txn.target = 0w ==>
+    storage_vars_rel cenv (place_store_wrap_probe_context with txn := txn) /\
+    transient_vars_rel cenv (place_store_wrap_probe_context with txn := txn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!src. get_module_code (place_store_wrap_probe_context with txn := txn) src =
+    get_module_code place_store_wrap_probe_context src` by
+    simp[vyperContextTheory.get_module_code_def, place_store_wrap_probe_context_def,
+      vyperContextTheory.empty_evaluation_context_def,
+      vyperContextTheory.empty_call_txn_def] >>
+  simp[storage_vars_rel_def, transient_vars_rel_def,
+    place_store_wrap_probe_context_tables, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs(), find_var_decl_by_name_def, var_decl_transient_def] >>
+  EVAL_TAC >> simp[] >>
+  qpat_x_assum `lookup_var_slot_from_layout _ _ _ _ = _` mp_tac >>
+  EVAL_TAC >> simp[] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem place_store_wrap_probe_compiler_realizable:
+  let cx1 = place_store_wrap_probe_context with txn :=
+    (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) in
+  ?cenv env dtv.
+    expr_sim_inv cenv cx1 env
+      (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>) /\
+    cenv.ce_target = K T /\ cenv.ce_is_ctor = F /\
+    cenv.ce_imm_alloca = NONE /\
+    cenv.ce_module_vars = FEMPTY |+ ((NONE,"wrapped"), StorageLoc 0w) /\
+    storage_vars_rel cenv cx1 /\ transient_vars_rel cenv cx1 /\
+    evaluate_type (get_tenv cx1)
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) =
+      SOME dtv /\
+    storage_place_region cx1 (StoragePlace F 0w dtv)
+Proof
+  simp[] >>
+  mp_tac place_store_wrap_probe_source_transaction_realizable >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`cenv with <|ce_target := K T; ce_is_ctor := F;
+    ce_imm_alloca := NONE;
+    ce_module_vars := FEMPTY |+ ((NONE,"wrapped"), StorageLoc 0w)|>`,
+    `env`, `dtv`] >>
+  simp[] >> conj_tac
+  >- (irule place_store_expr_sim_inv_backend_fields >> simp[] >>
+      irule place_store_expr_sim_inv_empty_immutables >>
+      goal_assum $ drule_at Any >> simp[empty_state_def]) >>
+  irule place_store_wrap_probe_module_layout >>
+  simp[vyperContextTheory.empty_call_txn_def]
+QED
+
+Theorem place_store_wrap_probe_initial_state_rel:
+  !func cenv cc tc bc label mem vars allocas next.
+    let cx1 = place_store_wrap_probe_context with txn :=
+      (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) in
+    cenv.ce_module_vars = FEMPTY |+ ((NONE,"wrapped"), StorageLoc 0w) /\
+    call_ctx_rel cx1.txn cc tc bc ==>
+    state_rel func cenv cx1
+      (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>)
+      ((init_venom_state label) with <|vs_memory := mem; vs_vars := vars;
+        vs_allocas := allocas; vs_alloca_next := next;
+        vs_call_ctx := cc with cc_static := F;
+        vs_tx_ctx := tc; vs_block_ctx := bc|>)
+Proof
+  rpt gen_tac >> simp[] >> strip_tac >>
+  `storage_vars_rel cenv (place_store_wrap_probe_context with txn :=
+      (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>)) /\
+    transient_vars_rel cenv (place_store_wrap_probe_context with txn :=
+      (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>))` by
+    (irule place_store_wrap_probe_module_layout >>
+     simp[vyperContextTheory.empty_call_txn_def]) >>
+  qpat_x_assum `call_ctx_rel _ _ _ _` mp_tac >>
+  simp[call_ctx_rel_def, vyperContextTheory.empty_call_txn_def] >> strip_tac >>
+  simp[state_rel_def, local_ptrs_rel_def, local_region_def,
+    contract_storage_def, contract_transient_def,
+    lookup_scopes_def, empty_state_def, init_venom_state_def,
+    storage_rel_def, transient_rel_def, accounts_rel_def, immutables_rel_def,
+    logs_rel_def, accounts_agree_def, transient_agree_def, storage_agree_def,
+    call_ctx_rel_def, vyperContextTheory.empty_call_txn_def] >>
+  fs[vyperContextTheory.empty_call_txn_def]
+QED
+
+Theorem place_store_wrap_probe_initial_stmt_rel:
+  !ctx func cenv cc tc bc label mem vars.
+    let cx1 = place_store_wrap_probe_context with txn :=
+      (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>) in
+    cenv.ce_module_vars = FEMPTY |+ ((NONE,"wrapped"), StorageLoc 0w) /\
+    cenv.ce_is_ctor = F /\ cenv.ce_imm_alloca = NONE /\
+    call_ctx_rel cx1.txn cc tc bc /\
+    venomInst$lookup_function func.fn_name ctx.ctx_functions = SOME func /\
+    FINITE {g | TC (fn_directly_calls ctx) func.fn_name g} /\
+    (!g. TC (fn_directly_calls ctx) func.fn_name g ==>
+      ~TC (fn_directly_calls ctx) g g) /\
+    pending_alloca_size func (init_venom_state label) +
+      CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
+        unit_alloca_frame ctx < 32 /\
+    ~EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
+    (!g f. TC (fn_directly_calls ctx) func.fn_name g /\
+      MEM f ctx.ctx_functions /\ f.fn_name = g ==>
+      ~EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f)) ==>
+    stmt_state_rel ctx func cenv cx1
+      (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>)
+      ((init_venom_state label) with <|vs_memory := mem; vs_vars := vars;
+        vs_alloca_next := dimword (:256) - 32;
+        vs_call_ctx := cc with cc_static := F;
+        vs_tx_ctx := tc; vs_block_ctx := bc|>)
+Proof
+  rpt gen_tac >> simp[] >> strip_tac >>
+  simp[stmt_state_rel_def] >> conj_tac
+  >- (mp_tac place_store_wrap_probe_initial_state_rel >>
+      simp[init_venom_state_def] >> disch_then irule >> simp[]) >>
+  simp[venomMemDefsTheory.alloca_inv_def,
+    venomMemDefsTheory.allocas_non_overlapping_def,
+    venomMemDefsTheory.alloca_next_valid_def,
+    immutable_alloca_sep_def, immutable_base_zero_def,
+    init_venom_state_def, fmp_room_def] >>
+  simp[alloca_room_def, pending_alloca_size_def, init_venom_state_def] >>
+  qpat_x_assum `_ + _ < 32` mp_tac >>
+  simp[pending_alloca_size_def, init_venom_state_def] >> metis_tac[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
