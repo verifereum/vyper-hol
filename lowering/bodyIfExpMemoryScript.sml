@@ -519,6 +519,30 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY] >> EVAL_TAC
 QED
 
+Theorem ifexp_root_forced_branch_admissible[local]:
+  gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
+    expr_res_ok es /\
+  (!tail. bind (eval_expr cx c) (read_result cx)
+    (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
+  gas_admissible (bind (eval_expr cx (if sel then a else b)) (read_result cx))
+    expr_res_ok (mid with gas_obs := [])
+Proof
+  rewrite_tac[gas_admissible_def] >> strip_tac >> rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
+  simp[ifexp_root_eval_forced, bind_def] >>
+  Cases_on `sel` >> gvs[] >> strip_tac >>
+  rename1 `bind (eval_expr cx arm) (read_result cx) _ = _` >>
+  Cases_on `eval_expr cx arm (mid with gas_obs := gs)` >>
+  rename1 `_ = (ar,ast)` >> Cases_on `ar` >> gvs[bind_def] >>
+  (rename1 `conditional_result cx raw ast` >>
+      Cases_on `(do r <- conditional_result cx raw; read_result cx r od) ast` >>
+      `read_result cx raw ast = (q,r) \/
+       ?m. conditional_result cx raw ast = (INR (Error (TypeError m)),r) /\
+           q = INR (Error (TypeError m))` by
+        (irule ifexp_conditional_read_cases >> simp[bind_def]) >>
+      gvs[bind_def, expr_res_ok_def])
+QED
+
 Theorem ifexp_read_conditional_cert[local]:
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
