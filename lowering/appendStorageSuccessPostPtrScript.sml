@@ -80,7 +80,8 @@ QED
 Theorem append_storage_word_ghost_post:
   ghost_inv d cenv cx es G tn s /\
   local_ptrs_reserved cenv sb /\ ret_pc_ok cenv sb s /\
-  return_buf_frame d cenv sb s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sb x) /\
   s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\

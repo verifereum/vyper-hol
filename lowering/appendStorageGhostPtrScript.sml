@@ -98,7 +98,8 @@ QED
 Theorem ghost_inv_old_transport:
   ghost_inv d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s /\
-  return_buf_frame d cenv sa s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==>
        FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x) /\
@@ -119,9 +120,9 @@ Proof
           goal_assum (drule_at Any) >> simp[]) >>
       rpt strip_tac >> gvs[] >> metis_tac[]) >>
   conj_tac
-  >- (Cases_on `d` >> fs[return_buf_frame_def, return_buf_ptr_def] >>
+  >- (Cases_on `d` >> fs[return_buf_ptr_def] >>
       PairCases_on `x` >>
-      gvs[return_buf_frame_def, return_buf_ptr_def] >>
+      gvs[return_buf_ptr_def] >>
       metis_tac[ptr_covers_old_transport]) >>
   simp[] >> metis_tac[ret_pc_ok_def]
 QED
