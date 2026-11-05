@@ -34,7 +34,7 @@ Ancestors
   dfgDefs list rich_list deepDupCallerSim
 
 (* The stack and spill relations read the Venom state through vs_vars only. *)
-Theorem plan_stack_rel_vars[local]:
+Theorem plan_stack_rel_vars:
   !lo v v' stk astk.
     v'.vs_vars = v.vs_vars ==>
     (plan_stack_rel lo v' stk astk <=> plan_stack_rel lo v stk astk)
@@ -45,7 +45,7 @@ Proof
   simp[plan_stack_rel_def]
 QED
 
-Theorem plan_spill_rel_vars[local]:
+Theorem plan_spill_rel_vars:
   !lo v v' sp am.
     v'.vs_vars = v.vs_vars ==>
     (plan_spill_rel lo v' sp am <=> plan_spill_rel lo v sp am)
@@ -56,7 +56,7 @@ Proof
   simp[plan_spill_rel_def]
 QED
 
-Theorem plan_rels_memory[local]:
+Theorem plan_rels_memory:
   (plan_stack_rel lo (v with vs_memory := m) stk astk <=>
    plan_stack_rel lo v stk astk) /\
   (plan_spill_rel lo (v with vs_memory := m) sp am <=>
@@ -66,7 +66,7 @@ Proof
   irule plan_spill_rel_vars >> simp[]
 QED
 
-Theorem plan_rels_jump_to[local]:
+Theorem plan_rels_jump_to:
   (plan_stack_rel lo (jump_to l v) stk astk <=>
    plan_stack_rel lo v stk astk) /\
   (plan_spill_rel lo (jump_to l v) sp am <=>
@@ -76,7 +76,7 @@ Proof
   irule plan_spill_rel_vars >> simp[jump_to_def]
 QED
 
-Theorem venom_asm_rel_jump_to[local]:
+Theorem venom_asm_rel_jump_to:
   !lo ps l v st.
     venom_asm_rel lo ps (jump_to l v) st <=> venom_asm_rel lo ps v st
 Proof
@@ -84,14 +84,14 @@ Proof
   simp[jump_to_def]
 QED
 
-Theorem venom_asm_rel_pc[local]:
+Theorem venom_asm_rel_pc:
   !lo ps v st pc.
     venom_asm_rel lo ps v (st with as_pc := pc) <=> venom_asm_rel lo ps v st
 Proof
   simp[venom_asm_rel_def]
 QED
 
-Theorem jump_to_fields[local]:
+Theorem jump_to_fields:
   (jump_to l v).vs_halted = v.vs_halted /\
   (jump_to l v).vs_initial_fmp = v.vs_initial_fmp /\
   (jump_to l v).vs_memory = v.vs_memory
@@ -99,7 +99,7 @@ Proof
   simp[jump_to_def]
 QED
 
-Theorem frame_view_jump_to[local]:
+Theorem frame_view_jump_to:
   !fn ra l v. frame_view fn ra (jump_to l v) = jump_to l (frame_view fn ra v)
 Proof
   simp[frame_view_def, jump_to_def]
@@ -107,7 +107,7 @@ QED
 
 (* The context relation on a frame's own stack, read as the local relation
    with the assembly memory standing in for the Venom memory. *)
-Theorem context_venom_asm_rel_local[local]:
+Theorem context_venom_asm_rel_local:
   !cp lo ps v st.
     context_venom_asm_rel cp lo ps v st ==>
     venom_asm_rel lo ps (v with vs_memory := st.as_memory) st
@@ -116,7 +116,7 @@ Proof
        memory_rel_refl]
 QED
 
-Theorem venom_asm_rel_context[local]:
+Theorem venom_asm_rel_context:
   !cp lo ps v st m.
     venom_asm_rel lo ps (v with vs_memory := m) st /\
     context_memory_rel cp v.vs_memory st.as_memory ==>
@@ -127,7 +127,7 @@ QED
 
 (* A local run's memory footprint lies inside its allocator's interval;
    when that interval lies inside region r, bytes outside r are kept. *)
-Theorem memory_rel_outside_region[local]:
+Theorem memory_rel_outside_region:
   !alloc m m' r b.
     memory_rel alloc m m' /\
     r.sr_spill_base <= alloc.sa_spill_base /\
@@ -138,7 +138,7 @@ Proof
   rw[memory_rel_def] >> first_x_assum irule >> decide_tac
 QED
 
-Theorem closure_spill_byte_own[local]:
+Theorem closure_spill_byte_own:
   !ctx cp fn r b.
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= b /\ b < r.sr_spill_end ==>
@@ -150,7 +150,7 @@ QED
 
 (* ===== Restoring a join's spilled targets ===== *)
 
-Theorem restore_spilled_plan_venom_asm_rel[local]:
+Theorem restore_spilled_plan_venom_asm_rel:
   !targets ps ops ps' lo o2pc prog vs st initial_fmp.
     restore_spilled_plan targets ps = (ops,ps') /\
     (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
@@ -232,7 +232,7 @@ Proof
 QED
 
 (* A JMP's plan is its regular plan, which must reach the join stack. *)
-Theorem generate_inst_plan_jmp[local]:
+Theorem generate_inst_plan_jmp:
   inst.inst_opcode = JMP ==>
   (generate_inst_plan liveness dfg cfg fn inst nl ih nit bbl ps =
      SOME (ops,ps') <=>
