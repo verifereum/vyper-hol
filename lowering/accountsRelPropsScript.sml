@@ -780,3 +780,87 @@ Proof
   impl_tac >- (simp[] >> decide_tac) >>
   simp[arithmeticTheory.ADD_COMM]
 QED
+
+Theorem dead_bytes_fixed_array_selected[local]:
+  !st bs et n i j b.
+    dead_bytes st bs (ArrayTV et (Fixed n)) j b /\
+    bs + i * type_slot_size et <= j /\
+    j < bs + i * type_slot_size et + type_slot_size et ==>
+    dead_bytes st (bs + i * type_slot_size et) et j b
+Proof
+  simp[Once dead_bytes_def] >> rpt strip_tac >>
+  rename1 `k < n` >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
+  Cases_on `k = i` >- gvs[] >>
+  Cases_on `k < i`
+  >- (drule vyperLookupStorageTheory.array_index_element_end_bound >>
+      disch_then (qspec_then `type_slot_size et` mp_tac) >> decide_tac) >>
+  `i < k` by decide_tac >>
+  drule_all vyperLookupStorageTheory.array_index_element_end_bound >>
+  disch_then (qspec_then `type_slot_size et` mp_tac) >> decide_tac
+QED
+
+Theorem storage_read_live_fixed_array_child:
+  !cx tr st w et n i.
+    storage_read_live cx tr st w (ArrayTV et (Fixed n)) /\ i < n ==>
+    storage_read_live cx tr st (w + n2w (i * type_slot_size et)) et
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  drule_all vyperStorageWritePreservationTheory.fixed_array_child_region_bounds >>
+  strip_tac >> simp[] >> strip_tac >>
+  `dead_bytes st (w2n w) (ArrayTV et (Fixed n)) j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >> simp[]) >>
+  irule dead_bytes_fixed_array_selected >> simp[] >> qexists `n` >> simp[]
+QED
+
+Theorem dead_bytes_dynamic_array_selected[local]:
+  !st bs et n i j b.
+    dead_bytes st bs (ArrayTV et (Dynamic n)) j b /\
+    i < w2n (lookup_storage (n2w bs) st) /\
+    bs + 1 + i * type_slot_size et <= j /\
+    j < bs + 1 + i * type_slot_size et + type_slot_size et ==>
+    dead_bytes st (bs + 1 + i * type_slot_size et) et j b
+Proof
+  simp[Once dead_bytes_def] >> rpt strip_tac >>
+  rename1 `k < n` >>
+  Cases_on `k < w2n (lookup_storage (n2w bs) st)` >> gvs[]
+  >- (drule (cj 1 dead_bytes_range) >> strip_tac >>
+      Cases_on `k = i` >- gvs[] >>
+      Cases_on `k < i`
+      >- (drule vyperLookupStorageTheory.array_index_element_end_bound >>
+          disch_then (qspec_then `type_slot_size et` mp_tac) >> decide_tac) >>
+      `i < k` by decide_tac >>
+      drule_all vyperLookupStorageTheory.array_index_element_end_bound >>
+      disch_then (qspec_then `type_slot_size et` mp_tac) >> decide_tac) >>
+  `i < k` by decide_tac >>
+  drule_all vyperLookupStorageTheory.array_index_element_end_bound >>
+  disch_then (qspec_then `type_slot_size et` mp_tac) >> decide_tac
+QED
+
+Theorem storage_read_live_dynamic_array_child:
+  !cx tr st w et n i.
+    storage_read_live cx tr st w (ArrayTV et (Dynamic n)) /\
+    i < n /\ i < w2n (lookup_storage w st) ==>
+    storage_read_live cx tr st (w + n2w (1 + i * type_slot_size et)) et
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_slot_size et = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w 1` mp_tac wordsTheory.w2n_lt >> decide_tac) >>
+  `0 < type_slot_size et` by decide_tac >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  drule_all vyperStorageWritePreservationTheory.dynamic_array_child_region_bounds >>
+  strip_tac >> simp[] >> strip_tac >>
+  `dead_bytes st (w2n w) (ArrayTV et (Dynamic n)) j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >> simp[]) >>
+  `w2n w + (i * type_slot_size et + 1) =
+   w2n w + 1 + i * type_slot_size et` by decide_tac >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `_ + (_ + 1) = _` kall_tac >>
+  irule dead_bytes_dynamic_array_selected >> simp[] >> qexists `n` >> simp[]
+QED

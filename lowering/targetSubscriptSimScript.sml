@@ -1193,3 +1193,53 @@ Proof
     (drule_all run_inst_seq_chain >> simp[]) >>
   qexists_tac `u` >> simp[]
 QED
+
+Theorem slots_in_range_dynamic_capacity:
+  !st slot et cap.
+    slots_in_range st (w2n slot) (ArrayTV et (Dynamic cap)) ==>
+    w2n (lookup_storage slot st) <= cap
+Proof
+  simp[vyperLookupStorageTheory.slots_in_range_def,
+       vyperStorageTheory.read_slot_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem storage_fixed_array_child_slots:
+  !st w et n i.
+    slots_in_range st (w2n (w:bytes32)) (ArrayTV et (Fixed n)) /\ i < n ==>
+    slots_in_range st (w2n (w + n2w (i * type_slot_size et))) et
+Proof
+  rpt strip_tac >>
+  `slots_in_range st (w2n w + i * type_slot_size et) et` by
+    (gvs[vyperLookupStorageTheory.slots_in_range_def,
+         vyperLookupStorageTheory.array_slots_in_range_indexed]) >>
+  `slots_in_range st (w2n w + i * type_slot_size et) et =
+   slots_in_range st (w2n (w + n2w (i * type_slot_size et))) et` by
+    (irule (cj 1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+     `w + n2w (i * type_slot_size et) =
+      n2w (w2n w + i * type_slot_size et)` by
+       simp[GSYM word_add_n2w] >>
+     simp[]) >>
+  gvs[]
+QED
+
+Theorem storage_dynamic_array_child_slots:
+  !st w et n i.
+    slots_in_range st (w2n (w:bytes32)) (ArrayTV et (Dynamic n)) /\
+    i < w2n (lookup_storage w st) ==>
+    slots_in_range st (w2n (w + n2w (1 + i * type_slot_size et))) et
+Proof
+  rpt strip_tac >>
+  `slots_in_range st (w2n w + (1 + i * type_slot_size et)) et` by
+    (gvs[vyperLookupStorageTheory.slots_in_range_def,
+         vyperStorageTheory.read_slot_def, AllCaseEqs(),
+         vyperLookupStorageTheory.array_slots_in_range_indexed] >>
+     simp[GSYM ADD_ASSOC]) >>
+  `slots_in_range st (w2n w + (1 + i * type_slot_size et)) et =
+   slots_in_range st (w2n (w + n2w (1 + i * type_slot_size et))) et` by
+    (irule (cj 1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+     `w + n2w (1 + i * type_slot_size et) =
+      n2w (w2n w + (1 + i * type_slot_size et))` by
+       simp[GSYM word_add_n2w] >> simp[]) >>
+  gvs[]
+QED
