@@ -118,7 +118,8 @@ Definition ghost_kept_def:
 End
 
 (* v of type t is in memory at op's address whatever the tainted bytes
-   hold, and op's pointer is covered for its footprint. *)
+   hold, and op's pointer is covered for its word-padded footprint,
+   val_store_size: copies of a bytestring read whole words. *)
 Definition ptr_mem_ok_def:
   ptr_mem_ok cx t v op G tn (s : venom_state) <=>
     !tv w. evaluate_type (get_tenv cx) t = SOME tv /\
@@ -127,7 +128,7 @@ Definition ptr_mem_ok_def:
                   val_in_memory tv v (w2n w) mem) /\
            (val_footprint tv v <> 0 ==>
             ?x b sz. op = Var x /\ FLOOKUP G x = SOME (b, sz) /\
-                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz)
+                     b <= w2n w /\ w2n w + val_store_size tv v <= b + sz)
 End
 
 (* A lowered value op of type t holding v is untainted, and a memory
@@ -182,13 +183,17 @@ End
    counted path whose post keeps the invariant, with the value's pointer
    covered, and leaves older variables' ghost alone.  The return buffer's
    and return PC's variables, which ghost_inv reads, are older than sa, so
-   the fragment's fresh variables don't clobber them. *)
+   the fragment's fresh variables don't clobber them.  S3 is about the
+   runtime code only: a constructor's immutable region is read and written
+   through fixed addresses, not pointers, so the judgments assume
+   ~cenv.ce_is_ctor. *)
 Definition expr_sim_ptr_def:
   expr_sim_ptr d ctx PG func cenv cx ty e es <=>
     !sa sb op s0 G0 tn0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      ~cenv.ce_is_ctor /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -216,6 +221,7 @@ Definition expr_vv_sim_ptr_def:
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      ~cenv.ce_is_ctor /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -251,7 +257,7 @@ Definition stmt_frag_ptr_def:
     (m : compile_env compiler) source es <=>
     !sa sb s0 G0 tn0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
-      ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
+      ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
