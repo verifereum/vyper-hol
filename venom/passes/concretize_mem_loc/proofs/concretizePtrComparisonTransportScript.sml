@@ -9,7 +9,7 @@ Proof
   strip_tac >> gvs[] >> wordsLib.WORD_DECIDE_TAC
 QED
 
-Theorem ptr_closed_relocation_value[local]:
+Theorem ptr_closed_relocation_value:
   (x':bytes32) = x - n2w b + n2w p /\
   b <= w2n x /\ w2n x <= b + sz /\
   p + sz < dimword(:256) ==>
