@@ -117,10 +117,11 @@ Theorem assign_base_ptr_one_byte_init_sequence:
         [mk_inst i MSTORE [Var p; Lit 1w] [];
          mk_inst j ADD [Var p; Lit 32w] [q];
          mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s = OK t /\
-      inst_seq_ptr D 0 ctx func PG G tn
+      (!idx. inst_seq_ptr D 0 ctx func PG G tn
         [mk_inst i MSTORE [Var p; Lit 1w] [];
          mk_inst j ADD [Var p; Lit 32w] [q];
-         mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s G' tn' /\
+         mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []]
+        (s with vs_inst_idx := idx) G' tn') /\
       lookup_var p t = SOME a /\ ptr_covers G' tn' p t 64 /\
       w2n a + 64 < dimword(:256)
 Proof
@@ -168,6 +169,7 @@ Resume assign_base_ptr_one_byte_init_sequence[offset]:
 QED
 
 Resume assign_base_ptr_one_byte_init_sequence[checks]:
+  gen_tac >>
   `~is_terminator h.inst_opcode /\ ~is_terminator ad.inst_opcode /\
    ~is_terminator st.inst_opcode` by
     simp[Abbr `h`, Abbr `ad`, Abbr `st`, mk_inst_def, is_terminator_def] >>
