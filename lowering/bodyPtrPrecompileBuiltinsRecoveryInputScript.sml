@@ -40,7 +40,9 @@ Theorem word_store_progress:
   (do dst <- emit_op ADD [Var bufroot; Lit (n2w off)];
       emit_void MSTORE [dst; v] od) sa = ((),sb) ==>
   sa.cs_next_var <= sb.cs_next_var /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sa sb)
 Proof
   simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
@@ -131,7 +133,9 @@ Finalise clean_input_prefix_extend
 Theorem direct_word_store_progress:
   emit_void MSTORE [Var bufroot; v] sa = ((),sb) ==>
   sa.cs_next_var <= sb.cs_next_var /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sa sb)
 Proof
   simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_id_def, emit_def] >>

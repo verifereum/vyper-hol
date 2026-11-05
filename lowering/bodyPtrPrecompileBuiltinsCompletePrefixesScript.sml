@@ -9,7 +9,9 @@ Ancestors bodyPtrPrecompileBuiltinsAllocationTransport
 Theorem allocation_progress:
   compile_alloc_buffer n sa = (buf,sb) ==>
   sa.cs_next_var <= sb.cs_next_var /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sa sb)
 Proof
   strip_tac >> conj_tac
   >- (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
@@ -55,11 +57,17 @@ Theorem ecmul_complete_prefix_checked:
       (emitted_insts sf sa ++
        (emitted_insts sa sb ++ emitted_insts sb sc ++ emitted_insts sc sp) ++
        emitted_insts sp sm) (s0 with vs_inst_idx := k) Gf tnf) /\
+    EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+      i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE)
+      (emitted_insts sf sa ++ emitted_insts sa sb ++ emitted_insts sb sc ++
+       emitted_insts sc sp ++ emitted_insts sp sm) /\
     ptr_covers Gf tnf bufroot s3 96 /\ ptr_covers Gf tnf out s3 64 /\
     lookup_var bufroot s3 = SOME b /\
     (!i. w2n b <= i /\ i < w2n b + 96 ==> i NOTIN tnf.t_mem) /\
     tnf.t_mem = ((tn.t_mem UNION new_site_bytes s0 s1) DIFF
       {i | w2n b <= i /\ i < w2n b + 96}) UNION new_site_bytes s2 s3 /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 96) ==>
+      mem_bytes_at i 1 s3.vs_memory = mem_bytes_at i 1 s0.vs_memory) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sf p ==>
       lookup_var p s3 = lookup_var p s0 /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -95,6 +103,9 @@ Resume ecmul_complete_prefix_checked[stage]:
   gvs[] >>
   `sa.cs_next_var <= sp.cs_next_var /\
    EVERY (\i. ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb ++ emitted_insts sb sc ++ emitted_insts sc sp) /\
+   EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE)
      (emitted_insts sa sb ++ emitted_insts sb sc ++ emitted_insts sc sp)` by
     (qpat_assum `_ sa = ((),sb)`
        (mp_then Any strip_assume_tac point_word_transfer_progress) >>
@@ -117,10 +128,15 @@ QED
 Resume ecmul_complete_prefix_checked[compose]:
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sf sa)` by
     metis_tac[allocation_progress] >>
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sf sa) /\
+   EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sp sm)` by
+    metis_tac[allocation_progress] >>
   rpt (qpat_x_assum `_ _ = ((),_)` kall_tac) >>
   qpat_x_assum `compile_alloc_buffer 96 _ = _` kall_tac >>
   qpat_x_assum `compile_alloc_buffer 64 _ = _` kall_tac >>
-  simp[] >>
+  fs[EVERY_APPEND] >> reverse conj_tac >- (rpt strip_tac >> first_assum irule >> simp[]) >>
   `!k. inst_seq_ptr D 0 ctx fn PG G1 tn1
     ((emitted_insts sa sb ++ emitted_insts sb sc ++ emitted_insts sc sp) ++
       emitted_insts sp sm) (s1 with vs_inst_idx := k) G3 tn3` by
@@ -176,11 +192,17 @@ Theorem ecadd_complete_prefix_checked:
        (emitted_insts sa sb ++ emitted_insts sb sc ++
         emitted_insts sc sd ++ emitted_insts sd sp) ++ emitted_insts sp sm)
       (s0 with vs_inst_idx := k) Gf tnf) /\
+    EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+      i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE)
+      (emitted_insts sf sa ++ emitted_insts sa sb ++ emitted_insts sb sc ++
+       emitted_insts sc sd ++ emitted_insts sd sp ++ emitted_insts sp sm) /\
     ptr_covers Gf tnf bufroot s3 128 /\ ptr_covers Gf tnf out s3 64 /\
     lookup_var bufroot s3 = SOME b /\
     (!i. w2n b <= i /\ i < w2n b + 128 ==> i NOTIN tnf.t_mem) /\
     tnf.t_mem = ((tn.t_mem UNION new_site_bytes s0 s1) DIFF
       {i | w2n b <= i /\ i < w2n b + 128}) UNION new_site_bytes s2 s3 /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 128) ==>
+      mem_bytes_at i 1 s3.vs_memory = mem_bytes_at i 1 s0.vs_memory) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sf p ==>
       lookup_var p s3 = lookup_var p s0 /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -215,6 +237,10 @@ Resume ecadd_complete_prefix_checked[stage]:
   `sa.cs_next_var <= sp.cs_next_var /\
    EVERY (\i. ~is_terminator i.inst_opcode)
      (emitted_insts sa sb ++ emitted_insts sb sc ++
+      emitted_insts sc sd ++ emitted_insts sd sp) /\
+   EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE)
+     (emitted_insts sa sb ++ emitted_insts sb sc ++
       emitted_insts sc sd ++ emitted_insts sd sp)` by
     (qpat_assum `_ sa = ((),sb)`
        (mp_then Any strip_assume_tac point_word_transfer_progress) >>
@@ -239,10 +265,15 @@ QED
 Resume ecadd_complete_prefix_checked[compose]:
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sf sa)` by
     metis_tac[allocation_progress] >>
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sf sa) /\
+   EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sp sm)` by
+    metis_tac[allocation_progress] >>
   rpt (qpat_x_assum `_ _ = ((),_)` kall_tac) >>
   qpat_x_assum `compile_alloc_buffer 128 _ = _` kall_tac >>
   qpat_x_assum `compile_alloc_buffer 64 _ = _` kall_tac >>
-  simp[] >>
+  fs[EVERY_APPEND] >> reverse conj_tac >- (rpt strip_tac >> first_assum irule >> simp[]) >>
   `!k. inst_seq_ptr D 0 ctx fn PG G1 tn1
     ((emitted_insts sa sb ++ emitted_insts sb sc ++
       emitted_insts sc sd ++ emitted_insts sd sp) ++ emitted_insts sp sm)
@@ -293,6 +324,11 @@ Theorem recovery_complete_prefix_checked:
         emitted_insts sc sd ++ emitted_insts sd sp) ++
        emitted_insts sp sm ++ emitted_insts sm sz)
       (s0 with vs_inst_idx := k) Gf tnf) /\
+    EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+      i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE)
+      (emitted_insts sf sa ++ emitted_insts sa sb ++ emitted_insts sb sc ++
+       emitted_insts sc sd ++ emitted_insts sd sp ++ emitted_insts sp sm ++
+       emitted_insts sm sz) /\
     ptr_covers Gf tnf bufroot s4 128 /\ ptr_covers Gf tnf out s4 32 /\
     lookup_var bufroot s4 = SOME b /\ lookup_var out s4 = SOME c /\
     (!i. w2n b <= i /\ i < w2n b + 128 ==> i NOTIN tnf.t_mem) /\
@@ -300,6 +336,9 @@ Theorem recovery_complete_prefix_checked:
     tnf.t_mem = (((tn.t_mem UNION new_site_bytes s0 s1) DIFF
       {i | w2n b <= i /\ i < w2n b + 128}) UNION new_site_bytes s2 s3) DIFF
       {i | w2n c <= i /\ i < w2n c + 32} /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 128) /\
+         ~(w2n c <= i /\ i < w2n c + 32) ==>
+      mem_bytes_at i 1 s4.vs_memory = mem_bytes_at i 1 s0.vs_memory) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sf p ==>
       lookup_var p s4 = lookup_var p s0 /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -337,6 +376,10 @@ Resume recovery_complete_prefix_checked[stage]:
   `sa.cs_next_var <= sp.cs_next_var /\
    EVERY (\i. ~is_terminator i.inst_opcode)
      (emitted_insts sa sb ++ emitted_insts sb sc ++
+      emitted_insts sc sd ++ emitted_insts sd sp) /\
+   EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE)
+     (emitted_insts sa sb ++ emitted_insts sb sc ++
       emitted_insts sc sd ++ emitted_insts sd sp)` by
     (qpat_assum `_ sa = ((),sb)`
        (mp_then Any strip_assume_tac direct_word_store_progress) >>
@@ -367,6 +410,10 @@ Resume recovery_complete_prefix_checked[zero]:
     emitted_direct_word_store_checked) >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `u` (qx_choose_then `tn4` strip_assume_tac)) >>
+  `!i. ~(w2n c <= i /\ i < w2n c + 32) ==>
+    mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s3.vs_memory` by
+    (rpt strip_tac >> irule bodyPtrPrecompileBuiltinsObservationsTheory.memory_observation_mstore >>
+     simp[] >> metis_tac[]) >>
   qpat_x_assum `u = mstore _ _ _` kall_tac >> gvs[] >>
   `ptr_covers G3 tn3 bufroot s3 128 /\ lookup_var bufroot s3 = SOME b` by
     metis_tac[] >>
@@ -376,13 +423,20 @@ Resume recovery_complete_prefix_checked[zero]:
 QED
 
 Resume recovery_complete_prefix_checked[compose]:
+  qpat_assum `emit_void MSTORE _ sm = _`
+    (mp_then Any strip_assume_tac direct_word_store_progress) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sf sa) /\
    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sp sm)` by
+    metis_tac[allocation_progress] >>
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sf sa) /\
+   EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sp sm)` by
     metis_tac[allocation_progress] >>
   rpt (qpat_x_assum `_ _ = ((),_)` kall_tac) >>
   qpat_x_assum `compile_alloc_buffer 128 _ = _` kall_tac >>
   qpat_x_assum `compile_alloc_buffer 32 _ = _` kall_tac >>
-  simp[] >>
+  fs[EVERY_APPEND] >> reverse conj_tac >- (rpt strip_tac >> metis_tac[]) >>
   `!k. inst_seq_ptr D 0 ctx fn PG G2 tn2
     (emitted_insts sp sm ++ emitted_insts sm sz)
     (s2 with vs_inst_idx := k) G3 tn4` by

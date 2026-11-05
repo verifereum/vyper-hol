@@ -278,7 +278,9 @@ Theorem point_word_transfer_progress:
       dst <- emit_op ADD [Var bufroot; Lit (n2w dstoff)];
       emit_void MSTORE [dst; value] od) sa = ((),sb) ==>
   sa.cs_next_var <= sb.cs_next_var /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) (emitted_insts sa sb)
 Proof
   strip_tac >> drule point_word_transfer_code >> strip_tac >>
   simp[mk_inst_def, is_terminator_def]

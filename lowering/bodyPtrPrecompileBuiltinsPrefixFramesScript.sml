@@ -86,3 +86,25 @@ Proof
       finite_mapTheory.FLOOKUP_DEF] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[]
 QED
+
+(* One application at a completed staging boundary supplies the remaining
+   non-memory frame from its code restriction and linked runtime trace. *)
+Theorem staging_prefix_nonmemory_frames:
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) code /\
+  run_inst_seq code s = OK t /\
+  (!k. inst_seq_ptr D 0 ctx fn PG G tn code
+    (s with vs_inst_idx := k) G' tn') ==>
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+  t.vs_transient = s.vs_transient /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all staging_sequence_runtime_fields >> strip_tac >>
+  qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `s.vs_inst_idx` assume_tac) >> gvs[] >>
+  `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> SSTORE /\
+    i.inst_opcode <> TSTORE /\ i.inst_opcode <> ISTORE) code` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[]) >>
+  drule_all inst_seq_ptr_nonmemory_frame >> simp[]
+QED
