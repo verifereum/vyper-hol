@@ -848,9 +848,10 @@ Resume compile_augassign_attr_storage_mem[post]:
     (qpat_x_assum `emit_void _ _ s3 = _` mp_tac >>
      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
           fresh_id_def, emit_def, comp_return_def] >>
-     strip_tac >> Cases_on `s3.cs_current_insts` >> Cases_on `tr` >>
-     gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
-         venomInstTheory.mk_inst_def, is_terminator_def]) >>
+     strip_tac >> qpat_x_assum `_ = sb` (SUBST1_TAC o SYM) >>
+     Cases_on `s3.cs_current_insts` >> Cases_on `tr` >>
+     simp[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
+          venomInstTheory.mk_inst_def, is_terminator_def]) >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x s = SOME w` by
     (rpt strip_tac >>
