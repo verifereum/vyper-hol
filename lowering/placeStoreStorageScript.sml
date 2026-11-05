@@ -681,7 +681,9 @@ Proof
   >- (`MEM off (MAP FST writes)` by
         (simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
       drule_all (cj 1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
-      simp[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+      simp[vyperValueTheory.type_slot_size_def] >> strip_tac >>
+      gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+      decide_tac) >>
   strip_tac >> gvs[vyperStorageTheory.encode_dyn_bytes_slots_def,
     AllCaseEqs(), indexedListsTheory.MEM_MAPi] >> gvs[]
 QED
@@ -704,7 +706,8 @@ Proof
   qexists_tac `w2n (n2w (LENGTH bs) : bytes32)` >>
   simp[wordsTheory.w2n_n2w] >>
   `LENGTH bs MOD dimword (:256) <= LENGTH bs` by
-    simp[arithmeticTheory.MOD_LESS_EQ] >> decide_tac
+    simp[arithmeticTheory.MOD_LESS_EQ] >>
+  gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac
 QED
 
 Theorem place_store_bytestring_live_copy:
@@ -791,6 +794,7 @@ Resume place_store_encoded_copy_agree[frame]:
          simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
       `start + off < dimword (:256)` by decide_tac >>
       gvs[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >> decide_tac) >>
+  once_rewrite_tac[wordsTheory.WORD_ADD_COMM] >>
   rename1 `FOLDL (\st i. update_storage (n2w start + n2w i) (rd i) st) st2 (COUNT_LIST n)` >>
   `~MEM q (MAP FST (MAP (\i. ((n2w start + n2w i):bytes32,rd i))
        (COUNT_LIST n)))` by
@@ -805,6 +809,7 @@ QED
 Resume place_store_encoded_copy_agree[live]:
   reverse conj_tac >- (asm "origin" mp_tac >> simp[ADD_COMM]) >>
   rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[wordsTheory.WORD_ADD_COMM] >>
   rename1 `FOLDL (\st j. update_storage (n2w start + n2w j) (rd j) st) st2 (COUNT_LIST n)` >>
   `i < n /\
    EL b (word_to_bytes (lookup_storage (n2w (start+i))
@@ -1222,6 +1227,8 @@ Proof
         simp[venom_state_component_equality] >>
       simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules]) >>
   Cases_on `n` >> gvs[contextTheory.compile_copy_memory_def] >> strip_tac >>
+  `SUC n' < dimword (:256)` by
+    gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
   drule_all valueCopyTheory.emit_mcopy_run >> strip_tac >>
   `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
@@ -1958,12 +1965,15 @@ Proof
        ~u.vs_halted /\ u.vs_current_bb = z.cs_current_bb /\
        u.vs_inst_idx = LENGTH z.cs_current_insts` by
     (irule place_store_index_child_path >> simp[] >>
+     conj_tac
+     >- (gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
      goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_op MUL _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_op MUL _ _ = _`)) >>
-     qexists_tac `sw` >> simp[regions_disjoint_def] >> decide_tac) >>
+     qexists_tac `sw` >> simp[regions_disjoint_def] >>
+     gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
   `lookup_var counter u = SOME (n2w k)` by
     metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_counter] >>
   drule_all place_store_counter_increment_path >>
@@ -2346,7 +2356,8 @@ Proof
       drule place_store_fixed_value_path >>
       disch_then (qspecl_then [`ArrayV (SArrayV kvs)`, `ArrayTV stv (Fixed N)`] mp_tac) >>
       simp[valueEncodingTheory.type_memory_size_def] >>
-      disch_then irule >> simp[] >> decide_tac) >>
+      disch_then irule >> simp[] >>
+      gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
   drule_all typedMemoryCopyTheory.typed_copy_sarray_representation >> strip_tac >>
   `?t. gas_marked_path F ctx func s 0 (OK t) /\
        (!i. i < N ==> val_in_memory dtv
@@ -2521,7 +2532,8 @@ Resume place_store_counted_dynarray_prefix_path[raw_sequence]:
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
                   rich_listTheory.DROP_LENGTH_APPEND, listTheory.APPEND] >>
   simp[Once run_inst_seq_def] >>
-  `LENGTH vs < dimword (:256)` by decide_tac >>
+  `LENGTH vs < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
   simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, bool_to_word_def,
@@ -2731,7 +2743,8 @@ Resume place_store_counted_dynarray_path[data]:
   qpat_x_assum `val_in_memory _ _ _ s.vs_memory` kall_tac >>
   qpat_x_assum `typedMemoryCopy$typed_copy_state_frame sa _ _ s t` kall_tac >>
   qpat_x_assum `mem_bytes_at _ _ _ = _` kall_tac >>
-  `LENGTH vs < dimword (:256)` by decide_tac >>
+  `LENGTH vs < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
   Cases_on `type_memory_size dtv = type_memory_size stv /\ dty = sty` >>
   IF (qpat_assum `type_memory_size dtv = type_memory_size stv /\ dty = sty` kall_tac)
     (suspend "bulk_data") (suspend "slow_data")
@@ -2761,7 +2774,9 @@ Resume place_store_counted_dynarray_path[slow_data]:
   qpat_x_assum `w2n (sw + 32w) = _` kall_tac >>
   qpat_x_assum `_ b = ((),sb)` mp_tac >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gnvs[]) >>
+  rpt (pairarg_tac >>
+    pop_assum (fn th => assume_tac th >> pure_rewrite_tac [th]) >>
+    CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV)) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> gnvs[] >>
   rename1 `fresh_label "typed_dyn_cond" b = (hdr,l1)` >>
   rename1 `fresh_label "typed_dyn_body" l1 = (blabel,l2)` >>
@@ -3393,8 +3408,10 @@ Proof
   simp[place_store_counted_entry_def] >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`func`, `s`, `dw`, `sw`] mp_tac) >>
-  simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
-  qexists_tac `t` >>
+  simp[compileEnvTheory.regions_disjoint_def] >>
+  (impl_tac >- (gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac)) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  qexists_tac `u` >>
   gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
       typedMemoryCopyTheory.typed_copy_frame_def] >> metis_tac[]
 QED
@@ -3606,6 +3623,62 @@ Proof
        evaluate_type_def, type_slot_size_def, valueEncodingTheory.type_memory_size_def,
        is_word_type_def, is_bytestring_type_def,
        wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> EVAL_TAC
+QED
+
+Theorem place_store_zero_alloc_probe:
+  inst.inst_outputs = [out] ==>
+  exec_alloca inst s 0w =
+    (case FLOOKUP s.vs_allocas inst.inst_id of
+       SOME (b,sz) => OK (update_var out (n2w b) s)
+     | NONE => OK (update_var out (n2w s.vs_alloca_next)
+         (s with vs_allocas :=
+           s.vs_allocas |+ (inst.inst_id, (s.vs_alloca_next,0)))))
+Proof
+  strip_tac >> simp[exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem place_store_wrapped_suffix_address_probe:
+  let d = dimword (:256) in
+    1 < d DIV 32 /\
+    w2n (n2w (d - 32) + (n2w 1 : bytes32) * 32w) = 0 /\
+    w2n (((1w + 31w) && integer_word$i2w (-32)) + 32w : bytes32) = 64 /\
+    (!s.
+      mem_bytes_at 0 32 (mcopy (d - 32) 0 64 s).vs_memory =
+        mem_bytes_at 0 32 s.vs_memory /\
+      mem_bytes_at d 32 (mcopy (d - 32) 0 64 s).vs_memory =
+        mem_bytes_at 32 32 s.vs_memory)
+Proof
+  simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  conj_tac >- (CONV_TAC wordsLib.WORD_CONV >>
+    qspec_then `1` mp_tac valueCopyTheory.bytestring_copy_len_word_exact >>
+    simp[vfmConstantsTheory.word_size_def, wordsTheory.dimword_def,
+         venomMemPropsTheory.dimindex_256]) >>
+  gen_tac >> conj_tac
+  >- (irule valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint >> EVAL_TAC) >>
+  mp_tac valueEncodingPropsTheory.mcopy_mem_bytes_at_same >>
+  disch_then (qspecl_then [`2 ** 256 - 32`, `0`, `64`, `s`] assume_tac) >>
+  drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
+  disch_then (qspecl_then [`32`, `32`] mp_tac) >> simp[]
+QED
+
+Theorem place_store_nested_normalization_dispatch_probe:
+  !cenv dst src.
+    acyclic_struct_metadata cenv.ce_struct_fields ==>
+    compile_store_memory_typed cenv dst
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) src
+      (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) =
+    compile_copy_sarray_typed cenv dst
+      (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) src
+      (BaseT (BytesT (Dynamic 1))) 1 /\
+    compile_store_memory_typed cenv dst
+      (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) src
+      (BaseT (BytesT (Dynamic 1))) = compile_store_bytestring src dst
+Proof
+  rpt strip_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def,
+       is_word_type_def, is_bytestring_type_def]
 QED
 
 Theorem place_store_value_storage_run:
