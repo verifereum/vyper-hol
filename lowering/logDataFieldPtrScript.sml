@@ -312,3 +312,24 @@ Resume log_data_store_memory_seq_ptr[word]:
   asm_rewrite_tac[] >> simp[]
 QED
 Finalise log_data_store_memory_seq_ptr
+
+Theorem log_data_source_ptr_kept:
+  log_data_source cx b cap s (op,ty) v /\ ptr_val_ok cx ty v op G tn s /\
+  log_write_frame st b cap s sf /\
+  (!x. op = Var x ==> not_fresh_at st x /\ FLOOKUP Gf x = FLOOKUP G x) /\
+  op_taint tnf op = op_taint tn op /\
+  (!i. ~(b <= i /\ i < b+cap) ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) ==>
+  ptr_val_ok cx ty v op Gf tnf sf
+Proof
+  strip_tac >>
+  `eval_operand op sf = eval_operand op s` by
+    (irule log_write_frame_operand >> metis_tac[]) >>
+  irule ptr_val_ok_exterior_frame >>
+  qexistsl_tac [`G`,`s`,`tn`,`{i | b <= i /\ i < b+cap}`] >>
+  asm_rewrite_tac[] >> simp[] >> conj_tac
+  >- (rpt strip_tac >> fs[log_write_frame_def] >>
+      first_x_assum irule >> decide_tac) >>
+  fs[log_data_source_def,log_source_apart_def] >> rpt strip_tac >>
+  qpat_x_assum `!tv w. _` (qspecl_then [`tv`,`w`] mp_tac) >>
+  simp[] >> decide_tac
+QED
