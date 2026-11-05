@@ -112,8 +112,12 @@ Theorem emit_copy_len_binop_seq_ptr:
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
     ~ctx_has_dalloca ctx ==>
-    ?Gf tnf.
+    ?Gf tnf sf.
       inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      lookup_var out sf = SOME (f a b) /\
+      (sf with vs_vars := s.vs_vars) = s /\
+      (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s) /\
       op_taint tnf (Var out) = {} /\
       tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
       tnf.t_trans = tn.t_trans /\
@@ -136,7 +140,12 @@ Proof
      (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
                        op_taint tnf (Var p) = op_taint tn (Var p))` by
     (irule copy_len_binop_seq_ptr >> metis_tac[]) >>
-  qexistsl_tac [`Gf`, `tnf`] >> gvs[] >> metis_tac[]
+  `step_inst_base (mk_inst sa.cs_next_id opc [left;right] [out]) s =
+     OK (update_var out (f a b) s)` by
+    (irule copy_len_binop_step >> metis_tac[]) >>
+  qexistsl_tac [`Gf`, `tnf`, `update_var out (f a b) s`] >>
+  gvs[run_inst_seq_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
 
 Theorem inst_seq_ptr_append_run:
@@ -157,4 +166,48 @@ Proof
   first_x_assum irule >>
   simp[run_inst_seq_inst_idx, exec_result_map_def] >>
   qexistsl_tac [`G1`, `tn1`] >> gvs[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem emit_mload_clean_seq_ptr:
+  !D ctx fn PG G tn s sa sb src out a.
+    emit_op MLOAD [Var src] sa = (Var out,sb) /\
+    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    lookup_var src s = SOME a /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+    ?Gf tnf sf.
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      lookup_var out sf = SOME (mload (w2n a) s) /\
+      (sf with vs_vars := s.vs_vars) = s /\
+      (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s) /\
+      op_taint tnf (Var out) = {} /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      (!p. not_fresh_at sa p ==>
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt strip_tac >>
+  `emitted_insts sa sb = [mk_inst sa.cs_next_id MLOAD [Var src] [out]] /\
+   (!p. not_fresh_at sa p ==> p <> out)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def,
+         emitted_insts_def, DROP_APPEND1] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `?Gf tnf.
+     inst_seq_ptr D 0 ctx fn PG G tn
+       [mk_inst sa.cs_next_id MLOAD [Var src] [out]] s Gf tnf /\
+     op_taint tnf (Var out) = {} /\
+     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+     tnf.t_trans = tn.t_trans /\
+     (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
+                       op_taint tnf (Var p) = op_taint tn (Var p))` by
+    (irule mload_clean_seq_ptr >> simp[]) >>
+  qexistsl_tac [`Gf`, `tnf`, `update_var out (mload (w2n a) s) s`] >>
+  simp[] >>
+  `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s =
+     OK (update_var out (mload (w2n a) s) s)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+  gvs[run_inst_seq_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
