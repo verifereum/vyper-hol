@@ -124,7 +124,7 @@ Theorem register_positional_args_step:
        compile_alloc_buffer msz st = (buf, sa) /\
        compile_decode_args
          (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar buf.buf_operand msz)))
-         [(name, prim, dyn, sz, dec)] off CALLDATALOAD (Lit 0w) (Lit 0w) 4 sa = ((), sb) /\
+         [(name, prim, dyn, sz, dec)] off CALLDATALOAD (Lit 0w) 4 sa = ((), sb) /\
        compile_register_positional_args
          (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar buf.buf_operand msz)))
          rest (off + sz) sb = (cenvf, stf))
@@ -834,7 +834,7 @@ Theorem entry_register_index_phases:
         (FST (EL i args), PtrVar buf.buf_operand
            (type_memory_bytes cenv0 (SND (EL i args))))) in
       compile_decode_args cenv1 [build_positional_arg cenv0 (EL i args)]
-        off CALLDATALOAD (Lit 0w) (Lit 0w) 4 sa = ((),sb) /\
+        off CALLDATALOAD (Lit 0w) 4 sa = ((),sb) /\
       compile_register_positional_args cenv1
         (build_positional_args cenv0 (DROP (SUC i) args))
         (off + abi_embedded_static_size cenv0.ce_struct_fields (SND (EL i args)))
