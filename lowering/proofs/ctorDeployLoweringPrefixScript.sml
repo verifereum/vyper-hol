@@ -891,9 +891,17 @@ val prefix_plan_rules = List.concat (List.concat (map
   (computeLib.listItems (computeLib.the_compset ()))));
 val prefix_plan_cs = computeLib.copy (computeLib.the_compset ());
 val prefix_plan_cs = computeLib.scrub_const prefix_plan_cs prefix_release_const;
+fun prefix_release_elim_conv tm =
+  let
+    val norm = RAND_CONV computeLib.EVAL_CONV tm
+    val ntm = rhs (concl norm)
+    val elim = SIMP_CONV (srw_ss()) [deploy_prefix_release_empty_spills] ntm
+  in
+    if aconv (rhs (concl elim)) (rand ntm) then TRANS norm elim
+    else raise Fail "prefix_release_elim_conv: release did not eliminate to state"
+  end;
 val prefix_plan_cs = computeLib.add_conv
-  (prefix_release_const, 2,
-   SIMP_CONV (srw_ss()) [deploy_prefix_release_empty_spills]) prefix_plan_cs;
+  (prefix_release_const, 2, prefix_release_elim_conv) prefix_plan_cs;
 fun prefix_reinstall_callers heads rules cs =
   let fun depends th =
         let val (_,body) = strip_forall (concl th)
@@ -935,6 +943,26 @@ Theorem deploy_prefix_negative_reorder_second:
 Proof
   EVAL_TAC
 QED
+val prefix_context_plan_tm = ``
+  <|cp_regions :=
+      [<|sr_fn_name := "__deploy"; sr_spill_base := 32; sr_spill_end := 32;
+         sr_plan :=
+           [SOLabel "__deploy"; SOPush (Lit 32w); SOPush (Lit 0w);
+            SOPush (Lit 0w); SOEmit "ADD"; SOPushLabel "code_end";
+            SOEmit "ADD"; SOPush (Lit 0w); SOSwap 1; SODup 2; SOSwap 3;
+            SOSwap 2; SOEmit "CODECOPY"; SOEmit "MLOAD"; SOPush (Lit 0w);
+            SOEmit "MSTORE"; SOPush (Lit 0w); SOPush (Lit 0w); SODup 1;
+            SOPushLabel "runtime_begin"; SOSwap 1; SOEmit "CODECOPY";
+            SOPush (Lit 0w); SOEmit "RETURN"]|>]; cp_max_static_eom := 32;
+    cp_peak_spill_end := 0; cp_initial_fmp := 32|>``;
+
+Theorem deploy_prefix_negative_context_plan:
+  stackPlanGen$generate_context_plan ^prefix_plan_ctx_tm =
+    SOME ^prefix_context_plan_tm
+Proof
+  CONV_TAC prefix_plan_eval_conv
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
