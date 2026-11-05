@@ -8,6 +8,7 @@ Ancestors
   vyperTypeSystem exprLoweringProps venomExecSemantics exprSimUnop builtinSimple
   words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
   exprSimOps exprBopLowering exprSimCompare freshWrites rich_list exprSimArith
+  exprSimOperators bodyIntCallSourceFrame
 Libs
   intLib
 
@@ -1734,3 +1735,118 @@ val () = List.app (fn th =>
         compile_shift_storage_frame_reachable_frag,
         compile_compare_storage_frame_reachable_frag,
         compile_bitwise_storage_frame_reachable_frag];
+
+Theorem integer_typed_value_bound:
+  is_int_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  ?i u. v = IntV i /\ type_to_int_bound ty = SOME u /\
+    within_int_bound u i /\ 0 < type_bits ty /\ type_bits ty <= 256
+Proof
+  strip_tac >> Cases_on `ty` >> gvs[is_int_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[is_int_type_def, evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[value_has_type_def, type_to_int_bound_def, type_bits_def] >>
+  simp[within_int_bound_def]
+QED
+
+Theorem integer_bop_operand_types[local]:
+  well_typed_binop ann bop t1 t2 /\ MEM bop [Add;Sub;Mul] /\ is_int_type ann ==>
+  t1 = ann /\ t2 = ann /\ is_word_type ann /\ word_value_type ann
+Proof
+  strip_tac >> fs[] >> gvs[well_typed_binop_def] >>
+  Cases_on `ann` >> gvs[is_int_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[is_int_type_def, is_word_type_def, word_value_type_def, is_numeric_type_def]
+QED
+
+Theorem integer_bop_success_types[local]:
+  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  MEM bop [Add;Sub;Mul] /\ is_int_type ann /\
+  (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+  (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+  expr_type e1 = ann /\ expr_type e2 = ann /\
+  is_word_type ann /\ IS_SOME (evaluate_type (get_tenv cx) ann) /\
+  expr_body_pre cenv cx env e1 es /\ expr_body_pre cenv cx env e2 es1 /\
+  ?i1 i2 u. v1 = IntV i1 /\ v2 = IntV i2 /\ type_to_int_bound ann = SOME u /\
+    0 < type_bits ann /\ type_bits ann <= 256 /\
+    within_int_bound u i1 /\ within_int_bound u i2
+Proof
+  strip_tac >> drule expr_body_pre_bop >> strip_tac >>
+  drule_all integer_bop_operand_types >> strip_tac >>
+  `word_value_type (expr_type e1)` by simp[] >>
+  drule_all expr_body_pre_word_result >> strip_tac >>
+  `expr_body_pre cenv cx env e2 es1` by metis_tac[] >>
+  `word_value_type (expr_type e2)` by simp[] >>
+  qpat_assum `expr_body_pre _ _ _ e2 es1`
+    (mp_then Any mp_tac expr_body_pre_word_result) >>
+  simp[] >> strip_tac >>
+  gvs[] >>
+  `?i u. v1 = IntV i /\ type_to_int_bound (expr_type e1) = SOME u /\
+    within_int_bound u i /\ 0 < type_bits (expr_type e1) /\ type_bits (expr_type e1) <= 256` by
+    (irule integer_typed_value_bound >> metis_tac[]) >>
+  qpat_assum `value_has_type _ v2`
+    (mp_then Any (qspecl_then [`expr_type e1`, `get_tenv cx`] mp_tac)
+      integer_typed_value_bound) >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem supported_word_eval_scopes[local]:
+  supported_pure_expr tops e /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
+  es'.scopes = es.scopes
+Proof
+  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  drule_all supported_eval_expr_outcomes >> strip_tac >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  qpat_x_assum `es' = _` (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]
+QED
+
+Theorem compile_checked_storage_frame_typed:
+  MEM bop [Add;Sub;Mul] /\ is_int_type ann /\
+  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  supported_pure_expr tops e1 /\ supported_pure_expr tops e2 /\
+  (!e env0 a b operand es0 es1 value start saved savedT R.
+    (e = e1 \/ e = e2) /\ expr_body_pre cenv cx env0 e es0 /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule successful_bop_operands >> strip_tac >>
+  drule_all integer_bop_success_types >> strip_tac >>
+  irule compile_checked_storage_frame_reachable_frag >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_body_pre_lower_value_word_shape >>
+      disch_then (qspecl_then [`cx`, `env`, `es`] mp_tac) >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!e env0 a b operand es0 es1 value start saved savedT R. _`
+        irule >> gvs[] >> qexists_tac `env` >> simp[]) >>
+  conj_tac
+  >- (`es1.scopes = es.scopes` by
+        (irule supported_word_eval_scopes >> metis_tac[]) >> simp[]) >>
+  qexists_tac `ty` >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Typed integer framing has unproved dependencies"
+  end) [integer_typed_value_bound, integer_bop_operand_types,
+        integer_bop_success_types, supported_word_eval_scopes,
+        compile_checked_storage_frame_typed];
