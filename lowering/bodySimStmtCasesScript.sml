@@ -310,9 +310,9 @@ Theorem body_assert_reason_other:
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
-    (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
-             (INL (BoolV F), es1) ==>
-           expr_vv_sim ctx func cenv cx (expr_type se) se es1) /\
+    (!gs es1. (do raw <- eval_expr cx e; read_result cx raw od)
+                (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
+              expr_vv_sim ctx func cenv cx (expr_type se) se es1) /\
     (!sa vv sb. compile_expr cenv (expr_type se) se sa = (vv, sb) ==>
                 reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
@@ -396,7 +396,7 @@ Proof
     (rpt strip_tac >> irule assert_reason_vv_sim >>
      gvs[expr_sim_pre_body, stmt_exprs_ok_def,
          supported_stmt_expr_exists_def, supported_assert_exists_def] >>
-     metis_tac[]) >>
+     metis_tac[expr_sim_pre_gas_obs]) >>
   Cases_on `reason_covered cenv se`
   >- (gvs[reason_covered_def]
       >- (irule compile_assert_reason_frag >> simp[] >> metis_tac[])
