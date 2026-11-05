@@ -3,7 +3,8 @@ Ancestors
   concretizePtrStructuralTranscript concretizePtrValueSelection
   concretizePtrPrefixLedger concretizePtrStagePlacements concretizePtrBytes
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
-  concretizeStepRetpc concretizeStageShape
+  concretizeStepRetpc concretizeStageShape concretizeStepContract
+  concretizePtrOpaqueRetpc
   list rich_list arithmetic pair pred_set
 
 (* The global map is for relocation only; production rewrites have their
@@ -268,4 +269,41 @@ Proof
   rpt gen_tac >> strip_tac >> drule_all ptr_paired_write_event >>
   simp[ptr_paired_write_def] >> strip_tac >>
   drule_all ptr_paired_write_owner_byte >> simp[]
+QED
+
+Theorem ptr_paired_code_retpc:
+  ptr_paired_code R lp positions f g ==>
+  (retpc_var f x <=> retpc_var g x)
+Proof
+  simp[ptr_paired_code_def, unitShapeDefsTheory.retpc_var_def] >> strip_tac >>
+  drule concretize_blocks_copy_phi >>
+  disch_then (qspecl_then [`x`,`RETPC_PARAM`] mp_tac) >>
+  simp[concretize_positions_copy_phi]
+QED
+
+(* The historical mixed fact is an input here. C1.10.8 installs it in the
+   sample certificate; restoration never reinterprets caller variables
+   using a callee token. *)
+Theorem ptr_paired_call_mixed:
+  ptr_paired_call h ht done H frame framet tags (n,j) /\
+  ptr_mixed_vars births positions TG (EL n h).po_taint
+    (EL n h).po_fn (EL j ht).po_fn (EL n h).po_state (EL j ht).po_state ==>
+  ptr_mixed_vars births positions TG (EL n h).po_taint
+    frame.cf_fn framet.cf_fn frame.cf_state framet.cf_state
+Proof
+  simp[ptr_paired_call_def, ptr_paired_frame_def] >> metis_tac[]
+QED
+
+Theorem ptr_paired_callers_mixed:
+  ptr_paired_callers h ht done H a at saved calls /\ k < LENGTH calls /\
+  EL k calls = (n,j) /\
+  ptr_mixed_vars births positions TG (EL n h).po_taint
+    (EL n h).po_fn (EL j ht).po_fn (EL n h).po_state (EL j ht).po_state ==>
+  ptr_mixed_vars births positions TG (EL n h).po_taint
+    (EL k a.po_stack).cf_fn (EL k at.po_stack).cf_fn
+    (EL k a.po_stack).cf_state (EL k at.po_stack).cf_state
+Proof
+  strip_tac >> fs[ptr_paired_callers_def] >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
+  drule_all ptr_paired_call_mixed >> simp[]
 QED

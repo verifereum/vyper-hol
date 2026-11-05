@@ -616,3 +616,94 @@ QED
    Consumers must supply that actual binding order and the postghost masks
    for ordinary bound values and untouched ordinary variables.  Nothing here
    asserts universal block-entry success or equal ordinary return values. *)
+
+Theorem ptr_mixed_vars_fields:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s'.vs_vars = s.vs_vars /\ t'.vs_vars = t.vs_vars /\
+  s'.vs_return_pc_token = s.vs_return_pc_token /\
+  t'.vs_return_pc_token = t.vs_return_pc_token /\ tn'.t_var = tn.t_var ==>
+  ptr_mixed_vars births positions TG tn' f g s' t'
+Proof
+  simp[ptr_mixed_vars_def, ptr_opaque_env_def, lookup_var_def,
+       ptrDisciplineTheory.op_taint_def] >> metis_tac[]
+QED
+
+Theorem ptr_mixed_vars_merge:
+  ptr_mixed_vars births positions TG tn f g s t ==>
+  ptr_mixed_vars births positions TG tn f g
+    (merge_callee_state s se) (merge_callee_state t te)
+Proof
+  strip_tac >> irule ptr_mixed_vars_fields >>
+  simp[merge_callee_state_frame] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ptr_mixed_vars_adopt:
+  ptr_mixed_vars births positions TG tn f g s t ==>
+  ptr_mixed_vars births positions TG tn f g
+    (adopt_return_fmp r s) (adopt_return_fmp rt t)
+Proof
+  strip_tac >> irule ptr_mixed_vars_fields >>
+  simp[adopt_return_fmp_frame] >> goal_assum (drule_at Any) >>
+  Cases_on `r.iret_adopt_fmp` >> Cases_on `rt.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def]
+QED
+
+Theorem ptr_mixed_scalar_bind_fold:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  EVERY (\kv. ~retpc_var f (FST kv)) kvs ==>
+  ptr_mixed_vars births positions
+    (DRESTRICT TG (COMPL (set (MAP FST kvs))))
+    (tn with t_var := DRESTRICT tn.t_var (COMPL (set (MAP FST kvs)))) f g
+    (FOLDL (\st (out,v). update_var out v st) s kvs)
+    (FOLDL (\st (out,v). update_var out v st) t kvs)
+Proof
+  strip_tac >> irule ptr_mixed_vars_bind_fold >>
+  reverse (rpt conj_tac) >- (qexistsl_tac [`TG`,`tn`] >> simp[])
+  >- (simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+      `MEM (EL n kvs) kvs` by simp[EL_MEM] >>
+      Cases_on `EL n kvs` >> gvs[] >>
+      `MEM q (MAP FST kvs)` by (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+      `~retpc_var f q` by (fs[EVERY_MEM] >> metis_tac[pairTheory.FST]) >>
+      simp[FLOOKUP_DRESTRICT, ptrDisciplineTheory.op_taint_def,
+           ptr_value_transport_refl]) >>
+  rpt strip_tac >>
+  simp[FLOOKUP_DRESTRICT, ptrDisciplineTheory.op_taint_def] >>
+  drule_all ptr_mixed_vars_lookup >> simp[ptrDisciplineTheory.op_taint_def]
+QED
+
+
+Theorem ptr_mixed_return_bind:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  EVERY (\out. ~retpc_var f out) outs /\
+  r.iret_values = rt.iret_values /\
+  r.iret_adopt_fmp = NONE /\ rt.iret_adopt_fmp = NONE ==>
+  (bind_outputs outs r.iret_values (adopt_return_fmp r (merge_callee_state s se)) = NONE <=>
+   bind_outputs outs rt.iret_values (adopt_return_fmp rt (merge_callee_state t te)) = NONE) /\
+  (!s' t'.
+    bind_outputs outs r.iret_values (adopt_return_fmp r (merge_callee_state s se)) = SOME s' /\
+    bind_outputs outs rt.iret_values (adopt_return_fmp rt (merge_callee_state t te)) = SOME t' ==>
+    ptr_mixed_vars births positions (DRESTRICT TG (COMPL (set outs)))
+      (tn with t_var := DRESTRICT tn.t_var (COMPL (set outs))) f g s' t')
+Proof
+  strip_tac >>
+  `ptr_mixed_vars births positions TG tn f g
+    (adopt_return_fmp r (merge_callee_state s se))
+    (adopt_return_fmp rt (merge_callee_state t te))` by
+    (irule ptr_mixed_vars_adopt >> irule ptr_mixed_vars_merge >> simp[]) >>
+  simp[bind_outputs_def] >> Cases_on `LENGTH outs = LENGTH rt.iret_values` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  drule ptr_mixed_scalar_bind_fold >>
+  disch_then (qspec_then `ZIP (outs,rt.iret_values)` mp_tac) >>
+  simp[GSYM combinTheory.o_DEF, GSYM EVERY_MAP, MAP_ZIP] >>
+  impl_tac >- fs[EVERY_MAP] >> simp[]
+QED
+
+Theorem ptr_retpc_invoke_outputs:
+  retpc_shape_ok f /\ MEM inst (fn_insts f) /\ inst.inst_opcode = INVOKE ==>
+  EVERY (\out. ~retpc_var f out) inst.inst_outputs
+Proof
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  fs[retpc_shape_ok_def] >>
+  qpat_x_assum `!i x. MEM i _ /\ MEM x _ /\ retpc_var _ x ==> _`
+    (qspecl_then [`inst`,`out`] mp_tac) >> simp[]
+QED
