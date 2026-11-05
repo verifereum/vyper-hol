@@ -2,7 +2,7 @@
    builtins: ceil (S1: exprSimBuiltins' compile_ceil_case). *)
 Theory bodyMemBiCeil
 Ancestors
-  bodyMemoryPreds exprSimSource exprSimDefs vyperTypeSystem
+  bodyMemoryPreds bodyMemBiCeilCompose exprSimSource exprSimDefs vyperTypeSystem
   vyperAST exprSimHypsDefs loweringShapeProps
 
 Theorem ceil_body_pre[local]:
@@ -34,5 +34,12 @@ Theorem body_builtin_ceil_mem:
     (builtin_args_length_ok Ceil (LENGTH es) ==> body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Builtin ty Ceil es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule ceil_body_pre >> strip_tac >> gvs[] >>
+  `body_expr_mem_ok cx e` by
+    (irule ceil_body_operand_mem >> simp[]) >>
+  `expr_sim_mem ctx func cenv cx ty' e es'` by
+    metis_tac[body_expr_mem_ok_def] >>
+  metis_tac[compile_ceil_sim_mem, compile_ceil_vv_sim_mem]
 QED
