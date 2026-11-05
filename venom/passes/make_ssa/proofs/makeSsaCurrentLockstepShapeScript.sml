@@ -584,5 +584,8 @@ Theorem make_ssa_current_fn_lookup_block_rev:
   lookup_block l fn'.fn_blocks = SOME bb' ==>
   ?bb. lookup_block l fn.fn_blocks = SOME bb
 Proof
-  cheat
+  rpt strip_tac >> drule make_ssa_current_fn_labels >> strip_tac >>
+  drule makeSsaHelperTheory.lookup_block_labels_agree >>
+  disch_then (qspec_then `l` mp_tac) >> simp[] >>
+  Cases_on `lookup_block l fn.fn_blocks` >> simp[]
 QED
