@@ -210,5 +210,23 @@ Theorem lineage_entry_join_stack:
                                          (live_vars_at liveness bb.bb_label 0)) /\
           EVERY (\op. op = dead_stack_marker) pre
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [lineage_entry_def]) >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_all (SRULE [] lineage_entry_inventory) >> strip_tac >>
+  drule_all join_predecessor_jmp_shape >> strip_tac >>
+  drule_all join_predecessor_single_successor >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all lineage_state_reachable >> strip_tac >>
+  drule_all successful_block_jmp_suffix >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `generated_plan_state_wf_marked _ _` mp_tac >>
+  simp[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  strip_tac >> irule distinct_filtered_prefix_markers >>
+  goal_assum (drule_at Any) >> rpt strip_tac >>
+  qpat_x_assum `!op. _ ==> ?v. _` (qspec_then `x` mp_tac) >>
+  simp[] >> strip_tac >> gvs[MEM_MAP] >>
+  irule single_successor_exit_live >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
