@@ -5,7 +5,8 @@
  *)
 Theory ctorDeployDload
 Ancestors
-  ctorDeployDefs o1PassContract unitMemInv lowerDloadDefs
+  ctorDeployDefs o1PassContract gasSummary unitMemInv lowerDloadDefs
+  ctorDeployMemoryFrontier ctorDeployMemoryRunMem ctorDeployImmBudget
 
 Theorem deploy_unit_dload_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
@@ -13,12 +14,20 @@ Theorem deploy_unit_dload_ok:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (entry_venom_state prog cplan es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
     code_layout_valid vs /\
-    ~deploy_source_exempt tops (load_contract NONE [] am tx [(NONE, tops)] [])
+    (!marks. ~deploy_source_exempt tops
+               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+                  [(NONE, tops)] []))
     ==>
     mem_inv dload_offset_ok dunit.cu_context vs /\
     mem_inv dload_headroom_ok dunit.cu_context vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_unit_run_entry >> strip_tac >>
+  drule_all deploy_unit_run_mem_safe >> strip_tac >>
+  drule deploy_imm_budget_ok >> strip_tac >>
+  conj_tac
+  >- (irule lowered_unit_dload_offset_ok >> metis_tac[]) >>
+  irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
 QED
