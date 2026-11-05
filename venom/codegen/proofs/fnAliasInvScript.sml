@@ -3721,6 +3721,95 @@ Proof
   Cases_on `phi.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]
 QED
 
+Theorem alias_ready_phi_prefix_retention:
+  codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM x (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  k < LENGTH (collect_phis bb.bb_instructions) /\
+  MEM (pred,x) (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands) ==>
+  EVERY (\p. (?out. (FST p).inst_outputs = [out]) /\
+    ~MEM (Var x) (FILTER is_var_operand (FST p).inst_operands) /\
+    ~MEM x (FST p).inst_outputs)
+    (MAP (\j. (EL j (collect_phis bb.bb_instructions), lives j)) (COUNT_LIST k))
+Proof
+  strip_tac >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, phi_operands_ready_def, phi_block_ready_def,
+         EVERY_MEM, NULL_EQ, phi_uses_disjoint_def] >>
+     metis_tac[lookup_block_MEM, phi_uses_disjoint_def]) >>
+  `MEM x (inst_uses (EL k (collect_phis bb.bb_instructions)))` by
+    (simp[inst_uses_def] >> irule alias_phi_pairs_subset_uses >>
+     simp[MEM_MAP] >> qexists_tac `(pred,x)` >> simp[]) >>
+  simp[EVERY_MAP, EVERY_MEM, MEM_COUNT_LIST] >> rpt strip_tac
+  >- (irule alias_ready_phi_single_output >> metis_tac[EL_MEM, arithmeticTheory.LESS_TRANS])
+  >- (gvs[MEM_FILTER, inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+      `j < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+      `j = k` by metis_tac[alias_phi_uses_disjoint_index, inst_uses_def,
+                          passSharedDefsTheory.MEM_operand_vars_eq_Var] >> decide_tac) >>
+  `MEM (EL j (collect_phis bb.bb_instructions))
+       (collect_phis bb.bb_instructions)` by (simp[EL_MEM] >> decide_tac) >>
+  metis_tac[alias_ready_input_not_phi_output, inst_defs_def]
+QED
+
+Theorem alias_lineage_join_phi_prefix_slots:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) ==>
+  ?pred. lineage_entry liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
+    MEM pred (cfg_preds_of cfg lbl) /\
+    (!k x lives halting.
+      k < LENGTH (collect_phis bb.bb_instructions) /\
+      MEM (pred,x) (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands) ==>
+      MEM (Var x) (FOLDL (\s p.
+        SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+        (MAP (\j. (EL j (collect_phis bb.bb_instructions), lives j))
+          (COUNT_LIST k))).ps_stack /\
+      (?d. stack_get_phi_depth
+        (FILTER is_var_operand (EL k (collect_phis bb.bb_instructions)).inst_operands)
+        (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+          (MAP (\j. (EL j (collect_phis bb.bb_instructions), lives j))
+            (COUNT_LIST k))).ps_stack = SOME d))
+Proof
+  strip_tac >> drule_all alias_lineage_join_historical_coverage >>
+  disch_then (qx_choose_then `pred` strip_assume_tac) >>
+  qexists_tac `pred` >> simp[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[alias_lineage_reachable] >>
+  `fn_reachable fn lbl` by metis_tac[fn_reachable_cfg_analyze] >>
+  `?pb. cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
+    (qpat_x_assum `lineage_entry _ _ _ _ _ _ _ _` mp_tac >>
+     simp[lineage_entry_def] >> rpt strip_tac >>
+     metis_tac[alias_lineage_reachable]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM x (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))` by
+    metis_tac[alias_ready_phi_input_member] >>
+  `MEM (Var x) ps.ps_stack` by metis_tac[] >>
+  `EVERY (\p. (?out. (FST p).inst_outputs = [out]) /\
+    ~MEM (Var x) (FILTER is_var_operand (FST p).inst_operands) /\
+    ~MEM x (FST p).inst_outputs)
+    (MAP (\j. (EL j (collect_phis bb.bb_instructions), lives j)) (COUNT_LIST k))` by
+    (irule alias_ready_phi_prefix_retention >> metis_tac[]) >>
+  conj_tac
+  >- (irule alias_phi_prefix_retains_stack >> simp[]) >>
+  irule alias_phi_prefix_next_slot >> simp[] >>
+  qexists_tac `x` >> simp[MEM_FILTER, is_var_operand_def] >>
+  `MEM x (inst_uses (EL k (collect_phis bb.bb_instructions)))` by
+    (simp[inst_uses_def] >> irule alias_phi_pairs_subset_uses >>
+     simp[MEM_MAP] >> qexists_tac `(pred,x)` >> simp[]) >>
+  gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]
+QED
+
 Theorem alias_phi_plan_holds_live:
   MEM x live /\ plan_holds ps (Var x) ==>
   plan_holds (SND (generate_phi_plan inst live halting ps)) (Var x)
