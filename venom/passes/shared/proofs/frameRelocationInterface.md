@@ -635,3 +635,18 @@ actual decode/lookup/eval/setup witnesses. At return, close the child prefix,
 apply `matched_run_invoke_return`, then extend the saved caller prefix.
 Neither endpoint reachability nor erased joint-history logs alone supplies
 this matched execution invariant or the raw-reachability projection.
+
+### Raw projection from matched activations (frameRawProjection)
+
+`frame_reachable_raw` projects the current activation to `raw_reachable`
+under `EVERY wf_function ctx.ctx_functions`; `frame_reachable_saved_raw`
+provides the same fact for every saved caller. `joint_config_raw` and
+`joint_config_saved_raw` expose these projections for joint endpoints.
+
+The internal matched-prefix stack retains each caller's local prefix and
+raw reachability together with the exact decode/lookup/argument/setup
+witnesses for its child. On return, `execution_prefix_return` closes the
+child from that setup entry, and `matched_run_invoke_return` supplies the
+successful caller step. Thus both the saved prefix and raw reachability
+advance without adding a return constructor to raw reachability. No
+termination of unfinished activations is assumed.
