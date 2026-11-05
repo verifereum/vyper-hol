@@ -1,7 +1,7 @@
 Theory lowerDloadPtrOrdinary
 Ancestors
   lowerDloadPtrBlockEntry lowerDloadPtrAggregate lowerDloadPtrPhi
-  lowerDloadPtrRel lowerDloadPtrCompare
+  lowerDloadPtrRel lowerDloadPtrCompare lowerDloadPtrStatic
   venomExecSemantics venomState venomInst ptrDiscipline
   unitShapeDefs codegenRel memLocDefs pointerConfinedDefs finite_map list pred_set
 
@@ -38,6 +38,75 @@ Proof
   Cases_on `op_prov G op` >> simp[EXTENSION] >> metis_tac[]
 QED
 
+Theorem dload_assign_original_input_closed:
+  MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
+  i.inst_operands = [op] ==>
+  !out w. MEM out i.inst_outputs /\
+    out IN (set (fn_ir_vars f) DIFF {v | retpc_var f v}) /\
+    MEM (Var w) i.inst_operands ==>
+    w IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+Proof
+  rpt strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule fn_ir_vars_operand >> qexists `i` >> simp[]) >>
+  irule retpc_assign_input_tracked >> qexistsl [`i`,`out`] >> simp[]
+QED
+
+Theorem dload_boundary_core_assign_tracked:
+  MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
+  s.vs_labels = t.vs_labels /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
+  (!out w. MEM out i.inst_outputs /\ out IN V /\
+    MEM (Var w) i.inst_operands ==> w IN V) /\
+  (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  step_inst fuel Ct i t = OK t' ==>
+  ?s'. step_inst fuel Cs i s = OK s' /\
+    (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
+    dload_boundary_core lo fs V Ws PG PH
+      (step_prov PG G i s') (step_prov PH H i t')
+      (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
+    s' = s with vs_vars := s'.vs_vars /\
+    t' = t with vs_vars := t'.vs_vars
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[assign_step_success] >> strip_tac >> gvs[] >>
+  `eval_operand op s <> NONE` by
+    (drule eval_operand_definedness >>
+     disch_then (qspec_then `op` mp_tac) >>
+     (impl_tac >- metis_tac[MEM]) >> simp[]) >>
+  Cases_on `eval_operand op s` >- gvs[] >>
+  rename1 `eval_operand op t = SOME b` >>
+  rename1 `eval_operand op s = SOME a` >>
+  `dload_vars_match fs V G H tn un s t` by
+    metis_tac[dload_boundary_vars] >>
+  `out IN V ==> op_taint tn op = op_taint un op /\
+    dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
+    (strip_tac >>
+     `!w. op = Var w ==> w IN V` by metis_tac[MEM] >>
+     conj_tac >- (Cases_on `op` >> gvs[op_taint_def, dload_vars_match_def]) >>
+     irule dload_matched_operand >>
+     qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
+  drule_all assign_ghost_updates >> strip_tac >>
+  qpat_x_assum `eval_operand op s = SOME a` mp_tac >>
+  drule_all assign_ghost_updates >> strip_tac >> disch_tac >>
+  qexists `update_var out a s` >>
+  simp[assign_step_success, assign_ghost_updates] >>
+  conj_tac >- (rpt strip_tac >>
+    irule update_var_definedness >> qexists `U` >> simp[]) >>
+  simp[update_var_def] >>
+  `dload_vars_match fs V
+    (set_prov G [out] (op_prov G op)) (set_prov H [out] (op_prov H op))
+    (tn with t_var := set_var_taint tn.t_var [out] (op_taint tn op))
+    (un with t_var := set_var_taint un.t_var [out] (op_taint un op))
+    (s with <|vs_vars := (update_var out a s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
+    (t with <|vs_vars := (update_var out b t).vs_vars; vs_inst_idx := t.vs_inst_idx|>)` by
+    (simp[update_var_def] >> pure_rewrite_tac[GSYM update_var_def] >>
+     irule dload_vars_match_write >> simp[]) >>
+  drule_all dload_boundary_core_var_index_update >> simp[update_var_def]
+QED
+
 Theorem dload_boundary_core_assign:
   MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
   s.vs_labels = t.vs_labels /\
@@ -54,42 +123,41 @@ Theorem dload_boundary_core_assign:
     t' = t with vs_vars := t'.vs_vars
 Proof
   strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[assign_step_success] >> strip_tac >> gvs[] >>
-  `eval_operand op s <> NONE` by
-    (drule eval_operand_definedness >>
-     disch_then (qspec_then `op` mp_tac) >>
-     (impl_tac >- metis_tac[MEM]) >> simp[]) >>
-  Cases_on `eval_operand op s` >- gvs[] >>
-  rename1 `eval_operand op t = SOME b` >>
-  rename1 `eval_operand op s = SOME a` >>
-  `dload_vars_match fs {v | ~retpc_var f v} G H tn un s t` by
-    metis_tac[dload_boundary_vars] >>
-  `~retpc_var f out ==> op_taint tn op = op_taint un op /\
-    dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
-    (strip_tac >>
-     `!w. op = Var w ==> ~retpc_var f w` by
-       metis_tac[retpc_assign_input_tracked, MEM] >>
-     conj_tac >- (Cases_on `op` >> gvs[op_taint_def, dload_vars_match_def]) >>
-     irule dload_matched_operand >>
-     qexistsl [`{v | ~retpc_var f v}`,`s`,`t`,`un`] >> simp[]) >>
-  drule_all assign_ghost_updates >> strip_tac >>
-  qpat_x_assum `eval_operand op s = SOME a` mp_tac >>
-  drule_all assign_ghost_updates >> strip_tac >> disch_tac >>
-  qexists `update_var out a s` >>
-  simp[assign_step_success, assign_ghost_updates] >>
-  conj_tac >- (rpt strip_tac >>
-    irule update_var_definedness >> qexists `U` >> simp[]) >>
-  simp[update_var_def] >>
-  `dload_vars_match fs {v | ~retpc_var f v}
-    (set_prov G [out] (op_prov G op)) (set_prov H [out] (op_prov H op))
-    (tn with t_var := set_var_taint tn.t_var [out] (op_taint tn op))
-    (un with t_var := set_var_taint un.t_var [out] (op_taint un op))
-    (s with <|vs_vars := (update_var out a s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
-    (t with <|vs_vars := (update_var out b t).vs_vars; vs_inst_idx := t.vs_inst_idx|>)` by
-    (simp[update_var_def] >> pure_rewrite_tac[GSYM update_var_def] >>
-     irule dload_vars_match_write >> simp[]) >>
-  drule_all dload_boundary_core_var_index_update >> simp[update_var_def]
+  `?op. i.inst_operands = [op]` by
+    (drule_all assign_step_success >> simp[] >> metis_tac[]) >>
+  irule dload_boundary_core_assign_tracked >>
+  simp[] >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> gvs[] >>
+    irule retpc_assign_input_tracked >> qexistsl [`i`,`out`] >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem dload_boundary_core_assign_tracked_index:
+  MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
+  s.vs_labels = t.vs_labels /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
+  (!out w. MEM out i.inst_outputs /\ out IN V /\
+    MEM (Var w) i.inst_operands ==> w IN V) /\
+  (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  step_inst fuel Ct i t = OK t' ==>
+  ?s'. step_inst fuel Cs i s = OK s' /\
+    (!v. v IN U ==>
+      (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
+       lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
+    dload_boundary_core lo fs V Ws PG PH
+      (step_prov PG G i s') (step_prov PH H i t')
+      (step_taint i s s' tn) (step_taint i t t' un)
+      (s' with vs_inst_idx := SUC s.vs_inst_idx)
+      (t' with vs_inst_idx := SUC t.vs_inst_idx) cs ds /\
+    s' = s with vs_vars := s'.vs_vars /\
+    t' = t with vs_vars := t'.vs_vars
+Proof
+  strip_tac >> drule_all dload_boundary_core_assign_tracked >>
+  disch_then (qspec_then `Cs` strip_assume_tac) >>
+  qexists `s'` >> simp[lookup_var_def] >>
+  conj_tac >- gvs[lookup_var_def] >>
+  irule dload_boundary_core_index_update >> simp[]
 QED
 
 Theorem dload_boundary_core_assign_index:

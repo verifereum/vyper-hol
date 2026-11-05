@@ -34,14 +34,15 @@ Proof
   simp[EXTENSION, eval_operand_def, SF CONJ_ss]
 QED
 
-Theorem dload_boundary_core_parameter:
+Theorem dload_boundary_core_parameter_tracked:
   MEM i (fn_insts f) /\ (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
+  (i.inst_opcode = RETPC_PARAM ==> !out. MEM out i.inst_outputs ==> out NOTIN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     s1 = s with vs_vars := s1.vs_vars /\ t1 = t with vs_vars := t1.vs_vars
@@ -60,26 +61,74 @@ Proof
   qmatch_goalsub_abbrev_tac `set_prov H [out] q` >>
   qmatch_goalsub_abbrev_tac `s with vs_vars := sv` >>
   qmatch_goalsub_abbrev_tac `t with vs_vars := tv` >>
-  `dload_vars_match fs {v | ~retpc_var f v}
+  `dload_vars_match fs V
     (set_prov G [out] p) (set_prov H [out] q)
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
     (s with <|vs_vars := sv; vs_inst_idx := s.vs_inst_idx|>)
     (t with <|vs_vars := tv; vs_inst_idx := t.vs_inst_idx|>)` by
     (simp[Abbr `sv`, Abbr `tv`] >> pure_rewrite_tac[GSYM update_var_def] >>
-     irule dload_vars_match_write >>
-     conj_tac
-     >- (unabbrev_all_tac >> simp[] >>
-         Cases_on `i.inst_opcode = PARAM`
-         >- (gvs[] >> strip_tac >>
-             `w2n idx < LENGTH s.vs_params` by simp[] >>
-             drule_all dload_param_values_lookup >> simp[]) >>
-         gvs[] >>
-         `retpc_var f out` by
-           (simp[retpc_var_def] >> irule copy_phi_var_seed >> qexists `i` >> simp[]) >>
-         simp[]) >>
-     simp[] >> metis_tac[dload_boundary_vars]) >>
+     `out IN V ==> dload_value_word fs {} p q
+       (if i.inst_opcode = PARAM then EL (w2n idx) s.vs_params else s.vs_return_pc_token)
+       (if i.inst_opcode = PARAM then EL (w2n idx) t.vs_params else t.vs_return_pc_token)` by
+       (strip_tac >> unabbrev_all_tac >> gvs[] >>
+        `w2n idx < LENGTH s.vs_params` by simp[] >>
+        drule_all dload_param_values_lookup >> simp[]) >>
+     irule dload_vars_match_write >> simp[] >>
+     metis_tac[dload_boundary_vars]) >>
   drule_all dload_boundary_core_var_index_update >> simp[]
+QED
+
+Theorem dload_boundary_core_parameter_tracked_index:
+  MEM i (fn_insts f) /\ (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
+  (i.inst_opcode = RETPC_PARAM ==> !out. MEM out i.inst_outputs ==> out NOTIN V) /\
+  (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  step_inst fuel Ct i t = OK t1 ==>
+  ?s1. step_inst fuel Cs i s = OK s1 /\
+    (!v. v IN U ==>
+      (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
+       lookup_var v (t1 with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
+    dload_boundary_core lo fs V Ws PG PH
+      (step_prov PG G i s1) (step_prov PH H i t1)
+      (step_taint i s s1 tn) (step_taint i t t1 un)
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) cs ds /\
+    s1 = s with vs_vars := s1.vs_vars /\ t1 = t with vs_vars := t1.vs_vars
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_at (Pat `dload_boundary_core`) dload_boundary_core_parameter_tracked >>
+  disch_then (drule_at (Pat `step_inst`)) >>
+  disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+  disch_then (qspec_then `U` mp_tac) >> simp[] >>
+  disch_then (qspec_then `Cs` strip_assume_tac) >>
+  qexists `s1` >> simp[lookup_var_def] >>
+  conj_tac >- gvs[lookup_var_def] >>
+  irule dload_boundary_core_index_update >> simp[]
+QED
+
+Theorem dload_parameter_retpc_output:
+  MEM i (fn_insts f) /\ i.inst_opcode = RETPC_PARAM ==>
+  !out. MEM out i.inst_outputs ==> retpc_var f out
+Proof
+  rpt strip_tac >> simp[retpc_var_def] >>
+  irule copy_phi_var_seed >> qexists `i` >> simp[]
+QED
+
+Theorem dload_boundary_core_parameter:
+  MEM i (fn_insts f) /\ (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
+  (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  step_inst fuel Ct i t = OK t1 ==>
+  ?s1. step_inst fuel Cs i s = OK s1 /\
+    (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
+    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+      (step_prov PG G i s1) (step_prov PH H i t1)
+      (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
+    s1 = s with vs_vars := s1.vs_vars /\ t1 = t with vs_vars := t1.vs_vars
+Proof
+  strip_tac >> irule dload_boundary_core_parameter_tracked >>
+  simp[] >> metis_tac[dload_parameter_retpc_output]
 QED
 
 Theorem dload_actual_parameter_next:
