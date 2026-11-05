@@ -52,7 +52,7 @@ Theorem gas_shadow_compiles_external_call_kwargs:
       return_size min_size ret_bytes staticcall call_value gas_op skip_check
       has_default default_op return_ty default_ty enc_info dec_info)
 Proof
-  Cases_on `vals = []` >> Cases_on `return_size = 0` >>
+  Cases_on `vals = []` >> Cases_on `return_ty = NoneT` >>
   Cases_on `skip_check` >> Cases_on `staticcall` >> Cases_on `has_default` >>
   simp[compile_external_call_kwargs_def, LET_THM, comp_ignore_bind_def] >>
   rpt (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc] >>
