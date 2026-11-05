@@ -17,7 +17,8 @@
 Theory bodyPtrCallCases
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
-  vyperState vyperContext vyperTypeCallGraph list
+  vyperState vyperContext vyperTypeCallGraph list bodyPtrCallResidual
+  bodyPtrCallCalldata
 
 val _ = Parse.hide "body";
 
@@ -33,7 +34,8 @@ Proof
   cheat
 QED
 
-(* ADMITTED: a piece of the body induction. *)
+(* bodyPtrCallResidual's residual, until extcall's lowering port and the
+   decoder's compare are settled. *)
 Theorem body_extcall_case_ptr:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
@@ -49,7 +51,7 @@ Theorem body_extcall_case_ptr:
     body_expr_ptr_ok cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  cheat
+  ACCEPT_TAC extcall_case_ptr_residual
 QED
 
 (* ADMITTED: a piece of the body induction. *)
@@ -67,35 +69,42 @@ Theorem body_raw_call_calldata_case_ptr:
     body_exprs_ptr_ok cx es ==>
     body_expr_ptr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  (* Vacuous: its DALLOCA contradicts ~ctx_has_dalloca (bodyPtrCallCalldata). *)
+  rw[body_expr_ptr_ok_def] >>
+  fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  drule raw_call_calldata_ptr_vacuous >> simp[]
 QED
 
-(* ADMITTED: a piece of the body induction. *)
+(* bodyPtrCallResidual's residual, until RawLog's lowering lands. *)
 Theorem body_raw_log_case_ptr:
   !cx v20 es v21.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v20 RawLog es v21)
 Proof
-  cheat
+  ACCEPT_TAC raw_log_case_ptr_residual
 QED
 
-(* ADMITTED: a piece of the body induction. *)
+(* bodyPtrCallResidual's residual, until RawRevert's lowering lands. *)
 Theorem body_raw_revert_case_ptr:
   !cx v22 es v23.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v22 RawRevert es v23)
 Proof
-  cheat
+  ACCEPT_TAC raw_revert_case_ptr_residual
 QED
 
-(* ADMITTED: a piece of the body induction. *)
+(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
 Theorem body_selfdestruct_case_ptr:
   !cx v24 es v25.
     body_exprs_ptr_ok cx es ==>
     body_expr_ptr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  cheat
+  rw[body_expr_ptr_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
-(* ADMITTED: a piece of the body induction. *)
+(* Vacuous: expr_body_pre excludes the creates, which the source runs on
+   the EVM (expr_evm_run_root). *)
 Theorem body_create_case_ptr:
   !cx ty kind has_salt rof v26 es v27.
     (!raw_args s'' prefix t s'3' code_size t'.
@@ -124,5 +133,8 @@ Theorem body_create_case_ptr:
     (kind = RawCreate ==> body_exprs_ptr_ok cx (TAKE 2 es)) ==>
     body_expr_ptr_ok cx (Call ty (CreateTarget kind has_salt rof v26) es v27)
 Proof
-  cheat
+  rw[body_expr_ptr_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
