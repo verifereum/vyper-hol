@@ -656,7 +656,10 @@ Proof
   Cases_on `args_res` >>
   gvs[bind_def, ignore_bind_def, type_check_def, assert_def, return_def, raise_def]
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
-      Cases_on `LENGTH vs = 1` >> gvs[] >> rpt strip_tac >> gvs[]) >>
+      Cases_on `LENGTH vs = 1` >>
+      Cases_on `dest_BytesV (HD vs)` >>
+      gvs[lift_option_type_def, lift_option_def, return_def, raise_def,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -701,13 +704,9 @@ Proof
       >- (Cases_on `dest_AddressV (HD vs)` >> gvs[return_def, raise_def]
           >- (rpt strip_tac >> gvs[]) >>
           rename1 `dest_AddressV (HD vs) = SOME addr` >>
-          Cases_on `transfer_value cx.txn.target addr
-            (lookup_account cx.txn.target args_st.accounts).balance args_st` >>
-          rename1 `transfer_value _ _ _ args_st = (transfer_res,transfer_st)` >>
-          drule_all transfer_value_preserves_contract_storage_well_formed >>
-          Cases_on `transfer_res` >>
-          gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-          rpt strip_tac >> gvs[]) >>
+          strip_tac >>
+          drule_all (REWRITE_RULE [ignore_bind_def]
+            selfdestruct_tail_preserves_contract_storage) >> simp[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -1619,6 +1618,61 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem body_intcall_actual_finally_storage[local]:
+  (!r s. eval_stmts cxf ss st = (r,s) ==> contract_storage_well_formed cx s) /\
+  storage_layout_safe cx /\
+  finally_unless_halt
+    (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+      (pop_function prev)) (unlock_if_nr cx nr is_view) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >>
+  Cases_on `try (do eval_stmts cxf ss; return NoneV od) handle_function st` >>
+  rename1 `try _ _ st = (body_res,body_st)` >>
+  `contract_storage_well_formed cx body_st` by
+    (drule body_try_handle_function_predicate >> disch_then irule >> simp[]) >>
+  `contract_storage_well_formed cx (body_st with scopes := prev)` by
+    (irule contract_storage_well_formed_backends_frame >>
+     qexists_tac `body_st` >> simp[]) >>
+  `!r s. unlock_if_nr cx nr is_view (body_st with scopes := prev) = (r,s) ==>
+       contract_storage_well_formed cx s` by
+    (rpt strip_tac >> irule body_intcall_cleanup_storage >>
+     simp[] >> qexistsl_tac [`is_view`, `nr`, `prev`, `r`, `body_st`] >>
+     gvs[pop_function_def, set_scopes_def, ignore_bind_apply, return_def,
+         unlock_if_nr_def]) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  Cases_on `body_res`
+  >- (gvs[finally_def, pop_function_def, set_scopes_def, return_def,
+          ignore_bind_apply, finally_unless_halt_def, AllCaseEqs()] >> metis_tac[]) >>
+  Cases_on `y` >>
+  gvs[finally_def, pop_function_def, set_scopes_def, finally_unless_halt_def,
+      ignore_bind_apply, return_def, raise_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem body_intcall_actual_return_storage:
+  (!r s. eval_stmts cxf ss st = (r,s) ==> contract_storage_well_formed cx s) /\
+  storage_layout_safe cx /\
+  (do rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr is_view);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >> qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp_tac (srw_ss()) [bind_def] >>
+  Cases_on `finally_unless_halt
+    (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+      (pop_function prev)) (unlock_if_nr cx nr is_view) st` >>
+  rename1 `finally_unless_halt _ _ st = (call_res,call_st)` >>
+  `contract_storage_well_formed cx call_st` by
+    (drule_all body_intcall_actual_finally_storage >> simp[]) >>
+  Cases_on `call_res` >> gvs[]
+  >- (rpt strip_tac >> gvs[AllCaseEqs(), return_def] >>
+      imp_res_tac lift_option_type_state >> gvs[]) >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem body_intcall_lock_storage:
   contract_storage_well_formed cx st /\ storage_layout_safe cx /\
   lock_if_nr cx nr is_view st = (res,st') ==>
@@ -1662,8 +1716,10 @@ Theorem body_eval_intcall_empty_defaults:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
