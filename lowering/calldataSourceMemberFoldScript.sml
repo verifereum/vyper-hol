@@ -9,7 +9,7 @@ Ancestors
   calldataMemberResourceFrame exprLoweringProps abiDecoderTypedContract abiDecoderContract
   abiDecoderReentry abiDecoderMembers abiDecoderMemberInfos abiEncoderInput abiDecoderCoherence
   abiDecoderAppend abiDecoderCode abiDecoderCounters abiDecoderMemberSetup abiDecoderOffsetHead
-  words list rich_list pair arithmetic
+  valueEncodingTyping words list rich_list pair arithmetic
 
 Theorem calldata_members_success_relation[local]:
   !fn dst src I R.
@@ -780,4 +780,108 @@ Proof
   asm_rewrite_tac[] >> rpt strip_tac >>
   drule_all calldata_member_child_contract_apply >>
   simp[calldata_member_success_def, calldata_member_transfers_def]
+QED
+
+(* A cursor's source position fixes the head type and both byte offsets. *)
+Theorem calldata_source_cursor_head[local]:
+  let n = LENGTH xs - LENGTH ((ei,az,mz)::rest) in
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    0 0 first final initial ((ei,az,mz)::rest) ao vo a s /\
+  xs = abi_decoder_member_infos sf ce tys /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
+  LENGTH vs = LENGTH tys ==>
+  n < LENGTH tys /\ n < LENGTH tvs /\
+  ei = type_to_abi_dec_info sf ce (EL n tys) /\
+  az = abi_member_head_size (vyper_to_abi_type env (EL n tys)) /\
+  mz = type_memory_size (EL n tvs) /\
+  ao = SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (TAKE n tys))) /\
+  vo = SUM (MAP type_memory_size (TAKE n tvs)) /\
+  abi_decoder_coherent ce env sf (EL n tys) (EL n tvs) /\
+  abi_to_vyper env (EL n tys)
+    (dec (vyper_to_abi_type env (EL n tys))
+      (abi_decode_member_bytes (vyper_to_abi_type env (EL n tys)) bs (DROP ao bs))) =
+    SOME (EL n vs) /\ val_wf (EL n tvs) (EL n vs) /\
+  (!i. i < n ==> SUM (MAP type_memory_size (TAKE i tvs)) +
+    type_memory_size (EL i tvs) <= vo)
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qhdtm_x_assum `calldata_source_member_cursor`
+    (strip_assume_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
+  `LENGTH xs = LENGTH tys /\ LENGTH tvs = LENGTH tys` by
+    (fs[abi_decoder_member_infos_def] >> metis_tac[LIST_REL_LENGTH]) >>
+  `LENGTH ((ei,az,mz)::rest) = LENGTH (DROP n xs)` by metis_tac[] >>
+  `n < LENGTH tys /\ LENGTH xs - LENGTH ((ei,az,mz)::rest) = n` by
+    (qpat_x_assum `LENGTH (_::rest) = _` mp_tac >> simp[LENGTH_DROP] >> decide_tac) >>
+  qpat_x_assum `LENGTH xs - LENGTH (_::rest) = n` SUBST1_TAC >>
+  fs[ADD_CLAUSES] >>
+  drule_all calldata_source_member_layout >> strip_tac >>
+  drule_all calldata_source_member_position >> strip_tac >>
+  simp[] >> metis_tac[value_has_type_val_wf]
+QED
+
+(* Recover the actual compiler phases needed by the cursor successor. *)
+Theorem calldata_source_cursor_compilation[local]:
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    0 0 first final initial ((ei,az,mz)::rest) ao vo a s /\
+  xs = abi_decoder_member_infos sf ce tys /\
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+      dp <- emit_op ADD [dst; Lit (n2w vo)];
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+  fn_has_code a final fn /\
+  (a.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) ==>
+  ?ops ready.
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+      (dec_info_needs_offset ei) ao vo a = (ops,ready) /\
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) ei ready = ((),next) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      rest (ao+az) (vo+mz) next = ((),final) /\
+    cs_extends a next /\ cs_extends next final /\
+    fn_has_code a next fn /\
+    a.cs_next_id < ready.cs_next_id /\ ready.cs_next_id <= next.cs_next_id /\
+    next.cs_next_id <= final.cs_next_id /\ next.cs_next_var <= final.cs_next_var /\
+    (ready.cs_blocks = next.cs_blocks \/
+      !bb. lookup_block next.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `(do ep <- _; _ od) a = ((),next)` mp_tac >>
+  simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_getelemptr_abi src _ ao CALLDATALOAD (Lit 0w) a = (ep,middle)` >>
+  rename1 `emit_op ADD _ middle = (dp,ready)` >>
+  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    (dec_info_needs_offset ei) ao vo a = ((ep,dp),ready)` by
+    simp[abi_decode_member_setup_def, comp_bind_def, comp_return_def] >>
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    rest (ao+az) (vo+mz) next = ((),final)` by
+    (qhdtm_assum `calldata_source_member_cursor`
+      (mp_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
+     simp[abi_decode_complex_member_phases, comp_bind_def, comp_ignore_bind_def] >>
+     metis_tac[]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule abi_decoder_member_cons_code >> simp_tac bool_ss [FST,SND] >>
+  disch_then drule_all >> strip_tac >>
+  `?tailtys. rest = abi_decoder_member_infos sf ce tailtys` by
+    (qhdtm_x_assum `calldata_source_member_cursor`
+      (strip_assume_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
+     qexists_tac `DROP (SUC n) tys` >>
+     `SUC n <= LENGTH xs` by
+       (qpat_assum `_::rest = DROP n xs`
+          (mp_tac o AP_TERM ``LENGTH : (abi_dec_info # num # num) list -> num``) >>
+        simp[LENGTH_DROP] >> decide_tac) >>
+     `rest = DROP (SUC n) xs` by
+       (qpat_x_assum `_::rest = DROP n xs`
+          (mp_tac o AP_TERM ``DROP 1 : (abi_dec_info # num # num) list -> (abi_dec_info # num # num) list``) >>
+        qpat_x_assum `xs = _` kall_tac >>
+        simp[DROP_DROP, ADD1, ADD_COMM]) >>
+     simp[abi_decoder_member_infos_def, MAP_DROP]) >>
+  qpat_x_assum `rest = abi_decoder_member_infos _ _ _` SUBST_ALL_TAC >>
+  drule_all abi_decode_member_setup_shape >> strip_tac >>
+  drule_all abi_decoder_members_child_phi >> strip_tac >>
+  qexistsl_tac [`(ep,dp)`,`ready`] >> fs[ADD_COMM]
 QED
