@@ -215,3 +215,59 @@ Proof
   rpt strip_tac >> gvs[emitted_insts_def] >>
   simp[DROP_APPEND1, arithmeticTheory.ADD_ASSOC]
 QED
+
+Theorem assign_base_ptr_alloc_buffer_counted_path:
+  !ctx func cenv cx es sa sm buf sz s PG G tn D.
+    compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t w G' tn'.
+      gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\
+      t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      (?p. buf.buf_operand = Var p /\ ptr_covers G' tn' p t sz)
+Proof
+  rpt strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
+  drule_all assign_base_ptr_alloc_buffer_sequence >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`, `D`] strip_assume_tac) >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `cs'.cs_current_bb = sa.cs_current_bb` by
+    (gvs[emit_op_def, comp_bind_def, comp_return_def, comp_ignore_bind_def,
+         fresh_id_def, fresh_var_def, emit_def]) >>
+  `t.vs_current_bb = s.vs_current_bb` by suspend "control" >>
+  gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  `isPREFIX (emitted_insts sa cs') (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[DROP_APPEND1] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa cs')` by simp[mk_inst_def, is_terminator_def] >>
+  drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
+    run_inst_seq_gas_path_ptr >>
+  disch_then (qspecl_then [`t`, `bb`] mp_tac) >>
+  simp[mk_inst_def, stmt_state_rel_inst_idx, DROP_APPEND1, is_terminator_def] >>
+  strip_tac >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH sa.cs_current_insts + 1`,
+               `w`, `G'`, `tn'`] >> simp[stmt_state_rel_inst_idx]
+QED
+
+Resume assign_base_ptr_alloc_buffer_counted_path[control]:
+  gvs[run_inst_seq_def, AllCaseEqs()] >>
+  `step_inst 0 ctx
+     (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)]) s = OK t` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  drule venomInstProofsTheory.step_preserves_control_flow >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Finalise assign_base_ptr_alloc_buffer_counted_path
