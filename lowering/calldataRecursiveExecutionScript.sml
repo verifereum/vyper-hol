@@ -125,7 +125,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >>
      simp[abi_decoder_coherent_array_iff] >> strip_tac >>
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
-  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ st = _`
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ _ st = _`
     (assume_tac o PURE_REWRITE_RULE [exprLoweringTheory.type_to_abi_dec_info_def]) >>
   qpat_assum `type_memory_bytes ce ty = _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
@@ -160,8 +160,8 @@ Proof
   irule calldata_coherent_nonbulk_array_owned_run >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qpat_assum `abi_decoder_coherent _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `abi_decode_loop_suffix _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `FLOOKUP initial.vs_allocas oid = _` (irule_at Any) >>
   qpat_assum `abi_decode_index_init _ = _` (irule_at Any) >>
