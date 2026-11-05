@@ -3059,3 +3059,281 @@ Theorem rf_assign_stale_spill_audit:
 Proof
   EVAL_TAC >> simp[listTheory.SET_TO_LIST_SING] >> EVAL_TAC
 QED
+
+Definition rf_spills_separated_def:
+  rf_spills_separated (ps:plan_state) <=>
+    !x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+      FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+      a + 32 <= b \/ b + 32 <= a
+End
+
+Theorem rf_spills_separated_entry:
+  !base ps. generated_plan_state_wf base ps ==> rf_spills_separated ps
+Proof
+  rpt strip_tac >> fs[generated_plan_state_wf_def] >>
+  drule spill_alloc_layout_wf_spilled_separated >>
+  simp[rf_spills_separated_def]
+QED
+
+Theorem rf_spills_separated_transfer:
+  rf_spills_separated ps /\
+  (!x off. FLOOKUP qs.ps_spilled x = SOME off ==>
+    FLOOKUP ps.ps_spilled x = SOME off) ==>
+  rf_spills_separated qs
+Proof
+  rw[rf_spills_separated_def] >> metis_tac[]
+QED
+
+Theorem rf_release_spill_lookup:
+  !ps nl x off.
+  FLOOKUP (release_dead_spills nl ps).ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  `!dead (ps:plan_state) x off.
+    FLOOKUP (FOLDL (\ps' (op:operand,addr:num).
+      ps' with <|ps_spilled := ps'.ps_spilled \\ op;
+        ps_alloc := free_spill_slot addr ps'.ps_alloc|>) ps dead).ps_spilled x = SOME off ==>
+    FLOOKUP ps.ps_spilled x = SOME off` by
+    (Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+     simp[] >> strip_tac >> first_x_assum (drule_then mp_tac) >>
+     simp[finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+     Cases_on `x = h0` >> simp[]) >>
+  simp[release_dead_spills_def] >> rpt strip_tac >>
+  first_x_assum (drule_then ACCEPT_TAC)
+QED
+
+Theorem rf_do_spill_at_has_spill:
+  ?off. MEM (SOSpill off) (FST (do_spill_at dist ps))
+Proof
+  simp[do_spill_at_def, do_spill_tos_def] >>
+  Cases_on `dist = 0` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> gvs[]
+QED
+
+Theorem rf_do_restore_spill_lookup:
+  do_restore op ps = (ops,ps') /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[do_restore_def] >> strip_tac >>
+  gvs[finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  Cases_on `x = op` >> gvs[]
+QED
+
+Theorem rf_do_dup_spilled:
+  (SND (do_dup dist ps)).ps_spilled = ps.ps_spilled
+Proof
+  simp[do_dup_def] >> IF_CASES_TAC >- simp[] >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem rf_reduce_depth_spilled:
+  !fuel targets op fixed len ps ops ps'.
+  reduce_depth_plan fuel targets op fixed len ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops) ==>
+  ps'.ps_spilled = ps.ps_spilled
+Proof
+  Cases >> simp[reduce_depth_plan_def] >> rpt gen_tac >>
+  IF_CASES_TAC >- simp[] >>
+  Cases_on `stack_get_unfixed_depth op fixed len ps.ps_stack` >- simp[] >>
+  simp[] >> IF_CASES_TAC >- simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets x len` >- simp[] >>
+  simp[] >> rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[MEM_APPEND] >>
+  metis_tac[rf_do_spill_at_has_spill, pairTheory.FST]
+QED
+
+Theorem rf_emit_one_input_spill_lookup:
+  emit_one_input opc live op ps = (ops,ps') /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  simp[emit_one_input_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  Cases_on `op` >> simp[] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[rf_do_restore_spill_lookup, rf_do_dup_spilled, pairTheory.SND]
+QED
+
+Theorem rf_emit_input_plan_spill_lookup:
+  !args ps ops ps'.
+  emit_input_plan opc args live ps = (ops,ps') /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule rf_emit_one_input_spill_lookup >> simp[]
+QED
+
+
+
+Theorem rf_reorder_one_spill_lookup:
+  reorder_one dfg targets idx op ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  simp[reorder_one_def] >> rpt (pairarg_tac >> simp[]) >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+  >- (irule rf_do_restore_spill_lookup >>
+      qexistsl [`op`, `ops`, `ps'`] >> simp[]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `dist > 16` >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets) ps2.ps_stack` >>
+  gvs[AllCaseEqs(), MEM_APPEND] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs(), MEM_APPEND]) >>
+  rpt (rename1 `do_swap d p = (cops,q)` >>
+       qspecl_then [`d`, `p`] mp_tac do_swap_spilled_unchanged >>
+       simp[] >> disch_then assume_tac >>
+       qpat_x_assum `do_swap d p = _` kall_tac) >> gvs[] >>
+  rpt (rename1 `do_swap d2 p2 = (cops2,q2)` >>
+       qspecl_then [`d2`, `p2`] mp_tac do_swap_spilled_unchanged >>
+       simp[] >> disch_then assume_tac >>
+       qpat_x_assum `do_swap d2 p2 = _` kall_tac) >> gvs[] >>
+  TRY (drule (REWRITE_RULE [AND_IMP_INTRO] rf_reduce_depth_spilled) >>
+       simp[] >> disch_then assume_tac >> gvs[]) >>
+  TRY (drule (REWRITE_RULE [AND_IMP_INTRO] rf_do_restore_spill_lookup) >> simp[] >> NO_TAC)
+QED
+
+Theorem rf_reorder_steps_spill_lookup[local]:
+  !items ps ops ps'.
+  plan_steps (\(idx,op) p. reorder_one dfg targets idx op p)
+    items ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  Induct >- simp[foldlSimTheory.plan_steps_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule plan_steps_cons_result >> strip_tac >>
+  first_x_assum (drule_at (Pos hd)) >>
+  simp[] >> strip_tac >> gvs[MEM_APPEND] >>
+  PairCases_on `h` >> gvs[] >>
+  drule (REWRITE_RULE [AND_IMP_INTRO] rf_reorder_one_spill_lookup) >> simp[]
+QED
+
+Theorem rf_reorder_plan_spill_lookup:
+  reorder_plan dfg targets ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  rewrite_tac[reorder_plan_eq_plan_steps] >>
+  metis_tac[rf_reorder_steps_spill_lookup]
+QED
+
+Theorem rf_optimistic_spilled:
+  !dfg inst live term ps. (SND (optimistic_swap_plan dfg inst live term ps)).ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[optimistic_swap_plan_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >>
+  simp[do_swap_spilled_unchanged]
+QED
+
+Theorem rf_popmany_fold_spilled[local]:
+  !items ops ps.
+  (SND (FOLDL (\(ops,ps) v.
+    case stack_get_depth v ps.ps_stack of
+      NONE => (ops,ps)
+    | SOME dist =>
+      (\(swap_ops,ps').
+         (ops ++ swap_ops ++ [SOPop 1],
+          ps' with ps_stack := stack_pop 1 ps'.ps_stack))
+        (if dist = 0 then ([],ps) else do_swap dist ps))
+    (ops,ps) items)).ps_spilled = ps.ps_spilled
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  fs[LET_THM] >>
+  Cases_on `stack_get_depth h ps.ps_stack` >> simp[] >>
+  Cases_on `x = 0` >> simp[] >>
+  Cases_on `do_swap x ps` >> simp[] >>
+  qspecl_then [`x`, `ps`] mp_tac do_swap_spilled_unchanged >> simp[]
+QED
+
+Theorem rf_popmany_spilled:
+  !items ps. (SND (popmany_plan items ps)).ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> Cases_on `items` >> simp[popmany_plan_def] >>
+  rpt IF_CASES_TAC >>
+  simp[popmany_individual_def, LET_THM, SRULE [LET_THM] rf_popmany_fold_spilled] >>
+  pairarg_tac >> simp[] >>
+  qspec_then `SUC (LENGTH t)` (qspec_then `ps` mp_tac) do_swap_spilled_unchanged >>
+  simp[]
+QED
+
+Theorem rf_assign_plan_spill_lookup:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') /\
+  (!a. ~MEM (SOSpill a) ops) /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan ASSIGN [rhs] nl ps` >> rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan dfg [rhs] ps1` >> rename1 `_ = (ros,ps2)` >>
+  drule_all rf_assign_plan_result >> strip_tac >> gvs[MEM_APPEND] >>
+  `FLOOKUP ps9.ps_spilled x = SOME off` by
+    metis_tac[rf_release_spill_lookup] >>
+  `ps9.ps_spilled = ps8.ps_spilled` by
+    (Cases_on `MEM out nl` >> gvs[] >>
+     qspecl_then [`dfg`, `inst`, `nl`, `term`, `ps8`] mp_tac rf_optimistic_spilled >> simp[]) >>
+  `ps8.ps_spilled = ps2.ps_spilled` by
+    (Cases_on `halting` >> gvs[] >>
+     qspecl_then [`if MEM out nl then [] else [Var out]`,
+       `ps2 with ps_stack := stack_push (Var out) (stack_pop 1 ps2.ps_stack)`]
+       mp_tac rf_popmany_spilled >> simp[]) >>
+  gvs[] >>
+  `FLOOKUP ps1.ps_spilled x = SOME off` by
+    (drule (REWRITE_RULE [AND_IMP_INTRO] rf_reorder_plan_spill_lookup) >> simp[]) >>
+  drule (REWRITE_RULE [AND_IMP_INTRO] rf_emit_input_plan_spill_lookup) >> simp[]
+QED
+
+Theorem rf_copy_plan_spill_lookup:
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') /\
+  (!a. ~MEM (SOSpill a) ops) /\
+  FLOOKUP ps'.ps_spilled x = SOME off ==>
+  FLOOKUP ps.ps_spilled x = SOME off
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps` >>
+  rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan dfg (compute_operands inst) ps1` >> rename1 `_ = (ros,ps2)` >>
+  drule_all rf_copy_plan_result >> strip_tac >> gvs[MEM_APPEND] >>
+  `FLOOKUP ps2.ps_spilled x = SOME off` by
+    (drule (REWRITE_RULE [AND_IMP_INTRO] rf_release_spill_lookup) >> simp[]) >>
+  `FLOOKUP ps1.ps_spilled x = SOME off` by
+    (drule (REWRITE_RULE [AND_IMP_INTRO] rf_reorder_plan_spill_lookup) >> simp[]) >>
+  drule (REWRITE_RULE [AND_IMP_INTRO] rf_emit_input_plan_spill_lookup) >> simp[]
+QED
+
+Theorem rf_assign_plan_spills_separated:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ rf_spills_separated ps /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') /\
+  (!a. ~MEM (SOSpill a) ops) ==>
+  rf_spills_separated ps'
+Proof
+  strip_tac >> irule rf_spills_separated_transfer >>
+  qexists_tac `ps` >> simp[] >> rpt strip_tac >>
+  irule rf_assign_plan_spill_lookup >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem rf_copy_plan_spills_separated:
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  rf_spills_separated ps /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') /\
+  (!a. ~MEM (SOSpill a) ops) ==>
+  rf_spills_separated ps'
+Proof
+  strip_tac >> irule rf_spills_separated_transfer >>
+  qexists_tac `ps` >> simp[] >> rpt strip_tac >>
+  irule rf_copy_plan_spill_lookup >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
