@@ -2050,8 +2050,9 @@ QED
 
 (* The interval certificate selects a surviving birth, not an arbitrary older
    visit of the same static source. It establishes analysis membership only.
-   Canonical representative epoch/value alignment and persistence of source
-   output bindings remain separate semantic obligations. *)
+   Below, cse_prefix_exec_avail_output_persistence adds output-binding
+   persistence using SSA ownership and the self-source barrier. Canonical
+   representative epoch/value alignment remains a separate obligation. *)
 
 Theorem cse_prefix_exec_predecessor_barrier:
  wf_function fn /\ fn_inst_wf fn /\
@@ -2086,4 +2087,134 @@ Theorem cse_source_interval_predecessor_barrier:
 Proof
  rpt strip_tac >>
  drule_all cse_prefix_exec_predecessor_barrier >> metis_tac[]
+QED
+
+Theorem cse_prefix_exec_self_source_barrier:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME ri /\ ri.inst_id = src.inst_id ==>
+ ~cse_phase_has_source fn (CseExec n bb s) e src
+Proof
+ strip_tac >>
+ `cse_static_trace fn (cse_project_trace events (CseExec n bb s))` by
+   (drule cse_prefix_project_trace >> simp[]) >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ `cse_point_has_id fn (bb.bb_label,s.vs_inst_idx) src.inst_id` by
+   (gvs[cse_point_has_id_def, get_instruction_def, AllCaseEqs()] >> metis_tac[]) >>
+ `LAST (cse_project_trace events (CseExec n bb s)) = (bb.bb_label,s.vs_inst_idx)` by
+   simp[cse_project_trace_last, cse_phase_point_def] >>
+ drule cse_static_trace_self_source_barrier >>
+ simp[cse_phase_has_source_def] >> strip_tac >> metis_tac[]
+QED
+
+Theorem cse_prefix_step_input_cut[local]:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ !pre n bb inst s t post.
+ events = pre ++ [CseStep n bb inst s t] ++ post ==>
+ cse_prefix ctx fn fuel0 s0 pre (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME inst
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+ Cases_on `post` using SNOC_CASES >>
+ gvs[GSYM rich_listTheory.SNOC_APPEND] >> metis_tac[]
+QED
+
+Theorem cse_prefix_nonphi_writer_step[local]:
+ wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ MEM ev events /\ cse_event_writes ev out /\
+ MEM src (fn_insts fn) /\ MEM out src.inst_outputs /\
+ src.inst_opcode <> PHI ==>
+ ?m sb u v. ev = CseStep m sb src u v
+Proof
+ strip_tac >> drule_all cse_prefix_writing_static_definer >> strip_tac >>
+ Cases_on `ev` >> gvs[cse_event_covers_def]
+ >- (rename1 `k < phi_prefix_length pb.bb_instructions` >>
+     `MEM (EL k pb.bb_instructions)
+       (TAKE (phi_prefix_length pb.bb_instructions) pb.bb_instructions)` by
+       (simp[MEM_EL] >> qexists `k` >>
+        gvs[get_instruction_def, AllCaseEqs(), LENGTH_TAKE, EL_TAKE,
+            phi_prefix_length_le]) >>
+     `EL k pb.bb_instructions = src` by
+       gvs[get_instruction_def, AllCaseEqs()] >>
+     mp_tac (Q.SPEC `pb.bb_instructions`
+       analysisSimProofsBaseTheory.phi_prefix_all_phi) >>
+     rewrite_tac[EVERY_MEM] >> disch_then (qspec_then `src` mp_tac) >>
+     gvs[]) >>
+ metis_tac[]
+QED
+
+Theorem cse_source_interval_nonwriting[local]:
+ wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ events = pre ++ [birth] ++ post /\
+ MEM src (fn_insts fn) /\ MEM out src.inst_outputs /\
+ src.inst_opcode <> PHI /\
+ (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+   cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+   cse_phase_has_source fn ph e src) ==>
+ EVERY (\ev. ~cse_event_writes ev out) post
+Proof
+ strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+ `MEM ev events` by gvs[MEM_APPEND] >>
+ drule_all cse_prefix_nonphi_writer_step >> strip_tac >>
+ qpat_x_assum `ev = _` SUBST_ALL_TAC >>
+ qpat_x_assum `MEM (CseStep _ _ _ _ _) post` mp_tac >>
+ rewrite_tac[MEM_SPLIT] >> strip_tac >>
+ rename1 `post = left ++ CseStep m sb src u v::right` >>
+ `events = (pre ++ [birth] ++ left) ++ [CseStep m sb src u v] ++ right` by
+   gvs[APPEND_ASSOC] >>
+ drule_all cse_prefix_step_input_cut >> strip_tac >>
+ `TAKE (LENGTH (pre ++ [birth] ++ left)) events = pre ++ [birth] ++ left` by
+   gvs[TAKE_APPEND1, TAKE_APPEND2] >>
+ `cse_phase_has_source fn (CseExec m sb u) e src` by
+   (first_x_assum irule >>
+    qexists `LENGTH (pre ++ [birth] ++ left)` >> simp[] >>
+    gvs[]) >>
+ `~cse_phase_has_source fn (CseExec m sb u) e src` by
+   (irule cse_prefix_exec_self_source_barrier >> metis_tac[]) >>
+ simp[]
+QED
+
+Theorem cse_prefix_exec_avail_output_persistence:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ FLOOKUP (ae_lookup_inst fn bb.bb_label s.vs_inst_idx) e = SOME xs /\
+ MEM src xs /\ src.inst_outputs = [out] ==>
+ ?pre post m sb u v.
+   events = pre ++ [CseStep m sb src u v] ++ post /\
+   cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+   avail_source_birth (dfg_build_function fn) e src src /\
+   EVERY (cse_event_survives e) post /\
+   (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+      cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+      cse_phase_has_source fn ph e src) /\
+   EVERY (\ev. ~cse_event_writes ev out) post /\
+   lookup_var out s = lookup_var out v
+Proof
+ strip_tac >> drule_all cse_prefix_exec_avail_interval >> strip_tac >>
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ `src.inst_opcode <> PHI` by
+   (strip_tac >> gvs[availExprProofsTheory.avail_source_birth_def, is_pseudo_def]) >>
+ `MEM (CseStep m sb src u v) events` by gvs[MEM_APPEND] >>
+ drule_all cse_prefix_event_provenance >> simp[] >> strip_tac >>
+ `MEM sb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+ `MEM src sb.bb_instructions` by
+   (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+ `MEM src (fn_insts fn)` by
+   (simp[fn_insts_def] >>
+    qpat_x_assum `MEM sb fn.fn_blocks` mp_tac >>
+    qspec_tac (`fn.fn_blocks`, `bbs`) >>
+    Induct >> simp[fn_insts_blocks_def] >> rpt strip_tac >> gvs[]) >>
+ `MEM out src.inst_outputs` by simp[] >>
+ `EVERY (\ev. ~cse_event_writes ev out) post` by
+   (drule_all cse_source_interval_nonwriting >> simp[]) >>
+ qexistsl [`pre`, `post`, `m`, `sb`, `u`, `v`] >> simp[] >>
+ `cse_event_writes (CseStep m sb src u v) out` by
+   simp[cse_event_writes_def] >>
+ drule_all cse_prefix_last_write_binding >>
+ gvs[cse_phase_state_def, cse_event_output_def] >>
+ strip_tac >> first_assum MATCH_ACCEPT_TAC
 QED

@@ -1188,3 +1188,21 @@ Proof
  drule_all cse_static_trace_member_prefix >> strip_tac >>
  fs[cse_path_preorder_def, listTheory.EVERY_MEM] >> metis_tac[listTheory.MEM_APPEND]
 QED
+
+Theorem cse_static_trace_self_source_barrier:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_static_trace fn ps /\ cse_point_has_id fn (LAST ps) src.inst_id /\
+ LAST ps = (lbl,k) ==>
+ ~(?xs. FLOOKUP (ae_lookup_inst fn lbl k) e = SOME xs /\ MEM src xs)
+Proof
+ strip_tac >> strip_tac >>
+ drule_all cse_static_trace_first_id >> strip_tac >>
+ `p = (lbl,k)` by metis_tac[cse_point_has_id_injective] >> gvs[] >>
+ qspecl_then [`fn`, `pre ++ [(lbl,k)]`] mp_tac cse_static_trace_availability >>
+ (impl_tac >- simp[]) >> (impl_tac >- simp[]) >>
+ disch_then (qspecl_then [`lbl`, `k`] mp_tac) >>
+ (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+ gvs[availExprDefsTheory.ae_lookup_inst_def, availExprDefsTheory.avail_unwrap_def,
+     GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC, listTheory.EVERY_MEM] >>
+ metis_tac[]
+QED
