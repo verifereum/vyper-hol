@@ -226,6 +226,103 @@ Proof
   metis_tac[ALL_DISTINCT_MAP]
 QED
 
+Theorem lower_dload_function_supply_path[local]:
+  lower_dload_function_supply s f = (g,t) ==>
+  !path. is_fn_path g path = is_fn_path f path
+Proof
+  strip_tac >> drule lower_dload_function_supply_cfg_edge >> strip_tac >>
+  Induct >> simp[is_fn_path_def] >>
+  gen_tac >> rename1 `is_fn_path g (head::tail)` >> Cases_on `tail` >>
+  gvs[is_fn_path_def]
+QED
+
+Theorem lower_dload_function_supply_pairing[local]:
+  lower_dload_function_supply s f = (g,t) ==>
+  (!a. MEM a f.fn_blocks ==> ?b u v.
+     MEM b g.fn_blocks /\ lower_dload_block_supply u a = (b,v)) /\
+  (!b. MEM b g.fn_blocks ==> ?a u v.
+     MEM a f.fn_blocks /\ lower_dload_block_supply u a = (b,v))
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule lower_dload_blocks_supply_pairing >> gvs[]
+QED
+
+Theorem lower_dload_block_supply_definition[local]:
+  lower_dload_block_supply s a = (b,t) /\
+  EVERY inst_wf a.bb_instructions /\
+  MEM i a.bb_instructions /\ MEM v i.inst_outputs ==>
+  ?j. MEM j b.bb_instructions /\ MEM v j.inst_outputs
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule_all lower_dload_insts_supply_output_survives >> gvs[]
+QED
+
+Theorem lower_dload_function_supply_definition[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_inst_wf f /\
+  MEM a f.fn_blocks /\ MEM i a.bb_instructions /\ MEM v i.inst_outputs ==>
+  ?b j. MEM b g.fn_blocks /\ b.bb_label = a.bb_label /\
+        MEM j b.bb_instructions /\ MEM v j.inst_outputs
+Proof
+  strip_tac >> drule lower_dload_function_supply_pairing >> strip_tac >>
+  `?b u w. MEM b g.fn_blocks /\ lower_dload_block_supply u a = (b,w)`
+    by metis_tac[] >>
+  `EVERY inst_wf a.bb_instructions` by
+    (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  drule_all lower_dload_block_supply_definition >> strip_tac >>
+  drule lower_dload_block_supply_label >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_def_on_all_paths_end[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_inst_wf f /\
+  MEM a f.fn_blocks /\ lower_dload_block_supply u a = (b,w) /\
+  def_on_all_paths f a NONE v ==>
+  def_on_all_paths g b NONE v
+Proof
+  strip_tac >> drule lower_dload_function_supply_path >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  drule lower_dload_block_supply_label >> strip_tac >>
+  `EVERY inst_wf a.bb_instructions` by
+    (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  gvs[def_on_all_paths_def] >> rpt strip_tac >>
+  qpat_x_assum `!path. _` drule_all >> strip_tac
+  >- (disj1_tac >>
+      drule_all lower_dload_function_supply_definition >> strip_tac >>
+      metis_tac[]) >>
+  disj2_tac >>
+  `?j. MEM j b.bb_instructions /\ MEM v j.inst_outputs` by
+    (irule lower_dload_block_supply_definition >>
+     goal_assum (drule_at Any) >> simp[MEM_EL] >> metis_tac[]) >>
+  gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem lower_dload_prefix_definition[local]:
+  b.bb_instructions = pre ++ j::post /\ MEM d pre /\
+  MEM v d.inst_outputs ==>
+  def_on_all_paths g b (SOME j) v
+Proof
+  strip_tac >> qpat_x_assum `MEM d pre` mp_tac >>
+  simp[MEM_EL] >> strip_tac >> gvs[] >>
+  simp[def_on_all_paths_def] >> rpt strip_tac >> disj2_tac >>
+  rename1 `MEM v (EL n pre).inst_outputs` >> qexists `n` >>
+  simp[EL_APPEND_EQN] >> qexists `LENGTH pre` >> simp[EL_APPEND_EQN]
+QED
+
+Theorem lower_dload_source_prefix_definition[local]:
+  ALL_DISTINCT (pre ++ i::post) /\
+  n < m /\ m < LENGTH (pre ++ i::post) /\
+  EL m (pre ++ i::post) = i /\
+  MEM v (EL n (pre ++ i::post)).inst_outputs ==>
+  ?d. MEM d pre /\ MEM v d.inst_outputs
+Proof
+  strip_tac >>
+  `m = LENGTH pre` by
+    (drule ALL_DISTINCT_EL_IMP >>
+     disch_then (qspecl_then [`m`,`LENGTH pre`] mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  gvs[EL_APPEND_EQN] >> qexists `EL n pre` >> simp[MEM_EL] >>
+  metis_tac[]
+QED
+
 (* Intuition, per conjunct of make_ssa_input_ok:
    - all_reachable and the PHI rows: the CFG (labels, edges, entry) is the
      same, and PHIs are kept unchanged in their same-labelled block
