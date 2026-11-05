@@ -5163,3 +5163,108 @@ Resume eval_expr_storage_result_form[Call]:
   drule eval_create_value >> simp[])
 QED
 Finalise eval_expr_storage_result_form
+
+Theorem eval_expr_storage_result_location:
+  !e cx s out t tr cenv ty sc.
+    storage_vars_rel cenv cx ==> transient_vars_rel cenv cx ==>
+    ~expr_has_pop e ==> eval_expr cx e s = (INL out,t) ==>
+    ((?slot vt. out = PlaceR (StoragePlace tr slot vt)) \/
+     (?slot kt vt. out = HashMapRef tr slot kt vt)) ==>
+    vv_location (FST (compile_expr cenv ty e sc)) =
+      SOME (if tr then LocTransient else LocStorage)
+Proof
+  ho_match_mp_tac (vyperASTTheory.expr_induction |> Q.SPEC `P` |>
+    Q.SPEC `\x. T` |> SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt (FIRST [gen_tac, disch_tac]) >>
+  all_tac >~ [`eval_expr _ (TopLevelName _ _) _ = _`] >- suspend "Global" >~
+  [`eval_expr _ (Subscript _ _ _) _ = _`] >- suspend "Subscript" >~
+  [`eval_expr _ (Attribute _ _ _) _ = _`] >- suspend "Attribute" >>
+  all_tac >~ [`eval_expr _ (Name ann nm) _ = _`] >-
+    (`(?a nsid. Name ann nm = TopLevelName a nsid) \/
+      (?a obj idx. Name ann nm = Subscript a obj idx) \/
+      (?a obj fld. Name ann nm = Attribute a obj fld)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (FlagMember ann nsid fld) _ = _`] >-
+    (`(?a n. FlagMember ann nsid fld = TopLevelName a n) \/
+      (?a ob ix. FlagMember ann nsid fld = Subscript a ob ix) \/
+      (?a ob fl. FlagMember ann nsid fld = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (IfExp ann c x y) _ = _`] >-
+    (`(?a n. IfExp ann c x y = TopLevelName a n) \/
+      (?a ob ix. IfExp ann c x y = Subscript a ob ix) \/
+      (?a ob fl. IfExp ann c x y = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (Literal ann lit) _ = _`] >-
+    (`(?a n. Literal ann lit = TopLevelName a n) \/
+      (?a ob ix. Literal ann lit = Subscript a ob ix) \/
+      (?a ob fl. Literal ann lit = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (StructLit ann nsid fs) _ = _`] >-
+    (`(?a n. StructLit ann nsid fs = TopLevelName a n) \/
+      (?a ob ix. StructLit ann nsid fs = Subscript a ob ix) \/
+      (?a ob fl. StructLit ann nsid fs = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (Builtin ann bn args) _ = _`] >-
+    (`(?a n. Builtin ann bn args = TopLevelName a n) \/
+      (?a ob ix. Builtin ann bn args = Subscript a ob ix) \/
+      (?a ob fl. Builtin ann bn args = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (TypeBuiltin ann bn bt args) _ = _`] >-
+    (`(?a n. TypeBuiltin ann bn bt args = TopLevelName a n) \/
+      (?a ob ix. TypeBuiltin ann bn bt args = Subscript a ob ix) \/
+      (?a ob fl. TypeBuiltin ann bn bt args = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  all_tac >~ [`eval_expr _ (Pop ann obj) _ = _`] >-
+    (`(?a n. Pop ann obj = TopLevelName a n) \/
+      (?a ob ix. Pop ann obj = Subscript a ob ix) \/
+      (?a ob fl. Pop ann obj = Attribute a ob fl)` by
+        metis_tac [eval_expr_storage_result_form] >> gvs[]) >>
+  rename1 `eval_expr _ (Call ann target args kws) _ = _` >>
+  `(?a n. Call ann target args kws = TopLevelName a n) \/
+   (?a ob ix. Call ann target args kws = Subscript a ob ix) \/
+   (?a ob fl. Call ann target args kws = Attribute a ob fl)` by
+     metis_tac [eval_expr_storage_result_form] >> gvs[]
+QED
+
+Resume eval_expr_storage_result_location[Global]:
+  rename1 `TopLevelName ann nsid` >> PairCases_on `nsid` >>
+  `?off. FLOOKUP cenv.ce_module_vars (nsid0,nsid1) =
+      SOME (if tr then TransientLoc off else StorageLoc off)` by
+    metis_tac [related_global_storage_result_location] >>
+  Cases_on `tr` >>
+  simp[Once exprLoweringTheory.compile_expr_def,
+       comp_bind_def, comp_return_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def]
+QED
+Resume eval_expr_storage_result_location[Subscript]:
+  rename1 `eval_expr cx (Subscript ann obj idx) s = _` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rename1 `eval_expr cx obj s = (INL res,mid)` >>
+  `(?slot vt. res = PlaceR (StoragePlace tr slot vt)) \/
+   (?slot kt vt. res = HashMapRef tr slot kt vt)` by
+     metis_tac [select_result_storage_origin] >>
+  `~expr_has_pop obj` by
+    gvs[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def] >>
+  simp[Once exprLoweringTheory.compile_expr_def] >>
+  irule compile_subscript_preserves_location >>
+  simp[exprCallBoundsTheory.expr_child_callback_def] >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`cx`, `res`, `s`, `mid`] >> simp[]
+QED
+Resume eval_expr_storage_result_location[Attribute]:
+  rename1 `eval_expr cx (Attribute ann obj fld) st0 = _` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rename1 `eval_expr cx obj st0 = (INL res,mid)` >>
+  `(?slot vt. res = PlaceR (StoragePlace tr slot vt)) \/
+   (?slot kt vt. res = HashMapRef tr slot kt vt)` by
+     metis_tac [select_result_storage_origin] >>
+  `~expr_has_pop obj` by
+    gvs[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def] >>
+  simp[Once exprLoweringTheory.compile_expr_def] >>
+  irule compile_attribute_preserves_location >>
+  simp[exprCallBoundsTheory.expr_child_callback_def] >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`cx`, `res`, `st0`, `mid`] >> simp[]
+QED
+
+Finalise eval_expr_storage_result_location
