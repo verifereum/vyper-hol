@@ -377,6 +377,55 @@ Proof
   simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def]
 QED
 
+Theorem deploy_prefix_word_zero_probe:
+  words$w2n (0w : 256 word) = 0
+Proof
+  simp[wordsTheory.word_0_n2w, wordsTheory.w2n_n2w, wordsTheory.dimword_def]
+QED
+
+val _ = computeLib.add_funs
+  [deploy_prefix_word_size_probe, deploy_prefix_word_zero_probe];
+
+Theorem deploy_prefix_word_eval_probe:
+  words$w2n (32w : 256 word) = 32 /\
+  words$w2n (0w : 256 word) = 0
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_alloc_size_0:
+  concretizeMemLocDefs$get_alloca_size ^prefix_dload_fn_tm (Allocation 0) = 32
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_alloc_size_8:
+  concretizeMemLocDefs$get_alloca_size ^prefix_dload_fn_tm (Allocation 8) = 32
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_alloc_size_5:
+  concretizeMemLocDefs$get_alloca_size ^prefix_dload_fn_tm (Allocation 5) = 0
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_alloc_map_artifact:
+  concretizeMemLocDefs$compute_alloc_map_fuel_in_context 48
+    (^prefix_dload_unit_tm).cu_context ^prefix_dload_fn_tm
+    (concretizeMemLocDefs$bp_analyze_fuel 48
+      (cfgDefs$cfg_analyze ^prefix_dload_fn_tm) ^prefix_dload_fn_tm)
+    (cfgDefs$cfg_analyze ^prefix_dload_fn_tm) FEMPTY [] =
+    FEMPTY |+ (Allocation 0,0) |+ (Allocation 5,0) |+ (Allocation 8,0)
+Proof
+  pure_rewrite_tac[deploy_prefix_negative_bp_artifact,
+                   deploy_prefix_negative_cfg_artifact,
+                   deploy_prefix_negative_alloc_items_artifact,
+                   deploy_prefix_alloc_size_0, deploy_prefix_alloc_size_8,
+                   deploy_prefix_alloc_size_5] >> EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
