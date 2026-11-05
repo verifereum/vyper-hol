@@ -18,7 +18,7 @@ Ancestors
   exprSimFieldLayout
   exprSimSource
   targetPlaceSimDefs
-  stmtSimProps
+  stmtSimProps gasSummaryCompose
   exprSimProps
   exprSimHypsDefs
   exprSimDefs
@@ -33,6 +33,19 @@ Ancestors
   venomState venomInst
 Libs
   pairLib
+
+(* A failed base consumes exactly the same marked path in the full target;
+   no index or pointer suffix is evaluated. *)
+Theorem target_subscript_base_exception:
+  gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
+    (es, s0) marks (INR exc) fin r ==>
+  gas_marked_exec memory (ctx, func)
+    (eval_base_place cx (SubscriptTarget bt e))
+    (es, s0) marks (INR exc) fin r
+Proof
+  strip_tac >> once_rewrite_tac[evaluate_def] >>
+  irule gas_marked_exec_bind_exception >> simp[]
+QED
 
 (* An element of an array or a mapping, when no index can shrink an array
    the place is already in: the base's fragment, the index's (lower_value),
