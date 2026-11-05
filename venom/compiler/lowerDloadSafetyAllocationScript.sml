@@ -22,6 +22,9 @@ Proof
   qexistsl_tac [`b`,`inst`,`n`,`szS`] >> simp[exec_alloca_def]
 QED
 
+val _ = if null (hyp ld_cached_alloca_pair) then ()
+  else raise Fail "nonclosed ld_cached_alloca_pair";
+
 Theorem ld_alloca_step:
   inst.inst_opcode = ALLOCA ==>
   (step_inst fuel C inst s = OK ss <=>
@@ -104,10 +107,13 @@ Theorem ld_cached_alloca_effect:
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
     FRANGE (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) SUBSET FDOM A
 Proof
-  strip_tac >>
+  VALID (strip_tac >>
   drule_all ld_alloca_step >> strip_tac >> gvs[] >>
-  drule_all ld_cached_alloca_pair >>
-  disch_then (strip_assume_tac o Q.ISPECL [`sz:bytes32`,`sz:bytes32`]) >>
+  (* Instantiate word widths before creating the implication assumption:
+     type-instantiating an ASSUME theorem would change its hypothesis. *)
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    ld_cached_alloca_pair) >>
+  disch_then (qspecl_then [`sz:bytes32`,`sz:bytes32`] strip_assume_tac) >>
   gvs[] >>
   `step_taint inst f.lf_src (update_var out (n2w b) f.lf_src) tn =
     tn with t_var := tn.t_var |+ (out,{})` by
@@ -121,8 +127,11 @@ Proof
   conj_tac >- gvs[FLOOKUP_DEF] >>
   irule SUBSET_TRANS >> qexists_tac `FRANGE f.lf_H` >>
   simp[] >> simp[SUBSET_DEF, IN_FRANGE, DOMSUB_FAPPLY_THM] >>
-  metis_tac[]
+  metis_tac[])
 QED
+
+val _ = if null (hyp ld_cached_alloca_effect) then ()
+  else raise Fail "nonclosed ld_cached_alloca_effect";
 
 Theorem ld_cached_alloca_advance:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -664,3 +673,9 @@ Proof
     conj_tac >- metis_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* Exported allocation interfaces must be closed kernel theorems. *)
+val _ = List.app (fn (name, th) =>
+  if null (hyp th) then () else raise Fail ("nonclosed " ^ name))
+  [("ld_cached_alloca_advance", ld_cached_alloca_advance),
+   ("ld_fresh_alloca_advance", ld_fresh_alloca_advance)];

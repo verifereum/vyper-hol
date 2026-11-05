@@ -973,3 +973,23 @@ ld_sync_head_update once (i) supplies vars/provenance/taint effects. No new
 definition, axiom, cheat, or speculative admitted theorem is introduced here.
 Generated DLOAD scratch prefixes, INVOKE/return, failing/terminal states and
 current raw safety remain separate outstanding obligations.
+
+## C1.11.5.88: checked original-ALLOCA owned successor
+
+`lowerDloadSafetyAllocationCoverageTheory` now exports
+`ld_sync_owned_boundary_coverage` and `ld_sync_alloca_owned_coverage`.
+The latter handles both cached and fresh original ALLOCA, retaining the same
+correlated Q-ownership, supply and name-order witnesses. It is conditional on
+the source next activity and next envelope, and target next activity; it does
+not establish these location premises or current-instruction raw safety.
+The next expansion is arbitrary Y, packaged at phase zero, not singleton.
+Generated DLOAD scratch, call/return and exhaustive reachable coverage remain open.
+
+An imported cached effect had a hidden kernel hypothesis despite earlier build
+success. Its polymorphic cached-pair theorem is now type-instantiated before
+druling, and only then specialized at the actual size. Type-instantiating the
+ASSUME theorem produced by disch_then had changed that hypothesis and prevented
+its discharge. The repaired effect is validated with VALID; permanent hyp=[]
+checks cover cached pair/effect/advance, fresh advance and both owned-coverage
+exports. Both allocation and allocation-coverage targets build with these checks.
+No theorem statement or semantic definition changed in this repair.
