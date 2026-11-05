@@ -789,8 +789,68 @@ Theorem frag_exec_gas_path_relabel_edge:
          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
     (?r. gas_marked_path F ctx fn s 0 r /\ exit_result r /\ R r)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all frag_relabel_observer_exists >> strip_tac >>
+  `frag_relabel_edge_context sa sb L ids fn` by simp[frag_relabel_edge_context_def] >>
+  `(s with vs_current_bb := L).vs_inst_idx = LENGTH (start_relabel L ids sa).cs_current_insts` by
+    simp[start_relabel_def] >>
+  `((s with vs_current_bb := L).vs_current_bb,
+     (s with vs_current_bb := L).vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb)` by
+    (mp_tac (Q.INST [`sa` |-> `start_relabel L ids sa`,
+       `sb` |-> `start_swap sa L ids sb`] frag_observer_start_region) >>
+     simp[start_relabel_def, start_relabel_extends]) >>
+  `frag_relabel_state L sa.cs_current_bb (s with vs_current_bb := L) s` by
+    (irule frag_relabel_state_initial >> simp[]) >>
+  `(frag_relabel_observer sa sb L ids fn id).fn_name = fn.fn_name` by
+    simp[frag_relabel_observer_def] >>
+  qpat_x_assum `!L ids fn'. _`
+    (qspecl_then [`L`, `ids`, `frag_relabel_observer sa sb L ids fn id`] mp_tac) >>
+  simp[] >> strip_tac
+  >- suspend "normal" >> suspend "exit"
 QED
+
+Resume frag_exec_gas_path_relabel_edge[normal]:
+  rename1 `Q t` >>
+  `run_from 0 ctx (frag_relabel_observer sa sb L ids fn id) t = Halt (stop_view t)` by
+    (irule run_from_stop_view >>
+     qexistsl_tac [`<|bb_label := sb.cs_current_bb;
+       bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>`, `id`] >>
+     simp[frag_relabel_observer_cut, frag_observer_cut_instruction]) >>
+  `?fuel. run_from fuel ctx (frag_relabel_observer sa sb L ids fn id)
+     (s with vs_current_bb := L) = Halt (stop_view t)` by
+    (qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `?u. local_prefix ctx (frag_relabel_observer sa sb L ids fn id)
+     (frag_observer_cut sb) (s with vs_current_bb := L) u /\ stop_view u = stop_view t` by
+    (irule frag_relabel_edge_halt_prefix >>
+     gvs[frag_observer_cut_def, stop_view_def, halt_state_def] >> metis_tac[]) >>
+  `?v. gas_path ctx fn s 0 (OK v) /\ frag_relabel_state L sa.cs_current_bb u v` by
+    (drule frag_relabel_edge_prefix_path >> disch_then irule >> simp[] >>
+     qexistsl_tac [`id`, `ids`, `sb`] >> gvs[]) >>
+  drule local_prefix_endpoint >> strip_tac >>
+  `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
+  `Q v` by (irule frag_relabel_state_post >> gvs[frag_observer_cut_def] >> metis_tac[]) >>
+  drule frag_relabel_state_fields >> strip_tac >>
+  disj1_tac >> qexists_tac `v` >>
+  gvs[gas_marked_path_def, frag_observer_cut_def]
+QED
+
+Resume frag_exec_gas_path_relabel_edge[exit]:
+  qmatch_asmsub_abbrev_tac `R r` >>
+  `!h. r <> Halt h` by metis_tac[] >>
+  `?b p. gas_path ctx fn s 0
+    (exec_result_map (\t. t with <|vs_current_bb := b; vs_prev_bb := p|>) r)` by
+    (irule frag_relabel_edge_exit_path >> simp[Abbr `r`] >>
+     qpat_assum `frag_relabel_edge_context _ _ _ _ _`
+       (irule_at (Pat `frag_relabel_edge_context _ _ _ _ _`)) >>
+     qexistsl_tac [`s with vs_current_bb := L`, `id`, `fuel`] >> gvs[]) >>
+  disj2_tac >>
+  qexists_tac `exec_result_map (\t. t with <|vs_current_bb := b; vs_prev_bb := p|>) r` >>
+  simp[gas_marked_path_def] >>
+  Cases_on `r` >> gvs[exit_result_def, instIdxIndepTheory.exec_result_map_def] >> metis_tac[]
+QED
+
+Finalise frag_exec_gas_path_relabel_edge
 
 Theorem abi_decode_sim_gas_path_relabel_edge:
   !ctx sa sb Q fn s.
@@ -817,5 +877,40 @@ Theorem abi_decode_sim_gas_path_relabel_edge:
     ?t. gas_marked_path F ctx fn s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
         t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  cheat
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all frag_relabel_observer_exists >> strip_tac >>
+  `frag_relabel_edge_context sa sb L ids fn` by simp[frag_relabel_edge_context_def] >>
+  `(s with vs_current_bb := L).vs_inst_idx = LENGTH (start_relabel L ids sa).cs_current_insts` by
+    simp[start_relabel_def] >>
+  `((s with vs_current_bb := L).vs_current_bb,
+    (s with vs_current_bb := L).vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb)` by
+    (mp_tac (Q.INST [`sa` |-> `start_relabel L ids sa`,
+       `sb` |-> `start_swap sa L ids sb`] frag_observer_start_region) >>
+     simp[start_relabel_def, start_relabel_extends]) >>
+  `frag_relabel_state L sa.cs_current_bb (s with vs_current_bb := L) s` by
+    (irule frag_relabel_state_initial >> simp[]) >>
+  `(frag_relabel_observer sa sb L ids fn id).fn_name = fn.fn_name` by
+    simp[frag_relabel_observer_def] >>
+  qpat_x_assum `!L ids fn'. _`
+    (qspecl_then [`L`, `ids`, `frag_relabel_observer sa sb L ids fn id`] mp_tac) >>
+  simp[] >> strip_tac >> rename1 `Q t` >>
+  `?fuel. run_from fuel ctx (frag_relabel_observer sa sb L ids fn id)
+     (s with vs_current_bb := L) = Halt (stop_view t)` by
+    (irule abi_decode_sim_stop_run >> simp[] >>
+     qexistsl_tac [`<|bb_label := sb.cs_current_bb;
+       bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>`, `id`] >>
+     simp[frag_relabel_observer_cut, frag_observer_cut_instruction]) >>
+  `?u. local_prefix ctx (frag_relabel_observer sa sb L ids fn id)
+     (frag_observer_cut sb) (s with vs_current_bb := L) u /\ stop_view u = stop_view t` by
+    (irule frag_relabel_edge_halt_prefix >>
+     gvs[frag_observer_cut_def, stop_view_def, halt_state_def] >> metis_tac[]) >>
+  `?v. gas_path ctx fn s 0 (OK v) /\ frag_relabel_state L sa.cs_current_bb u v` by
+    (drule frag_relabel_edge_prefix_path >> disch_then irule >> simp[] >>
+     qexistsl_tac [`id`, `ids`, `sb`] >> gvs[]) >>
+  drule local_prefix_endpoint >> strip_tac >>
+  `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
+  `Q v` by (irule frag_relabel_state_post >> gvs[frag_observer_cut_def] >> metis_tac[]) >>
+  drule frag_relabel_state_fields >> strip_tac >>
+  qexists_tac `v` >> gvs[gas_marked_path_def, frag_observer_cut_def]
 QED
