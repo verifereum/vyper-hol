@@ -169,6 +169,13 @@ Proof
   >- (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
       metis_tac[])
   >- (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  TRY (rpt strip_tac >>
+       qpat_x_assum `!target. supported_expr_exists _ (StructLit _ _ _) ==> _`
+         (qspec_then `target` irule) >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def,
+            supportedExprTraverseTheory.supported_fields_exists_every,
+            listTheory.EXISTS_MEM] >>
+       disj2_tac >> fs[listTheory.MEM_MAP] >> metis_tac[] >> NO_TAC) >>
   strip_tac >> gvs[] >> Cases_on `int_calls_expr e` >> gvs[] >>
   metis_tac[MEM]
 QED

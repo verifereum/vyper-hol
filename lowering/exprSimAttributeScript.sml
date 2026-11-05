@@ -104,7 +104,11 @@ Proof
       vyperTypeCallGraphTheory.int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
       alloc_limits_expr_def] >>
-  Cases_on `expr_type obj` >> gvs[attribute_type_def]
+  Cases_on `expr_type obj` >> gvs[attribute_type_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!target. supported_expr_exists _ (Attribute _ _ _) ==> _`
+    (qspec_then `target` irule) >>
+  simp[supportedExprTraverseTheory.supported_expr_exists_def]
 QED
 
 Theorem attr_add_post[local]:
