@@ -118,6 +118,20 @@ Proof
   drule_all build_hashmap_info_hashmap >> simp[]
 QED
 
+Theorem single_module_defined_map_agreement_from_lookups:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  (!k vt. FLOOKUP env.toplevel_vtypes k = SOME vt ==>
+    FLOOKUP (build_contract_type_artifact d [(NONE,tops)]).cta_toplevel_vtypes k = SOME vt) /\
+  cenv.ce_hashmap_info = build_hashmap_info tops ==>
+  place_map_tables_agree_on_defined cenv env
+Proof
+  rw[place_map_tables_agree_on_defined_def] >>
+  first_x_assum drule >> strip_tac >>
+  drule single_module_vtypes_sound >> strip_tac >> gvs[]
+  >- (drule_all build_hashmap_info_variable >> simp[]) >>
+  drule_all build_hashmap_info_hashmap >> simp[]
+QED
+
 Theorem checked_single_module_defined_map_agreement:
   check_contract d layouts addr [(NONE,tops)] = SOME art /\
   env.toplevel_vtypes = art.cta_toplevel_vtypes /\
@@ -125,8 +139,10 @@ Theorem checked_single_module_defined_map_agreement:
   place_map_tables_agree_on_defined cenv env
 Proof
   rw[check_contract_def] >>
-  irule single_module_defined_map_agreement >>
-  gvs[contract_namespaces_ok_def, contract_keys_def] >> metis_tac[]
+  irule single_module_defined_map_agreement_from_lookups >>
+  qexistsl [`d`, `tops`] >>
+  gvs[contract_namespaces_ok_def, contract_keys_def, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
 QED
 
 Theorem build_compile_env_ce_hashmap_info:
