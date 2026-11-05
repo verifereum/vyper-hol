@@ -39,3 +39,17 @@ Theorem ifexp_copy_frontier_after_growth:
 Proof
   mp_tac abi_builtin_rounded_padding_bound >> decide_tac
 QED
+
+(* Small execution test of the new-allocation branch. *)
+Theorem ifexp_fresh_alloc_padding_probe:
+  s.vs_alloca_next = 33 /\ FLOOKUP s.vs_allocas 7 = NONE ==>
+  ?u. exec_alloca (mk_inst 7 ALLOCA [Lit 64w] ["%probe"]) s (64w:bytes32) = OK u /\
+      u.vs_alloca_next = 97 /\
+      FLOOKUP u.vs_allocas 7 = SOME (33,64) /\
+      32 + 32 * word_size 0 <= u.vs_alloca_next /\
+      32 + 32 * word_size 1 <= u.vs_alloca_next /\
+      32 + 32 * word_size 32 <= u.vs_alloca_next
+Proof
+  simp[venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.update_var_def, wordsTheory.dimword_def] >> EVAL_TAC
+QED
