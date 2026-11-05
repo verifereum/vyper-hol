@@ -80,3 +80,91 @@ QED
    is currently missing. The same issue applies to changing addresses.
    This is an unproved bridge, NOT a checked task counterexample.
 *)
+
+(* Definition-cut interface audit (C1.P.3.3.3).
+
+   These are CANDIDATES, not proved facts. The shared solver premise below
+   means exactly the is_fixpoint premise of le_occ_prefix_singleton_generation;
+   contexts additionally satisfy le_configured_context ctx.
+
+   Value cut candidate, for a reachable defining instruction:
+     wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+     MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions /\
+     MEM v (EL n bb.bb_instructions).inst_outputs /\
+     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\ <solver premise>
+     ==>
+     FLOOKUP (unwrap_load_lattice
+       (df_at NONE (load_analyze ctx fn) bb.bb_label n)) key <>
+       SOME [Var v].
+   For a PHI this must also hold at block index zero, before the batch.
+   The candidate is stronger than writer availability: it speaks about a
+   STATIC point, independently of which dynamic visit reaches that point.
+
+   Missing static path boundary:
+   Backward singleton selection must be iterated over an arbitrary finite
+   is_fn_path from entry to this point, returning a generation in a previous
+   block or in TAKE n bb.bb_instructions. No successful execution of that
+   path is needed or justified. le_occ_prefix_singleton_generation cannot
+   supply this theorem: it requires successful steps/PHI evaluation.
+   def_on_all_paths is precisely the available static interface for raw
+   store operands, but not yet for analysis witnesses.
+
+   Branch audit for a path ending at the FIRST visit to the defining block:
+   - Load generation of Var v writes v. ssa_form_output_unique identifies
+     its static instruction with the definition. It cannot be on the strict
+     prefix to that definition (requires occurrence/index uniqueness too).
+   - Store generation of Var v uses Var v as a raw operand, not normalized.
+     def_dominates_uses -> def_available_at supplies dominance and same-block
+     strict ordering. A path prefix to a store before the first definition
+     would contradict this availability, using SSA output uniqueness.
+   - PHI definition: cut at index zero, not between individual PHIs.
+     No PHI generates a binding; le_configured_phi_transfer preserves it.
+     Static uniqueness separates any generating load from a PHI definition.
+     Ordinary store operands are subject to dominance as above, even when
+     v's definition is a PHI. No sequential PHI-value argument is valid.
+   - Ordinary definition: cut immediately before its instruction; a defining
+     load then refreshes its own singleton. Other definitions do not refresh
+     the fact, so their pre-point exclusion is necessary.
+   - Later visits: once the STATIC cut is proved, apply it at each matching
+     defining instruction/PHI block occurrence. Writer availability alone
+     does not establish this reuse. Persistence still needs a suffix chosen
+     after the most recent refresh and the local semantic transfer lemmas.
+
+   Address audit:
+   normalize_operand_eval_proof (dfgCorrectnessProof) has exact interface
+     dfg_assigns_sound dfg s ==>
+     eval_operand (normalize_operand dfg visited op) s = eval_operand op s.
+   This discharges generation-time address agreement in
+   le_empty_read_key_address / le_empty_write_key_address. It also permits
+   transform-time comparison of normalized values. le_chain_valid_eval is
+   an existing weaker, chain-local alternative; do not duplicate either.
+   It does NOT prove equality between different states. In particular,
+   even dfg_assigns_sound at both endpoints only relates each normalized
+   address to its raw address at THAT endpoint. A cross-state normalized
+   key transport lemma still needs operand persistence (or an independent
+   semantic reason for raw-address equality).
+
+   Address cut candidate replaces the last line of the value candidate by
+     FLOOKUP (unwrap_load_lattice
+       (df_at NONE (load_analyze ctx fn) bb.bb_label n)) (LK_Op (Var v)) = NONE.
+   This needs backward KEY-presence provenance, not merely singleton-value
+   provenance: generators of this key may carry DIFFERENT value lists on
+   different incoming paths. At a generator Var v is normalize_operand's
+   result, not necessarily an original operand. The missing static bridge
+   is normalization-chain def/use availability for the built DFG; semantic
+   normalization equality alone does not supply that syntactic bridge.
+   For LK_Op (Lit w), evaluation is state-independent; LK_Op (Label l)
+   cannot give a successful word address. For LK_Loc, see correction below.
+
+   Correction to the older LK_Loc paragraph above: empty BP does NOT exclude
+   all LK_Loc keys. A literal address can produce an absolute fixed location.
+   le_step_preserves_analyze_empty uses fn_inst_wf, le_step_preserves,
+   bp_assigns_stable and initial dfg_assigns_sound to obtain empty original
+   BP queries; no-ALLOCA preservation handles later rebuilt BP analyses.
+   le_analyze_absolute_keys then restricts retained LK_Loc keys to
+   le_absolute_key: ml_alloca = NONE, fixed bounded offset, fixed word size.
+   le_absolute_location_address already proves address persistence for this
+   remaining branch. What is excluded is allocation-relative LK_Loc, not
+   LK_Loc itself. No normalized-variable dominance is required for absolute
+   locations. This is a proof-interface correction, not task falsehood.
+*)
