@@ -1,6 +1,6 @@
 Theory bodyIfExpMemory
 Ancestors
-  loweringPosts
+  loweringPosts exprSimMemUnwrap
   exprBopSimProps
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
@@ -587,6 +587,65 @@ Proof
   simp[vv_post_def, vv_at_def, vv_holds_def, vv_store_bound_def,
        vyperValueTheory.evaluate_type_def, finite_mapTheory.FLOOKUP_EMPTY,
        contextTheory.mk_ptr_def, eval_operand_def, read_result_def, return_def]
+QED
+
+(* Successful raw StackValue endpoint: the actual arm emits no unwrap code. *)
+Theorem ifexp_stack_arm_endpoint_mem[local]:
+  compile_expr cenv ty e sa = (StackValue st op,sm) /\
+  compile_ifexp_arm cenv t at (StackValue st op) sm = (out,sb) /\
+  is_word_type t /\ expr_type e = t /\
+  vv_post ctx func cenv cx e es sa sm s0 ee raw (StackValue st op) u /\
+  read_result cx raw ee = (INL v,ee) /\
+  alloca_history func u /\ ~u.vs_halted /\
+  s0.vs_alloca_next <= u.vs_alloca_next /\
+  u.vs_current_bb = sm.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?z. gas_path_mem ctx func u 0 (OK z) /\
+    expr_post ctx func cenv cx e es sa sb s0 ee v out z /\
+    expr_store_bound cx t v out z /\
+    alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+    z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  gvs[compile_ifexp_arm_def, unwrap_value_def, comp_return_def] >>
+  qexists_tac `u` >> simp[cj 1 gas_path_mem_rules, expr_store_bound_word] >>
+  irule exprSimUnwrapTheory.expr_post_of_vv_post_stack >>
+  drule exprSimUnwrapPropsTheory.vv_post_read_result >>
+  disch_then (fn th => fs[th]) >> qexists_tac `st` >> simp[]
+QED
+
+(* Construction with the precise residual MLOAD bound exposed, not discharged. *)
+Theorem ifexp_memory_arm_endpoint_mem[local]:
+  compile_expr cenv ty e sa = (LocatedValue st p,sm) /\
+  compile_ifexp_arm cenv t at (LocatedValue st p) sm = (op,sb) /\
+  is_word_type t /\ expr_type e = t /\ p.ptr_location = LocMemory /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue st p) u /\
+  read_result cx raw ee = (INL v,ee) /\
+  (?w. eval_operand p.ptr_operand u = SOME w /\
+       w2n w + 32 <= u.vs_alloca_next) /\
+  alloca_history func u /\ ~u.vs_halted /\
+  s0.vs_alloca_next <= u.vs_alloca_next /\
+  u.vs_current_bb = sm.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?z. gas_path_mem ctx func u 0 (OK z) /\
+    expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+    expr_store_bound cx t v op z /\
+    alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+    z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `st = t` by fs[vv_post_def, vv_holds_def] >> gvs[] >>
+  `unwrap_value cenv (LocatedValue (expr_type e) p) sm = (op,sb)` by
+    fs[compile_ifexp_arm_def] >>
+  `is_word_type (expr_type e) ==>
+    ?w. eval_operand p.ptr_operand u = SOME w /\
+        w2n w + 32 <= u.vs_alloca_next` by simp[] >>
+  drule_all bodyFieldMemoryPropsTheory.body_unwrap_memory_counted_read >>
+  strip_tac >> goal_assum (drule_at Any) >> simp[expr_store_bound_word]
 QED
 
 Theorem compile_ifexp_vv_sim_mem:
