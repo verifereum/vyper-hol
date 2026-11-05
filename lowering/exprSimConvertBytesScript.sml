@@ -1073,8 +1073,11 @@ Proof
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all convert_wb_frame_trans >> strip_tac >>
   gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
+  conj_tac
+  >- (irule expr_val_at_start_mono >> goal_assum (drule_at Any) >> simp[]) >>
   reverse conj_tac >- (first_assum ACCEPT_TAC) >>
-  irule expr_val_at_start_mono >> goal_assum (drule_at Any) >> simp[]
+  strip_tac >> irule expr_val_own_start_mono >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem convert_readonly_val_at:
@@ -1104,6 +1107,31 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
+Theorem convert_readonly_val_own:
+  !func cenv cx ty sa sm sb es v x op s tt p.
+    expr_val_own cenv cx ty sa sm es v x s /\
+    eval_operand x s = SOME p /\ eval_operand op tt = SOME p /\
+    tt.vs_allocas = s.vs_allocas /\ sm.cs_next_id <= sb.cs_next_id /\
+    local_ptrs_rel func cenv es.scopes s /\ local_ptrs_reserved cenv sm /\
+    (!z w. not_fresh_at sm z /\ lookup_var z s = SOME w ==>
+      lookup_var z tt = SOME w) ==>
+    expr_val_own cenv cx ty sa sb es v op tt
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n b sz. local_region cenv es.scopes tt n b sz <=>
+             local_region cenv es.scopes s n b sz` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule exprSimOpsTheory.local_region_frame >>
+         conj_tac >- (qexists_tac `func` >> simp[]) >>
+         qexistsl_tac [`sm`, `es.scopes`, `tt`] >> simp[]) >>
+     strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
+  gvs[expr_val_own_def] >> rpt strip_tac >>
+  qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >> gvs[] >>
+  disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem convert_readonly_expr_post:
   !ctx func cenv cx e es es1 sa sm sb s0 s tt v x op p.
     expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
@@ -1124,6 +1152,10 @@ Proof
      gvs[expr_post_def] >> metis_tac[]) >>
   `expr_val_rel cx (post_value_type cenv e) v op tt` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `post_value_type cenv e <> expr_type e ==>
+   expr_val_own cenv cx (post_value_type cenv e) sa sb es1 v op tt` by
+    (strip_tac >> irule convert_readonly_val_own >>
+     goal_assum (drule_at Any) >> gvs[expr_post_def] >> metis_tac[]) >>
   gvs[expr_post_def] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x'` by

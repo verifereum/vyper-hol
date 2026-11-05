@@ -508,6 +508,17 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
+Theorem expr_val_own_start_mono:
+  sa.cs_next_id <= s1.cs_next_id /\
+  expr_val_own cenv cx ty s1 sm es v p s ==>
+  expr_val_own cenv cx ty sa sm es v p s
+Proof
+  simp[expr_val_own_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> qexists_tac `w` >> simp[] >>
+  disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
 (* Operand composition: the value of a non-word operand survives code that
    keeps the operand and the bytes of the value's footprint, the
    type_memory_size bytes at its address (val_in_memory_mem_agree). *)
