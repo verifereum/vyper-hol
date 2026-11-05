@@ -79,20 +79,22 @@ Proof
 QED
 
 Theorem lowering_stuck_entry_rejected:
-  unit.cu_context.ctx_entry = NONE ==>
-  ~source_unit_execution_correct tops ret am tx unit vs
+  unit.cu_context.ctx_entry = NONE /\
+  ~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) ==>
+  ~source_unit_execution_correct_at gobs tops ret am tx unit vs
 Proof
-  simp[source_unit_execution_correct_def, run_context_def,
+  simp[source_unit_execution_correct_at_def, run_context_def,
        lowering_rejects_nonterminal]
 QED
 
 Theorem lowering_source_execution_terminates:
-  source_unit_execution_correct tops ret am tx unit vs ==>
+  source_unit_execution_correct_at gobs tops ret am tx unit vs /\
+  ~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) ==>
   ?fuel. 0 < fuel /\
     ((?ss. run_context fuel unit.cu_context vs = Halt ss) \/
      (?kind ss. run_context fuel unit.cu_context vs = Abort kind ss))
 Proof
-  rw[source_unit_execution_correct_def] >>
+  rw[source_unit_execution_correct_at_def] >>
   qexists_tac `fuel` >> conj_tac
   >- (Cases_on `fuel` >> gvs[lowering_zero_fuel_rejected]) >>
   drule lowering_real_termination >> simp[]

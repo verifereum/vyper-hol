@@ -168,7 +168,7 @@ Proof
   simp[GSYM comp_bind_def, comp_bind_uncurry] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (irule gas_shadow_compiles_multi_exprs >> simp[]) >>
+  >- (irule gas_shadow_compiles_abi_encode_args >> simp[]) >>
   gen_tac >> BETA_TAC >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- irule gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer >>

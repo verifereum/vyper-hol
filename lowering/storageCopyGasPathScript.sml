@@ -10,7 +10,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem storage_copy_seq_path[local]:
+Theorem storage_copy_seq_path:
   !code s t memory ctx func bb.
     ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -30,7 +30,7 @@ Proof
   drule_all tuple_run_inst_seq_gas_path >> simp[]
 QED
 
-Theorem storage_copy_jump_path[local]:
+Theorem storage_copy_jump_path:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
@@ -313,7 +313,7 @@ Proof
   metis_tac[gas_marked_path_then, ADD]
 QED
 
-Theorem storage_copy_code_prefix[local]:
+Theorem storage_copy_code_prefix:
   !sa sb func. fn_has_code sa sb func /\ same_blocks sa sb /\
   isPREFIX sa.cs_current_insts sb.cs_current_insts ==>
   ?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
