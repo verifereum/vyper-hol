@@ -101,8 +101,7 @@ Proof
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [mk_inst_def] >>
   simp_tac bool_ss [Once step_inst_base_def, instruction_accessors,
-                    opcode_case_def] >>
-  simp_tac (srw_ss()) [] >>
+                    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> simp[venom_state_component_equality]
 QED
@@ -181,10 +180,26 @@ Proof
   fs[MEM]
 QED
 
-Theorem calldata_clamp_prefix_framed:
+Theorem clamp_scalar_lookup_frame:
+  MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
+  step_inst_base (mk_inst id opc ops outs) s = OK t /\ ~MEM x outs ==>
+  lookup_var x t = lookup_var x s
+Proof
+  strip_tac >> fs[MEM] >> gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [mk_inst_def] >>
+  simp_tac bool_ss [Once step_inst_base_def, instruction_accessors,
+                    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem calldata_clamp_overwrite_prefix:
   compile_abi_clamp_basetype op clamp sa = ((),sb) /\
-  eval_operand op s = SOME w /\ abi_decoder_clamp_valid clamp w /\
-  fresh_vars_wrt sa s /\ op_taint tn op = {} /\ op_prov G op = NONE /\
+  eval_operand op s = SOME w /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  op_taint tn op = {} /\ op_prov G op = NONE /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -196,8 +211,9 @@ Theorem calldata_clamp_prefix_framed:
     s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
     s'.vs_memory = s.vs_memory /\ s'.vs_allocas = s.vs_allocas /\
     s'.vs_alloca_next = s.vs_alloca_next /\
-    (!a v. eval_operand a s = SOME v ==> eval_operand a s' = SOME v) /\
-    fresh_vars_wrt sb s' /\
+    s' = t with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    (!a v. (!x. a = Var x ==> not_fresh_at sa x) /\
+      eval_operand a s = SOME v ==> eval_operand a s' = SOME v) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==>
@@ -206,11 +222,11 @@ Theorem calldata_clamp_prefix_framed:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >>
-  drule_all abi_decoder_clamp_sequence >> strip_tac >>
   drule calldata_clamp_instructions >> strip_tac
   >- (gvs[run_inst_seq_def] >>
-      qexistsl_tac [`s`, `G`, `tn`] >>
-      simp[venom_state_component_equality] >> metis_tac[]) >>
+      qexistsl_tac [`G`, `tn`] >>
+      `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
+        simp[venom_state_component_equality] >> simp[]) >>
   qabbrev_tac `v0 = "%" ++ toString sa.cs_next_var` >>
   qabbrev_tac `v1 = "%" ++ toString (sa.cs_next_var + 1)` >>
   qabbrev_tac `i0 = mk_inst sa.cs_next_id opc [Lit shift; op] [v0]` >>
@@ -237,12 +253,9 @@ Proof
      qexistsl_tac [`sa.cs_next_id + 2`, `ASSERT`, `[Var v1]`, `[]:string list`] >>
      simp[Abbr `i2`]) >>
   `op <> Var v0` by
-    (qpat_x_assum `fresh_vars_wrt sa s` mp_tac >>
-     simp[fresh_vars_wrt_def] >>
-     disch_then (qspec_then `sa.cs_next_var` mp_tac) >>
-     Cases_on `op` >>
-     gvs[Abbr `v0`, eval_operand_def, lookup_var_def, FLOOKUP_DEF] >>
-     metis_tac[]) >>
+    (strip_tac >>
+     qpat_x_assum `!x. op = Var x ==> _` drule >>
+     simp[not_fresh_at_def, Abbr `v0`]) >>
   qabbrev_tac `G1 = step_prov PG G i0 s1` >>
   qabbrev_tac `tn1 = step_taint i0 s s1 tn` >>
   qabbrev_tac `G2 = step_prov PG G1 i1 s2` >>
@@ -252,7 +265,7 @@ Proof
   suspend "ghost_frames"
 QED
 
-Resume calldata_clamp_prefix_framed[ghost_frames]:
+Resume calldata_clamp_overwrite_prefix[ghost_frames]:
   `op_taint tn1 op = {} /\ op_prov G1 op = NONE` by
     (Cases_on `op` >>
      gvs[Abbr `tn1`, Abbr `G1`, Abbr `i0`, op_prov_def,
@@ -288,7 +301,7 @@ Resume calldata_clamp_prefix_framed[ghost_frames]:
   suspend "endpoint"
 QED
 
-Resume calldata_clamp_prefix_framed[endpoint]:
+Resume calldata_clamp_overwrite_prefix[endpoint]:
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb (LENGTH sa.cs_current_insts) = SOME i0 /\
     get_instruction bb (LENGTH sa.cs_current_insts + 1) = SOME i1 /\
@@ -304,15 +317,34 @@ Resume calldata_clamp_prefix_framed[endpoint]:
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `G3`, `tn3`] >>
   `t with vs_inst_idx := LENGTH sa.cs_current_insts = t` by
     simp[venom_state_component_equality] >>
-  simp[eval_operand_def, lookup_var_def, fresh_vars_wrt_def] >>
+  simp[eval_op_inst_idx] >>
   conj_tac >- simp[venom_state_component_equality] >>
-  conj_tac
-  >- (qpat_x_assum `!a v. eval_operand a s = SOME v ==> _` mp_tac >>
-      simp[eval_operand_def, lookup_var_def]) >>
-  qpat_x_assum `fresh_vars_wrt sb t` mp_tac >> simp[fresh_vars_wrt_def]
+  rpt strip_tac >> Cases_on `a`
+  >- fs[eval_operand_def]
+  >- (rename1 `eval_operand (Var x) s = SOME v` >>
+  `not_fresh_at sa x` by
+    (qpat_x_assum `!y. Var x = Var y ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
+  `x <> v0 /\ x <> v1` by metis_tac[] >>
+  `lookup_var x s1 = lookup_var x s` by
+    (irule clamp_scalar_lookup_frame >>
+     qexistsl_tac [`sa.cs_next_id`, `opc`, `[Lit shift;op]`, `[v0]`] >>
+     simp[Abbr `i0`] >> fs[MEM]) >>
+  `lookup_var x s2 = lookup_var x s1` by
+    (irule clamp_scalar_lookup_frame >>
+     qexistsl_tac [`sa.cs_next_id + 1`, `if signed then EQ else ISZERO`,
+       `if signed then [op;Var v0] else [Var v0]`, `[v1]`] >>
+     simp[Abbr `i1`] >> Cases_on `signed` >> simp[]) >>
+  `lookup_var x t = lookup_var x s2` by
+    (irule clamp_scalar_lookup_frame >>
+     qexistsl_tac [`sa.cs_next_id + 2`, `ASSERT`, `[Var v1]`, `[]:string list`] >>
+     simp[Abbr `i2`]) >>
+  qpat_x_assum `lookup_var x t = _` mp_tac >>
+  qpat_x_assum `eval_operand (Var x) s = _` mp_tac >>
+  simp[eval_operand_def]) >>
+  fs[eval_operand_def]
 QED
 
-Resume calldata_clamp_prefix_framed[continuation]:
+Resume calldata_clamp_overwrite_prefix[continuation]:
   strip_tac >>
   `!fuel. ptr_safe_run D lo fuel ctx fn PG G2 tn2
      (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 2)` by
@@ -358,4 +390,48 @@ Resume calldata_clamp_prefix_framed[continuation]:
   simp[]
 QED
 
-Finalise calldata_clamp_prefix_framed
+Finalise calldata_clamp_overwrite_prefix
+
+Theorem evaluated_operand_not_fresh:
+  fresh_vars_wrt sa s /\ eval_operand a s = SOME z /\ a = Var x ==>
+  not_fresh_at sa x
+Proof
+  rpt strip_tac >> fs[not_fresh_at_def] >> rpt strip_tac >>
+  gvs[eval_operand_def, lookup_var_def, FLOOKUP_DEF, fresh_vars_wrt_def] >>
+  metis_tac[]
+QED
+
+Theorem calldata_clamp_prefix_framed:
+  compile_abi_clamp_basetype op clamp sa = ((),sb) /\
+  eval_operand op s = SOME w /\ abi_decoder_clamp_valid clamp w /\
+  fresh_vars_wrt sa s /\ op_taint tn op = {} /\ op_prov G op = NONE /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    s'.vs_memory = s.vs_memory /\ s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next /\
+    (!a v. eval_operand a s = SOME v ==> eval_operand a s' = SOME v) /\
+    fresh_vars_wrt sb s' /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `!x. op = Var x ==> not_fresh_at sa x` by
+    (rpt strip_tac >> irule evaluated_operand_not_fresh >>
+     goal_assum $ drule_at (Pat `eval_operand`) >> simp[]) >>
+  drule_all abi_decoder_clamp_sequence >> strip_tac >>
+  drule_all calldata_clamp_overwrite_prefix >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`s'`, `G'`, `tn'`] >>
+  simp[fresh_vars_wrt_def, eval_op_inst_idx] >> fs[fresh_vars_wrt_def]
+QED
