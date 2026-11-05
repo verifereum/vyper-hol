@@ -169,3 +169,131 @@ Proof
       finite_mapTheory.FLOOKUP_UPDATE, not_fresh_at_def] >> metis_tac[]
 QED
 
+
+Theorem sha256_alloc32_compile:
+  compile_alloc_buffer 32 ca = (buf,cb) ==>
+  cb.cs_next_id = ca.cs_next_id + 1 /\
+  cb.cs_next_var = ca.cs_next_var + 1 /\
+  cb.cs_current_insts = ca.cs_current_insts ++ emitted_insts ca cb
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]
+QED
+
+Theorem sha256_mstore_mem:
+  !ptr_op value ca cb s p v.
+  emit_void MSTORE [ptr_op;value] ca = ((),cb) /\
+  eval_operand ptr_op s = SOME p /\ eval_operand value s = SOME v /\
+  w2n p + 32 <= s.vs_alloca_next ==>
+  run_inst_seq (emitted_insts ca cb) s = OK (mstore (w2n p) v s) /\
+  run_inst_seq_mem_ok (emitted_insts ca cb) s /\
+  (mstore (w2n p) v s).vs_allocas = s.vs_allocas /\
+  (mstore (w2n p) v s).vs_alloca_next = s.vs_alloca_next /\
+  (!a. eval_operand a (mstore (w2n p) v s) = eval_operand a s) /\
+  (alloca_next_valid (mstore (w2n p) v s) <=> alloca_next_valid s)
+Proof
+  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `step_inst_base (mk_inst ca.cs_next_id MSTORE [ptr_op;value] []) s =
+    OK (mstore (w2n p) v s)` by (irule step_MSTORE >> simp[]) >>
+  simp[run_inst_seq_def, run_inst_seq_mem_ok_last, below_frontier_MSTORE,
+       mstore_def, alloca_next_valid_def] >>
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem compile_sha256_bytesm_mem_ok:
+  compile_sha256_bytesm val_op m sa = (op,sb) /\
+  eval_operand val_op s = SOME v /\
+  (!x. val_op = Var x ==> not_fresh_at sa x) /\
+  alloca_next_valid s /\ m <= 32 /\
+  (!aid base cap. (aid = sa.cs_next_id \/ aid = sa.cs_next_id + 2) /\
+    FLOOKUP s.vs_allocas aid = SOME (base,cap) ==> cap = 32) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  simp[builtinHashingTheory.compile_sha256_bytesm_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  rename1 `compile_alloc_buffer 32 sa = (ib,c1)` >>
+  rename1 `emit_void MSTORE _ c1 = (u,c2)` >> Cases_on `u` >>
+  rename1 `compile_alloc_buffer 32 c2 = (ob,c3)` >>
+  rename1 `emit_void ASSERT _ _ = (u,c6)` >> Cases_on `u` >>
+  `!base cap. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (base,cap) ==> cap = 32` by metis_tac[] >>
+  drule_all sha256_alloc32_mem >> strip_tac >>
+  qpat_x_assum `!base cap. _` kall_tac >>
+  qpat_x_assum `!aid base cap. _` (mk_asm "sizes") >>
+  qpat_assum `compile_alloc_buffer 32 sa = _`
+    (mp_then Any strip_assume_tac sha256_alloc32_compile) >>
+  `eval_operand val_op t = SOME v` by metis_tac[] >>
+  drule_all sha256_mstore_mem >> strip_tac >>
+  qpat_assum `emit_void MSTORE _ _ = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+  `!base cap. FLOOKUP (mstore (w2n r) v t).vs_allocas c2.cs_next_id = SOME (base,cap) ==> cap = 32` by
+    (simp[] >> rpt strip_tac >>
+     `c2.cs_next_id <> sa.cs_next_id` by decide_tac >>
+     asm "sizes" (qspec_then `sa.cs_next_id + 2` mp_tac) >> metis_tac[]) >>
+  qpat_assum `compile_alloc_buffer 32 c2 = _`
+    (mp_then Any mp_tac sha256_alloc32_mem) >>
+  disch_then (qspec_then `mstore (w2n r) v t` mp_tac) >>
+  impl_tac >- (conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qpat_x_assum `!base cap. _` kall_tac >>
+  rename1 `run_inst_seq (emitted_insts c2 c3) _ = OK t3` >>
+  `!x. ib.buf_operand = Var x ==> not_fresh_at c2 x` by fs[not_fresh_at_def] >>
+  `eval_operand ib.buf_operand t3 = SOME r` by metis_tac[] >>
+  qpat_assum `compile_alloc_buffer 32 c2 = _`
+    (mp_then Any strip_assume_tac sha256_alloc32_compile) >>
+  `!x. ib.buf_operand = Var x ==> not_fresh_at c3 x` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
+  `run_inst_seq_mem_ok (emitted_insts c3 sb) t3` by
+    (irule emit_sha256_tail_mem_ok >>
+     goal_assum (drule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op STATICCALL _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op GAS _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_void ASSERT _ _ = _`)) >>
+     simp[eval_operand_def] >> conj_tac >- metis_tac[] >>
+     `m MOD dimword (:256) <= m` by simp[arithmeticTheory.MOD_LESS_EQ] >>
+     fs[] >> decide_tac) >>
+  `sb.cs_current_insts = c3.cs_current_insts ++ emitted_insts c3 sb` by
+    (qpat_x_assum `emit_op GAS [] c3 = _` mp_tac >>
+     qpat_x_assum `emit_op STATICCALL _ _ = _` mp_tac >>
+     qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
+     qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++
+      (emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 sb))` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_x_assum `sb.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `c3.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `c2.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `c1.cs_current_insts = _` SUBST1_TAC >>
+     rpt (pop_assum kall_tac) >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND] >>
+     `!a b:num. a - (a + b) = 0` by decide_tac >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `t1` >> strip_tac >>
+  `t1 = t` by
+    (qpat_x_assum `run_inst_seq _ s = OK t1` mp_tac >>
+     qpat_assum `run_inst_seq _ s = OK t` (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `t1 = t` SUBST_ALL_TAC >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `t2` >> strip_tac >>
+  `t2 = mstore (w2n r) v t` by
+    (qpat_x_assum `run_inst_seq _ t = OK t2` mp_tac >>
+     qpat_assum `run_inst_seq _ t = OK (mstore _ _ _)`
+       (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `t2 = _` SUBST_ALL_TAC >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `t4` >> strip_tac >>
+  `t4 = t3` by
+    (qpat_x_assum `run_inst_seq (emitted_insts c2 c3) _ = OK t4` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts c2 c3) _ = OK t3`
+       (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `t4 = t3` SUBST_ALL_TAC >> first_assum ACCEPT_TAC
+QED
