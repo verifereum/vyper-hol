@@ -50,7 +50,8 @@ QED
 Theorem pop_target_source_facts:
   expr_body_pre cenv cx env (Pop ann bt) s /\
   eval_target_place cx bt s = (INL p,t) ==>
-  ?n. state_well_typed t /\ writable_place_result cx t (PlaceR p) /\
+  ?n. state_well_typed t /\ env_consistent env cx t /\
+    writable_place_result cx t (PlaceR p) /\
     eval_result_typed (env,cx,t) (PlaceR p) (Type (ArrayT ann (Dynamic n)))
 Proof
   strip_tac >>
