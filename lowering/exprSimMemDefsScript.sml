@@ -6,23 +6,34 @@ Ancestors
 
 (* A memory-backed result lies below the allocation frontier with its
    bytestring data rounded up to whole words, which is how much a copy of
-   it reads. *)
+   it reads.  A zero-size read passes the memory check at any pointer, so
+   it needs no bound. *)
 Definition expr_store_bound_def:
   expr_store_bound cx t v op s <=>
     !tv w. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
            eval_operand op s = SOME w ==>
+           val_store_size tv v = 0 \/
            w2n w + val_store_size tv v <= s.vs_alloca_next
 End
 
-(* The same for a value_vv located in memory. *)
+(* The same for a value_vv located in memory, whose whole region at its
+   located type also lies below the frontier: a staging copy reads that
+   type's full size, not just the value's footprint. *)
 Definition vv_store_bound_def:
   vv_store_bound cx t es tv vv s <=>
-    !vt p v tvt w.
+    (!vt p v tvt w.
       vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
       read_result cx tv es = (INL v, es) /\
       evaluate_type (get_tenv cx) t = SOME tvt /\
       eval_operand p.ptr_operand s = SOME w ==>
-      w2n w + val_store_size tvt v <= s.vs_alloca_next
+      val_store_size tvt v = 0 \/
+      w2n w + val_store_size tvt v <= s.vs_alloca_next) /\
+    (!vt p tvt w.
+      vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
+      evaluate_type (get_tenv cx) vt = SOME tvt /\
+      eval_operand p.ptr_operand s = SOME w ==>
+      type_memory_size tvt = 0 \/
+      w2n w + type_memory_size tvt <= s.vs_alloca_next)
 End
 
 Theorem expr_store_bound_word:
@@ -127,16 +138,18 @@ Proof
 QED
 
 (* A memory pointer with room below the frontier for its whole type bounds
-   the value it points at. *)
+   the value it points at, and a zero-size type needs no room. *)
 Theorem vv_store_bound_capacity:
   vv_post ctx func cenv cx e es sa sb s0 es' tv (LocatedValue vt p) t /\
+  vt = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
   eval_operand p.ptr_operand t = SOME fw /\
-  w2n fw + type_memory_size ftv <= t.vs_alloca_next ==>
+  (type_memory_size ftv = 0 \/
+   w2n fw + type_memory_size ftv <= t.vs_alloca_next) ==>
   vv_store_bound cx (expr_type e) es' tv (LocatedValue vt p) t
 Proof
   rw[vv_store_bound_def, vv_post_def, vv_at_def] >> gvs[] >>
-  drule val_store_size_le >> decide_tac
+  imp_res_tac val_store_size_le >> decide_tac
 QED
 
 Theorem expr_store_bound_capacity:
@@ -144,7 +157,8 @@ Theorem expr_store_bound_capacity:
   (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
         ~is_word_type (expr_type e) ==>
         ?w. eval_operand op t = SOME w /\
-            w2n w + type_memory_size tv <= t.vs_alloca_next) ==>
+            (type_memory_size tv = 0 \/
+             w2n w + type_memory_size tv <= t.vs_alloca_next)) ==>
   expr_store_bound cx (expr_type e) v op t
 Proof
   rw[expr_store_bound_def, expr_post_def, expr_val_at_def] >>
