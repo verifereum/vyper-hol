@@ -1949,7 +1949,8 @@ Theorem rf_probe_pair:
 Proof
   simp[revert_forward_pair_def, rf_probe_bb_def, get_instruction_def,
        mk_inst_def] >>
-  simp[resolve_block_assigns_def]
+  simp[resolve_block_assigns_def, same_after_assigns_def,
+       step_back_assign_def]
 QED
 Theorem rf_probe_word_ne[local]:
   (0w : 256 word) <> 1w
@@ -2019,7 +2020,8 @@ Proof
        mk_inst_def] >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     `k = 2` by decide_tac >> gvs[]) >>
-  simp[resolve_block_assigns_def]
+  simp[resolve_block_assigns_def, same_after_assigns_def,
+       step_back_assign_def]
 QED
 Theorem rf_probe_assign_liveness:
   ~MEM "dead" (cfg_analyze rf_probe_assign_fn).cfg_dfs_pre /\
@@ -2407,6 +2409,38 @@ Proof
   metis_tac[MEM_REVERSE, MEM_TAKE]
 QED
 
+Theorem step_back_assign_normalize:
+  !fn inst op op'. codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+    step_back_assign inst op = SOME op' ==>
+    normalize_operand (dfg_build_function fn) [] op' =
+    normalize_operand (dfg_build_function fn) [] op
+Proof
+  rpt strip_tac >>
+  `op' = resolve_block_assigns [inst] op` by
+    (qpat_x_assum `step_back_assign _ _ = _` mp_tac >>
+     Cases_on `op` >> rw[step_back_assign_def, resolve_block_assigns_def]) >>
+  simp[] >> irule normalize_operand_resolve_block_assigns >> simp[]
+QED
+
+Theorem same_after_assigns_normalize:
+  !insts fn op1 op2. codegen_ready_fn fn /\
+    EVERY (\inst. MEM inst (fn_insts fn)) insts /\
+    same_after_assigns insts op1 op2 ==>
+    normalize_operand (dfg_build_function fn) [] op1 =
+    normalize_operand (dfg_build_function fn) [] op2
+Proof
+  Induct >> simp[same_after_assigns_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `op1 = op2` >> gvs[] >>
+  Cases_on `step_back_assign h op1` >> gvs[] >>
+  Cases_on `step_back_assign h op2` >> gvs[] >>
+  rename1 `step_back_assign h op1 = SOME op1'` >>
+  rename1 `step_back_assign h op2 = SOME op2'` >>
+  `normalize_operand (dfg_build_function fn) [] op1' =
+   normalize_operand (dfg_build_function fn) [] op2'` by
+    (first_x_assum irule >> simp[]) >>
+  metis_tac[step_back_assign_normalize]
+QED
+
 Theorem rf_forward_normalized_operands:
   codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
   revert_forward_pair bb i j /\
@@ -2419,12 +2453,33 @@ Theorem rf_forward_normalized_operands:
     normalize_operand (dfg_build_function fn) [] sz'
 Proof
   strip_tac >>
-  `!k op. normalize_operand (dfg_build_function fn) []
-     (resolve_block_assigns (REVERSE (TAKE k bb.bb_instructions)) op) =
+  `!insts. (!x. MEM x insts ==> MEM x bb.bb_instructions) ==>
+     EVERY (\inst. MEM inst (fn_insts fn)) insts` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     irule mem_fn_insts_intro >> qexists_tac `bb` >>
+     metis_tac[lookup_block_MEM]) >>
+  `EVERY (\inst. MEM inst (fn_insts fn))
+     (REVERSE (TAKE i bb.bb_instructions))` by
+    (first_x_assum irule >> metis_tac[MEM_REVERSE, MEM_TAKE]) >>
+  `EVERY (\inst. MEM inst (fn_insts fn))
+     (REVERSE (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions)))` by
+    (first_x_assum irule >>
+     metis_tac[MEM_REVERSE, MEM_TAKE, rich_listTheory.MEM_DROP_IMP]) >>
+  `!op1 op2. same_after_assigns (REVERSE (TAKE i bb.bb_instructions)) op1 op2 ==>
+     normalize_operand (dfg_build_function fn) [] op1 =
+     normalize_operand (dfg_build_function fn) [] op2` by
+    (rpt strip_tac >> irule same_after_assigns_normalize >> simp[] >>
+     qexists_tac `REVERSE (TAKE i bb.bb_instructions)` >> simp[]) >>
+  `!op. normalize_operand (dfg_build_function fn) []
+     (resolve_block_assigns
+        (REVERSE (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions))) op) =
      normalize_operand (dfg_build_function fn) [] op` by
-    (rpt gen_tac >> irule rf_resolve_prefix_normalize >> simp[]) >>
-  fs[revert_forward_pair_def] >> gvs[] >>
-  metis_tac[normalize_operand_def]
+    (gen_tac >> irule normalize_operand_resolve_block_assigns >> simp[]) >>
+  qpat_x_assum `revert_forward_pair _ _ _` mp_tac >>
+  pure_rewrite_tac[revert_forward_pair_def] >> strip_tac >> gvs[] >>
+  `normalize_operand (dfg_build_function fn) [] (Lit 0w) = Lit 0w` by
+    simp[normalize_operand_def] >>
+  metis_tac[]
 QED
 
 Theorem rf_written_interval:
@@ -3474,8 +3529,7 @@ Proof
 QED
 
 Theorem rf_entry_copy_execution:
-  !base.
-  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  codegen_ready_fn fn /\ rf_spills_separated ps /\
   inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
   inst.inst_operands = [dop;sop;zop] /\
   emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
@@ -3512,8 +3566,7 @@ Theorem rf_entry_copy_execution:
       AsmFault st' /\
     venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st')
 Proof
-  gen_tac >> strip_tac >>
-  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
+  strip_tac >>
   `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
     (irule rf_inventory_inv_entry >> first_assum ACCEPT_TAC) >>
   `!op. MEM op (compute_operands inst) ==>
@@ -3976,7 +4029,7 @@ Proof
 QED
 
 Theorem rf_entry_copy_setup:
-  !ctx cp lo prog liveness dfg cfg fn bb i j base ps vs ast ops
+  !ctx cp lo prog liveness dfg cfg fn bb i j ps vs ast ops
    ps_end ra rest mem0.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
@@ -3984,7 +4037,7 @@ Theorem rf_entry_copy_setup:
     revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
     LENGTH (get_params bb.bb_instructions) <= i /\
     EVERY (\inst. EVERY (\op. ~is_label_operand op) inst.inst_operands)
-      (DROP i bb.bb_instructions) /\ generated_plan_state_wf base ps /\
+      (DROP i bb.bb_instructions) /\ rf_spills_separated ps /\
     (!k inst op. i <= k /\ get_instruction bb k = SOME inst /\
        MEM op (compute_operands inst) /\ is_var_operand op /\
        (!k' inst' x. i <= k' /\ k' < k /\ get_instruction bb k' = SOME inst' /\
@@ -4049,7 +4102,6 @@ Proof
     fs[listTheory.LENGTH_EQ_NUM_compute] >>
   `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
     (irule rf_suffix_instruction_no_labels >> metis_tac[]) >>
-  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
   `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
     (irule rf_inventory_inv_entry >> gvs[]) >>
   `!op. rf_live_use bb i j op /\ is_var_operand op ==>
@@ -4107,7 +4159,7 @@ Proof
 QED
 
 Theorem rf_entry_forward_abort:
-  !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j base ps vs ast ops
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j ps vs ast ops
    ps_end ra rest mem0 a vs_end.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\ opaque_use_ok fn /\
@@ -4115,7 +4167,7 @@ Theorem rf_entry_forward_abort:
     revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
     LENGTH (get_params bb.bb_instructions) <= i /\
     EVERY (\inst. EVERY (\op. ~is_label_operand op) inst.inst_operands)
-      (DROP i bb.bb_instructions) /\ generated_plan_state_wf base ps /\
+      (DROP i bb.bb_instructions) /\ rf_spills_separated ps /\
     (!k inst op. i <= k /\ get_instruction bb k = SOME inst /\
        MEM op (compute_operands inst) /\ is_var_operand op /\
        (!k' inst' x. i <= k' /\ k' < k /\ get_instruction bb k' = SOME inst' /\

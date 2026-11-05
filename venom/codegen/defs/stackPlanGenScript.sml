@@ -379,13 +379,18 @@ Definition dead_stack_marker_def:
   dead_stack_marker = Label ""
 End
 
-(* Per-instruction: no pre-codegen opcodes, and no operand the planner could
-   mistake for its dead_stack_marker *)
+(* Per-instruction: no pre-codegen opcodes, no operand the planner could
+   mistake for its dead_stack_marker, at most 16 stack operands for any
+   instruction but a PHI (the frame proofs reach operands with DUP/SWAP),
+   and a LOG's topic count at most 4 (LOG0 to LOG4) *)
 Definition codegen_ready_inst_def:
   codegen_ready_inst inst ⇔
     ¬ is_pre_codegen_opcode inst.inst_opcode ∧
     (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) ∧
-    ¬MEM dead_stack_marker inst.inst_operands
+    ¬MEM dead_stack_marker inst.inst_operands ∧
+    (inst.inst_opcode ≠ PHI ==> LENGTH (compute_operands inst) ≤ 16) ∧
+    (inst.inst_opcode = LOG ==>
+     case inst.inst_operands of Lit tc :: _ => w2n tc ≤ 4 | _ => F)
 End
 
 (* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
@@ -442,8 +447,35 @@ Definition phi_operands_ready_def:
     else EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks
 End
 
+(* The planner pushes an OFFSET's output and never pops it, dead or not, as
+   Python's _generate_evm_for_instruction does.  A dead one would stay below
+   a join's live-in variables and pile up in a loop, so codegen takes only
+   functions whose OFFSET outputs are all read (remove_unused drops the
+   others). *)
+Definition offset_outputs_used_def:
+  offset_outputs_used fn ⇔
+    EVERY (λinst. inst.inst_opcode = OFFSET ⇒
+             EVERY (λout. EXISTS (λuse. MEM (Var out) use.inst_operands)
+                            (fn_insts fn))
+               inst.inst_outputs)
+      (fn_insts fn)
+End
+
+(* The planner finds a PHI's source only on the stack, as Python's
+   _generate_evm_for_instruction does (stack.get_phi_depth).  A block with a
+   single predecessor can be entered by a JNZ, which keeps the predecessor's
+   spills (only a JMP restores them), so a spilled source would be missed and
+   the PHI's output never pushed.  Codegen takes only functions whose PHIs
+   are all at joins. *)
+Definition phis_at_joins_def:
+  phis_at_joins cfg fn ⇔
+    EVERY (λbb. LENGTH (cfg_preds_of cfg bb.bb_label) ≤ 1 ⇒
+                NULL (collect_phis bb.bb_instructions))
+      fn.fn_blocks
+End
+
 (* Per-function: structural WF + SSA + SUE + normalized CFG + PHI operands
-   + no bad opcodes *)
+   + no bad opcodes + no dead OFFSET output + PHIs only at joins *)
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     canonical_param_prefix fn ∧
@@ -455,12 +487,17 @@ Definition codegen_ready_fn_def:
     cfg_is_normalized (cfg_analyze fn) fn ∧
     block_entries_ready (cfg_analyze fn) fn ∧
     phi_operands_ready fn ∧
-    EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
+    EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks ∧
+    offset_outputs_used fn ∧
+    phis_at_joins (cfg_analyze fn) fn
 End
 
-(* Per-context: all functions ready *)
+(* Per-context: all functions ready, and every function but the first
+   (the entry) takes a return PC, which INVOKE pushes for its callee. *)
 Definition codegen_ready_def:
-  codegen_ready ctx ⇔ EVERY codegen_ready_fn ctx.ctx_functions
+  codegen_ready ctx ⇔
+    EVERY codegen_ready_fn ctx.ctx_functions ∧
+    EVERY (λfn. IS_SOME (fn_retpc_param fn)) (TL ctx.ctx_functions)
 End
 
 (* Dispatch to phi, offset, or regular.
