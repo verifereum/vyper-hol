@@ -4,7 +4,7 @@ Ancestors makeSsaCurrentReinsertionSlots makeSsaCurrentDemandedCut
   makeSsaCurrentPathBridge makeSsaCurrentTokenGraph makeSsaCurrentTokens
   makeSsaCurrentSourceCuts makeSsaCurrentPlacementCut makeSsaCurrentDefs
   makeSsaCurrentAnalysis venomWf venomExecProps venomInst cfgWf
-  livenessDefs list
+  livenessDefs list rich_list relation cfgAnalysisProps
 
 Theorem current_certificate_root_exit:
   current_structural_certificate s fn fn' s' A H events /\
@@ -80,4 +80,53 @@ Proof
    current_inherited_token fn (current_actual_inserted fn) v pp` by
     metis_tac[current_actual_demanded_cut_tokens, REVERSE_REVERSE] >>
   simp[current_non_site_block_token]
+QED
+
+Theorem current_certificate_rooted_live_exit:
+  !route p ep pb.
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\
+  first_block_no_preds fn /\ entry_block fn = SOME eb /\
+  LRC (fn_cfg_edge fn) route eb.bb_label p /\
+  MEM ep events /\ current_event_label ep = p /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions)) /\
+  (!b phi. MEM b fn.fn_blocks /\ MEM phi (collect_phis b.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) ==>
+  current_event_exit_env ep v =
+    current_chain_token fn (current_actual_inserted fn) v (route ++ [p]) (CurrentDefault v)
+Proof
+  ho_match_mp_tac SNOC_INDUCT >> conj_tac
+  >- (simp[LRC_def, current_chain_token_def] >> rpt strip_tac >>
+      metis_tac[current_certificate_root_exit]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[SNOC_APPEND, current_lrc_append, LRC_def] >> strip_tac >>
+  rename1 `fn_cfg_edge fn a p` >>
+  rewrite_tac[current_chain_token_append, current_chain_token_def] >>
+  Cases_on `current_changing_site fn (current_actual_inserted fn) v p`
+  >- (irule current_certificate_site_exit >> metis_tac[]) >>
+  `MEM a (fn_labels fn)` by
+    (gvs[fn_cfg_edge_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `?ab. lookup_block a fn.fn_blocks = SOME ab` by
+    (gvs[fn_labels_def, MEM_MAP] >>
+     metis_tac[MEM_lookup_block, wf_function_def, fn_labels_def]) >>
+  `?ea. MEM ea events /\ current_event_label ea = a` by
+    metis_tac[current_certificate_event_at] >>
+  `MEM v (live_vars_at (liveness_analyze fn) p
+     (LENGTH (collect_phis pb.bb_instructions)))` by
+    (irule current_live_exit_to_cut >> simp[] >>
+     metis_tac[current_non_site_outputs]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) a (LENGTH ab.bb_instructions))` by
+    (irule current_live_cut_to_pred_exit >> simp[] >>
+     qexistsl_tac [`p`, `pb`] >> simp[] >> conj_tac
+     >- metis_tac[lookup_block_MEM] >>
+     metis_tac[current_non_site_cut_clear, current_phi_cut_clear_def]) >>
+  `current_event_exit_env ea v =
+   current_chain_token fn (current_actual_inserted fn) v
+     (route ++ [a]) (CurrentDefault v)` by
+    (first_x_assum irule >> metis_tac[]) >>
+  `current_event_exit_env ep v = current_event_exit_env ea v` by
+    (irule current_certificate_non_site_live_exit >> metis_tac[]) >>
+  simp[current_non_site_block_token, current_chain_token_append, current_chain_token_def]
 QED
