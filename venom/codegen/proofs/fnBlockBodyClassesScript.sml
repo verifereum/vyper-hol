@@ -980,3 +980,101 @@ Proof
           qpat_x_assum `as'.as_pc = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
       disch_then ACCEPT_TAC)
 QED
+
+(* ===== Revert forwarding ===== *)
+
+Theorem rf_exec_block_cases:
+  !bb s j fuel ctx.
+    revert_forward_pair bb s.vs_inst_idx j ==>
+    (?a t. exec_block fuel ctx bb s = Abort a t) \/
+    (?e. exec_block fuel ctx bb s = Error e)
+Proof
+  rpt strip_tac >>
+  `!t. exec_block fuel ctx bb s <> Halt t` by
+    metis_tac[revert_forward_pair_no_halt] >>
+  `!t ret. exec_block fuel ctx bb s <> OK t /\
+           exec_block fuel ctx bb s <> IntRet ret t` by
+    metis_tac[revert_forward_pair_no_normal] >>
+  Cases_on `exec_block fuel ctx bb s` >> metis_tac[]
+QED
+
+(* A revert forwarding from k runs the rest of the block as one step,
+   given that its code neither spills nor restores. *)
+Theorem body_revert_step:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    revert_forward_pair bb k j /\
+    (!off. ~MEM (SORestore off) rest_ops /\ ~MEM (SOSpill off) rest_ops) ==>
+    (!t. exec_block fuel ctx bb vs <> OK t) /\
+    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+      (exec_block fuel ctx bb vs)
+Proof
+  strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
+  `revert_forward_pair bb vs.vs_inst_idx j` by
+    (qpat_x_assum `vs.vs_inst_idx = k` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`bb`, `vs`, `j`, `fuel`, `ctx`] mp_tac rf_exec_block_cases >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac
+  >~ [`exec_block fuel ctx bb vs = Error e`]
+  >- (qpat_x_assum `exec_block fuel ctx bb vs = _`
+        (fn th => REWRITE_TAC [th, body_result_error]) >>
+      simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `exec_block fuel ctx bb vs = _`
+        (fn th => REWRITE_TAC [th]) >> simp[]) >>
+  `k < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `revert_forward_pair bb k j` mp_tac >>
+     rpt (pop_assum kall_tac) >> CONV_TAC CONTRAPOS_CONV >> strip_tac >>
+     simp[revert_forward_pair_def, get_instruction_def]) >>
+  `EL k bb.bb_instructions = EL k bb.bb_instructions` by REWRITE_TAC [] >>
+  drule_all body_inv_static >> strip_tac >>
+  `!inst. MEM inst bb.bb_instructions ==> inst_shape_ok inst` by
+    (rpt strip_tac >>
+     qspecl_then [`fn`, `bb`, `inst`] mp_tac body_inst_ready >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_x_assum `EVERY inst_shape_ok (fn_insts fn)` mp_tac >>
+     REWRITE_TAC [EVERY_MEM] >> disch_then irule >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`bb`, `k`, `j`] mp_tac rf_pair_no_labels >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  `k - LENGTH (get_params bb.bb_instructions) +
+   LENGTH (get_params bb.bb_instructions) = k` by
+    (qpat_x_assum `LENGTH (get_params _) <= k` mp_tac >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
+  `DROP (k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb) =
+   DROP k bb.bb_instructions` by
+    (qpat_x_assum `non_param_insts bb = _` SUBST1_TAC >>
+     REWRITE_TAC [DROP_DROP_T] >>
+     qpat_x_assum `_ + _ = k` (fn th => REWRITE_TAC [th])) >>
+  `asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp rest_ops)` by
+    (qspecl_then [`prog`, `pc0`, `cpl.cp_initial_fmp`, `bb.bb_label`,
+                  `prefix_ops`, `rest_ops`, `[]`] mp_tac block_ops_at >>
+     REWRITE_TAC [APPEND_NIL] >>
+     impl_tac
+     >- (qpat_x_assum `block_ops = _` (fn th =>
+           qpat_x_assum `asm_block_at prog pc0 _` (fn th2 =>
+             ACCEPT_TAC (REWRITE_RULE [th] th2)))) >>
+     qpat_x_assum `as.as_pc = _` SUBST1_TAC >> disch_then ACCEPT_TAC) >>
+  qpat_x_assum `!j. revert_forward_pair bb k j ==> _` drule >> strip_tac >>
+  qpat_x_assum `DROP (k - _) (non_param_insts bb) = _` (fn dth =>
+    qpat_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ ps =
+                SOME (rest_ops, ps_after)`
+      (fn th => assume_tac (REWRITE_RULE [dth] th))) >>
+  `!name. MEM (AsmOp name) (execute_plan cpl.cp_initial_fmp rest_ops) ==>
+          IS_SOME (evm_opcode_byte name)` by
+    (rpt strip_tac >>
+     qspecl_then [`rpolicy`, `unit`, `prog`, `as.as_pc`,
+                  `execute_plan cpl.cp_initial_fmp rest_ops`, `name`]
+       mp_tac body_placed_target_safe >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  qspecl_then [`fuel`, `ctx`, `cpl`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`,
+               `cfg`, `fn`, `bb`, `k`, `j`, `spill_base`, `ps`, `vs`, `as`,
+               `rest_ops`, `ps_after`, `ra`, `rest`, `mem0`]
+    mp_tac revert_forward_frame_sim_deep >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`a`, `t`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `exec_block fuel ctx bb vs = _` (fn th => REWRITE_TAC [th]) >>
+  MATCH_ACCEPT_TAC body_result_abort
+QED
