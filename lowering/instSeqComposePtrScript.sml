@@ -24,3 +24,14 @@ Proof
   simp[run_inst_seq_inst_idx, exec_result_map_def, ADD_CLAUSES] >>
   fs[ADD_CLAUSES]
 QED
+
+(* Successful whole runs expose phase endpoints without operational unfolding. *)
+Theorem run_inst_seq_append_ok_split:
+  run_inst_seq (xs ++ ys) s = OK t ==>
+  ?u. run_inst_seq xs s = OK u /\ run_inst_seq ys u = OK t
+Proof
+  Cases_on `run_inst_seq xs s`
+  >- (drule run_inst_seq_append >> disch_then (qspec_then `ys` assume_tac) >>
+      strip_tac >> qexists_tac `v` >> fs[]) >>
+  simp[run_inst_seq_append_err]
+QED

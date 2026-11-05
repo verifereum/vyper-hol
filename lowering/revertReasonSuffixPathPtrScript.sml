@@ -304,11 +304,7 @@ Proof
   `TAKE 7 (revert_reason_suffix id v (Var b) (Var p) (Var q)) = xs ++ ys` by
     simp[NoAsms, Abbr `xs`, Abbr `ys`, revert_reason_suffix_def] >>
   `?s2. run_inst_seq xs s = OK s2 /\ run_inst_seq ys s2 = OK u` by
-    (Cases_on `run_inst_seq xs s`
-     >- (drule run_inst_seq_append >> disch_then (qspec_then `ys` assume_tac) >>
-         qexists_tac `v'` >> simp[NoAsms] >> metis_tac[]) >>
-     qpat_x_assum `run_inst_seq (TAKE 7 _) _ = _` mp_tac >>
-     asm_rewrite_tac[] >> simp[run_inst_seq_append_err]) >>
+    (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   `run_inst_seq (TAKE 2 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK s2` by
     metis_tac[] >>
   drule_all revert_reason_size_cell_checks >>
@@ -344,11 +340,7 @@ Resume revert_reason_seven_checks[aliases]:
   qabbrev_tac `as2 = DROP 3 ys` >>
   `ys = as3 ++ as2` by simp[NoAsms, Abbr `as3`, Abbr `as2`] >>
   `?s5. run_inst_seq as3 s2 = OK s5 /\ run_inst_seq as2 s5 = OK u` by
-    (Cases_on `run_inst_seq as3 s2`
-     >- (drule run_inst_seq_append >> disch_then (qspec_then `as2` assume_tac) >>
-         qexists_tac `v'` >> simp[NoAsms] >> metis_tac[]) >>
-     qpat_x_assum `run_inst_seq ys _ = _` mp_tac >>
-     asm_rewrite_tac[] >> simp[run_inst_seq_append_err]) >>
+    (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) as3` by
     simp[NoAsms, Abbr `as3`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
