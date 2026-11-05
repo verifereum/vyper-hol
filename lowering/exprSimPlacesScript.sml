@@ -103,6 +103,8 @@ QED
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
+    (!kt vt. place_type cenv obj = MapPT kt vt ==>
+             expr_map_case nocalls ctx func cenv cx obj) /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
@@ -135,8 +137,11 @@ Proof
   `expr_ok cenv obj /\ expr_ok cenv idx` by
     (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
      simp[expr_size_def]) >>
+  `expr_sim_below cenv (expr_size obj)` by
+    (irule expr_sim_below_mono >>
+     qexists_tac `expr_size (Subscript ann obj idx)` >> simp[expr_size_def]) >>
   gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_subscript_case >> simp[]
+  irule compile_subscript_case >> simp[expr_map_case_below]
 QED
 
 (* ===== Attributes ===== *)
