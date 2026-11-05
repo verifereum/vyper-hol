@@ -299,7 +299,7 @@ Proof
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem emit_op_length[local]:
+Theorem emit_op_length:
   emit_op opc ops sa = (out,sb) ==> LENGTH (emitted_insts sa sb) = 1
 Proof
   strip_tac >> drule emitted_insts_emit_op >> simp[]
