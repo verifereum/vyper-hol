@@ -526,3 +526,127 @@ must supply actual writer conflicts. Paired write content/footprint containment
 and byte framing remain separate consumers. No target noninterference is yet proved.
 Shared setup's final argument-token equality is also separate and unresolved;
 equality of entire relocated argument vectors must not be introduced to solve it.
+
+## Reverse ancestor-destination interface validation (C1.5.90.60)
+
+Outcome: localized semantic supplier gap, NOT a proof of reverse exclusion.
+No SML, speculative admission, positions-rewrite lemma, or executable change is
+introduced. TokenInterval and the strengthened ProtectedLivesets discharge the
+previous .57 continuity / same-w export recommendations; those are no longer
+the missing boundaries below.
+
+### Direction and cursor
+
+At an intervening observation `a = EL t h`, let the demanded allocation belong
+to a deeper live frame and the actual write destination belong to a shallower
+live frame `f = EL n a.po_stack`. The shallower frame is necessarily suspended:
+its instruction is INVOKE, NOT the currently executed store. Its production
+cursor is `(f.cf_state.vs_current_bb,f.cf_state.vs_inst_idx)`. The demand owner's
+cache is transported upward by StackImports, not by BP in the executing callee.
+
+* StackImports:197--215 `ptr_frame_descendant_demand` supplies `ml_callee_gen
+  (Allocation aid) mems f.cf_inst`, with actual stage, NONE eoms, shape/run-state,
+  no-DALLOCA, distinct ids/callee-first, frame reachability, `n<LENGTH stk`,
+  `k<=n`, the descendant `(owner,os)` at index k, its cache lookup, and the
+  shallower owner's actual walk view. StackImports:218--237 supplies the
+  corresponding imported tuple (add observed-context name equality).
+* LivenessTransfer:16--26 makes callee_gen BOTH read_gen and used_gen. Applying
+  OwnerConflict:55--71 with `u=t=r` at this SAME shallower cursor supplies the
+  imported demand liveset (empty no-kill interval), exactly as done in
+  CallSeparation:65--75. This part is an existing checked chain.
+* LayoutOutput's local/import consumer still needs the shallower owner's LOCAL
+  destination allocation liveset at that very cursor. CallSeparation does not
+  supply it: its lines29--37 take the local liveset as an antecedent. Reversing
+  the names in that theorem leaves precisely this antecedent unsolved.
+
+### Store marking is not a suspended-call supplier
+
+`ptr_active_write_liveset` (RetrospectiveLocal:8--19) has the exact interface
+
+```sml
+active_inst fn inst st /\
+MEM a (find_base_allocas_opt bp (inst_write_op inst)) ==>
+?xs. FLOOKUP (context_mem_livesets fuel ctx fn bp (cfg_analyze fn)) a = SOME xs /\
+  MEM (st.vs_current_bb,st.vs_inst_idx) xs
+```
+
+It bypasses the need for a writer read seed when the write actually executes in
+its allocation owner. It does NOT mark an ancestor's INVOKE for a descendant
+store. OwnerConflict:105--128 has the same write-origin limitation in its final
+antecedent. Thus even having both read/used seeds for the imported demand does
+not make that store-conflict theorem applicable at the suspended ancestor.
+
+BPOrigins:198--204 `ptr_bp_analyze_origins` goes from a BP member to membership
+in `pointer_derived_vars fn (ptr_bp_alloc_roots fn aid)`. It is NOT runtime
+provenance-to-BP completeness and cannot manufacture the ancestor call operand.
+RuntimeGeneration:17--30 `ptr_production_operand_used_seed` goes the other way
+for an already supplied Var operand and local derived membership, under
+fn_ptr_ok, SSA, inst_wf, scan coverage and instruction membership. At an INVOKE,
+its proof also yields operand_gen, hence read_gen by LivenessTransfer:20--21.
+This would solve local liveness at `u=t=r`; the missing input is that ancestor
+Var/local-derived witness, not a new liveness recurrence or a writer read seed.
+
+### Smallest exposed semantic boundary (UNPROVED candidate)
+
+The following is a precise proposed intermediate consumer, not a declared
+constant/theorem and not a claim of checked derivability. All constants already
+exist. It intentionally asks only for ancestor call-operand provenance/local
+origin, not target separation, matching source success, or memory equality.
+Here the positive birth and live token select the actual destination owner,
+not an arbitrary retained birth or a same-named function.
+
+```sml
+ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+EVERY (fn_ptr_ok P) C.ctx_functions /\
+EVERY ssa_form C.ctx_functions /\
+EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+n < LENGTH a.po_stack /\ EL (SUC n) tokens = token /\
+FLOOKUP TG v = SOME (token,bid) /\
+FLOOKUP births (token,bid) = SOME (b,sz) /\ 0 < sz /\
+FLOOKUP (EL n a.po_stack).cf_state.vs_allocas bid = SOME (b,sz) /\
+inst_write_op a.po_inst = SOME (Var v) ==>
+?u. MEM (Var u) (EL n a.po_stack).cf_inst.inst_operands /\
+    FLOOKUP (EL n a.po_stack).cf_prov u = SOME (b,sz) /\
+    u IN pointer_derived_vars (EL n a.po_stack).cf_fn
+      (ptr_bp_alloc_roots (EL n a.po_stack).cf_fn bid)
+```
+
+This candidate is subject to strategist validation (including adequacy of its
+antecedent); it is NOT a proposed new assumption on StageStatic. The current
+source prefix and actual destination tag supply ownership, current TG and birth;
+positive footprint containment supplies sz>0; live placement supplies the owner
+cache/token; frozen source shape supplies the structural assumptions. It should
+be proved from those sources, or corrected at that level before installation.
+
+Premise-by-premise supplier ledger / remaining work:
+
+| Boundary | Existing supplier | Exact limitation |
+|---|---|---|
+| Reachable current/saved frames | ownership history -> chrono reachability; owner_view_active | No target simulation needed. |
+| Runtime variable supported by local-or-PARAM roots | ActivationSupport:121--139, FrameOrigins:5--11 | Support is closure over a UNION of local cache roots and PARAM roots; it does not select a PARAM chain or this owner's local bid. |
+| One imported PARAM crosses one call | CallAncestry:41--59 | Requires `MEM (SOME site) PG` at that edge; concludes caller Var operand and numerical G lookup. It does not derive that membership from arbitrary derived runtime G, nor iterate it to the selected tagged owner. |
+| Root classification | RootCover:7--12,36--59 | Local roots or `ptr_roots DIFF alloca_roots`; not membership in this specific bid's derived closure. Distinct local roots/cache uniqueness and exclusion of foreign PARAM origin still need semantic justification. |
+| Tagged support | TaggedSupport:21--43 | Gives `v IN fn_pv P fn` / allowed PARAM index only, not local-bid closure at the selected ancestor. |
+| BP origins/completeness | BPOrigins:198, ProductionCoverage:71, RuntimeGeneration:17 | Usable AFTER local-derived witness; BPOrigins direction alone is insufficient. |
+| Imported deeper demand at same cursor | StackImports + OwnerConflict at singleton interval | Complete existing chain as above. |
+| Actual layout, local items, positive sizes, observed/pass witnesses | HistoricalPlacement, StagePlacements, LayoutOutput | Keep original owner and production metadata; arbitrary positions or retained siblings are inadmissible. These do not solve ancestor operand origin. |
+
+A possible proof route for the unproved boundary is to decompose finite derived
+closure over frame roots, rule out local-cache origin in each strictly deeper
+frame using positive active-owner geometry, extract PARAM membership, cross the
+call with CallAncestry, and repeat until the selected owner; there rule out its
+foreign PARAM and other local origins. No such iteration/origin-selection proof
+was installed or credited in this diagnostic. In particular numerical site
+aliasing at zero size is not solved by this route: the candidate explicitly
+handles positive-byte destinations only. Zero-byte footprints require no byte
+exclusion; zero-sized provenance elsewhere remains a separate integration issue.
+
+Verification: holbuild passed OwnerConflict, BPOrigins, StackImports,
+CallSeparation, TokenInterval, ProtectedLivesets (tool output
+TO_concretize_ptr-20261105T100526Z_m9834_t001), then OwnerDemand,
+RuntimeGeneration, RetrospectiveLocal, ActivationSupport, CallAncestry,
+TaggedSupport (TO_concretize_ptr-20261105T100526Z_m9868_t001). No rebase break was
+encountered. Universal prefix coverage and setup argument-token equality remain
+blocked and are not conclusions of this audit.
