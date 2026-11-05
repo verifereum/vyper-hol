@@ -2,6 +2,8 @@ Theory bodyPtrTypeBuiltinsBoundWords
 Ancestors
   bodyPtrTypeBuiltinsOperands exprSimAggregates gasContext bodyPtrDefs
   exprPtrUnwrap exprSimSource exprLoweringProps vyperState
+  exprSimHypsDefs vyperTypeSystem vyperInterpreter vyperValueOperation
+  exprLowering compileEnv valueEncoding vyperContext exprSimHyps
 Libs monadsyntax
 
 
@@ -52,4 +54,34 @@ Proof
   rename1 `_ (st with gas_obs := gs) = (r2,ee2)` >>
   `expr_res_ok r2` by (drule_all gas_admissible_result >> simp[]) >>
   drule_all bound_builtin_explicit_bind >> strip_tac >> gvs[]
+QED
+
+Theorem bound_builtin_typed_literal:
+  !cenv cx env ann tb typ args es v ty sa op sb.
+    MEM tb [MaxValue;MinValue;Epsilon] /\
+    expr_sim_pre cenv cx env (TypeBuiltin ann tb typ args) es /\
+    evaluate_type_builtin cx tb typ [] [] = INL v /\ args = [] /\
+    lower_value compile_expr cenv ty (TypeBuiltin ann tb typ args) sa = (op,sb) ==>
+    sb = sa /\ is_word_type ann /\
+    ?w. op = Lit w /\
+      !tv. evaluate_type (get_tenv cx) ann = SOME tv ==> typed_val_to_w256 tv v = w
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ann = typ /\ is_numeric_type typ` by
+    gvs[expr_sim_pre_def, well_typed_expr_def, type_builtin_result_ok_def,
+        well_typed_type_builtin_args_def] >>
+  `(?n. typ = BaseT (UintT n)) \/ (?n. typ = BaseT (IntT n)) \/
+   typ = BaseT DecimalT` by
+    (Cases_on `typ` >> gvs[] >> rename1 `BaseT bt` >> Cases_on `bt` >> gvs[]) >>
+  gvs[] >>
+  gvs[evaluate_type_builtin_def, evaluate_max_value_def,
+      evaluate_min_value_def, AllCaseEqs()] >>
+  gvs[lower_value_def, compile_expr_type_builtin_dispatch, comp_bind_def] >>
+  gvs[Once compile_expr_def, unwrap_value_def, comp_return_def,
+      type_bounds_def, type_bits_def, is_signed_type_def] >>
+  simp[is_word_type_def] >>
+  simp[integerTheory.INT_SUB] >>
+  rw[vyperValueTheory.evaluate_type_def] >>
+  PURE_REWRITE_TAC [typed_val_to_w256_def, val_to_w256_def,
+    integer_wordTheory.i2w_0, integer_wordTheory.i2w_pos] >> REFL_TAC
 QED
