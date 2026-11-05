@@ -234,3 +234,202 @@ candidate has been tested and found insufficient; no speculative revision is
 installed. The next strategist decision must address the source-version
 implication and exhaustive source provenance, not request another conditional
 store-preservation theorem or pretend this audit establishes inductiveness.
+
+## 7. Rooted token-path test (C1.12.origin_path_test)
+
+This section is a bounded design test, not a proved graph or simulation result.
+Baseline targets CollapsedOrigin and o1ContractMakeSsa build unchanged
+(TO_makessa-20261105T052724Z_m9687_t001). The two contract cheats remain.
+
+### 7.1 Exact interfaces that are available
+
+The source of each interface, rather than its name alone, was checked:
+
+* SourceCuts:50-145: `current_source_cut A ev n rs E` splits a STATIC
+  `current_local_trace` into two traces at equal annotation/source/renamed
+  lengths. `current_source_cut_step` exposes the indexed `current_inst_trace`
+  and the next source cut. These are not execution-history statements.
+* DemandedCut:78-101: `current_actual_demanded_cut_tokens` equates the static
+  predecessor block-exit token and successor inherited token. Besides
+  wf_function, fn_inst_wf, fn_defs_reach_uses, fn_phi_operands_single_def,
+  all_reachable, first_block_no_preds and entry lookup, it requires the CFG
+  edge, both DOMINATOR token chains, **no insertion for v at the successor**,
+  `current_phi_cut_clear fn v successor`, and selected post-PHI liveness at
+  the successor. It does not apply across an inserted reset or a source PHI
+  defining v. Its exceptional sibling (32-76) handles global PHI-operand
+  occurrence using the single-definition bound; it does not assert arbitrary
+  backward liveness through those PHIs.
+* LiveTransport:61-107: `current_live_cut_to_pred_exit` requires successor
+  post-PHI liveness, no leading-PHI definition of v, and **no occurrence of v
+  among any leading-PHI operand variables**, not merely the selected edge's
+  operands. `current_live_exit_to_cut` additionally requires no tail definition
+  of v in its block. `current_selected_live_edge` combines those requirements.
+  A bare CFG route therefore cannot be supplied as a live route.
+* LastSite:22-79: no changing site implies no source output and a clear PHI
+  cut. `current_non_site_live_route` turns a CFG suffix into a live route only
+  with no changing sites on its listed nodes, a clear final cut, and global
+  absence of PHI-operand v. LastSite:115-123 splits a finite list at its LAST
+  changing site. CutTokens:27-74 proves identity off changing sites and
+  constancy at a changing block, but on DOMINATOR scan chains, not an actual
+  rooted execution route. LastSite:82-113 can recover strict dominance from
+  a last-site-to-live-cut suffix, with frontier closure and the same global
+  PHI-operand exclusion. This is a possible bridge, not dynamic preservation.
+* FirstArrival:164-185 excludes the TOKEN CurrentInserted v h on an actual
+  entry prefix with no earlier `CurrentBatch h phis`. Lines 217-239 give the
+  exact NAME residual `name=x <=> x=v /\ exit_token=CurrentDefault v`.
+  Its conclusion is not `name<>x`.
+* ExitTokens:53-81 excludes defaults given a SINGLE dominating source
+  definition and a static ancestor path. Lines 83-106 obtain such a definition
+  for original PHI operands from the single-definition premise. They do not
+  establish a dominating individual definition for arbitrary multiply-defined
+  v merely from definite assignment.
+* TokenOwnership:39-95: block/chain scans preserve owner v; an original token's
+  owner is its indexed source output, and an inserted token's owner is its
+  constructor's variable. PlacementCut:108-118 localizes every insertion of
+  a single-definition variable to its defining block when leading PHIs exist.
+* CollapsedOrigin:110-205 supplies a nondefault nonself token t naming y,
+  allocated-name uniqueness, and incoming-token trichotomy (self, t, default).
+  Default incoming tokens retain the physical alternatives v=x or v=y.
+  None of those conclusions equates the static scan to a chronological scan.
+
+### 7.2 A precise next graph theorem candidate
+
+Here is the first missing graph implication in a form independent of target
+success and of the ledger in section 2. It is proposed notation only; no new
+constant or theorem is installed. Let `I = current_actual_inserted fn`, and let
+`Pgraph` be exactly:
+
+```
+current_structural_certificate s fn fn' s' A H events /\
+wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+fn_phi_operands_single_def fn /\ all_reachable fn /\
+first_block_no_preds fn /\ entry_block fn = SOME eb
+```
+
+For any finite ROOTED CFG route and certified endpoint, test:
+
+```
+Pgraph /\ LRC (fn_cfg_edge fn) route eb.bb_label p /\
+MEM ep events /\ current_event_label ep = p /\
+lookup_block p fn.fn_blocks = SOME pb /\
+MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions)) /\
+(!b phi. MEM b fn.fn_blocks /\ MEM phi (collect_phis b.bb_instructions) ==>
+         ~MEM v (MAP SND (phi_pairs phi.inst_operands)))
+==>
+current_event_exit_env ep v =
+  current_chain_token fn I v (route ++ [p]) (CurrentDefault v)
+```
+
+The LRC list convention must be retained: route lists nodes before the endpoint,
+so `[p]` is appended exactly once. Repeated labels are permitted. This is NOT
+an equation between the static dominator path and the executed CFG path without
+liveness premises. In particular the endpoint is live at EXIT, not necessarily
+live after its leading PHIs; an ordinary definition in p is allowed.
+
+Proposed reduction (all unproved steps explicitly exposed): split the rooted
+route at its last changing site using current_list_last_site. There are no
+insertions or ordinary definitions in the remaining full blocks. Propagate exit
+liveness backwards across that suffix using the LiveTransport premises above.
+Apply demanded-cut equality at its non-changing successor entries, and local
+block scan identity, until reaching the last site's exit. Its block scan is
+constant, so its incoming static token is irrelevant. The no-site branch must
+instead propagate back to entry and identify its inherited default token.
+The existing LastSite dominance/frontier argument is an alternative way to
+identify this same last static site. These reductions still need a proof for
+an EXIT endpoint (which may define v), and a checked certificate-to-static-scan
+adapter on each selected cut. They do not follow from cut equality alone.
+This graph implication is the first missing theorem; the bounded test stops
+here instead of assuming its conclusion as an operational invariant.
+
+The global PHI-operand exclusion is not silently added to the frozen contract.
+If v occurs as an original PHI operand, DemandedCut:10-19 bounds its source
+instruction-definition count by one; PlacementCut:108-118 localizes its
+insertions to that defining block. A complete consumer must handle that case
+separately, including repeated output slots in that one instruction, rather
+than invoke the displayed candidate with a false exclusion premise.
+
+### 7.3 What the candidate would say about last h / last t-writer
+
+For an actual predecessor exit, obtain its rooted route from actual_prefix,
+not from current_dom_tree. To use 7.2 one must FIRST derive endpoint liveness
+from the selected post-PHI liveness that justified insertion at h. In the
+non-original-PHI-output case, h has no source leading-PHI definition of v;
+if v is not an original PHI operand, current_live_cut_to_pred_exit supplies
+this exit liveness on p->h. The original-PHI-output case uses the retained
+batch interface below instead. This demand bridge is a separate obligation,
+not an assumption that all inserted reads are source uses.
+
+Assume the graph candidate is proved and its premises discharged. If the
+certified exit token is CurrentInserted v h, the chronological scan's last
+changing block must be h, and that block must have no source definition of v:
+a source definition makes its final token CurrentOriginal, not CurrentInserted.
+Every changing block after the most recent completed h would contradict that
+last-token identity. Since the unique allocated writer of y has owner v,
+an intervening visit to its external writer is a changing block too. Thus
+this would rule out REFRESHING y after the latest h copy, not just rule out
+source writes of v. It is the missing alias-sensitive conclusion in section 5.
+Taking the latest h visit automatically handles the case that a t-writer visit
+is followed by another h: the newer h, not the old h, seeds the epoch.
+
+There are four distinct local-origin cases, not one dominance slogan:
+
+1. `t=CurrentOriginal h i j`, original PHI: source PHI output uniqueness and
+   inst_wf force the appropriate singleton output; nondegeneracy retains it.
+   ReinsertedOrigin:53-95 identifies the retained writer before the copy and
+   ReinsertedReady supplies its readiness. Here the NEW source PHI version is
+   wanted; preservation of the incoming y version would be incorrect.
+2. `t=CurrentOriginal h i j`, ordinary tail: y's writer is after the copy on
+   this visit, so it cannot justify readiness. In the SELF-token case, 7.2
+   would exclude the case entirely: scanning a whole h with any source v
+   definition cannot produce inserted(v,h). For a first/nonself entrance a
+   separate rooted no-earlier-h argument is still needed to exclude a future
+   tail token at its predecessor. Static token occurrence alone is not an
+   execution of that writer.
+3. `t=CurrentInserted w h`: owner preservation forces w=v; then t=self,
+   contradicting CollapsedOrigin's nonself condition. There is no distinct
+   earlier/later inserted copy in h for this owner. This is a token-owner
+   exclusion, not arbitrary instruction-order reasoning.
+4. t outside h: its effective writer is a changing site for v (original
+   indexed source output or inserted(v,g)). The last-site conclusion above
+   would prohibit its execution after the latest h copy. No interpretation
+   of a dominator-tree path as a runtime path is required.
+
+The semantic endpoint would then be: at the most recent completed h copy,
+x and y carry the SAME source version; there is no subsequent source v write
+and no subsequent allocated y writer before p. Block output distinctness also
+protects an external y through the current retained batch and earlier copies.
+Consequently LastT y has exactly the LastS v version required in section 5.
+This uses a previously completed successful copy from the induction history,
+not the success of the copy currently being justified. Establishing that first
+successful copy, and the current-retained original-PHI case, cannot be skipped.
+
+### 7.4 First entrances and the two physical default collisions
+
+On first entrance, FirstArrival rules out inserted(v,h) as a TOKEN. Trichotomy
+then leaves t or default; spelling x does not itself distinguish them.
+For default with v=x, first-arrival-name-residual permits the self SPELLING
+but provides no completed h. For default with v=y, the nonself SPELLING can
+still be physically uninitialized. Both must be eliminated at a demanded exit
+by the same rooted argument plus actual source definedness, not by name
+injectivity. Under 7.2, a default endpoint implies no changing site in the
+rooted scan: scans never create a default after a nondefault token. An actual
+source v definition on the completed route would be a changing site. Source
+availability at this demanded actual exit must provide such a completed
+source event. This contradicts default in EITHER spelling case. This reduction
+requires the actual-domain/demand-to-availability interfaces as well as 7.2;
+it is not proved merely by the graph candidate or fn_defs_reach_uses alone.
+For original PHI operands the single-definition/dominance route may discharge
+this residual instead, with its exact premises from 7.1.
+
+### 7.5 Disposition of the bounded test
+
+No concrete finite source/certificate obstruction was found. No EVAL task
+counterexample is claimed. The rooted last-changing-site equality in 7.2 is
+an exact next graph candidate, with a reduction to existing list splitting,
+backward live transport and static cut equality; the missing exit-endpoint
+and certificate adapters are explicit. The singleton-PHI-operand branch,
+first entrance nonself readiness, and semantic source-version transfer remain
+obligations. This test therefore supports a focused rooted-path proof-design
+checkpoint, NOT global simulation integration and NOT another conditional
+store wrapper. In particular a proof of 7.2 alone must not be reported as
+operational readiness or completion of either frozen theorem.
