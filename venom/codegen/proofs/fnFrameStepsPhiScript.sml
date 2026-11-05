@@ -819,87 +819,6 @@ QED
 
 (* ===== The PHI prefix from any entry stack ===== *)
 
-(* phi_prefix_frame_sim without the join-entry facts: it assumes only that
-   every variable operand of a PHI on the entry stack is the operand
-   resolve_phi selects for the edge taken, so each PHI's stack hit (the
-   shallowest of its variable operands, which generate_phi_plan pokes) is
-   that operand, also after earlier PHIs' pokes and dead-output pops have
-   reordered the stack (a premise on the entry hits alone does not survive
-   a pop's swap).  A PHI with no hit (its operand spilled, say) gets no
-   code and no slot.  The join case (fnFrameSteps) and the
-   single-predecessor case both derive that from their entry stacks.
-
-   Why it should hold: each PHI pokes its hit's slot with its output
-   (phi_block_ready: no PHI operand is live past the prefix, so the dup
-   branch never runs), and a dead output is popped.  No PHI reads another
-   PHI output of the same block (it would then be live past the prefix),
-   so the hits stay the same while the prefix runs and the sequential code
-   agrees with eval_phis.  The freshness premise keeps every other stack
-   or spill entry's value, and its root's, unchanged by eval_phis; only a
-   stack entry the prefix consumes (a PHI operand selected from pred) is
-   exempt, since its slot is poked.  A spilled pred-edge operand is not
-   exempt: it stays in the spill map, and its root may be another PHI's
-   output. *)
-Theorem phi_prefix_hits_frame_sim:
-  !ctx cp lo o2pc prog liveness dfg cfg fn bb pred base ps vs as s_phi phis
-   body ops ps3 r ra rest mem0.
-    lo = SND (compute_label_offsets prog) /\
-    o2pc = build_offset_to_pc prog /\
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\
-    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
-    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
-    bb <> HD fn.fn_blocks /\
-    vs.vs_prev_bb = SOME pred /\
-    (!inst op.
-       MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
-       MEM op ps.ps_stack ==>
-       resolve_phi pred inst.inst_operands = SOME op) /\
-    generated_plan_state_wf_marked base ps /\
-    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-       ~(MEM op ps.ps_stack /\
-         ?inst. MEM inst (collect_phis bb.bb_instructions) /\
-                resolve_phi pred inst.inst_operands = SOME op) /\
-       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
-       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
-    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-    r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
-    ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
-    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
-           off < dimword (:256)) /\
-    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
-       operand_val (frame_view fn ra vs) lo at =
-       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
-    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
-    eval_phis vs bb.bb_instructions = OK s_phi /\
-    non_param_insts bb = phis ++ body /\
-    LENGTH phis = phi_prefix_length bb.bb_instructions /\
-    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions) 0 (phis ++ body) ps = SOME (ops, ps3) /\
-    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops)
-    ==>
-    ?phi_ops ps1 body_ops n as'.
-      ops = phi_ops ++ body_ops /\
-      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
-        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-        (LENGTH bb.bb_instructions) 0 (LENGTH phis) (phis ++ body) ps =
-        SOME (phi_ops, ps1) /\
-      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-        (LENGTH bb.bb_instructions) (LENGTH phis) body ps1 =
-        SOME (body_ops, ps3) /\
-      asm_steps lo o2pc prog n as = AsmOK as' /\
-      as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp phi_ops) /\
-      fn_frame_inv ctx cp lo fn ra rest mem0 ps1
-        (s_phi with vs_inst_idx := LENGTH phis) as' /\
-      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
-         operand_val (frame_view fn ra s_phi) lo at =
-         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
-Proof
-  cheat
-QED
-
 (* ===== PHI hits at a join's entry stack ===== *)
 
 (* resolve_phi on well-formed PHI operands is the first matching pair. *)
@@ -3194,3 +3113,314 @@ Proof
   rpt gen_tac >> strip_tac >> drule_all phi_run_final >> strip_tac >>
   metis_tac[phi_provenance_final_resident]
 QED
+
+Theorem phi_run_final_alias:
+  !base fn bb pred entry source final ra lo m last st dfg.
+  phi_run_context fn bb pred entry source final /\
+  phi_run_config fn ra lo base pred entry source m
+    (collect_phis bb.bb_instructions) [] last st /\
+  generated_plan_state_wf_marked base entry /\
+  dfg = dfg_build_function fn /\
+  (!op v. (MEM op entry.ps_stack \/ op IN FDOM entry.ps_spilled) /\
+    ~(MEM op entry.ps_stack /\ ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+      resolve_phi pred inst.inst_operands = SOME op) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+  (!at. MEM at entry.ps_stack \/ at IN FDOM entry.ps_spilled ==>
+    operand_val (frame_view fn ra source) lo at =
+    operand_val (frame_view fn ra source) lo (normalize_operand dfg [] at)) ==>
+  !at. MEM at last.ps_stack \/ at IN FDOM last.ps_spilled ==>
+    operand_val (frame_view fn ra final) lo at =
+    operand_val (frame_view fn ra final) lo (normalize_operand dfg [] at)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  drule_all phi_run_final_support >> disch_then DISJ_CASES_TAC
+  >- (irule phi_eval_preserves_frame_alias >>
+      qexistsl_tac [`collect_phis bb.bb_instructions`, `source`] >>
+      gvs[phi_run_context_def] >>
+      rpt strip_tac >>
+      `~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+        (qpat_x_assum `!op v. _` irule >> qexists_tac `at` >> simp[]) >>
+      gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+      metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+  pop_assum strip_assume_tac >> gvs[] >>
+  `ssa_form fn` by gvs[phi_run_context_def, codegen_ready_fn_def] >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[phi_run_context_def] >>
+     metis_tac[allocaRemapSSATheory.mem_fn_insts_intro,
+       livenessProofsTheory.collect_phis_mem]) >>
+  `inst.inst_opcode = PHI` by
+    metis_tac[phi_codegen_inst_shape, phi_run_context_def] >>
+  metis_tac[phi_output_normalize_self]
+QED
+
+Theorem phi_local_frame_transport:
+  !ctx cp lo fn ra rest mem0 ps vs st last final endpoint insts k r.
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  eval_phis vs insts = OK final /\
+  venom_asm_rel lo last
+    (frame_view fn ra final with vs_memory := st.as_memory) endpoint /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= last.ps_alloc.sa_spill_base /\
+  last.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  fn_frame_inv ctx cp lo fn ra rest mem0 last (final with vs_inst_idx := k)
+    (endpoint with as_stack := endpoint.as_stack ++ rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >> strip_tac >>
+  `final.vs_memory = vs.vs_memory /\ final.vs_halted = vs.vs_halted /\
+   final.vs_initial_fmp = vs.vs_initial_fmp` by
+    (qpat_x_assum `final = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `context_memory_rel cplan (frame_view fn ra final).vs_memory st.as_memory` by
+    gvs[fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
+  `context_venom_asm_rel cplan lo last (frame_view fn ra final) endpoint` by
+    (irule fnFrameBoundaryEntryParamsTheory.entry_local_to_context_memory >>
+     conj_tac >- (qexists_tac `r` >> simp[]) >>
+     qexists_tac `st.as_memory` >> simp[]) >>
+  `memory_rel last.ps_alloc st.as_memory endpoint.as_memory` by
+    gvs[venom_asm_rel_def] >>
+  `!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    read_byte b endpoint.as_memory = read_byte b st.as_memory` by
+    (rpt strip_tac >>
+     irule fnFrameBoundaryEntryParamsTheory.entry_local_footprint_outside_closure >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!s op. operand_val (s with vs_inst_idx := k) lo op = operand_val s lo op` by
+    (gen_tac >> Cases >> simp[operand_val_def]) >>
+  simp[fn_frame_inv_def] >> conj_tac >- gvs[fn_frame_inv_def] >>
+  conj_tac >- gvs[fn_frame_inv_def] >> conj_tac
+  >- (pure_rewrite_tac[context_venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def] >>
+      `!op. operand_val (frame_view fn ra (final with vs_inst_idx := k)) lo op =
+        operand_val (frame_view fn ra final) lo op` by
+        (Cases >> simp[frame_view_def, operand_val_def]) >>
+      simp[] >> gvs[context_venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def,
+        frame_view_def]) >>
+  conj_tac >- (gvs[fn_frame_inv_def] >> metis_tac[]) >>
+  qexists_tac `r` >> simp[]
+QED
+
+Theorem phi_entry_outputs_absent:
+  !fn bb pred entry dfg.
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  (!op v. (MEM op entry.ps_stack \/ op IN FDOM entry.ps_spilled) /\
+    ~(MEM op entry.ps_stack /\ ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+      resolve_phi pred inst.inst_operands = SOME op) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) ==>
+  !inst out. MEM inst (collect_phis bb.bb_instructions) /\ MEM out inst.inst_outputs ==>
+    ~MEM (Var out) entry.ps_stack /\ Var out NOTIN FDOM entry.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `~(?phi. MEM phi (collect_phis bb.bb_instructions) /\
+    resolve_phi pred phi.inst_operands = SOME (Var out))` by
+    (strip_tac >>
+     `MEM (Var out) phi.inst_operands` by metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
+     metis_tac[phi_prefix_output_not_operand]) >>
+  `MEM out (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     qexists_tac `inst.inst_outputs` >> simp[] >>
+     qexists_tac `inst` >> simp[] >>
+     metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+  metis_tac[]
+QED
+
+Theorem phi_eval_collect:
+  !insts s. eval_phis s (collect_phis insts) = eval_phis s insts
+Proof
+  Induct >- simp[collect_phis_def, eval_phis_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[collect_phis_def, eval_phis_def]
+QED
+
+(* The entry-stack-agnostic PHI prefix simulation.  Entry residents are
+   tracked by provenance, not fixed depths: dead-output pops may permute
+   the remaining hits.  Parallel evaluation preserves pending raw source
+   values; freshness is needed only for the final residents and their
+   normalized roots, not for intermediate alias relations.  The join and
+   single-predecessor wrappers discharge the entry-hit premises. *)
+Theorem phi_prefix_hits_frame_sim:
+  !ctx cp lo o2pc prog liveness dfg cfg fn bb pred base ps vs as s_phi phis
+   body ops ps3 r ra rest mem0.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    vs.vs_prev_bb = SOME pred /\
+    (!inst op.
+       MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
+       MEM op ps.ps_stack ==>
+       resolve_phi pred inst.inst_operands = SOME op) /\
+    generated_plan_state_wf_marked base ps /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+       ~(MEM op ps.ps_stack /\
+         ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+                resolve_phi pred inst.inst_operands = SOME op) /\
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
+    ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+           off < dimword (:256)) /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    eval_phis vs bb.bb_instructions = OK s_phi /\
+    non_param_insts bb = phis ++ body /\
+    LENGTH phis = phi_prefix_length bb.bb_instructions /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (phis ++ body) ps = SOME (ops, ps3) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops)
+    ==>
+    ?phi_ops ps1 body_ops n as'.
+      ops = phi_ops ++ body_ops /\
+      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) 0 (LENGTH phis) (phis ++ body) ps =
+        SOME (phi_ops, ps1) /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (LENGTH phis) body ps1 =
+        SOME (body_ops, ps3) /\
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp phi_ops) /\
+      fn_frame_inv ctx cp lo fn ra rest mem0 ps1
+        (s_phi with vs_inst_idx := LENGTH phis) as' /\
+      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+         operand_val (frame_view fn ra s_phi) lo at =
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  rename1 `generated_plan_state_wf_marked bound ps` >>
+  rename1 `non_param_insts bb = phis ++ suffix` >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `non_param_insts bb = bb.bb_instructions` by
+    (irule phi_non_entry_non_param_insts >> qexists_tac `fn` >>
+     gvs[codegen_ready_fn_def]) >>
+  `phis = collect_phis bb.bb_instructions` by
+    (qspecl_then [`phis`, `suffix`] mp_tac phi_prefix_is_collect_phis >>
+     metis_tac[]) >>
+  suspend "prepare"
+QED
+
+Resume phi_prefix_hits_frame_sim[prepare]:
+  `get_params bb.bb_instructions = []` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, callLayoutDefsTheory.canonical_param_prefix_def,
+       callLayoutDefsTheory.no_param_insts_def, listTheory.EVERY_MEM] >>
+     Cases_on `bb.bb_instructions` >- simp[get_params_def] >>
+     rename1 `bb.bb_instructions = inst::tail` >>
+     `~is_param_opcode inst.inst_opcode` by
+       (qpat_x_assum `!bb'. MEM bb' _ ==> _` (qspec_then `bb` mp_tac) >> simp[]) >>
+     simp[get_params_def]) >>
+  `eval_phis vs (collect_phis bb.bb_instructions) = OK s_phi` by
+    simp[phi_eval_collect] >>
+  `phi_run_context fn bb pred ps vs s_phi` by
+    (rewrite_tac[phi_run_context_def] >> simp[] >>
+     rpt gen_tac >> strip_tac >> irule phi_entry_outputs_absent >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `LENGTH phis <= LENGTH (phis ++ suffix)` by simp[] >>
+  qspecl_then [`LENGTH phis`, `phis ++ suffix`] mp_tac
+    (INST_TYPE [``:'a`` |-> ``:cfg_analysis``] generate_block_insts_plan_split) >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th => CONV_TAC (LAND_CONV (REWR_CONV (SPEC_ALL th)))) >>
+  simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> strip_tac >>
+  suspend "run"
+QED
+
+Resume phi_prefix_hits_frame_sim[run]:
+  rename1 `ops = phi_ops ++ body_ops` >>
+  rename1 `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ ps = SOME (phi_ops,ps1)` >>
+  `r.sr_spill_base <= ps1.ps_alloc.sa_spill_base /\
+   ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (drule allocMonoTheory.generate_block_insts_plan_spill_base >> strip_tac >>
+     drule allocMonoTheory.generate_block_insts_plan_next_offset >> strip_tac >> simp[]) >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) phi_ops` by
+    (simp[listTheory.EVERY_MEM] >> Cases >> simp[] >> metis_tac[listTheory.MEM_APPEND]) >>
+  `asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp phi_ops)` by
+    gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule fnFrameTerminalPrepTheory.fn_frame_inv_local_state >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  `phi_run_config fn ra lo bound pred ps vs st.as_memory [] phis ps
+    (st with as_stack := top)` by (irule phi_run_init >> simp[]) >>
+  `collect_phis bb.bb_instructions = [] ++ phis` by simp[] >>
+  `LENGTH bb.bb_instructions = LENGTH [] + LENGTH (phis ++ suffix)` by
+    (qpat_x_assum `non_param_insts bb = phis ++ suffix` mp_tac >>
+     qpat_x_assum `non_param_insts bb = bb.bb_instructions` mp_tac >>
+     simp_tac (srw_ss()) [] >> rpt strip_tac >> gvs[]) >>
+  `generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) (LENGTH []) (LENGTH phis)
+    (phis ++ suffix) ps = SOME (phi_ops, ps1)` by
+    (qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ ps = _` mp_tac >>
+     qpat_x_assum `liveness = liveness_analyze fn` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `get_params bb.bb_instructions = []` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) []) >>
+  `asm_block_at prog (st with as_stack := top).as_pc
+    (execute_plan cplan.cp_initial_fmp phi_ops)` by simp[] >>
+  `?endpoint.
+    asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp phi_ops))
+      (st with as_stack := top) = AsmOK endpoint /\
+    endpoint.as_pc = (st with as_stack := top).as_pc +
+      LENGTH (execute_plan cplan.cp_initial_fmp phi_ops) /\
+    phi_run_config fn ra lo bound pred ps vs st.as_memory ([] ++ phis) [] ps1 endpoint` by
+    (irule (INST_TYPE [``:'a`` |-> ``:cfg_analysis``] phi_run_prefix) >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`LENGTH bb.bb_instructions`, `suffix`, `cfg`, `dfg`, `s_phi`, `bb_is_halting bb`] >>
+     rule_assum_tac (SIMP_RULE bool_ss [listTheory.LENGTH]) >>
+     simp_tac bool_ss [listTheory.LENGTH] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "lift"
+QED
+
+Resume phi_prefix_hits_frame_sim[lift]:
+  rename1 `asm_steps lo o2pc prog _ (st with as_stack := top) = AsmOK endpoint` >>
+  `phi_run_config fn ra lo bound pred ps vs st.as_memory
+    (collect_phis bb.bb_instructions) [] ps1 endpoint` by
+    (qpat_x_assum `phi_run_config _ _ _ _ _ _ _ _ _ [] ps1 endpoint` mp_tac >>
+     pure_rewrite_tac[listTheory.APPEND] >>
+     qpat_x_assum `phis = collect_phis bb.bb_instructions` (fn th => rewrite_tac[th]) >>
+     simp_tac bool_ss []) >>
+  drule_all phi_run_final >> strip_tac >>
+  `fn_frame_inv ctx cplan lo fn ra rest mem0 ps1
+    (s_phi with vs_inst_idx := LENGTH phis)
+    (endpoint with as_stack := endpoint.as_stack ++ rest)` by
+    (irule phi_local_frame_transport >> conj_tac
+     >- (qexists_tac `r` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`bb.bb_instructions`, `ps`, `st`, `vs`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule asmFrameTheory.asm_steps_frame >>
+  disch_then (qspec_then `rest` mp_tac) >>
+  `st with as_stack := top ++ rest = st` by
+    (qpat_x_assum `st.as_stack = top ++ rest` (fn th => rewrite_tac[GSYM th]) >>
+     simp[]) >>
+  qpat_x_assum `st with as_stack := top ++ rest = st` (fn th => rewrite_tac[th]) >> strip_tac >>
+  qexistsl_tac [`phi_ops`, `ps1`, `body_ops`,
+    `LENGTH (execute_plan cplan.cp_initial_fmp phi_ops)`,
+    `endpoint with as_stack := endpoint.as_stack ++ rest`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `endpoint.as_pc = _` mp_tac >> simp_tac (srw_ss()) []) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> disch_tac >> irule phi_run_final_alias >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  qpat_assum `phi_run_config _ _ _ _ _ _ _ _ (collect_phis _) [] ps1 endpoint`
+    (irule_at Any) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise phi_prefix_hits_frame_sim
