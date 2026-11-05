@@ -3,7 +3,7 @@
 Theory bodyIfExpMemoryAdapter
 Ancestors
   bodyMemoryDefs loweringPosts instMemFrontier compileEnv
-  finite_map arithmetic
+  finite_map arithmetic abiBuiltinAllocation exprSimHyps
 
 Theorem ifexp_located_footprint_frontier:
   vv_at ce cx t sa sb es raw (LocatedValue t' p) s /\
@@ -20,4 +20,22 @@ Proof
   simp[vv_at_def] >> strip_tac
   >- (drule_all alloca_region_below_frontier >> simp[]) >>
   drule_all body_local_region_frontier >> decide_tac
+QED
+
+(* Falsification of the proposed rounded-copy/live-footprint implication.
+   This is an interface counterexample, not yet a counterexample to simulation. *)
+Theorem ifexp_rounded_copy_exceeds_live_footprint:
+  val_footprint (BaseTV (BytesT (Dynamic 1))) (BytesV [0w]) = 33 /\
+  32 + 32 * word_size 1 = 64 /\
+  ~(32 + 32 * word_size 1 <=
+    val_footprint (BaseTV (BytesT (Dynamic 1))) (BytesV [0w]))
+Proof
+  EVAL_TAC
+QED
+
+Theorem ifexp_copy_frontier_after_growth:
+  p + 32 + n <= frontier /\ 32 <= capacity ==>
+  p + 32 + 32 * word_size n <= frontier + capacity
+Proof
+  mp_tac abi_builtin_rounded_padding_bound >> decide_tac
 QED
