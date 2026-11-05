@@ -299,3 +299,41 @@ Proof
   disch_then (qspec_then `R` strip_assume_tac) >>
   qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
 QED
+
+(* Two actual buffer allocations supply distinct, bounded encoder regions.
+   The two runs are exposed separately so callers may frame stores between
+   allocation sites without baking extcall-specific code into this interface. *)
+Theorem alloc_buffer_pair_run:
+  !ctx func cenv cx es sa sb sc ba bb na nb s.
+    compile_alloc_buffer na sa = (ba,sb) /\
+    compile_alloc_buffer nb sb = (bb,sc) /\
+    fn_has_code sa sb func /\ fn_has_code sb sc func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\
+    na < dimword (:256) /\ nb < dimword (:256) ==>
+    ?t u wa wb.
+      run_inst_seq (emitted_insts sa sb) s = OK t /\
+      run_inst_seq (emitted_insts sb sc) t = OK u /\
+      stmt_state_rel ctx func cenv cx es u /\
+      eval_operand ba.buf_operand u = SOME wa /\
+      eval_operand bb.buf_operand u = SOME wb /\
+      FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n wa,na) /\
+      FLOOKUP u.vs_allocas sb.cs_next_id = SOME (w2n wb,nb) /\
+      w2n wa + na < dimword (:256) /\
+      w2n wb + nb < dimword (:256) /\
+      regions_disjoint (w2n wb) nb (w2n wa) na /\
+      u.vs_memory = s.vs_memory /\ sa.cs_next_id < sb.cs_next_id
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  rev_drule_all buffer_alloc_code >> strip_tac >>
+  qpat_assum `compile_alloc_buffer na sa = _`
+    (mp_then Any (drule_all_then strip_assume_tac) literal_alloc_buffer_run) >>
+  qpat_x_assum `stmt_state_rel ctx func cenv cx es s` kall_tac >>
+  qpat_assum `compile_alloc_buffer nb sb = _`
+    (mp_then Any (drule_all_then strip_assume_tac) literal_alloc_buffer_run) >>
+  qexistsl_tac [`t`, `t'`, `w`, `w'`] >>
+  simp[] >> conj_tac
+  >- (gvs[eval_operand_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
