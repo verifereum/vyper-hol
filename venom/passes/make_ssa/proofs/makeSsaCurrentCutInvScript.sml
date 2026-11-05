@@ -80,7 +80,20 @@ Theorem current_cut_inv_entry:
   current_cut_inv fn A renamed H events eb.bb_label 0 s0 s0 /\
   current_cut_sg fn A renamed H events eb.bb_label 0 = FEMPTY
 Proof
-  cheat
+  strip_tac >>
+  `!v. ~current_demand fn v eb.bb_label 0` by
+    (gen_tac >> irule current_wf_entry_undemanded >>
+     fs[current_wf_phi_context_def, venomInstTheory.fn_entry_label_def]) >>
+  `!x v. ~current_cut_pair fn A renamed H events eb.bb_label 0 x v` by
+    simp[current_cut_pair_def] >>
+  `current_cut_sg fn A renamed H events eb.bb_label 0 = FEMPTY` by
+    (rewrite_tac[current_cut_sg_def] >>
+     `FILTER (\(x',v). current_cut_pair fn A renamed H events eb.bb_label 0 x' v)
+        (MAP (\(t,v,x'). (x',v)) H) = []` by
+       (irule (iffRL listTheory.FILTER_EQ_NIL) >>
+        simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD]) >>
+     simp[]) >>
+  simp[current_cut_inv_def, state_rel_def, vars_rel_def]
 QED
 
 (* An instruction past the PHIs pairs with the output's instruction at the
