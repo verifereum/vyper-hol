@@ -3846,26 +3846,56 @@ QED
 
 val stmt_labels_rws = stmt_return_helpers_labels :: stmt_list_helpers_labels :: stmt_labels_rws;
 
-(* The literal-endpoint case splits of a range loop's entry, as one rewrite
+(* The literal-endpoint case splits of a range loop's entry, as rewrites
    rather than a split over every pair of expression forms. *)
-Theorem range_literal_case_labels:
-  !start_e end_e f g P s.
-    (!i j s. cs_extends s (SND (f i j s)) /\ EVERY P (added_labels s (SND (f i j s)))) /\
-    (!s. cs_extends s (SND (g s)) /\ EVERY P (added_labels s (SND (g s)))) ==>
-    cs_extends s (SND ((case (start_e, end_e) of
-                          (Literal _ (IntL i), Literal _ (IntL j)) => f i j
-                        | _ => g) s)) /\
-    EVERY P (added_labels s (SND ((case (start_e, end_e) of
-                                     (Literal _ (IntL i), Literal _ (IntL j)) => f i j
-                                   | _ => g) s)))
+Theorem range_literal_case_pred:
+  !Q start_e end_e f g.
+    (!i j. Q (f i j)) /\ Q g ==>
+    Q (case (start_e, end_e) of
+             (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+           | _ => g)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `start_e` >> simp[] >>
   Cases_on `end_e` >> simp[] >>
-  rpt BasicProvers.TOP_CASE_TAC >> simp[]
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[]
 QED
 
-val for_labels_rws = range_literal_case_labels :: stmt_labels_rws;
+Theorem range_literal_case_extends:
+  !start_e end_e f g s.
+    (!i j s. cs_extends s (SND (f i j s))) /\
+    (!s. cs_extends s (SND (g s))) ==>
+    cs_extends s (SND ((case (start_e, end_e) of
+             (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+           | _ => g) s))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`\a. !s. cs_extends s (SND (a s))`, `start_e`, `end_e`, `f`, `g`]
+    mp_tac range_literal_case_pred >>
+  simp[]
+QED
+
+Theorem range_literal_case_labels:
+  !start_e end_e f g P s.
+    (!i j s. EVERY P (added_labels s (SND (f i j s)))) /\
+    (!s. EVERY P (added_labels s (SND (g s)))) ==>
+    EVERY P (added_labels s (SND ((case (start_e, end_e) of
+             (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+           | _ => g) s)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`\a. !s. EVERY P (added_labels s (SND (a s)))`, `start_e`, `end_e`,
+               `f`, `g`]
+    mp_tac range_literal_case_pred >>
+  simp[]
+QED
+
+(* Simp has already reduced the pair case in the goals, so the rewrites
+   are taken in that form. *)
+val for_labels_rws =
+  map (SIMP_RULE bool_ss [pairTheory.pair_case_thm])
+    [range_literal_case_extends, range_literal_case_labels] @ stmt_labels_rws;
 
 val stmt_labels_case =
   rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
