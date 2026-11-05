@@ -648,6 +648,8 @@ Theorem reason_encoder_prefix_post:
       tuple.buf_operand = Var out2 /\
       step_inst_base (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) r = OK z /\
       eval_operand tuple.buf_operand z = SOME (n2w b2) /\
+      FLOOKUP z.vs_allocas c3.cs_next_id = SOME (b2,m) /\
+      b2 + m < dimword (:256) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
       fresh_vars_wrt c4 z /\ local_ptrs_reserved cenv c4 /\
       eval_operand op z = SOME ow /\

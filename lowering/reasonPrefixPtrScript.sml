@@ -122,6 +122,8 @@ Theorem reason_encoder_prefix_path_ptr:
       t.vs_current_bb = c4.cs_current_bb /\
       t.vs_inst_idx = LENGTH c4.cs_current_insts /\
       eval_operand tuple.buf_operand t = SOME (n2w b2) /\
+      FLOOKUP t.vs_allocas c3.cs_next_id = SOME (b2,m) /\
+      b2 + m < dimword (:256) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
       fresh_vars_wrt c4 t /\ local_ptrs_reserved cenv c4 /\
       eval_operand op t = SOME ow /\
