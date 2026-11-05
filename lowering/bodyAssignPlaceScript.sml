@@ -328,5 +328,24 @@ Theorem body_assign_place_case:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then strip_assume_tac assign_place_typing >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_assign_place_rhs_pre] >>
+  `target_indices_pre cenv cx env t` by metis_tac[body_assign_place_indices_pre] >>
+  `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_ok_def] >>
+  Cases_on `immutable_root cx t`
+  >- (drule_all_then strip_assume_tac body_assign_immutable_target >> gvs[] >>
+      rename1 `supported_immutable_type tops nsid` >>
+      Cases_on `supported_immutable_type tops nsid` >> gvs[] >>
+      drule_all_then strip_assume_tac body_immutable_target_type >> gvs[] >>
+      metis_tac[immutable_deploy_assign_case]) >>
+  `((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
+      target_case F ctx func cenv cx t)` by metis_tac[body_target_case] >>
+  `target_env_ok cenv cx /\ cenv.ce_target CapMcopy /\
+   acyclic_struct_metadata cenv.ce_struct_fields` by
+    metis_tac[body_inv_target_env_ok, body_inv_mcopy, body_inv_def] >>
+  Cases_on `supported_target_pure tops t`
+  >- metis_tac[compile_assign_place_case] >>
+  metis_tac[assign_place_effectful_index_case]
 QED
