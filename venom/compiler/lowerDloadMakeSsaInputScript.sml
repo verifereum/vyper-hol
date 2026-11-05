@@ -35,6 +35,64 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
+Theorem lower_dload_inst_supply_output_survives[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ inst_wf i /\
+  MEM v i.inst_outputs ==> ?j. MEM j xs /\ MEM v j.inst_outputs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (rpt strip_tac >> gvs[inst_wf_def]) >>
+  rpt strip_tac >> gvs[lower_dload_inst_supply_def]
+QED
+
+Theorem lower_dload_inst_supply_output_count[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ inst_wf i /\
+  MEM v s.irs_used_vars ==>
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) xs) =
+  if MEM v i.inst_outputs then 1 else 0
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac (cj 1 fresh_ir_var_contract) >>
+      imp_res_tac (cj 2 fresh_ir_var_contract) >>
+      gvs[inst_wf_def] >> rpt IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac (cj 1 fresh_ir_var_contract) >>
+      imp_res_tac (cj 2 fresh_ir_var_contract) >>
+      gvs[inst_wf_def] >> rpt IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[lower_dload_inst_supply_def] >>
+  Cases_on `MEM v i.inst_outputs` >> simp[]
+QED
+
+Theorem lower_dload_inst_supply_ordered_operand[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ xs = pre ++ j::post /\
+  j.inst_opcode <> PHI /\ MEM (Var v) j.inst_operands ==>
+  (?d. MEM d pre /\ MEM v d.inst_outputs) \/
+  (i.inst_opcode <> PHI /\ MEM (Var v) i.inst_operands)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      gvs[] >> qpat_x_assum `_ = _ ++ _` (mp_tac o SYM) >>
+      simp[APPEND_EQ_CONS] >> rpt strip_tac >>
+      gvs[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      gvs[] >> qpat_x_assum `_ = _ ++ _` (mp_tac o SYM) >>
+      simp[APPEND_EQ_CONS] >> rpt strip_tac >>
+      gvs[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      metis_tac[]) >>
+  rpt strip_tac >> gvs[lower_dload_inst_supply_def] >>
+  qpat_x_assum `_ = _ ++ _` (mp_tac o SYM) >>
+  simp[APPEND_EQ_CONS] >> rpt strip_tac >> gvs[]
+QED
+
 (* Intuition, per conjunct of make_ssa_input_ok:
    - all_reachable and the PHI rows: the CFG (labels, edges, entry) is the
      same, and PHIs are kept unchanged in their same-labelled block
