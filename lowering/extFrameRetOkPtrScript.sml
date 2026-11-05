@@ -19,7 +19,19 @@ val _ = Parse.hide "body";
 
 (* ADMITTED: external_frame_ret_ok with the ghost, for any outcome of the
    return: every return sequence halts pointer-safely, its return data
-   untainted. *)
+   untainted.
+
+   Why it should hold: the frame has no return PC or buffer and no
+   nonreentrant lock (supported_program forces nr = F), so the lowered
+   Return is the returned expression's code (expr_sim_ptr /
+   expr_vv_sim_ptr, given) and then one of compile_external_return's
+   branches: STOP; ALLOCA 32, MSTORE, RETURN 32 of an untainted word; a raw
+   return of a Bytes value's data; or ALLOCA of the max return size, the
+   ABI encoder, RETURN of the encoded length, possibly after a widening
+   copy into a fresh buffer.  Fresh ALLOCA bytes start tainted, so the
+   point is that the encoder writes every byte it returns, from the value's
+   pinned (hence untainted, by ptr_mem_ok) bytes or from literals, and
+   returns exactly what it wrote. *)
 Theorem external_frame_ret_ok_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa func.
