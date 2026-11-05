@@ -795,3 +795,46 @@ val _ = List.app (fn (n,th) =>
   [("compile_expr_typed_no_label", compile_expr_typed_no_label),
    ("lower_value_typed_no_label", lower_value_typed_no_label),
    ("compile_expr_typed_operand_frame", compile_expr_typed_operand_frame)];
+
+Theorem storage_holds_live_suffix:
+  storage_holds cx tr ty tv w es s /\
+  es2.scopes = es.scopes /\ es2.immutables = es.immutables /\
+  (!tr'. get_storage cx es2 tr' = get_storage cx es tr') /\
+  stmt_state_rel ctx func ce cx es2 s2 /\
+  (!tvt. evaluate_type (get_tenv cx) ty = SOME tvt ==>
+     storage_read_live cx tr (get_storage cx es2 tr) w tvt) ==>
+  storage_holds cx tr ty tv w es2 s2
+Proof
+  strip_tac >>
+  qpat_x_assum `storage_holds _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [storage_holds_def]) >>
+  `read_result cx tv es2 = (INL v,es2)` by
+    (irule read_result_preserved_fields >> metis_tac[]) >>
+  `read_storage_slot cx tr w tvt es2 = (INL v,es2)` by
+    (fs[read_storage_slot_def,
+        vyperStorageBackendTheory.get_storage_backend_eq,
+        bind_def, lift_option_def, return_def, raise_def,
+        vyperMiscTheory.option_CASE_rator, AllCaseEqs()]) >>
+  `storage_agree (storage_dead cx tr (get_storage cx es2 tr))
+    (get_storage cx es2 tr)
+    (if tr then contract_transient s2 else contract_storage s2)` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `tr` >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+        storage_rel_def, transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+        vfmStateTheory.lookup_account_def]) >>
+  `storage_range_agree (get_storage cx es2 tr)
+     (if tr then contract_transient s2 else contract_storage s2) w tvt` by
+    (irule accountsRelPropsTheory.storage_range_agree_of_live >>
+     conj_tac
+     >- fs[accountsRelPropsTheory.storage_range_agree_def] >>
+     qexistsl_tac [`cx`, `tr`] >> simp[]) >>
+  qpat_x_assum `!tr'. get_storage _ _ _ = _`
+    (qspec_then `tr` assume_tac) >>
+  gvs[storage_holds_def]
+QED
+
+val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag storage_holds_live_suffix) in
+  if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+  then raise Fail "Live storage suffix dependency" else ()
+end;
