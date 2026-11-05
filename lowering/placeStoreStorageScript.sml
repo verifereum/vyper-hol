@@ -6143,6 +6143,92 @@ Proof
   simp[]
 QED
 
+Theorem place_store_wrap_probe_counterexample:
+  ~(!ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    (!et n. dty <> ArrayT et (Dynamic n)) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
+      (case dty of ArrayT et (Dynamic _) =>
+         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
+       | _ => NONE) (type_memory_bytes cenv dty) sa = ((), sb) /\
+    eval_operand dst_op s = SOME w /\
+    place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
+    (!x. dst_op = Var x ==> not_fresh_at sa x) /\
+    (!x. op = Var x ==> not_fresh_at sa x) /\
+    type_widens_to (get_tenv cx) sty dty /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+    expr_val_rel cx sty v op s /\ cenv.ce_target CapMcopy /\
+    (loc = LocMemory /\ src_loc <> SOME LocMemory /\ ~is_word_type dty /\
+     ~is_bytestring_type dty /\ dty <> sty ==>
+     !sw dtv. eval_operand op s = SOME sw /\
+       evaluate_type (get_tenv cx) dty = SOME dtv ==>
+       type_memory_size stv = 0 \/
+       w2n sw + type_memory_size stv <= w2n w \/
+       w2n w + type_memory_size dtv <= w2n sw \/ sw = w /\ stv = dtv) /\
+    expr_sim_inv cenv cx env ee /\ acyclic_struct_metadata cenv.ce_struct_fields /\
+    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    (!id path entry t0.
+       p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
+       cenv.ce_var_type id = SOME t0 ==>
+       evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+    (~is_word_type sty ==>
+     !sw. eval_operand op s = SOME sw ==>
+       w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+       !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
+         w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
+    (loc = LocMemory ==>
+     !dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
+       w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
+    (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
+    stmt_state_rel ctx func cenv cx ee s /\ write_place cx p v ee = (INL (), ff) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path F ctx func s 0 (OK t) /\
+        stmt_state_rel ctx func cenv cx ff t /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                 FLOOKUP t.vs_allocas aid = SOME b) /\
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+Proof
+  disch_tac >>
+  mp_tac place_store_wrap_probe_joint_antecedent >>
+  simp_tac pure_ss [LET_THM] >>
+  disch_then (qx_choose_then `cenv` (qx_choose_then `env`
+    (qx_choose_then `cc` (qx_choose_then `tc` (qx_choose_then `bc`
+      (qx_choose_then `sb` (qx_choose_then `ff` assume_tac))))))) >>
+  qpat_x_assum `!ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb. _`
+    (fn th => first_assum (mp_tac o MATCH_MP th)) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `expr_sim_inv cenv cx env ee` >>
+  qpat_x_assum `_ /\ _` (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `cenv.ce_struct_fields = FEMPTY` by
+    (irule place_store_expr_sim_inv_empty_tenv_metadata >>
+     goal_assum (drule_at Any) >>
+     simp[Abbr `cx`, vyperContextTheory.get_tenv_def,
+       place_store_wrap_probe_context_def,
+       vyperContextTheory.empty_evaluation_context_def,
+       vyperContextTheory.empty_call_txn_def] >> EVAL_TAC >> simp[]) >>
+  drule_all place_store_wrap_probe_compilation_mcopy >>
+  simp_tac pure_ss [LET_THM] >> disch_tac >>
+  qpat_x_assum `compile_assign_value cenv _ _ _ _ _ _ _ _ _ _ = ((),sb)`
+    (assume_tac o SIMP_RULE (srw_ss()) [is_word_type_def, type_memory_bytes_def]) >>
+  qpat_x_assum `compile_assign_value cenv _ _ _ _ _ _ _ _ _ _ = compile_assign_value _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE (srw_ss()) []) >>
+  simp[] >> disch_then (assume_tac o SYM) >>
+  qspecl_then [`ctx`, `func`, `cenv`] mp_tac
+    (SIMP_RULE pure_ss [LET_THM] place_store_wrap_probe_endpoint_exclusion) >>
+  disch_then (qspecl_then
+    [`empty_call_txn with <|block_number := 1; block_hashes := [0w]|>`, `ee`, `ff`]
+    (qspecl_then [`cc`, `tc`, `bc`] mp_tac)) >>
+  (impl_tac
+   >- (simp[Abbr `func`, mk_raw_function_def] >>
+       simp[GSYM (markerTheory.Abbrev_def), Abbr `cx`,
+         vyperContextTheory.empty_call_txn_def])) >>
+  simp[GSYM (markerTheory.Abbrev_def)] >> metis_tac[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
