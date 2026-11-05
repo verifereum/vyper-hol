@@ -22,6 +22,8 @@
  *
  * TOP-LEVEL:
  *   lower_vyper_runtime_unit_correct -- S1
+ *   lower_vyper_runtime_unit_run_bounded -- S1b (sufficient gas), a
+ *     planned admission
  *   external_fallthrough_result_rel_any -- the fall-through halt, with
  *     state_rel at any compile env
  *   call_external_selected_body -- the source runs the selected body
@@ -713,4 +715,28 @@ Proof
   rename1 `_ = (sres, es0)` >> Cases_on `sres`
   >- (rename1 `INL u` >> Cases_on `u` >> irule lower_vyper_runtime_unit_body >> metis_tac[]) >>
   irule external_entry_value_revert >> metis_tac[]
+QED
+
+(* PLANNED ADMISSION S1b, sufficient gas.  The lowered run ends within a
+   fuel F that does not depend on the entry state, in particular not on the
+   external-call outcomes.  Proof idea: the source is total by stmt_bound,
+   whose loop terms carry each loop's static bound; the lowering spends a
+   bounded number of blocks and nested INVOKEs per source step. *)
+Theorem lower_vyper_runtime_unit_run_bounded:
+  !tops rpolicy unit am tx ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx
+    ==>
+    ?fuel. !vs.
+      valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      initial_venom_state_rel tops am tx vs /\
+      call_outcomes_ok am tx vs.vs_outcomes /\
+      ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+      ==>
+      terminates (run_context fuel unit.cu_context vs)
+Proof
+  cheat
 QED
