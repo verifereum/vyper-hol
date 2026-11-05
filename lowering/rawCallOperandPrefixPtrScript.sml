@@ -5,7 +5,7 @@ Ancestors
   rawCallShapePtr typedOperandsPtr rawCallBufferPtr gasContext exprSimWordArgs
   exprSimDefs gasSummaryComposePtr vyperState vyperInterpreter exprSimHash
   ghostPcTransportPtr typedCopyAmbientFramePtr decoderGhostFramePtr exprOperandVar
-  rawCallHeaderFramePtr rawCallDataHeaderPtr
+  rawCallHeaderFramePtr rawCallDataHeaderPtr stmtSimLogArgs
 
 Theorem eval_exprs_head_admissible:
   gas_admissible (eval_exprs cx (e::args))
@@ -355,6 +355,8 @@ Theorem raw_call_addr_data_header_sim_ptr:
       ea.gas_obs = [] /\
       expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data tb /\
+      wb_frame cenv ee s2 tb t /\
+      expr_val_at cenv cx (expr_type d) s1 sm ee (BytesV bs) data t /\
       expr_sim_inv cenv cx env ee /\ body_exprs_ptr_ok cx kws /\
       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
       t.vs_current_bb = sm.cs_current_bb /\
@@ -538,6 +540,12 @@ Resume raw_call_addr_data_header_sim_ptr[header_steps]:
 QED
 
 Resume raw_call_addr_data_header_sim_ptr[header_posts]:
+  `expr_val_at cenv cx (expr_type d) s1 sm ee' (BytesV bs) (Var x) u` by
+    (irule log_frame_placement >>
+     simp[] >> qexistsl_tac [`ctx`, `ee'`, `func`, `t'`, `s2`] >> simp[] >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >>
+     qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
+     simp[loweringPostsTheory.expr_post_def]) >>
   `!z. addr = Var z ==> not_fresh_at s2 z` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
