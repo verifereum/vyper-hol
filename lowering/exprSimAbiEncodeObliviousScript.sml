@@ -4,12 +4,14 @@
 Theory exprSimAbiEncodeOblivious
 Ancestors
   exprSimAbiGasBridge builtinAbi compileEnv fragExec
+  exprSimAbiEncodeObliviousContext exprSimAbiEncodeObliviousSimulation
+  exprSimAbiEncodeObliviousFacts exprSimAbiEncodeObliviousOperands
 
 Theorem lower_abi_encode_start_oblivious:
   !ensure mid src info maxlen.
     frag_start_oblivious (lower_abi_encode ensure mid src info maxlen)
 Proof
-  cheat
+  simp[entry_action_oblivious, entry_action_lower_abi_encode]
 QED
 
 Theorem lower_abi_encode_frag_facts:
@@ -21,5 +23,5 @@ Theorem lower_abi_encode_frag_facts:
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
     (sa.cs_blocks = sb.cs_blocks ==> frag_gas_free sa sb)
 Proof
-  cheat
+  metis_tac[lower_abi_encode_structural_facts, lower_abi_encode_no_block_gas_free]
 QED
