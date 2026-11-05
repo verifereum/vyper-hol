@@ -52,6 +52,15 @@ Proof
        vyperStateTheory.raise_def, COND_RAND, COND_RATOR]
 QED
 
+Theorem deploy_prefix_negative_lowering_probe:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  IS_SOME (lower_vyper_deploy_unit tops rp [])
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
