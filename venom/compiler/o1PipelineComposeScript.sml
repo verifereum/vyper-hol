@@ -19,10 +19,10 @@
 Theory o1PipelineCompose
 Ancestors
   o1ComposeSupport o1PassContract o1ContractTheorems o1ScheduleDecomp
-  o1FnScheduleDecompHelpers
+  o1FnScheduleDecompHelpers o1DretDesugarContract o1ContractSimplifyCfg
   ctxLookupAgree ptrDiscipline ptrDisciplineAgree unitMemInv
   unitTransformDefs unitShapeDefs venomPipelineDriver venomPipelineRunner
-  venomPipelineRunnerProps venomFnScheduleRunner venomPassSchedule
+  venomPipelineRunnerProps venomPassDispatcherProps venomFnScheduleRunner venomPassSchedule
   venomPassDispatcher venomCompilerWf venomWf venomInst venomExecSemantics
   venomState stateEquivProps fcgDefs fcgPruning fcgPostorder
   fcgAnalysisProps fcgBridge contextCodegenRel venomMemDefs list rich_list
@@ -284,7 +284,10 @@ Theorem ctx_pass_stage_every:
   EVERY P C'.ctx_functions
 Proof
   rw[ctx_pass_stage_def, EVERY_EL, LIST_REL_EL_EQN] >>
-  first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
+  `n < LENGTH C.ctx_functions` by gvs[] >>
+  qpat_x_assum `!n. n < _ ==> ?observed s out. _`
+    (qspec_then `n` strip_assume_tac) >>
+  gvs[] >> metis_tac[]
 QED
 
 (* The walk's input is at row 0: SimplifyCFG's pre-walk run makes every
@@ -307,7 +310,7 @@ Proof
             mapped_pass_stage) >>
   impl_tac >- simp[o1_contract_simplify_cfg_pre_walk] >> strip_tac >>
   mp_tac (Q.INST [`rp` |-> `rpolicy`, `pass` |-> `CFP_Simple VP_DretDesugar`,
-                  `u` |-> `mid`, `s` |-> `t`]
+                  `u` |-> `mid`, `s` |-> `t`, `u'` |-> `unit'`]
             mapped_pass_stage) >>
   impl_tac
   >- simp[o1_contract_dret_desugar_pre_walk, unit_labels_wf_namespace] >>
@@ -319,13 +322,17 @@ Proof
        metis_tac[simplify_cfg_stage_functions] >>
      asm_rewrite_tac[EVERY_MAP] >> simp[EVERY_MEM] >> rpt strip_tac >>
      irule simplify_cfg_pre_walk_make_ssa_input_ok >>
-     qexists_tac `unit.cu_context` >>
-     fs[o1_ctx_shape_def, unit_defs_reach_uses_def, o1_source_unit_ok_def,
-        EVERY_MEM, raw_opcode_ok_def]) >>
+     rpt conj_tac
+     >- fs[unit_defs_reach_uses_def, EVERY_MEM]
+     >- (fs[o1_source_unit_ok_def, EVERY_MEM] >> rpt strip_tac >>
+         res_tac >> gvs[raw_opcode_ok_def]) >>
+     qexists_tac `unit.cu_context` >> fs[o1_ctx_shape_def, EVERY_MEM]) >>
   `EVERY no_raw_fmp_ops mid.cu_context.ctx_functions` by
-    (irule (Q.INST [`C` |-> `unit.cu_context`,
-                    `pass` |-> `CFP_Simple VP_SimplifyCFG`,
-                    `view` |-> `any_view`] ctx_pass_stage_every) >>
+    (mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
+                     `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                     `view` |-> `any_view`, `P` |-> `no_raw_fmp_ops`]
+               ctx_pass_stage_every) >>
+     impl_tac >- (
      rpt conj_tac
      >- first_assum ACCEPT_TAC
      >- (rpt strip_tac >>
@@ -334,15 +341,19 @@ Proof
          drule_at (Pos last) execute_configured_fn_pass_o1_suffix_no_raw_fmp_ops >>
          simp[] >> metis_tac[]) >>
      simp[EVERY_MEM] >> metis_tac[source_no_raw_fmp_ops]) >>
+     simp[]) >>
   `EVERY fmp_sig_no_param mid.cu_context.ctx_functions` by
-    (irule (Q.INST [`C` |-> `unit.cu_context`,
-                    `pass` |-> `CFP_Simple VP_SimplifyCFG`,
-                    `view` |-> `any_view`] ctx_pass_stage_every) >>
+    (mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
+                     `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                     `view` |-> `any_view`, `P` |-> `fmp_sig_no_param`]
+               ctx_pass_stage_every) >>
+     impl_tac >- (
      rpt conj_tac
      >- first_assum ACCEPT_TAC
      >- (rpt strip_tac >> drule fn_pass_step_fmp_sig_no_param >>
          simp[fn_pass_tag_def] >> metis_tac[]) >>
      fs[unit_fmp_unsealed_def, EVERY_MEM, fmp_sig_no_param_def]) >>
+     simp[]) >>
   fs[EVERY_MEM, o1_fn_row_def]
 QED
 
