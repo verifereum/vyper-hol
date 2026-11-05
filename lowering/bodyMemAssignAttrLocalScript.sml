@@ -8,6 +8,7 @@ Ancestors
   words ASCIInumbers exprLoweringProps stmtSimAssignAttr
   gasExemptCert stmtSimForced vyperInterpreter vyperState vyperExprNoControl
   stmtSimDefs exprSimDefs gasOutcome loweringPosts gasContext exprSimMemorySource
+  exprSimMemDefs context
 
 Theorem assign_attr_local_add_exact_mem[local]:
   emit_op ADD [Var p; Lit (n2w off)] sm = (dst,sn) /\
@@ -239,6 +240,17 @@ Proof
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
   irule gas_exempt_cert_error_result >> simp[]
+QED
+
+Theorem assign_attr_local_vv_bound_frame_mem[local]:
+  vv_store_bound cx ty lt es tv vv s /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  s.vs_alloca_next <= q.vs_alloca_next ==>
+  vv_store_bound cx ty lt es tv vv q
+Proof
+  Cases_on `vv` >>
+  simp[vv_store_bound_def, vv_operand_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[]
 QED
 
 Theorem body_assign_attr_local_mem:
