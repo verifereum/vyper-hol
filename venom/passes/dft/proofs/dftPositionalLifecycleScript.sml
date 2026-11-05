@@ -9,7 +9,7 @@ Ancestors
   dftOccurrenceMachine dftOpenMachine dftRunRel unitLabelMapIdentity
   venomInst venomState finite_map list arithmetic
 
-Theorem dft_pos_root_crossing_ready[local]:
+Theorem dft_pos_root_crossing_ready:
   dft_original_context Corig C /\
   dft_pos_runtime_ready C fi bi pre x call post /\
   dft_pos_slot C D fi bi f g b b' /\
