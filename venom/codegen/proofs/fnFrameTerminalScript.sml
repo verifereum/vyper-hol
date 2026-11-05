@@ -178,6 +178,7 @@ Theorem gen_inst_abort_frame_sim:
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
+    ~vs.vs_call_ctx.cc_static /\
     source_memory_reads_disjoint cp inst vs /\
     opaque_use_ok fn /\
     ~is_param_opcode inst.inst_opcode /\
