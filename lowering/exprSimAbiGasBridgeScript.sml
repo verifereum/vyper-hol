@@ -1519,6 +1519,22 @@ Proof
   drule lookup_block_MEM >> metis_tac[]
 QED
 
+Theorem frag_relabel_observer_no_invoke:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb ==>
+  !i. MEM i (fn_insts (frag_relabel_observer sa sb L ids fn id)) ==>
+      i.inst_opcode <> INVOKE
+Proof
+  strip_tac >> drule_all start_swap_emitted_blocks >> strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  fs[frag_ops_free_def, frag_code_def, NULL_EQ, EVERY_APPEND, EVERY_MEM] >>
+  simp[fn_insts_def, frag_fn_insts_blocks_member, frag_relabel_observer_def,
+       FLAT_APPEND, MAP_APPEND, MEM_FLAT, MEM_MAP, MEM_APPEND, mk_inst_def] >>
+  rpt strip_tac >> gvs[MEM_APPEND, MEM_MAP, mk_inst_def] >>
+  qpat_x_assum `!i. _ ==> _` (qspec_then `i` mp_tac) >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
 Theorem frag_relabel_observer_exists:
   cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb /\
   fn_has_code sa sb fn /\
@@ -1534,6 +1550,8 @@ Theorem frag_relabel_observer_exists:
     fn_inst_ids_distinct (frag_relabel_observer sa sb L ids fn id) /\
     (!i. MEM i (fn_insts (frag_relabel_observer sa sb L ids fn id)) /\
          i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
+    (!i. MEM i (fn_insts (frag_relabel_observer sa sb L ids fn id)) ==>
+         i.inst_opcode <> INVOKE) /\
     (!bb. lookup_block sb.cs_current_bb
        (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb ==>
        phi_prefix_length bb.bb_instructions = 0)
@@ -1551,7 +1569,8 @@ Proof
   >- metis_tac[start_relabel_gas_free]
   >- metis_tac[frag_relabel_observer_has_code]
   >- metis_tac[frag_relabel_observer_ids]
-  >- metis_tac[frag_relabel_observer_provenance] >>
+  >- metis_tac[frag_relabel_observer_provenance]
+  >- metis_tac[frag_relabel_observer_no_invoke] >>
   metis_tac[frag_relabel_observer_phi_zero]
 QED
 
@@ -1733,6 +1752,54 @@ Definition frag_relabel_state_def:
       <|vs_current_bb := (if u.vs_current_bb = L then entry else u.vs_current_bb);
         vs_prev_bb := p|>
 End
+
+Theorem frag_relabel_state_initial:
+  s.vs_current_bb = entry ==>
+  frag_relabel_state L entry (s with vs_current_bb := L) s
+Proof
+  simp[frag_relabel_state_def] >> strip_tac >>
+  qexists_tac `s.vs_prev_bb` >> simp[venom_state_component_equality]
+QED
+
+Theorem frag_relabel_state_fields:
+  frag_relabel_state L entry u v ==>
+  v.vs_inst_idx = u.vs_inst_idx /\ v.vs_halted = u.vs_halted /\
+  v.vs_current_bb = (if u.vs_current_bb = L then entry else u.vs_current_bb)
+Proof
+  simp[frag_relabel_state_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem frag_relabel_state_cut:
+  frag_relabel_state L entry u v /\ u.vs_current_bb <> L ==>
+  v = u with vs_prev_bb := v.vs_prev_bb
+Proof
+  simp[frag_relabel_state_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem frag_relabel_state_post:
+  frag_relabel_state L entry u v /\ u.vs_current_bb <> L /\ Q u /\
+  (!t p. Q t ==> Q (t with vs_prev_bb := p)) ==> Q v
+Proof
+  strip_tac >> drule_all frag_relabel_state_cut >> strip_tac >> metis_tac[]
+QED
+
+Theorem frag_relabel_state_abort_post:
+  frag_relabel_state L entry u v /\ R (Abort a u) /\
+  (!a t b p. R (Abort a t) ==>
+     R (Abort a (t with <| vs_current_bb := b; vs_prev_bb := p |>))) ==>
+  R (Abort a v)
+Proof
+  simp[frag_relabel_state_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem frag_relabel_state_intret_post:
+  frag_relabel_state L entry u v /\ R (IntRet vals u) /\
+  (!vals t b p. R (IntRet vals t) ==>
+     R (IntRet vals (t with <| vs_current_bb := b; vs_prev_bb := p |>))) ==>
+  R (IntRet vals v)
+Proof
+  simp[frag_relabel_state_def] >> rpt strip_tac >> simp[]
+QED
 
 Theorem frag_eval_operand_control[local]:
   !op s b p.
