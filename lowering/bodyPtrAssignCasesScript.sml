@@ -12,7 +12,7 @@
  *)
 Theory bodyPtrAssignCases
 Ancestors
-  bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
+  bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
