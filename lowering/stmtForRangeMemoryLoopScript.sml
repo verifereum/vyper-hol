@@ -2,7 +2,7 @@
 Theory stmtForRangeMemoryLoop
 Ancestors
   stmtForRangeMemoryEntry stmtForRangeMemoryRound bodyMemoryDefs stmtSimDeclGas
-  gasExemptCert gasSummary gasOutcome gasContext
+  gasExemptCert gasSummary gasOutcome gasContext stmtSimForRounds fragGasMode venomExecSemantics
   stmtSimForLoop stmtSimDefs stmtSimProps stmtLowering compileEnv
   loweringPosts exprLoweringProps vyperState allocaHistory
   stmtForRangeMemoryParts fragExec fragGasPathMem venomState venomInst memSafeRun
@@ -358,3 +358,203 @@ Resume for_iteration_mem[landing]:
   qexists_tac `u` >> simp[]
 QED
 Finalise for_iteration_mem
+
+Theorem for_loop_mem:
+  !m d P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
+   n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st k esk cc w.
+    for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+    (!scs. lookup_scopes id scs = NONE ==> not_local_ptr bc (FEMPTY :: scs) p) /\
+    st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
+    return_buf_frame d cenv st cc /\ alloca_history func cc /\
+    (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
+    (!ei j.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) ==>
+       stmt_frag_mem d ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)) /\
+    (!ei j gs r2 es2 sc rest.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with <| scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes;
+                     gas_obs := gs |>) = (r2, es2) /\
+       (r2 = INL () \/ r2 = INR ContinueException) /\
+       es2.scopes = sc :: rest ==> P (es2 with scopes := rest)) /\
+    n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
+    k + m = Num (n2 - n1) /\
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (stmt_res_ok lctx) esk /\
+    P (esk with gas_obs := []) /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    stmt_state_rel ctx func cenv cx esk cc /\ lookup_scopes id esk.scopes = NONE /\
+    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
+    gas_outcome T (cx_tops cx) (ctx, func)
+      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m)) (esk, cc)
+      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
+         s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+         stmt_state_rel ctx func cenv cx ee s /\
+         return_buf_frame d cenv st s /\ alloca_history func s /\
+         cc.vs_alloca_next <= s.vs_alloca_next /\
+         (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
+         (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
+      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  rpt gen_tac >>
+  map_every qid_spec_tac [`w`, `cc`, `esk`, `k`, `m`] >>
+  Induct_on `m` >> rpt gen_tac >> strip_tac
+  >- suspend "zero" >> suspend "step"
+QED
+
+Resume for_loop_mem[zero]:
+  gvs[] >> simp[Once vyperInterpreterTheory.evaluate_def] >>
+  irule gas_outcome_return_path >>
+  qexists_tac `jump_to exit_lbl (update_var dv 1w cc)` >>
+  conj_tac >- suspend "zero_path" >> suspend "zero_post"
+QED
+
+Resume for_loop_mem[zero_path]:
+  `!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
+     lookup_var x (jump_to exit_lbl (update_var dv 1w cc)) = SOME v` by
+    (rpt strip_tac >> simp[jump_to_def, update_var_def, lookup_var_def,
+                          finite_mapTheory.FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `return_buf_frame d cenv st (jump_to exit_lbl (update_var dv 1w cc))` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `cc`, `st`] >>
+     simp[jump_to_def, update_var_def]) >>
+  `alloca_history func (jump_to exit_lbl (update_var dv 1w cc))` by
+    (irule alloca_history_jump >> simp[jump_to_def, update_var_def] >>
+     qexists_tac `cc` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx (esk with gas_obs := [])
+     (jump_to exit_lbl (update_var dv 1w cc))` by
+    (simp[stmt_state_rel_jump_to] >> irule stmt_state_rel_update_var >>
+     conj_tac >- fs[for_code_def] >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`cc.vs_gas_readings`, `cc.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[]) >>
+  gvs[jump_to_def, update_var_def]
+QED
+Resume for_loop_mem[zero_post]:
+  `n1 + &Num (n2 - n1) = n2` by intLib.ARITH_TAC >>
+  simp[gas_marked_path_def] >>
+  `gas_path_mem ctx func cc 0 (OK (jump_to exit_lbl (update_var dv 1w cc)))` suffices_by
+    simp[gas_marked_path_def] >>
+  `bool_to_word (i2w n2 = i2w n2) = (1w:bytes32)` by simp[bool_to_word_def] >>
+  qhdtm_assum `for_code` (strip_assume_tac o SRULE [for_code_def]) >>
+  drule for_cond_zero_path_mem >>
+  disch_then (qspecl_then [`ctx`, `cc`, `i2w n2`, `i2w n2`] mp_tac) >>
+  simp[bool_to_word_def]
+QED
+Resume for_loop_mem[step]:
+  qpat_x_assum `!k esk cc w. for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _ ==> _` (mk_asm "ih") >>
+  qpat_x_assum `!ei j gs r2 es2 sc rest. _` (mk_asm "preserve") >>
+  `k < Num (n2 - n1)` by decide_tac >>
+  `GENLIST (\j. IntV (n1 + &(k + j))) (SUC m) =
+     IntV (n1 + &k) :: GENLIST (\j. IntV (n1 + &((k + 1) + j))) m` by
+    (simp[rich_listTheory.GENLIST_CONS] >>
+     irule listTheory.GENLIST_CONG >> simp[combinTheory.o_DEF]) >>
+  `stmt_frag_mem d ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
+    (esk with <|scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>)) :: esk.scopes;
+                gas_obs := []|>)` by
+    (asm_x "ih" kall_tac >>
+     asm_x "preserve" kall_tac >>
+     qpat_assum `!ei j. _ ==> stmt_frag_mem _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `esk with gas_obs := []` mp_tac) >>
+     disch_then (qspec_then `k` mp_tac) >>
+     `!ei scs gs. (ei with gas_obs := gs) with scopes := scs =
+        ei with <|scopes := scs; gas_obs := gs|>` by
+       simp[evaluation_state_component_equality] >>
+     qpat_x_assum `!ei j. _ ==> stmt_frag_mem _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     impl_tac >- simp[] >> disch_tac >> gvs[]) >>
+  `not_local_ptr bc (FEMPTY :: esk.scopes) p` by simp[] >>
+  `gas_admissible (eval_for cx tyv id stmts
+      (IntV (n1 + &k) :: GENLIST (\j. IntV (n1 + &((k + 1) + j))) m))
+     (stmt_res_ok lctx) esk` by gvs[] >>
+  drule_all for_iteration_mem >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome T tops cf source start Final Exit` >>
+  qmatch_asmsub_abbrev_tac `gas_outcome T tops cf round start Step StepExit` >>
+  qabbrev_tac `Done = (\ee t. Final (INL ()) ee t)` >>
+  qabbrev_tac `Next = (\ee t. Step (INL F) ee t)` >>
+  qabbrev_tac `R = (\ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)` >>
+  `gas_outcome T tops cf source start
+     (\res ee t. res = INL () /\ Done ee t)
+     (\res ee r. ?ex. res = INR ex /\ R ex ee r)` suffices_by
+    (strip_tac >> fs[Abbr `cf`, Abbr `start`] >>
+     irule for_outcome_consequence_mem >>
+     qhdtm_x_assum `gas_outcome` (irule_at Any) >>
+     simp[Abbr `Done`, Abbr `Final`, Abbr `R`, Abbr `Exit`] >>
+     rpt gen_tac >> strip_tac >> gvs[]) >>
+  simp[Abbr `source`, Abbr `start`, Abbr `cf`, Abbr `tops`,
+       eval_for_cons_round] >>
+  irule gas_outcome_bool_round >>
+  qexists_tac `Next` >> reverse conj_tac
+  >- (irule for_outcome_consequence_mem >>
+      qhdtm_x_assum `gas_outcome` (irule_at Any) >>
+      conj_tac
+      >- simp[Abbr `StepExit`, Abbr `R`] >>
+      simp[Abbr `Step`, Abbr `Next`, Abbr `Done`, Abbr `Final`] >>
+      rpt gen_tac >> strip_tac >> Cases_on `broke` >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  fs[Abbr `round`] >>
+  drule for_round_false_source_mem >> strip_tac >>
+  `P (mid with gas_obs := [])` by
+    (asm_x "ih" kall_tac >>
+     qpat_x_assum `!ei j. _ ==> stmt_frag_mem _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     asm_x "preserve"
+       (qspecl_then [`esk with gas_obs := []`, `k`, `gs`, `r2`, `es2`, `sc`, `rest`] mp_tac) >>
+     `!ei scs gs. (ei with gas_obs := []) with <|scopes := scs; gas_obs := gs|> =
+        ei with <|scopes := scs; gas_obs := gs|>` by
+       simp[evaluation_state_component_equality] >>
+     gvs[]) >>
+  `lookup_scopes id rest = NONE` by
+    (asm_x "ih" kall_tac >> asm_x "preserve" kall_tac >>
+     irule (cj 1 for_body_scope_mem) >>
+     qexistsl_tac [`cx`, `esk with gas_obs := gs`,
+       `<|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>`,
+       `es2`, `r2`, `sc`, `stmts`] >> simp[] >>
+     qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
+     simp[evaluation_state_component_equality]) >>
+  `lookup_scopes id mid.scopes = NONE` by
+    (qpat_x_assum `(es2 with scopes := rest) = _` mp_tac >>
+     simp[Once evaluation_state_component_equality] >> strip_tac >> gvs[]) >>
+  `gas_admissible (eval_for cx tyv id stmts
+       (GENLIST (\j. IntV (n1 + &((k + 1) + j))) m))
+       (stmt_res_ok lctx) (mid with gas_obs := [])` by
+    (asm_x "ih" kall_tac >> asm_x "preserve" kall_tac >>
+     qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
+     rewrite_tac[eval_for_cons_round] >> disch_tac >>
+     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     drule_all gas_admissible_bind_tail >> simp[]) >>
+  fs[Abbr `Next`, Abbr `Step`] >>
+  `k + 1 + m = Num (n2 - n1)` by decide_tac >>
+  `ret_pc_ok cenv st t` by
+    (asm_x "ih" kall_tac >> asm_x "preserve" kall_tac >>
+     fs[ret_pc_ok_def] >> metis_tac[]) >>
+  asm_x "ih" (qspecl_then [`k + 1`, `mid with gas_obs := []`, `t`, `w`] mp_tac) >>
+  (impl_tac
+   >- (simp[] >> asm "preserve" ACCEPT_TAC)) >>
+  disch_tac >>
+  `GENLIST (\j. IntV (n1 + &(k + 1 + j))) m =
+   GENLIST (\j. IntV (n1 + &(j + (k + 1)))) m` by simp[arithmeticTheory.ADD_COMM] >>
+  fs[] >>
+  irule for_outcome_consequence_mem >>
+  qpat_x_assum `gas_outcome _ _ _ (eval_for _ _ _ _ _) _ _ _` (irule_at Any) >>
+  asm_x "preserve" kall_tac >>
+  qpat_x_assum `!ei j. _ ==> stmt_frag_mem _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  (conj_tac
+   >- (simp[Abbr `Exit`, Abbr `R`] >> rpt gen_tac >> strip_tac >>
+       Cases_on `res`
+       >- (Cases_on `x` >> metis_tac[stmt_exit_loop_ctl]) >>
+       metis_tac[])) >>
+  simp[Abbr `Done`, Abbr `Final`] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+QED
+Finalise for_loop_mem
