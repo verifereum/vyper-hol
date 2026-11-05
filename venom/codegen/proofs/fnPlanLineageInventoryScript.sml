@@ -329,6 +329,36 @@ Proof
   disch_then (qspec_then `dfg` mp_tac) >> simp[]
 QED
 
+Theorem generate_inst_plan_jmp_spilled_empty:
+  !liveness dfg cfg fn inst next halt term cur ps targets ops ps'.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops liveness fn cur inst = SOME targets /\
+    set (MAP Var next) SUBSET set targets /\
+    generate_inst_plan liveness dfg cfg fn inst next halt term cur ps =
+      SOME (ops,ps') ==> ps'.ps_spilled = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?target. inst.inst_operands = [Label target]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_param_opcode_def] >>
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
+  rename1 `restore_spilled_plan targets ps = (rOps,psR)` >>
+  Cases_on `reorder_plan dfg targets psR` >> simp[stack_pop_def] >>
+  strip_tac >> gvs[] >>
+  drule_all restore_reorder_release_spilled_empty >> simp[]
+QED
+
 Theorem restore_spilled_plan_inventory_exhausted:
   !S ps ops. lineage_inventory S ps /\ S SUBSET set ops ==>
     (SND (restore_spilled_plan ops ps)).ps_spilled = FEMPTY

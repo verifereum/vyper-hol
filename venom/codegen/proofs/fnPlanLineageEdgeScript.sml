@@ -103,3 +103,25 @@ Proof
   `(LAST (non_param_insts pb)).inst_opcode = JMP` by simp[] >>
   drule_all generate_block_plan_jmp_suffix >> simp[]
 QED
+
+Theorem analyzed_terminal_jmp_spilled_empty:
+  !fn pred succ pred_bb succ_bb inst dfg cfg halt term ps ops ps'.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block succ fn.fn_blocks = SOME succ_bb /\
+    pred_bb.bb_instructions <> [] /\ LAST pred_bb.bb_instructions = inst /\
+    inst.inst_opcode = JMP /\ inst.inst_operands = [Label succ] /\
+    inst.inst_outputs = [] /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+      (live_vars_at (liveness_analyze fn) pred (LENGTH pred_bb.bb_instructions))
+      halt term pred ps = SOME (ops,ps') ==>
+    ps'.ps_spilled = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all analyzed_live_out_jmp >> strip_tac >>
+  irule generate_inst_plan_jmp_spilled_empty >>
+  goal_assum (drule_at Any) >> simp[join_target_ops_def] >>
+  qpat_x_assum `set _ = set _` mp_tac >>
+  simp[pred_setTheory.EXTENSION, pred_setTheory.SUBSET_DEF, MEM_MAP] >>
+  metis_tac[]
+QED
