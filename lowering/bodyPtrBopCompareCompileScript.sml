@@ -1,7 +1,7 @@
 Theory bodyPtrBopCompareCompile
 Ancestors
   bodyPtrBopCompare emitHelper emitHelperProps exprLoweringProps fragExec
-  compileEnv arithmetic rich_list
+  compileEnv arithmetic rich_list instIdxIndep venomInst venomState
 
 Theorem bop_compare_emit_placement:
   emit_op opc ops sc = (op,sd) /\ fn_has_code sc sd fn /\
@@ -71,4 +71,41 @@ Proof
   conj_tac >- metis_tac[] >>
   rpt strip_tac >> `x <> STRING #"%" (toString sc.cs_next_var)` by
     gvs[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem bop_compare_emit_layout:
+  emit_op opc ops sc = (op,sd) ==>
+  inst_extends sc sd /\ cs_extends sc sd /\
+  sd.cs_current_bb = sc.cs_current_bb /\
+  LENGTH sd.cs_current_insts = LENGTH sc.cs_current_insts + 1
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
+  simp[inst_extends_def, emitted_insts_def, DROP_LENGTH_APPEND] >>
+  irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]
+QED
+
+Theorem bop_compare_emit_readonly:
+  ((opc = EQ /\ ops = [left;right]) \/ (opc = ISZERO /\ ops = [left])) /\
+  emit_op opc ops sc = (op,sd) /\
+  run_inst_seq (emitted_insts sc sd) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[run_inst_seq_def, AllCaseEqs()] >>
+  irule bop_compare_state_frame >> metis_tac[]
+QED
+
+Theorem bop_compare_emit_run_cursor:
+  emit_op opc ops sc = (op,sd) /\ ~is_terminator opc /\
+  run_inst_seq (emitted_insts sc sd) s = OK t ==>
+  run_inst_seq (emitted_insts sc sd) (s with vs_inst_idx := idx) =
+    OK (t with vs_inst_idx := idx)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sc sd)` by
+    simp[venomInstTheory.mk_inst_def] >>
+  drule run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`s`, `idx`] mp_tac) >>
+  simp[exec_result_map_def]
 QED
