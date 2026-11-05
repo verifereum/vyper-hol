@@ -98,7 +98,7 @@ Proof
 QED
 
 (* Expose compiler boundaries without expanding compile_state records. *)
-Theorem storage_copy_bind_eq[local]:
+Theorem storage_copy_bind_eq:
   comp_bind m f s = (u,t) <=>
   ?v s1. m s = (v,s1) /\ f v s1 = (u,t)
 Proof
@@ -173,7 +173,7 @@ Proof
   rw[not_fresh_at_def] >> first_x_assum irule >> simp[]
 QED
 
-Theorem storage_copy_header_layout[local]:
+Theorem storage_copy_header_layout:
   !cv n sth test stj.
     emit_op EQ [Var cv; Lit (n2w n)] sth = (test,stj) ==>
     ?tv. test = Var tv /\
@@ -191,7 +191,7 @@ Proof
   rw[not_fresh_at_def] >> first_x_assum irule >> simp[]
 QED
 
-Theorem storage_copy_init_layout[local]:
+Theorem storage_copy_init_layout:
   !sa hdr body exit cv tv s1 s2 s3 s4 s0 sj sth stj n old.
     fresh_label "wcopy_cond" sa = (hdr,s1) /\
     fresh_label "wcopy_body" s1 = (body,s2) /\
@@ -218,7 +218,7 @@ Proof
   rw[not_fresh_at_def, fresh_var_distinct] >> decide_tac
 QED
 
-Theorem storage_copy_prefix_freshness[local]:
+Theorem storage_copy_prefix_freshness:
   !sa hdr body exit cv tv s1 s2 s3 s4 s0 sj sth stj st2 stb n old0 oldh.
     fresh_label "wcopy_cond" sa = (hdr,s1) /\
     fresh_label "wcopy_body" s1 = (body,s2) /\
