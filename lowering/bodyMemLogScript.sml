@@ -15,7 +15,7 @@ Theorem log_mem_arg_body_pre[local]:
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
     well_typed_expr env e /\
     ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target tops) /\
@@ -42,7 +42,7 @@ Theorem log_mem_args_step[local]:
     expr_sim_inv cenv cx env s /\
     supported_pure_exprs tops (e::tail) /\ well_typed_exprs env (e::tail) /\
     ~supported_exprs_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) (e::tail) /\
+       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) (e::tail) /\
     call_evaluation_safe cx (int_calls_exprs (e::tail)) /\
     (!target. supported_exprs_exists (expr_abi_decode_target_root target) (e::tail) ==>
               occurs_abi_decode_target target tops) ==>
@@ -51,7 +51,7 @@ Theorem log_mem_args_step[local]:
       (body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s1 /\
        supported_pure_exprs tops tail /\ well_typed_exprs env tail /\
        ~supported_exprs_exists
-          (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\
+          (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\
        call_evaluation_safe cx (int_calls_exprs tail) /\
        (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==>
                  occurs_abi_decode_target target tops)) /\
@@ -118,13 +118,13 @@ Proof
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
   `~supported_exprs_exists
-      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) es /\
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) es /\
    call_evaluation_safe cx (int_calls_exprs es) /\
    (!target. supported_exprs_exists (expr_abi_decode_target_root target) es ==>
              occurs_abi_decode_target target tops)` by
     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
-  qabbrev_tac `RR = \tail s. body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
+  qabbrev_tac `RR = \tail s. body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
   irule compile_log_ready_stmt_frag_mem >>
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>
