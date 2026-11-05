@@ -28,13 +28,13 @@
 
 Theory fnFrameBoundaryInvoke
 Ancestors
-  fnFrameBoundaryGenRet genFrameSim frameRel contextCodegenRel codegenRel
-  regularPostfixSim preparedPrefixSim asmFrame prefixSim stackOpSim
+  fnFrameBoundaryGenRet fnFrameBoundaryEntryParams genFrameSim frameRel contextCodegenRel codegenRel
+  regularPostfixSim preparedPrefixSim asmFrame prefixSim stackOpSim blockSimHelpers
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map
-  callLayoutDefs fmpWfDefs list rich_list reorderSim planWf stackModel
-  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps generatedPrefixSim
+  callLayoutDefs fmpWfDefs list rich_list pred_set reorderSim planWf stackModel
+  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps generatedPrefixSim allocMono
 
 Theorem invoke_source_ok:
   inst.inst_opcode = INVOKE /\
@@ -1140,4 +1140,193 @@ Proof
     (pure_rewrite_tac[stack_pop_def] >> irule plan_stack_rel_pop >> simp[]) >>
   `DROP (LENGTH operands) values = []` by metis_tac[DROP_LENGTH_NIL] >>
   gvs[context_venom_asm_rel_def, DROP_APPEND]
+QED
+
+Theorem invoke_context_release_dead_spills:
+  !cplan lo ps vs st nl.
+  context_venom_asm_rel cplan lo ps vs st ==>
+  context_venom_asm_rel cplan lo (release_dead_spills nl ps) vs st
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule entry_context_to_local_memory >> strip_tac >>
+  drule venom_asm_rel_release_dead_spills >>
+  disch_then (qspec_then `nl` assume_tac) >>
+  `!op. operand_val (vs with vs_memory := st.as_memory) lo op =
+    operand_val vs lo op` by (Cases >> simp[operand_val_def]) >>
+  gvs[context_venom_asm_rel_def, venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def]
+QED
+
+Theorem invoke_called_structural:
+  !consumed outs ret_lbl called.
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      consumed outs) = (ret_lbl, called) /\
+  spill_alloc_layout_wf consumed.ps_alloc consumed.ps_spilled /\
+  ALL_DISTINCT consumed.ps_stack /\ ALL_DISTINCT outs /\
+  DISJOINT (set consumed.ps_stack) (FDOM consumed.ps_spilled) /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs)
+    consumed.ps_stack /\
+  (!op. op IN FDOM consumed.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) outs) ==>
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  ALL_DISTINCT called.ps_stack /\
+  DISJOINT (set called.ps_stack) (FDOM called.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >> drule invoke_called_plan_fields >> strip_tac >>
+  `ALL_DISTINCT (MAP Var outs)` by (irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  `!x. MEM x outs ==> ~MEM (Var x) consumed.ps_stack` by
+    (rpt strip_tac >>
+     qpat_x_assum `EVERY _ consumed.ps_stack` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM] >>
+     disch_then (qspec_then `Var x` mp_tac) >> simp[] >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  `!x. MEM x outs ==> Var x NOTIN FDOM consumed.ps_spilled` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op. op IN FDOM _ ==> _`
+       (qspec_then `Var x` mp_tac) >>
+     pure_rewrite_tac[EVERY_MEM] >> simp[] >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  simp[ALL_DISTINCT_APPEND, MEM_MAP, DISJOINT_UNION, LIST_TO_SET_APPEND] >>
+  conj_tac >- metis_tac[] >>
+  gvs[DISJOINT_DEF, EXTENSION, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem invoke_cleanup_popmany:
+  !outs nl halting called pops popped cplan lo o2pc prog vs st r ctx name.
+  (if outs = [] then ([], called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([], called)) = (pops,popped) /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  ALL_DISTINCT called.ps_stack /\
+  DISJOINT (set called.ps_stack) (FDOM called.ps_spilled) /\
+  (!off. MEM (SOSpill off) pops ==> off < dimword (:256)) /\
+  context_venom_asm_rel cplan lo called vs st /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp pops) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= popped.ps_alloc.sa_spill_base /\
+  popped.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp pops)) st = AsmOK st' /\
+    context_venom_asm_rel cplan lo popped vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp pops) /\
+    (!b. ~closure_spill_byte ctx cplan name b ==>
+      read_byte b st'.as_memory = read_byte b st.as_memory) /\
+    spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled /\
+    ALL_DISTINCT popped.ps_stack /\
+    DISJOINT (set popped.ps_stack) (FDOM popped.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `outs = []`
+  >- (gvs[] >> qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  Cases_on `~halting \/ LENGTH outs > 1`
+  >- (fs[] >> drule_all entry_context_popmany_outside_closure >>
+      disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+      qexists `st'` >> simp[]) >>
+  gvs[] >> qexists `st` >> simp[execute_plan_def, asm_steps_def]
+QED
+
+Theorem invoke_cleanup_swap:
+  !outs nl dfg inst term popped opts swapped cplan lo o2pc prog vs st r ctx name.
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled /\
+  ALL_DISTINCT popped.ps_stack /\
+  DISJOINT (set popped.ps_stack) (FDOM popped.ps_spilled) /\
+  (!off. MEM (SOSpill off) opts ==> off < dimword (:256)) /\
+  context_venom_asm_rel cplan lo popped vs st /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp opts) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= swapped.ps_alloc.sa_spill_base /\
+  swapped.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp opts)) st = AsmOK st' /\
+    context_venom_asm_rel cplan lo swapped vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp opts) /\
+    (!b. ~closure_spill_byte ctx cplan name b ==>
+      read_byte b st'.as_memory = read_byte b st.as_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `outs = [] \/ FILTER (\out. MEM out nl) outs = []`
+  >- (gvs[] >> qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  fs[] >> drule_all entry_context_optimistic_swap_outside_closure >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  qexists `st'` >> simp[]
+QED
+
+Theorem invoke_cleanup_alloc:
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped ==>
+  called.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+  popped.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+  swapped.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+  called.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
+  popped.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
+  swapped.ps_alloc.sa_next_offset = final.ps_alloc.sa_next_offset
+Proof
+  strip_tac >>
+  `called.ps_alloc.sa_spill_base = popped.ps_alloc.sa_spill_base /\
+   called.ps_alloc.sa_next_offset <= popped.ps_alloc.sa_next_offset` by
+    (Cases_on `outs = []` >> gvs[] >>
+     Cases_on `~halting \/ LENGTH outs > 1` >> gvs[] >>
+     metis_tac[popmany_plan_spill_base, popmany_plan_next_offset]) >>
+  `popped.ps_alloc.sa_spill_base = swapped.ps_alloc.sa_spill_base /\
+   popped.ps_alloc.sa_next_offset <= swapped.ps_alloc.sa_next_offset` by
+    (Cases_on `outs = [] \/ FILTER (\out. MEM out nl) outs = []` >> gvs[] >>
+     metis_tac[optimistic_swap_plan_spill_base, optimistic_swap_plan_next_offset]) >>
+  gvs[release_dead_spills_spill_base, release_dead_spills_next_offset]
+QED
+
+Theorem invoke_cleanup_context:
+  !outs nl halting called pops popped dfg inst term opts swapped final
+    cplan lo o2pc prog vs st r ctx name.
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  ALL_DISTINCT called.ps_stack /\
+  DISJOINT (set called.ps_stack) (FDOM called.ps_spilled) /\
+  (!off. MEM (SOSpill off) (pops ++ opts) ==> off < dimword (:256)) /\
+  context_venom_asm_rel cplan lo called vs st /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp (pops ++ opts)) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) st = AsmOK st' /\
+    context_venom_asm_rel cplan lo final vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts)) /\
+    (!b. ~closure_spill_byte ctx cplan name b ==>
+      read_byte b st'.as_memory = read_byte b st.as_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all invoke_cleanup_alloc >> strip_tac >>
+  `r.sr_spill_base <= popped.ps_alloc.sa_spill_base /\
+   popped.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+   r.sr_spill_base <= swapped.ps_alloc.sa_spill_base /\
+   swapped.ps_alloc.sa_next_offset <= r.sr_spill_end` by metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+  `(!off. MEM (SOSpill off) pops ==> off < dimword (:256)) /\
+   (!off. MEM (SOSpill off) opts ==> off < dimword (:256))` by gvs[] >>
+  `asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp pops) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp pops))
+     (execute_plan cplan.cp_initial_fmp opts)` by
+    gvs[execute_plan_append, asm_block_at_append] >>
+  drule_all invoke_cleanup_popmany >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  rename1 `context_venom_asm_rel cplan lo popped vs after_pop` >>
+  `asm_block_at prog after_pop.as_pc (execute_plan cplan.cp_initial_fmp opts)` by simp[] >>
+  drule_all invoke_cleanup_swap >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  rename1 `asm_steps _ _ _ _ after_pop = AsmOK after_swap` >>
+  qexists `after_swap` >>
+  conj_tac >- (simp[execute_plan_append] >> irule asm_steps_compose_ok >>
+              goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- metis_tac[invoke_context_release_dead_spills] >>
+  simp[execute_plan_append] >> metis_tac[]
 QED
