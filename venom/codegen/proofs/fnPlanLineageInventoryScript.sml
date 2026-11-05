@@ -3683,3 +3683,41 @@ QED
    The reachable JMP producer must establish pending_inventory_wf targets ps1.
    Neither successful generation nor join_reached supplies that premise.
    This boundary proves inventory inclusion only, not dominance support. *)
+
+Theorem restore_spilled_plan_length_exact:
+  !targets ps ops mid.
+    restore_spilled_plan targets ps = (ops,mid) ==>
+    LENGTH mid.ps_stack = LENGTH ps.ps_stack +
+      CARD (set targets INTER FDOM ps.ps_spilled)
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  simp[do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled h` >> simp[]
+  >- (pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+      first_x_assum drule >> strip_tac >>
+      `h NOTIN FDOM ps.ps_spilled` by gvs[FLOOKUP_DEF] >>
+      simp[INSERT_INTER]) >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  gvs[stack_push_def, INSERT_INTER] >>
+  `h IN FDOM ps.ps_spilled` by gvs[FLOOKUP_DEF] >>
+  `h INSERT (set targets INTER FDOM ps.ps_spilled) =
+   h INSERT (set targets INTER (FDOM ps.ps_spilled DELETE h))` by SET_TAC[] >>
+  simp[CARD_INSERT]
+QED
+
+Theorem restore_reorder_scalar_inventory_subset:
+  !targets ps rops mid dfg ops qs.
+    LENGTH targets <= LENGTH ps.ps_stack +
+      CARD (set targets INTER FDOM ps.ps_spilled) /\
+    restore_spilled_plan targets ps = (rops,mid) /\
+    reorder_plan dfg targets mid = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH targets <= LENGTH mid.ps_stack` by
+    metis_tac[restore_spilled_plan_length_exact] >>
+  metis_tac[reorder_plan_inventory_subset_nb,
+            restore_spilled_plan_inventory_subset]
+QED
