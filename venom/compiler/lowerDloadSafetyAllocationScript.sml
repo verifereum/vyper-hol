@@ -5,6 +5,7 @@ Ancestors
   lowerDloadConfiguredOrigins lowerDloadSafetyAmbient
   venomExecSemantics ptrDiscipline lowerDloadSafetyKernel
   venomState venomInst memLocDefs codegenRel finite_map pred_set
+  lowerDloadSafetyLocations o1PassContract venomWf
 
 Theorem ld_cached_alloca_pair:
   ld_maps A f /\ inst.inst_outputs = [out] /\
@@ -728,3 +729,207 @@ val _ = List.app (fn (name, th) =>
    ("ld_sync_fresh_alloca_update", ld_sync_fresh_alloca_update),
    ("ld_cached_alloca_advance", ld_cached_alloca_advance),
    ("ld_fresh_alloca_advance", ld_fresh_alloca_advance)];
+
+(* Cached original allocations also have an endpoint at the end of a block. *)
+Theorem ld_cached_alloca_endpoint:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ step_inst fuel C' inst t = OK ts ==>
+  ?ss g.
+    step_inst 0 C inst s = OK ss /\
+    g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+      lf_tgt := ts with vs_inst_idx := p + 1;
+      lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+      lf_tv := (step_taint inst s ss tn).t_var|> /\
+    step_prov PG G inst ss = ld_erase A o_f g.lf_H /\
+    ld_vars P A g /\ ld_maps A g /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+    EVERY (ld_maps A) fs /\
+    (!next. active_inst fn next g.lf_src ==>
+      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)
+Proof
+  strip_tac >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  `FRANGE f.lf_H SUBSET FDOM A` by
+    (simp[SUBSET_DEF] >> rpt strip_tac >>
+     irule ld_global_selected >> qexistsl [`f`,`f::fs`,`lo`] >> simp[]) >>
+  qpat_x_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+  drule_all ld_cached_alloca_effect >>
+  disch_then (qspecl_then [`PG`,`C`] strip_assume_tac) >>
+  `step_inst 0 C inst f.lf_src = OK ss` by
+    gvs[step_inst_non_invoke] >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+   step_prov PG G inst ss =
+     ld_erase A o_f (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) /\
+   (!a. a IN FRANGE (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) ==>
+      a IN FDOM A) /\
+   ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
+   ss.vs_alloca_next = f.lf_src.vs_alloca_next /\
+   ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+   ss.vs_current_bb = f.lf_src.vs_current_bb /\
+   ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
+   ss.vs_prev_bb = f.lf_src.vs_prev_bb /\
+   ts.vs_prev_bb = f.lf_tgt.vs_prev_bb` by
+    (gvs[update_var_def, is_terminator_def, SUBSET_DEF] >> metis_tac[]) >>
+  qabbrev_tac `g = f with
+    <|lf_src := ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx;
+      lf_tgt := ts with vs_inst_idx := p + 1;
+      lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var|>` >>
+  `ld_vars P A g /\ ld_maps A g /\
+   ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+   EVERY (ld_maps A) fs /\
+   (!next. active_inst f.lf_fn next g.lf_src ==>
+     ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+       (step_taint inst f.lf_src ss tn) f.lf_fn next g.lf_src g.lf_tgt A (g::fs) N)` by
+    (drule_all (SRULE [SUBSET_DEF] ld_nonallocating_endpoint) >>
+     simp[Abbr `g`, update_var_def, is_terminator_def]) >>
+  qexists `ss` >> gvs[Abbr `g`]
+QED
+
+Theorem ld_fresh_alloca_endpoint:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ ir_supply_covers_fn f.lf_supply fn /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [Lit sz] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ step_inst fuel C' inst t = OK ts ==>
+  ?ss Ar g.
+    Ar = A |+ ((f.lf_serial,inst.inst_id),
+      (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+    step_inst 0 C inst s = OK ss /\
+    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
+    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
+    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+    g.lf_tgt = (ts with vs_inst_idx := p + 1) /\
+    g.lf_tv = (step_taint inst s ss tn).t_var /\
+    step_prov PG G inst ss = ld_erase Ar o_f g.lf_H /\
+    ld_vars P Ar g /\ ld_maps Ar g /\
+    ld_memory lo Ar (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
+    EVERY (ld_maps Ar) fs /\
+    (!next. active_inst fn next g.lf_src ==>
+      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+Proof
+  strip_tac >>
+  `lo <= t.vs_alloca_next` by
+    (irule ld_sync_frontier_lower_bound >> simp[] >> metis_tac[]) >>
+  `lo <= s.vs_alloca_next` by
+    (drule ld_sync_source >> strip_tac >>
+     drule_all ld_frame_raw_reachable >> strip_tac >>
+     drule lowerDloadFrontierTheory.ld_raw_reachable_frontier >> gvs[ptr_discipline_def]) >>
+  drule_all ld_sync_original_site_fresh >> strip_tac >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  `FRANGE f.lf_H SUBSET FDOM A` by
+    (simp[SUBSET_DEF] >> rpt strip_tac >>
+     irule ld_global_selected >> qexistsl [`f`,`f::fs`,`lo`] >> simp[]) >>
+  `?ss. exec_alloca inst s sz = OK ss` by simp[exec_alloca_def] >>
+  `exec_alloca inst t sz = OK ts` by
+    (qpat_x_assum `step_inst fuel C' inst t = OK ts` mp_tac >>
+     simp[ld_alloca_step]) >>
+  qabbrev_tac `Ar = A |+ ((f.lf_serial,inst.inst_id),
+    (s.vs_alloca_next,t.vs_alloca_next,w2n sz))` >>
+  qpat_x_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+  `Ar = A |+ ((f.lf_serial,inst.inst_id),
+    (f.lf_src.vs_alloca_next,f.lf_tgt.vs_alloca_next,w2n sz))` by simp[Abbr `Ar`] >>
+  drule_all ld_fresh_alloca_effect >>
+  disch_then (qspecl_then [`0`,`PG`,`C'`,`C`] strip_assume_tac) >>
+  qabbrev_tac `sn = ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx` >>
+  qabbrev_tac `tt = ts with vs_inst_idx := p + 1` >>
+  qabbrev_tac `g = f with <|lf_src := sn; lf_tgt := tt;
+    lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+    lf_tv := (step_taint inst f.lf_src ss tn).t_var|>` >>
+  `ld_vars P Ar g /\
+   ld_memory lo Ar (step_taint inst f.lf_src ss tn) sn tt /\
+   ld_nonghost (step_taint inst f.lf_src ss tn) sn tt` by
+    (gvs[Abbr `g`, Abbr `sn`, Abbr `tt`, ld_vars_def,
+         ld_memory_def, ld_nonghost_def] >>
+     rpt conj_tac >> first_x_assum ACCEPT_TAC) >>
+  `ld_maps Ar g /\ ld_global lo Ar (g::fs) /\
+   FDOM Ar = ld_slots Ar (g::fs) /\
+   EVERY (\h. ld_maps Ar h /\ ld_vars P Ar h) fs` by
+    suspend "structure" >>
+  `!next. active_inst f.lf_fn next sn ==>
+    ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+      (step_taint inst f.lf_src ss tn) f.lf_fn next sn tt Ar (g::fs) N` by
+    suspend "continuation" >>
+  qexistsl [`ss`,`g`] >>
+  gvs[Abbr `g`, Abbr `sn`, Abbr `tt`, Abbr `Ar`, listTheory.EVERY_MEM]
+QED
+
+Resume ld_fresh_alloca_endpoint[structure]:
+  qpat_x_assum `Abbrev (Ar = _)` kall_tac >>
+  `sn = ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx /\
+   tt = ts with vs_inst_idx := SUC p /\
+   g = f with <|lf_src := sn; lf_tgt := tt;
+     lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+     lf_tv := (step_taint inst f.lf_src ss tn).t_var|> /\
+   step_prov PG G inst ss =
+     ld_erase Ar o_f (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))` by
+    (rpt conj_tac
+     >- simp[NoAsms, Abbr `sn`]
+     >- simp[NoAsms, Abbr `tt`, arithmeticTheory.ADD1]
+     >- simp[NoAsms, Abbr `g`]
+     >> metis_tac[]) >>
+  drule_all ld_fresh_alloca_structure >> strip_tac >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Resume ld_fresh_alloca_endpoint[continuation]:
+  gen_tac >> strip_tac >>
+  qpat_x_assum `Abbrev (Ar = _)` kall_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) f.lf_fn.fn_blocks)` by
+    (drule_all ld_sync_fn_shape >>
+     simp[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
+  `ss.vs_current_bb = f.lf_src.vs_current_bb /\
+   ss.vs_prev_bb = f.lf_src.vs_prev_bb` by
+    gvs[exec_alloca_def, update_var_def] >>
+  `active_inst f.lf_fn next (ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx)` by
+    fs[Abbr `sn`] >>
+  `?Y. ld_envelope f.lf_supply f.lf_fn sn sn.vs_inst_idx Y tt.vs_inst_idx` by
+    (drule_all ld_envelope_source_next >>
+     simp[Abbr `sn`, Abbr `tt`, arithmeticTheory.ADD1]) >>
+  `ss = update_var out (n2w f.lf_src.vs_alloca_next)
+     (f.lf_src with <|vs_allocas := f.lf_src.vs_allocas |+
+       (inst.inst_id,(f.lf_src.vs_alloca_next,w2n sz));
+       vs_alloca_next := f.lf_src.vs_alloca_next + w2n sz|>)` by
+    gvs[exec_alloca_def] >>
+  `sn = ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx /\
+   tt = ts with vs_inst_idx := SUC p /\
+   g = f with <|lf_src := sn; lf_tgt := tt;
+     lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+     lf_tv := (step_taint inst f.lf_src ss tn).t_var|>` by
+    (rpt conj_tac
+     >- simp[NoAsms, Abbr `sn`]
+     >- simp[NoAsms, Abbr `tt`, arithmeticTheory.ADD1]
+     >> simp[NoAsms, Abbr `g`]) >>
+  drule_all (SRULE [PULL_EXISTS] ld_fresh_alloca_advance) >>
+  strip_tac >>
+  qpat_x_assum `Abbrev (sn = _)` kall_tac >>
+  qpat_x_assum `Abbrev (tt = _)` kall_tac >>
+  qpat_x_assum `Abbrev (g = _)` kall_tac >> gvs[]
+QED
+Finalise ld_fresh_alloca_endpoint
+
+val _ = List.app (fn th => if null (hyp th) then ()
+  else raise Fail "allocation endpoint has hypotheses")
+  [ld_cached_alloca_endpoint, ld_fresh_alloca_endpoint];
