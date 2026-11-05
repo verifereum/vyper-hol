@@ -281,3 +281,152 @@ own next/block/call/ret rules. Exact closure predicates for E/S (not merely
 R) and sufficiency of configured freshness premises still require strategist
 review before authorizing proofs. This audit deliberately makes those gaps
 visible instead of calling the architecture de-risked.
+
+## 6. Endpoint audit (.12.2): producer matrix and consumer experiment
+
+This section is an audit, not a claim of endpoint assembly. The exact
+`ld_sync_def` inspected is SafetyRelation lines 123–153. The baseline
+ExpansionGhost target builds. The temporary identity consumer was removed to
+avoid retaining a near-duplicate effect lemma.
+
+### Ambient correction
+
+In B above, `callee_first names C` must read
+`callee_first names C.ctx_functions`. Add the stage-derived clause
+`!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn`.
+Neither correction is a new assumption for the frozen theorem. Do not use B
+as an actual checked HOL predicate before making these textual corrections.
+
+### Section 1 conclusion coverage
+
+| Required field | Existing interface and exact restriction | Remaining obligation |
+|---|---|---|
+| actual source success | `ld_sync_identity_effect`, `ld_sync_assignment_effect`, `ld_sync_arithmetic_effect`, `ld_sync_param_effect`, `ld_sync_observational_read_effect`, `ld_sync_classified_read_effect`, storage/immutable/write and oracle effects | These are same-instruction effects, not DLOADBYTES expansion effects. `ld_dload_expansion_ghost_exit` supplies DLOAD success on its correlated trace. No source-success assumption may replace an actual producer. |
+| target unchanged instruction index | oracle and memory-write effects export it explicitly; `ld_prefix_position` gives the incoming `p+h` | Other effect signatures do not all export it: use nonterminating semantic index preservation, not target activity. |
+| post index p+LENGTH X | `ld_prefix_position` and SUC h=LENGTH X | arithmetic only, after the unchanged-index equation |
+| serial/supply/fn/Q | record update preserving these fields | g must be chosen once, shared with H/E/map witnesses |
+| src/tgt/tv equations | record constructor; producer gives tn'=step_taint | no location assumption needed |
+| step_prov erasure, ld_vars, selected H support | ordinary effects export these for unchanged A; ghost exit for DLOAD | transfer vars through final index updates; DLOADBYTES ghost noninterference and fresh-ALLOCA map change must be correlated |
+| ld_maps g | incoming maps + unchanged allocations/frontiers/E for ordinary effects | DLOAD changes E/frontier; fresh original ALLOCA changes A. Use their actual map updates, not ordinary_advance. |
+| ld_memory, ld_nonghost | ordinary effects export both at unincremented ss,ts | DLOAD ghost exit is not memory preservation. Private CODECOPY theorem requires owned-private destination; DLOADBYTES writes a potentially public selected destination and is not private. |
+| ld_global, FDOM/slots, EVERY saved maps | ordinary unchanged-site congruence; original fresh allocation proof has the necessary erasure/saved-map reasoning | Existing `ld_sync_head_update` and `ld_sync_fresh_alloca_update` conclude these only jointly with an active-next sync. Factor the location-independent result once, not per opcode. |
+| conditional final ld_sync | `ld_sync_ordinary_advance` given source next activity AND next envelope; original allocation advances similarly | Need source-active-successor envelope transport. `ld_envelope_singleton_next` instead assumes active target successor, so does not discharge the required implication. |
+
+Additional effect premises are real obligations. Observational reads additionally
+ask EVERY(fn_ptr_ok P), already supplied by incoming sync. Classified reads
+ask headroom and, for MLOAD/ILOAD, `~in_revert_forward fn s`. Oracle CALL and
+STATICCALL also ask headroom and non-forwarding. The memory-write producer
+covers only MSTORE/MSTORE8/MCOPY and asks fn_shape_ok, fn_inst_wf, labels,
+non-forwarding, and target frontier < dimword. Source shape, labels and
+pointer/access/taint facts have existing sync/ambient projections; none of
+these signatures covers DLOADBYTES merely because it writes memory.
+
+`ld_sync_alloca_owned_coverage` (AllocationCoverage 63–100) asks source next
+activity, a next envelope, and target next activity. The fresh and cached
+advance theorems therefore cannot be used backwards to obtain unconditional
+post-fields. `ld_sync_fresh_alloca_update` (Allocation 485–506) explicitly
+assumes reachable/active next and next envelope; its proof already contains
+saved-frame erasure, maps/vars and interval reasoning. Reuse/generalize that
+implementation instead of duplicating it.
+
+### Every ld_sync clause, independent of whether next exists
+
+| Definition lines | Preservation obligation |
+|---|---|
+| 125–126 nonempty/head fn/src/tgt/tv | constructor equations |
+| 127 reachable/active | `frame_reachable_next` needs incoming reachable, actual source success, nonterminator and active source successor; it is used only inside the final implication |
+| 128 EVERY fn_ptr_ok; 129 stack length | unchanged C, stk, tail |
+| 130 G erasure | effect's step_prov equation (fresh map erasure for original allocation) |
+| 131 PG erasure of Q | unchanged Q and A for ordinary/DLOAD/BYTES; fresh-map erasure preservation for ALLOCA |
+| 132 serial distinct | unchanged serial/tail |
+| 133 serial bound/maps/vars | serial unchanged; effect vars; maps requires actual allocation/E update |
+| 134 intervals | unchanged frontier for ordinary; allocation preservation theorem for allocating cases |
+| 135–137 prev/current block, membership | effect control equalities, incoming control equality, fn unchanged |
+| 138 domain/slots | unchanged-site congruence or original fresh extension; never inverse address identity |
+| 139–141 per-frame frontier/charge | ordinary unchanged; scratch ownership fresh/cached charge; original ALLOCA equal size increment |
+| 142–145 per-frame envelope | saved frames unchanged; head needs NEW envelope from source next activity, not target-successor assumption |
+| 146–151 saved caller fn/state/G/PG/tvar | unchanged tail; if A extends, saved erasure equations required |
+| 152 total charge bound | ordinary/original ALLOCA unchanged E; DLOAD requires idempotent fresh/cached charge proof |
+| 153 memory/nonghost | actual semantic effect, then index-insensitivity |
+
+### DLOADBYTES semantic trace (not yet a paired write theorem)
+
+Defs 161–173 expands *every* three-operand DLOADBYTES, regardless of outputs,
+into ADD `[src; Label "code_end"]` followed by CODECOPY
+`[dst; Var fresh; size]`. Malformed operand length is singleton.
+Semantics 969–980 ignores outputs and requires three evaluable operands;
+CODECOPY 983–994 likewise ignores outputs. Thus it is incorrect to exclude a
+DLOADBYTES merely because outputs are nonempty. Source shape/wf may exclude
+that separately. DLOAD uses exec_read1, so its successful output/operand shape
+must be inverted through exec_read1 rather than inferred from the pass.
+
+Write bytes are exactly
+`TAKE (w2n size) (DROP (w2n src) s.vs_data_section ++ REPLICATE (w2n size) 0w)`;
+target uses the analogous DROP from code at evaluated `src + code_end`.
+A paired proof needs data/code suffix equality, scalar src and size equality,
+correct label evaluation and the dload_offset_ok no-word-wrap bound. Fresh
+ADD output must not change evaluation of original dst/size. Destination
+classification comes from access_ok and selected provenance; only nonempty
+writes need interval containment and target no-wrap (headroom). For size=0,
+TAKE 0 gives []; no address-provenance containment should be demanded, but
+memory expansion/metadata behavior still follows the actual write function,
+not an assumed no-op. The current generic write effect excludes this opcode;
+private CODECOPY cannot substitute for selected/public relocated overwrite.
+A new actual paired DLOADBYTES byte/write effect remains necessary.
+
+### Exact proposed common reconstruction statement (NOT proved)
+
+This is the nonallocating version required by the identity consumer. It is
+not an additional definition, and not an exported theorem. The corresponding
+allocation/scratch versions must change A/E and preserve the same fields.
+
+```sml
+ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+t.vs_inst_idx = p /\
+step_inst 0 C inst s = OK ss /\ step_inst 0 C' inst t = OK ts /\
+tn' = step_taint inst s ss tn /\ G' = step_prov PG G inst ss /\
+g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+              lf_tgt := ts with vs_inst_idx := SUC p;
+              lf_H := H'; lf_tv := tn'.t_var|> /\
+ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+                      lf_H := H'; lf_tv := tn'.t_var|>) /\
+ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+G' = ld_erase A o_f H' /\
+(!a. a IN FRANGE H' ==> a IN FDOM A) /\
+ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+ss.vs_alloca_next = s.vs_alloca_next /\
+ts.vs_alloca_next = t.vs_alloca_next /\
+ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb
+==>
+ld_vars P A g /\ ld_maps A g /\
+ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+EVERY (ld_maps A) fs /\
+(!next. active_inst fn next g.lf_src ==>
+  ld_sync lo P C vs0 stk PG G' tn' fn next g.lf_src g.lf_tgt A (g::fs) N)
+```
+
+No target successor is a premise. The two actual successes are appropriate
+premises ONLY for this common post-effect constructor; the enclosing endpoint
+must produce source success from target success before applying it.
+
+### Checked consumer and exact obstruction
+
+Temporary local `ld_identity_endpoint_audit` applied `ld_sync_identity_effect`
+and obtained actual source success, vars, memory, nonghost, provenance and
+allocation equations without either successor premise. Its reduced consumer
+built with `null(hyp ld_identity_endpoint_audit)` checked (tool output
+TO_ld_mem-20261104T190123Z_m6842_t001). It was removed to avoid duplication.
+The full consumer, requiring only source activity inside its final implication,
+reached the conditional sync residual with all effect fields in context
+(TO_ld_mem-20261104T190123Z_m6827_t001). Attempting existing ordinary_advance
+exposed its next-envelope requirement and unfixed frame/effect witnesses
+(TO_ld_mem-20261104T190123Z_m6838_t001). No further tactic chain was pursued.
+This does NOT prove that the common constructor above exists. Missing
+infrastructure: source-active envelope transport, location-independent
+maps/global/saved-map/charge reconstruction, and DLOADBYTES actual write
+transport. The audit is ready for a scoped strategist checkpoint, not broad
+endpoint assembly.
