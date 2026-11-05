@@ -103,3 +103,35 @@ Proof
      metis_tac[mstore_mem_word_at_same, mem_word_at_def, mem_bytes_at_def]) >>
   gvs[word_value_def, val_in_memory_def]
 QED
+
+(* Source updates supply only the local-value clause. The remaining ghost
+   components are insensitive to a memory-only store with no variable outputs. *)
+Theorem ghost_inv_mstore_transport:
+  ghost_inv d cenv cx es G tn s /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  op_taint tn value = {} /\
+  (!name entry p sz.
+    lookup_scopes name es'.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+    ptr_covers G tn p s sz /\
+    !b mem. lookup_var p s = SOME b /\
+      mem_agree_outside (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32})
+        (mstore (w2n a) w s).vs_memory mem ==>
+      val_in_memory entry.type entry.value (w2n b) mem) ==>
+  ghost_inv d cenv cx es' G
+    (step_taint (mk_inst id MSTORE [Var dst; value] []) s (mstore (w2n a) w s) tn)
+    ((mstore (w2n a) w s) with vs_inst_idx := pc)
+Proof
+  strip_tac >>
+  drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`, `G`, `id`] strip_assume_tac) >>
+  ` (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+      (mstore (w2n a) w s) tn).t_imm = tn.t_imm` by
+    simp[step_taint_def, imm_taint_def, adopt_reset_def, mk_inst_def] >>
+  gvs[ghost_inv_def, ptr_covers_def, op_taint_def, stor_taint_ok_def,
+      mstore_def, lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
+  Cases_on `d` >> gvs[return_buf_ptr_def] >>
+  PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def, op_taint_def,
+    mstore_def, lookup_var_def]
+QED
