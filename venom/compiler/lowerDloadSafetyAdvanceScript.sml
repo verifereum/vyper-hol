@@ -122,27 +122,35 @@ Theorem ld_nonallocating_endpoint:
   ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
   t.vs_inst_idx = p /\
   step_inst 0 C inst s = OK ss /\
-  tn' = step_taint inst s ss tn /\ G' = step_prov PG G inst ss /\
-  g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-               lf_tgt := ts with vs_inst_idx := p + LENGTH X;
-               lf_H := H'; lf_tv := tn'.t_var|> /\
   ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
-                        lf_H := H'; lf_tv := tn'.t_var|>) /\
-  ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
-  G' = ld_erase A o_f H' /\
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\
+  ld_memory lo A (step_taint inst s ss tn) ss ts /\
+  ld_nonghost (step_taint inst s ss tn) ss ts /\
+  step_prov PG G inst ss = ld_erase A o_f H' /\
   (!a. a IN FRANGE H' ==> a IN FDOM A) /\
   ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
   ss.vs_alloca_next = s.vs_alloca_next /\
   ts.vs_alloca_next = t.vs_alloca_next /\
   ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
   ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb ==>
+  let g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|> in
   ld_vars P A g /\ ld_maps A g /\
   ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
   EVERY (ld_maps A) fs /\
   (!next. active_inst fn next g.lf_src ==>
-    ld_sync lo P C vs0 stk PG G' tn' fn next g.lf_src g.lf_tgt A (g::fs) N)
+    ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+      (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)
 Proof
-  strip_tac >>
+  strip_tac >> pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `ld_vars P A g` >>
+  `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` by simp[Abbr `g`] >>
+  qpat_x_assum `Abbrev (g = _)` kall_tac >>
+  qabbrev_tac `tn' = step_taint inst s ss tn` >>
+  qabbrev_tac `G' = step_prov PG G inst ss` >>
   `f.lf_src = s /\ f.lf_tgt = t` by
     (drule ld_sync_active >> simp[]) >>
   `ld_vars P A g` by (gvs[ld_vars_def]) >>
@@ -170,7 +178,8 @@ Proof
     (drule_all ld_envelope_source_next >> simp[ADD1]) >>
   `frame_reachable vs0 C stk PG G' tn' fn next
        (ss with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (gvs[] >> irule frame_reachable_next >>
+    (qpat_x_assum `G' = ld_erase A o_f H'` kall_tac >>
+     gvs[Abbr `tn'`, Abbr `G'`] >> irule frame_reachable_next >>
      drule ld_sync_source >> metis_tac[]) >>
   irule (cj 1 ld_sync_head_update) >>
   drule ld_sync_control >> strip_tac >> simp[] >>

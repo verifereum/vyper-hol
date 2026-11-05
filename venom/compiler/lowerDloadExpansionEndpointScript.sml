@@ -130,21 +130,26 @@ Proof
     (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
   `t0.vs_inst_idx = p` by (drule_all ld_sync_envelope_position >> simp[]) >>
   `t.vs_inst_idx = p+1` by (irule ld_prefix_position >> metis_tac[]) >>
+  qpat_x_assum `tn' = _` SUBST_ALL_TAC >>
+  qpat_x_assum `G' = _` SUBST_ALL_TAC >>
+  `step_prov PG G inst ss = ld_erase A o_f H'` by metis_tac[] >>
+  qpat_x_assum `ld_erase A o_f H' = _` kall_tac >>
   qabbrev_tac `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
     lf_tgt := u with vs_inst_idx := p + LENGTH X;
-    lf_H := H'; lf_tv := tn'.t_var|>` >>
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` >>
   `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
     lf_tgt := u with vs_inst_idx := p + LENGTH X;
-    lf_H := H'; lf_tv := tn'.t_var|>` by simp[Abbr `g`] >>
-  drule_all ld_nonallocating_endpoint >> strip_tac >>
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` by simp[Abbr `g`] >>
+  drule_all ld_nonallocating_endpoint >>
+  qpat_assum `g = _` (fn eq =>
+    disch_then (strip_assume_tac o SIMP_RULE std_ss [LET_THM, GSYM eq])) >>
   `g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\ g.lf_H = H' /\
    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
-   g.lf_tgt = (u with vs_inst_idx := p+LENGTH X) /\ g.lf_tv = tn'.t_var` by
+   g.lf_tgt = (u with vs_inst_idx := p+LENGTH X) /\
+   g.lf_tv = (step_taint inst s ss tn).t_var` by
     simp[NoAsms, Abbr `g`] >>
   qpat_x_assum `g = _` kall_tac >> qpat_x_assum `Abbrev _` kall_tac >>
-  qpat_x_assum `tn' = _` SUBST_ALL_TAC >>
-  qpat_x_assum `G' = _` SUBST_ALL_TAC >>
   qexistsl_tac [`ss`, `A`, `g`] >>
   asm_simp_tac std_ss [] >>
   conj_tac >- simp[NoAsms] >>
@@ -152,9 +157,8 @@ Proof
     asm_simp_tac std_ss [EVERY_DEF]) >>
   conj_tac >- (qpat_x_assum `EVERY (\f. !j a. _) (f::fs)` mp_tac >>
     asm_simp_tac std_ss [EVERY_DEF]) >>
-  conj_tac >- (drule ld_head_order_cong >> disch_then (fn th => rewrite_tac[th]) >>
-    qpat_x_assum `!j k. _` ACCEPT_TAC) >>
-  qpat_x_assum `!next. _` mp_tac >> asm_rewrite_tac[]
+  drule ld_head_order_cong >> disch_then (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `!j k. _` ACCEPT_TAC
 QED
 
 Theorem ld_dload_endpoint:
