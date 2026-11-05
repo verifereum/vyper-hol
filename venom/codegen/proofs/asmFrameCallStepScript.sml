@@ -14,6 +14,23 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmContextLength vfmDecreasesGas
+  vfmAccountFrame
+
+Theorem asm_call_child_parent_msgParams:
+  step_call op s = (q,e) /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH e.contexts /\
+  wf_state e /\ run_call e = SOME (INL (),t) ==>
+  (FST (HD t.contexts)).msgParams =
+  (FST (HD s.contexts)).msgParams
+Proof
+  strip_tac >> drule step_call_push_structure >> simp[] >> strip_tac >>
+  `2 <= LENGTH e.contexts` by
+    (Cases_on `s.contexts` >> gvs[] >> decide_tac) >>
+  drule_all run_call_parent_msgParams >> strip_tac >>
+  Cases_on `e.contexts` >> gvs[] >>
+  rename1 `e.contexts = child :: parents` >>
+  Cases_on `parents` >> gvs[]
+QED
 
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
