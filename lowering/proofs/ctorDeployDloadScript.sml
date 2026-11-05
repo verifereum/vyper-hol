@@ -5,7 +5,7 @@
  *)
 Theory ctorDeployDload
 Ancestors
-  ctorDeployDefs o1PassContract unitMemInv lowerDloadDefs
+  ctorDeployDefs o1PassContract gasSummary unitMemInv lowerDloadDefs
 
 Theorem deploy_unit_dload_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
@@ -15,7 +15,9 @@ Theorem deploy_unit_dload_ok:
     deploy_state_rel tops deploy_bc am tx es /\
     gas_variant vs (entry_venom_state prog cplan es) /\
     code_layout_valid vs /\
-    ~deploy_source_exempt tops (load_contract NONE [] am tx [(NONE, tops)] [])
+    (!marks. ~deploy_source_exempt tops
+               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+                  [(NONE, tops)] []))
     ==>
     mem_inv dload_offset_ok dunit.cu_context vs /\
     mem_inv dload_headroom_ok dunit.cu_context vs
