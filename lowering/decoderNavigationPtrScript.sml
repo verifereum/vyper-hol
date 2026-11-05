@@ -315,7 +315,7 @@ Proof
   drule step_inst_base_preserves_inst_idx >> simp[mk_inst_def]
 QED
 
-Theorem emit_op_run_pc[local]:
+Theorem emit_op_run_pc:
   emit_op opc ops sa = (out,sb) /\ ~is_terminator opc ==>
   run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := n) =
   exec_result_map (\v. v with vs_inst_idx := n)
