@@ -2,6 +2,8 @@
 Theory bodyMemTbExtract32Probe
 Ancestors
   exprSimHypsDefs exprLowering builtinBytes vyperTypeSystem compileEnv emitHelper
+  memSafeRun unitTransformDefs contextCodegenRel venomInst venomState
+  vyperInterpreter vyperState
 
 Theorem extract32_fixed32_args_admitted:
   well_typed_type_builtin_args Extract32 (BaseT (UintT 256))
@@ -65,4 +67,37 @@ Theorem extract32_fixed32_preparation:
         comp_return (src_len, src_data)))
 Proof
   simp[compile_bytestring_src_def]
+QED
+
+Theorem extract32_fixed32_source_value:
+  !cx tys. evaluate_type_builtin cx Extract32 (BaseT (UintT 256)) tys
+    [BytesV (REPLICATE 32 0w); IntV 0] = INL (IntV 0)
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[return_def, read_result_def]
+QED
+
+Theorem extract32_fixed32_header_read_range:
+  !s id out. source_memory_read_ranges
+    (mk_inst id MLOAD [Lit 0w] [out]) s = [(0,32)]
+Proof
+  simp[source_memory_read_ranges_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem extract32_fixed32_header_unsafe:
+  !s fuel ctx id out. s.vs_alloca_next < 32 ==>
+    ~mem_safe_step fuel ctx (mk_inst id MLOAD [Lit 0w] [out]) s
+Proof
+  rpt strip_tac >>
+  gvs[mem_safe_step_non_invoke, mk_inst_def, inst_mem_below_frontier_def,
+      source_memory_read_ranges_def, eval_operand_def]
+QED
+
+Theorem extract32_fixed32_source_eval:
+  !cx es. bind (eval_expr cx
+    (TypeBuiltin (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
+      [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 0w));
+       Literal (BaseT (UintT 256)) (IntL 0)])) (read_result cx) es =
+    (INL (IntV 0), es)
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[return_def, read_result_def]
 QED
