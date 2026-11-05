@@ -1353,3 +1353,33 @@ QED
    - Arbitrary p/q lower prefixes remain untouched and unrestricted.  Tag
      extinction in the suffix does not establish prefix shielding, native
      schedule existence, root exclusion, or ordinary-instruction replay. *)
+
+Definition phi_origin_count_def:
+  phi_origin_count i cells = LENGTH (FILTER (\c.
+    case c of PhiOriginal j a b => j = i | PhiCommon op => F) cells)
+End
+
+Theorem phi_origin_count_zero:
+  !i cells. phi_origin_count i cells = 0 <=>
+    EVERY (\c. !x y. c <> PhiOriginal i x y) cells
+Proof
+  gen_tac >> Induct >> simp[phi_origin_count_def] >>
+  Cases_on `h` >> simp[] >> Cases_on `n = i` >> gvs[phi_origin_count_def]
+QED
+
+Theorem phi_origin_count_split_unique:
+  !i before after a b.
+    phi_origin_count i (before ++ [PhiOriginal i a b] ++ after) <= 1 ==>
+    EVERY (\c. !x y. c <> PhiOriginal i x y) before /\
+    EVERY (\c. !x y. c <> PhiOriginal i x y) after
+Proof
+  rpt gen_tac >> rewrite_tac[GSYM phi_origin_count_zero] >>
+  simp[phi_origin_count_def, listTheory.FILTER_APPEND_DISTRIB] >>
+  rewrite_tac[GSYM listTheory.LENGTH_NIL] >> decide_tac
+QED
+
+Theorem phi_origin_count_reverse:
+  !i cells. phi_origin_count i (REVERSE cells) = phi_origin_count i cells
+Proof
+  simp[phi_origin_count_def, listTheory.FILTER_REVERSE]
+QED

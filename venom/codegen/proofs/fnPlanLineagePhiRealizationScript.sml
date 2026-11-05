@@ -118,3 +118,21 @@ QED
    prove neither arbitrary physical entry coverage nor residual/spill-map
    agreement, and do not justify a remaining-class schedule induction.
 *)
+
+Theorem phi_slot_cells_origin_count:
+  !slots i lm rm.
+    phi_origin_count i (MAP (phi_slot_cell lm rm) slots) =
+    LENGTH (FILTER (\s. s = INR i) slots)
+Proof
+  Induct >> simp[phi_origin_count_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[phi_slot_cell_def] >>
+  Cases_on `y = i` >> fs[phi_origin_count_def]
+QED
+
+Theorem phi_slot_trace_origin_unique:
+  !op_map base lm rm i.
+    phi_origin_count i (MAP (phi_slot_cell lm rm) (phi_slot_trace op_map base)) <= 1 /\
+    phi_origin_count i (REVERSE (MAP (phi_slot_cell lm rm) (phi_slot_trace op_map base))) <= 1
+Proof
+  simp[phi_origin_count_reverse, phi_slot_cells_origin_count, phi_slot_trace_inr_count]
+QED

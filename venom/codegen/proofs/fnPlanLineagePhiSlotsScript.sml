@@ -260,3 +260,31 @@ Proof
   gen_tac >> strip_tac >>
   simp[phi_slot_trace_inr_mem, build_phi_maps_operand_class] >> metis_tac[]
 QED
+
+Theorem phi_slot_fold_inr_count:
+  !base acc placed i op_map.
+    LENGTH (FILTER (\s. s = INR i)
+      (FST (FOLDL (phi_slot_step op_map) (acc,placed) base))) <=
+    LENGTH (FILTER (\s. s = INR i) acc) + (if MEM i placed then 0 else 1)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[] >>
+  simp[phi_slot_step_def] >>
+  Cases_on `FLOOKUP op_map h` >> simp[]
+  >- (first_x_assum (qspecl_then [`acc ++ [INL h]`, `placed`, `i`, `op_map`] mp_tac) >>
+      simp[listTheory.FILTER_APPEND_DISTRIB]) >>
+  rename1 `FLOOKUP op_map h = SOME j` >>
+  Cases_on `MEM j placed` >> simp[] >>
+  first_x_assum (qspecl_then [`acc ++ [INR j]`, `j::placed`, `i`, `op_map`] mp_tac) >>
+  Cases_on `i = j` >> Cases_on `MEM i placed` >>
+  gvs[listTheory.FILTER_APPEND_DISTRIB]
+QED
+
+Theorem phi_slot_trace_inr_count:
+  !op_map base i.
+    LENGTH (FILTER (\s. s = INR i) (phi_slot_trace op_map base)) <= 1
+Proof
+  rpt gen_tac >> rename1 `phi_slot_trace om xs` >>
+  qspecl_then [`xs`, `[]`, `[]`, `i`, `om`] mp_tac phi_slot_fold_inr_count >>
+  simp[phi_slot_trace_def]
+QED
