@@ -155,9 +155,12 @@ Theorem frag_exec_gas_path_relabel:
     sa.cs_blocks <> sb.cs_blocks /\ cs_extends sa sb /\ frag_ops_free sa sb /\
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
-    (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\ (!h. ~R (Halt h)) /\
-    (!a t b. R (Abort a t) ==> R (Abort a (t with vs_current_bb := b))) /\
-    (!v t b. R (IntRet v t) ==> R (IntRet v (t with vs_current_bb := b))) /\
+    (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
+    (!t p. Q t ==> Q (t with vs_prev_bb := p)) /\ (!h. ~R (Halt h)) /\
+    (!a t b p. R (Abort a t) ==>
+       R (Abort a (t with <| vs_current_bb := b; vs_prev_bb := p |>))) /\
+    (!v t b p. R (IntRet v t) ==>
+       R (IntRet v (t with <| vs_current_bb := b; vs_prev_bb := p |>))) /\
     fn_has_code sa sb fn /\
     (sb.cs_current_insts <> [] \/
      !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -189,6 +192,7 @@ Theorem abi_decode_sim_gas_path_relabel:
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
+    (!t p. Q t ==> Q (t with vs_prev_bb := p)) /\
     fn_has_code sa sb fn /\
     (sb.cs_current_insts <> [] \/
      !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
