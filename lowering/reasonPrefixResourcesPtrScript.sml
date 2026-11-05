@@ -260,6 +260,11 @@ Theorem reason_encoder_alloc_buffer_resources:
       eval_operand (Var out) t = SOME (n2w b) /\
       FLOOKUP t.vs_allocas cc.cs_next_id = SOME (b,n) /\
       b + n < dimword (:256) /\ ptr_covers G1 tn1 out t n /\
+      (!aid off len. aid < cc.cs_next_id /\
+        FLOOKUP t.vs_allocas aid = SOME (off,len) ==>
+        regions_disjoint b n off len) /\
+      (!name off len. local_region cenv es'.scopes t name off len ==>
+        regions_disjoint b n off len) /\
       (!j. w2n ow <= j /\ j < w2n ow + val_footprint tv v ==>
         ~(b <= j /\ j < b+n)) /\
       (!m. mem_agree_outside tn1.t_mem t.vs_memory m ==>
@@ -286,10 +291,22 @@ Proof
   rpt conj_tac
   >- metis_tac[]
   >- (drule_all alloca_step_ptr_covers >> simp[])
+  >- suspend "sites"
   >- suspend "separation"
   >- suspend "robust"
   >- suspend "oldptr" >>
   strip_tac >> drule_all alloca_step_stor_taint_ok >> simp[expr_post_def]
+QED
+
+Resume reason_encoder_alloc_buffer_resources[sites]:
+  rpt gen_tac >> strip_tac >>
+  `FLOOKUP s.vs_allocas aid = SOME (off,len)` by
+    (qpat_x_assum `step_inst_base _ s = OK t` mp_tac >>
+     simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+     gvs[AllCaseEqs()] >> rpt strip_tac >>
+     gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  qpat_x_assum `!aid b len. aid < cc.cs_next_id /\ _ ==> _` irule >>
+  qexists_tac `aid` >> simp[]
 QED
 
 Resume reason_encoder_alloc_buffer_resources[separation]:
@@ -314,3 +331,74 @@ Resume reason_encoder_alloc_buffer_resources[oldptr]:
 QED
 
 Finalise reason_encoder_alloc_buffer_resources
+
+(* Rebuild the ordinary expression value from the stronger robust memory
+   resource after a separated encoder store. *)
+Theorem reason_encoder_store_value:
+  !cx ty tv v op ow s tn dst value a w.
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand op s = SOME ow /\ lookup_var dst s = SOME a /\
+    eval_operand value s = SOME w /\ op_taint tn value = {} /\
+    val_wf tv v /\
+    (!i. w2n ow <= i /\ i < w2n ow + val_footprint tv v ==>
+      ~(w2n a <= i /\ i < w2n a + 32)) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n ow) m) ==>
+    expr_val_rel cx ty v op (mstore (w2n a) w s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `lookup_var _ _ = _`) reason_encoder_store_robust_preserved >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `op_taint _ _ = _`)) >>
+  disch_then (drule_at (Pat `val_wf _ _`)) >>
+  disch_then (qspecl_then
+    [`0`, `w2n ow`, `(mstore (w2n a) w s).vs_memory`] mp_tac) >>
+  simp[mem_agree_outside_def] >> strip_tac >>
+  simp[expr_val_rel_def, eval_operand_def, lookup_var_def,
+       mstore_def, write_memory_with_expansion_def] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def,
+    mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem reason_encoder_allocated_store_resources:
+  !ctx func cenv cx e es sa sb s0 es' v op s cc inst b sz
+    dst value a w tv ow tn id.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    sa.cs_next_id <= cc.cs_next_id /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+    b <= w2n a /\ w2n a + 32 <= b + sz /\
+    (!aid off len. aid < cc.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+      regions_disjoint b sz off len) /\
+    (!name off len. local_region cenv es'.scopes s name off len ==>
+      regions_disjoint b sz off len) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    ~is_word_type (expr_type e) /\ val_wf tv v /\
+    eval_operand op s = SOME ow /\ lookup_var dst s = SOME a /\
+    eval_operand value s = SOME w /\ op_taint tn value = {} /\
+    (!i. w2n ow <= i /\ i < w2n ow + val_footprint tv v ==>
+      ~(b <= i /\ i < b + sz)) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n ow) m) ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' v op
+      (mstore (w2n a) w s) /\
+    (!m. mem_agree_outside
+      (step_taint (mk_inst id MSTORE [Var dst; value] []) s
+        (mstore (w2n a) w s) tn).t_mem
+      (mstore (w2n a) w s).vs_memory m ==>
+      val_in_memory tv v (w2n ow) m)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. w2n ow <= i /\ i < w2n ow + val_footprint tv v ==>
+     ~(w2n a <= i /\ i < w2n a + 32)` by
+    (rpt strip_tac >> first_x_assum drule >> decide_tac) >>
+  `expr_val_rel cx (expr_type e) v op (mstore (w2n a) w s)` by
+    (irule reason_encoder_store_value >> metis_tac[]) >>
+  conj_tac
+  >- (irule reason_encoder_allocated_store_post >> simp[] >>
+      qexistsl_tac [`b`, `cc`, `inst`, `sz`] >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> irule reason_encoder_store_robust_preserved >> metis_tac[]
+QED
