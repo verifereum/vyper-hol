@@ -31,6 +31,8 @@ End
    holds with ps, the planner's state at k when bb is planned from its
    lineage state ps_l (with the cleanup fields h, promised that
    lineage_state_block_plan picks, which also gives the alloc equation).
+   k is not inside a revert forwarding (its instructions run as one
+   step, revert_forward_frame_sim_deep, from its RETURNDATACOPY).
    That plan is the block's DFS code block_ops, placed at pc0, and as is
    at its rest_ops, the code of the instructions from k on.  The entry
    step starts here after the parameters (entry_params_frame_sim), the
@@ -112,6 +114,7 @@ Theorem block_body_frame_sim:
       ps = SOME (rest_ops, ps_after) /\
     block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
     phi_prefix_length bb.bb_instructions <= k /\
+    (!i j. revert_forward_pair bb i j ==> k <= i \/ j < k) /\
     vs.vs_inst_idx = k /\
     asm_block_at prog pc0 (execute_plan cp.cp_initial_fmp block_ops) /\
     as.as_pc = pc0 + LENGTH (execute_plan cp.cp_initial_fmp
