@@ -2,7 +2,8 @@
 Theory stmtForArrayMemoryCopy
 Ancestors
   stmtSimForArray bodyDeclMemoryCore allocaFootprint fragExecMem
-  stmtLowering emitHelper emitHelperProps exprLoweringProps
+  stmtLowering emitHelper emitHelperProps exprLoweringProps stmtSimForArrayLoop
+  words arithmetic venomInst memSafeRun
   venomState venomExecSemantics compileEnv list instMemFrontier stmtSimReturn valueTypingMemoryProps exprSimProps
 
 Theorem array_iter_word_copy_mem_ok:
@@ -57,4 +58,34 @@ Proof
   goal_assum (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   goal_assum (drule_at (Pat `eval_operand dst s = _`)) >>
   simp[] >- first_assum ACCEPT_TAC >> decide_tac
+QED
+
+Theorem array_body_prefix_mem_ok:
+  compile_iter_elem_copy ce (Var ep) (Var p) stride LocMemory F ty ty sa = ((),sb) /\
+  (!x. x = ep \/ x = p ==> not_fresh_at sa x) /\
+  lookup_var idx s = SOME (n2w k) /\ eval_operand saved_arr_base s = SOME arr_base /\
+  (!x. saved_arr_base = Var x ==> x <> ov) /\
+  lookup_var p s = SOME dst /\ p <> ov /\ p <> ep /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  stride = type_memory_size tv /\ type_memory_bytes ce ty = stride /\
+  val_in_memory tv v (w2n arr_base + k * stride) s.vs_memory /\
+  w2n arr_base + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
+  w2n arr_base + k * stride + stride <= s.vs_alloca_next /\
+  w2n dst + stride <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok
+    ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
+      mk_inst j4 ADD [saved_arr_base; Var ov] [ep]] ++ emitted_insts sa sb) s
+Proof
+  strip_tac >> irule run_inst_seq_mem_ok_append >>
+  reverse conj_tac
+  >- (irule run_inst_seq_mem_ok_every >>
+      simp[mk_inst_def, inst_dload_in_section_def] >>
+      conj_tac >> gen_tac >> irule below_frontier_no_ranges >> simp[]) >>
+  drule_all array_address_prefix_run >> simp[] >> rpt strip_tac >> gvs[] >>
+  irule array_iter_copy_mem_ok >>
+  goal_assum (drule_at (Pat `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  qexistsl_tac [`dst`, `n2w (w2n arr_base + k * type_memory_size tv)`, `v`] >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def, w2n_n2w] >>
+  metis_tac[]
 QED
