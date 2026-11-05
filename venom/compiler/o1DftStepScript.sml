@@ -19,10 +19,10 @@ Theorem dft_shape_instruction_source:
       (i = j \/ (i = flip_operands j /\ is_flippable j.inst_opcode))
 Proof
   strip_tac >>
-  `LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
-    (irule dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `LIST_REL dftLifting$dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dftLiftingTheory.dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
   gvs[fn_insts_MEM] >> drule_all dft_blocks_rel_source >> strip_tac >>
-  drule_all dft_block_rel_source >> strip_tac >> metis_tac[]
+  drule_all dftLiftingTheory.dft_block_rel_source >> strip_tac >> metis_tac[]
 QED
 
 Theorem dft_shape_special_source:
@@ -82,11 +82,11 @@ QED
 
 Theorem dft_shape_first_rel:
   o1_fn_shape ctx fn ==>
-  dft_block_rel (HD fn.fn_blocks) (HD (dft_fn fn).fn_blocks)
+  dftLifting$dft_block_rel (HD fn.fn_blocks) (HD (dft_fn fn).fn_blocks)
 Proof
   strip_tac >>
-  `LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
-    (irule dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `LIST_REL dftLifting$dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dftLiftingTheory.dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
   `fn.fn_blocks <> []` by gvs[o1_fn_shape_def, wf_function_def, fn_has_entry_def] >>
   Cases_on `fn.fn_blocks` >> Cases_on `(dft_fn fn).fn_blocks` >>
   gvs[LIST_REL_def]
@@ -104,7 +104,7 @@ Proof
   `MEM e (FILTER (\i. is_pseudo i.inst_opcode)
      (HD (dft_fn fn).fn_blocks).bb_instructions)` by simp[MEM_FILTER, is_pseudo_def] >>
   `MEM e (HD fn.fn_blocks).bb_instructions` by
-    (gvs[dft_block_rel_def] >> metis_tac[MEM_FILTER]) >>
+    (gvs[dftLiftingTheory.dft_block_rel_def] >> metis_tac[MEM_FILTER]) >>
   gvs[o1_fn_shape_def, first_block_no_phi_def, EVERY_MEM]
 QED
 
@@ -112,13 +112,13 @@ Theorem dft_shape_first_no_preds:
   o1_fn_shape ctx fn ==> first_block_no_preds (dft_fn fn)
 Proof
   strip_tac >> drule dft_shape_first_rel >> strip_tac >>
-  `LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
-    (irule dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `LIST_REL dftLifting$dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dftLiftingTheory.dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
   simp[first_block_no_preds_def, EVERY_MEM] >> rpt strip_tac >>
   drule_all dft_blocks_rel_source >> strip_tac >>
   `bb_succs bb = bb_succs a` by
-    (irule dft_block_rel_succs >> gvs[o1_fn_shape_def, wf_function_def] >> metis_tac[]) >>
-  gvs[dft_block_rel_def, o1_fn_shape_def, first_block_no_preds_def, EVERY_MEM] >>
+    (irule dftLiftingTheory.dft_block_rel_succs >> gvs[o1_fn_shape_def, wf_function_def] >> metis_tac[]) >>
+  gvs[dftLiftingTheory.dft_block_rel_def, o1_fn_shape_def, first_block_no_preds_def, EVERY_MEM] >>
   metis_tac[]
 QED
 
@@ -151,7 +151,7 @@ Proof
   simp[fn_shape_ok_def] >> rpt conj_tac
   >- (Cases_on `fn.fn_blocks` >> Cases_on `(dft_fn fn).fn_blocks` >>
       gvs[o1_fn_shape_def, fn_shape_ok_def, fn_entry_label_def,
-          entry_block_def, dft_block_rel_def, dft_fn_def] >>
+          entry_block_def, dftLiftingTheory.dft_block_rel_def, dft_fn_def] >>
       pairarg_tac >> simp[]) 
   >- metis_tac[dft_shape_opaque_use]
   >- metis_tac[dft_shape_retpc_shape]
@@ -230,16 +230,16 @@ Theorem dft_shape_no_param_tl:
   EVERY (\bb. no_param_insts bb.bb_instructions) (TL (dft_fn fn).fn_blocks)
 Proof
   strip_tac >>
-  `LIST_REL dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
-    (irule dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
-  `LIST_REL dft_block_rel (TL fn.fn_blocks) (TL (dft_fn fn).fn_blocks)` by
+  `LIST_REL dftLifting$dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dftLiftingTheory.dft_fn_block_rel >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `LIST_REL dftLifting$dft_block_rel (TL fn.fn_blocks) (TL (dft_fn fn).fn_blocks)` by
     (Cases_on `fn.fn_blocks` >> Cases_on `(dft_fn fn).fn_blocks` >> gvs[]) >>
   simp[EVERY_MEM, callLayoutDefsTheory.no_param_insts_def] >> rpt strip_tac >>
   rename1 `MEM b' (TL (dft_fn fn).fn_blocks)` >>
   rename1 `MEM i b'.bb_instructions` >>
-  `?b. MEM b (TL fn.fn_blocks) /\ dft_block_rel b b'` by
+  `?b. MEM b (TL fn.fn_blocks) /\ dftLifting$dft_block_rel b b'` by
     (gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
-  drule_all dft_block_rel_source >> strip_tac >> gvs[]
+  drule_all dftLiftingTheory.dft_block_rel_source >> strip_tac >> gvs[]
   >- (gvs[EVERY_MEM, callLayoutDefsTheory.no_param_insts_def] >> metis_tac[]) >>
   drule flip_operands_special_opcode >> gvs[is_param_opcode_iff]
 QED
