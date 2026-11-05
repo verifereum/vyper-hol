@@ -64,7 +64,7 @@ Theorem eval_mutual_preserves_scopes_dom[local]:
   (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp_tac bool_ss []
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[]
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
           type_check_def, assert_def,
@@ -90,7 +90,28 @@ Proof
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       imp_res_tac select_result_state >> gvs[] >> metis_tac[])
-  >- suspend "Builtin"
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `builtin_args_length_ok bt (LENGTH es)`
+      >- (fs[type_check_def, assert_def, return_def] >>
+          rpt gen_tac >> strip_tac >>
+          qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+          simp[Once evaluate_def] >>
+          rw[bind_def, ignore_bind_def, type_check_def, assert_def,
+             return_def, raise_def] >>
+          gvs[bind_def, return_def, AllCaseEqs()] >>
+          imp_res_tac result_array_length_state >>
+          imp_res_tac next_gas_reading_state >>
+          imp_res_tac precompile_call_success_state >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[]
+          >>~- ([`option_CASE (code_slice_source _ _) _ _ _ = _`],
+                drule_at (Pos last) builtin_operands_preserve >>
+                disch_then (qspec_then
+                  `\s t. MAP FDOM s.scopes = MAP FDOM t.scopes` mp_tac) >>
+                impl_tac >- (simp[] >> metis_tac[]) >>
+                simp[])
+          >> metis_tac[])
+      >> simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+              ignore_bind_def, raise_def])
   >- (rpt strip_tac >>
       qpat_x_assum `eval_expr cx (Pop _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
@@ -106,12 +127,11 @@ Proof
       Cases_on `LENGTH es = if has_gas then 3 else 2` >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
            assert_def, return_def, raise_def] >>
-      (* The old IH specialization [st,st] preceded its type-check guard.
-         Discharge that guard before consuming the evaluation equation. *)
-      fs[type_check_def, assert_def, return_def] >>
+      first_x_assum (qspecl_then [`st`, `st`] mp_tac) >>
+      simp[type_check_def, assert_def, return_def] >> strip_tac >>
       rpt CASE_TAC >> rpt strip_tac >> gvs[] >>
-      imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-      metis_tac[])
+      first_x_assum drule >> strip_tac >> gvs[] >>
+      drule eval_send_preserves_non_accounts >> strip_tac >> gvs[])
   >- (rpt strip_tac >>
       qpat_x_assum `eval_expr cx (Call _ (ExtCall _ _ _ _) _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
@@ -179,514 +199,6 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
-Resume eval_mutual_preserves_scopes_dom[Builtin]:
-  rpt gen_tac >> strip_tac >>
-  Cases_on `builtin_args_length_ok bt (LENGTH es)`
-  >- (Cases_on `bt = Len`
-      >- suspend "BuiltinLen"
-      >> Cases_on `bt = Env MsgGas`
-      >- suspend "BuiltinGas"
-      >> suspend "BuiltinRest")
-  >> simp[Once evaluate_def, type_check_def, assert_def, bind_def,
-          ignore_bind_def, raise_def]
-QED
-
-Resume eval_mutual_preserves_scopes_dom[BuiltinLen]:
-  (* Previously selected the two-state Len guard before normalization. *)
-  qpat_x_assum `!s x t. _ /\ bt = Len ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >>
-  simp[type_check_def, assert_def, return_def] >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> imp_res_tac result_array_length_state >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`st`, `st`] mp_tac) >>
-  simp[type_check_def, assert_def, return_def]
-QED
-
-Resume eval_mutual_preserves_scopes_dom[BuiltinGas]:
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> imp_res_tac next_gas_reading_state >> gvs[]
-QED
-
-Resume eval_mutual_preserves_scopes_dom[BuiltinRest]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def] >>
-  Cases_on `bt`
-  >- (qpat_x_assum `Len <> Len` mp_tac >> simp[NoAsms])
-  >- suspend "RestCalldataLen"
-  >- suspend "RestCalldataSlice"
-  >- suspend "RestNot"
-  >- suspend "RestNeg"
-  >- suspend "RestAbs"
-  >- suspend "RestKeccak"
-  >- suspend "RestSha"
-  >- suspend "RestWei"
-  >- suspend "RestConcat"
-  >- suspend "RestSlice"
-  >- suspend "RestUint"
-  >- suspend "RestArray"
-  >- suspend "RestCeil"
-  >- suspend "RestFloor"
-  >- suspend "RestAddMod"
-  >- suspend "RestMulMod"
-  >- suspend "RestBop"
-  >- suspend "RestBlockHash"
-  >- suspend "RestBlobHash"
-  >- suspend "RestEnv"
-  >- suspend "RestAcc"
-  >- suspend "RestMethod"
-  >- suspend "RestRecover"
-  >- suspend "RestECAdd"
-  >- suspend "RestECMul"
-  >> suspend "RestPow"
-QED
-
-Resume eval_mutual_preserves_scopes_dom[RestCalldataLen]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (CalldataLen,es) = (CalldataLen,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
-  gvs[] >> metis_tac[]
-QED
-
-val scopes_builtin_ordinary_tac =
-  strip_tac >> gvs[AllCaseEqs()] >>
-  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac precompile_call_success_state >>
-  gvs[] >> metis_tac[];
-
-Resume eval_mutual_preserves_scopes_dom[RestCalldataSlice]:
-  (* The contextual guard also quantifies the result and argument body. *)
-  qpat_x_assum `!s x t body n'. _ /\ _ /\ _ /\ (CalldataSlice n,es) = (CalldataSlice n',body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestNot]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (Not,es) = (Not,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestNeg]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (Neg,es) = (Neg,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestAbs]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (Abs,es) = (Abs,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestKeccak]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (Keccak256,es) = (Keccak256,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestSha]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (Sha256,es) = (Sha256,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestWei]:
-  qpat_x_assum `!s x t body w. _ /\ _ /\ _ /\ (AsWeiValue _,es) = (AsWeiValue w,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestConcat]:
-  qpat_x_assum `!s x t body w. _ /\ _ /\ _ /\ (Concat _,es) = (Concat w,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestSlice]:
-  qpat_assum `builtin_args_length_ok _ _` mp_tac >>
-  simp[NoAsms, builtin_args_length_ok_def] >> strip_tac >>
-  namedCases_on `es` ["", "operand rest1"]
-  >- (qpat_x_assum `LENGTH [] = 3` mp_tac >> simp[NoAsms])
-  >> namedCases_on `rest1` ["", "start rest2"]
-  >- (qpat_x_assum `LENGTH [_] = 3` mp_tac >> simp[NoAsms])
-  >> namedCases_on `rest2` ["", "len rest3"]
-  >- (qpat_x_assum `LENGTH [_;_] = 3` mp_tac >> simp[NoAsms])
-  >> Cases_on `rest3`
-  >- suspend "SliceThree"
-  >> qpat_x_assum `LENGTH _ = 3` mp_tac >> simp[NoAsms]
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceThree]:
-  namedCases_on `operand`
-    ["ty id", "ty id", "ty id flag", "ty test yes no",
-     "ty lit", "ty name fields", "ty base ix", "ty base field",
-     "ct builtin args", "ty tb tv args", "ty target", "ty call args keys"]
-  >- suspend "SliceName"
-  >- suspend "SliceTopName"
-  >- suspend "SliceFlag"
-  >- suspend "SliceIf"
-  >- suspend "SliceLiteral"
-  >- suspend "SliceStruct"
-  >- suspend "SliceSubscript"
-  >- suspend "SliceAttribute"
-  >- suspend "SliceBuiltin"
-  >- suspend "SliceTypeBuiltin"
-  >- suspend "SlicePop"
-  >> suspend "SliceCall"
-QED
-
-Resume eval_mutual_preserves_scopes_dom[SliceName]:
-  qpat_x_assum `!s x t n' tl ty id. _ /\ _ /\ _ /\ (_,_) = (Slice n',Name ty id::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  scopes_builtin_ordinary_tac
-QED
-
-Resume eval_mutual_preserves_scopes_dom[SliceTopName]:
-  qpat_x_assum `!s x t n' tl a b. _ /\ _ /\ _ /\ (_,_) = (Slice n',TopLevelName a b::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceFlag]:
-  qpat_x_assum `!s x t n' tl a b c. _ /\ _ /\ _ /\ (_,_) = (Slice n',FlagMember a b c::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceIf]:
-  qpat_x_assum `!s x t n' tl a b c d. _ /\ _ /\ _ /\ (_,_) = (Slice n',IfExp a b c d::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceLiteral]:
-  qpat_x_assum `!s x t n' tl a b. _ /\ _ /\ _ /\ (_,_) = (Slice n',Literal a b::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceStruct]:
-  qpat_x_assum `!s x t n' tl a b c. _ /\ _ /\ _ /\ (_,_) = (Slice n',StructLit a b c::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceSubscript]:
-  qpat_x_assum `!s x t n' tl a b c. _ /\ _ /\ _ /\ (_,_) = (Slice n',Subscript a b c::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceAttribute]:
-  qpat_x_assum `!s x t n' tl a b c. _ /\ _ /\ _ /\ (_,_) = (Slice n',Attribute a b c::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceTypeBuiltin]:
-  qpat_x_assum `!s x t n' tl a b c d. _ /\ _ /\ _ /\ (_,_) = (Slice n',TypeBuiltin a b c d::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SlicePop]:
-  qpat_x_assum `!s x t n' tl a b. _ /\ _ /\ _ /\ (_,_) = (Slice n',Pop a b::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceCall]:
-  qpat_x_assum `!s x t n' tl a b c d. _ /\ _ /\ _ /\ (_,_) = (Slice n',Call a b c d::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceBuiltin]:
-  Cases_on `builtin = Acc Code`
-  >- (namedCases_on `args` ["", "addr rest"]
-      >- suspend "SliceCodeEmpty"
-      >> Cases_on `rest`
-      >- suspend "SliceCodeOne"
-      >> suspend "SliceCodeMany")
-  >> suspend "SliceOtherBuiltin"
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceCodeOne]:
-  qpat_x_assum `!s r u n' ct a x y ps vs pt. _ /\ _ /\ _ /\ (_,_) = (Slice n',[Builtin ct (Acc Code) [a]; x; y]) /\ _ ==> _` mp_tac >>
-  qpat_x_assum `!s r u n' ct a x y. _ /\ _ /\ _ /\ (_,_) = (Slice n',[Builtin ct (Acc Code) [a]; x; y]) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >>
-  ntac 2 strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >>
-  simp[bind_def, return_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
-  gvs[] >> metis_tac[]
-QED
-
-Resume eval_mutual_preserves_scopes_dom[SliceCodeEmpty]:
-  qpat_x_assum `!s r u n' tl ct. _ /\ _ /\ _ /\ (_,_) = (Slice n',Builtin ct (Acc Code) []::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceCodeMany]:
-  qpat_x_assum `!s r u n' tl ct a x xs. _ /\ _ /\ _ /\ (_,_) = (Slice n',Builtin ct (Acc Code) (a::x::xs)::tl) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[SliceOtherBuiltin]:
-  Cases_on `builtin`
-  >- suspend "NestedLen"
-  >- suspend "NestedCalldataLen"
-  >- suspend "NestedCalldataSlice"
-  >- suspend "NestedNot"
-  >- suspend "NestedNeg"
-  >- suspend "NestedAbs"
-  >- suspend "NestedKeccak"
-  >- suspend "NestedSha"
-  >- suspend "NestedWei"
-  >- suspend "NestedConcat"
-  >- suspend "NestedSlice"
-  >- suspend "NestedUint"
-  >- suspend "NestedArray"
-  >- suspend "NestedCeil"
-  >- suspend "NestedFloor"
-  >- suspend "NestedAddMod"
-  >- suspend "NestedMulMod"
-  >- suspend "NestedBop"
-  >- suspend "NestedBlockHash"
-  >- suspend "NestedBlobHash"
-  >- suspend "NestedEnv"
-  >- suspend "NestedAcc"
-  >- suspend "NestedMethod"
-  >- suspend "NestedRecover"
-  >- suspend "NestedECAdd"
-  >- suspend "NestedECMul"
-  >> suspend "NestedPow"
-QED
-fun scopes_keep_operand pat =
-  (* Recover the component equations used by the operand selectors. *)
-  rule_assum_tac (PURE_REWRITE_RULE [PAIR_EQ]) >>
-  qpat_x_assum pat mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac;
-
-Resume eval_mutual_preserves_scopes_dom[NestedLen]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Len args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedCalldataLen]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct CalldataLen args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedCalldataSlice]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (CalldataSlice k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedNot]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Not args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedNeg]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Neg args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedAbs]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Abs args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedKeccak]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Keccak256 args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedSha]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Sha256 args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedWei]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (AsWeiValue k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedConcat]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Concat k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedSlice]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Slice k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedUint]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Uint2Str k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedArray]:
-  scopes_keep_operand `!s x u n' tl ct args k m. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (MakeArray k m) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedCeil]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Ceil args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedFloor]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct Floor args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedAddMod]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct AddMod args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedMulMod]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct MulMod args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedBop]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Bop k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedBlockHash]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct BlockHash args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedBlobHash]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct BlobHash args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedEnv]:
-  scopes_keep_operand `!s x u n' tl ct args k. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Env k) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedAcc]:
-  Cases_on `a`
-  >- suspend "NestedAddress"
-  >- suspend "NestedBalance"
-  >- suspend "NestedCodehash"
-  >- suspend "NestedCodesize"
-  >- suspend "NestedIsContract"
-  >> (qpat_x_assum `Acc Code <> Acc Code` mp_tac >> simp[NoAsms])
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedAddress]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Acc Address) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedBalance]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Acc Balance) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedCodehash]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Acc Codehash) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedCodesize]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Acc Codesize) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedIsContract]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct (Acc IsContract) args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedMethod]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct MethodId args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedRecover]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct ECRecover args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedECAdd]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct ECAdd args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedECMul]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct ECMul args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[NestedPow]:
-  scopes_keep_operand `!s x u n' tl ct args. _ /\ _ /\ _ /\ _ /\ _ = Builtin ct PowMod256 args::tl ==> _` >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-
-
-
-Resume eval_mutual_preserves_scopes_dom[RestUint]:
-  qpat_x_assum `!s x t body w. _ /\ _ /\ _ /\ (_,es) = (Uint2Str w,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestArray]:
-  qpat_x_assum `!s x t body a b. _ /\ _ /\ _ /\ (_,es) = (MakeArray a b,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestCeil]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (Ceil,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestFloor]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (Floor,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestAddMod]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (AddMod,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestMulMod]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (MulMod,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestBop]:
-  qpat_x_assum `!s x t body w. _ /\ _ /\ _ /\ (_,es) = (Bop w,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestBlockHash]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (BlockHash,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestBlobHash]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (BlobHash,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestEnv]:
-  qpat_x_assum `!s x t body w. _ /\ _ /\ _ /\ (_,es) = (Env w,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestAcc]:
-  qpat_x_assum `!s x t body w. _ /\ _ /\ _ /\ (_,es) = (Acc w,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestMethod]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (MethodId,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestRecover]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (ECRecover,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestECAdd]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (ECAdd,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestECMul]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (ECMul,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-Resume eval_mutual_preserves_scopes_dom[RestPow]:
-  qpat_x_assum `!s x t body. _ /\ _ /\ _ /\ (_,es) = (PowMod256,body) ==> _` mp_tac >>
-  rpt (qpat_x_assum `!s x t. _` kall_tac) >> strip_tac >>
-  gvs[type_check_def, assert_def, return_def] >> scopes_builtin_ordinary_tac
-QED
-
 Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `kind` >> gvs[] >>
@@ -749,13 +261,13 @@ QED
 Resume eval_mutual_preserves_scopes_dom[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
-    `!s x t s1 ts t1 s2 tup t2 s3 x1 t3. _ ==>
+    `!s t s1 ts t1 s2 tup t2 s3 t3. _ ==>
        !st res st'. eval_expr_results cx es st = (res,st') ==> _`
     (mp_tac o SRULE [type_check_def, assert_def, lift_option_type_def,
                      option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   disch_then assume_tac >>
   qpat_x_assum
-    `!s x t s1 ts t1 s2 tup t2 s3 x1 t3 s4 vs t4 s5 prev t5 s6 x2 t6. _` kall_tac >>
+    `!s t s1 ts t1 s2 tup t2 s3 t3 s4 vs t4 s5 prev t5 s6 t6. _` kall_tac >>
   rpt gen_tac >> rewrite_tac[Once evaluate_def] >>
   rewrite_tac[bind_def, ignore_bind_def] >>
   BasicProvers.TOP_CASE_TAC >> reverse BasicProvers.TOP_CASE_TAC
