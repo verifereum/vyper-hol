@@ -1948,3 +1948,79 @@ Proof
     simp[MAP_MAP_o, combinTheory.o_DEF] >>
   simp[] >> irule ALL_DISTINCT_MAP_INJ >> simp[]
 QED
+
+Theorem entry_optimistic_swap_sim_structural:
+  !dfg inst next_live next_is_term ps ops ps' lo o2pc prog vs st initial_fmp.
+    optimistic_swap_plan dfg inst next_live next_is_term ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `optimistic_swap_plan _ _ _ _ _ = _` mp_tac >>
+  simp[optimistic_swap_plan_def] >>
+  Cases_on `next_is_term` >- (simp[] >> strip_tac >> gvs[] >>
+    qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  Cases_on `inst.inst_outputs = []` >- (simp[] >> strip_tac >> gvs[] >>
+    qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  Cases_on `next_live = []` >- (simp[] >> strip_tac >> gvs[] >>
+    qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  Cases_on `operand_equiv dfg (Var (LAST inst.inst_outputs)) (Var (LAST next_live))`
+  >- (simp[] >> strip_tac >> gvs[] >> qexists `st` >>
+      simp[execute_plan_def, asm_steps_def]) >>
+  simp[] >> Cases_on `stack_get_depth (Var (LAST next_live)) ps.ps_stack`
+  >- (simp[] >> strip_tac >> gvs[] >> qexists `st` >>
+      simp[execute_plan_def, asm_steps_def]) >>
+  rename1 `stack_get_depth _ ps.ps_stack = SOME dist` >> simp[] >> strip_tac >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  `prefix_spill_wf initial_fmp lo ops ps` by
+    (irule entry_do_swap_prefix_spill_wf >> simp[] >> metis_tac[]) >>
+  drule_all do_swap_structural_layout_wf >> strip_tac >>
+  drule_all do_swap_venom_asm_rel_layout >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists `st'` >> gvs[]
+QED
+
+Theorem entry_context_optimistic_swap_outside_closure:
+  !dfg inst next_live next_is_term ps ops ps' cp lo o2pc prog vs st initial_fmp r ctx name.
+    optimistic_swap_plan dfg inst next_live next_is_term ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    context_venom_asm_rel cp lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      context_venom_asm_rel cp lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~closure_spill_byte ctx cp name b ==>
+        read_byte b st'.as_memory = read_byte b st.as_memory) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule entry_context_to_local_memory >> strip_tac >>
+  drule_all entry_optimistic_swap_sim_structural >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `context_venom_asm_rel cplan lo ps vs st` >>
+  `context_memory_rel cplan vs.vs_memory st.as_memory` by
+    gvs[context_venom_asm_rel_def] >>
+  drule_all entry_local_to_context_memory >> strip_tac >>
+  drule entry_local_memory_footprint >> strip_tac >>
+  qexists `st'` >> simp[] >> rpt strip_tac >>
+  irule entry_local_footprint_outside_closure >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
