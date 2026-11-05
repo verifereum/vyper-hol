@@ -7,7 +7,7 @@ Ancestors
   list finite_map stmtLowering emitHelperProps exprLoweringProps
 Libs monadsyntax
 
-Theorem assign_local_marked_exec[local]:
+Theorem assign_local_marked_exec:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
   gas_marked_exec memory (ctx,func)
