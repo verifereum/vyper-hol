@@ -3,13 +3,15 @@
    relabeled bridges' shape premises. *)
 Theory exprSimAbiDecodeOblivious
 Ancestors
-  exprSimAbiGasBridge builtinAbi compileEnv fragExec
+  exprSimAbiGasBridge exprSimAbiDecodeCertificate exprSimAbiDecodeTrace
+  builtinAbi compileEnv fragExec
 
 Theorem lower_abi_decode_start_oblivious:
   !data di mn mx msz.
     frag_start_oblivious (lower_abi_decode data di mn mx msz)
 Proof
-  cheat
+  rpt gen_tac >> irule decode_certificate_oblivious >>
+  simp[decode_certificate_lower]
 QED
 
 Theorem lower_abi_decode_frag_facts:
