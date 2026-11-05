@@ -478,3 +478,284 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[] >> qpat_x_assum `t = _` (fn th => conj_tac >> simp[Once th])
 QED
+
+Theorem rest_word_capacity_check_run:
+  eval_operand lenop s = SOME (n2w len) /\ len <= cap /\ cap < dimword (:256) ==>
+  run_inst_seq
+    [mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar];
+     mk_inst id2 ISZERO [Var invvar] [valid];
+     mk_inst id3 ASSERT [Var valid] []] s =
+  OK (update_var valid 1w (update_var invvar 0w s))
+Proof
+  strip_tac >>
+  `len < dimword (:256)` by decide_tac >>
+  `step_inst_base (mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar]) s =
+    OK (update_var invvar 0w s)` by
+    (drule emitHelperPropsTheory.step_GT >>
+     disch_then (qspecl_then [`Lit (n2w cap)`, `n2w cap`] mp_tac) >>
+     simp[venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w,
+       venomExecSemanticsTheory.bool_to_word_def]) >>
+  `step_inst_base (mk_inst id2 ISZERO [Var invvar] [valid]) (update_var invvar 0w s) =
+    OK (update_var valid 1w (update_var invvar 0w s))` by
+    (mp_tac (Q.SPECL [`Var invvar`, `0w`] emitHelperPropsTheory.step_ISZERO) >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       venomExecSemanticsTheory.bool_to_word_def]) >>
+  `step_inst_base (mk_inst id3 ASSERT [Var valid] [])
+    (update_var valid 1w (update_var invvar 0w s)) =
+    OK (update_var valid 1w (update_var invvar 0w s))` by
+    (irule emitHelperPropsTheory.step_ASSERT_ok >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def]
+QED
+
+Theorem rest_word_capacity_check_mem_ok:
+  run_inst_seq_mem_ok
+    [mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar];
+     mk_inst id2 ISZERO [Var invvar] [validvar];
+     mk_inst id3 ASSERT [Var validvar] []] s
+Proof
+  irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+  simp[venomInstTheory.mk_inst_def] >> rpt conj_tac >> gen_tac >>
+  irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]
+QED
+
+Theorem rest_word_capacity_check_shape:
+  emit_op GT [lenop; Lit (n2w cap)] ca = (invop,cb) /\
+  emit_op ISZERO [invop] cb = (validop,cc) /\
+  emit_inst ASSERT [validop] [] cc = ((),cd) ==>
+  ?invvar validvar.
+    invop = Var invvar /\ validop = Var validvar /\
+    emitted_insts ca cd =
+      [mk_inst ca.cs_next_id GT [lenop; Lit (n2w cap)] [invvar];
+       mk_inst (ca.cs_next_id + 1) ISZERO [Var invvar] [validvar];
+       mk_inst (ca.cs_next_id + 2) ASSERT [Var validvar] []] /\
+    cd.cs_blocks = ca.cs_blocks /\
+    cd.cs_current_bb = ca.cs_current_bb /\
+    cd.cs_current_insts = ca.cs_current_insts ++ emitted_insts ca cd /\
+    ca.cs_next_var <= cd.cs_next_var /\
+    ~not_fresh_at ca invvar /\ ~not_fresh_at ca validvar /\
+    not_fresh_at cd invvar /\ not_fresh_at cd validvar /\
+    invvar <> validvar /\
+    (!z. not_fresh_at ca z ==> z <> invvar /\ z <> validvar)
+Proof
+  simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_inst_def,
+    compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+    compileEnvTheory.comp_return_def, compileEnvTheory.fresh_var_def,
+    compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[exprLoweringPropsTheory.emitted_insts_def,
+    rich_listTheory.DROP_LENGTH_APPEND, compileEnvTheory.not_fresh_at_def]
+QED
+
+Theorem rest_word_loop_caller_prefix[local]:
+  compile_array_membership_loop needle arr len stride off
+    (compile_ptr_load ctor imm loc) is_in cs = (out,ct) /\
+  fn_has_code cs ct fn ==>
+  ?bb. lookup_block cs.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX cs.cs_current_insts bb.bb_instructions
+Proof
+  rewrite_tac[exprSimBopRestWordLayoutTheory.rest_word_loop_factor_eq] >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_loop_suffix_shape >>
+  rewrite_tac[exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape_def,
+    exprSimBopRestWordLayoutTheory.rest_word_loop_suffix_shape_def] >>
+  rpt strip_tac >>
+  gvs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+    listTheory.LENGTH_APPEND, listTheory.APPEND_ASSOC,
+    DISJ_IMP_THM, FORALL_AND_THM, arithmeticTheory.ADD1]
+QED
+
+Theorem rest_word_dynamic_code:
+  compile_ptr_load ctor imm loc arr sm = (lenop,ch) /\
+  emit_op GT [lenop; Lit (n2w cap)] ch = (invop,cg) /\
+  emit_op ISZERO [invop] cg = (validop,cz) /\
+  emit_inst ASSERT [validop] [] cz = ((),cs) /\
+  compile_array_membership_loop needle arr lenop stride off
+    (compile_ptr_load ctor imm loc) is_in cs = (out,ct) /\
+  fn_has_code sm ct fn ==>
+  fn_has_code sm ch fn /\ fn_has_code ch cs fn /\ fn_has_code cs ct fn
+Proof
+  strip_tac >>
+  drule_all rest_word_capacity_check_shape >> strip_tac >>
+  drule exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape >> strip_tac >>
+  `fn_has_code cs ct fn` by
+    fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+  drule_all rest_word_loop_caller_prefix >> strip_tac >>
+  `isPREFIX ch.cs_current_insts bb.bb_instructions` by
+    (irule rich_listTheory.IS_PREFIX_TRANS >>
+     qexists `cs.cs_current_insts` >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
+  `isPREFIX sm.cs_current_insts bb.bb_instructions` by
+    (irule rich_listTheory.IS_PREFIX_TRANS >>
+     qexists `ch.cs_current_insts` >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
+  simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+  metis_tac[]
+QED
+
+Theorem rest_word_capacity_check_path:
+  emit_op GT [lenop; Lit (n2w cap)] ch = (invop,cg) /\
+  emit_op ISZERO [invop] cg = (validop,cz) /\
+  emit_inst ASSERT [validop] [] cz = ((),cs) /\
+  fn_has_code ch cs fn /\
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len s /\
+  eval_operand (vv_operand vv) s = SOME baseword /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sm.cs_next_var <= ch.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!z. needleop = Var z \/ vv_operand vv = Var z \/ lenop = Var z ==> not_fresh_at ch z) /\
+  len <= cap /\ cap < dimword (:256) /\
+  s.vs_current_bb = ch.cs_current_bb /\
+  s.vs_inst_idx = LENGTH ch.cs_current_insts /\ ~s.vs_halted ==>
+  ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+      needleop needle lenop len t /\
+    eval_operand (vv_operand vv) t = SOME baseword /\
+    t.vs_current_bb = cs.cs_current_bb /\
+    t.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~t.vs_halted
+Proof
+  strip_tac >> drule_all rest_word_capacity_check_shape >> strip_tac >>
+  `eval_operand lenop s = SOME (n2w len)` by fs[rest_word_search_rep_def] >>
+  `run_inst_seq (emitted_insts ch cs) s =
+    OK (update_var validvar 1w (update_var invvar 0w s))` by
+    (asm_rewrite_tac[] >> irule rest_word_capacity_check_run >>
+     conj_tac >- simp[] >> qexists `len` >> simp[]) >>
+  `~not_fresh_at sm invvar /\ ~not_fresh_at sm validvar` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `needleop <> Var invvar /\ lenop <> Var invvar /\
+   needleop <> Var validvar /\ lenop <> Var validvar` by metis_tac[] >>
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len (update_var invvar 0w s)` by
+    (irule rest_word_search_rep_update >> simp[] >> metis_tac[]) >>
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len (update_var validvar 1w (update_var invvar 0w s))` by
+    (irule rest_word_search_rep_update >> simp[] >> metis_tac[]) >>
+  `eval_operand (vv_operand vv) (update_var validvar 1w (update_var invvar 0w s)) =
+    SOME baseword` by
+    (irule exprLoweringPropsTheory.eval_operand_update_other_local >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     irule exprLoweringPropsTheory.eval_operand_update_other_local >> simp[] >> metis_tac[]) >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts ch cs) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fragExecTheory.fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[listTheory.DROP_APPEND]) >>
+  `run_inst_seq_mem_ok (emitted_insts ch cs) s` by
+    (asm_rewrite_tac[] >> irule rest_word_capacity_check_mem_ok) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> GAS) (emitted_insts ch cs)` by
+    simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  `gas_marked_path memory execctx fn s 0
+    (OK ((update_var validvar 1w (update_var invvar 0w s)) with
+      vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts ch cs)))` by
+    (irule exprSimBopRestWordLoopPathTheory.rest_word_sequence_marked >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  qexists `(update_var validvar 1w (update_var invvar 0w s)) with
+    vs_inst_idx := LENGTH cs.cs_current_insts` >>
+  simp[rest_word_search_rep_control, venomStateTheory.update_var_def] >>
+  qpat_x_assum `gas_marked_path _ _ _ _ _ _` mp_tac >>
+  simp[venomStateTheory.update_var_def]
+QED
+
+Theorem rest_word_dynamic_tail:
+  compile_var_array_membership cenv needleop vv (ArrayT ty (Dynamic cap)) is_in sm = (out,ct) /\
+  fn_has_code sm ct fn /\
+  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
+  expr_type e = ArrayT ty (Dynamic cap) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Dynamic cap)) /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) /\ value_has_type et needle /\
+  eval_operand needleop s = SOME (typed_val_to_w256 et needle) /\
+  eval_operand (vv_operand vv) s = SOME baseword /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. needleop = Var z \/ vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  cap < dimword (:256) /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~s.vs_halted ==>
+  ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
+      t.vs_current_bb = ct.cs_current_bb /\
+      t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
+      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
+      eval_operand (vv_operand vv) t = SOME baseword /\
+      eval_operand out t = SOME (bool_to_word
+        (if is_in then evaluate_in_array (ArrayTV et (Dynamic cap)) needle av
+         else ~evaluate_in_array (ArrayTV et (Dynamic cap)) needle av))
+Proof
+  strip_tac >>
+  `elem_size_in_location cenv loc ty = word_scale loc` by metis_tac[rest_word_word_stride] >>
+  qpat_x_assum `compile_var_array_membership _ _ _ _ _ _ = _` mp_tac >>
+  simp[rest_word_dynamic_dispatch] >>
+  qpat_assum `loc = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_x_assum `elem_size_in_location _ _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> strip_tac >>
+  drule rest_word_located_header_run >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sm z` by metis_tac[] >>
+  `!z. needleop = Var z ==> not_fresh_at sm z` by metis_tac[] >>
+  `vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv q /\
+   eval_operand needleop q = SOME (typed_val_to_w256 et needle) /\
+   eval_operand (vv_operand vv) q = SOME baseword` by
+    (irule rest_word_capture_load_frame >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `word_scale loc` >>
+  rename1 `compile_ptr_load _ _ loc _ sm = (lenop,ch)` >>
+  rename1 `emit_op GT _ ch = (invop,cg)` >>
+  rename1 `emit_op ISZERO _ cg = (validop,cz)` >>
+  rename1 `emit_inst ASSERT _ _ cz = ((),cs)` >>
+  drule_all rest_word_dynamic_code >> strip_tac >>
+  `ci_mono sm ch` by
+    (mp_tac (Q.SPECL [`cenv.ce_is_ctor`, `cenv.ce_imm_alloca`, `loc`,
+       `vv_operand vv`, `sm`] exprLoweringPropsTheory.ci_mono_compile_ptr_load) >> simp[]) >>
+  `sm.cs_next_var <= ch.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
+  `!z. needleop = Var z \/ vv_operand vv = Var z \/ lenop = Var z ==>
+      not_fresh_at ch z` by
+    (drule exprSafeOperandTheory.compile_ptr_load_safe_operand >>
+     simp[exprSafeOperandTheory.safe_operand_def] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `gas_marked_path memory execctx fn s 0
+     (OK (q with vs_inst_idx := LENGTH ch.cs_current_insts)) /\
+   q.vs_current_bb = ch.cs_current_bb /\ ~q.vs_halted` by
+    (drule rest_word_ptr_load_marked >>
+     disch_then (qspecl_then [`q`, `s`, `memory`, `fn`, `execctx`] mp_tac) >> simp[]) >>
+  `array_length (ArrayTV et (Dynamic cap)) av <= cap` by
+    (Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def,
+       vyperValueOperationTheory.array_length_def]) >>
+  qabbrev_tac `p = q with vs_inst_idx := LENGTH ch.cs_current_insts` >>
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
+    needleop (typed_val_to_w256 et needle) lenop
+      (array_length (ArrayTV et (Dynamic cap)) av) p` by
+    simp[Abbr `p`, rest_word_search_rep_control, rest_word_search_rep_def] >>
+  `eval_operand (vv_operand vv) p = SOME baseword /\
+   p.vs_current_bb = ch.cs_current_bb /\
+   p.vs_inst_idx = LENGTH ch.cs_current_insts /\ ~p.vs_halted` by simp[Abbr `p`] >>
+  drule_all rest_word_capacity_check_path >>
+  disch_then (qspecl_then [`memory`, `execctx`] strip_assume_tac) >>
+  `sm.cs_next_var <= cs.cs_next_var /\
+   (!z. needleop = Var z \/ vv_operand vv = Var z \/ lenop = Var z ==>
+      not_fresh_at cs z)` by
+    (drule_all rest_word_capacity_check_shape >> strip_tac >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `array_length (ArrayTV et (Dynamic cap)) av < dimword (:256)` by decide_tac >>
+  qpat_x_assum `rest_word_search_rep _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  simp[rest_word_search_rep_def] >> strip_tac >>
+  `loc = (case vv_location vv of SOME l => l | NONE => LocMemory)` by simp[Abbr `loc`] >>
+  `evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Dynamic cap))` by simp[] >>
+  drule_all (SRULE [] (Q.INST [`bd` |-> `Dynamic cap`,
+    `len` |-> `array_length (ArrayTV et (Dynamic cap)) av`] rest_word_located_search)) >>
+  disch_then (qspecl_then [`memory`, `execctx`] strip_assume_tac) >>
+  qexists `t'` >> simp[] >>
+  `gas_marked_path memory execctx fn s (0 + 0) (OK t)` by
+    (irule fragGasModeTheory.gas_marked_path_then >> qexists `p` >> simp[]) >>
+  pop_assum (assume_tac o SRULE []) >>
+  `gas_marked_path memory execctx fn s (0 + 0) (OK t')` by
+    (irule fragGasModeTheory.gas_marked_path_then >> qexists `t` >> simp[]) >>
+  pop_assum mp_tac >> simp[]
+QED
