@@ -1402,9 +1402,11 @@ Proof
            gvs[vv_post_def, vv_holds_def] >>
          qexists_tac `w` >> simp[] >>
          qpat_x_assum `vv_store_bound _ _ _ _ _ _`
-           (mp_tac o REWRITE_RULE [vv_store_bound_def]) >>
-         disch_then (qspecl_then [`expr_type e`, `p`, `v`, `tvt`, `w`] mp_tac) >>
-         simp[] >> metis_tac[word_val_store_size]) >>
+           (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_store_bound_def]) >>
+         disch_then (qspecl_then [`expr_type e`, `p.ptr_operand`, `v`, `tvt`, `w`] mp_tac) >>
+         simp[] >>
+         `val_store_size tvt v = 32` by metis_tac[word_val_store_size] >>
+         simp[]) >>
       drule_at (Pat `unwrap_value _ _ _ = _`) body_unwrap_memory_counted_read >>
       disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[] >> strip_tac >> qexists_tac `u` >> gvs[]) >>
