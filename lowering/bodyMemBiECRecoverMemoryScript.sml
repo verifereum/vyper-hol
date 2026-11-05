@@ -103,7 +103,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem ecrecover_buffers_mem:
+Theorem ecrecover_buffers_mem_ready:
   (do ib <- context$compile_alloc_buffer 128;
       emit_void MSTORE [ib.buf_operand; h];
       p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
@@ -121,7 +121,11 @@ Theorem ecrecover_buffers_mem:
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
   eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
   (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sf x) ==>
-  run_inst_seq_mem_ok (emitted_insts sf sm) s
+  run_inst_seq_mem_ok (emitted_insts sf sm) s /\
+  ?t wi wo. run_inst_seq (emitted_insts sf sm) s = OK t /\
+    eval_operand ip t = SOME wi /\ eval_operand op t = SOME wo /\
+    w2n wi + 128 <= t.vs_alloca_next /\
+    w2n wo + 32 <= t.vs_alloca_next
 Proof
   strip_tac >> drule_all ecrecover_buffers_prefix_shape >> strip_tac >>
   qpat_x_assum `_ sf = ((ip,op),sm)` kall_tac >>
@@ -174,6 +178,27 @@ Proof
   drule_all ecrecover_alloc_mem >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sb sc) s2 = OK s3` >>
   rename1 `eval_operand ob.buf_operand s3 = SOME wo` >>
+  qpat_assum `stmt_state_rel ctx func cenv cx es s2`
+    (mp_then Any (drule_all_then strip_assume_tac) literal_alloc_buffer_run) >>
+  gvs[] >>
+  `s2.vs_allocas = s1.vs_allocas` by
+    (qpat_x_assum `(s2 with <|vs_memory := m; vs_vars := vs|>) = s1`
+       (mp_tac o AP_TERM ``\z. z.vs_allocas``) >> simp[]) >>
+  `FLOOKUP s3.vs_allocas sf.cs_next_id = SOME (w2n wi,128)` by
+    (qpat_x_assum `!aid entry. _ ==> FLOOKUP s3.vs_allocas aid = SOME entry` irule >>
+     simp[]) >>
+  `w2n wi + 128 <= s3.vs_alloca_next` by
+    (`alloca_inv s3` by fs[stmt_state_rel_def] >>
+     fs[alloca_inv_def, alloca_next_valid_def] >> first_x_assum drule >> simp[]) >>
+  `eval_operand ib.buf_operand s3 = SOME wi` by
+    (simp[eval_operand_def] >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x s2 = _`
+       (qspec_then `p` mp_tac) >>
+     qpat_x_assum `!x. not_fresh_at sb x ==> lookup_var x s3 = _`
+       (qspec_then `p` mp_tac) >>
+     `not_fresh_at sa p` by simp[] >>
+     `not_fresh_at sb p` by fs[not_fresh_at_def] >>
+     fs[eval_operand_def]) >>
   `run_inst_seq_mem_ok (emitted_insts sc sm) s3` by
     (drule_all allocaFootprintTheory.emit_mstore_mem_ok >> simp[]) >>
   `run_inst_seq_mem_ok (emitted_insts sf sa) s` by
@@ -181,14 +206,25 @@ Proof
        (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
      simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
           run_inst_seq_mem_ok_last, below_frontier_no_ranges, mk_inst_def]) >>
-  qpat_x_assum `emitted_insts sf sm = _` SUBST1_TAC >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `s1` >> conj_tac >- first_assum ACCEPT_TAC >>
-  irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `s2` >> conj_tac >- first_assum ACCEPT_TAC >>
-  irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `s3` >> simp[]
+  conj_tac
+  >- (qpat_x_assum `emitted_insts sf sm = _` SUBST1_TAC >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `s1` >> conj_tac >- first_assum ACCEPT_TAC >>
+      irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `s2` >> conj_tac >- first_assum ACCEPT_TAC >>
+      irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `s3` >> simp[]) >>
+  `run_inst_seq (emitted_insts sc sm) s3 = OK (mstore (w2n w) 0w s3)` by
+    (drule emitted_insts_emit_void >> strip_tac >>
+     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_write2_def,
+          eval_operand_def]) >>
+  qexistsl_tac [`mstore (w2n w) 0w s3`, `wi`, `w`] >>
+  conj_tac
+  >- (qpat_x_assum `emitted_insts sf sm = _` SUBST1_TAC >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      imp_res_tac run_inst_seq_append >> simp[]) >>
+  simp[ecrecover_operand_mstore] >> simp[mstore_def] >> gvs[]
 QED
 
 Theorem ecrecover_suffix_mem:
@@ -247,4 +283,58 @@ Proof
   pure_rewrite_tac[COND_RAND, COND_RATOR] >>
   simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD,
        Excl "consume_call_outcome_eq"]
+QED
+
+Theorem ecrecover_buffers_mem:
+  (do ib <- context$compile_alloc_buffer 128;
+      emit_void MSTORE [ib.buf_operand; h];
+      p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
+      emit_void MSTORE [p1; v];
+      p2 <- emit_op ADD [ib.buf_operand; Lit 64w];
+      emit_void MSTORE [p2; r];
+      p3 <- emit_op ADD [ib.buf_operand; Lit 96w];
+      emit_void MSTORE [p3; sig];
+      ob <- context$compile_alloc_buffer 32;
+      emit_void MSTORE [ob.buf_operand; Lit 0w];
+      return (ib.buf_operand,ob.buf_operand) od) sf = ((ip,op),sm) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sm) ==> MEM i (fn_insts func)) /\
+  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
+  eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
+  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sf x) ==>
+  run_inst_seq_mem_ok (emitted_insts sf sm) s
+Proof
+  strip_tac >> drule_all ecrecover_buffers_mem_ready >> simp[]
+QED
+
+Theorem compile_ecrecover_mem_ok:
+  compile_ecrecover h v r sig sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
+  eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
+  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sf x) ==>
+  run_inst_seq_mem_ok (emitted_insts sf sb) s
+Proof
+  strip_tac >> drule compile_ecrecover_split >> strip_tac >>
+  drule ecrecover_suffix_shape >> strip_tac >>
+  `!i. MEM i (emitted_insts sf sm) ==> MEM i (fn_insts func)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND] >> simp[]) >>
+  drule_all ecrecover_buffers_mem_ready >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sf sm) s = OK t` >>
+  `(!y. ip = Var y ==> not_fresh_at sm y) /\
+   (!y. op = Var y ==> not_fresh_at sm y)` by
+    (drule_all ecrecover_buffers_prefix_shape >> strip_tac >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sm sb) t` by
+    (drule_all ecrecover_suffix_mem >> simp[]) >>
+  `LENGTH sf.cs_current_insts - LENGTH sm.cs_current_insts = 0` by decide_tac >>
+  `emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb` by
+    simp[emitted_insts_def, rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0] >>
+  asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append_run >>
+  conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `run_inst_seq_mem_ok (emitted_insts sm sb) t` mp_tac >>
+  asm_rewrite_tac[]
 QED

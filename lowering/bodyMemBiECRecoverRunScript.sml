@@ -11,7 +11,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem compile_ecrecover_split[local]:
+Theorem compile_ecrecover_split:
   compile_ecrecover h v r sig sf = (res,sb) ==>
   ?ip op sm.
     (do ib <- context$compile_alloc_buffer 128;
