@@ -99,7 +99,8 @@ Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   rw[expr_vv_case_def, expr_vv_sim_def] >>
@@ -141,8 +142,7 @@ Proof
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
   disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> simp[]
-    >~ [`int_calls_expr e = [] \/ _`] >- metis_tac[] >>
+  (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
@@ -192,7 +192,8 @@ Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt gen_tac >> Cases_on `topt`
@@ -237,8 +238,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
-  (impl_tac >- (rpt strip_tac >> simp[]
-    >~ [`int_calls_expr e = [] \/ _`] >- metis_tac[] >>
+  (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
@@ -318,8 +318,7 @@ Resume compile_make_array_vv_case[array]:
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[wordsTheory.dimword_def] >>
   disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
-  (impl_tac >- (rpt strip_tac >> simp[]
-    >~ [`int_calls_expr e = [] \/ _`] >- metis_tac[] >>
+  (impl_tac >- (rpt strip_tac >> simp[] >>
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
       (irule aggregate_alloca_immutable_sep >>
@@ -380,7 +379,8 @@ Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
@@ -393,7 +393,8 @@ Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_sim_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args) /\
     expr_vv_case nocalls ctx func cenv cx
