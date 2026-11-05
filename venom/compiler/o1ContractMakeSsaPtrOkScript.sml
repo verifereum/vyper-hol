@@ -692,6 +692,58 @@ Proof
   irule mssa_pointer_output_backward >> gvs[wf_ssa_def] >> metis_tac[]
 QED
 
+Theorem mssa_reachable_inst_identity:
+  all_reachable fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  (inst.inst_opcode = PHI ==> phi_edge_uses_wf fn bb inst) ==>
+  reachable_inst fn bb.bb_label inst = inst
+Proof
+  strip_tac >> simp[reachable_inst_def] >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  `filter_phi_ops (reachable_preds fn bb.bb_label) inst.inst_operands =
+   inst.inst_operands` suffices_by simp[] >>
+  irule simplifyCfgRepairDataflowTheory.filter_phi_ops_all_preds >>
+  gvs[phi_edge_uses_wf_def] >> rpt strip_tac >>
+  simp[reachable_preds_def, listTheory.MEM_FILTER, listTheory.MEM_MAP] >>
+  `?pred_bb. MEM pred_bb fn.fn_blocks /\ pred_bb.bb_label = p /\
+     fn_cfg_edge fn p bb.bb_label` by metis_tac[] >>
+  gvs[all_reachable_def] >> metis_tac[]
+QED
+
+Theorem mssa_reachable_fn_identity:
+  all_reachable fn /\ wf_ssa fn ==> reachable_fn fn = fn
+Proof
+  strip_tac >>
+  `FILTER (\bb. fn_reachable fn bb.bb_label) fn.fn_blocks = fn.fn_blocks` by
+    (gvs[all_reachable_def] >>
+     qpat_x_assum `!bb. _` mp_tac >>
+     qspec_tac (`fn.fn_blocks`, `blocks`) >> Induct >> simp[] >> metis_tac[]) >>
+  simp[reachable_fn_def] >>
+  `MAP (\bb. bb with bb_instructions :=
+       MAP (reachable_inst fn bb.bb_label) bb.bb_instructions) fn.fn_blocks = fn.fn_blocks`
+    suffices_by simp[] >>
+  GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM listTheory.MAP_ID] >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+  rename1 `MEM bb fn.fn_blocks` >>
+  `MAP (reachable_inst fn bb.bb_label) bb.bb_instructions = bb.bb_instructions`
+    suffices_by simp[] >>
+  GEN_REWRITE_TAC RAND_CONV empty_rewrites [GSYM listTheory.MAP_ID] >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+  irule mssa_reachable_inst_identity >>
+  gvs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]
+QED
+
+Theorem mssa_reachable_output_identity:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') ==> reachable_fn fn' = fn'
+Proof
+  strip_tac >> irule mssa_reachable_fn_identity >> conj_tac
+  >- (irule make_ssa_current_fn_all_reachable >>
+      gvs[make_ssa_input_ok_def, wf_function_def] >> metis_tac[]) >>
+  irule mssa_wf_ssa >> metis_tac[]
+QED
+
 (* Why it holds.  make_ssa_current_fn_origin gives orig, from fn' vars to
    fn vars: each instruction of fn' is a renamed non-PHI of fn (same
    opcode and id, outputs and Var operands mapped by orig), a NOP, or a
