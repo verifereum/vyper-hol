@@ -107,7 +107,16 @@ Theorem reorder_plan_venom_asm_rel_numeric_marked:
           residual_budget_wf_marked base target_ops ps' /\
           pending_inventory_wf target_ops ps'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\(idx,op). idx < LENGTH target_ops /\ MEM op target_ops)
+     (MAPi (\i op. (i,op)) target_ops)` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
+     rpt strip_tac >> gvs[] >> simp[MEM_EL] >> qexists_tac `p_1` >> simp[]) >>
+  `plan_steps (\(idx,op) ps. reorder_one dfg target_ops idx op ps)
+     (MAPi (\i op. (i,op)) target_ops) ps = (ops,ps')` by
+    (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
+     simp[reorder_plan_eq_plan_steps]) >>
+  drule_all plan_steps_reorder_venom_asm_rel_numeric_marked >> simp[]
 QED
 
 (* generatedPrefixSim$selected_input_arranged over the marker-tolerant budget. *)
