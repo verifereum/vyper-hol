@@ -44,8 +44,11 @@ Theorem raw_log_topics_bind:
   gas_outcome F tops (ctx,func) (eval_exprs cx topics) (es,s0)
     (\rr ee t. ?vs. rr = INL vs /\ P vs ee t)
     (\rr ee r. ?exc. rr = INR exc /\ R (INR exc) ee r) /\
-  (!vs ee t. P vs ee t ==>
-     gas_outcome F tops (ctx,func) (k vs) (ee,t) Q R) ==>
+  (!vs mid t marks.
+     gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
+       marks (INL vs) mid (OK t) /\ P vs (mid with gas_obs := []) t ==>
+     gas_outcome F tops (ctx,func) (k vs)
+       (mid with gas_obs := [],t) Q R) ==>
   gas_outcome F tops (ctx,func) (bind (eval_exprs cx topics) k)
     (es,s0) Q R
 Proof
