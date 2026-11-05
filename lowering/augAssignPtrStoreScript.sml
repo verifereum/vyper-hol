@@ -4,7 +4,7 @@ Ancestors
   augAssignPtrLoad typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
   bodyPtrDefs venomInst venomState venomExecSemantics ptrSafeRun
   ptrDiscipline emitHelperProps emitHelper compileEnv fragExec
-  finite_map words robustCopyTransportPtr valueEncoding valueEncodingProps
+  finite_map words loweringSlice robustCopyTransportPtr valueEncoding valueEncodingProps
   valueEncodingProofs list venomMemProofs
 
 Theorem mstore_path_ptr:
@@ -81,4 +81,25 @@ Proof
   qexistsl_tac [`s.vs_memory`, `tainted`, `{i | off <= i /\ i < off + 32}`] >>
   simp[] >> mp_tac (Q.SPECL [`s`, `off`, `w`] mstore_memory_frame) >>
   simp[mem_agree_outside_def]
+QED
+
+Theorem mstore_robust_scalar:
+  word_value v ==>
+  !m. mem_agree_outside (tainted DIFF {i | off <= i /\ i < off + 32})
+    (mstore off (val_to_w256 v) s).vs_memory m ==> val_in_memory tv v off m
+Proof
+  strip_tac >> rpt strip_tac >>
+  `mem_bytes_at off 32 m =
+    mem_bytes_at off 32 (mstore off (val_to_w256 v) s).vs_memory` by
+    (irule LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < 32` >>
+     `off + j NOTIN (tainted DIFF {i | off <= i /\ i < off + 32})` by simp[] >>
+     `mem_bytes_at (off+j) 1 (mstore off (val_to_w256 v) s).vs_memory =
+      mem_bytes_at (off+j) 1 m` by
+       (fs[mem_agree_outside_def] >> metis_tac[]) >>
+     qpat_x_assum `mem_bytes_at _ 1 _ = mem_bytes_at _ 1 _` mp_tac >>
+     simp[LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
+  `mem_word_at off m = val_to_w256 v` by
+    (simp[NoAsms, mem_word_at_def, GSYM mem_bytes_at_def] >>
+     metis_tac[mstore_mem_word_at_same, mem_word_at_def, mem_bytes_at_def]) >>
+  gvs[word_value_def, val_in_memory_def]
 QED
