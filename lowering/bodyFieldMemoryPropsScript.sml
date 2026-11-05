@@ -729,3 +729,80 @@ Proof
   drule emit_op_extends >> strip_tac >>
   gvs[same_blocks_def, update_var_def]
 QED
+
+Theorem body_word_load_gas_path:
+  emit_op MLOAD [operand] sm = (dst,sn) /\ fn_has_code sm sn func /\
+  eval_operand operand s = SOME w /\ w2n w + 32 <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  run_inst_seq (emitted_insts sm sn) s = OK q ==>
+  gas_path_mem ctx func s 0
+    (OK (q with vs_inst_idx := LENGTH sn.cs_current_insts))
+Proof
+  rpt strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sn ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sm sn) = LENGTH sn.cs_current_insts` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+         emitted_insts_def, fn_has_code_def, IS_PREFIX_APPEND] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+  drule_all body_word_load_prefix_mem_ok >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `isPREFIX (emitted_insts sm sn) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm sn)` by simp[mk_inst_def, is_terminator_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sm sn) s` by simp[] >>
+  drule_all run_inst_seq_gas_path_mem >> simp[mk_inst_def]
+QED
+
+Theorem body_field_expr_post_inst_idx[simp]:
+  expr_post ctx func cenv cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s
+Proof
+  simp[expr_post_def, stmt_state_rel_inst_idx, eval_operand_def,
+       lookup_var_def, expr_val_rel_def, expr_val_at_def, local_region_def,
+       locals_kept_def]
+QED
+
+Theorem body_unwrap_memory_counted_read:
+  unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
+  p.ptr_location = LocMemory /\ read_result cx tv es' = (INL v,es') /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  (is_word_type t ==> ?w. eval_operand p.ptr_operand s = SOME w /\
+                          w2n w + 32 <= s.vs_alloca_next) /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_path_mem ctx func s 0 (OK u) /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  strip_tac >>
+  `vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s` by
+    (drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
+  qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[unwrap_value_def] >> Cases_on `is_word_type t` >> simp[]
+  >- (strip_tac >> fs[compile_ptr_load_def] >>
+      drule_all body_word_load_run_post >> strip_tac >>
+      `alloca_inv s` by fs[vv_post_def, stmt_state_rel_def] >>
+      drule_all body_word_load_history >> strip_tac >>
+      drule_all body_word_load_gas_path >> strip_tac >>
+      qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+      simp[] >>
+      drule emitted_insts_emit_op >> strip_tac >>
+      drule step_MLOAD >>
+      disch_then (qspecl_then [`sm.cs_next_id`, `STRING #"%" (toString sm.cs_next_var)`]
+        assume_tac) >>
+      gvs[run_inst_seq_def] >>
+      drule emit_op_extends >> gvs[same_blocks_def, update_var_def]) >>
+  simp[comp_return_def] >> strip_tac >> gvs[] >>
+  qexists_tac `s` >> simp[gas_path_mem_rules] >>
+  irule expr_post_of_vv_post_memory >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
