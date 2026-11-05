@@ -231,8 +231,9 @@ Theorem codegen_ready_fn_no_marker:
     EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
       inst.inst_operands) bb'.bb_instructions) fn.fn_blocks
 Proof
-  simp[codegen_ready_fn_def, codegen_ready_inst_def, EVERY_MEM] >>
-  metis_tac[]
+  simp[codegen_ready_fn_def, EVERY_MEM] >> rpt strip_tac >>
+  `codegen_ready_inst inst` by metis_tac[] >>
+  gvs[codegen_ready_inst_def]
 QED
 
 Theorem step_fn_shape:
