@@ -2,7 +2,7 @@
 Theory targetSubscriptMemory
 Ancestors
   fragGasFresh fragGasMode varsExt context emitHelper emitHelperProps venomInst
-  exprBopSimProps exprSimUnopProps fragExec
+  exprBopSimProps exprSimUnopProps fragExec exprSimHyps
   targetPlaceSim targetPlaceSimCasesBase exprSimProps exprSimArrayIndex
   exprSimHypsDefs exprLoweringProps freshWrites option vyperPlaceResultTyping
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
@@ -690,4 +690,81 @@ Proof
       intLib.ARITH_TAC) >>
   simp[evaluate_type_def, value_has_type_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[value_has_type_def]
+QED
+
+Theorem target_memory_array_header:
+  val_in_memory (ArrayTV etv (Dynamic cnt)) (ArrayV av) (w2n b) s.vs_memory /\
+  value_has_type (ArrayTV etv (Dynamic cnt)) (ArrayV av) ==>
+  mload (w2n b) s = n2w (array_length (ArrayTV etv (Dynamic cnt)) av)
+Proof
+  Cases_on `av` >> simp[value_has_type_def, val_in_memory_def,
+    array_length_def, GSYM mem_word_at_eq_mload]
+QED
+
+Theorem target_memory_array_length_bound:
+  evaluate_type tenv (ArrayT ety bd) = SOME (ArrayTV etv bd) /\
+  value_has_type (ArrayTV etv bd) (ArrayV av) ==>
+  array_length (ArrayTV etv bd) av < dimword (:256)
+Proof
+  strip_tac >>
+  `bound_length bd < dimword (:256)` by
+    (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
+     rw[evaluate_type_def, AllCaseEqs()] >> Cases_on `bd` >>
+     gvs[type_slot_size_def, vyperASTTheory.bound_length_def] >>
+     `n <= n * type_slot_size etv` by
+       (Cases_on `type_slot_size etv` >> gvs[MULT_CLAUSES]) >>
+     decide_tac) >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[value_has_type_def, array_length_def, vyperASTTheory.bound_length_def] >>
+  decide_tac
+QED
+
+Theorem target_memory_array_range:
+  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b loc
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) ==>
+  (idx_in_range (is_signed_type ity) (i2w i)
+     (if dyn then mload (w2n b) s else n2w cnt) <=>
+   0 <= i /\ Num i < array_length (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) av)
+Proof
+  strip_tac >> drule_all place_ptr_rel_memory_current >> strip_tac >>
+  drule_all target_memory_array_length_bound >> strip_tac >>
+  Cases_on `dyn` >> gvs[]
+  >- (drule_all target_memory_array_header >> disch_then SUBST1_TAC >>
+      metis_tac[target_typed_index_range]) >>
+  Cases_on `av` >> gvs[value_has_type_def, array_length_def] >>
+  metis_tac[target_typed_index_range]
+QED
+
+Theorem target_memory_array_offset:
+  expr_sim_inv cenv cx env es /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  value_has_type (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) (ArrayV av) /\
+  0 <= i /\ Num i < array_length (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) av ==>
+  ?k. mem_step_offset (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))
+        (ValueSubscript (IntV i)) = SOME (k,etv) /\
+      evaluate_type (get_tenv cx) ety = SOME etv /\
+      ((if dyn then b + n2w 32 else b) + i2w i * n2w (type_memory_bytes cenv ety) =
+       (b : bytes32) + n2w k)
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) ety = SOME etv` by
+    (gvs[evaluate_type_def, AllCaseEqs()]) >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >>
+  `i2w i : bytes32 = n2w (Num i)` by
+    (`i = &Num i` by simp[integerTheory.INT_OF_NUM] >>
+     qpat_x_assum `i = &Num i` SUBST1_TAC >>
+     simp[integer_wordTheory.i2w_pos]) >>
+  Cases_on `dyn` >> Cases_on `av` >>
+  gvs[value_has_type_def, array_length_def, mem_step_offset_def] >>
+  simp[integer_wordTheory.i2w_pos, word_add_n2w, word_mul_n2w,
+       WORD_ADD_ASSOC, ADD_COMM] >>
+  pure_rewrite_tac[GSYM word_add_n2w] >>
+  metis_tac[WORD_ADD_ASSOC, WORD_ADD_COMM]
 QED
