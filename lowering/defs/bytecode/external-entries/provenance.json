@@ -1,8 +1,8 @@
 {
   "fixtures": {
     "base_dom1": {
-      "deploy_sha256": "895cb8a0101a5cb0019f3ebd5891a8e948cc62f937acbf4d975365515a38b4d9",
-      "runtime_sha256": "fdf466940bc1bb5b48e6021043501c39ce5af269520e8e4bd49a128eedba2c91",
+      "deploy_sha256": "84e5ff56a6d5d7350f176e4f93c4642026392c5b1d0f24f3574db32bab17b39e",
+      "runtime_sha256": "f5bd5111b8847e6589b14aa914f5eefa0bfdc8ca9530d098c902fa49cd4f5d6f",
       "source": "sources/base_dom1.vy",
       "source_sha256": "06acf0ec3ee91577797f37c6df055ad4fc3c58ebacbfbd0bc1db4f450f670572"
     },
@@ -19,8 +19,8 @@
       "source_sha256": "9ad387a1400c88e243e009bee92b0f1d4bd1e5a3097d50d1f835b8be4ff7dd2a"
     },
     "dflt_bytes": {
-      "deploy_sha256": "fc305fa93fa7cee7df7e725e0a20082a6f56d9b7fad7ec22b602064ade628a0c",
-      "runtime_sha256": "d7715b0a67cfff13b10cc88b59343572f425ac8f07e61438a8a19ce222331731",
+      "deploy_sha256": "02cc92ec6c2ccf174bd62d763369cd68c20972cb3617310c46207ce4ad70a616",
+      "runtime_sha256": "c3fa2009c134eaa46dbdadc0c938e5999c0efb915520a4a0b9f45a20be45bb58",
       "source": "sources/dflt_bytes.vy",
       "source_sha256": "50ecc0144d005dafe33283411201d3480e016394696263dbf249c094db6b10da"
     },
@@ -187,8 +187,8 @@
       "source_sha256": "f2069c98ac245c6a2f04364095fcabda96f2f1b45f919f5bb126286441e72b70"
     },
     "rr_nr": {
-      "deploy_sha256": "1dee74308214892e244f254f3c57112b912a7dd87dfdaff43502d13650d77cbe",
-      "runtime_sha256": "266815888529005e3a959ff9bf08f5c815c2a38b94e4f10ea3145bc77ab5b014",
+      "deploy_sha256": "2c882a4bc158650d67d24b690bfac9819aef3d7c486701b4f67274ba29f35a9d",
+      "runtime_sha256": "a7a00092f8bf9b2c3388c49a2a94b80ceafdd4d755879a25c3c90b7de8a3e9d4",
       "source": "sources/rr_nr.vy",
       "source_sha256": "440afa3b3268e53e859971636711915589bf2a16533f182c05f74e6a14555002"
     }
@@ -215,6 +215,6 @@
       567
     ]
   },
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b"
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1"
 }
