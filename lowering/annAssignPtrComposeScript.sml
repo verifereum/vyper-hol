@@ -78,3 +78,42 @@ Resume annassign_rhs_outcome_ptr[exempt]:
 QED
 
 Finalise annassign_rhs_outcome_ptr
+
+(* Only old-variable frames are rebased; memory ghosts remain at the endpoint. *)
+Theorem annassign_outcome_entry_prefix_ptr:
+ gas_path_ptr D 0 ctx func PG G0 tn0 s0 n Ga tna (OK salloc) /\
+ (!x. not_fresh_at sa0 x ==> not_fresh_at sa x /\
+    FLOOKUP Ga x = FLOOKUP G0 x /\
+    op_taint tna (Var x) = op_taint tn0 (Var x)) /\
+ (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+    lookup_var x salloc = SOME w) /\
+ gas_outcome_ptr D tops (ctx,func) PG source (es,salloc,Ga,tna)
+   (\res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      ghost_inv d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x salloc = SOME w ==>
+         lookup_var x t = SOME w) /\
+      (!x. not_fresh_at sa x ==>
+         FLOOKUP G x = FLOOKUP Ga x /\
+         op_taint tn (Var x) = op_taint tna (Var x))) R ==>
+ gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
+   (\res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      ghost_inv d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x t = SOME w) /\
+      (!x. not_fresh_at sa0 x ==>
+         FLOOKUP G x = FLOOKUP G0 x /\
+         op_taint tn (Var x) = op_taint tn0 (Var x))) R
+Proof
+ strip_tac >> drule_all gas_outcome_ptr_prefix >> strip_tac >>
+ irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+ simp[] >> rpt gen_tac >> strip_tac >>
+ qexists `cenv''` >> simp[]
+QED
