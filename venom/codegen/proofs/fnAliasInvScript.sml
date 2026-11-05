@@ -339,6 +339,24 @@ Proof
   gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem alias_path_last_visit:
+  !path fn d. is_fn_path fn path /\ MEM d path ==>
+  ?pre tail. path = pre ++ d::tail /\ ~MEM d tail /\
+    is_fn_path fn (d::tail) /\ LAST (d::tail) = LAST path
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `MEM d path`
+  >- (`is_fn_path fn path` by
+        (Cases_on `path` >> gvs[is_fn_path_def]) >>
+      `LAST (h::path) = LAST path` by
+        (Cases_on `path` >> gvs[LAST_DEF]) >>
+      first_x_assum drule >> disch_then drule >>
+      strip_tac >> qexistsl_tac [`h::pre`, `tail`] >>
+      metis_tac[APPEND]) >>
+  `h = d` by gvs[] >>
+  qexistsl_tac [`[]`, `path`] >> gvs[]
+QED
+
 Theorem alias_phi_ready_postprefix_input:
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
