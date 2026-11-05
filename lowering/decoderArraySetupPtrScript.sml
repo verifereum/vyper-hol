@@ -56,6 +56,69 @@ Proof
   strip_tac >> gvs[AllCaseEqs(), update_var_def]
 QED
 
+Theorem scaled_address_prefix_structure:
+  !base idx stride st data c1 off c2 out ready.
+  emit_op ADD [base; Lit 32w] st = (data,c1) /\
+  emit_op MUL [idx; Lit (n2w stride)] c1 = (off,c2) /\
+  emit_op ADD [data;off] c2 = (out,ready) ==>
+  inst_extends st ready /\ same_blocks st ready /\
+  st.cs_next_var <= ready.cs_next_var /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready) /\
+  LENGTH (emitted_insts st ready) = 3
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_extends st c1 /\ inst_extends c1 c2 /\ inst_extends c2 ready` by
+    metis_tac[inst_extends_emit_op] >>
+  `same_blocks st c1 /\ same_blocks c1 c2 /\ same_blocks c2 ready` by
+    metis_tac[emit_op_same_blocks] >>
+  `st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
+   c2.cs_next_var <= ready.cs_next_var` by
+    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `emitted_insts st ready = emitted_insts st c1 ++ emitted_insts c1 c2 ++ emitted_insts c2 ready` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  conj_tac >- metis_tac[inst_extends_trans] >>
+  conj_tac >- fs[same_blocks_def] >>
+  conj_tac >- decide_tac >>
+  imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem indexed_destination_structure:
+  !base idx stride st out ready.
+  abi_decode_indexed_address base idx stride st = (out,ready) ==>
+  inst_extends st ready /\ same_blocks st ready /\
+  st.cs_next_var <= ready.cs_next_var /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready) /\
+  LENGTH (emitted_insts st ready) = 3
+Proof
+  rpt gen_tac >> simp[abi_decode_indexed_address_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  metis_tac[scaled_address_prefix_structure]
+QED
+
+Theorem calldata_dynamic_element_source_structure:
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz st = (out,ready) ==>
+  inst_extends st ready /\ same_blocks st ready /\
+  st.cs_next_var <= ready.cs_next_var /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready) /\
+  LENGTH (emitted_insts st ready) = 2
+Proof
+  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_op CALLDATALOAD [head] st = (off,mid)` >>
+  rename1 `emit_op ADD [data;off] mid = (out,ready)` >>
+  `inst_extends st mid /\ inst_extends mid ready` by metis_tac[inst_extends_emit_op] >>
+  `same_blocks st mid /\ same_blocks mid ready` by metis_tac[emit_op_same_blocks] >>
+  `st.cs_next_var <= mid.cs_next_var /\ mid.cs_next_var <= ready.cs_next_var` by
+    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `emitted_insts st ready = emitted_insts st mid ++ emitted_insts mid ready` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append]) >>
+  conj_tac >- metis_tac[inst_extends_trans] >>
+  conj_tac >- fs[same_blocks_def] >>
+  conj_tac >- decide_tac >>
+  imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]
+QED
+
 Theorem indexed_destination_endpoint_ptr:
   !st out ready root idx stride s t d j total G tn cx ctx PG R.
     abi_decode_indexed_address (Var root) idx stride st = (out,ready) /\
@@ -165,6 +228,7 @@ Proof
 QED
 
 Theorem calldata_dynamic_element_source_endpoint_ptr:
+  !head data abi_sz st out ready s a b tn G t cx ctx PG R.
   compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz st = (out,ready) /\
   eval_operand head s = SOME a /\ eval_operand data s = SOME b /\
   (!x. head = Var x ==> not_fresh_at st x) /\
@@ -172,7 +236,10 @@ Theorem calldata_dynamic_element_source_endpoint_ptr:
   op_taint tn head = {} /\ op_prov G head = NONE /\
   op_taint tn data = {} /\ op_prov G data = NONE /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
-  ?H u. op_taint u out = {} /\ op_prov H out = NONE /\
+  ?H u. (?v. eval_operand out t = SOME v) /\
+    (!x. out = Var x ==> not_fresh_at ready x) /\
+    t.vs_labels = s.vs_labels /\
+    op_taint u out = {} /\ op_prov H out = NONE /\
     frag_exec_ptr cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = s)
       (\g z v. g = H /\ z = u /\
@@ -182,7 +249,7 @@ Theorem calldata_dynamic_element_source_endpoint_ptr:
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def,
+  rpt gen_tac >> simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def,
     comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,mid)` >>
@@ -223,6 +290,17 @@ Proof
   `!x. not_fresh_at st x ==> not_fresh_at mid x` by
     (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   fs[Abbr `sm`, ADD1, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
+  `t.vs_labels = m.vs_labels` by
+    (irule emit_op_run_labels >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!x. out = Var x ==> not_fresh_at ready x` by
+    (qpat_assum `emit_op ADD _ mid = _`
+       (mp_then Any mp_tac abi_decoder_operand_live_emit) >>
+     Cases_on `out` >> simp[calldata_operand_live_not_fresh]) >>
+  `?v. eval_operand out t = SOME v` by
+    (qpat_assum `emit_op ADD _ mid = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qexistsl_tac [`H`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
   qexistsl_tac [`(\g z v. g = H1 /\ z = u1 /\ v = m with vs_inst_idx := s.vs_inst_idx + 1)`,`mid`] >>
@@ -230,6 +308,7 @@ Proof
 QED
 
 Theorem clean_scaled_source_prefix_endpoint_ptr:
+  !src st data c1 idx stride off c2 head ready s a b tn G t cx ctx PG R.
   emit_op ADD [src; Lit 32w] st = (data,c1) /\
   emit_op MUL [idx; Lit (n2w stride)] c1 = (off,c2) /\
   emit_op ADD [data;off] c2 = (head,ready) /\
@@ -239,7 +318,10 @@ Theorem clean_scaled_source_prefix_endpoint_ptr:
   op_taint tn src = {} /\ op_prov G src = NONE /\
   op_taint tn idx = {} /\ op_prov G idx = NONE /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
-  ?H u. op_taint u head = {} /\ op_prov H head = NONE /\
+  ?H u. eval_operand data t = SOME (a + 32w) /\
+    eval_operand head t = SOME (a + 32w + b * n2w stride) /\
+    t.vs_labels = s.vs_labels /\
+    op_taint u head = {} /\ op_prov H head = NONE /\
     op_taint u data = {} /\ op_prov H data = NONE /\
     (!x. data = Var x ==> not_fresh_at ready x) /\
     (!x. head = Var x ==> not_fresh_at ready x) /\
@@ -252,7 +334,7 @@ Theorem clean_scaled_source_prefix_endpoint_ptr:
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `inst_extends st c1 /\ inst_extends c1 c2 /\ inst_extends c2 ready` by
     metis_tac[inst_extends_emit_op] >>
   `emitted_insts st ready = emitted_insts st c1 ++ emitted_insts c1 c2 ++ emitted_insts c2 ready` by
@@ -334,6 +416,29 @@ Proof
   `cs_extends st c1 /\ cs_extends c1 c2 /\ cs_extends c2 ready` by
     (rpt conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def]) >>
   fs[Abbr `ss2`, ADD1, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
+  `eval_operand data s1 = SOME (a + 32w)` by
+    (qpat_assum `emit_op ADD [src; Lit 32w] st = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+         eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `eval_operand off s2 = SOME (b * n2w stride)` by
+    (qpat_assum `emit_op MUL _ c1 = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+         eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `eval_operand data s2 = SOME (a + 32w)` by
+    (qpat_assum `!q. not_fresh_at c1 q ==> _`
+       (mp_then Any mp_tac old_operand_ghost_frame) >>
+     disch_then (qspec_then `data` mp_tac) >> simp[]) >>
+  `eval_operand head t = SOME (a + 32w + b * n2w stride)` by
+    (qpat_assum `emit_op ADD [data;off] c2 = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+         eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `eval_operand data t = SOME (a + 32w)` by
+    (qpat_assum `!q. not_fresh_at c2 q ==> _`
+       (mp_then Any mp_tac old_operand_ghost_frame) >>
+     disch_then (qspec_then `data` mp_tac) >> simp[]) >>
   qexistsl_tac [`H`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
   qexistsl_tac [`(\g z v. g = H1 /\ z = u1 /\ v = s1 with vs_inst_idx := s.vs_inst_idx + 1)`,`c1`] >>
@@ -341,3 +446,4 @@ Proof
   irule frag_exec_ptr_seq >>
   qexistsl_tac [`(\g z v. g = H2 /\ z = u2 /\ v = s2 with vs_inst_idx := s.vs_inst_idx + 2)`,`c2`] >> simp[]
 QED
+
