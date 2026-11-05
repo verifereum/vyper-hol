@@ -678,3 +678,43 @@ Theorem ld_frontiers_empty_push:
 Proof
   strip_tac >> gen_tac >> Cases_on `j` >> simp[ld_charge_empty_push]
 QED
+
+(* A target-only allocation is disjoint from every live translated slot. *)
+Theorem ld_private_slot_separation:
+  ld_global lo A (f::fs) /\ EVERY (ld_maps A) (f::fs) /\
+  FDOM A = ld_slots A (f::fs) /\
+  FLOOKUP f.lf_src.vs_allocas ai = NONE /\
+  FLOOKUP f.lf_tgt.vs_allocas ai = SOME (d,m) /\ 0 < m ==>
+  lo <= d /\
+  (!k b c n. FLOOKUP A k = SOME (b,c,n) /\ 0 < n ==>
+    c+n <= d \/ d+m <= c)
+Proof
+  strip_tac >>
+  `(0,ai,d,m) IN ld_sites (f::fs) F` by
+    (simp[ld_sites_def] >> qexists_tac `0` >> simp[]) >>
+  conj_tac
+  >- (drule_all ld_global_bounds >> simp[]) >>
+  rpt strip_tac >>
+  `k IN ld_slots A (f::fs)` by
+    (`k IN FDOM A` by (gvs[FLOOKUP_DEF] >> metis_tac[]) >> metis_tac[]) >>
+  `?g aid. MEM g (f::fs) /\ k = (g.lf_serial,aid) /\
+    FLOOKUP g.lf_src.vs_allocas aid = SOME (b,n) /\
+    FLOOKUP g.lf_tgt.vs_allocas aid = SOME (c,n)` by
+    (qpat_x_assum `k IN ld_slots _ _` mp_tac >>
+     simp_tac std_ss [ld_slots_def, GSPECIFICATION] >> strip_tac >>
+     rename1 `MEM g (f::fs)` >>
+     `ld_maps A g` by (fs[EVERY_MEM] >> metis_tac[]) >>
+     drule_all ld_maps_original >> strip_tac >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `MEM g (f::fs)` mp_tac >>
+  pure_rewrite_tac[MEM_EL] >>
+  disch_then (qx_choose_then `j` strip_assume_tac) >> gvs[] >>
+  `(j,aid,c,n) IN ld_sites (f::fs) F` by
+    (simp[ld_sites_def] >> metis_tac[]) >>
+  `(j,aid) <> (0,ai)` by (strip_tac >> gvs[]) >>
+  irule ld_global_separate >> simp[] >>
+  goal_assum (drule_at (Pat `ld_global _ _ _`)) >>
+  metis_tac[]
+QED
+
+val _ = if null (hyp ld_private_slot_separation) then ()
+  else raise Fail "private slot separation has hypotheses";

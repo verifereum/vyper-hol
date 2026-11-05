@@ -2,7 +2,7 @@
 Theory lowerDloadExpansionExit
 Ancestors
   lowerDloadCodeDataBytes lowerDloadSafetyKernel lowerDloadSafetyAllocation
-  lowerDloadSafetyWriteBytes
+  lowerDloadSafetyWriteBytes lowerDloadSafetyRelation
   venomExecSemantics venomState venomInst finite_map list words arithmetic
 
 Theorem ld_alloca_value_frame[local]:
@@ -116,3 +116,24 @@ QED
 
 val _ = if null (hyp ld_codecopy_memory_private) then ()
   else raise Fail "private CODECOPY theorem has hypotheses";
+
+Theorem ld_codecopy_owned_private:
+  ld_global lo A (f::fs) /\ EVERY (ld_maps A) (f::fs) /\
+  FDOM A = ld_slots A (f::fs) /\
+  FLOOKUP f.lf_src.vs_allocas ai = NONE /\
+  FLOOKUP f.lf_tgt.vs_allocas ai = SOME (d,m) /\ 0 < m /\
+  ld_memory lo A tn s t /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dest; src; len] /\
+  eval_operand dest t = SOME dw /\ eval_operand src t = SOME sw /\
+  eval_operand len t = SOME nw /\ w2n dw = d /\ w2n nw = m /\
+  step_inst fuel C inst t = OK u ==>
+  ld_memory lo A tn s u
+Proof
+  strip_tac >> drule_all ld_private_slot_separation >> strip_tac >>
+  irule ld_codecopy_memory_private >>
+  goal_assum (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
+  gvs[] >> metis_tac[]
+QED
+
+val _ = if null (hyp ld_codecopy_owned_private) then ()
+  else raise Fail "owned private CODECOPY theorem has hypotheses";
