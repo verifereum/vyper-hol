@@ -25,7 +25,7 @@ Ancestors
   exprSimUnop exprSimCompare
   exprBopLowering exprWordOperand
   loweringSlice
-  exprLowering compileEnv
+  exprLowering exprCallBounds compileEnv
   vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperValue vyperValueOperation
   vyperTypeCallGraph
@@ -417,6 +417,89 @@ QED
    word_builtin_frag, word_builtin_frag_success); that theorem is stated for
    `Builtin ann bt args` with lower_word_args over args, which this
    expression's lowering is not (its operands are e1::elems). *)
+Theorem literal_compile_multi_exprs:
+  !es cenv. compile_multi_exprs compile_expr cenv es =
+    lower_word_args cenv expr_type es
+Proof
+  Induct >> simp[compile_multi_exprs_def, lower_word_args_def]
+QED
+
+Theorem literal_dispatch:
+  !cenv ty ann bop e1 a t n elems sa.
+    (bop = In \/ bop = NotIn) /\ is_ArrayT a ==>
+    compile_expr cenv ty
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) sa =
+    comp_bind (lower_word_args cenv expr_type (e1::elems))
+      (\xs st. as_stack_val ann
+        ((if bop = In then compile_list_membership_in (HD xs) (TL xs)
+          else compile_list_membership_notin (HD xs) (TL xs)) st)) sa
+Proof
+  rpt strip_tac >>
+  `~names_builtin (Bop bop) [e1; Builtin a (MakeArray t n) elems]` by
+    (Cases_on `e1` >> simp[names_builtin_def]) >>
+  simp[compile_expr_builtin_dispatch] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, vyperASTTheory.expr_type_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def] >>
+  qmatch_goalsub_abbrev_tac `compile_multi_exprs (expr_child_callback bound compile_expr) cenv elems` >>
+  `compile_multi_exprs (expr_child_callback bound compile_expr) cenv elems =
+   compile_multi_exprs compile_expr cenv elems` by
+    (irule compile_multi_exprs_callback_cong >> rpt strip_tac >>
+     simp[FUN_EQ_THM, expr_child_callback_def] >>
+     drule expr_list_member_bound >> simp[Abbr `bound`]) >>
+  simp[literal_compile_multi_exprs, lower_word_args_def, comp_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem literal_args_shape:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) ==>
+  wb_args_shape cenv arg_ty (e1::elems)
+Proof
+  strip_tac >> drule literal_body_typing >> simp[] >> strip_tac >>
+  simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (irule literal_body_operand_pre >> conj_tac
+     >- gvs[expr_body_pre_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `is_word_type (expr_type e)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all expr_body_pre_lower_value_word_shape >> simp[]
+QED
+
+Theorem literal_compile_stack:
+  (bop = In \/ bop = NotIn) /\ is_ArrayT a ==>
+  !ty sa. ?op sb. compile_expr cenv ty
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) sa =
+    (StackValue ann op,sb)
+Proof
+  strip_tac >> rpt gen_tac >> simp[literal_dispatch, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qmatch_goalsub_abbrev_tac `as_stack_val ann result` >>
+  Cases_on `result` >> simp[as_stack_val_def]
+QED
+
+Theorem literal_lower_value:
+  (bop = In \/ bop = NotIn) /\ is_ArrayT a /\
+  lower_value compile_expr cenv ty
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) sa = (op,sb) ==>
+  ?needle xs sm.
+    lower_word_args cenv expr_type (e1::elems) sa = (needle::xs,sm) /\
+    (if bop = In then compile_list_membership_in needle xs
+     else compile_list_membership_notin needle xs) sm = (op,sb)
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, literal_dispatch,
+       lower_word_args_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_abbrev_tac `as_stack_val ann result` >>
+  Cases_on `result` >> gvs[as_stack_val_def, unwrap_value_def, comp_return_def]
+QED
+
 Theorem compile_bop_in_literal_word_case:
   !nocalls ctx func cenv cx ann bop e1 a t n elems.
     is_word_type (expr_type e1) /\ (bop = In \/ bop = NotIn) /\
