@@ -138,6 +138,34 @@ Proof
   asm_rewrite_tac[]
 QED
 
+(* Materialization keeps the child's physical post layout, including widened
+   internal-call buffers. *)
+Theorem unwrap_value_materialise_physical_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' tv v vv op R.
+    unwrap_value cenv vv sm = (op,sb) /\
+    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    read_result cx tv es' = (INL v,es') /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt /\
+           ~is_word_type (post_value_type cenv e) ==>
+           type_memory_bytes cenv (post_value_type cenv e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
+    frag_exec ctx sm sb
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac
+    [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,
+     `\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s`, `R`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all vv_post_materialise >> simp[]) >>
+  irule unwrap_value_physical_sim >> simp[]
+QED
+
 Theorem unwrap_value_materialise_sim:
   !ctx func cenv cx e es sa sm sb s0 es' tv v vv op R.
     post_value_type cenv e = expr_type e /\
@@ -156,13 +184,7 @@ Theorem unwrap_value_materialise_sim:
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  rpt strip_tac >> irule frag_exec_conseq >>
-  qexistsl_tac
-    [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,
-     `\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s`, `R`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> drule_all vv_post_materialise >> simp[]) >>
-  irule unwrap_value_sim >> simp[]
+  rpt strip_tac >> irule unwrap_value_materialise_physical_sim >> simp[]
 QED
 
 Theorem vv_post_old_buffer:
@@ -377,17 +399,16 @@ Proof
   simp[vv_post_def]
 QED
 
-Theorem unwrap_value_rebased_sim:
-  post_value_type ce e = expr_type e /\
+Theorem unwrap_value_rebased_physical_sim:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
   vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-           ~is_word_type (expr_type e) ==>
-           type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+    (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+           ~is_word_type (post_value_type ce e) ==>
+           type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) ==>
   frag_exec ctx sm su (\s. s = r)
     (\s. expr_post ctx func ce cx e es'
@@ -404,7 +425,27 @@ Proof
   `local_ptrs_reserved ce (sa with cs_next_var := sm.cs_next_var)` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sm` >> simp[]) >>
-  irule unwrap_value_materialise_sim >> simp[]
+  irule unwrap_value_materialise_physical_sim >> simp[]
+QED
+
+Theorem unwrap_value_rebased_sim:
+  post_value_type ce e = expr_type e /\
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
+  frag_exec ctx sm su (\s. s = r)
+    (\s. expr_post ctx func ce cx e es'
+      (sa with cs_next_var := sm.cs_next_var) su r es' v op s) R
+Proof
+  strip_tac >> irule unwrap_value_rebased_physical_sim >> simp[] >>
+  qexistsl_tac [`es`, `s0`, `tv`, `vv`] >> simp[]
 QED
 
 Theorem expr_post_rebased_lookup:
