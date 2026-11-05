@@ -1013,3 +1013,19 @@ Checked build: lowerDloadPtrJointMemoryStoreTheory and
 o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6778_t001).
 This is only the original MSTORE8 next row, not MSTORE, MCOPY, an expansion
 completion, or global closure; the frozen theorem remains unfinished.
+
+## C1.12.94: checked ordinary MSTORE whole-normal-Q row
+
+`dload_joint_tracked_mstore_next` in lowerDloadPtrJointMemoryStoreTheory closes
+the exact same normal-Q literal-next interface with opcode MSTORE. The extra
+core premise, bounded source operand masks, follows from the incoming source
+frame_reachable witness using dload_reachable_op_taint_bound; it is not a new
+caller hypothesis or an inference from taint_within. Shape supplies empty
+outputs and operand eligibility; source discipline supplies safety. The checked
+MSTORE core preserves the actual finite V and independent U and exact ghosts.
+A successful-step field lemma supplies unchanged control, allocation and call
+context fields, allowing the existing fields-singleton, index-update and
+NormalNext interfaces to return every Q field without unfolding the boundary.
+Checked build: lowerDloadPtrJointMemoryStoreTheory and
+o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6792_t001).
+This is local MSTORE next closure only, not allocation/expansion/global closure.
