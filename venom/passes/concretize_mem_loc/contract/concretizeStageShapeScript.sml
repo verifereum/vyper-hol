@@ -200,6 +200,83 @@ Proof
   simp[fn_reachable_def, concretize_positions_entry_label]
 QED
 
+Theorem concretize_positions_operand_provenance[local]:
+  MEM (Var v) (concretize_inst_with_positions positions inst).inst_operands ==>
+  MEM (Var v) inst.inst_operands
+Proof
+  Cases_on `inst.inst_opcode = ALLOCA` >>
+  simp[concretize_inst_with_positions_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  rename1 `out::rest` >> Cases_on `rest` >> simp[] >>
+  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
+  simp[mk_assign_inst_def, mk_nop_inst_def]
+QED
+
+Theorem concretize_positions_block_instruction:
+  MEM inst' (clear_nops_block (block_map_transform
+    (concretize_inst_with_positions positions) bb)).bb_instructions <=>
+  ?inst. MEM inst bb.bb_instructions /\
+    inst' = concretize_inst_with_positions positions inst /\
+    inst'.inst_opcode <> NOP
+Proof
+  simp[clear_nops_block_def, block_map_transform_def, MEM_FILTER, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem concretize_positions_block_phi:
+  inst.inst_opcode = PHI ==>
+  (MEM inst (clear_nops_block (block_map_transform
+     (concretize_inst_with_positions positions) bb)).bb_instructions <=>
+   MEM inst bb.bb_instructions)
+Proof
+  strip_tac >> simp[concretize_positions_block_instruction] >>
+  metis_tac[concretize_inst_positions_phi]
+QED
+
+Theorem concretize_positions_block_provenance:
+  MEM bb' (concretize_function_with_positions positions fn).fn_blocks <=>
+  ?bb. MEM bb fn.fn_blocks /\
+    bb' = clear_nops_block
+      (block_map_transform (concretize_inst_with_positions positions) bb)
+Proof
+  simp[concretize_function_with_positions_def, clear_nops_function_def,
+       function_map_transform_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem concretize_positions_insts_blocks[local]:
+  fn_insts_blocks (MAP (\bb. clear_nops_block
+    (block_map_transform (concretize_inst_with_positions positions) bb)) bbs) =
+  FILTER (\i. i.inst_opcode <> NOP)
+    (MAP (concretize_inst_with_positions positions) (fn_insts_blocks bbs))
+Proof
+  Induct_on `bbs` >>
+  gvs[fn_insts_blocks_def, clear_nops_block_def, block_map_transform_def,
+       MAP_APPEND, FILTER_APPEND]
+QED
+
+Theorem concretize_positions_insts[local]:
+  fn_insts (concretize_function_with_positions positions fn) =
+  FILTER (\i. i.inst_opcode <> NOP)
+    (MAP (concretize_inst_with_positions positions) (fn_insts fn))
+Proof
+  simp[fn_insts_def, concretize_function_with_positions_def,
+       clear_nops_function_def, function_map_transform_def, MAP_MAP_o,
+       combinTheory.o_DEF, concretize_positions_insts_blocks]
+QED
+
+Theorem concretize_positions_definition_count:
+  EVERY inst_wf (fn_insts fn) /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) ==>
+  LENGTH (FILTER (\i. MEM v i.inst_outputs)
+    (fn_insts (concretize_function_with_positions positions fn))) =
+  LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn))
+Proof
+  strip_tac >> simp[concretize_positions_insts] >>
+  drule_all concretize_positions_definition_filter >>
+  disch_then (qspec_then `v` assume_tac) >> simp[]
+QED
+
 Theorem mk_concretize_layout_alloca_positions[local]:
   mk_concretize_layout reserved positions fn = SOME layout ==>
   !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
