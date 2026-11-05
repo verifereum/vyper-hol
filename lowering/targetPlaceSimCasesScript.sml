@@ -6,15 +6,15 @@
  * base's pointer with one ADD: struct_field_offset bytes for a local's
  * place, struct_field_offset_slots slots for a storage one, where the
  * source extends the base's place by the field.  An element of an array or
- * a mapping is cheated for a target with no pop
- * (target_subscript_nopop_case says what it needs) and admitted for one
- * with one (target_subscript_pop_case).
+ * a mapping is proved for a target with no pop and effect-free storage
+ * indices (target_subscript_nopop_case), and admitted for targets with
+ * a pop or an effectful storage index.
  *
  * TOP-LEVEL:
  *   target_attr_case       — a field: the base's pointer plus the field's
  *                          byte offset (memory) or slot offset (storage)
  *   target_subscript_case  — an element of an array or a mapping, by
- *                          whether the index has a pop (both cheated)
+ *                          whether indices have pops or storage effects
  *   target_case_all        — every target, by induction, from the indices'
  *                          judgments
  *   target_indices, target_idx_case_ok — the indices' judgments from
@@ -38,7 +38,8 @@ Ancestors
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim targetSubscriptSim exprSimMappingHash
-  exprNoEffectStorage supportedExprTraverse
+  exprNoEffectStorage supportedExprTraverse exprOperandVar context vyperTyping
+  exprSimAggregateLayout
   accountsRelProps vyperStoragePlaceProvenance vyperStorageLayoutSafety
   vyperStorageBackend vyperLookupStorage
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
@@ -759,8 +760,8 @@ QED
    base's fragment, the index's (lower_value), then, by the base's place
    type, the slot of the key (compile_mapping_subscript, with
    compile_keccak256_key for a bytes or string key) or the bounds check and
-   the element's pointer (compile_array_subscript).  Cheated, for the alan
-   run:
+   the element's pointer (compile_array_subscript).  The proof composes
+   these boundaries:
    - the index runs after the base, so the base's target_post must survive
      its fragment: place_ptr_rel does (place_ptr_rel_vars_frame: the local
      pointers and the base's operand are not fresh at the index's start),
@@ -793,8 +794,366 @@ Theorem target_subscript_nopop_case:
        ~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[target_case_def, target_sim_def] >>
+  rpt gen_tac >> strip_tac >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `target_sim ctx func cenv cx env bt es` by
+    (fs[target_case_def] >> first_x_assum irule >>
+     gvs[int_calls_expr_def]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ _ = _` mp_tac >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `?rb sm ix sn.
+     compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+     lower_value compile_expr cenv (expr_type e) e sm = (ix,sn)` by
+    (drule compile_get_target_ptr_subscript >> strip_tac >>
+     qexistsl_tac [`rb`,`sm`,`ix`,`sn`] >> simp[]) >>
+  drule_all compile_get_target_ptr_subscript_mono >> strip_tac >>
+  `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb` by
+    fs[ci_mono_def] >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
+  qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+  rewrite_tac[eval_base_place_subscript] >>
+  Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
+  reverse (Cases_on `r1`) >> simp[]
+  >- (rename1 `eval_base_place cx bt es = (INR exc,es1)` >>
+      rpt strip_tac >> gvs[] >>
+      qpat_x_assum `target_sim _ _ _ _ _ bt _`
+        (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
+      disch_then drule_all >> disch_then (qspec_then `s0` mp_tac) >>
+      strip_tac >> fs[] >> irule frag_exec_exit_prefix >>
+      qexists_tac `sm` >> simp[]) >>
+  rename1 `eval_base_place cx bt es = (INL pv,es1)` >>
+  `expr_sim_case nocalls ctx func cenv cx e /\
+   expr_vv_case nocalls ctx func cenv cx e` by metis_tac[] >>
+  `expr_sim_inv cenv cx env es1` by metis_tac[eval_base_place_sim_inv] >>
+  `expr_body_pre cenv cx env e es1` by
+    gvs[target_pre_def, target_indices_pre_def] >>
+  `expr_sim ctx func cenv cx (expr_type e) e es1` by
+    (qpat_x_assum `expr_sim_case _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_sim_case_def]) >>
+     disch_then irule >> conj_tac
+     >- gvs[int_calls_expr_def] >>
+     qexists_tac `env` >> simp[]) >>
+  `fn_has_code sm sn func /\ fn_has_code sn sb func` by
+    metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved cenv sm` by
+    (fs[local_ptrs_reserved_def, ci_mono_def] >>
+     rpt strip_tac >> irule not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es1` >>
+  rename1 `(ir,es2)` >> reverse (Cases_on `ir`) >> simp[]
+  >- suspend "index_exception" >>
+  suspend "successful_index"
 QED
+
+Resume target_subscript_nopop_case[index_exception]:
+  rename1 `(do raw <- eval_expr cx e; read_result cx raw od) es1 = (INR exc,es2)` >>
+  strip_tac >> gvs[] >>
+  `expr_res_ok (INR exc : value + exception)` by
+    gvs[expr_res_ok_def, target_res_ok_def] >>
+  qpat_x_assum `target_sim _ _ _ _ _ bt _`
+    (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
+  `target_res_ok (INL pv)` by simp[target_res_ok_def] >>
+  disch_then drule_all >> disch_then (qspec_then `s0` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule frag_exec_weaken >>
+  disch_then (qspecl_then
+    [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+     `\s. target_post ctx func cenv cx es sa sm s0 es1 pv vt' rb s`,
+     `expr_exit (INR exc : value + exception)`] mp_tac) >>
+  simp[expr_exit_def] >> strip_tac >>
+  drule frag_exec_then >>
+  disch_then (qspecl_then [`sb`, `\s. F`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >>
+    irule frag_exec_exit_prefix >> qexists_tac `sn` >> simp[] >>
+    drule_all target_index_exception_frag >>
+    disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
+    disch_then (qspecl_then [`\s. s = t`, `\s. F`,
+      `expr_exit (INR exc : value + exception)`] mp_tac) >>
+    impl_tac >- gvs[target_post_def] >> simp[]) >>
+  `expr_exit (INR exc : value + exception) =
+   expr_exit (INR exc : eval_result + exception)` by
+    (qspec_then `\v:eval_result. ARB:value` mp_tac expr_exit_success_map >>
+     disch_then (qspec_then `INR exc` mp_tac) >> simp[]) >>
+  asm_rewrite_tac[]
+QED
+
+Resume target_subscript_nopop_case[successful_index]:
+  rename1 `(do raw <- eval_expr cx e; read_result cx raw od) es1 = (INL kv,es2)` >>
+  strip_tac >>
+  `~expr_has_pop e /\ ~target_has_pop bt` by
+    gvs[target_has_pop_def, supportedExprTraverseTheory.supported_expr_exists_def, expr_has_pop_def] >>
+  `es2.scopes = es1.scopes` by
+    (qpat_x_assum `(do raw <- eval_expr cx e; read_result cx raw od) _ = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     metis_tac[exprNoPopScopesTheory.eval_expr_nopop_scopes]) >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
+    metis_tac[exprNoPopScopesTheory.eval_base_place_nopop_scopes] >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- simp[frag_exec_def] >>
+  `target_res_ok (INL pv)` by simp[target_res_ok_def] >>
+  qpat_x_assum `target_sim _ _ _ _ _ bt _`
+    (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
+  disch_then drule_all >> disch_then (qspec_then `s0` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `frag_exec _ sa sm _ _ _`
+    (mp_then Any mp_tac frag_exec_weaken) >>
+  disch_then (qspecl_then
+    [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+     `\s. target_post ctx func cenv cx es sa sm s0 es1 pv vt' rb s`,
+     `expr_exit res`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `frag_exec _ sa sm _ _ _`
+    (mp_then Any mp_tac frag_exec_then) >>
+  disch_then (qspecl_then [`sb`,
+    `\s. ?pv. res = INL pv /\ target_post ctx func cenv cx es sa sb s0 es' pv vt r s`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >>
+    `!l. FST rb <> Label l` by
+      (irule compile_get_target_ptr_sim_not_label >>
+       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+       qexists_tac `vt'` >> simp[]) >>
+    `sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+     sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+    drule_all target_index_frag >> strip_tac >>
+    qpat_x_assum `frag_exec _ sm sn _ _ _`
+      (mp_then Any mp_tac frag_exec_weaken) >>
+    disch_then (qspecl_then [`\s. s = t`,
+      `\s. target_post ctx func cenv cx es sa sn s0 es2 pv vt' rb s /\
+           expr_post ctx func cenv cx e es1 sm sn t es2 kv ix s`,
+      `expr_exit res`] mp_tac) >>
+    simp[] >> strip_tac >>
+    qpat_x_assum `frag_exec _ sm sn _ _ _`
+      (mp_then Any mp_tac frag_exec_then) >>
+    disch_then (qspecl_then [`sb`,
+      `\s. ?pv. res = INL pv /\ target_post ctx func cenv cx es sa sb s0 es' pv vt r s`] mp_tac) >>
+    impl_tac >- (simp[] >> rpt strip_tac >>
+      suspend "suffix") >>
+    disch_then ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume target_subscript_nopop_case[suffix]:
+  Cases_on `pv`
+  >- (fs[target_post_def, place_ptr_rel_def])
+  >- suspend "place_suffix" >>
+  suspend "mapping_suffix"
+QED
+
+Resume target_subscript_nopop_case[mapping_suffix]:
+  rename1 `HashMapRef tr slot kt vt0` >>
+  `vt' = HashMapT kt vt0 /\
+   FST (SND rb) = SOME (slot_loc tr) /\
+   SND (SND rb) = SOME (MapPT kt vt0)` by
+    fs[target_post_def, place_ptr_rel_def, value_type_place_def] >>
+  gvs[] >>
+  drule compile_get_target_ptr_subscript >> strip_tac >> gvs[] >>
+  `expr_type e = kt /\ hashmap_key_type kt /\ vt = vt0` by
+    gvs[subscript_vtype_def, AllCaseEqs()] >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      expr_runtime_typed_def, value_result_typed_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `!m. res <> INR (Error (TypeError m))` by
+    (rpt strip_tac >> gvs[target_res_ok_def]) >>
+  `?pv0. res = INL pv0` by
+    (Cases_on `vt` >>
+     gvs[extend_place_def, extend_place_nested_mapping, bind_def,
+         lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+     qpat_x_assum `(_ es2 = (INR _,_))` mp_tac >>
+     qmatch_goalsub_abbrev_tac `evaluate_type (get_tenv cx) elemty` >>
+     Cases_on `evaluate_type (get_tenv cx) elemty` >>
+     gvs[return_def, raise_def]) >>
+  gvs[] >>
+  `!x. ix = Var x ==> not_fresh_at sn x` by
+    metis_tac[compile_lower_value_var] >>
+  `ci_mono sn sk` by
+    (Cases_on `is_bytestring_type (expr_type e)` >>
+     gvs[comp_return_def, ci_mono_refl] >>
+     qspecl_then [`ix`,`F`,`sn`] mp_tac ci_mono_compile_keccak256_key >>
+     simp[]) >>
+  `!x. kh = Var x ==> not_fresh_at sk x` by
+    (Cases_on `is_bytestring_type (expr_type e)` >>
+     gvs[comp_return_def] >>
+     gvs[compile_keccak256_key_def, emit_op_def, comp_bind_def,
+         comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+         not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
+  `!x. dst = Var x ==> not_fresh_at sb x` by
+    gvs[compile_mapping_subscript_def, compile_alloc_buffer_def,
+        emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+        not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+  `local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv sk` by
+    metis_tac[compiler_ci_mono_reserved] >>
+  `ci_mono sk sb` by
+    (qspecl_then [`FST rb`,`kh`,`sk`] mp_tac ci_mono_compile_mapping_subscript >> simp[]) >>
+  `fn_has_code sk sb func` by
+    (irule (cj 2 fn_has_code_split) >>
+     conj_tac >- fs[ci_mono_def] >>
+     qexists_tac `sn` >> fs[ci_mono_def]) >>
+  `sn.cs_next_var <= sk.cs_next_var /\ sa.cs_next_var <= sn.cs_next_var /\
+   sa.cs_next_id <= sk.cs_next_id` by fs[ci_mono_def] >>
+  qpat_x_assum `target_post _ _ _ _ _ sa sm _ _ _ _ _ _` kall_tac >>
+  irule target_mapping_suffix_frag >>
+  qpat_assum `target_post _ _ _ _ _ sa sn _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume target_subscript_nopop_case[place_suffix]:
+  `?ety. vt' = Type ety` by
+    (Cases_on `vt'` >> simp[] >> Cases_on `p` >>
+     fs[target_post_def, place_ptr_rel_def]) >>
+  gvs[] >>
+  `?et bd. ety = ArrayT et bd /\ vt = Type et /\ is_int_type (expr_type e)` by
+    (Cases_on `ety` >> gvs[subscript_vtype_def, AllCaseEqs()]) >>
+  gvs[] >> Cases_on `p`
+  >~ [`StoragePlace tr slot tv0`] >- suspend "storage_suffix"
+  >~ [`ImmutablePlace src id path`] >- fs[target_post_def, place_ptr_rel_def] >>
+  suspend "memory_suffix"
+QED
+
+Resume target_subscript_nopop_case[memory_suffix]:
+  rename1 `MemoryPlace id path` >>
+  `FST (SND rb) = SOME LocMemory /\
+   SND (SND rb) = SOME (ValPT (ArrayT et bd))` by
+    fs[target_post_def, place_ptr_rel_def, value_type_place_def] >>
+  drule compile_get_target_ptr_subscript >> strip_tac >> gvs[] >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      expr_runtime_typed_def, value_result_typed_def] >>
+  drule_all eval_base_place_memory_live_scopes_frame >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?w etv. eval_operand (FST rb) t' = SOME w /\
+     place_ptr_rel cenv cx t' (PlaceR (MemoryPlace id path)) w
+       (FST (SND rb)) (Type (ArrayT et bd)) /\
+     evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+     evaluate_type (get_tenv cx) et = SOME etv` by
+    (fs[target_post_def, place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >>
+     metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx es2 t'` by fs[expr_post_def] >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  `?av. v = ArrayV av` by (Cases_on `v` >> fs[value_has_type_def]) >>
+  `?ibt bits i. expr_type e = BaseT ibt /\
+     (ibt = IntT bits \/ ibt = UintT bits) /\ bits <= 256 /\
+     kv = IntV i /\ tv = BaseTV ibt` by
+    (Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+     rename1 `is_int_type (BaseT ibt)` >> Cases_on `ibt` >>
+     gvs[is_int_type_def, evaluate_type_def, AllCaseEqs()] >>
+     Cases_on `kv` >> gvs[value_has_type_def]) >>
+  `eval_operand ix t' = SOME (typed_val_to_w256 (BaseTV ibt) (IntV i))` by
+    fs[expr_post_def, expr_val_rel_def, is_word_type_def] >>
+  gvs[] >>
+  `elem_size_in_location cenv LocMemory et = type_memory_size etv` by
+    (simp[elem_size_in_location_def, is_slot_addressed_def] >>
+     irule expr_sim_inv_memory_size >>
+     qpat_assum `expr_sim_inv cenv cx env es2` (irule_at Any) >> simp[]) >>
+  `!x. ix = Var x ==> not_fresh_at sn x` by
+    metis_tac[compile_lower_value_var] >>
+  `!x. dst = Var x ==> not_fresh_at sb x` by
+    metis_tac[compiler_subscript_ops_var] >>
+  `local_ptrs_reserved cenv sn` by metis_tac[compiler_ci_mono_reserved] >>
+  `sa.cs_next_var <= sn.cs_next_var` by fs[ci_mono_def] >>
+  suspend "memory_execute"
+QED
+
+Resume target_subscript_nopop_case[memory_execute]:
+  markerLib.RESUME_TAC >>
+  irule frag_exec_pre_exit >>
+  irule_at Any target_memory_array_suffix >>
+  qpat_assum `target_post _ _ _ _ _ sa sn _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extend_place _ _ _ _ = _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `expr_sim_inv cenv cx env es2` (irule_at Any) >>
+  qpat_assum `eval_operand ix t' = SOME _` (irule_at Any) >>
+  simp[] >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `bd` >> simp[word_scale_def, bound_length_def]
+QED
+
+Resume target_subscript_nopop_case[storage_suffix]:
+  rename1 `StoragePlace tr slot tv0` >>
+  `FST (SND rb) = SOME (slot_loc tr) /\
+   SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME tv0 /\
+   eval_operand (FST rb) t' = SOME slot` by
+    fs[target_post_def, place_ptr_rel_def, value_type_place_def] >>
+  `~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))` by
+    (simp[NOT_EXISTS] >>
+     qpat_x_assum `!st r st' l. _` mp_tac >>
+     disch_then (qspecl_then [`sa`,`rb`,`sm`,`slot_loc tr`] mp_tac) >>
+     simp[] >> Cases_on `tr` >> simp[slot_loc_def, is_slot_addressed_def]) >>
+  `~EXISTS expr_has_effect (target_indices bt) /\ ~expr_has_effect e` by
+    fs[target_indices_def, EXISTS_APPEND] >>
+  drule_all eval_base_place_pure_storage_invariant >> strip_tac >>
+  `get_storage cx es2 tr = get_storage cx es1 tr` by
+    (irule eval_expr_read_noeffect_storage >> goal_assum (drule_at Any) >> simp[]) >>
+  drule compile_get_target_ptr_subscript >> strip_tac >> gvs[] >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      expr_runtime_typed_def, value_result_typed_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?etv. tv0 = ArrayTV etv bd /\ evaluate_type (get_tenv cx) et = SOME etv` by
+    fs[evaluate_type_def, AllCaseEqs()] >>
+  `?ibt bits i. expr_type e = BaseT ibt /\
+     (ibt = IntT bits \/ ibt = UintT bits) /\ bits <= 256 /\
+     kv = IntV i /\ tv = BaseTV ibt` by
+    (Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+     rename1 `is_int_type (BaseT ibt)` >> Cases_on `ibt` >>
+     gvs[is_int_type_def, evaluate_type_def, AllCaseEqs()] >>
+     Cases_on `kv` >> gvs[value_has_type_def]) >>
+  `eval_operand ix t' = SOME (typed_val_to_w256 (BaseTV ibt) (IntV i))` by
+    fs[expr_post_def, expr_val_rel_def, is_word_type_def] >>
+  gvs[] >>
+  `type_memory_bytes cenv et = type_memory_size etv` by
+    (irule expr_sim_inv_memory_size >>
+     qpat_assum `expr_sim_inv cenv cx env es2` (irule_at Any) >> simp[]) >>
+  `elem_size_in_location cenv (slot_loc tr) et = type_slot_size etv` by
+    (Cases_on `tr` >>
+     simp[slot_loc_def, elem_size_in_location_def, is_slot_addressed_def,
+          slot_count_of_memory_size]) >>
+  `!x. ix = Var x ==> not_fresh_at sn x` by metis_tac[compile_lower_value_var] >>
+  `!x. dst = Var x ==> not_fresh_at sb x` by metis_tac[compiler_subscript_ops_var] >>
+  `local_ptrs_reserved cenv sn` by metis_tac[compiler_ci_mono_reserved] >>
+  `sa.cs_next_var <= sn.cs_next_var` by fs[ci_mono_def] >>
+  `stmt_state_rel ctx func cenv cx es2 t'` by fs[expr_post_def] >>
+  Cases_on `bd` >>
+  FIRST [qpat_assum `extend_place _ (PlaceR (StoragePlace _ _ (ArrayTV _ (Fixed _)))) _ _ = _` kall_tac >>
+         suspend "storage_static_execute",
+         qpat_assum `extend_place _ (PlaceR (StoragePlace _ _ (ArrayTV _ (Dynamic _)))) _ _ = _` kall_tac >>
+         suspend "storage_dynamic_execute"]
+QED
+
+Resume target_subscript_nopop_case[storage_static_execute]:
+  markerLib.RESUME_TAC >>
+  irule frag_exec_pre_exit >> irule_at Any target_storage_array_static_suffix >>
+  qpat_assum `target_post _ _ _ _ _ sa sn _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extend_place _ _ _ _ = _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `eval_operand ix t' = SOME _` (irule_at Any) >> simp[] >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `tr` >> simp[word_scale_def, slot_loc_def]
+QED
+
+Resume target_subscript_nopop_case[storage_dynamic_execute]:
+  markerLib.RESUME_TAC >>
+  irule frag_exec_pre_exit >> irule_at Any target_storage_array_dynamic_suffix >>
+  qpat_assum `target_post _ _ _ _ _ sa sn _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extend_place _ _ _ _ = _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `eval_operand ix t' = SOME _` (irule_at Any) >> simp[] >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `tr` >> simp[word_scale_def, slot_loc_def]
+QED
+
+Finalise target_subscript_nopop_case
+
 
 (* An element of a storage or transient array target with a call in any of
    its indices (expr_has_effect).  ADMITTED (cheat), with exprSimPlaces'
