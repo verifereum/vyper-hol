@@ -1031,7 +1031,7 @@ Proof
   metis_tac[copy_runtime_frame_trans]
 QED
 
-Theorem body_ctor_copy_mem_ok[local]:
+Theorem body_ctor_copy_mem_ok:
   !n off sa sb s a b.
     compile_imm_copy_to_memory T imm src dst n off sa = ((),sb) /\
     copy_old_operand sa src /\ copy_old_operand sa dst /\
@@ -1121,7 +1121,7 @@ Proof
 QED
 
 (* A constructor's immutable lies below the allocation frontier. *)
-Theorem ctor_immutable_frontier[local]:
+Theorem ctor_immutable_frontier:
   stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t tv w es s' /\
   evaluate_type (get_tenv cx) t = SOME tvt ==>

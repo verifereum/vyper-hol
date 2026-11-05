@@ -42,14 +42,14 @@ Proof
   disch_then (qspec_then `d` mp_tac) >> simp[]
 QED
 
-(* unwrap_value of a pointer to a runtime immutable aggregate: a buffer of
-   the type's size, then the word copy into it. *)
-Theorem code_unwrap_shape[local]:
+(* unwrap_value of a pointer to an immutable aggregate: a buffer of the
+   type's size, then the word copy into it. *)
+Theorem code_unwrap_shape:
   !cenv ty p st op st'.
-    ~is_word_type ty /\ p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\
+    ~is_word_type ty /\ p.ptr_location = LocCode /\
     unwrap_value cenv (LocatedValue ty p) st = (op, st') ==>
     op = Var ("%" ++ toString st.cs_next_var) /\
-    compile_imm_copy_to_memory F cenv.ce_imm_alloca p.ptr_operand op
+    compile_imm_copy_to_memory cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_operand op
       ((type_memory_bytes cenv ty + 31) DIV 32) 0
       (st with <| cs_next_id := st.cs_next_id + 1;
                   cs_next_var := st.cs_next_var + 1;

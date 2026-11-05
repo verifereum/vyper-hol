@@ -2,7 +2,8 @@
    whatever its compiled value: a memory or stack value
    (stmtReasonMemKindMemory), a storage or transient pointer
    (stmtReasonStorageKindMemory), or a pointer into code
-   (stmtReasonCodeKindMemory).  bodySimStmtCases's reason_covered and
+   (stmtReasonCodeKindMemory, and stmtReasonCtorCodeKindMemory in a
+   constructor).  bodySimStmtCases's reason_covered and
    supported_reason_code tell them apart. *)
 Theory stmtReasonKindsMemory
 Ancestors
