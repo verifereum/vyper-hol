@@ -342,3 +342,250 @@ Proof
   disch_then (fn th => irule (SPEC_ALL th)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* ===== Assert ===== *)
+
+(* A false condition runs the reason as raise does. *)
+Theorem eval_assert_reason_bind:
+  !cx e se.
+    eval_stmt cx (Assert e (AssertReason se)) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (\v. if v = BoolV T then return ()
+           else if v = BoolV F then eval_stmt cx (Raise (RaiseReason se))
+           else raise (Error (TypeError "not BoolV")))
+Proof
+  rpt gen_tac >> rewrite_tac[eval_raise_reason_eq] >>
+  simp_tac (srw_ss()) [FUN_EQ_THM] >> gen_tac >>
+  simp_tac (srw_ss()) [Once evaluate_def] >>
+  simp[eval_expr_switch_forced] >>
+  simp[bind_def] >>
+  Cases_on `eval_expr cx e x` >> rename1 `_ = (raw,st)` >>
+  Cases_on `raw` >> simp[] >>
+  rename1 `read_result cx v st` >>
+  Cases_on `read_result cx v st` >> rename1 `_ = (forced,sf)` >>
+  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >> simp[bind_def]
+QED
+
+Theorem assert_reason_expr_admissible:
+  gas_admissible (eval_stmt cx (Assert e (AssertReason se))) (stmt_res_ok lctx)
+    es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `no_control_exc ex` by
+    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
+     simp[bind_def] >>
+     Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+     rename1 `_ = (raw,st)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
+  simp[eval_assert_reason_bind, bind_def] >>
+  fs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def] >>
+  metis_tac[]
+QED
+
+Theorem assert_reason_raise_admissible:
+  gas_admissible (eval_stmt cx (Assert e (AssertReason se))) (stmt_res_ok lctx)
+    es /\
+  (!tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := G ++ tail) =
+          (INL (BoolV F), mid with gas_obs := tail)) ==>
+  gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx)
+    (mid with gas_obs := [])
+Proof
+  rw[gas_admissible_def] >>
+  first_x_assum (qspecl_then [`G ++ gs`, `res`, `ee`] irule) >>
+  qexistsl_tac [`G`, `ee`, `gs`] >>
+  rewrite_tac[eval_assert_reason_bind] >> pure_once_rewrite_tac[bind_def] >>
+  asm_simp_tac (srw_ss()) []
+QED
+
+Theorem assert_ok_return_outcome[local]:
+  gas_marked_path memory ctx func s 0 (OK t) /\
+  Q (INL ()) (es with gas_obs := []) t ==>
+  gas_outcome memory tops (ctx,func) (return ()) (es,s) Q R
+Proof
+  strip_tac >> rewrite_tac[gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL ()`, `es`, `OK t`] >>
+  simp[gas_marked_exec_def, return_def]
+QED
+
+Theorem compile_assert_reason_parts:
+  compile_reason_message cenv se = compile_expr cenv (expr_type se) se /\
+  stmt_env cenv lctx ty (Assert e (AssertReason se)) sa = (cenv',sb) ==>
+  ?op s1 ok s2 fl s3 s4 s5 vv sm s6.
+    cenv' = cenv /\
+    lower_value compile_expr cenv (BaseT BoolT) e sa = (op,s1) /\
+    fresh_label "assert_ok" s1 = (ok,s2) /\
+    fresh_label "assert_fail" s2 = (fl,s3) /\
+    emit_inst JNZ [op; Label ok; Label fl] [] s3 = ((),s4) /\
+    new_block fl s4 = (s4.cs_current_bb,s5) /\
+    compile_expr cenv (expr_type se) se s5 = (vv,sm) /\
+    compile_revert_with_reason cenv vv (expr_type se)
+      (type_memory_bytes cenv (expr_type se)) sm = ((),s6) /\
+    new_block ok s6 = (s6.cs_current_bb,sb)
+Proof
+  strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [stmt_env_def, declare_stmt_local_def,
+    compile_stmt_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    LET_THM] >>
+  Cases_on `lower_value compile_expr cenv (BaseT BoolT) e sa` >>
+  rename1 `_ = (op,s1)` >> simp[] >>
+  Cases_on `fresh_label "assert_ok" s1` >> rename1 `_ = (ok,s2)` >> simp[] >>
+  Cases_on `fresh_label "assert_fail" s2` >> rename1 `_ = (fl,s3)` >> simp[] >>
+  Cases_on `emit_inst JNZ [op; Label ok; Label fl] [] s3` >>
+  rename1 `_ = (u,s4)` >> simp[] >>
+  Cases_on `new_block fl s4` >> rename1 `_ = (x5,s5)` >> simp[] >>
+  Cases_on `compile_expr cenv (expr_type se) se s5` >>
+  rename1 `_ = (vv,sm)` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `compile_revert_with_reason cenv vv MT MS sm` >>
+  Cases_on `compile_revert_with_reason cenv vv MT MS sm` >>
+  rename1 `_ = (u6,s6)` >> simp[] >>
+  Cases_on `new_block ok s6` >> rename1 `_ = (x7,s7)` >>
+  simp[] >> strip_tac >>
+  gvs[Abbr `MT`, Abbr `MS`] >>
+  imp_res_tac new_block_props >> gvs[]
+QED
+
+(* The condition's fragment and its JNZ; the ok edge lands, the fail edge
+   runs raise_reason_vv_outcome. *)
+Theorem compile_assert_reason_vv_frag_mem:
+  !d ctx func cx lctx RetQ cenv ty e se es.
+    (!ml str. se <> Literal (BaseT (StringT ml)) (StringL str)) /\
+    expr_type e = BaseT BoolT /\
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) e es /\
+    (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) e sa = (op, sb) ==>
+                cs_extends sa sb) /\
+    (!gs es1.
+       (do raw <- eval_expr cx e; read_result cx raw od)
+         (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
+       expr_vv_sim_mem ctx func cenv cx (expr_type se) se es1) /\
+    (!es sa vv sm sb s0 ee tv t.
+       compile_expr cenv (expr_type se) se sa = (vv, sm) /\
+       compile_revert_with_reason cenv vv (expr_type se)
+         (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
+       fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+       local_ptrs_reserved cenv sa /\
+       vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
+       ?u. gas_path_mem ctx func t 0 (Abort Revert_abort u)) ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assert e (AssertReason se)))
+      (eval_stmt cx (Assert e (AssertReason se))) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `compile_reason_message cenv se = compile_expr cenv (expr_type se) se` by
+    metis_tac[compile_reason_message_expr] >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_assert_reason_parts >> strip_tac >> gvs[] >>
+  `cs_extends sa s1` by metis_tac[] >>
+  `cs_extends s5 sm /\ s5.cs_next_var <= sm.cs_next_var` by
+    metis_tac[cj 1 compile_expr_grows] >>
+  `cs_extends sm s6 /\ sm.cs_next_var <= s6.cs_next_var` by
+    metis_tac[revert_reason_grows] >>
+  `cs_extends s5 s6` by metis_tac[cs_extends_trans] >>
+  drule_all assert_lit_compiler_code >> strip_tac >>
+  `sa.cs_next_var <= s5.cs_next_var` by
+    (drule (cj 2 compile_expr_grows) >> strip_tac >>
+     imp_res_tac fresh_label_props >> imp_res_tac new_block_props >>
+     imp_res_tac emit_inst_extends >> gvs[] >> decide_tac) >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (imp_res_tac new_block_props >> gvs[] >> decide_tac) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[assert_reason_expr_admissible] >>
+  qpat_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then drule >> simp[] >>
+  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
+  rewrite_tac[eval_assert_reason_bind] >>
+  irule gas_outcome_bind_value >>
+  first_assum (irule_at (Pos last)) >>
+  conj_tac >- suspend "normal" >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  Cases_on `res` >- fs[expr_exit_def] >>
+  simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+QED
+
+Resume compile_assert_reason_vv_frag_mem[normal]:
+  rpt gen_tac >> BETA_TAC >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  simp_tac (srw_ss()) [] >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+  qpat_x_assum `gas_marked_path _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE (srw_ss()) [gas_marked_path_def]) >>
+  `~t.vs_halted` by metis_tac[gas_path_mem_exec, gas_path_normal] >>
+  `?b. v = BoolV b` by
+    (spose_not_then assume_tac >>
+     `v <> BoolV T /\ v <> BoolV F` by metis_tac[] >>
+     qpat_x_assum `gas_admissible (eval_stmt _ _) _ _` mp_tac >>
+     rewrite_tac[gas_admissible_def] >>
+     disch_then (qspecl_then [`gas_explicit marks s0.vs_gas_readings`,
+       `INR (Error (TypeError "not BoolV"))`, `mid with gas_obs := []`] mp_tac) >>
+     simp[stmt_res_ok_def] >>
+     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     fs[] >> rewrite_tac[eval_assert_reason_bind] >>
+     pure_once_rewrite_tac[bind_def] >> asm_simp_tac (srw_ss()) [raise_def]) >>
+  `eval_operand op t = SOME (if b then 1w else 0w)` by
+    gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def] >>
+  `gas_path_mem ctx func t 0
+     (OK (jump_to (if b then sb.cs_current_bb else s5.cs_current_bb) t))` by
+    (imp_res_tac emit_inst_extends >>
+     irule assert_jnz_zero_path_mem >> simp[] >>
+     qexistsl_tac [`op`, `s3`, `s4`] >> simp[]) >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `!sa op sb. lower_value _ _ _ _ _ = _ ==> _` kall_tac >>
+  Cases_on `b`
+  >- suspend "true"
+  >> suspend "false"
+QED
+
+Resume compile_assert_reason_vv_frag_mem[true]:
+  gvs[] >>
+  irule assert_ok_return_outcome >>
+  qexists_tac `jump_to sb.cs_current_bb t` >>
+  simp[gas_marked_path_def] >>
+  drule_all assert_success_post_mem >> simp[]
+QED
+
+Resume compile_assert_reason_vv_frag_mem[false]:
+  gvs[] >>
+  irule gas_outcome_zero_prefix_any >>
+  qexists_tac `jump_to s5.cs_current_bb t` >>
+  conj_tac >- simp[gas_marked_path_def] >>
+  `expr_vv_sim_mem ctx func cenv cx (expr_type se) se (mid with gas_obs := [])` by
+    (qpat_x_assum `!gs es1. _` (qspecl_then
+       [`gas_explicit marks s0.vs_gas_readings`, `mid with gas_obs := []`]
+       mp_tac) >>
+     impl_tac
+     >- (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+         CONV_TAC (DEPTH_CONV ETA_CONV) >>
+         simp_tac (srw_ss()) [listTheory.APPEND_NIL]) >>
+     disch_then ACCEPT_TAC) >>
+  `gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx)
+     (mid with gas_obs := [])` by
+    (irule assert_reason_raise_admissible >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx (mid with gas_obs := [])
+     (jump_to s5.cs_current_bb t)` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     rewrite_tac[stmt_state_rel_jump_to] >> metis_tac[]) >>
+  `alloca_history func (jump_to s5.cs_current_bb t)` by
+    fs[allocaHistoryTheory.alloca_history_def, jump_to_def] >>
+  `local_ptrs_reserved cenv s5` by metis_tac[local_ptrs_reserved_next_var] >>
+  qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `se`,
+               `mid with gas_obs := []`, `jump_to s5.cs_current_bb t`,
+               `s5`, `vv`, `sm`, `s6`] mp_tac raise_reason_vv_outcome >>
+  disch_then (fn th => irule (SPEC_ALL th)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[jump_to_def] >> NO_TAC) >>
+  rpt strip_tac >> first_x_assum (drule_all_then ACCEPT_TAC)
+QED
+
+Finalise compile_assert_reason_vv_frag_mem
