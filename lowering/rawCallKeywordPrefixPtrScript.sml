@@ -164,6 +164,7 @@ Theorem raw_call_kwargs_execution_ptr:
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs xs. rr = INL vs /\
       typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\x. op_taint tn x = {}) xs /\
@@ -202,6 +203,7 @@ Resume raw_call_kwargs_execution_ptr[posts]:
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. (?vs. rr = INL vs /\
       typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv dep cenv cx ee G tn t /\ EVERY (\x. op_taint tn x = {}) xs /\
@@ -248,6 +250,7 @@ Theorem raw_call_kwargs_sim_ptr:
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs xs. rr = INL vs /\
       typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\

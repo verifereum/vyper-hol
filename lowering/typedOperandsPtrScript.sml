@@ -91,6 +91,7 @@ Theorem lower_typed_args_nil_sim_ptr:
     (eval_exprs cx []) (es, s0, G0, tn0)
     (\rr ee G tn t. ?vs. rr = INL vs /\
        typed_args_post ctx func cenv cx es sa s0 ee [] [] vs t /\
+       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts /\
        ghost_inv d cenv cx ee G tn t /\
@@ -203,6 +204,7 @@ Theorem lower_typed_args_sim_ptr:
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\rr ee G tn t. ?vs. rr = INL vs /\
         typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
+        MAP FDOM es.scopes = MAP FDOM ee.scopes /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         ghost_inv d cenv cx ee G tn t /\
@@ -264,6 +266,7 @@ Resume lower_typed_args_sim_ptr[tail]:
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       Cases_on `evaluate_type (get_tenv cx) (expr_type h)` >> gvs[] >>
       fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
+      `MAP FDOM es.scopes = MAP FDOM ee.scopes` by metis_tac[] >>
       drule_all typed_args_post_cons_ptr >> simp[]) >>
   simp[exprSimWordArgsTheory.wb_args_exit_def] >>
   rpt strip_tac >> Cases_on `res` >> gvs[]

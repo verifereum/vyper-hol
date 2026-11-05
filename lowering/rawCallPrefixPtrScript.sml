@@ -343,6 +343,7 @@ Theorem raw_call_operands_sim_ptr:
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       t.vs_current_bb = s5.cs_current_bb /\
       t.vs_inst_idx = LENGTH s5.cs_current_insts /\ ~t.vs_halted /\
       expr_val_rel cx (BaseT AddressT) av addr t /\ op_taint tn addr = {} /\
