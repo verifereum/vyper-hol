@@ -1100,3 +1100,34 @@ layouts do not observe the changed head. No unchanged-table claim, assumed
 budget, pre-to-post headroom claim, or new definition was used. Generated
 scratch ALLOCA and expansion completion remain separate obligations; this row
 does not certify global closure or the frozen contract.
+
+## C1.12.99 — checked DLOADBYTES completion row
+
+`lowerDloadPtrJointBytesClosureTheory` now exports
+`dload_joint_tracked_dloadbytes_complete_next`, with the full incoming/outgoing
+normal existential and no additional semantic-origin hypotheses.
+
+Premise origins checked in its Resume blocks:
+- `shape`: source `o1_fn_shape` supplies `inst_wf`, hence three operands and no outputs.
+- `supply`: actual control exposes the blocks/instructions prefix supplies;
+  their reserved-variable monotonicity and `ir_supply_covers_fn` imply that
+  `fresh_ir_var` is outside `fn_ir_vars f`.
+- `operands`: original operands belong to `fn_ir_vars`; opaque-use safety from
+  source shape excludes return-PC operands for DLOADBYTES.
+- `forward`: source control supplies active instruction; distinct source labels
+  identify its lookup block, and forwarding opcodes exclude DLOADBYTES.
+- `layout`: frame/raw reachability, `raw_reachable_labels`, and the packaged
+  `code_data_closed` invariant preserve initial code/data/labels; initial run
+  validity supplies `code_layout_valid`.
+- `reachable`: `frame_reachable_next`, source success reflected by the existing
+  general-V bytes boundary, and emission-next control supply source successor.
+
+Mixed-fuel replay supplies the exact completed ghosts. `dloadbytes_step_fields`
+and `dloadbytes_supply_allocas` discharge source call-context and target
+allocation-map footprints. `dload_normal_unchanged_successor` reconstructs all
+normal ancillary fields at phase zero with the finite original tracked set.
+
+Build check: both lowerDloadPtrJointBytesClosureTheory and
+ o1ContractLowerDloadPtrTheory pass (TO_ld_ptr_v2-20261104T185312Z_m7074_t001).
+The latter remains the existing unfinished contract: this row is not global
+closure and does NOT meet the TASK zero-CHEAT completion criterion.
