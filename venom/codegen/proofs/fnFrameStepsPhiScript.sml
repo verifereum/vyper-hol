@@ -1254,3 +1254,18 @@ Proof
   metis_tac[]
 QED
 
+
+(* Boundary probe: a well-formed PHI edge forces reachability, even though
+   lookup of an arbitrary block alone does not. *)
+Theorem phi_edge_operand_reachable:
+  !fn bb inst v.
+    phi_edge_uses_wf fn bb inst /\ MEM (Var v) inst.inst_operands ==>
+    fn_reachable fn bb.bb_label
+Proof
+  rpt gen_tac >> simp[venomWfTheory.phi_edge_uses_wf_def] >> strip_tac >>
+  drule_all venomWfTheory.phi_well_formed_var_pair >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[venomWfTheory.def_available_at_def, venomWfTheory.fn_dominates_def] >>
+  gvs[venomWfTheory.fn_reachable_def] >>
+  metis_tac[relationTheory.RTC_RULES_RIGHT1]
+QED
