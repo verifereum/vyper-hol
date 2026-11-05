@@ -1,5 +1,7 @@
 Theory makeSsaCurrentNonDegDefault
 Ancestors
+  makeSsaCurrentNonDegTokenSources makeSsaCurrentTraceCertificate
+  makeSsaCurrentTreePaths
   makeSsaCurrentDemandedCut makeSsaCurrentAvailability makeSsaCurrentPathBridge
   makeSsaCurrentLiveTransport makeSsaCurrentLastSite makeSsaCurrentTokens
   makeSsaCurrentDemandDominance makeSsaCurrentAnalysis makeSsaCurrentTokenGraph
@@ -163,4 +165,91 @@ Proof
     (irule current_live_post_phi_available >> simp[] >> metis_tac[]) >>
   `fn_entry_label fn = SOME eb.bb_label` by simp[fn_entry_label_def] >>
   metis_tac[current_nondeg_entry_unavailable]
+QED
+
+Theorem current_nondeg_live_pred_exit_nondefault:
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ ~blocks_have_leading_phi fn.fn_blocks /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block h fn.fn_blocks = SOME hb /\
+  current_tree_ancestor_path (current_dom_tree fn) p path /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) h = SOME vs /\ MEM v vs) ==>
+  current_block_token fn (current_actual_inserted fn) v p
+    (current_inherited_token fn (current_actual_inserted fn) v path) <>
+      CurrentDefault w
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `current_inherited_token fn (current_actual_inserted fn) v path = CurrentDefault w` by
+    metis_tac[current_nondeg_block_token_local, current_nondeg_token_at_def] >>
+  `w = v` by
+    (fs[current_inherited_token_def] >>
+     metis_tac[current_nondeg_chain_token_local, current_nondeg_token_at_def,
+               current_token_11]) >>
+  gvs[current_nondeg_block_token_default] >>
+  `!k. k < LENGTH pb.bb_instructions ==>
+    ~MEM v (inst_defs (EL k pb.bb_instructions))` by
+    (fs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]) >>
+  `current_phi_cut_clear fn v p` by
+    (simp[current_phi_cut_clear_def] >> rpt strip_tac >> gvs[] >>
+     metis_tac[current_collect_phis_length, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `collect_phis hb.bb_instructions = []` by
+    metis_tac[current_no_leading_phi_cut] >>
+  `?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) p = SOME vs /\ MEM v vs` by
+    (irule current_selected_live_edge >> simp[] >>
+     qexistsl_tac [`h`, `hb`] >> gvs[]) >>
+  `current_inherited_token fn (current_actual_inserted fn) v path <> CurrentDefault v` by
+    (irule current_nondeg_selected_live_nondefault >> simp[] >>
+     qexistsl_tac [`pb`, `p`] >> gvs[] >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem current_nondeg_tree_label_path:
+  !tree l. MEM l (dom_tree_labels tree) ==>
+    ?path. current_tree_ancestor_path tree l path
+Proof
+  Induct >> simp[makeSsaDefsTheory.dom_tree_labels_def, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> metis_tac[current_tree_ancestor_path_rules]
+QED
+
+Theorem current_nondeg_actual_chain_path:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM p (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps p ==>
+  current_tree_ancestor_path (current_dom_tree fn) p (REVERSE ps)
+Proof
+  strip_tac >>
+  `MEM p (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_label_member] >>
+  drule current_nondeg_tree_label_path >> strip_tac >>
+  `current_token_chain (dom_analyze (cfg_analyze fn) fn)
+    eb.bb_label (REVERSE path) p` by metis_tac[current_actual_path_chain] >>
+  `REVERSE path = ps` by
+    metis_tac[current_token_chain_unique, current_token_root_idom] >>
+  metis_tac[REVERSE_REVERSE]
+QED
+
+Theorem current_nondeg_live_pred_chain_nondefault:
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ ~blocks_have_leading_phi fn.fn_blocks /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block h fn.fn_blocks = SOME hb /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps p /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) h = SOME vs /\ MEM v vs) ==>
+  current_inherited_token fn (current_actual_inserted fn) v (REVERSE (p::ps)) <>
+    CurrentDefault w
+Proof
+  strip_tac >>
+  `MEM p (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  drule_all current_nondeg_actual_chain_path >> strip_tac >>
+  rewrite_tac[current_parent_inherited_token] >>
+  irule current_nondeg_live_pred_exit_nondefault >> simp[] >>
+  qexistsl_tac [`h`, `hb`] >> gvs[] >> metis_tac[]
 QED
