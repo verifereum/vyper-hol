@@ -1312,6 +1312,81 @@ Proof
   simp[relabel_probe_s_def, relabel_probe_sa_def]
 QED
 
+Theorem relabel_probe_loop_blocks:
+  !fuel ctx fn id s.
+    lookup_block "A" fn.fn_blocks = SOME
+      <|bb_label := "A"; bb_instructions :=
+        [mk_inst id NOP [] []; relabel_probe_jump]|> /\
+    s.vs_current_bb = "A" /\ ~s.vs_halted ==>
+    run_blocks fuel ctx fn s = Error "out of fuel"
+Proof
+  Induct_on `fuel` >- simp[Once run_blocks_def] >>
+  rpt strip_tac >> once_rewrite_tac[run_blocks_def] >>
+  simp[eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  simp[Once exec_block_def, get_instruction_def, step_inst_def,
+    step_inst_base_def, is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, relabel_probe_jump_def,
+    mk_inst_def, step_inst_def, step_inst_base_def, is_terminator_def] >>
+  simp[jump_to_def] >> first_x_assum irule >> simp[] >>
+  qexists_tac `id` >> simp[]
+QED
+
+Theorem relabel_probe_loop_from:
+  !fuel ctx fn id s.
+    lookup_block "A" fn.fn_blocks = SOME
+      <|bb_label := "A"; bb_instructions :=
+        [mk_inst id NOP [] []; relabel_probe_jump]|> /\
+    s.vs_current_bb = "A" /\ ~s.vs_halted /\ s.vs_inst_idx = 0 ==>
+    run_from fuel ctx fn s = Error "out of fuel"
+Proof
+  rpt strip_tac >> simp[run_from_def] >>
+  simp[Once exec_block_def, get_instruction_def, mk_inst_def,
+    step_inst_def, step_inst_base_def, is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, relabel_probe_jump_def,
+    mk_inst_def, step_inst_def, step_inst_base_def, is_terminator_def,
+    jump_to_def] >>
+  irule relabel_probe_loop_blocks >> simp[] >>
+  qexists_tac `id` >> simp[]
+QED
+
+Theorem relabel_probe_sim:
+  !ctx L ids fn.
+    LENGTH ids = 1 /\
+    fn_has_code (start_relabel L ids relabel_probe_sa)
+      (start_swap relabel_probe_sa L ids relabel_probe_sb) fn ==>
+    ?t. t.vs_prev_bb <> SOME "A" /\ ~t.vs_halted /\
+        t.vs_current_bb = "A" /\ t.vs_inst_idx = 0 /\
+        abi_decode_sim ctx fn (relabel_probe_s with vs_current_bb := L) t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?id. ids = [id]` by
+    (Cases_on `ids` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  gvs[] >>
+  `lookup_block L fn.fn_blocks = SOME
+    <|bb_label := L; bb_instructions :=
+      [mk_inst id NOP [] []; relabel_probe_jump]|>` by
+    (fs[fn_has_code_def, relabel_probe_swap] >> metis_tac[MEM]) >>
+  Cases_on `L = "A"`
+  >- (gvs[] >> qexists_tac `relabel_probe_s with
+        <|vs_current_bb := "A"; vs_inst_idx := 0; vs_prev_bb := SOME "B"|>` >>
+      simp[relabel_probe_s_def, abi_decode_sim_def] >>
+      gen_tac >>
+      `run_from fuel ctx fn
+        (relabel_probe_s with <|vs_current_bb := "A";
+          vs_inst_idx := 0; vs_prev_bb := SOME "B"|>) = Error "out of fuel"` by
+        (irule relabel_probe_loop_from >> simp[relabel_probe_s_def] >>
+         qexists_tac `id` >> simp[]) >>
+      gvs[relabel_probe_s_def]) >>
+  qexists_tac `jump_to "A" (relabel_probe_s with vs_current_bb := L)` >>
+  simp[jump_to_def, relabel_probe_s_def] >>
+  rewrite_tac[abi_decode_sim_def] >> rpt strip_tac >>
+  qexists_tac `SUC fuel` >>
+  irule run_from_jump_result >>
+  simp[get_instruction_def, relabel_probe_jump_def, mk_inst_def,
+    is_terminator_def, step_inst_base_def, jump_to_def] >>
+  qexists_tac `"A"` >> simp[]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
