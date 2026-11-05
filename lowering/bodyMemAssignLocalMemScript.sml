@@ -11,7 +11,10 @@ Ancestors
   bodyDeclMemoryCounted bodyDeclMemoryCore stmtSimAssignStore stmtSimProps
   valueCopy valueEncoding localPtrsProps exprLoweringProps loweringPosts
   venomState venomExecSemantics compileEnv finite_map list
-  vyperLookup loweringSlice bodyMemoryDefs
+  vyperLookup loweringSlice bodyMemoryDefs stmtSimAssignMem stmtSimAssignSource
+  bodyDeclEmptyMemory emitHelper emitHelperProps venomInst rich_list
+  gasSummary gasSummaryCompose fragGasMode allocaFootprint
+  stmtSimDefs stmtSimDeclMem valueEncodingProps vyperState
 Libs
   monadsyntax
 
@@ -307,6 +310,118 @@ Proof
       rename1 `return_buf_frame (SOME pair)` >> PairCases_on `pair` >>
       fs[return_buf_frame_def, lookup_var_def]) >>
   fs[lookup_var_def]
+QED
+
+Theorem local_header_store_path_mem[local]:
+  !ctx func cenv cx es s id p sz w pre env entry rest v wd sa sb.
+    emit_void MSTORE [Var p; Lit wd] sa = ((), sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
+    val_wf entry.type v /\
+    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    ?t. stmt_state_rel ctx func cenv cx
+          (es with scopes := pre ++
+            (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (!x. lookup_var x t = lookup_var x s) /\
+        t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+        alloca_history func t /\ gas_path_mem ctx func s 0 (OK t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `w2n w + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `w2n w + 32 <= s.vs_alloca_next` by decide_tac >>
+  drule_all local_header_store_state >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n w) wd s` >>
+  `run_inst_seq (emitted_insts sa sb) s = OK u` by
+    (`step_inst_base (mk_inst sa.cs_next_id MSTORE [Var p; Lit wd] []) s = OK u` by
+       (simp[Abbr `u`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+     simp[run_inst_seq_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (qspecl_then [`Var p`, `Lit wd`, `sa`, `sb`, `s`, `w`] mp_tac
+       emit_mstore_mem_ok >> simp[eval_operand_def]) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `gas_path_mem ctx func s 0
+     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb` by
+    (irule body_decl_cursor_path >> simp[is_terminator_def] >>
+     qexists_tac `sa` >> simp[is_terminator_def]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule body_store_memory_history >> simp[is_terminator_def] >>
+     qexistsl_tac [`s`, `sa`] >> simp[is_terminator_def]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[stmt_state_rel_inst_idx] >>
+  simp[Abbr `u`, lookup_var_def, mstore_def]
+QED
+
+Theorem compile_assign_local_empty_stmt_frag_mem[local]:
+  !d ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv.
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    has_length_word (expr_type e) /\ is_empty_value_expr e /\
+    has_length_word vtyp /\ evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+    (!gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (INL (default_value tyv), es with gas_obs := gs)) /\
+    (!entry. lookup_scopes id es.scopes = SOME entry ==> entry.type = tyv) ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  drule_all assign_local_empty_code_parts >> strip_tac >> gvs[] >>
+  `!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := [] ++ tail) =
+    (INL (default_value tyv), es with gas_obs := tail)` by simp[] >>
+  drule_all assign_local_continuation_all_tails >> strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `entry.type = tyv` by metis_tac[] >>
+  `?w. lookup_var p s0 = SOME w` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `val_in_memory tyv (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s0).vs_memory /\
+   val_wf tyv (default_value tyv) /\ 32 <= type_memory_size tyv` by
+    (irule memory_length_word_layout >> simp[mstore_mem_word_at_same] >> metis_tac[]) >>
+  `val_wf entry.type (default_value tyv) /\
+   32 <= type_memory_size entry.type /\
+   val_in_memory entry.type (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s0).vs_memory` by simp[] >>
+  drule_all local_header_store_path_mem >> strip_tac >>
+  `~block_is_terminated sb` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          fresh_id_def, emit_def, comp_return_def] >>
+     strip_tac >> Cases_on `sa.cs_current_insts` >>
+     gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
+         mk_inst_def, is_terminator_def]) >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (drule emitted_insts_emit_void >> simp[]) >>
+  `return_buf_frame d cenv sb t` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INL ()`, `es with scopes := pre ++
+    (env |+ (id, entry with <|value := default_value tyv; popped := []|>)) :: rest`,
+    `OK t`] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def] >>
+      gen_tac >> drule assign_local_admissible_run >>
+      disch_then (qspec_then `tail` SUBST1_TAC) >> simp[bind_def]) >>
+  disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl]
 QED
 
 Theorem body_assign_local_memory_mem:
