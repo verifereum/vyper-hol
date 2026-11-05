@@ -22,8 +22,10 @@ Theorem framed_array_index_outcome_compose:
     (mid with gas_obs := [],t)
     (\res ee u. ?v. res = INL v /\ V v ee u)
     (\res ee out. ?exc. res = INR exc /\ R (INR exc) ee out) /\
-  (!v ee u. V v ee u ==>
-     gas_summary_at F (ctx,func) [] (k captured v) (ee,u) Q R) ==>
+  (!imarks raw v u.
+     gas_marked_exec F (ctx,func) b (mid with gas_obs := [],t)
+       imarks (INL v) raw (OK u) /\ V v (raw with gas_obs := []) u ==>
+     gas_summary_at F (ctx,func) [] (k captured v) (raw with gas_obs := [],u) Q R) ==>
   gas_outcome F tops (ctx,func) (bind a (\r. bind b (k r))) (es,s0) Q R
 Proof
   strip_tac >> fs[gas_outcome_def] >>
@@ -41,7 +43,7 @@ Resume framed_array_index_outcome_compose[normal]:
   goal_assum (drule_at Any) >> BETA_TAC >>
   pure_once_rewrite_tac[GSYM APPEND_NIL] >>
   irule framed_array_summary_after_prefix >> simp[] >>
-  goal_assum (drule_at Any) >> simp[]
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 Resume framed_array_index_outcome_compose[exit]:
   gvs[] >> disj1_tac >>
@@ -67,8 +69,8 @@ Finalise framed_array_index_outcome_compose
 Theorem framed_array_after_base:
   gas_marked_exec F (ctx,func) (eval_expr cx obj)
     (es,s0) left (INL captured) mid (OK t) /\
-  expr_sim ctx func cenv cx (expr_type idx) idx (mid with gas_obs := []) /\
-  lower_value compile_expr cenv (expr_type idx) idx sm = (iop,si) /\
+  expr_sim ctx func cenv cx ty idx (mid with gas_obs := []) /\
+  lower_value compile_expr cenv ty idx sm = (iop,si) /\
   fn_has_code sm si func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
@@ -76,13 +78,16 @@ Theorem framed_array_after_base:
   stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  (!v ee u.
-     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
+  (!imarks raw v u.
+     gas_marked_exec F (ctx,func) (bind (eval_expr cx idx) (read_result cx))
+       (mid with gas_obs := [],t) imarks (INL v) raw (OK u) /\
+     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t
+       (raw with gas_obs := []) v iop u /\
      u.vs_current_bb = si.cs_current_bb /\
      u.vs_inst_idx = LENGTH si.cs_current_insts ==>
      gas_summary_at F (ctx,func) []
-       (select_result cx (expr_type obj) captured (ValueSubscript v)) (ee,u)
-       Q (\res ee out. expr_exit res out)) ==>
+       (select_result cx (expr_type obj) captured (ValueSubscript v))
+       (raw with gas_obs := [],u) Q (\res ee out. expr_exit res out)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_expr cx (Subscript ann obj idx)) (es,s0)
     Q (\res ee out. expr_exit res out)
@@ -105,5 +110,5 @@ Proof
     (gen_tac >> Cases_on `res` >> simp[] >> rename1 `INR exc` >>
      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>
-  simp[]
+  simp[] >> first_assum ACCEPT_TAC
 QED
