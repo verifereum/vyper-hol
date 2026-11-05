@@ -344,6 +344,69 @@ Proof
   gvs[] >> metis_tac[listTheory.MEM_EL]
 QED
 
+Theorem ldd_available_back[local]:
+  ldd_available fn bb (SUC i) v /\
+  ~MEM v (EL i bb.bb_instructions).inst_outputs ==>
+  ldd_available fn bb i v
+Proof
+  rw[ldd_available_def] >> qexistsl_tac [`db`, `di`] >> simp[] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  `k <> i` by metis_tac[] >>
+  qexists_tac `k` >> simp[]
+QED
+
+Theorem ldd_instruction[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (!w. MEM w live ==> ldd_available fn bb (SUC i) w \/
+                          ldd_pending_phi bb (SUC i) w) /\
+  MEM v (liveness_transfer fn.fn_blocks (EL i bb.bb_instructions) live) ==>
+  ldd_available fn bb i v \/ ldd_pending_phi bb i v
+Proof
+  simp[liveness_transfer_def, live_update_mem] >> strip_tac
+  >- (gvs[venomInstTheory.inst_defs_def] >>
+      metis_tac[ldd_available_back, ldd_pending_phi_back,
+                arithmeticTheory.LESS_EQ_SUC_REFL]) >>
+  gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI`
+  >- (disj2_tac >> simp[ldd_pending_phi_def] >>
+      qexists_tac `i` >> simp[]) >>
+  disj1_tac >> irule ldd_ordinary_use >> metis_tac[]
+QED
+
+Theorem ldd_edge_transfer[local]:
+  codegen_ready_fn fn /\ ldd_state fn st /\ fn_reachable fn p /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  MEM s (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM v (liveness_edge_transfer fn.fn_blocks s p (df_at [] st s 0)) ==>
+  ldd_available fn pb (LENGTH pb.bb_instructions) v
+Proof
+  strip_tac >> drule_all ldd_edge_successor >> strip_tac >>
+  `wf_function fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `MEM sb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb_well_formed sb` by metis_tac[venomExecProofsTheory.wf_function_bb_well_formed] >>
+  `!phi. MEM phi sb.bb_instructions /\ phi.inst_opcode = PHI ==>
+    phi_well_formed phi.inst_operands` by
+    (gvs[def_dominates_uses_def, phi_edge_uses_wf_def] >> metis_tac[]) >>
+  gvs[liveness_edge_transfer_def] >>
+  drule_all ldd_input_vars_from >> strip_tac
+  >- (irule ldd_available_predecessor >> simp[] >>
+      qexistsl_tac [`p`, `s`, `sb`] >> simp[] >>
+      gvs[ldd_state_def] >> metis_tac[arithmeticTheory.ZERO_LESS_EQ]) >>
+  irule ldd_phi_edge_use >> metis_tac[]
+QED
+
+Theorem ldd_live_out[local]:
+  codegen_ready_fn fn /\ ldd_state fn st /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (liveness_out fn.fn_blocks (cfg_analyze fn) lbl st) ==>
+  ldd_available fn bb (LENGTH bb.bb_instructions) v
+Proof
+  rw[livenessBlockProofsTheory.liveness_out_def, mem_foldl_list_union,
+     listTheory.MEM_MAP] >>
+  irule ldd_edge_transfer >> metis_tac[]
+QED
+
 (* Used by fnLineageStatic: no stack slot of a lineage state is an output
    of the block it enters.
 
