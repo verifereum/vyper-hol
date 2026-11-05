@@ -212,3 +212,45 @@ Proof
   fs[abi_decode_load_def, abi_decode_source_def, jump_to_def,
      abi_decode_header_state_def, update_var_def, mload_def]
 QED
+
+(* The nested producer's stable old operands and current-index output suffice
+   for the actual outer backedge; no second execution witness is selected. *)
+Theorem nested_array_backedge_endpoint[local]:
+  nested_array_body next limit_st d ncount prepared iid b cap ip src p srcaddr j s /\
+  abi_decoder_operand_live child_next ip /\ abi_decoder_operand_live child_next src /\
+  (!op w. abi_decoder_operand_live child_next op /\ eval_operand op s = SOME w ==>
+    eval_operand op t = SOME w) /\
+  entry_loop_fields s t /\ eval_operand (FST ops) t = SOME (n2w j) /\
+  FST ops = Var iv /\ ~t.vs_halted /\
+  t.vs_current_bb = last.cs_current_bb /\
+  t.vs_inst_idx = LENGTH last.cs_current_insts /\
+  (?bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = last.cs_current_insts ++
+      abi_decode_backedge_insts last.cs_next_id iv nv ip hdr) ==>
+  entry_loop_child_end fn last.cs_current_bb last.cs_current_insts last.cs_next_id
+    iv nv ip hdr src p srcaddr ncount j t
+Proof
+  simp_tac bool_ss [nested_array_body_def, entry_loop_child_end_def] >> strip_tac >>
+  asm_rewrite_tac[] >>
+  `eval_operand ip t = SOME p /\ eval_operand src t = SOME srcaddr` by metis_tac[] >>
+  asm_rewrite_tac[] >>
+  fs[entry_loop_fields_def, abi_decode_load_def, abi_decode_source_def]
+QED
+
+(* The initial arena budget covers both actual counter sites only when both
+   are absent. Once the inner site exists, no fresh-space margin is needed. *)
+Theorem nested_array_initializer_scratch[local]:
+  cid <> iid /\ b <= s.vs_alloca_next /\
+  (!id. id <> cid ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+  (if FLOOKUP s.vs_allocas cid = NONE then
+     t.vs_alloca_next = s.vs_alloca_next+32 else t.vs_alloca_next = s.vs_alloca_next) /\
+  (FLOOKUP s.vs_allocas iid = NONE ==>
+     s.vs_alloca_next + (if FLOOKUP s.vs_allocas cid = NONE then 32 else 0) + 32 <= b+cap) /\
+  (!q. FLOOKUP s.vs_allocas iid = SOME (q,32) ==> b <= q /\ q+32 <= b+cap) ==>
+  entry_nested_scratch_ready iid b cap t
+Proof
+  Cases_on `FLOOKUP s.vs_allocas cid = NONE` >>
+  simp[entry_nested_scratch_ready_def] >> rpt strip_tac >>
+  `FLOOKUP t.vs_allocas iid = FLOOKUP s.vs_allocas iid` by metis_tac[] >>
+  gvs[]
+QED
