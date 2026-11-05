@@ -246,12 +246,125 @@ clean scalar fact in its normal post. No claim that it is proved:
   gas_outcome_ptr witness supplied/constructed by the simulation. Separate
   existence of a clean syntactic trace is not enough.
 * Thus NO-GO for a proof using only consequence on the frozen operand judgment.
-  A separate constructive compiler-origin/path-strengthening argument is still
-  required (possibly ghost-trace determinism aligning the chosen simulation
-  path). This need not change any frozen judgment. No typed terminal scalar
-  allocation/PARAM leak was identified. There is NO verified counterexample
+  C1.23 below makes the remaining witness obstruction precise. No typed terminal
+  scalar allocation/PARAM leak was identified. There is NO verified counterexample
   and this audit does not license claiming the target false.
 
-Stop here for strategist review; no compiler induction or new runtime frame
-was attempted. The scalar transfer deliverable is satisfied by existing,
-isolated-build-checked helpers rather than adding duplicates.
+## C1.23: exact-witness localization diagnostic
+
+### Checked consumer signature
+
+`bodyPtrWordBuiltinsOutcomeTheory.gas_outcome_ptr_path_strengthen` would require,
+with Q the normal post at lines 218--224 **without** its final cleanliness
+conjunct, the following implication (all initial hypotheses at lines 200--215
+remain in scope):
+
+```sml
+!n G tn t res ee.
+  gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 n G tn (OK t) /\
+  Q res ee G tn t ==> op_prov G op = NONE
+```
+
+This quantifies over every normal path, not just a selected emitted trace.
+`expr_post_def` (loweringPosts:251--266) says nothing about the intermediate
+PCs, instruction selection, number of steps, or provenance. `fn_has_code_def`
+(fragExec:112--118) supplies exact finished blocks and only a prefix at the
+final current block. It does not forbid running that block's arbitrary suffix
+and returning to the endpoint. `fn_inst_ids_distinct` does not prohibit repeated
+execution of an instruction. Therefore those definitions do not justify the
+proposed localization argument. This is a gap in that argument, NOT a checked
+counterexample to the universal implication or to the frozen theorem.
+
+The source observation equation must not be discarded if a future proof uses
+source evaluation to select a branch or align calls. The following more usable
+consumer interface is now checked in the independently built new leaf
+`bodyPtrWordBuiltinsObservedOutcomeScript.sml`:
+
+```sml
+gas_outcome_ptr D tops (ctx,fn) PG source (es,s0,G0,tn0) Q R /\
+(!marks res ee G tn t.
+  gas_marked_exec_ptr D (ctx,fn) PG source (es,s0,G0,tn0)
+    marks res ee G tn (OK t) /\
+  Q res (ee with gas_obs := []) G tn t ==>
+  P res (ee with gas_obs := []) G tn t) ==>
+gas_outcome_ptr D tops (ctx,fn) PG source (es,s0,G0,tn0)
+  (\res ee G tn t. Q res ee G tn t /\ P res ee G tn t) R
+```
+
+Instantiate D=`cx_dead cx`, tops=`cx_tops cx`, source=
+`bind (eval_expr cx e) (read_result cx)`, P=
+`\res ee G tn t. op_prov G op = NONE`, Q as above and R=
+`\res ee gt r. expr_exit res r`. This yields exactly the candidate strengthened
+outcome, using its SAME marks, target path, initial ghost and final ghost.
+The marked premise expands to the path with count LENGTH marks AND
+
+```sml
+!tail.
+  source (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (res, ee with gas_obs := tail)
+```
+
+as defined in gasSummaryComposePtr:28--35. The generic consumer theorem has no
+compiler assumptions and does not prove this instantiated premise.
+Retaining the equation is conservative, not a proof that it is logically
+necessary for cleanliness. It is also NOT sufficient for localization:
+`gas_marked_exec_ptr_no_source_read` permits REPLICATE n F for ANY counted path
+when the source does not read gas. Zero-count target steps are not bounded by
+LENGTH marks. Thus even this corrected signature does not certify first arrival
+at the compiled endpoint or exclusion of arbitrary suffix code.
+
+### Immediate boundary obligations (not new assumed theorems)
+
+Only these three interfaces are needed before considering compiler recursion:
+
+1. **Selected-path/first-endpoint boundary.** For the actual operand witness,
+   establish a decomposition which stops at the FIRST compiled endpoint and
+   contains only fetched instructions in the emitted fragment, with intermediate
+   compiler cuts for recursive operands. The present exact required conclusion is
+   the marked implication above with P instantiated to cleanliness, under the
+   original frame at lines 200--215. Neither fn_has_code nor Q contains the
+   proposed decomposition. A new trace certificate cannot simply be assumed.
+   Existing `fn_has_code_split`, `_start`, `_mid`, `_new_block` transport static
+   code membership, not dynamic first-hit or path inversion. `gas_path_ptr_then`
+   and `gas_marked_exec_ptr_bind_normal` construct concatenations; they do not
+   invert arbitrary paths at a compiler cut. fragGasPath's `_normal`/`_suffix`
+   lemmas erase to execution continuations, not selected-code localization.
+   A constructive strengthened simulation may avoid universal-path inversion,
+   but that is a strategy change for review, not work performed here.
+2. **Entry boundary on EACH selected jump target.** Existing
+   `typedCopyArrayPtrTheory.entry_ghost_no_phi` has the exact interface
+   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 ==>
+    entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn`.
+   Its missing premise must be proved for the actual selected target, not for
+   every block in the arbitrary containing function. The jump-stop edge leaves
+   G unchanged; the entered edge applies entry_prov and skips the PHI prefix.
+   For a nonempty prefix, the needed demand is instead
+   `!x. x IN need ==> FLOOKUP (entry_prov fn s G) x = NONE`;
+   selected PHI operands must be checked in PRE-entry G, not sequentially updated
+   G. No new PHI transfer theorem is needed if emitted-entry no-PHI is established.
+3. **Successful INVOKE boundary at its actual edge fuel.** Existing
+   `bodyPtrWordBuiltinsCertificateProbeTheory.ghost_step_invoke_scalar_set`
+   already gives clean old scalar variables UNION outputs from clean old scalars
+   plus the exact decode/lookup/eval_operands/setup_callee equations. Reuse it;
+   do not add a duplicate. Selected-call decomposition must supply these four
+   success equations for the fuel in `gas_path_ptr_edge` and preserve the same
+   returned taint used by ghost_step. Setup failure leaves G unchanged and does
+   not license output cleanliness. Callee execution's pointer checks and taint
+   transport are separate obligations of ptr_safe_step, not discharged by this
+   caller provenance fact. Fuel-sensitive call runs cannot be replaced by an
+   unrestricted determinism claim.
+
+For ordinary selected steps, C1.21's `ghost_step_clean_demand` is already the
+right exact interface: demanded nonoutputs are clean before the step and any
+needed output has out_prov NONE. `step_prov_scalar_demand` expands the latter to
+clean forwarded operands. It permits unrelated allocations. What is missing is
+the selection/decomposition establishing those premises on the actual witness,
+not another arithmetic transfer theorem.
+
+**Verdict: NO-GO for universal-path localization from the present post and code
+inclusion alone, even after retaining source/marks. GO only for the checked
+source-aware consumer interface.** No frozen judgment was edited, no general
+compiler theorem implemented, and no new runtime-frame examples attempted.
+Strategist must resolve first-endpoint/selected-witness design before compiler
+induction. All new proof text is in the independently built ObservedOutcome leaf.
