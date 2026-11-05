@@ -1,7 +1,7 @@
 (* Source and machine boundaries for word storage/transient Append. *)
 Theory stmtSimAppendStorage
 Ancestors
-  bodyAppendStorageFacts stmtSimAssignStorage vyperState vyperStorage
+  bodyAppendStorageFacts vyperState vyperStorage
   vyperStorageBackend vyperValue valueEncoding valueEncodingProofs
   vyperTyping words exprLowering compileEnv emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState stateFrame

@@ -74,8 +74,7 @@ End
    - the two ALLOCAs and the encoder write only their own buffers, which
      stmt_state_rel's allocation facts keep apart from every live local. *)
 Theorem compile_log_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id args es res es' Inv h tys flags env.
-    eval_stmt cx (Log id args) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id args es Inv h tys flags env.
     cenv.ce_event_info (nsid_to_string id) = SOME (h, tys, flags) /\
     lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
       SOME (h, tys, flags) /\
@@ -86,15 +85,18 @@ Theorem compile_log_stmt_frag:
     abi_size_bound cenv.ce_struct_fields
       (TupleT (log_non_indexed_types flags tys)) < dimword (:256) /\
     log_args_ready ctx func cenv cx Inv args /\ Inv es /\
+    (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
     well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Log id args)) es res es'
+      (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
 Proof
-  rpt gen_tac >> strip_tac >> irule compile_log_ready_stmt_frag >>
-  reverse conj_tac >- (simp[] >> metis_tac[LENGTH_MAP]) >>
-  qexists_tac `\tail s. log_args_ready ctx func cenv cx Inv tail /\ Inv s` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  irule (Q.INST [`R` |-> `\tail s. log_args_ready ctx func cenv cx Inv tail /\ Inv s`]
+           compile_log_ready_stmt_frag) >>
+  simp[] >> qexistsl_tac [`env`, `flags`, `h`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
   rpt gen_tac >> simp[Once log_args_ready_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >> simp[] >>
   rpt gen_tac >> strip_tac >>
