@@ -1,7 +1,8 @@
 (* The middle, taint-transferring segment of a storage copy body. *)
 Theory exprPtrUnwrapStoreSegment
 Ancestors
-  exprPtrUnwrapCopyEdges fragGasSeqPtr fragExec ptrDiscipline ptrSafeRun
+  exprPtrUnwrapCopyEdges exprPtrUnwrapFrames bodyPtrDefs
+  fragGasSeqPtr fragExec ptrDiscipline ptrSafeRun
   venomExecSemantics venomInst venomState finite_map exprLoweringProps
 
 Theorem copy_store_segment:
@@ -18,7 +19,9 @@ Theorem copy_store_segment:
         {w2n addr + k | k IN op_taint tn v} /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. FLOOKUP Gf p = FLOOKUP G p /\
-         op_taint tnf (Var p) = op_taint tn (Var p))
+         op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!p n. ptr_covers G tn p s n ==> ptr_covers Gf tnf p t n)
 Proof
   strip_tac >>
   qexistsl_tac [`step_prov PG G (mk_inst id MSTORE [Var root;v] [])
@@ -32,5 +35,7 @@ Proof
        mstore_transferred_taint] >>
   simp[step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,
        store_taint_def, adopt_reset_def, mk_inst_def, op_taint_def,
-       FLOOKUP_DRESTRICT]
+       FLOOKUP_DRESTRICT, allocas_from_def, allocas_below_fmp_def,
+       ptr_covers_def, mstore_def, lookup_var_def] >>
+  fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED

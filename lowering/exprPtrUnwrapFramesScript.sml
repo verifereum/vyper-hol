@@ -33,3 +33,10 @@ Theorem copy_update_inst_idx[simp]:
 Proof
   simp[update_var_def]
 QED
+
+Theorem copy_mstore_inst_idx[simp]:
+  mstore off value (s with vs_inst_idx := k) =
+    (mstore off value s) with vs_inst_idx := k
+Proof
+  simp[mstore_def]
+QED
