@@ -2,16 +2,18 @@
 
 Theory bodySimCallRawCallCalldata
 Ancestors
-  bodySimExprCases
+  bodySimExprCases exprSimRawCallCalldata
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
 
-(* GAP (#636 operands with internal calls): raw_call with calldata.  Its
-   case lemma is still stated over expr_sim_below, for compile_expr_sim only. *)
+(* exprSimRawCallCalldata's compile_raw_call_calldata_case, over operands
+   that may contain internal calls. *)
 Theorem raw_call_calldata_body_expr_ok:
   !cx ty flags es v19.
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt strip_tac >>
+  `exprs_case F ctx func cenv cx es` by metis_tac[body_exprs_ok_case] >>
+  simp[compile_raw_call_calldata_case]
 QED
