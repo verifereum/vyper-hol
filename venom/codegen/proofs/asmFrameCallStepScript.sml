@@ -4836,6 +4836,194 @@ Proof
   Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
 QED
 
+Theorem asm_call_static_prefix_cp_snd:
+  cp f /\ asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (f s))
+Proof
+  strip_tac >> Cases_on `f s` >> simp[] >>
+  drule_all asm_call_static_prefix_cp >> simp[]
+QED
+
+Theorem asm_call_static_prefix_bind_cp:
+  cp g /\
+  (!x t. asm_call_static_prefix saved a ts ds t ==>
+    asm_call_static_prefix saved a ts ds (SND (f x t))) /\
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (bind g f s))
+Proof
+  strip_tac >> drule_all asm_call_static_prefix_cp_snd >>
+  simp[bind_def] >> Cases_on `g s` >> Cases_on `q` >> simp[]
+QED
+
+Theorem asm_call_static_prefix_ignore_bind_cp:
+  cp g /\
+  (!t. asm_call_static_prefix saved a ts ds t ==>
+    asm_call_static_prefix saved a ts ds (SND (f t))) /\
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (ignore_bind g f s))
+Proof
+  simp[ignore_bind_def] >> strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[]
+QED
+
+Theorem asm_call_static_prefix_assert:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds
+    (SND (bind assert_not_static f s))
+Proof
+  strip_tac >> drule asm_call_static_prefix_head >> strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> fs[] >>
+  drule_all assert_not_static_static >>
+  simp[bind_def] >> disch_then SUBST1_TAC >> simp[]
+QED
+
+Theorem asm_call_static_prefix_ignore_assert:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds
+    (SND (ignore_bind assert_not_static f s))
+Proof
+  simp[ignore_bind_def, asm_call_static_prefix_assert]
+QED
+
+Theorem asm_call_static_prefix_sstore:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (step_sstore transient s))
+Proof
+  strip_tac >> simp[step_sstore_def] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_assert >> simp[]
+QED
+
+Theorem asm_call_static_prefix_log:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (step_log n s))
+Proof
+  strip_tac >> simp[step_log_def] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_assert >> simp[]
+QED
+
+Theorem asm_call_static_prefix_self_destruct:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (step_self_destruct s))
+Proof
+  strip_tac >> simp[step_self_destruct_def] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_assert >> simp[]
+QED
+
+Theorem asm_call_static_prefix_create:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (step_create two s))
+Proof
+  strip_tac >> simp[step_create_def] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_ignore_assert >> simp[]
+QED
+
+Theorem asm_call_static_prefix_proceed_call:
+  asm_call_static_prefix saved a ts ds s /\
+  (value = 0 \/ op = CallCode) ==>
+  asm_call_static_prefix saved a ts ds
+    (SND (proceed_call op sender address value ao az code stipend (Memory mr) s))
+Proof
+  strip_tac >> drule asm_call_static_prefix_head >> strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> fs[] >>
+  simp[proceed_call_def, get_rollback_def, read_memory_def,
+       get_caller_def, get_value_def, get_static_def,
+       get_current_context_def, push_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  irule asm_call_static_prefix_cp_snd >> simp[] >>
+  gvs[asm_call_static_prefix_def] >>
+  simp[vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem asm_call_static_prefix_uncurry:
+  (!x y. asm_call_static_prefix saved a ts ds (SND (f x y s))) ==>
+  asm_call_static_prefix saved a ts ds (SND (UNCURRY f p s))
+Proof
+  Cases_on `p` >> simp[]
+QED
+
+Theorem asm_call_static_prefix_guard:
+  asm_call_static_prefix saved a ts ds s /\
+  (~b ==> asm_call_static_prefix saved a ts ds (SND (f s))) ==>
+  asm_call_static_prefix saved a ts ds
+    (SND (ignore_bind (if b then assert_not_static else return ()) f s))
+Proof
+  Cases_on `b`
+  >- simp[asm_call_static_prefix_ignore_assert] >>
+  simp[ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem asm_call_static_prefix_cond:
+  asm_call_static_prefix saved a ts ds (SND (f s)) /\
+  asm_call_static_prefix saved a ts ds (SND (g s)) ==>
+  asm_call_static_prefix saved a ts ds (SND ((if b then f else g) s))
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem asm_call_static_prefix_step_call:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (step_call op s))
+Proof
+  strip_tac >> simp[step_call_def] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_uncurry >> rpt gen_tac >> simp[] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_uncurry >> rpt gen_tac >> simp[] >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_uncurry >> rpt gen_tac >> simp[] >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_guard >> simp[] >> strip_tac >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_cond >> conj_tac
+  >- (irule asm_call_static_prefix_cp_snd >> simp[]) >>
+  irule asm_call_static_prefix_ignore_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_bind_cp >> simp[] >> rpt strip_tac >>
+  irule asm_call_static_prefix_cond >> conj_tac
+  >- (irule asm_call_static_prefix_cp_snd >> simp[]) >>
+  irule asm_call_static_prefix_proceed_call >> simp[] >>
+  Cases_on `op` >> gvs[call_has_value_def]
+QED
+
+Theorem asm_call_static_prefix_step_inst:
+  asm_call_static_prefix saved a ts ds s ==>
+  asm_call_static_prefix saved a ts ds (SND (step_inst op s))
+Proof
+  strip_tac >> Cases_on `cp (step_inst op)`
+  >- (irule asm_call_static_prefix_cp_snd >> simp[]) >>
+  Cases_on `op` >> fs[] >>
+  simp[step_inst_def, asm_call_static_prefix_sstore,
+       asm_call_static_prefix_log, asm_call_static_prefix_self_destruct,
+       asm_call_static_prefix_create, asm_call_static_prefix_step_call]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
