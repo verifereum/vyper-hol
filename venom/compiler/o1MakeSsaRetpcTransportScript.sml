@@ -1,6 +1,6 @@
 Theory o1MakeSsaRetpcTransport
 Ancestors o1ContractMakeSsaPtrOk o1MakeSsaRequiredUses unitShapeDefs list
-  venomWf cfgWf
+  venomWf cfgWf makeSsaCurrentInputOk o1PassContract o1MakeSsaClosure pred_set
 
 Theorem mssa_retpc_definition_cases:
   retpc_shape_ok fn /\ mssa_inst_origin orig fn i /\
@@ -138,4 +138,93 @@ Theorem mssa_retpc_operand_backward:
 Proof
   strip_tac >> drule_all mssa_operand_has_definition >> strip_tac >>
   irule mssa_retpc_output_backward >> gvs[venomWfTheory.wf_ssa_def] >> metis_tac[]
+QED
+
+Theorem make_ssa_current_fn_retpc_full_required:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\ retpc_shape_ok fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (g,s') ==>
+  !y. retpc_full_required g y ==> retpc_var g y
+Proof
+  strip_tac >>
+  `?orig. !i. MEM i (fn_insts g) ==> mssa_inst_origin orig fn i` by
+    (irule mssa_origin >> metis_tac[]) >>
+  `wf_ssa g` by (irule mssa_wf_ssa >> metis_tac[]) >>
+  drule_all make_ssa_current_fn_input_ok >> strip_tac >>
+  `!bb inst. MEM bb g.fn_blocks /\ MEM inst bb.bb_instructions /\
+    fn_entry_label g = SOME bb.bb_label ==> inst.inst_opcode <> PHI` by
+    (rpt gen_tac >> strip_tac >> irule mssa_entry_no_phi >> metis_tac[]) >>
+  simp[retpc_full_required_def] >> rpt strip_tac >>
+  `retpc_var fn (orig x)` by (irule mssa_retpc_origin_forward >> metis_tac[]) >>
+  `mssa_inst_origin orig fn i` by metis_tac[] >>
+  drule_all mssa_retpc_definition_cases >> simp[] >> strip_tac >>
+  irule mssa_retpc_operand_backward >> metis_tac[]
+QED
+
+Theorem make_ssa_current_fn_retpc_reachable_required:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\ retpc_shape_ok fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (g,s') ==>
+  !y. retpc_reachable_required (reachable_fn g) y ==>
+    retpc_var (reachable_fn g) y
+Proof
+  strip_tac >>
+  `reachable_fn g = g` by (irule mssa_reachable_output_identity >> metis_tac[]) >>
+  `?orig. !i. MEM i (fn_insts g) ==> mssa_inst_origin orig fn i` by
+    (irule mssa_origin >> metis_tac[]) >>
+  `wf_ssa g` by (irule mssa_wf_ssa >> metis_tac[]) >>
+  drule_all make_ssa_current_fn_input_ok >> strip_tac >>
+  `!bb inst. MEM bb g.fn_blocks /\ MEM inst bb.bb_instructions /\
+    fn_entry_label g = SOME bb.bb_label ==> inst.inst_opcode <> PHI` by
+    (rpt gen_tac >> strip_tac >> irule mssa_entry_no_phi >> metis_tac[]) >>
+  pure_asm_rewrite_tac[] >> rewrite_tac[retpc_reachable_required_def] >> rpt strip_tac
+  >- suspend "return"
+  >> `mssa_inst_origin orig fn i` by metis_tac[] >>
+  `?v. MEM v i.inst_outputs` by
+    (qpat_x_assum `mssa_inst_origin _ _ i` mp_tac >>
+     pure_rewrite_tac[mssa_inst_origin_def] >> strip_tac >> gvs[]) >>
+  `retpc_var g v` by
+    (simp[retpc_var_def] >> metis_tac[cj 3 copy_phi_var_rules, retpc_var_def]) >>
+  irule make_ssa_current_fn_retpc_full_required >>
+  simp[retpc_full_required_def] >> metis_tac[]
+QED
+
+Resume make_ssa_current_fn_retpc_reachable_required[return]:
+  `mssa_inst_origin orig fn i` by metis_tac[] >>
+  qpat_x_assum `mssa_inst_origin _ _ _` mp_tac >>
+  pure_rewrite_tac[mssa_inst_origin_def] >> strip_tac >> gvs[] >>
+  `MEM inst (fn_insts (reachable_fn fn))` by
+    (simp[MEM_reachable_fn_insts] >>
+     `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+       (gvs[venomInstTheory.fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+     qexistsl_tac [`bb`, `inst`] >>
+     gvs[make_ssa_input_ok_def, all_reachable_def, reachable_inst_def]) >>
+  `retpc_var fn (orig y)` by
+    (irule reachable_retpc_var >>
+     gvs[retpc_shape_ok_def] >>
+     qpat_x_assum `!inst. MEM inst _ /\ _ ==> _` drule >>
+     simp[] >> strip_tac >> gvs[]) >>
+  irule mssa_retpc_operand_backward >>
+  `MEM (Var y) i.inst_operands` by simp[] >> metis_tac[]
+QED
+
+Finalise make_ssa_current_fn_retpc_reachable_required
+
+Theorem make_ssa_current_fn_retpc_required_exclusions:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\ retpc_shape_ok fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (g,s') ==>
+  (!x B. retpc_reachable_required (reachable_fn g) x /\
+     cp_bad_set RETPC_PARAM (reachable_fn g) B ==> x NOTIN B) /\
+  (!x B. retpc_full_required g x /\ cp_bad_set RETPC_PARAM g B ==> x NOTIN B)
+Proof
+  strip_tac >>
+  `!x. retpc_reachable_required (reachable_fn g) x ==> retpc_var (reachable_fn g) x` by
+    (rpt strip_tac >> irule make_ssa_current_fn_retpc_reachable_required >> metis_tac[]) >>
+  `!x. retpc_full_required g x ==> retpc_var g x` by
+    (rpt strip_tac >> irule make_ssa_current_fn_retpc_full_required >> metis_tac[]) >>
+  gvs[retpc_var_def] >> metis_tac[copy_phi_var_bad_set]
 QED
