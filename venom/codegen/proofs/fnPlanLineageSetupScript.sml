@@ -1030,3 +1030,42 @@ Proof
   drule (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] native_regular_variable_origins) >>
   ntac 6 (disch_then drule) >> metis_tac[]
 QED
+
+Theorem native_regular_core_resource:
+  !liveness dfg cfg fn inst nl halting term lbl ps m core spillbase ops qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
+    (!v. MEM (Var v) (compute_operands inst) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) /\
+    ALL_DISTINCT inst.inst_outputs /\
+    EVERY (\v. ~MEM (Var v) (compute_operands inst) /\ ~MEM (Var v) core /\
+      Var v NOTIN FDOM ps.ps_spilled) inst.inst_outputs ==>
+    ?rest. lineage_core m rest qs /\
+      residual_budget_wf spillbase [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_regular_stages >> strip_tac >>
+  qabbrev_tac `consumed = ps4 with ps_stack :=
+    stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` >>
+  `consumed = ps4 with ps_stack :=
+    stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` by simp[Abbr `consumed`] >>
+  drule_all emit_reorder_pop_marker_core_fresh >> strip_tac >>
+  qabbrev_tac `emitted = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+    consumed inst.inst_outputs` >>
+  `emitted = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+    consumed inst.inst_outputs` by simp[Abbr `emitted`] >>
+  drule_all output_push_marker_core >> strip_tac >>
+  `generate_emit_ops inst topic emitted = (eops,ps7)` by simp[Abbr `emitted`, Abbr `consumed`] >>
+  drule_all generate_emit_ops_core_resource >> strip_tac >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> strip_tac >>
+  `ps7.ps_stack = REPLICATE m dead_stack_marker ++ (rest ++ MAP Var inst.inst_outputs)` by metis_tac[] >>
+  qabbrev_tac `deleted = if inst.inst_outputs <> [] /\ (~halting \/ LENGTH inst.inst_outputs > 1)
+    then MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs) else []` >>
+  `deleted = if inst.inst_outputs <> [] /\ (~halting \/ LENGTH inst.inst_outputs > 1)
+    then MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs) else []` by simp[Abbr `deleted`] >>
+  drule_all regular_post_emit_tail_core_resource >> strip_tac >>
+  qexists_tac `rest'` >> simp[lineage_core_def]
+QED
