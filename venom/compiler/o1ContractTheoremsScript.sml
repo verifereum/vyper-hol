@@ -25,6 +25,7 @@ Ancestors
   o1ContractCfgNorm
   venomPassSchedule venomCompilerTypes o1ContractLowerDloadStage
   o1ContractSimplifyCfg o1ContractSue
+  o1ContractMakeSsa o1ContractConcretize o1ContractDft
 
 (* ===== The pre-walk runs ===== *)
 
@@ -40,36 +41,22 @@ Theorem o1_contract_dret_desugar_pre_walk =
 
 (* ===== The walk runs, by stage ===== *)
 
-Theorem o1_contract_make_ssa_1:
-  o1_step_contract_at 0 rpolicy (CFP_Simple VP_MakeSSA) /\
-  o1_run_contract rpolicy D 0
-Proof
-  cheat
-QED
+Theorem o1_contract_make_ssa_1 =
+  o1ContractMakeSsaTheory.o1_contract_make_ssa_1
 
 Theorem o1_contract_lower_dload =
   o1ContractLowerDloadStageTheory.o1_contract_lower_dload
 
-(* ConcretizeMemLoc reads callee layouts (the walk view): the raw
-   invariant becomes the static one. *)
-Theorem o1_contract_concretize_mem_loc:
-  o1_step_contract_at 2 rpolicy (CFP_Simple VP_ConcretizeMemLoc) /\
-  o1_run_contract rpolicy D 2
-Proof
-  cheat
-QED
+Theorem o1_contract_concretize_mem_loc =
+  o1ContractConcretizeTheory.o1_contract_concretize_mem_loc
 
 (* FmpLowering reads callee signatures (the walk view): the static
    invariant becomes the lowered one. *)
 Theorem o1_contract_fmp_lowering =
   o1ContractFmpLoweringTheory.o1_contract_fmp_lowering
 
-Theorem o1_contract_make_ssa_2:
-  o1_step_contract_at 4 rpolicy (CFP_Simple VP_MakeSSA) /\
-  o1_run_contract rpolicy D 4
-Proof
-  cheat
-QED
+Theorem o1_contract_make_ssa_2 =
+  o1ContractMakeSsaTheory.o1_contract_make_ssa_2
 
 Theorem o1_contract_simplify_cfg =
   o1ContractSimplifyCfgTheory.o1_contract_simplify_cfg
@@ -77,13 +64,8 @@ Theorem o1_contract_simplify_cfg =
 Theorem o1_contract_sue =
   o1ContractSueTheory.o1_contract_sue
 
-(* DFT reorders GAS reads: forall-out exists-in over the oracle. *)
-Theorem o1_contract_dft:
-  o1_step_contract_at 7 rpolicy (CFP_Simple VP_DFT) /\
-  o1_run_contract_gas rpolicy D 7
-Proof
-  cheat
-QED
+Theorem o1_contract_dft =
+  o1ContractDftTheory.o1_contract_dft
 
 Theorem o1_contract_cfg_normalization =
   o1ContractCfgNormTheory.o1_contract_cfg_normalization
