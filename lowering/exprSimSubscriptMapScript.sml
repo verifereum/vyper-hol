@@ -204,6 +204,43 @@ Proof
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
+Theorem gas_outcome_bind_result_exec:
+  gas_outcome memory tops (ctx, func)
+    (a : evaluation_state -> eval_result evaluation_result) (es, s0)
+    (\res ee t. ?v. res = INL v /\ P v ee t)
+    (\res ee r. ?ex. res = INR ex /\ R (INR ex) ee r) /\
+  (!marks v mid t.
+     gas_marked_exec memory (ctx, func) a (es, s0) marks (INL v) mid (OK t) /\
+     P v (mid with gas_obs := []) t ==>
+     gas_outcome memory tops (ctx, func) (k v)
+       (mid with gas_obs := [], t) Q R) ==>
+  gas_outcome memory tops (ctx, func) (bind a k) (es, s0) Q R
+Proof
+  disch_then (CONJUNCTS_THEN2
+    (mp_tac o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) assume_tac) >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `mid`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      disch_then (DISJ_CASES_THEN strip_assume_tac)
+      >- (gvs[] >> irule gas_outcome_result_prefix >>
+          qexistsl_tac [`marks`, `mid`, `t`, `v`] >>
+          simp[] >> first_x_assum irule >> simp[] >>
+          goal_assum (drule_at Any)) >>
+      gvs[] >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR ex`, `mid`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >> simp[]) >>
+  strip_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_error_result >> simp[]
+QED
+
 Theorem int_calls_subscript_operands:
   !nocalls ann obj idx.
     (nocalls ==> int_calls_expr (Subscript ann obj idx) = []) ==>
