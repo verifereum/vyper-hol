@@ -380,3 +380,239 @@ Proof
   drule_all ptr_mixed_vars_lookup >>
   simp[ptrDisciplineTheory.op_taint_def]
 QED
+
+Theorem ptr_mixed_vars_update:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  (retpc_var f out ==> sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token) /\
+  (~retpc_var f out ==>
+    ptr_value_transport births positions (FLOOKUP TG' out)
+      (op_taint tn' (Var out)) sv tv) /\
+  (!x. x <> out /\ ~retpc_var f x ==>
+    ptr_lookup_transport births positions (FLOOKUP TG' x)
+      (op_taint tn' (Var x)) (lookup_var x s) (lookup_var x t)) ==>
+  ptr_mixed_vars births positions TG' tn' f g
+    (update_var out sv s) (update_var out tv t)
+Proof
+  simp[ptr_mixed_vars_def, ptr_opaque_env_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  Cases_on `x = out` >> gvs[ptr_lookup_transport_def] >> metis_tac[]
+QED
+
+Theorem ptr_parallel_fold_lookup[local]:
+  !skvs tkvs s t.
+  LIST_REL (\(out,sv) (out',tv). out = out' /\
+    (out = x ==> R (SOME sv) (SOME tv))) skvs tkvs /\
+  (~MEM x (MAP FST skvs) ==> R (lookup_var x s) (lookup_var x t)) ==>
+  R (lookup_var x (FOLDL (\st (out,v). update_var out v st) s skvs))
+    (lookup_var x (FOLDL (\st (out,v). update_var out v st) t tkvs))
+Proof
+  Induct >- (Cases >> simp[]) >>
+  gen_tac >> PairCases_on `h` >> gen_tac >> Cases_on `tkvs` >> simp[] >>
+  PairCases_on `h` >>
+  rpt strip_tac >> gvs[] >> first_x_assum irule >> simp[] >>
+  strip_tac >> Cases_on `h0 = x` >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_parallel_fold_token[local]:
+  !kvs s. (FOLDL (\st (out,v). update_var out v st) s kvs).vs_return_pc_token =
+    s.vs_return_pc_token
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >> simp[update_var_def]
+QED
+Theorem ptr_mixed_vars_pointwise:
+  ptr_mixed_vars births positions TG tn f g s t <=>
+  (!x. retpc_var f x <=> retpc_var g x) /\
+  (!x. if retpc_var f x then
+    ((lookup_var x s = NONE /\ lookup_var x t = NONE) \/
+     (lookup_var x s = SOME s.vs_return_pc_token /\
+      lookup_var x t = SOME t.vs_return_pc_token))
+   else ptr_lookup_transport births positions (FLOOKUP TG x)
+     (op_taint tn (Var x)) (lookup_var x s) (lookup_var x t))
+Proof
+  eq_tac
+  >- (strip_tac >> conj_tac
+      >- gvs[ptr_mixed_vars_def] >>
+      gen_tac >> Cases_on `retpc_var f x` >> simp[] >>
+      metis_tac[ptr_mixed_vars_opaque_lookup, ptr_mixed_vars_lookup]) >>
+  simp[ptr_mixed_vars_def, ptr_opaque_env_def, lookup_var_def] >>
+  rpt strip_tac >> first_x_assum (qspec_then `x` mp_tac) >>
+  simp[] >> metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem ptr_mixed_vars_bind_fold:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  LIST_REL (\(out,sv) (out',tv). out = out' /\
+    (retpc_var f out ==> sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token) /\
+    (~retpc_var f out ==> ptr_value_transport births positions
+      (FLOOKUP TG' out) (op_taint tn' (Var out)) sv tv)) skvs tkvs /\
+  (!x. ~MEM x (MAP FST skvs) /\ ~retpc_var f x ==>
+    ptr_lookup_transport births positions (FLOOKUP TG' x)
+      (op_taint tn' (Var x)) (lookup_var x s) (lookup_var x t)) ==>
+  ptr_mixed_vars births positions TG' tn' f g
+    (FOLDL (\st (out,v). update_var out v st) s skvs)
+    (FOLDL (\st (out,v). update_var out v st) t tkvs)
+Proof
+  strip_tac >> simp[ptr_mixed_vars_pointwise, ptr_parallel_fold_token] >>
+  conj_tac >- gvs[ptr_mixed_vars_def] >> gen_tac >>
+  Cases_on `retpc_var f x` >> simp[]
+  >- (irule (BETA_RULE (Q.INST [`R` |-> `\sv tv.
+        (sv = NONE /\ tv = NONE) \/
+        (sv = SOME s.vs_return_pc_token /\ tv = SOME t.vs_return_pc_token)`]
+        (SPEC_ALL ptr_parallel_fold_lookup))) >> conj_tac
+      >- metis_tac[ptr_mixed_vars_opaque_lookup] >>
+      irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+      simp[pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  irule ptr_parallel_fold_lookup >> conj_tac >- simp[] >>
+  irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[pairTheory.FORALL_PROD, ptr_lookup_transport_def] >> metis_tac[]
+QED
+
+Theorem ptr_mixed_bind_outputs:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  LENGTH outs = LENGTH svs /\ LENGTH outs = LENGTH tvs /\
+  LIST_REL (\(out,sv) (out',tv). out = out' /\
+    (retpc_var f out ==> sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token) /\
+    (~retpc_var f out ==> ptr_value_transport births positions
+      (FLOOKUP TG' out) (op_taint tn' (Var out)) sv tv))
+    (ZIP (outs,svs)) (ZIP (outs,tvs)) /\
+  (!x. ~MEM x outs /\ ~retpc_var f x ==>
+    ptr_lookup_transport births positions (FLOOKUP TG' x)
+      (op_taint tn' (Var x)) (lookup_var x s) (lookup_var x t)) /\
+  bind_outputs outs svs s = SOME s' /\ bind_outputs outs tvs t = SOME t' ==>
+  ptr_mixed_vars births positions TG' tn' f g s' t'
+Proof
+  simp[bind_outputs_def] >> rpt strip_tac >> gvs[] >>
+  irule ptr_mixed_vars_bind_fold >> simp[MAP_ZIP] >>
+  qexistsl_tac [`TG`,`tn`] >> simp[]
+QED
+
+Theorem ptr_retpc_assign_selection:
+  retpc_shape_ok f /\ MEM inst (fn_insts f) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  MEM out inst.inst_outputs ==>
+  (retpc_var f out <=> ?x. op = Var x /\ retpc_var f x)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> fs[retpc_shape_ok_def] >>
+      qpat_x_assum `!i x. MEM i _ /\ MEM x _ /\ retpc_var _ x ==> _`
+        (qspecl_then [`inst`,`out`] mp_tac) >> simp[]) >>
+  strip_tac >> gvs[retpc_var_def] >>
+  irule copy_phi_var_assign >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem ptr_retpc_phi_selection:
+  retpc_shape_ok f /\ MEM inst (fn_insts f) /\ inst_wf inst /\
+  inst.inst_opcode = PHI /\ MEM out inst.inst_outputs /\
+  resolve_phi prev inst.inst_operands = SOME op ==>
+  ?x. op = Var x /\ MEM (Var x) inst.inst_operands /\
+      (retpc_var f out <=> retpc_var f x)
+Proof
+  strip_tac >>
+  `?x. op = Var x /\ MEM (Var x) inst.inst_operands` by
+    (qpat_x_assum `resolve_phi _ _ = _` mp_tac >>
+     `phi_well_formed inst.inst_operands` by gvs[venomWfTheory.inst_wf_def] >>
+     pop_assum mp_tac >> qid_spec_tac `op` >> SPEC_TAC (``inst.inst_operands``, ``ops:operand list``) >>
+     ho_match_mp_tac venomWfTheory.phi_well_formed_ind >>
+     simp[venomWfTheory.phi_well_formed_def, resolve_phi_def] >>
+     rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+  qexists_tac `x` >> simp[] >> eq_tac
+  >- (strip_tac >> fs[retpc_shape_ok_def] >>
+      qpat_x_assum `!i x. MEM i _ /\ MEM x _ /\ retpc_var _ x ==> _`
+        (qspecl_then [`inst`,`out`] mp_tac) >> simp[]) >>
+  strip_tac >> gvs[retpc_var_def] >>
+  irule copy_phi_var_phi >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_mixed_selected_eval:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\
+  (retpc_var f out <=> ?x. op = Var x /\ retpc_var f x) ==>
+  OPTREL (\sv tv. if retpc_var f out then
+      sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token
+    else ptr_value_transport births positions (op_prov TG op) (op_taint tn op) sv tv)
+    (eval_operand op s) (eval_operand op t)
+Proof
+  strip_tac >> Cases_on `retpc_var f out`
+  >- (gvs[] >> qpat_x_assum `retpc_var f out` kall_tac >>
+      drule_all ptr_mixed_vars_opaque_lookup >>
+      simp[eval_operand_def, optionTheory.OPTREL_def] >>
+      strip_tac >> simp[]) >>
+  `ptr_nonopaque_operand f op` by
+    (Cases_on `op` >> gvs[ptr_nonopaque_operand_def]) >>
+  drule_all ptr_mixed_vars_eval >>
+  simp[ptr_lookup_transport_def, optionTheory.OPTREL_def] >>
+  Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >> simp[]
+QED
+
+Theorem ptr_mixed_assign_eval:
+  ptr_mixed_vars births positions TG tn f g s t /\ s.vs_labels = t.vs_labels /\
+  retpc_shape_ok f /\ MEM inst (fn_insts f) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  MEM out inst.inst_outputs ==>
+  OPTREL (\sv tv. if retpc_var f out then
+      sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token
+    else ptr_value_transport births positions (op_prov TG op) (op_taint tn op) sv tv)
+    (eval_operand op s) (eval_operand op t)
+Proof
+  strip_tac >> irule ptr_mixed_selected_eval >> simp[] >>
+  reverse conj_tac >- (qexists_tac `g` >> simp[]) >>
+  irule ptr_retpc_assign_selection >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `inst` >> simp[]
+QED
+
+Theorem ptr_mixed_phi_eval:
+  ptr_mixed_vars births positions TG tn f g s t /\ s.vs_labels = t.vs_labels /\
+  retpc_shape_ok f /\ MEM inst (fn_insts f) /\ inst_wf inst /\
+  inst.inst_opcode = PHI /\ MEM out inst.inst_outputs /\
+  resolve_phi prev inst.inst_operands = SOME op ==>
+  OPTREL (\sv tv. if retpc_var f out then
+      sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token
+    else ptr_value_transport births positions (op_prov TG op) (op_taint tn op) sv tv)
+    (eval_operand op s) (eval_operand op t)
+Proof
+  strip_tac >> drule_all ptr_retpc_phi_selection >> strip_tac >>
+  irule ptr_mixed_selected_eval >> simp[] >> qexists_tac `g` >> simp[]
+QED
+
+Theorem ptr_mixed_eval_one_phi:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
+  retpc_shape_ok f /\ MEM inst (fn_insts f) /\ inst_wf inst /\
+  inst.inst_opcode = PHI ==>
+  OPTREL (\(out,sv) (out',tv). out = out' /\
+    if retpc_var f out then
+      sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token
+    else ptr_value_transport births positions (phi_prov s.vs_prev_bb TG inst)
+      (phi_taint s.vs_prev_bb tn inst) sv tv)
+    (eval_one_phi s inst) (eval_one_phi t inst)
+Proof
+  strip_tac >>
+  qpat_x_assum `s.vs_prev_bb = t.vs_prev_bb`
+    (fn th => rewrite_tac[eval_one_phi_def, GSYM th]) >>
+  Cases_on `s.vs_prev_bb` >> simp[optionTheory.OPTREL_def] >>
+  Cases_on `inst.inst_outputs` >> simp[optionTheory.OPTREL_def] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[optionTheory.OPTREL_def] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> simp[optionTheory.OPTREL_def] >>
+  rename1 `resolve_phi x inst.inst_operands = SOME op` >>
+  `OPTREL (\sv tv. if retpc_var f out then
+      sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token
+    else ptr_value_transport births positions (op_prov TG op) (op_taint tn op) sv tv)
+    (eval_operand op s) (eval_operand op t)` by
+    (irule ptr_mixed_phi_eval >> simp[] >>
+     conj_tac >- (qexistsl_tac [`inst`,`x`] >> simp[]) >>
+     qexists_tac `g` >> simp[]) >>
+  Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
+  gvs[optionTheory.OPTREL_def, ptrDisciplineTheory.phi_prov_def,
+      ptrDisciplineTheory.phi_taint_def]
+QED
+
+(* Mixed selection and binding intentionally have separate interfaces.
+   eval_one_phi reads s/t, never an incrementally updated environment.
+   ptr_mixed_vars_bind_fold permits duplicates, with FOLDL's last writer
+   taking precedence; eval_phis applies its selected writes in reverse order.
+   Consumers must supply that actual binding order and the postghost masks
+   for ordinary bound values and untouched ordinary variables.  Nothing here
+   asserts universal block-entry success or equal ordinary return values. *)
