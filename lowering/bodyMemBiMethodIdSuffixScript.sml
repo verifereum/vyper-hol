@@ -1,6 +1,7 @@
 (* Memory checks for the straight-line selector suffix. *)
 Theory bodyMemBiMethodIdSuffix
 Ancestors
+  venomMemProps fragGasSeqMem fragGasMode allocaHistoryFragment fragExec
   bodyAllocMemory allocaFootprint allocaSiteResource
   builtinHashing builtinBytesMemory builtinBytes exprSimHash
   exprLoweringProps emitHelperProps emitHelper context compileEnv
@@ -211,4 +212,73 @@ Proof
   `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
   irule (Q.INST [`n` |-> `4`] method_id_alloc_word_buffer_mem_ok) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem method_id_run_path_mem:
+  fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ code /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK t /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s ==>
+  gas_marked_path T ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = code ++ rest` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >> pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> REFL_TAC) >>
+  `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  `s.vs_inst_idx + LENGTH code = LENGTH sb.cs_current_insts` by simp[] >>
+  conj_tac >-
+    (simp[gas_marked_path_def] >> drule_all run_inst_seq_gas_path_mem >> simp[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  drule_all alloca_history_run_inst_seq >> simp[]
+QED
+
+Theorem method_id_sequence_frontier:
+  !code s t.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+       ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE) code /\
+    run_inst_seq code s = OK t ==>
+    s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `s.vs_alloca_next <= u.vs_alloca_next` by
+    (irule step_inst_alloca_next_mono >>
+     qexistsl_tac [`ARB`, `0`, `h`] >> simp[step_inst_non_invoke]) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem method_id_typed_hash_mem_ok:
+  expr_post ctx func cenv cx e es sa sm s0 es' v src s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  expr_store_bound cx (expr_type e) v src s /\
+  (!x. src = Var x ==> not_fresh_at sm x) /\ fresh_vars_wrt sm s /\
+  compile_method_id_hash (expr_type e) src sm = (op,sb) /\
+  fn_has_code sm sb func /\ ~block_is_terminated sm ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >>
+  Cases_on `bty` >> gvs[is_bytes_or_string_type_def]
+  >~ [`BytesT bd`]
+  >- (Cases_on `bd` >> gvs[compile_method_id_hash_def]
+      >- (Cases_on `v` >> gvs[value_has_type_def] >>
+          `LENGTH l <= 32` by gvs[evaluate_type_def, AllCaseEqs()] >>
+          drule hash_fixed_post_view >> simp[value_has_type_def] >> strip_tac >>
+          irule method_id_fixed_hash_mem_ok >> goal_assum (drule_at Any) >>
+          fs[expr_post_def] >> metis_tac[]) >>
+      drule method_id_dynamic_hash_mem_ok >> disch_then irule >>
+      simp[is_bytestring_type_def] >> metis_tac[]) >>
+  gvs[compile_method_id_hash_def] >>
+  drule method_id_dynamic_hash_mem_ok >> disch_then irule >>
+  simp[is_bytestring_type_def] >> metis_tac[]
 QED
