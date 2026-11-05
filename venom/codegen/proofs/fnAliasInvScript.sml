@@ -3810,6 +3810,46 @@ Proof
   gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]
 QED
 
+Theorem alias_lineage_join_phi_prefix_total_slots:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) ==>
+  !k lives halting. k < LENGTH (collect_phis bb.bb_instructions) ==>
+  ?d. stack_get_phi_depth
+    (FILTER is_var_operand (EL k (collect_phis bb.bb_instructions)).inst_operands)
+    (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+      (MAP (\j. (EL j (collect_phis bb.bb_instructions), lives j))
+        (COUNT_LIST k))).ps_stack = SOME d
+Proof
+  strip_tac >> drule_all alias_lineage_join_phi_prefix_slots >>
+  disch_then (qx_choose_then `pred` strip_assume_tac) >>
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `?pb. lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
+    (qpat_x_assum `lineage_entry _ _ _ _ _ _ _ _` mp_tac >>
+     simp[lineage_entry_def] >> metis_tac[]) >>
+  `fn_cfg_edge fn pred lbl` by
+    (`MEM pb fn.fn_blocks /\ pb.bb_label = pred` by
+       metis_tac[lookup_block_MEM, lookup_block_label] >>
+     drule_all cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+     strip_tac >> gvs[fn_cfg_edge_def] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\
+    MEM (EL k (collect_phis bb.bb_instructions)) bb.bb_instructions /\
+    (EL k (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
+    metis_tac[lookup_block_MEM, lookup_block_label,
+              livenessProofsTheory.collect_phis_mem, EL_MEM] >>
+  `phi_edge_uses_wf fn bb (EL k (collect_phis bb.bb_instructions))` by
+    metis_tac[def_dominates_uses_def] >>
+  `?x. MEM (pred,x)
+    (phi_pairs (EL k (collect_phis bb.bb_instructions)).inst_operands)` by
+    (gvs[phi_edge_uses_wf_def] >> PairCases_on `p` >> gvs[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem alias_phi_plan_holds_live:
   MEM x live /\ plan_holds ps (Var x) ==>
   plan_holds (SND (generate_phi_plan inst live halting ps)) (Var x)
@@ -3865,6 +3905,62 @@ Proof
   simp[plan_holds_def, stack_poke_def] >>
   disj1_tac >> irule (iffRL MEM_EL) >>
   qexists_tac `LENGTH ps.ps_stack - 1 - d` >> simp[EL_LUPDATE]
+QED
+
+Theorem alias_phi_fold_holds_live:
+  !steps ps. plan_holds ps (Var x) /\
+    EVERY (\p. MEM x (SND p)) steps ==>
+  plan_holds (FOLDL (\s p.
+    SND (generate_phi_plan (FST p) (SND p) halting s)) ps steps) (Var x)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >>
+  irule alias_phi_plan_holds_live >> simp[]
+QED
+
+Theorem alias_phi_indexed_fold_holds_output:
+  !n ps j. j < n /\ (insts j).inst_outputs = [x] /\
+  (?d. stack_get_phi_depth (FILTER is_var_operand (insts j).inst_operands)
+    (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+      (MAP (\i. (insts i,lives i)) (COUNT_LIST j))).ps_stack = SOME d) /\
+  (!i. j <= i /\ i < n ==> MEM x (lives i)) ==>
+  plan_holds (FOLDL (\s p.
+    SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+    (MAP (\i. (insts i,lives i)) (COUNT_LIST n))) (Var x)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  simp[COUNT_LIST_SNOC, MAP_SNOC, FOLDL_SNOC] >>
+  Cases_on `j = n`
+  >- (gvs[] >> irule alias_phi_plan_holds_output >> simp[] >>
+      first_x_assum (qspec_then `j` mp_tac) >> simp[]) >>
+  irule alias_phi_plan_holds_live >> conj_tac
+  >- (first_x_assum irule >> simp[] >> decide_tac) >>
+  first_x_assum irule >> qexists_tac `j` >> simp[]
+QED
+
+Theorem alias_lineage_join_phi_fold_lower_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) /\
+  n <= LENGTH (collect_phis bb.bb_instructions) /\
+  ((plan_holds ps (Var x) /\ (!i. i < n ==> MEM x (lives i))) \/
+   (?j. j < n /\ (EL j (collect_phis bb.bb_instructions)).inst_outputs = [x] /\
+     (!i. j <= i /\ i < n ==> MEM x (lives i)))) ==>
+  plan_holds (FOLDL (\s p.
+    SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+    (MAP (\i. (EL i (collect_phis bb.bb_instructions), lives i))
+      (COUNT_LIST n))) (Var x)
+Proof
+  strip_tac
+  >- (irule alias_phi_fold_holds_live >>
+      simp[EVERY_MAP, EVERY_MEM, MEM_COUNT_LIST]) >>
+  ho_match_mp_tac alias_phi_indexed_fold_holds_output >>
+  qexists_tac `j` >> simp[] >>
+  irule alias_lineage_join_phi_prefix_total_slots >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
 QED
 
 Theorem alias_jmp_plan_holds_live:
