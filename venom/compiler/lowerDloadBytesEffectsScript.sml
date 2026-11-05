@@ -1,7 +1,7 @@
 Theory lowerDloadBytesEffects
 Ancestors
   lowerDloadMacroBoundary lowerDloadPureEffects lowerDloadCleanCopy
-  venomExecSemantics venomState finite_map list words pred_set
+  venomExecSemantics venomState finite_map list words pred_set ptrDiscipline
 
 (* Allocation projections are already exported by ld_bytes_completed_projections. *)
 Theorem ld_bytes_completed_params:
@@ -76,4 +76,22 @@ Proof
   disch_then (fn th => gvs[th]) >>
   simp[write_memory_with_expansion_def, expand_memory_def, write_memory_def,
        update_var_def]
+QED
+
+Theorem ld_bytes_completed_taint_effects:
+  a.inst_opcode = ADD /\ a.inst_operands = [off;Label "code_end"] /\
+  a.inst_outputs = [av] /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [dst;Var av;sz] /\
+  c.inst_outputs = [] /\
+  (!v. dst = Var v ==> v <> av) /\
+  (!v. sz = Var v ==> v <> av) /\
+  ld_target_prefix C [a;c] t0 u0 (SUC (SUC 0)) t u ==>
+  u.t_var = u0.t_var |+ (av,{}) /\
+  u.t_stor = u0.t_stor /\ u.t_trans = u0.t_trans /\ u.t_imm = u0.t_imm
+Proof
+  strip_tac >> drule_all ld_bytes_completed_prefix >>
+  disch_then (fn th => gvs[th]) >>
+  simp[step_taint_def, set_var_taint_def, out_taint_def,
+       adopt_reset_def, store_taint_def, imm_taint_def] >>
+  gvs[DRESTRICT_UNIV]
 QED
