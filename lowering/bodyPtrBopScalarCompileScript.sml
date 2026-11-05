@@ -242,3 +242,189 @@ Proof
           `y IN B'` by metis_tac[SUBSET_DEF] >>
           drule bop_scalar_compile_emit_op >> simp[]) >> simp[]) >> simp[]
 QED
+
+Theorem bop_scalar_compile_emit_iszero:
+  comp_bind (emit_op opc ops) (\u. emit_op ISZERO [u]) st = (v, st') /\
+  MEM opc [LT; GT; SLT; SGT; EQ] /\ EVERY (\op. op IN A) ops /\
+  (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. (bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var) /\ v IN B
+Proof
+  strip_tac >> drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. v IN B`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[] >>
+          disch_then irule >> fs[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `!z. z IN R ==> not_fresh_at m z` by metis_tac[not_fresh_at_mono] >>
+      drule bop_scalar_compile_emit_op >> simp[]) >> simp[]
+QED
+
+Theorem bop_scalar_compile_compare:
+  MEM cmp [Lt; Gt; Eq; NotEq; LtE; GtE] /\
+  compile_compare cmp x y ty st = (v, st') /\ x IN A /\ y IN A /\
+  (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. (bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var) /\ v IN B
+Proof
+  strip_tac >> gvs[compile_compare_def] >>
+  Cases_on `is_uint256 ty` >> gvs[] >>
+  FIRST [
+    (drule bop_scalar_compile_emit_iszero >> simp[]),
+    (drule bop_scalar_compile_emit_op >> simp[])]
+QED
+
+Theorem bop_scalar_compile_emit_checked:
+  comp_bind (emit_op opc ops) (\u. emit_void ASSERT [u]) st = ((), st') /\
+  MEM opc [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD;
+           LT; GT; SLT; SGT; EQ; ISZERO; AND; OR; XOR; NOT;
+           SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSIGN] /\
+  EVERY (\op. op IN A) ops /\ (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var
+Proof
+  strip_tac >> drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >> Cases_on `v` >>
+      drule bop_scalar_compile_emit_assert >> simp[]) >> simp[]
+QED
+
+Theorem bop_scalar_compile_clamp:
+  compile_clamp x ty st = ((), st') /\ x IN A /\ (!w. Lit w IN A) /\
+  (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var
+Proof
+  Cases_on `type_bounds ty` >>
+  Cases_on `is_signed_type ty` >> simp[compile_clamp_def] >> strip_tac
+  >- suspend "signed"
+  >> drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `!z. z IN R ==> not_fresh_at m z` by metis_tac[not_fresh_at_mono] >>
+      Cases_on `v` >> drule bop_scalar_compile_emit_checked >> simp[]) >> simp[]
+QED
+
+Resume bop_scalar_compile_clamp[signed]:
+  drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `!z. z IN R ==> not_fresh_at m z` by metis_tac[not_fresh_at_mono] >>
+      drule bop_scalar_compile_bind_run >>
+      disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `B`] mp_tac) >>
+      impl_tac
+      >- (conj_tac
+          >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+          rpt strip_tac >> rule_assum_tac BETA_RULE >>
+          `!z. z IN R ==> not_fresh_at m' z` by metis_tac[not_fresh_at_mono] >>
+          `x IN B' /\ (!w. Lit w IN B')` by metis_tac[SUBSET_DEF] >>
+          drule bop_scalar_compile_bind_run >>
+          disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `B'`] mp_tac) >>
+          impl_tac
+          >- (conj_tac
+              >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+              rpt strip_tac >> rule_assum_tac BETA_RULE >>
+              `!z. z IN R ==> not_fresh_at m'' z` by metis_tac[not_fresh_at_mono] >>
+              drule bop_scalar_compile_bind_run >>
+              disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `B''`] mp_tac) >>
+              impl_tac
+              >- (conj_tac
+                  >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+                  rpt strip_tac >> rule_assum_tac BETA_RULE >>
+                  `!z. z IN R ==> not_fresh_at m''' z` by metis_tac[not_fresh_at_mono] >>
+                  `u' IN B'''` by metis_tac[SUBSET_DEF] >>
+                  Cases_on `v'''` >> drule bop_scalar_compile_emit_checked >> simp[]) >> simp[]) >> simp[]) >> simp[]) >> simp[]
+QED
+Finalise bop_scalar_compile_clamp
+
+Theorem bop_scalar_compile_clamp_and_return:
+  clamp_and_return res ty st = (v, st') /\ res IN A /\ (!w. Lit w IN A) /\
+  (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. (bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var) /\ v IN B
+Proof
+  simp[clamp_and_return_def, comp_ignore_bind_def] >> strip_tac >>
+  drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. v IN B`, `\u B. T`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> Cases_on `u` >>
+          drule bop_scalar_compile_clamp >> simp[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `res IN B` by metis_tac[SUBSET_DEF] >>
+      drule bop_scalar_compile_return >> simp[]) >> simp[]
+QED
+
+Theorem bop_scalar_compile_emit_wrap:
+  comp_bind (emit_op opc [x; y]) (\u. wrap_truncate u ty) st = (v, st') /\
+  MEM opc [ADD; SUB; MUL; Div; SDIV] /\ x IN A /\ y IN A /\
+  (!w. Lit w IN A) /\ (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. (bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var) /\ v IN B
+Proof
+  strip_tac >> drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. v IN B`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[] >>
+          disch_then irule >> fs[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `!z. z IN R ==> not_fresh_at m z` by metis_tac[not_fresh_at_mono] >>
+      `!w. Lit w IN B` by metis_tac[SUBSET_DEF] >>
+      drule bop_scalar_compile_wrap_truncate >> simp[]) >> simp[]
+QED
+
+Theorem bop_scalar_compile_emit_select:
+  comp_bind (emit_op opc [x; y]) (\u. compile_select u x y) st = (v, st') /\
+  MEM opc [LT; GT; SLT; SGT] /\ x IN A /\ y IN A /\
+  (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. (bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var) /\ v IN B
+Proof
+  strip_tac >> drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. v IN B`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[] >>
+          disch_then irule >> fs[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `!z. z IN R ==> not_fresh_at m z` by metis_tac[not_fresh_at_mono] >>
+      `x IN B /\ y IN B` by metis_tac[SUBSET_DEF] >>
+      drule bop_scalar_compile_select >> simp[]) >> simp[]
+QED
+
+Theorem bop_scalar_compile_binop_elementary:
+  MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv; And; Or; XOr; ShL; ShR;
+           Eq; NotEq; Lt; LtE; Gt; GtE; Min; Max] /\
+  compile_binop bop x y ty base_literal exp_literal st = (v, st') /\
+  x IN A /\ y IN A /\ (!w. Lit w IN A) /\
+  (!z. z IN R ==> not_fresh_at st z) ==>
+  ?B. (bop_scalar_seq R A (emitted_insts st st') B /\ A SUBSET B /\
+       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+       same_blocks st st' /\ st.cs_next_var <= st'.cs_next_var) /\ v IN B
+Proof
+  strip_tac >> gvs[compile_binop_def] >>
+  Cases_on `is_signed_type ty` >> Cases_on `is_uint256 ty` >> gvs[] >>
+  FIRST [
+    (drule bop_scalar_compile_emit_wrap >> simp[]),
+    (drule bop_scalar_compile_emit_op >> simp[]),
+    (drule_at (Pat `compile_compare _ _ _ _ _ = _`) bop_scalar_compile_compare >> simp[]),
+    (drule bop_scalar_compile_emit_select >> simp[])]
+QED
