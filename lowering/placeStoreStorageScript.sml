@@ -2471,53 +2471,7 @@ Proof
        mem_bytes_at (w2n dw) 32 u.vs_memory = word_to_bytes (n2w (LENGTH vs) : bytes32) T /\
        typedMemoryCopy$typed_copy_state_frame a (w2n dw) 32 s u /\
        ~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-    (qpat_x_assum `val_wf _ _` kall_tac >>
-     qpat_x_assum `val_in_memory _ _ _ _` kall_tac >>
-     qpat_x_assum `fn_has_code _ _ _` kall_tac >>
-     gvs[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
-          comp_bind_def, comp_ignore_bind_def, comp_return_def,
-          fresh_var_def, fresh_id_def, emit_def] >>
-     `!j v u. a.cs_next_var <= j ==>
-       eval_operand src (update_var (STRING #"%" (toString j)) v u) = eval_operand src u /\
-       eval_operand dst (update_var (STRING #"%" (toString j)) v u) = eval_operand dst u` by
-       (rpt gen_tac >> strip_tac >> conj_tac >>
-        Cases_on `src` >> Cases_on `dst` >>
-        simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
-        rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
-     pure_rewrite_tac[emitted_insts_def] >>
-     simp_tac (srw_ss()) [] >>
-     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
-                      rich_listTheory.DROP_LENGTH_APPEND, listTheory.APPEND] >>
-     simp[Once run_inst_seq_def] >>
-     `LENGTH vs < dimword (:256)` by decide_tac >>
-     simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-          exec_pure2_def, eval_operand_def,
-          emitHelperPropsTheory.lookup_var_update_var,
-          wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, bool_to_word_def,
-          arithmeticTheory.NOT_LESS] >>
-     simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure1_def,
-          eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
-          bool_to_word_def] >>
-     simp[Once run_inst_seq_def, step_inst_base_opcode_eqs,
-          eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
-     simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
-          eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
-     simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure2_def,
-          emitHelperPropsTheory.eval_operand_mstore, eval_operand_def] >>
-     simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure2_def,
-          emitHelperPropsTheory.eval_operand_mstore, eval_operand_def] >>
-     simp[run_inst_seq_def] >>
-     `typedMemoryCopy$typed_copy_state_frame a (w2n dw) 32 s
-       ((mstore (w2n dw) (n2w (LENGTH vs)) s) with vs_inst_idx := s.vs_inst_idx)` by
-       irule typedMemoryCopyTheory.typed_copy_mstore_state_frame >>
-     `mem_bytes_at (w2n dw) 32 (mstore (w2n dw) (n2w (LENGTH vs)) s).vs_memory =
-       word_to_bytes (n2w (LENGTH vs) : bytes32) T` by
-       simp[valueEncodingPropsTheory.mem_bytes_at_mstore_same] >>
-     gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
-          emitHelperPropsTheory.lookup_var_update_var, update_var_def,
-          mstore_def, lookup_var_def,
-          finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt strip_tac >> rpt IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
+    suspend "raw_sequence" >>
   `b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
    same_blocks a b /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -2545,6 +2499,59 @@ Proof
       typedMemoryCopyTheory.typed_copy_dynarray_representation,
       typedMemoryCopyTheory.typed_copy_state_frame_def]
 QED
+
+Resume place_store_counted_dynarray_prefix_path[raw_sequence]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `val_wf _ _` kall_tac >>
+  qpat_x_assum `val_in_memory _ _ _ _` kall_tac >>
+  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+  gvs[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def] >>
+  `!j v u. a.cs_next_var <= j ==>
+    eval_operand src (update_var (STRING #"%" (toString j)) v u) = eval_operand src u /\
+    eval_operand dst (update_var (STRING #"%" (toString j)) v u) = eval_operand dst u` by
+    (rpt gen_tac >> strip_tac >> conj_tac >>
+     Cases_on `src` >> Cases_on `dst` >>
+     simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
+     rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
+  pure_rewrite_tac[emitted_insts_def] >> simp_tac (srw_ss()) [] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+                  rich_listTheory.DROP_LENGTH_APPEND, listTheory.APPEND] >>
+  simp[Once run_inst_seq_def] >>
+  `LENGTH vs < dimword (:256)` by decide_tac >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure2_def, eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, bool_to_word_def,
+       arithmeticTheory.NOT_LESS] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure1_def,
+       eval_operand_def, emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs,
+       eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
+       eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure2_def,
+       emitHelperPropsTheory.eval_operand_mstore, eval_operand_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure2_def,
+       emitHelperPropsTheory.eval_operand_mstore, eval_operand_def] >>
+  simp[run_inst_seq_def] >> suspend "raw_frame"
+QED
+
+Resume place_store_counted_dynarray_prefix_path[raw_frame]:
+  markerLib.RESUME_TAC >>
+  `typedMemoryCopy$typed_copy_state_frame a (w2n dw) 32 s
+    ((mstore (w2n dw) (n2w (LENGTH vs)) s) with vs_inst_idx := s.vs_inst_idx)` by
+    irule typedMemoryCopyTheory.typed_copy_mstore_state_frame >>
+  `mem_bytes_at (w2n dw) 32 (mstore (w2n dw) (n2w (LENGTH vs)) s).vs_memory =
+    word_to_bytes (n2w (LENGTH vs) : bytes32) T` by
+    simp[valueEncodingPropsTheory.mem_bytes_at_mstore_same] >>
+  gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+      emitHelperPropsTheory.lookup_var_update_var, update_var_def,
+      mstore_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> rpt IF_CASES_TAC >> gvs[not_fresh_at_def]
+QED
+
+Finalise place_store_counted_dynarray_prefix_path
 
 Theorem place_store_counted_dynarray_bulk_data_path:
   emit_op MUL [length; Lit (n2w (type_memory_size tv))] sa = (bytes,b) /\
