@@ -1,7 +1,7 @@
 Theory exprSimAbiDecodeResource
 Ancestors
   exprSimAbiDecodeShapeProbe exprSimAbiDecodeShape exprSimAbiDecodeTrace
-  exprSimAbiDecodePrims compileEnv emitHelperProps pred_set list arithmetic
+  exprSimAbiDecodePrims compileEnv emitHelper emitHelperProps venomInst pred_set list arithmetic
 
 Definition decode_label_range_def:
   decode_label_range a b =
@@ -124,4 +124,131 @@ Proof
   strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
   irule decode_resource_run_bind >>
   qexistsl_tac [`Q`, `u`, `x`] >> simp[]
+QED
+
+Theorem decode_label_range_empty[simp]:
+  decode_label_range a a = EMPTY
+Proof
+  simp[decode_label_range_def, EXTENSION] >>
+  metis_tac[DECIDE ``~(a <= k /\ k < a)``]
+QED
+
+Theorem decode_resource_fresh_id:
+  P SUBSET decode_label_range 0 s.cs_next_label ==>
+  decode_resource_run ex P fresh_id s s.cs_next_id
+    (s with cs_next_id := s.cs_next_id + 1) P
+Proof
+  rw[decode_resource_run_def, fresh_id_def] >> qexists_tac `[]` >>
+  simp[decode_replay_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def,
+       compile_state_component_equality]
+QED
+
+Theorem decode_resource_fresh_var:
+  P SUBSET decode_label_range 0 s.cs_next_label ==>
+  decode_resource_run ex P fresh_var s ("%" ++ toString s.cs_next_var)
+    (s with cs_next_var := s.cs_next_var + 1) P
+Proof
+  rw[decode_resource_run_def, fresh_var_def] >> qexists_tac `[]` >>
+  simp[decode_replay_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def,
+       compile_state_component_equality]
+QED
+
+Theorem decode_resource_emit_inst:
+  P SUBSET decode_label_range 0 s.cs_next_label /\
+  opc <> GAS /\ opc <> INVOKE /\ opc <> PHI /\ opc <> STOP /\ opc <> RETURN /\
+  ~MEM (Label ex) ops ==>
+  decode_resource_run ex P (emit_inst opc ops outs) s ()
+    (s with <|cs_next_id := s.cs_next_id + 1;
+      cs_current_insts := s.cs_current_insts ++ [mk_inst s.cs_next_id opc ops outs]|>) P
+Proof
+  rw[decode_resource_run_def, emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  qexists_tac `[DecodeEmit (mk_inst s.cs_next_id opc ops outs)]` >>
+  simp[decode_replay_def, decode_step_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def, mk_inst_def,
+       compile_state_component_equality]
+QED
+
+Theorem decode_resource_emit_void:
+  P SUBSET decode_label_range 0 s.cs_next_label /\
+  opc <> GAS /\ opc <> INVOKE /\ opc <> PHI /\ opc <> STOP /\ opc <> RETURN /\
+  ~MEM (Label ex) ops ==>
+  decode_resource_run ex P (emit_void opc ops) s ()
+    (s with <|cs_next_id := s.cs_next_id + 1;
+      cs_current_insts := s.cs_current_insts ++ [mk_inst s.cs_next_id opc ops []]|>) P
+Proof
+  rewrite_tac[emit_void_def, GSYM emit_inst_def] >>
+  MATCH_ACCEPT_TAC decode_resource_emit_inst
+QED
+
+Theorem decode_resource_emit_op:
+  P SUBSET decode_label_range 0 s.cs_next_label /\
+  opc <> GAS /\ opc <> INVOKE /\ opc <> PHI /\ opc <> STOP /\ opc <> RETURN /\
+  ~MEM (Label ex) ops ==>
+  decode_resource_run ex P (emit_op opc ops) s (Var ("%" ++ toString s.cs_next_var))
+    (s with <|cs_next_id := s.cs_next_id + 1; cs_next_var := s.cs_next_var + 1;
+      cs_current_insts := s.cs_current_insts ++
+        [mk_inst s.cs_next_id opc ops ["%" ++ toString s.cs_next_var]]|>) P
+Proof
+  rw[decode_resource_run_def, emit_op_def, comp_ignore_bind_def, comp_bind_def, comp_return_def,
+     fresh_id_def, fresh_var_def, emit_def] >>
+  qexists_tac `[DecodeEmit
+    (mk_inst s.cs_next_id opc ops ["%" ++ toString s.cs_next_var])]` >>
+  simp[decode_replay_def, decode_step_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def, mk_inst_def,
+       compile_state_component_equality]
+QED
+
+Theorem decode_resource_switch:
+  P SUBSET decode_label_range 0 s.cs_next_label /\ l IN P ==>
+  decode_resource_run ex P (comp_ignore_bind (new_block l) (comp_return ())) s ()
+    (decode_step (DecodeSwitch l) s) (P DELETE l)
+Proof
+  rw[decode_resource_run_def, comp_ignore_bind_def, comp_bind_def,
+     comp_return_def, new_block_def, decode_step_def] >>
+  qexists_tac `[DecodeSwitch l]` >>
+  simp[decode_replay_def, decode_step_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def, compile_state_component_equality,
+       DELETE_DEF]
+QED
+
+Theorem decode_resource_terminator_switch:
+  P SUBSET decode_label_range 0 s.cs_next_label /\ l IN P /\
+  (opc = JMP \/ opc = JNZ) ==>
+  decode_resource_run ex P
+    (comp_ignore_bind (emit_inst opc ops [])
+      (comp_ignore_bind (new_block l) (comp_return ()))) s ()
+    (decode_step (DecodeSwitch l)
+      (s with <|cs_next_id := s.cs_next_id + 1;
+        cs_current_insts := s.cs_current_insts ++ [mk_inst s.cs_next_id opc ops []]|>))
+    (P DELETE l)
+Proof
+  rpt strip_tac >>
+  simp[decode_resource_run_def, comp_ignore_bind_def, comp_bind_def,
+       comp_return_def, emit_inst_def, fresh_id_def, emit_def,
+       new_block_def, decode_step_def] >>
+  qexists_tac `[DecodeEmit (mk_inst s.cs_next_id opc ops []); DecodeSwitch l]` >>
+  simp[decode_replay_def, decode_step_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def, compile_state_component_equality,
+       mk_inst_def, DELETE_DEF]
+QED
+
+Theorem decode_resource_fresh_label:
+  P SUBSET decode_label_range 0 s.cs_next_label ==>
+  decode_resource_run ex P (fresh_label suffix) s
+    (fresh_label_output suffix s.cs_next_label)
+    (s with cs_next_label := s.cs_next_label + 1)
+    (P UNION decode_label_range s.cs_next_label (s.cs_next_label + 1))
+Proof
+  rw[decode_resource_run_def, fresh_label_def] >> qexists_tac `[]` >>
+  simp[decode_replay_def, decode_history_def, decode_trace_safe_def,
+       decode_instructions_def, decode_switches_def,
+       compile_state_component_equality]
+QED
+
+Theorem decode_resource_fresh_label_available:
+  fresh_label_output suffix n IN decode_label_range n (n + 1)
+Proof
+  simp[decode_label_range_def] >> qexistsl_tac [`suffix`, `n`] >> simp[]
 QED
