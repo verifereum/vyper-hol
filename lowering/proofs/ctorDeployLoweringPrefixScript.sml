@@ -1287,6 +1287,237 @@ Proof
               deploy_prefix_parse_end, deploy_prefix_parse_args]
 QED
 
+Theorem deploy_prefix_negative_first_step:
+  FST (step ^prefix_es_tm) = INL ()
+Proof
+  simp[LET_THM, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
+  EVAL_TAC
+QED
+
+val prefix_es1_tm = ``(^prefix_es_tm) with contexts :=
+  MAP (\(ctxt,rb). (ctxt with <|pc := 1; gasUsed := 1|>,rb))
+    (^prefix_es_tm).contexts``;
+
+Theorem deploy_prefix_negative_step1:
+  step ^prefix_es_tm = (INL (), ^prefix_es1_tm)
+Proof
+  simp[LET_THM, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_observe1:
+  observe 1 ^prefix_es_tm (INL (), ^prefix_es1_tm)
+    <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  simp[callTraceTheory.observe_def, callTraceTheory.observable_call_def,
+       LET_THM, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_step1_continues:
+  LENGTH (^prefix_es1_tm).contexts = 1
+Proof
+  simp[LET_THM]
+QED
+
+val prefix_es2_tm = ``(^prefix_es_tm) with contexts :=
+  MAP (\(ctxt,rb). (ctxt with <|pc := 3; gasUsed := 4; stack := [32w]|>,rb))
+    (^prefix_es_tm).contexts``;
+
+Theorem deploy_prefix_negative_step2:
+  step ^prefix_es1_tm = (INL (), ^prefix_es2_tm)
+Proof
+  simp[LET_THM, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
+  EVAL_TAC >> simp[byteTheory.set_byte_bit_field_insert] >> EVAL_TAC
+QED
+
+fun prefix_stack_state_tm (pc, gas, stack) =
+  ``(^prefix_es_tm) with contexts :=
+    MAP (\(ctxt,rb). (ctxt with <|pc := ^pc; gasUsed := ^gas; stack := ^stack|>,rb))
+      (^prefix_es_tm).contexts``;
+val prefix_step_eval_tac =
+  simp[LET_THM, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
+  EVAL_TAC >> simp[byteTheory.set_byte_bit_field_insert] >> EVAL_TAC;
+
+val prefix_es3_tm = prefix_stack_state_tm (``4:num``, ``6:num``, ``[0w;32w]:256 word list``);
+val prefix_es4_tm = prefix_stack_state_tm (``5:num``, ``8:num``, ``[0w;0w;32w]:256 word list``);
+val prefix_es5_tm = prefix_stack_state_tm (``6:num``, ``11:num``, ``[0w;32w]:256 word list``);
+val prefix_es6_tm = prefix_stack_state_tm (``9:num``, ``14:num``, ``[33w;0w;32w]:256 word list``);
+val prefix_es7_tm = prefix_stack_state_tm (``10:num``, ``17:num``, ``[33w;32w]:256 word list``);
+val prefix_es8_tm = prefix_stack_state_tm (``11:num``, ``19:num``, ``[0w;33w;32w]:256 word list``);
+
+Theorem deploy_prefix_negative_step3:
+  step ^prefix_es2_tm = (INL (), ^prefix_es3_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step4:
+  step ^prefix_es3_tm = (INL (), ^prefix_es4_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step5:
+  step ^prefix_es4_tm = (INL (), ^prefix_es5_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step6:
+  step ^prefix_es5_tm = (INL (), ^prefix_es6_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step7:
+  step ^prefix_es6_tm = (INL (), ^prefix_es7_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step8:
+  step ^prefix_es7_tm = (INL (), ^prefix_es8_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+val prefix_es9_tm = prefix_stack_state_tm (``12:num``, ``22:num``, ``[33w;0w;32w]:256 word list``);
+val prefix_es10_tm = prefix_stack_state_tm (``13:num``, ``25:num``, ``[0w;33w;0w;32w]:256 word list``);
+val prefix_es11_tm = prefix_stack_state_tm (``14:num``, ``28:num``, ``[32w;33w;0w;0w]:256 word list``);
+val prefix_es12_tm = prefix_stack_state_tm (``15:num``, ``31:num``, ``[0w;33w;32w;0w]:256 word list``);
+
+Theorem deploy_prefix_negative_step9:
+  step ^prefix_es8_tm = (INL (), ^prefix_es9_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step10:
+  step ^prefix_es9_tm = (INL (), ^prefix_es10_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step11:
+  step ^prefix_es10_tm = (INL (), ^prefix_es11_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step12:
+  step ^prefix_es11_tm = (INL (), ^prefix_es12_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+fun prefix_mem_state_tm (pc, gas, stack) =
+  let val es = prefix_stack_state_tm (pc, gas, stack) in
+    ``^es with contexts := MAP
+      (\(ctxt,rb). (ctxt with memory := buffer_of_list ^prefix_args_tm,rb))
+      (^es).contexts``
+  end;
+val prefix_es13_tm = prefix_mem_state_tm (``16:num``, ``40:num``, ``[0w]:256 word list``);
+
+Theorem deploy_prefix_negative_step13:
+  step ^prefix_es12_tm = (INL (), ^prefix_es13_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+val prefix_es14_tm = prefix_mem_state_tm (``17:num``, ``43:num``, ``[1w]:256 word list``);
+val prefix_es15_tm = prefix_mem_state_tm (``18:num``, ``45:num``, ``[0w;1w]:256 word list``);
+val prefix_es16_tm = prefix_mem_state_tm (``19:num``, ``48:num``, ``[]:256 word list``);
+val prefix_es17_tm = prefix_mem_state_tm (``20:num``, ``50:num``, ``[0w]:256 word list``);
+val prefix_es18_tm = prefix_mem_state_tm (``21:num``, ``52:num``, ``[0w;0w]:256 word list``);
+val prefix_es19_tm = prefix_mem_state_tm (``22:num``, ``55:num``, ``[0w;0w;0w]:256 word list``);
+val prefix_es20_tm = prefix_mem_state_tm (``25:num``, ``58:num``, ``[33w;0w;0w;0w]:256 word list``);
+val prefix_es21_tm = prefix_mem_state_tm (``26:num``, ``61:num``, ``[0w;33w;0w;0w]:256 word list``);
+val prefix_es22_tm = prefix_mem_state_tm (``27:num``, ``64:num``, ``[0w]:256 word list``);
+val prefix_es23_tm = prefix_mem_state_tm (``28:num``, ``66:num``, ``[0w;0w]:256 word list``);
+
+Theorem deploy_prefix_negative_step14:
+  step ^prefix_es13_tm = (INL (), ^prefix_es14_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step15:
+  step ^prefix_es14_tm = (INL (), ^prefix_es15_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step16:
+  step ^prefix_es15_tm = (INL (), ^prefix_es16_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step17:
+  step ^prefix_es16_tm = (INL (), ^prefix_es17_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step18:
+  step ^prefix_es17_tm = (INL (), ^prefix_es18_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step19:
+  step ^prefix_es18_tm = (INL (), ^prefix_es19_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step20:
+  step ^prefix_es19_tm = (INL (), ^prefix_es20_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step21:
+  step ^prefix_es20_tm = (INL (), ^prefix_es21_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step22:
+  step ^prefix_es21_tm = (INL (), ^prefix_es22_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_step23:
+  step ^prefix_es22_tm = (INL (), ^prefix_es23_tm)
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_negative_terminal:
+  FST (step ^prefix_es23_tm) = INR NONE
+Proof
+  prefix_step_eval_tac
+QED
+
+Theorem deploy_prefix_observe_noncall[local]:
+  ~observable_call (FST (HD es.contexts)) /\
+  next_opcode (FST (HD es.contexts)) <> SOME Gas ==>
+  observe d es (r,post) <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  simp[callTraceTheory.observe_def]
+QED
+
+
 Theorem deploy_prefix_negative_wf_state:
   wf_state ^prefix_es_tm
 Proof
