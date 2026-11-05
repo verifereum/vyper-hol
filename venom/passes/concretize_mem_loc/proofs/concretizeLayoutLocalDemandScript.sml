@@ -157,14 +157,14 @@ Resume concretize_same_activation_write_demand_disjoint[livesets]:
     (irule activation_cache_source_static_item >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
-     qexists_tac `byteA` >> simp[]) >>
+     simp[]) >>
   `MEM (Allocation aidB,szB) itemsA` by
     (`?itemsB. static_alloca_items owner = SOME itemsB /\
         MEM (Allocation aidB,szB) itemsB` by
        (irule activation_cache_source_static_item >>
         goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
         goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
-        qexists_tac `byteB` >> simp[]) >> gvs[]) >>
+        simp[]) >> gvs[]) >>
   suspend "numeric"
 QED
 

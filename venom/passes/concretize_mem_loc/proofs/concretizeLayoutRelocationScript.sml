@@ -1,6 +1,6 @@
 Theory concretizeLayoutRelocation
 Ancestors
-  concretizeLayoutOwnerPairs frameRelocationBinding frameDemandTaint
+  concretizeLayoutOwnerPairs concretizeLayoutPositions frameRelocationBinding frameDemandTaint
   frameActivationCache frameJointTrace frameJointDemand frameJointTaint
   frameJointTransition ptrDiscipline o1PassContract o1ScheduleDecomp
   unitTransformDefs venomInst venomWf cfgWf finite_map list pred_set arithmetic
@@ -20,7 +20,7 @@ Theorem concretize_relocation_write_demand_noncollision:
   (!k d owner aid base size. k <= LENGTH es /\
      activation_cache (EL k (q0::qs)) d owner aid (base,size) ==>
      canonical_metadata C C' (Allocation aid) (positions owner aid) size /\
-     lo <= positions owner aid) /\
+     (0 < size ==> lo <= positions owner aid)) /\
   joint_relocation_demand lo positions q0 es qs n a z /\
   byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
   relocation_pair lo positions (EL n (q0::qs)) byte w /\ a <> byte ==>
@@ -99,7 +99,7 @@ Theorem concretize_relocation_demand_write_complement:
   (!k d owner aid base size. k <= LENGTH es /\
      activation_cache (EL k (q0::qs)) d owner aid (base,size) ==>
      canonical_metadata C C' (Allocation aid) (positions owner aid) size /\
-     lo <= positions owner aid) /\
+     (0 < size ==> lo <= positions owner aid)) /\
   (!w. w IN target_writes ==> ?byte.
      byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
      relocation_pair lo positions (EL n (q0::qs)) byte w) /\
@@ -118,4 +118,49 @@ Proof
   qpat_x_assum `!w. w IN target_writes ==> _` drule >> strip_tac >>
   `a <> byte` by metis_tac[] >>
   drule_all concretize_relocation_write_demand_noncollision >> simp[]
+QED
+
+Theorem concretize_positions_write_demand_noncollision:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  fixed_region_reserved lo C /\
+  joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\ n < LENGTH es /\
+  joint_relocation_demand lo (concretize_positions C') q0 es qs n a z /\
+  byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
+  relocation_pair lo (concretize_positions C') (EL n (q0::qs)) byte w /\ a <> byte ==>
+  z <> w
+Proof
+  strip_tac >> irule concretize_relocation_write_demand_noncollision >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `joint_relocation_demand _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `relocation_pair _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >>
+  metis_tac[concretize_positions_trace_cache]
+QED
+
+Theorem concretize_positions_demand_write_complement:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  fixed_region_reserved lo C /\
+  joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\ n < LENGTH es /\
+  (!w. w IN target_writes ==> ?byte.
+    byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
+    relocation_pair lo (concretize_positions C') (EL n (q0::qs)) byte w) /\
+  joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC n) a z /\
+  a NOTIN joint_writes (EL n (q0::qs)) (EL n es) ==>
+  joint_relocation_demand lo (concretize_positions C') q0 es qs n a z /\
+  z NOTIN target_writes
+Proof
+  strip_tac >> irule concretize_relocation_demand_write_complement >> simp[] >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >>
+  metis_tac[concretize_positions_trace_cache]
 QED
