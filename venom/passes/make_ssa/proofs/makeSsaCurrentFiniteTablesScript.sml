@@ -392,7 +392,12 @@ Definition current_loop_demand_table_def:
   current_loop_demand_table =
     FLAT (MAP (\c. MAP (\op. (c,op,op))
       [Lit 1w; Lit 2w; Label "D"; Label "X"])
-      (current_finite_cuts current_probe_loop (current_finite_target current_probe_loop))) ++
+      ([CurrentStaticCut "" "E" 0 0; CurrentStaticCut "" "E" 1 1;
+        CurrentStaticCut "" "E" 2 2; CurrentStaticCut "D" "X" 0 0;
+        CurrentStaticCut "D" "X" 1 1] ++
+       FLAT (MAP (\p. [CurrentStaticCut p "D" 0 0; CurrentStaticCut p "D" 1 1;
+         CurrentStaticCut p "D" 1 2; CurrentStaticCut p "D" 2 3;
+         CurrentStaticCut p "D" 3 4]) ["E";"D"]))) ++
     [(CurrentStaticCut "" "E" 1 1,Var "a",Var "a");
      (CurrentStaticCut "" "E" 2 2,Var "a",Var "a");
      (CurrentStaticCut "E" "D" 0 0,Var "a",Var "a");
@@ -470,3 +475,113 @@ Proof
 QED
 
 
+
+Definition current_sparse_closed_check_def:
+  current_sparse_closed_check fn fn' table edges =
+    EVERY (\(c,d,k). EVERY (\(e,x,y).
+      if e = d then
+        case current_table_pull fn fn' c k x y of
+          SOME (CurrentStaticRead u,CurrentStaticRead v) => MEM (c,u,v) table
+        | _ => T
+      else T) table) edges
+End
+
+Theorem current_sparse_closed_check_sound:
+  current_sparse_closed_check fn fn' table edges /\
+  (!c d k. current_finite_edge fn fn' c d k ==> MEM (c,d,k) edges) ==>
+  !c d k x y u v.
+    MEM (d,x,y) table /\ current_finite_edge fn fn' c d k /\
+    current_static_back fn fn' c k x y (CurrentStaticRead u) (CurrentStaticRead v) ==>
+    MEM (c,u,v) table
+Proof
+  simp[current_sparse_closed_check_def, EVERY_MEM] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `MEM (c,d,k) edges` by metis_tac[] >>
+  qpat_x_assum `!e. MEM e edges ==> _` drule >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[GSYM current_table_pull_back] >>
+  gvs[GSYM current_table_pull_back]
+QED
+
+Definition current_loop_sparse_edges_def:
+  current_loop_sparse_edges =
+   [(CurrentStaticCut "" "E" 0 0,CurrentStaticCut "" "E" 0 0,0);
+    (CurrentStaticCut "" "E" 0 0,CurrentStaticCut "" "E" 1 1,2);
+    (CurrentStaticCut "" "E" 1 1,CurrentStaticCut "" "E" 2 2,2);
+    (CurrentStaticCut "" "E" 2 2,CurrentStaticCut "E" "D" 0 0,3);
+    (CurrentStaticCut "D" "X" 0 0,CurrentStaticCut "D" "X" 0 0,0);
+    (CurrentStaticCut "D" "X" 0 0,CurrentStaticCut "D" "X" 1 1,2)] ++
+   FLAT (MAP (\p.
+    [(CurrentStaticCut p "D" 0 0,CurrentStaticCut p "D" 1 1,0);
+     (CurrentStaticCut p "D" 1 1,CurrentStaticCut p "D" 1 2,1);
+     (CurrentStaticCut p "D" 1 2,CurrentStaticCut p "D" 2 3,2);
+     (CurrentStaticCut p "D" 2 3,CurrentStaticCut p "D" 3 4,2);
+     (CurrentStaticCut p "D" 3 4,CurrentStaticCut "D" "D" 0 0,3);
+     (CurrentStaticCut p "D" 3 4,CurrentStaticCut "D" "X" 0 0,3)]) ["E";"D"])
+End
+
+Theorem current_static_edge_lookup:
+  current_static_edge fn fn' (CurrentStaticCut p h i j) d kind <=>
+  case lookup_block h fn.fn_blocks of NONE => F | SOME old =>
+  case lookup_block h fn'.fn_blocks of NONE => F | SOME out =>
+    (i = 0 /\ j = 0 /\
+      d = CurrentStaticCut p h (phi_prefix_length old.bb_instructions)
+        (phi_prefix_length out.bb_instructions) /\ kind = 0) \/
+    (i = phi_prefix_length old.bb_instructions /\
+      phi_prefix_length out.bb_instructions <= j /\
+      j < current_static_body_start old.bb_instructions out.bb_instructions /\
+      d = CurrentStaticCut p h i (SUC j) /\ kind = 1) \/
+    (phi_prefix_length old.bb_instructions <= i /\ i < LENGTH old.bb_instructions /\
+      j = current_static_body_start old.bb_instructions out.bb_instructions +
+        (i - phi_prefix_length old.bb_instructions) /\ j < LENGTH out.bb_instructions /\
+      d = CurrentStaticCut p h (SUC i) (SUC j) /\ kind = 2) \/
+    (i = LENGTH old.bb_instructions /\ j = LENGTH out.bb_instructions /\
+      ?q. fn_cfg_edge fn h q /\ d = CurrentStaticCut h q 0 0 /\ kind = 3)
+Proof
+  Cases_on `lookup_block h fn.fn_blocks` >>
+  Cases_on `lookup_block h fn'.fn_blocks` >>
+  simp[current_static_edge_def, PULL_EXISTS] >>
+  eq_tac >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_loop_sparse_coverage:
+  current_finite_edge current_probe_loop (current_finite_target current_probe_loop) c d k ==>
+  MEM (c,d,k) current_loop_sparse_edges
+Proof
+  simp[current_finite_edge_def] >>
+  CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
+  strip_tac >> gvs[] >>
+  gvs[current_static_edge_lookup, current_finite_loop_source_blocks,
+    current_finite_loop_target_blocks, lookup_block_def, FIND_def, INDEX_FIND_def,
+    history_probe_bb_def, current_probe_inst_def, phi_prefix_length_def,
+    current_static_body_start_def] >>
+  gvs[current_loop_sparse_edges_def] >>
+  qpat_x_assum `fn_cfg_edge _ _ _` mp_tac >> EVAL_TAC >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `MEM q _` mp_tac >> EVAL_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem current_loop_sparse_closed:
+  current_sparse_closed_check current_probe_loop (current_finite_target current_probe_loop)
+    current_loop_demand_table current_loop_sparse_edges
+Proof
+  simp[current_sparse_closed_check_def, current_loop_sparse_edges_def,
+    EVERY_APPEND, EVERY_FLAT, EVERY_MAP] >>
+  rpt conj_tac >>
+  simp[current_table_pull_def, current_finite_loop_source_blocks,
+    current_finite_loop_target_blocks, lookup_block_def, FIND_def, INDEX_FIND_def,
+    history_probe_bb_def, current_probe_inst_def] >>
+  EVAL_TAC
+QED
+
+Theorem current_loop_demand_contained:
+  current_finite_demand current_probe_loop (current_finite_target current_probe_loop)
+    (current_finite_history current_probe_loop) c x y ==>
+  MEM (c,x,y) current_loop_demand_table
+Proof
+  map_every qid_spec_tac [`y`,`x`,`c`] >>
+  match_mp_tac current_finite_table_contains >> conj_tac
+  >- metis_tac[current_loop_table_seeds] >>
+  match_mp_tac (Q.INST [`edges` |-> `current_loop_sparse_edges`]
+    current_sparse_closed_check_sound) >>
+  simp[current_loop_sparse_closed, current_loop_sparse_coverage]
+QED
