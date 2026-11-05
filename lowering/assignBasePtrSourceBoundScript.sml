@@ -2,6 +2,7 @@
 Theory assignBasePtrSourceBound
 Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv exprLowering
   valueEncoding venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState vyperContext accountsRelProps
+  fcgDefs relation venomMemDefs pred_set venomInst list
 
 (* Identity framing isolates the substantive placement and state relation
    obligations; no execution claim is made here. *)
@@ -175,4 +176,84 @@ Proof
                 vs_call_ctx := cc; vs_tx_ctx := tc; vs_block_ctx := bc|>`] >>
   simp[] >> irule assign_base_ptr_empty_state_rel >>
   gvs[Abbr `tx`, call_ctx_rel_def]
+QED
+
+Theorem assign_base_ptr_empty_calls:
+  !ctx. EVERY (\f. f.fn_blocks = []) ctx.ctx_functions ==>
+    !a b. ~TC (fn_directly_calls ctx) a b
+Proof
+  gen_tac >> strip_tac >>
+  `!a b. ~fn_directly_calls ctx a b` by
+    (simp[fn_directly_calls_def] >> rpt strip_tac >>
+     drule lookup_function_MEM >> strip_tac >>
+     fs[EVERY_MEM] >> res_tac >>
+     gvs[fn_insts_def, fn_insts_blocks_def]) >>
+  simp[Once TC_CASES1]
+QED
+
+Theorem assign_base_ptr_empty_room:
+  !func ctx s.
+    func.fn_blocks = [] /\ ctx.ctx_functions = [func] /\
+    s.vs_alloca_next < dimword(:256) ==>
+    alloca_room ctx func s /\ fmp_room ctx func s
+Proof
+  rpt strip_tac >>
+  `!a b. ~TC (fn_directly_calls ctx) a b` by
+    (irule assign_base_ptr_empty_calls >> simp[]) >>
+  simp[alloca_room_def, fmp_room_def, pending_alloca_size_def,
+       fn_insts_def, fn_insts_blocks_def, lookup_function_def, FIND_thm]
+QED
+
+Theorem assign_base_ptr_empty_stmt_state:
+  !ctx func cenv cx es s.
+    state_rel func cenv cx es s /\
+    func.fn_blocks = [] /\ ctx.ctx_functions = [func] /\
+    ~cenv.ce_is_ctor /\ cenv.ce_imm_alloca = NONE /\
+    s.vs_allocas = FEMPTY |+ (0,(dimword(:256)-64,32)) /\
+    s.vs_alloca_next = dimword(:256)-32 ==>
+    stmt_state_rel ctx func cenv cx es s
+Proof
+  rpt strip_tac >>
+  `alloca_room ctx func s /\ fmp_room ctx func s` by
+    (irule assign_base_ptr_empty_room >> simp[dimword_def]) >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_base_zero_def,
+       fn_insts_def, fn_insts_blocks_def] >>
+  simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+       FLOOKUP_UPDATE, dimword_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem assign_base_ptr_source_bound_state_exists:
+  ?ctx func cenv cx es s.
+    stmt_state_rel ctx func cenv cx es s /\
+    lookup_var "p" s = SOME (n2w (dimword(:256)-64)) /\
+    mem_word_at (dimword(:256)-64) s.vs_memory = 0w /\
+    FLOOKUP s.vs_allocas 0 = SOME (dimword(:256)-64,32) /\
+    (!n b sz. ~local_region cenv es.scopes s n b sz)
+Proof
+  qabbrev_tac `func = (ARB:ir_function) with fn_blocks := []` >>
+  qspecl_then [`func`, `[]`, `FEMPTY |+ ("p",n2w (dimword(:256)-64))`,
+    `FEMPTY |+ (0,(dimword(:256)-64,32))`, `dimword(:256)-32`]
+    strip_assume_tac assign_base_ptr_ordinary_state_exists >>
+  qexistsl [`ARB with ctx_functions := [func]`, `func`, `cenv`, `cx`, `es`, `s`] >>
+  conj_tac
+  >- (irule assign_base_ptr_empty_stmt_state >> simp[Abbr `func`]) >>
+  simp[lookup_var_def, FLOOKUP_UPDATE, local_region_def, lookup_scopes_def,
+       mem_word_at_def, mem_bytes_at_def, dimword_def] >> EVAL_TAC >> simp[]
+QED
+
+(* The full exported expression post does not entail whole-buffer no-wrap.
+   This remains an interface counterexample, not a statement execution. *)
+Theorem assign_base_ptr_source_bound_counterexample:
+  ?ctx func cenv cx es s e sa sb G tn v op w off tv.
+    expr_post ctx func cenv cx e es sa sb s es v op s /\
+    ptr_val_ok cx (expr_type e) v op G tn s /\
+    ptr_buf_ok cenv e op G s /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
+    off < type_memory_bytes cenv (lowered_value_type cenv e) /\
+    ~(w2n w + off < dimword(:256))
+Proof
+  strip_assume_tac assign_base_ptr_source_bound_state_exists >>
+  drule_all assign_base_ptr_source_bound_conditional >>
+  metis_tac[]
 QED
