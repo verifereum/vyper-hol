@@ -6,7 +6,7 @@
  *)
 Theory lowerDloadSupplySegment
 Ancestors
-  o1ContractLowerDload lowerDloadDefs list
+  o1ContractLowerDload lowerDloadDefs list rich_list
 
 Theorem lower_dload_insts_supply_append_forward:
   !pre q before qi post after qe.

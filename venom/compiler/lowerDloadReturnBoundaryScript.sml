@@ -98,12 +98,11 @@ Proof
   `MAP FST (ZIP (outs,vals)) = outs` by simp[MAP_ZIP] >>
   qspecl_then [`ZIP (outs,vals)`,`s`,`t`,`v`] strip_assume_tac ld_fold_bind_lookup >>
   qspecl_then [`ZIP (outs,vals)`,`t`,`s`,`v`] strip_assume_tac ld_fold_bind_lookup >>
-  Cases_on `MEM v outs`
-  >- (fs[MAP_ZIP] >>
-      simp[FLOOKUP_DRESTRICT, op_taint_def, ld_owned_value_def,
-           lowerDloadOperandTheory.ld_mask_word_def]) >>
-  fs[MAP_ZIP, op_taint_def] >>
-  simp[FLOOKUP_DRESTRICT, op_taint_def] >> metis_tac[]
+  Cases_on `MEM v outs` >> fs[MAP_ZIP, op_taint_def] >>
+  simp[FLOOKUP_DRESTRICT, op_taint_def]
+  >~ [`ld_owned_value E NONE NONE _ _ _ _`]
+  >- simp[ld_owned_value_def, lowerDloadOperandTheory.ld_mask_word_def] >>
+  metis_tac[]
 QED
 
 Theorem ld_bind_outputs_target_exists:
