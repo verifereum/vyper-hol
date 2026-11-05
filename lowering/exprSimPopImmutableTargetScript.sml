@@ -1495,6 +1495,45 @@ Proof
   Cases_on `bd` >> simp[] >> strip_tac >> gvs[]
 QED
 
+Theorem imm_target_type_only[local]:
+  !bt env cx cenv es src id vt.
+    expr_sim_inv cenv cx env es /\
+    target_root bt = TopLevelNameTarget (src,id) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) /\
+    type_place_target env bt = SOME vt ==> ?ty. vt = Type ty
+Proof
+  Induct_on `bt` using base_assignment_target_induct >>
+  rpt gen_tac >> strip_tac >>
+  gvs[target_root_def, Once well_typed_expr_def, AllCaseEqs()]
+  >- (`env_context_consistent env cx` by
+        fs[expr_sim_inv_def, env_consistent_def] >>
+      Cases_on `vt` >> simp[] >>
+      fs[env_context_consistent_def] >>
+      qpat_x_assum `!src id kt vt. _ ==> _` drule >>
+      strip_tac >> res_tac >> gvs[]) >>
+  `?bty. vt' = Type bty` by metis_tac[] >> gvs[] >>
+  Cases_on `bty` >> gvs[subscript_vtype_def, AllCaseEqs()]
+QED
+
+Theorem imm_target_subscript_type[local]:
+  !bt e env cx cenv es src id ty.
+    expr_sim_inv cenv cx env es /\
+    target_root bt = TopLevelNameTarget (src,id) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) /\
+    type_place_target env (SubscriptTarget bt e) = SOME (Type ty) ==>
+    ?bd. type_place_target env bt = SOME (Type (ArrayT ty bd)) /\
+         well_typed_expr env e /\ is_int_type (expr_type e)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = _` mp_tac >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+  drule_all imm_target_type_only >> strip_tac >> gvs[] >>
+  rename1 `subscript_vtype (Type bty) _ = _` >>
+  Cases_on `bty` >> gvs[subscript_vtype_def, AllCaseEqs()]
+QED
+
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
