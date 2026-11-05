@@ -272,6 +272,63 @@ Proof
   metis_tac[finite_mapTheory.flookup_thm]
 QED
 
+Definition alias_probe_phis_def:
+  alias_probe_phis =
+    [mk_inst 10 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"];
+     mk_inst 11 PHI [Label "left"; Var "c"; Label "right"; Var "d"] ["q"]]
+End
+
+Theorem alias_probe_phi_static_edges:
+  phi_uses_disjoint alias_probe_phis /\
+  input_vars_from "left" alias_probe_phis ["a"; "b"; "c"; "d"; "r"] = ["a"; "c"; "r"] /\
+  input_vars_from "right" alias_probe_phis ["a"; "b"; "c"; "d"; "r"] = ["b"; "d"; "r"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_probe_phi_prefix_ownership:
+  (SND (generate_phi_plan (HD alias_probe_phis) ["c"; "d"; "r"] F
+    ((init_plan_state 0) with ps_stack := [Var "r"; Var "a"; Var "c"]))).ps_stack =
+    [Var "r"; Var "c"] /\
+  FILTER (\at. MEM at [Var "c"; Var "d"])
+    (SND (generate_phi_plan (HD alias_probe_phis) ["c"; "d"; "r"] F
+      ((init_plan_state 0) with ps_stack := [Var "r"; Var "a"; Var "c"]))).ps_stack =
+    [Var "c"] /\
+  (SND (generate_phi_plan (EL 1 alias_probe_phis) ["q"; "r"] F
+    (SND (generate_phi_plan (HD alias_probe_phis) ["c"; "d"; "r"] F
+      ((init_plan_state 0) with ps_stack := [Var "r"; Var "a"; Var "c"]))))).ps_stack =
+    [Var "r"; Var "q"] /\
+  (SND (generate_phi_plan (HD alias_probe_phis) ["c"; "d"; "r"] F
+    ((init_plan_state 0) with ps_stack := [Var "r"; Var "a"; Var "c"]))).ps_spilled = FEMPTY
+Proof
+  EVAL_TAC
+QED
+
+(* Input disjointness alone supplies neither output freshness nor static
+   edge choice. In loops SSA alone also permits an output on a backedge.
+   A proposed freshness proof must additionally use phi_block_ready's
+   dead-after-prefix condition and a liveness witness from the backedge;
+   that proof remains an obligation, not a consequence of these fixtures. *)
+Theorem alias_probe_phi_disjoint_not_fresh:
+  phi_uses_disjoint
+    [mk_inst 10 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["c"];
+     mk_inst 11 PHI [Label "left"; Var "c"; Label "right"; Var "d"] ["q"]] /\
+  MEM (Var "c") (FILTER is_var_operand
+    (mk_inst 11 PHI [Label "left"; Var "c"; Label "right"; Var "d"] ["q"]).inst_operands)
+Proof
+  EVAL_TAC
+QED
+
+(* Proposed remaining-PHI preservation interface: disjoint selected input
+   lists A,B, FILTER A stack = [Var a], FILTER B stack = [Var b], no
+   incoming spill keys, a dead at this step, output not in A or B and not
+   already held. After the step FILTER B stack = [Var b], no B spills,
+   and no A held (the latter is alias_phi_singleton_consumed).
+   Output freshness needs its own codegen_ready/SSA/liveness boundary.
+   Poke preserves the B filter, but optional pop can move the B slot;
+   preserve a FILTER singleton, not its absolute depth. The computation
+   above exercises that movement with a carried residual r. *)
+
 
 Theorem plan_holds_cleanup_update[simp]:
   plan_holds
