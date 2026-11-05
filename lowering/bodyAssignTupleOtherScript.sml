@@ -378,9 +378,11 @@ Theorem tuple_places_key_pre[local]:
 Proof
   rpt strip_tac >>
   `int_calls_expr key = []` by metis_tac[supported_pure_int_calls] >>
-  `~expr_has_evm_run key` by metis_tac[supported_expr_body_calls] >>
+  `~expr_has_evm_run key /\ ~is_extcode key` by
+    metis_tac[supported_expr_body_calls] >>
   `~supported_expr_exists
-    (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) key` by
+    (\e. ~is_extcode e /\
+          ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) key` by
     (gvs[stmt_exprs_ok_def] >> metis_tac[tuple_places_key_occurs]) >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> gvs[body_inv_def]) >>
