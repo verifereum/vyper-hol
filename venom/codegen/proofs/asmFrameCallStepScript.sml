@@ -6258,6 +6258,57 @@ Proof
   drule_all asm_call_pending_step_result >> simp[]
 QED
 
+Theorem asm_call_pending_finite:
+  !n. wf_state s /\ ^call_pending_inv pending saved s /\
+    (!k. k <= n ==>
+      LENGTH saved < LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts) ==>
+    wf_state (SND (FUNPOW (step o SND) n (INL (),s))) /\
+    ^call_pending_inv pending saved (SND (FUNPOW (step o SND) n (INL (),s)))
+Proof
+  Induct >- simp[] >> strip_tac >>
+  `wf_state (SND (FUNPOW (step o SND) n (INL (),s))) /\
+   ^call_pending_inv pending saved (SND (FUNPOW (step o SND) n (INL (),s)))` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  simp[arithmeticTheory.FUNPOW_SUC] >>
+  qmatch_goalsub_abbrev_tac `step mid` >>
+  `wf_state mid /\ ^call_pending_inv pending saved mid` by simp[Abbr `mid`] >>
+  `LENGTH saved < LENGTH (SND (step mid)).contexts` by
+    (first_x_assum (qspec_then `SUC n` mp_tac) >>
+     simp[arithmeticTheory.FUNPOW_SUC, Abbr `mid`]) >>
+  Cases_on `step mid` >> gvs[] >> conj_tac
+  >- (drule_all step_preserves_wf_state >> simp[]) >>
+  irule (SRULE [] asm_call_pending_step) >>
+  simp[] >> qexistsl_tac [`q`,`mid`] >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_call_run_pending_suffix:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  s.rollback.toDelete = pending /\ crb.toDelete = pending /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?added. t.rollback.toDelete = added ++ pending
+Proof
+  strip_tac >>
+  `^call_pending_inv pending ((parent,prb)::rest) s` by
+    (irule asm_call_pending_initial >> simp[]) >>
+  drule run_call_finite_trace >> strip_tac >>
+  Cases_on `n` >- gvs[] >>
+  qmatch_asmsub_abbrev_tac `FUNPOW (step o SND) (SUC n') start` >>
+  qabbrev_tac `mid = SND (FUNPOW (step o SND) n' start)` >>
+  `step mid = (INL (),t)` by
+    (gvs[arithmeticTheory.FUNPOW_SUC, Abbr `mid`]) >>
+  `!k. k <= n' ==> LENGTH ((parent,prb)::rest) <
+      LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts` by
+    (rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+  `wf_state mid /\ ^call_pending_inv pending ((parent,prb)::rest) mid` by
+    (qspec_then `n'` mp_tac
+       (Q.INST [`saved` |-> `(parent,prb)::rest`] asm_call_pending_finite) >>
+     simp[Abbr `mid`, Abbr `start`] >> metis_tac[]) >>
+  drule_all asm_call_pending_step_result >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
