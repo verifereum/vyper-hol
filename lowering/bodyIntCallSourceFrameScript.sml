@@ -2,7 +2,7 @@
 Theory bodyIntCallSourceFrame
 Ancestors
   supportedExprs supportedExprForms vyperPureExpr vyperInterpreter vyperState
-  vyperStatePreservation vyperPlaceFrames
+  vyperStatePreservation vyperPlaceFrames loweringPosts exprSimHyps
 
 Theorem outcomes_frame_trans[local]:
   s1 = s0 with outcomes := s1.outcomes /\
@@ -115,4 +115,118 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[bind_def, return_def, AllCaseEqs()] >>
   metis_tac[supported_eval_expr_outcomes, outcomes_frame_trans]
+QED
+
+Theorem get_storage_outcomes[local]:
+  vyperStorageBackend$get_storage cx (es with outcomes := os) tr =
+  get_storage cx es tr
+Proof
+  Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem read_place_outcomes:
+  read_place cx p (es with outcomes := os) =
+    (FST (read_place cx p es), es with outcomes := os)
+Proof
+  Cases_on `p` >>
+  simp[read_place_def, vyperStorageBackendTheory.read_storage_slot_eq,
+       get_storage_outcomes, get_scopes_def,
+       get_immutables_def, get_address_immutables_def, bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem read_result_outcomes:
+  read_result cx raw (es with outcomes := os) =
+    (FST (read_result cx raw es), es with outcomes := os)
+Proof
+  Cases_on `raw` >>
+  simp[read_result_def, read_place_outcomes, return_def, raise_def] >>
+  metis_tac[read_place_state, pairTheory.PAIR]
+QED
+
+Theorem read_result_outcomes_iff:
+  read_result cx raw (es with outcomes := os) =
+    (res, es with outcomes := os) <=> read_result cx raw es = (res,es)
+Proof
+  simp[read_result_outcomes] >>
+  Cases_on `read_result cx raw es` >>
+  drule read_result_state >> simp[]
+QED
+
+Theorem read_results_outcomes:
+  !raw es os. read_results cx raw (es with outcomes := os) =
+    (FST (read_results cx raw es), es with outcomes := os)
+Proof
+  Induct_on `raw` >> simp[read_results_def, return_def] >>
+  rpt gen_tac >>
+  simp[bind_def, read_result_outcomes] >>
+  Cases_on `read_result cx h es` >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[] >>
+  Cases_on `read_results cx raw es` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[return_def]
+QED
+
+Theorem read_results_outcomes_iff:
+  read_results cx raw (es with outcomes := os) =
+    (res, es with outcomes := os) <=> read_results cx raw es = (res,es)
+Proof
+  simp[read_results_outcomes] >>
+  Cases_on `read_results cx raw es` >>
+  drule read_results_state >> simp[]
+QED
+
+Theorem storage_holds_outcomes:
+  storage_holds cx tr t tv w (es with outcomes := os) s <=>
+  storage_holds cx tr t tv w es s
+Proof
+  simp[storage_holds_def, read_result_outcomes_iff,
+       vyperStorageBackendTheory.read_storage_slot_eq, get_storage_outcomes,
+       AllCaseEqs()]
+QED
+
+Theorem immutable_holds_outcomes:
+  immutable_holds cenv cx t tv w (es with outcomes := os) <=>
+  immutable_holds cenv cx t tv w es
+Proof
+  simp[immutable_holds_def, read_result_outcomes_iff]
+QED
+
+Theorem vv_holds_outcomes:
+  vv_holds cenv cx t tv vv (es with outcomes := os) s <=>
+  vv_holds cenv cx t tv vv es s
+Proof
+  Cases_on `vv` >>
+  simp[vv_holds_def, read_result_outcomes_iff] >>
+  Cases_on `p.ptr_location` >>
+  simp[storage_holds_outcomes, immutable_holds_outcomes]
+QED
+
+Theorem vv_at_outcomes:
+  vv_at cenv cx t sa sb (es with outcomes := os) tv vv s <=>
+  vv_at cenv cx t sa sb es tv vv s
+Proof
+  Cases_on `vv` >>
+  simp[vv_at_def, read_result_outcomes_iff, expr_val_at_def]
+QED
+
+Theorem expr_body_pre_next_argument:
+  expr_body_pre cenv cx env e es /\
+  eval_expr cx e es = (res,es') /\
+  expr_body_pre cenv cx env a es ==>
+  expr_body_pre cenv cx env a es'
+Proof
+  strip_tac >> drule_all expr_body_pre_eval_result >>
+  strip_tac >> gvs[expr_body_pre_def]
+QED
+
+Theorem expr_body_pre_next_arguments:
+  expr_body_pre cenv cx env e es /\
+  eval_expr cx e es = (res,es') /\
+  EVERY (\a. expr_body_pre cenv cx env a es) args ==>
+  EVERY (\a. expr_body_pre cenv cx env a es') args
+Proof
+  simp[listTheory.EVERY_MEM] >> metis_tac[expr_body_pre_next_argument]
 QED
