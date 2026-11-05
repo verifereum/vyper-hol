@@ -25,7 +25,7 @@ two; neither is your concern.)
 The predicates (`body_expr_ptr_ok`, `body_stmts_ptr_ok`, ...) are in
 lowering/bodyPtrPredsScript.sml. The judgments `expr_sim_ptr`,
 `expr_vv_sim_ptr`, `stmt_frag_ptr`, `frame_ret_ok_ptr`, `stmt_exit_ptr`,
-`ghost_inv`, `ghost_kept`, `ptr_val_ok`, `ptr_mem_ok`, `ptr_vv_ok`,
+`ghost_inv`, `ghost_kept`, `ptr_val_ok`, `ptr_mem_ok`, `ptr_vv_ok`, `ptr_buf_ok`,
 `cx_dead`, `frag_exec_ptr` are in lowering/bodyPtrDefsScript.sml; the
 counted paths `gas_path_ptr_edge`, `gas_path_ptr`, `gas_outcome_ptr` in
 lowering/fragGasPathPtrScript.sml; the per-step check `ptr_safe_step`,
