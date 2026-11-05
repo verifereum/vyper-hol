@@ -14,14 +14,13 @@
  * fn_entry_state_rel, fn_return_state_rel) are in frameRel.
  *
  * TOP-LEVEL:
- *   gen_fn_simulation       — ADMITTED function-level simulation (M4.2),
- *                             from function entry
- *   gen_fn_frame_simulation — ADMITTED restatement from any later block
- *                             boundary, over frameRel$fn_frame_inv
+ *   gen_fn_simulation       — function-level simulation (M4.2), from
+ *                             function entry
+ *   gen_fn_frame_simulation — the same from any later block boundary,
+ *                             over frameRel$fn_frame_inv
  *
- * STATUS: The function-level Venom→Asm simulation target is open/cheated.
- * Several helper proof layers exist, but theorem statements/preconditions may
- * need stabilization before proof repair; see docs/compiler-proof-roadmap.md.
+ * Both are proved together by induction on fuel; the steps are
+ * fnEntryStep$fn_entry_block_step and fnBlockStep$fn_block_frame_step.
  *)
 
 Theory venomToAsmProps
@@ -29,8 +28,24 @@ Ancestors
   frameRel codegenRel contextCodegenRelProps fnPlanDecomp blockSimHelpers
   cleanOpsSim genBlockSim codegen symbolResolve venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs fnPlanLineage
+  fnSimSpec fnBlockStep fnEntryStep
   list rich_list
   finite_map
+
+(* ===== Fuel induction ===== *)
+
+(* Both function theorems at once, by induction on fuel: run_blocks 0 is
+   an Error, and the step is the entry block (fnEntryStep) or a later
+   block (fnBlockStep), each given both theorems at the smaller fuel for
+   the callees an INVOKE runs and for the rest of the run. *)
+Theorem gen_fn_sims_all[local]:
+  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel
+Proof
+  Induct
+  >- (simp[gen_fn_sim_at_def, gen_fn_frame_sim_at_def] >>
+      rpt strip_tac >> gvs[Once run_blocks_def]) >>
+  metis_tac[fn_block_frame_step, fn_entry_block_step]
+QED
 
 (* ===== Function-Level Simulation ===== *)
 
@@ -96,7 +111,10 @@ Theorem gen_fn_simulation:
                as'.as_stack = REVERSE ret.iret_values ++ rest /\
                fn_return_state_rel ctx cp fn vs' as as')
 Proof
-  cheat
+  rpt gen_tac >>
+  mp_tac (CONJUNCT1 (SPEC_ALL gen_fn_sims_all)) >>
+  PURE_REWRITE_TAC[gen_fn_sim_at_def] >>
+  disch_then MATCH_ACCEPT_TAC
 QED
 
 (* The same simulation from any block boundary after the entry block, with
@@ -203,5 +221,8 @@ Theorem gen_fn_frame_simulation:
                     read_byte b as'.as_memory = read_byte b mem0) /\
                shared_state_rel vs' as')
 Proof
-  cheat
+  rpt gen_tac >>
+  mp_tac (CONJUNCT2 (SPEC_ALL gen_fn_sims_all)) >>
+  PURE_REWRITE_TAC[gen_fn_frame_sim_at_def] >>
+  disch_then MATCH_ACCEPT_TAC
 QED

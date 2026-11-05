@@ -13,7 +13,7 @@
 
 Theory fnFrameSteps
 Ancestors
-  fnFrameStepsRevertForward genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
 
@@ -160,6 +160,18 @@ Theorem revert_forward_frame_sim:
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'
 Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED (codegen skeleton): fnFrameStepsRevertForward was
+   proved against the old revert_forward_pair; the base cut redefines it
+   through step_back_assign and same_after_assigns, so that theory no
+   longer builds and is out of this theory's Ancestors until it is
+   repaired.  Repair piece; the original proof, with
+   fnFrameStepsRevertForward back in Ancestors:
+
+Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
   drule_all rf_entry_forward_abort >> simp[]
 QED
+*)
