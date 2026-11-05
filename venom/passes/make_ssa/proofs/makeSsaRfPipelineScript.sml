@@ -1,6 +1,6 @@
 Theory makeSsaRfPipeline
 Ancestors makeSsaRfFinalBlock makeSsaRfLocalBridge makeSsaRfDomDistinct
-  makeSsaRfTreeTrace makeSsaRfWitness makeSsaCurrentDefs
+  makeSsaRfTreeTrace makeSsaRfWitness makeSsaCurrentDefs makeSsaRfEdgeShape
   makeSsaRfShape makeSsaRfTransport makeSsaRfAnnotations makeSsaRfAllocation
   makeSsaHelper makeSsaCurrentProps makeSsaRfAssign makeSsaRfRenameTrace list pair
 
@@ -118,4 +118,21 @@ Proof
   simp[REVERSE_DEF] >> irule rf_back_trace_append >>
   qexists_tac `latest_current_name rs1` >>
   simp[rf_back_trace_def] >> metis_tac[]
+QED
+
+Theorem current_event_source_rf_trace:
+  current_event_valid A V ev /\ current_event_trace A finalH ev /\
+  current_edge_shape old (current_event_input_block ev) /\
+  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
+    EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
+  ?f g. rf_back_trace V f g (REVERSE old.bb_instructions)
+    (REVERSE (current_event_renamed_block ev).bb_instructions)
+Proof
+  strip_tac >> drule current_edge_shape_copy_shape >> strip_tac >>
+  PairCases_on `ev` >>
+  gvs[current_event_valid_def, current_event_trace_def,
+    current_event_input_block_def, current_event_renamed_block_def] >>
+  qexistsl_tac [`latest_current_name (ev3,ev4)`,
+    `latest_current_name (ev9,ev10)`] >>
+  irule current_local_trace_source_rf >> metis_tac[]
 QED
