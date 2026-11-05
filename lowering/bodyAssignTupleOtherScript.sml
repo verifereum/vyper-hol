@@ -9,7 +9,7 @@
    immutable_deploy_tuple_assign, tuple_assign_effectful_index (RESIDUAL). *)
 Theory bodyAssignTupleOther
 Ancestors
-  stmtSimAssignTuplePlaces stmtSimAssignPlace targetPlaceSimCases targetPlaceSim bodySimExprCases
+  stmtSimAssignTuplePlaces targetPlaceSimCases targetPlaceSim bodySimExprCases
   bodyExprPreFacts bodySim
   exprSimAggregateLayout exprSimHypsDefs bodyStorageMetadata
   supportedStmts supportedDecls vyperTypeSystem vyperTypeInvariants vyperTypeEnv
@@ -455,7 +455,6 @@ Proof
   drule_all tuple_places_typing >> strip_tac >>
   `get_module_code cx NONE = SOME tops /\
    acyclic_struct_metadata cenv.ce_struct_fields` by gvs[body_inv_def] >>
-  `target_env_ok cenv cx` by metis_tac[body_inv_target_env_ok] >>
   `expr_sim ctx func cenv cx (TupleT tys) e es` by
     (drule_all body_expr_ok_case >>
      disch_then (qspec_then `func` strip_assume_tac) >>

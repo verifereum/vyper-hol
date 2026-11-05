@@ -40,7 +40,7 @@ Theorem compile_assign_tuple_places_stmt_frag:
                     target_case F ctx func cenv cx bt /\
                     ~immutable_root cx bt /\ target_indices_pre cenv cx env bt)
       gs /\
-    target_env_ok cenv cx /\ acyclic_struct_metadata cenv.ce_struct_fields /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_inv cenv cx env es /\
     expr_body_pre cenv cx env e es /\
     expr_sim ctx func cenv cx (TupleT tys) e es ==>
