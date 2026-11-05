@@ -9,12 +9,22 @@
  * plan has no SOSpill or SORestore at all).
  *
  * TOP-LEVEL:
- *   revert_forward_frame_sim_deep - CHEATED
+ *   revert_forward_frame_sim_deep
  *)
 
 Theory fnFrameStepsRevertForwardDeep
 Ancestors
   fnFrameStepsRevertForward fnPlanPrefix
+
+(* fnFrameStepsRevertForward's entry lemmas need only spill separation,
+   which the marked invariant gives as well. *)
+Theorem rf_spills_separated_entry_marked:
+  !base ps. generated_plan_state_wf_marked base ps ==> rf_spills_separated ps
+Proof
+  rpt strip_tac >> fs[generated_plan_state_wf_marked_def] >>
+  drule doSwapSimTheory.spill_alloc_layout_wf_spilled_separated >>
+  simp[rf_spills_separated_def]
+QED
 
 (* Used in the block induction at a revert forwarding's RETURNDATACOPY, as
    revert_forward_frame_sim, from the planner state the induction keeps.
@@ -64,5 +74,7 @@ Theorem revert_forward_frame_sim_deep:
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  drule rf_spills_separated_entry_marked >> strip_tac >>
+  drule_all rf_entry_forward_abort >> simp[]
 QED

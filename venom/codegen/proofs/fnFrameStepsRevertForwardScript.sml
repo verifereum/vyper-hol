@@ -3529,8 +3529,7 @@ Proof
 QED
 
 Theorem rf_entry_copy_execution:
-  !base.
-  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  codegen_ready_fn fn /\ rf_spills_separated ps /\
   inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
   inst.inst_operands = [dop;sop;zop] /\
   emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
@@ -3567,8 +3566,7 @@ Theorem rf_entry_copy_execution:
       AsmFault st' /\
     venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st')
 Proof
-  gen_tac >> strip_tac >>
-  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
+  strip_tac >>
   `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
     (irule rf_inventory_inv_entry >> first_assum ACCEPT_TAC) >>
   `!op. MEM op (compute_operands inst) ==>
@@ -4031,7 +4029,7 @@ Proof
 QED
 
 Theorem rf_entry_copy_setup:
-  !ctx cp lo prog liveness dfg cfg fn bb i j base ps vs ast ops
+  !ctx cp lo prog liveness dfg cfg fn bb i j ps vs ast ops
    ps_end ra rest mem0.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
@@ -4039,7 +4037,7 @@ Theorem rf_entry_copy_setup:
     revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
     LENGTH (get_params bb.bb_instructions) <= i /\
     EVERY (\inst. EVERY (\op. ~is_label_operand op) inst.inst_operands)
-      (DROP i bb.bb_instructions) /\ generated_plan_state_wf base ps /\
+      (DROP i bb.bb_instructions) /\ rf_spills_separated ps /\
     (!k inst op. i <= k /\ get_instruction bb k = SOME inst /\
        MEM op (compute_operands inst) /\ is_var_operand op /\
        (!k' inst' x. i <= k' /\ k' < k /\ get_instruction bb k' = SOME inst' /\
@@ -4104,7 +4102,6 @@ Proof
     fs[listTheory.LENGTH_EQ_NUM_compute] >>
   `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
     (irule rf_suffix_instruction_no_labels >> metis_tac[]) >>
-  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
   `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
     (irule rf_inventory_inv_entry >> gvs[]) >>
   `!op. rf_live_use bb i j op /\ is_var_operand op ==>
@@ -4162,7 +4159,7 @@ Proof
 QED
 
 Theorem rf_entry_forward_abort:
-  !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j base ps vs ast ops
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j ps vs ast ops
    ps_end ra rest mem0 a vs_end.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\ opaque_use_ok fn /\
@@ -4170,7 +4167,7 @@ Theorem rf_entry_forward_abort:
     revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
     LENGTH (get_params bb.bb_instructions) <= i /\
     EVERY (\inst. EVERY (\op. ~is_label_operand op) inst.inst_operands)
-      (DROP i bb.bb_instructions) /\ generated_plan_state_wf base ps /\
+      (DROP i bb.bb_instructions) /\ rf_spills_separated ps /\
     (!k inst op. i <= k /\ get_instruction bb k = SOME inst /\
        MEM op (compute_operands inst) /\ is_var_operand op /\
        (!k' inst' x. i <= k' /\ k' < k /\ get_instruction bb k' = SOME inst' /\
