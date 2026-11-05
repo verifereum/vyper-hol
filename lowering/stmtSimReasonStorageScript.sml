@@ -25,11 +25,14 @@
 
 Theory stmtSimReasonStorage
 Ancestors
+  exprSimUnwrapProps
+  stmtSimDefs
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimUnwrap exprSimHyps exprSimWordBuiltins loweringSlice
+  fragExec localPtrsProps  exprSimUnwrap exprSimHyps exprSimWordBuiltins loweringSlice
   exprSimStorageCopy exprOperandVar
-  stmtSim stmtSimIf stmtSimReason stmtSimReasonExpr
+   stmtSimIf stmtSimReason stmtSimReasonExpr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps
   vyperInterpreter vyperState vyperValue vyperExprNoControl

@@ -1,7 +1,8 @@
 Theory stmtSimLogSource
 Ancestors
-  stmtSim supportedTypes e2eDefs vyperTyping vyperValue vyperABI
-  vyperEvent valueEncoding vyperInterpreter vyperState exprSim vyperExprNoControl
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
+   supportedTypes e2eDefs vyperTyping vyperValue vyperABI
+  vyperEvent valueEncoding vyperInterpreter vyperState  vyperExprNoControl
 
 (* Source-only scalar conversion boundary. No compiler execution is unfolded. *)
 Theorem log_scalar_abi_exists:

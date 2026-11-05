@@ -20,8 +20,12 @@
 
 Theory exprSimLen
 Ancestors
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
-  list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
+  list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
   exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
   valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
@@ -230,27 +234,7 @@ Proof
   gvs[value_has_type_def, result_array_length_def, read_result_def, bind_def, return_def]
 QED
 
-Theorem expr_body_pre_runtime_typed:
-  !cenv cx env e es r es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (INL r,es') ==>
-    ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-          eval_result_typed (env,cx,es') r (Type (expr_type e)) /\
-          (!v. read_result cx r es' = (INL v,es') ==> value_has_type tvt v)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all expr_body_pre_eval_result >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
-  `?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` by
-    (gvs[eval_result_typed_def] >> Cases_on `r` >> gvs[]) >>
-  qexists_tac `tvt` >> simp[] >> rpt strip_tac >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INL v,es')` by
-    simp[bind_def] >>
-  drule_all expr_body_pre_eval >> strip_tac >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
-      value_result_typed_def]
-QED
+
 
 Theorem expr_sim_pre_runtime_typed:
   !cenv cx env e es r es'.

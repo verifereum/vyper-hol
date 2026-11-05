@@ -1,5 +1,6 @@
 Theory convertScalarFlags
 Ancestors
+  exprUnopStraight
   convertScalarBytesRun convertScalarProps convertScalarTyping exprSimConvert exprSimUnop
   exprLowering compileEnv vyperValueOperation valueEncoding vyperValue
   venomExecSemantics exprLoweringProps integer_word arithmeticProps

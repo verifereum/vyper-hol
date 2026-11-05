@@ -1,8 +1,8 @@
 Theory stmtSimLogArgsRun
 Ancestors
-  loweringPosts
+  exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar
-  exprSimWordArgs supportedTypes exprSim exprSimOps
+  exprSimWordArgs supportedTypes  exprSimOps
   loweringSlice exprLoweringProps freshWrites fragExec emitHelperProps varsExt compileEnv
   vyperInterpreter vyperState vyperTyping
   vyperEvalExprPreservesScopesDom

@@ -1,158 +1,18 @@
-(*
- * Expression simulation in the unit context (#636, part 1)
- *
- * The judgment expr_sim: the fragment of an expression, run from
- * stmt_state_rel at the source state where the expression is evaluated,
- * either reaches its end with stmt_state_rel at the source state after it
- * and the operand holding its value (expr_post), or, where the source
- * raises an error other than a type error or an assertion, exits with an
- * Abort as result_rel allows.
- *
- * TOP-LEVEL:
- *   expr_exit, expr_res_ok, expr_val_rel, expr_val_at, expr_post,
- *   expr_sim
- *   expr_sim_values        — expr_sim of an expression whose results are
- *                            values, from its fragment reaching expr_post
- *   expr_sim_expr_frag     — expr_sim gives loweringSlice's expr_frag
- *   stmt_state_rel_vars_frame, stmt_state_rel_vars_ext,
- *   stmt_state_rel_drop_fresh — stmt_state_rel reads the variables only
- *                            through the live locals' pointers
- *   compile_literal_word_sim — bool, integer and decimal literals
- *   compile_name_word_sim  — a word local
- *   compile_env_sim        — environment reads (msg.sender, block.number,
- *                            ...), all but block.prevhash and msg.gas
- *   expr_val_rel_mem_agree — a non-word operand's value survives code that
- *                            keeps its type_memory_size bytes
- *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
- *   expr_val_rel_footprint_agree — the bytes a memory value occupies, which
- *                            expr_val_at bounds, and the same at them
- *   val_store_size, val_store_size_le, val_footprint_le_store_size — the
- *                            bytes storing a value writes: a bytestring's
- *                            data rounded up to whole words
- *   val_in_memory_word_type — a word type's value in memory: its word is
- *                            the typed encoding
- *   mem_path_offset_sound, mem_field_offset_sound — a path's (a field's)
- *                            offset, from loweringPosts' mem_path_offset, is
- *                            where subscripts_type (ALOOKUP) puts it, inside
- *                            the type's bytes
- *   mem_step_offset_shape — the four kinds of step
- *   local_path_at_root, local_path_at_step, local_path_at_val_at,
- *   local_val_at_base     — loweringPosts' local_path_at and local_val_at:
- *                            a value sits at a path's offset in a local's
- *                            region, or for a base value, a base type
- *                            covering its bytes sits there
- *   dynarray_free_base, dynarray_free_fixed,
- *   mem_path_offset_dynarray_apart — a value with no dynamic array in it
- *                            (dynarray_free) is apart from every length
- *                            word that locals_kept exempts (dynarray_len_at)
- *   locals_kept_mem, locals_kept_mem_tail, locals_kept_regions,
- *   locals_kept_regions_tail — locals_kept from equal memory or from the
- *                            whole regions kept, and along such code
- *   locals_kept_refl, locals_kept_inst_idx — reflexivity and instruction-index
- *                            normalization of the local frame
- *
- * Helpers: expr_exit_INL, expr_exit_success_map, expr_val_at_start_mono,
- *   typed_val_to_w256_word_value, eval_expr_env,
- *   lower_value_env
- *
- * Values are related by expr_val_rel, by the expression's type: a word
- * type's value as the operand in the typed encoding typed_val_to_w256, any
- * other type's value in memory at the operand, as val_in_memory has it.
- * expr_val_at says where a memory-backed value's bytes are: in one of the
- * expression's own allocations or in a live local's region.  expr_post
- * keeps the memory of the allocations made before the fragment's start,
- * but its own and the live locals'.  So two operands lowered in turn
- * compose where the first one's value sits in a buffer it allocated: that
- * allocation's id is below the second's start counter and it holds no
- * local (alloca_inv, local_backed), so the second's expr_post keeps its
- * bytes, and val_in_memory with them (expr_val_rel_footprint_agree:
- * expr_val_at bounds the value's val_footprint bytes).  expr_post also
- * keeps the bytes of the live locals at its start (locals_kept), but the
- * length words of the dynamic arrays in them, which a pop writes;
- * expr_val_at puts a value in a local at a path through the local's
- * declared type (local_path_at), or a base value where such a path reaches
- * a base type covering its bytes (local_val_at), so a value with no dynamic
- * array in it is apart from those words (mem_path_offset_dynarray_apart).
- * expr_frag, which relates values by val_to_w256, follows for a word type
- * whose typed encoding is val_to_w256 (expr_sim_expr_frag).
- *
- * Not covered by the leaves here:
- *   - bytes and string literals: a bytesN literal is a Lit of its typed
- *     encoding, a dynamic bytes or string literal a memory buffer;
- *   - locals other than word_value ones (address, bytesN, memory-backed);
- *   - block.prevhash: it reads BLOCKHASH (NUMBER - 1), so its case is
- *     exprSimLeaves' compile_prevhash_sim, on call_ctx_rel's tx_env_ok;
- *   - msg.gas: the source reads the next of the state's gas readings
- *     (gas_obs), while the lowering emits GAS, and call_ctx_rel does not
- *     relate the two.
- * Nor does the memory frame in expr_post follow from stmt_state_rel for an
- * expression whose lowering writes a DALLOCA buffer (raw_call of msg.data,
- * the create copy and blueprint lowerings): DALLOCA allocates at vs_fmp,
- * which stmt_state_rel does not relate to the ALLOCA allocations.
- *)
-
-Theory exprSim
+(* Value-layout, local-frame and leaf-evaluation facts for simulations. *)
+Theory exprSimProps
 Ancestors
+  exprSimDefs
   loweringPosts
-  list rich_list finite_map pred_set pair
+  words list rich_list finite_map pred_set pair
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
-  vyperInterpreter vyperState vyperValueOperation vyperContext
+  vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
-  vyperLookupStorage vyperStorageBackend accountsRelProps
+  vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
 Libs
   pairLib
 
-(* ===== The judgment ===== *)
-
-(* The exits a source result allows: an error other than a type error
-   (a runtime error, or the revert of a failed external call, create or
-   raw_call) any Abort, an assertion a revert, or an exceptional halt for
-   "UNREACHABLE", as result_rel relates them.  external_call_result_rel
-   asks a revert for RevertData, but result_rel, which the statement lemmas
-   conclude, allows any Abort. *)
-Definition expr_exit_def:
-  (expr_exit (INR (Error (RuntimeError m))) (Abort a s) <=> T) /\
-  (expr_exit (INR (Error (RevertData d))) (Abort a s) <=> T) /\
-  (expr_exit (INR (AssertException str)) (Abort a s) <=>
-     a = Revert_abort \/ (a = ExHalt_abort /\ str = "UNREACHABLE")) /\
-  (expr_exit _ _ <=> F)
-End
-
-Theorem expr_exit_INL[simp]:
-  !x r. ~expr_exit (INL x) r
-Proof
-  Cases_on `r` >> simp[expr_exit_def]
-QED
-
-(* Exit predicates are insensitive to the successful result representation. *)
-Theorem expr_exit_success_map:
-  !f r. expr_exit (case r of INL v => INL (f v) | INR ex => INR ex) =
-        expr_exit r
-Proof
-  rpt gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
-  Cases_on `r` >- simp[] >>
-  rename1 `INR ex` >> Cases_on `ex` >>
-  Cases_on `x` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
-QED
-
-(* The source results the judgment speaks of: a value, an error other than
-   a type error, or an assertion.  Type errors and control exceptions
-   (break, continue, return) are left out. *)
-Definition expr_res_ok_def:
-  expr_res_ok (res : value + exception) <=>
-    (?v. res = INL v) \/ (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
-
-
-(* The bytes from its address that storing the value v of type tv writes
-   (compile_store_memory): for a dynamic bytes or string value, its length
-   word and its data rounded up to whole words, as compile_store_bytestring
-   copies them; for any other value, type_memory_size tv. *)
 Definition val_store_size_def:
   val_store_size tv v =
     case v of
@@ -439,7 +299,6 @@ Proof
   simp[type_memory_size_def] >> rpt strip_tac >> decide_tac
 QED
 
-
 Theorem locals_kept_mem_tail:
   !cenv es s0 t u.
     locals_kept cenv es s0 t /\ u.vs_memory = t.vs_memory ==>
@@ -468,7 +327,6 @@ Proof
   simp[locals_kept_def]
 QED
 
-(* Locals kept up to s, then whole regions kept from s to t. *)
 Theorem locals_kept_regions_tail:
   !cenv es s0 s t.
     locals_kept cenv es s0 s /\
@@ -485,7 +343,6 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
-(* Code that keeps every live local's whole region keeps the locals. *)
 Theorem locals_kept_regions:
   !cenv es s0 s.
     (!n b sz. local_region cenv es.scopes s0 n b sz ==>
@@ -494,7 +351,6 @@ Theorem locals_kept_regions:
 Proof
   metis_tac[locals_kept_regions_tail, locals_kept_refl]
 QED
-
 
 Theorem expr_val_at_start_mono:
   sa.cs_next_id <= s1.cs_next_id /\
@@ -508,9 +364,6 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
-(* Operand composition: the value of a non-word operand survives code that
-   keeps the operand and the bytes of the value's footprint, the
-   type_memory_size bytes at its address (val_in_memory_mem_agree). *)
 Theorem expr_val_rel_mem_agree:
   !cx t v op s s' w tv.
     expr_val_rel cx t v op s /\ ~is_word_type t /\
@@ -527,7 +380,6 @@ Proof
   asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
-(* A dynamic bytes value's data fits in its rounded-up words. *)
 Theorem le_word_size_mul:
   !n. n <= 32 * word_size n
 Proof
@@ -537,7 +389,6 @@ Proof
   disch_then (qspec_then `n + 31` strip_assume_tac) >> decide_tac
 QED
 
-(* Rounding down to whole words: clearing the low five bits. *)
 Theorem buffer_round_mask:
   !w:bytes32. w && i2w (- &32) = (w >>> 5) << 5
 Proof
@@ -563,7 +414,6 @@ Proof
   gvs[]
 QED
 
-(* Dynamic bytestrings have their own footprint and store size. *)
 Theorem val_size_cases[local]:
   !tv v.
     (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
@@ -577,7 +427,6 @@ Proof
   rename1 `BytesT sz` >> Cases_on `sz` >> simp[]
 QED
 
-(* A well-formed value's footprint fits its type's size. *)
 Theorem val_footprint_le:
   !tv v. val_wf tv v ==> val_footprint tv v <= type_memory_size tv
 Proof
@@ -616,7 +465,6 @@ Proof
   qexists_tac `bt0` >> simp[]
 QED
 
-(* A value's footprint is within the bytes storing it writes. *)
 Theorem val_footprint_le_store_size:
   !tv v. val_footprint tv v <= val_store_size tv v
 Proof
@@ -625,7 +473,6 @@ Proof
   gvs[val_footprint_def, val_store_size_def, le_word_size_mul]
 QED
 
-(* A well-formed value's store size fits its type's size. *)
 Theorem val_store_size_le:
   !tv v. val_wf tv v ==> val_store_size tv v <= type_memory_size tv
 Proof
@@ -643,7 +490,6 @@ Proof
   simp[]
 QED
 
-(* val_in_memory reads no more than the value's footprint. *)
 Theorem val_in_memory_footprint_agree:
   !tv v off mem mem'.
     val_in_memory tv v off mem /\ val_wf tv v /\
@@ -682,9 +528,6 @@ Proof
   asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
-(* Operand composition at the footprint expr_val_at bounds: the value of a
-   non-word operand survives code that keeps the operand and its
-   val_footprint bytes. *)
 Theorem expr_val_rel_footprint_agree:
   !cx t v op s s' w tv.
     expr_val_rel cx t v op s /\ ~is_word_type t /\
@@ -699,160 +542,6 @@ Proof
   qexists_tac `s.vs_memory` >> simp[]
 QED
 
-
-(* The fragment of e lowered as a value of type ty, run from a state
-   related at es, the source state where e is evaluated, under the code
-   premises of the statement lemmas.  On a value it reaches its end in
-   expr_post; on an error other than a type error or an assertion it exits
-   as expr_exit allows.  This is expr_frag (loweringSlice) with the failing
-   outcomes added. *)
-Definition expr_sim_def:
-  expr_sim ctx func cenv cx ty e es <=>
-    !sa sb op res es' s0.
-      lower_value compile_expr cenv ty e sa = (op, sb) /\
-      (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\ expr_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?v. res = INL v /\
-                 expr_post ctx func cenv cx e es sa sb s0 es' v op s)
-        (expr_exit res)
-End
-
-(* ===== The judgment on compile_expr's value ===== *)
-
-(* expr_sim speaks of lower_value: compile_expr's code and then
-   unwrap_value's, run as one piece.  A case that lowers an operand with
-   compile_expr and unwraps it later, after code of its own (the elements
-   of a struct or array literal, the arguments of an external call), or
-   never (len, in on an array), needs what compile_expr's value_vv holds
-   when compile_expr's code ends.  expr_vv_sim says that; expr_sim follows
-   from it and unwrap_value's code (exprSimHyps). *)
-
-
-(* Raw expression results include values and captured places.  Mapping
-   roots are excluded because they cannot be read as values. *)
-Definition expr_vv_res_ok_def:
-  expr_vv_res_ok (res : eval_result + exception) <=>
-    (?v. res = INL (Value v)) \/ (?p. res = INL (PlaceR p)) \/
-    (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
-
-Definition expr_read_res_ok_def:
-  expr_read_res_ok cx es res <=>
-    (?r v. res = INL r /\ read_result cx r es = (INL v,es)) \/
-    (?exc. res = INR exc /\
-           expr_res_ok (INR exc : value + exception))
-End
-
-(* expr_sim with compile_expr in place of lower_value: compile_expr's
-   fragment of e, run from a state related at es, reaches its end with the
-   value_vv holding the source result as vv_post says, or exits as
-   expr_exit allows. *)
-Definition expr_vv_sim_def:
-  expr_vv_sim ctx func cenv cx ty e es <=>
-    !sa sb vv res es' s0.
-      compile_expr cenv ty e sa = (vv, sb) /\
-      eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?tv. res = INL tv /\
-                  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s)
-        (expr_exit res)
-End
-
-(* Where compile_expr hands out a StackValue, unwrap_value emits no code, so
-   expr_sim is expr_vv_sim on the results that are values. *)
-Theorem expr_vv_sim_stack:
-  !ctx func cenv cx ty e es.
-    expr_sim ctx func cenv cx ty e es /\
-    (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_vv_sim ctx func cenv cx ty e es
-Proof
-  rw[expr_vv_sim_def] >>
-  first_x_assum (qspec_then `sa` strip_assume_tac) >> gvs[] >>
-  `lower_value compile_expr cenv ty e sa = (op, sb)` by
-    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  Cases_on `res`
-  >- (rename1 `eval_expr cx e es = (INL raw, es')` >>
-      `?v. raw = Value v` by metis_tac[] >> gvs[] >>
-      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
-        (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es'`, `s0`] mp_tac) >>
-      simp[bind_def, read_result_def, return_def, expr_res_ok_def] >>
-      strip_tac >> irule frag_exec_conseq >>
-      first_x_assum (irule_at Any) >>
-      rpt strip_tac >>
-      gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-          read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
-  rename1 `eval_expr cx e es = (INR exc, es')` >>
-  `expr_res_ok (INR exc : value + exception)` by
-    gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  simp[bind_def] >> strip_tac >>
-  irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-  simp[] >> rpt gen_tac >>
-  Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
-QED
-
-(* expr_sim gives expr_frag where the expression's type is a word type
-   whose typed encoding agrees, on the values the expression evaluates to,
-   with val_to_w256, the encoding expr_frag uses. *)
-Theorem expr_sim_expr_frag:
-  !ctx func cenv cx ty e es R tv.
-    expr_sim ctx func cenv cx ty e es /\ is_word_type (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    (!v es'. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') ==>
-             typed_val_to_w256 tv v = val_to_w256 v) ==>
-    expr_frag ctx func cenv cx ty e es R
-Proof
-  rw[expr_sim_def, expr_frag_def] >>
-  first_x_assum (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es'`, `s0`]
-                   mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
-  strip_tac >> irule frag_exec_conseq >>
-  first_x_assum (irule_at Any) >>
-  simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
-  qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _`
-    (qspec_then `tv` mp_tac) >>
-  qpat_x_assum `!v es'. (do result <- eval_expr _ _; read_result _ result od) _ = _ ==> _` drule >>
-  gvs[]
-QED
-
-(* An expression whose results the judgment speaks of are all values: its
-   fragment need only reach expr_post. *)
-Theorem expr_sim_values:
-  !ctx func cenv cx ty e es.
-    (!res es'. (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\ expr_res_ok res ==>
-               ?v. res = INL v) /\
-    (!sa sb op v es' s0.
-       lower_value compile_expr cenv ty e sa = (op, sb) /\
-       (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') /\
-       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-       local_ptrs_reserved cenv sa ==>
-       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-         (expr_post ctx func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
-    expr_sim ctx func cenv cx ty e es
-Proof
-  rpt gen_tac >> strip_tac >> simp[expr_sim_def] >> rpt strip_tac >>
-  qpat_x_assum `!res es'. _ ==> _` (drule_all_then strip_assume_tac) >>
-  gvs[] >>
-  first_x_assum (drule_all_then (qspec_then `s0` assume_tac)) >>
-  irule frag_exec_conseq >>
-  first_x_assum (irule_at Any) >> simp[]
-QED
-
-(* ===== stmt_state_rel and the variables ===== *)
-
-(* stmt_state_rel reads the variables only through the pointers of the
-   live locals and the constructor's immutable base. *)
 Theorem stmt_state_rel_vars_frame:
   !func cenv cx es s V ctx.
     stmt_state_rel ctx func cenv cx es s /\
@@ -923,8 +612,6 @@ Proof
   fs[local_ptrs_reserved_def] >> metis_tac[]
 QED
 
-(* ===== Leaves ===== *)
-
 Theorem typed_val_to_w256_word_value:
   !tv v. word_value v ==> typed_val_to_w256 tv v = val_to_w256 v
 Proof
@@ -932,7 +619,6 @@ Proof
   rename1 `BaseTV bt` >> Cases_on `bt` >> simp[typed_val_to_w256_def]
 QED
 
-(* A value of a word type in memory: its word is the typed encoding. *)
 Theorem val_in_memory_word_type:
   !tenv t tvt v off mem.
     is_word_type t /\ evaluate_type tenv t = SOME tvt /\
@@ -950,54 +636,6 @@ Proof
   Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
       typed_val_to_w256_def]
-QED
-
-(* A word local held through its pointer (loweringSlice's
-   compile_name_word_frag). *)
-Theorem compile_name_word_sim:
-  !ctx func cenv cx ty ann id es p sz entry.
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    is_word_type ann /\
-    lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
-    expr_sim ctx func cenv cx ty (Name ann id) es
-Proof
-  rpt strip_tac >> irule expr_sim_values >>
-  drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
-  simp[] >> rpt strip_tac >> gvs[] >>
-  drule_all lower_value_name_word >> strip_tac >>
-  irule frag_exec_conseq >>
-  drule emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
-                           `val_to_w256 entry.value`, `\r. F`] mp_tac) >>
-  impl_tac
-  >- (simp[is_terminator_def] >> strip_tac >>
-      drule_all step_name_word >> simp[]) >>
-  strip_tac >> first_x_assum (irule_at Any) >> rpt strip_tac >>
-  gvs[expr_post_def, expr_val_rel_def, expr_val_at_def,
-      vyperASTTheory.expr_type_def,
-      typed_val_to_w256_word_value, locals_kept_mem]
-QED
-
-val literal_word_tac =
-  gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
-      compile_literal_vv_def, unwrap_value_def, evaluate_literal_def] >>
-  irule frag_exec_refl >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       vyperASTTheory.expr_type_def,
-       eval_operand_def, typed_val_to_w256_word_value, word_value_def] >>
-  simp[val_to_w256_def];
-
-(* A bool, integer or decimal literal annotated with a word type: a Lit,
-   no code. *)
-Theorem compile_literal_word_sim:
-  !ctx func cenv cx ty ann l es.
-    is_word_type ann /\
-    ((?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i)) ==>
-    expr_sim ctx func cenv cx ty (Literal ann l) es
-Proof
-  rw[expr_sim_def] >> gvs[Once evaluate_def, bind_def, read_result_def, return_def]
-  >~ [`BoolL b`] >- (Cases_on `b` >> literal_word_tac) >>
-  literal_word_tac
 QED
 
 Theorem eval_expr_env:
@@ -1030,48 +668,151 @@ Proof
   simp[as_stack_val_def, unwrap_value_def, comp_return_def]
 QED
 
-(* An environment read (msg.sender, block.timestamp, ...) annotated with
-   its type, but block.prevhash, proved in exprSimLeaves'
-   compile_prevhash_sim, and msg.gas, for which expr_sim does not hold
-   (see the header). *)
-Theorem compile_env_sim:
-  !ctx func cenv cx ty ann item es.
-    item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
-    expr_sim ctx func cenv cx ty (Builtin ann (Env item) []) es
+Theorem eval_expr_flag_member:
+  !cx ann src fid mid es res es'.
+    (do result <- eval_expr cx (FlagMember ann (src, fid) mid); read_result cx result od) es = (res, es') /\
+    expr_res_ok res ==>
+    es' = es /\
+    ?ts ls i. get_module_code cx src = SOME ts /\
+              lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
+              res = INL (FlagV (2 ** i))
 Proof
-  rpt strip_tac >> irule expr_sim_values >>
-  conj_tac >~ [`expr_res_ok _`]
-  >- (rpt strip_tac >> drule_all eval_expr_env >> strip_tac >> simp[]) >>
+  rpt gen_tac >>
+  simp[Once evaluate_def, lookup_flag_mem_def] >>
+  Cases_on `get_module_code cx src` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `lookup_flag fid ts` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `lookup_flag fid ts = SOME ls` >>
+  Cases_on `INDEX_OF mid ls` >>
+  gvs[bind_def, read_result_def, raise_def, return_def, expr_res_ok_def]
+QED
+
+Theorem eval_expr_flag_member_gas:
+  gas_admissible
+    (bind (eval_expr cx (FlagMember ann (src,fid) mid)) (read_result cx))
+    expr_res_ok es ==>
+  ?ts ls i. get_module_code cx src = SOME ts /\
+    lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
+    (!tail. bind (eval_expr cx (FlagMember ann (src,fid) mid))
+       (read_result cx) (es with gas_obs := tail) =
+       (INL (FlagV (2 ** i)), es with gas_obs := tail))
+Proof
+  strip_tac >>
+  Cases_on `bind (eval_expr cx (FlagMember ann (src,fid) mid))
+    (read_result cx) (es with gas_obs := [])` >>
+  drule_all gasContextTheory.gas_admissible_result >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_flag_member) >>
+  strip_tac >>
+  qexistsl [`ts`, `ls`, `i`] >> simp[] >>
+  simp[Once evaluate_def, lookup_flag_mem_def, bind_def,
+       read_result_def, return_def]
+QED
+
+(* Pointer variables and scope domains determine live local regions. *)
+Theorem local_region_frame:
+  !func cenv scopes0 s0 sa scopes t n b sz.
+    local_ptrs_rel func cenv scopes0 s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM scopes0 = MAP FDOM scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    local_region cenv scopes t n b sz ==>
+    local_region cenv scopes0 s0 n b sz
+Proof
+  rw[local_region_def] >>
+  `lookup_scopes n scopes0 <> NONE` by
+    metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  Cases_on `lookup_scopes n scopes0` >> fs[] >>
+  rename1 `lookup_scopes n scopes0 = SOME e0` >>
+  `?w0. lookup_var p s0 = SOME w0` by
+    (fs[local_ptrs_rel_def] >>
+     qpat_x_assum `!name entry p sz. _` drule_all >> metis_tac[]) >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `lookup_var p t = SOME w0` by metis_tac[] >> gvs[]
+QED
+
+(* The converse needs only preservation of pointers already present. *)
+Theorem local_region_frame_fwd:
+  !cenv scopes0 sa scopes s0 t n b sz.
+    local_ptrs_reserved cenv sa /\ MAP FDOM scopes0 = MAP FDOM scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    local_region cenv scopes0 s0 n b sz ==>
+    local_region cenv scopes t n b sz
+Proof
+  rw[local_region_def] >>
+  `lookup_scopes n scopes <> NONE` by
+    metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  Cases_on `lookup_scopes n scopes` >> gvs[]
+QED
+
+Theorem vv_post_initial_gas:
+  vv_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee tv vv t <=>
+  vv_post ctx func cenv cx e es sa sb s0 ee tv vv t
+Proof
+  simp[vv_post_def, locals_kept_def]
+QED
+
+Theorem eval_expr_literal_value:
+  !cx ann l es tv es'.
+    eval_expr cx (Literal ann l) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  simp[Once evaluate_def, return_def]
+QED
+
+
+Theorem word_tv_memory_size:
+  !tenv t tv.
+    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
+    type_memory_size tv = 32
+Proof
+  Cases_on `t` >> simp[is_word_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
+      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
+      simp[evaluate_type_def, type_memory_size_def]) >>
+  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >>
+  simp[type_memory_size_def]
+QED
+
+(* Original proof before making the word bound explicit in this owner.
+Proof
   rpt strip_tac >>
-  `expr_res_ok (INL v : value + exception)` by
-    simp[expr_res_ok_def] >>
-  drule_all eval_expr_env >> strip_tac >> gvs[] >>
-  `is_word_type (env_item_type item) /\
-   !tv. evaluate_type (get_tenv cx) (env_item_type item) = SOME tv ==>
-        typed_val_to_w256 tv v = val_to_w256 v` by
-    (Cases_on `item` >>
-     gvs[evaluate_builtin_def, env_item_type_def, is_word_type_def,
-         vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
-         val_to_w256_def] >>
-     simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []) >>
-  drule lower_value_env >> strip_tac >>
-  irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                `\s. stmt_state_rel ctx func cenv cx es s /\
-                     eval_operand op s = SOME (val_to_w256 v) /\
-                     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-                            lookup_var x s = SOME w) /\
-                     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                              FLOOKUP s.vs_allocas aid = SOME b) /\
-                     s.vs_memory = s0.vs_memory`,
-                `\r. F`] >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       vyperASTTheory.expr_type_def, locals_kept_mem] >>
-  Cases_on `item` >>
-  gvs[compile_env_var_def, evaluate_builtin_def] >>
-  drule emit_op_frag >> disch_then irule >>
-  simp[is_terminator_def] >> rpt strip_tac >>
-  simp[step_inst_base_opcode_eqs, exec_read0_def, venomInstTheory.mk_inst_def] >>
-  fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-     val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def]
+  `off < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w off) = w2n w + w2n ((n2w off):bytes32)`
+    suffices_by simp[] >>
+  irule wordsTheory.w2n_add_2 >> simp[] >> decide_tac
+QED
+*)
+Theorem buffer_offset_no_wrap:
+  !w:bytes32. !off sz.
+    w2n w + sz < dimword (:256) /\ off <= sz ==>
+    w2n (w + n2w off) = w2n w + off
+
+Proof
+  rpt strip_tac >>
+  `off < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w off) = w2n w + w2n ((n2w off):bytes32)`
+    suffices_by simp[] >>
+  irule wordsTheory.w2n_add_2 >> gvs[wordsTheory.dimword_def] >> decide_tac
+QED
+
+Theorem stmt_state_rel_region_lt:
+  !func cenv cx es s ctx.
+    stmt_state_rel ctx func cenv cx es s ==>
+    (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+                b + sz < dimword (:256)) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+              b + sz < dimword (:256))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[alloca_room_next_lt, stmt_state_rel_def] >>
+  conj_tac
+  >- (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
+      rpt strip_tac >> res_tac >> DECIDE_TAC) >>
+  rw[local_region_def] >>
+  fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+  res_tac >> gvs[] >> DECIDE_TAC
 QED

@@ -8,7 +8,7 @@
  * program) so PC is always meaningful and composes with run_asm.
  *
  * Concrete codegen program and label maps; frame-aware entry and return.
- * Assembly GAS readings remain unconstrained (no S7 trace claim).
+ * Venom and assembly GAS readings agree at entry and return.
  *
  * TOP-LEVEL:
  *   fn_has_retpc, shared_state_rel, fn_entry_state_rel,
@@ -37,11 +37,12 @@ Definition fn_has_retpc_def:
       (get_params (HD fn.fn_blocks).bb_instructions)
 End
 
-(* Leftover outcomes are a running/function-return contract ONLY.
-   terminal_rel still observes requests but not leftover outcomes or GAS. *)
+(* Leftover outcomes and GAS readings are a running/function-return contract
+   ONLY.  terminal_rel still observes requests but not leftovers. *)
 Definition shared_state_rel_def:
   shared_state_rel vs as <=>
     venom_asm_terminal_rel vs as /\ as.as_outcomes = vs.vs_outcomes /\
+    as.as_gas_readings = vs.vs_gas_readings /\
     as.as_call_ctx = vs.vs_call_ctx /\ as.as_tx_ctx = vs.vs_tx_ctx /\
     as.as_block_ctx = vs.vs_block_ctx /\ as.as_code = vs.vs_code /\
     as.as_prev_hashes = vs.vs_prev_hashes
@@ -68,6 +69,7 @@ Definition fn_return_state_rel_def:
     (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
          read_byte b as'.as_memory = read_byte b as.as_memory) /\
     venom_asm_terminal_rel vs' as' /\ as'.as_outcomes = vs'.vs_outcomes /\
+    as'.as_gas_readings = vs'.vs_gas_readings /\
     as'.as_call_ctx = as.as_call_ctx /\ as'.as_tx_ctx = as.as_tx_ctx /\
     as'.as_block_ctx = as.as_block_ctx /\ as'.as_code = as.as_code /\
     as'.as_prev_hashes = as.as_prev_hashes

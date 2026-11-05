@@ -25,10 +25,14 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimDefs
   loweringPosts
   list rich_list finite_map pred_set alist
-  storageStoreFrame fragExec exprSim exprSimHyps exprSimLeaves exprSimAttributeFields
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem
+  fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding accountsRelProps

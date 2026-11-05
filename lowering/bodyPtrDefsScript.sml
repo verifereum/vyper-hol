@@ -12,7 +12,7 @@
  *)
 Theory bodyPtrDefs
 Ancestors
-  bodySim stmtSim exprSim exprSimHyps fragExec ptrSafeRun ptrDiscipline
+  bodySim stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHyps fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words

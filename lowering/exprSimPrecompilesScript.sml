@@ -48,9 +48,14 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprBopSimProps
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs exprSimStack
   loweringPosts
   exprSimAlloc
-  list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
+  list fragExec loweringSlice  exprSimHyps exprSimWordBuiltins
   exprSimLiteralBuffer abiDecodeStaticProps dftCommutation loweringHalt
   exprSimWordArgs exprSimOperators exprSimHash exprBopLowering exprLowering
   exprLoweringProps builtinMisc compileEnv
@@ -1629,34 +1634,39 @@ Theorem computed_suffix_success:
     OK (update_var (STRING #"%" (toString (sm.cs_next_var+1))) 1w
       ((write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data)
          (update_var (STRING #"%" (toString sm.cs_next_var))
-            (n2w s.vs_call_ctx.cc_gas) s))
-        with <|vs_returndata := data; vs_outcomes := DROP 1 s.vs_outcomes|>))
+            (HD (s.vs_gas_readings ++ [0w]))
+            (s with vs_gas_readings := DROP 1 s.vs_gas_readings))) with
+         <|vs_returndata := data; vs_outcomes := DROP 1 s.vs_outcomes|>))
 Proof
   strip_tac >> drule computed_suffix_shape >> strip_tac >>
-  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var))
-    (n2w s.vs_call_ctx.cc_gas) s` >>
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var)) g s0` >>
+  `step_inst_base (mk_inst sm.cs_next_id GAS [] [STRING #"%" (toString sm.cs_next_var)]) s =
+   OK sg` by simp[Abbr `sg`, Abbr `g`, Abbr `s0`, step_GAS] >>
   `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
     (simp[Abbr `sg`] >>
      metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
   `venom_call_request sg target 0w wi insz T =
    venom_call_request s target 0w wi insz T` by
-    simp[Abbr `sg`, venom_call_request_def, update_var_def, read_memory_def] >>
+    simp[Abbr `sg`, Abbr `s0`, venom_call_request_def, update_var_def, read_memory_def] >>
   qabbrev_tac `ci = mk_inst (sm.cs_next_id+1) STATICCALL
     [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
     [STRING #"%" (toString (sm.cs_next_var+1))]` >>
   qabbrev_tac `sc = update_var (STRING #"%" (toString (sm.cs_next_var+1))) 1w
     ((write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) sg)
       with <|vs_returndata := data; vs_outcomes := DROP 1 sg.vs_outcomes|>)` >>
-  `exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T =
+  `exec_ext_call ci sg (g:bytes32) target 0w wi insz wo outsz T =
     OK sc` by
     (qunabbrev_tac `sc` >> irule computed_static_exec_success >>
-     simp[Abbr `ci`, mk_inst_def, Abbr `sg`, update_var_def] >> metis_tac[]) >>
-  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg =
-    SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
+     simp[Abbr `ci`, mk_inst_def, Abbr `sg`, Abbr `s0`, update_var_def] >> metis_tac[]) >>
+  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg = SOME g` by
     simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
   `step_inst_base ci sg =
-   exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T` by
+   exec_ext_call ci sg (g:bytes32) target 0w wi insz wo outsz T` by
     (qunabbrev_tac `ci` >>
      irule computed_suffix_staticcall_dispatch >> simp[eval_operand_def]) >>
   `step_inst_base ci sg = OK sc` by simp[] >>
@@ -1665,10 +1675,10 @@ Proof
     (irule emitHelperPropsTheory.step_ASSERT_ok >> qexists_tac `1w` >>
      simp[Abbr `sc`, eval_operand_def, lookup_var_def, update_var_def,
           finite_mapTheory.FLOOKUP_UPDATE]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+  simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >>
   gvs[mk_inst_def] >>
-  simp[run_inst_seq_def, Abbr `sc`, Abbr `sg`]
+  simp[run_inst_seq_def, Abbr `sc`, Abbr `sg`, Abbr `s0`]
 QED
 
 Theorem computed_suffix_failure:
@@ -1683,24 +1693,23 @@ Theorem computed_suffix_failure:
   ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
 Proof
   strip_tac >> drule computed_suffix_shape >> strip_tac >>
-  `eval_operand ip (update_var (STRING #"%" (toString sm.cs_next_var))
-      (n2w s.vs_call_ctx.cc_gas) s) = SOME wi /\
-   eval_operand op (update_var (STRING #"%" (toString sm.cs_next_var))
-      (n2w s.vs_call_ctx.cc_gas) s) = SOME wo` by
-    metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL] >>
-  `venom_call_request
-     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s)
-     target 0w wi insz T = venom_call_request s target 0w wi insz T` by
-    simp[venom_call_request_def, update_var_def, read_memory_def] >>
-  `precompile_result
-     (venom_call_request (update_var (STRING #"%" (toString sm.cs_next_var))
-       (n2w s.vs_call_ctx.cc_gas) s) target 0w wi insz T).cr_target
-     (venom_call_request (update_var (STRING #"%" (toString sm.cs_next_var))
-       (n2w s.vs_call_ctx.cc_gas) s) target 0w wi insz T).cr_data = SOME NONE` by
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var)) g s0` >>
+  `step_inst_base (mk_inst sm.cs_next_id GAS [] [STRING #"%" (toString sm.cs_next_var)]) s =
+   OK sg` by simp[Abbr `sg`, Abbr `g`, Abbr `s0`, step_GAS] >>
+  `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
+    (simp[Abbr `sg`] >>
+     metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
+  `venom_call_request sg target 0w wi insz T =
+   venom_call_request s target 0w wi insz T` by
+    simp[Abbr `sg`, Abbr `s0`, venom_call_request_def, update_var_def, read_memory_def] >>
+  `precompile_result (venom_call_request sg target 0w wi insz T).cr_target
+     (venom_call_request sg target 0w wi insz T).cr_data = SOME NONE` by
     metis_tac[] >>
-  `computed_precompile (venom_call_request
-     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s)
-     target 0w wi insz T)` by
+  `computed_precompile (venom_call_request sg target 0w wi insz T)` by
     simp[computed_precompile_def, venom_call_request_def] >>
   `(mk_inst (sm.cs_next_id+1) STATICCALL
      [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
@@ -1708,34 +1717,24 @@ Proof
      [STRING #"%" (toString (sm.cs_next_var+1))]` by simp[mk_inst_def] >>
   `exec_ext_call (mk_inst (sm.cs_next_id+1) STATICCALL
      [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
-     [STRING #"%" (toString (sm.cs_next_var+1))])
-     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s)
-     (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T =
+     [STRING #"%" (toString (sm.cs_next_var+1))]) sg (g:bytes32) target 0w wi insz wo outsz T =
    OK (update_var (STRING #"%" (toString (sm.cs_next_var+1))) 0w
-     ((write_memory_with_expansion (w2n wo) []
-       (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s))
-       with <|vs_returndata := []; vs_outcomes := DROP 1
-         (update_var (STRING #"%" (toString sm.cs_next_var))
-            (n2w s.vs_call_ctx.cc_gas) s).vs_outcomes|>))` by
+     ((write_memory_with_expansion (w2n wo) [] sg)
+       with <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes|>))` by
     (qpat_x_assum `venom_call_request _ _ _ _ _ _ = _` kall_tac >>
      irule computed_static_exec_failure >> simp[] >> metis_tac[]) >>
-  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var)))
-     (update_var (STRING #"%" (toString sm.cs_next_var))
-       (n2w s.vs_call_ctx.cc_gas) s) = SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
-    simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg = SOME g` by
+    simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (sm.cs_next_id+1) STATICCALL
      [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
-     [STRING #"%" (toString (sm.cs_next_var+1))])
-     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s) =
+     [STRING #"%" (toString (sm.cs_next_var+1))]) sg =
    OK (update_var (STRING #"%" (toString (sm.cs_next_var+1))) 0w
-     ((write_memory_with_expansion (w2n wo) []
-       (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s))
-       with <|vs_returndata := []; vs_outcomes := DROP 1
-         (update_var (STRING #"%" (toString sm.cs_next_var))
-            (n2w s.vs_call_ctx.cc_gas) s).vs_outcomes|>))` by
+     ((write_memory_with_expansion (w2n wo) [] sg)
+       with <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes|>))` by
     (fs[mk_inst_def] >> simp[step_inst_base_def, eval_operand_def] >>
      first_assum ACCEPT_TAC) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+  simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >> fs[mk_inst_def] >>
   rpt (pop_assum kall_tac) >>
   simp[run_inst_seq_def, step_inst_base_def, eval_operand_def,
@@ -1754,39 +1753,44 @@ Theorem computed_suffix_oracle_failure:
   ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
 Proof
   strip_tac >> drule computed_suffix_shape >> strip_tac >>
-  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var))
-    (n2w s.vs_call_ctx.cc_gas) s` >>
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var)) g s0` >>
+  `step_inst_base (mk_inst sm.cs_next_id GAS [] [STRING #"%" (toString sm.cs_next_var)]) s =
+   OK sg` by simp[Abbr `sg`, Abbr `g`, Abbr `s0`, step_GAS] >>
   `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
     (simp[Abbr `sg`] >>
      metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
   `venom_call_request sg target 0w wi insz T =
    venom_call_request s target 0w wi insz T` by
-    simp[Abbr `sg`, venom_call_request_def, update_var_def, read_memory_def] >>
+    simp[Abbr `sg`, Abbr `s0`, venom_call_request_def, update_var_def, read_memory_def] >>
   qabbrev_tac `ci = mk_inst (sm.cs_next_id+1) STATICCALL
     [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
     [STRING #"%" (toString (sm.cs_next_var+1))]` >>
   qabbrev_tac `sc = update_var (STRING #"%" (toString (sm.cs_next_var+1))) 0w
     ((write_memory_with_expansion (w2n wo) [] sg)
       with <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes|>)` >>
-  `exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T =
+  `exec_ext_call ci sg (g:bytes32) target 0w wi insz wo outsz T =
     OK sc` by
     (qunabbrev_tac `sc` >>
      Cases_on `s.vs_outcomes = []`
-     >- (`sg.vs_outcomes = []` by simp[Abbr `sg`, update_var_def] >>
+     >- (`sg.vs_outcomes = []` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
          simp[] >> irule computed_static_empty_probe >>
          simp[Abbr `ci`, mk_inst_def] >> metis_tac[]) >>
      fs[] >>
-     `sg.vs_outcomes = co::rest` by simp[Abbr `sg`, update_var_def] >>
+     `sg.vs_outcomes = co::rest` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
      simp[] >> irule computed_static_false_probe >>
      simp[Abbr `ci`, mk_inst_def] >> metis_tac[]) >>
   `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg =
-    SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
+    SOME g` by
     simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
   `step_inst_base ci sg = OK sc` by
     (fs[Abbr `ci`, mk_inst_def] >>
      simp[step_inst_base_def, eval_operand_def]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+  simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >> gvs[mk_inst_def] >>
   `eval_operand (Var (STRING #"%" (toString (sm.cs_next_var+1)))) sc = SOME 0w` by
     simp[NoAsms, Abbr `sc`, eval_operand_def, lookup_var_def,
@@ -1966,19 +1970,21 @@ Proof
     simp[computed_precompile_def, venom_call_request_def] >>
   drule_all computed_suffix_ok_outcomes >> disch_tac >>
   drule_all computed_suffix_success >> strip_tac >>
-  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var))
-    (n2w s.vs_call_ctx.cc_gas) s` >>
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var)) g s0` >>
   `venom_call_request sg target 0w wi insz T =
    venom_call_request s target 0w wi insz T` by
-    simp[Abbr `sg`, venom_call_request_def, update_var_def, read_memory_def] >>
+    simp[Abbr `sg`, Abbr `s0`, venom_call_request_def, update_var_def, read_memory_def] >>
   `!n. sm.cs_next_var <= n ==>
      not_local_ptr cenv es.scopes (STRING #"%" (toString n))` by
     metis_tac[local_ptrs_reserved_fresh] >>
   `stmt_state_rel ctx func cenv cx es sg` by
-    (simp[Abbr `sg`] >> irule stmt_state_rel_update_var >> simp[]) >>
+    (simp[Abbr `sg`] >> irule stmt_state_rel_update_var >>
+     simp[Abbr `s0`, hash_gas_readings_state_rel]) >>
   `!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
      lookup_var x sg = SOME w` by
-    (simp[Abbr `sg`, lookup_var_def, update_var_def,
+    (simp[Abbr `sg`, Abbr `s0`, lookup_var_def, update_var_def,
           finite_mapTheory.FLOOKUP_UPDATE] >>
      rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
   `!name b sz. local_region cenv es.scopes sg name b sz ==>
@@ -1994,13 +2000,13 @@ Proof
   qabbrev_tac `ci = mk_inst (sm.cs_next_id+1) STATICCALL
     [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
     [STRING #"%" (toString (sm.cs_next_var+1))]` >>
-  `sg.vs_outcomes = s.vs_outcomes` by simp[Abbr `sg`, update_var_def] >>
-  `exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
+  `sg.vs_outcomes = s.vs_outcomes` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
+  `exec_ext_call ci sg (g:bytes32)
      target 0w wi insz wo outsz T = OK t` by
     (irule EQ_TRANS >>
      irule_at Any computed_static_exec_success >> simp[Abbr `ci`, mk_inst_def] >>
      gvs[]) >>
-  `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
+  `?u. exec_ext_call ci sg (g:bytes32)
       target 0w wi insz wo outsz T = OK u /\ stmt_state_rel ctx func cenv cx
         (es with outcomes := SOME (DROP 1 sg.vs_outcomes)) u` by
     (irule computed_static_exec_state_rel >>
@@ -2014,24 +2020,24 @@ Proof
      qexists_tac `w2n outsz` >> simp[listTheory.LENGTH_TAKE_EQ] >>
      first_assum ACCEPT_TAC) >>
   conj_tac >- gvs[] >>
-  `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
+  `?u. exec_ext_call ci sg (g:bytes32)
       target 0w wi insz wo outsz T = OK u /\ wb_frame cenv es sf sg u` by
     (irule computed_static_exec_wb_frame >>
      simp[Abbr `ci`, mk_inst_def, not_fresh_at_def] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      rpt strip_tac >>
      `FLOOKUP s.vs_allocas aid = SOME (b,sz)` by
-       gvs[Abbr `sg`, update_var_def] >>
+       gvs[Abbr `sg`, Abbr `s0`, update_var_def] >>
      `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
      gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
      decide_tac) >>
   `wb_frame cenv es sf sg t` by gvs[] >>
   irule wb_frame_readonly_input >> qexists_tac `sg` >>
-  simp[Abbr `sg`, update_var_def] >>
+  simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
   conj_tac
   >- (simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
       rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
-  rpt strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+  rpt strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
   qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[update_var_def] >>
   simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]

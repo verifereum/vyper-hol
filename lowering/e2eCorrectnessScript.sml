@@ -12,6 +12,7 @@
  *)
 Theory e2eCorrectness
 Ancestors
+  ptrDiscipline unitMemInv lowerDloadDefs moduleLoweringProps
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
@@ -208,6 +209,46 @@ End
    Totality supplies an actual EVM run even when neither stage applies.
    The middle stage matches runs up to the source result's dead bytes
    (external_call_dead), which the source relation ignores. *)
+(* The reconstructed raw oracle need not satisfy initial_ctx_rel: that
+   relation ties the output entry state to the actual EVM readings. *)
+Theorem e2e_vyper_to_evm_states:
+  !tops ret am tx ctx ctx' vs_in vs_out es.
+    vs_in.vs_outcomes = MAP SND (call_trace es) /\
+    (?fuel. external_call_result_rel tops ret tx
+              (call_external (SOME vs_in.vs_outcomes) [] am tx)
+              (run_context fuel ctx vs_in)) /\
+    (~source_exempt tops (call_external (SOME vs_in.vs_outcomes) [] am tx) ==>
+       ctx_sim (external_call_dead tx
+                  (call_external (SOME vs_in.vs_outcomes) [] am tx))
+         ctx ctx' vs_in vs_out /\
+       !fuel. ?r es'.
+         run_call es = SOME (r, es') /\
+         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+          venom_frame_rel es r es' (run_context fuel ctx' vs_out)))
+    ==>
+    ?r es'. run_call es = SOME (r, es') /\
+            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+             call_result_rel tops ret am tx es r es')
+Proof
+  rpt strip_tac >>
+  qspec_then `es` strip_assume_tac run_call_total >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  Cases_on `source_exempt tops (call_external (SOME vs_in.vs_outcomes) [] am tx)`
+  >- (disj2_tac >> disj2_tac >>
+      irule source_exempt_call_result_rel >> gvs[]) >>
+  gvs[] >>
+  drule_all external_call_result_rel_terminates >> strip_tac >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  `terminates (run_context fuel' ctx' vs_out)` by
+    metis_tac[dead_result_rel_terminates] >>
+  qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
+    (qspec_then `fuel'` strip_assume_tac) >>
+  gvs[] >>
+  drule_all external_call_result_rel_dead_transport >> strip_tac >>
+  drule_all external_call_result_rel_frame >> simp[]
+QED
+
 Theorem e2e_vyper_to_evm:
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
@@ -730,6 +771,27 @@ QED
 
 *)
 
+Theorem gas_variant_outcomes[local]:
+  gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem gas_variant_call_ctx[local]:
+  gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem gas_variant_initial_venom_state_rel[local]:
+  gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
+  initial_venom_state_rel tops am tx si
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `so = _` SUBST_ALL_TAC >>
+  gvs[initial_venom_state_rel_def, venom_env_rel_def]
+QED
+
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* The raw O1 shape theorems no longer need immutable_free_program; it
    remains in this statement, which is unchanged. *)
@@ -776,21 +838,12 @@ Proof
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
    call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
-  `source_unit_execution_correct tops ret am tx unit vs` by
-    (irule lower_vyper_runtime_unit_correct >> simp[] >>
-     qexists_tac `rpolicy` >> simp[]) >>
-  irule e2e_vyper_to_evm >>
-  qexistsl_tac [`unit.cu_context`, `out.po_unit.cu_context`, `vs`] >>
-  simp[] >> conj_tac
-  >- (fs[source_unit_execution_correct_def] >>
-      qexists_tac `fuel` >> gvs[]) >> strip_tac >>
-  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_dload_offset_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_dload_headroom_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
+  `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+   fixed_region_reserved 0 unit.cu_context` by
+    (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+     drule run_lowering_eom_none >> simp[fixed_region_reserved_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
@@ -798,6 +851,41 @@ Proof
               (call_external (SOME vs.vs_outcomes) [] am tx))` by
     simp[external_call_dead_wf] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
+  `initial_venom_state_rel tops am tx vs_in` by
+    (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
+  `vs_in.vs_outcomes = vs.vs_outcomes` by
+    (irule gas_variant_outcomes >> simp[]) >>
+  `vs_in.vs_call_ctx = vs.vs_call_ctx` by
+    (irule gas_variant_call_ctx >> simp[]) >>
+  `valid_vyper_call tops tx vs_in.vs_call_ctx.cc_calldata ret /\
+   call_outcomes_ok am tx vs_in.vs_outcomes` by simp[] >>
+  `source_unit_execution_correct tops ret am tx unit vs_in` by
+    (irule lower_vyper_runtime_unit_correct >> simp[] >>
+     qexists_tac `rpolicy` >> simp[]) >>
+  irule e2e_vyper_to_evm_states >>
+  qexistsl_tac [`unit.cu_context`, `out.po_unit.cu_context`, `vs_in`, `vs`] >>
+  simp[] >> conj_tac
+  >- (fs[source_unit_execution_correct_def] >>
+      qexists_tac `fuel` >> gvs[]) >> strip_tac >>
+  `code_layout_valid vs_in` by
+    (fs[gas_variant_def] >>
+     qpat_x_assum `vs = _` SUBST_ALL_TAC >> fs[code_layout_valid_def]) >>
+  `raw_unit_memory_ok unit.cu_context vs_in /\
+   ptr_discipline 0 unit.cu_context vs_in /\
+   taint_within
+     (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
+     unit.cu_context vs_in` by
+    (drule_all lower_vyper_runtime_unit_memory_ok >> simp[]) >>
+  `mem_inv dload_offset_ok unit.cu_context vs_in` by
+    (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
+     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> simp[]) >>
+  `ctx_sim (external_call_dead tx
+       (call_external (SOME vs.vs_outcomes) [] am tx))
+       unit.cu_context out.po_unit.cu_context vs_in vs /\
+   o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
+  `mem_inv dload_headroom_ok unit.cu_context vs_in` by
+    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   conj_tac >- gvs[] >>

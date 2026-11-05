@@ -1,10 +1,11 @@
 (* Compiler head boundaries for mixed tuple destinations. *)
 Theory tupleTargetStoreRun
 Ancestors
+  loweringPosts stmtSimDefs stmtSimProps
   tupleAssignParts
   tupleTargetStoreProps tupleLocalStoreRun stmtSimAssignStorage
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
-  storageStoreFrame stmtSim stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
+  storageStoreFrame  stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
   emitHelper emitHelperProps compileEnv list finite_map
   tupleMemoryFrame tupleMemoryLayout valueEncoding vyperTyping stmtLoweringMono

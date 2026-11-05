@@ -12,9 +12,10 @@
 
 Theory exprOpenCases
 Ancestors
+  exprSimHypsDefs
   exprOpenCopies exprOpenPrimitives exprOpenTerminals exprOpenBuiltins
   supportedExprs supportedExprForms
-  exprLowering exprSimHyps vyperTypeSystem compileEnv finite_map
+  exprLowering  vyperTypeSystem compileEnv finite_map
   supportedDecls vyperState vyperInterpreter list
 
 Theorem compile_expr_name_open:

@@ -10,9 +10,10 @@
 
 Theory exprOpenCopies
 Ancestors
+  exprSimHypsDefs
   exprOpenPrimitives exprOpenTerminals exprLowering context compileEnv
   supportedExprForms supportedTypes typedCopyMetadata list rich_list pair alist finite_map venomInst
-  exprSimAggregateLayout exprSimHyps vyperTypeInvariants vyperTypeSystem
+  structFieldsProps  vyperTypeInvariants vyperTypeSystem
 
 Theorem compile_copy_memory_open[local]:
   !dst src n sa r sb.

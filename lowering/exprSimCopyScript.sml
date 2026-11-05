@@ -21,10 +21,12 @@
 
 Theory exprSimCopy
 Ancestors
+  valueEncodingProps
+  exprSimProps
   loweringPosts
   exprSimAlloc exprSimOps
   list finite_map
-  exprSim exprLowering compileEnv context vyperAST vyperInterpreter
+   exprLowering compileEnv context vyperAST vyperInterpreter
   vyperState valueEncoding
   fragExec localPtrsProps loweringSlice exprLoweringProps emitHelperProps
   exprSimStorageCopy immutableCopyExecution storageDecodeMemory

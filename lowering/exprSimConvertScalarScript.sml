@@ -13,7 +13,8 @@
 
 Theory exprSimConvertScalar
 Ancestors
-  exprSim exprSimHyps exprSimConvert exprSimUnop compileEnv vyperAST
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+   exprSimHyps exprSimConvert exprSimUnop compileEnv vyperAST
   convertScalarBridge convertScalarSim convertScalarTyping convertScalarDispatch
   exprSimOperators
 

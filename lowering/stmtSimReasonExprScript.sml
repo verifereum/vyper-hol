@@ -22,10 +22,14 @@
 
 Theory stmtSimReasonExpr
 Ancestors
+  exprSimUnwrapProps
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimUnwrap loweringSlice
-  stmtSim stmtSimIf stmtSimReason
+  fragExec localPtrsProps  exprSimUnwrap loweringSlice
+   stmtSimIf stmtSimReason
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv
   vyperInterpreter vyperState vyperValue vyperExprNoControl

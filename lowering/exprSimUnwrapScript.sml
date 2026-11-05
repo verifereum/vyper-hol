@@ -37,9 +37,11 @@
 
 Theory exprSimUnwrap
 Ancestors
+  exprSimProps exprSimUnwrapProps
+  exprSimDefs
   loweringPosts
   list finite_map
-  exprSim exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
+   exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
   exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom
@@ -149,16 +151,6 @@ Proof
 QED
 
 (* Captured results with the same read have the same compiled-value relation. *)
-Theorem vv_post_read_result:
-  !func cenv cx e es sa sb s0 es' tv v vv s ctx.
-    read_result cx tv es' = (INL v, es') ==>
-    (vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
-     vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
-Proof
-  rpt strip_tac >> Cases_on `vv` >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
-       immutable_holds_def, read_result_def, return_def]
-QED
 
 (* ===== unwrap_value's code ===== *)
 
@@ -176,43 +168,9 @@ Proof
 QED
 
 (* An aggregate in memory: the pointer is the operand, no code. *)
-Theorem expr_post_of_vv_post_memory:
-  !func cenv cx e es sa sb s0 es' v t p s ctx.
-    vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (LocatedValue t p) s /\
-    p.ptr_location = LocMemory /\ ~is_word_type t ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
-Proof
-  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
-  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def] >>
-  metis_tac[]
-QED
 
 (* The end of a one-instruction load of a word: the loaded word in a fresh
    variable, nothing else changed. *)
-Theorem expr_post_of_vv_post_load:
-  !func cenv cx e es sa sm sb s0 es' v t p op s1 s w ctx.
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s1 /\
-    is_word_type (expr_type e) /\ sa.cs_next_var <= sm.cs_next_var /\
-    stmt_state_rel ctx func cenv cx es' s /\ eval_operand op s = SOME w /\
-    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
-           w = typed_val_to_w256 tvt v) /\
-    (!x w'. not_fresh_at sm x /\ lookup_var x s1 = SOME w' ==>
-            lookup_var x s = SOME w') /\
-    (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) /\
-    s.vs_memory = s1.vs_memory ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s
-Proof
-  rw[expr_post_def]
-  >~ [`expr_val_rel`] >- gvs[expr_val_rel_def]
-  >~ [`expr_val_at`] >- simp[expr_val_at_def]
-  >~ [`lookup_var x s`]
-  >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
-  >~ [`FLOOKUP s.vs_allocas`] >- fs[vv_post_def]
-  >~ [`locals_kept`]
-  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail]) >>
-  fs[vv_post_def] >> metis_tac[]
-QED
 
 (* A word in memory: an MLOAD. *)
 Theorem unwrap_memory_word_sim:
@@ -752,15 +710,6 @@ val () =
     else raise Fail "unwrap_memory_read_result_sim: admitted proof dependency"
   end;
 
-Theorem expr_exit_exception_transport:
-  !exc result.
-    expr_res_ok (INR exc : value + exception) ==>
-    (expr_exit (INR exc : eval_result + exception) result <=>
-     expr_exit (INR exc : value + exception) result)
-Proof
-  rpt strip_tac >> gvs[expr_res_ok_def] >>
-  Cases_on `result` >> simp[expr_exit_def]
-QED
 
 Theorem unwrap_read_result_sim[local]:
   !ctx func cenv cx e es sa sm sb s0 es' raw res vv op.
@@ -854,64 +803,3 @@ Proof
       simp[expr_exit_exception_transport]) >>
   simp[fragExecTheory.frag_exec_false_pre]
 QED
-
-(* Memory-buffer forcing uses only the oracle-clean memory boundary. *)
-Theorem expr_sim_of_vv_sim_buffer:
-  !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es /\
-    (!sa. ?t p sb. compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
-      p.ptr_location = LocMemory /\ ~is_word_type t) /\
-    (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
-    expr_sim ctx func cenv cx ty e es
-Proof
-  rw[expr_sim_def] >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` kall_tac >>
-  qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
-  gvs[] >> rename1 `compile_expr cenv ty e sa = (LocatedValue t p, sm)` >>
-  drule compile_expr_extends >> strip_tac >>
-  drule unwrap_value_extends >> strip_tac >>
-  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  `local_ptrs_reserved cenv sm` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
-  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
-  simp[bind_def] >> Cases_on `raw`
-  >- (rename1 `eval_expr cx e es = (INL r, est)` >> simp[] >> strip_tac >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      `expr_vv_res_ok (INL r)` by
-        (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
-                             raise_def, expr_res_ok_def]) >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-        (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
-      simp[] >> strip_tac >>
-      irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sm s0 es' r (LocatedValue t p) s`, `sm`] >>
-      simp[] >> conj_tac
-      >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-          simp[FUN_EQ_THM]) >>
-      irule unwrap_memory_read_result_sim >> simp[]) >>
-  rename1 `eval_expr cx e es = (INR exc, est)` >> strip_tac >> gvs[] >>
-  `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  simp[] >> strip_tac >>
-  irule frag_exec_seq >> qexistsl_tac [`\s. F`, `sm`] >> simp[] >> conj_tac
-  >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-      simp[expr_exit_exception_transport]) >>
-  simp[fragExecTheory.frag_exec_false_pre]
-QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_sim_of_vv_sim_buffer)
-  in
-    if null axioms andalso null (Thm.hyp expr_sim_of_vv_sim_buffer) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "MEMORY_FORCE_AUDIT expr_sim_of_vv_sim_buffer OK\n"
-    else raise Fail "expr_sim_of_vv_sim_buffer: admitted proof dependency"
-  end;

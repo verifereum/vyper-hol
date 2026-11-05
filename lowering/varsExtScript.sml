@@ -178,7 +178,17 @@ Theorem exec_read0_vars_ext:
       (exec_read0 f inst (s with vs_vars := V))
 Proof
   rpt strip_tac >> Cases_on `exec_read0 f inst s` >>
-  gvs[vars_ext_result_def, exec_read0_def, AllCaseEqs()] >>
+  gvs[vars_ext_result_def, exec_read0_def, exec_gas_def, AllCaseEqs()] >>
+  simp exec_simps
+QED
+
+Theorem exec_gas_vars_ext:
+  !inst s V.
+    s.vs_vars SUBMAP V ==>
+    vars_ext_result (exec_gas inst s) (exec_gas inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> Cases_on `exec_gas inst s` >>
+  gvs[vars_ext_result_def, exec_gas_def, AllCaseEqs()] >>
   simp exec_simps
 QED
 
@@ -301,7 +311,7 @@ QED
 
 Theorem step_inst_base_context_vars_ext[local]:
   !inst s V.
-    MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE;
+    MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE;
                          CHAINID] /\ s.vs_vars SUBMAP V ==>
     vars_ext_result (step_inst_base inst s)
       (step_inst_base inst (s with vs_vars := V))
@@ -538,7 +548,7 @@ val vars_ext_opcode_facts =
    ([``AND``, ``OR``, ``XOR``, ``SHL``, ``SHR``, ``SAR``, ``SIGNEXTEND``, ``BYTE``],
     step_inst_base_bitwise_vars_ext),
    ([``ADDMOD``, ``MULMOD``], step_inst_base_pure3_vars_ext),
-   ([``CALLER``, ``ADDRESS``, ``CALLVALUE``, ``GAS``, ``ORIGIN``, ``GASPRICE``,
+   ([``CALLER``, ``ADDRESS``, ``CALLVALUE``, ``ORIGIN``, ``GASPRICE``,
      ``CHAINID``], step_inst_base_context_vars_ext),
    ([``COINBASE``, ``TIMESTAMP``, ``NUMBER``, ``PREVRANDAO``, ``GASLIMIT``,
      ``BASEFEE``, ``BLOBBASEFEE``], step_inst_base_block_vars_ext),
@@ -586,7 +596,10 @@ Theorem step_inst_base_vars_ext:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def, is_ext_call_op_def] >>
+  fs[is_terminator_def, is_ext_call_op_def]
+  >~ [`inst.inst_opcode = GAS`]
+  >- (asm_simp_tac bool_ss [vars_ext_opcode_eq ``GAS``] >>
+     irule exec_gas_vars_ext >> simp[]) >>
   vars_ext_apply_opcode_fact
 QED
 end

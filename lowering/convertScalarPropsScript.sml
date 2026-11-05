@@ -1,5 +1,6 @@
 Theory convertScalarProps
 Ancestors
+  exprUnopStraight
   exprSimConvert exprSimUnop exprLowering freshWrites emitHelper
   compileEnv vyperValue valueEncoding vyperValueOperation
   venomExecSemantics exprLoweringProps

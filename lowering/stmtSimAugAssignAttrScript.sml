@@ -34,12 +34,20 @@
 
 Theory stmtSimAugAssignAttr
 Ancestors
+  exprBopSimDefs exprBopSimProps
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec freshWrites loweringSlice exprSim exprSimHyps exprSimOps
+  fragExec freshWrites loweringSlice  exprSimHyps exprSimOps
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimBuffer
   exprSimAttributeFields
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
+   stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
   stmtSimAugAssign stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps

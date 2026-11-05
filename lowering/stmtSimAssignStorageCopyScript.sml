@@ -16,9 +16,14 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  valueEncodingProps
+  stmtSimProps
+  exprSimProps
+  stmtSimDefs
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec exprSim exprSimLeaves exprSimOps stmtSim stmtSimAssign stmtSimAssignMem
+  fragExec  exprSimLeaves exprSimOps  stmtSimAssign stmtSimAssignMem
   stmtSimAssignStorage exprSimHash exprOperandVar stmtSimDecl vyperExprNoControl
   stmtSimStoreCopy storageCopyLive accountsRelProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -364,7 +369,7 @@ Theorem storage_copy_live_footprint[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `val_footprint tv v = type_memory_size tv`
-  >- (gvs[storageDecodeMemoryTheory.type_memory_size_slots] >> decide_tac) >>
+  >- (gvs[valueEncodingPropsTheory.type_memory_size_slots] >> decide_tac) >>
   Cases_on `v` >> fs[val_footprint_def] >>
   Cases_on `tv` >> fs[] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> fs[]
@@ -426,7 +431,7 @@ Theorem storage_copy_count_bound[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `val_footprint tv v = type_memory_size tv`
-  >- (gvs[storageDecodeMemoryTheory.type_memory_size_slots] >> decide_tac) >>
+  >- (gvs[valueEncodingPropsTheory.type_memory_size_slots] >> decide_tac) >>
   Cases_on `v` >> fs[val_footprint_def] >>
   Cases_on `tv` >> fs[] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> fs[]
@@ -886,7 +891,7 @@ Proof
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
   drule_all storage_copy_post_region >> strip_tac >>
-  RULE_ASSUM_TAC (REWRITE_RULE [storageDecodeMemoryTheory.type_memory_size_slots]) >>
+  RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
     storage_copy_suffix_run >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s1`, `w`] mp_tac) >>

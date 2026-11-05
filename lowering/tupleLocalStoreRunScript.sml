@@ -9,7 +9,7 @@
 Theory tupleLocalStoreRun
 Ancestors
   tupleLocalStoreProps stmtSimAssignStore stmtSimAssignMem tupleMemoryFrame
-  tupleMemoryLayout exprSim exprLoweringProps localPtrsProps compileEnv
+  tupleMemoryLayout  exprLoweringProps localPtrsProps compileEnv
   valueEncoding valueEncodingProps valueEncodingProofs vyperState vyperLookup
   list rich_list finite_map arithmetic venomState venomInst
   stmtSimDeclMem stmtLowering emitHelperProps emitHelper fragExec vyperInterpreter

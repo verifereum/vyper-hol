@@ -40,9 +40,11 @@
 
 Theory exprSimOperands
 Ancestors
+  exprBopSimProps
+  exprSimProps
   loweringPosts
   finite_map
-  exprSim exprSimOps localPtrsProps compileEnv exprLoweringProps
+   exprSimOps localPtrsProps compileEnv exprLoweringProps
   valueEncodingProofs venomState venomInst
 
 (* ===== Values in an expression's own allocations ===== *)

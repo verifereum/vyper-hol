@@ -233,6 +233,31 @@ End
 
 (* Admissibility supplies the footprint well-formedness needed by memory
    transport; no canonical-padding assumption is imposed on immutables. *)
+Theorem immutable_base_admissible_val_wf[local]:
+  !bt v. immutable_value_admissible (BaseTV bt) v ==> val_wf (BaseTV bt) v
+Proof
+  Cases_on `bt`
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def] >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >- (rename1 `BytesT bound` >> Cases_on `bound`
+      >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def])
+      >> Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                              type_memory_size_def] >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >> Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def]
+QED
+
 Theorem immutable_admissible_val_wf:
   (!tv v. immutable_value_admissible tv v ==> val_wf tv v) /\
   (!vs tvs. immutable_fields_admissible tvs vs ==> fields_val_wf vs tvs) /\

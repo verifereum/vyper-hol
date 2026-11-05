@@ -4,7 +4,7 @@
    Metadata premises are the field-layout clauses of expr_sim_inv. *)
 Theory typedMemoryCopy
 Ancestors
-  loweringPosts
+  exprSimProps loweringPosts
   context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
@@ -2759,7 +2759,7 @@ Proof
           qexistsl_tac [`w2n sw + i * type_memory_size tv`,
                         `type_memory_size tv`, `t.vs_memory`] >>
           simp[] >> conj_tac
-          >- metis_tac[exprSimTheory.val_footprint_le] >>
+          >- metis_tac[exprSimPropsTheory.val_footprint_le] >>
           irule valueEncodingProofsTheory.mem_bytes_at_translated_window >>
           qexists_tac `N * type_memory_size tv` >>
           simp[mcopy_mem_bytes_at_same] >>
@@ -3467,9 +3467,9 @@ Proof
       `(?cap. dtv = BaseTV (BytesT (Dynamic cap))) \/
        (?cap. dtv = BaseTV (StringT cap))` by metis_tac[] >>
       `val_footprint dtv v <= type_memory_size dtv` by
-        metis_tac[exprSimTheory.val_footprint_le] >>
+        metis_tac[exprSimPropsTheory.val_footprint_le] >>
       `val_footprint stv v <= type_memory_size stv` by
-        metis_tac[exprSimTheory.val_footprint_le] >>
+        metis_tac[exprSimPropsTheory.val_footprint_le] >>
       gvs[] >> Cases_on `v` >> gvs[value_has_type_def] >>
       (irule typed_copy_bytestring_frag_exact >>
        conj_tac >- simp[] >>
@@ -3482,7 +3482,7 @@ Proof
        `word_size len <= word_size capacity` by
          (irule exprSimHypsTheory.word_size_monotone >>
           simp[Abbr `len`]) >>
-       qspec_then `len` assume_tac exprSimTheory.le_word_size_mul >>
+       qspec_then `len` assume_tac exprSimPropsTheory.le_word_size_mul >>
        decide_tac)) >>
   Cases_on `dty`
   >~ [`BaseT bt`]

@@ -46,9 +46,12 @@
 
 Theory targetPlaceSim
 Ancestors
+  exprSimFieldLayout
+  targetPlaceSimDefs
+  exprSimHypsDefs
   loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimAttributeFields
+  fragExec  exprSimHyps exprSimAttributeFields
   exprLowering exprLoweringProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperPlaceResultTyping
@@ -60,29 +63,10 @@ Libs
 
 (* The source results the judgment speaks of: a place or a mapping, an
    error other than a type error, or an assertion. *)
-Definition target_res_ok_def:
-  target_res_ok (res : eval_result + exception) <=>
-    (?pv. res = INL pv) \/ (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
 
 (* The judgment: the target's fragment of bt, typed vt, run from a state
    related at es, reaches its end in target_post on a place, and exits as
    expr_exit allows on an error. *)
-Definition target_sim_def:
-  target_sim ctx func cenv cx env bt es <=>
-    !vt sa sb r res es' s0.
-      type_place_target env bt = SOME vt /\
-      compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      eval_base_place cx bt es = (res, es') /\ target_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?pv. res = INL pv /\
-                  target_post ctx func cenv cx es sa sb s0 es' pv vt r s)
-        (expr_exit res)
-End
 
 (* ===== Premises ===== *)
 

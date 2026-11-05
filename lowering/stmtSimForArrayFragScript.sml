@@ -1,8 +1,8 @@
 (* Compiler certification and public boundary for fixed-array loops. *)
 Theory stmtSimForArrayFrag
 Ancestors
-  loweringPosts
-  stmtSimForArrayLoop stmtSimForArrayParts stmtSim stmtLowering compileEnv
+  loweringPosts stmtSimDefs stmtSimProps
+  stmtSimForArrayLoop stmtSimForArrayParts  stmtLowering compileEnv
   exprLoweringProps fragExec loweringSlice localPtrsProps emitHelperProps
   venomInst venomState venomExecSemantics list rich_list finite_map arithmetic
   stmtSimForParts

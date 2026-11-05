@@ -22,8 +22,9 @@
 
 Theory stmtSimDeclStore
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
-  fragExec localPtrsProps venomMemDefs loweringSlice exprSim
+  fragExec localPtrsProps venomMemDefs loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperTyping
