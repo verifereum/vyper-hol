@@ -456,8 +456,21 @@ Definition offset_outputs_used_def:
       (fn_insts fn)
 End
 
+(* The planner finds a PHI's source only on the stack, as Python's
+   _generate_evm_for_instruction does (stack.get_phi_depth).  A block with a
+   single predecessor can be entered by a JNZ, which keeps the predecessor's
+   spills (only a JMP restores them), so a spilled source would be missed and
+   the PHI's output never pushed.  Codegen takes only functions whose PHIs
+   are all at joins. *)
+Definition phis_at_joins_def:
+  phis_at_joins cfg fn ⇔
+    EVERY (λbb. LENGTH (cfg_preds_of cfg bb.bb_label) ≤ 1 ⇒
+                NULL (collect_phis bb.bb_instructions))
+      fn.fn_blocks
+End
+
 (* Per-function: structural WF + SSA + SUE + normalized CFG + PHI operands
-   + no bad opcodes + no dead OFFSET output *)
+   + no bad opcodes + no dead OFFSET output + PHIs only at joins *)
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     canonical_param_prefix fn ∧
@@ -470,7 +483,8 @@ Definition codegen_ready_fn_def:
     block_entries_ready (cfg_analyze fn) fn ∧
     phi_operands_ready fn ∧
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks ∧
-    offset_outputs_used fn
+    offset_outputs_used fn ∧
+    phis_at_joins (cfg_analyze fn) fn
 End
 
 (* Per-context: all functions ready, and every function but the first
