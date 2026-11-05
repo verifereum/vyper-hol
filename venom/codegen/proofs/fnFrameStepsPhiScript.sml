@@ -766,10 +766,13 @@ QED
 (* ===== The PHI prefix from any entry stack ===== *)
 
 (* phi_prefix_frame_sim without the join-entry facts: it assumes only that
-   each PHI's stack hit (the shallowest of its variable operands on the
-   entry stack, which generate_phi_plan pokes) is the operand resolve_phi
-   selects for the edge taken.  A PHI with no hit (its operand spilled,
-   say) gets no code and no slot.  The join case (fnFrameSteps) and the
+   every variable operand of a PHI on the entry stack is the operand
+   resolve_phi selects for the edge taken, so each PHI's stack hit (the
+   shallowest of its variable operands, which generate_phi_plan pokes) is
+   that operand, also after earlier PHIs' pokes and dead-output pops have
+   reordered the stack (a premise on the entry hits alone does not survive
+   a pop's swap).  A PHI with no hit (its operand spilled, say) gets no
+   code and no slot.  The join case (fnFrameSteps) and the
    single-predecessor case both derive that from their entry stacks.
 
    Why it should hold: each PHI pokes its hit's slot with its output
@@ -794,12 +797,10 @@ Theorem phi_prefix_hits_frame_sim:
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\
     vs.vs_prev_bb = SOME pred /\
-    (!inst. MEM inst phis ==>
-       !dist.
-         stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-           ps.ps_stack = SOME dist ==>
-         resolve_phi pred inst.inst_operands =
-           SOME (stack_peek dist ps.ps_stack)) /\
+    (!inst op.
+       MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
+       MEM op ps.ps_stack ==>
+       resolve_phi pred inst.inst_operands = SOME op) /\
     generated_plan_state_wf_marked base ps /\
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
        ~(MEM op ps.ps_stack /\
@@ -990,36 +991,21 @@ QED
 (* At a join's entry stack (lineage_entry_join_stack's shape), each PHI's
    hit is the operand resolve_phi selects for the edge from pred. *)
 Theorem phi_join_stack_hit:
-  !pred instrs live pre inst dist.
+  !pred instrs live pre inst op.
     phi_uses_disjoint (collect_phis instrs) /\
     EVERY (\phi. phi_well_formed phi.inst_operands) (collect_phis instrs) /\
     MEM inst (collect_phis instrs) /\
     EVERY (\op. op = dead_stack_marker) pre /\
-    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-      (pre ++ MAP Var (input_vars_from pred instrs live)) = SOME dist ==>
-    resolve_phi pred inst.inst_operands =
-      SOME (stack_peek dist (pre ++ MAP Var (input_vars_from pred instrs live)))
+    is_var_operand op /\ MEM op inst.inst_operands /\
+    MEM op (pre ++ MAP Var (input_vars_from pred instrs live)) ==>
+    resolve_phi pred inst.inst_operands = SOME op
 Proof
   rpt gen_tac >> strip_tac >>
-  qabbrev_tac `stk = pre ++ MAP Var (input_vars_from pred instrs live)` >>
-  qpat_x_assum `stack_get_phi_depth _ _ = _` mp_tac >>
-  simp[stackModelTheory.stack_get_phi_depth_def] >> strip_tac >>
-  drule genBlockSimTheory.stack_find_el >>
-  drule planWfTheory.stack_find_bound >> simp[listTheory.MEM_FILTER] >>
-  rpt strip_tac >>
-  `EL dist (REVERSE stk) = stack_peek dist stk` by
-    simp[stackModelTheory.stack_peek_def, listTheory.EL_REVERSE,
-         arithmeticTheory.PRE_SUB1] >>
-  `MEM (stack_peek dist stk) stk` by
-    metis_tac[listTheory.EL_MEM, listTheory.MEM_REVERSE,
-              listTheory.LENGTH_REVERSE] >>
-  `?y. stack_peek dist stk = Var y` by
-    (Cases_on `stack_peek dist stk` >> gvs[is_var_operand_def]) >>
-  gvs[] >>
-  `MEM y (input_vars_from pred instrs live)` by
-    (qpat_x_assum `MEM (Var y) stk` mp_tac >>
-     simp[Abbr `stk`, listTheory.MEM_MAP] >> strip_tac >>
-     gvs[listTheory.EVERY_MEM] >> res_tac >> gvs[dead_stack_marker_def]) >>
+  `~MEM op pre` by
+    (strip_tac >> gvs[listTheory.EVERY_MEM] >> res_tac >>
+     gvs[dead_stack_marker_def, is_var_operand_def]) >>
+  Cases_on `op` >> gvs[is_var_operand_def] >> rename1 `Var y` >>
+  `MEM y (input_vars_from pred instrs live)` by gvs[listTheory.MEM_MAP] >>
   `~NULL (collect_phis instrs)` by (Cases_on `collect_phis instrs` >> gvs[]) >>
   drule_all phi_input_vars_from_mem >> strip_tac
   >- (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
@@ -1079,12 +1065,10 @@ Theorem phi_join_entry_hits:
     ps = ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |> /\
     non_param_insts bb = phis ++ body /\
     LENGTH phis = phi_prefix_length bb.bb_instructions ==>
-    !inst. MEM inst phis ==>
-       !dist.
-         stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-           ps.ps_stack = SOME dist ==>
-         resolve_phi pred inst.inst_operands =
-           SOME (stack_peek dist ps.ps_stack)
+    !inst op.
+      MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
+      MEM op ps.ps_stack ==>
+      resolve_phi pred inst.inst_operands = SOME op
 Proof
   rpt gen_tac >> strip_tac >>
   `bb.bb_label = lbl` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
@@ -1097,14 +1081,23 @@ Proof
                `lbl_ctr`, `pred`, `bb`, `ps_l`]
     mp_tac fnPlanLineageJoinTheory.lineage_entry_join_stack >>
   impl_tac >- gvs[] >> strip_tac >>
-  rpt strip_tac >> gvs[] >>
-  irule phi_join_stack_hit >> simp[] >>
-  conj_tac >- metis_tac[phi_codegen_uses_disjoint] >>
-  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
-  `phi.inst_opcode = PHI /\ MEM phi bb.bb_instructions` by
-    (qpat_x_assum `MEM phi _` mp_tac >>
-     qspec_tac (`bb.bb_instructions`, `l`) >>
-     Induct >> rw[collect_phis_def] >> gvs[]) >>
-  `inst_wf phi` by metis_tac[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
-  gvs[venomWfTheory.inst_wf_def]
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    metis_tac[phi_codegen_uses_disjoint] >>
+  `EVERY (\phi. phi_well_formed phi.inst_operands)
+     (collect_phis bb.bb_instructions)` by (
+    simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+    `phi.inst_opcode = PHI /\ MEM phi bb.bb_instructions` by
+      (qpat_x_assum `MEM phi _` mp_tac >>
+       qspec_tac (`bb.bb_instructions`, `l`) >>
+       Induct >> rw[collect_phis_def] >> gvs[]) >>
+    `inst_wf phi` by
+      metis_tac[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+    gvs[venomWfTheory.inst_wf_def]) >>
+  rpt gen_tac >> strip_tac >>
+  irule phi_join_stack_hit >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bb.bb_instructions`, `live_vars_at liveness bb.bb_label 0`,
+                `pre`] >>
+  gvs[]
 QED
