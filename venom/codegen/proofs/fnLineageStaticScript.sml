@@ -5,7 +5,7 @@
  * body (fnBlockBody) need them of the state they start from.
  *
  * TOP-LEVEL:
- *   lineage_state_static - CHEATED: the state is well formed (repeated
+ *   lineage_state_static - the state is well formed (repeated
  *                          dead_stack_marker slots allowed), and nothing on
  *                          its stack or in its spill map but the block's
  *                          PHI sources stands for a variable the block
@@ -1187,5 +1187,19 @@ Theorem lineage_state_static:
                       (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled))
       (collect_phis bb.bb_instructions)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule lineage_state_entry_cases >> strip_tac
+  >- (gvs[] >>
+      `live_vars_at (liveness_analyze fn) lbl 0 = []` by
+        metis_tac[ready_entry_live_empty] >>
+      `collect_phis bb.bb_instructions = []` by
+        metis_tac[ready_entry_no_phis] >>
+      simp[initial_cleanup_wf_marked, initial_cleanup_empty]) >>
+  conj_tac >- metis_tac[lineage_entry_marked] >>
+  conj_tac >- (rpt gen_tac >> disch_tac >>
+    irule lineage_entry_non_phi_fresh >> metis_tac[]) >>
+  conj_tac >- (disch_tac >> rpt gen_tac >> disch_tac >>
+    irule lineage_entry_small_fresh >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule lineage_entry_coverage >> metis_tac[]) >>
+  irule lineage_entry_phi_sources >> metis_tac[]
 QED
