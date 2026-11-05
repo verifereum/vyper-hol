@@ -1318,12 +1318,13 @@ Proof
      (execute_plan cplan.cp_initial_fmp opts)` by
     gvs[execute_plan_append, asm_block_at_append] >>
   drule_all invoke_cleanup_popmany >>
-  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
-  rename1 `context_venom_asm_rel cplan lo popped vs after_pop` >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] mp_tac) >>
+  disch_then (qx_choose_then `after_pop` assume_tac) >>
+  fs[] >>
   `asm_block_at prog after_pop.as_pc (execute_plan cplan.cp_initial_fmp opts)` by simp[] >>
   drule_all invoke_cleanup_swap >>
-  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
-  rename1 `asm_steps _ _ _ _ after_pop = AsmOK after_swap` >>
+  disch_then (qspecl_then [`o2pc`, `ctx`]
+    (qx_choose_then `after_swap` strip_assume_tac)) >>
   qexists `after_swap` >>
   conj_tac >- (simp[execute_plan_append] >> irule asm_steps_compose_ok >>
               goal_assum (drule_at Any) >> simp[]) >>
