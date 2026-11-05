@@ -11,7 +11,7 @@ Ancestors
   vyperTypeExprSoundness exprSimWordArgs exprSimPrecompiles compileEnv
   vyperEvent venomExecSemantics venomInst venomState exprLoweringProps
   extCallOracleStep venomMemDefs exprSimHash builtinSystem emitHelper fragExec
-  emitHelperProps venomExecProofs exprSimOperators exprSimRawLog
+  emitHelperProps venomExecProofs exprSimOperators exprSimRawLog exprSimRawLogSimCompose
 Libs
   pairLib
 
@@ -306,7 +306,7 @@ Theorem raw_log_topics_ready[local]:
     (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
   EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) ==>
   typed_args_ready ctx func cenv cx expr_type
-    (\s. expr_sim_inv cenv cx env s /\ source_supply s) topics /\
+    (expr_sim_inv cenv cx env) topics /\
   wb_args_shape cenv expr_type topics
 Proof
   strip_tac >> irule typed_stack_args_ready >>
@@ -330,17 +330,22 @@ Theorem raw_log_topics_sim[local]:
     (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
   EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
   compile_multi_exprs compile_expr cenv topics sa = (ops, sb) /\
-  eval_exprs cx topics es = (rr, es') /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?vs. rr = INL vs /\
-      typed_args_post ctx func cenv cx es sa s0 es' topics ops vs s)
-    (wb_args_exit rr)
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx topics) (es,s0)
+    (\rr ee t. ?vs. rr = INL vs /\
+       typed_args_post ctx func cenv cx es sa s0 ee topics ops vs t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\rr ee r. wb_args_exit rr r)
 Proof
   strip_tac >> drule_all raw_log_topics_ready >> strip_tac >>
   irule lower_typed_args_sim >> simp[] >>
-  qexistsl [`\s. expr_sim_inv cenv cx env s /\ source_supply s`, `expr_type`] >>
-  gvs[compile_multi_exprs_lower_word_args, expr_sim_pre_def]
+  qexistsl [`expr_sim_inv cenv cx env`, `expr_type`] >>
+  gvs[compile_multi_exprs_lower_word_args, expr_sim_pre_def] >>
+  metis_tac[expr_sim_inv_gas_obs]
 QED
 
 Theorem raw_log_dynamic_data[local]:
@@ -368,7 +373,7 @@ Theorem raw_log_operands_frame[local]:
 Proof
   Induct >> simp[eval_operands_def] >> rpt gen_tac >> strip_tac >>
   gvs[AllCaseEqs()] >>
-  drule_all exprSimOpsTheory.eval_operand_frame >> strip_tac >>
+  drule_all exprBopSimPropsTheory.eval_operand_frame >> strip_tac >>
   simp[] >> first_x_assum irule >> simp[]
 QED
 
@@ -385,7 +390,7 @@ Proof
     (irule wb_frame_trans >> goal_assum (drule_at Any) >>
      metis_tac[expr_post_frame]) >>
   gvs[expr_post_def, wb_frame_def] >>
-  metis_tac[expr_val_at_start_mono]
+  metis_tac[exprSimPropsTheory.expr_val_at_start_mono]
 QED
 
 Theorem raw_log_post_operands[local]:
@@ -418,7 +423,7 @@ Proof
     gvs[stmt_state_rel_def, state_rel_def] >>
   gvs[expr_post_def] >> rpt strip_tac >>
   `local_region cenv es.scopes s0 name lb len` by
-    (irule exprSimOpsTheory.local_region_frame >>
+    (irule exprSimPropsTheory.local_region_frame >>
      conj_tac >- (qexists `func` >> simp[]) >>
      qexistsl [`sa`, `es'.scopes`, `s`] >> simp[]) >>
   metis_tac[]
