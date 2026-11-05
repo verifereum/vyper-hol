@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomState venomInst finite_map pred_set list
   ptrDiscipline lowerDloadRelocation words
 
-Theorem ld_alloca_preserves_entry[local]:
+Theorem ld_alloca_preserves_entry:
   i.inst_opcode = ALLOCA /\ step_inst fuel C i s = OK s' /\
   FLOOKUP s.vs_allocas id = SOME p ==>
   FLOOKUP s'.vs_allocas id = SOME p

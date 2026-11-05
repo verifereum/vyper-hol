@@ -569,3 +569,14 @@ by this inventory; revert-forward and observation production remain open.
    whole-call completion, successor representation for a newly allocated
    owner, or full macro/observation closure. No saved memory is restored.
 *)
+
+(* Ordinary ALLOCA representation checkpoint: ld_alloca_live_representation
+   now produces concrete post-selection/provenance live-site representation
+   at the unchanged frame floor f. Old live owners keep their table entries
+   and existing target allocation witnesses; the fresh site is witnessed by
+   the ordinary instruction ID outside scratch keys. Cached ALLOCA adds no
+   live site. This geometry result permits zero sizes and does not change lo.
+   Whole ALLOCA certificate assembly, macro C1-C12 closure, call completion,
+   revert-forward production, observations and temporal execution induction
+   remain separate unresolved obligations.
+*)
