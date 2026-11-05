@@ -307,7 +307,7 @@ Theorem ptr_safe_run_all_fuel:
     !m. ptr_safe_run D lo m ctx fn PG G tn s
 Proof
   rpt strip_tac >> Cases_on `m <= fuel`
-  >- metis_tac[ptr_safe_run_fuel_mono_down] >>
+  >- (drule_all ptr_safe_run_fuel_mono_down >> simp[]) >>
   gvs[ptr_safe_run_def, run_from_def] >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[] >>
   irule (cj 2 ptr_safe_fuel_mono_up) >> qexists_tac `fuel` >>

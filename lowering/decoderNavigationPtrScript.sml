@@ -5,7 +5,59 @@ Ancestors typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
   compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
-  abiDecoderMemberSetup decoderMemberValidEndpoint
+  abiDecoderMemberSetup decoderMemberValidEndpoint memLocDefs venomInstProofs contextCodegenRel
+
+Theorem emitted_ptr_scalar_offset_frag_ptr[local]:
+  !cx ctx PG sa sb id root offset out off s a G tn total n R.
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst id ADD [Var root; offset] [out]] /\
+    lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
+    eval_operand offset s = SOME (n2w off) /\
+    op_taint tn offset = {} /\ op_prov G offset = NONE /\
+    off + n <= total /\ w2n a + off < dimword(:256) ==>
+    ?Gf tnf sf.
+      sf = ((update_var out (a + n2w off) s) with
+        vs_inst_idx := SUC s.vs_inst_idx) /\
+      lookup_var out sf = SOME (n2w (w2n a + off)) /\
+      ptr_covers Gf tnf out sf n /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      sf.vs_memory = s.vs_memory /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      (!q. q <> out ==>
+        lookup_var q sf = lookup_var q s /\
+        FLOOKUP Gf q = FLOOKUP G q /\
+        op_taint tnf (Var q) = op_taint tn (Var q))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `t = update_var out (a + n2w off) s` >>
+  qabbrev_tac `gf = step_prov PG G
+    (mk_inst id ADD [Var root; offset] [out]) t` >>
+  qabbrev_tac `tf = step_taint
+    (mk_inst id ADD [Var root; offset] [out]) s t tn` >>
+  qexistsl_tac [`gf`, `tf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  simp[] >> conj_tac >-
+    simp[Abbr `t`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+      GSYM word_add_n2w, ADD_COMM, WORD_ADD_COMM] >>
+  conj_tac >-
+    (`op_taint tf (Var out) = {}` by
+       simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
+     gvs[ptr_covers_def] >>
+     `off < dimword(:256)` by decide_tac >>
+     simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
+       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
+       lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD,
+       eval_operand_def] >> decide_tac) >>
+  conj_tac >-
+    (irule copy_len_binop_frag_ptr >> simp[mk_inst_def] >>
+     simp[Abbr `gf`, Abbr `tf`, Abbr `t`, eval_operand_def, mk_inst_def,
+       op_taint_def] >> gvs[ptr_covers_def, op_taint_def]) >>
+  simp[Abbr `tf`, Abbr `gf`, Abbr `t`, copy_len_binop_ghost_frame,
+    update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
 
 Theorem emitted_ptr_offset_frag_ptr:
   !cx ctx PG sa sb id root out off s a G tn total n R.
@@ -30,32 +82,62 @@ Theorem emitted_ptr_offset_frag_ptr:
         FLOOKUP Gf q = FLOOKUP G q /\
         op_taint tnf (Var q) = op_taint tn (Var q))
 Proof
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `t = update_var out (a + n2w off) s` >>
-  qabbrev_tac `gf = step_prov PG G
-    (mk_inst id ADD [Var root; Lit (n2w off)] [out]) t` >>
-  qabbrev_tac `tf = step_taint
-    (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s t tn` >>
-  qexistsl_tac [`gf`, `tf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
-  simp[] >>
-  conj_tac >-
-    simp[Abbr `t`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-      GSYM word_add_n2w, ADD_COMM, WORD_ADD_COMM] >>
-  conj_tac >-
-    ( `op_taint tf (Var out) = {}` by
-        simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
-      gvs[ptr_covers_def] >>
-      `off < dimword(:256)` by decide_tac >>
-      simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
-        first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
-        lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD] >>
-      decide_tac) >>
-  conj_tac >-
-    (irule copy_len_binop_frag_ptr >> simp[mk_inst_def] >>
-     simp[Abbr `gf`, Abbr `tf`, Abbr `t`, eval_operand_def, mk_inst_def,
-       op_taint_def] >> gvs[ptr_covers_def, op_taint_def]) >>
-  simp[Abbr `tf`, Abbr `gf`, Abbr `t`, copy_len_binop_ghost_frame,
-    update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+  rpt strip_tac >> irule emitted_ptr_scalar_offset_frag_ptr >>
+  rename1 `ptr_covers G tn root s cap` >> simp[] >>
+  qexistsl_tac [`id`, `Lit (n2w off)`, `root`, `cap`] >>
+  simp[eval_operand_def, op_taint_def, op_prov_def] >> decide_tac
+QED
+
+Theorem scalar_binop_frag_ptr[local]:
+  !cx ctx PG sa sb id opc f left right out s a b G tn R.
+    (opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul) /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst id opc [left;right] [out]] /\
+    eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+    op_taint tn left = {} /\ op_taint tn right = {} /\
+    op_prov G left = NONE /\ op_prov G right = NONE ==>
+    ?H u.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\
+          v = (update_var out (f a b) s with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      op_taint u (Var out) = {} /\ op_prov H (Var out) = NONE /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!q. q <> out ==> FLOOKUP H q = FLOOKUP G q /\
+        op_taint u (Var q) = op_taint tn (Var q))
+Proof
+  rpt gen_tac >> strip_tac >> (
+  qabbrev_tac `t = update_var out (f a b) s` >>
+  qabbrev_tac `H = step_prov PG G (mk_inst id opc [left;right] [out]) t` >>
+  qabbrev_tac `u = step_taint (mk_inst id opc [left;right] [out]) s t tn` >>
+  qexistsl_tac [`H`, `u`] >> conj_tac >-
+    (irule ptr_fragment_step >> simp[] >>
+     reverse conj_tac >- gvs[is_terminator_def] >>
+     rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+     conj_tac >- gvs[Abbr `t`, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+     simp[Abbr `H`, Abbr `u`, Abbr `t`, update_var_def] >>
+     rpt strip_tac >> gvs[] >>
+     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     conj_tac >- metis_tac[] >>
+     simp[step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+       combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `new_site_bytes s t = {}` by
+    simp[Abbr `t`, new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+      EXTENSION, SF CONJ_ss] >>
+  gvs[] >>
+  simp[Abbr `H`, Abbr `u`, step_prov_def, step_taint_def,
+    out_prov_def, first_prov_def, set_prov_def, mk_inst_def, op_prov_def,
+    set_var_taint_def, out_taint_def, op_taint_def, mem_taint_def,
+    new_site_bytes_def, step_writes_def, written_taint_def, store_taint_def,
+    imm_taint_def, adopt_reset_def,
+    FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, source_memory_write_ranges_def,
+    range_bytes_def, EXTENSION, SF CONJ_ss])
 QED
 
 (* Exact scalar successors, independent of stale output-register contents. *)
@@ -77,16 +159,7 @@ Theorem scalar_add_frag_ptr:
       (!q. q <> out ==> FLOOKUP H q = FLOOKUP G q /\
         op_taint u (Var q) = op_taint tn (Var q))
 Proof
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `t = update_var out (a+b) s` >>
-  qabbrev_tac `H = step_prov PG G (mk_inst id ADD [left;right] [out]) t` >>
-  qabbrev_tac `u = step_taint (mk_inst id ADD [left;right] [out]) s t tn` >>
-  qexistsl_tac [`H`, `u`] >> conj_tac >-
-    (irule copy_len_binop_frag_ptr >> simp[Abbr `H`, Abbr `u`, Abbr `t`] >>
-     metis_tac[]) >>
-  simp[Abbr `u`, Abbr `t`, copy_len_binop_ghost_frame] >>
-  simp[Abbr `H`, step_prov_def, out_prov_def,
-    first_prov_def, set_prov_def, mk_inst_def, op_prov_def, FLOOKUP_DRESTRICT]
+  rpt strip_tac >> irule scalar_binop_frag_ptr >> simp[] >> metis_tac[]
 QED
 
 Theorem calldata_load_frag_ptr:
@@ -141,6 +214,42 @@ Proof
     range_bytes_def, SF CONJ_ss]
 QED
 
+Theorem emit_scalar_binop_endpoint_ptr:
+  !opc left right sa out sb s t a b G tn cx ctx PG R.
+    (opc = ADD \/ opc = MUL) /\
+    emit_op opc [left;right] sa = (out,sb) /\
+    eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+    op_taint tn left = {} /\ op_taint tn right = {} /\
+    op_prov G left = NONE /\ op_prov G right = NONE /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u. op_taint u out = {} /\ op_prov H out = NONE /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
+        FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qabbrev_tac `x = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `f : 256 word -> 256 word -> 256 word = if opc = ADD then word_add else word_mul` >>
+  `opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul` by
+    (gvs[Abbr `f`]) >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `t = update_var x (f a b) s` by
+    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  `!q. not_fresh_at sa q ==> q <> x` by
+    (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
+  drule_at (Pat `sb.cs_current_insts = _`) scalar_binop_frag_ptr >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `f`] mp_tac) >>
+  simp[] >> disch_then drule_all >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  qexistsl_tac [`H`, `u`] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
 
 Theorem emit_scalar_add_endpoint_ptr:
   !left right sa out sb s t a b G tn cx ctx PG R.
@@ -158,18 +267,7 @@ Theorem emit_scalar_add_endpoint_ptr:
       (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
         FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q))
 Proof
-  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  qabbrev_tac `x = "%" ++ toString sa.cs_next_var` >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
-  `t = update_var x (a+b) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
-  `!q. not_fresh_at sa q ==> q <> x` by
-    (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
-  drule_all scalar_add_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] mp_tac) >> strip_tac >>
-  qexistsl_tac [`H`, `u`] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+  rpt strip_tac >> irule emit_scalar_binop_endpoint_ptr >> simp[] >> metis_tac[]
 QED
 
 Theorem emit_calldata_load_endpoint_ptr:
@@ -362,8 +460,44 @@ QED
 
 Finalise calldata_ep_source_frag_ptr
 
+Theorem emit_ptr_offset_endpoint_ptr:
+  !sa out sb root offset off s t a G tn total n cx ctx PG R.
+    emit_op ADD [Var root; offset] sa = (out,sb) /\
+    lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
+    eval_operand offset s = SOME (n2w off) /\
+    op_taint tn offset = {} /\ op_prov G offset = NONE /\
+    off + n <= total /\ w2n a + off < dimword(:256) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u q. out = Var q /\
+      lookup_var q t = SOME (n2w (w2n a + off)) /\
+      ptr_covers H u q (t with vs_inst_idx := SUC s.vs_inst_idx) n /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qabbrev_tac `q = "%" ++ toString sa.cs_next_var` >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `t = update_var q (a + n2w off) s` by
+    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+      eval_operand_def] >>
+  `!x. not_fresh_at sa x ==> x <> q` by
+    (simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
+  rename1 `ptr_covers G tn root s cap` >>
+  `off + n <= cap /\ w2n a + off < dimword(:256)` by decide_tac >>
+  drule_all emitted_ptr_scalar_offset_frag_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  qexistsl_tac [`Gf`,`tnf`] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, ptr_covers_def] >> metis_tac[]
+QED
+
 (* Supplied ordinary endpoint for a destination-navigation ADD. *)
-Theorem emit_ptr_offset_endpoint_ptr[local]:
+Theorem emit_ptr_literal_offset_endpoint_ptr[local]:
   !sa out sb root vo s t a G tn total n cx ctx PG R.
     emit_op ADD [Var root; Lit (n2w vo)] sa = (out,sb) /\
     lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
@@ -380,21 +514,10 @@ Theorem emit_ptr_offset_endpoint_ptr[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
         FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
-  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  qabbrev_tac `q = "%" ++ toString sa.cs_next_var` >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
-  `t = update_var q (a + n2w vo) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
-      eval_operand_def] >>
-  `!x. not_fresh_at sa x ==> x <> q` by
-    (simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
-  rename1 `ptr_covers G tn root s cap` >>
-  `vo + n <= cap /\ w2n a + vo < dimword(:256)` by decide_tac >>
-  drule_all emitted_ptr_offset_frag_ptr >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
-  qexistsl_tac [`Gf`,`tnf`] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, ptr_covers_def] >> metis_tac[]
+  rpt strip_tac >> irule emit_ptr_offset_endpoint_ptr >>
+  rename1 `ptr_covers G tn root s cap` >> simp[] >>
+  qexistsl_tac [`Lit (n2w vo)`, `root`, `cap`] >>
+  simp[eval_operand_def, op_taint_def, op_prov_def] >> decide_tac
 QED
 
 Theorem calldata_member_setup_frag_ptr:
@@ -457,7 +580,7 @@ Proof
   `lookup_var root sp = SOME a /\ ptr_covers H1 u1 root sp total' /\
    vo + n <= total' /\ w2n a + vo < dimword(:256)` by
     (gvs[Abbr `sp`, lookup_var_def, ptr_covers_def] >> decide_tac) >>
-  drule_all emit_ptr_offset_endpoint_ptr >>
+  drule_all emit_ptr_literal_offset_endpoint_ptr >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `LENGTH (emitted_insts mid sb) = 1` by metis_tac[emit_op_length] >>
   `same_blocks sa mid /\ same_blocks mid sb` by
