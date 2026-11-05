@@ -344,6 +344,101 @@ Proof
   simp[EL_APPEND_EQN]
 QED
 
+Theorem concretize_positions_def_on_paths:
+  EVERY bb_well_formed fn.fn_blocks /\ fn_inst_wf fn /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) /\
+  MEM bb fn.fn_blocks /\
+  (case use_opt of NONE => T | SOME inst =>
+    (concretize_inst_with_positions positions inst).inst_opcode <> NOP) /\
+  def_on_all_paths fn bb use_opt v ==>
+  def_on_all_paths (concretize_function_with_positions positions fn)
+    (clear_nops_block (block_map_transform
+      (concretize_inst_with_positions positions) bb))
+    (OPTION_MAP (concretize_inst_with_positions positions) use_opt) v
+Proof
+  strip_tac >>
+  `!b. MEM b fn.fn_blocks ==> EVERY inst_wf b.bb_instructions /\
+    (!inst. MEM inst b.bb_instructions /\ inst.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP positions (Allocation inst.inst_id)))`
+    by (gvs[fn_inst_wf_def, EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >>
+        metis_tac[]) >>
+  gvs[def_on_all_paths_def, concretize_positions_path,
+      concretize_positions_entry_label, clear_nops_block_def,
+      block_map_transform_def] >>
+  qx_gen_tac `path` >> strip_tac >>
+  first_x_assum (qspec_then `path` mp_tac) >> simp[] >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (disj1_tac >>
+      `EVERY inst_wf def_bb.bb_instructions /\
+       (!inst. MEM inst def_bb.bb_instructions /\ inst.inst_opcode = ALLOCA ==>
+          IS_SOME (FLOOKUP positions (Allocation inst.inst_id)))`
+        by metis_tac[] >>
+      drule_all concretize_positions_definition_filter >>
+      disch_then (qspec_then `v` assume_tac) >>
+      `MEM (concretize_inst_with_positions positions def_inst)
+        (MAP (concretize_inst_with_positions positions)
+          (FILTER (\inst. MEM v inst.inst_outputs) def_bb.bb_instructions))`
+        by (simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+      qpat_x_assum `FILTER _ _ = _` (fn th => fs[GSYM th, MEM_FILTER]) >>
+      qexistsl [`k`, `clear_nops_block (block_map_transform
+        (concretize_inst_with_positions positions) def_bb)`,
+        `concretize_inst_with_positions positions def_inst`] >>
+      simp[concretize_positions_block_provenance,
+           concretize_positions_block_instruction] >>
+      simp[clear_nops_block_def, block_map_transform_def] >> metis_tac[]) >>
+  disj2_tac >>
+  `EVERY inst_wf bb.bb_instructions /\
+   (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP positions (Allocation inst.inst_id)))`
+    by metis_tac[] >>
+  Cases_on `use_opt` >> gvs[]
+  >- (irule concretize_positions_definition_endpoint >> simp[] >>
+      goal_assum drule >> simp[]) >>
+  `EVERY inst_wf bb.bb_instructions` by metis_tac[] >>
+  drule_all concretize_positions_definition_before_use >>
+  strip_tac >> qexists `i'` >> simp[] >>
+  qexists `j'` >> simp[]
+QED
+
+Theorem concretize_positions_defs_reach_uses:
+  EVERY bb_well_formed fn.fn_blocks /\ fn_inst_wf fn /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) /\
+  fn_defs_reach_uses fn ==>
+  fn_defs_reach_uses (concretize_function_with_positions positions fn)
+Proof
+  strip_tac >> simp[fn_defs_reach_uses_def] >>
+  qx_gen_tac `bb'` >> qx_gen_tac `inst'` >> strip_tac >>
+  gvs[concretize_positions_block_provenance,
+      concretize_positions_block_instruction] >>
+  rename1 `MEM bb fn.fn_blocks` >>
+  rename1 `MEM inst bb.bb_instructions` >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (`concretize_inst_with_positions positions inst = inst`
+        by metis_tac[concretize_inst_positions_phi] >>
+      simp[] >> rpt gen_tac >> strip_tac >>
+      gvs[concretize_positions_block_provenance] >>
+      rename1 `MEM pred_bb fn.fn_blocks` >>
+      `fn_cfg_edge fn pred_bb.bb_label bb.bb_label`
+        by gvs[clear_nops_block_def, block_map_transform_def,
+               concretize_positions_cfg_edge] >>
+      `def_on_all_paths fn pred_bb NONE v`
+        by (gvs[fn_defs_reach_uses_def, clear_nops_block_def,
+                block_map_transform_def] >> metis_tac[]) >>
+      drule_at (Pat `def_on_all_paths _ _ _ _`) concretize_positions_def_on_paths >>
+      simp[]) >>
+  ` (concretize_inst_with_positions positions inst).inst_opcode <> PHI`
+    by metis_tac[concretize_inst_positions_phi] >>
+  simp[] >> qx_gen_tac `v` >> strip_tac >>
+  `MEM (Var v) inst.inst_operands`
+    by metis_tac[concretize_positions_operand_provenance] >>
+  `def_on_all_paths fn bb (SOME inst) v`
+    by (gvs[fn_defs_reach_uses_def, clear_nops_block_def,
+                block_map_transform_def] >> metis_tac[]) >>
+  drule_at (Pat `def_on_all_paths _ _ _ _`) concretize_positions_def_on_paths >> simp[]
+QED
+
 Theorem mk_concretize_layout_alloca_positions[local]:
   mk_concretize_layout reserved positions fn = SOME layout ==>
   !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
