@@ -541,6 +541,66 @@ Resume place_store_subregion_agree[outside]:
 QED
 Finalise place_store_subregion_agree
 
+Theorem place_store_updates_lookup:
+  !xs a st.
+    lookup_storage a
+      (FOLDL (\st kv. update_storage (FST kv) (SND kv) st) st xs) =
+    case FILTER (\kv. FST kv = a) (REVERSE xs) of
+      [] => lookup_storage a st
+    | kv::rest => SND kv
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[listTheory.FILTER_APPEND_DISTRIB] >>
+  Cases_on `FILTER (\kv. FST kv = a) (REVERSE xs)` >>
+  simp[] >> Cases_on `h` >>
+  simp[vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM] >>
+  Cases_on `q = a` >> simp[]
+QED
+
+Theorem place_store_updates_miss:
+  !xs a st.
+    ~MEM a (MAP FST xs) ==>
+    lookup_storage a
+      (FOLDL (\st kv. update_storage (FST kv) (SND kv) st) st xs) =
+    lookup_storage a st
+Proof
+  rpt strip_tac >> rewrite_tac[place_store_updates_lookup] >>
+  `FILTER (\kv. FST kv = a) (REVERSE xs) = []` by
+    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM,
+          listTheory.MEM_REVERSE] >>
+     gvs[listTheory.MEM_MAP] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem place_store_updates_hit:
+  !xs a w st.
+    MEM (a,w) xs /\
+    (!kv. MEM kv xs /\ FST kv = a ==> SND kv = w) ==>
+    lookup_storage a
+      (FOLDL (\st kv. update_storage (FST kv) (SND kv) st) st xs) = w
+Proof
+  rpt strip_tac >> rewrite_tac[place_store_updates_lookup] >>
+  Cases_on `FILTER (\kv. FST kv = a) (REVERSE xs)`
+  >- (gvs[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM,
+          listTheory.MEM_REVERSE] >>
+      first_x_assum (qspec_then `(a,w)` mp_tac) >> simp[]) >>
+  simp[] >> first_x_assum irule >>
+  `MEM h (FILTER (\kv. FST kv = a) (REVERSE xs))` by simp[] >>
+  gvs[listTheory.MEM_FILTER, listTheory.MEM_REVERSE]
+QED
+
+Theorem place_store_apply_writes_fold:
+  !writes k st.
+    apply_writes k writes st =
+    FOLDL (\st kv. update_storage (FST kv) (SND kv) st) st
+      (MAP (\(off,v). (k + n2w off,v)) writes)
+Proof
+  Induct >> simp[vyperStorageTheory.apply_writes_def] >>
+  Cases_on `h` >> simp[vyperStorageTheory.apply_writes_def,
+    GSYM wordsTheory.word_add_n2w, ADD_COMM]
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
