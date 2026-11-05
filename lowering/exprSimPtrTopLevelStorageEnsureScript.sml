@@ -2,9 +2,20 @@
 Theory exprSimPtrTopLevelStorageEnsure
 Ancestors
   exprSimPtrTopLevelStorageAlloc exprSimPtrTopLevelStoragePost
+  exprSimPtrTopLevelStorageCopy
   exprSimPtrTopLevelStorageFrame exprSimUnwrap loweringHalt fragExec
   ghostPcTransportPtr fragGasPathPtr exprSimStorageCopy
   compileEnv context exprLoweringProps venomInst venomState words ptrDiscipline
+
+Theorem toplevel_copy_alloc_taint_bound:
+  tna.t_stor = tn.t_stor /\ tna.t_trans = tn.t_trans /\
+  tna.t_mem SUBSET tn.t_mem UNION toplevel_copy_region b n ==>
+  toplevel_copy_taint_bound loc a b tna n SUBSET
+    toplevel_copy_taint_bound loc a b tn n
+Proof
+  simp[toplevel_copy_taint_bound_def, toplevel_copy_translated_taint_def,
+    toplevel_copy_source_taint_def] >> SET_TAC[]
+QED
 
 Theorem toplevel_storage_ensure_ptr_path:
   (loc = LocStorage \/ loc = LocTransient) /\
@@ -19,7 +30,20 @@ Theorem toplevel_storage_ensure_ptr_path:
     op = Var p /\ gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
     ptr_covers Gf tnf p t nb /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ?u w.
+      stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
+      lookup_var p u = SOME w /\ lookup_var p t = SOME w /\
+      copy_prefix loc a (w2n w) n u n t /\ copy_static t = copy_static u /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+      tnf.t_mem SUBSET toplevel_copy_taint_bound loc a (w2n w) tn n /\
+      (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+        regions_disjoint (w2n w) nb b len) /\
+      (!name b len. local_region cenv es.scopes u name b len ==>
+        regions_disjoint (w2n w) nb b len) /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_ensure_in_memory (Lit a) loc nb n ctor imm =
@@ -56,5 +80,33 @@ Proof
   drule_all (REWRITE_RULE[comp_ignore_bind_def] toplevel_copy_suffix_post) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
-  qexistsl_tac [`t`, `Gf'`, `tnf'`] >> simp[]
+  `copy_prefix loc a (w2n w) n u n t /\ copy_static t = copy_static u` by
+    (`copy_static s1 = copy_static u` by simp[Abbr `s1`, copy_static_def] >>
+     `!z. copy_runtime_word loc s1 z = copy_runtime_word loc u z` by
+       metis_tac[copy_runtime_word_static] >>
+     qpat_x_assum `copy_prefix _ _ _ _ _ _ _` mp_tac >>
+     simp[copy_prefix_def, Abbr `s1`] >> metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at r x` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     strip_tac >> drule storage_copy_alloc_layout >>
+     simp[not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `lookup_var p t = SOME w` by
+    (qpat_x_assum `!x. not_fresh_at r x ==> _` drule >>
+     simp[Abbr `s1`, lookup_var_def]) >>
+  `toplevel_copy_taint_bound loc a (w2n w) tnf n SUBSET
+    toplevel_copy_taint_bound loc a (w2n w) tn n` by
+    (irule toplevel_copy_alloc_taint_bound >>
+     simp[toplevel_copy_region_def]) >>
+  `tnf'.t_mem SUBSET toplevel_copy_taint_bound loc a (w2n w) tn n` by
+    metis_tac[pred_setTheory.SUBSET_TRANS] >>
+  qexistsl_tac [`t`, `Gf'`, `tnf'`] >> simp[] >>
+  qexists_tac `u` >>
+  simp[] >>
+  rpt conj_tac
+  >- fs[eval_operand_def, lookup_var_def]
+  >- (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      fs[Abbr `s1`, lookup_var_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
