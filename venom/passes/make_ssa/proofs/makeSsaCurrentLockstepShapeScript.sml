@@ -168,6 +168,39 @@ Proof
   qexistsl [`b''`, `pre' ++ pre`] >> simp[EVERY_APPEND, APPEND_ASSOC]
 QED
 
+(* Renaming keeps positional instruction signatures. *)
+Theorem rename_current_outputs_length:
+  !vs s rs rs' s' vs'.
+  rename_current_outputs s rs vs = (rs',s',vs') ==>
+  LENGTH vs' = LENGTH vs
+Proof
+  Induct >> simp[rename_current_outputs_def] >> rpt gen_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
+  first_x_assum drule >> gvs[]
+QED
+
+Theorem rename_current_inst_signature:
+  rename_current_inst s rs i = (rs',s',i') ==>
+  (i'.inst_opcode,i'.inst_id,LENGTH i'.inst_outputs) =
+  (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)
+Proof
+  simp[rename_current_inst_def] >>
+  IF_CASES_TAC >> pairarg_tac >> gvs[] >> strip_tac >>
+  gvs[] >> drule rename_current_outputs_length >> simp[]
+QED
+
+Theorem rename_current_block_insts_signatures:
+  !xs s rs rs' s' ys.
+  rename_current_block_insts s rs xs = (rs',s',ys) ==>
+  MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) ys =
+  MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) xs
+Proof
+  Induct >> simp[rename_current_block_insts_def] >> rpt gen_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
+  drule rename_current_inst_signature >> strip_tac >>
+  first_x_assum drule >> gvs[]
+QED
+
 Theorem make_ssa_current_fn_block_shape:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
