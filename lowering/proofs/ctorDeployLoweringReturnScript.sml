@@ -14,8 +14,7 @@ Theorem deploy_ctor_return:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs
-      (entry_venom_state prog cplan es with vs_alloca_next := ctor_imm_len tops) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -25,7 +24,7 @@ Theorem deploy_ctor_return:
       (res, st) /\
     (res = INL () \/ res = INR (ReturnException NoneV)) /\
     constructor_return_q func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
-      (ctor_imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
+      (imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
     final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels ==>
     deploy_venom_result_rel tops runtime_bc tx
       (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st) (Halt final)

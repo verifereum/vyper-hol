@@ -10,7 +10,7 @@ Ancestors
    any outcomes field gives the same result. *)
 Theorem deploy_ctor_source_run:
   !tops am tx mut nr body am_c es0 gobs oc res st.
-    deploy_source_ok tops am tx /\
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" /\
     deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
     eval_stmts (deploy_evaluation_context tops am tx) body
       (es0 with <| gas_obs := gobs; outcomes := oc |>) = (res, st) ==>

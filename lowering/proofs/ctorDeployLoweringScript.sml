@@ -42,7 +42,7 @@ Theorem deploy_ctor_code_facts[local]:
   st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st_exit = ((), st_epilogue) /\
-  compile_constructor_epilogue (LENGTH runtime_bc) (ctor_imm_len tops) imm
+  compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm
     st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\
@@ -51,16 +51,13 @@ Proof
   simp[deploy_ctor_code_def, new_block_def] >> strip_tac >> gvs[]
 QED
 
-(* deploy_unit_execution_correct with the deploy entry state's allocation
-   frontier past the immutables section. *)
-Theorem deploy_unit_execution_correct_frontier:
+Theorem deploy_unit_execution_correct:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs
-      (entry_venom_state prog cplan es with vs_alloca_next := ctor_imm_len tops)
+    gas_variant vs (deploy_entry_state prog cplan tops es)
     ==>
     ?marks.
       deploy_source_exempt tops
@@ -77,6 +74,7 @@ Proof
   Cases_on `cfo`
   >- (drule_all deploy_no_ctor_correct >> simp[]) >>
   drule_all deploy_ctor_code_exists >> strip_tac >>
+  `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
   reverse (Cases_on `?mut nr' body' am_c es0.
                        deploy_ctor_start tops am tx (mut, nr', body', am_c, es0)`)
   >- (fs[] >> drule_all deploy_ctor_prefix_fail >> strip_tac >>
@@ -93,10 +91,10 @@ Proof
      metis_tac[]) >>
   qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
   qabbrev_tac `RetQ = constructor_return_q func cenv cx (LENGTH runtime_bc)
-                        (ctor_imm_len tops) nr nkey` >>
+                        (imm_len tops) nr nkey` >>
   `frame_ret_ok dunit.cu_context func cx RetQ cenv NoneT` by
     (qspecl_then [`dunit.cu_context`, `func`, `cenv`, `cx`, `LENGTH runtime_bc`,
-                  `ctor_imm_len tops`, `imm`, `nr`, `nkey`, `ut`, `exit_lbl`,
+                  `imm_len tops`, `imm`, `nr`, `nkey`, `ut`, `exit_lbl`,
                   `st_exit`, `st_epilogue`, `st_final`] mp_tac
        constructor_frame_ret_ok >>
      impl_tac >- simp[] >> simp[Abbr `RetQ`]) >>
@@ -181,7 +179,7 @@ Proof
         fs[Abbr `RetQ`, constructor_return_q_def] >>
       gvs[] >>
       drule run_from_halt_code >> strip_tac >>
-      `constructor_return_q func cenv cx (LENGTH runtime_bc) (ctor_imm_len tops)
+      `constructor_return_q func cenv cx (LENGTH runtime_bc) (imm_len tops)
          nr nkey NoneV (es' with scopes := []) (Halt final)` by
         (`es' with <| scopes := []; gas_obs := [] |> = es' with scopes := []` by
            simp[Abbr `es'`] >>
@@ -209,24 +207,4 @@ Proof
   pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
   gvs[deploy_ctor_finish_def, deploy_source_exempt_def, Abbr `cx`,
       deploy_cx_tops]
-QED
-
-Theorem deploy_unit_execution_correct:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es)
-    ==>
-    ?marks.
-      deploy_source_exempt tops
-        (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-           [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel tops runtime_bc tx
-               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-                  [(NONE, tops)] [])
-               (run_context fuel dunit.cu_context vs)
-Proof
-  cheat
 QED
