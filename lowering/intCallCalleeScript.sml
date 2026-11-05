@@ -2332,7 +2332,7 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!i po psz name tv iv io. _` irule >>
   simp[] >> qexistsl_tac [`v`, `name`] >> simp[]
 QED
-Finalise internal_prologue_run[local]
+Finalise internal_prologue_run
 
 
 (* Running the prologue of an internal function func, compiled in cenv from
