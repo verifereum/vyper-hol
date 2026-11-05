@@ -5656,6 +5656,41 @@ Proof
       TAKE_LENGTH_APPEND, DROP_APPEND]
 QED
 
+Theorem asm_call_memory_pop_jumpDest:
+  u.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  EVERY (wf_context o FST) u.contexts /\ stack_room_ok u /\ gas_stack_ok u /\
+  handle_exception ex u = (INL (),t) /\ t.contexts = (c,prb)::rest ==>
+  c.jumpDest = parent.jumpDest
+Proof
+  strip_tac >> `2 <= LENGTH u.contexts` by simp[] >>
+  drule_all asm_call_memory_pop_bounds >> strip_tac >>
+  `LENGTH parent.stack < stack_limit /\
+   child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed /\
+   child.gasUsed <= child.msgParams.gasLimit` by
+    (qpat_x_assum `u.contexts = _` (fn th => fs[th])) >>
+  Cases_on `ex`
+  >- (drule_all asm_handle_exception_memory_success >> strip_tac >> gvs[]) >>
+  Cases_on `x = Reverted`
+  >- (qpat_x_assum `x = Reverted` SUBST_ALL_TAC >>
+      drule_all asm_handle_exception_memory_reverted >> strip_tac >> gvs[]) >>
+  drule_all asm_handle_exception_memory_exception >> strip_tac >> gvs[]
+QED
+
+Theorem asm_call_run_memory_jumpDest:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) /\
+  t.contexts = (c,prb)::rest ==> c.jumpDest = parent.jumpDest
+Proof
+  strip_tac >>
+  drule_at (Pat `run_call _ = _`) asm_call_run_final_memory_view >>
+  simp[] >> strip_tac >>
+  `c'.msgParams.outputTo = Memory mr` by simp[] >>
+  drule_all asm_call_memory_pop_jumpDest >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
