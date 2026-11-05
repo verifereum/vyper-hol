@@ -9,6 +9,7 @@ Ancestors
   words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
   bodyIntCallForceTransfer bodyIntCallAggregateCopy
   exprSimOps exprBopLowering exprSimCompare freshWrites rich_list exprSimArith
+  vyperHashMapStorage
   exprSimOperators bodyIntCallSourceFrame bodyIntCallMappingFrame
 Libs
   intLib
@@ -2927,3 +2928,119 @@ val () = List.app (fn th =>
    mapping_place_scratch_tail, mapping_typed_key_scratch_frag,
    mapping_key_post_rebase, mapping_subscript_place_constructor,
    compile_subscript_mapping_components];
+
+Theorem mapping_place_post_retag:
+  mapping_place_post ctx func cenv cx kt vt es sa sb s0 es'
+    (HashMapRef tr slot kt vt) vv s ==>
+  mapping_place_post ctx func cenv cx kt' vt' es sa sb s0 es'
+    (HashMapRef tr slot kt' vt') vv s
+Proof
+  simp[mapping_place_post_def, place_ptr_rel_def] >> metis_tac[]
+QED
+
+Theorem eval_subscript_result_split:
+  eval_expr cx base_e es = (rb,esm) /\
+  (do r <- eval_expr cx idx; read_result cx r od) esm = (rk,esk) ==>
+  eval_expr cx (Subscript ann base_e idx) es =
+    (case rb of INR ex => (INR ex,esm) | INL r =>
+       case rk of INR ex => (INR ex,esk) | INL v =>
+         select_result cx (expr_type base_e) r (ValueSubscript v) esk)
+Proof
+  strip_tac >> Cases_on `rb` >>
+  gvs[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx idx esm` >>
+  gvs[AllCaseEqs()] >> Cases_on `rk` >> gvs[]
+QED
+
+(* Conditional nested PLACE closure: the callbacks include both source exits.
+   No total recursive producer is asserted by this boundary. *)
+Theorem mapping_subscript_nested_place_frag:
+  eval_expr cx base_e es = (rb,esm) /\
+  (do r <- eval_expr cx idx; read_result cx r od) esm = (rk,esk) /\
+  eval_expr cx (Subscript ann base_e idx) es = (res,es') /\
+  place_type cenv base_e = MapPT kt (HashMapT kt' vt') /\
+  compile_expr cenv ty base_e sa = (bvv,s1) /\
+  lower_value compile_expr cenv (expr_type idx) idx s1 = (key,s2) /\
+  (if is_bytestring_type kt then compile_keccak256_key key F
+   else comp_return key) s2 = (hashed,s3) /\
+  compile_mapping_subscript (vv_operand bvv) hashed s3 = (out,sb) /\
+  cs_extends sa s1 /\ cs_extends s1 s2 /\
+  cs_extends s2 s3 /\ cs_extends s3 sb /\
+  (!r. rb = INL r ==> ?tr slot. r = HashMapRef tr slot kt (HashMapT kt' vt')) /\
+  (!ex. rb = INR ex ==>
+    frag_exec ctx sa s1
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. F) (expr_exit (INR ex : eval_result + exception))) /\
+  (!tr slot. rb = INL (HashMapRef tr slot kt (HashMapT kt' vt')) ==>
+    frag_exec ctx sa s1
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (mapping_place_post ctx func cenv cx kt (HashMapT kt' vt') es sa s1 s0 esm
+        (HashMapRef tr slot kt (HashMapT kt' vt')) bvv) (expr_exit res) /\
+    (!mid. mapping_place_post ctx func cenv cx kt (HashMapT kt' vt') es sa s1 s0 esm
+        (HashMapRef tr slot kt (HashMapT kt' vt')) bvv mid ==>
+      !ex. rk = INR ex ==>
+        frag_exec ctx s1 s2 (\s. s = mid) (\s. F) (expr_exit (INR ex : eval_result + exception))) /\
+    (!v. rk = INL v ==>
+      expr_type idx = kt /\ hashmap_key_type kt /\
+      (?tv. evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v) /\
+      sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+      s1.cs_next_var <= s2.cs_next_var /\ s2.cs_next_var <= s3.cs_next_var /\
+      sa.cs_next_id <= s3.cs_next_id /\
+      (!x. key = Var x ==> not_fresh_at s2 x) /\
+      (!x. hashed = Var x ==> not_fresh_at s3 x) /\
+      safe_operand s1 (vv_operand bvv) /\ safe_operand s2 (vv_operand bvv) /\
+      fn_has_code s3 sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
+      (!mid. mapping_place_post ctx func cenv cx kt (HashMapT kt' vt') es sa s1 s0 esm
+          (HashMapRef tr slot kt (HashMapT kt' vt')) bvv mid ==>
+        frag_exec ctx s1 s2 (\s. s = mid)
+          (\s. expr_post ctx func cenv cx idx esm s1 s2 mid esk v key s /\
+            contract_storage s = contract_storage mid /\
+            contract_transient s = contract_transient mid) (expr_exit res)) /\
+      (!mid. mapping_place_post ctx func cenv cx kt (HashMapT kt' vt') es sa s1 s0 esm
+          (HashMapRef tr slot kt (HashMapT kt' vt')) bvv mid ==>
+        !n b sz. local_region cenv es.scopes s0 n b sz <=>
+                 local_region cenv esm.scopes mid n b sz) /\
+      (!s. mapping_place_post ctx func cenv cx kt (HashMapT kt' vt') es sa s3 s0 esk
+          (HashMapRef tr slot kt (HashMapT kt' vt')) bvv s ==>
+        !n b sz. local_region cenv es.scopes s0 n b sz <=>
+                 local_region cenv esk.scopes s n b sz))) ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. ?r. res = INL r /\
+      mapping_place_post ctx func cenv cx kt' vt' es sa sb s0 es' r
+        (LocatedValue ann (mk_ptr out
+          (case vv_location bvv of SOME l => l | NONE => LocMemory))) s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  `cs_extends s2 sb` by (irule cs_extends_trans >> qexists `s3` >> simp[]) >>
+  `cs_extends s1 sb` by (irule cs_extends_trans >> qexists `s2` >> simp[]) >>
+  drule_all eval_subscript_result_split >> strip_tac >>
+  Cases_on `rb`
+  >- (gvs[] >> Cases_on `rk`
+      >- (gvs[select_result_hashmap_nested] >>
+          drule_all (SRULE [] (Q.INST [`kt` |-> `expr_type idx`]
+            mapping_subscript_place_constructor)) >> strip_tac >>
+          qpat_x_assum `!a. frag_exec _ sa sb _ _ _`
+            (qspec_then `ann` mp_tac) >>
+          rpt (pop_assum kall_tac) >> strip_tac >>
+          drule frag_exec_weaken >> disch_then irule >>
+          simp[] >> metis_tac[mapping_place_post_retag]) >>
+      gvs[] >> irule frag_exec_seq_pointwise >>
+      goal_assum (drule_at (Pat `frag_exec _ sa s1 _ _ _`)) >>
+      simp[] >> rpt strip_tac >>
+      irule frag_exec_exit_prefix >> qexists `s2` >>
+      simp[] >> first_x_assum drule >> disch_then ACCEPT_TAC) >>
+  gvs[] >> irule frag_exec_exit_prefix >> qexists `s1` >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Nested mapping PLACE has unproved dependencies"
+  end)
+  [mapping_place_post_retag, eval_subscript_result_split,
+   mapping_subscript_nested_place_frag];
