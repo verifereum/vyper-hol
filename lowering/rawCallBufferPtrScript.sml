@@ -1,7 +1,8 @@
 Theory rawCallBufferPtr
 Ancestors
   bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr
-  finite_map pred_set
+  finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
+  venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr
 
 Theorem ptr_mem_ok_site:
   ptr_mem_ok cx ty v op G tn s /\
@@ -130,4 +131,151 @@ Proof
   simp[ptr_covers_def, ptr_buf_ok_def, venomStateTheory.eval_operand_def] >>
   rpt strip_tac >> gvs[] >>
   qexistsl_tac [`b`, `sz'`] >> simp[] >> decide_tac
+QED
+
+Theorem clean_footprint_robust_val_in_memory:
+  val_in_memory tv v b mem /\ val_wf tv v /\
+  (!i. b <= i /\ i < b + val_footprint tv v ==> i NOTIN dirty) ==>
+  !m. mem_agree_outside dirty mem m ==> val_in_memory tv v b m
+Proof
+  rpt strip_tac >> irule val_in_memory_relocate_footprint >>
+  conj_tac >- simp[] >> qexistsl_tac [`mem`, `b`] >> simp[] >>
+  irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  rename1 `j < val_footprint tv v` >>
+  `b+j NOTIN dirty` by (first_x_assum irule >> decide_tac) >>
+  `mem_bytes_at (b+j) 1 mem = mem_bytes_at (b+j) 1 m` by
+    metis_tac[mem_agree_outside_def] >>
+  pop_assum mp_tac >> simp[LIST_EQ_REWRITE, EL_mem_bytes_at]
+QED
+
+Theorem bytes_length_store_representation:
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs ==>
+  val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) b
+    (mstore b (n2w (LENGTH bs)) s).vs_memory
+Proof
+  strip_tac >>
+  `mem_bytes_at (b+32) (LENGTH bs)
+    (mstore b (n2w (LENGTH bs)) s).vs_memory = bs` by
+    (rewrite_tac[mstore_mem_bytes_at_disjoint
+       |> Q.SPECL [`b+32`, `LENGTH bs`, `b`]
+       |> SIMP_RULE (srw_ss()) []] >> simp[]) >>
+  simp[valueEncodingTheory.val_in_memory_def, mstore_mem_word_at_same]
+QED
+
+Theorem bytes_length_store_robust:
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  LENGTH bs <= cap /\
+  (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN dirty) ==>
+  !m. mem_agree_outside (dirty DIFF {i | b <= i /\ i < b+32})
+    (mstore b (n2w (LENGTH bs)) s).vs_memory m ==>
+    val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) b m
+Proof
+  rpt strip_tac >> irule clean_footprint_robust_val_in_memory >>
+  conj_tac >-
+    (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+     mp_tac (Q.SPEC `cap` valueTypingMemoryPropsTheory.word_size_capacity) >>
+     decide_tac) >>
+  qexistsl_tac [`dirty DIFF {i | b <= i /\ i < b+32}`,
+    `(mstore b (n2w (LENGTH bs)) s).vs_memory`] >>
+  simp[bytes_length_store_representation, valueEncodingTheory.val_wf_def,
+    loweringPostsTheory.val_footprint_def] >>
+  rpt strip_tac >> Cases_on `i < b+32` >> simp[] >>
+  metis_tac[arithmeticTheory.NOT_LESS]
+QED
+
+(* Unlike gas_path_ptr_abort, this boundary also accepts terminators. *)
+Theorem gas_path_ptr_abort_instruction:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  ptr_inst_ok D lo 0 ctx fn G tn inst s /\
+  step_inst_base inst s = Abort a t ==>
+  gas_path_ptr D lo ctx fn PG G tn s 0 G tn (Abort a t)
+Proof
+  strip_tac >> irule (cj 3 gas_path_ptr_rules) >>
+  simp[exit_result_def] >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+  qexists_tac `0` >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    gas_count_step_def, exit_result_def,
+    ptrSafeRunTheory.ptr_safe_step_def]
+QED
+
+Theorem forwarding_pair_active:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb i = SOME copy /\
+  get_instruction bb (SUC i) = SOME rev /\
+  copy.inst_opcode = RETURNDATACOPY /\
+  copy.inst_operands = [p; Lit 0w; rds] /\
+  rev.inst_opcode = REVERT /\ rev.inst_operands = [p; rds] /\
+  (s.vs_inst_idx = i \/ s.vs_inst_idx = SUC i) ==>
+  in_revert_forward fn s
+Proof
+  strip_tac >>
+  `revert_forward_pair bb i (SUC i)` by
+    (irule revert_forward_pair_consecutive >> metis_tac[]) >>
+  simp[contextCodegenRelTheory.in_revert_forward_def] >>
+  simp[contextCodegenRelTheory.revert_forward_at_def] >>
+  metis_tac[]
+QED
+
+Theorem forwarding_copy_operand_taint:
+  copy.inst_outputs = [] ==>
+  op_taint (step_taint copy s u tn) op = op_taint tn op
+Proof
+  strip_tac >> Cases_on `op` >>
+  simp[decoderGhostFramePtrTheory.step_taint_other_output,
+    ptrDisciplineTheory.op_taint_def]
+QED
+
+(* The semantic step equations are supplied by the simulation; the pointer
+   checks need neither provenance for the scratch region nor clean payload. *)
+Theorem revert_forward_pair_path_ptr:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME copy /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME rev /\
+  copy.inst_opcode = RETURNDATACOPY /\ copy.inst_outputs = [] /\
+  copy.inst_operands = [p; Lit 0w; rds] /\
+  rev.inst_opcode = REVERT /\ rev.inst_operands = [p; rds] /\
+  op_taint tn p = {} /\ op_taint tn rds = {} /\
+  step_inst_base copy s = OK u /\
+  step_inst_base rev (u with vs_inst_idx := SUC s.vs_inst_idx) = Abort a t ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (step_prov PG G copy u) (step_taint copy s u tn) (Abort a t)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx copy s = OK u` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  `~is_terminator copy.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    (drule_all venomInstPropsTheory.step_preserves_halted >>
+     drule_all venomInstPropsTheory.step_preserves_control_flow >> simp[]) >>
+  `in_revert_forward fn s` by
+    (irule forwarding_pair_active >> metis_tac[]) >>
+  `about_to_revert fn copy s` by
+    (simp[ptrDisciplineTheory.about_to_revert_def,
+      contextCodegenRelTheory.active_inst_def] >>
+     qexists_tac `rev` >> simp[] >> qexists_tac `bb` >>
+     drule venomExecPropsTheory.lookup_block_MEM >>
+     drule venomExecPropsTheory.lookup_block_label >>
+     fs[venomInstTheory.get_instruction_def, AllCaseEqs()]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn copy s` by
+    (irule ptr_inst_ok_forward_copy >>
+     fs[ptrDisciplineTheory.op_taint_def]) >>
+  qabbrev_tac `s' = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `in_revert_forward fn s'` by
+    (irule forwarding_pair_active >> simp[Abbr `s'`] >> metis_tac[]) >>
+  `ptr_inst_ok D 0 0 ctx fn (step_prov PG G copy u)
+     (step_taint copy s u tn) rev s'` by
+    (irule ptr_inst_ok_forward_revert >>
+     simp[forwarding_copy_operand_taint]) >>
+  `gas_path_ptr D 0 ctx fn PG (step_prov PG G copy u)
+    (step_taint copy s u tn) s' 0 (step_prov PG G copy u)
+    (step_taint copy s u tn) (Abort a t)` by
+    (irule gas_path_ptr_abort_instruction >> simp[Abbr `s'`] >> metis_tac[]) >>
+  qunabbrev_tac `s'` >>
+  drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`) gas_path_ptr_step >>
+  simp[] >> metis_tac[]
 QED
