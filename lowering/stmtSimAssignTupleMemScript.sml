@@ -18,6 +18,7 @@
 
 Theory stmtSimAssignTupleMem
 Ancestors
+  stmtSimForced fragGasMode gasContext exprSimDefs tupleStageProps
   stmtSimProps
   stmtSimDefs
   loweringPosts
@@ -89,7 +90,7 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
       es
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `!i. i < LENGTH ids /\ i < LENGTH tys ==> ?p sz vt.
      FLOOKUP cenv.ce_vars (EL i ids) = SOME (PtrVar (Var p) sz) /\
      cenv.ce_var_type (EL i ids) = SOME vt /\
@@ -104,21 +105,91 @@ Proof
     metis_tac[] >>
   drule_all assign_tuple_locals_memory_code_parts >> strip_tac >>
   qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  Cases_on `res`
-  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
-      drule_all assign_tuple_locals_memory_success_run >> strip_tac >>
-      disj1_tac >> qexistsl [`t`, `cenv`] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
-  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
-   expr_res_ok (INR y : value + exception)` by
-    (drule eval_assign_tuple_locals_error >> disch_then drule >> simp[]) >>
   `lower_value compile_expr cenv (TupleT tys) e sa = (op,su)` by
     simp[lower_value_def, comp_bind_def] >>
-  `cs_extends sa su /\ cs_extends su sb` by metis_tac[cs_extends_trans] >>
+  `cs_extends sa su` by metis_tac[cs_extends_trans] >>
   `fn_has_code sa su func` by
-    (qspecl_then [`sa`, `su`, `sb`, `func`] mp_tac fn_has_code_split >> simp[]) >>
-  drule_all stmtSimDeclTheory.expr_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+    (irule (cj 1 fn_has_code_split) >> simp[] >> qexists `sb` >> simp[] >>
+     metis_tac[cs_extends_trans]) >>
+  irule forced_then_stmt_outcome >>
+  qexistsl [
+    `\v ee t. expr_post ctx func cenv cx e es sa su s0 ee v op t /\
+              t.vs_current_bb = su.cs_current_bb /\
+              t.vs_inst_idx = LENGTH su.cs_current_insts`,
+    `e`, `assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids))`] >>
+  reverse conj_tac
+  >- (conj_tac >- simp[eval_assign_tuple_action] >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `su`, `op`, `s0`] mp_tac) >>
+      (impl_tac >- (fs[] >> metis_tac[forced_then_admissible, eval_assign_tuple_action])) >>
+      simp[]) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  suspend "success"
 QED
+
+Resume compile_assign_tuple_locals_memory_stmt_frag[success]:
+  `value_has_type (TupleTV tvs) v` by metis_tac[] >>
+  Cases_on `assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids)) v ee` >>
+  rename1 `_ = (res, ee')` >>
+  `eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
+     (es with gas_obs := gs) = (res, ee')` by
+    (pure_rewrite_tac[eval_assign_tuple_action] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >>
+     pure_once_rewrite_tac[bind_def] >> asm_rewrite_tac[] >> simp[]) >>
+  `stmt_res_ok lctx res` by
+    (qpat_x_assum `gas_admissible _ _ _`
+       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspecl_then [`gs`, `res`, `ee'`] mp_tac) >> simp[]) >>
+  `res = INL ()` by
+    (drule assign_tuple_locals_ok >> disch_then irule >> gvs[stmt_res_ok_def]) >>
+  gvs[] >>
+  drule_all tuple_type_value >> strip_tac >> gvs[] >>
+  `!x. op = Var x ==> not_fresh_at su x` by
+    metis_tac[compile_lower_value_var] >>
+  qpat_assum `assign_tuple_targets _ _ _ _ = _`
+    (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  suspend "suffix"
+QED
+
+Resume compile_assign_tuple_locals_memory_stmt_frag[suffix]:
+  `!i entry. i < LENGTH ids /\ lookup_scopes (EL i ids) ee.scopes = SOME entry ==>
+     if is_word_type (EL i tys) then store_lays_out (EL i tvs) entry.type (EL i vs)
+     else ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
+       evaluate_type (get_tenv cx) vt = SOME entry.type /\ value_has_type entry.type (EL i vs)` by
+    metis_tac[] >>
+  `local_ptrs_reserved cenv su` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `if flag then _ else comp_return op` >>
+  `flag ==> type_memory_size_list tvs < dimword (:256)` by
+    (simp[Abbr `flag`] >> metis_tac[type_memory_size_def]) >>
+  qpat_x_assum `(if flag then _ else _) su = _`
+    (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
+  `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op t /\
+   expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op t` by metis_tac[] >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path) >> strip_tac >>
+  suspend "post" 
+QED
+
+Resume compile_assign_tuple_locals_memory_stmt_frag[post]:
+  qexistsl [`INL ()`, `ee'`, `OK t'`] >>
+  conj_tac >- (drule assign_tuple_locals_gas >> simp[]) >>
+  asm_rewrite_tac [] >> disj1_tac >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  `stmt_state_rel ctx func cenv cx (ee' with gas_obs := []) t'` by
+    (qpat_assum `stmt_state_rel _ _ _ _ ee' t'` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     mp_tac (Q.INST [`es` |-> `ee'`, `s` |-> `t'`,
+                     `gs` |-> `[]`, `readings` |-> `t'.vs_gas_readings`,
+                     `k` |-> `t'.vs_inst_idx`] msg_gas_state_frame) >>
+     simp[] >> metis_tac[]) >>
+  asm_rewrite_tac [] >>
+  rpt strip_tac >>
+  `not_fresh_at su x` by
+    (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  metis_tac[]
+QED
+Finalise compile_assign_tuple_locals_memory_stmt_frag
