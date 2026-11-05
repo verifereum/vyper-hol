@@ -338,6 +338,147 @@ Proof
   gvs[] >> decide_tac
 QED
 
+Theorem alias_reduce_depth_length_floor:
+  !fuel targets op f n ps.
+  n <= LENGTH ps.ps_stack ==>
+  n <= LENGTH (SND (reduce_depth_plan fuel targets op f n ps)).ps_stack
+Proof
+  Induct >> simp[Once reduce_depth_plan_def] >> rpt gen_tac >> strip_tac >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets x n` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  drule_then assume_tac stack_get_unfixed_depth_bound >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all_then strip_assume_tac planWfTheory.select_spill_candidate_bound >>
+  drule_then assume_tac planWfTheory.select_spill_candidate_below_target >>
+  `LENGTH ps'.ps_stack = LENGTH ps.ps_stack - 1` by
+    (Cases_on `x' = 0` >>
+     gvs[do_spill_at_def, do_spill_tos_def, LET_THM,
+         stack_swap_def, stack_pop_def] >>
+     rpt (pairarg_tac >> gvs[]) >> simp[LENGTH_LUPDATE, LENGTH_TAKE_EQ]) >>
+  first_x_assum (qspecl_then [`targets`, `op`, `f`, `n`, `ps'`] mp_tac) >>
+  simp[] >> decide_tac
+QED
+
+Theorem alias_reorder_one_bounds:
+  LENGTH targets <= LENGTH ps.ps_stack ==>
+  LENGTH targets <= LENGTH (SND (reorder_one dfg targets idx op ps)).ps_stack /\
+  alias_var_mass x (SND (reorder_one dfg targets idx op ps)) <= alias_var_mass x ps
+Proof
+  strip_tac >> simp[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  `LENGTH targets <= LENGTH ps1.ps_stack /\
+   alias_var_mass x ps1 = alias_var_mass x ps` by
+    (Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+                   (LENGTH targets) ps.ps_stack` >> gvs[] >>
+     Cases_on `FLOOKUP ps.ps_spilled op` >> gvs[] >>
+     mp_tac alias_var_mass_restore >>
+     qspecl_then [`op`, `ps`] mp_tac planWfTheory.do_restore_length >> gvs[] >> decide_tac) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+                   (LENGTH targets) ps1.ps_stack` >> simp[] >>
+  pairarg_tac >> simp[] >>
+  `LENGTH targets <= LENGTH ps2.ps_stack /\
+   alias_var_mass x ps2 <= alias_var_mass x ps1` by
+    (Cases_on `x' > 16` >> gvs[] >>
+     qspecl_then [`LENGTH ps1.ps_stack`, `targets`, `op`,
+       `LENGTH targets - (idx + 1)`, `LENGTH targets`, `ps1`]
+       mp_tac alias_reduce_depth_length_floor >>
+     qspecl_then [`LENGTH ps1.ps_stack`, `targets`, `op`,
+       `LENGTH targets - (idx + 1)`, `LENGTH targets`, `ps1`, `x`]
+       mp_tac alias_var_mass_reduce_depth >> gvs[]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+                   (LENGTH targets) ps2.ps_stack` >> simp[] >>
+  suspend "exchange"
+QED
+
+Resume alias_reorder_one_bounds[exchange]:
+  drule_then strip_assume_tac stack_get_unfixed_depth_props >>
+  `LENGTH targets - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  Cases_on `x'' = LENGTH targets - (idx + 1)` >> simp[] >>
+  Cases_on `operand_equiv dfg op
+    (stack_peek (LENGTH targets - (idx + 1)) ps2.ps_stack)` >> simp[]
+  >- (qspecl_then [`ps2.ps_stack`, `x''`, `LENGTH targets - (idx + 1)`, `Var x`]
+        mp_tac doSwapSimTheory.stack_poke_exchange_multiplicity >>
+      simp[] >> strip_tac >>
+      gvs[alias_var_mass_def, stack_poke_def, LENGTH_LUPDATE]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack /\
+   alias_var_mass x ps3 = alias_var_mass x ps2` by
+    (qspecl_then [`x''`, `ps2`] mp_tac planWfTheory.do_swap_length >>
+     mp_tac (Q.INST [`d` |-> `x''`, `ps` |-> `ps2`] alias_var_mass_swap) >>
+     gvs[]) >>
+  qspecl_then [`LENGTH targets - (idx + 1)`, `ps3`]
+    mp_tac planWfTheory.do_swap_length >>
+  mp_tac (Q.INST [`d` |-> `LENGTH (targets : operand list) - (idx + 1)`, `ps` |-> `ps3`]
+    alias_var_mass_swap) >> gvs[] >> decide_tac
+QED
+
+Finalise alias_reorder_one_bounds
+
+Theorem alias_reorder_one_length_floor:
+  LENGTH targets <= LENGTH ps.ps_stack ==>
+  LENGTH targets <= LENGTH (SND (reorder_one dfg targets idx op ps)).ps_stack
+Proof
+  metis_tac[alias_reorder_one_bounds]
+QED
+
+Theorem alias_var_mass_reorder_one:
+  LENGTH targets <= LENGTH ps.ps_stack ==>
+  alias_var_mass x (SND (reorder_one dfg targets idx op ps)) <= alias_var_mass x ps
+Proof
+  metis_tac[alias_reorder_one_bounds]
+QED
+
+Theorem alias_reorder_fold_bounds:
+  !steps ops ps.
+  LENGTH targets <= LENGTH ps.ps_stack ==>
+  LENGTH targets <= LENGTH (SND (FOLDL
+    (\(ops, ps) (idx, op).
+      (\(step_ops, ps'). (ops ++ step_ops, ps'))
+        (reorder_one dfg targets idx op ps)) (ops, ps) steps)).ps_stack /\
+  alias_var_mass x (SND (FOLDL
+    (\(ops, ps) (idx, op).
+      (\(step_ops, ps'). (ops ++ step_ops, ps'))
+        (reorder_one dfg targets idx op ps)) (ops, ps) steps)) <= alias_var_mass x ps
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >> simp[] >> pairarg_tac >> simp[] >>
+  `LENGTH targets <= LENGTH ps'.ps_stack /\
+   alias_var_mass x ps' <= alias_var_mass x ps` by
+    (mp_tac (Q.INST [`idx` |-> `h0`, `op` |-> `h1`] alias_reorder_one_bounds) >>
+     gvs[]) >>
+  first_x_assum (qspecl_then [`ops ++ step_ops`, `ps'`] mp_tac) >>
+  simp[] >> decide_tac
+QED
+
+Theorem alias_reorder_plan_length_floor:
+  LENGTH targets <= LENGTH ps.ps_stack ==>
+  LENGTH targets <= LENGTH (SND (reorder_plan dfg targets ps)).ps_stack
+Proof
+  strip_tac >> simp[reorder_plan_def] >>
+  metis_tac[alias_reorder_fold_bounds]
+QED
+
+Theorem alias_var_mass_reorder_plan:
+  LENGTH targets <= LENGTH ps.ps_stack ==>
+  alias_var_mass x (SND (reorder_plan dfg targets ps)) <= alias_var_mass x ps
+Proof
+  strip_tac >> simp[reorder_plan_def] >>
+  metis_tac[alias_reorder_fold_bounds]
+QED
+
+Theorem alias_var_budget_reorder_plan:
+  LENGTH targets <= LENGTH ps.ps_stack /\ alias_var_budget pending ps ==>
+  alias_var_budget pending (SND (reorder_plan dfg targets ps))
+Proof
+  rw[alias_var_budget_def] >>
+  drule_then (qspecl_then [`x`, `dfg`] assume_tac)
+    (GEN_ALL alias_var_mass_reorder_plan) >>
+  first_x_assum (qspec_then `x` mp_tac) >> decide_tac
+QED
+
 Theorem alias_var_mass_emit_one:
   !opc live op ps x.
   alias_var_mass x (SND (emit_one_input opc live op ps)) <=
