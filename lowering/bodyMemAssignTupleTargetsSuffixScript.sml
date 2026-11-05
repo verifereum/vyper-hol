@@ -132,6 +132,7 @@ Theorem assign_tuple_targets_suffix_mem:
         (INL (), ee' with gas_obs := tail)) /\
       gas_path_mem ctx func sv 0 (OK t') /\
       alloca_history func t' /\ return_buf_frame d cenv sf t' /\
+      sv.vs_alloca_next <= t'.vs_alloca_next /\
       stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
         (ee' with gas_obs := []) t'
 Proof
