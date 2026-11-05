@@ -69,3 +69,28 @@ Proof
   simp[concretizePtrPairedFieldsTheory.ptr_paired_params_def,
     ptr_gap_scan_fields]
 QED
+
+Theorem ptr_paired_cursor_normalize:
+  ptr_paired_cursor local_positions a at /\
+  lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb ==>
+  ?n. ptr_paired_cursor local_positions (ptr_gap_scan bb n a) at /\
+    (ptr_gap_scan bb n a).po_state.vs_inst_idx =
+      a.po_state.vs_inst_idx + n /\
+    !k. a.po_state.vs_inst_idx <= k /\
+      k < a.po_state.vs_inst_idx + n ==>
+      (EL k bb.bb_instructions).inst_opcode = NOP
+Proof
+  simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >>
+  rpt strip_tac >>
+  gvs[] >>
+  qexists_tac `EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx` >>
+  `a.po_state.vs_inst_idx +
+    (EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx) =
+    EL at.po_state.vs_inst_idx indices` by decide_tac >>
+  simp[ptr_gap_scan_fields] >>
+  qexists_tac `indices` >> simp[] >>
+  Cases_on `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices`
+  >- simp[ptr_gap_scan_def] >>
+  `0 < EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx` by decide_tac >>
+  simp[ptr_gap_scan_fields]
+QED
