@@ -1,7 +1,7 @@
 Theory algebraicOptOffsetProofs
 Ancestors
   algebraicOptMainShapeProofs algebraicOptShapeProofs algebraicOptDefs venomWf venomInst
-  venomExecProps
+  venomExecProps venomExecSemantics
 Libs
   listTheory
 
@@ -136,4 +136,90 @@ Proof
     metis_tac[ao_offset_var_operands] >>
   `def_available_at fn bb (SOME original) v` by metis_tac[] >>
   drule_all ao_offset_available >> simp[]
+QED
+
+Theorem ao_offset_step:
+  !fuel ctx inst s.
+    step_inst fuel ctx (ao_handle_offset_inst inst) s = step_inst fuel ctx inst s
+Proof
+  rpt gen_tac >> Cases_on `inst.inst_opcode = ADD` >>
+  simp[ao_handle_offset_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `t'` >> simp[] >>
+  once_rewrite_tac[step_inst_def] >> simp[] >>
+  simp[step_inst_base_def] >>
+  simp[exec_pure2_def,
+       venomStateTheory.eval_operand_def, wordsTheory.WORD_ADD_COMM] >>
+  rename1 `FLOOKUP s.vs_labels lbl` >>
+  Cases_on `FLOOKUP s.vs_labels lbl` >> simp[wordsTheory.WORD_ADD_COMM]
+QED
+
+Theorem ao_offset_phi_prefix:
+  !insts. phi_prefix_length (MAP ao_handle_offset_inst insts) = phi_prefix_length insts
+Proof
+  Induct >> simp[phi_prefix_length_def, ao_handle_offset_inst_shape]
+QED
+
+Theorem ao_offset_eval_phis:
+  !insts s. eval_phis s (MAP ao_handle_offset_inst insts) = eval_phis s insts
+Proof
+  Induct >> simp[eval_phis_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[ao_handle_offset_inst_shape, ao_offset_phi]
+QED
+
+Theorem ao_offset_get_instruction:
+  !bb idx. get_instruction
+    (bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions) idx =
+    OPTION_MAP ao_handle_offset_inst (get_instruction bb idx)
+Proof
+  rpt gen_tac >> simp[get_instruction_def, EL_MAP] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem ao_offset_exec_block:
+  !fuel ctx bb s. exec_block fuel ctx
+    (bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions) s =
+    exec_block fuel ctx bb s
+Proof
+  rpt gen_tac >> measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[ao_offset_get_instruction] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  simp[ao_offset_step, ao_handle_offset_inst_shape] >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK next` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+  first_x_assum irule >>
+  gvs[get_instruction_def, AllCaseEqs()] >> decide_tac
+QED
+
+Theorem ao_offset_lookup_block:
+  !bbs lbl. lookup_block lbl
+    (MAP (\bb. bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions) bbs) =
+    OPTION_MAP (\bb. bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions)
+      (lookup_block lbl bbs)
+Proof
+  Induct >> simp[lookup_block_def, FIND_thm] >> rpt gen_tac >>
+  Cases_on `h.bb_label = lbl` >> gvs[lookup_block_def]
+QED
+
+Theorem ao_offset_run_blocks:
+  !fuel ctx fn s.
+    run_blocks fuel ctx
+      (fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) s =
+    run_blocks fuel ctx fn s
+Proof
+  Induct >- (once_rewrite_tac[run_blocks_def] >> simp[]) >> rpt gen_tac >>
+  once_rewrite_tac[run_blocks_def] >> simp[ao_offset_lookup_block] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  simp[ao_offset_eval_phis, ao_offset_phi_prefix, ao_offset_exec_block] >>
+  Cases_on `eval_phis s bb.bb_instructions` >> simp[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK p` >>
+  Cases_on `exec_block fuel ctx bb
+    (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[]
 QED
