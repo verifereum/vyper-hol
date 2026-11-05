@@ -137,3 +137,37 @@ Proof
   drule_all storage_agree_read_head >>
   Cases_on `tr` >> simp[tload_def, sload_def]
 QED
+
+Theorem append_storage_place_preserves_gas:
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v st =
+    (res,st') ==> st'.gas_obs = st.gas_obs
+Proof
+  simp[append_place_def, get_storage_backend_eq, bind_def, LET_THM,
+       ignore_bind_def, check_def, assert_def, return_def, raise_def,
+       write_storage_slot_eq] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[set_storage_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[] >> Cases_on `tr` >> simp[set_storage_def]
+QED
+
+Theorem append_storage_place_no_return:
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v st =
+    (res,st') ==> !rv. res <> INR (ReturnException rv)
+Proof
+  simp[append_place_def, get_storage_backend_eq, bind_def, LET_THM,
+       ignore_bind_def, check_def, assert_def, return_def, raise_def,
+       write_storage_slot_eq] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[set_storage_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem append_storage_place_exit_transport:
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v st =
+    (res,st') /\ stmt_exit RetQ st' res r ==>
+  !st2. stmt_exit RetQ st2 res r
+Proof
+  strip_tac >> drule append_storage_place_no_return >>
+  Cases_on `res` >> gvs[stmt_exit_def] >>
+  Cases_on `y` >> gvs[stmt_exit_def]
+QED
