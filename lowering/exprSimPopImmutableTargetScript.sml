@@ -386,6 +386,72 @@ Proof
   rewrite_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
+Theorem imm_readable_path_memory[local]:
+  !ctx func cenv cx env es s src id itv iv off path k tv v.
+    cenv.ce_is_ctor /\ src = cenv.ce_module /\
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+       NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+       SOME (itv,iv) /\
+    mem_path_offset itv path = SOME (k,tv) /\
+    evaluate_subscripts itv iv path = INL v ==>
+    val_in_memory tv v (off+k) s.vs_memory
+Proof
+  rpt strip_tac >>
+  `val_in_memory itv iv off s.vs_memory` by
+    (gvs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `value_has_type itv iv /\ well_formed_type_value itv` by
+    (irule imm_place_at_value_type >> goal_assum (drule_at Any) >>
+     qexistsl [`cenv`, `env`, `0`, `[]`] >>
+     simp[mem_path_offset_def, evaluate_subscripts_def]) >>
+  irule imm_typed_path_memory >> goal_assum (drule_at Any) >>
+  qexistsl [`path`, `iv`] >> simp[]
+QED
+
+Theorem imm_readable_dynarray_length[local]:
+  !ctx func cenv cx env es s src id itv iv off path k etv n vs.
+    cenv.ce_is_ctor /\ src = cenv.ce_module /\
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+       NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+       SOME (itv,iv) /\
+    mem_path_offset itv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+    evaluate_subscripts itv iv path = INL (ArrayV (DynArrayV vs)) ==>
+    mem_word_at (off+k) s.vs_memory = n2w (LENGTH vs)
+Proof
+  rpt strip_tac >>
+  `val_in_memory (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV vs))
+     (off+k) s.vs_memory` by
+    (irule imm_readable_path_memory >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`ctx`, `env`, `func`] >> simp[]) >>
+  fs[valueEncodingPropsTheory.val_in_memory_dynarray]
+QED
+
+Theorem imm_place_at_extend[local]:
+  !cenv cx es src id path w ty tv sub d etv ety.
+    imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    evaluate_type (get_tenv cx) ety = SOME etv /\
+    mem_step_offset tv sub = SOME (d,etv) /\
+    (!itv iv.
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+        SOME (itv,iv) ==>
+      ?ev. evaluate_subscripts itv iv (path ++ [sub]) = INL ev) ==>
+    imm_place_at cenv cx es (PlaceR (ImmutablePlace src id (path ++ [sub])))
+      (w + n2w d) ety
+Proof
+  rpt strip_tac >> gvs[imm_place_at_def] >>
+  drule_all exprSimPropsTheory.mem_path_offset_snoc >> strip_tac >>
+  qexists_tac `k + d` >>
+  simp[wordsTheory.word_add_n2w, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
 (* The counted walk of a target rooted at an immutable in the
    constructor, with pure indices, given their judgments, the
    constructor's compile env and the root's declared type in it: from s0
