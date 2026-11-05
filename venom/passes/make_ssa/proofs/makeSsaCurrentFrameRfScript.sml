@@ -8,7 +8,8 @@
 Theory makeSsaCurrentFrameRf
 Ancestors
   o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract o1FrameLockstep makeSsaCurrentLockstep
+  makeSsaCurrentLockstepRf makeSsaCurrentRevertForward
 
 Theorem make_ssa_current_fn_frame_sim_rf:
   ctx_bisim C C' /\
@@ -18,5 +19,13 @@ Theorem make_ssa_current_fn_frame_sim_rf:
   make_ssa_current_fn s fn = (fn',s') ==>
   frame_sim_rf L C C' fn fn'
 Proof
-  cheat
+  strip_tac >>
+  drule_all make_ssa_current_fn_frame_lockstep >>
+  disch_then (qspec_then `L` mp_tac) >>
+  rw[frame_lockstep_def] >>
+  irule lockstep_frame_sim_rf >>
+  qexistsl [`R`, `make_ssa_pos fn fn'`] >> simp[] >> conj_tac
+  >- (rpt strip_tac >> simp[make_ssa_pos_def] >>
+      drule_all make_ssa_current_fn_revert_forward_at >> simp[]) >>
+  rpt strip_tac >> irule frame_reach_lockstep_rel >> metis_tac[]
 QED
