@@ -1329,3 +1329,169 @@ Proof
   conj_tac >- metis_tac[invoke_context_release_dead_spills] >>
   simp[execute_plan_append] >> metis_tac[]
 QED
+
+(* ===== Composition ===== *)
+
+Theorem eval_operands_some_length:
+  !xs s ys. eval_operands xs s = SOME ys ==> LENGTH ys = LENGTH xs
+Proof
+  Induct >> simp[eval_operands_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem invoke_packet_block:
+  !prog pc fmp a b post.
+  asm_block_at prog pc
+    (execute_plan fmp ([SOPushLabel a; SOPushLabel b; SOEmit "JUMP"; SOLabel a] ++ post)) ==>
+  asm_block_at prog pc [AsmPushLabel a; AsmPushLabel b; AsmOp "JUMP"]
+Proof
+  rw[asm_block_at_def, execute_plan_def, exec_stack_op_def] >>
+  first_x_assum (qspec_then `j` mp_tac) >>
+  `j = 0 \/ j = 1 \/ j = 2` by decide_tac >> gvs[]
+QED
+
+(* The prefix and the call packet: from the caller's frame to the callee's
+   entry, with everything the callee hypothesis needs. *)
+Theorem invoke_enter_callee:
+  !Inv unit cp prog ctx lo o2pc liveness dfg cfg fn inst nl halting term label
+   base ps vs st ops final r ra rest mem0 nm arg_ops callee args cvs.
+  ctx = unit.cu_context /\
+  unit_shape_ok unit /\
+  codegen_context_obligations Inv ctx cp /\
+  reachability_closed Inv ctx /\
+  MEM fn ctx.ctx_functions /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  Inv ctx fn inst vs /\ active_inst fn inst vs /\
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  (!f inst callee_name args callee.
+     MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+     MEM inst (fn_insts f) /\
+     inst.inst_opcode = INVOKE /\
+     inst.inst_operands = Label callee_name :: args /\
+     lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+     fn_has_retpc callee) /\
+  (!j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
+     ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword (:256) /\
+              FLOOKUP o2pc off = SOME pc /\
+              asm_block_at prog pc
+                (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan)) /\
+  opaque_use_ok fn /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf base ps /\
+  MEM inst (fn_insts fn) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode
+      (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!lbl i. i < LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+           EL i (execute_plan cp.cp_initial_fmp ops) = AsmLabel lbl ==>
+           ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                 FLOOKUP o2pc off = SOME (st.as_pc + i)) /\
+  (!op. MEM op (compute_operands inst) ==>
+        eval_operand op (frame_view fn ra vs) =
+        operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+           (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+            MEM at (compute_operands inst)) /\
+           operand_equiv dfg op at ==>
+           operand_val (frame_view fn ra vs) lo op =
+           operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+    (compute_operands inst) /\
+  prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps =
+    SOME (ops, final) /\
+  asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands arg_ops vs = SOME args /\
+  setup_callee callee args vs = SOME cvs ==>
+  ?j iops prepared rops arranged ret_lbl ret_off post mid saved cas.
+    callee.fn_name = nm /\
+    j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+    MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+    fn_entry_inv Inv ctx callee cvs /\
+    asm_block_at prog cas.as_pc
+      (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan) /\
+    LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_has_retpc callee /\
+    fn_entry_state_rel cp callee cvs cas (n2w ret_off) (saved ++ rest) /\
+    FLOOKUP o2pc (w2n ((n2w ret_off):bytes32)) =
+      SOME (st.as_pc + LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)) + 3) /\
+    emit_input_plan INVOKE (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++
+      [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post /\
+    asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)))
+      st = AsmOK mid /\
+    asm_block_at prog mid.as_pc (execute_plan cp.cp_initial_fmp
+      ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+    plan_state_residual_wf base (compute_operands inst)
+      (LENGTH (compute_operands inst)) arranged /\
+    arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+      compute_operands inst /\
+    mid.as_stack = REVERSE args ++ saved ++ rest /\
+    LENGTH saved = LENGTH (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack) /\
+    r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    asm_steps lo o2pc prog 3 mid = AsmOK cas /\
+    cas = mid with <| as_stack := n2w ret_off :: mid.as_stack; as_pc := cas.as_pc |>
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `codegen_context_obligations Inv ctx cplan` >>
+  `compute_operands inst = arg_ops /\ EVERY (\op. ~is_label_operand op) arg_ops` by
+    (irule invoke_compute_operands >> gvs[] >> metis_tac[]) >>
+  drule_all invoke_callee_entry_facts >> strip_tac >>
+  `fn_has_retpc callee` by (first_x_assum irule >> metis_tac[]) >>
+  `invoke_layout_wf ctx inst` by
+    (fs[codegen_context_obligations_def, fmp_lowered_context_wf_def] >>
+     metis_tac[]) >>
+  drule_all invoke_callee_param_arity >> strip_tac >>
+  `eval_operands (REVERSE (compute_operands inst)) (frame_view fn ra vs) =
+     SOME (REVERSE args)` by
+    (simp[eval_operands_reverse] >>
+     drule_all invoke_operands_frame_values >> simp[]) >>
+  `EVERY (\op. ~is_label_operand op) (compute_operands inst) /\
+   LENGTH (compute_operands inst) <=
+     LENGTH (SND (emit_input_plan INVOKE (compute_operands inst) nl ps)).ps_stack` by
+    (qpat_x_assum `inst.inst_opcode = INVOKE` (fn th => fs[th]) >> gvs[]) >>
+  drule_all invoke_generated_frame_prefix >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  suspend "call"
+QED
+
+Resume invoke_enter_callee[call]:
+  `MEM callee ctx.ctx_functions /\ callee.fn_name = nm` by simp[] >>
+  drule_all invoke_indexed_callee_target >>
+  disch_then (qx_choosel_then [`j`, `off`, `pc`] strip_assume_tac) >>
+  `?ret_off. FLOOKUP lo ret_lbl = SOME ret_off /\ ret_off < dimword (:256) /\
+     FLOOKUP o2pc ret_off =
+       SOME (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3)` by
+    (irule invoke_return_label_target >> qexistsl [`nm`, `ops`, `post`] >>
+     simp[]) >>
+  `asm_block_at prog mid.as_pc
+     [AsmPushLabel ret_lbl; AsmPushLabel callee.fn_name; AsmOp "JUMP"]` by
+    (irule invoke_packet_block >> metis_tac[]) >>
+  `mid.as_stack = REVERSE args ++ saved ++ rest` by gvs[] >>
+  qpat_x_assum `callee.fn_name = nm` (SUBST_ALL_TAC o SYM) >>
+  drule_all invoke_call_entry >> strip_tac >>
+  drule_all invoke_call_packet >> strip_tac >>
+  `LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256)` by
+    (`LENGTH args = LENGTH (compute_operands inst)` by
+       metis_tac[eval_operands_some_length] >>
+     `LENGTH args + 1 < 18` by decide_tac >>
+     `18 < dimword (:256)` by simp[wordsTheory.dimword_def] >> decide_tac) >>
+  qexistsl [`j`, `iops`, `prepared`, `rops`, `arranged`, `ret_lbl`, `ret_off`,
+    `post`, `mid`, `saved`, `cas`] >>
+  gvs[] >> simp[asm_state_component_equality]
+QED
+
+Finalise invoke_enter_callee
