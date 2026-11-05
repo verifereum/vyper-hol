@@ -777,8 +777,12 @@ QED
    branch never runs), and a dead output is popped.  No PHI reads another
    PHI output of the same block (it would then be live past the prefix),
    so the hits stay the same while the prefix runs and the sequential code
-   agrees with eval_phis.  The freshness premise keeps every other slot's
-   value, and its root's, unchanged by eval_phis. *)
+   agrees with eval_phis.  The freshness premise keeps every other stack
+   or spill entry's value, and its root's, unchanged by eval_phis; only a
+   stack entry the prefix consumes (a PHI operand selected from pred) is
+   exempt, since its slot is poked.  A spilled pred-edge operand is not
+   exempt: it stays in the spill map, and its root may be another PHI's
+   output. *)
 Theorem phi_prefix_hits_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg fn bb pred base ps vs as s_phi phis
    body ops ps3 r ra rest mem0.
@@ -798,8 +802,9 @@ Theorem phi_prefix_hits_frame_sim:
            SOME (stack_peek dist ps.ps_stack)) /\
     generated_plan_state_wf_marked base ps /\
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-       ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
-                       (collect_phis bb.bb_instructions))) /\
+       ~(MEM op ps.ps_stack /\
+         ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+                resolve_phi pred inst.inst_operands = SOME op) /\
        (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
        ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
