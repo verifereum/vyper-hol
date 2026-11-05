@@ -2392,6 +2392,59 @@ Proof
   simp[generate_offset_plan_def, plan_holds_def, stackModelTheory.stack_push_def]
 QED
 
+(* Reachable JNZ spill/PHI diagnostic. Root names are deliberately distinct. *)
+Definition alias_spill_probe_names_def:
+  alias_spill_probe_names =
+    ["x0"; "x1"; "x2"; "x3"; "x4"; "x5"; "x6"; "x7"; "x8"; "x9";
+     "x10"; "x11"; "x12"; "x13"; "x14"; "x15"; "x16"; "x17"; "x18"; "x19"]
+End
+
+Definition alias_spill_probe_fn_def:
+  alias_spill_probe_fn = mk_raw_function "alias_spill_probe"
+    [<| bb_label := "E"; bb_instructions :=
+      MAPi (\i v. mk_inst i CALLDATASIZE [] [v]) alias_spill_probe_names ++
+      [mk_inst 20 ADD [Var "x0"; Var "x1"] ["c"];
+       mk_inst 21 JNZ [Var "c"; Label "S"; Label "P"] []] |>;
+     <| bb_label := "P"; bb_instructions :=
+      [mk_inst 22 PHI [Label "E"; Var "x18"] ["p"];
+       mk_inst 23 ASSIGN [Var "p"] ["q"]] ++
+      MAPi (\i v. mk_inst (24+i) MSTORE [Lit (n2w (32*i)); Var v] [])
+        ("q" :: FILTER (\v. v <> "x18") (TL (TL alias_spill_probe_names))) ++
+      [mk_inst 43 STOP [] []] |>;
+     <| bb_label := "S"; bb_instructions := [mk_inst 44 STOP [] []] |>]
+End
+
+Definition alias_spill_probe_live_def:
+  alias_spill_probe_live = liveness_analyze alias_spill_probe_fn
+End
+
+Theorem alias_spill_probe_ready:
+  codegen_ready_fn alias_spill_probe_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_spill_probe_entry_result_def:
+  alias_spill_probe_entry_result = generate_block_plan
+    alias_spill_probe_live (dfg_build_function alias_spill_probe_fn)
+    (cfg_analyze alias_spill_probe_fn) alias_spill_probe_fn
+    (HD alias_spill_probe_fn.fn_blocks) (init_cleanup_plan_state NONE [] 0 0)
+End
+
+val () = computeLib.upd_compset
+  (computeLib.add_thms [alistTheory.fmap_to_alist_FEMPTY]);
+
+Theorem alias_spill_probe_edge_demand:
+  cfg_succs_of (cfg_analyze alias_spill_probe_fn) "E" = ["P"; "S"] /\
+  cfg_preds_of (cfg_analyze alias_spill_probe_fn) "P" = ["E"] /\
+  MEM "x18" (live_vars_at alias_spill_probe_live "E" 22) /\
+  MEM "x18" (input_vars_from "E"
+    (EL 1 alias_spill_probe_fn.fn_blocks).bb_instructions
+    (live_vars_at alias_spill_probe_live "P" 0))
+Proof
+  EVAL_TAC
+QED
+
 (* Small computation fixture: an actual DFG, not an assumed equivalence. *)
 Definition alias_probe_fn_def:
   alias_probe_fn = mk_raw_function "alias_probe"
