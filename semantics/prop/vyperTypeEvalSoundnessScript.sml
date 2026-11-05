@@ -5043,7 +5043,7 @@ Proof
   simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
-Theorem code_slice_operand_typing[local]:
+Theorem code_slice_operand_typing:
   code_slice_source bt es = SOME (ct,addr) /\
   well_typed_exprs env es ==>
   well_typed_exprs env (TL es) /\
@@ -5056,7 +5056,7 @@ Proof
   gvs[Once well_typed_expr_def]
 QED
 
-Theorem code_slice_operand_call_safe[local]:
+Theorem code_slice_operand_call_safe:
   code_slice_source bt es = SOME (ct,addr) /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   call_evaluation_safe cx (int_calls_exprs (TL es)) /\
