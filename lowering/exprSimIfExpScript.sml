@@ -471,6 +471,47 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
+Theorem ifexp_typed_alloc_source[local]:
+  compile_alloc_buffer (type_memory_bytes cenv dty) sa = (buf,sm) /\
+  compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
+  ~is_word_type sty /\ ~is_bytestring_type sty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_size dtv < dimword (:256) /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf dtv v /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  stmt_state_rel ctx func cenv cx es s /\
+  expr_val_at cenv cx sty origin sa es v src s /\
+  eval_operand src s = SOME sw /\
+  val_in_memory stv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size stv < dimword (:256) ==>
+  frag_exec ctx sa sb (\z. z = s)
+    (\u. ?w. stmt_state_rel ctx func cenv cx es u /\
+      eval_operand buf.buf_operand u = SOME w /\
+      w2n w + type_memory_size dtv < dimword (:256) /\
+      val_in_memory dtv v (w2n w) u.vs_memory /\
+      FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)) R
+Proof
+  strip_tac >>
+  `0 < type_memory_size stv` by
+    (drule_all ifexp_widened_source_positive >> simp[]) >>
+  drule_all ifexp_aggregate_source_region >> strip_tac >> gvs[] >>
+  `val_wf stv v` by gvs[expr_val_at_def] >>
+  irule (SRULE [arithmeticTheory.ADD_COMM] compile_return_normalize_frag) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem ifexp_mcopy_window[local]:
   !dst src n s k. k <= n ==>
     mem_bytes_at dst k (mcopy dst src n s).vs_memory =
