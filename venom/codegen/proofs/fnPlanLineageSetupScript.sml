@@ -473,18 +473,6 @@ Proof
   metis_tac[popmany_individual_resources]
 QED
 
-Theorem residual_budget_wf_empty_inventory:
-  !spillbase ps. residual_budget_wf spillbase [] ps ==>
-    ALL_DISTINCT ps.ps_stack /\
-    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `plan_state_residual_wf spillbase [] 0 ps` by
-    (irule residual_budget_wf_to_residual >> simp[]) >>
-  qspecl_then [`spillbase`, `[]`, `ps`] mp_tac plan_state_residual_wf_pop >>
-  simp[stack_pop_def] >> metis_tac[]
-QED
-
 Theorem popmany_plan_core_resource:
   !ps prefix core spillbase to_pop qs.
     ps.ps_stack = prefix ++ core /\

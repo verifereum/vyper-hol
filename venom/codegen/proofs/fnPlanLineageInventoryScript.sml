@@ -2551,33 +2551,33 @@ Proof
   qexistsl_tac [`iops`, `nl`, `opc`, `operands`, `ps`] >> simp[] >> metis_tac[]
 QED
 
-Theorem emit_reorder_pop_marker_core_protected_reserve:
-  !ps m core base operands selected opc nl keep dfg iops ps1 rops ps2 qs.
+Theorem emit_reorder_pop_marker_execution:
+  !ps m core base operands selected opc nl dfg iops ps1 rops ps2 qs.
     ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
     residual_budget_wf base [] (ps with ps_stack := core) /\
     EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
-    set keep SUBSET set nl /\
-    (!v. MEM (Var v) operands \/ MEM v keep ==>
+    (!v. MEM (Var v) operands ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
     PERM operands selected /\
     emit_input_plan opc operands nl ps = (iops,ps1) /\
     reorder_plan dfg selected ps1 = (rops,ps2) /\
     qs = ps2 with ps_stack := stack_pop (LENGTH operands) ps2.ps_stack ==>
-    ?rest. qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
-      residual_budget_wf base [] (qs with ps_stack := rest) /\
-      (!v. MEM v keep ==> MEM (Var v) rest \/ Var v IN FDOM qs.ps_spilled)
+    ?ci cs1 cr cs2.
+      emit_input_plan opc operands nl (ps with ps_stack := core) = (ci,cs1) /\
+      reorder_plan dfg selected cs1 = (cr,cs2) /\
+      LENGTH selected <= LENGTH cs2.ps_stack /\
+      qs = cs2 with ps_stack := REPLICATE m dead_stack_marker ++
+        stack_pop (LENGTH selected) cs2.ps_stack
 Proof
   rpt gen_tac >> strip_tac >>
-  rename1 `residual_budget_wf spillbase [] (ps with ps_stack := core)` >>
   Cases_on `emit_input_plan opc operands nl (ps with ps_stack := core)` >>
   rename1 `emit_input_plan _ _ _ _ = (ci,cs1)` >>
   Cases_on `reorder_plan dfg selected cs1` >>
   rename1 `reorder_plan _ _ cs1 = (cr,cs2)` >>
-  `!v. MEM (Var v) operands \/ MEM v keep ==>
+  `!v. MEM (Var v) operands ==>
     MEM (Var v) (ps with ps_stack := core).ps_stack \/
       Var v IN FDOM (ps with ps_stack := core).ps_spilled` by
     (gvs[MEM_REPLICATE, dead_stack_marker_def] >> metis_tac[]) >>
-  drule_all emit_reorder_plan_core_protected_consumption >> strip_tac >>
   `!op. MEM op operands /\ is_var_operand op ==>
     MEM op (ps with ps_stack := core).ps_stack \/
       op IN FDOM (ps with ps_stack := core).ps_spilled` by
@@ -2601,16 +2601,44 @@ Proof
        (mp_then Any mp_tac reorder_plan_bottom_frame) >>
      disch_then (qspec_then `REPLICATE m dead_stack_marker` mp_tac) >>
      simp[] >> metis_tac[pairTheory.PAIR_EQ]) >>
+  drule_all emit_reorder_plan_core_suffix >> strip_tac >>
   `LENGTH selected <= LENGTH cs2.ps_stack` by
-    (`!v. MEM (Var v) operands ==>
-      MEM (Var v) (ps with ps_stack := core).ps_stack \/
-        Var v IN FDOM (ps with ps_stack := core).ps_spilled` by metis_tac[] >>
-     drule_all emit_reorder_plan_core_suffix >>
-     disch_then (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >>
+    (qpat_assum `cs2.ps_stack = _`
+       (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >>
      pure_rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
   qpat_x_assum `(ps with ps_stack := _) = ps` kall_tac >>
-  qexists_tac `stack_pop (LENGTH selected) cs2.ps_stack` >>
-  gvs[stack_pop_def, TAKE_APPEND]
+  qexistsl_tac [`ci`, `cs1`, `cr`, `cs2`] >>
+  `m <= m + LENGTH cs2.ps_stack - LENGTH selected` by decide_tac >>
+  gvs[stack_pop_def, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem emit_reorder_pop_marker_core_protected_reserve:
+  !ps m core base operands selected opc nl keep dfg iops ps1 rops ps2 qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
+    set keep SUBSET set nl /\
+    (!v. MEM (Var v) operands \/ MEM v keep ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) /\
+    qs = ps2 with ps_stack := stack_pop (LENGTH operands) ps2.ps_stack ==>
+    ?rest. qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      residual_budget_wf base [] (qs with ps_stack := rest) /\
+      (!v. MEM v keep ==> MEM (Var v) rest \/ Var v IN FDOM qs.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM (Var v) operands ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+  drule_all emit_reorder_pop_marker_execution >> strip_tac >>
+  `!v. MEM (Var v) operands \/ MEM v keep ==>
+    MEM (Var v) (ps with ps_stack := core).ps_stack \/
+      Var v IN FDOM (ps with ps_stack := core).ps_spilled` by
+    (gvs[MEM_REPLICATE, dead_stack_marker_def] >> metis_tac[]) >>
+  drule_all emit_reorder_plan_core_protected_consumption >> strip_tac >>
+  qpat_x_assum `qs = ps2 with ps_stack := _` kall_tac >>
+  qexists_tac `stack_pop (LENGTH selected) cs2.ps_stack` >> gvs[]
 QED
 
 
@@ -2881,4 +2909,170 @@ Proof
        (gvs[SUBSET_DEF] >> metis_tac[]) >>
      gvs[GSYM LIST_ELEM_COUNT_MEM, LIST_ELEM_COUNT_THM]) >>
   drule_all emit_input_plan_live_upper_acc >> simp[]
+QED
+
+Theorem reorder_plan_inventory_subset:
+  !dfg pending ps ops qs base.
+    residual_budget_wf base pending ps /\
+    LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
+    reorder_plan dfg pending ps = (ops,qs) ==>
+    !x. MEM x qs.ps_stack \/ x IN FDOM qs.ps_spilled ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  gen_tac >> strip_tac >> irule plan_steps_reorder_inventory_subset >>
+  qexistsl_tac [`base'`, `dfg`, `MAPi (\i op. (i,op)) pending`, `ops`, `qs`, `pending`] >>
+  simp[GSYM reorder_plan_eq_plan_steps, EVERY_EL,
+       indexedListsTheory.EL_MAPi, indexedListsTheory.LENGTH_MAPi]
+QED
+
+Theorem reorder_plan_materialised_live_upper:
+  !dfg pending ps ops qs base live.
+    (!x. MEM x pending ==> x NOTIN FDOM ps.ps_spilled) /\
+    residual_budget_wf base pending ps /\
+    LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
+    (!x. MEM x pending ==> LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x pending + (if MEM x live then 1 else 0)) /\
+    reorder_plan dfg pending ps = (ops,qs) ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x pending + (if MEM x live then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all reorder_plan_inventory_mono >> strip_tac >>
+  `!x. MEM x pending ==> LIST_ELEM_COUNT x qs.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
+    metis_tac[reorder_plan_materialised_counts] >>
+  `!x. MEM x qs.ps_stack \/ x IN FDOM qs.ps_spilled ==>
+       MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled` by
+    metis_tac[reorder_plan_inventory_subset] >>
+  gen_tac >> Cases_on `MEM x pending`
+  >- (`x NOTIN FDOM ps.ps_spilled` by metis_tac[] >>
+      `x NOTIN FDOM qs.ps_spilled` by
+        (drule_all reorder_plan_pending_not_spilled >>
+         disch_then (qspec_then `dfg` mp_tac) >> simp[]) >>
+      qpat_x_assum `!x. _ + _ <= LIST_ELEM_COUNT x pending + _` (qspec_then `x` mp_tac) >>
+      simp[]) >>
+  Cases_on `MEM x live`
+  >- (qpat_x_assum `residual_budget_wf _ _ qs` mp_tac >>
+      simp[residual_budget_wf_def] >> strip_tac >>
+      Cases_on `x IN FDOM qs.ps_spilled` >>
+      qpat_x_assum `!op. LIST_ELEM_COUNT op qs.ps_stack <= SUC _`
+        (qspec_then `x` assume_tac) >>
+      qpat_x_assum `!op. op IN FDOM _ ==> _` (qspec_then `x` assume_tac) >>
+      gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  `LIST_ELEM_COUNT x ps.ps_stack = 0 /\ x NOTIN FDOM ps.ps_spilled` by
+    (qpat_x_assum `!x. _ + _ <= LIST_ELEM_COUNT x pending + _` (qspec_then `x` mp_tac) >>
+     Cases_on `x IN FDOM ps.ps_spilled` >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  `~MEM x qs.ps_stack /\ x NOTIN FDOM qs.ps_spilled` by
+    (qpat_x_assum `!x. MEM x qs.ps_stack \/ _ ==> _`
+       (qspec_then `x` mp_tac) >>
+     simp[GSYM LIST_ELEM_COUNT_MEM]) >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem residual_budget_wf_empty_inventory:
+  !spillbase ps. residual_budget_wf spillbase [] ps ==>
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `plan_state_residual_wf spillbase [] 0 ps` by
+    (irule residual_budget_wf_to_residual >> simp[]) >>
+  qspecl_then [`spillbase`, `[]`, `ps`] mp_tac plan_state_residual_wf_pop >>
+  simp[stack_pop_def] >> metis_tac[]
+QED
+
+Theorem emit_reorder_plan_core_live_upper:
+  !ps base operands selected opc nl dfg iops ps1 rops ps2.
+    residual_budget_wf base [] ps /\ LENGTH operands <= 16 /\
+    set ps.ps_stack UNION FDOM ps.ps_spilled SUBSET
+      set (MAP Var (operand_vars operands ++ nl)) /\
+    (!v. MEM (Var v) operands ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    !x. LIST_ELEM_COUNT x (stack_pop (LENGTH selected) ps2.ps_stack) +
+      (if x IN FDOM ps2.ps_spilled then 1 else 0) <=
+      (if MEM x (MAP Var nl) then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `residual_budget_wf spillbase [] ps` >>
+  drule residual_budget_wf_empty_inventory >> strip_tac >>
+  drule_all emit_input_plan_live_upper >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule_all emit_input_plan_residual_budget_wf >> simp[] >> strip_tac >>
+  `!x. MEM x operands ==> x NOTIN FDOM ps1.ps_spilled` by
+    (gen_tac >> strip_tac >> Cases_on `is_var_operand x`
+     >- metis_tac[emit_input_plan_vars_not_spilled] >>
+     `~MEM x (MAP Var nl)` by
+       (Cases_on `x` >> gvs[stackPlanTypesTheory.is_var_operand_def, MEM_MAP]) >>
+     qpat_x_assum `!x. _ + _ <= LIST_ELEM_COUNT x operands + _`
+       (qspec_then `x` mp_tac) >>
+     first_x_assum (qspec_then `x` assume_tac) >>
+     Cases_on `x IN FDOM ps1.ps_spilled` >> simp[] >> decide_tac) >>
+  drule perm_operand_counts >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `residual_budget_wf spillbase selected ps1` by
+    metis_tac[residual_budget_wf_perm] >>
+  `!x. MEM x selected ==> x NOTIN FDOM ps1.ps_spilled` by
+    metis_tac[sortingTheory.PERM_MEM_EQ] >>
+  `!x. MEM x selected ==> LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x ps1.ps_stack` by
+    metis_tac[] >>
+  `!x. LIST_ELEM_COUNT x ps1.ps_stack +
+    (if x IN FDOM ps1.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x selected + (if MEM x (MAP Var nl) then 1 else 0)` by
+    metis_tac[] >>
+  `LENGTH selected <= LENGTH ps1.ps_stack /\ LENGTH selected <= 16` by simp[] >>
+  drule_all reorder_plan_materialised_live_upper >> strip_tac >>
+  drule_all emit_reorder_plan_core_suffix >> strip_tac >>
+  gen_tac >>
+  qpat_x_assum `!x. _ + _ <= LIST_ELEM_COUNT x selected + _`
+    (qspec_then `x` mp_tac) >>
+  qpat_x_assum `ps2.ps_stack = _` (fn th => once_rewrite_tac[th]) >>
+  simp[elem_count_append, stack_pop_def, TAKE_APPEND, TAKE_TAKE]
+QED
+
+Theorem emit_reorder_pop_marker_core_live_upper:
+  !ps m core base operands selected opc nl dfg iops ps1 rops ps2 qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    set core UNION FDOM ps.ps_spilled SUBSET
+      set (MAP Var (operand_vars operands ++ nl)) /\
+    EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
+    (!v. MEM (Var v) operands ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) /\
+    qs = ps2 with ps_stack := stack_pop (LENGTH operands) ps2.ps_stack ==>
+    ?rest. qs.ps_stack = REPLICATE m dead_stack_marker ++ rest /\
+      residual_budget_wf base [] (qs with ps_stack := rest) /\
+      (!x. LIST_ELEM_COUNT x rest +
+        (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+        (if MEM x (MAP Var nl) then 1 else 0))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all emit_reorder_pop_marker_execution >> strip_tac >>
+  `!v. MEM (Var v) operands ==>
+    MEM (Var v) (ps with ps_stack := core).ps_stack \/
+      Var v IN FDOM (ps with ps_stack := core).ps_spilled` by
+    (gvs[MEM_REPLICATE, dead_stack_marker_def] >> metis_tac[]) >>
+  `set (ps with ps_stack := core).ps_stack UNION
+     FDOM (ps with ps_stack := core).ps_spilled SUBSET
+       set (MAP Var (operand_vars operands ++ nl))` by gvs[] >>
+  drule_all emit_reorder_plan_core_live_upper >> strip_tac >>
+  `set [] SUBSET set nl` by simp[] >>
+  `!v. MEM (Var v) operands \/ MEM v [] ==>
+    MEM (Var v) (ps with ps_stack := core).ps_stack \/
+      Var v IN FDOM (ps with ps_stack := core).ps_spilled` by simp[] >>
+  drule_all emit_reorder_plan_core_protected_consumption >> strip_tac >>
+  qpat_x_assum `qs = ps2 with ps_stack := _` kall_tac >>
+  qexists_tac `stack_pop (LENGTH selected) cs2.ps_stack` >> gvs[]
 QED
