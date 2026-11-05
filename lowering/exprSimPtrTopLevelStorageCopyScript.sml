@@ -628,3 +628,187 @@ Proof
     (gvs[mk_inst_def, is_terminator_def] >> rpt strip_tac >> gvs[]) >>
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> simp[]
 QED
+
+
+
+Theorem toplevel_copy_body_safe:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule toplevel_copy_inv_source >> strip_tac >>
+  drule toplevel_copy_inv_counter >> strip_tac >>
+  drule toplevel_copy_inv_counter_value >> strip_tac >>
+  qabbrev_tac `i = mk_inst id ADD [src;Var cv] [sv]` >>
+  qabbrev_tac `u = update_var sv (a + n2w k) s` >>
+  `step_inst_base i s = OK u` by
+    (simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+          exec_pure2_def, eval_operands_def, eval_operand_def]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
+  qabbrev_tac `G1 = step_prov PG G i u` >>
+  qabbrev_tac `tn1 = step_taint i s u tn` >>
+  `op_taint tn1 (Var sv) = {}` by
+    (simp[Abbr `tn1`, Abbr `i`] >>
+     irule toplevel_copy_source_add_clean >> simp[]) >>
+  qabbrev_tac `j = mk_inst (id+1)
+    (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]` >>
+  qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `v = update_var vv (copy_runtime_word loc s (a+n2w k)) u1` >>
+  `step_inst_base j u1 = OK v` by
+    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
+      step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
+      sload_def, tload_def, contract_storage_def, contract_transient_def] >>
+     Cases_on `loc = LocStorage` >> simp[]) >>
+  `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
+    (simp[Abbr `j`] >> irule toplevel_ptr_inst_ok_load >>
+     Cases_on `loc = LocStorage` >> simp[]) >>
+  qabbrev_tac `G2 = step_prov PG G1 j v` >>
+  qabbrev_tac `tn2 = step_taint j u1 v tn1` >>
+  drule toplevel_copy_inv_destination >> strip_tac >>
+  `sv <> dst /\ vv <> dst` by gvs[] >>
+  `ptr_covers G1 tn1 dst u (32*n)` by
+    (simp[Abbr `G1`, Abbr `tn1`] >> irule ptr_covers_step_frame >>
+     simp[Abbr `i`, Abbr `u`, mk_inst_def, lookup_var_def,
+          update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
+  `ptr_covers G1 tn1 dst u1 (32*n)` by
+    gvs[Abbr `u1`, ptr_covers_def, lookup_var_def] >>
+  `ptr_covers G2 tn2 dst v (32*n)` by
+    (simp[Abbr `G2`, Abbr `tn2`] >> irule ptr_covers_step_frame >>
+     simp[Abbr `j`, Abbr `v`, mk_inst_def, lookup_var_def,
+          update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
+  `cv <> sv /\ cv <> vv /\ cv <> mv /\ mv <> dst` by gvs[] >>
+  `op_taint tn2 (Var cv) = {}` by
+    (simp[Abbr `tn2`, Abbr `tn1`, Abbr `i`, Abbr `j`,
+          step_taint_other_output, mk_inst_def]) >>
+  qabbrev_tac `v1 = v with vs_inst_idx := SUC u1.vs_inst_idx` >>
+  qabbrev_tac `l = mk_inst (id+2) MUL [Var cv;Lit 32w] [mv]` >>
+  qabbrev_tac `w = update_var mv (n2w (32*k)) v1` >>
+  `eval_operand (Var cv) v1 = SOME (n2w k)` by
+    (simp[Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`, eval_operand_def,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
+  `step_inst_base l v1 = OK w` by
+    (simp[Abbr `l`, Abbr `w`, step_inst_base_def, mk_inst_def,
+      exec_pure2_def, eval_operands_def] >>
+     simp[NoAsms, eval_operand_def, word_mul_n2w]) >>
+  `ptr_inst_ok D 0 0 ctx fn G2 tn2 l v1` by
+    (simp[Abbr `l`] >> irule toplevel_copy_ptr_inst_ok_mul >> simp[]) >>
+  qabbrev_tac `G3 = step_prov PG G2 l w` >>
+  qabbrev_tac `tn3 = step_taint l v1 w tn2` >>
+  `ptr_covers G2 tn2 dst v1 (32*n)` by
+    gvs[Abbr `v1`, ptr_covers_def, lookup_var_def] >>
+  `ptr_covers G3 tn3 dst w (32*n)` by
+    (simp[Abbr `G3`, Abbr `tn3`] >> irule ptr_covers_step_frame >>
+     simp[Abbr `l`, Abbr `w`, mk_inst_def, lookup_var_def,
+          update_var_def, FLOOKUP_UPDATE]) >>
+  `op_taint tn3 (Var mv) = {}` by
+    simp[Abbr `tn3`, Abbr `l`, toplevel_counter_offset_ghost] >>
+  qabbrev_tac `w1 = w with vs_inst_idx := SUC v1.vs_inst_idx` >>
+  qabbrev_tac `p = mk_inst (id+3) ADD [Var dst;Var mv] [dv]` >>
+  qabbrev_tac `x = update_var dv (n2w b + n2w (32*k)) w1` >>
+  `lookup_var dst w1 = SOME (n2w b)` by
+    (simp[Abbr `w1`, Abbr `w`, Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
+  `eval_operand (Var dst) w1 = SOME (n2w b)` by simp[eval_operand_def] >>
+  `eval_operand (Var mv) w1 = SOME (n2w (32*k))` by
+    simp[Abbr `w1`, Abbr `w`, eval_operand_def, lookup_var_def,
+         update_var_def, FLOOKUP_UPDATE] >>
+  `step_inst_base p w1 = OK x` by
+    simp[Abbr `p`, Abbr `x`, step_inst_base_def, mk_inst_def,
+      exec_pure2_def, eval_operands_def] >>
+  `ptr_covers G3 tn3 dst w1 (32*n)` by
+    gvs[Abbr `w1`, ptr_covers_def, lookup_var_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G3 tn3 p w1` by
+    (simp[Abbr `p`] >> irule ptr_inst_ok_copy_len_binop >>
+     gvs[ptr_covers_def]) >>
+  qabbrev_tac `G4 = step_prov PG G3 p x` >>
+  qabbrev_tac `tn4 = step_taint p w1 x tn3` >>
+  `ptr_covers G4 tn4 dv x 32` by
+    (simp[Abbr `G4`, Abbr `tn4`, Abbr `p`, Abbr `x`] >>
+     irule toplevel_destination_offset_covers >>
+     drule toplevel_copy_inv_bounds >> strip_tac >> simp[] >>
+     qexists_tac `n` >> simp[] >>
+     `b < dimword (:256)` by gvs[dimword_def] >>
+     gvs[dimword_def]) >>
+  `dv <> vv /\ dv <> cv /\ vv <> mv` by gvs[] >>
+  qabbrev_tac `x1 = x with vs_inst_idx := SUC w1.vs_inst_idx` >>
+  qabbrev_tac `q = mk_inst (id+4) MSTORE [Var dv;Var vv] []` >>
+  qabbrev_tac `y = mstore (w2n ((n2w b:256 word) + n2w (32*k)))
+    (copy_runtime_word loc s (a+n2w k)) x1` >>
+  `eval_operand (Var dv) x1 = SOME (n2w b+n2w (32*k))` by
+    simp[Abbr `x1`, Abbr `x`, eval_operand_def, lookup_var_def,
+         update_var_def, FLOOKUP_UPDATE] >>
+  `eval_operand (Var vv) x1 = SOME (copy_runtime_word loc s (a+n2w k))` by
+    simp[Abbr `x1`, Abbr `x`, Abbr `w1`, Abbr `w`, Abbr `v1`, Abbr `v`,
+         eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `step_inst_base q x1 = OK y` by
+    (simp[Abbr `q`, Abbr `y`, step_inst_base_def, mk_inst_def,
+         eval_operands_def, exec_write2_def] >> REFL_TAC) >>
+  `ptr_covers G4 tn4 dv x1 32` by
+    gvs[Abbr `x1`, ptr_covers_def, lookup_var_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G4 tn4 q x1` by
+    (simp[Abbr `q`] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+  qabbrev_tac `G5 = step_prov PG G4 q y` >>
+  qabbrev_tac `tn5 = step_taint q x1 y tn4` >>
+  `op_taint tn5 (Var cv) = {}` by
+    simp[Abbr `tn5`, Abbr `tn4`, Abbr `tn3`, Abbr `q`, Abbr `p`, Abbr `l`,
+         step_taint_other_output, mk_inst_def] >>
+  qabbrev_tac `y1 = y with vs_inst_idx := SUC x1.vs_inst_idx` >>
+  qabbrev_tac `h = mk_inst (id+5) ADD [Var cv;Lit 1w] [nv]` >>
+  qabbrev_tac `z = update_var nv (n2w k + 1w) y1` >>
+  `eval_operand (Var cv) y1 = SOME (n2w k)` by
+    (simp[Abbr `y1`, Abbr `y`, mstore_def, Abbr `x1`, Abbr `x`,
+      Abbr `w1`, Abbr `w`, Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`,
+      eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     gvs[lookup_var_def]) >>
+  `step_inst_base h y1 = OK z` by
+    (simp[Abbr `h`, Abbr `z`, step_inst_base_def, mk_inst_def,
+          exec_pure2_def, eval_operands_def] >> simp[NoAsms, eval_operand_def]) >>
+  `ptr_inst_ok D 0 0 ctx fn G5 tn5 h y1` by
+    (simp[Abbr `h`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  qabbrev_tac `G6 = step_prov PG G5 h z` >>
+  qabbrev_tac `tn6 = step_taint h y1 z tn5` >>
+  `op_taint tn6 (Var nv) = {}` by
+    (simp[Abbr `tn6`, Abbr `h`] >>
+     simp[toplevel_counter_increment_ghost, step_taint_def, out_taint_def,
+          set_var_taint_def, mk_inst_def, op_taint_def, FLOOKUP_UPDATE,
+          eval_operand_def]) >>
+  qabbrev_tac `z1 = z with vs_inst_idx := SUC y1.vs_inst_idx` >>
+  qabbrev_tac `f = mk_inst (id+6) ASSIGN [Var nv] [cv]` >>
+  qabbrev_tac `t = update_var cv (n2w k + 1w) z1` >>
+  `step_inst_base f z1 = OK t` by
+    simp[Abbr `f`, Abbr `t`, Abbr `z1`, Abbr `z`, step_inst_base_def,
+         mk_inst_def, exec_read1_def, eval_operand_def, lookup_var_def,
+         update_var_def, FLOOKUP_UPDATE] >>
+  `ptr_inst_ok D 0 0 ctx fn G6 tn6 f z1` by
+    (simp[Abbr `f`] >> irule toplevel_copy_ptr_inst_ok_assign >> simp[]) >>
+  qabbrev_tac `G7 = step_prov PG G6 f t` >>
+  qabbrev_tac `tn7 = step_taint f z1 t tn6` >>
+  qexistsl_tac [`G7`, `tn7`] >>
+  qpat_x_assum `code = _` SUBST1_TAC >>
+      fs[Abbr `G7`, Abbr `tn7`, Abbr `G6`, Abbr `tn6`,
+           Abbr `G5`, Abbr `tn5`, Abbr `G4`, Abbr `tn4`,
+           Abbr `G3`, Abbr `tn3`, Abbr `G2`, Abbr `tn2`, Abbr `G1`, Abbr `tn1`,
+           Abbr `z1`, Abbr `y1`, Abbr `x1`, Abbr `w1`, Abbr `v1`, Abbr `u1`,
+           fragGasSeqPtrTheory.inst_seq_ptr_def]
+QED
+
+(* C1.4.3.2: restore toplevel_copy_body_ptr with the exact body_safe
+   premises and conclusion
+     ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf /\
+       toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf r
+   after the whole-body ghost and ordinary observation boundaries. *)
