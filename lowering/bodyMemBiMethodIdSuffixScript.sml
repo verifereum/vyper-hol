@@ -1,7 +1,7 @@
 (* Memory checks for the straight-line selector suffix. *)
 Theory bodyMemBiMethodIdSuffix
 Ancestors
-  venomMemProps fragGasSeqMem fragGasMode allocaHistoryFragment fragExec
+  exprOperandVar venomMemProps fragGasSeqMem fragGasMode allocaHistoryFragment fragExec
   bodyAllocMemory allocaFootprint allocaSiteResource
   builtinHashing builtinBytesMemory builtinBytes exprSimHash
   exprLoweringProps emitHelperProps emitHelper context compileEnv
@@ -380,4 +380,34 @@ Proof
   simp[below_frontier_SHA3, eval_operand_lit, Abbr `u`, eval_operand_update_var] >>
   rpt strip_tac >> gvs[] >> simp[w2n_n2w] >>
   `m MOD dimword (:256) <= m` by simp[MOD_LESS_EQ] >> decide_tac
+QED
+
+Theorem method_id_typed_hash_mem_ok_unrestricted:
+  expr_post ctx func cenv cx e es sa sm s0 es' v src s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  expr_store_bound cx (expr_type e) v src s /\
+  lower_value compile_expr cenv (expr_type e) e sa = (src,sm) /\
+  local_ptrs_reserved cenv sa /\
+  compile_method_id_hash (expr_type e) src sm = (op,sb) /\
+  fn_has_code sm sb func /\ ~block_is_terminated sm ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >>
+  `!x. src = Var x ==> not_fresh_at sm x` by
+    (metis_tac[exprOperandVarTheory.compile_lower_value_var]) >>
+  Cases_on `bty` >> gvs[is_bytes_or_string_type_def]
+  >~ [`BytesT bd`]
+  >- (Cases_on `bd` >> gvs[compile_method_id_hash_def]
+      >- (Cases_on `v` >> gvs[value_has_type_def] >>
+          `LENGTH l <= 32` by gvs[evaluate_type_def, AllCaseEqs()] >>
+          drule hash_fixed_post_view >> simp[value_has_type_def] >> strip_tac >>
+          irule method_id_fixed_hash_mem_ok_unrestricted >> goal_assum (drule_at Any) >>
+          fs[expr_post_def] >> metis_tac[]) >>
+      drule method_id_dynamic_hash_mem_ok >> disch_then irule >>
+      simp[is_bytestring_type_def] >> metis_tac[]) >>
+  gvs[compile_method_id_hash_def] >>
+  drule method_id_dynamic_hash_mem_ok >> disch_then irule >>
+  simp[is_bytestring_type_def] >> metis_tac[]
 QED
