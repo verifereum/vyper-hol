@@ -2064,6 +2064,288 @@ Proof
   gvs[exec_alloca_def, exec_gas_def, AllCaseEqs(), update_var_def]
 QED
 
+Theorem frag_relabel_base_nonphi[local]:
+  inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\ step_inst_base inst s = OK t ==>
+  step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
+    OK (t with <|vs_current_bb := b; vs_prev_bb := p|>)
+Proof
+  Cases_on `is_pseudo inst.inst_opcode`
+  >- (Cases_on `inst.inst_opcode` >>
+      fs[is_pseudo_def] >>
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> simp[update_var_def]) >>
+  metis_tac[frag_relabel_base_ordinary]
+QED
+
+Theorem frag_relabel_ordinary_edge[local]:
+  frag_relabel_state L entry u v /\ ~u.vs_halted /\
+  lookup_block v.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> GAS /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+  step_inst_base inst u = OK middle /\ ~middle.vs_halted ==>
+  ?v'. gas_path_edge ctx fn v 0 (OK v') /\
+       frag_relabel_state L entry
+         (middle with vs_inst_idx := SUC u.vs_inst_idx) v'
+Proof
+  strip_tac >>
+  `middle.vs_current_bb = u.vs_current_bb` by
+    metis_tac[step_preserves_control_flow, step_inst_non_invoke] >>
+  fs[frag_relabel_state_def] >> gvs[] >>
+  drule_all frag_relabel_base_nonphi >>
+  disch_then (qspecl_then
+    [`p`, `if u.vs_current_bb = L then entry else u.vs_current_bb`] assume_tac) >>
+  qexists_tac `middle with <|vs_current_bb :=
+     (if u.vs_current_bb = L then entry else u.vs_current_bb);
+     vs_prev_bb := p; vs_inst_idx := SUC u.vs_inst_idx|>` >>
+  gvs[] >> conj_tac
+  >- (simp[gas_path_edge_def] >> qexists_tac `0` >>
+      simp[step_inst_non_invoke, gas_count_step_def]) >>
+  qexists_tac `p` >> simp[venom_state_component_equality]
+QED
+
+Theorem frag_relabel_jump_control[local]:
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\ step_inst_base inst u = OK middle ==>
+  step_inst_base inst (u with <|vs_current_bb := b; vs_prev_bb := p|>) =
+    OK (middle with vs_prev_bb := SOME b)
+Proof
+  simp[MEM] >> strip_tac >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  simp[frag_eval_operand_control] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  simp[jump_to_def, venom_state_component_equality]
+QED
+
+Definition frag_relabel_context_def:
+  frag_relabel_context sa sb L ids fn <=>
+    cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb /\
+    fn_has_code sa sb fn /\ LENGTH ids = LENGTH sa.cs_current_insts /\
+    L <> sb.cs_current_bb /\
+    ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
+    EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb) /\
+    (sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0)
+End
+
+Theorem frag_relabel_region_entry_bound[local]:
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  LENGTH ids = LENGTH sa.cs_current_insts ==>
+  (u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)
+Proof
+  simp[frag_observer_region_def, start_relabel_def] >> metis_tac[]
+QED
+
+Theorem frag_relabel_off_cut_opcodes[local]:
+  frag_relabel_context sa sb L ids fn /\
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  (u.vs_current_bb,u.vs_inst_idx) <> frag_observer_cut sb /\
+  lookup_block u.vs_current_bb (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME inst ==>
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> STOP /\ inst.inst_opcode <> RETURN
+Proof
+  strip_tac >> fs[frag_relabel_context_def] >>
+  `(u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)` by
+    metis_tac[frag_relabel_region_entry_bound] >>
+  drule_all frag_relabel_code_provenance >> strip_tac >>
+  fs[frag_ops_free_def, EVERY_MEM]
+QED
+
+Theorem frag_relabel_region_closed[local]:
+  frag_relabel_context sa sb L ids fn ==>
+  observer_region_closed ctx (frag_relabel_observer sa sb L ids fn id)
+    (frag_observer_cut sb)
+    (frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb))
+Proof
+  strip_tac >> rw[observer_region_closed_def] >>
+  fs[abi_observer_step_def] >>
+  drule_all frag_relabel_off_cut_opcodes >> strip_tac
+  >- (drule_all step_preserves_control_flow >> strip_tac >>
+      gvs[frag_observer_region_def] >> metis_tac[LESS_EQ_SUC_REFL, LESS_EQ_TRANS]) >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_successful_terminator_jump] >>
+  `middle.vs_current_bb <> L` by
+    (`(s.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= s.vs_inst_idx)` by
+       (fs[frag_relabel_context_def] >> metis_tac[frag_relabel_region_entry_bound]) >>
+     `step_inst_base inst s = OK middle` by metis_tac[step_inst_non_invoke] >>
+     fs[frag_relabel_context_def, EVERY_MEM] >>
+     metis_tac[frag_relabel_jump_no_reentry, MEM]) >>
+  drule eval_phis_preserves_current_bb >> strip_tac >>
+  drule frag_relabel_observer_lookup_cases >> strip_tac >>
+  fs[frag_relabel_context_def] >> drule_all start_swap_fields >> strip_tac >>
+  gvs[frag_observer_region_def, start_relabel_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem frag_relabel_step_edge[local]:
+  frag_relabel_context sa sb L ids fn /\
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  frag_relabel_state L sa.cs_current_bb u v /\
+  abi_observer_step ctx (frag_relabel_observer sa sb L ids fn id)
+    (frag_observer_cut sb) u u' ==>
+  ?v'. gas_path_edge ctx fn v 0 (OK v') /\ frag_relabel_state L sa.cs_current_bb u' v'
+Proof
+  strip_tac >> fs[abi_observer_step_def] >>
+  drule_all frag_relabel_off_cut_opcodes >> strip_tac >>
+  `(u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)` by
+    (fs[frag_relabel_context_def] >> metis_tac[frag_relabel_region_entry_bound]) >>
+  `?original. lookup_block
+    (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb)
+      fn.fn_blocks = SOME original /\
+    get_instruction original u.vs_inst_idx = SOME inst` by
+    (fs[frag_relabel_context_def] >> drule_all frag_relabel_instruction_agrees >> simp[]) >>
+  `step_inst_base inst u = OK middle` by metis_tac[step_inst_non_invoke] >>
+  drule frag_relabel_state_fields >> strip_tac
+  >- (irule frag_relabel_ordinary_edge >> goal_assum (drule_at Any) >>
+      gvs[]) >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_successful_terminator_jump] >>
+  `middle.vs_current_bb <> L` by
+    (fs[frag_relabel_context_def, EVERY_MEM] >>
+     metis_tac[frag_relabel_jump_no_reentry, MEM]) >>
+  `?original_target. lookup_block middle.vs_current_bb fn.fn_blocks = SOME original_target /\
+      phi_prefix_length original_target.bb_instructions = 0 /\
+      phi_prefix_length target.bb_instructions = 0` by
+    (fs[frag_relabel_context_def] >> metis_tac[frag_relabel_target_phis]) >>
+  qpat_x_assum `eval_phis _ _ = _` mp_tac >>
+  once_rewrite_tac[GSYM eval_phis_prefix] >> simp[eval_phis_def] >> strip_tac >> gvs[] >>
+  fs[frag_relabel_state_def] >> gvs[] >>
+  `step_inst_base inst (u with <|vs_current_bb :=
+       (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb);
+       vs_prev_bb := p|>) =
+    OK (entered with vs_prev_bb :=
+       SOME (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb))` by
+    metis_tac[frag_relabel_jump_control, MEM] >>
+  qexists_tac `entered with <|vs_prev_bb :=
+       SOME (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb);
+       vs_inst_idx := 0|>` >>
+  gvs[] >> (conj_tac
+  >- (simp[gas_path_edge_def] >> qexists_tac `0` >>
+      simp[step_inst_non_invoke, gas_count_step_def] >>
+      disj1_tac >>
+      once_rewrite_tac[GSYM eval_phis_prefix] >> simp[eval_phis_def]) >>
+  qexists_tac `SOME (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb)` >>
+  simp[venom_state_component_equality])
+QED
+
+Theorem frag_relabel_base_abort[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
+  step_inst_base inst s = Abort a t ==>
+  step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
+    Abort a (t with <|vs_current_bb := b; vs_prev_bb := p|>)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
+       frag_ext_call_control, frag_create_control, frag_delegatecall_control,
+       frag_read0_control, frag_read1_control, frag_write2_control,
+       mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def,
+       mstore_def, mstore8_def, istore_def, sstore_def, tstore_def,
+       write_memory_with_expansion_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  simp[frag_eval_operand_control, frag_eval_operands_control] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[instIdxIndepTheory.exec_result_map_def, halt_state_def, set_returndata_def,
+      revert_state_def, exec_alloca_def, exec_gas_def, AllCaseEqs()] >>
+  qpat_x_assum `_ = Abort _ _` mp_tac >> pairarg_tac >> simp[]
+QED
+
+Theorem frag_mcopy_control[local]:
+  mcopy dst src sz (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    (mcopy dst src sz s) with <|vs_prev_bb := p; vs_current_bb := b|>
+Proof
+  simp[mcopy_def, read_memory_def, write_memory_with_expansion_def]
+QED
+
+Theorem frag_pack_dret_control[local]:
+  !pairs cursor s b p.
+  pack_dret_dynamic cursor pairs (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    (FST (pack_dret_dynamic cursor pairs s),
+     FST (SND (pack_dret_dynamic cursor pairs s)),
+     (SND (SND (pack_dret_dynamic cursor pairs s))) with
+       <|vs_current_bb := b; vs_prev_bb := p|>)
+Proof
+  Induct >- simp[pack_dret_dynamic_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[pack_dret_dynamic_def, frag_mcopy_control] >>
+  first_x_assum (fn th => rewrite_tac[th]) >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem frag_relabel_base_intret[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
+  step_inst_base inst s = IntRet vals t ==>
+  step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
+    IntRet vals (t with <|vs_current_bb := b; vs_prev_bb := p|>)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
+       frag_ext_call_control, frag_create_control, frag_delegatecall_control,
+       frag_read0_control, frag_read1_control, frag_write2_control,
+       mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def,
+       mstore_def, mstore8_def, istore_def, sstore_def, tstore_def,
+       write_memory_with_expansion_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  simp[frag_eval_operand_control, frag_eval_operands_control] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[instIdxIndepTheory.exec_result_map_def, halt_state_def, set_returndata_def,
+      revert_state_def, exec_alloca_def, exec_gas_def, AllCaseEqs()] >>
+  rewrite_tac[frag_pack_dret_control] >>
+  qpat_x_assum `_ = IntRet _ _` mp_tac >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem frag_relabel_base_exit[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
+  step_inst_base inst u = r /\ exit_result r /\ (!h. r <> Halt h) ==>
+  step_inst_base inst (u with <|vs_current_bb := b; vs_prev_bb := p|>) =
+    exec_result_map (\t. t with <|vs_current_bb := b; vs_prev_bb := p|>) r
+Proof
+  Cases_on `r` >> simp[exit_result_def, instIdxIndepTheory.exec_result_map_def] >>
+  (rpt strip_tac)
+  >- (irule (SRULE [] frag_relabel_base_abort) >> simp[])
+  >> irule (SRULE [] frag_relabel_base_intret) >> simp[]
+QED
+
+Theorem frag_relabel_exit_edge[local]:
+  frag_relabel_context sa sb L ids fn /\
+  (u.vs_current_bb,u.vs_inst_idx) IN
+    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
+  (u.vs_current_bb,u.vs_inst_idx) <> frag_observer_cut sb /\
+  frag_relabel_state L sa.cs_current_bb u v /\ ~u.vs_halted /\
+  lookup_block u.vs_current_bb (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME inst /\
+  step_inst_base inst u = r /\ exit_result r /\ (!h. r <> Halt h) ==>
+  ?b p. gas_path_edge ctx fn v 0
+    (exec_result_map (\t. t with <|vs_current_bb := b; vs_prev_bb := p|>) r)
+Proof
+  strip_tac >> drule_all frag_relabel_off_cut_opcodes >> strip_tac >>
+  `(u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)` by
+    (fs[frag_relabel_context_def] >> metis_tac[frag_relabel_region_entry_bound]) >>
+  `?original. lookup_block
+    (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb)
+      fn.fn_blocks = SOME original /\
+    get_instruction original u.vs_inst_idx = SOME inst` by
+    (fs[frag_relabel_context_def] >> drule_all frag_relabel_instruction_agrees >> simp[]) >>
+  fs[frag_relabel_state_def] >> gvs[] >>
+  qexistsl_tac [`if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb`, `p`] >>
+  `step_inst_base inst (u with <|vs_current_bb :=
+     (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb);
+     vs_prev_bb := p|>) = exec_result_map (\t. t with <|vs_current_bb :=
+     (if u.vs_current_bb = L then sa.cs_current_bb else u.vs_current_bb);
+     vs_prev_bb := p|>) (step_inst_base inst u)` by
+    (irule frag_relabel_base_exit >> simp[]) >>
+  gvs[] >> simp[gas_path_edge_def] >> qexists_tac `0` >>
+  simp[step_inst_non_invoke, gas_count_step_def] >>
+  Cases_on `step_inst_base inst u` >>
+  gvs[exit_result_def, instIdxIndepTheory.exec_result_map_def]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
