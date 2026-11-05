@@ -4,7 +4,7 @@ Ancestors
   appendStorageGhostPtr fragGasSeqPtr stmtSimAppendStorage
   typedCopyLoopHeaderPtr ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomInst venomState emitHelperProps finite_map list
-  ghostPcTransportPtr exprLoweringProps compileEnv
+  ghostPcTransportPtr exprLoweringProps compileEnv instSeqComposePtr instIdxIndep fragExec
 
 Theorem append_scalar_inst_check:
   MEM opc [ADD; SLOAD; TLOAD; SSTORE; TSTORE; ASSERT] /\
@@ -249,4 +249,36 @@ Proof
     (fs[run_inst_seq_def, AllCaseEqs()]) >>
   simp[inst_seq_ptr_def] >> simp[Abbr `i`] >>
   irule append_assert_abort_check >> simp[] >> metis_tac[]
+QED
+
+Theorem emit_append_assert_uniform_ptr:
+  emit_void ASSERT [a] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  op_taint tn a = {} /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
+        (s with vs_inst_idx := k) G tn
+Proof
+  rpt strip_tac >> irule emit_append_assert_ptr >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  qexists_tac `t with vs_inst_idx := k` >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def,
+       is_terminator_def] >> metis_tac[]
+QED
+
+Theorem emit_append_assert_abort_uniform_ptr:
+  emit_void ASSERT [a] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = Abort ex t /\
+  op_taint tn a = {} /\ ~ctx_has_dalloca ctx ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
+        (s with vs_inst_idx := k) G tn
+Proof
+  rpt strip_tac >> irule emit_append_assert_abort_ptr >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  qexistsl_tac [`ex`, `t with vs_inst_idx := k`] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def,
+       is_terminator_def] >> metis_tac[]
 QED
