@@ -116,6 +116,28 @@ Proof
   >> drule_all asm_precompile_ecmul_success >> simp[]
 QED
 
+Theorem asm_call_nested_handler_inl:
+  wf_state s /\ 2 <= LENGTH s.contexts /\
+  step_inner s = (INR e,t) /\ ~vfm_abort e /\
+  handle_step e t = (q,u) ==> ISL q
+Proof
+  strip_tac >>
+  `s.contexts <> []` by gvs[wf_state_def] >>
+  `EVERY (wf_context o FST) t.contexts` by
+    (mp_tac decreases_gas_cred_step_inner >>
+     rewrite_tac[decreases_gas_cred_def] >>
+     disch_then (qspec_then `s` mp_tac) >> simp[] >>
+     gvs[wf_state_def]) >>
+  `stack_room_ok t /\ gas_stack_ok t` by
+    (irule step_inner_preserves_stack_room_gas_ok >>
+     goal_assum $ drule_at Any >> simp[]) >>
+  `LENGTH t.contexts >= LENGTH s.contexts` by
+    (mp_tac vfmStepLengthTheory.same_frame_or_grow_step_inner_named >>
+     metis_tac[vfmStepLengthTheory.same_frame_or_grow_length]) >>
+  irule handle_step_not_abort_returns_inl >>
+  qexistsl_tac [`e`, `t`, `u`] >> simp[]
+QED
+
 Theorem asm_call_child_parent_msgParams:
   step_call op s = (q,e) /\ s.contexts <> [] /\
   LENGTH s.contexts < LENGTH e.contexts /\
