@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsCalldataCopy
 Ancestors
   fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline venomExecSemantics
   venomInst venomState finite_map codegenRel memLocDefs contextCodegenRel
-  robustCopyTransportPtr valueEncodingProps
+  robustCopyTransportPtr valueEncodingProps exprSimProps localPtrsProps compileEnv
 
 Theorem ptr_inst_ok_calldatacopy_operand:
   !D ctx fn G tn s id dst src count n fuel.
@@ -181,4 +181,69 @@ Proof
     (irule calldatacopy_ghost_step >> metis_tac[]) >>
   simp[] >> irule ghost_kept_mem_taint_decrease >>
   simp[pred_setTheory.DIFF_SUBSET]
+QED
+
+Theorem write_memory_ghost_inv_local_regions:
+  !d cenv cx es G tn s off bytes func.
+    ghost_inv d cenv cx es G tn s /\
+    local_ptrs_rel func cenv es.scopes s /\
+    (!name lo sz. local_region cenv es.scopes s name lo sz ==>
+       regions_disjoint lo sz off (LENGTH bytes)) ==>
+    ghost_inv d cenv cx es G
+      (tn with t_mem := tn.t_mem DIFF {i | off <= i /\ i < off + LENGTH bytes})
+      (write_memory_with_expansion off bytes s)
+Proof
+  rpt strip_tac >> irule write_memory_ghost_inv >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `local_region cenv es.scopes s name (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `regions_disjoint (w2n w) sz off (LENGTH bytes)` by metis_tac[] >>
+  fs[local_ptrs_rel_def] >>
+  qpat_x_assum `!name' entry' p' sz'. _` drule_all >> strip_tac >>
+  gvs[] >> drule val_footprint_le >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
+Theorem write_memory_ghost_inv_alloca:
+  !d cenv cx es G tn s off bytes func inst q b asz.
+    ghost_inv d cenv cx es G tn s /\
+    local_ptrs_rel func cenv es.scopes s /\
+    alloca_inv s /\ fn_inst_ids_distinct func /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
+    not_local_ptr cenv es.scopes q /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\
+    b <= off /\ off + LENGTH bytes <= b + asz ==>
+    ghost_inv d cenv cx es G
+      (tn with t_mem := tn.t_mem DIFF {i | off <= i /\ i < off + LENGTH bytes})
+      (write_memory_with_expansion off bytes s)
+Proof
+  rpt strip_tac >> irule write_memory_ghost_inv_local_regions >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
+      simp[regions_disjoint_def] >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem calldatacopy_ghost_inv_alloca:
+  !rb cenv cx es G tn s d a n func inst q b asz.
+    ghost_inv rb cenv cx es G tn s /\
+    local_ptrs_rel func cenv es.scopes s /\
+    alloca_inv s /\ fn_inst_ids_distinct func /\
+    MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
+    not_local_ptr cenv es.scopes q /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\
+    b <= w2n d /\ w2n d + w2n n <= b + asz ==>
+    ghost_inv rb cenv cx es G
+      (tn with t_mem := tn.t_mem DIFF
+        {i | w2n d <= i /\ i < w2n d + w2n n})
+      (write_memory_with_expansion (w2n d)
+        (TAKE (w2n n) (DROP (w2n a) s.vs_call_ctx.cc_calldata ++
+                       REPLICATE (w2n n) 0w)) s)
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n d) bytes s` >>
+  `LENGTH bytes = w2n n` by simp[Abbr `bytes`, listTheory.LENGTH_TAKE] >>
+  `w2n n = LENGTH bytes` by simp[] >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  irule write_memory_ghost_inv_alloca >> metis_tac[]
 QED
