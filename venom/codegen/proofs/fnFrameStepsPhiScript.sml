@@ -126,3 +126,26 @@ Proof
   strip_tac >> strip_tac >>
   drule_all phi_jmp_block_spill_support >> simp[]
 QED
+
+Theorem phi_lineage_entry_spill_support:
+  lineage_entry liveness dfg cfg fn ps0 pred succ ps /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  at IN FDOM ps.ps_spilled ==>
+  ?v. at = Var v /\
+    MEM v (live_vars_at liveness pb.bb_label (LENGTH pb.bb_instructions))
+Proof
+  simp[lineage_entry_def] >> rpt strip_tac >> gvs[] >>
+  drule_all phi_jmp_block_spill_support >> simp[]
+QED
+
+Theorem phi_lineage_entry_spill_fresh:
+  lineage_entry liveness dfg cfg fn ps0 pred succ ps /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  ~MEM out (live_vars_at liveness pb.bb_label (LENGTH pb.bb_instructions)) ==>
+  ~(Var out IN FDOM ps.ps_spilled)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all phi_lineage_entry_spill_support >> simp[]
+QED
