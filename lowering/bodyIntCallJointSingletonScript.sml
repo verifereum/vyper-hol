@@ -224,3 +224,162 @@ Proof
   qexistsl_tac [`b`, `sz`] >> simp[]
 QED
 
+
+(* Symbolic names keep the semantic suffix independent of compiler counters. *)
+Theorem joint_gas_store_frame:
+  stmt_state_rel ctx func ce cx es t /\
+  not_local_ptr ce es.scopes g /\ not_local_ptr ce es.scopes x /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\ 32 <= sz /\
+  (!name lb len. local_region ce es.scopes t name lb len ==>
+     regions_disjoint b sz lb len) /\
+  EVERY (\(off,len). regions_disjoint b sz off len) hs ==>
+  let u = update_var g w (t with vs_gas_readings := readings) in
+  let r = (mstore b w (update_var x p u)) with vs_inst_idx := ix in
+  stmt_state_rel ctx func ce cx (es with gas_obs := gs) r /\
+  EVERY (\(off,len). mem_bytes_at off len r.vs_memory =
+                     mem_bytes_at off len t.vs_memory) hs /\
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+      NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+      name = SOME (tv,v) ==>
+    mem_bytes_at off (type_memory_size tv) r.vs_memory =
+    mem_bytes_at off (type_memory_size tv) t.vs_memory)
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func ce cx es
+     (update_var g w (t with vs_gas_readings := readings))` by
+    (irule stmt_state_rel_update_var >>
+     simp[exprSimHashTheory.hash_gas_readings_state_rel]) >>
+  qabbrev_tac `u = update_var g w (t with vs_gas_readings := readings)` >>
+  `(!name lb len. local_region ce es.scopes u name lb len ==>
+     regions_disjoint b sz lb len) /\
+   FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz)` by
+    (simp[Abbr `u`, local_region_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     gvs[not_local_ptr_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
+  simp[LET_THM] >>
+  qpat_assum `stmt_state_rel _ _ _ _ es u`
+    (mp_then (Pos hd) mp_tac joint_tuple_word_suffix_frame) >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`w`, `p`, `ix`] mp_tac) >>
+  simp[Abbr `u`, update_var_def] >> metis_tac[]
+QED
+
+Theorem joint_msg_gas_tuple_layout:
+  evaluate_type (get_tenv cx) (TupleT [env_item_type MsgGas]) =
+    SOME (TupleTV [BaseTV (UintT 256)]) /\
+  val_wf (TupleTV [BaseTV (UintT 256)])
+    (ArrayV (TupleV [IntV (&w2n w)])) /\
+  val_footprint (TupleTV [BaseTV (UintT 256)])
+    (ArrayV (TupleV [IntV (&w2n w)])) = 32
+Proof
+  simp[env_item_type_def, vyperValueTheory.evaluate_type_def,
+       val_wf_def, type_memory_size_def, loweringPostsTheory.val_footprint_def,
+       vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def]
+QED
+
+(* A post at the allocation run's actual endpoint, not an independently chosen
+   existential aggregate simulation. *)
+Theorem joint_singleton_endpoint_post:
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  compile_store_memory ce gop dst (env_item_type MsgGas) sty sp = ((),sb) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  run_inst_seq (emitted_insts sa sm) s0 = OK t /\
+  eval_operand buf.buf_operand t = SOME p ==>
+  let r = (mstore (w2n p) w
+    (update_var (STRING #"%" (toString sn.cs_next_var)) p
+      (update_var (STRING #"%" (toString sm.cs_next_var)) w
+        (t with vs_gas_readings := readings)))) with vs_inst_idx := ix in
+  vv_post ctx func ce cx
+    (Builtin (TupleT [env_item_type MsgGas]) (MakeArray NONE bnd)
+      [Builtin (env_item_type MsgGas) (Env MsgGas) []])
+    es sa sb s0 (es with gas_obs := gs)
+    (Value (ArrayV (TupleV [IntV (&w2n w)])))
+    (LocatedValue (TupleT [env_item_type MsgGas])
+      (mk_ptr buf.buf_operand LocMemory)) r
+Proof
+  strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all joint_alloc_gas_add_registers >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  `!x. not_fresh_at sa x ==>
+    lookup_var x ((mstore (w2n p) w
+      (update_var (STRING #"%" (toString sn.cs_next_var)) p
+        (update_var (STRING #"%" (toString sm.cs_next_var)) w
+          (t with vs_gas_readings := readings)))) with vs_inst_idx := ix) =
+    lookup_var x s0` by
+    (rpt strip_tac >> irule joint_alloc_gas_add_old_registers >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`buf`, `dst`, `sa`, `sp`, `32`] >>
+     gvs[] >> metis_tac[]) >>
+  gvs[] >>
+  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ _ _ _ _ _ _ _ _ r` >>
+  `not_local_ptr ce es.scopes (STRING #"%" (toString (sa.cs_next_var + 1))) /\
+   not_local_ptr ce es.scopes (STRING #"%" (toString (sa.cs_next_var + 2)))` by
+    (conj_tac >> irule local_ptrs_reserved_fresh >>
+     qexists_tac `sa` >> simp[]) >>
+  `stmt_state_rel ctx func ce cx (es with gas_obs := gs) r` by
+    (simp[Abbr `r`] >>
+     irule (cj 1 (SRULE [LET_THM, stmt_state_rel_inst_idx]
+       joint_gas_store_frame)) >>
+     simp[] >>
+     qexistsl_tac [`[]`, `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+       [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>
+     simp[venomInstTheory.mk_inst_def] >> metis_tac[]) >>
+
+  `locals_kept ce es s0 r /\
+   (!aid off len. FLOOKUP s0.vs_allocas aid = SOME (off,len) /\
+     aid < sa.cs_next_id ==>
+     mem_bytes_at off len r.vs_memory = mem_bytes_at off len s0.vs_memory)` by
+    (irule joint_allocated_store_entry_frame >>
+     simp[] >>
+     qexistsl_tac [`w2n p`, `w2n p`, `32`, `t`, `w`] >>
+     simp[Abbr `r`, mstore_def, update_var_def] >> metis_tac[]) >>
+  suspend "assemble"
+QED
+
+Resume joint_singleton_endpoint_post[assemble]:
+  irule (SRULE [vyperASTTheory.expr_type_def]
+    (Q.SPEC `Builtin (TupleT [env_item_type MsgGas]) (MakeArray NONE bnd)
+      [Builtin (env_item_type MsgGas) (Env MsgGas) []]`
+      (Q.SPECL [`func`, `ce`, `cx`] buffer_memory_vv_post_general))) >>
+  simp[vyperASTTheory.expr_type_def, is_word_type_def, mk_ptr_def,
+       joint_msg_gas_tuple_layout] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x (r with vs_inst_idx := ix) = _`
+      drule >> simp[lookup_var_def]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (simp[Abbr `r`, mstore_def, update_var_def] >> metis_tac[]) >>
+  conj_tac
+  >- (`ci_mono sp sb` by metis_tac[ci_mono_compile_store_memory, pairTheory.SND] >>
+      gvs[ci_mono_def]) >>
+  qexistsl_tac [`32`, `p`] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `local_region ce es.scopes t n lb lsz` by
+        (qpat_x_assum `local_region _ _ r _ _ _` mp_tac >>
+         simp[local_region_def, Abbr `r`, lookup_var_def, update_var_def,
+              mstore_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+         strip_tac >>
+         rename1 `FLOOKUP ce.ce_vars n = SOME (PtrVar (Var q) lsz)` >>
+         `STRING #"%" (toString (sa.cs_next_var + 1)) <> q /\
+          STRING #"%" (toString (sa.cs_next_var + 2)) <> q` by
+           (gvs[not_local_ptr_def] >> metis_tac[]) >>
+         gvs[] >> metis_tac[]) >>
+      gvs[regions_disjoint_def] >> metis_tac[]) >>
+  simp[] >>
+  conj_tac
+  >- (gvs[Abbr `r`, eval_operand_def, lookup_var_def, update_var_def,
+          mstore_def, finite_mapTheory.FLOOKUP_UPDATE,
+          ASCIInumbersTheory.toString_11]) >>
+  conj_tac >- simp[Abbr `r`, mstore_def, update_var_def] >>
+  simp[Abbr `r`, valueEncodingTheory.val_in_memory_def,
+       mstore_mem_word_at_same, valueEncodingTheory.val_to_w256_def]
+QED
+Finalise joint_singleton_endpoint_post
