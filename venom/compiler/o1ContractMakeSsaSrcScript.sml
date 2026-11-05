@@ -12,7 +12,8 @@ Ancestors
   o1PassContract ptrDiscipline unitMemInv lowerDloadDefs venomPassSchedule
   list o1PassLift contextRawReachable venomInst venomWf venomFnScheduleRunner
   makeSsaCurrentDefs makeSsaCurrentProps makeSsaCurrentSim
-  o1ContractMakeSsaReplay o1ContractMakeSsaSrcOpcodes
+  o1ContractMakeSsaReplay o1ContractMakeSsaSrcOpcodes makeSsaCurrentLockstep
+  o1FrameLockstep stateFrame venomState option
 
 
 (* ===== The stage's functions ===== *)
@@ -199,6 +200,25 @@ Proof
   simp[dload_headroom_ok_def]
 QED
 
+(* Each function of the output is MakeSSA's run on the input function of
+   its name. *)
+Theorem make_ssa_src_stage_lookup[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  lookup_function nm C.ctx_functions = SOME fn ==>
+  ?fn' t t'. lookup_function nm C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn' = fn_entry_label fn /\
+    make_ssa_current_fn t fn = (fn',t') /\
+    ir_supply_covers_fn t fn /\ ir_supply_inst_ok t /\
+    make_ssa_input_ok fn /\ o1_fn_shape C fn
+Proof
+  strip_tac >> drule_all make_ssa_src_stage_frame >> strip_tac >>
+  drule list_rel_lookup_function >> impl_tac >- simp[] >>
+  disch_then (qspec_then `nm` mp_tac) >> simp[] >>
+  Cases_on `lookup_function nm C'.ctx_functions` >>
+  simp[optionTheory.OPTREL_def] >> metis_tac[]
+QED
+
 (* The DLOAD offset bound: a reachable DLOAD of the output reads the value
    of the one of the input it renames, from the same code. *)
 Theorem make_ssa_src_stage_dload_ok[local]:
@@ -208,7 +228,45 @@ Theorem make_ssa_src_stage_dload_ok[local]:
   mem_inv dload_offset_ok C vs ==>
   mem_inv dload_offset_ok C' vs
 Proof
-  cheat
+  strip_tac >>
+  `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
+                      fn_entry_label fn' = fn_entry_label fn /\
+                      frame_sim vs.vs_labels C C' fn fn')
+     C.ctx_functions C'.ctx_functions` by
+    metis_tac[make_ssa_src_stage_frame_sim] >>
+  `ctx_bisim C C'` by metis_tac[make_ssa_src_stage_frame] >>
+  `C'.ctx_entry = C.ctx_entry` by metis_tac[make_ssa_src_stage_fns] >>
+  fs[mem_inv_raw_reachable] >> conj_tac
+  >- (drule_all make_ssa_src_stage_lookup >> strip_tac >> metis_tac[]) >>
+  rpt strip_tac >> rename1 `raw_reachable vs C' fn' inst' s'` >>
+  reverse (Cases_on
+    `inst'.inst_opcode = DLOAD \/ inst'.inst_opcode = DLOADBYTES`)
+  >- fs[dload_offset_ok_def] >>
+  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
+  `frame_origin vs C C' fn' inst' s'` by
+    (irule frame_sim_raw_origins >> fs[]) >>
+  fs[frame_origin_def] >>
+  drule_all make_ssa_src_stage_lookup >> strip_tac >> gvs[] >>
+  rename1 `make_ssa_current_fn _ g = (fn',_)` >>
+  `frame_lockstep vs.vs_labels C C' g fn' (make_ssa_pos g fn')` by
+    (irule make_ssa_current_fn_frame_lockstep >> fs[o1_fn_shape_def] >>
+     metis_tac[]) >>
+  fs[frame_lockstep_def] >>
+  `?inst s. frame_reach C g s0 inst s /\
+            inst.inst_opcode = inst'.inst_opcode /\
+            execution_frame s' = execution_frame s /\
+            LIST_REL (\op op'. eval_operand op' s' = eval_operand op s)
+              inst.inst_operands inst'.inst_operands` by
+    (irule frame_reach_lockstep >> fs[] >> metis_tac[]) >>
+  `raw_reachable vs C g inst s` by
+    (irule frame_reach_raw_reachable >> metis_tac[]) >>
+  `s'.vs_code = s.vs_code /\ s'.vs_data_section = s.vs_data_section` by
+    (qpat_x_assum `execution_frame s' = execution_frame s` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  first_x_assum drule >>
+  simp[dload_offset_ok_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[LIST_REL_CONS2] >> first_x_assum irule >> metis_tac[]
 QED
 
 Theorem make_ssa_stage_src_rows:
