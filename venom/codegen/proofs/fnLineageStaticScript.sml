@@ -186,6 +186,54 @@ Proof
   simp[dead_stack_marker_def, normalize_operand_def]
 QED
 
+Theorem normalize_var_invariant[local]:
+  !P dfg visited op.
+  (!u inst w. FLOOKUP dfg.dfg_defs u = SOME inst /\
+     inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var w] /\ P u ==> P w) ==>
+  !v.
+    (case op of Var u => P u | _ => F) /\
+    normalize_operand dfg visited op = Var v ==> P v
+Proof
+  gen_tac >> recInduct normalize_operand_ind >>
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> gen_tac >>
+      simp[NoAsms] >> strip_tac >>
+      rename1 `normalize_operand dfg visited (Var src) = Var dst` >>
+      qpat_x_assum `normalize_operand _ _ _ = _` mp_tac >>
+      pure_once_rewrite_tac[normalize_operand_def] >>
+      Cases_on `MEM src visited`
+      >- (simp[NoAsms] >> strip_tac >> gvs[]) >>
+      qpat_assum `~MEM src visited` (fn th => simp[NoAsms, th]) >>
+      Cases_on `FLOOKUP dfg.dfg_defs src`
+      >- (qpat_assum `FLOOKUP _ _ = NONE` (fn th => simp[NoAsms, th]) >>
+          strip_tac >> gvs[]) >>
+      rename1 `FLOOKUP dfg.dfg_defs src = SOME inst` >>
+      qpat_assum `FLOOKUP _ _ = SOME inst` (fn th => simp[NoAsms, th]) >>
+      Cases_on `inst.inst_opcode = ASSIGN`
+      >- (qpat_assum `inst.inst_opcode = ASSIGN` (fn th => simp[NoAsms, th]) >>
+          Cases_on `inst.inst_operands`
+          >- (qpat_assum `inst.inst_operands = []` (fn th => simp[NoAsms, th]) >>
+              strip_tac >> gvs[]) >>
+          rename1 `inst.inst_operands = operand::rest` >>
+          Cases_on `rest`
+          >- (qpat_assum `inst.inst_operands = [operand]`
+                (fn th => simp[NoAsms, th]) >>
+              qpat_x_assum `!a b c. _ ==> _ ==> _`
+                (qspecl_then [`inst`, `operand`, `[]`] mp_tac) >>
+              (impl_tac >- simp[]) >>
+              (impl_tac >- first_assum ACCEPT_TAC) >>
+              Cases_on `operand`
+              >- simp[normalize_operand_def]
+              >- (rename1 `inst.inst_operands = [Var source]` >>
+                  `P source` by metis_tac[] >> simp[]) >>
+              simp[normalize_operand_def]) >>
+          qpat_assum `inst.inst_operands = _::_::_`
+            (fn th => simp[NoAsms, th]) >> strip_tac >> gvs[]) >>
+      qpat_assum `inst.inst_opcode <> ASSIGN` (fn th => simp[NoAsms, th]) >>
+      strip_tac >> gvs[]) >>
+  simp[NoAsms]
+QED
+
 Theorem collect_phis_idempotent[local]:
   !instrs. collect_phis (collect_phis instrs) = collect_phis instrs
 Proof
