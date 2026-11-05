@@ -274,13 +274,57 @@ Definition rest_word_loop_layout_def:
           out = Var outvar)
 End
 
-Theorem rest_word_loop_layout_extract:
+Definition rest_word_loop_layout_safe_def:
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h loadcode (cl:compile_state) cm v <=>
+  ?a0 a1 a2 a3 a4 a5 a6 a7 a8 b0 b1 b2 b3 b4 b5 b6 b7
+   done mul total addr match next outvar caller exitbb.
+    (!x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
+         x <> done /\ x <> mul /\ x <> total /\ x <> addr) /\
+    (!x. not_fresh_at cm x ==> x <> match /\ x <> next /\ x <> outvar) /\
+    h.rw_addr = Var addr /\ ct.cs_current_bb = h.rw_exit /\
+    lookup_block cs.cs_current_bb fn.fn_blocks = SOME caller /\
+    get_instruction caller (LENGTH cs.cs_current_insts) =
+      SOME (mk_inst a0 JMP [Label h.rw_entry] []) /\
+    lookup_block h.rw_entry fn.fn_blocks = SOME
+      <|bb_label := h.rw_entry;
+        bb_instructions := [mk_inst a1 ASSIGN [Lit 0w] [h.rw_idx];
+                            mk_inst a2 ASSIGN [Lit 0w] [h.rw_result];
+                            mk_inst a3 JMP [Label h.rw_cond] []]|> /\
+    lookup_block h.rw_cond fn.fn_blocks = SOME
+      <|bb_label := h.rw_cond;
+        bb_instructions := [mk_inst a4 EQ [Var h.rw_idx; len] [done];
+                            mk_inst a5 JNZ [Var done; Label h.rw_exit; Label h.rw_body] []]|> /\
+    lookup_block h.rw_body fn.fn_blocks = SOME
+      <|bb_label := h.rw_body;
+        bb_instructions :=
+          [mk_inst a6 MUL [Var h.rw_idx; Lit (n2w stride)] [mul]] ++
+          (if 0 < off then [mk_inst a7 ADD [Lit (n2w off); Var mul] [total]] else []) ++
+          [mk_inst a8 ADD [arr; if 0 < off then Var total else Var mul] [addr]] ++
+          loadcode ++ [mk_inst b0 EQ [v; needle] [match];
+                       mk_inst b1 JNZ [Var match; Label h.rw_found; Label h.rw_incr] []]|> /\
+    lookup_block h.rw_found fn.fn_blocks = SOME
+      <|bb_label := h.rw_found;
+        bb_instructions := [mk_inst b2 ASSIGN [Lit 1w] [h.rw_result];
+                            mk_inst b3 JMP [Label h.rw_exit] []]|> /\
+    lookup_block h.rw_incr fn.fn_blocks = SOME
+      <|bb_label := h.rw_incr;
+        bb_instructions := [mk_inst b4 ADD [Var h.rw_idx; Lit 1w] [next];
+                            mk_inst b5 ASSIGN [Var next] [h.rw_idx];
+                            mk_inst b6 JMP [Label h.rw_cond] []]|> /\
+    lookup_block h.rw_exit fn.fn_blocks = SOME exitbb /\
+    isPREFIX ct.cs_current_insts exitbb.bb_instructions /\
+    (if is_in then ct.cs_current_insts = [] /\ out = Var h.rw_result
+     else ct.cs_current_insts = [mk_inst b7 ISZERO [Var h.rw_result] [outvar]] /\
+          out = Var outvar)
+End
+
+Theorem rest_word_loop_layout_safe_extract:
   rest_word_loop_prefix needle arr len stride off cs = (h,cl) /\
   cm.cs_current_bb = cl.cs_current_bb /\ cm.cs_blocks = cl.cs_blocks /\
   cm.cs_current_insts = cl.cs_current_insts ++ loadcode /\
   rest_word_loop_suffix h v needle is_in cm = (out,ct) /\
   fn_has_code cs ct fn ==>
-  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h loadcode
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h loadcode cl cm v
 Proof
   strip_tac >>
   drule rest_word_loop_prefix_shape >>
@@ -296,11 +340,36 @@ Proof
   qpat_x_assum `ct.cs_blocks = _` kall_tac >>
   qpat_x_assum `cl.cs_blocks = _` kall_tac >>
   qpat_x_assum `cl.cs_current_insts = _` kall_tac >>
-  simp[rest_word_loop_layout_def, APPEND_ASSOC] >>
+  simp[rest_word_loop_layout_safe_def, APPEND_ASSOC] >>
   qexistsl [`j0'`, `j1'`, `j2'`, `j3'`, `j4'`, `j5'`, `j6'`, `j7'`, `j8`,
             `j0`, `j1`, `j2`, `j3`, `j4`, `j5`, `j6`, `j7`,
-            `done`, `mul'`, `total'`, `match`, `next`, `outvar`, `v`] >>
-  simp[get_instruction_def, EL_APPEND_EQN]
+            `done`, `mul'`, `total'`, `match`, `next`, `outvar`] >>
+  simp[get_instruction_def, EL_APPEND_EQN, DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem rest_word_loop_layout_safe_forget:
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h code cl cm v ==>
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code
+Proof
+  simp[rest_word_loop_layout_safe_def, rest_word_loop_layout_def] >>
+  rpt strip_tac >>
+  qexistsl [`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`,
+            `b0`, `b1`, `b2`, `b3`, `b4`, `b5`, `b6`, `b7`,
+            `done`, `mul'`, `total'`, `addr`, `match`, `next`, `outvar`,
+            `v`, `caller`, `exitbb`] >> simp[]
+QED
+
+Theorem rest_word_loop_layout_extract:
+  rest_word_loop_prefix needle arr len stride off cs = (h,cl) /\
+  cm.cs_current_bb = cl.cs_current_bb /\ cm.cs_blocks = cl.cs_blocks /\
+  cm.cs_current_insts = cl.cs_current_insts ++ loadcode /\
+  rest_word_loop_suffix h v needle is_in cm = (out,ct) /\
+  fn_has_code cs ct fn ==>
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h loadcode
+Proof
+  strip_tac >> irule rest_word_loop_layout_safe_forget >>
+  qexistsl [`cl`, `cm`, `v`] >>
+  irule rest_word_loop_layout_safe_extract >> simp[]
 QED
 
 Theorem rest_word_ptr_load_shape:
@@ -474,4 +543,86 @@ Theorem rest_word_loop_layout_body:
                    mk_inst e JNZ [Var match; Label h.rw_found; Label h.rw_incr] []]|>
 Proof
   simp[rest_word_loop_layout_def] >> metis_tac[]
+QED
+
+Theorem rest_word_ptr_loop_layout_safe:
+  compile_array_membership_loop needle arr len stride off
+    (compile_ptr_load ctor imm loc) is_in cs = (out,ct) /\
+  fn_has_code cs ct fn ==>
+  ?h cl cm v.
+    rest_word_loop_prefix needle arr len stride off cs = (h,cl) /\
+    compile_ptr_load ctor imm loc h.rw_addr cl = (v,cm) /\
+    rest_word_loop_suffix h v needle is_in cm = (out,ct) /\
+    rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h
+      (emitted_insts cl cm) cl cm v
+Proof
+  rewrite_tac[rest_word_loop_factor_eq] >> strip_tac >>
+  drule rest_word_ptr_load_shape >> strip_tac >>
+  `emitted_insts cl cm = code` by
+    simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
+  qexistsl [`h`, `cl`, `cm`, `v`] >> simp[] >>
+  irule rest_word_loop_layout_safe_extract >> simp[]
+QED
+
+Theorem rest_word_loop_layout_safe_cond:
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h code cl cm v ==>
+  ?a b done.
+    (!x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==> x <> done) /\
+    lookup_block h.rw_cond fn.fn_blocks = SOME
+      <|bb_label := h.rw_cond;
+        bb_instructions := [mk_inst a EQ [Var h.rw_idx; len] [done];
+          mk_inst b JNZ [Var done; Label h.rw_exit; Label h.rw_body] []]|>
+Proof
+  simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >>
+  qexistsl [`a4`, `a5`, `done`] >> simp[] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_safe_body:
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h code cl cm v ==>
+  ?a b c d e mulvar totalvar addr matched.
+    h.rw_addr = Var addr /\
+    (!x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
+         x <> mulvar /\ x <> totalvar /\ x <> addr) /\
+    (!x. not_fresh_at cm x ==> x <> matched) /\
+    lookup_block h.rw_body fn.fn_blocks = SOME
+      <|bb_label := h.rw_body;
+        bb_instructions :=
+          [mk_inst a MUL [Var h.rw_idx; Lit (n2w stride)] [mulvar]] ++
+          (if 0 < off then [mk_inst b ADD [Lit (n2w off); Var mulvar] [totalvar]] else []) ++
+          [mk_inst c ADD [arr; if 0 < off then Var totalvar else Var mulvar] [addr]] ++
+          code ++ [mk_inst d EQ [v; needle] [matched];
+                   mk_inst e JNZ [Var matched; Label h.rw_found; Label h.rw_incr] []]|>
+Proof
+  simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >>
+  qexistsl [`a6`, `a7`, `a8`, `b0`, `b1`, `mul'`, `total'`, `addr`, `match`] >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_safe_incr:
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h code cl cm v ==>
+  ?a b c next.
+    (!x. not_fresh_at cm x ==> x <> next) /\
+    lookup_block h.rw_incr fn.fn_blocks = SOME
+      <|bb_label := h.rw_incr;
+        bb_instructions := [mk_inst a ADD [Var h.rw_idx; Lit 1w] [next];
+                            mk_inst b ASSIGN [Var next] [h.rw_idx];
+                            mk_inst c JMP [Label h.rw_cond] []]|>
+Proof
+  simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >>
+  qexistsl [`b4`, `b5`, `b6`, `next`] >> simp[] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_safe_exit:
+  rest_word_loop_layout_safe cs ct fn needle arr len stride off is_in out h code cl cm v ==>
+  ct.cs_current_bb = h.rw_exit /\
+  ?bb. lookup_block h.rw_exit fn.fn_blocks = SOME bb /\
+       isPREFIX ct.cs_current_insts bb.bb_instructions /\
+       (if is_in then ct.cs_current_insts = [] /\ out = Var h.rw_result
+        else ?a z. (!x. not_fresh_at cm x ==> x <> z) /\
+                   ct.cs_current_insts = [mk_inst a ISZERO [Var h.rw_result] [z]] /\
+                   out = Var z)
+Proof
+  simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >> simp[] >>
+  Cases_on `is_in` >> gvs[] >>
+  qexists `b7` >> simp[] >> metis_tac[]
 QED

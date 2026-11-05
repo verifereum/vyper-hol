@@ -199,3 +199,26 @@ Proof
   irule rest_word_search_rep_update >>
   simp[compileEnvTheory.not_fresh_at_def]
 QED
+
+(* Boundary check: freshness and the tested register come from the SAME
+   compiler certificate, without reconciling independent layout witnesses. *)
+Theorem rest_word_safe_cond_probe[local]:
+  rest_word_loop_layout_safe cs ct fn needleop arrop lenop stride off is_in out h code cl cm valueop /\
+  rest_word_membership_inv h.rw_idx h.rw_result len needle elem R i s /\
+  s.vs_current_bb = h.rw_cond /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  eval_operand lenop s = SOME (n2w len) /\
+  (!u x w. R u /\ ~not_fresh_at cs x ==> R (update_var x w u)) /\
+  (!u lbl. R u ==> R (jump_to lbl u)) ==>
+  ?t. gas_marked_path memory ctx fn s 0 (OK t) /\
+      t.vs_current_bb = (if i = len then h.rw_exit else h.rw_body) /\
+      t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      rest_word_membership_inv h.rw_idx h.rw_result len needle elem R i t
+Proof
+  strip_tac >> drule exprSimBopRestWordLayoutTheory.rest_word_loop_layout_safe_cond >> strip_tac >>
+  `~not_fresh_at cs done /\ done <> h.rw_idx /\ done <> h.rw_result` by
+    metis_tac[] >>
+  `R s` by fs[rest_word_membership_inv_def] >>
+  irule rest_word_cond_path >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`a`, `b`, `lenop`] >> simp[]
+QED
