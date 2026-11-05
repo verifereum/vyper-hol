@@ -140,6 +140,20 @@ Proof
   metis_tac[ptr_safe_block_terminator, ptr_safe_blocks_block]
 QED
 
+(* No PHIs at the block entered: the entry ghost is the ghost. *)
+Theorem jump_entry_ghost[local]:
+  !fn s bb G tn.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 ==>
+    entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn
+Proof
+  rpt strip_tac >> Cases_on `bb.bb_instructions` >>
+  gvs[phi_prefix_length_def, entry_prov_def, entry_taint_vars_def,
+      phis_prov_def, phis_taint_def] >>
+  Cases_on `h.inst_opcode = PHI` >>
+  gvs[phi_prefix_length_def, phis_prov_def, phis_taint_def]
+QED
+
 (* A jump to the start of a block: the run from jump_to does not fail, so
    the block has no PHIs and the jump is an entry with nothing to evaluate. *)
 Theorem ptr_jump_step[local]:
@@ -151,10 +165,8 @@ Theorem ptr_jump_step[local]:
   (!e. run_from fuel ctx fn (jump_to lbl s) <> Error e) ==>
   run_from (SUC (fe + fuel)) ctx fn s = run_from fuel ctx fn (jump_to lbl s) /\
   ghost_run (SUC (fe + fuel)) ctx fn PG G tn s =
-    ghost_run fuel ctx fn PG (entry_prov fn (jump_to lbl s) G)
-      (entry_taint_vars fn (jump_to lbl s) tn) (jump_to lbl s) /\
-  (ptr_safe_run D lo fuel ctx fn PG (entry_prov fn (jump_to lbl s) G)
-     (entry_taint_vars fn (jump_to lbl s) tn) (jump_to lbl s) ==>
+    ghost_run fuel ctx fn PG G tn (jump_to lbl s) /\
+  (ptr_safe_run D lo fuel ctx fn PG G tn (jump_to lbl s) ==>
    ptr_safe_run D lo (SUC (fe + fuel)) ctx fn PG G tn s)
 Proof
   strip_tac >>
@@ -166,6 +178,9 @@ Proof
   `(jump_to lbl s).vs_current_bb = lbl /\ ~(jump_to lbl s).vs_halted /\
    jump_to lbl s with vs_inst_idx := 0 = jump_to lbl s` by
     simp[jump_to_def] >>
+  `entry_prov fn (jump_to lbl s) G = G /\
+   entry_taint_vars fn (jump_to lbl s) tn = tn` by
+    (irule jump_entry_ghost >> metis_tac[]) >>
   qspecl_then [`jump_to lbl s`, `jump_to lbl s`] mp_tac
     (Q.GENL [`t'`, `entered`] ptr_enter_step) >>
   simp[]
