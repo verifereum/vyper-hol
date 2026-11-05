@@ -2,7 +2,7 @@
 Theory bodyIntCallEntry
 Ancestors
   bodySim bodySimEntry compileEnv intCallCallee vyperInterpreter vyperContext vyperState list compileVyper bodyIntCallEntryEnv
-  vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants exprSimHyps finite_map
+  vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants exprSimHyps exprSimHypsDefs finite_map
   vyperTypeStoragePreservation vyperTypeEvalStoragePreservation
   vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend
   bodyIntCallTypingTransfer
@@ -11,7 +11,7 @@ Theorem body_inv_push_stack:
   body_inv tops ctx cenv cx ==>
   body_inv tops ctx cenv (cx with stk updated_by CONS src_fn)
 Proof
-  simp[body_inv_def, get_module_code_def]
+  simp[body_inv_def, get_module_code_def, get_tenv_def]
 QED
 
 Theorem body_inv_push_function:
@@ -185,10 +185,10 @@ Proof
   gvs[body_inv_def] >> qexistsl_tac [`rpolicy`, `unit`] >> simp[]
 QED
 
-Theorem body_inv_runtime_internal_entry:
+Theorem body_inv_packaged_internal_entry:
   body_inv tops ctx caller cx /\ target = caller.ce_target /\
   set_internal_package_target target
-    (package_internal_fn tops use_trans nkeys F 0
+    (package_internal_fn tops use_trans nkeys caller.ce_is_ctor 0
       (mut,nr,rr,name,args,dflts,ret,ss)) =
     (lbl,ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len,ss',rt) /\
   compile_internal_prologue ce params has_rb rt st0 = ((ce2,pc),st1) /\
@@ -198,7 +198,8 @@ Proof
   strip_tac >> drule_all body_inv_push_function >> strip_tac >>
   `body_inv tops ctx
      (build_compile_env tops Internal mut name args ret ss use_trans
-        with ce_target := caller.ce_target) cxf` by
+        with <| ce_target := caller.ce_target;
+                ce_is_ctor := caller.ce_is_ctor |>) cxf` by
     (irule body_inv_build_internal_env >> goal_assum drule) >>
   irule body_inv_internal_prologue >> goal_assum drule >>
   gvs[compileVyperTheory.package_internal_fn_def,
