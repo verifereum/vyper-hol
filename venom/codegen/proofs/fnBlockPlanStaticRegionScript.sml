@@ -99,3 +99,74 @@ Proof
     by simp[FILTER_EQ_ID, EVERY_MAP] >>
   gvs[]
 QED
+
+Theorem dfs_lineage_branch[local]:
+  lineage_state lv dfg cfg fn ps0 lbl pin /\
+  dfs_block_state lv dfg cfg fn ps0 lbl pin /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb pin = SOME (bops,pout) /\
+  MEM succ (cfg_succs_of cfg lbl) /\
+  dfs_block_state lv dfg cfg fn ps0 succ pg ==>
+  lineage_state lv dfg cfg fn ps0 succ
+    (pg with <| ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled |> )
+Proof
+  strip_tac >> irule lineage_state_step >> simp[] >>
+  goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
+  goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
+  simp[]
+QED
+
+Theorem dfs_lineage_mutual[local]:
+  (!wl visited pg.
+    dfs_aux_call lv dfg cfg fn ps0 wl visited pg ==>
+    dfs_aux_call lv dfg cfg fn ps0 wl visited pg /\
+    !lbl rest. wl = lbl::rest ==>
+      rest = [] /\ (~MEM lbl visited ==>
+        lineage_state lv dfg cfg fn ps0 lbl pg)) /\
+  (!ss sp succs visited pg.
+    dfs_succs_call lv dfg cfg fn ps0 ss sp succs visited pg ==>
+    dfs_succs_call lv dfg cfg fn ps0 ss sp succs visited pg /\
+    ?lbl pin bb bops pout.
+      lineage_state lv dfg cfg fn ps0 lbl pin /\
+      dfs_block_state lv dfg cfg fn ps0 lbl pin /\
+      lookup_block lbl fn.fn_blocks = SOME bb /\
+      generate_block_plan lv dfg cfg fn bb pin = SOME (bops,pout) /\
+      ss = pout.ps_stack /\ sp = pout.ps_spilled /\
+      (!s. MEM s succs ==> MEM s (cfg_succs_of cfg lbl)))
+Proof
+  ho_match_mp_tac dfs_aux_call_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[dfs_aux_call_entry, lineage_state_entry])
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      metis_tac[dfs_aux_call_visited])
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      metis_tac[dfs_aux_call_missing])
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[dfs_aux_call_succs]
+      >> goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
+      goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+      simp[dfs_block_state_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      metis_tac[dfs_aux_call_rest])
+  >- (rpt gen_tac >> strip_tac >> conj_asm1_tac
+      >- metis_tac[dfs_aux_call_branch]
+      >> rpt strip_tac >> gvs[] >>
+      rename1 `~MEM next visited` >>
+      `dfs_block_state lv dfg cfg fn ps0 next
+         (pg with <| ps_stack := pout.ps_stack;
+                     ps_spilled := pout.ps_spilled |>)`
+        by (simp[dfs_block_state_def] >> metis_tac[]) >>
+      `MEM next (cfg_succs_of cfg lbl)` by metis_tac[] >>
+      drule_all dfs_lineage_branch >> simp[])
+  >> rpt gen_tac >> strip_tac >> conj_tac
+  >- metis_tac[dfs_aux_call_sibling]
+  >> metis_tac[MEM]
+QED
+
+Theorem dfs_block_state_lineage_state:
+  dfs_block_state lv dfg cfg fn ps0 lbl ps ==>
+  lineage_state lv dfg cfg fn ps0 lbl ps
+Proof
+  simp[dfs_block_state_def] >> metis_tac[dfs_lineage_mutual]
+QED
