@@ -309,3 +309,80 @@ Proof
   strip_tac >> AP_TERM_TAC >>
   simp[EXTENSION] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
+
+Theorem toplevel_copy_inv_content:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  storage_copy_inv cv ds loc a b n s0 k s
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_bounds:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  k <= n /\ n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_destination:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n)
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_source:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  eval_operand src s = SOME a /\ op_taint tn src = {}
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_counter:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  op_taint tn (Var cv) = {} /\ FLOOKUP G cv = NONE
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_counter_value:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  lookup_var cv s = SOME (n2w k)
+Proof
+  simp[toplevel_copy_inv_def, storage_copy_inv_def, eval_operand_def]
+QED
+
+Theorem toplevel_copy_inv_ghost_frame:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ ~MEM x ds ==>
+  FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_storage_taint:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  tn.t_stor = tn0.t_stor
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_transient_taint:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  tn.t_trans = tn0.t_trans
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_immutable_taint:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  tn.t_imm = tn0.t_imm
+Proof
+  simp[toplevel_copy_inv_def]
+QED
+
+Theorem toplevel_copy_inv_memory_taint:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  tn.t_mem SUBSET toplevel_copy_taint_bound loc a b tn0 k
+Proof
+  simp[toplevel_copy_inv_def]
+QED
