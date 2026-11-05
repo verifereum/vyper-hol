@@ -517,3 +517,108 @@ val () =
        List.all (fn oracle => oracle = "DISK_THM") oracles then ()
     else raise Fail "Mapping dispatch shape has unproved dependencies"
   end;
+
+Theorem compile_keccak256_key_bytes_run:
+  !key sa out sb s p bytes.
+  compile_keccak256_key key F sa = (out,sb) /\
+  eval_operand key s = SOME p /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  mload (w2n p) s = n2w (LENGTH bytes) /\
+  LENGTH bytes < dimword (:256) /\
+  mem_bytes_at (w2n (p + 32w)) (LENGTH bytes) s.vs_memory = bytes ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand out t = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bytes)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  simp[compile_keccak256_key_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq _ mid` >>
+  `eval_operand key mid = SOME p` by
+    (Cases_on `key` >>
+     gvs[Abbr `mid`, eval_operand_def, lookup_var_update_var, not_fresh_at_def]) >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+       exec_read1_def, bind_outputs_def] >>
+  `mload (w2n p) mid = n2w (LENGTH bytes)` by
+    (simp[Abbr `mid`, mload_def, update_var_def] >>
+     gvs[mload_def]) >>
+  simp[] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
+       lookup_var_update_var, Abbr `mid`, GSYM mem_bytes_at_def] >>
+  simp[run_inst_seq_def, lookup_var_update_var] >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac >- simp[update_var_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `not_fresh_at sa x` mp_tac >> simp[not_fresh_at_def] >>
+  strip_tac >>
+  first_assum (qspec_then `sa.cs_next_var` mp_tac) >>
+  first_assum (qspec_then `sa.cs_next_var + 1` mp_tac) >>
+  first_x_assum (qspec_then `sa.cs_next_var + 2` mp_tac) >>
+  simp[] >> rpt strip_tac >> simp[lookup_var_update_var] >> metis_tac[]
+QED
+
+Theorem compile_keccak256_key_bytes_code:
+  !key sa out sb.
+  compile_keccak256_key key F sa = (out,sb) ==>
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_keccak256_key_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def, same_blocks_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem compile_keccak256_key_bytes_frame_frag:
+  !key sa out sb s0 p bytes ctx func cenv cx es R.
+  compile_keccak256_key key F sa = (out,sb) /\
+  eval_operand key s0 = SOME p /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  mload (w2n p) s0 = n2w (LENGTH bytes) /\
+  LENGTH bytes < dimword (:256) /\
+  mem_bytes_at (w2n (p + 32w)) (LENGTH bytes) s0.vs_memory = bytes /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\t. eval_operand out t = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bytes)) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
+      contract_storage t = contract_storage s0 /\
+      contract_transient t = contract_transient s0 /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0)) R
+Proof
+  rpt strip_tac >> drule compile_keccak256_key_bytes_code >> strip_tac >>
+  irule hash_run_frag >> simp[] >> rpt strip_tac >> gvs[] >>
+  drule_all compile_keccak256_key_bytes_run >> strip_tac >>
+  `t = s0 with vs_vars := t.vs_vars` by
+    (qpat_x_assum `t with vs_vars := s0.vs_vars = s0`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+     irule stmt_state_rel_fresh_vars >> simp[] >> qexists_tac `sa` >>
+     gvs[lookup_var_def]) >>
+  qexists_tac `t` >>
+  simp[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
+       contract_storage_def, contract_transient_def] >>
+  qpat_assum `t = _` (fn th => pure_once_rewrite_tac[th]) >>
+  simp[] >> gvs[lookup_var_def]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Bytestring key execution has unproved dependencies"
+  end) [compile_keccak256_key_bytes_run, compile_keccak256_key_bytes_code,
+        compile_keccak256_key_bytes_frame_frag];
