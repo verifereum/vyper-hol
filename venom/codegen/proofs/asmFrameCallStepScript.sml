@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmContextLength vfmDecreasesGas
-  vfmAccountFrame asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list
+  vfmAccountFrame asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 
 Theorem asm_call_child_parent_msgParams:
   step_call op s = (q,e) /\ s.contexts <> [] /\
@@ -752,6 +752,70 @@ Proof
   qexistsl [`child`, `child_rb`] >> conj_tac >- simp[] >>
   `child.gasUsed <= child.msgParams.gasLimit` by gvs[] >>
   drule_all asm_handle_exception_memory_exception >> simp[]
+QED
+
+Theorem asm_expand_memory_append_zeros[local]:
+  asm_expand_memory n mem =
+    mem ++ REPLICATE (MAX (LENGTH mem) (((n + 31) DIV 32) * 32) - LENGTH mem) 0w
+Proof
+  simp[asm_expand_memory_def] >> rw[arithmeticTheory.MAX_DEF] >> simp[]
+QED
+
+Theorem asm_expand_memory_nested[local]:
+  asm_expand_memory n (asm_expand_memory m mem) =
+    if m <= n then asm_expand_memory n mem else asm_expand_memory m mem
+Proof
+  `!a b. a <= b ==> (a + 31) DIV 32 * 32 <= (b + 31) DIV 32 * 32`
+    by (rpt strip_tac >> simp[] >>
+        irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >>
+  Cases_on `m <= n`
+  >- (first_x_assum drule >> strip_tac >>
+      simp[asm_expand_memory_append_zeros, APPEND_ASSOC] >>
+      rw[arithmeticTheory.MAX_DEF] >>
+      simp[REPLICATE_APPEND] >> gvs[] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  `n <= m` by simp[] >> first_x_assum drule >> strip_tac >>
+  simp[asm_expand_memory_append_zeros, APPEND_ASSOC] >>
+  rw[arithmeticTheory.MAX_DEF] >> simp[REPLICATE_APPEND] >> gvs[] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac
+QED
+
+Theorem asm_call_memory_buffer_extend:
+  max_expansion_range (ao,az) (ro,rs) = (off,sz) /\
+  e = MAX (buffer_length mem)
+        (if 0 < sz then word_size (off+sz) * 32 else 0) - buffer_length mem ==>
+  buffer_to_list (buffer_extend e mem) =
+    asm_call_memory ao az ro rs (buffer_to_list mem)
+Proof
+  Cases_on `az = 0` >> Cases_on `rs = 0` >>
+  simp[max_expansion_range_def, asm_call_memory_def] >>
+  rw[] >> gvs[buffer_to_list_extend, vfmConstantsTheory.word_size_def,
+    asm_expand_memory_nested, asm_expand_memory_append_zeros] >>
+  IF_CASES_TAC >> gvs[] >>
+  `ao + az = ro + rs` by decide_tac >>
+  `ao + (az + 31) = ro + (rs + 31)` by decide_tac >> simp[]
+QED
+
+Theorem asm_call_memory_buffer_write:
+  max_expansion_range (ao,az) (ro,rs) = (off,sz) /\
+  e = MAX (buffer_length mem)
+        (if 0 < sz then word_size (off+sz) * 32 else 0) - buffer_length mem ==>
+  buffer_to_list (buffer_write ro (TAKE rs bytes) (buffer_extend e mem)) =
+    TAKE ro (asm_call_memory ao az ro rs (buffer_to_list mem)) ++
+    TAKE rs bytes ++
+    DROP (ro + LENGTH (TAKE rs bytes))
+      (asm_call_memory ao az ro rs (buffer_to_list mem))
+Proof
+  strip_tac >> drule_all asm_call_memory_buffer_extend >> strip_tac >>
+  dep_rewrite.DEP_REWRITE_TAC[buffer_to_list_write_le] >> simp[] >>
+  strip_tac >>
+  `rs <> 0` by (Cases_on `rs` >> gvs[]) >>
+  `ro <= LENGTH (asm_call_memory ao az ro rs (buffer_to_list mem))`
+    by (simp[asm_call_memory_def] >>
+        mp_tac (Q.SPECL [`ro + rs`,
+          `if az = 0 then buffer_to_list mem
+           else asm_expand_memory (ao + az) (buffer_to_list mem)`]
+          spillSimTheory.asm_expand_memory_length) >> decide_tac) >>
+  qpat_x_assum `buffer_to_list _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+  simp[] >> decide_tac
 QED
 
 Theorem asm_frame_call_step:
