@@ -60,3 +60,25 @@ Theorem ret_probe_cleanup_observable:
 Proof
   EVAL_TAC
 QED
+
+Theorem fn_path_sink_last[local]:
+  !path fn sink.
+    is_fn_path fn path /\ MEM sink path /\
+    (!dst. ~fn_cfg_edge fn sink dst) ==> LAST path = sink
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem fn_sink_dominates_only_self:
+  !fn sink target.
+    (!dst. ~fn_cfg_edge fn sink dst) /\ fn_dominates fn sink target ==>
+    target = sink
+Proof
+  rw[fn_dominates_def, fn_reachable_def] >>
+  drule codegenReadyComputeTheory.rtc_to_fn_path_compute >>
+  strip_tac >>
+  `MEM sink path` by metis_tac[] >>
+  drule_all fn_path_sink_last >> simp[]
+QED
