@@ -2240,3 +2240,161 @@ Proof
   drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     rf_assign_plan_live_retained >> simp[]
 QED
+
+Theorem rf_block_plan_step:
+  get_instruction bb k = SOME inst /\ n_params <= k /\
+  generate_block_insts_plan lv dfg cfg fn bb.bb_label halting n_params
+    (LENGTH bb.bb_instructions) (k - n_params)
+    (DROP k bb.bb_instructions) ps = SOME (ops,ps_end) ==>
+  ?step_ops ps1 rest_ops.
+    generate_inst_plan lv dfg cfg fn inst
+      (live_vars_at lv bb.bb_label (SUC k)) halting
+      (case DROP (SUC k) bb.bb_instructions of
+         [] => F | next_i :: _ => is_terminator next_i.inst_opcode)
+      bb.bb_label ps = SOME (step_ops,ps1) /\
+    generate_block_insts_plan lv dfg cfg fn bb.bb_label halting n_params
+      (LENGTH bb.bb_instructions) (SUC k - n_params)
+      (DROP (SUC k) bb.bb_instructions) ps1 = SOME (rest_ops,ps_end) /\
+    ops = step_ops ++ rest_ops
+Proof
+  strip_tac >>
+  `k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst` by
+    gvs[get_instruction_def] >>
+  `DROP k bb.bb_instructions = inst :: DROP (SUC k) bb.bb_instructions` by
+    metis_tac[DROP_CONS_EL] >>
+  `k - n_params + n_params + 1 = SUC k /\
+   k - n_params + 1 = SUC k - n_params` by decide_tac >>
+  `DROP (SUC k) bb.bb_instructions = [] ==>
+   LENGTH bb.bb_instructions = SUC k` by
+    (strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_block_insts_plan_def] >>
+  Cases_on `DROP (SUC k) bb.bb_instructions = []` >> simp[] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem rf_forward_instruction_opcode:
+  revert_forward_pair bb i j /\ i <= k /\ k <= j /\
+  get_instruction bb k = SOME inst ==>
+  inst.inst_opcode =
+    (if k = i then RETURNDATACOPY else if k = j then REVERT else ASSIGN)
+Proof
+  simp[revert_forward_pair_def] >> strip_tac >>
+  Cases_on `k = i` >- gvs[] >>
+  Cases_on `k = j` >- gvs[] >>
+  simp[] >> first_x_assum irule >> qexists_tac `k` >> simp[]
+QED
+
+Theorem rf_forward_instruction_exists:
+  revert_forward_pair bb i j /\ i <= k /\ k <= j ==>
+  ?inst. get_instruction bb k = SOME inst
+Proof
+  simp[revert_forward_pair_def] >> strip_tac >>
+  `j < LENGTH bb.bb_instructions` by gvs[get_instruction_def] >>
+  simp[get_instruction_def]
+QED
+
+Theorem rf_forward_instruction_shape:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb i j /\ i <= k /\ k <= j /\
+  get_instruction bb k = SOME inst ==>
+  (k = i ==> inst.inst_outputs = [] /\ LENGTH inst.inst_operands = 3) /\
+  (k = j ==> inst.inst_outputs = [] /\ LENGTH inst.inst_operands = 2) /\
+  (i < k /\ k < j ==> ?rhs out.
+    inst.inst_operands = [rhs] /\ inst.inst_outputs = [out]) /\
+  LENGTH (compute_operands inst) <= 3 /\
+  inst.inst_opcode <> PHI
+Proof
+  strip_tac >>
+  `inst_wf inst` by
+    (fs[codegen_ready_fn_def, fn_inst_wf_def] >>
+     first_x_assum irule >> qexists_tac `bb` >>
+     conj_tac >- metis_tac[lookup_block_MEM] >>
+     gvs[get_instruction_def] >> metis_tac[EL_MEM]) >>
+  `i < j` by fs[revert_forward_pair_def] >>
+  drule_all rf_forward_instruction_opcode >> strip_tac >>
+  Cases_on `k = i` >> Cases_on `k = j` >>
+  gvs[inst_wf_def, compute_operands_def, python_stack_operands_def,
+      venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
+QED
+
+Theorem rf_forward_regular_plan:
+  revert_forward_pair bb i j /\ i <= k /\ k <= j /\
+  get_instruction bb k = SOME inst ==>
+  generate_inst_plan lv dfg cfg fn inst nl halting term lbl ps =
+    SOME (generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps)
+Proof
+  strip_tac >> drule_all rf_forward_instruction_opcode >> strip_tac >>
+  Cases_on `k = i` >> Cases_on `k = j` >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+      is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+      is_raw_fmp_opcode_def]
+QED
+
+Theorem rf_forward_exec_abort_cases:
+  revert_forward_pair bb i j /\ i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
+  get_instruction bb vs.vs_inst_idx = SOME inst /\
+  exec_block fuel ctx bb vs = Abort a vs_end ==>
+  step_inst fuel ctx inst vs = Abort a vs_end \/
+  (?vs1. vs.vs_inst_idx < j /\ step_inst fuel ctx inst vs = OK vs1 /\
+    exec_block fuel ctx bb (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) =
+      Abort a vs_end)
+Proof
+  strip_tac >>
+  `i < j` by fs[revert_forward_pair_def] >>
+  drule_all rf_forward_instruction_opcode >> strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `step_inst fuel ctx inst vs` >> simp[] >>
+  Cases_on `vs.vs_inst_idx = i` >> Cases_on `vs.vs_inst_idx = j` >>
+  gvs[is_terminator_def] >> simp[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem rf_suffix_instruction_no_labels:
+  EVERY (\ti. EVERY (\op. ~is_label_operand op) ti.inst_operands)
+    (DROP i bb.bb_instructions) /\ i <= k /\
+  get_instruction bb k = SOME inst ==>
+  EVERY (\op. ~is_label_operand op) inst.inst_operands
+Proof
+  strip_tac >>
+  `k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst` by
+    gvs[get_instruction_def] >>
+  `MEM inst (DROP i bb.bb_instructions)` by
+    (`k - i < LENGTH (DROP i bb.bb_instructions)` by simp[] >>
+     `EL (k - i) (DROP i bb.bb_instructions) = inst` by simp[EL_DROP] >>
+     metis_tac[EL_MEM]) >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem rf_resolve_prefix_normalize:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb ==>
+  normalize_operand (dfg_build_function fn) []
+    (resolve_block_assigns (REVERSE (TAKE k bb.bb_instructions)) op) =
+  normalize_operand (dfg_build_function fn) [] op
+Proof
+  strip_tac >> irule normalize_operand_resolve_block_assigns >> simp[] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  irule mem_fn_insts_intro >> qexists_tac `bb` >>
+  conj_tac >- metis_tac[lookup_block_MEM] >>
+  metis_tac[MEM_REVERSE, MEM_TAKE]
+QED
+
+Theorem rf_forward_normalized_operands:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb i j /\
+  get_instruction bb i = SOME copy /\ copy.inst_operands = [dst;src;sz] /\
+  get_instruction bb j = SOME rev /\ rev.inst_operands = [dst';sz'] ==>
+  normalize_operand (dfg_build_function fn) [] src = Lit 0w /\
+  normalize_operand (dfg_build_function fn) [] dst =
+    normalize_operand (dfg_build_function fn) [] dst' /\
+  normalize_operand (dfg_build_function fn) [] sz =
+    normalize_operand (dfg_build_function fn) [] sz'
+Proof
+  strip_tac >>
+  `!k op. normalize_operand (dfg_build_function fn) []
+     (resolve_block_assigns (REVERSE (TAKE k bb.bb_instructions)) op) =
+     normalize_operand (dfg_build_function fn) [] op` by
+    (rpt gen_tac >> irule rf_resolve_prefix_normalize >> simp[]) >>
+  fs[revert_forward_pair_def] >> gvs[] >>
+  metis_tac[normalize_operand_def]
+QED
