@@ -3,6 +3,8 @@
 Theory augAssignPtrConditionalWitness
 Ancestors
   augAssignPtrScalarWitnessProbe augAssignPtrScalarJoin
+  stmtAssertPtr stmtFragPtr decoderGhostFramePtr ptrDiscipline venomInst venomState
+  venomExecSemantics codegenRel finite_map pred_set
   exprSimConvert exprSimIfExp vyperValueOperation loweringPosts loweringSlice
   vyperInterpreter vyperState vyperAST vyperContext valueEncoding exprLowering compileEnv
 
@@ -206,4 +208,132 @@ Proof
        venomStateTheory.eval_operand_def,
        exprSimPropsTheory.typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
        locals_kept_def, is_word_type_def]
+QED
+
+Theorem word_ifexp_arm_lower_value:
+  is_word_type t /\
+  compile_expr cenv ty e sa = (vv,sm) /\
+  compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) ==>
+  lower_value compile_expr cenv ty e sa = (op,sb)
+Proof
+  strip_tac >> gvs[compile_ifexp_arm_def, lower_value_def, comp_bind_def]
+QED
+
+Theorem bool_conditional_word_layout:
+  is_word_type t /\
+  lower_value compile_expr cenv ty
+    (IfExp t (Literal (BaseT BoolT) (BoolL b)) a c) sa = (op,sb) ==>
+  ?rv tl el xl s5 s6 s7 aop s8 s9 s10 s11 cop s12 s13 s14.
+    op = Var rv /\
+    emit_inst JNZ [Lit (if b then 1w else 0w); Label tl; Label el] [] s5 = ((),s6) /\
+    (?z. new_block tl s6 = (z,s7)) /\
+    lower_value compile_expr cenv ty a s7 = (aop,s8) /\
+    emit_inst ASSIGN [aop] [rv] s8 = ((),s9) /\
+    emit_inst JMP [Label xl] [] s9 = ((),s10) /\
+    (?z. new_block el s10 = (z,s11)) /\
+    lower_value compile_expr cenv ty c s11 = (cop,s12) /\
+    emit_inst ASSIGN [cop] [rv] s12 = ((),s13) /\
+    emit_inst JMP [Label xl] [] s13 = ((),s14) /\
+    (?z. new_block xl s14 = (z,sb)) /\
+    s5.cs_current_bb = sa.cs_current_bb /\
+    s5.cs_current_insts = sa.cs_current_insts /\
+    s7.cs_current_bb = tl /\ s11.cs_current_bb = el /\ sb.cs_current_bb = xl /\
+    s7.cs_current_insts = [] /\ s11.cs_current_insts = [] /\ sb.cs_current_insts = [] /\
+    cs_extends sa s5 /\ cs_extends s7 s8 /\ cs_extends s7 s11 /\
+    cs_extends s11 s12 /\ cs_extends s11 sb /\ cs_extends sa sb /\
+    sa.cs_next_var <= s7.cs_next_var /\ sa.cs_next_id <= s7.cs_next_id /\
+    sa.cs_next_var <= s11.cs_next_var /\ sa.cs_next_id <= s11.cs_next_id /\
+    s8.cs_next_id <= sb.cs_next_id /\ s12.cs_next_id <= sb.cs_next_id /\
+    (!x. not_fresh_at sa x ==> x <> rv)
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[lower_value_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >>
+  drule compile_expr_ifexp_states >>
+  (impl_tac >-
+    (conj_tac >- (rpt strip_tac >>
+       drule (CONJUNCT2 exprLoweringPropsTheory.compile_expr_grows) >> simp[]) >>
+     rpt strip_tac >> drule (CONJUNCT2 exprLoweringPropsTheory.compile_expr_grows) >> simp[])) >>
+  strip_tac >>
+  gvs[bool_literal_lower_value, unwrap_value_def, comp_return_def] >>
+  qexistsl_tac [`s5`, `s6`, `s7`, `aop`, `s8`, `s9`, `s10`,
+                 `s11`, `bop`, `s12`, `s13`, `s14`] >>
+  gvs[compile_ifexp_arm_def] >> metis_tac[]
+QED
+
+Theorem clean_assign_taint:
+  op_taint tn arg = {} ==>
+  step_taint (mk_inst id ASSIGN [arg] [out]) s (update_var out w s) tn =
+    (tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  strip_tac >>
+  `new_site_bytes s (update_var out w s) = {}` by
+    simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
+  simp[step_taint_def, set_var_taint_def, mk_inst_def, mem_taint_def,
+       step_writes_def, source_memory_write_ranges_def, written_taint_def,
+       store_taint_def, adopt_reset_def, out_taint_def, imm_taint_def,
+       range_bytes_def, taint_component_equality] >>
+  Cases_on `eval_operand arg s` >> simp[]
+QED
+
+Theorem scalar_join_ghost_inv:
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> x <> out) ==>
+  ghost_inv d cenv cx es (DRESTRICT G (COMPL {out}))
+    (tn with t_var := tn.t_var |+ (out,{}))
+    (jump_to lbl (update_var out w s with vs_inst_idx := k))
+Proof
+  strip_tac >> irule augAssignPtrLoadTheory.ghost_inv_load_frame >>
+  qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[] >>
+  simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_DRESTRICT,
+       op_taint_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem scalar_join_ghost_kept:
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  (!x. not_fresh_at sa x ==> x <> out) ==>
+  ghost_kept cenv es sa G0 tn0 s0 (DRESTRICT G (COMPL {out}))
+    (tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  simp[bodyPtrDefsTheory.ghost_kept_def, FLOOKUP_DRESTRICT,
+       op_taint_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem scalar_join_complete_path:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [arg] [out]) /\
+  eval_operand arg s = SOME w /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb1 /\
+  get_instruction bb1 (SUC s.vs_inst_idx) = SOME (mk_inst jid JMP [Label lbl] []) /\
+  op_prov G arg = NONE /\ op_taint tn arg = {} /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> x <> out) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t = jump_to lbl (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ghost_inv d cenv cx es H tm t /\
+    op_prov H (Var out) = NONE /\ op_taint tm (Var out) = {} /\
+    (!G0 tn0 s0. ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+      ghost_kept cenv es sa G0 tn0 s0 H tm)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ASSIGN [arg] [out]) s = OK (update_var out w s)` by
+    simp[step_inst_base_def, mk_inst_def] >>
+  qexistsl_tac [`DRESTRICT G (COMPL {out})`,
+    `tn with t_var := tn.t_var |+ (out,{})`,
+    `jump_to lbl (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx)`] >>
+  conj_tac
+  >- (irule (cj 1 scalar_join_path) >>
+      simp[update_var_def] >> conj_tac >- metis_tac[] >>
+      qexistsl_tac [`arg`, `id`, `out`, `update_var out w s`] >>
+      gvs[assign_clean_provenance, clean_assign_taint, update_var_def]) >>
+  simp[] >> conj_tac >- (irule scalar_join_ghost_inv >> metis_tac[]) >>
+  simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> irule scalar_join_ghost_kept >> simp[] >> metis_tac[]
 QED
