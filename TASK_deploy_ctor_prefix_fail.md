@@ -83,3 +83,17 @@ The unit's code: `compile_generate_deploy` (`lowering/defs/moduleLoweringScript.
 The statement parses: it built with `cheat` in this worktree. Many shared
 ancestors are cheated locally (the commit "LOCAL OVERLAY"); that is expected.
 Do not touch or revert that commit.
+
+### Update: the negative-argument counterexample is ruled out
+
+The previous run's witness (`__init__(x: uint256)`, `tx.args = [IntV (-1)]`)
+predates the current head. `constructor_args_encode_def`
+(`lowering/e2eDeployDefsScript.sml`) now also requires
+`IS_SOME (bind_arguments (type_env tops) args tx.args)`, and
+`deploy_state_rel` includes `constructor_args_encode`, so that witness no
+longer satisfies the premises. `deploy_prefix_negative_counterexample` was
+removed. The concrete witness theorems in `ctorDeployLoweringPrefixScript.sml`
+(`deploy_prefix_negative_*`, `*_probe`, `*_artifact`, the concrete
+`deploy_state_rel` instance) are obsolete: delete those that no longer build or
+no longer serve the proof, and keep the general helpers (parse lemmas,
+`deploy_prefix_safe_*_no_abort`). Prove the frozen statement as-is.
