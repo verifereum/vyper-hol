@@ -114,7 +114,7 @@ admitted at this base, so S1's whole body result
 `expr_vv_sim` for the call) is a usable theorem. The S1 proof of the case
 is in progress elsewhere; its partial work (S1-level helper theories
 `bodyIntCall*`, not part of this project's build) is a read-only reference
-under alan-ref/s1c-intcall/lowering/ (its target there is
+under /home/claude/tasks/s3ptr-intcall/s1c-intcall/lowering/ (its target there is
 `bodySimCallIntcall$intcall_body_expr_ok`). Do not import or copy those
 theories into the build: read them for the shape only.
 
@@ -162,10 +162,16 @@ theories into the build: read them for the shape only.
 | S1 judgments | lowering/exprSimDefsScript.sml, lowering/stmtSimDefsScript.sml, lowering/exprSimHypsDefsScript.sml, lowering/loweringPostsScript.sml | expr_sim, stmt_frag, expr_post, vv_post |
 | Lowering | lowering/defs/exprLoweringScript.sml, lowering/defs/stmtLoweringScript.sml | compile_call, internal function packaging |
 | Source semantics | semantics/vyperInterpreterScript.sml | evaluate's IntCall clause |
-| S1 partial proof (reference only) | alan-ref/s1c-intcall/lowering/bodyIntCall*Script.sml, alan-ref/s1c-intcall/lowering/bodySimCallIntcallScript.sml | shape of the S1 proof in progress |
+| S1 partial proof (reference only) | /home/claude/tasks/s3ptr-intcall/s1c-intcall/lowering/bodyIntCall*Script.sml, /home/claude/tasks/s3ptr-intcall/s1c-intcall/lowering/bodySimCallIntcallScript.sml | shape of the S1 proof in progress |
 
 ## Notes
 
 - Intermediate lemmas you add are yours to state; the target is frozen.
 - Intuition is in the comment above body_intcall_case_ptr in
   lowering/bodyPtrIntCallCaseScript.sml.
+- `intCallCallee$internal_prologue_run` is now exported (its `[local]` was
+  dropped, statement unchanged), so the prologue leaf can `drule` it.
+- Decision 12 is merged: for a word type, `ptr_val_ok` now also requires
+  `op_prov G op = NONE` (helpers `ptr_val_ok_word`, `out_prov_*_none` in
+  bodyPtrDefs). A word IntCall return is an MLOAD, so it has no provenance;
+  adapt any leaf that concludes or consumes a word `ptr_val_ok`.
