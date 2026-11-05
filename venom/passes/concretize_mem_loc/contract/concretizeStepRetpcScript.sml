@@ -14,14 +14,6 @@ Proof
   qexists `i` >> simp[concretize_positions_unchanged]
 QED
 
-Theorem concretize_positions_var_operand:
-  MEM (Var x) (concretize_inst_with_positions p i).inst_operands ==>
-  concretize_inst_with_positions p i = i
-Proof
-  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
-  gvs[mk_assign_inst_def, mk_nop_inst_def]
-QED
-
 Theorem concretize_positions_seed:
   MEM origin [GAS; RETPC_PARAM] /\
   (concretize_inst_with_positions p i).inst_opcode = origin ==>
@@ -86,42 +78,16 @@ Proof
   metis_tac[fn_insts_MEM]
 QED
 
-Theorem concretize_positions_cfg_edge:
-  wf_function fn ==>
-  fn_cfg_edge (concretize_function_with_positions p fn) = fn_cfg_edge fn
-Proof
-  strip_tac >> simp[FUN_EQ_THM, fn_cfg_edge_def,
-    concretize_positions_blocks, MEM_MAP, PULL_EXISTS,
-    concretize_positions_block_label] >>
-  rpt gen_tac >>
-  `!bb. MEM bb fn.fn_blocks ==>
-     bb_succs (clear_nops_block
-       (block_map_transform (concretize_inst_with_positions p) bb)) = bb_succs bb` by
-    metis_tac[wf_function_def, concretize_positions_block_succs] >>
-  metis_tac[]
-QED
-
-Theorem concretize_positions_entry_label:
-  fn_entry_label (concretize_function_with_positions p fn) = fn_entry_label fn
-Proof
-  simp[fn_entry_label_def, entry_block_def, concretize_positions_blocks] >>
-  Cases_on `fn.fn_blocks` >> simp[concretize_positions_block_label]
-QED
-
-Theorem concretize_positions_reachable:
-  wf_function fn ==>
-  fn_reachable (concretize_function_with_positions p fn) = fn_reachable fn
-Proof
-  strip_tac >> drule concretize_positions_cfg_edge >> strip_tac >>
-  simp[FUN_EQ_THM, fn_reachable_def, concretize_positions_entry_label]
-QED
-
 Theorem concretize_positions_reachable_preds:
   wf_function fn ==>
   reachable_preds (concretize_function_with_positions p fn) = reachable_preds fn
 Proof
-  strip_tac >> drule concretize_positions_cfg_edge >> strip_tac >>
-  drule concretize_positions_reachable >> strip_tac >>
+  strip_tac >>
+  `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
+  `fn_cfg_edge (concretize_function_with_positions p fn) = fn_cfg_edge fn /\
+   fn_reachable (concretize_function_with_positions p fn) = fn_reachable fn` by
+    simp[FUN_EQ_THM, concretize_positions_cfg_edge,
+         concretize_positions_reachable] >>
   simp[FUN_EQ_THM, reachable_preds_def, concretize_positions_blocks,
        MAP_MAP_o, combinTheory.o_DEF, concretize_positions_block_label]
 QED
@@ -155,7 +121,9 @@ Theorem concretize_positions_reachable_fn:
   concretize_function_with_positions p (reachable_fn fn)
 Proof
   strip_tac >>
-  drule concretize_positions_reachable >> strip_tac >>
+  `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
+  `fn_reachable (concretize_function_with_positions p fn) = fn_reachable fn` by
+    simp[FUN_EQ_THM, concretize_positions_reachable] >>
   drule concretize_positions_reachable_preds >> strip_tac >>
   `reachable_inst (concretize_function_with_positions p fn) = reachable_inst fn` by
     simp[FUN_EQ_THM, reachable_inst_def] >>

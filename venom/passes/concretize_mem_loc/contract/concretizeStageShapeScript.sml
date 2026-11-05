@@ -8,7 +8,7 @@
  *)
 Theory concretizeStageShape
 Ancestors
-  o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher venomPassSchedule venomFnScheduleRunner cfgWf
+  concretizeStepStructure o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher venomPassSchedule venomFnScheduleRunner cfgWf
   staticLayoutFoldProofs staticLayoutDefs passSharedDefs venomWf passSimulationDefs list rich_list combin venomInst
 
 Theorem concretize_inst_positions_outputs[local]:
@@ -22,20 +22,6 @@ Proof
   rename1 `out::rest` >> Cases_on `rest` >> simp[] >>
   Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
   simp[mk_assign_inst_def]
-QED
-
-Theorem concretize_inst_positions_phi[local]:
-  ((concretize_inst_with_positions positions inst).inst_opcode = PHI <=>
-   inst.inst_opcode = PHI) /\
-  (inst.inst_opcode = PHI ==>
-   concretize_inst_with_positions positions inst = inst)
-Proof
-  Cases_on `inst.inst_opcode = ALLOCA` >>
-  simp[concretize_inst_with_positions_def] >>
-  Cases_on `inst.inst_outputs` >> simp[] >>
-  rename1 `out::rest` >> Cases_on `rest` >> simp[] >>
-  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
-  simp[mk_assign_inst_def, mk_nop_inst_def]
 QED
 
 Theorem concretize_inst_positions_nop[local]:
@@ -74,111 +60,6 @@ Proof
   gvs[mk_assign_inst_def, mk_nop_inst_def]
 QED
 
-Theorem concretize_positions_terminator[local]:
-  is_terminator inst.inst_opcode ==>
-  concretize_inst_with_positions positions inst = inst /\
-  inst.inst_opcode <> NOP
-Proof
-  Cases_on `inst.inst_opcode = ALLOCA` >>
-  simp[concretize_inst_with_positions_def] >>
-  strip_tac >> gvs[is_terminator_def] >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem concretize_positions_terminator_suffix[local]:
-  is_terminator inst.inst_opcode ==>
-  FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions positions) (xs ++ [inst])) =
-  FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions positions) xs) ++ [inst]
-Proof
-  strip_tac >>
-  drule_then (qspec_then `positions` strip_assume_tac)
-    concretize_positions_terminator >>
-  simp[MAP_APPEND, FILTER_APPEND]
-QED
-
-Theorem concretize_positions_last_terminator[local]:
-  insts <> [] /\ is_terminator (LAST insts).inst_opcode ==>
-  FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions positions) insts) <> [] /\
-  LAST (FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions positions) insts)) = LAST insts
-Proof
-  strip_tac >>
-  `insts = FRONT insts ++ [LAST insts]` by metis_tac[APPEND_FRONT_LAST] >>
-  `FILTER (\i. i.inst_opcode <> NOP)
-     (MAP (concretize_inst_with_positions positions) insts) =
-   FILTER (\i. i.inst_opcode <> NOP)
-     (MAP (concretize_inst_with_positions positions) (FRONT insts)) ++ [LAST insts]`
-    by metis_tac[concretize_positions_terminator_suffix] >>
-  simp[]
-QED
-
-Theorem concretize_positions_block_succs[local]:
-  bb_well_formed bb ==>
-  bb_succs (clear_nops_block
-    (block_map_transform (concretize_inst_with_positions positions) bb)) =
-  bb_succs bb
-Proof
-  simp[bb_well_formed_def] >> strip_tac >>
-  drule_all concretize_positions_last_terminator >>
-  disch_then (qspec_then `positions` strip_assume_tac) >>
-  simp[bb_succs_def, clear_nops_block_def, block_map_transform_def] >>
-  Cases_on `bb.bb_instructions` >> gvs[] >>
-  Cases_on `FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions positions) bb.bb_instructions)` >> gvs[]
-QED
-
-Theorem concretize_positions_block_labels:
-  MAP (\bb. bb.bb_label)
-    (concretize_function_with_positions positions fn).fn_blocks =
-  MAP (\bb. bb.bb_label) fn.fn_blocks
-Proof
-  simp[concretize_function_with_positions_def, clear_nops_function_def,
-       function_map_transform_def, MAP_MAP_o, o_DEF,
-       clear_nops_block_def, block_map_transform_def]
-QED
-
-Theorem concretize_positions_entry_label:
-  fn_entry_label (concretize_function_with_positions positions fn) =
-  fn_entry_label fn
-Proof
-  Cases_on `fn.fn_blocks` >>
-  simp[fn_entry_label_def, entry_block_def,
-       concretize_function_with_positions_def, clear_nops_function_def,
-       function_map_transform_def, clear_nops_block_def, block_map_transform_def]
-QED
-
-Theorem concretize_positions_cfg_edge:
-  EVERY bb_well_formed fn.fn_blocks ==>
-  (fn_cfg_edge (concretize_function_with_positions positions fn) a b <=>
-   fn_cfg_edge fn a b)
-Proof
-  strip_tac >>
-  simp[fn_cfg_edge_def, concretize_function_with_positions_def,
-       clear_nops_function_def, function_map_transform_def, MEM_MAP] >>
-  eq_tac
-  >- (rpt strip_tac >> gvs[] >>
-      rename1 `MEM source fn.fn_blocks` >>
-      `bb_well_formed source` by metis_tac[EVERY_MEM] >>
-      drule concretize_positions_block_succs >>
-      disch_then (qspec_then `positions` assume_tac) >>
-      qexists `source` >>
-      gvs[clear_nops_block_def, block_map_transform_def]) >>
-  rpt strip_tac >>
-  rename1 `MEM source fn.fn_blocks` >>
-  `bb_well_formed source` by metis_tac[EVERY_MEM] >>
-  drule concretize_positions_block_succs >>
-  disch_then (qspec_then `positions` assume_tac) >>
-  qexists `clear_nops_block (block_map_transform
-    (concretize_inst_with_positions positions) source)` >>
-  conj_tac
-  >- (qexists `block_map_transform (concretize_inst_with_positions positions) source` >>
-      simp[] >> qexists `source` >> simp[]) >>
-  gvs[clear_nops_block_def, block_map_transform_def]
-QED
-
 Theorem concretize_positions_path:
   EVERY bb_well_formed fn.fn_blocks ==>
   (is_fn_path (concretize_function_with_positions positions fn) path <=>
@@ -187,29 +68,6 @@ Proof
   strip_tac >> Induct_on `path` >- simp[is_fn_path_def] >>
   Cases_on `path` >>
   simp[is_fn_path_def, concretize_positions_cfg_edge]
-QED
-
-Theorem concretize_positions_reachable:
-  EVERY bb_well_formed fn.fn_blocks ==>
-  (fn_reachable (concretize_function_with_positions positions fn) lbl <=>
-   fn_reachable fn lbl)
-Proof
-  strip_tac >>
-  `fn_cfg_edge (concretize_function_with_positions positions fn) = fn_cfg_edge fn`
-    by (simp[FUN_EQ_THM, concretize_positions_cfg_edge]) >>
-  simp[fn_reachable_def, concretize_positions_entry_label]
-QED
-
-Theorem concretize_positions_operand_provenance[local]:
-  MEM (Var v) (concretize_inst_with_positions positions inst).inst_operands ==>
-  MEM (Var v) inst.inst_operands
-Proof
-  Cases_on `inst.inst_opcode = ALLOCA` >>
-  simp[concretize_inst_with_positions_def] >>
-  Cases_on `inst.inst_outputs` >> simp[] >>
-  rename1 `out::rest` >> Cases_on `rest` >> simp[] >>
-  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
-  simp[mk_assign_inst_def, mk_nop_inst_def]
 QED
 
 Theorem concretize_positions_block_instruction:
@@ -230,7 +88,7 @@ Theorem concretize_positions_block_phi:
    MEM inst bb.bb_instructions)
 Proof
   strip_tac >> simp[concretize_positions_block_instruction] >>
-  metis_tac[concretize_inst_positions_phi]
+  metis_tac[concretize_positions_phi]
 QED
 
 Theorem concretize_positions_block_provenance:
@@ -416,7 +274,7 @@ Proof
   rename1 `MEM inst bb.bb_instructions` >>
   Cases_on `inst.inst_opcode = PHI`
   >- (`concretize_inst_with_positions positions inst = inst`
-        by metis_tac[concretize_inst_positions_phi] >>
+        by metis_tac[concretize_positions_phi] >>
       simp[] >> rpt gen_tac >> strip_tac >>
       gvs[concretize_positions_block_provenance] >>
       rename1 `MEM pred_bb fn.fn_blocks` >>
@@ -429,10 +287,10 @@ Proof
       drule_at (Pat `def_on_all_paths _ _ _ _`) concretize_positions_def_on_paths >>
       simp[]) >>
   ` (concretize_inst_with_positions positions inst).inst_opcode <> PHI`
-    by metis_tac[concretize_inst_positions_phi] >>
+    by metis_tac[concretize_positions_phi] >>
   simp[] >> qx_gen_tac `v` >> strip_tac >>
   `MEM (Var v) inst.inst_operands`
-    by metis_tac[concretize_positions_operand_provenance] >>
+    by metis_tac[concretize_positions_var_operand] >>
   `def_on_all_paths fn bb (SOME inst) v`
     by (gvs[fn_defs_reach_uses_def, clear_nops_block_def,
                 block_map_transform_def] >> metis_tac[]) >>
@@ -463,28 +321,28 @@ Proof
   >- (gvs[fn_phi_operands_single_def_def] >>
       simp[concretize_positions_block_provenance,
            concretize_positions_block_instruction,
-           concretize_inst_positions_phi] >> rpt strip_tac >>
-      gvs[concretize_inst_positions_phi, concretize_positions_block_phi] >> metis_tac[])
+           concretize_positions_phi] >> rpt strip_tac >>
+      gvs[concretize_positions_phi, concretize_positions_block_phi] >> metis_tac[])
   >- (gvs[fn_phis_cover_preds_def] >>
       simp[concretize_positions_block_provenance,
            concretize_positions_block_instruction,
-           concretize_inst_positions_phi] >> rpt strip_tac >>
+           concretize_positions_phi] >> rpt strip_tac >>
       gvs[concretize_positions_block_phi] >>
-      gvs[concretize_inst_positions_phi, concretize_positions_cfg_edge,
+      gvs[concretize_positions_phi, concretize_positions_cfg_edge,
           clear_nops_block_def, block_map_transform_def] >> metis_tac[])
   >- (gvs[fn_phi_outputs_single_def_def] >>
       simp[concretize_positions_block_provenance,
            concretize_positions_block_instruction,
-           concretize_inst_positions_phi] >> rpt strip_tac >>
-      gvs[concretize_inst_positions_phi, concretize_positions_block_phi] >> metis_tac[])
+           concretize_positions_phi] >> rpt strip_tac >>
+      gvs[concretize_positions_phi, concretize_positions_block_phi] >> metis_tac[])
   >- (gvs[fn_phis_non_degenerate_def] >>
       simp[concretize_positions_insts, MEM_FILTER, MEM_MAP] >> rpt strip_tac >>
-      gvs[concretize_inst_positions_phi, concretize_positions_block_phi] >> metis_tac[]) >>
+      gvs[concretize_positions_phi, concretize_positions_block_phi] >> metis_tac[]) >>
   simp[concretize_positions_block_provenance,
        concretize_positions_block_instruction,
-       concretize_inst_positions_phi] >> rpt strip_tac >>
+       concretize_positions_phi] >> rpt strip_tac >>
   gvs[concretize_positions_block_phi] >>
-      gvs[concretize_inst_positions_phi, concretize_positions_cfg_edge,
+      gvs[concretize_positions_phi, concretize_positions_cfg_edge,
       clear_nops_block_def, block_map_transform_def] >> metis_tac[]
 QED
 

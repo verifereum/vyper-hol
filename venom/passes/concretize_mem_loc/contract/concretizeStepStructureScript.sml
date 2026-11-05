@@ -11,12 +11,14 @@ Proof
 QED
 
 Theorem concretize_positions_terminator:
-  is_terminator i.inst_opcode ==> concretize_inst_with_positions p i = i
+  is_terminator inst.inst_opcode ==>
+  concretize_inst_with_positions positions inst = inst /\
+  inst.inst_opcode <> NOP
 Proof
-  strip_tac >>
-  `i.inst_opcode <> ALLOCA` by
-    (strip_tac >> gvs[is_terminator_def]) >>
-  simp[concretize_inst_with_positions_def]
+  Cases_on `inst.inst_opcode = ALLOCA` >>
+  simp[concretize_inst_with_positions_def] >>
+  strip_tac >> gvs[is_terminator_def] >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem concretize_positions_nonterminator:
@@ -28,10 +30,16 @@ Proof
 QED
 
 Theorem concretize_positions_phi:
-  ((concretize_inst_with_positions p i).inst_opcode = PHI) <=>
-  (i.inst_opcode = PHI)
+  ((concretize_inst_with_positions positions inst).inst_opcode = PHI <=>
+   inst.inst_opcode = PHI) /\
+  (inst.inst_opcode = PHI ==>
+   concretize_inst_with_positions positions inst = inst)
 Proof
-  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
+  Cases_on `inst.inst_opcode = ALLOCA` >>
+  simp[concretize_inst_with_positions_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  rename1 `out::rest` >> Cases_on `rest` >> simp[] >>
+  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
   simp[mk_assign_inst_def, mk_nop_inst_def]
 QED
 
@@ -224,4 +232,62 @@ Proof
   Cases_on `bb.bb_instructions` >> gvs[] >>
   qmatch_goalsub_abbrev_tac `prefix ++ [last]` >>
   Cases_on `prefix` >> simp[LAST_DEF, LAST_APPEND_CONS]
+QED
+
+Theorem concretize_positions_var_operand:
+  MEM (Var x) (concretize_inst_with_positions p i).inst_operands ==>
+  concretize_inst_with_positions p i = i
+Proof
+  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
+  gvs[mk_assign_inst_def, mk_nop_inst_def]
+QED
+
+Theorem concretize_positions_entry_label:
+  fn_entry_label (concretize_function_with_positions positions fn) =
+  fn_entry_label fn
+Proof
+  Cases_on `fn.fn_blocks` >>
+  simp[fn_entry_label_def, entry_block_def,
+       concretize_function_with_positions_def, clear_nops_function_def,
+       function_map_transform_def, clear_nops_block_def, block_map_transform_def]
+QED
+
+Theorem concretize_positions_cfg_edge:
+  EVERY bb_well_formed fn.fn_blocks ==>
+  (fn_cfg_edge (concretize_function_with_positions positions fn) a b <=>
+   fn_cfg_edge fn a b)
+Proof
+  strip_tac >>
+  simp[fn_cfg_edge_def, concretize_function_with_positions_def,
+       clear_nops_function_def, function_map_transform_def, MEM_MAP] >>
+  eq_tac
+  >- (rpt strip_tac >> gvs[] >>
+      rename1 `MEM source fn.fn_blocks` >>
+      `bb_well_formed source` by metis_tac[EVERY_MEM] >>
+      drule concretize_positions_block_succs >>
+      disch_then (qspec_then `positions` assume_tac) >>
+      qexists `source` >>
+      gvs[clear_nops_block_def, block_map_transform_def]) >>
+  rpt strip_tac >>
+  rename1 `MEM source fn.fn_blocks` >>
+  `bb_well_formed source` by metis_tac[EVERY_MEM] >>
+  drule concretize_positions_block_succs >>
+  disch_then (qspec_then `positions` assume_tac) >>
+  qexists `clear_nops_block (block_map_transform
+    (concretize_inst_with_positions positions) source)` >>
+  conj_tac
+  >- (qexists `block_map_transform (concretize_inst_with_positions positions) source` >>
+      simp[] >> qexists `source` >> simp[]) >>
+  gvs[clear_nops_block_def, block_map_transform_def]
+QED
+
+Theorem concretize_positions_reachable:
+  EVERY bb_well_formed fn.fn_blocks ==>
+  (fn_reachable (concretize_function_with_positions positions fn) lbl <=>
+   fn_reachable fn lbl)
+Proof
+  strip_tac >>
+  `fn_cfg_edge (concretize_function_with_positions positions fn) = fn_cfg_edge fn`
+    by (simp[FUN_EQ_THM, concretize_positions_cfg_edge]) >>
+  simp[fn_reachable_def, concretize_positions_entry_label]
 QED
