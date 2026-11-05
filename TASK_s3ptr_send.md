@@ -37,7 +37,7 @@ holbuild -j4 build bodyPtrCallCasesTheory
 
 ## Background
 
-The S3 pointer-safety proof of the Vyper-to-Venom lowering is a pointer twin of the S1 body simulation: `bodySimPtrMain`'s `body_sim_ptr_mutual` runs the body induction over the predicates of `bodyPtrPreds`, one case lemma per expression and statement form. Each case is the twin of S1's case of the same name, with `expr_sim_ptr` / `expr_vv_sim_ptr` (a counted path `gas_path_ptr` on which every edge passes `ptr_safe_step`, with the ghost provenance `G` and taint `tn` threaded along) in place of S1's `expr_sim` / `expr_vv_sim`. Their posts are S1's posts plus `ghost_inv`, `ptr_val_ok` / `ptr_vv_ok` and `ghost_kept`. So the simulation half replays S1's proof; the new work is the ghost and the per-edge check.
+The S3 pointer-safety proof of the Vyper-to-Venom lowering is a pointer twin of the S1 body simulation: `bodySimPtrMain`'s `body_sim_ptr_mutual` runs the body induction over the predicates of `bodyPtrPreds`, one case lemma per expression and statement form. Each case is the twin of S1's case of the same name, with `expr_sim_ptr` / `expr_vv_sim_ptr` (a counted path `gas_path_ptr` on which every edge passes `ptr_safe_step`, with the ghost provenance `G` and taint `tn` threaded along) in place of S1's `expr_sim` / `expr_vv_sim`. Their posts are S1's posts plus `ghost_inv`, `ptr_val_ok` / `ptr_vv_ok`, `ghost_kept`, and `ptr_buf_ok` for memory values (the value's site covers `type_memory_bytes` of its lowered type, not just its footprint). So the simulation half replays S1's proof; the new work is the ghost and the per-edge check.
 
 `send(to, value[, gas=g])` lowers its word operands left to right with `lower_value`, then `CALL [gas; to; value; 0; 0; 0; 0]` (gas `Lit 0w` without `gas=`) and an `ASSERT` of the success word; its value is `StackValue NoneT (Lit 0w)` (`compile_call ... (Send has_gas)` in `lowering/defs/exprLoweringScript.sml`). In oracle mode the CALL takes the same outcome as the source's `eval_send` (`extCallOracleStep`'s `send_call_oracle_step`). The CALL reads and writes no memory (both regions have size 0).
 
@@ -61,7 +61,7 @@ All paths are relative to this directory (the vyper-hol project root).
 |----------|----------|-------------|
 | Piece theory | `lowering/bodyPtrCallCasesScript.sml` | The frozen target; the other cases are worked on elsewhere, leave them |
 | Predicates | `lowering/bodyPtrPredsScript.sml` | `body_*_ptr_ok`, the induction's predicates |
-| Judgments | `lowering/bodyPtrDefsScript.sml` | `expr_sim_ptr`, `expr_vv_sim_ptr`, `ghost_inv`, `ghost_kept`, `ptr_val_ok`, `ptr_vv_ok`, `cx_dead`, `stor_taint_ok` |
+| Judgments | `lowering/bodyPtrDefsScript.sml` | `expr_sim_ptr`, `expr_vv_sim_ptr`, `ghost_inv`, `ghost_kept`, `ptr_val_ok`, `ptr_vv_ok`, `ptr_buf_ok`, `cx_dead`, `stor_taint_ok` |
 | Counted ptr paths | `lowering/fragGasPathPtrScript.sml` | `gas_path_ptr_edge`, `gas_path_ptr`, `gas_summary_ptr_at`, `gas_outcome_ptr`, `gas_path_ptr_then`, `gas_path_ptr_erase` |
 | Composition | `lowering/gasSummaryComposePtrScript.sml` | `gas_marked_exec_ptr*`, `gas_outcome_ptr_bind`, `_bind_normal`, `_prefix`, `_conseq`, `_erase` |
 | Straight-line runs | `lowering/fragGasSeqPtrScript.sml` | `run_inst_seq_gas_path_ptr`, `inst_seq_ptr`, `gas_path_ptr_step`, `gas_path_ptr_abort` |
@@ -78,3 +78,4 @@ All paths are relative to this directory (the vyper-hol project root).
 
 - The CALL changes storage and transient storage (the oracle outcome's accounts). `ghost_inv`'s `stor_taint_ok` is stated over the current storage's dead bytes, so check how `step_taint` treats the CALL before relying on it surviving.
 - `NoneT` is not a word type; `ptr_mem_ok` of `NoneV` holds because its footprint is 0.
+- The result is `StackValue NoneT (Lit 0w)`; check whether `ptr_buf_ok` is vacuous for it (`type_memory_bytes` of its lowered type).

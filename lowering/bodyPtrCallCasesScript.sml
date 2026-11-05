@@ -18,6 +18,7 @@ Theory bodyPtrCallCases
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list bodyPtrCallResidual
+  bodyPtrCallCalldata
 
 val _ = Parse.hide "body";
 
@@ -33,7 +34,8 @@ Proof
   cheat
 QED
 
-(* ADMITTED: a piece of the body induction. *)
+(* bodyPtrCallResidual's residual, until extcall's lowering port and the
+   decoder's compare are settled. *)
 Theorem body_extcall_case_ptr:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
@@ -49,7 +51,7 @@ Theorem body_extcall_case_ptr:
     body_expr_ptr_ok cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  cheat
+  ACCEPT_TAC extcall_case_ptr_residual
 QED
 
 (* ADMITTED: a piece of the body induction. *)
@@ -67,7 +69,10 @@ Theorem body_raw_call_calldata_case_ptr:
     body_exprs_ptr_ok cx es ==>
     body_expr_ptr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  (* Vacuous: its DALLOCA contradicts ~ctx_has_dalloca (bodyPtrCallCalldata). *)
+  rw[body_expr_ptr_ok_def] >>
+  fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  drule raw_call_calldata_ptr_vacuous >> simp[]
 QED
 
 (* bodyPtrCallResidual's residual, until RawLog's lowering lands. *)
