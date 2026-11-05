@@ -1,6 +1,6 @@
 (* List-level robust source and staging composition. *)
 Theory logDataStorePtr
-Ancestors robustCopyTransportPtr logValueFramePtr exprSimProps logDataFieldPtr logDataFieldRunPtr logFieldGhostPtr logInstSeqPtr stmtSimLogDataRun
+Ancestors robustCopyTransportPtr logValueFramePtr loweringPosts exprSimDefs exprSimProps logDataFieldPtr logDataFieldRunPtr logFieldGhostPtr logInstSeqPtr stmtSimLogDataRun
   stmtSimLogDataFrame stmtSimLogData stmtSimLogTopics bodyPtrDefs ptrDiscipline
   exprLoweringProps context stmtLowering emitHelper emitHelperProps freshWrites venomInst venomState compileEnv words list arithmetic
 
@@ -102,4 +102,35 @@ Proof
           simp[mk_inst_def,is_terminator_def]) >>
       irule log_store_memory_opcode_shape >> metis_tac[]) >>
   first_x_assum irule >> metis_tac[]
+QED
+
+Theorem log_data_source_inst_idx[simp]:
+  log_data_source cx b cap (s with vs_inst_idx := k) = log_data_source cx b cap s
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >> PairCases_on `x` >>
+  simp[log_data_source_def,log_source_apart_def,expr_val_rel_def,
+    eval_operand_def,lookup_var_def]
+QED
+
+Theorem ptr_val_ok_inst_idx[simp]:
+  ptr_val_ok cx ty v op G tn (s with vs_inst_idx := k) <=>
+  ptr_val_ok cx ty v op G tn s
+Proof
+  simp[ptr_val_ok_def,ptr_mem_ok_def,eval_operand_def,lookup_var_def] >>
+  Cases_on `op` >> simp[eval_operand_def,lookup_var_def]
+QED
+
+Theorem log_field_opcode_shape:
+  emit_op ADD [buf;Lit (n2w off)] sa = (dst,sm) /\
+  compile_store_memory ce src dst ty ty sm = ((),sn) /\ supported_scalar_type ty ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sn)
+Proof
+  strip_tac >> drule emit_op_extends >> strip_tac >>
+  drule exprSimBufferStoreTheory.buffer_store_memory_shape >> strip_tac >>
+  `emitted_insts sa sn = emitted_insts sa sm ++ emitted_insts sm sn` by
+    (irule emitted_insts_append >> asm_rewrite_tac[]) >>
+  simp[EVERY_APPEND] >> conj_tac
+  >- (drule emitted_insts_emit_op >> strip_tac >> simp[mk_inst_def,is_terminator_def]) >>
+  irule log_store_memory_opcode_shape >> metis_tac[]
 QED
