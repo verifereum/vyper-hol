@@ -47,3 +47,21 @@ Theorem calldatacopy_step_prov:
 Proof
   simp[step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV]
 QED
+
+Theorem calldatacopy_step_taint:
+  !dst src count s d a n id tn bytes.
+    eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+    eval_operand count s = SOME n ==>
+    step_taint (mk_inst id CALLDATACOPY [dst; src; count] []) s
+      (write_memory_with_expansion (w2n d) bytes s) tn =
+    tn with t_mem := tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n n}
+Proof
+  rpt strip_tac >>
+  simp[step_taint_def, mk_inst_def, set_var_taint_def, DRESTRICT_UNIV,
+       store_taint_def, adopt_reset_def, imm_taint_def, mem_taint_def,
+       step_writes_def, source_memory_write_ranges_def,
+       sized_source_write_range_def, written_taint_def, range_bytes_def,
+       new_site_bytes_def, write_memory_with_expansion_def,
+       FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  simp[taint_component_equality]
+QED
