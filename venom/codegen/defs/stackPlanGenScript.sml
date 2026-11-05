@@ -382,7 +382,12 @@ End
 (* Per-instruction: no pre-codegen opcodes, no operand the planner could
    mistake for its dead_stack_marker, at most 16 stack operands for any
    instruction but a PHI (the frame proofs reach operands with DUP/SWAP),
-   and a LOG's topic count at most 4 (LOG0 to LOG4) *)
+   a LOG's topic count at most 4 (LOG0 to LOG4), no operands on a NOP
+   (the planner skips a NOP, so a variable it read would stay on the stack;
+   the passes that make NOPs clear their operands), and no Label operand on
+   a terminator other than a jump (get_successors takes every Label operand
+   of a terminator as a CFG edge, so a halting one would keep variables live
+   past its end) *)
 Definition codegen_ready_inst_def:
   codegen_ready_inst inst ⇔
     ¬ is_pre_codegen_opcode inst.inst_opcode ∧
@@ -390,7 +395,11 @@ Definition codegen_ready_inst_def:
     ¬MEM dead_stack_marker inst.inst_operands ∧
     (inst.inst_opcode ≠ PHI ==> LENGTH (compute_operands inst) ≤ 16) ∧
     (inst.inst_opcode = LOG ==>
-     case inst.inst_operands of Lit tc :: _ => w2n tc ≤ 4 | _ => F)
+     case inst.inst_operands of Lit tc :: _ => w2n tc ≤ 4 | _ => F) ∧
+    (inst.inst_opcode = NOP ==> inst.inst_operands = []) ∧
+    (is_terminator inst.inst_opcode ∧ inst.inst_opcode ≠ JMP ∧
+     inst.inst_opcode ≠ JNZ ∧ inst.inst_opcode ≠ DJMP ==>
+     EVERY (λop. get_label op = NONE) inst.inst_operands)
 End
 
 (* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
@@ -830,6 +839,20 @@ Definition generate_block_insts_plan_def:
         | SOME (rest_ops, ps'') => SOME (step_ops ++ rest_ops, ps'')
 End
 
+(* A block that ends in a REVERT after a RETURNDATACOPY may forward a
+   failed call's revert data: the RETURNDATACOPY writes past the memory
+   frontier, where nothing but the REVERT reads.  The codegen proof covers
+   such a block only when its code uses no spill slot, which lives in that
+   same memory, so the planner rejects one whose code would spill or
+   restore (Python's venom_to_assembly spills there freely). *)
+Definition revert_block_spills_def:
+  revert_block_spills bb (ops : stack_op list) ⇔
+    bb.bb_instructions ≠ [] ∧
+    (LAST bb.bb_instructions).inst_opcode = REVERT ∧
+    EXISTS (λinst. inst.inst_opcode = RETURNDATACOPY) bb.bb_instructions ∧
+    EXISTS (λop. case op of SOSpill _ => T | SORestore _ => T | _ => F) ops
+End
+
 Definition generate_block_plan_def:
   generate_block_plan liveness dfg cfg fn bb ps =
     let label_op = [SOLabel bb.bb_label] in
@@ -850,7 +873,8 @@ Definition generate_block_plan_def:
     case result of
       NONE => NONE
     | SOME (inst_ops, ps3) =>
-        SOME (label_op ++ param_ops ++ clean_ops ++ inst_ops, ps3)
+        if revert_block_spills bb inst_ops then NONE
+        else SOME (label_op ++ param_ops ++ clean_ops ++ inst_ops, ps3)
 End
 
 (* =========================================================================

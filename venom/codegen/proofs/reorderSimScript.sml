@@ -565,7 +565,7 @@ Proof
   gvs[residual_budget_wf_def]
 QED
 
-Theorem stack_pop_one_elem_count[local]:
+Theorem stack_pop_one_elem_count:
   !x (xs : 'a list).
     xs <> [] ==>
     LIST_ELEM_COUNT x (stack_pop 1 xs) +
