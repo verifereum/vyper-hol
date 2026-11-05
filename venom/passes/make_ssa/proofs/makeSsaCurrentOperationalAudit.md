@@ -697,3 +697,268 @@ the canonical FINAL slot; original PHIs use snapshot/first-write semantics and
 the frozen output-uniqueness premise, not ordinary sequential-write reasoning.
 No concrete task counterexample is asserted. No new operational invariant or
 conditional runtime theorem is installed by this audit.
+
+## 10. Completed-event judgment signature test (C1.12.completed_history_probe)
+
+This section supersedes the *proposed origin discipline* in sections 2 and 9,
+not their accepted historical diagnostics. It is HOL-shaped design notation,
+NOT an installed definition or a proved simulation. No SML changed. The baseline
+four targets in STATE build (TO_makessa-20261105T052724Z_m9963_t001).
+
+### 10.1 Judgment, admissibility, and event positions
+
+Write `J Ps Pt q st st' V M N L a` for an inductively generated paired
+completed-prefix judgment. Fixed parameters are the actual certificate, frozen
+hypotheses, contexts and entry state. `Ps,Pt` are chronological semantic phase
+lists; `q` carries the two execution locations plus block/source cursor and
+cleanup cursor; `L` is a finite chronological list of completed records; `a` is
+a fresh-origin generation bound. A record contains:
+
+```
+(kind, source_phase_position, target_phase_position,
+ source_slot option, target_slot, source_owner, target_name,
+ origin, value, source_cut, target_cut)
+```
+
+Positions refer to OCCURRENCES in Ps/Pt, not static instruction IDs, labels or
+certificate events. A batch record additionally identifies the incoming snapshot
+cut and the PHI index. A copy record points to its completed read cut and write
+cut. Several indexed writes can belong to one ordinary phase. Their order is the
+order in `writes`, and their ordinal is separate from their output slot. A PHI
+origin can precede the event that propagates it; event position is NOT the origin.
+Every record refers only to phases at or before its two recorded cuts. Historical
+records retain their old maps/values as witnesses, not as claims about current
+bindings. Default tokens have no fabricated record.
+
+Required fields at a reachable aligned cut:
+
+* `current_actual_prefix fn C (CurrentEntry f) entry Ps next result st` and
+  the corresponding target prefix from the same entry store/frame. A continuing
+  cut has `next=SOME loc, result=OK st`. Raw stopped cuts may use the existing
+  `NONE` constructor but cannot then be continued by the prefix append rule.
+* q aligns source ordinary instruction i with the certificate's renamed index
+  `LENGTH ip+i`, or source post-PHI cut with target retained-batch/copy cursor k.
+  Target cleaned prefix length/index adjustment must use PhaseShape, not identify
+  its cleaned index with `LENGTH ip+i` for all phases. Index controls occur in the
+  actual prefixes. Equal frames and equal current/previous BBs hold at aligned
+  semantic cuts; indices need not agree.
+* `current_origin_realizes V M st /\ current_origin_realizes V N st'`;
+  `current_singleton_agree (current_instruction_singleton_table fn H) st st'`.
+* At ordinary/exit cuts, demanded lookup agreement is the final conjunct of
+  `current_joint_rel V M N rs D st st'`, with the certified selector rs and
+  precisely the relevant D. During cleanup it is required only for selectors
+  already produced. This is NOT permission to assume readiness for the next copy.
+* Every effective source write has a completed record paired with an actual
+  target write or retained snapshot event with the same origin/value. At an
+  ordinary phase, extraction of the current binding uses its final matching
+  slot; at PHIs it uses the batch's actual first-binding semantics. This is a
+  coverage clause to be established by constructors, not by static MEM in H.
+* All origins in M, N, historical record maps and retained seed records have
+  first coordinate `< a`. A saved record remains valued by V at its recorded
+  value. No clause asserts that its target_name still maps to its origin.
+
+The final two fields are the proposed dynamic ledger invariant. They are not
+known to follow from the other fields. In particular demanded agreement is a
+transfer conclusion to prove, not evidence by itself that J is inductive.
+
+Constructors must be forward extensions of **already constructed** actual
+prefixes: Entry; non-INVOKE ordinary OK (plus its actual control update);
+retained batch/dispatch (source stays post-PHI while target copies advance);
+completed cleanup ASSIGN or NOP; and terminator/result boundaries. Constructor
+premises may contain source execution and a previously proved J, but not a
+successful target next step or a read-ready premise for that step. This is a
+specification of obligations, not a definition by assuming them. INVOKE is not
+among the admissible edges of ExecutionHistory:51-109; extending this skeleton
+to calls is explicitly OPEN, not encoded as a fictitious CurrentControl edge.
+
+At an intermediate target copy cursor, actual-prefix admissibility must include
+its real `SUC vs_inst_idx` update before a continuing next copy. A raw prefix
+ending immediately after a write has `next=NONE`; concatenating another prefix
+onto that stopped witness is invalid. The target retained dispatch includes
+both CurrentBatch and CurrentControl, as ExecutionHistory:52-61 specifies.
+SemanticHistory is used only to extract/fold writes from such actual slices;
+its unconstrained CurrentControl cannot manufacture reachability.
+
+### 10.2 Actual entry and freshness test
+
+Entry uses **the actual same state e** with `fn_entry_state fn e`, not arbitrary
+states with matching frames. Pass entry-label preservation must establish
+`fn_entry_state fn' e`; e has FEMPTY variables, index 0, prev NONE, nonhalted
+and the actual entry label (o1PassLift:49-53). Choose `Ps=Pt=L=[]`, `M=N=[]`,
+`V=(\o. NONE)`, `a=1` and both actual-prefix empty constructors. Realization,
+frame equality, singleton agreement and empty ledger are immediate candidates.
+Agreement of empty maps is true even when D is nonempty, but does NOT establish
+SOME operand values. Entry has no PHIs; actual source availability is needed
+when a later read is attempted. Fuel/location alignment and label preservation
+are still proof obligations, not consequences of empty realization alone.
+
+JointOrdinaryStep:143-178 returns `?n writes post'` and valuations
+`V1 = current_event_valuation V visit l i n writes`, maps
+`M1 = current_event_origins outs M visit l i n writes` and likewise N1.
+It imposes NO freshness constraint relative to a historical seed ledger.
+`current_origin_absent` checks ALOOKUP of the *current* map only
+(JointRuntime:112-114); shadowed historical origins are not protected.
+Thus choosing visit equal to a block visit while accepting arbitrary returned n
+is not a sufficient ledger allocation discipline.
+
+A precise candidate repair at the J level (unproved here) is to instantiate the
+universally quantified `visit` with `a`, and then increase a to `SUC a` after
+each ordinary phase, not just each block visit. All new origins then have first
+coordinate a, regardless of existential n or repeated slot indices. All old
+record/seed/map origins have smaller first coordinate. Consequently V1 agrees
+with V on every historical origin. This uses the freedom in the actual theorem
+signature; `visit` has no premise equating it to a block-visit number. Keep the
+actual block occurrence as a SEPARATE ledger field. Finiteness of L is needed
+for initialization/extension of the bound if any entry bindings are ever used;
+fn_entry_state here has none. Retained batches and copies only propagate old
+origins, so need not allocate a new origin generation. The finite bound and
+valuation-preservation induction are explicit obligations for a future theorem,
+not facts supplied by current_joint_rel. Without that discipline the interface
+test fails exactly on an origin occurring only in an old seed.
+
+### 10.3 Ordinary completed writer: exact supplied and missing facts
+
+Instantiate the certificate ordinary theorem at a source body cut satisfying
+its phis/tail split, j bound, non-PHI opcode and i=LENGTH phis+j. Use its SAME U,
+rs,E,rt,Et and target out. At this cut J must derive joint agreement on
+`operand_vars inst.operands ++ current_before_outputs inst.outputs D`, with
+`D SUBSET U`, as well as permanent singleton agreement. Source actual execution
+supplies `step_inst_base inst st=OK post` only after excluding INVOKE and applying
+the non-INVOKE bridge. The theorem yields the SAME post' for:
+
+1. target base-step OK;
+2. shared indexed writes and `MAP FST writes=GENLIST I (LENGTH outs)`;
+3. joint relation at rt,D with V1,M1,N1;
+4. permanent singleton agreement at post,post'.
+
+This is an ordinary **OK base-step** interface. It supplies neither an INVOKE
+callee run nor the actual instruction-index/control edge. Even a terminator's
+halt/dispatch choice must be connected to ExecutionHistory's constructors.
+No terminal IntRet/Abort transport follows from this OK-only signature.
+
+After making those real non-INVOKE edges, record each shared indexed write with
+its two actual phase positions. For the external original writer t, accepted
+OriginalOrigin gives the canonical FINAL matching output slot j at its last
+changing block d. Select that slot's event from the completed phase's writes;
+PairedRuntime:8-19 gives its origin `(a,d,i,n+j)` when the ordered writes are the
+GENLIST slots. It occurs in BOTH decorated maps, but only the final hit for v
+is its source ALOOKUP. Use LastEvent's final-hit interface, not arbitrary slot
+membership. A later ordinary output of v in the SAME block would supersede it;
+OriginalOrigin's final instruction/slot is needed before selecting the record.
+If t is a PHI, the next subsection applies instead.
+
+The event gives equal value w at its paired post-write cuts and V1(o)=SOME w.
+It does not give N_at_p[y]=SOME o. To obtain that, split the already completed
+source/target histories at the end of d, transport over d's remaining local
+instructions, and then over the non-changing inter-block suffix to p. The latter
+uses RestrictedRuntime physical owner exclusion and underlying actual-prefix
+origin transport (section 9.2); it must also protect the source owner v. A
+batch can read/write before the ordinary body, so the phase slice endpoints
+must be explicit. Current-map realization plus historical event membership
+alone is insufficient.
+
+### 10.4 Retained original PHI: propagated origin, not a fresh source ID
+
+RetainedJoint:31-50 requires the actual source `eval_one_phi` result, selected
+operand v and predecessor p, exit joint relation with MEM v D, singleton output
+and frozen nondegeneracy/certificate premises. It yields target retained index r,
+name y, `ALOOKUP M_in v=SOME o`, `V o=SOME w`, both snapshot origin-read
+relations, and target `eval_one_phi = SOME(y,w)`. It does NOT write M or N, and
+it does NOT allocate `(new_visit,h,i,0)` for the source output dst.
+
+Assemble the whole mixed target batch successfully from the incoming agreements
+before recording any post-batch lookup. RetainedJoint:98-107 requires this
+`eval_phis=OK post'`, PHI-prefix wf, non-PHI suffix boundary, prev p, distinct
+outputs and incoming realization. It yields target `N_batch=bindings++N_in`,
+realization under unchanged V and `ALOOKUP N_batch y=SOME o`. PhiOrigins supplies
+the source batch counterpart. Source PHI output uniqueness is essential when
+extracting `ALOOKUP M_batch dst=SOME o`. Both batches read their INCOMING
+snapshots; serially reading an earlier updated binding would be wrong.
+
+The completed ledger record links source PHI OUTPUT occurrence dst to target
+y with origin o of the INCOMING OPERAND. It may share o with older events.
+Demanding a fresh source origin per retained PHI is incompatible with these
+published signatures. A source write occurrence and its propagated value-origin
+must remain separate. For a current-h original PHI writer this completed batch
+record, not an old visit or future ordinary output, is the witness. ReinsertedReady
+then protects its read through prior copies. For an external PHI writer d, use
+the same historical record plus the suffix transport of 10.3.
+
+### 10.5 First external-writer copy and dependency audit
+
+Fix the FIRST entrance at h and its next copy x<-y for owner v, with external
+nonself token t. Use the accepted InsertionDemand bridge and the appropriate
+rooted equality (ordinary operand-excluded or ExceptionalDemandOrigin).
+DemandOrigin/source availability excludes default; FirstArrival excludes the
+self token. OriginalOrigin locates the final original slot if t is original.
+Chronological inserted inversion locates the last completed g if
+`t=CurrentInserted v g`, with g<>h. These are static-to-route conclusions,
+not completed-target-write conclusions.
+
+For an external ORIGINAL ordinary writer, 10.3 identifies the record that the
+proposed ordinary constructor must have added at the actual earlier occurrence
+of d. For an external original PHI, 10.4 identifies the batch record. The record
+plus valuation protection, local d-tail exclusion, non-changing suffix transport
+to p, and current-h retained/prior-copy local nonclobber would establish
+`ALOOKUP M_post_source v=SOME o /\ ALOOKUP N_cursor y=SOME o /\ V o=SOME w`.
+Realization then gives lookup_var y target_cursor=SOME w BEFORE executing the
+copy. CleanupRuntime can execute it, and sequential origin copy extends N with
+(x,o), after which a new completed seed may be recorded. The remaining local
+h nonclobber implication must exclude writes to external y by the actual
+retained prefix/prior copies; it is not a source no-write consequence.
+
+For external INSERTED t, the IH must supply a completed producer record for
+(v,g) at the **last completed occurrence of g** in the rooted scan, either its
+retained inserted PHI batch write or its cleanup copy. Its position is strictly
+earlier because g lies in the already completed route ending at predecessor p,
+not at the newly entered h; g<>h. Earlier-than-current does not by itself prove
+that record exists: insertion coverage and successful batch/copy construction
+at that occurrence are required IH clauses. This branch remains OPEN until
+those constructors and coverage are proved. It must not be justified by
+`MEM (t,v,y) H` or by demanding y ready in J. For CURRENT original-PHI writer
+use the already completed current retained batch event from 10.4 instead; this
+case does not require an earlier visit and does not preserve an old PHI origin.
+
+Dependency graph (arrows mean requires):
+
+```
+actual source dispatch + insertion demand
+  -> rooted token / chronological effective writer
+  -> earlier completed paired record [J constructors/coverage: OPEN]
+  -> protected V(o) + local writer-tail exclusion
+  -> completed non-changing source/target slice transport
+  -> current retained/prior-copy nonclobber [local assembly: OPEN]
+  -> lookup y = SOME w
+  -> current copy success
+  -> NEW ledger record/seed
+```
+
+There is no arrow from current copy success back to its earlier record or read.
+Using semantic-history transport of a prefix containing that copy would create
+exactly that forbidden cycle. Local current retained success must independently
+come from incoming selected-operand agreement and the mixed-batch assembler,
+not from the outgoing demanded agreement the copies are meant to establish.
+
+### 10.6 Proposed proof obligations and disposition
+
+These are interfaces for strategist consideration, NOT new theorem declarations:
+
+| obligation | allowed inputs | required conclusion / gap |
+| --- | --- | --- |
+| J entry | actual fn_entry_state, certificate entry preservation | empty actual prefixes, realizations and aligned cuts; no arbitrary entry state |
+| J ordinary OK | J at input-demand cut, actual non-INVOKE source OK | constructed target actual edge, V1/M1/N1, completed indexed records, singleton and next demand; ledger generation bound preserved |
+| J retained dispatch | incoming J, actual successful source batch, selected agreements | successful mixed target batch and snapshot records; origin propagation unchanged V; actual control update |
+| event extraction | J plus chronological last original/inserted site on completed route | earlier paired record with the effective source origin; inserted branch OPEN |
+| first external copy | earlier record and certified no-write slices up to CURRENT cursor | derive SOME, then success and a new record, never success as input |
+| J outgoing cut | completed copies, source post-PHI actual cut | demanded successor agreement, not yet supplied by local preservation |
+| calls/results | future call/run correspondence infrastructure | outside current actual_prefix and OK-only ordinary theorem; OPEN |
+
+The smallest *interface* obstruction for a historical-valuation ledger without
+extra discipline is existential n versus old seed-only origins (10.2). The fresh
+first-coordinate discipline would address it without modifying existing lemmas,
+but its induction is not proved here. Even with that repair, the first-copy test
+stops at completed inserted-producer coverage and local prefix nonclobber, not
+at another finite-map fold. This bounded diagnostic has therefore specified a
+candidate judgment and isolated its exact remaining transfer obligations; it
+has NOT established inductiveness, either frozen contract, or a counterexample.
+No speculative operational theory or conditional readiness wrapper is installed.
