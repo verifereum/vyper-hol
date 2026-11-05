@@ -402,3 +402,78 @@ Proof
   gvs[as_ptr_val_def, vv_operand_def, mk_ptr_def, markerTheory.Abbrev_def] >>
   metis_tac[lower_abi_decode_not_label]
 QED
+
+Theorem compile_array_pointer_not_label:
+  compile_expr cenv ty e sa = (LocatedValue rt p,sb) /\
+  expr_type e = ArrayT et bd /\ well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+    ?q sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz)) /\
+  (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) ==>
+  !l. p.ptr_operand <> Label l
+Proof
+  Cases_on `e` >> simp[expr_type_def] >> rpt strip_tac
+  >>~- ([`well_typed_expr env (Subscript _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    drule compile_subscript_not_label >> simp[vv_operand_def])
+  >>~- ([`well_typed_expr env (Attribute _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    drule compile_attribute_safe_operand >>
+    simp[exprSafeOperandTheory.safe_operand_def, vv_operand_def])
+  >>~- ([`well_typed_expr env (Builtin _ bi args)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
+         AllCaseEqs()]
+     >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`],
+       qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
+       pure_once_rewrite_tac[cj 2 compile_expr_raw_def] >> strip_tac >>
+       drule_all builtin_array_not_label >> simp[vv_operand_def]) >>
+     gvs[Once well_typed_expr_def, well_typed_builtin_app_def]) >>
+  all_tac
+  >>~- ([`well_typed_expr env (Name _ _)`],
+    gvs[Once well_typed_expr_def] >>
+    first_x_assum drule >> strip_tac >>
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
+        compile_name_vv_def, comp_return_def, mk_ptr_def])
+  >>~- ([`well_typed_expr env (TypeBuiltin _ _ _ _)`],
+    gvs[] >> qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+    pure_once_rewrite_tac[cj 1 compile_expr_raw_def] >>
+    simp[compile_expr_body_def, expr_type_def] >>
+    pure_once_rewrite_tac[cj 3 compile_expr_raw_def] >> simp[] >>
+    strip_tac >> drule_all type_builtin_array_not_label >> simp[vv_operand_def]) >>
+  all_tac
+  >>~- ([`well_typed_expr env (TopLevelName _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
+        AllCaseEqs(), mk_ptr_def] >>
+    rpt (pairarg_tac >> gvs[]))
+  >>~- ([`well_typed_expr env (IfExp _ _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    rpt (pairarg_tac >> gvs[]) >>
+    gvs[is_word_type_def, mk_ptr_def])
+  >>~- ([`well_typed_expr env (StructLit _ _ _)`],
+    gvs[Once well_typed_expr_def])
+  >>~- ([`well_typed_expr env (FlagMember _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def])
+  >>~- ([`well_typed_expr env (Literal _ lit)`],
+    Cases_on `lit` >>
+    gvs[Once well_typed_expr_def, well_typed_literal_def]) >>
+  all_tac
+  >>~- ([`well_typed_expr env (Pop _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    rpt (pairarg_tac >> gvs[]) >>
+    gvs[mk_ptr_def] >>
+    drule (cj 3 subscript_pop_not_label) >> simp[]) >>
+  all_tac
+  >>~- ([`well_typed_expr env (Call _ c _ _)`],
+    Cases_on `c` >>
+    gvs[Once well_typed_expr_def, raw_call_return_type_def] >>
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def]
+    >>~- ([`compile_call _ _ _ _ (IntCall _) _ _ _ = _`],
+      drule compile_internal_call_not_label >> simp[vv_operand_def]) >>
+    all_tac
+    >>~- ([`ArrayT _ _ = if _ then _ else _`],
+      gvs[AllCaseEqs()]) >>
+    PairCases_on `p'` >>
+    gvs[compile_call_def, AllCaseEqs()] >>
+    rpt (pairarg_tac >> gvs[]) >>
+    gvs[AllCaseEqs(), mk_ptr_def] >>
+    drule compile_external_call_not_label >> simp[])
+QED
