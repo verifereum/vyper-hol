@@ -4,7 +4,7 @@ Ancestors
   stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv
   venomState allocaHistory fragGasMode fragGasPathMem finite_map list arithmetic
   stmtForArrayMemoryCopy stmtForArrayMemoryBodyEntry rich_list emitHelper venomInst
-  bodyDeclMemoryCounted stmtLowering venomMemDefs
+  bodyDeclMemoryCounted stmtLowering venomMemDefs stmtSimDefs
 
 Definition array_round_frame_def:
   array_round_frame d func cenv caller orig s <=>
@@ -309,4 +309,85 @@ Proof
   `type_memory_bytes cenv et = stride` by simp[] >>
   drule_all array_round_copy_entry >> strip_tac >>
   qexists_tac `t` >> simp[]
+QED
+
+Definition array_body_post_mem_def:
+  array_body_post_mem d ctx func cx lctx bc bc' sb0 sb1 s_body r ee t <=>
+    ?ce. stmt_lands lctx sb1 r t /\ ~t.vs_halted /\
+      (r = INL () ==> ~block_is_terminated sb1 /\ ce = bc') /\
+      cenv_top_ext bc ce ee.scopes /\ stmt_state_rel ctx func ce cx ee t /\
+      (!x w. not_fresh_at sb0 x /\ lookup_var x s_body = SOME w ==>
+        lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      return_buf_frame d ce sb1 t /\ alloca_history func t /\
+      s_body.vs_alloca_next <= t.vs_alloca_next
+End
+
+Theorem array_code_body_outcome_mem:
+  array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
+    p sz ainst idx dv ov ep nv cond exit stmts_lbl incr
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst stmts_lbl caller orig k es s /\
+  k < LENGTH vs /\ evaluate_type (get_tenv cx) et = SOME tv /\
+  value_has_type tv (EL k vs) /\ val_wf tv (EL k vs) /\
+  val_in_memory tv (EL k vs) (w2n arr_base + k * stride) s.vs_memory /\
+  w2n arr_base + k * stride < dimword (:256) /\
+  w2n arr_base + LENGTH vs * stride <= s.vs_alloca_next /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  lookup_block stmts_lbl func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  caller.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  (!x. not_fresh_at caller x ==> x <> ov /\ x <> ep) /\
+  ei = es with scopes :=
+    (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
+      :: es.scopes /\
+  stmt_frag_mem d ctx func cx (InLoop exit incr) RetQ bc
+    (stmts_env bc (InLoop exit incr) ty stmts) (eval_stmts cx stmts) ei /\
+  gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) ei ==>
+  ?s_body. gas_marked_path T ctx func s 0 (OK s_body) /\
+    gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (ei,s_body)
+      (array_body_post_mem d ctx func cx (InLoop exit incr) bc
+        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body)
+      (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+    s_body.vs_allocas = s.vs_allocas /\ s_body.vs_alloca_next = s.vs_alloca_next /\
+    (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
+      lookup_var x s_body = lookup_var x s)
+Proof
+  strip_tac >>
+  `array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst stmts_lbl caller k es s /\ alloca_history func s /\
+    return_buf_frame d cenv caller s` by
+    fs[array_round_inv_def, array_round_frame_def] >>
+  drule_all array_code_copy_entry_mem >> strip_tac >>
+  `!x w. not_fresh_at caller x /\ lookup_var x s = SOME w ==>
+    lookup_var x t = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at sa x` by (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  drule array_for_code_stmts >> strip_tac >>
+  `bc.ce_return_pc = cenv.ce_return_pc /\ bc.ce_return_buf = cenv.ce_return_buf` by
+    (qhdtm_assum `array_for_code` mp_tac >>
+     pure_rewrite_tac[array_for_code_def] >> strip_tac >>
+     qpat_x_assum `_ = cenv` (mp_tac o AP_TERM
+       ``\ce:compile_env. (ce.ce_return_pc,ce.ce_return_buf)``) >> simp[]) >>
+  `ret_pc_ok bc sb0 t` by
+    (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s`, `caller`] >>
+     fs[array_loop_inv_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `return_buf_frame d bc sb0 t` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s`, `caller`] >>
+     simp[] >> metis_tac[LESS_EQ_TRANS]) >>
+  `stmts_env bc (InLoop exit incr) ty stmts sb0 =
+     (FST (stmts_env bc (InLoop exit incr) ty stmts sb0),sb1)` by
+    (Cases_on `stmts_env bc (InLoop exit incr) ty stmts sb0` >>
+     gvs[compile_stmts_env]) >>
+  `fn_inst_ids_distinct func /\ s.vs_current_bb = sb0.cs_current_bb` by
+    fs[array_for_code_def, array_loop_inv_def] >>
+  qexists_tac `t` >> simp[] >>
+  qhdtm_x_assum `stmt_frag_mem` mp_tac >>
+  rewrite_tac[stmt_frag_mem_def] >>
+  disch_then (qspecl_then [`sb0`, `sb1`, `t`,
+    `FST (stmts_env bc (InLoop exit incr) ty stmts sb0)`] mp_tac) >>
+  simp[GSYM array_body_post_mem_def, SF ETA_ss]
 QED
