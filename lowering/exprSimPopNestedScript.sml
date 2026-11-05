@@ -86,9 +86,9 @@ Definition nested_pop_suffix_def[local]:
 End
 
 Theorem nested_pop_suffix_shape[local]:
-  !hdr tr esz sa r sb.
-    compile_dynarray_pop hdr 1 esz
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = (r,sb) ==>
+  !hdr tr esz is_ctor imm sa r sb.
+    compile_dynarray_pop hdr 1 esz is_ctor imm
+      (if tr then LocTransient else LocStorage) sa = (r,sb) ==>
     ?x0 x1 x2 x3 x4 x5 x6.
       ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
       EVERY (\x. ~not_fresh_at sa x) [x0;x1;x2;x3;x4;x5;x6] /\
@@ -98,7 +98,10 @@ Theorem nested_pop_suffix_shape[local]:
       sb.cs_current_insts = sa.cs_current_insts ++
         nested_pop_suffix hdr tr sa.cs_next_id esz x0 x1 x2 x3 x4 x5 x6
 Proof
-  simp[compile_dynarray_pop_def, emit_op_def, emit_void_def, fresh_id_def,
+  rpt gen_tac >> Cases_on `tr` >>
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def,
+       emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt strip_tac >> gvs[APPEND_ASSOC] >>
@@ -948,10 +951,9 @@ Theorem nested_pop_compile_eq[local]:
     (let ((hdr,loc_opt,pt_opt),sm) = compile_get_target_ptr compile_expr cenv bt sa in
      let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
      let et = (case pt_opt of SOME (ValPT (ArrayT t _)) => t | _ => BaseT (IntT 256)) in
-     let load = (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
-     let store = (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) in
      let (elem,sb) = compile_dynarray_pop hdr (word_scale loc)
-       (elem_size_in_location cenv loc et) load store sm in
+       (elem_size_in_location cenv loc et)
+       cenv.ce_is_ctor cenv.ce_imm_alloca loc sm in
      (LocatedValue ann (mk_ptr elem loc),sb))
 Proof
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
@@ -973,7 +975,8 @@ Theorem nested_pop_compile_storage_eq[local]:
   compile_expr cenv ty (Pop ann bt) sa =
     (let (elem,sb) = compile_dynarray_pop hdr 1
        (elem_size_in_location cenv (if tr then LocTransient else LocStorage) et)
-       (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sm in
+       cenv.ce_is_ctor cenv.ce_imm_alloca
+       (if tr then LocTransient else LocStorage) sm in
      (LocatedValue ann (mk_ptr elem (if tr then LocTransient else LocStorage)),sb))
 Proof
   strip_tac >> rewrite_tac[nested_pop_compile_eq] >>
@@ -1317,8 +1320,8 @@ Theorem nested_pop_storage_suffix_sim[local]:
   target_post ctx func cenv cx es sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
     (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t /\
-  compile_dynarray_pop hdr 1 (type_slot_size tv)
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sm = (q,r) /\
+  compile_dynarray_pop hdr 1 (type_slot_size tv) cenv.ce_is_ctor
+    cenv.ce_imm_alloca (if tr then LocTransient else LocStorage) sm = (q,r) /\
   pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) es = (res,es') /\
   local_ptrs_reserved cenv sa /\ ci_mono sa sm ==>
   frag_exec ctx sm r (\s. s = t)
@@ -1460,25 +1463,14 @@ Proof
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   rewrite_tac[nested_pop_compile_eq] >> asm_rewrite_tac[] >>
   simp_tac std_ss [LET_THM] >>
-  qmatch_goalsub_abbrev_tac `compile_dynarray_pop hdr ws esz load store sm` >>
-  Cases_on `compile_dynarray_pop hdr ws esz load store sm` >>
+  qmatch_goalsub_abbrev_tac
+    `compile_dynarray_pop hdr ws esz cenv.ce_is_ctor cenv.ce_imm_alloca lc sm` >>
+  Cases_on
+    `compile_dynarray_pop hdr ws esz cenv.ce_is_ctor cenv.ce_imm_alloca lc sm` >>
   simp[] >> strip_tac >> gvs[] >>
   `ci_mono sa sm` by metis_tac[stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr, pairTheory.SND] >>
-  `!h w e l st s. ci_mono s (SND (compile_dynarray_pop h w e l st s))` by
-    (rpt gen_tac >> simp[compile_dynarray_pop_def, LET_THM] >>
-     ntac 3 (irule ci_mono_bind >>
-       (reverse conj_tac >- simp[ci_mono_emit_op]) >>
-       rpt gen_tac >> BETA_TAC) >>
-     irule ci_mono_ignore_bind >>
-     (conj_tac >- simp[ci_mono_emit_void]) >> rpt gen_tac >>
-     irule ci_mono_bind >>
-     (reverse conj_tac >- simp[ci_mono_emit_op]) >> rpt gen_tac >> BETA_TAC >>
-     irule ci_mono_ignore_bind >>
-     (conj_tac >- simp[ci_mono_emit_void]) >> rpt gen_tac >>
-     ntac 2 (irule ci_mono_bind >>
-       (reverse conj_tac >- simp[ci_mono_emit_op]) >>
-       rpt gen_tac >> BETA_TAC) >>
-     simp[ci_mono_emit_op]) >>
+  `!h w e c i l s. ci_mono s (SND (compile_dynarray_pop h w e c i l s))` by
+    simp[ci_mono_compile_dynarray_pop] >>
   `ci_mono sm r` by metis_tac[pairTheory.SND] >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split, ci_mono_def] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -1519,15 +1511,14 @@ Resume pop_nested_storage_pure_sim[target_success]:
   drule_all pop_storage_element_size >>
   disch_then (qspec_then `tr` assume_tac) >>
   fs[GSYM slot_loc_def] >>
-  `ws = 1 /\ load = (if tr then TLOAD else SLOAD) /\
-   store = (if tr then TSTORE else SSTORE)` by
-    (Cases_on `tr` >>
-     fs[Abbr `ws`, Abbr `load`, Abbr `store`, slot_loc_def, word_scale_def]) >>
+  `ws = 1` by
+    (Cases_on `tr` >> fs[Abbr `ws`, Abbr `lc`, slot_loc_def, word_scale_def]) >>
+  qunabbrev_tac `lc` >> qunabbrev_tac `ws` >>
   gvs[Abbr `esz`] >>
   simp[slot_loc_def] >>
   irule nested_pop_storage_suffix_sim >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[ci_mono_def] >> metis_tac[]
+  fs[ci_mono_def, slot_loc_def] >> metis_tac[]
 QED
 
 Finalise pop_nested_storage_pure_sim
@@ -1618,14 +1609,13 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-(* RESIDUAL (constructor immutables), false as stated: pop on a member of
-   an immutable in the constructor.  Python's checker accepts it for a
-   complex immutable (local.py skips the modification count when var_info
-   is None).  The Pop lowering loads and stores a LocCode target with
-   MLOAD/MSTORE at the bare offset, bypassing ce_imm_alloca, where Python's
-   _lower_dynarray_pop uses location-aware loads and stores (issue #1159).
-   The result judgment also needs to accept a code pointer to the popped
-   element, which is no longer inside the immutable's value. *)
+(* RESIDUAL (constructor immutables): pop on a member of an immutable in
+   the constructor, which Python's checker accepts for a complex immutable
+   (local.py skips the modification count when var_info is None).  The
+   lowering loads and stores the length through the immutables buffer
+   (compile_ptr_load/compile_ptr_store), and immutable_holds accepts the
+   code pointer to the popped element, whose bytes the pop leaves in the
+   buffer.  The proof also needs the constructor immutable invariant. *)
 Theorem pop_nested_immutable_deploy_sim:
   !ctx func cenv cx env ann bt ty es src id.
     cx.in_deploy /\

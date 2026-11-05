@@ -578,15 +578,21 @@ Definition sub_layout_def:
 End
 
 (* w points k bytes into the data of an immutable of the module being
-   lowered, and tv is the value of type t that sits there (sub_layout)
-   inside the immutable's value at es; immutables_rel says where the Venom
-   state keeps that value.  The immutable's bytes end below 2 ** 256, so a
+   lowered, and tv is the value of type t that sits there: either inside
+   the immutable's value at es (sub_layout), where immutables_rel says the
+   Venom state keeps it, or, in the constructor, in the staged immutables
+   buffer of s within the immutable's bytes.  The second form is for an
+   element popped from an array inside the immutable: it is past the
+   array's new length, so no longer part of the immutable's value, but the
+   pop leaves its bytes in the buffer, as storage's pop leaves its dead
+   slots (storage_holds).  The immutable's bytes end below 2 ** 256, so a
    load reads at off + k itself.  No invariant gives that bound yet:
    immutables_rel at runtime bounds the offset only by the data section's
    length, so a producer of a code pointer needs a compile-env clause
    bounding ImmutableLoc offsets. *)
 Definition immutable_holds_def:
-  immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
+  immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state)
+                  (s:venom_state) <=>
     ?name off itv iv k tvt v.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
@@ -596,9 +602,41 @@ Definition immutable_holds_def:
                | SOME imms => get_source_immutables cenv.ce_module imms)
               name = SOME (itv, iv) /\
       evaluate_type (get_tenv cx) t = SOME tvt /\
-      sub_layout itv iv k tvt v /\ value_has_type tvt v /\
+      (sub_layout itv iv k tvt v \/
+       cenv.ce_is_ctor /\ k + type_memory_size tvt <= type_memory_size itv /\
+       val_in_memory tvt v (off + k) s.vs_memory) /\
+      value_has_type tvt v /\
       read_result cx tv es = (INL v, es)
 End
+
+Theorem immutable_holds_memory_cong:
+  s'.vs_memory = s.vs_memory ==>
+  (immutable_holds cenv cx t tv w es s' <=> immutable_holds cenv cx t tv w es s)
+Proof
+  simp[immutable_holds_def]
+QED
+
+(* A value inside the value w points to, j bytes further on (sub_layout),
+   is at w + j. *)
+Theorem immutable_holds_sub:
+  !cenv cx t tv w es s stv sv j ft ftv fv tv'.
+    immutable_holds cenv cx t tv w es s /\
+    read_result cx tv es = (INL sv, es) /\
+    evaluate_type (get_tenv cx) t = SOME stv /\
+    sub_layout stv sv j ftv fv /\
+    evaluate_type (get_tenv cx) ft = SOME ftv /\ value_has_type ftv fv /\
+    read_result cx tv' es = (INL fv, es) ==>
+    immutable_holds cenv cx ft tv' (w + n2w j) es s
+Proof
+  rpt strip_tac >> fs[immutable_holds_def] >> gvs[] >>
+  qexistsl [`name`, `off`, `itv`, `iv`, `k + j`] >>
+  simp[wordsTheory.word_add_n2w]
+  >~ [`sub_layout itv iv k stv sv`]
+  >- (disj1_tac >> fs[sub_layout_def] >> rpt strip_tac >> TRY decide_tac >>
+      res_tac >> res_tac >> fs[]) >>
+  disj2_tac >> fs[sub_layout_def] >>
+  first_x_assum drule >> strip_tac >> fs[] >> decide_tac
+QED
 
 (* A compiled value holds the value read from the captured source result
    at es.  Located values retain their expression type and location;
@@ -620,7 +658,7 @@ Definition vv_holds_def:
                           typed_val_to_w256 tvt v)
          | LocStorage => storage_holds cx F t tv w es s
          | LocTransient => storage_holds cx T t tv w es s
-         | LocCode => immutable_holds cenv cx t tv w es
+         | LocCode => immutable_holds cenv cx t tv w es s
          | LocCalldata => F)
 End
 

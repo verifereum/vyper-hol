@@ -638,7 +638,7 @@ Proof
 QED
 
 Theorem compiler_dynarray_pop_var:
-  compile_dynarray_pop base_op ws elem_sz load_opc store_opc sa = (op,sb) ==>
+  compile_dynarray_pop base_op ws elem_sz is_ctor imm loc sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
 Proof
   simp[compile_dynarray_pop_def, LET_THM, comp_bind_def,

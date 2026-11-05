@@ -1485,6 +1485,24 @@ Proof
   simp[] >> stmt_plain_void
 QED
 
+Theorem compile_ptr_store_cenv_shape[local]:
+  !cenv loc dst v internal.
+    shape_step internal compiler_label
+      (\st. cenv_shape_ok st cenv /\ plain_operand st dst /\ plain_operand st v)
+      (compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst v)
+      (\x st. cenv_shape_ok st cenv)
+Proof
+  rpt gen_tac >> Cases_on `loc = LocCode /\ cenv.ce_is_ctor`
+  >- (gvs[compile_ptr_store_def] >> irule compile_imm_store_word_shape) >>
+  `compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst v =
+   compile_ptr_store cenv.ce_is_ctor NONE loc dst v` by
+    (Cases_on `loc` >> gvs[compile_ptr_store_def]) >>
+  pop_assum SUBST1_TAC >>
+  irule shape_step_conseq >> irule_at Any shape_step_frame >>
+  irule_at Any compile_ptr_store_shape >>
+  qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]
+QED
+
 Theorem stmt_shape_stable_const[local]:
   !b. shape_stable (\st. b)
 Proof
@@ -5253,10 +5271,10 @@ QED
 Finalise compile_acc_shape[local]
 
 Theorem compile_dynarray_pop_shape[local]:
-  shape_stable R /\ MEM load_opc [MLOAD; SLOAD; TLOAD] /\
-  MEM store_opc [MSTORE; SSTORE; TSTORE] ==>
+  shape_stable R /\ (!st. R st ==> cenv_shape_ok st cenv) ==>
   shape_step internal compiler_label (\st. R st /\ plain_operand st base_op)
-    (compile_dynarray_pop base_op scale elem_size load_opc store_opc)
+    (compile_dynarray_pop base_op scale elem_size cenv.ce_is_ctor
+       cenv.ce_imm_alloca loc)
     (\v st. R st /\ plain_operand st v)
 Proof
   strip_tac >> simp[compile_dynarray_pop_def] >>
@@ -5264,7 +5282,12 @@ Proof
   `shape_stable P` by
     (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[base_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
-  shape_scalar_emit_bind_tac `P` `len_op` (simp[Abbr `P`] >> gvs[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. P st /\ plain_operand st v` >> conj_tac
+  >- (irule shape_step_conseq >> irule_at Any shape_step_frame >>
+      irule_at Any compile_ptr_load_cenv_shape >> qexists_tac `P` >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[Abbr `P`]) >>
+  qx_gen_tac `len_op` >> simp[] >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label L _ _` >>
   `shape_stable L` by
     (simp[Abbr `L`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
@@ -5278,7 +5301,10 @@ Proof
     (simp[Abbr `N`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[new_len]:operand list` shape_stable_plain_operands) >> simp[]) >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. N st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `N` >> simp[Abbr `N`, Abbr `P`] >> gvs[] >> shape_opcode_tac) >>
+  >- (irule shape_step_conseq >> irule_at Any shape_step_frame >>
+      irule_at Any compile_ptr_store_cenv_shape >> qexists_tac `N` >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      gvs[Abbr `N`, Abbr `P`]) >>
   gen_tac >> simp[] >>
   shape_scalar_emit_bind_tac `N` `data_ptr` (simp[Abbr `N`, Abbr `P`]) >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label D _ _` >>
@@ -8316,20 +8342,6 @@ Proof
   Cases_on `rest` >> Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
 QED
 
-Theorem pop_load_selector_mem[local]:
-  !loc. MEM (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
-    [MLOAD; SLOAD; TLOAD]
-Proof
-  Cases >> simp[]
-QED
-
-Theorem pop_store_selector_mem[local]:
-  !loc. MEM (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
-    [MSTORE; SSTORE; TSTORE]
-Proof
-  Cases >> simp[]
-QED
-
 Theorem compile_expr_body_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -8467,8 +8479,7 @@ Resume compile_expr_body_shape[pop]:
   qexists_tac `\op st. cenv_shape_ok st cenv /\ plain_operand st op` >>
   reverse conj_tac
   >- (shape_under_tac compile_dynarray_pop_shape `\st. cenv_shape_ok st cenv` >>
-      simp[cenv_shape_ok_stable, SRULE [MEM] pop_load_selector_mem,
-           SRULE [MEM] pop_store_selector_mem]) >>
+      simp[cenv_shape_ok_stable]) >>
   gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def] >>
   Cases_on `r1` >> gvs[]
 QED

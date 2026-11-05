@@ -298,7 +298,7 @@ QED
 Theorem immutable_holds_dload:
   !func cenv cx es s t v w ctx.
     stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
-    is_word_type t /\ immutable_holds cenv cx t (Value v) w es ==>
+    is_word_type t /\ immutable_holds cenv cx t (Value v) w es s ==>
     ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\
           word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)) =
@@ -329,7 +329,7 @@ Proof
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
   `t = expr_type e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' s1 /\
        stmt_state_rel ctx func cenv cx es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
@@ -486,15 +486,16 @@ QED
 Theorem immutable_holds_iload:
   !func cenv cx es s t v w ctx.
     stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
-    is_word_type t /\ immutable_holds cenv cx t (Value v) w es ==>
+    is_word_type t /\ immutable_holds cenv cx t (Value v) w es s ==>
     ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\
           mload (w2n w) s = typed_val_to_w256 tvt v
 Proof
   rw[immutable_holds_def, exprLoweringPropsTheory.stmt_state_rel_def,
      state_rel_def, immutables_rel_def, read_result_def, return_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
+  `val_in_memory tvt v (off + k) s.vs_memory` by
+    (gvs[] >> first_x_assum drule_all >> strip_tac >>
+     gvs[sub_layout_def] >> first_x_assum drule >> simp[]) >>
+  `off + k < dimword (:256)` by (fs[sub_layout_def] >> DECIDE_TAC) >>
   `mem_word_at (off + k) s.vs_memory = typed_val_to_w256 tvt v` by
     (irule val_in_memory_word_type >> metis_tac[]) >>
   gvs[valueEncodingTheory.mem_word_at_def, mload_def]
@@ -595,7 +596,7 @@ Proof
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
   `t = expr_type e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' s1 /\
        stmt_state_rel ctx func cenv cx es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>

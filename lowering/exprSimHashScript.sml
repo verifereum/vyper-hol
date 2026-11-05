@@ -2567,7 +2567,7 @@ Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
        expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
-       storage_holds_inst_idx]
+       storage_holds_inst_idx, immutable_holds_def]
 QED
 
 Theorem hash_buffer_suffix_shape:

@@ -203,8 +203,8 @@ Proof
 QED
 
 Theorem immutable_holds_read:
-  !cenv cx t tv w es.
-    immutable_holds cenv cx t tv w es ==> ?v. read_result cx tv es = (INL v, es)
+  !cenv cx t tv w es s.
+    immutable_holds cenv cx t tv w es s ==> ?v. read_result cx tv es = (INL v, es)
 Proof
   rw[immutable_holds_def] >> metis_tac[]
 QED
@@ -230,7 +230,7 @@ Theorem base_vv_holds_struct[local]:
            storage_range_agree (get_storage cx es T) (contract_transient s)
              w stv) /\
         (vv_loc vv = LocCode ==>
-           immutable_holds cenv cx (StructT sid) tv w es) /\
+           immutable_holds cenv cx (StructT sid) tv w es s) /\
         vv_loc vv <> LocCalldata
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -343,8 +343,8 @@ QED
 (* The field of a struct an immutable's code pointer holds: the pointer
    plus the field's offset. *)
 Theorem immutable_holds_field[local]:
-  !cenv cx sid tv w es fs fields vals fld fv ftv ann tv'.
-    immutable_holds cenv cx (StructT sid) tv w es /\
+  !cenv cx sid tv w es s fs fields vals fld fv ftv ann tv'.
+    immutable_holds cenv cx (StructT sid) tv w es s /\
     read_result cx tv es = (INL (StructV vals), es) /\
     fields_layout fields fs /\ ALOOKUP vals fld = SOME fv /\
     ALOOKUP fs fld = SOME ftv /\
@@ -352,15 +352,23 @@ Theorem immutable_holds_field[local]:
     evaluate_type (get_tenv cx) ann = SOME ftv /\
     read_result cx tv' es = (INL fv, es) ==>
     immutable_holds cenv cx ann tv' (w + n2w (struct_field_offset fields fld))
-      es
+      es s
 Proof
-  rw[immutable_holds_def] >> gvs[] >>
+  rpt strip_tac >>
+  `value_has_type (StructTV fs) (StructV vals)` by
+    (fs[immutable_holds_def] >> gvs[]) >>
   drule struct_value_shape >> strip_tac >> gvs[] >>
-  qexistsl [`name`, `off`, `itv`, `iv`, `k + struct_field_offset fields fld`] >>
-  simp[wordsTheory.word_add_n2w] >>
-  conj_tac >- (irule sub_layout_field >> metis_tac[]) >>
-  drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
-  strip_tac >> gvs[]
+  `value_has_type ftv fv` by
+    (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
+     strip_tac >> gvs[]) >>
+  `sub_layout (StructTV fs) (StructV vals) (struct_field_offset fields fld)
+     ftv fv` by
+    (qspecl_then [`StructTV fs`, `StructV vals`, `0`, `fs`, `vals`, `fields`,
+                  `fld`, `ftv`, `fv`] mp_tac sub_layout_field >>
+     simp[sub_layout_def]) >>
+  irule immutable_holds_sub >>
+  qexistsl [`ftv`, `fv`, `StructTV fs`, `StructV vals`, `StructT sid`, `tv`] >>
+  simp[]
 QED
 
 (* The field's value_vv after the ADD, from the base's. *)

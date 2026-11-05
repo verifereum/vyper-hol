@@ -299,17 +299,19 @@ QED
 Theorem immutable_holds_memory[local]:
   !func cenv cx es s t tv w ctx.
     stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
-    immutable_holds cenv cx t tv w es ==>
+    immutable_holds cenv cx t tv w es s ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
             val_in_memory tvt v (w2n w) s.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
-  gvs[arithmeticTheory.ADD_COMM]
+     immutables_rel_def]
+  >~ [`sub_layout`]
+  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
+      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+      `off + k < dimword (:256)` by DECIDE_TAC >>
+      gvs[arithmeticTheory.ADD_COMM]) >>
+  `off + k < dimword (:256)` by DECIDE_TAC >> gvs[] >> metis_tac[]
 QED
 
 Theorem vv_holds_len_header:

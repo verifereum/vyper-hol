@@ -29,7 +29,7 @@ Theorem subscript_pop_not_label:
   (compile_mapping_subscript bop kop sa = (op,sb) ==> !l. op <> Label l) /\
   (compile_array_subscript bop idx dyn cnt ws sz signed load sa = (op,sb) ==>
      !l. op <> Label l) /\
-  (compile_dynarray_pop bop ws sz lopc sopc sa = (op,sb) ==>
+  (compile_dynarray_pop bop ws sz is_ctor imm loc sa = (op,sb) ==>
      !l. op <> Label l)
 Proof
   rpt conj_tac >>

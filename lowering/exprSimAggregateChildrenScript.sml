@@ -44,7 +44,7 @@ Proof
   simp[vv_holds_def, storage_holds_def, immutable_holds_def,
        read_result_def, return_def] >>
   rpt strip_tac >> gvs[read_result_def, return_def] >>
-  metis_tac[arithmeticTheory.LESS_MOD]
+  qexistsl [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
 QED
 
 Theorem vv_at_materialise:
@@ -137,7 +137,8 @@ Theorem vv_holds_vars_frame:
 Proof
   Cases_on `vv` >>
   simp[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
-  metis_tac[]
+  rpt strip_tac >> gvs[] >> BasicProvers.every_case_tac >> gvs[] >>
+  metis_tac[immutable_holds_memory_cong]
 QED
 
 Theorem vv_at_vars_frame:

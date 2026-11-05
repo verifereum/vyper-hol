@@ -1143,13 +1143,17 @@ End
    matching the Python compiler behavior. The popped slot contains stale data,
    but is inaccessible (past the length). Gas accounting differs: interpreter
    gets SSTORE refund for clearing, lowering does not.
-   Mirrors Python: expr.py _lower_dynarray_pop *)
+   The length is loaded and stored by the array's location loc, through
+   compile_ptr_load/compile_ptr_store, so a constructor immutable goes through
+   the immutables buffer.
+   Mirrors Python: expr.py _lower_dynarray_pop, with its location-aware length
+   load and store done as ctx.load_word/store_word do them (at VYPER_PIN its
+   builder.load/builder.store have no IMMUTABLES case and panic). *)
 Definition compile_dynarray_pop_def:
-  compile_dynarray_pop base_op word_scale elem_size
-                            (load_opc : opcode) (store_opc : opcode) =
+  compile_dynarray_pop base_op word_scale elem_size is_ctor imm loc =
     let overhead = word_scale in
     do (* Load current length *)
-       len_op <- emit_op load_opc [base_op];
+       len_op <- compile_ptr_load is_ctor imm loc base_op;
        (* Assert length > 0 *)
        nz <- emit_op ISZERO [len_op];
        valid <- emit_op ISZERO [nz];
@@ -1157,7 +1161,7 @@ Definition compile_dynarray_pop_def:
        (* new_len = len - 1 *)
        new_len <- emit_op SUB [len_op; Lit 1w];
        (* Store new length *)
-       emit_void store_opc [base_op; new_len];
+       compile_ptr_store is_ctor imm loc base_op new_len;
        (* elem_ptr = base + overhead + new_len * elem_size *)
        data_ptr <- emit_op ADD [base_op; Lit (n2w overhead)];
        offset <- emit_op MUL [new_len; Lit (n2w elem_size)];
@@ -3012,12 +3016,9 @@ Definition compile_expr_body_def:
             SOME (ValPT (ArrayT t _)) => t
           | _ => BaseT (IntT 256)) in
         let elem_size = elem_size_in_location cenv loc elem_ty in
-        let load_opc = (case loc of
-           LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) in
-        let store_opc = (case loc of
-           LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) in
         let (elem_ptr, st2) =
-          compile_dynarray_pop target_op ws elem_size load_opc store_opc st1 in
+          compile_dynarray_pop target_op ws elem_size
+            cenv.ce_is_ctor cenv.ce_imm_alloca loc st1 in
         (LocatedValue ret_ty (mk_ptr elem_ptr loc), st2)))
 End
 
