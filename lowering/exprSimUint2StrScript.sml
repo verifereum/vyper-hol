@@ -401,7 +401,7 @@ Proof
 QED
 
 Theorem compile_uint2str_layout_eq:
-  compile_alloc_buffer sz sa = (ba,a) ==>
+  compile_alloc_buffer (sz + n) sa = (ba,a) ==>
   compile_uint2str op n sz sa =
     (Var (u2s_var a 2), u2s_end a op ba.buf_operand n)
 Proof
@@ -425,10 +425,10 @@ QED
 
 Theorem compile_uint2str_layout:
   compile_uint2str op n sz sa = (out,sb) ==>
-  ?ba a. compile_alloc_buffer sz sa = (ba,a) /\
+  ?ba a. compile_alloc_buffer (sz + n) sa = (ba,a) /\
          out = Var (u2s_var a 2) /\ u2s_layout a op ba.buf_operand n sb
 Proof
-  Cases_on `compile_alloc_buffer sz sa` >>
+  Cases_on `compile_alloc_buffer (sz + n) sa` >>
   drule compile_uint2str_layout_eq >> simp[u2s_layout_def] >>
   metis_tac[]
 QED
@@ -2674,7 +2674,7 @@ Theorem u2s_alloc_vv_path:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2687,26 +2687,28 @@ Theorem u2s_alloc_vv_path:
 Proof
   strip_tac >> drule compile_uint2str_layout >> strip_tac >>
   drule_all u2s_alloc_ready_path >> strip_tac >>
-  mp_tac (Q.INST [`s` |-> `ready`, `buf` |-> `ba.buf_operand`, `ty` |-> `tv`]
+  mp_tac (Q.INST [`s` |-> `ready`, `buf` |-> `ba.buf_operand`, `ty` |-> `tv`,
+                  `sz` |-> `sz + n`]
     u2s_setup_entry_path) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   rename1 `val_in_memory tv _ _ t.vs_memory` >>
   `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz)` by metis_tac[] >>
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz + n)` by metis_tac[] >>
   `w2n (n2w (b+n-LENGTH (num_to_dec_string X)):bytes32) =
     b+n-LENGTH (num_to_dec_string X)` by
     (simp[wordsTheory.w2n_n2w] >> irule LESS_MOD >> decide_tac) >>
   `sa.cs_next_id < sb.cs_next_id` by
-    (mp_tac (Q.SPECL [`sz`, `sa`] exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
+    (mp_tac (Q.SPECL [`sz + n`, `sa`] exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
      simp[exprLoweringPropsTheory.ci_mono_def] >> strip_tac >>
      gvs[u2s_layout_def, u2s_end_def]) >>
   qexists_tac `t` >>
   conj_tac >- (irule u2s_path_then >> qexists_tac `ready` >> simp[]) >>
   reverse conj_tac >- gvs[u2s_layout_def, u2s_end_def] >>
   irule vv_post_allocated_memory_intro >> simp[] >>
-  qexistsl_tac [`sa.cs_next_id`, `b`, `sz`] >> simp[] >>
+  qexistsl_tac [`sa.cs_next_id`, `b`, `sz + n`] >> simp[] >>
   qpat_x_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
-  simp_tac (srw_ss()) [u2s_safe_def] >> metis_tac[]
+  simp_tac (srw_ss()) [u2s_safe_def] >> rpt strip_tac >>
+  first_x_assum drule >> decide_tac
 QED
 
 Theorem u2s_alloc_vv_exit:
@@ -2717,7 +2719,7 @@ Theorem u2s_alloc_vv_exit:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2740,7 +2742,7 @@ Theorem u2s_alloc_vv_frag:
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2909,7 +2911,7 @@ Theorem uint2str_numeric_suffix:
   local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) ==>
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   frag_exec ctx sm sb (\t. t = s)
     (\t. vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
@@ -2996,7 +2998,7 @@ Theorem uint2str_numeric_path:
   expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) ==>
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
       vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
         es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
