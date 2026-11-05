@@ -77,6 +77,13 @@ Proof
       is_bytestring_type_def]
 QED
 
+(* A value of a type that takes memory has a footprint. *)
+Theorem val_store_size_pos:
+  !tv v. 0 < type_memory_size tv ==> 0 < val_store_size tv v
+Proof
+  rw[val_store_size_def] >> BasicProvers.every_case_tac >> simp[]
+QED
+
 (* The copy into a declared local after its right-hand side, from the
    state t that the right-hand side's fragment ends in.  A value staged
    through its own buffer is read at its type's size, which the premise on
@@ -95,6 +102,7 @@ Theorem annassign_copy_post_path_mem:
     evaluate_type (get_tenv cx) vtyp = SOME tyv /\
     value_has_type tyv v /\
     type_memory_bytes cenv vtyp = type_memory_size tyv /\
+    0 < type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
     compile_assign_value cenv (Var p) LocMemory op F loc vtyp vtyp info bytes sb =
       ((),sf) /\
@@ -133,7 +141,10 @@ Proof
         val_in_memory tyv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `w2n sw + val_store_size tyv v <= s.vs_alloca_next` by
-    gvs[expr_store_bound_def] >>
+    (`0 < val_store_size tyv v` by simp[val_store_size_pos] >>
+     qpat_x_assum `expr_store_bound _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_store_bound_def]) >>
+     disch_then (qspecl_then [`tyv`, `sw`] mp_tac) >> simp[]) >>
   `sa.cs_next_var <= sb.cs_next_var` by metis_tac[cj 2 compile_expr_grows] >>
   `not_fresh_at sb p` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
@@ -259,8 +270,9 @@ Proof
     (rpt strip_tac >>
      `val_store_size tyv v = type_memory_size tyv` by
        metis_tac[val_store_size_type_size] >>
-     qpat_x_assum `expr_store_bound _ _ _ _ _` mp_tac >>
-     simp[expr_store_bound_def]) >>
+     qpat_x_assum `expr_store_bound _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_store_bound_def]) >>
+     disch_then (qspecl_then [`tyv`, `sw`] mp_tac) >> gvs[]) >>
   `lookup_var p t = SOME w /\
    FLOOKUP t.vs_allocas st.cs_next_id =
      SOME (w2n w, type_memory_bytes cenv (expr_type e)) /\
