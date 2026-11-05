@@ -460,3 +460,37 @@ Resume hashmap_key_preprocess[string]:
 QED
 
 Finalise hashmap_key_preprocess
+
+Theorem compile_mapping_subscript_straight:
+  compile_mapping_subscript slot_op key_op sa = (op,sb) ==>
+  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_mapping_subscript_def, compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem hashmap_key_preprocess_straight:
+  (if is_bytestring_type kt then compile_keccak256_key key_op F
+   else comp_return key_op) sa = (op,sb) ==>
+  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  Cases_on `is_bytestring_type kt`
+  >- (simp[compile_keccak256_key_def, emit_op_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+      strip_tac >> gvs[] >>
+      simp[emitted_insts_def] >>
+      pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND, rich_listTheory.DROP_LENGTH_APPEND] >>
+      simp[mk_inst_def, is_terminator_def]) >>
+  simp[comp_return_def] >> strip_tac >> gvs[emitted_insts_def]
+QED

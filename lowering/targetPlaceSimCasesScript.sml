@@ -37,7 +37,7 @@ Theory targetPlaceSimCases
 Ancestors
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimBuffer exprSimAttributeFields
-  freshWrites stmtLoweringMono targetPlaceSim
+  freshWrites stmtLoweringMono targetPlaceSim targetSubscriptSim exprSimMappingHash
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
@@ -696,4 +696,40 @@ Proof
   rpt strip_tac >> gvs[target_res_ok_def] >>
   qpat_x_assum `frag_exec _ _ _ _ _ _` (mp_then Any irule frag_exec_weaken) >>
   simp[] >> metis_tac[expr_exit_INR_type]
+QED
+
+(* The mapping target suffix allocates scratch but preserves the original
+   target frame; its compiler equations supply straight-line execution. *)
+Theorem target_mapping_suffix_frag:
+  target_post ctx func cenv cx es sa sm s0 es' (HashMapRef tr slot kt vt)
+    (HashMapT kt vt) rb t /\
+  expr_post ctx func cenv cx e esk se sm sk es' kv key_op t /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key_op F
+   else comp_return key_op) sm = (encoded_op,sh) /\
+  compile_mapping_subscript (FST rb) encoded_op sh = (dst,sb) /\
+  (!x. key_op = Var x ==> not_fresh_at sm x) /\
+  (!x. encoded_op = Var x ==> not_fresh_at sh x) /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\ (!l. FST rb <> Label l) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  local_ptrs_reserved cenv sh /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sh.cs_next_var /\
+  sa.cs_next_id <= sh.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  fn_has_code sh sb func /\ fn_inst_ids_distinct func /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript kv) es' =
+    (INL pv, es'') ==>
+  frag_exec ctx sm sb (\s. s = t)
+    (\s. target_post ctx func cenv cx es sa sb s0 es'' pv vt
+      (dst,SOME (slot_loc tr),SOME (value_type_place vt)) s) R
+Proof
+  strip_tac >>
+  drule hashmap_key_preprocess_straight >> strip_tac >>
+  drule compile_mapping_subscript_straight >> strip_tac >>
+  drule_all target_mapping_suffix_run >> strip_tac >>
+  `emitted_insts sm sb = emitted_insts sm sh ++ emitted_insts sh sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  irule frag_exec_run_inst_seq >> simp[IS_PREFIX_APPEND] >>
+  disj1_tac >> qexists_tac `u` >> gvs[]
 QED

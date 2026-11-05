@@ -10,6 +10,7 @@ Ancestors
   vyperPlaceStatePreservation vyperPlaceTyping vyperTypeStatePreservation
   words finite_map option exprSimArrayIndex valueEncodingProps accountsRelProps
   venomState venomMemDefs vyperArith integer integer_word exprNoEffectStorage
+  exprSimMappingHash
 Libs
   pairLib
 
@@ -1083,4 +1084,112 @@ Proof
       rpt strip_tac >> gvs[place_ptr_rel_def, place_readable_def]) >>
   simp[extend_place_nested_mapping] >> rpt strip_tac >>
   gvs[place_ptr_rel_def, place_readable_def]
+QED
+
+Theorem target_mapping_hash_run:
+  target_post ctx func cenv cx es sa sm s0 es' (HashMapRef tr slot kt vt)
+    (HashMapT kt vt) rb t /\
+  compile_mapping_subscript (FST rb) key_op sm = (dst,sb) /\
+  eval_operand key_op t = SOME (encode_hashmap_key kt kv) /\
+  (!x. key_op = Var x ==> not_fresh_at sm x) /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript kv) es' =
+    (INL pv, es'') ==>
+  ?u. run_inst_seq (emitted_insts sm sb) t = OK u /\
+    target_post ctx func cenv cx es sa sb s0 es'' pv vt
+      (dst,SOME (slot_loc tr),SOME (value_type_place vt)) u
+Proof
+  strip_tac >>
+  `eval_operand (FST rb) t = SOME slot /\
+   stmt_state_rel ctx func cenv cx es' t /\
+   (!x. FST rb = Var x ==> not_fresh_at sm x)` by
+    gvs[target_post_def, place_ptr_rel_def] >>
+  drule_all compile_mapping_subscript_alloca_member >> strip_tac >>
+  drule_all compile_mapping_subscript_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sb) t = OK u` >>
+  drule target_mapping_extend_place >>
+  disch_then (qspecl_then [`u`, `cenv`] strip_assume_tac) >> gvs[] >>
+  irule target_post_regions_suffix_frame >>
+  simp[] >>
+  qexistsl_tac [`HashMapRef tr slot kt vt`, `rb`, `sm`, `t`, `HashMapT kt vt`] >>
+  simp[] >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem target_mapping_key_preprocess:
+  target_post ctx func cenv cx es sa sm s0 es' (HashMapRef tr slot kt vt)
+    (HashMapT kt vt) rb t /\
+  expr_post ctx func cenv cx e esk se sm sk es' kv key_op t /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key_op F
+   else comp_return key_op) sm = (encoded_op,sh) /\
+  (!x. key_op = Var x ==> not_fresh_at sm x) /\
+  (!l. FST rb <> Label l) /\
+  local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sh.cs_next_var ==>
+  ?u. run_inst_seq (emitted_insts sm sh) t = OK u /\
+    eval_operand encoded_op u = SOME (encode_hashmap_key kt kv) /\
+    target_post ctx func cenv cx es sa sh s0 es' (HashMapRef tr slot kt vt)
+      (HashMapT kt vt)
+      (FST rb,SOME (slot_loc tr),SOME (value_type_place (HashMapT kt vt))) u
+Proof
+  strip_tac >> drule_all hashmap_key_preprocess >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sh) t = OK u` >>
+  `eval_operand (FST rb) t = SOME slot /\
+   (!x. FST rb = Var x ==> not_fresh_at sm x)` by
+    gvs[target_post_def, place_ptr_rel_def] >>
+  `eval_operand (FST rb) u = SOME slot` by
+    (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sm`, `t`] >> simp[]) >>
+  `u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas` by
+    (qpat_x_assum `u with vs_vars := t.vs_vars = t`
+      (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `!x. FST rb = Var x ==> not_fresh_at sh x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
+  qexists_tac `u` >> simp[] >>
+  irule target_post_suffix_frame >>
+  simp[place_ptr_rel_def, place_readable_def] >>
+  qexistsl_tac [`HashMapRef tr slot kt vt`, `rb`, `sm`, `t`, `HashMapT kt vt`] >>
+  simp[]
+QED
+
+Theorem target_mapping_suffix_run:
+  target_post ctx func cenv cx es sa sm s0 es' (HashMapRef tr slot kt vt)
+    (HashMapT kt vt) rb t /\
+  expr_post ctx func cenv cx e esk se sm sk es' kv key_op t /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key_op F
+   else comp_return key_op) sm = (encoded_op,sh) /\
+  compile_mapping_subscript (FST rb) encoded_op sh = (dst,sb) /\
+  (!x. key_op = Var x ==> not_fresh_at sm x) /\
+  (!x. encoded_op = Var x ==> not_fresh_at sh x) /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\ (!l. FST rb <> Label l) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  local_ptrs_reserved cenv sh /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sh.cs_next_var /\
+  sa.cs_next_id <= sh.cs_next_id /\
+  sh.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sh /\
+  sb.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sb /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  fn_has_code sh sb func /\ fn_inst_ids_distinct func /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript kv) es' =
+    (INL pv, es'') ==>
+  ?u. run_inst_seq (emitted_insts sm sb) t = OK u /\
+    target_post ctx func cenv cx es sa sb s0 es'' pv vt
+      (dst,SOME (slot_loc tr),SOME (value_type_place vt)) u
+Proof
+  strip_tac >> drule_all target_mapping_key_preprocess >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sh) t = OK preprocessed` >>
+  `sa.cs_next_var <= sh.cs_next_var` by decide_tac >>
+  qpat_assum `target_post _ _ _ _ _ _ sh _ _ _ _ _ _`
+    (mp_then Any mp_tac target_mapping_hash_run) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sh sb) preprocessed = OK u` >>
+  `run_inst_seq (emitted_insts sm sb) t = OK u` by
+    (drule_all run_inst_seq_chain >> simp[]) >>
+  qexists_tac `u` >> simp[]
 QED
