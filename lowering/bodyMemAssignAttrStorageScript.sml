@@ -4,7 +4,7 @@ Theory bodyMemAssignAttrStorage
 Ancestors
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
   vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
-  exprSimMemUnwrap exprLoweringProps exprSimMemDefs
+  exprSimMemUnwrap exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
 Libs
   monadsyntax
 
@@ -98,6 +98,42 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   irule expr_post_rebased_operand_mem_src >> goal_assum (drule_at Any) >> gvs[]
+QED
+
+Theorem expr_post_rebased_compose_mem_src[local]:
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  local_ptrs_reserved ce sa /\ local_ptrs_rel func ce es.scopes s0 /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  expr_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
+    sb s ee v op u ==>
+  expr_post ctx func ce cx e es sa sb s0 ee v op u
+Proof
+  strip_tac >>
+  `!n b sz. local_region ce ee.scopes s n b sz ==>
+             local_region ce es.scopes s0 n b sz` by
+    (rpt strip_tac >> irule local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> simp[]) >>
+     qexistsl_tac [`sa`, `ee.scopes`, `s`] >> simp[] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def]) >>
+  `locals_kept ce es s0 u` by
+    (irule locals_kept_trans >> goal_assum (drule_at Any) >>
+     qexistsl_tac [`sa`, `s`] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
+  gvs[vv_post_def, expr_post_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at (sa with cs_next_var := sm.cs_next_var) x` by
+        (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      first_x_assum irule >> simp[] >> metis_tac[])
+  >- metis_tac[] >>
+  rpt strip_tac >>
+  `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+  `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem body_assign_attr_storage_mem:
