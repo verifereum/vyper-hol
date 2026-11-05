@@ -449,3 +449,155 @@ All these execution clauses remain implementation obligations. Clean builds
 of the existing boundaries do not establish a full opcode or generic call
 simulation. The strategist must now turn the three audits into explicit
 producer implementation components before final stage work is authorized.
+
+## Endpoint and local-integration audit (2026-11-05)
+
+This ledger supersedes any implication above that strict endpoints or the
+cache-to-layout bridge are already discharged. It adds no theorem premise.
+Validated existing targets: frameRelocationMemoryOpaque, CopySteps,
+StoreValues, LoadSteps, AllocationSteps, ScalarSteps, AffineSteps,
+CompareSteps, Phi; frameActivationSeparation; concretizeAnalysisStageSizes,
+RuntimeSizes; concretizeLayoutNumericSchedule; frameRelocationRangeGeometry.
+All passed holbuild (audit evidence in episode dossier).
+
+### Source strict endpoint: preservation machinery already exists
+
+`joint_reachable_cache_separated` (frameActivationSeparation:177) gives
+`frame_cache_separated stk s` from joint reachability and an empty INITIAL
+cache. It does not require a zero initial frontier.
+`frame_cache_separated_local` gives `alloca_inv s`, whose
+`alloca_next_valid_def` bounds every current cached `(b,sz)` by
+`b+sz <= s.vs_alloca_next`. `frame_cache_saved_bound` (same file:190)
+already gives the SAME bound for every saved frame at index k. Thus a new
+cache-history induction is unnecessary! `activation_cache_def` combines
+these two cases. `joint_trace_prefix_reachable` supplies reachability of
+all prefix configurations.
+
+The remaining raw endpoint adapter has this exact intended conclusion:
+
+```sml
+mem_inv raw_mem_ok C vs0 /\ o1_run_state_ok vs0 /\
+joint_config_reachable vs0 C
+  (JointConfig stk PG G tn fn inst s oms om hs h) /\
+activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+  depth owner aid (b,sz) ==> b + sz < dimword (:256)
+```
+
+To close it, use `mem_inv_raw_reachable` and `raw_mem_ok_def` to bound the
+CURRENT frontier. A projection from this joint/frame reachability to
+`raw_reachable vs0 C fn inst s` is still needed: the searched
+`frame_reach_raw_reachable` in o1PassLift:653 is NOT that projection!
+It concerns the separate frame-local `frame_reach` relation with an entry
+hypothesis. `joint_origin_history_erasure` followed by
+`origin_frame_erasure` reaches `frame_reachable`, but no direct raw
+projection was located in the inspected compiler sources. Plan this
+projection/adapter, not a duplicate alloca invariant. Returning restores
+the caller cache AND frontier (`return_bind_allocation_frame`); the
+accepted separation induction already accounts for this non-monotone
+current frontier.
+
+### Target strict endpoint: size bridge and actual positions remain
+
+`resolved_token_position`/`resolved_operand_position` give an activation
+cache witness and identify `token_positions positions ... tok` with
+`positions owner aid`. They do NOT constrain `positions`.
+`o1_frame_source_sizes_current` and `_saved` in concretizeAnalysisStageSizes
+already give `cache_sizes_ok (source_alloca_sizes owner)` for BOTH kinds
+of activation. `cache_sizes_ok_lookup` yields the exact cached size.
+`concretize_runtime_context_size` only packages the CURRENT frame case
+against imported metadata; it is not a saved-cache canonical bridge.
+
+`canonical_metadata C C' (Allocation aid) p sz` means some source owner has
+static items containing `(Allocation aid,sz)` and its output function's
+`fn_mems_used` FIND returns `(Allocation aid,p,sz)`.
+`concretize_canonical_numeric` proves `p+sz < dimword (:256)` for ALL sizes;
+reserved-interval disjointness is only conditional on positive size.
+`canonical_metadata_unique` provides position/size uniqueness under global
+instruction-ID distinctness. Numeric proof does not need more arithmetic.
+
+Still missing is a CHOSEN position function (not arbitrary positions) and
+its cache-to-canonical producer. Its required HOL interface, after choosing
+positions from the output owner lookup/FIND, is:
+
+```sml
+ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+  (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+o1_run_state_ok vs0 /\
+joint_config_reachable vs0 C q /\ activation_cache q depth owner aid (b,sz)
+==> canonical_metadata C C' (Allocation aid) (positions owner aid) sz
+```
+
+Here `positions` MUST be replaced by the planned actual choice definition,
+not universally quantified. This is a missing producer, not a checked
+statement. Trace membership of saved owners, static ALLOCA item coverage,
+output metadata FIND and cache size equality through existing StageSizes
+and MetadataSchedule facts. For memory geometry also prove
+`lo <= positions owner aid` from fixed_region_reserved and positive size;
+zero-size entries need numeric endpoints, not byte reservation claims.
+The current concretizeLayoutRelocation:20-23 assumes this bridge for every
+trace cache. That explicit premise remains undischarged.
+
+### Local producer premise ledger
+
+All families need a concrete `local_rel` initialization and invariant
+assembly, a chosen Obs (currently abstract), actual instruction/control
+alignment, and distinct target taint transport. The following categorizes
+the remaining inputs; no family below is unconditional simulation.
+
+* Scalar binary: `guarded_scalar_binary_step` requires operand arity,
+  labels equality, every variable operand `clean_scalar`, and Obs stability
+  under equal writes. Existing classification/cleanliness interfaces must
+  be instantiated at actual reachable uses. Same-tn post equalities do not
+  imply an independently tracked target tn is contained.
+* Affine: `guarded_pointer_binary_step` requires a resolved pointer tag,
+  non-opacity, clean scalar other operand, label equality and Obs stability
+  under unequal pointer writes. Modular affine displacement is proved;
+  reachable resolution and the combined invariant remain assembly work.
+  ADD commutation is available; SUB is pointer-minus-scalar only.
+* Comparison: same resolved token/site for both pointers, non-opacity,
+  inclusive source-site operand bounds, both strict site endpoints and Obs
+  stability. CompareAccess supplies source bounds only; TokenPositions and
+  this audit identify endpoint dependencies, not their discharge.
+* ASSIGN/parallel PHI: related source lookups, matching predecessor/control,
+  and origin/taint update compatibility must be supplied at actual block
+  edges. Accepted copy/PHI equations are not reachable control alignment.
+* ALLOCA-to-ASSIGN: `local_rel_alloca_assign_step` requires actual target
+  literal, cache-hit/fresh split, post pointer/byte predicates for output,
+  all other variable predicate transports, `next ==> R` and post Obs.
+  Allocation memory is unchanged; fresh taint and lifetime/demand transport
+  still need integration. A cache hit's stored size is not the size operand
+  without StageSizes. No fresh-memory zero assumption is valid.
+* MLOAD: `local_rel_mload_step` requires translated successful address
+  evaluations, every unmasked lane in pre-demand R, post output pointer/byte
+  predicates, mask empty if P' demands scalar equality, unchanged-variable
+  predicate transport, and post Obs. Byte-lane computation is proved;
+  actual demand, range endpoint and origin classification are producers.
+* MSTORE/MSTORE8: successful address/value evaluations on both sides;
+  demanded written bytes lie in both ranges and equal value lanes;
+  complement retains R and avoids target write range; post Obs. StoreValues
+  supplies demanded lane agreement under trace cleanliness. WriteCoverage
+  supplies actual coverage CONDITIONALLY on range translation; the global
+  cache-to-layout premise in concretizeLayoutRelocation remains a dependency.
+* MCOPY: translated source/destination evaluations and equal length;
+  each demanded written pair maps to pre-state copy-source demand;
+  retained demand avoids target range; post Obs. Overlap is handled
+  simultaneously. CopyTaint transports independent memory taint under the
+  same range/complement correspondence, not observations or all components.
+* Other memory/observation/control families remain unassembled: ILOAD/
+  ISTORE and storage/transient data; memory hashes/logs; RETURN/REVERT;
+  external request/outcome/return-copy; branches and terminal results.
+  They require equality of clean controls and demanded untainted bytes,
+  non-revert exemptions where applicable, observable agreement outside
+  source taint/D and explicit post-taint transport. No existing abstract
+  Obs premise produces these facts.
+
+Ownership: endpoint/cache metadata/position choice and demanded-write
+noncollision depend on source reachability and concretize layout machinery;
+operand semantic transport and Obs/taint preservation are local producers;
+INVOKE push/pop, terminating fuel adequacy and target-prefix request/final
+reflection belong to generic frame/integration work. `taint_within` needs
+that reverse reachable/request/final direction even after forward local
+simulation is complete. Frozen wrappers must remain blocked until all
+these interfaces are instantiated, not merely rebuilt.
