@@ -27,6 +27,7 @@ Ancestors
   loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
+  vyperValue vyperValueOperation
   vyperTypeCallGraph
   vyperTyping vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   vyperStatePreservation
@@ -125,6 +126,180 @@ Proof
   strip_tac >> simp[] >>
   metis_tac[literal_word_post_operand, expr_post_state, expr_post_frame]
 QED
+
+Theorem literal_enumerate_membership:
+  !vs k. MEM v (MAP SND (enumerate_static_array d k vs)) <=>
+          MEM v vs /\ v <> d
+Proof
+  Induct >> simp[enumerate_static_array_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem literal_enumerate_length:
+  !vs k. LENGTH (enumerate_static_array d k vs) <= LENGTH vs /\
+    (LENGTH (enumerate_static_array d k vs) < LENGTH vs <=> MEM d vs)
+Proof
+  Induct >> simp[enumerate_static_array_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> gvs[] >>
+  first_x_assum (qspec_then `SUC k` mp_tac) >> simp[]
+QED
+
+Theorem literal_array_membership:
+  compatible_bound bd (LENGTH vs) ==>
+  (evaluate_in_array (ArrayTV tv bd) v (make_array_value tv bd vs) <=> MEM v vs)
+Proof
+  Cases_on `bd` >>
+  simp[compatible_bound_def, evaluate_in_array_def, make_array_value_def,
+       literal_enumerate_membership, literal_enumerate_length] >>
+  metis_tac[]
+QED
+
+Theorem literal_membership_typing:
+  well_typed_binop ann bop et a /\ (bop = In \/ bop = NotIn) /\
+  well_typed_builtin_app a (MakeArray t n) (MAP expr_type elems) ==>
+  ann = BaseT BoolT /\ a = ArrayT et n /\ t = SOME et /\
+  compatible_bound n (LENGTH elems) /\
+  EVERY (\e. expr_type e = et) elems
+Proof
+  strip_tac >> Cases_on `t` >>
+  gvs[well_typed_builtin_app_def, well_typed_binop_def, EVERY_MAP] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem literal_membership_result:
+  compatible_bound bd (LENGTH vs) /\ (bop = In \/ bop = NotIn) ==>
+  evaluate_binop u (ArrayTV tv bd) bop v (ArrayV (make_array_value tv bd vs)) =
+    INL (BoolV (if bop = In then MEM v vs else ~MEM v vs))
+Proof
+  strip_tac >> gvs[evaluate_binop_def, binop_negate_def,
+                         literal_array_membership]
+QED
+
+Theorem literal_body_typing:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) ==>
+  ann = BaseT BoolT /\ a = ArrayT (expr_type e1) n /\ t = SOME (expr_type e1) /\
+  compatible_bound n (LENGTH elems) /\
+  EVERY (\e. expr_type e = expr_type e1) elems
+Proof
+  simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+       expr_type_def] >> metis_tac[literal_membership_typing]
+QED
+
+Theorem literal_body_operand_pre:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  MEM e (e1::elems) /\ expr_sim_inv cenv cx env es' ==>
+  expr_body_pre cenv cx env e es'
+Proof
+  strip_tac >> gvs[]
+  >- metis_tac[expr_body_pre_builtin_arg, MEM] >>
+  `expr_body_pre cenv cx env (Builtin a (MakeArray t n) elems) es'` by
+    metis_tac[expr_body_pre_builtin_arg, MEM] >>
+  metis_tac[expr_body_pre_builtin_arg]
+QED
+Theorem literal_make_array_action:
+  compatible_bound n (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv ==>
+  bind (eval_expr cx (Builtin a (MakeArray (SOME et) n) elems)) (read_result cx) =
+  bind (eval_exprs cx elems) (\vs. vyperState$return (ArrayV (make_array_value tv n vs)))
+Proof
+  strip_tac >>
+  `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
+   ~precompile_builtin (MakeArray (SOME et) n) /\
+   builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
+    simp[precompile_builtin_def, builtin_args_length_ok_def] >>
+  drule_all eval_expr_builtin_action >>
+  disch_then (qspecl_then [`cx`, `a`] mp_tac) >>
+  simp[builtin_result_def, evaluate_builtin_def] >>
+  disch_then SUBST1_TAC >>
+  AP_TERM_TAC >> simp[FUN_EQ_THM, vyperStateTheory.return_def]
+QED
+
+Theorem literal_make_array_continuation:
+  compatible_bound n (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv ==>
+  vyperState$bind (eval_expr cx (Builtin a (MakeArray (SOME et) n) elems))
+    (\r. vyperState$bind (read_result cx r) k) =
+  vyperState$bind (eval_exprs cx elems) (\vs. k (ArrayV (make_array_value tv n vs)))
+Proof
+  strip_tac >> drule_all literal_make_array_action >>
+  disch_then (qspec_then `a` mp_tac) >>
+  disch_tac >>
+  pure_once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
+  asm_rewrite_tac[] >>
+  simp[vyperStateTheory.bind_assoc, vyperStateTheory.bind_return]
+QED
+
+Theorem literal_make_array_value_continuation:
+  compatible_bound n (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv ==>
+  vyperState$bind (eval_expr cx (Builtin a (MakeArray (SOME et) n) elems))
+    (\r. vyperState$bind (read_result cx r)
+      (k : value -> evaluation_state -> (value + vyperState$exception) # evaluation_state)) =
+  vyperState$bind (eval_exprs cx elems) (\vs. k (ArrayV (make_array_value tv n vs)))
+Proof
+  MATCH_ACCEPT_TAC literal_make_array_continuation
+QED
+
+Theorem literal_membership_action_prefix:
+  compatible_bound n (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv ==>
+  bind (eval_expr cx (Builtin ann (Bop bop)
+    [e1; Builtin a (MakeArray (SOME et) n) elems])) (read_result cx) =
+  bind (bind (eval_expr cx e1) (read_result cx))
+    (\v. bind (eval_exprs cx elems)
+      (\vs ee. (builtin_result cx ee.accounts ann (Bop bop)
+        [expr_type e1; a] [v; ArrayV (make_array_value tv n vs)], ee)))
+Proof
+  strip_tac >>
+  `Bop bop <> Len /\ Bop bop <> Env MsgGas /\
+   ~precompile_builtin (Bop bop) /\
+   builtin_args_length_ok (Bop bop) 2` by
+    simp[precompile_builtin_def, builtin_args_length_ok_def] >>
+  `eval_exprs cx [] = vyperState$return []` by
+    simp[FUN_EQ_THM, eval_exprs_nil, vyperStateTheory.return_def] >>
+  simp[Once eval_expr_builtin_action] >>
+  simp[expr_type_def, eval_exprs_cons_action,
+       vyperStateTheory.bind_assoc, vyperStateTheory.bind_return] >>
+  AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> ABS_TAC >>
+  drule_all literal_make_array_value_continuation >>
+  disch_then (qspecl_then [
+    `\v' ee. (builtin_result cx ee.accounts ann (Bop bop)
+      [expr_type e1; a] [v; v'], ee)`, `a`] mp_tac) >> simp[]
+QED
+
+Theorem literal_membership_action:
+  compatible_bound n (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  evaluate_type (get_tenv cx) (ArrayT et n) = SOME (ArrayTV tv n) /\
+  (bop = In \/ bop = NotIn) ==>
+  bind (eval_expr cx (Builtin ann (Bop bop)
+    [e1; Builtin (ArrayT et n) (MakeArray (SOME et) n) elems])) (read_result cx) =
+  bind (bind (eval_expr cx e1) (read_result cx))
+    (\v. bind (eval_exprs cx elems)
+      (\vs. vyperState$return (BoolV (if bop = In then MEM v vs else ~MEM v vs))))
+Proof
+  strip_tac >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+  drule_all literal_membership_action_prefix >>
+  disch_then (fn th => rewrite_tac[th]) >> disch_tac >>
+  AP_TERM_TAC >> ABS_TAC >>
+  rewrite_tac[FUN_EQ_THM] >> gen_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+  rename1 `eval_exprs cx elems st` >>
+  Cases_on `eval_exprs cx elems st` >>
+  rename1 `eval_exprs cx elems st = (res, st')` >>
+  Cases_on `res` >> gvs[] >>
+  drule eval_exprs_length >> disch_tac >>
+  `compatible_bound n (LENGTH x)` by metis_tac[] >>
+  simp[builtin_result_def, evaluate_builtin_def, literal_membership_result]
+QED
+
+
+
+
 
 (* Why it holds.  Typing (well_typed_binop In/NotIn, well_typed_builtin_app
    MakeArray) forces the right operand to be
