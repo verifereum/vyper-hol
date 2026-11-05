@@ -13,7 +13,7 @@ Ancestors
   o1PassContract o1FnScheduleDecomp venomPipelineRunner
   venomFnScheduleRunner venomFnScheduleRunnerProps venomPassDispatcher
   venomInst irSupply venomCompilerWf venomWf unitShapeDefs fcgDefs
-  list rich_list o1ScheduleDecompHelpers o1PartialSchedule
+  list rich_list o1ScheduleDecompHelpers o1PartialSchedule o1FnScheduleDecompHelpers
 
 
 Theorem chain_facts_length:
@@ -91,16 +91,41 @@ Proof
   qx_gen_tac `i` >> strip_tac >> irule chain_facts_name >> metis_tac[]
 QED
 
+Theorem stage_ctx_inst_ids_distinct:
+  LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
+  (!i. i < LENGTH chains ==> chain_facts rpolicy passes unit order chains i) /\
+  chains_ids_apart chains /\ k <= LENGTH passes ==>
+  ctx_inst_ids_distinct (stage_ctx unit.cu_context chains k)
+Proof
+  strip_tac >>
+  simp[ctx_inst_ids_distinct_ir_ids, stage_ctx_def, stage_fns_def, MAP_MAP_o] >>
+  irule ALL_DISTINCT_FLAT_EL_apart >>
+  simp[EVERY_EL, EL_MAP] >> conj_tac
+  >- (rpt strip_tac >> irule o1_fn_shape_inst_ids >>
+      qexists_tac `unit.cu_context` >> irule chain_facts_shape >> metis_tac[]) >>
+  rpt strip_tac >>
+  `k < LENGTH (FST (EL i chains)) /\ k < LENGTH (FST (EL j chains))` by
+    (`chain_facts rpolicy passes unit order chains i /\
+      chain_facts rpolicy passes unit order chains j` by simp[] >>
+     imp_res_tac chain_facts_length >> simp[]) >>
+  qpat_x_assum `chains_ids_apart _` mp_tac >> rewrite_tac[chains_ids_apart_def] >>
+  disch_then (qspecl_then [`i`,`j`,`EL k (FST (EL i chains))`,
+                           `EL k (FST (EL j chains))`,`x`] mp_tac) >>
+  simp[EL_MEM]
+QED
+
 Theorem stage_ctx_shape:
   LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
   o1_ctx_shape unit.cu_context /\
   (!i. i < LENGTH chains ==> chain_facts rpolicy passes unit order chains i) /\
-  k <= LENGTH passes ==>
+  chains_ids_apart chains /\ k <= LENGTH passes ==>
   o1_ctx_shape (stage_ctx unit.cu_context chains k)
 Proof
   strip_tac >>
   `ctx_fn_names (stage_ctx unit.cu_context chains k) =
      ctx_fn_names unit.cu_context` by (irule stage_ctx_names >> metis_tac[]) >>
+  `ctx_inst_ids_distinct (stage_ctx unit.cu_context chains k)` by
+    (irule stage_ctx_inst_ids_distinct >> metis_tac[]) >>
   irule o1_ctx_shape_transport >>
   qexists_tac `unit.cu_context` >> simp[GSYM stage_ctx_def] >>
   simp[stage_ctx_def] >>
@@ -171,12 +196,16 @@ Theorem run_named_fn_schedules_decomp:
          chain_facts rpolicy passes unit names chains i) /\
     unit'.cu_context = stage_ctx unit.cu_context chains (LENGTH passes) /\
     (names <> [] ==> unit_labels_wf unit') /\
+    chains_ids_apart chains /\
   ir_supply_inst_ok s'
 Proof
   strip_tac >>
   `partial_schedule rpolicy passes unit names []
     (MAP (\f. ([f],[])) unit.cu_context.ctx_functions) unit` by
     (irule partial_schedule_initial >> simp[]) >>
+  `chains_ids_used unit.cu_context []
+     (MAP (\f. ([f],[])) unit.cu_context.ctx_functions) s` by
+    simp[chains_ids_used_def] >>
   drule_at (Pat `partial_schedule _ _ _ _ _ _ _`) partial_schedule_suffix >>
   disch_then (drule_at (Pat `run_named_fn_schedules _ _ _ _ _ _ = _`)) >>
   simp[] >> disch_then (qx_choose_then `chains` strip_assume_tac) >>
@@ -203,7 +232,7 @@ Theorem chain_facts_stage_shape:
   LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
   o1_ctx_shape unit.cu_context /\
   (!i. i < LENGTH chains ==> chain_facts rpolicy passes unit order chains i) /\
-  k <= LENGTH passes ==>
+  chains_ids_apart chains /\ k <= LENGTH passes ==>
   ctx_fn_names (stage_ctx unit.cu_context chains k) =
     ctx_fn_names unit.cu_context /\
   o1_ctx_shape (stage_ctx unit.cu_context chains k)
