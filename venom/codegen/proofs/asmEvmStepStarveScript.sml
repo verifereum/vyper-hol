@@ -16,7 +16,7 @@ Theory asmEvmStepStarve
 Ancestors
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   asmToBytecodeProofs asmEncodeParse vfmExecution vfmExecutionProp rich_list
-  arithmetic pair vfmOperation asmParseProofs spillSim
+  arithmetic pair vfmOperation asmParseProofs spillSim list
 Libs
   fcpLib
 
@@ -1787,6 +1787,343 @@ Proof
   >- (drule_at (Pos (el 2)) starve_revert >>
       Cases_on `asm_revert_op as` >> gvs[] >> metis_tac[]) >>
   drule_at (Pos (el 2)) starve_invalid >> simp[]
+QED
+
+Theorem starve_take_replicate[local]:
+  !n m (x:'a). n <= m ==> TAKE n (REPLICATE m x) = REPLICATE n x
+Proof
+  Induct_on `n` >> simp[] >> Cases_on `m` >> simp[]
+QED
+
+Theorem starve_take_pad_replicate[local]:
+  !n (l:byte list) k.
+    n <= LENGTH l + k ==>
+    TAKE n (l ++ REPLICATE k (0w:byte)) = take_pad_0 n l
+Proof
+  simp[vfmTypesTheory.take_pad_0_pad_take, listTheory.PAD_RIGHT,
+       GSYM rich_listTheory.REPLICATE_GENLIST] >>
+  Induct_on `n` >> simp[] >> rpt strip_tac >>
+  Cases_on `l` >> gvs[]
+  >- (Cases_on `k` >> gvs[starve_take_replicate]) >>
+  first_x_assum (qspecl_then [`t`, `k`] mp_tac) >> simp[]
+QED
+
+Theorem starve_copy_source[local]:
+  !sz soff (src:byte list).
+    TAKE sz (DROP soff (asm_expand_memory (soff + sz) src)) =
+    take_pad_0 sz (DROP soff src)
+Proof
+  rpt gen_tac >> simp[asm_expand_memory_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `if rounded <= _ then _ else _` >>
+  `soff + sz <= rounded` by
+    (simp[Abbr `rounded`] >>
+     mp_tac (Q.SPEC `soff + sz` n_le_round_up_32) >> simp[]) >>
+  IF_CASES_TAC
+  >- (`soff + sz <= LENGTH src` by decide_tac >>
+      simp[vfmTypesTheory.take_pad_0_def, listTheory.PAD_RIGHT,
+           GSYM rich_listTheory.REPLICATE_GENLIST, LENGTH_TAKE_EQ, LENGTH_DROP]) >>
+  Cases_on `soff <= LENGTH src`
+  >- (simp[DROP_APPEND1] >> irule starve_take_pad_replicate >> simp[LENGTH_DROP]) >>
+  `LENGTH src <= soff` by simp[] >>
+  simp[DROP_APPEND2, rich_listTheory.DROP_REPLICATE, DROP_LENGTH_TOO_LONG,
+       vfmTypesTheory.take_pad_0_def, listTheory.PAD_RIGHT,
+       GSYM rich_listTheory.REPLICATE_GENLIST] >>
+  irule starve_take_replicate >> decide_tac
+QED
+
+Theorem starve_copy_write[local]:
+  !b off bs sz.
+    LENGTH bs = sz ==>
+    buffer_to_list (buffer_write off bs
+      (buffer_extend (MAX (buffer_length b) (32 * ((off + sz + 31) DIV 32)) -
+                      buffer_length b) b)) =
+    TAKE off (asm_expand_memory (off + sz) (buffer_to_list b)) ++ bs ++
+    DROP (off + sz) (asm_expand_memory (off + sz) (buffer_to_list b))
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `buffer_write off bs expanded` >>
+  `buffer_to_list expanded = asm_expand_memory (off + sz) (buffer_to_list b)` by
+    (simp[Abbr `expanded`, vfmBufferTheory.buffer_to_list_extend] >>
+     pure_rewrite_tac[GSYM vfmBufferTheory.LENGTH_buffer_to_list] >>
+     once_rewrite_tac[GSYM starve_expand_memory] >> simp[GSYM ADD_ASSOC]) >>
+  `off + sz <= buffer_length expanded` by
+    (mp_tac (Q.SPECL [`off + sz`, `buffer_to_list b`]
+       spillSimTheory.asm_expand_memory_length) >>
+     metis_tac[vfmBufferTheory.LENGTH_buffer_to_list]) >>
+  dep_rewrite.DEP_REWRITE_TAC[vfmBufferTheory.buffer_to_list_write_le] >> simp[]
+QED
+
+Theorem starve_calldatacopy:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "CALLDATACOPY" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_copy_to_mem as.as_call_ctx.cc_calldata as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_copy_to_mem_def, LET_THM] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = CallDataCopy` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  `h'' = 0w \/ 0 < w2n h''` by
+    (Cases_on `w2n h'' = 0` >- gvs[wordsTheory.w2n_eq_0] >>
+     disj2_tac >> decide_tac) >>
+  Cases_on `h'' = 0w` >> gvs[] >>
+  simp[step_def, handle_def, step_inst_def, step_copy_to_memory_def,
+       copy_to_memory_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, consume_gas_def, memory_expansion_info_def,
+       expand_memory_def, write_memory_def, get_call_data_def,
+       vfmConstantsTheory.word_size_def, vfmConstantsTheory.memory_copy_cost_def,
+       assert_def, fail_def, LET_THM] >> fs[] >>
+  (IF_CASES_TAC
+   >- (simp[] >> disj2_tac >>
+       simp[inc_pc_or_jump_def, LET_THM, opcode_def, bind_def,
+            get_current_context_def, return_def, set_current_context_def, is_call_def] >>
+       qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+       simp[asm_evm_rel_def] >> strip_tac >>
+       gvs[asm_evm_rel_def, asm_next_def, starve_copy_source,
+           starve_copy_write, vfmTypesTheory.LENGTH_take_pad_0,
+           vfmTypesTheory.take_pad_0_0] >>
+       once_rewrite_tac[GSYM ADD1] >>
+       simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+       qspec_then `ctxt.memory` mp_tac starve_copy_write >>
+       simp[GSYM ADD_ASSOC] >>
+       disch_then (qspecl_then [`w2n h`,
+         `take_pad_0 (w2n h'') (DROP (w2n h') (buffer_to_list ctxt.msgParams.data))`]
+         mp_tac) >> simp[vfmTypesTheory.LENGTH_take_pad_0]) >>
+   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[])
+QED
+
+Theorem starve_codecopy:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "CODECOPY" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_copy_to_mem as.as_code as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_copy_to_mem_def, LET_THM] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = CodeCopy` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  `h'' = 0w \/ 0 < w2n h''` by
+    (Cases_on `w2n h'' = 0` >- gvs[wordsTheory.w2n_eq_0] >>
+     disj2_tac >> decide_tac) >>
+  Cases_on `h'' = 0w` >> gvs[] >>
+  simp[step_def, handle_def, step_inst_def, step_copy_to_memory_def,
+       copy_to_memory_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, consume_gas_def, memory_expansion_info_def,
+       expand_memory_def, write_memory_def, get_current_code_def,
+       vfmConstantsTheory.word_size_def, vfmConstantsTheory.memory_copy_cost_def,
+       assert_def, fail_def, LET_THM] >> fs[] >>
+  (IF_CASES_TAC
+   >- (simp[] >> disj2_tac >>
+       simp[inc_pc_or_jump_def, LET_THM, opcode_def, bind_def,
+            get_current_context_def, return_def, set_current_context_def, is_call_def] >>
+       qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+       simp[asm_evm_rel_def] >> strip_tac >>
+       gvs[asm_evm_rel_def, asm_next_def, starve_copy_source,
+           starve_copy_write, vfmTypesTheory.LENGTH_take_pad_0,
+           vfmTypesTheory.take_pad_0_0] >>
+       once_rewrite_tac[GSYM ADD1] >>
+       simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+       qspec_then `ctxt.memory` mp_tac starve_copy_write >>
+       simp[GSYM ADD_ASSOC] >>
+       disch_then (qspecl_then [`w2n h`,
+         `take_pad_0 (w2n h'') (DROP (w2n h') (assemble prog))`]
+         mp_tac) >> simp[vfmTypesTheory.LENGTH_take_pad_0]) >>
+   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[])
+QED
+
+Theorem starve_returndatacopy:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "RETURNDATACOPY" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_returndatacopy as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\
+                         exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+                         LENGTH es1.contexts = 1 /\
+                         (FST (HD es1.contexts)).returnData = []
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_returndatacopy_def, LET_THM] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = ReturnDataCopy` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  `h'' = 0w \/ 0 < w2n h''` by
+    (Cases_on `w2n h'' = 0` >- gvs[wordsTheory.w2n_eq_0] >>
+     disj2_tac >> decide_tac) >>
+  Cases_on `h'' = 0w` >> gvs[] >>
+  simp[step_def, handle_def, step_inst_def, step_return_data_copy_def,
+       step_copy_to_memory_def, copy_to_memory_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, consume_gas_def, memory_expansion_info_def,
+       expand_memory_def, write_memory_def, get_return_data_check_def,
+       get_return_data_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.memory_copy_cost_def,
+       assert_def, fail_def, LET_THM] >> fs[] >>
+  (IF_CASES_TAC
+   >- (simp[] >> IF_CASES_TAC >> gvs[]
+       >- suspend "in_bounds" >> suspend "out_of_bounds") >>
+   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[])
+QED
+
+Resume starve_returndatacopy[out_of_bounds]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `handle_step (SOME OutOfBoundsRead) s` >>
+  qspec_then `s` mp_tac starve_handle_fault >>
+  simp[Abbr `s`] >>
+  disch_then (qspec_then `OutOfBoundsRead` mp_tac) >>
+  simp[vfm_abort_def] >>
+  (strip_tac
+   >- (disj1_tac >> qexistsl [`es1`, `OutOfGas`] >> simp[]) >>
+   disj2_tac >> qexistsl [`es1`, `OutOfBoundsRead`] >> simp[vfm_abort_def])
+QED
+
+Resume starve_returndatacopy[in_bounds]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  disj2_tac >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def, bind_def,
+       get_current_context_def, return_def, set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, vfmTypesTheory.take_pad_0_0] >>
+  once_rewrite_tac[GSYM ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  qspec_then `ctxt.memory` mp_tac starve_copy_write >>
+  simp[GSYM ADD_ASSOC] >>
+  disch_then (qspecl_then [`w2n h`,
+    `TAKE (w2n h'') (DROP (w2n h') as.as_returndata)`] mp_tac) >>
+  simp[vfmTypesTheory.take_pad_0_def, listTheory.PAD_RIGHT,
+       GSYM rich_listTheory.REPLICATE_GENLIST, LENGTH_TAKE_EQ, LENGTH_DROP]
+QED
+
+Finalise starve_returndatacopy
+
+Theorem starve_extcodecopy:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
+    as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "EXTCODECOPY" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_extcodecopy as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_extcodecopy_def, LET_THM] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  rename1 `as.as_stack = addr :: dest :: src :: rest` >>
+  Cases_on `rest` >> simp[] >>
+  rename1 `as.as_stack = addr :: dest :: src :: sz :: stk` >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = ExtCodeCopy` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  `sz = 0w \/ 0 < w2n sz` by
+    (Cases_on `w2n sz = 0` >- gvs[wordsTheory.w2n_eq_0] >>
+     disj2_tac >> decide_tac) >>
+  Cases_on `sz = 0w` >> gvs[] >>
+  simp[step_def, handle_def, step_inst_def, step_ext_code_copy_def,
+       step_copy_to_memory_def, copy_to_memory_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, consume_gas_def, memory_expansion_info_def,
+       expand_memory_def, write_memory_def, get_code_def, get_accounts_def,
+       access_address_def, domain_check_def, set_domain_def,
+       vfmConstantsTheory.word_size_def, vfmConstantsTheory.memory_copy_cost_def,
+       assert_def, fail_def, LET_THM] >> fs[] >>
+  (IF_CASES_TAC
+   >- (simp[] >> suspend "copy_ok") >>
+   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[])
+QED
+
+Resume starve_extcodecopy[copy_ok]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  disj2_tac >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def, bind_def,
+       get_current_context_def, return_def, set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, starve_copy_source,
+      vfmTypesTheory.LENGTH_take_pad_0, vfmTypesTheory.take_pad_0_0] >>
+  once_rewrite_tac[GSYM ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  qspec_then `ctxt.memory` mp_tac starve_copy_write >>
+  simp[GSYM ADD_ASSOC] >>
+  disch_then (qspecl_then [`w2n dest`,
+    `take_pad_0 (w2n sz) (DROP (w2n src)
+      (lookup_account (w2w addr) as.as_accounts).code)`] mp_tac) >>
+  simp[vfmTypesTheory.LENGTH_take_pad_0]
+QED
+
+Finalise starve_extcodecopy
+
+Theorem starve_copy_dispatch:
+  !prog as es name ar.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
+    as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp name /\ asm_step_copy name as = SOME ar ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case ar of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\ LENGTH es1.contexts = 1 /\
+                         asm_evm_rel prog as1 es1
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\
+                         exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+                         LENGTH es1.contexts = 1 /\
+                         (FST (HD es1.contexts)).returnData = []
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `asm_step_copy _ _ = _` mp_tac >>
+  simp[asm_step_copy_def] >> rpt (IF_CASES_TAC >> simp[]) >>
+  strip_tac >> gvs[]
+  >- (drule_all starve_calldatacopy >>
+      Cases_on `asm_copy_to_mem as.as_call_ctx.cc_calldata as` >> gvs[] >> metis_tac[])
+  >- (drule_all starve_returndatacopy >>
+      Cases_on `asm_returndatacopy as` >> gvs[] >> metis_tac[])
+  >- (drule_all starve_codecopy >>
+      Cases_on `asm_copy_to_mem as.as_code as` >> gvs[] >> metis_tac[]) >>
+  drule_at (Pos (el 2)) starve_extcodecopy >>
+  simp[] >> Cases_on `asm_extcodecopy as` >> gvs[] >> metis_tac[]
 QED
 
 Theorem asm_evm_step_starve:
