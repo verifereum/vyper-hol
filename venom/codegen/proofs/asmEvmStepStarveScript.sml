@@ -2402,6 +2402,72 @@ Proof
   simp[is_evm_call_name_def, asm_step_extcall_def]
 QED
 
+Theorem starve_op_dispatch:
+  !prog data as es name.
+    asm_encoding_wf prog /\
+    asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
+    LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
+    ~(FST (HD es.contexts)).msgParams.static /\
+    (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
+         !j. j <= i ==> ~is_data_inst (EL j prog)) /\
+    as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
+    ~is_evm_call_name name /\ name <> "GAS" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_step_op (build_offset_to_pc prog) name as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\ LENGTH es1.contexts = 1 /\
+                    asm_evm_rel (prog ++ [AsmDataItem data]) as1 es1
+    | AsmHalt as1 => ?es1. step es = (INR NONE, es1) /\ LENGTH es1.contexts = 1 /\
+                    asm_evm_rel (prog ++ [AsmDataItem data]) as1 es1
+    | AsmRevert as1 => ?es1. step es = (INR (SOME Reverted), es1) /\
+                    LENGTH es1.contexts = 1 /\
+                    asm_evm_rel (prog ++ [AsmDataItem data]) as1 es1
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\ exc <> Reverted /\
+                    ~vfm_abort (SOME exc) /\ LENGTH es1.contexts = 1 /\
+                    (FST (HD es1.contexts)).returnData = []
+    | AsmError _ => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  `!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)` by metis_tac[] >>
+  `asm_encoding_wf (prog ++ [AsmDataItem data])` by simp[data_suffix_encoding_wf] >>
+  `as.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+  `EL as.as_pc (prog ++ [AsmDataItem data]) = AsmOp name` by simp[EL_APPEND1] >>
+  `!j. j <= as.as_pc ==> ~is_data_inst (EL j (prog ++ [AsmDataItem data]))` by
+    (rpt strip_tac >> `j < LENGTH prog` by decide_tac >> gvs[EL_APPEND1]) >>
+  rewrite_tac[asm_step_op_def] >>
+  reverse (Cases_on `asm_step_arith name as`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_arith_dispatch >> simp[] >>
+      Cases_on `x` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `asm_step_compare name as`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_compare_dispatch >> simp[] >>
+      Cases_on `x` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `asm_step_bitwise name as`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_bitwise_dispatch >> simp[] >>
+      Cases_on `x` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `asm_step_memory name as`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_memory_dispatch >> simp[] >>
+      Cases_on `x` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `asm_step_control (build_offset_to_pc prog) name as`) >> simp[]
+  >- (drule_all starve_control_dispatch >> simp[]) >>
+  simp[starve_extcall_excluded] >>
+  reverse (Cases_on `asm_step_copy name as`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_copy_dispatch >> simp[] >>
+      Cases_on `x` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `asm_step_context name as`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_context_dispatch >> simp[] >>
+      Cases_on `x` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `ALOOKUP dup_table name`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_dup_dispatch >> simp[] >>
+      Cases_on `asm_dup x as` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `ALOOKUP swap_table name`) >> simp[]
+  >- (drule_at (Pos (el 2)) starve_swap_dispatch >> simp[] >>
+      Cases_on `asm_swap x as` >> gvs[] >> metis_tac[]) >>
+  reverse (Cases_on `ALOOKUP log_table name`) >> simp[] >>
+  drule_at (Pos (el 2)) starve_log >> simp[] >>
+  Cases_on `asm_log x as` >> gvs[] >> metis_tac[]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
@@ -2432,5 +2498,23 @@ Theorem asm_evm_step_starve:
                   (FST (HD es1.contexts)).returnData = []
     | AsmError _ => T
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)` by metis_tac[] >>
+  Cases_on `EL as.as_pc prog` >> gvs[is_data_inst_def]
+  >- (drule_at (Pos (el 2)) starve_op_dispatch >> simp[asm_step_def] >>
+      metis_tac[]) >>
+  drule_at (Pos (el 2)) starve_push_family >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  Cases_on `asm_step (SND (compute_label_offsets prog))
+                    (build_offset_to_pc prog) (EL as.as_pc prog) as` >>
+  gvs[] >> metis_tac[]
 QED
+
+(* Audit the final theorem's dependency tags; the frozen label-map oracle
+   is deliberately retained above, as required by this task. *)
+val _ = let
+  val (oracles, _) = Tag.dest_tag (Thm.tag asm_evm_step_starve)
+in
+  print ("asm_evm_step_starve dependency oracles: " ^
+         String.concatWith ", " oracles ^ "\n")
+end;
