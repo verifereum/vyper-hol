@@ -83,13 +83,14 @@ Proof
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]
 QED
 
-Theorem hash_ghost_kept_readonly_then:
+Theorem hash_ghost_kept_then:
   ghost_kept cenv es sa G tn s G1 tn1 /\
   ghost_kept cenv es sm G1 tn1 a Gf tf /\
   local_ptrs_reserved cenv sa /\
   (!z. not_fresh_at sa z ==> not_fresh_at sm z) /\
   (!z. not_fresh_at sa z ==> lookup_var z a = lookup_var z s) /\
-  a.vs_allocas = s.vs_allocas /\ sa.cs_next_id <= sm.cs_next_id ==>
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP a.vs_allocas aid = SOME entry) /\ sa.cs_next_id <= sm.cs_next_id ==>
   ghost_kept cenv es sa G tn s Gf tf
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -101,6 +102,7 @@ Proof
   gvs[ghost_kept_def] >> conj_tac
   >- (rpt strip_tac >>
       `aid < sm.cs_next_id` by decide_tac >>
+      `FLOOKUP a.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
       qpat_assum `!aid off sz i. FLOOKUP _ aid = _ /\ _ ==> i IN tn1.t_mem` drule_all >> strip_tac >>
       qpat_assum `!aid off sz i. FLOOKUP _ aid = _ /\ _ ==> i IN tn.t_mem` drule_all >> simp[]) >>
   rpt strip_tac >>

@@ -257,7 +257,9 @@ Resume hash_sha256_bytes_success_path[compose]:
   `!z. not_fresh_at sa z ==> not_fresh_at sm z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `sa.cs_next_id <= sm.cs_next_id` by simp[] >>
-  drule_all hash_ghost_kept_readonly_then >> strip_tac >>
+  `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP a.vs_allocas aid = SOME entry` by simp[] >>
+  drule_all hash_ghost_kept_then >> strip_tac >>
   qpat_x_assum `t' = u with vs_inst_idx := _` SUBST_ALL_TAC >>
   qexistsl_tac [`u`, `Gf`, `tf`] >> conj_tac
   >- (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK t`

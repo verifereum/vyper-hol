@@ -251,7 +251,13 @@ Theorem hash_literal_alloc_store_frame:
       ghost_inv d cenv cx es G2 tn2 (mstore (w2n a) v t) /\
       ghost_kept cenv es sa G tn s G2 tn2 /\
       ptr_covers G2 tn2 p (mstore (w2n a) v t) 32 /\
-      (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn2.t_mem)
+      (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn2.t_mem) /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,32) /\
+      w2n a+32 < dimword (:256) /\ not_fresh_at sm p /\
+      ptr_covers G1 tn1 p t 32 /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+        FLOOKUP t.vs_allocas aid = SOME entry)
 Proof
   rpt gen_tac >> strip_tac >>
   `32 < dimword (:256)` by
