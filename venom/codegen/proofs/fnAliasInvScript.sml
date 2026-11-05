@@ -1994,10 +1994,12 @@ Proof
 QED
 
 Theorem alias_mark_dead_stack_upper_support:
-  MEM (Var x) (mark_dead_stack retained stk) ==> MEM (Var x) stk
+  MEM (Var x) (mark_dead_stack retained stk) <=>
+    MEM (Var x) stk /\ ~MEM (Var x) retained
 Proof
-  simp[mark_dead_stack_def, MEM_MAP] >> rpt strip_tac >>
-  Cases_on `MEM op retained` >> gvs[dead_stack_marker_def]
+  simp[mark_dead_stack_def, MEM_MAP] >> eq_tac
+  >- (rpt strip_tac >> Cases_on `MEM op retained` >> gvs[dead_stack_marker_def]) >>
+  strip_tac >> qexists_tac `Var x` >> simp[]
 QED
 
 Theorem alias_clean_stack_upper_support:
@@ -2028,6 +2030,81 @@ Proof
           gvs[plan_holds_def] >> metis_tac[alias_mark_dead_stack_upper_support]) >>
       simp[] >> metis_tac[alias_popmany_upper_support]) >>
   simp[clean_stack_plan_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem alias_clean_stack_spilled:
+  clean_stack_plan live cfg fn bb ps = (ops,qs) ==>
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  `!items ops ps. (SND (FOLDL pop_foldl_body (ops,ps) items)).ps_spilled =
+      ps.ps_spilled` by
+    (Induct >> simp[] >> rpt gen_tac >>
+     Cases_on `stack_get_depth h ps.ps_stack` >> simp[pop_foldl_body_def] >>
+     IF_CASES_TAC >> simp[] >> pairarg_tac >> simp[] >>
+     metis_tac[do_swap_spilled_unchanged, pairTheory.SND]) >>
+  `!items ps. (SND (popmany_plan items ps)).ps_spilled = ps.ps_spilled` by
+    (Cases >> simp[popmany_plan_def] >> rpt gen_tac >>
+     rpt IF_CASES_TAC >> simp[popmany_individual_eq_foldl] >>
+     pairarg_tac >> simp[] >>
+     metis_tac[do_swap_spilled_unchanged, pairTheory.SND]) >>
+  pop_assum (fn th =>
+    (Cases_on `cfg_preds_of cfg bb.bb_label`
+     >- (simp[clean_stack_plan_def] >> strip_tac >> gvs[]) >>
+     rename1 `cfg_preds_of cfg bb.bb_label = pred::rest` >>
+     Cases_on `rest`
+     >- (simp[clean_stack_plan_def] >> IF_CASES_TAC
+         >- (strip_tac >> gvs[]) >>
+         Cases_on `lookup_block pred fn.fn_blocks`
+         >- (simp[] >> strip_tac >> gvs[]) >>
+         simp[] >> IF_CASES_TAC
+         >- (strip_tac >> gvs[]) >>
+         IF_CASES_TAC
+         >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+             metis_tac[th, pairTheory.SND]) >>
+         metis_tac[th, pairTheory.SND]) >>
+     simp[clean_stack_plan_def] >> strip_tac >> gvs[]))
+QED
+
+Theorem alias_clean_stack_bypass:
+  (!pred. cfg_preds_of cfg bb.bb_label = [pred] ==>
+    LENGTH (cfg_succs_of cfg pred) <= 1 \/ lookup_block pred fn.fn_blocks = NONE) ==>
+  clean_stack_plan live cfg fn bb ps = ([],ps)
+Proof
+  strip_tac >> Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- simp[clean_stack_plan_def] >>
+  rename1 `cfg_preds_of cfg bb.bb_label = pred::rest` >> Cases_on `rest`
+  >- (first_x_assum (qspec_then `pred` mp_tac) >> simp[clean_stack_plan_def] >>
+      strip_tac >> simp[]) >>
+  simp[clean_stack_plan_def]
+QED
+
+Theorem alias_clean_stack_survival:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\ lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  inputs = input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0) /\
+  layout = live_vars_at live pred (LENGTH pred_bb.bb_instructions) /\
+  to_pop = FILTER (\v. ~MEM v inputs) layout /\
+  physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop) /\
+  retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+  cleanup = FILTER (\op. ~MEM op retained) physical /\
+  ok = (ps.ps_cleanup_promised \/
+    cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb
+      (LENGTH ps.ps_stack - LENGTH cleanup)) ==>
+  (MEM (Var x) (SND (clean_stack_plan live cfg fn bb ps)).ps_stack <=>
+    if NULL inputs /\ ok then F
+    else if ok then
+      MEM (Var x) (SND (popmany_plan cleanup ps)).ps_stack /\ ~MEM (Var x) retained
+    else MEM (Var x) (SND (popmany_plan (MAP Var to_pop) ps)).ps_stack)
+Proof
+  rpt strip_tac >> gvs[] >> simp[clean_stack_plan_def] >>
+  qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+  qmatch_goalsub_abbrev_tac `if enabled then _ else _` >>
+  IF_CASES_TAC
+  >- simp[MEM_MAP, dead_stack_marker_def] >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> gvs[alias_mark_dead_stack_upper_support,
+                        Abbr `enabled`, Abbr `guard`]) >>
+  gvs[Abbr `enabled`, Abbr `guard`]
 QED
 
 Theorem alias_unique_take_absent:
