@@ -9,7 +9,7 @@
 
 Theory tailMergeStep
 Ancestors
-  venomCallOracleDefs
+  venomCallOracleDefs venomWf
   stateEquiv venomExecSemantics execEquivProofs list rich_list
 Libs
   stateEquivTheory stateEquivProofsTheory
@@ -1034,22 +1034,14 @@ fun prove_ext_call bridge_thm cr opc =
 (* LOG: dispatched to pre-proved log_step_sim theorem *)
 fun prove_log cr opc = log_step_sim;
 
-(* ALLOCA and OFFSET: need Lit/Label preservation.
-   Strategy: resolve inst1 operands via CASE_TAC, derive inst2 operands
-   from sim_pre extraction lemmas to avoid cross-product blowup. *)
+(* ALLOCA: excluded by the caller (tail merge never merges ALLOCA blocks,
+   since exec_alloca keys vs_allocas by inst_id), so the case is vacuous. *)
 fun prove_alloca cr opc =
   let val goal = ``!inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id ==>
+    inst1.inst_opcode <> ALLOCA ==>
     step_sim inst1 inst2 s1 s2``
-  in prove(goal,
-  rpt gen_tac >> strip_tac >>
-  `sim_pre inst1 inst2 s1 s2` by first_assum ACCEPT_TAC >>
-  fs[sim_pre_def] >>
-  imp_res_tac cr >> simp[step_sim_def, exec_alloca_def] >>
-  spec_evals >> decompose_ops >>
-  rpt (CASE_TAC >> gvs[]) >>
-  gvs inline_close_defs)
+  in prove(goal, rpt gen_tac >> strip_tac >> fs[])
   end;
 
 (* OFFSET now uses exec_pure2, handled by category dispatch *)
@@ -1118,7 +1110,7 @@ val all_opcode_thms = map timed_prove_opcode target_opcodes;
 Theorem step_inst_base_sim:
   !inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ~is_terminator inst1.inst_opcode /\
     inst1.inst_opcode <> PHI /\ inst1.inst_opcode <> PARAM /\
     inst1.inst_opcode <> RET ==>
@@ -1316,7 +1308,7 @@ fun output_thm_for_cat "exec_pure1" = SOME exec_pure1_output
 fun prove_output_cat out_thm cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
@@ -1341,7 +1333,7 @@ fun prove_output_cat out_thm cr opc =
 fun prove_output_inline cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
@@ -1396,7 +1388,7 @@ val output_target_opcodes =
 fun prove_output_ext_call bridge_thm cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
@@ -1474,7 +1466,7 @@ End
 Theorem step_inst_base_output_match:
   !inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     ~is_terminator inst1.inst_opcode /\
@@ -1491,4 +1483,226 @@ Proof
   Cases_on `inst1.inst_opcode` >>
   fs[is_terminator_def, is_output_opcode_def] >>
   output_match_dispatch_tac
+QED
+
+Theorem setup_callee_ee_UNIV:
+  !fn args s1 s2. execution_equiv UNIV s1 s2 ==>
+    setup_callee fn args s1 = setup_callee fn args s2
+Proof
+  rw[setup_callee_def, execution_equiv_def] >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem sim_pre_PARAM_shape:
+  !i1 i2 s1 s2.
+    sim_pre i1 i2 s1 s2 /\ inst_wf i1 /\
+    i1.inst_opcode = PARAM ==>
+    ?idx x1 x2. i1.inst_operands = [Lit idx] /\
+      i2.inst_operands = [Lit idx] /\
+      i1.inst_outputs = [x1] /\ i2.inst_outputs = [x2] /\
+      i2.inst_opcode = PARAM /\ execution_equiv UNIV s1 s2
+Proof
+  rw[sim_pre_def, inst_wf_def] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute]
+QED
+
+Theorem step_inst_base_PARAM_sim:
+  !i1 i2 s1 s2.
+    sim_pre i1 i2 s1 s2 /\ inst_wf i1 /\
+    i1.inst_opcode = PARAM ==>
+    step_sim i1 i2 s1 s2
+Proof
+  rpt strip_tac >> drule_all sim_pre_PARAM_shape >> strip_tac >>
+  simp[step_sim_def, opcode_clause ``PARAM``] >>
+  `s1.vs_params = s2.vs_params` by gvs[execution_equiv_def] >>
+  simp[] >> IF_CASES_TAC >> simp[update_var_ee_UNIV]
+QED
+
+Theorem step_inst_base_PARAM_output_match:
+  !i1 i2 s1 s2 t1 t2.
+    sim_pre i1 i2 s1 s2 /\ inst_wf i1 /\
+    i1.inst_opcode = PARAM /\
+    step_inst_base i1 s1 = OK t1 /\
+    step_inst_base i2 s2 = OK t2 ==>
+    !k. k < LENGTH i1.inst_outputs ==>
+      lookup_var (EL k i1.inst_outputs) t1 =
+      lookup_var (EL k i2.inst_outputs) t2
+Proof
+  rpt gen_tac >> strip_tac >> drule_all sim_pre_PARAM_shape >> strip_tac >>
+  `s1.vs_params = s2.vs_params` by gvs[execution_equiv_def] >>
+  gvs[opcode_clause ``PARAM``, AllCaseEqs(), update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem bind_outputs_cons[local]:
+  !x xs v vs s.
+    bind_outputs (x::xs) (v::vs) s =
+      bind_outputs xs vs (update_var x v s)
+Proof
+  simp[bind_outputs_def, listTheory.FOLDL]
+QED
+
+Theorem bind_outputs_ee_UNIV:
+  !xs ys vals s1 s2.
+    LENGTH xs = LENGTH ys /\ execution_equiv UNIV s1 s2 ==>
+    case (bind_outputs xs vals s1, bind_outputs ys vals s2) of
+      (SOME t1, SOME t2) => execution_equiv UNIV t1 t2
+    | (NONE, NONE) => T
+    | _ => F
+Proof
+  Induct >- (Cases_on `ys` >> Cases_on `vals` >> simp[bind_outputs_def]) >>
+  Cases_on `ys` >- simp[] >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  simp[bind_outputs_cons] >> rpt strip_tac >>
+  fs[pair_case_simp] >>
+  first_x_assum irule >> simp[update_var_ee_UNIV]
+QED
+
+Theorem bind_outputs_lookup_outside:
+  !xs vals s t v. bind_outputs xs vals s = SOME t /\ ~MEM v xs ==>
+    lookup_var v t = lookup_var v s
+Proof
+  Induct >- (simp[bind_outputs_def] >> Cases >> simp[]) >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  simp[bind_outputs_cons] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >>
+  disch_then (qspec_then `v` mp_tac) >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem bind_outputs_lookup_position:
+  !xs vals s t k.
+    ALL_DISTINCT xs /\ bind_outputs xs vals s = SOME t /\
+    k < LENGTH xs ==>
+    lookup_var (EL k xs) t = SOME (EL k vals)
+Proof
+  Induct >- simp[] >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  simp[bind_outputs_cons] >> rpt gen_tac >> strip_tac >>
+  Cases_on `k`
+  >- (drule_all bind_outputs_lookup_outside >>
+      simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[] >> first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem merge_callee_ee_UNIV:
+  !s1 s2 cs. execution_equiv UNIV s1 s2 ==>
+    execution_equiv UNIV (merge_callee_state s1 cs) (merge_callee_state s2 cs)
+Proof
+  rw[merge_callee_state_def, execution_equiv_def]
+QED
+
+Theorem adopt_return_fmp_ee_UNIV:
+  !ir s1 s2. execution_equiv UNIV s1 s2 ==>
+    execution_equiv UNIV (adopt_return_fmp ir s1) (adopt_return_fmp ir s2)
+Proof
+  rpt gen_tac >> Cases_on `ir.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, execution_equiv_def]
+QED
+
+Theorem sim_pre_INVOKE_args:
+  !i1 i2 s1 s2.
+    sim_pre i1 i2 s1 s2 /\ inst_wf i1 /\
+    i1.inst_opcode = INVOKE ==>
+    ?lbl ops1 ops2.
+      decode_invoke i1 = SOME (lbl, ops1) /\
+      decode_invoke i2 = SOME (lbl, ops2) /\
+      eval_operands ops1 s1 = eval_operands ops2 s2 /\
+      i2.inst_opcode = INVOKE /\
+      LENGTH i1.inst_outputs = LENGTH i2.inst_outputs /\
+      execution_equiv UNIV s1 s2
+Proof
+  rpt strip_tac >>
+  `?lbl ops1. i1.inst_operands = Label lbl :: ops1`
+    by gvs[inst_wf_def] >>
+  `?ops2. i2.inst_operands = Label lbl :: ops2` by
+    (gvs[sim_pre_def] >> Cases_on `i2.inst_operands` >> gvs[] >>
+     qpat_x_assum `!i. _ ==> !l. EL i (Label lbl::ops1) = Label l ==> _` (qspec_then `0` mp_tac) >>
+     simp[]) >>
+  qexistsl_tac [`lbl`, `ops1`, `ops2`] >>
+  simp[decode_invoke_def] >>
+  gvs[sim_pre_def] >> irule eval_operands_match >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+    (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Theorem step_inst_INVOKE_sim:
+  !fuel ctx i1 i2 s1 s2.
+    sim_pre i1 i2 s1 s2 /\ inst_wf i1 /\
+    i1.inst_opcode = INVOKE ==>
+    case (step_inst fuel ctx i1 s1, step_inst fuel ctx i2 s2) of
+      (OK t1, OK t2) => execution_equiv UNIV t1 t2
+    | (r1, r2) => result_equiv UNIV r1 r2
+Proof
+  rpt strip_tac >> drule_all sim_pre_INVOKE_args >> strip_tac >>
+  pure_once_rewrite_tac[step_inst_def] >> simp[] >>
+  Cases_on `lookup_function lbl ctx.ctx_functions` >> simp[result_equiv_def] >>
+  Cases_on `eval_operands ops2 s2` >> simp[result_equiv_def] >>
+  `setup_callee x x' s1 = setup_callee x x' s2`
+    by (irule setup_callee_ee_UNIV >> simp[]) >>
+  simp[] >> Cases_on `setup_callee x x' s2` >> simp[result_equiv_def] >>
+  Cases_on `run_blocks fuel ctx x x''` >>
+  simp[result_equiv_def, execution_equiv_refl, revert_equiv_def] >>
+  `execution_equiv UNIV
+     (adopt_return_fmp i (merge_callee_state s1 v))
+     (adopt_return_fmp i (merge_callee_state s2 v))` by
+    (irule adopt_return_fmp_ee_UNIV >> irule merge_callee_ee_UNIV >> simp[]) >>
+  drule_all bind_outputs_ee_UNIV >>
+  disch_then (qspec_then `i.iret_values` mp_tac) >>
+  Cases_on `bind_outputs i1.inst_outputs i.iret_values
+    (adopt_return_fmp i (merge_callee_state s1 v))` >>
+  Cases_on `bind_outputs i2.inst_outputs i.iret_values
+    (adopt_return_fmp i (merge_callee_state s2 v))` >>
+  simp[result_equiv_def]
+QED
+
+Theorem step_inst_INVOKE_OK_bind:
+  !fuel ctx inst s t.
+    inst.inst_opcode = INVOKE /\ step_inst fuel ctx inst s = OK t ==>
+    ?ir cs. bind_outputs inst.inst_outputs ir.iret_values
+      (adopt_return_fmp ir (merge_callee_state s cs)) = SOME t
+Proof
+  rpt gen_tac >> simp[Once step_inst_def] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem step_inst_INVOKE_lookup_outside:
+  !fuel ctx inst s t v.
+    inst.inst_opcode = INVOKE /\ step_inst fuel ctx inst s = OK t /\
+    ~MEM v inst.inst_outputs ==>
+    lookup_var v t = lookup_var v s
+Proof
+  rpt strip_tac >> drule_all step_inst_INVOKE_OK_bind >> strip_tac >>
+  drule_all bind_outputs_lookup_outside >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, merge_callee_state_def, lookup_var_def]
+QED
+
+Theorem step_inst_INVOKE_output_match:
+  !fuel ctx i1 i2 s1 s2 t1 t2.
+    sim_pre i1 i2 s1 s2 /\ inst_wf i1 /\ i1.inst_opcode = INVOKE /\
+    ALL_DISTINCT i1.inst_outputs /\ ALL_DISTINCT i2.inst_outputs /\
+    step_inst fuel ctx i1 s1 = OK t1 /\
+    step_inst fuel ctx i2 s2 = OK t2 ==>
+    !k. k < LENGTH i1.inst_outputs ==>
+      lookup_var (EL k i1.inst_outputs) t1 =
+      lookup_var (EL k i2.inst_outputs) t2
+Proof
+  rpt gen_tac >> strip_tac >> drule_all sim_pre_INVOKE_args >> strip_tac >>
+  qpat_x_assum `step_inst _ _ i1 _ = _` mp_tac >>
+  qpat_x_assum `step_inst _ _ i2 _ = _` mp_tac >>
+  pure_once_rewrite_tac[step_inst_def] >> simp[] >>
+  Cases_on `lookup_function lbl ctx.ctx_functions` >> simp[] >>
+  Cases_on `eval_operands ops2 s2` >> simp[] >>
+  `setup_callee x x' s1 = setup_callee x x' s2`
+    by (irule setup_callee_ee_UNIV >> simp[]) >>
+  simp[] >> Cases_on `setup_callee x x' s2` >> simp[] >>
+  Cases_on `run_blocks fuel ctx x x''` >> simp[AllCaseEqs()] >>
+  rpt strip_tac >>
+  `lookup_var (EL k i1.inst_outputs) t1 = SOME (EL k i.iret_values)` by
+    (irule bind_outputs_lookup_position >> simp[] >> metis_tac[]) >>
+  `lookup_var (EL k i2.inst_outputs) t2 = SOME (EL k i.iret_values)` by
+    (irule bind_outputs_lookup_position >> simp[] >> metis_tac[]) >>
+  simp[]
 QED
