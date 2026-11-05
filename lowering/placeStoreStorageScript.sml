@@ -4947,6 +4947,21 @@ Proof
   gvs[]
 QED
 
+Theorem place_store_path_invariant:
+  !ctx fn s n r.
+    gas_path ctx fn s n r ==>
+    !P. P s /\
+      (!u k v. P u /\ gas_path_edge ctx fn u k (OK v) ==> P v) ==>
+      !t. r = OK t ==> P t
+Proof
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >>
+      qpat_x_assum `!P. _` (qspec_then `P` mp_tac) >>
+      impl_tac >- metis_tac[] >> simp[])
+  >> rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
