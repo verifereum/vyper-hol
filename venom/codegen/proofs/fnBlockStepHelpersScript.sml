@@ -77,7 +77,8 @@ Proof
   >- (qpat_x_assum `TAKE (SUC _) _ = _`
         (mp_tac o Q.AP_TERM `EL (LENGTH acc.cpa_regions)`) >>
       simp[EL_TAKE, EL_LENGTH_SNOC])
-  >> first_x_assum (qspec_then `n` mp_tac) >> simp[ADD_CLAUSES]
+  >> qpat_x_assum `!i. i < LENGTH fns ==> (EL _ _).sr_fn_name = _`
+       (qspec_then `n` mp_tac) >> simp[ADD_CLAUSES]
 QED
 
 Theorem context_region_fn_name:
@@ -98,8 +99,8 @@ QED
 
 (* Every spill or restore offset of a region's code is a word. *)
 Theorem region_subplan_spill_offsets:
-  !ctx cp r pre ops post off.
-    generate_context_plan ctx = SOME cp /\ MEM r cp.cp_regions /\
+  !ctx cpl r pre ops post off.
+    generate_context_plan ctx = SOME cpl /\ MEM r cpl.cp_regions /\
     r.sr_plan = pre ++ ops ++ post /\
     (MEM (SOSpill off) ops \/ MEM (SORestore off) ops) ==>
     off < dimword (:256)
@@ -109,7 +110,7 @@ Proof
   strip_tac >>
   drule generate_context_plan_spill_gap >> strip_tac >>
   `region_spill_access r off` by simp[region_spill_access_def] >>
-  `off + 32 <= r.sr_spill_end /\ r.sr_spill_end <= cp.cp_initial_fmp` by
+  `off + 32 <= r.sr_spill_end /\ r.sr_spill_end <= cpl.cp_initial_fmp` by
     metis_tac[] >>
   decide_tac
 QED
@@ -292,11 +293,10 @@ Theorem label_block_steps:
     asm_block_at prog (as.as_pc + 1) (execute_plan fmp ops)
 Proof
   rpt gen_tac >>
-  `execute_plan fmp (SOLabel lbl :: ops) =
-     [AsmLabel lbl] ++ execute_plan fmp ops` by
-    simp[execute_plan_def, exec_stack_op_def] >>
-  simp[asm_block_at_append] >> strip_tac >>
-  drule label_op_asm_steps >> simp[]
+  simp[execute_plan_def, exec_stack_op_def, asm_block_at_cons] >>
+  strip_tac >>
+  qspecl_then [`lo`, `o2pc`, `prog`, `as`, `lbl`] mp_tac label_op_asm_steps >>
+  simp[asm_block_at_cons, asm_block_at_def]
 QED
 
 Theorem execute_plan_label_length:
@@ -352,5 +352,7 @@ Proof
   first_x_assum drule >> strip_tac >>
   rename1 `asm_steps lo o2pc prog m as1` >>
   qexistsl_tac [`n + m`, `as'`] >>
-  drule_then (qspec_then `m` SUBST1_TAC) asm_steps_add_ok >> simp[]
+  qpat_x_assum `asm_steps _ _ _ n as = _`
+    (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>
+  simp[]
 QED
