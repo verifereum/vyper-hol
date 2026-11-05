@@ -64,6 +64,8 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprSimAggregatesStructCounted exprSimAggregatesArrayCounted
+  exprSimAggregatesAllocCounted
   exprSimAbiDecode
   exprSimAbiEncode
   exprSimConvertOther
