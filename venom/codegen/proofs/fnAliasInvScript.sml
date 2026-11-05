@@ -3325,6 +3325,118 @@ Proof
   metis_tac[]
 QED
 
+Theorem alias_popmany_singleton_retains_stack:
+  at <> v /\ MEM at ps.ps_stack ==>
+  MEM at (SND (popmany_plan [v] ps)).ps_stack
+Proof
+  strip_tac >> Cases_on `stack_get_depth v ps.ps_stack` >>
+  simp[popmany_plan_def, is_contiguous_top_def, popmany_individual_def,
+       QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  drule stack_get_depth_props >> strip_tac >>
+  Cases_on `x = 0` >> gvs[]
+  >- (irule stack_pop_retains_noninputs >> simp[] >>
+      qexists_tac `[stack_peek 0 ps.ps_stack]` >> simp[]) >>
+  Cases_on `x = 1` >> simp[] >> pairarg_tac >> simp[] >>
+  `ps'.ps_stack = stack_swap x ps.ps_stack` by
+    metis_tac[doSwapSimTheory.do_swap_stack_result, pairTheory.SND] >>
+  irule stack_pop_retains_noninputs >> simp[stack_swap_mem_unbounded] >>
+  qexists_tac `[stack_peek x ps.ps_stack]` >>
+  simp[stack_swap_def, stack_peek_def, EL_LUPDATE]
+QED
+
+Theorem alias_stack_find_selected:
+  !stk d. stack_find p stk = SOME d ==> p (EL d stk)
+Proof
+  Induct >> simp[stack_find_def] >> gen_tac >>
+  Cases_on `p h` >> simp[] >>
+  Cases_on `stack_find p stk` >> simp[] >>
+  gvs[EL_CONS, GSYM arithmeticTheory.ADD1]
+QED
+
+Theorem alias_stack_find_exists:
+  !stk. (?d. stack_find p stk = SOME d) <=> EXISTS p stk
+Proof
+  Induct >> simp[stack_find_def] >>
+  Cases_on `p h` >> simp[] >>
+  Cases_on `stack_find p stk` >> gvs[]
+QED
+
+Theorem alias_phi_depth_selected:
+  stack_get_phi_depth inputs stk = SOME d ==>
+  MEM (stack_peek d stk) inputs
+Proof
+  strip_tac >>
+  `d < LENGTH stk` by
+    (gvs[stack_get_phi_depth_def] >> drule planWfTheory.stack_find_bound >> simp[]) >>
+  gvs[stack_get_phi_depth_def] >> drule alias_stack_find_selected >>
+  simp[EL_REVERSE, stack_peek_def, arithmeticTheory.PRE_SUB1]
+QED
+
+Theorem alias_phi_plan_retains_stack:
+  ~MEM (Var x) (FILTER is_var_operand inst.inst_operands) /\
+  ~MEM x inst.inst_outputs /\ MEM (Var x) ps.ps_stack /\
+  inst.inst_outputs = [out] ==>
+  MEM (Var x) (SND (generate_phi_plan inst live halting ps)).ps_stack
+Proof
+  strip_tac >> Cases_on `stack_get_phi_depth
+    (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  rename1 `_ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >> drule planWfTheory.stack_find_bound >> simp[]) >>
+  `stack_peek d ps.ps_stack <> Var x` by
+    metis_tac[alias_phi_depth_selected] >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) live` >> simp[]
+  >- (Cases_on `do_dup d ps` >> simp[] >>
+      `r.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
+        metis_tac[doSwapSimTheory.do_dup_stack_exact, pairTheory.SND] >>
+      `MEM (Var x) (stack_poke 0 (Var out) r.ps_stack)` by
+        gvs[stack_poke_def, LUPDATE_APPEND2] >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> simp[] >>
+          `x <> out` by gvs[] >>
+          qpat_x_assum `popmany_plan _ _ = _` (mp_tac o Q.AP_TERM `SND`) >>
+          simp[] >> disch_then (SUBST1_TAC o SYM) >>
+          irule alias_popmany_singleton_retains_stack >> gvs[]) >>
+      gvs[]) >>
+  `MEM (Var x) (stack_poke d (Var out) ps.ps_stack)` by
+    metis_tac[stack_poke_retains_other] >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[] >> `x <> out` by gvs[] >>
+      qpat_x_assum `popmany_plan _ _ = _` (mp_tac o Q.AP_TERM `SND`) >>
+          simp[] >> disch_then (SUBST1_TAC o SYM) >>
+          irule alias_popmany_singleton_retains_stack >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem alias_phi_prefix_retains_stack:
+  !steps ps.
+  EVERY (\p. (?out. (FST p).inst_outputs = [out]) /\
+    ~MEM (Var x) (FILTER is_var_operand (FST p).inst_operands) /\
+    ~MEM x (FST p).inst_outputs) steps /\ MEM (Var x) ps.ps_stack ==>
+  MEM (Var x) (FOLDL (\s p.
+    SND (generate_phi_plan (FST p) (SND p) halting s)) ps steps).ps_stack
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >>
+  irule alias_phi_plan_retains_stack >> metis_tac[]
+QED
+
+Theorem alias_phi_prefix_next_slot:
+  EVERY (\p. (?out. (FST p).inst_outputs = [out]) /\
+    ~MEM (Var x) (FILTER is_var_operand (FST p).inst_operands) /\
+    ~MEM x (FST p).inst_outputs) steps /\ MEM (Var x) ps.ps_stack /\
+  MEM (Var x) (FILTER is_var_operand next.inst_operands) ==>
+  ?d. stack_get_phi_depth (FILTER is_var_operand next.inst_operands)
+    (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s))
+      ps steps).ps_stack = SOME d
+Proof
+  strip_tac >> drule_all alias_phi_prefix_retains_stack >>
+  simp[stack_get_phi_depth_def, alias_stack_find_exists, EXISTS_MEM] >>
+  metis_tac[MEM_REVERSE]
+QED
+
 Theorem alias_phi_plan_holds_live:
   MEM x live /\ plan_holds ps (Var x) ==>
   plan_holds (SND (generate_phi_plan inst live halting ps)) (Var x)
