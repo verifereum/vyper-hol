@@ -4681,6 +4681,31 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem asm_call_create_push_saved_tail:
+  s.contexts <> [] /\
+  proceed_create sender address value code gas s = (r,t) ==>
+  TL t.contexts = s.contexts
+Proof
+  strip_tac >>
+  qpat_x_assum `proceed_create _ _ _ _ _ _ = _` mp_tac >>
+  simp[proceed_create_def, update_accounts_def, get_rollback_def,
+       get_original_def, set_original_def, push_context_def,
+       ignore_bind_def, bind_def, return_def, fail_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem asm_call_nested_memory_pop_saved_tail:
+  s.contexts = (child,crb)::(parent,prb)::saved /\
+  child.msgParams.outputTo = Memory mr /\
+  LENGTH parent.stack < stack_limit /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed /\
+  handle_exception NONE s = (q,t) ==>
+  TL t.contexts = saved
+Proof
+  strip_tac >> drule_all asm_handle_exception_memory_success >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
