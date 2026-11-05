@@ -156,3 +156,136 @@ Proof
   simp[expr_sim_case_def, expr_vv_case_def, int_calls_expr_def] >>
   metis_tac[]
 QED
+
+Theorem clear_base_compile_symbolic:
+  !sa.
+    let vn = \n. "%" ++ num_to_dec_string (sa.cs_next_var + n);
+        op = \n. Var (vn n);
+        ins = \n opc args outs. mk_inst (sa.cs_next_id + n) opc args (MAP vn outs)
+    in
+    compile_get_target_ptr compile_expr probe_deep_cenv probe_clear_source_bt sa =
+    ((op 19, SOME LocStorage,
+      SOME (ValPT (ArrayT (BaseT (UintT 256)) (Dynamic 1)))),
+     sa with <| cs_next_var := sa.cs_next_var + 20;
+                cs_next_id := sa.cs_next_id + 23;
+                cs_current_insts := sa.cs_current_insts ++
+       [ins 0 SLOAD [Lit 0w] [0];
+        ins 1 LT [Lit 0w; op 0] [1];
+        ins 2 ISZERO [op 1] [2];
+        ins 3 OR [Lit 0w; op 2] [3];
+        ins 4 ISZERO [op 3] [4];
+        ins 5 ASSERT [op 4] [];
+        ins 6 ADD [Lit 0w; Lit 1w] [5];
+        ins 7 MUL [Lit 0w; Lit 3w] [6];
+        ins 8 ADD [op 5; op 6] [7];
+        ins 9 ALLOCA [Lit 32w] [8];
+        ins 10 INVOKE [Label "internal 0 shrink()_runtime"] [9];
+        ins 11 ADD [op 8; Lit 0w] [10];
+        ins 12 MSTORE [op 10; op 9] [];
+        ins 13 MLOAD [op 8] [11];
+        ins 14 SLOAD [op 7] [12];
+        ins 15 LT [op 11; op 12] [13];
+        ins 16 ISZERO [op 13] [14];
+        ins 17 OR [Lit 0w; op 14] [15];
+        ins 18 ISZERO [op 15] [16];
+        ins 19 ASSERT [op 16] [];
+        ins 20 ADD [op 7; Lit 1w] [17];
+        ins 21 MUL [op 11; Lit 2w] [18];
+        ins 22 ADD [op 17; op 18] [19]] |>)
+Proof
+  gen_tac >>
+  `num_to_dec_string 0 = "0"` by EVAL_TAC >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``num_to_dec_string``]) >>
+  simp[arithmeticTheory.ADD_ASSOC] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+  simp[]
+QED
+
+Theorem clear_base_compile_shape[local]:
+  !sa r sb.
+    compile_get_target_ptr compile_expr probe_deep_cenv probe_clear_source_bt sa = (r,sb) ==>
+    sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_blocks = sa.cs_blocks /\
+    ?tail. LENGTH tail = 22 /\
+      sb.cs_current_insts = sa.cs_current_insts ++
+        mk_inst sa.cs_next_id SLOAD [Lit 0w]
+          ["%" ++ num_to_dec_string sa.cs_next_var] :: tail
+Proof
+  rpt gen_tac >>
+  qspec_then `sa` mp_tac clear_base_compile_symbolic >>
+  SIMP_TAC bool_ss [LET_THM] >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  rpt strip_tac >> gvs[] >> simp[mk_inst_def]
+QED
+
+Theorem clear_caller_root_position[local]:
+  !n.
+    n < LENGTH (HD probe_descendant_outer_caller.fn_blocks).bb_instructions /\
+    (EL n (HD probe_descendant_outer_caller.fn_blocks).bb_instructions).inst_opcode = SLOAD /\
+    (EL n (HD probe_descendant_outer_caller.fn_blocks).bb_instructions).inst_operands = [Lit 0w] ==>
+    n = 0
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``EL``]) >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >>
+  CONV_TAC (REDEPTH_CONV (numLib.BOUNDED_FORALL_CONV EVAL)) >> simp[]
+QED
+
+Theorem clear_caller_lookup[local]:
+  !label bb.
+    lookup_block label probe_descendant_outer_caller.fn_blocks = SOME bb ==>
+    label = "entry" /\ bb = HD probe_descendant_outer_caller.fn_blocks
+Proof
+  simp[probe_descendant_outer_caller_def, mk_raw_function_def,
+       lookup_block_def, listTheory.FIND_thm] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem clear_base_code_position[local]:
+  !sa r sb.
+    compile_get_target_ptr compile_expr probe_deep_cenv probe_clear_source_bt sa = (r,sb) /\
+    fn_has_code sa sb probe_descendant_outer_caller ==>
+    sa.cs_current_bb = "entry" /\ sa.cs_current_insts = []
+Proof
+  rpt strip_tac >>
+  drule clear_base_compile_shape >> strip_tac >>
+  qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+  pure_rewrite_tac[fragExecTheory.fn_has_code_def] >> strip_tac >>
+  drule clear_caller_lookup >> strip_tac >> gvs[] >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  `LENGTH sa.cs_current_insts <
+    LENGTH (HD probe_descendant_outer_caller.fn_blocks).bb_instructions` by
+    (qpat_x_assum `(HD _).bb_instructions = _` (fn th => rewrite_tac[th]) >> simp[]) >>
+  `EL (LENGTH sa.cs_current_insts)
+      (HD probe_descendant_outer_caller.fn_blocks).bb_instructions =
+    mk_inst sa.cs_next_id SLOAD [Lit 0w]
+      ["%" ++ num_to_dec_string sa.cs_next_var]` by
+    (qpat_x_assum `(HD _).bb_instructions = _` (fn th => rewrite_tac[th]) >>
+     simp[listTheory.EL_APPEND_EQN]) >>
+  qspec_then `LENGTH sa.cs_current_insts` mp_tac clear_caller_root_position >>
+  simp[mk_inst_def]
+QED
+
+Theorem clear_base_code_inversion:
+  !sa r sb.
+    compile_get_target_ptr compile_expr probe_deep_cenv probe_clear_source_bt sa = (r,sb) /\
+    fn_has_code sa sb probe_descendant_outer_caller ==>
+    sa.cs_current_bb = "entry" /\ sa.cs_current_insts = [] /\
+    sa.cs_next_id = 0 /\ sa.cs_next_var = 0
+Proof
+  rpt strip_tac >>
+  drule_all clear_base_code_position >> strip_tac >>
+  drule clear_base_compile_shape >> strip_tac >>
+  qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+  pure_rewrite_tac[fragExecTheory.fn_has_code_def] >> strip_tac >>
+  drule clear_caller_lookup >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  gvs[] >>
+  `HD (HD probe_descendant_outer_caller.fn_blocks).bb_instructions =
+     mk_inst sa.cs_next_id SLOAD [Lit 0w]
+       ["%" ++ num_to_dec_string sa.cs_next_var]` by
+    (qpat_x_assum `_ = (HD _).bb_instructions` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  pop_assum mp_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``num_to_dec_string``]) >>
+  simp[]
+QED
