@@ -1101,3 +1101,77 @@ Proof
                 `pre`] >>
   gvs[]
 QED
+
+(* At a join's lineage entry nothing is spilled: every spill-map key is a
+   variable live out of pred (lineage_entry_inventory), pred's live-out
+   is input_vars_from pred (single_successor_exit_live), which the JMP's
+   plan leaves on the stack (successful_block_jmp_suffix), and
+   generated_plan_state_wf_marked keeps stack and spill map disjoint. *)
+Theorem phi_join_entry_spill_empty:
+  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred bb ps.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred bb.bb_label ps ==>
+    ps.ps_spilled = FEMPTY
+Proof
+  cheat
+QED
+
+(* The PHI prefix's narrowed freshness at a join's lineage entry, from the
+   coarse one: with nothing spilled, an exempt entry is a stack operand of
+   some PHI, which phi_join_entry_hits makes the pred-selected one. *)
+Theorem phi_join_entry_fresh:
+  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred bb lbl ps_l h
+   promised ps phis body.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps_l /\
+    ps = ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |> /\
+    non_param_insts bb = phis ++ body /\
+    LENGTH phis = phi_prefix_length bb.bb_instructions /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+       ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+                       (collect_phis bb.bb_instructions))) /\
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) ==>
+    !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+       ~(MEM op ps.ps_stack /\
+         ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+                resolve_phi pred inst.inst_operands = SOME op) /\
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,
+               `lbl_ctr`, `pred`, `bb`, `lbl`, `ps_l`, `h`, `promised`, `ps`,
+               `phis`, `body'`]
+    mp_tac phi_join_entry_hits >>
+  impl_tac >- asm_rewrite_tac[] >>
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `non_param_insts bb = bb.bb_instructions` by
+    metis_tac[phi_non_entry_non_param_insts, codegen_ready_fn_def] >>
+  `phis = collect_phis bb.bb_instructions` by
+    metis_tac[phi_prefix_is_collect_phis] >>
+  `ps_l.ps_spilled = FEMPTY` by
+    (irule phi_join_entry_spill_empty >> gvs[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM op ps.ps_stack` by gvs[] >>
+  Cases_on `is_var_operand op`
+  >- (`~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+                       (collect_phis bb.bb_instructions)))` by
+        (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> rpt strip_tac >>
+         gvs[] >> metis_tac[]) >>
+      metis_tac[]) >>
+  Cases_on `op` >> gvs[is_var_operand_def, normalize_operand_def]
+QED
+

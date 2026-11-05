@@ -110,22 +110,12 @@ Proof
     mp_tac fnFrameStepsPhiTheory.phi_join_entry_hits >>
   impl_tac >- asm_rewrite_tac[] >>
   strip_tac >>
-  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-    metis_tac[venomExecProofsTheory.lookup_block_label] >>
   qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,
-               `lbl_ctr`, `pred`, `bb`, `ps_l`]
-    mp_tac fnPlanLineageJoinTheory.lineage_entry_join_stack >>
+               `lbl_ctr`, `pred`, `bb`, `vs.vs_current_bb`, `ps_l`, `h`,
+               `promised`, `ps`, `phis`, `body'`]
+    mp_tac fnFrameStepsPhiTheory.phi_join_entry_fresh >>
   impl_tac >- asm_rewrite_tac[] >>
   strip_tac >>
-  `!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-          ~(MEM op ps.ps_stack /\
-            ?inst. MEM inst (collect_phis bb.bb_instructions) /\
-                   resolve_phi pred inst.inst_operands = SOME op) /\
-          (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
-          ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by (
-    qpat_x_assum `!op v. _ /\ ~(MEM op _ /\ _) /\ _ ==> _` mp_tac >>
-    qpat_x_assum `ps = _` SUBST1_TAC >>
-    simp_tac (srw_ss()) []) >>
   qspecl_then [`ctx`, `cp'`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`, `cfg`,
                `fn`, `bb`, `pred`, `base'`, `ps`, `vs`, `as`, `s_phi`, `phis`,
                `body'`, `ops`, `ps3`, `r`, `ra`, `rest`, `mem0`]
