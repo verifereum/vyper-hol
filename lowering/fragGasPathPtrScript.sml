@@ -3,7 +3,8 @@
  * memory check, and no revert-forward exemption.  The ghost follows each
  * edge as ghost_block threads it: ghost_step past an instruction, the
  * block-entry ghost past a terminator that enters a block, and unchanged
- * where the run stops.
+ * where the run stops or jumps to a block start (a run that goes on from
+ * there finds no PHIs, where the entry ghost is the ghost).
  *
  * TOP-LEVEL:
  *   gas_path_ptr_edge, gas_path_ptr -- the edges and paths, with the ghost
@@ -45,8 +46,7 @@ Definition gas_path_ptr_edge_def:
           G' = entry_prov fn t G /\ tn' = entry_taint_vars fn t tn) \/
        (?lbl. is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
               middle = OK (jump_to lbl s) /\ r = middle /\
-              G' = entry_prov fn (jump_to lbl s) G /\
-              tn' = entry_taint_vars fn (jump_to lbl s) tn) \/
+              G' = G /\ tn' = tn) \/
        (exit_result middle /\ r = middle /\ G' = G /\ tn' = tn))
 End
 

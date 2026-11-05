@@ -5,13 +5,12 @@
  * and expression of a frame of the lowered program simulates with the
  * ghost (bodyPtrPreds's predicates), internal calls included.  Each case
  * is a case lemma of the bodyPtr*Cases theories, or a short tactic below,
- * as in bodySimMain.  The expressions without internal calls come from
- * exprSimPtr's compile_expr_sim_ptr, through body_expr_ptr_ok_intro.
+ * as in bodySimMain.  The leaf expressions come from exprSimPtr's
+ * leaf_expr_sim_ptr, through body_expr_ptr_ok_leaf.
  *
  * TOP-LEVEL:
  *   body_sim_ptr_mutual -- the eleven predicates, by evaluate_ind
- *   body_expr_ptr_ok_intro -- an expression is body_expr_ptr_ok if it is
- *     when it has internal calls
+ *   body_expr_ptr_ok_leaf -- the leaf expressions are body_expr_ptr_ok
  *   body_stmts_ptr_ok_sim -- the statement-list judgment it gives
  *)
 Theory bodySimPtrMain
@@ -22,17 +21,18 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem body_expr_ptr_ok_intro:
+Theorem body_expr_ptr_ok_leaf:
   !cx e.
-    (!d PG tops ctx func cenv env ty es.
-       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
-       int_calls_expr e <> [] ==>
-       expr_sim_ptr d ctx PG func cenv cx ty e es /\
-       expr_vv_sim_ptr d ctx PG func cenv cx ty e es) ==>
+    (?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
+    (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
     body_expr_ptr_ok cx e
 Proof
-  rw[body_expr_ptr_ok_def] >> Cases_on `int_calls_expr e = []` >> gvs[] >>
-  metis_tac[compile_expr_sim_ptr, expr_sim_pre_body]
+  rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env e es` by
+    (simp[expr_sim_pre_body] >>
+     qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[int_calls_expr_def]) >>
+  metis_tac[leaf_expr_sim_ptr]
 QED
 
 val body_ind = evaluate_ind
@@ -82,11 +82,11 @@ Proof
     (* 25 *) rw[body_iterator_ptr_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_ptr_ok_def],
     (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def],
-    (* 28 *) rpt strip_tac >> irule body_expr_ptr_ok_intro >> simp[int_calls_expr_def],
-    (* 29 *) rpt strip_tac >> irule body_expr_ptr_ok_intro >> simp[int_calls_expr_def],
-    (* 30 *) rpt strip_tac >> irule body_expr_ptr_ok_intro >> simp[int_calls_expr_def],
+    (* 28 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
+    (* 29 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
+    (* 30 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
     (* 31 *) MATCH_ACCEPT_TAC body_ifexp_case_ptr,
-    (* 32 *) rpt strip_tac >> irule body_expr_ptr_ok_intro >> simp[int_calls_expr_def],
+    (* 32 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case_ptr,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case_ptr,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case_ptr,

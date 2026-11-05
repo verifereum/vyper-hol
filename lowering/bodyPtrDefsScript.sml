@@ -180,13 +180,19 @@ End
 
 (* expr_sim with the ghost: the ghost invariant at s0 gives a pointer-safe
    counted path whose post keeps the invariant, with the value's pointer
-   covered, and leaves older variables' ghost alone. *)
+   covered, and leaves older variables' ghost alone.  The return buffer's
+   and return PC's variables, which ghost_inv reads, are older than sa, so
+   the fragment's fresh variables don't clobber them. *)
 Definition expr_sim_ptr_def:
   expr_sim_ptr d ctx PG func cenv cx ty e es <=>
     !sa sb op s0 G0 tn0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
       stmt_state_rel ctx func cenv cx es s0 /\
       ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
@@ -210,6 +216,10 @@ Definition expr_vv_sim_ptr_def:
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
       gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
       stmt_state_rel ctx func cenv cx es s0 /\
       ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
@@ -243,6 +253,8 @@ Definition stmt_frag_ptr_def:
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
       ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
       stmt_state_rel ctx func cenv cx es s0 /\
