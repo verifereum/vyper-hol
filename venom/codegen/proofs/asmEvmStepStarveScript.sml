@@ -92,6 +92,45 @@ Proof
   drule_all opcode_byte_91_is_jumpdest >> simp[]
 QED
 
+Theorem starve_handle_fault:
+  !es ctxt rb exc.
+    es.contexts = [(ctxt, rb)] /\
+    (!a. ctxt.msgParams.outputTo <> Code a) /\
+    exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
+    (?es1. handle_step (SOME exc) es = (INR (SOME OutOfGas), es1)) \/
+    (?es1. handle_step (SOME exc) es = (INR (SOME exc), es1) /\
+           LENGTH es1.contexts = 1 /\
+           (FST (HD es1.contexts)).returnData = [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[handle_step_def, handle_def, handle_create_def,
+       bind_def, ignore_bind_def, get_return_data_def, get_output_to_def,
+       get_current_context_def, return_def, reraise_def] >>
+  Cases_on `ctxt.msgParams.outputTo` >> gvs[] >>
+  simp[handle_exception_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, get_gas_left_def,
+       consume_gas_def, set_current_context_def, assert_def] >>
+  Cases_on `ctxt.msgParams.gasLimit - ctxt.gasUsed + ctxt.gasUsed <=
+            ctxt.msgParams.gasLimit` >>
+  simp[set_return_data_def, bind_def, get_current_context_def,
+       return_def, set_current_context_def, get_num_contexts_def, reraise_def,
+       assert_def, ignore_bind_def]
+QED
+
+Theorem starve_handle_resource:
+  !es ctxt rb exc.
+    es.contexts = [(ctxt, rb)] /\
+    (!a. ctxt.msgParams.outputTo <> Code a) /\
+    (exc = OutOfGas \/ exc = StackOverflow) ==>
+    ?es1 exc1. handle_step (SOME exc) es = (INR (SOME exc1), es1) /\
+               (exc1 = OutOfGas \/ exc1 = StackOverflow)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `exc <> Reverted /\ ~vfm_abort (SOME exc)` by
+    gvs[vfm_abort_def] >>
+  drule_all starve_handle_fault >> metis_tac[]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
