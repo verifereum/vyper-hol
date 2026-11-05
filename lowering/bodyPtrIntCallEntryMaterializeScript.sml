@@ -481,3 +481,121 @@ Resume intcall_entry_prefix_path[fresh]:
   Cases_on `STRING #"%" (toString k) IN FDOM t.vs_vars` >> gvs[]
 QED
 Finalise intcall_entry_prefix_path
+
+Definition intcall_entry_memory_def:
+  intcall_entry_memory ce params src argbase PG tn s <=>
+    !i entry off sz. i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP src (FST (EL i params)) = SOME entry /\
+      FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc off sz) ==>
+      ?b n. EL (argbase+i) PG = SOME (b,n) /\
+        b <= w2n (EL (argbase+i) s.vs_params) /\
+        w2n (EL (argbase+i) s.vs_params) + sz <= b+n /\
+        (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+          val_in_memory entry.type entry.value
+            (w2n (EL (argbase+i) s.vs_params)) m)
+End
+
+Definition intcall_entry_return_def:
+  intcall_entry_return ce has_rb d PG s <=>
+    if has_rb then ?off sz bw capacity b n.
+      ce.ce_return_buf = SOME (MemLoc off sz) /\ d = SOME (bw,capacity) /\
+      HD s.vs_params = bw /\ HD PG = SOME (b,n) /\
+      b <= w2n bw /\ w2n bw + capacity <= b+n
+    else ce.ce_return_buf = NONE /\ d = NONE
+End
+
+Theorem intcall_entry_captured_pending:
+  internal_args_rel ce params src argbase s.vs_params s.vs_alloca_next s.vs_memory /\
+  intcall_entry_memory ce params src argbase PG tn s /\
+  ce1.ce_vars = ce.ce_vars /\ LENGTH caps = LENGTH params /\
+  (!i. i < LENGTH params ==> ?p.
+    EL i caps = (FST (EL i params), SND (EL i params), Var p) /\
+    lookup_var p t = SOME (EL (argbase+i) s.vs_params) /\
+    FLOOKUP G' p = EL (argbase+i) PG /\ op_taint tn' (Var p) = {}) /\
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
+  tn'.t_mem = tn.t_mem /\
+  (!name entry off sz. FLOOKUP src name = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (MemLoc off sz) ==>
+    val_footprint entry.type entry.value <= sz) ==>
+  intcall_pending src ce1 caps G' tn' t
+Proof
+  strip_tac >> irule intcall_captured_pending >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`argbase`,`s.vs_params`,`s.vs_alloca_next`,`s.vs_memory`,`params`] >>
+  simp[] >> reverse conj_tac
+  >- (gvs[internal_args_rel_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i. i < LENGTH params ==> ?p. _` drule >> strip_tac >>
+  qexists_tac `p` >> simp[] >> rpt strip_tac >>
+  fs[intcall_entry_memory_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[ptr_covers_def] >> metis_tac[]
+QED
+
+Theorem intcall_entry_captured_return:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  intcall_entry_return ce has_rb d PG s /\
+  (has_rb ==> not_fresh_at stm (STRING #"%" (toString st.cs_next_var)) /\
+    lookup_var (STRING #"%" (toString st.cs_next_var)) t = SOME (HD s.vs_params) /\
+    FLOOKUP G' (STRING #"%" (toString st.cs_next_var)) = HD PG /\
+    op_taint tn' (Var (STRING #"%" (toString st.cs_next_var))) = {}) ==>
+  return_buf_ptr d ce1 G' tn' t /\
+  (!p k. ce1.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at stm p)
+Proof
+  strip_tac >> drule intcall_entry_prefix_code >> strip_tac >>
+  qpat_x_assum `compile_internal_entry_prefix _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `!i. i < LENGTH params ==> _` kall_tac >>
+  qpat_x_assum `stm.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `rpc = _` kall_tac >>
+  qpat_x_assum `ce1 = _` SUBST_ALL_TAC >>
+  Cases_on `has_rb` >>
+  qpat_x_assum `intcall_entry_return _ _ _ _ _` mp_tac >>
+  simp[NoAsms, intcall_entry_return_def] >> strip_tac >>
+  simp[return_buf_ptr_def, ptr_covers_def] >> metis_tac[]
+QED
+
+Theorem intcall_entry_captured_ready:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  internal_args_rel ce params src (if has_rb then 1 else 0)
+    s.vs_params s.vs_alloca_next s.vs_memory /\
+  intcall_entry_memory ce params src (if has_rb then 1 else 0) PG tn s /\
+  intcall_entry_return ce has_rb d PG s /\
+  (!name entry off sz. FLOOKUP src name = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (MemLoc off sz) ==>
+    val_footprint entry.type entry.value <= sz) /\
+  fresh_vars_wrt stm t /\
+  (!aid. aid IN FDOM t.vs_allocas ==> aid < stm.cs_next_id) /\
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
+  tn'.t_mem = tn.t_mem /\
+  (!i. i < LENGTH params ==> ?p.
+    EL i caps = (FST (EL i params), SND (EL i params), Var p) /\
+    lookup_var p t = SOME (EL ((if has_rb then 1 else 0)+i) s.vs_params) /\
+    FLOOKUP G' p = EL ((if has_rb then 1 else 0)+i) PG /\
+    op_taint tn' (Var p) = {}) /\
+  (!p k. ce1.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at stm p) /\
+  (has_rb ==> not_fresh_at stm (STRING #"%" (toString st.cs_next_var)) /\
+    lookup_var (STRING #"%" (toString st.cs_next_var)) t = SOME (HD s.vs_params) /\
+    FLOOKUP G' (STRING #"%" (toString st.cs_next_var)) = HD PG /\
+    op_taint tn' (Var (STRING #"%" (toString st.cs_next_var))) = {}) ==>
+  intcall_mat_ready src FEMPTY ce1 caps stm G' tn' t /\
+  return_buf_ptr d ce1 G' tn' t
+Proof
+  strip_tac >> drule_all intcall_entry_captured_return >> strip_tac >>
+  drule intcall_entry_prefix_code >> strip_tac >>
+  `ce1.ce_vars = ce.ce_vars` by simp[] >>
+  `intcall_pending src ce1 caps G' tn' t` by
+    (irule intcall_entry_captured_pending >>
+     qexistsl_tac [`PG`,`if has_rb then 1 else 0`,`ce`,`params`,`s`,`tn`] >>
+     asm_rewrite_tac[]) >>
+  qpat_x_assum `compile_internal_entry_prefix _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `!i. i < LENGTH params ==> EL i caps = _` kall_tac >>
+  qpat_x_assum `stm.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `rpc = _` kall_tac >>
+  qpat_x_assum `ce1 = _` kall_tac >>
+  reverse conj_tac >- asm_rewrite_tac[] >>
+  irule intcall_captured_ready >>
+  asm_rewrite_tac[] >>
+  qexistsl_tac [`if has_rb then 1 else 0`,`s.vs_params`,
+    `s.vs_alloca_next`,`s.vs_memory`,`params`] >>
+  asm_rewrite_tac[] >> fs[internal_args_rel_def]
+QED
