@@ -1059,8 +1059,51 @@ Theorem frag_exec_gas_path:
          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
     (?r. gas_marked_path F ctx fn s 0 r /\ exit_result r /\ R r)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `fn_has_code sa sb (frag_observer sa sb fn 0)` by
+    metis_tac[frag_observer_has_code] >>
+  `(s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb` by
+    metis_tac[frag_observer_start_region] >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[frag_exec_def]) >>
+  disch_then (qspecl_then [`frag_observer sa sb fn 0`, `s`] mp_tac) >>
+  simp[] >> strip_tac
+  >- suspend "normal" >> suspend "exit"
 QED
+
+Resume frag_exec_gas_path[normal]:
+  rename1 `Q t` >>
+  `run_from 0 ctx (frag_observer sa sb fn 0) t = Halt (stop_view t)` by
+    (irule run_from_stop_view >>
+     qexistsl_tac [`<|bb_label := sb.cs_current_bb;
+       bb_instructions := sb.cs_current_insts ++ [mk_inst 0 STOP [] []]|>`, `0`] >>
+     simp[frag_observer_cut_lookup, frag_observer_cut_instruction]) >>
+  `?fuel. run_from fuel ctx (frag_observer sa sb fn 0) s = Halt (stop_view t)` by
+    (qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `(stop_view t).vs_current_bb = sb.cs_current_bb /\
+   (stop_view t).vs_inst_idx = LENGTH sb.cs_current_insts` by
+    simp[stop_view_def, halt_state_def] >>
+  `?u. local_prefix ctx (frag_observer sa sb fn 0) (frag_observer_cut sb) s u /\
+       stop_view u = stop_view t` by
+    (irule frag_observer_halt_cut_prefix >> simp[frag_observer_cut_def] >>
+     metis_tac[]) >>
+  `gas_path ctx fn s 0 (OK u)` by
+    (drule frag_observer_prefix_zero_path >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  drule local_prefix_endpoint >> strip_tac >>
+  disj1_tac >> qexists_tac `u` >>
+  simp[gas_marked_path_def] >>
+  `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
+  gvs[frag_observer_cut_def]
+QED
+
+Resume frag_exec_gas_path[exit]:
+  disj2_tac >> qexists_tac `run_from fuel ctx (frag_observer sa sb fn 0) s` >>
+  simp[gas_marked_path_def] >>
+  irule frag_observer_exit_path >> metis_tac[]
+QED
+
+Finalise frag_exec_gas_path
 
 (* The same for a fragment proved in the abi_decode_sim form, such as the
    ABI encoder and decoder executions. *)
