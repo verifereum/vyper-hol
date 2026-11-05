@@ -2864,3 +2864,198 @@ Proof
   irule rf_source_copy_result >> simp[] >>
   metis_tac[listTheory.MEM]
 QED
+
+Theorem rf_suffix_preparation_execution:
+  !base.
+  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  emit_input_plan opc inputs nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) inputs ps1 = (ros,ps2) /\
+  opc <> INVOKE /\ LENGTH inputs <= 16 /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inputs /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. MEM op inputs ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!off. ~MEM (SOSpill off) (ins ++ ros) /\
+    ~MEM (SORestore off) (ins ++ ros)) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp (ins ++ ros)) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (ins ++ ros))) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros))|>) /\
+    plan_stack_rel lo (frame_view fn ra s) ps2.ps_stack stk' /\
+    ps2.ps_stack = stack_pop (LENGTH inputs) ps2.ps_stack ++ inputs /\
+    rf_inventory_inv fn ra lo entry ps2 s
+Proof
+  gen_tac >> strip_tac >>
+  `EVERY is_simple_stack_op (ins ++ ros) /\
+   prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros) /\
+   plan_stack_sem_eq lo (frame_view fn ra s)
+     (apply_prefix_ops initial_fmp lo (ins ++ ros) ps).ps_stack ps2.ps_stack` by
+    (irule rf_preparation_replay >> asm_rewrite_tac[] >>
+     conj_tac
+     >- (fs[generated_plan_state_wf_def] >>
+         drule spill_alloc_layout_wf_spilled_separated >> simp[]) >>
+     qexistsl_tac [`dfg_build_function fn`, `entry`, `inputs`, `nl`, `opc`, `ps1`] >>
+     asm_rewrite_tac[] >> conj_tac
+     >- (fs[rf_inventory_inv_def] >> metis_tac[]) >>
+     fs[EVERY_MEM] >> metis_tac[codegen_normalize_operand_not_dead_marker,
+       dead_stack_marker_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  drule_all rf_preparation_stack_frame >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `stk'` >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (drule_all rf_preparation_arranged >> simp[]) >>
+  drule_at (Pat `reorder_plan _ _ _ = _`) rf_inventory_inv_preparation >>
+  simp[] >> disch_then irule >> asm_rewrite_tac[] >>
+  qexistsl_tac [`ins`, `nl`, `opc`, `ps`] >> simp[]
+QED
+
+Theorem rf_assign_prepared_stack:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  step_inst fuel ctx inst s = OK s' /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  operand_val (frame_view fn ra s) lo rhs =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs) /\
+  ps.ps_stack = tail ++ [rhs] /\
+  pushed = ps with ps_stack := stack_push (Var out) tail /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk ==>
+  rf_inventory_inv fn ra lo entry pushed s' /\
+  plan_stack_rel lo (frame_view fn ra s') pushed.ps_stack stk
+Proof
+  strip_tac >>
+  `stack_pop 1 ps.ps_stack = tail` by simp[stack_pop_def, TAKE_APPEND] >>
+  `rf_inventory_inv fn ra lo entry pushed s'` by
+    (qpat_assum `pushed = _` SUBST1_TAC >>
+     qpat_assum `stack_pop 1 ps.ps_stack = tail`
+       (fn th => pure_once_rewrite_tac[GSYM th]) >>
+     drule_at (Pat `step_inst _ _ _ _ = OK _`) rf_inventory_inv_assign >>
+     disch_then irule >> simp[] >> qexists_tac `ps` >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule rf_assign_stack_transfer >>
+  qexistsl_tac [`entry`, `ps`, `rhs`, `s`, `tail`, `out`] >> simp[] >>
+  conj_tac >- (strip_tac >> gvs[dead_stack_marker_def,
+    stackPlanTypesTheory.is_label_operand_def]) >>
+  irule normalize_operand_codegen_assign >> simp[] >> qexists_tac `inst` >>
+  simp[] >> irule dfg_build_function_ssa_def >> simp[] >>
+  fs[codegen_ready_fn_def] >> metis_tac[]
+QED
+
+Theorem rf_assign_plan_execution:
+  !base.
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  generated_plan_state_wf base ps /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  operand_val (frame_view fn ra s) lo rhs =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs) /\
+  step_inst fuel ctx inst s = OK s' /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp ops)|>) /\
+    plan_stack_rel lo (frame_view fn ra s') ps'.ps_stack stk'
+Proof
+  gen_tac >> strip_tac >>
+  Cases_on `emit_input_plan ASSIGN [rhs] nl ps` >> rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) [rhs] ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  drule_all rf_assign_plan_result >> strip_tac >>
+  `asm_block_at prog st.as_pc (execute_plan initial_fmp (ins ++ ros)) /\
+   asm_block_at prog
+     (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+     (execute_plan initial_fmp (pops ++ opts))` by
+    gvs[execute_plan_append, asm_block_at_append, APPEND_ASSOC] >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+    ~MEM (SORestore off) (ins ++ ros)` by fs[MEM_APPEND] >>
+  `ASSIGN <> INVOKE /\ LENGTH [rhs] <= 16 /\
+   EVERY (\op. ~is_label_operand op) [rhs] /\
+   (!op. MEM op [rhs] /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+   (!op. MEM op [rhs] ==>
+     operand_val (frame_view fn ra s) lo op =
+     operand_val entry lo (normalize_operand (dfg_build_function fn) [] op))` by
+    simp[] >>
+  drule_all rf_suffix_preparation_execution >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `AsmOK mid` >>
+  qabbrev_tac `pushed = ps2 with ps_stack :=
+    stack_push (Var out) (stack_pop 1 ps2.ps_stack)` >>
+  qpat_x_assum `ps2.ps_stack = _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `rf_inventory_inv fn ra lo entry pushed s' /\
+   plan_stack_rel lo (frame_view fn ra s') pushed.ps_stack stk'` by
+    (drule_at (Pat `step_inst _ _ _ _ = OK _`) rf_assign_prepared_stack >>
+     disch_then irule >> simp[] >>
+     qexistsl_tac [`ps2`, `stack_pop 1 ps2.ps_stack`] >>
+     simp[Abbr `pushed`]) >>
+  `EVERY is_simple_stack_op (pops ++ opts)` by
+    (irule spill_free_postfix_simple >>
+     conj_tac >- fs[MEM_APPEND] >>
+     qexistsl_tac [`dfg_build_function fn`, `~halting`, `inst`,
+       `if MEM out nl then [] else [Var out]`, `nl`, `~MEM out nl`,
+       `term`, `pushed`, `ps8`, `ps9`] >>
+     conj_tac >- (Cases_on `halting` >> gvs[]) >>
+     Cases_on `MEM out nl` >> gvs[]) >>
+  qpat_x_assum `ps2.ps_stack = _` kall_tac >>
+  `mid.as_stack = stk' ++ rest /\
+   asm_block_at prog mid.as_pc (execute_plan initial_fmp (pops ++ opts))` by
+    (simp[Abbr `mid`] >>
+     once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC) >>
+  `pushed.ps_stack = stack_push (Var out) (stack_pop 1 ps2.ps_stack)` by
+    simp[Abbr `pushed`] >>
+  drule_all rf_assign_postfix_stack_frame >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `stk''` >> conj_tac
+  >- (qpat_x_assum `asm_steps _ _ _ _ st = AsmOK mid`
+        (mp_then Any (qspec_then
+          `LENGTH (execute_plan initial_fmp (pops ++ opts))` mp_tac)
+          asm_steps_add_ok) >>
+      simp[execute_plan_append, APPEND_ASSOC] >>
+      disch_then SUBST1_TAC >>
+      simp[Abbr `mid`, NoAsms] >>
+      simp[NoAsms, execute_plan_append]) >>
+  fs[]
+QED
+
+(* Abstract planner audit, not a counterexample to the frozen theorem. *)
+Theorem rf_assign_stale_stack_audit:
+  ~ALL_DISTINCT
+    (SND (generate_regular_inst_plan
+      (liveness_analyze rf_probe_fn) (dfg_build_function rf_probe_fn)
+      (cfg_analyze rf_probe_fn) rf_probe_fn
+      (mk_inst 10 ASSIGN [Lit 7w] ["o"]) ["o"] F T "dead"
+      ((init_plan_state 0) with ps_stack := [Var "o"]))).ps_stack
+Proof
+  EVAL_TAC
+QED
+
+Theorem rf_assign_stale_spill_audit:
+  ~DISJOINT
+    (set (SND (generate_regular_inst_plan
+      (liveness_analyze rf_probe_fn) (dfg_build_function rf_probe_fn)
+      (cfg_analyze rf_probe_fn) rf_probe_fn
+      (mk_inst 10 ASSIGN [Lit 7w] ["o"]) ["o"] F T "dead"
+      ((init_plan_state 0) with ps_spilled := FEMPTY |+ (Var "o",0)))).ps_stack)
+    (FDOM (SND (generate_regular_inst_plan
+      (liveness_analyze rf_probe_fn) (dfg_build_function rf_probe_fn)
+      (cfg_analyze rf_probe_fn) rf_probe_fn
+      (mk_inst 10 ASSIGN [Lit 7w] ["o"]) ["o"] F T "dead"
+      ((init_plan_state 0) with ps_spilled := FEMPTY |+ (Var "o",0)))).ps_spilled)
+Proof
+  EVAL_TAC >> simp[listTheory.SET_TO_LIST_SING] >> EVAL_TAC
+QED
