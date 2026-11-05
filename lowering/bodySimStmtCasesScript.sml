@@ -352,7 +352,9 @@ Theorem assert_reason_vv_sim[local]:
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\
     ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
+       (\e. ~is_extcode e /\
+            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
+    ~is_extcode se /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) se ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
     (do raw <- eval_expr cx e; read_result cx raw od) es =
@@ -388,7 +390,7 @@ Proof
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
-  `~expr_has_evm_run se` by
+  `~expr_has_evm_run se /\ ~is_extcode se` by
     metis_tac[supported_string_reason_body_calls] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
