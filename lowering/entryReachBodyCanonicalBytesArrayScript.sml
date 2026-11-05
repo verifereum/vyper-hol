@@ -9,6 +9,7 @@ Ancestors
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderGuards abiDecoderDynarrayBound
   fragExec abiDecoderArrayHeader abiDecoderIndexInit abiDecoderArrayInit abiDecoderPrimitiveLoopEntry
   abiDecoderLoopEmit abiDecoderAppend abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopEntry context
+  abiDecoderLoopCode abiDecoderArraySetupCode abiDecoderCounters
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
   venomExecSemantics venomExecProofs venomState venomInst venomMemDefs valueEncoding valueEncodingProps words list arithmetic finite_map
 
@@ -1195,4 +1196,172 @@ Proof
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   `cs_extends st loop_st` by (irule cs_extends_same_block >> simp[]) >>
   drule_all fn_has_code_split >> simp[]
+QED
+
+Theorem entry_bytes_array_phase_layout[local]:
+  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (DecBytestring n) asz msz body_st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+    (Lit 0w) (DecBytestring n) middle = ((),last) /\
+  abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
+    ((),final) /\ fn_has_code loop_st final fn /\
+  (!bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  final.cs_next_var <= limit_st.cs_next_var ==>
+  body_st.cs_current_bb = FST (SND labels) /\ body_st.cs_current_insts = [] /\
+  fn_has_code body_st last fn /\
+  abi_decode_loop_cfg fn (FST labels) (FST (SND labels)) (SND (SND labels))
+    (loop_st.cs_next_id+1) ip src CALLDATALOAD
+    (STRING #"%" (toString loop_st.cs_next_var))
+    (STRING #"%" (toString (loop_st.cs_next_var+1)))
+    (STRING #"%" (toString (loop_st.cs_next_var+2)))
+    (STRING #"%" (toString (loop_st.cs_next_var+3))) /\
+  (?bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = last.cs_current_insts ++
+      abi_decode_backedge_insts last.cs_next_id
+        (STRING #"%" (toString body_st.cs_next_var))
+        (STRING #"%" (toString last.cs_next_var)) ip (FST labels)) /\
+  FST ops = Var (STRING #"%" (toString body_st.cs_next_var)) /\
+  loop_st.cs_next_var <= body_st.cs_next_var /\
+  loop_st.cs_next_var+4 <= limit_st.cs_next_var /\
+  middle.cs_next_var <= limit_st.cs_next_var /\
+  last.cs_next_var < limit_st.cs_next_var /\
+  loop_st.cs_next_var <= last.cs_next_var /\
+  final.cs_current_bb = SND (SND labels) /\ final.cs_current_insts = []
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_loop_phase_cfg >> strip_tac >>
+  drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
+  drule_all abi_decoder_loop_phase_containment >> strip_tac >>
+  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule abi_decoder_array_setup_head >> strip_tac >>
+  `abi_decode_loop_suffix ip (Var (STRING #"%" (toString body_st.cs_next_var)))
+     (FST labels) (SND (SND labels)) last = ((),final)` by metis_tac[] >>
+  drule abi_decoder_loop_suffix_facts >> strip_tac >>
+  drule_all abi_decoder_array_body_code >> strip_tac >>
+  gvs[] >> simp[SF SFY_ss]
+QED
+
+Theorem entry_bytes_array_concrete_config[local]:
+  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+    (type_memory_bytes ce ty) body_st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+    (Lit 0w) (DecBytestring n) middle = ((),last) /\
+  abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
+    ((),final) /\ fn_has_code loop_st final fn /\
+  (!bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  final.cs_next_var <= limit_st.cs_next_var /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  type_memory_bytes ce ty = type_memory_size tv /\ EVERY (val_wf tv) xs /\
+  LENGTH xs <= maxn /\ maxn < dimword (:256) /\
+  abi_decoder_operand_live loop_st.cs_next_var ip /\
+  abi_decoder_operand_live loop_st.cs_next_var src /\
+  abi_decoder_operand_live loop_st.cs_next_var dst /\
+  type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= capacity /\
+  (d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= w2n p \/ w2n p+32 <= d) ==>
+  entry_bytes_array_config
+    ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+     (ip,src,dst,ops,body_st,middle,last,limit_st),
+     (loop_st.cs_next_var,d,p,srcaddr,sb,b,cap,oid,capacity),
+     (ctx,fn,FST labels,FST (SND labels),SND (SND labels),loop_st.cs_next_id+1,
+      last.cs_current_bb,last.cs_current_insts,last.cs_next_id,
+      STRING #"%" (toString body_st.cs_next_var),last.cs_next_var))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all entry_bytes_array_phase_layout >> strip_tac >>
+  drule_all entry_bytes_array_spatial >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `src <> Var (STRING #"%" (toString loop_st.cs_next_var))` by
+    (irule abi_decoder_live_excludes_output >> qexists_tac `loop_st.cs_next_var` >> simp[]) >>
+  pure_rewrite_tac[entry_bytes_array_config_def] >>
+  asm_rewrite_tac[] >> simp[] >> metis_tac[]
+QED
+
+Theorem entry_bytes_array_initial_live[local]:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+    ((ip,cnt),loop_st) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst ==>
+  abi_decoder_operand_live loop_st.cs_next_var ip /\
+  abi_decoder_operand_live loop_st.cs_next_var src /\
+  abi_decoder_operand_live loop_st.cs_next_var dst
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
+  drule abi_decode_array_loop_init_trace >> strip_tac >> gvs[] >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  conj_tac >-
+    (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >> decide_tac) >>
+  conj_tac >> irule abi_decoder_operand_live_mono >>
+  qexists_tac `st.cs_next_var` >> simp[]
+QED
+
+Theorem entry_bytes_array_compiled_config[local]:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T maxn) st = ((),final) /\
+  fn_has_code st final fn /\
+  (!bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  entry_bytes_array_resources dst src maxn (abi_embedded_static_size ce.ce_struct_fields ty) st
+    (ctx,fn,site,d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)),b,cap,p,oid,capacity,initial) /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  type_memory_bytes ce ty = type_memory_size tv /\ EVERY (val_wf tv) xs /\
+  LENGTH xs <= maxn /\ maxn < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  final.cs_next_var <= limit_st.cs_next_var /\ p < dimword (:256) ==>
+  ?guard_st header_st loop_st ip cnt labels body_st ops middle last.
+    entry_array_init_resources dst src maxn (abi_embedded_static_size ce.ce_struct_fields ty)
+      (st,guard_st,header_st,loop_st,ip,cnt)
+      (ctx,fn,site,d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)),b,cap,p,initial) /\
+    oid <> header_st.cs_next_id /\ FLOOKUP initial.vs_allocas oid = SOME (d,capacity) /\
+    fn_has_code st loop_st fn /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
+    entry_bytes_array_config
+      ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,body_st,middle,last,limit_st),
+       (loop_st.cs_next_var,d,(n2w p:bytes32),srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,FST labels,FST (SND labels),SND (SND labels),loop_st.cs_next_id+1,
+        last.cs_current_bb,last.cs_current_insts,last.cs_next_id,
+        STRING #"%" (toString body_st.cs_next_var),last.cs_next_var)) /\
+    lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME
+      <|bb_label := loop_st.cs_current_bb; bb_instructions := loop_st.cs_current_insts ++
+        [mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []]|> /\
+    (?hdr_bb. lookup_block (FST labels) fn.fn_blocks = SOME hdr_bb /\
+      phi_prefix_length hdr_bb.bb_instructions = 0) /\
+    final.cs_current_bb = SND (SND labels) /\ final.cs_current_insts = []
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `entry_bytes_array_resources _ _ _ _ _ _`
+    (CHOOSE_THEN (CHOOSE_THEN (CHOOSE_THEN (CHOOSE_THEN
+      (CHOOSE_THEN (map_every assume_tac o CONJUNCTS))))) o
+      PURE_REWRITE_RULE [entry_bytes_array_resources_def]) >>
+  qpat_assum `entry_array_init_resources _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
+  drule_all entry_bytes_array_code_split >> strip_tac >>
+  drule_all entry_bytes_array_compile_phases >> strip_tac >>
+  drule_all entry_bytes_array_initial_live >> strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all entry_bytes_array_phase_layout >> strip_tac >>
+  `loop_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all abi_decoder_loop_phase_entry >> strip_tac >>
+  drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
+  qexistsl_tac [`guard_st`,`header_st`,`loop_st`,`ip`,`cnt`,`labels`,`body_st`,`ops`,`middle`,`last`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (irule entry_bytes_array_concrete_config >> simp[SF SFY_ss]) >>
+  simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def, SF SFY_ss]
 QED
