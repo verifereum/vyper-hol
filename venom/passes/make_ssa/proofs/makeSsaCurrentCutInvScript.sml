@@ -70,7 +70,7 @@ Theorem current_cut_pair_unique_owner:
   current_cut_pair fn A renamed H events l i x' v2 ==>
   v1 = v2 /\ MEM (x',v1) (MAP (\(t,v,x). (x,v)) H)
 Proof
-  cheat
+  suspend "owned_history"
 QED
 
 (* At entry nothing is demanded, so the pairing is empty. *)
@@ -222,4 +222,49 @@ Proof
   >- (gvs[arithmeticTheory.ADD_COMM] >>
       drule_all (SRULE [arithmeticTheory.ADD_COMM] current_carrier_cut_token_owned_name) >> metis_tac[]) >>
   irule current_collapsed_carrier_owned_name >> metis_tac[]
+QED
+
+Resume current_cut_pair_unique_owner[owned_history]:
+  strip_tac >>
+  `?t. MEM (t,v1,x') H` by metis_tac[current_cut_pair_owned_name] >>
+  `?u. MEM (u,v2,x') H` by metis_tac[current_cut_pair_owned_name] >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  `v1 = v2` by metis_tac[current_carrier_history_name_owner] >>
+  simp[listTheory.MEM_MAP] >> qexists `(t,v1,x')` >> simp[]
+QED
+
+Finalise current_cut_pair_unique_owner
+
+Theorem current_cut_functional_alist_lookup[local]:
+  !xs. (!k a b. MEM (k,a) xs /\ MEM (k,b) xs ==> a = b) ==>
+    (FLOOKUP (alist_to_fmap xs) k = SOME v <=> MEM (k,v) xs)
+Proof
+  Induct >> simp[alistTheory.alist_to_fmap_def] >>
+  gen_tac >> PairCases_on `h` >> strip_tac >>
+  `!a b c. MEM (a,b) xs /\ MEM (a,c) xs ==> b = c` by metis_tac[] >>
+  fs[alistTheory.ALOOKUP_def] >> Cases_on `h0 = k` >>
+  simp_tac (srw_ss()) [] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem current_cut_sg_lookup:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb ==>
+  (FLOOKUP (current_cut_sg fn A renamed H events l i) n = SOME v <=>
+   current_cut_pair fn A renamed H events l i n v)
+Proof
+  strip_tac >> rewrite_tac[current_cut_sg_def] >>
+  `!k a b.
+    MEM (k,a) (FILTER (\(n,v). current_cut_pair fn A renamed H events l i n v)
+      (MAP (\(t,v,n). (n,v)) H)) /\
+    MEM (k,b) (FILTER (\(n,v). current_cut_pair fn A renamed H events l i n v)
+      (MAP (\(t,v,n). (n,v)) H)) ==> a = b` by
+    (simp[listTheory.MEM_FILTER] >> rpt strip_tac >>
+     metis_tac[current_cut_pair_unique_owner]) >>
+  drule current_cut_functional_alist_lookup >> disch_then (rewrite_tac o single) >>
+  simp[listTheory.MEM_FILTER] >>
+  metis_tac[current_cut_pair_unique_owner]
 QED
