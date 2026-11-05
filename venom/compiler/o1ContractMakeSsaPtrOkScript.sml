@@ -783,6 +783,40 @@ QED
    hence phi_well_formed (phi_well_formed_var_pair).  So the backward
    induction reaches every PHI operand, and with all_reachable fn'
    filter_phi_ops drops nothing: reachable_fn fn' = fn'. *)
+Theorem mssa_filter_map_singleton:
+  !xs. FILTER ($= (f v)) (MAP f xs) = [f v] ==>
+       MEM v xs ==> FILTER ($= v) xs = [v]
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `h = v` >> gvs[] >>
+  Cases_on `f h = f v` >> gvs[] >>
+  gvs[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM, listTheory.MEM_MAP] >> metis_tac[]
+QED
+
+Theorem mssa_map_label_member:
+  MEM (Label l)
+    (MAP (\op. case op of Var u => Var (orig u) | _ => op) ops) <=>
+  MEM (Label l) ops
+Proof
+  simp[listTheory.MEM_MAP] >> eq_tac >> rpt strip_tac
+  >- (rename1 `MEM op ops` >> Cases_on `op` >> gvs[])
+  >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem mssa_decode_invoke_map:
+  decode_invoke (inst with inst_operands :=
+    MAP (\op. case op of Var u => Var (orig u) | _ => op)
+      inst.inst_operands) =
+  case decode_invoke inst of
+    NONE => NONE
+  | SOME (nm,args) => SOME (nm,
+      MAP (\op. case op of Var u => Var (orig u) | _ => op) args)
+Proof
+  simp[venomExecSemanticsTheory.decode_invoke_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename1 `op :: ops` >> Cases_on `op` >> simp[]
+QED
+
 Theorem make_ssa_current_fn_ptr_ok:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
