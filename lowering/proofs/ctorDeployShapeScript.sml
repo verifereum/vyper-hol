@@ -16,7 +16,7 @@ Theorem deploy_unit_shape_ok:
     o1_source_unit_ok dunit /\ unit_entry_no_params dunit /\
     unit_fmp_unsealed dunit /\
     EVERY (\fn. fn.fn_eom = NONE) dunit.cu_context.ctx_functions /\
-    fixed_region_reserved 0 dunit.cu_context /\
+    fixed_region_reserved (imm_len tops) dunit.cu_context /\
     reserved_intervals_wf dunit.cu_context.ctx_global_reserved
 Proof
   cheat

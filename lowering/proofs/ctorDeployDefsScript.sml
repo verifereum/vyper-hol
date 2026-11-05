@@ -1,5 +1,5 @@
 (* Definitions for the deployment composition (e2e_deploy_correctness).
- * TOP-LEVEL: deploy_phases, deploy_source_ok, deploy_dead,
+ * TOP-LEVEL: deploy_phases, imm_len, deploy_entry_state, deploy_source_ok, deploy_dead,
  * deploy_source_exempt, deploy_venom_result_rel.
  * Helpers: deploy_venom_result_rel_terminates, dead_wf_deploy_dead.
  * deploy_venom_result_rel is the Venom-level counterpart of deploy_result_rel:
@@ -9,7 +9,7 @@
 Theory ctorDeployDefs
 Ancestors
   e2eDeployDefs e2eProducers ptrDiscipline passSimulationDefs
-  venomExecSemantics venomState
+  venomExecSemantics venomState e2eEntry compileVyper
 
 (* Every artifact a successful compile_vyper (K SOME) produces for the
    deployment unit, as compile_vyper_runtime_phases does for the runtime unit. *)
@@ -27,6 +27,20 @@ Definition deploy_phases_def:
            data_segment_asm dout.po_unit.cu_data_segment ++
            [AsmDataHeader "code_end"] /\
     deploy_bc = assemble prog
+End
+
+(* Bytes of the constructor's immutables fixed region, at memory offset 0. *)
+Definition imm_len_def:
+  imm_len tops =
+    compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
+End
+
+(* The deployment unit's entry state: entry_venom_state with the alloca
+   frontier past the immutables fixed region, which the constructor addresses
+   by literal offsets rather than through an ALLOCA. *)
+Definition deploy_entry_state_def:
+  deploy_entry_state prog cplan tops es =
+    entry_venom_state prog cplan es with vs_alloca_next := imm_len tops
 End
 
 (* The source-side hypotheses of e2e_deploy_correctness. *)

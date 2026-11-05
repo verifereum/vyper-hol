@@ -13,7 +13,7 @@ Theorem deploy_unit_dload_ok:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (entry_venom_state prog cplan es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
     code_layout_valid vs /\
     (!marks. ~deploy_source_exempt tops
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
