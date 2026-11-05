@@ -447,3 +447,211 @@ Proof
   qexistsl_tac [`(\g z v. g = H2 /\ z = u2 /\ v = s2 with vs_inst_idx := s.vs_inst_idx + 2)`,`c2`] >> simp[]
 QED
 
+
+Theorem calldata_array_element_setup_endpoint_ptr:
+  !q src root di abi_sz mem_sz st ops ready initial slot j sb G tn d total t cx ctx PG R.
+  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
+  lookup_var q initial = SOME (n2w slot) /\ slot + 32 < dimword (:256) /\
+  mload slot initial = n2w j /\ j < dimword (:256) /\
+  eval_operand src initial = SOME (n2w sb) /\
+  ptr_covers G tn q initial 32 /\
+  (!a. slot <= a /\ a < slot + 32 ==> a NOTIN tn.t_mem) /\
+  lookup_var root initial = SOME (n2w d) /\ ptr_covers G tn root initial total /\
+  not_fresh_at st q /\ not_fresh_at st root /\
+  (!x. src = Var x ==> not_fresh_at st x) /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  32 + j * mem_sz + mem_sz <= total /\
+  d + 32 + j * mem_sz < dimword (:256) /\ mem_sz < dimword (:256) /\
+  ~initial.vs_halted /\
+  run_inst_seq (emitted_insts st ready) initial = OK t ==>
+  ?H u child. SND (SND ops) = Var child /\
+    ptr_covers H u child
+      (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx) mem_sz /\
+    op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
+    op_taint u (FST (SND ops)) = {} /\ op_prov H (FST (SND ops)) = NONE /\
+    frag_exec_ptr cx ctx PG st ready
+      (\g z v. g = G /\ z = tn /\ v = initial)
+      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
+    t.vs_memory = initial.vs_memory /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x initial /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> simp[abi_decode_array_element_setup_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  gvs[] >>
+  rename1 `emit_op MLOAD [Var q] st = (idx,c0)` >>
+  rename1 `emit_op ADD [src; Lit 32w] c0 = (data,c1)` >>
+  rename1 `emit_op MUL [idx; Lit (n2w abi_sz)] c1 = (off,c2)` >>
+  rename1 `emit_op ADD [data; off] c2 = (head,c3)` >>
+  rename1 `abi_decode_indexed_address (Var root) idx mem_sz c4 = (dst,ready)` >>
+  `inst_extends st c0 /\ same_blocks st c0 /\
+   st.cs_next_var <= c0.cs_next_var /\ LENGTH (emitted_insts st c0) = 1` by
+    metis_tac[inst_extends_emit_op, emit_op_same_blocks, ci_mono_emit_op, ci_mono_def, pairTheory.SND, emit_op_length] >>
+  `inst_extends c0 c3 /\ same_blocks c0 c3 /\
+   c0.cs_next_var <= c3.cs_next_var /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c0 c3) /\
+   LENGTH (emitted_insts c0 c3) = 3` by
+    metis_tac[scaled_address_prefix_structure] >>
+  `inst_extends c3 c4 /\ same_blocks c3 c4 /\
+   c3.cs_next_var <= c4.cs_next_var /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c3 c4)` by
+    (Cases_on `dec_info_needs_offset di`
+     >- (fs[] >> drule calldata_dynamic_element_source_structure >> simp[]) >>
+     gvs[comp_return_def, inst_extends_def, same_blocks_def, emitted_insts_def]) >>
+  `inst_extends c4 ready /\ same_blocks c4 ready /\
+   c4.cs_next_var <= ready.cs_next_var /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c4 ready) /\
+   LENGTH (emitted_insts c4 ready) = 3` by
+    metis_tac[indexed_destination_structure] >>
+  `emitted_insts st ready = emitted_insts st c0 ++ emitted_insts c0 c3 ++
+      emitted_insts c3 c4 ++ emitted_insts c4 ready` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  qpat_x_assum `run_inst_seq (emitted_insts st ready) initial = OK t` mp_tac >>
+  simp[] >> strip_tac >>
+  drule run_inst_seq_append_ok >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c4 ready) r4 = OK t` >>
+  qpat_x_assum `run_inst_seq (_ ++ _) initial = OK r4`
+    (strip_assume_tac o MATCH_MP run_inst_seq_append_ok) >>
+  rename1 `run_inst_seq (emitted_insts c3 c4) r3 = OK r4` >>
+  qpat_x_assum `run_inst_seq (_ ++ _) initial = OK r3`
+    (strip_assume_tac o MATCH_MP run_inst_seq_append_ok) >>
+  rename1 `run_inst_seq (emitted_insts st c0) initial = OK r0` >>
+  suspend "load_and_source"
+QED
+
+Resume calldata_array_element_setup_endpoint_ptr[load_and_source]:
+  `slot < dimword (:256)` by decide_tac >>
+  `!i. w2n (n2w slot :256 word) <= i /\ i < w2n (n2w slot :256 word) + 32 ==> i NOTIN tn.t_mem` by simp[] >>
+  drule_all emit_mload_clean_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  rename1 `op_taint u0 idx = {}` >> rename1 `op_prov H0 idx = NONE` >>
+  `r0.vs_labels = initial.vs_labels` by
+    (irule emit_op_run_labels >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `eval_operand idx r0 = SOME (n2w j)` by
+    (qpat_assum `emit_op MLOAD _ st = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+       eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  `!x. idx = Var x ==> not_fresh_at c0 x` by
+    (qpat_assum `emit_op MLOAD _ st = _` (mp_then Any mp_tac abi_decoder_operand_live_emit) >>
+     Cases_on `idx` >> simp[calldata_operand_live_not_fresh]) >>
+  `eval_operand src r0 = SOME (n2w sb) /\ op_taint u0 src = {} /\ op_prov H0 src = NONE` by
+    (drule_all old_operand_ghost_frame >> simp[]) >>
+  `!x. src = Var x ==> not_fresh_at c0 x` by
+    (rpt strip_tac >> `not_fresh_at st x` by metis_tac[] >>
+     fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  qabbrev_tac `s0 = r0 with vs_inst_idx := 1 + initial.vs_inst_idx` >>
+  `run_inst_seq (emitted_insts c0 c3) s0 = OK (r3 with vs_inst_idx := s0.vs_inst_idx)` by
+    simp[Abbr `s0`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  `eval_operand src s0 = SOME (n2w sb) /\ eval_operand idx s0 = SOME (n2w j)` by simp[Abbr `s0`] >>
+  drule_all clean_scaled_source_prefix_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  rename1 `op_taint u3 head = {}` >> rename1 `op_prov H3 head = NONE` >>
+  fs[Abbr `s0`, ADD1, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
+  `!x. not_fresh_at st x ==> not_fresh_at c0 x /\ not_fresh_at c3 x /\ not_fresh_at c4 x` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!x. not_fresh_at c0 x ==> not_fresh_at c3 x /\ not_fresh_at c4 x` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `eval_operand idx r3 = SOME (n2w j) /\ op_taint u3 idx = {} /\ op_prov H3 idx = NONE` by
+    (qpat_assum `!x. not_fresh_at c0 x ==> _` (mp_then Any mp_tac old_operand_ghost_frame) >>
+     disch_then (qspec_then `idx` mp_tac) >> simp[]) >>
+  `lookup_var root r0 = SOME (n2w d) /\ ptr_covers H0 u0 root r0 total'` by
+    (conj_tac >- metis_tac[] >> irule decoderGhostFramePtrTheory.ptr_covers_frame >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `lookup_var root r3 = SOME (n2w d) /\ ptr_covers H3 u3 root r3 total'` by
+    (conj_tac >- metis_tac[] >> irule decoderGhostFramePtrTheory.ptr_covers_frame >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `cs_extends st c0 /\ cs_extends c0 c3 /\ cs_extends c3 c4 /\ cs_extends c4 ready` by
+    (rpt conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def]) >>
+  `frag_exec_ptr cx ctx PG st c3
+    (\g z v. g = G /\ z = tn /\ v = initial)
+    (\g z v. g = H3 /\ z = u3 /\ v = r3 with vs_inst_idx := initial.vs_inst_idx + 4) R` by
+    (irule frag_exec_ptr_seq >>
+     qexistsl_tac [`(\g z v. g = H0 /\ z = u0 /\ v = r0 with vs_inst_idx := initial.vs_inst_idx + 1)`,`c0`] >>
+     simp[] >>
+     qpat_x_assum `frag_exec_ptr _ _ _ c0 c3 _ _ _` mp_tac >>
+     simp[]) >>
+  `!x. not_fresh_at st x ==> lookup_var x r3 = lookup_var x initial /\
+     FLOOKUP H3 x = FLOOKUP G x /\ op_taint u3 (Var x) = op_taint tn (Var x)` by metis_tac[] >>
+  suspend "optional_and_destination"
+QED
+
+Resume calldata_array_element_setup_endpoint_ptr[optional_and_destination]:
+  qpat_x_assum `emit_op MLOAD _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD [src; _] _ = _` kall_tac >>
+  qpat_x_assum `emit_op MUL _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD [data; _] _ = _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ st c0 _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ c0 c3 _ _ _` kall_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts c0 c3) (r0 with vs_inst_idx := _) = _` kall_tac >>
+  qabbrev_tac `s3 = r3 with vs_inst_idx := initial.vs_inst_idx + 4` >>
+  `run_inst_seq (emitted_insts c3 c4) s3 = OK (r4 with vs_inst_idx := s3.vs_inst_idx)` by
+    simp[Abbr `s3`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  `?H4 u4. (?v. eval_operand child_src r4 = SOME v) /\
+    (!x. child_src = Var x ==> not_fresh_at c4 x) /\
+    r4.vs_labels = r3.vs_labels /\ op_taint u4 child_src = {} /\ op_prov H4 child_src = NONE /\
+    frag_exec_ptr cx ctx PG c3 c4
+      (\g z v. g = H3 /\ z = u3 /\ v = s3)
+      (\g z v. g = H4 /\ z = u4 /\ v = r4 with vs_inst_idx := LENGTH (emitted_insts c3 c4) + s3.vs_inst_idx) R /\
+    r4.vs_memory = r3.vs_memory /\ r4.vs_call_ctx = r3.vs_call_ctx /\
+    u4.t_mem = u3.t_mem /\ u4.t_stor = u3.t_stor /\ u4.t_trans = u3.t_trans /\
+    (!x. not_fresh_at c3 x ==> lookup_var x r4 = lookup_var x r3 /\
+      FLOOKUP H4 x = FLOOKUP H3 x /\ op_taint u4 (Var x) = op_taint u3 (Var x))` by
+    (Cases_on `dec_info_needs_offset di`
+     >- suspend "dynamic_source"
+     >> suspend "static_source") >>
+  `eval_operand idx r4 = SOME (n2w j) /\ op_taint u4 idx = {} /\ op_prov H4 idx = NONE` by
+    (qpat_assum `!x. not_fresh_at c3 x ==> _` (mp_then Any mp_tac old_operand_ghost_frame) >>
+     disch_then (qspec_then `idx` mp_tac) >> simp[] >> metis_tac[]) >>
+  `lookup_var root r4 = SOME (n2w d) /\ ptr_covers H4 u4 root r4 total'` by
+    (conj_tac >- metis_tac[] >> irule decoderGhostFramePtrTheory.ptr_covers_frame >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  qabbrev_tac `s4 = r4 with vs_inst_idx := LENGTH (emitted_insts c3 c4) + s3.vs_inst_idx` >>
+  `run_inst_seq (emitted_insts c4 ready) s4 = OK (t with vs_inst_idx := s4.vs_inst_idx)` by
+    simp[Abbr `s4`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  `lookup_var root s4 = SOME (n2w d) /\ ptr_covers H4 u4 root s4 total' /\
+   eval_operand idx s4 = SOME (n2w j) /\
+   not_fresh_at c4 root /\ (!x. idx = Var x ==> not_fresh_at c4 x) /\
+   32 + j * mem_sz + mem_sz <= total' /\ d + 32 + j * mem_sz < dimword (:256)` by
+    (simp[Abbr `s4`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >> metis_tac[]) >>
+  drule_all indexed_destination_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  fs[Abbr `s4`, Abbr `s3`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
+  suspend "compose"
+
+
+
+QED
+Resume calldata_array_element_setup_endpoint_ptr[dynamic_source]:
+  fs[] >>
+  `eval_operand head s3 = SOME (n2w sb + 32w + n2w j * n2w abi_sz) /\
+   eval_operand data s3 = SOME (n2w sb + 32w)` by simp[Abbr `s3`] >>
+  drule_all calldata_dynamic_element_source_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  fs[Abbr `s3`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
+  qexistsl_tac [`H`,`u`] >> simp[]
+QED
+
+Resume calldata_array_element_setup_endpoint_ptr[static_source]:
+  gvs[comp_return_def, emitted_insts_def, run_inst_seq_def] >>
+  qexistsl_tac [`H3`,`u3`] >> simp[Abbr `s3`] >>
+  simp[frag_exec_ptr_def] >> rpt strip_tac >> gvs[] >>
+  disj1_tac >> rpt strip_tac >> qexists_tac `fuel` >> simp[]
+QED
+
+Resume calldata_array_element_setup_endpoint_ptr[compose]:
+  `op_taint u idx = {} /\ op_prov H idx = NONE` by
+    (Cases_on `idx` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  `op_taint u child_src = {} /\ op_prov H child_src = NONE` by
+    (Cases_on `child_src` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  qexistsl_tac [`H`,`u`] >> simp[] >>
+  irule frag_exec_ptr_seq >>
+  qexistsl_tac [`(\g z v. g = H3 /\ z = u3 /\ v = r3 with vs_inst_idx := initial.vs_inst_idx + 4)`,`c3`] >>
+  simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+  (conj_tac >- metis_tac[cs_extends_trans]) >>
+  irule frag_exec_ptr_seq >>
+  qexistsl_tac [`(\g z v. g = H4 /\ z = u4 /\ v = r4 with vs_inst_idx := LENGTH (emitted_insts c3 c4) + (initial.vs_inst_idx + 4))`,`c4`] >> simp[]
+QED
+Finalise calldata_array_element_setup_endpoint_ptr
