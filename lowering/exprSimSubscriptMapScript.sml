@@ -71,11 +71,13 @@ Proof
   rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INL (HashMapRef tr (n2w slot) kt vt)`, `es`, `OK s0`] >>
   conj_tac >- (irule toplevel_mapping_marked_exec >> simp[]) >>
-  disj1_tac >> simp[] >>
+  disj1_tac >> simp_tac std_ss [] >>
   `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[]) >>
+     simp_tac std_ss (#rewrs (TypeBase.simpls_of ``:venom_state``))) >>
+  qexists `s0` >> simp_tac std_ss [] >>
+  qexistsl [`tr`, `n2w slot`, `kt`, `vt`] >>
   simp[slot_loc_def, mk_ptr_def, eval_operand_def, locals_kept_def]
 QED
 
