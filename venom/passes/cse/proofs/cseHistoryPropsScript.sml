@@ -3395,7 +3395,10 @@ Theorem cse_prefix_some_operand_current_binding_aux[local]:
  definer.inst_opcode <> ASSIGN /\ definer.inst_id = k /\
  MEM definer (fn_insts fn) /\ MEM v definer.inst_outputs /\
  eval_operand op s = lookup_var v s /\
- cse_path_preorder fn definer.inst_id use.inst_id
+ cse_path_preorder fn definer.inst_id use.inst_id /\
+ (!visited. set visited = seen ==>
+   (is_pseudo definer.inst_opcode \/ 1 < LENGTH definer.inst_outputs) ==>
+   availExprDefs$mk_operand_expr d visited op = ExprVar v)
 Proof
  recInduct cseDefsTheory.operand_producer_ind >> rpt strip_tac >>
  gvs[Once cseDefsTheory.operand_producer_def, AllCaseEqs()]
@@ -3408,7 +3411,10 @@ Proof
  `MEM inst (fn_insts fn)` by gvs[fn_insts_def] >>
  `cse_path_preorder fn inst.inst_id use.inst_id` by
    (drule_all cse_prefix_def_use_order >> simp[]) >>
- qexistsl_tac [`v`, `inst`] >> simp[eval_operand_def]
+ qexistsl_tac [`v`, `inst`] >> simp[eval_operand_def] >>
+ rpt strip_tac >>
+ simp[Once availExprDefsTheory.mk_operand_expr_def,
+      dfgDefsTheory.dfg_get_def_def] >> gvs[]
 QED
 
 Resume cse_prefix_some_operand_current_binding_aux[copy]:
@@ -3429,7 +3435,12 @@ Resume cse_prefix_some_operand_current_binding_aux[copy]:
    (drule_all cse_prefix_copy_use_order >> simp[]) >>
  `cse_path_preorder fn definer.inst_id use.inst_id` by
    metis_tac[cse_path_preorder_transitive, relationTheory.transitive_def] >>
- qexistsl_tac [`v'`, `definer`] >> simp[] >> metis_tac[]
+ qexistsl_tac [`v'`, `definer`] >> simp[] >>
+ conj_tac >- metis_tac[] >>
+ rpt strip_tac >>
+ simp[Once availExprDefsTheory.mk_operand_expr_def,
+      dfgDefsTheory.dfg_get_def_def, venomInstTheory.is_pseudo_def] >>
+ first_x_assum irule >> simp[]
 QED
 Finalise cse_prefix_some_operand_current_binding_aux
 
@@ -3446,7 +3457,30 @@ Theorem cse_prefix_some_operand_current_binding:
  eval_operand op s = lookup_var v s /\
  cse_path_preorder fn definer.inst_id use.inst_id
 Proof
- strip_tac >> irule cse_prefix_some_operand_current_binding_aux >> metis_tac[]
+ strip_tac >>
+ drule_at (Pos hd) (SRULE [] cse_prefix_some_operand_current_binding_aux) >>
+ disch_then drule_all >> metis_tac[]
+QED
+
+Theorem cse_prefix_opaque_operand_current_binding:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) {} op = SOME d.inst_id /\
+ MEM d (fn_insts fn) /\
+ (is_pseudo d.inst_opcode \/ 1 < LENGTH d.inst_outputs) ==>
+ ?x. MEM x d.inst_outputs /\
+     availExprDefs$mk_operand_expr (dfg_build_function fn) [] op = ExprVar x /\
+     eval_operand op s = lookup_var x s /\
+     cse_path_preorder fn d.inst_id use.inst_id
+Proof
+ strip_tac >>
+ drule_at (Pos hd) (SRULE [] cse_prefix_some_operand_current_binding_aux) >>
+ disch_then drule_all >> strip_tac >>
+ `definer = d` by (irule cse_fn_insts_id_injective >> metis_tac[]) >>
+ gvs[] >> qexists_tac `v` >> simp[] >>
+ first_x_assum irule >> simp[]
 QED
 
 Theorem cse_prefix_some_operand_single_output_binding:
@@ -3487,6 +3521,41 @@ Proof
  `eval_operand sop u = lookup_var x u` by
    (irule cse_prefix_some_operand_single_output_binding >> metis_tac[]) >>
  `MEM x d.inst_outputs` by simp[] >>
+ drule_all cse_source_interval_predecessor_binding_all >> simp[]
+QED
+
+Theorem cse_source_interval_same_opaque_producer_operands_equal:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ events = pre ++ [CseStep m sb src u v] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+ get_instruction sb u.vs_inst_idx = SOME src /\
+ src.inst_opcode <> PHI /\ MEM sop src.inst_operands /\
+ MEM src (fn_insts fn) /\ MEM d (fn_insts fn) /\
+ (is_pseudo d.inst_opcode \/ 1 < LENGTH d.inst_outputs) /\
+ availExprDefs$mk_operand_expr (dfg_build_function fn) [] op =
+ availExprDefs$mk_operand_expr (dfg_build_function fn) [] sop /\
+ operand_producer (dfg_build_function fn) {} op = SOME d.inst_id /\
+ operand_producer (dfg_build_function fn) {} sop = SOME d.inst_id /\
+ cse_path_preorder fn d.inst_id src.inst_id /\ d.inst_id <> src.inst_id /\
+ (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+   cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+   cse_phase_has_source fn ph e src) ==>
+ eval_operand op s = eval_operand sop u
+Proof
+ strip_tac >>
+ `?x. MEM x d.inst_outputs /\
+   availExprDefs$mk_operand_expr (dfg_build_function fn) [] op = ExprVar x /\
+   eval_operand op s = lookup_var x s` by
+   (metis_tac[cse_prefix_opaque_operand_current_binding]) >>
+ `?y. MEM y d.inst_outputs /\
+   availExprDefs$mk_operand_expr (dfg_build_function fn) [] sop = ExprVar y /\
+   eval_operand sop u = lookup_var y u` by
+   (metis_tac[cse_prefix_opaque_operand_current_binding]) >>
+ `x = y` by metis_tac[availExprDefsTheory.avail_expr_11] >>
+ qpat_x_assum `x = y` SUBST_ALL_TAC >>
  drule_all cse_source_interval_predecessor_binding_all >> simp[]
 QED
 
