@@ -561,12 +561,12 @@ Proof
   `entry_block (entry_ret_family n) =
     SOME (HD (entry_ret_family n).fn_blocks)` by
     simp[entry_block_def, entry_ret_family_def] >>
-  simp[block_entries_ready_def, phi_operands_ready_def,
+  simp[block_entries_ready_def, phi_operands_ready_def, phis_at_joins_def,
        entry_ret_family_no_preds, entry_ret_family_no_phis,
        entry_ret_family_opcodes_ready] >>
   qpat_x_assum `_ = [HD _]` (fn th => once_rewrite_tac[th]) >>
   simp[entry_ret_family_no_phis, entry_ret_family_opcodes_ready,
-       entry_ret_family_offsets_used, phis_at_joins_def]
+       entry_ret_family_offsets_used]
 QED
 
 (* The long member is admitted by every source-side contract. *)
