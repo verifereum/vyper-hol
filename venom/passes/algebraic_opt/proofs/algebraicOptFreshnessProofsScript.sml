@@ -782,6 +782,38 @@ Proof
   qexistsl [`i`,`j'`] >> simp[] >> decide_tac
 QED
 
+Theorem ao_source_trace_iszero_operand_value:
+  !ctx fn trace bp r prod x op target use_opt h t value.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\ prod.inst_opcode = ISZERO /\
+    prod.inst_outputs = [x] /\ prod.inst_operands = [op] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) ==>
+    ?word. eval_operand op t = SOME word /\
+           value = (if word = 0w then 1w else 0w)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `prod.inst_opcode <> PHI /\ ~is_terminator prod.inst_opcode /\
+   MEM x prod.inst_outputs` by simp[is_terminator_def] >>
+  drule_all ao_source_trace_last_producer_operands >> strip_tac >>
+  `eval_operand op t = eval_operand op u` by metis_tac[MEM] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
+  strip_tac >>
+  gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, venomExecSemanticsTheory.bool_to_word_def] >>
+  Cases_on `x' = 0w` >> simp[venomExecSemanticsTheory.bool_to_word_def]
+QED
+
 Theorem ao_source_trace_iszero_value:
   !ctx fn trace bp r prod x z target use_opt h t value.
     wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
@@ -801,15 +833,48 @@ Theorem ao_source_trace_iszero_value:
     ?word. eval_operand (Var z) t = SOME word /\
            value = (if word = 0w then 1w else 0w)
 Proof
+  rpt gen_tac >> strip_tac >> drule_all ao_source_trace_iszero_operand_value >> simp[]
+QED
+
+
+Theorem ao_source_trace_selected_phi_iszero_operand_value:
+  !ctx fn trace bp r prod x op bb phi pred h s value.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+    2 <= LENGTH trace /\ ao_source_trace ctx fn trace /\
+    LAST trace = (h,T,s) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x s = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\ prod.inst_opcode = ISZERO /\
+    prod.inst_outputs = [x] /\ prod.inst_operands = [op] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    MEM bb fn.fn_blocks /\ MEM phi bb.bb_instructions /\
+    phi.inst_opcode = PHI /\ s.vs_prev_bb = SOME pred /\
+    resolve_phi pred phi.inst_operands = SOME (Var x) ==>
+    ?word. eval_operand op s = SOME word /\
+           value = (if word = 0w then 1w else 0w)
+Proof
   rpt gen_tac >> strip_tac >>
-  drule_all ao_source_trace_last_iszero >> strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
-  strip_tac >>
-  gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE, venomStateTheory.eval_operand_def,
-      venomExecSemanticsTheory.bool_to_word_def] >>
-  Cases_on `x' = 0w` >> simp[venomExecSemanticsTheory.bool_to_word_def]
+  drule ao_source_trace_selected_edge >> simp[] >>
+  disch_then drule >> strip_tac >>
+  PairCases_on `a` >> gvs[] >>
+  drule_all ao_selected_phi_available >> strip_tac >>
+  `lookup_block a2.vs_current_bb fn.fn_blocks = SOME pred_bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  `?term. get_instruction pred_bb a2.vs_inst_idx = SOME term /\
+          is_terminator term.inst_opcode` by
+    (drule ao_source_step_exit >> simp[] >> strip_tac >> gvs[]) >>
+  `lookup_var x (SND (SND (HD (front ++ [(a0,F,a2)])))) = NONE` by
+    (Cases_on `front` >> gvs[]) >>
+  `s.vs_labels = a2.vs_labels` by
+    (drule ao_source_step_labels >> simp[]) >>
+  `eval_operand op s = eval_operand op a2` by
+    (Cases_on `op` >> simp[venomStateTheory.eval_operand_def]) >>
+  qspecl_then [`ctx`,`fn`,`front ++ [(a0,F,a2)]`] mp_tac
+    ao_source_trace_iszero_operand_value >>
+  simp[] >>
+  disch_then (qspecl_then [`bp`,`r`,`prod`,`x`,`op`,`NONE`,`value`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem ao_source_trace_selected_phi_iszero_value:
@@ -829,12 +894,5 @@ Theorem ao_source_trace_selected_phi_iszero_value:
            value = (if word = 0w then 1w else 0w)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all ao_source_trace_selected_phi_last_iszero >> strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
-  strip_tac >>
-  gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE, venomStateTheory.eval_operand_def,
-      venomExecSemanticsTheory.bool_to_word_def] >>
-  Cases_on `x' = 0w` >> simp[venomExecSemanticsTheory.bool_to_word_def]
+  drule_all ao_source_trace_selected_phi_iszero_operand_value >> simp[]
 QED
