@@ -84,3 +84,74 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs(), update_var_def]
 QED
 
+
+Theorem bop_eq_counted_path:
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [left;right] [tmp]) /\
+  step_inst_base (mk_inst id EQ [left;right] [tmp]) s = OK u ==>
+  ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  op_prov G' (Var tmp) = NONE /\ op_taint tn' (Var tmp) = {} /\
+  tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  (!x. x <> tmp ==> FLOOKUP G' x = FLOOKUP G x /\
+    FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `EQ`, `ops` |-> `[left;right]`]
+      (SPEC_ALL bop_compare_state_frame)))) >> strip_tac >>
+  `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\ ~u.vs_halted` by
+    (qpat_x_assum `(u with vs_vars := _) = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  mp_tac (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `EQ`, `ops` |-> `[left;right]`]
+      (SPEC_ALL bop_compare_ghost_frame))) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `EQ`, `ops` |-> `[left;right]`]
+      (SPEC_ALL bop_compare_counted_edge)))) >>
+  disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
+  qexistsl_tac [`step_prov PG G (mk_inst id EQ [left;right] [tmp]) u`,
+    `step_taint (mk_inst id EQ [left;right] [tmp]) s u tn`] >> simp[] >>
+  irule (SIMP_RULE (srw_ss()) []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] (SPEC_ALL (cj 2 gas_path_ptr_rules)))) >>
+  goal_assum (drule_at Any) >> simp[] >> irule (cj 1 gas_path_ptr_rules) >> simp[]
+QED
+
+Theorem bop_iszero_counted_path:
+  op_taint tn arg = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ISZERO [arg] [tmp]) /\
+  step_inst_base (mk_inst id ISZERO [arg] [tmp]) s = OK u ==>
+  ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  op_prov G' (Var tmp) = NONE /\ op_taint tn' (Var tmp) = {} /\
+  tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  (!x. x <> tmp ==> FLOOKUP G' x = FLOOKUP G x /\
+    FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `ISZERO`, `ops` |-> `[arg]`, `left` |-> `arg`]
+      (SPEC_ALL bop_compare_state_frame)))) >> strip_tac >>
+  `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\ ~u.vs_halted` by
+    (qpat_x_assum `(u with vs_vars := _) = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  mp_tac (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `ISZERO`, `ops` |-> `[arg]`, `left` |-> `arg`]
+      (SPEC_ALL bop_compare_ghost_frame))) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`opc` |-> `ISZERO`, `ops` |-> `[arg]`, `left` |-> `arg`,
+             `right` |-> `arg`]
+      (SPEC_ALL bop_compare_counted_edge)))) >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
+  qexistsl_tac [`step_prov PG G (mk_inst id ISZERO [arg] [tmp]) u`,
+    `step_taint (mk_inst id ISZERO [arg] [tmp]) s u tn`] >> simp[] >>
+  irule (SIMP_RULE (srw_ss()) []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] (SPEC_ALL (cj 2 gas_path_ptr_rules)))) >>
+  goal_assum (drule_at Any) >> simp[] >> irule (cj 1 gas_path_ptr_rules) >> simp[]
+QED
