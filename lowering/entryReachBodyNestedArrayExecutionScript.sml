@@ -8,8 +8,9 @@ Ancestors
   valueTypingMemoryProps vyperTyping valueEncoding compileEnv
   entryReachBodyExactArrayLoop abiDecoderLoopRegisters abiDecoderExecution abiDecoderContract
   calldataRecursiveProducers abiDecoderDynamicLoopSetup abiEncoderRegisteredEffect
-  fragExec exprLoweringProps
-  entryReachBodyOwnedLoop entryReachBodyOwnedRegion
+  fragExec exprLoweringProps calldataDynOwned
+  entryReachBodyOwnedLoop entryReachBodyOwnedRegion entryReachBodyActualOwnedLoop
+  entryReachBodyIndexedLoopInput abiDecoderArrayBackedge
   emitHelperProps valueEncodingProps venomExecSemantics venomState
   words finite_map list rich_list arithmetic
 
@@ -418,3 +419,164 @@ Resume nested_array_child_code_producer[emitted]:
   fs[emitted_insts_def]
 QED
 Finalise nested_array_child_code_producer
+
+(* Immutable compiler/canonical facts shared by every outer iteration. *)
+Definition nested_array_loop_config_def:
+  nested_array_loop_config
+    ((ce,env,sf,ty,tv,inner,outer,parent_di,avs,xs,n),
+     (ip,src,dst,st,ops,middle,last,guard_st,header_st,loop_st,iip,cnt,limit_st,iv,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,cap,prepared,p,srcaddr,sb),
+     (hdr,body_lbl,exit_lbl,hid,next)) <=>
+  nested_array_child_code sf ce ty inner ip src dst st ops middle last
+    guard_st header_st loop_st iip cnt fn limit_st iv (STRING #"%" (toString nv)) hdr /\
+  st.cs_current_bb = body_lbl /\ st.cs_current_insts = [] /\
+  abi_decode_loop_cfg fn hdr body_lbl exit_lbl hid ip src CALLDATALOAD
+    (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
+    (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3))) /\
+  src <> Var (STRING #"%" (toString next)) /\
+  STRING #"%" (toString next) <> STRING #"%" (toString (next+1)) /\
+  next+4 <= limit_st.cs_next_var /\ next <= nv /\ nv < limit_st.cs_next_var /\
+  next <= st.cs_next_var /\
+  abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
+  abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live st.cs_next_var ip /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_coherent ce env sf
+    (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))
+    (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer)) /\
+  abi_decoder_metadata ce env
+    (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))
+    (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer)) parent_di
+    (ListV avs) (ArrayV (DynArrayV xs)) /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\
+  type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)) =
+    DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T inner /\
+  type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic inner)) =
+    DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T inner /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  is_dynamic (vyper_to_abi_type env (ArrayT ty (Dynamic inner))) /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_bytes ce (ArrayT ty (Dynamic inner)) =
+    type_memory_size (ArrayTV tv (Dynamic inner)) /\
+  EVERY (val_wf (ArrayTV tv (Dynamic inner))) xs /\
+  LENGTH xs < dimword (:256) /\ inner < dimword (:256) /\ n < dimword (:256) /\
+  32+LENGTH xs*type_memory_size (ArrayTV tv (Dynamic inner)) <=
+    type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)) /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  oid <> header_st.cs_next_id /\ cid <> header_st.cs_next_id /\ cid <> oid /\
+  (d+32 <= w2n p \/ w2n p+32 <= d) /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) b cap prepared /\
+  mem_bytes_at sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs)))
+    (abi_decode_source CALLDATALOAD prepared) =
+    enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs)
+End
+
+Theorem nested_array_actual_contract[local]:
+  cfg = ((ce,env,sf,ty,tv,inner,outer,parent_di,avs,xs,n),
+     (ip,src,dst,st,ops,middle,last,guard_st,header_st,loop_st,iip,cnt,limit_st,iv,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,cap,prepared,p,srcaddr,sb),
+     (hdr,body_lbl,exit_lbl,hid,next)) /\ nested_array_loop_config cfg ==>
+  entry_actual_owned_indexed_contract ctx fn site hdr body_lbl exit_lbl hid
+    last.cs_current_bb last.cs_current_insts last.cs_next_id ip src
+    (STRING #"%" (toString next)) iv (STRING #"%" (toString (next+1)))
+    (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3)))
+    (STRING #"%" (toString nv)) p srcaddr (ArrayTV tv (Dynamic inner)) xs d
+    (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)))
+    cid oid root extent {cid;header_st.cs_next_id} {header_st.cs_next_id}
+    (\j s. nested_array_inv next limit_st d (LENGTH xs) prepared header_st.cs_next_id b cap s)
+    (nested_array_body next limit_st d (LENGTH xs) prepared header_st.cs_next_id b cap
+      ip src p srcaddr)
+    (\j s. nested_array_inv next limit_st d (LENGTH xs) prepared header_st.cs_next_id b cap s)
+    (nested_array_inv next limit_st d (LENGTH xs) prepared header_st.cs_next_id b cap)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qhdtm_x_assum `nested_array_loop_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [nested_array_loop_config_def]) >>
+  `ip <> Var (STRING #"%" (toString nv)) /\ src <> Var (STRING #"%" (toString nv))` by
+    (conj_tac >> irule abi_decoder_live_excludes_output >>
+     qexists_tac `next` >> simp[]) >>
+  simp_tac bool_ss [entry_actual_owned_indexed_contract_def] >>
+  asm_rewrite_tac [] >> simp[Excl "enc_def"] >> rpt conj_tac
+  >- suspend "header"
+  >- suspend "child"
+  >> suspend "successor"
+QED
+Resume nested_array_actual_contract[header]:
+  rpt strip_tac >> Cases_on `j < LENGTH xs`
+  >- (simp[] >> irule nested_array_header_body >>
+      fs[entry_owned_loop_inv_def, SF SFY_ss, Excl "enc_def"]) >>
+  simp[] >> irule nested_array_inv_header >> asm_rewrite_tac []
+QED
+Resume nested_array_actual_contract[child]:
+  rpt strip_tac >>
+  `d+32+j*type_memory_bytes ce (ArrayT ty (Dynamic inner))+
+     type_memory_bytes ce (ArrayT ty (Dynamic inner)) <=
+     d+type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))` by
+    (`(j+1)*type_memory_size (ArrayTV tv (Dynamic inner)) <=
+       LENGTH xs*type_memory_size (ArrayTV tv (Dynamic inner))` by
+       simp[LE_MULT_RCANCEL] >>
+     qpat_x_assum `(j+1)*_ <= _` mp_tac >>
+     qpat_x_assum `32+LENGTH xs*_ <= _` mp_tac >>
+     qpat_assum `type_memory_bytes ce (ArrayT ty (Dynamic inner)) = _`
+       (fn th => pure_rewrite_tac [th]) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     pure_rewrite_tac [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES] >>
+     decide_tac) >>
+  `32 <= type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))` by
+    (qpat_x_assum `32+LENGTH xs*_ <= _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp_tac arith_ss []) >>
+  `b <= u.vs_alloca_next` by
+    fs[nested_array_body_def, nested_array_inv_def, entry_nested_scratch_ready_def,
+       Excl "enc_def"] >>
+  `u.vs_current_bb = st.cs_current_bb /\
+   u.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
+  drule_all nested_array_allocating_callback >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >>
+  qhdtm_x_assum `val_in_memory` mp_tac >>
+  qhdtm_x_assum `abi_encoder_registered_effect` mp_tac >>
+  asm_simp_tac (srw_ss()) [AC ADD_ASSOC ADD_COMM]
+QED
+Resume nested_array_actual_contract[successor]:
+  rpt strip_tac >> irule nested_array_inv_backedge >> asm_rewrite_tac []
+QED
+Finalise nested_array_actual_contract
+
+Theorem nested_array_loop_endpoint[local]:
+  cfg = ((ce,env,sf,ty,tv,inner,outer,parent_di,avs,xs,n),
+     (ip,src,dst,st,ops,middle,last,guard_st,header_st,loop_st,iip,cnt,limit_st,iv,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,cap,prepared,p,srcaddr,sb),
+     (hdr,body_lbl,exit_lbl,hid,next)) /\ nested_array_loop_config cfg /\
+  entry_owned_loop_inv ctx fn site hdr ip src p srcaddr (ArrayTV tv (Dynamic inner)) xs d
+    (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)))
+    cid oid root extent 0 s /\
+  nested_array_inv next limit_st d (LENGTH xs) prepared header_st.cs_next_id b cap s ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) t /\
+    nested_array_inv next limit_st d (LENGTH xs) prepared header_st.cs_next_id b cap t /\
+    val_in_memory (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer))
+      (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_trace ctx fn {cid;header_st.cs_next_id}
+      [(d,32+LENGTH xs*type_memory_size (ArrayTV tv (Dynamic inner)))] s t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all nested_array_actual_contract >> strip_tac >>
+  drule entry_actual_owned_indexed_array_loop_from_index >>
+  simp_tac bool_ss [] >> disch_then drule >>
+  asm_rewrite_tac [] >> disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac [] >>
+  irule (cj 2 calldata_terminal_array_memory) >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qhdtm_x_assum `nested_array_loop_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [nested_array_loop_config_def]) >>
+  drule abi_decoder_dynarray_values >> strip_tac >>
+  fs[entry_loop_prefix_def, nested_array_inv_def, Excl "enc_def"] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
