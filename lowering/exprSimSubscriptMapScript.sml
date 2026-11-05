@@ -240,12 +240,12 @@ QED
 
 Theorem gas_outcome_bind_result_exec:
   gas_outcome memory tops (ctx, func)
-    (a : evaluation_state -> eval_result evaluation_result) (es, s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. ?ex. res = INR ex /\ R (INR ex) ee r) /\
+    (a : evaluation_state -> eval_result evaluation_result) (es, s0) P Exit /\
+  (!res ee t. P res ee t ==> ?v. res = INL v) /\
+  (!res ee r. Exit res ee r ==> ?ex. res = INR ex /\ R (INR ex) ee r) /\
   (!marks v mid t.
      gas_marked_exec memory (ctx, func) a (es, s0) marks (INL v) mid (OK t) /\
-     P v (mid with gas_obs := []) t ==>
+     P (INL v) (mid with gas_obs := []) t ==>
      gas_outcome memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) Q R) ==>
   gas_outcome memory tops (ctx, func) (bind a k) (es, s0) Q R
@@ -257,10 +257,13 @@ Proof
       disch_then (qx_choose_then `res` (qx_choose_then `mid`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
       disch_then (DISJ_CASES_THEN strip_assume_tac)
-      >- (gvs[] >> irule gas_outcome_result_prefix >>
+      >- (`?v. res = INL v` by metis_tac[] >> gvs[] >>
+          irule gas_outcome_result_prefix >>
           qexistsl_tac [`marks`, `mid`, `t`, `v`] >>
           simp[] >> first_x_assum irule >> simp[] >>
           goal_assum (drule_at Any)) >>
+      `?ex. res = INR ex /\ R (INR ex) (mid with gas_obs := []) r` by
+        metis_tac[] >>
       gvs[] >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
       qexists_tac `marks` >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >>
@@ -527,6 +530,351 @@ Proof
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
   metis_tac[]
+QED
+
+Theorem mapping_subscript_marked_success:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt /\
+  gas_marked_exec memory (ctx,func) (eval_expr cx obj)
+    (es,s0) left (INL bres) mid (OK t) /\
+  gas_marked_exec memory (ctx,func)
+    (bind (eval_expr cx idx) (read_result cx))
+    (mid with gas_obs := [],t) right (INL kv) fin (OK u) ==>
+  expr_sim_inv cenv cx env (fin with gas_obs := []) /\
+  expr_type idx = kt /\ hashmap_key_type kt /\
+  (?tv. evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv) /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+  MAP FDOM mid.scopes = MAP FDOM fin.scopes
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `expr_body_pre cenv cx env idx (mid with gas_obs := [])` by
+    (drule_all mapping_subscript_marked_index_pre >> simp[]) >>
+  `expr_type idx = kt /\ hashmap_key_type kt` by
+    (drule_all mapping_subscript_key_type >> simp[]) >>
+  `bind (eval_expr cx idx) (read_result cx)
+     (mid with gas_obs := gas_explicit right t.vs_gas_readings) =
+     (INL kv,fin with gas_obs := [])` by
+    (qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[gas_marked_exec_def] >>
+     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >> simp[]) >>
+  `expr_body_pre cenv cx env idx
+     (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
+    (qpat_x_assum `expr_body_pre _ _ _ idx _` mp_tac >> simp[]) >>
+  drule_at (Pat `bind _ _ _ = _`)
+    (SRULE [SF ETA_ss] exprSimSourceTheory.expr_body_pre_eval) >>
+  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `MAP FDOM mid.scopes = MAP FDOM fin.scopes` by
+    (drule (SRULE [SF ETA_ss] exprBopSimPropsTheory.bop_marked_scopes_dom) >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[gas_marked_exec_def] >>
+     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >>
+     simp[] >> disch_then (mp_tac o MATCH_MP vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >> simp[]) >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+      vyperTypeExprSoundnessTheory.value_runtime_typed_def,
+      vyperTypeInvariantsTheory.value_result_typed_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem mapping_subscript_selection_success:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt ==>
+  ?tv. !tail.
+    select_result cx (expr_type obj) (HashMapRef tr slot kt vt)
+      (ValueSubscript kv) (ee with gas_obs := tail) =
+    (INL tv,ee with gas_obs := tail)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
+  drule_all expr_map_pre_checked_type >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_map_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `~well_typed_expr env obj` by
+    (strip_tac >>
+     `place_map_tables_agree_on_defined cenv env /\
+      (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+                 cenv.ce_hashmap_info nsid = NONE)` by
+       gvs[expr_map_pre_def, expr_sim_inv_def] >>
+     drule_all place_type_well_typed_on_defined >> simp[]) >>
+  Cases_on `vt`
+  >- (rename1 `MapPT kt (Type leaf)` >>
+      `ann = leaf /\ well_formed_type env.type_defs leaf` by
+        (gvs[expr_body_pre_def, expr_map_pre_def, well_typed_expr_def,
+             subscript_vtype_def, AllCaseEqs()]) >>
+      gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+      drule vyperHashMapStorageTheory.select_result_hashmap_leaf >>
+      disch_then (fn th => simp[th])) >>
+  simp[vyperHashMapStorageTheory.select_result_hashmap_nested]
+QED
+
+Theorem forced_then_outcome_exec[local]:
+  gas_outcome memory tops (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (es,s0)
+    (\res ee t. ?v. res = INL v /\ P v ee t)
+    (\res ee r. expr_exit res r) /\
+  (!marks v mid t.
+    gas_marked_exec memory (ctx,func)
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      marks (INL v) mid (OK t) /\ P v (mid with gas_obs := []) t ==>
+    ?res ee' r.
+      (!tail. k v (mid with gas_obs := tail) =
+              (res,ee' with gas_obs := tail)) /\
+      gas_marked_path memory ctx func t 0 r /\
+      ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
+       (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
+  (!ex ee r. expr_exit (INR ex : value + exception) r ==>
+             R (INR ex) ee r) ==>
+  gas_outcome memory tops (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
+Proof
+  disch_then (CONJUNCTS_THEN2
+    (mp_tac o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) assume_tac) >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `mid`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      disch_then (DISJ_CASES_THEN strip_assume_tac)
+      >- (gvs[] >>
+          first_x_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+          (impl_tac >- first_assum ACCEPT_TAC) >>
+          disch_then (qx_choose_then `res` (qx_choose_then `ee'`
+            (qx_choose_then `rr` (CONJUNCTS_THEN2 assume_tac
+              (CONJUNCTS_THEN2 assume_tac assume_tac))))) >>
+          `gas_marked_exec memory (ctx,func) (k v)
+             (mid with gas_obs := [],t) [] res ee' rr` by
+            simp[gas_marked_exec_def] >>
+          `gas_marked_exec memory (ctx,func)
+             (bind (bind (eval_expr cx e) (read_result cx)) k)
+             (es,s0) (marks ++ []) res ee' rr` by
+            (irule gas_marked_exec_bind_normal >> goal_assum drule >> simp[]) >>
+          rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+          qexists_tac `marks` >> disj1_tac >>
+          rewrite_tac[gas_summary_at_def] >>
+          qexistsl_tac [`res`, `ee'`, `rr`] >> fs[]) >>
+      `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR ex`, `mid`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      disj2_tac >> simp[] >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
+  pure_rewrite_tac[ignore_bind_def] >>
+  once_rewrite_tac[vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
+QED
+
+Theorem compile_mapping_subscript_outcome:
+  expr_map_case nocalls ctx func cenv cx obj /\
+  (!s tv t. eval_expr cx obj s = (INL tv,t) ==>
+            expr_sim_case nocalls ctx func cenv cx idx) /\
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt /\
+  (nocalls ==> int_calls_expr (Subscript ann obj idx) = []) /\
+  compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_admissible (eval_expr cx (Subscript ann obj idx)) A es /\
+  (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (eval_expr cx (Subscript ann obj idx)) (es,s0)
+    (\res ee t. ?tr base_slot kv tv tp p.
+       res = INL tv /\
+       storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
+       select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
+         (ValueSubscript kv) ee = (INL tv,ee) /\
+       expr_type idx = kt /\ hashmap_key_type kt /\
+       (?key_ty. evaluate_type (get_tenv cx) kt = SOME key_ty /\
+                 value_has_type key_ty kv) /\
+       expr_sim_inv cenv cx env ee /\ vv = LocatedValue tp p /\
+       p.ptr_location = slot_loc tr /\
+       eval_operand p.ptr_operand t =
+         SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
+  drule_all compile_expr_mapping_subscript_parts >> strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+   sa.cs_next_id <= sm.cs_next_id` by
+    (drule (cj 1 compile_expr_grows) >> simp[]) >>
+  `cs_extends sm sn /\ sm.cs_next_var <= sn.cs_next_var /\
+   sm.cs_next_id <= sn.cs_next_id` by
+    (drule (cj 2 compile_expr_grows) >> simp[]) >>
+  `cs_extends sn sp` by
+    (Cases_on `is_bytestring_type kt`
+     >- (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> simp[] >> strip_tac >>
+         qspecl_then [`key`, `F`, `sn`] mp_tac
+           ci_mono_compile_keccak256_key >> simp[ci_mono_def]) >>
+     fs[] >> simp[cs_extends_refl]) >>
+  `cs_extends sp sb` by
+    (qspecl_then [`vv_operand bvv`, `hashed`, `sp`] mp_tac
+       ci_mono_compile_mapping_subscript >> simp[ci_mono_def]) >>
+  `cs_extends sn sb` by metis_tac[cs_extends_trans] >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\
+   fn_has_code sp sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  drule exprOperandVarTheory.compile_lower_value_var >>
+  simp[] >> disch_then assume_tac >>
+  qpat_assum `compile_expr _ _ obj _ = _`
+    (mp_then Any mp_tac (cj 1 exprOperandVarTheory.compiler_compile_var)) >>
+  simp[] >> disch_then assume_tac >>
+  `type_place_expr env obj = SOME (HashMapT kt vt)` by
+    (drule_all expr_map_pre_checked_type >> simp[]) >>
+  drule_all compile_mapping_operand_not_label >> disch_then assume_tac >>
+  `gas_admissible (eval_expr cx obj) expr_map_res_ok es` by
+    (irule subscript_result_base_admissible >>
+     qexistsl_tac [`A`, `ann`, `idx`] >> simp[]) >>
+  `nocalls ==> int_calls_expr obj = []` by
+    metis_tac[int_calls_subscript_operands] >>
+  `expr_map_sim ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_map_case _ _ _ _ _ _` mp_tac >>
+     simp[expr_map_case_def] >> disch_then irule >> simp[] >>
+     qexists `env` >> simp[]) >>
+  qpat_x_assum `expr_map_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_map_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[eval_subscript_bind] >>
+  disch_then (mp_then Any irule gas_outcome_bind_result_exec) >>
+  reverse conj_tac
+  >- (conj_tac
+      >- (rpt gen_tac >> Cases_on `res` >> simp[] >> rpt strip_tac >> simp[]) >>
+      rpt gen_tac >> simp[] >> rpt strip_tac >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(\res ee t. _) _ _ _` mp_tac >>
+  simp[] >> strip_tac >>
+  rename1 `v = HashMapRef tr base_slot bkt bvt` >>
+  `wb_frame cenv es sa s0 t` by
+    (pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` kall_tac >>
+  qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` kall_tac >>
+  qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ t.vs_memory = _` kall_tac >>
+  qpat_x_assum `locals_kept cenv es s0 t` kall_tac >>
+  `expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
+   ?s u. eval_expr cx obj s = (INL v,u)` by
+    (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
+       mapping_subscript_marked_index_pre >>
+     disch_then irule >> simp[] >>
+     qexists `ann` >> simp[]) >>
+  `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
+  `eval_expr cx obj
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v, mid with gas_obs := [])` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[gas_marked_exec_def] >>
+     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >> simp[]) >>
+  `type_place_expr env obj = SOME (HashMapT kt vt)` by
+    (drule_all expr_map_pre_checked_type >> simp[]) >>
+  `bkt = kt /\ bvt = vt` by
+    (qpat_assum `eval_expr _ _ (_ with gas_obs := _) = _`
+       (mp_then Any mp_tac expr_map_pre_eval_result) >>
+     disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+     simp[] >> strip_tac >>
+     first_x_assum (qspec_then `HashMapT kt vt` mp_tac) >>
+     simp[eval_result_typed_def]) >>
+  `gas_admissible (bind (eval_expr cx idx) (read_result cx))
+     expr_res_ok (mid with gas_obs := [])` by
+    (irule subscript_result_index_admissible >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`A`, `ann`] >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `~t.vs_halted` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     drule gas_marked_path_exec >> strip_tac >>
+     drule gas_path_normal >> simp[]) >>
+  `nocalls ==> int_calls_expr idx = []` by
+    metis_tac[int_calls_subscript_operands] >>
+  `expr_sim ctx func cenv cx (expr_type idx) idx (mid with gas_obs := [])` by
+    (qpat_x_assum `expr_sim_case _ _ _ _ _ _` mp_tac >>
+     simp[expr_sim_case_def] >> disch_then irule >> simp[] >>
+     qexists `env` >>
+     qpat_x_assum `expr_body_pre _ _ _ idx _` mp_tac >> simp[]) >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_def] >>
+  disch_then (qspecl_then [`sm`, `sn`, `key`, `t`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then assume_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (start,t)` >>
+  irule forced_then_outcome_exec >>
+  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  qexists_tac `\kv ee u. expr_post ctx func cenv cx idx
+    (mid with gas_obs := []) sm sn t ee kv key u /\
+    u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
+  reverse conj_tac >- (simp[Abbr `start`] >> first_assum ACCEPT_TAC) >>
+  simp[Abbr `start`] >>
+  map_every qx_gen_tac [`imarks`, `kv`, `fin`, `it`] >> strip_tac >>
+  `expr_sim_inv cenv cx env (fin with gas_obs := []) /\
+   expr_type idx = kt /\ hashmap_key_type kt /\
+   (?key_ty. evaluate_type (get_tenv cx) kt = SOME key_ty /\
+             value_has_type key_ty kv) /\
+   MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+   MAP FDOM mid.scopes = MAP FDOM fin.scopes` by
+    (drule_all mapping_subscript_marked_success >> simp[]) >>
+  `?selected. !tail.
+     select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
+       (ValueSubscript kv) (fin with gas_obs := tail) =
+     (INL selected,fin with gas_obs := tail)` by
+    (irule mapping_subscript_selection_success >>
+     qexistsl_tac [`ann`, `cenv`, `env`, `es`, `idx`] >> simp[]) >>
+
+  `fn_has_code sn sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  `~it.vs_halted` by
+    (qpat_assum `gas_marked_exec _ _ _ _ imarks _ _ _` mp_tac >>
+     pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     drule gas_marked_path_exec >> strip_tac >>
+     drule gas_path_normal >> simp[]) >>
+  `eval_operand (vv_operand bvv) t = SOME base_slot` by
+    gvs[contextTheory.vv_operand_def] >>
+  `?out. gas_marked_path F ctx func it 0 (OK out) /\
+     eval_operand slot out = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+     stmt_state_rel ctx func cenv cx (fin with gas_obs := []) out /\
+     wb_frame cenv (mid with gas_obs := []) sm t out /\
+     out.vs_current_bb = sb.cs_current_bb /\
+     out.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (drule compile_mapping_index_success_tail >>
+     disch_then irule >> simp[] >> qexists `vv_operand bvv` >> simp[]) >>
+  `wb_frame cenv es sa s0 out` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
+     conj_tac
+     >- (qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
+     goal_assum (drule_at Any)) >>
+  `storage_mapping_region cx tr base_slot (HashMapT kt vt)` by
+    (qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >> simp[]) >>
+  qexistsl_tac [`INL selected`, `fin with gas_obs := []`, `OK out`] >>
+  simp[] >> qexistsl_tac [`tr`, `base_slot`, `kv`] >>
+  simp[contextTheory.mk_ptr_def, contextTheory.vv_location_def] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ (fin with gas_obs := []) out` mp_tac >>
+  simp[stmt_state_rel_def, state_rel_gas_obs] >>
+  strip_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem toplevel_storage_ce_vars_decl:
