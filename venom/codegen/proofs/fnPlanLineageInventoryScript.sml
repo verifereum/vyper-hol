@@ -3170,3 +3170,15 @@ Proof
   `~MEM (Var v) cs2.ps_stack /\ Var v NOTIN FDOM cs2.ps_spilled` by metis_tac[] >>
   gvs[stack_pop_def] >> metis_tac[MEM_TAKE]
 QED
+
+(* Diagnostic only: malformed short storage reaches native bulk swap.
+   This equation does not assign a value to out-of-range EL reads. *)
+Theorem reorder_one_short_bulk_branch[local]:
+  !dfg ps x. ps.ps_stack = [Var x] ==>
+    reorder_one dfg (REPLICATE 18 (Var x)) 0 (Var x) ps = do_swap 17 ps
+Proof
+  rpt strip_tac >>
+  simp[reorder_one_def, stack_get_unfixed_depth_def, stack_get_depth_def,
+       stack_find_def, do_swap_def] >>
+  CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >> simp[]
+QED
