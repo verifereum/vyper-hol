@@ -4,7 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsBoundary fragGasSeqPtr
           venomExecSemantics venomInst venomState finite_map
           contextCodegenRel codegenRel memLocDefs exprSimHash
           decoderGhostFramePtr exprLoweringProps ghostPcTransportPtr venomMemProps
-          instIdxIndep
+          instIdxIndep exprSimPrecompiles venomCallOracleDefs
 
 Theorem gas_ptr_inst_ok:
   allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
@@ -99,9 +99,10 @@ Proof
   metis_tac[]
 QED
 
-(* Runtime success supplies the two intermediate states; each pointer check
-   is established independently, rather than inferred from erasure. *)
-Theorem suffix_success_checked:
+(* Success of the GAS/STATICCALL prefix supplies the intermediate states.
+   ASSERT is checked for either outcome, so the same boundary covers normal
+   return and failed-call reversion. Checks are not inferred from erasure. *)
+Theorem suffix_checked:
   gi = mk_inst id GAS [] [gv] /\
   ci = mk_inst (id+1) STATICCALL
     [Var gv; Lit addr; Var src; Lit an; Var dst; Lit rn] [cv] /\
@@ -115,7 +116,7 @@ Theorem suffix_success_checked:
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
     (s.vs_transient s.vs_call_ctx.cc_address) /\
-  run_inst_seq [gi;ci;ai] s = OK t ==>
+  run_inst_seq [gi;ci] s = OK t ==>
   ?G' tn'. inst_seq_ptr D lo ctx fn PG G tn [gi;ci;ai] s G' tn'
 Proof
   strip_tac >>
@@ -136,7 +137,7 @@ Proof
   suspend "sequence"
 QED
 
-Resume suffix_success_checked[call_check]:
+Resume suffix_checked[call_check]:
   `ptr_covers G1 tn1 src u (w2n an) /\
    ptr_covers G1 tn1 dst u (w2n rn)` by
     (simp[Abbr `G1`, Abbr `tn1`] >> metis_tac[gas_ptr_covers]) >>
@@ -152,7 +153,7 @@ Resume suffix_success_checked[call_check]:
   metis_tac[]
 QED
 
-Resume suffix_success_checked[assert_check]:
+Resume suffix_checked[assert_check]:
   `v.vs_allocas = u.vs_allocas` by
     (irule step_inst_base_preserves_allocas >> qexists_tac `ci` >>
      simp[Abbr `ci`, mk_inst_def]) >>
@@ -162,7 +163,7 @@ Resume suffix_success_checked[assert_check]:
   gvs[step_GAS, allocas_from_def, update_var_def] >> metis_tac[]
 QED
 
-Resume suffix_success_checked[sequence]:
+Resume suffix_checked[sequence]:
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id GAS [] [gv]) s` by
     (irule gas_ptr_inst_ok >> simp[]) >>
   `~is_terminator ci.inst_opcode` by
@@ -170,8 +171,11 @@ Resume suffix_success_checked[sequence]:
   `~is_terminator (mk_inst (id+2) ASSERT [Var cv] []).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
   simp[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
-       Abbr `G1`, Abbr `tn1`]
+       Abbr `G1`, Abbr `tn1`] >>
+  Cases_on `step_inst_base (mk_inst (id+2) ASSERT [Var cv] []) v` >>
+  simp[exec_result_map_def]
 QED
 
-Finalise suffix_success_checked
+Finalise suffix_checked
+
 
