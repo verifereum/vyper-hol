@@ -20,7 +20,7 @@ Theory fnBlockPlanStatic
 Ancestors
   fnLineageStatic fnPlanPrefix fnPlanLineage reorderSim contextCodegenRel
   stackPlanGen stackPlanOps stackPlanTypes venomExecSemantics venomWf
-  livenessDefs dfgDefs cfgDefs
+  livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
