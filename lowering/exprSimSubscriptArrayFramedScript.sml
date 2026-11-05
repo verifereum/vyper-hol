@@ -5,6 +5,8 @@ Ancestors
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
   emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
   exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
+  freshWrites fragGasFresh moduleLoweringProps venomState
+  fragExec fragGasSeq fragGasMode venomInst list rich_list finite_map
 
 (* The runtime loader of a code array's length word: a DLOAD of the data
    section at the base. *)
@@ -211,3 +213,90 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+
+Theorem straight_fresh_compile_array_subscript:
+  (dyn ==> straight_fresh (loader base_op)) ==>
+  straight_fresh
+    (compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader)
+Proof
+  strip_tac >> rewrite_tac[compile_array_subscript_split] >>
+  irule straight_fresh_bind >> reverse conj_tac
+  >- (Cases_on `dyn` >> gvs[straight_fresh_return]) >>
+  gen_tac >> BETA_TAC >> irule straight_fresh_array_check_ptr
+QED
+
+
+(* Unlike arithmetic fresh writes, DLOAD reads the actual data section.
+   No freshness of the entry variable map is needed for this execution. *)
+Theorem compile_imm_load_word_runtime_run:
+  compile_imm_load_word F imm base_op sa = (op,sb) /\
+  eval_operand base_op s = SOME b ==>
+  ?p. op = Var p /\
+    p = STRING #"%" (toString sa.cs_next_var) /\
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (update_var p (word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) s)
+Proof
+  simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_def, exec_read1_def,
+       venomInstTheory.mk_inst_def]
+QED
+
+Theorem compile_imm_load_word_runtime_frame:
+  compile_imm_load_word F imm base_op sa = (Var p,sb) /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx es
+    ((update_var p w s) with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  (!z. not_fresh_at sa z ==>
+    lookup_var z ((update_var p w s) with vs_inst_idx := LENGTH sb.cs_current_insts) =
+    lookup_var z s)
+Proof
+  simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  `!z. not_fresh_at sa z ==>
+    lookup_var z (update_var (STRING #"%" (toString sa.cs_next_var)) w s) =
+    lookup_var z s` by
+    (rpt strip_tac >> drule lookup_var_update_not_fresh >> simp[]) >>
+  conj_tac
+  >- (simp[stmt_state_rel_inst_idx, update_var_def] >>
+      irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      first_x_assum drule >> simp[lookup_var_def, update_var_def]) >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[lookup_var_def, update_var_def]
+QED
+
+Theorem compile_imm_load_word_runtime_path:
+  compile_imm_load_word F imm base_op sa = (op,sb) /\
+  eval_operand base_op s = SOME b /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) /\
+    gas_marked_path F ctx func s 0
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >> drule_all compile_imm_load_word_runtime_run >> strip_tac >>
+  qexists_tac `update_var p (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) s` >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+  simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[DROP_APPEND]) >>
+  conj_tac
+  >- (drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      simp[gas_marked_path_def, venomInstTheory.mk_inst_def,
+           is_terminator_def, is_ext_call_op_def, update_var_def] >>
+      gvs[venomInstTheory.mk_inst_def]) >>
+  gvs[same_blocks_def]
+QED
