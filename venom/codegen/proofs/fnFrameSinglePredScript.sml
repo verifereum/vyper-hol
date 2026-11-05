@@ -15,21 +15,81 @@
 
 Theory fnFrameSinglePred
 Ancestors
-  fnFrameCleanStack fnFrameStepsPhi allocMono stackOpSim fnPlanPrefix fnFrameSteps genFrameSim fnPlanLineage frameRel
+  fnFrameCleanStack fnFrameStepsPhi allocMono stackOpSim venomWf cfgAnalysisProps
+  stackModel list fnPlanPrefix fnFrameSteps genFrameSim fnPlanLineage frameRel
   contextCodegenRel codegenRel unitShapeDefs genBlockSim stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   livenessDefs dfgDefs cfgDefs
 
+(* The first phi_prefix_length instructions of a block survive the
+   parameter filter as a prefix, and are PHIs. *)
+Theorem phi_prefix_filter_mem:
+  !l phis body inst.
+    FILTER (\i. ~is_param_opcode i.inst_opcode) l = phis ++ body /\
+    LENGTH phis = phi_prefix_length l /\ MEM inst phis ==>
+    MEM inst l /\ inst.inst_opcode = PHI
+Proof
+  Induct >> simp[phi_prefix_length_def] >> rpt gen_tac >>
+  reverse (Cases_on `h.inst_opcode = PHI`) >> simp[] >> strip_tac
+  >- gvs[] >>
+  `~is_param_opcode h.inst_opcode` by simp[is_param_opcode_def] >>
+  Cases_on `phis` >> gvs[] >>
+  Cases_on `inst = h` >> gvs[] >> metis_tac[]
+QED
+
+(* fn_cfg_edge is cfg_analyze's predecessor relation. *)
+Theorem fn_cfg_edge_cfg_preds:
+  !fn p l.
+    wf_function fn ==>
+    (fn_cfg_edge fn p l <=> MEM p (cfg_preds_of (cfg_analyze fn) l))
+Proof
+  rw[fn_cfg_edge_def, GSYM cfg_edge_symmetry_uncond] >> eq_tac >> strip_tac
+  >- (drule_all cfg_analyze_preserves_bb_succs >> strip_tac >> gvs[]) >>
+  `MEM p (fn_labels fn)` by
+    metis_tac[cfg_analyze_pred_labels, cfg_edge_symmetry_uncond] >>
+  gvs[fn_labels_def, MEM_MAP] >>
+  rename1 `MEM bb' fn.fn_blocks` >> qexists_tac `bb'` >>
+  drule_all cfg_analyze_preserves_bb_succs >> strip_tac >> gvs[]
+QED
+
+Theorem phi_well_formed_pairs:
+  !ops.
+    phi_well_formed ops ==>
+    ops = FLAT (MAP (\(l,v). [Label l; Var v]) (phi_pairs ops))
+Proof
+  recInduct phi_pairs_ind >> rw[phi_well_formed_def, phi_pairs_def] >>
+  gvs[phi_well_formed_def]
+QED
+
 (* In a block whose only predecessor is pred, each PHI is `phi pred, %v`
    (venomWf$phi_edge_uses_wf, from def_dominates_uses: its labels are
-   distinct and exactly the CFG predecessors), so its only variable operand
-   is the one resolve_phi pred reads, and wherever stack_get_phi_depth finds
-   it, stack_peek returns it. *)
+   distinct and exactly the CFG predecessors). *)
+Theorem single_pred_phi_operands:
+  !fn bb pred inst.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred] /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+    ?v. inst.inst_operands = [Label pred; Var v]
+Proof
+  rw[codegen_ready_fn_def, def_dominates_uses_def] >>
+  first_x_assum drule_all >> rw[phi_edge_uses_wf_def] >>
+  `!p. (?q. MEM q (phi_pairs inst.inst_operands) /\ FST q = p) <=> p = pred`
+    by metis_tac[fn_cfg_edge_cfg_preds, MEM] >>
+  drule phi_well_formed_pairs >> strip_tac >>
+  Cases_on `phi_pairs inst.inst_operands` >- metis_tac[MEM] >>
+  rename1 `_ = q :: qs` >> Cases_on `qs`
+  >- (PairCases_on `q` >> gvs[] >> metis_tac[pairTheory.FST, MEM]) >>
+  rename1 `_ = q :: q2 :: _` >>
+  `FST q = pred /\ FST q2 = pred` by metis_tac[MEM] >>
+  gvs[]
+QED
+
+(* So the operand stack_get_phi_depth finds is the one resolve_phi pred
+   reads, whatever the stack. *)
 Theorem single_pred_phi_hits:
   !cfg fn lbl bb pred phis body inst stk dist.
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
-    bb <> HD fn.fn_blocks /\
     LENGTH (cfg_preds_of cfg bb.bb_label) = 1 /\
     MEM bb.bb_label (cfg_succs_of cfg pred) /\
     non_param_insts bb = phis ++ body /\
@@ -39,7 +99,20 @@ Theorem single_pred_phi_hits:
       SOME dist ==>
     resolve_phi pred inst.inst_operands = SOME (stack_peek dist stk)
 Proof
-  cheat
+  rw[] >>
+  `MEM bb fn.fn_blocks` by
+    (gvs[lookup_block_def] >> drule FIND_SOME_MEM >> simp[]) >>
+  `cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred]` by
+    (gvs[cfg_edge_symmetry_uncond] >>
+     Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
+     gvs[LENGTH_NIL]) >>
+  `MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI` by
+    (irule phi_prefix_filter_mem >> gvs[non_param_insts_def] >> metis_tac[]) >>
+  drule_all single_pred_phi_operands >> strip_tac >>
+  gvs[is_var_operand_def, resolve_phi_def, stack_get_phi_depth_def] >>
+  `stack_get_depth (Var v) stk = SOME dist` by
+    gvs[stack_get_depth_def] >>
+  drule stack_get_depth_props >> simp[]
 QED
 
 (* Used at the start of a non-entry block whose only predecessor is pred
