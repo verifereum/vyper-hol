@@ -84,15 +84,6 @@ Proof
   metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup, ADD_ASSOC])
 QED
 
-Theorem local_path_at_step:
-  local_path_at cenv cx n k tv /\ mem_step_offset tv sb = SOME (j,et) ==>
-  local_path_at cenv cx n (k + j) et
-Proof
-  rw[local_path_at_def] >>
-  qexistsl_tac [`t0`, `tv0`, `path ++ [sb]`] >> simp[] >>
-  drule_all mem_path_offset_snoc >> simp[]
-QED
-
 Theorem local_val_at_array_element:
   local_val_at cenv cx n k (ArrayTV et bd) (ArrayV av) /\
   mem_step_offset (ArrayTV et bd) (ValueSubscript (IntV i)) = SOME (j,et) ==>

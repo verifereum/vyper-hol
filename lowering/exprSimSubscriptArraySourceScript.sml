@@ -6,7 +6,7 @@ Ancestors
   vyperTypeInvariants vyperTypeSystem vyperPlaceTyping vyperArray
   vyperAST placeTypingProps allocLimits supportedExprTraverse
   vyperTypeCallGraph vyperTypeCallStackSoundness
-  integer option list rich_list finite_map
+  integer option list rich_list finite_map exprSimAttributeFields
 
 Theorem read_result_nonstorage_frame:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
@@ -78,23 +78,6 @@ Proof
   strip_tac >> gvs[GSYM SNOC_APPEND, SNOC_11]
 QED
 
-Theorem evaluate_subscripts_append_error:
-  !path tv ptv a err suffix.
-    subscripts_type tv path = SOME ptv /\
-    evaluate_subscripts tv a path = INR err ==>
-    evaluate_subscripts tv a (path ++ suffix) = INR err
-Proof
-  Induct >- simp[evaluate_subscripts_def] >>
-  rpt gen_tac >> strip_tac >>
-  gvs[subscripts_type_def, AllCaseEqs()] >>
-  drule evaluate_subscripts_cons_typed >>
-  disch_then (fn th =>
-    qspec_then `path` assume_tac th >>
-    qspec_then `path ++ suffix` assume_tac th) >>
-  Cases_on `evaluate_subscripts tv a [h]` >> gvs[] >>
-  first_x_assum drule_all >> simp[]
-QED
-
 Theorem prefix_snoc_not_equal[local]:
   !path pre sb.
     IS_PREFIX (path ++ [sb]) pre /\ pre <> path ++ [sb] ==>
@@ -117,7 +100,7 @@ Proof
   gvs[vyperPlaceStatePreservationTheory.subscripts_type_append] >>
   Cases_on `evaluate_subscripts htv saved l`
   >- (drule_all evaluate_subscripts_append >> simp[]) >>
-  drule_all evaluate_subscripts_append_error >> simp[]
+  drule_all evaluate_subscripts_append_err >> simp[]
 QED
 
 Theorem read_popped_snoc:
@@ -160,7 +143,7 @@ Proof
       disch_then (qspec_then `[sb]` assume_tac) >> simp[read_memory_path_def]) >>
   gvs[read_memory_path_def, AllCaseEqs()] >>
   drule_all read_popped_snoc >> strip_tac >>
-  drule_all evaluate_subscripts_append_error >>
+  drule_all evaluate_subscripts_append_err >>
   disch_then (qspec_then `[sb]` assume_tac) >> simp[read_memory_path_def]
 QED
 

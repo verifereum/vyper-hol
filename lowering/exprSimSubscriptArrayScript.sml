@@ -21,7 +21,7 @@ Ancestors
    as they were, and whose base the index's fragment keeps as it is: an
    immutable at runtime (LocCode outside the constructor), or a static array
    with no dynamic array inside it in memory (a local or a temporary).
-   Cheated, for the alan run.  compile_subscript lowers the index after the
+   compile_subscript lowers the index after the
    base, and the base's value_vv must still hold its value when the index's
    fragment ends.  At runtime an immutable sits in the data section, which
    immutables_rel relates to the unchanged source immutables, and
