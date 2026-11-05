@@ -317,3 +317,34 @@ root entry, saved caller successor and endpoint consumption are now checked;
 the common three-mode simulation itself is still unproved and must receive
 strategist review before implementation. The original frozen main cheat is
 unchanged. No new relation definition was introduced.
+
+## Checked run-clause checkpoint (C1.5.3.1)
+
+`o1LowerDloadRunnerScript.sml` now shares A/J/R and Pstep/Pexec/Prun as
+proof-time HOL terms only. `ld_runner_run_clause` proves exactly clause 3 of
+`run_defs_ind` specialized to those terms. The continuation IH is guarded by
+source exec = OK v and nonhaltedness; the exec IH is restricted to the actual
+successful source entry/block/fetch. Branch consumption passes evolved maps
+through entry_prov and entry_taint_vars, then applies that guarded continuation
+IH to paired preentry states (v,te), with post-PHI witnesses (sn,t1).
+The source call address is propagated, not assumed. Target block and tail fuel
+are synchronized at MAX m m', and the enclosing run uses SUC(MAX m m').
+Only terminating target results are lifted by the existing exact-result mono
+lemmas. Halt/Abort/IntRet packets propagate directly. No global runner
+simulation is an assumption of this checked run clause.
+
+`ld_runner_conditional_induction` leaves precisely clauses 1 and 2 open:
+- Step clause: for arbitrary fuel/ctx/inst/s, assume Prun fuel ctx callee_fn
+  callee_s only under the actual INVOKE opcode, successful decode, lookup,
+  operand evaluation and setup_callee equations. Prove Pstep fuel ctx inst s.
+  There is no assumed target callee execution; it must come from this IH.
+- Exec clause: for arbitrary fuel/ctx/bb/s, assume Pstep fuel ctx inst s under
+  the successful current instruction fetch. Under that fetch, nonterminator
+  opcode, successful source step OK s' and nonhalted s', assume Pexec at the
+  same fuel and source successor with incremented instruction index. Prove
+  Pexec fuel ctx bb s. This is a suffix IH, not a global exec hypothesis;
+  expansion segments and ordinary instruction preservation remain to be built.
+
+These two explicit hypotheses imply all three specialized mode predicates by
+run_defs_ind and the proved run clause. This is conditional infrastructure,
+not an unconditional simulation theorem. The frozen final theorem is unchanged.
