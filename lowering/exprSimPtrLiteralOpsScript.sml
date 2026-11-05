@@ -4,6 +4,7 @@ Ancestors
   allocationPtr typedCopyPtr exprSimLiteralBuffer exprSimHypsDefs
   exprLowering ptrDiscipline venomExecSemantics venomMemDefs finite_map
   vyperTypeSystem vyperValue vyperAST exprSimProps compileEnv venomState venomInst
+  fragExecPtr ptrSafeRun codegenRel contextCodegenRel bodyPtrDefs words
 
 Theorem literal_nonword_classify:
   expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
@@ -51,4 +52,89 @@ Proof
        written_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
        taint_component_equality, FLOOKUP_DEF, pred_setTheory.EXTENSION] >>
   Cases_on `lookup_var src s` >> simp[] >> metis_tac[]
+QED
+
+Theorem literal_empty_chunks:
+  compile_store_byte_chunks op [] off sa = ((),sa)
+Proof
+  simp[compile_store_byte_chunks_def, comp_return_def]
+QED
+
+Theorem literal_short_chunk_shape:
+  bs <> [] /\ LENGTH bs <= 32 ==>
+  compile_store_byte_chunks op bs off =
+    do dst <- emit_op ADD [op; Lit (n2w off)];
+       emit_void MSTORE
+         [dst; Lit (word_of_bytes T 0w (TAKE 32 (bs ++ REPLICATE 31 (0w:word8)) ))];
+       return ()
+    od
+Proof
+  strip_tac >> Cases_on `bs` >> gvs[] >>
+  simp[Once compile_store_byte_chunks_def] >>
+  `DROP 31 t = []` by (simp[listTheory.DROP_EQ_NIL] >> decide_tac) >>
+  simp[compile_store_byte_chunks_def]
+QED
+
+Theorem literal_add_ptr_inst_ok:
+  op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id ADD [Var src; Lit off] [dst]) s
+Proof
+  strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  simp[exec_pure2_def, eval_operand_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[op_taint_def] >>
+  Cases_on `FLOOKUP tn.t_var src` >> gvs[] >> metis_tac[]
+QED
+
+Theorem literal_mstore_ptr_inst_ok:
+  ptr_covers G tn dst s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id MSTORE [Var dst; Lit w] []) s
+Proof
+  strip_tac >> irule ptr_inst_ok_mstore >> simp[op_taint_def]
+QED
+
+Theorem literal_alloca_ptr_inst_ok:
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id ALLOCA [Lit n] [dst]) s
+Proof
+  simp[ptr_inst_ok_alloca]
+QED
+
+Theorem literal_add_ptr_covers:
+  lookup_var src s = SOME w /\ FLOOKUP G src = SOME (b,n) /\
+  b <= w2n w /\ w2n w + off + sz <= b+n /\
+  w2n w + off < dimword (:256) ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id ADD [Var src; Lit (n2w off)] [dst])
+      (update_var dst (n2w (w2n w + off)) s))
+    (step_taint (mk_inst id ADD [Var src; Lit (n2w off)] [dst]) s
+      (update_var dst (n2w (w2n w + off)) s) tn)
+    dst (update_var dst (n2w (w2n w + off)) s) sz
+Proof
+  strip_tac >> drule literal_add_ghost >> disch_then assume_tac >>
+  simp[ptr_covers_def, op_taint_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE, w2n_n2w] >> decide_tac
+QED
+
+Theorem literal_bytes_buffer_size:
+  type_memory_bytes cenv
+    (lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs))) =
+  32 + ((LENGTH bs + 31) DIV 32) * 32
+Proof
+  simp[lowered_value_type_def, type_memory_bytes_def]
+QED
+
+Theorem literal_string_buffer_size:
+  type_memory_bytes cenv
+    (lowered_value_type cenv (Literal (BaseT (StringT n)) (StringL str))) =
+  32 + ((LENGTH str + 31) DIV 32) * 32
+Proof
+  simp[lowered_value_type_def, type_memory_bytes_def]
 QED
