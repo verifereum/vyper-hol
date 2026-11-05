@@ -237,3 +237,75 @@ Proof
   pure_rewrite_tac[GSYM update_var_def] >>
   irule toplevel_copy_init_inv >> simp[] >> metis_tac[]
 QED
+
+Definition toplevel_copy_word_region_def:
+  toplevel_copy_word_region b k = {q | b + 32*k <= q /\ q < b + 32*(k+1)}
+End
+
+Definition toplevel_copy_word_taint_def:
+  toplevel_copy_word_taint loc a b tn k =
+    {q | ?j. j < 32 /\ (a + n2w k,j) IN toplevel_copy_source_taint loc tn /\
+             q = b + 32*k + j}
+End
+
+Theorem toplevel_copy_taint_bound_zero[simp]:
+  toplevel_copy_taint_bound loc a b tn 0 = tn.t_mem
+Proof
+  simp[toplevel_copy_taint_bound_def, toplevel_copy_region_def,
+       toplevel_copy_translated_taint_def]
+QED
+
+Theorem toplevel_copy_region_step:
+  toplevel_copy_region b (k+1) =
+    toplevel_copy_region b k UNION toplevel_copy_word_region b k
+Proof
+  simp[EXTENSION, toplevel_copy_region_def, toplevel_copy_word_region_def] >>
+  decide_tac
+QED
+
+Theorem toplevel_copy_translated_step:
+  toplevel_copy_translated_taint loc a b tn (k+1) =
+    toplevel_copy_translated_taint loc a b tn k UNION
+    toplevel_copy_word_taint loc a b tn k
+Proof
+  simp[EXTENSION, toplevel_copy_translated_taint_def, toplevel_copy_word_taint_def] >>
+  gen_tac >> eq_tac
+  >- (strip_tac >> Cases_on `i = k`
+      >- (gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+      disj1_tac >> qexistsl [`i`,`j`] >> simp[] >> decide_tac) >>
+  strip_tac
+  >- (qexistsl [`i`,`j`] >> simp[] >> decide_tac) >>
+  qexistsl [`k`,`j`] >> simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem toplevel_copy_taint_bound_step:
+  M SUBSET toplevel_copy_taint_bound loc a b tn k ==>
+  (M DIFF toplevel_copy_word_region b k) UNION
+    toplevel_copy_word_taint loc a b tn k SUBSET
+    toplevel_copy_taint_bound loc a b tn (k+1)
+Proof
+  simp[toplevel_copy_taint_bound_def, toplevel_copy_region_step,
+       toplevel_copy_translated_step] >> SET_TAC[]
+QED
+
+Theorem toplevel_copy_store_taint_bound:
+  tn.t_mem SUBSET toplevel_copy_taint_bound loc a b tn0 k /\
+  tnf.t_mem = (tn.t_mem DIFF toplevel_copy_word_region b k) UNION
+    toplevel_copy_word_taint loc a b tn0 k ==>
+  tnf.t_mem SUBSET toplevel_copy_taint_bound loc a b tn0 (k+1)
+Proof
+  metis_tac[toplevel_copy_taint_bound_step]
+QED
+
+Theorem toplevel_copy_mstore_taint:
+  eval_operand p s = SOME off /\ new_site_bytes s t = {} /\
+  range_bytes (step_writes (mk_inst id MSTORE [p;v] []) s t) =
+    toplevel_copy_word_region b k /\ w2n off = b + 32*k ==>
+  (step_taint (mk_inst id MSTORE [p;v] []) s t tn).t_mem =
+    (tn.t_mem DIFF toplevel_copy_word_region b k) UNION
+    {b + 32*k + j | j IN op_taint tn v}
+Proof
+  simp[step_taint_def, mem_taint_def, written_taint_def, mk_inst_def] >>
+  strip_tac >> AP_TERM_TAC >>
+  simp[EXTENSION] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
