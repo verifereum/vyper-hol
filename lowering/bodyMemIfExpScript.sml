@@ -96,7 +96,11 @@ Proof
      `v5 = expr_type e` by gvs[] >> pop_assum SUBST1_TAC >>
      irule ifexp_body_pre_read_typed >> metis_tac[]) >>
   `expr_vv_sim_mem ctx func cenv cx ty (IfExp v5 e1 e2 e3) es` by
-    (irule compile_ifexp_vv_sim_mem >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (`is_word_type v5 ==> ?tvt. evaluate_type (get_tenv cx) v5 = SOME tvt` by
+       (qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
+          (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >>
+        simp[optionTheory.IS_SOME_EXISTS, vyperASTTheory.expr_type_def]) >>
+     irule compile_ifexp_vv_sim_mem >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >> Cases_on `is_word_type v5`
   >- (irule compile_ifexp_word_sim_mem >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule expr_sim_mem_of_vv_sim_mem >> simp[vyperASTTheory.expr_type_def] >>
