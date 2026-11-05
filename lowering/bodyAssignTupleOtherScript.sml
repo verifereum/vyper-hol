@@ -13,7 +13,8 @@ Ancestors
   bodyExprPreFacts bodySim
   exprSimAggregateLayout exprSimHypsDefs bodyStorageMetadata
   supportedStmts supportedDecls vyperTypeSystem vyperTypeInvariants vyperTypeEnv
-  list finite_map
+  list finite_map vyperTypeValues exprSimHyps valueEncoding compileEnv vyperState supportedExprForms supportedTargets
+  supportedStmtTraverse supportedExprTraverse gasContext vyperTypeCallGraph
 
 (* A supported, typed tuple assignment with an element outside
    body_assign_tuple_targets' (a local of nonzero size, a word scalar, a word
@@ -146,6 +147,272 @@ Proof
   cheat
 QED
 
+Theorem tuple_places_typing[local]:
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' ==>
+  ?tys tvs. expr_type e = TupleT tys /\ gs <> [] /\
+    LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+    assignable_type (get_tenv cx) (TupleT tys) /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs)
+Proof
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
+      AllCaseEqs()] >>
+  rename1 `expr_type e = TupleT tys` >>
+  `?tv. evaluate_type (get_tenv cx) (TupleT tys) = SOME tv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  drule evaluate_type_TupleT_cases >> strip_tac >>
+  qexists_tac `tvs` >> simp[] >>
+  Cases_on `gs` >> gvs[assignable_type_def] >>
+  fs[ETA_AX]
+QED
+
+Theorem tuple_places_member_size[local]:
+  !tvs i. i < LENGTH tvs ==>
+    type_memory_size (EL i tvs) <= type_memory_size (TupleTV tvs)
+Proof
+  Induct >> simp[type_memory_size_def] >>
+  Cases_on `i` >> simp[type_memory_size_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[type_memory_size_def]
+QED
+
+Theorem tuple_places_component_bound[local]:
+  expr_body_pre cenv cx env e es /\ expr_type e = TupleT tys /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) ==>
+  !i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
+    type_memory_size (EL i tvs) + 64 < dimword (:256)
+Proof
+  rpt strip_tac >>
+  `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
+  `type_memory_size (TupleTV tvs) < 2 ** 64` by
+    (drule expr_body_pre_copy_ok >>
+     disch_then (qspec_then `TupleTV tvs` mp_tac) >> simp[]) >>
+  drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+  `LENGTH tys = LENGTH tvs` by metis_tac[LIST_REL_LENGTH] >>
+  `type_memory_size (EL i tvs) <= type_memory_size (TupleTV tvs)` by
+    (irule tuple_places_member_size >> simp[]) >>
+  simp[wordsTheory.dimword_def] >> decide_tac
+QED
+
+Theorem tuple_places_storage_decl[local]:
+  !ts vis mut id ty init.
+    MEM (VariableDecl vis mut id ty init) ts /\
+    (mut = Storage \/ mut = Transient) ==>
+    find_var_decl_by_name id ts <> NONE
+Proof
+  Induct >> simp[] >> Cases >>
+  rw[find_var_decl_by_name_def] >> metis_tac[]
+QED
+
+Theorem tuple_places_hashmap_decl[local]:
+  !ts src id vis tr kt vt slot.
+    supported_hashmap_decl ts (src,id) = SOME (vis,tr,kt,vt,slot) ==>
+    src = NONE /\ find_var_decl_by_name id ts <> NONE
+Proof
+  Induct >> simp[supported_hashmap_decl_def] >> Cases >>
+  rw[supported_hashmap_decl_def, find_var_decl_by_name_def] >> metis_tac[]
+QED
+
+Theorem tuple_places_scalar_decl[local]:
+  supported_scalar_target tops (src,id) ==>
+  src = NONE /\ find_var_decl_by_name id tops <> NONE
+Proof
+  simp[supported_scalar_target_def] >>
+  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
+  rename1 `supported_variable_decl _ _ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> simp[] >>
+  Cases_on `decl1` >> simp[] >>
+  Cases_on `decl3` >> simp[] >> strip_tac >>
+  drule supported_variable_decl_mem >> strip_tac >> simp[] >>
+  metis_tac[tuple_places_storage_decl]
+QED
+
+Theorem tuple_places_array_decl[local]:
+  supported_storage_array tops (src,id) ==>
+  src = NONE /\ find_var_decl_by_name id tops <> NONE
+Proof
+  simp[supported_storage_array_def] >>
+  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
+  rename1 `supported_variable_decl _ _ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> simp[] >>
+  Cases_on `decl1` >> simp[] >>
+  Cases_on `decl2` >> simp[] >>
+  Cases_on `decl3` >> simp[] >> strip_tac >>
+  drule supported_variable_decl_mem >> strip_tac >> simp[] >>
+  metis_tac[tuple_places_storage_decl]
+QED
+
+Theorem tuple_places_fields_decl[local]:
+  supported_storage_fields tops (src,id) = SOME fields ==>
+  src = NONE /\ find_var_decl_by_name id tops <> NONE
+Proof
+  simp[supported_storage_fields_def] >>
+  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
+  rename1 `supported_variable_decl _ _ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> simp[] >>
+  Cases_on `decl1` >> simp[] >>
+  Cases_on `decl2` >> simp[] >>
+  Cases_on `decl3` >> simp[] >>
+  strip_tac >>
+  drule supported_variable_decl_mem >> strip_tac >> simp[] >>
+  metis_tac[tuple_places_storage_decl]
+QED
+
+Theorem tuple_places_storage_root[local]:
+  get_module_code cx NONE = SOME tops /\
+  (supported_scalar_target tops nsid \/ supported_subscript_base tops nsid \/
+   supported_storage_field_write tops nsid fld) ==>
+  ~immutable_root cx (TopLevelNameTarget nsid)
+Proof
+  PairCases_on `nsid` >>
+  rw[immutable_root_def, target_root_def] >>
+  imp_res_tac tuple_places_scalar_decl >>
+  gvs[supported_subscript_base_def, supported_storage_field_write_def] >>
+  imp_res_tac tuple_places_array_decl >>
+  gvs[]
+  >~ [`supported_hashmap_decl tops (src,id)`]
+  >- (Cases_on `supported_hashmap_decl tops (src,id)` >> gvs[] >>
+      rename1 `supported_hashmap_decl _ _ = SOME decl` >>
+      PairCases_on `decl` >>
+      drule tuple_places_hashmap_decl >> strip_tac >> gvs[])
+  >~ [`supported_storage_fields tops (src,id)`]
+  >- (Cases_on `supported_storage_fields tops (src,id)` >> gvs[] >>
+      drule tuple_places_fields_decl >> strip_tac >> gvs[])
+QED
+
+Theorem tuple_places_member[local]:
+  get_module_code cx NONE = SOME tops /\
+  expr_sim_inv cenv cx env es /\
+  supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+  type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+  ~EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+    cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs /\
+  ~EXISTS (\g. ?nsid key.
+    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
+    ~supported_pure_expr tops key) gs /\ MEM g gs ==>
+  ?bt ty. g = BaseTarget bt /\ supported_target tops bindings bt /\
+    supported_target_pure tops bt /\ ~immutable_root cx bt /\
+    well_typed_atarget env g ty
+Proof
+  rpt strip_tac >>
+  drule_all tuple_places_typing >> strip_tac >>
+  `?ty. well_typed_atarget env g ty` by
+    (drule_all LIST_REL_MEM_IMP >> simp[] >> metis_tac[]) >>
+  `?bt. g = BaseTarget bt /\ supported_target tops bindings bt` by
+    (gvs[supported_stmt_def, supported_assignment_def, EVERY_MEM] >>
+     qpat_x_assum `!g. MEM g gs ==> (case g of BaseTarget bt => _ | TupleTarget ts => _)`
+       (qspec_then `g` mp_tac) >>
+     Cases_on `g` >> simp[]) >>
+  gvs[EVERY_MEM] >> qexists_tac `ty` >> simp[] >>
+  Cases_on `bt` >> gvs[supported_target_def, supported_target_pure_def]
+  >~ [`NameTarget id`]
+  >- simp[immutable_root_def, target_root_def]
+  >~ [`supported_scalar_target tops nsid`]
+  >- (irule tuple_places_storage_root >> goal_assum drule >> simp[])
+  >~ [`TopLevelNameTarget nsid`]
+  >- (`~cx.in_deploy` by metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE] >>
+      `bare_globals_complete env.bare_globals cx /\
+       bare_global_assignable_complete env.bare_global_assignable cx` by
+        gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+      gvs[optionTheory.IS_SOME_EXISTS, supported_immutable_type_def,
+          well_typed_atarget_def, well_typed_target_def, AllCaseEqs()] >>
+      PairCases_on `nsid` >> drule supported_variable_decl_mem >> strip_tac >>
+      gvs[bare_globals_complete_def, bare_global_assignable_complete_def] >>
+      first_x_assum (drule_then drule) >> strip_tac >>
+      qpat_x_assum `type_place_target _ _ = _` mp_tac >>
+      simp[Once well_typed_expr_def])
+  >~ [`SubscriptTarget t key`]
+  >- (Cases_on `t` >> gvs[supported_target_pure_def, target_root_def] >>
+      conj_tac >- metis_tac[] >>
+      `~immutable_root cx (TopLevelNameTarget p)` by
+        (irule tuple_places_storage_root >> goal_assum drule >> simp[]) >>
+      gvs[immutable_root_def, target_root_def])
+  >~ [`AttributeTarget t fld`]
+  >- (Cases_on `t` >> gvs[supported_target_pure_def, target_root_def] >>
+      `~immutable_root cx (TopLevelNameTarget p)` by
+        (irule tuple_places_storage_root >> goal_assum drule >>
+         qexists_tac `fld` >> simp[]) >>
+      gvs[immutable_root_def, target_root_def])
+QED
+
+Theorem tuple_places_target_case[local]:
+  body_inv tops ctx cenv cx /\ supported_target tops bindings bt /\
+  supported_target_pure tops bt ==>
+  target_case F ctx func cenv cx bt
+Proof
+  rpt strip_tac >> irule target_case_all >>
+  Cases_on `bt` >> gvs[supported_target_def, target_idx_case_def]
+  >~ [`SubscriptTarget t key`]
+  >- (Cases_on `t` >> gvs[target_idx_case_def, supported_target_pure_def] >>
+      rpt strip_tac >>
+      `int_calls_expr key = []` by metis_tac[supported_pure_int_calls] >>
+      `body_expr_ok cx key` by (irule body_expr_ok_intro >> simp[]) >>
+      metis_tac[body_expr_ok_case])
+  >~ [`AttributeTarget t fld`]
+  >- (Cases_on `t` >> gvs[target_idx_case_def])
+QED
+
+Theorem tuple_places_key_occurs[local]:
+  !gs. MEM (BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key)) gs /\
+    supported_expr_exists p key ==>
+    supported_stmt_expr_exists p (Assign (TupleTarget gs) e)
+Proof
+  Induct >> gvs[supported_stmt_expr_exists_def,
+    supported_assignment_exists_def, supported_expr_exists_def] >>
+  rpt strip_tac >> gvs[supported_assignment_exists_def,
+                       supported_expr_exists_def] >> metis_tac[]
+QED
+
+Theorem tuple_places_key_pre[local]:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  well_typed_expr env key /\ supported_expr tops key /\
+  call_evaluation_safe cx calls /\ supported_pure_expr tops key /\
+  MEM (BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key)) gs /\
+  stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target tops) ==>
+  expr_body_pre cenv cx env key es
+Proof
+  rpt strip_tac >>
+  `int_calls_expr key = []` by metis_tac[supported_pure_int_calls] >>
+  `~expr_has_evm_run key` by metis_tac[supported_expr_body_calls] >>
+  `~supported_expr_exists
+    (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) key` by
+    (gvs[stmt_exprs_ok_def] >> metis_tac[tuple_places_key_occurs]) >>
+  `cx_tops cx = tops` by
+    (irule cx_tops_module >> gvs[body_inv_def]) >>
+  irule stmt_expr_body_pre >> simp[] >>
+  conj_tac >- gvs[body_inv_def] >>
+  conj_tac >- metis_tac[tuple_places_key_occurs] >>
+  qexists_tac `calls` >> simp[]
+QED
+
+Theorem tuple_places_indices_pre[local]:
+  body_inv tops ctx cenv cx /\ supported_target tops bindings bt /\
+  supported_target_pure tops bt /\ well_typed_atarget env (BaseTarget bt) ty /\
+  MEM (BaseTarget bt) gs /\
+  stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+  call_evaluation_safe cx calls /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target tops) ==>
+  target_indices_pre cenv cx env bt
+Proof
+  rpt strip_tac >>
+  Cases_on `bt` >> gvs[supported_target_def, target_indices_pre_def]
+  >~ [`SubscriptTarget t key`]
+  >- (Cases_on `t` >> gvs[target_indices_pre_def, supported_target_pure_def] >>
+      rpt strip_tac >>
+      `well_typed_expr env key` by
+        gvs[well_typed_atarget_def, well_typed_target_def,
+            type_place_target_SubscriptTarget] >>
+      metis_tac[tuple_places_key_pre])
+  >~ [`AttributeTarget t fld`]
+  >- (Cases_on `t` >> gvs[target_indices_pre_def])
+QED
+
 (* body_assign_tuple_other for an RHS lowered at its own type: the two
    residual cases, and otherwise every element is a place outside an
    immutable with pure indices, which compile_assign_tuple_places_stmt_frag
@@ -177,5 +444,31 @@ Theorem body_assign_tuple_places:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+    cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs`
+  >- (irule immutable_deploy_tuple_assign >> metis_tac[]) >>
+  Cases_on `EXISTS (\g. ?nsid key.
+    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
+    ~supported_pure_expr tops key) gs`
+  >- (irule tuple_assign_effectful_index >> metis_tac[]) >>
+  drule_all tuple_places_typing >> strip_tac >>
+  `get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields` by gvs[body_inv_def] >>
+  `target_env_ok cenv cx` by metis_tac[body_inv_target_env_ok] >>
+  `expr_sim ctx func cenv cx (TupleT tys) e es` by
+    (drule_all body_expr_ok_case >>
+     disch_then (qspec_then `func` strip_assume_tac) >>
+     gvs[expr_sim_case_def] >> metis_tac[]) >>
+  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
+    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
+    target_indices_pre cenv cx env bt) gs` by
+    (rw[EVERY_MEM] >>
+     drule_all tuple_places_member >> strip_tac >> gvs[] >>
+     conj_tac
+     >- metis_tac[tuple_places_target_case] >>
+     metis_tac[tuple_places_indices_pre]) >>
+  irule compile_assign_tuple_places_stmt_frag >>
+  simp[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
+  metis_tac[tuple_places_component_bound]
 QED
