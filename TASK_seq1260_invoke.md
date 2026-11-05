@@ -31,7 +31,8 @@ Theorem gen_invoke_frame_sim:
     inst.inst_operands = Label nm :: arg_ops /\
     ~vs.vs_call_ctx.cc_static /\
     (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee_name :: args /\
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
@@ -174,6 +175,6 @@ vyper-hol proves the Venom-to-EVM-assembly code generator correct. The function-
 
 ## Notes
 
-- The frozen statement was updated on 2026-11-05 (branch skeleton change): the no-GAS context premise was dropped, `~vs.vs_call_ctx.cc_static` added, and the callee hypothesis now also takes `~cvs.vs_call_ctx.cc_static` and `LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256)`. Both new callee premises follow from the caller's premises (`setup_callee` keeps the call context; INVOKE's argument count is at most 16, and the callee has one more parameter). Lemmas already proved that only depend on the old statement's premises remain valid.
+- The frozen statement was updated on 2026-11-05 (branch skeleton change): the no-GAS context premise was dropped, `~vs.vs_call_ctx.cc_static` added, and the callee hypothesis now also takes `~cvs.vs_call_ctx.cc_static` and `LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256)`. Both new callee premises follow from the caller's premises (`setup_callee` keeps the call context; INVOKE's argument count is at most 16, and the callee has one more parameter). Lemmas already proved that only depend on the old statement's premises remain valid. A second update scoped the callee return-PC premise to reachable callers (`MEM f.fn_name (fcg_analyze ctx).fcg_reachable`), a weakening; fn itself is reachable.
 
 - The dependency cone of fnFrameBoundary is prebuilt in this worktree; `holbuild -j4 build fnFrameBoundaryInvokeTheory` builds just the helper leaf.
