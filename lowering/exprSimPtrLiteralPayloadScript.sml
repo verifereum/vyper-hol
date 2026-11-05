@@ -81,7 +81,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem literal_payload_chunks_shape[local]:
+Theorem literal_payload_chunks_shape:
   !ptr bs off sa sb.
     compile_store_byte_chunks ptr bs off sa = ((),sb) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\

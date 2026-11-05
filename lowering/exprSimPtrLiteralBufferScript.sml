@@ -1,6 +1,8 @@
 (* Robust literal representations and ghost frame boundaries. *)
 Theory exprSimPtrLiteralBuffer
 Ancestors
+  exprSimPtrLiteralPayload exprSimLiteralBuffer allocationPtr exprLowering
+  context emitHelper freshWrites vfmConstants loweringHalt
   exprSimPtrLiteralChunks robustCopyTransportPtr exprSimProps
   bodyPtrDefs compileEnv valueEncoding valueEncodingProofs valueEncodingProps
   venomMemProofs venomState finite_map words list pred_set
@@ -175,3 +177,86 @@ Proof
   simp[pred_setTheory.EXTENSION] >> rpt gen_tac >>
   eq_tac >> simp[] >> decide_tac
 QED
+
+Theorem literal_ptr_bytelike_alloca_mem:
+  !bs sa buf sb func.
+    compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+    fn_has_code sa sb func ==>
+    MEM (mk_inst sa.cs_next_id ALLOCA
+      [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_bytelike_literal _ _ _ = _` mp_tac >>
+  simp_tac (bool_ss ++ pairSimps.PAIR_ss)
+    [compile_bytelike_literal_def, LET_THM, comp_bind_def, comp_ignore_bind_def,
+     GSYM vfmConstantsTheory.word_size_def] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [comp_return_def] >>
+  strip_tac >> gvs[] >>
+  rename1 `compile_store_byte_chunks _ _ _ sh = (u,sb)` >> Cases_on `u` >>
+  drule literal_payload_chunks_shape >> strip_tac >>
+  gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+      emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+      same_blocks_def] >>
+  qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` kall_tac >>
+  gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  irule lookup_block_fn_insts >>
+  goal_assum (drule_at Any) >> simp[MEM_APPEND]
+QED
+
+Theorem literal_ptr_buffer_prefix_shape:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand; Lit value] sm = ((),sh) ==>
+  ?p. p = STRING #"%" (toString sa.cs_next_var) /\
+    buf.buf_operand = Var p /\ ~not_fresh_at sa p /\
+    not_fresh_at sm p /\ not_fresh_at sh p /\
+    emitted_insts sa sm = [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]] /\
+    emitted_insts sm sh = [mk_inst sm.cs_next_id MSTORE [Var p; Lit value] []] /\
+    sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
+    sh.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sh /\
+    same_blocks sa sm /\ same_blocks sm sh /\
+    sm.cs_next_var = sa.cs_next_var+1 /\ sh.cs_next_var = sm.cs_next_var /\
+    sm.cs_next_id = sa.cs_next_id+1 /\ sh.cs_next_id = sm.cs_next_id+1
+Proof
+  strip_tac >>
+  gvs[compile_alloc_buffer_def, emit_op_def, emit_void_def, comp_bind_def,
+      comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def, comp_return_def,
+      emitted_insts_def, same_blocks_def, rich_listTheory.DROP_APPEND1,
+      not_fresh_at_def] >>
+  qexists_tac `STRING #"%" (toString sa.cs_next_var)` >>
+  simp[not_fresh_at_def]
+QED
+
+Theorem literal_ptr_alloca_ghost:
+  stmt_state_rel ctx func cenv cx es s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
+  ?b dirty. FLOOKUP s1.vs_allocas id = SOME (b,n) /\
+    b+n < dimword (:256) /\ lookup_var out s1 = SOME (n2w b) /\
+    step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1 =
+      G |+ (out,(b,n)) /\
+    step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn =
+      tn with <|t_var := tn.t_var |+ (out,{}); t_mem := tn.t_mem UNION dirty|> /\
+    dirty SUBSET {i | b <= i /\ i < b+n}
+Proof
+  strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
+  >- (drule_all stmt_state_rel_alloca_fresh_bound >> strip_tac >>
+      drule_all fresh_alloca_ghost >> strip_tac >>
+      drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
+      simp[] >> disch_then (qspec_then `out` assume_tac) >> gvs[] >>
+      qexistsl_tac [`s.vs_alloca_next`,
+        `{i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n}`] >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
+  drule_all stmt_state_rel_alloca_site_bound >> strip_tac >> gvs[] >>
+  drule reused_alloca_step >> disch_then (qspec_then `out` assume_tac) >> gvs[] >>
+  drule reused_alloca_ghost >>
+  disch_then (qspecl_then [`out`, `PG`, `G`, `tn`] strip_assume_tac) >>
+  qexists_tac `{}` >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE, taint_component_equality]
+QED
+
