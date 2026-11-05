@@ -3846,6 +3846,27 @@ QED
 
 val stmt_labels_rws = stmt_return_helpers_labels :: stmt_list_helpers_labels :: stmt_labels_rws;
 
+(* The literal-endpoint case splits of a range loop's entry, as one rewrite
+   rather than a split over every pair of expression forms. *)
+Theorem range_literal_case_labels:
+  !start_e end_e f g P s.
+    (!i j s. cs_extends s (SND (f i j s)) /\ EVERY P (added_labels s (SND (f i j s)))) /\
+    (!s. cs_extends s (SND (g s)) /\ EVERY P (added_labels s (SND (g s)))) ==>
+    cs_extends s (SND ((case (start_e, end_e) of
+                          (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+                        | _ => g) s)) /\
+    EVERY P (added_labels s (SND ((case (start_e, end_e) of
+                                     (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+                                   | _ => g) s)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `start_e` >> simp[] >>
+  Cases_on `end_e` >> simp[] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+val for_labels_rws = range_literal_case_labels :: stmt_labels_rws;
+
 val stmt_labels_case =
   rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
   stmt_labels_chain stmt_labels_rws >>
@@ -3878,47 +3899,47 @@ Proof
   >- stmt_labels_case
   >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >>
       rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-      simp (comp_return_labels :: stmt_labels_rws) >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws)
+      simp (comp_return_labels :: for_labels_rws) >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws)
   >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_labels_case)
   >- stmt_labels_case
   >- stmt_labels_case
