@@ -558,6 +558,70 @@ Proof
   simp[alias_assign_step_def] >> metis_tac[]
 QED
 
+Theorem alias_path_available_index_mono:
+  alias_path_available fn l i x /\ i <= j ==>
+  alias_path_available fn l j x
+Proof
+  simp[alias_path_available_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac
+  >- metis_tac[] >>
+  disj2_tac >> qexistsl_tac [`bb`, `j'`] >> simp[] >> decide_tac
+QED
+
+Theorem alias_available_suffix_not_output:
+  wf_function fn /\ ssa_form fn /\ fn_reachable fn l /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  alias_path_available fn l i x /\ i <= j /\
+  j < LENGTH bb.bb_instructions ==>
+  ~MEM x (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `alias_path_available fn l j x` by
+    metis_tac[alias_path_available_index_mono] >>
+  metis_tac[alias_definition_not_available, inst_defs_def]
+QED
+
+Theorem alias_available_root_suffix_not_output:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn l /\ lookup_block l fn.fn_blocks = SOME bb /\
+  (!x. at = Var x ==> alias_path_available fn l i x) /\
+  normalize_operand (dfg_build_function fn) [] at = Var r /\
+  i <= j /\ j < LENGTH bb.bb_instructions ==>
+  ~MEM r (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `alias_path_available fn l i r` by
+    (irule alias_normalize_available >> simp[] >> metis_tac[]) >>
+  metis_tac[alias_available_suffix_not_output]
+QED
+
+Theorem alias_available_entry_not_output:
+  wf_function fn /\ ssa_form fn /\ fn_reachable fn l /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  alias_path_available fn l 0 x /\ MEM inst bb.bb_instructions ==>
+  ~MEM x inst.inst_outputs
+Proof
+  strip_tac >>
+  `?j. j < LENGTH bb.bb_instructions /\ inst = EL j bb.bb_instructions` by
+    metis_tac[MEM_EL] >>
+  gvs[] >> irule alias_available_suffix_not_output >> simp[] >>
+  qexistsl_tac [`fn`, `0`, `l`] >> simp[]
+QED
+
+Theorem alias_available_root_entry_not_output:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn l /\ lookup_block l fn.fn_blocks = SOME bb /\
+  (!x. at = Var x ==> alias_path_available fn l 0 x) /\
+  normalize_operand (dfg_build_function fn) [] at = Var r /\
+  MEM inst bb.bb_instructions ==>
+  ~MEM r inst.inst_outputs
+Proof
+  strip_tac >>
+  `alias_path_available fn l 0 r` by
+    (irule alias_normalize_available >> simp[] >> metis_tac[]) >>
+  metis_tac[alias_available_entry_not_output]
+QED
+
 Theorem alias_live_root_not_defined:
   wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
   fn_reachable fn l /\ lookup_block l fn.fn_blocks = SOME bb /\
