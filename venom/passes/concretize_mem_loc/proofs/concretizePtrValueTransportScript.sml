@@ -149,3 +149,14 @@ Theorem ptr_label_lookup_probe:
 Proof
   EVAL_TAC
 QED
+
+Theorem ptr_vars_transport_eval_source:
+  ptr_vars_transport births positions TG tn s t /\
+  s.vs_labels = t.vs_labels /\ eval_operand op t = SOME y ==>
+  ?x. eval_operand op s = SOME x /\
+    ptr_value_transport births positions (op_prov TG op) (op_taint tn op) x y
+Proof
+  strip_tac >> drule_all ptr_vars_transport_eval_all >>
+  disch_then (qspec_then `op` mp_tac) >>
+  simp[ptr_lookup_transport_some_right]
+QED
