@@ -92,13 +92,16 @@ End
 
 (* The calls the source runs on the EVM even when it takes external calls
    from the outcome oracle: a delegate raw_call (eval_raw_call's
-   run_raw_call) and the creates (eval_create's run_create_evm). *)
+   run_raw_call) and the creates (eval_create's run_create_evm).  Also
+   selfdestruct, which the expression simulation holds out until the
+   source's selfdestruct halts (supported_program excludes it). *)
 Definition expr_evm_run_root_def:
   expr_evm_run_root (Call ty (RawCallTarget flags) es default) =
     flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
     flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
+  expr_evm_run_root (Call ty SelfDestructTarget es default) = T /\
   expr_evm_run_root _ = F
 End
 
