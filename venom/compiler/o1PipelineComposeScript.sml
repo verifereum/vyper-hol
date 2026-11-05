@@ -273,6 +273,79 @@ Proof
   metis_tac[ctx_sim_trans]
 QED
 
+(* A per-function fact that a pass's runs keep holds of every function
+   after a stage of it. *)
+Theorem ctx_pass_stage_every:
+  ctx_pass_stage rpolicy pass view C C' /\
+  (!observed s f out.
+     fn_pass_step rpolicy pass observed s f out /\ P f ==>
+     P out.fpo_function) /\
+  EVERY P C.ctx_functions ==>
+  EVERY P C'.ctx_functions
+Proof
+  rw[ctx_pass_stage_def, EVERY_EL, LIST_REL_EL_EQN] >>
+  first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* The walk's input is at row 0: SimplifyCFG's pre-walk run makes every
+   function a MakeSSA input (the source has no PHI and definite
+   assignment), both pre-walk runs keep the source's freedom from raw FMP
+   operations and its unset FMP conventions, and DretDesugar is the
+   identity. *)
+Theorem o1_pre_walk_rows:
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit s =
+    SOME (unit', s') /\
+  o1_ctx_shape unit.cu_context /\
+  ALL_DISTINCT (unit_label_namespace unit) /\ ir_supply_inst_ok s /\
+  o1_source_unit_ok unit /\ unit_defs_reach_uses unit /\
+  unit_fmp_unsealed unit ==>
+  EVERY (o1_fn_row 0) unit'.cu_context.ctx_functions
+Proof
+  strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`, `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                  `u` |-> `unit`, `u'` |-> `mid`, `s'` |-> `t`]
+            mapped_pass_stage) >>
+  impl_tac >- simp[o1_contract_simplify_cfg_pre_walk] >> strip_tac >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`, `pass` |-> `CFP_Simple VP_DretDesugar`,
+                  `u` |-> `mid`, `s` |-> `t`]
+            mapped_pass_stage) >>
+  impl_tac
+  >- simp[o1_contract_dret_desugar_pre_walk, unit_labels_wf_namespace] >>
+  strip_tac >>
+  `unit'.cu_context = mid.cu_context` by metis_tac[dret_desugar_stage_identity] >>
+  `EVERY make_ssa_input_ok mid.cu_context.ctx_functions` by
+    (`mid.cu_context.ctx_functions =
+        MAP simplify_cfg_fn unit.cu_context.ctx_functions` by
+       metis_tac[simplify_cfg_stage_functions] >>
+     asm_rewrite_tac[EVERY_MAP] >> simp[EVERY_MEM] >> rpt strip_tac >>
+     irule simplify_cfg_pre_walk_make_ssa_input_ok >>
+     qexists_tac `unit.cu_context` >>
+     fs[o1_ctx_shape_def, unit_defs_reach_uses_def, o1_source_unit_ok_def,
+        EVERY_MEM, raw_opcode_ok_def]) >>
+  `EVERY no_raw_fmp_ops mid.cu_context.ctx_functions` by
+    (irule (Q.INST [`C` |-> `unit.cu_context`,
+                    `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                    `view` |-> `any_view`] ctx_pass_stage_every) >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- (rpt strip_tac >>
+         qpat_x_assum `fn_pass_step _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [fn_pass_step_def]) >>
+         drule_at (Pos last) execute_configured_fn_pass_o1_suffix_no_raw_fmp_ops >>
+         simp[] >> metis_tac[]) >>
+     simp[EVERY_MEM] >> metis_tac[source_no_raw_fmp_ops]) >>
+  `EVERY fmp_sig_no_param mid.cu_context.ctx_functions` by
+    (irule (Q.INST [`C` |-> `unit.cu_context`,
+                    `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                    `view` |-> `any_view`] ctx_pass_stage_every) >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- (rpt strip_tac >> drule fn_pass_step_fmp_sig_no_param >>
+         simp[fn_pass_tag_def, fn_pass_abi_effect_def] >> metis_tac[]) >>
+     fs[unit_fmp_unsealed_def, EVERY_MEM, fmp_sig_no_param_def]) >>
+  fs[EVERY_MEM, o1_fn_row_def]
+QED
+
 (* ===== Pruning ===== *)
 
 Theorem o1_ctx_shape_prune:
@@ -446,7 +519,7 @@ Theorem o1_walk_sim:
   ALL_DISTINCT (unit_label_namespace unit) /\
   run_callee_first rpolicy o1_fn_passes (fcg_postorder fcg entry)
     (prune_unit_fcg_unreachable unit fcg) s = SOME (unit', s') /\
-  ir_supply_inst_ok s ==>
+  ir_supply_inst_ok s /\ EVERY (o1_fn_row 0) unit.cu_context.ctx_functions ==>
   o1_ctx_shape unit'.cu_context /\
   unit'.cu_context.ctx_entry = SOME entry /\
   ctx_fn_names unit'.cu_context =
@@ -461,8 +534,10 @@ Proof
   strip_tac >> drule_all o1_ctx_shape_prune >> strip_tac >>
   drule_all o1_walk_callee_first >> strip_tac >>
   fs[run_callee_first_def] >>
-  drule_at (Pos (el 2)) o1_schedule_stages >>
-  impl_tac >- simp[o1_fn_passes_steps] >> strip_tac >>
+  drule_at (Pos (el 3)) (Q.INST [`R` |-> `o1_fn_row`] o1_schedule_stages) >>
+  impl_tac
+  >- fs[o1_fn_passes_steps, o1_step_contracts_from_rows, o1_prune_every] >>
+  strip_tac >>
   `o1_ctx_shape unit'.cu_context /\
    unit'.cu_context.ctx_entry = SOME entry /\
    ctx_fn_names unit'.cu_context =
@@ -490,7 +565,8 @@ QED
 Theorem o1_pipeline_stage_facts:
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit ==>
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit ==>
   o1_ctx_shape out.po_unit.cu_context /\
   entry_fn_first out.po_unit.cu_context /\
   !D vs_out. dead_wf D /\ o1_run_state_ok vs_out ==>
@@ -503,6 +579,7 @@ Proof
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
   `ir_supply_inst_ok (init_ir_supply unit)`
     by simp[irSupplyTheory.init_ir_supply_inst_ok] >>
+  drule_all o1_pre_walk_rows >> strip_tac >>
   drule_all o1_pre_walk_sim >> strip_tac >>
   drule_at (Pos (el 6)) o1_walk_sim >> impl_tac
   >- (gvs[] >> metis_tac[unit_labels_wf_namespace]) >> strip_tac >>

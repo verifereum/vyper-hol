@@ -10,6 +10,7 @@ Ancestors
   o1PassContract concretizeMemLocDefs venomPassDispatcher concretizeStepShape
   concretizeStepStructure unitShapeDefs venomInst venomWf passSharedDefs
   passSimulationDefs irSupply dretDesugarDefs list venomFnScheduleRunnerProps
+  concretizeStageShape venomPassSchedule
 
 Theorem concretize_blocks_copy_phi:
   f.fn_blocks = g.fn_blocks ==>
@@ -109,7 +110,10 @@ QED
    fn_forced_alloc_positions) changes.  So labels, blocks, terminators,
    INVOKE operands, PHIs and each CALL's success check (call_checks_ok)
    are unchanged; fresh_names_ok holds because labels and ids are fn's;
-   the label map is []; and the output has no ALLOCA (row 3). *)
+   the label map is []; and the output has no ALLOCA (row 3).  A function
+   with a static layout is returned as it is, and the rewrite keeps the
+   blocks' shape and adds no FMP operation, so the output is still a
+   MakeSSA input without raw FMP operations; the FMP convention is kept. *)
 Theorem concretize_step_contract_at:
   o1_step_contract_at 2 rpolicy (CFP_Simple VP_ConcretizeMemLoc)
 Proof
@@ -117,6 +121,13 @@ Proof
   `o1_fn_shape observed.cu_context fn` by
     (fs[fn_pass_step_def, o1_ctx_shape_def, EVERY_MEM] >>
      drule lookup_unique_function_member >> strip_tac >> metis_tac[]) >>
+  `wf_function fn /\ fn_inst_wf fn` by fs[o1_fn_shape_def] >>
+  `make_ssa_input_ok out.fpo_function` by
+    metis_tac[concretize_step_make_ssa_input_ok] >>
+  `no_raw_fmp_ops out.fpo_function` by metis_tac[concretize_step_no_raw_fmp] >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     simp[fn_pass_tag_def, fn_pass_abi_effect_def] >> metis_tac[]) >>
   qpat_x_assum `fn_pass_step _ _ _ _ _ _` mp_tac >>
   simp[fn_pass_step_def, execute_configured_fn_pass_concretize, AllCaseEqs()] >>
   strip_tac >> gvs[] >>

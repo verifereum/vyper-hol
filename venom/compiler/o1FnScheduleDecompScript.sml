@@ -180,7 +180,8 @@ QED
 
 Theorem run_configured_fn_pass_fold_chain:
   !passes k s fn label_map fn' label_map' s' s0 fn0.
-    o1_step_contracts_from rpolicy k passes /\ o1_fn_row k fn /\
+    rows_step_contracts_from R rpolicy k passes /\ R k fn /\
+    EVERY (\g. ?j. R j g) unit.cu_context.ctx_functions /\
     run_configured_fn_pass_fold execute_configured_fn_pass rpolicy passes
       unit s fn label_map = SOME (fn', label_map', s') /\
     o1_ctx_shape unit.cu_context /\
@@ -203,7 +204,7 @@ Theorem run_configured_fn_pass_fold_chain:
            unit_with_fns unit
              (replace_fn fn.fn_name (EL k fs) unit.cu_context.ctx_functions)) /\
       EVERY (o1_fn_shape unit.cu_context) fs /\
-      (!j. j < LENGTH fs ==> o1_fn_row (k + j) (EL j fs)) /\
+      (!j. j < LENGTH fs ==> R (k + j) (EL j fs)) /\
       EVERY (\u. o1_ctx_shape u.cu_context) obs /\
       list_subset s.irs_used_inst_ids s'.irs_used_inst_ids /\
       (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
@@ -223,7 +224,7 @@ Proof
       qpat_x_assum `ir_supply_covers_unit _ _` mp_tac >>
       simp[unit_with_fns_def, replace_fn_def] >> strip_tac >>
       drule covers_unit_replacement_inst_ids >> simp[]) >>
-  rpt gen_tac >> pure_rewrite_tac[o1_step_contracts_from_def] >> strip_tac >>
+  rpt gen_tac >> pure_rewrite_tac[rows_step_contracts_from_def] >> strip_tac >>
   drule run_configured_fn_pass_fold_cons_step >>
   impl_tac >- gvs[unit_with_fns_def, replace_fn_def] >>
   strip_tac >>
@@ -259,7 +260,7 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   drule_at (Pat `run_configured_fn_pass_fold _ _ _ _ _ _ _ = _`)
     contracted_fold_invariant >>
-  disch_then (qspecl_then [`SUC k`, `fn0.fn_name`] mp_tac) >>
+  disch_then (qspecl_then [`R`, `SUC k`, `fn0.fn_name`] mp_tac) >>
   impl_tac >- gvs[unit_with_fns_def, replace_fn_def] >> strip_tac >>
   `label_map_dead s0 fn0 fn' out.fpo_label_map`
     by (drule_all step_map_dead_after_fold >> simp[]) >>
@@ -288,7 +289,7 @@ Proof
   rename1 `fn_chain rpolicy passes out.fpo_supply (next::rest) obs` >>
   gvs[] >>
   `!j. j < SUC (SUC (LENGTH rest)) ==>
-       o1_fn_row (j + k) (EL j (fn::out.fpo_function::rest))` by
+       R (j + k) (EL j (fn::out.fpo_function::rest))` by
     (Cases >- simp[] >> rename1 `SUC m < _` >> simp[] >>
      qpat_x_assum `!j. j < SUC (LENGTH rest) ==> _` (qspec_then `m` mp_tac) >>
      simp[arithmeticTheory.ADD_CLAUSES]) >>
@@ -323,7 +324,10 @@ Proof
 QED
 
 Theorem run_configured_fn_passes_decomp:
-  o1_step_contracts_from rpolicy 0 passes /\
+  rows_step_contracts_from R rpolicy 0 passes /\
+  EVERY (\g. ?j. R j g) unit.cu_context.ctx_functions /\
+  (!fn. lookup_unique_function name unit.cu_context.ctx_functions = SOME fn ==>
+        R 0 fn) /\
   run_configured_fn_passes execute_configured_fn_pass rpolicy passes name
     unit s = SOME (unit', s') /\
   o1_ctx_shape unit.cu_context /\
@@ -336,7 +340,7 @@ Theorem run_configured_fn_passes_decomp:
          unit_with_fns unit
            (replace_fn name (EL k fs) unit.cu_context.ctx_functions)) /\
     EVERY (o1_fn_shape unit.cu_context) fs /\
-    (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
+    (!j. j < LENGTH fs ==> R j (EL j fs)) /\
     EVERY (\u. o1_ctx_shape u.cu_context) obs /\
     list_subset s.irs_used_inst_ids s'.irs_used_inst_ids /\
     (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
@@ -353,10 +357,10 @@ Proof
   `o1_fn_shape unit.cu_context fn` by fs[o1_ctx_shape_def, EVERY_MEM] >>
   `MEM fn.fn_name (ctx_fn_names unit.cu_context)`
     by (simp[ctx_fn_names_def, MEM_MAP] >> metis_tac[]) >>
-  `o1_fn_row 0 fn` by simp[o1_fn_row_def] >>
+  `R 0 fn` by metis_tac[] >>
   drule_at (Pat `run_configured_fn_pass_fold _ _ _ _ _ _ _ = _`)
     run_configured_fn_pass_fold_chain >>
-  disch_then (qspecl_then [`0`,`s`,`fn`] mp_tac) >>
+  disch_then (qspecl_then [`R`,`0`,`s`,`fn`] mp_tac) >>
   simp[list_subset_def, EVERY_MEM, replace_fn_unique_id] >>
   (impl_tac >- (rpt strip_tac >>
     `ALL_DISTINCT (FLAT (MAP fn_ir_inst_ids unit.cu_context.ctx_functions))`

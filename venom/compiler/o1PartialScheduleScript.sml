@@ -33,13 +33,14 @@ End
    names in the order the schedule took them: the units its passes
    observed have the unit's entry, reservations and names, and show every
    function scheduled earlier in its final form; the j-th function of the
-   chain satisfies stage j's row (o1_fn_row). *)
+   chain satisfies row j of the row family R (o1_fn_row for the walk,
+   rows_step_contract). *)
 Definition chain_facts_def:
-  chain_facts rpolicy passes unit order chains i <=>
+  chain_facts R rpolicy passes unit order chains i <=>
     (?s0. fn_chain rpolicy passes s0 (FST (EL i chains)) (SND (EL i chains))) /\
     HD (FST (EL i chains)) = EL i unit.cu_context.ctx_functions /\
     EVERY (o1_fn_shape unit.cu_context) (FST (EL i chains)) /\
-    (!j. j < LENGTH (FST (EL i chains)) ==> o1_fn_row j (EL j (FST (EL i chains)))) /\
+    (!j. j < LENGTH (FST (EL i chains)) ==> R j (EL j (FST (EL i chains)))) /\
     !k. k < LENGTH passes ==>
       (EL k (SND (EL i chains))).cu_context.ctx_entry =
         unit.cu_context.ctx_entry /\
@@ -109,14 +110,14 @@ Definition mixed_fns_def:
 End
 
 Definition partial_schedule_def:
-  partial_schedule rpolicy passes original order done chains current <=>
+  partial_schedule R rpolicy passes original order done chains current <=>
     LENGTH chains = LENGTH original.cu_context.ctx_functions /\
     (!i. i < LENGTH chains /\
          ~MEM (EL i original.cu_context.ctx_functions).fn_name done ==>
          FST (EL i chains) = [EL i original.cu_context.ctx_functions]) /\
     (!i. i < LENGTH chains /\
          MEM (EL i original.cu_context.ctx_functions).fn_name done ==>
-         chain_facts rpolicy passes original order chains i) /\
+         chain_facts R rpolicy passes original order chains i) /\
     current.cu_context = original.cu_context with ctx_functions :=
       mixed_fns original.cu_context done chains /\
     o1_ctx_shape current.cu_context /\
@@ -146,7 +147,7 @@ QED
 
 Theorem partial_schedule_initial:
   o1_ctx_shape original.cu_context ==>
-  partial_schedule rpolicy passes original order []
+  partial_schedule R rpolicy passes original order []
     (MAP (\f. ([f],[])) original.cu_context.ctx_functions) original
 Proof
   strip_tac >> simp[partial_schedule_def, EL_MAP, chains_ids_apart_def] >>
@@ -159,7 +160,7 @@ QED
 
 (* Each function of the current unit is a member of its own chain. *)
 Theorem partial_schedule_mixed_mem:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   j < LENGTH chains ==>
   MEM (EL j (mixed_fns original.cu_context done chains)) (FST (EL j chains))
 Proof
@@ -173,7 +174,7 @@ Proof
 QED
 
 Theorem partial_schedule_names:
-  partial_schedule rpolicy passes original order done chains current ==>
+  partial_schedule R rpolicy passes original order done chains current ==>
   ctx_fn_names current.cu_context = ctx_fn_names original.cu_context
 Proof
   rw[partial_schedule_def, ctx_fn_names_def] >>
@@ -192,21 +193,21 @@ Theorem chain_facts_update_unobserved:
   i < LENGTH chains /\ t <> i /\
   ~list_precedes (EL t unit.cu_context.ctx_functions).fn_name
                  (EL i unit.cu_context.ctx_functions).fn_name order /\
-  chain_facts rpolicy passes unit order chains i ==>
-  chain_facts rpolicy passes unit order (LUPDATE c t chains) i
+  chain_facts R rpolicy passes unit order chains i ==>
+  chain_facts R rpolicy passes unit order (LUPDATE c t chains) i
 Proof
   simp[chain_facts_def, EL_LUPDATE] >> rpt strip_tac >>
   Cases_on `j = t` >> gvs[]
 QED
 
 Theorem partial_schedule_completed_update:
-  partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
+  partial_schedule R rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
   t < LENGTH chains /\
   (EL t original.cu_context.ctx_functions).fn_name = n ==>
   !i. i < LENGTH chains /\
       MEM (EL i original.cu_context.ctx_functions).fn_name done ==>
-      chain_facts rpolicy passes original (done ++ n::todo) (LUPDATE c t chains) i
+      chain_facts R rpolicy passes original (done ++ n::todo) (LUPDATE c t chains) i
 Proof
   rpt strip_tac >> irule chain_facts_update_unobserved >>
   gvs[partial_schedule_def] >>
@@ -215,7 +216,7 @@ Proof
 QED
 
 Theorem partial_schedule_pending_lookup:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   t < LENGTH original.cu_context.ctx_functions /\
   ~MEM (EL t original.cu_context.ctx_functions).fn_name done ==>
   lookup_unique_function (EL t original.cu_context.ctx_functions).fn_name
@@ -226,13 +227,13 @@ Proof
     gvs[partial_schedule_def, o1_ctx_shape_def, ctx_wf_def,
         ctx_distinct_fn_names_def, ctx_fn_names_def] >>
   simp[lookup_unique_function_member_iff] >>
-  qpat_x_assum `partial_schedule _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `partial_schedule _ _ _ _ _ _ _ _` mp_tac >>
   simp[partial_schedule_def] >> strip_tac >>
   simp[MEM_EL] >> qexists_tac `t` >> simp[mixed_fns_EL]
 QED
 
 Theorem partial_schedule_mixed_name:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   j < LENGTH original.cu_context.ctx_functions ==>
   (EL j (mixed_fns original.cu_context done chains)).fn_name =
     (EL j original.cu_context.ctx_functions).fn_name
@@ -243,7 +244,7 @@ Proof
 QED
 
 Theorem partial_schedule_mixed_update:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   ALL_DISTINCT (ctx_fn_names original.cu_context) /\
   t < LENGTH chains /\
   (EL t original.cu_context.ctx_functions).fn_name = n /\ ~MEM n done ==>
@@ -264,7 +265,7 @@ Proof
 QED
 
 Theorem partial_schedule_fields:
-  partial_schedule rpolicy passes original order done chains current ==>
+  partial_schedule R rpolicy passes original order done chains current ==>
   current.cu_context.ctx_entry = original.cu_context.ctx_entry /\
   current.cu_context.ctx_global_reserved = original.cu_context.ctx_global_reserved
 Proof
@@ -272,7 +273,7 @@ Proof
 QED
 
 Theorem partial_schedule_completed_lookup:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   j < LENGTH chains /\
   MEM (EL j original.cu_context.ctx_functions).fn_name done ==>
   lookup_function (EL j original.cu_context.ctx_functions).fn_name
@@ -288,13 +289,13 @@ Proof
     gvs[partial_schedule_def, o1_ctx_shape_def, ctx_wf_def,
         ctx_distinct_fn_names_def, ctx_fn_names_def] >>
   simp[lookup_function_member_iff] >>
-  qpat_x_assum `partial_schedule _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `partial_schedule _ _ _ _ _ _ _ _` mp_tac >>
   simp[partial_schedule_def] >> strip_tac >>
   simp[MEM_EL] >> qexists_tac `j` >> simp[mixed_fns_EL]
 QED
 
 Theorem partial_schedule_observed_fields:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   g.fn_name = n ==>
   (unit_with_fns current (replace_fn n g current.cu_context.ctx_functions)).cu_context.ctx_entry =
     original.cu_context.ctx_entry /\
@@ -310,7 +311,7 @@ Proof
 QED
 
 Theorem partial_schedule_observed_lookup:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   j < LENGTH chains /\
   MEM (EL j original.cu_context.ctx_functions).fn_name done /\
   (EL j original.cu_context.ctx_functions).fn_name <> n /\ g.fn_name = n ==>
@@ -323,7 +324,7 @@ Proof
 QED
 
 Theorem partial_schedule_chain_observations:
-  partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
+  partial_schedule R rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
   i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
   fn_chain rpolicy passes s fs obs /\ HD fs = EL i original.cu_context.ctx_functions /\
@@ -356,7 +357,7 @@ Proof
 QED
 
 Theorem partial_schedule_shapes:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   EVERY (o1_fn_shape current.cu_context) fs ==>
   EVERY (o1_fn_shape original.cu_context) fs
 Proof
@@ -369,7 +370,7 @@ QED
    each of its ids is the function's own or unused in the supply, which
    has seen every id of the other chains, scheduled or not. *)
 Theorem partial_schedule_new_apart:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   chains_ids_used original.cu_context done chains s /\
   ir_supply_covers_unit s current /\
   i < LENGTH chains /\
@@ -380,7 +381,7 @@ Theorem partial_schedule_new_apart:
   chains_ids_apart (LUPDATE (fs,obs) i chains)
 Proof
   strip_tac >>
-  qpat_x_assum `partial_schedule _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `partial_schedule _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[partial_schedule_def] >> strip_tac >>
   `FST (EL i chains) = [EL i original.cu_context.ctx_functions]` by
     (first_x_assum irule >> simp[]) >>
@@ -414,7 +415,7 @@ Proof
 QED
 
 Theorem partial_schedule_last_apart:
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
   fs <> [] /\ chains_ids_apart (LUPDATE (fs,obs) i chains) /\
   MEM h current.cu_context.ctx_functions /\ h.fn_name <> n /\
@@ -440,15 +441,15 @@ Proof
 QED
 
 Theorem partial_schedule_new_chain:
-  partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
+  partial_schedule R rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
   i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
   fn_chain rpolicy passes s fs obs /\ HD fs = EL i original.cu_context.ctx_functions /\
   EVERY (o1_fn_shape current.cu_context) fs /\
-  (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
+  (!j. j < LENGTH fs ==> R j (EL j fs)) /\
   (!k. k < LENGTH obs ==> EL k obs =
     unit_with_fns current (replace_fn n (EL k fs) current.cu_context.ctx_functions)) ==>
-  chain_facts rpolicy passes original (done ++ n::todo) (LUPDATE (fs,obs) i chains) i
+  chain_facts R rpolicy passes original (done ++ n::todo) (LUPDATE (fs,obs) i chains) i
 Proof
   strip_tac >> drule partial_schedule_chain_observations >> simp[] >> strip_tac >>
   drule_all partial_schedule_shapes >> strip_tac >>
@@ -458,19 +459,19 @@ Proof
 QED
 
 Theorem partial_schedule_extend:
-  partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
+  partial_schedule R rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
   ALL_DISTINCT (ctx_fn_names original.cu_context) /\
   i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
   fn_chain rpolicy passes s fs obs /\ HD fs = EL i original.cu_context.ctx_functions /\
   EVERY (o1_fn_shape current.cu_context) fs /\
-  (!j. j < LENGTH fs ==> o1_fn_row j (EL j fs)) /\
+  (!j. j < LENGTH fs ==> R j (EL j fs)) /\
   (!k. k < LENGTH obs ==> EL k obs =
     unit_with_fns current (replace_fn n (EL k fs) current.cu_context.ctx_functions)) /\
   next.cu_context = current.cu_context with ctx_functions :=
     replace_fn n (LAST fs) current.cu_context.ctx_functions /\
   chains_ids_apart (LUPDATE (fs,obs) i chains) ==>
-  partial_schedule rpolicy passes original (done ++ n::todo) (done ++ [n])
+  partial_schedule R rpolicy passes original (done ++ n::todo) (done ++ [n])
     (LUPDATE (fs,obs) i chains) next
 Proof
   strip_tac >>
@@ -485,12 +486,12 @@ Proof
      gvs[partial_schedule_def]) >>
   `LENGTH chains = LENGTH original.cu_context.ctx_functions` by
     gvs[partial_schedule_def] >>
-  `chain_facts rpolicy passes original (done ++ n::todo)
+  `chain_facts R rpolicy passes original (done ++ n::todo)
      (LUPDATE (fs,obs) i chains) i` by
     (irule partial_schedule_new_chain >> metis_tac[]) >>
   `!j. j < LENGTH chains /\
        MEM (EL j original.cu_context.ctx_functions).fn_name done ==>
-       chain_facts rpolicy passes original (done ++ n::todo)
+       chain_facts R rpolicy passes original (done ++ n::todo)
          (LUPDATE (fs,obs) i chains) j` by
     (rpt strip_tac >> irule partial_schedule_completed_update >> metis_tac[]) >>
   `!j. j < LENGTH chains /\
@@ -507,9 +508,30 @@ Proof
   >- (rpt strip_tac >> metis_tac[]) >>
   gvs[partial_schedule_def]
 QED
+(* Every function of a partial schedule's unit is at some row: a
+   scheduled one at its chain's last, a pending one at row 0. *)
+Theorem partial_schedule_rows:
+  partial_schedule R rpolicy passes original order done chains current /\
+  EVERY (R 0) original.cu_context.ctx_functions ==>
+  EVERY (\g. ?j. R j g) current.cu_context.ctx_functions
+Proof
+  strip_tac >> fs[partial_schedule_def] >>
+  simp[EVERY_EL, mixed_fns_EL] >> rpt strip_tac >>
+  IF_CASES_TAC
+  >- (`chain_facts R rpolicy passes original order chains n` by
+        (first_x_assum irule >> simp[]) >>
+      fs[chain_facts_def] >>
+      drule fn_chain_length >> strip_tac >>
+      `FST (EL n chains) <> []` by (strip_tac >> fs[]) >>
+      simp[LAST_EL] >> qexists_tac `LENGTH passes` >>
+      first_x_assum irule >> simp[]) >>
+  qexists_tac `0` >> fs[EVERY_EL]
+QED
+
 Theorem partial_schedule_step:
-  o1_step_contracts_from rpolicy 0 passes /\
-  partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
+  rows_step_contracts_from R rpolicy 0 passes /\
+  EVERY (R 0) original.cu_context.ctx_functions /\
+  partial_schedule R rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
   (!name. MEM name (done ++ n::todo) <=>
           MEM name (ctx_fn_names original.cu_context)) /\
@@ -517,7 +539,7 @@ Theorem partial_schedule_step:
   chains_ids_used original.cu_context done chains s /\
   run_configured_fn_passes execute_configured_fn_pass rpolicy passes n
     current s = SOME (next,s') /\ ir_supply_inst_ok s ==>
-  ?chains'. partial_schedule rpolicy passes original (done ++ n::todo)
+  ?chains'. partial_schedule R rpolicy passes original (done ++ n::todo)
     (done ++ [n]) chains' next /\ unit_labels_wf next /\
   ir_supply_inst_ok s' /\
   chains_ids_used original.cu_context (done ++ [n]) chains' s'
@@ -526,7 +548,8 @@ Proof
   `o1_ctx_shape current.cu_context` by gvs[partial_schedule_def] >>
   `ir_supply_covers_unit s current` by
     (drule run_configured_fn_passes_success >> simp[]) >>
-  drule_all run_configured_fn_passes_decomp >> strip_tac >>
+  `EVERY (\g. ?j. R j g) current.cu_context.ctx_functions` by
+    metis_tac[partial_schedule_rows] >>
   `ALL_DISTINCT (ctx_fn_names original.cu_context)` by
     (drule partial_schedule_names >> strip_tac >>
      gvs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def]) >>
@@ -544,11 +567,14 @@ Proof
      SOME (EL i original.cu_context.ctx_functions)` by
     (drule partial_schedule_pending_lookup >>
      disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  `!fn. lookup_unique_function n current.cu_context.ctx_functions = SOME fn ==>
+        R 0 fn` by gvs[EVERY_EL] >>
+  drule_all run_configured_fn_passes_decomp >> strip_tac >>
   `HD fs = EL i original.cu_context.ctx_functions` by metis_tac[optionTheory.SOME_11] >>
   `~MEM n done` by gvs[ALL_DISTINCT_APPEND] >>
   `chains_ids_apart (LUPDATE (fs,obs) i chains)` by
     (irule partial_schedule_new_apart >> simp[] >>
-     qexistsl_tac [`current`,`done`,`done ++ n::todo`,`original`,`passes`,
+     qexistsl_tac [`R`,`current`,`done`,`done ++ n::todo`,`original`,`passes`,
                    `rpolicy`,`s`] >>
      simp[] >> metis_tac[]) >>
   qexists_tac `LUPDATE (fs,obs) i chains` >> simp[] >> conj_tac
@@ -573,16 +599,17 @@ QED
 
 Theorem partial_schedule_suffix:
   !todo done chains current s final sf order.
-  o1_step_contracts_from rpolicy 0 passes /\
+  rows_step_contracts_from R rpolicy 0 passes /\
+  EVERY (R 0) original.cu_context.ctx_functions /\
   order = done ++ todo /\
-  partial_schedule rpolicy passes original order done chains current /\
+  partial_schedule R rpolicy passes original order done chains current /\
   ALL_DISTINCT order /\
   (!name. MEM name order <=> MEM name (ctx_fn_names original.cu_context)) /\
   ALL_DISTINCT (unit_label_namespace current) /\
   chains_ids_used original.cu_context done chains s /\
   run_named_fn_schedules execute_configured_fn_pass rpolicy passes todo
     current s = SOME (final,sf) /\ ir_supply_inst_ok s ==>
-  ?chains'. partial_schedule rpolicy passes original order order chains' final /\
+  ?chains'. partial_schedule R rpolicy passes original order order chains' final /\
     (todo <> [] ==> unit_labels_wf final) /\
   ir_supply_inst_ok sf
 Proof
@@ -599,11 +626,11 @@ Proof
   drule_all partial_schedule_step >>
   disch_then (qx_choose_then `nextchains` strip_assume_tac) >>
   `ALL_DISTINCT (unit_label_namespace mid)` by gvs[unit_labels_wf_def] >>
-  `partial_schedule rpolicy passes original ((done ++ [h]) ++ todo)
+  `partial_schedule R rpolicy passes original ((done ++ [h]) ++ todo)
      (done ++ [h]) nextchains mid` by (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]) >>
   `ALL_DISTINCT ((done ++ [h]) ++ todo)` by
     (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]) >>
-  first_x_assum (drule_at (Pat `partial_schedule _ _ _ _ _ _ _`)) >>
+  first_x_assum (drule_at (Pat `partial_schedule _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `run_named_fn_schedules _ _ _ _ _ _ = _`)) >>
   simp[APPEND_ASSOC] >>
   disch_then (qx_choose_then `finalchains` strip_assume_tac) >>
@@ -611,9 +638,9 @@ Proof
 QED
 
 Theorem partial_schedule_exhausted:
-  partial_schedule rpolicy passes original order order chains final /\
+  partial_schedule R rpolicy passes original order order chains final /\
   (!n. MEM n order <=> MEM n (ctx_fn_names original.cu_context)) ==>
-  !i. i < LENGTH chains ==> chain_facts rpolicy passes original order chains i
+  !i. i < LENGTH chains ==> chain_facts R rpolicy passes original order chains i
 Proof
   rw[partial_schedule_def] >> first_x_assum irule >> simp[] >>
   simp[ctx_fn_names_def, MEM_MAP] >>
@@ -622,7 +649,7 @@ Proof
 QED
 
 Theorem chain_facts_last:
-  chain_facts rpolicy passes unit order chains i ==>
+  chain_facts R rpolicy passes unit order chains i ==>
   LAST (FST (EL i chains)) = EL (LENGTH passes) (FST (EL i chains))
 Proof
   simp[chain_facts_def] >> rpt strip_tac >>
@@ -632,7 +659,7 @@ Proof
 QED
 
 Theorem partial_schedule_final_context:
-  partial_schedule rpolicy passes original order order chains final /\
+  partial_schedule R rpolicy passes original order order chains final /\
   (!n. MEM n order <=> MEM n (ctx_fn_names original.cu_context)) ==>
   final.cu_context = stage_ctx original.cu_context chains (LENGTH passes)
 Proof
