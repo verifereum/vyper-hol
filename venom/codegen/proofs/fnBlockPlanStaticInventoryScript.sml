@@ -1922,3 +1922,38 @@ Proof
   gvs[Abbr `dead`, MEM_MAP, MEM_FILTER, MEM_APPEND, EVERY_MEM] >>
   metis_tac[]
 QED
+
+Theorem inventory_regular_core_resources:
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  LENGTH operands <= LENGTH mid.ps_stack /\
+  reorder_plan dfg pending mid = (rops,arranged) ==>
+  plan_slots_bounded sb
+    (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack) /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  ALL_DISTINCT (stack_pop (LENGTH operands) arranged.ps_stack) /\
+  DISJOINT (set (stack_pop (LENGTH operands) arranged.ps_stack))
+    (FDOM arranged.ps_spilled)
+Proof
+  strip_tac >>
+  `residual_budget_wf sb [] ps` by
+    (irule residual_budget_wf_canonical >> simp[]) >>
+  `residual_budget_wf sb operands mid` by
+    metis_tac[emit_input_plan_residual_budget_nil] >>
+  `residual_budget_wf sb pending mid` by
+    metis_tac[residual_budget_wf_perm] >>
+  `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (drule_all emit_input_plan_stack_counts >>
+     drule perm_operand_counts >> simp[]) >>
+  `LENGTH pending <= LENGTH mid.ps_stack /\ LENGTH pending <= 16` by simp[] >>
+  `plan_state_residual_wf sb pending (LENGTH pending) arranged` by
+    (drule_all reorder_plan_materialised_arranged >> simp[]) >>
+  drule plan_state_residual_wf_pop >> simp[]
+QED
