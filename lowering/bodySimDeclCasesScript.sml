@@ -1005,6 +1005,7 @@ Proof
   rpt conj_tac
   >- metis_tac[compile_stmts_grows]
   >- suspend "endpoints"
+  >- suspend "active"
   >- metis_tac[]
   >- metis_tac[]
   >- suspend "body"
@@ -1013,6 +1014,8 @@ QED
 
 Resume body_for_range[endpoints]:
   rpt strip_tac >>
+  `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` by simp[] >>
+  qpat_x_assum `expr_body_pre cenv cx env e1 es` kall_tac >>
   drule (range_tuple_forall body_range_endpoint_read) >>
   disch_then (qspec_then `tyv` mp_tac) >>
   simp[] >> strip_tac >>
@@ -1022,13 +1025,15 @@ Resume body_for_range[endpoints]:
   >- (gvs[body_iterator_ok_def, body_expr_ok_def, bind_def, AllCaseEqs()] >>
       metis_tac[]) >>
   rpt strip_tac >>
-  qpat_x_assum `expr_body_pre cenv cx env e1 es` kall_tac >>
+  `expr_body_pre cenv cx env e2 (es1 with gas_obs := gs2)` by simp[] >>
+  qpat_x_assum `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` kall_tac >>
+  qpat_x_assum `expr_body_pre cenv cx env e2 es1` kall_tac >>
   drule (range_tuple_forall body_range_endpoint_read) >>
-  disch_then (qspec_then `tyv` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `tv2 = IntV hi` >> qexists_tac `hi` >> simp[] >>
-  strip_tac >>
-  qpat_x_assum `tv = IntV lo` SUBST_ALL_TAC >>
-  qpat_x_assum `tv2 = IntV hi` SUBST_ALL_TAC >>
+  disch_then (qspec_then `tyv` mp_tac) >> simp[]
+QED
+
+Resume body_for_range[active]:
+  rpt strip_tac >>
   drule_all (SIMP_RULE (srw_ss()) []
     (range_tuple_forall body_for_range_active)) >> simp[]
 QED

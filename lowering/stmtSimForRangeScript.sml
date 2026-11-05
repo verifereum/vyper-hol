@@ -1475,9 +1475,13 @@ Theorem compile_for_range_checked_frag_active:
               (do raw <- eval_expr cx e2; read_result cx raw od)
                 (es1 with gas_obs := gs2) = (INL tv2, es2) ==>
               ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
-                   P es2 /\
-                   ((n1 <= n2 /\ Num (n2 - n1) <= bound /\
-                     0 < Num (n2 - n1)) ==> Q)) /\
+                   P es2) /\
+    (!gs n1 es1 n2 es2.
+       (do raw <- eval_expr cx e1; read_result cx raw od)
+         (es with gas_obs := gs) = (INL (IntV n1), es1) /\
+       (do raw <- eval_expr cx e2; read_result cx raw od) es1 =
+         (INL (IntV n2), es2) /\
+       n1 <= n2 /\ Num (n2 - n1) <= bound /\ 0 < Num (n2 - n1) ==> Q) /\
     well_typed_expr env e1 /\ well_typed_expr env e2 /\
     (!x t. FLOOKUP env.var_types x = SOME t ==>
            well_formed_type env.type_defs t) /\
@@ -1624,6 +1628,13 @@ Resume compile_for_range_checked_frag_active[second_end]:
     (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[expr_post_def] >> strip_tac >>
      Cases_on `op1` >> gvs[eval_operand_def]) >>
+  `n1 <= n2 /\ Num (n2 - n1) <= bound /\ 0 < Num (n2 - n1) ==> Q` by
+    (strip_tac >>
+     qpat_x_assum `!gs n1 es1 n2 es2. _ ==> Q` irule >>
+     simp[SF ETA_ss] >>
+     qpat_assum `gas_marked_exec _ _ (bind (eval_expr cx e1) _) _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     metis_tac[]) >>
   suspend "tail_entry"
 QED
 
