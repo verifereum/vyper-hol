@@ -1,0 +1,206 @@
+Theory o1MakeSsaFormats
+Ancestors
+  o1MakeSsaFrontier o1MakeSsaCfg makeSsaCurrentDefs unitShapeDefs
+  venomInst stackPlanTypes list o1ContractSueStep simplifyCfgStruct
+
+Theorem rename_current_operands_length:
+  !ops. LENGTH (rename_current_operands rs ops) = LENGTH ops
+Proof
+  Induct >> simp[rename_current_operands_def] >>
+  Cases_on `h` >> simp[rename_current_operands_def]
+QED
+
+Theorem rename_current_operands_nonlabels:
+  !ops. EVERY (\op. ~is_label_operand op) (rename_current_operands rs ops) =
+        EVERY (\op. ~is_label_operand op) ops
+Proof
+  Induct >> simp[rename_current_operands_def] >>
+  Cases_on `h` >> simp[rename_current_operands_def, is_label_operand_def]
+QED
+
+Theorem inst_shape_ok_outputs[simp]:
+  inst_shape_ok (inst with inst_outputs := outs) = inst_shape_ok inst
+Proof
+  rewrite_tac[inst_shape_ok_def, label_positions_ok_def] >> simp[]
+QED
+
+Theorem rename_current_inst_shape:
+  rename_current_inst s rs inst = (rs',s',inst') /\ inst_shape_ok inst ==>
+  inst_shape_ok inst'
+Proof
+  simp[rename_current_inst_def] >> IF_CASES_TAC >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  `inst with <|inst_operands := rename_current_operands rs inst.inst_operands;
+               inst_outputs := outs'|> =
+   (inst with inst_operands := rename_current_operands rs inst.inst_operands)
+     with inst_outputs := outs'` by simp[] >>
+  pop_assum SUBST1_TAC >> simp[] >>
+  irule sue_inst_shape_projection >> simp[rename_current_operands_labels]
+QED
+
+Theorem rename_current_block_insts_shape:
+  !insts s rs rs' s' insts'.
+    rename_current_block_insts s rs insts = (rs',s',insts') /\
+    EVERY inst_shape_ok insts ==> EVERY inst_shape_ok insts'
+Proof
+  Induct >> simp[rename_current_block_insts_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  conj_tac >- metis_tac[rename_current_inst_shape] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem update_current_phi_for_pred_pair_labels:
+  !rs lbl ops.
+    MAP FST (phi_pairs (update_current_phi_for_pred rs lbl ops)) =
+    MAP FST (phi_pairs ops)
+Proof
+  recInduct update_current_phi_for_pred_ind >>
+  rw[update_current_phi_for_pred_def, phi_pairs_def] >>
+  gvs[phi_pairs_def]
+QED
+
+Theorem update_current_phi_inst_shape:
+  inst_shape_ok inst /\ inst.inst_opcode = PHI ==>
+  inst_shape_ok (inst with inst_operands :=
+    update_current_phi_for_pred rs lbl inst.inst_operands)
+Proof
+  strip_tac >>
+  `LENGTH (phi_pairs (update_current_phi_for_pred rs lbl inst.inst_operands)) =
+   LENGTH (phi_pairs inst.inst_operands)` by
+    metis_tac[update_current_phi_for_pred_pair_labels, LENGTH_MAP] >>
+  gvs[inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+      update_current_phi_for_pred_pair_labels]
+QED
+
+Theorem update_current_succ_phis_shape:
+  !succs bbs. EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) bbs ==>
+    EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions)
+      (update_current_succ_phis rs lbl bbs succs)
+Proof
+  Induct >> gvs[update_current_succ_phis_def] >> rpt strip_tac >>
+  first_x_assum irule >> Cases_on `lookup_block h bbs` >> simp[] >>
+  irule EVERY_replace_block >> simp[] >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  gvs[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  IF_CASES_TAC >- metis_tac[] >> simp[] >>
+  irule update_current_phi_inst_shape >> metis_tac[]
+QED
+
+Theorem rename_current_blocks_shape:
+  (!t s rs bbs sm ctrs s' bbs'.
+    rename_current_blocks s rs bbs sm t = (ctrs,s',bbs') /\
+    EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) bbs ==>
+    EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) bbs') /\
+  (!ts s ctrs stacks bbs sm ctrs' s' bbs'.
+    rename_current_children s ctrs stacks bbs sm ts = (ctrs',s',bbs') /\
+    EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) bbs ==>
+    EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) bbs')
+Proof
+  ho_match_mp_tac makeSsaCurrentInductTheory.current_dom_tree_induction >>
+  rpt conj_tac
+  >- (rpt strip_tac >> gvs[rename_current_blocks_def, AllCaseEqs()] >>
+      pairarg_tac >> gvs[] >> first_x_assum drule >> disch_then irule >>
+      irule update_current_succ_phis_shape >>
+      irule EVERY_replace_block >> simp[] >>
+      drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+      drule rename_current_block_insts_shape >> disch_then irule >>
+      gvs[EVERY_MEM] >> metis_tac[])
+  >- simp[rename_current_blocks_def] >>
+  rpt strip_tac >> gvs[rename_current_blocks_def] >> pairarg_tac >> gvs[] >>
+  first_x_assum drule >> disch_then irule >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem simplify_current_phi_raw_shape:
+  inst_shape_ok inst ==> inst_shape_ok (simplify_current_phi_raw inst)
+Proof
+  strip_tac >> simp[simplify_current_phi_raw_def] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `current_phi_output inst.inst_outputs` >> simp[] >>
+  Cases_on `current_phi_values (remove_current_phi_self x inst.inst_operands)` >>
+  simp[] >> Cases_on `x'`
+  >- simp[inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def] >>
+  simp[] >> IF_CASES_TAC >>
+  simp[inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+       is_label_operand_def]
+QED
+
+Theorem simplify_current_phi_shape:
+  inst_shape_ok inst ==> inst_shape_ok (simplify_current_phi inst)
+Proof
+  strip_tac >> simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  IF_CASES_TAC >> simp[simplify_current_phi_raw_shape]
+QED
+
+Theorem inst_shape_ok_id[simp]:
+  inst_shape_ok (inst with inst_id := id) = inst_shape_ok inst
+Proof
+  rewrite_tac[inst_shape_ok_def, label_positions_ok_def] >> simp[]
+QED
+
+Theorem reassign_current_inst_ids_shape:
+  !ids insts. EVERY inst_shape_ok insts ==>
+    EVERY inst_shape_ok (reassign_current_inst_ids ids insts)
+Proof
+  Induct_on `ids` >> Cases_on `insts` >> simp[reassign_current_inst_ids_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_shape:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    EVERY inst_shape_ok insts ==>
+    EVERY inst_shape_ok phis /\ EVERY inst_shape_ok ordinary
+Proof
+  Induct >> simp[simplify_current_phi_prefix_parts_def] >> rpt gen_tac >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  gvs[] >> pairarg_tac >> gvs[] >>
+  IF_CASES_TAC >> strip_tac >> gvs[] >>
+  simp[simplify_current_phi_shape]
+QED
+
+Theorem simplify_current_phi_prefix_shape:
+  EVERY inst_shape_ok insts ==>
+  EVERY inst_shape_ok (simplify_current_phi_prefix insts)
+Proof
+  strip_tac >> simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  irule reassign_current_inst_ids_shape >> simp[EVERY_APPEND] >>
+  drule_all simplify_current_phi_prefix_parts_shape >> simp[]
+QED
+
+Theorem simplify_current_phi_block_shape:
+  EVERY inst_shape_ok bb.bb_instructions ==>
+  EVERY inst_shape_ok (simplify_current_phi_block bb).bb_instructions
+Proof
+  Cases_on `bb.bb_instructions` >> simp[simplify_current_phi_block_def] >>
+  IF_CASES_TAC >> simp[simplify_current_phi_prefix_shape]
+QED
+
+Theorem simplify_current_phis_if_shape:
+  EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions)
+    (simplify_current_phis_if enabled bbs)
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def] >>
+  Cases_on `blocks_have_leading_phi bbs` >> simp[simplify_current_phis_def] >>
+  simp[EVERY_MAP] >> strip_tac >>
+  gvs[EVERY_MEM] >> metis_tac[simplify_current_phi_block_shape, EVERY_MEM]
+QED
+
+Theorem make_ssa_current_fn_inst_shape:
+  make_ssa_current_fn s fn = (fn',s') /\
+  EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) fn.fn_blocks ==>
+  EVERY (\bb. EVERY inst_shape_ok bb.bb_instructions) fn'.fn_blocks
+Proof
+  Cases_on `fn_entry_label fn`
+  >- (simp[make_ssa_current_fn_def] >> strip_tac >> gvs[]) >>
+  simp[make_ssa_current_fn_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  irule simplify_current_phis_if_shape >>
+  drule (CONJUNCT1 rename_current_blocks_shape) >> disch_then irule >>
+  `EVERY (\bb. MEM bb.bb_label (fn_labels fn) /\
+    EVERY inst_shape_ok bb.bb_instructions) bbs1` by
+    (drule (SRULE[current_frontier_map_def, current_pred_map_def, LET_THM]
+              add_phi_nodes_supply_shape) >> disch_then irule >>
+     gvs[EVERY_MEM, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED

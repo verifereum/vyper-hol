@@ -321,3 +321,21 @@ Proof
   disch_then irule >> simp[] >> rpt strip_tac >> IF_CASES_TAC >> simp[] >>
   irule insert_phi_at_block_well_formed >> simp[build_phi_inst_supply_def]
 QED
+
+Theorem add_phi_nodes_supply_provenance:
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    li fn.fn_blocks defs = (bbs',s') ==>
+  EVERY (\bb. MEM bb.bb_label (fn_labels fn) /\
+    EVERY (\i. MEM i (fn_insts fn) \/
+      (i.inst_opcode = PHI /\ inst_shape_ok i)) bb.bb_instructions) bbs'
+Proof
+  strip_tac >> drule add_phi_nodes_supply_invariant >>
+  disch_then irule >> conj_tac
+  >- (simp[] >> rpt strip_tac >> IF_CASES_TAC >>
+      gvs[makeSsaDefsTheory.insert_phi_at_block_def] >>
+      disj2_tac >> conj_tac >- simp[build_phi_inst_supply_def] >>
+      irule current_frontier_phi_shape >> metis_tac[current_frontier_key]) >>
+  simp[EVERY_MEM, fn_labels_def, fn_insts_def, MEM_fn_insts_blocks_iff,
+       MEM_MAP] >>
+  metis_tac[]
+QED
