@@ -2,7 +2,7 @@ Theory fnPlanLineageSetup
 Ancestors
   fnPlanLineageDemand fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState reorderSim list rich_list venomWf venomInst callLayoutDefs
 Libs
-  pred_setTheory finite_mapTheory stackPlanOpsTheory fnPlanLineageReplayTheory doSwapSimTheory planSpillBoundsTheory
+  pred_setTheory finite_mapTheory stackPlanOpsTheory fnPlanLineageReplayTheory doSwapSimTheory planSpillBoundsTheory cleanOpsSimTheory
 
 Theorem optimistic_swap_plan_core_step[local]:
   !ps m core dfg inst live term qs.
@@ -416,4 +416,96 @@ Proof
   drule do_swap_stack_result >> simp[] >> strip_tac >>
   gvs[stack_swap_bottom_extension,
       residual_budget_wf_def, plan_slots_bounded_def] >> metis_tac[]
+QED
+
+Theorem popmany_individual_resources[local]:
+  !spillbase ps to_pop.
+    plan_slots_bounded spillbase ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    plan_slots_bounded spillbase (SND (popmany_individual to_pop ps)) /\
+    spill_alloc_layout_wf (SND (popmany_individual to_pop ps)).ps_alloc
+      (SND (popmany_individual to_pop ps)).ps_spilled
+Proof
+  rpt gen_tac >> simp[popmany_individual_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `FOLDL popstep ([], ps) sorted` >>
+  qsuff_tac `!xs acc.
+    plan_slots_bounded spillbase (SND acc) /\
+    spill_alloc_layout_wf (SND acc).ps_alloc (SND acc).ps_spilled ==>
+    plan_slots_bounded spillbase (SND (FOLDL popstep acc xs)) /\
+    spill_alloc_layout_wf (SND (FOLDL popstep acc xs)).ps_alloc
+      (SND (FOLDL popstep acc xs)).ps_spilled`
+  >- (disch_then (qspecl_then [`sorted`, `([],ps)`] mp_tac) >> simp[]) >>
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `acc` >> strip_tac >>
+  gvs[] >> first_x_assum irule >> simp[Abbr `popstep`, LET_THM] >>
+  Cases_on `stack_get_depth h acc1.ps_stack`
+  >- gvs[] >>
+  Cases_on `x = 0`
+  >- (gvs[plan_slots_bounded_def] >> metis_tac[]) >>
+  simp[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  Cases_on `do_swap x acc1` >>
+  drule_all do_swap_slots_bounded >> strip_tac >>
+  drule_all do_swap_multiplicity_layout >> strip_tac >>
+  gvs[plan_slots_bounded_def] >> metis_tac[]
+QED
+
+Theorem popmany_plan_resources[local]:
+  !spillbase ps to_pop.
+    plan_slots_bounded spillbase ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    plan_slots_bounded spillbase (SND (popmany_plan to_pop ps)) /\
+    spill_alloc_layout_wf (SND (popmany_plan to_pop ps)).ps_alloc
+      (SND (popmany_plan to_pop ps)).ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `to_pop`
+  >- simp[popmany_plan_def] >>
+  simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (`LENGTH (h::t) < LENGTH ps.ps_stack` by
+            (qspecl_then [`h::t`, `ps.ps_stack`] mp_tac contiguous_top_stack_bound >>
+             simp[]) >>
+          Cases_on `do_swap (LENGTH (h::t)) ps` >>
+          drule_all do_swap_slots_bounded >> strip_tac >>
+          drule_all do_swap_multiplicity_layout >> strip_tac >>
+          gvs[plan_slots_bounded_def] >> metis_tac[]) >>
+      metis_tac[popmany_individual_resources]) >>
+  metis_tac[popmany_individual_resources]
+QED
+
+Theorem residual_budget_wf_empty_inventory:
+  !spillbase ps. residual_budget_wf spillbase [] ps ==>
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `plan_state_residual_wf spillbase [] 0 ps` by
+    (irule residual_budget_wf_to_residual >> simp[]) >>
+  qspecl_then [`spillbase`, `[]`, `ps`] mp_tac plan_state_residual_wf_pop >>
+  simp[stack_pop_def] >> metis_tac[]
+QED
+
+Theorem popmany_plan_core_resource:
+  !ps prefix core spillbase to_pop qs.
+    ps.ps_stack = prefix ++ core /\
+    DISJOINT (set prefix) (set to_pop) /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    qs = SND (popmany_plan to_pop ps) ==>
+    ?rest. qs.ps_stack = prefix ++ rest /\
+      set rest = set core DIFF set to_pop /\
+      qs.ps_spilled = ps.ps_spilled /\
+      residual_budget_wf spillbase [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule residual_budget_wf_empty_inventory >> simp[] >> strip_tac >>
+  drule_all popmany_plan_core >> strip_tac >>
+  rename1 `ALL_DISTINCT rest` >> qexists_tac `rest` >>
+  `qs.ps_spilled = ps.ps_spilled` by gvs[popmany_plan_spilled_unchanged] >>
+  `plan_slots_bounded spillbase ps /\
+   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    (gvs[residual_budget_wf_def, plan_slots_bounded_def] >> metis_tac[]) >>
+  drule_all popmany_plan_resources >>
+  disch_then (qspec_then `to_pop` strip_assume_tac) >>
+  gvs[popmany_plan_spilled_unchanged] >> irule residual_budget_wf_canonical >>
+  gvs[plan_slots_bounded_def, popmany_plan_spilled_unchanged] >> ASM_SET_TAC[]
 QED
