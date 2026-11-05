@@ -32,7 +32,7 @@ Ancestors
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst
-  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes oracleExecProps
 
 Theorem vv_holds_materialise:
   read_result cx tv es = (INL v,es) /\
@@ -546,6 +546,16 @@ Proof
   simp[local_region_def, lookup_var_def]
 QED
 
+(* Code without GAS leaves the gas readings alone. *)
+Theorem buffer_run_gas_readings[local]:
+  !code s t. EVERY (\i. i.inst_opcode <> GAS) code /\
+    run_inst_seq code s = OK t ==> t.vs_gas_readings = s.vs_gas_readings
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
+  metis_tac[oracleExecPropsTheory.step_inst_base_gas_readings]
+QED
+
 Theorem buffer_alloc_frag:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
@@ -559,6 +569,7 @@ Theorem buffer_alloc_frag:
         lookup_var x t = SOME (n2w b) /\
         FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
         b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
+        t.vs_gas_readings = s0.vs_gas_readings /\
         (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) /\
         (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
           FLOOKUP t.vs_allocas aid = SOME a) /\
@@ -570,13 +581,23 @@ Theorem buffer_alloc_frag:
         (!name p n. local_region ce es.scopes t name p n <=>
           local_region ce es.scopes s0 name p n)) R
 Proof
-  rpt strip_tac >> drule_all buffer_alloc_provenance >> strip_tac >>
+  rpt strip_tac >>
+  `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sm)` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+       comp_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_ignore_bind_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+       venomInstTheory.mk_inst_def]) >>
+  drule_all buffer_alloc_provenance >> strip_tac >>
   qexistsl [`inst`,`x`] >> simp[] >>
   irule frag_exec_run_inst_seq >> simp[] >> rpt strip_tac >> gvs[] >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
     metis_tac[buffer_alloc_code] >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
+  `t.vs_gas_readings = s0.vs_gas_readings` by
+    metis_tac[buffer_run_gas_readings] >>
   `!name p n. local_region ce es.scopes t name p n <=>
     local_region ce es.scopes s0 name p n` by
     (rpt gen_tac >> eq_tac
