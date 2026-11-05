@@ -129,3 +129,70 @@ Proof
   qexists_tac `P DELETE l` >> simp[] >>
   irule decode_resource_terminator_exists >> simp[]
 QED
+
+Theorem decode_resource_bind_exists:
+  (?x u Q. decode_resource_run ex P m s x u Q /\ mid x u Q) /\
+  (!x u Q. decode_resource_run ex P m s x u Q /\ mid x u Q ==>
+    ?y t R. decode_resource_run ex Q (f x) u y t R /\ post y t R) ==>
+  ?y t R. decode_resource_run ex P (comp_bind m f) s y t R /\ post y t R
+Proof
+  strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+  qexistsl_tac [`y`, `t`, `R`] >> simp[] >>
+  irule decode_resource_run_bind >> metis_tac[]
+QED
+
+Theorem decode_resource_fresh_label_then:
+  P SUBSET decode_label_range 0 s.cs_next_label /\
+  (!l u Q. Q SUBSET decode_label_range 0 u.cs_next_label /\ P SUBSET Q /\
+    l IN Q /\ l NOTIN P ==>
+    ?y t R. decode_resource_run ex Q (f l) u y t R /\ post y t R) ==>
+  ?y t R. decode_resource_run ex P (comp_bind (fresh_label suffix) f) s y t R /\ post y t R
+Proof
+  strip_tac >>
+  match_mp_tac (GEN_ALL decode_resource_bind_exists) >>
+  qexists_tac `\l u Q. Q SUBSET decode_label_range 0 u.cs_next_label /\
+    P SUBSET Q /\ l IN Q /\ l NOTIN P` >> simp[] >>
+  qexistsl_tac [`fresh_label_output suffix s.cs_next_label`,
+    `s with cs_next_label := s.cs_next_label + 1`,
+    `P UNION decode_label_range s.cs_next_label (s.cs_next_label + 1)`] >>
+  conj_tac >- simp[decode_resource_fresh_label] >>
+  conj_tac
+  >- (drule decode_resource_fresh_label >>
+      disch_then (qspec_then `suffix` mp_tac) >>
+      disch_then (qspec_then `ex` assume_tac) >>
+      drule decode_resource_run_pool >> simp[]) >>
+  simp[decode_resource_fresh_label_available] >>
+  `DISJOINT (decode_label_range 0 s.cs_next_label)
+    (decode_label_range s.cs_next_label (s.cs_next_label + 1))` by
+    simp[decode_label_range_disjoint] >>
+  `fresh_label_output suffix s.cs_next_label IN
+    decode_label_range s.cs_next_label (s.cs_next_label + 1)` by
+    simp[decode_resource_fresh_label_available] >> ASM_SET_TAC[]
+QED
+
+Theorem decode_framed_then:
+  decode_framed ex m mid /\ P SUBSET decode_label_range 0 s.cs_next_label /\
+  (!x u Q. mid x /\ P SUBSET Q /\ Q SUBSET decode_label_range 0 u.cs_next_label ==>
+    ?y t R. decode_resource_run ex Q (f x) u y t R /\ post y t R) ==>
+  ?y t R. decode_resource_run ex P (comp_bind m f) s y t R /\ post y t R
+Proof
+  strip_tac >>
+  match_mp_tac (GEN_ALL decode_resource_bind_exists) >>
+  qexists_tac `\x u Q. mid x /\ P SUBSET Q /\ Q SUBSET decode_label_range 0 u.cs_next_label` >>
+  conj_tac
+  >- (qpat_x_assum `decode_framed _ _ _` mp_tac >>
+      rewrite_tac[decode_framed_def] >> disch_then drule >> strip_tac >>
+      qexistsl_tac [`x`, `t`, `Q`] >> simp[] >>
+      drule decode_resource_run_pool >> simp[]) >>
+  simp[]
+QED
+
+Theorem decode_framed_ignore_then:
+  decode_framed ex m mid /\ P SUBSET decode_label_range 0 s.cs_next_label /\
+  (!u Q. P SUBSET Q /\ Q SUBSET decode_label_range 0 u.cs_next_label ==>
+    ?y t R. decode_resource_run ex Q n u y t R /\ post y t R) ==>
+  ?y t R. decode_resource_run ex P (comp_ignore_bind m n) s y t R /\ post y t R
+Proof
+  strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
+  match_mp_tac (GEN_ALL decode_framed_then) >> qexists_tac `mid` >> simp[]
+QED
