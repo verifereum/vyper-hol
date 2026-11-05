@@ -645,8 +645,7 @@ Proof
 QED
 
 Theorem compile_assign_local_memory_widen_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id e es res es' p sz vtyp etv tyv.
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv tyv.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME vtyp /\ ~is_word_type vtyp /\
     ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
@@ -658,14 +657,16 @@ Theorem compile_assign_local_memory_widen_stmt_frag:
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
     0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
     type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256) /\
-    (!v es1 entry.
-       (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
        entry.type = tyv /\ value_has_type tyv v /\
        val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e)) es res es'
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
