@@ -12,7 +12,7 @@ Definition ptr_call_ancestry_def:
     ptr_call_ancestry f.cf_params stk)
 End
 
-Theorem ptr_invoke_imported_provenance[local]:
+Theorem ptr_invoke_imported_provenance:
   decode_invoke inst = SOME (nm,ops) /\
   MEM (SOME site) (MAP (op_prov G) ops) ==>
   ?v. MEM (Var v) inst.inst_operands /\ FLOOKUP G v = SOME site
