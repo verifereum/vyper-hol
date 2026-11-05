@@ -20,7 +20,7 @@ Ancestors
   stackPlanGen stackPlanTypes livenessDefs dfgDefs
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
   relation list finite_map dominatorProofs cfgAnalysisProps
-  removeUnusedSsaProofs
+  removeUnusedSsaProofs cfgNormBase livenessProofs livenessTransferProofs
 
 Theorem lineage_state_entry_cases[local]:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>
@@ -161,6 +161,42 @@ Proof
   `ssa_form fn` by gvs[codegen_ready_fn_def] >>
   gvs[MEM_FLAT, MEM_MAP] >>
   metis_tac[ssa_unique_output_block]
+QED
+
+Theorem collect_phis_idempotent[local]:
+  !instrs. collect_phis (collect_phis instrs) = collect_phis instrs
+Proof
+  Induct >> simp[collect_phis_def] >> gen_tac >>
+  IF_CASES_TAC >> simp[collect_phis_def]
+QED
+
+Theorem input_vars_from_collect[local]:
+  input_vars_from pred (collect_phis instrs) live =
+  input_vars_from pred instrs live
+Proof
+  simp[input_vars_from_def, collect_phis_idempotent]
+QED
+
+Theorem input_vars_non_phi_iff[local]:
+  ~MEM (Var v) (FLAT (MAP (\phi. phi.inst_operands)
+                          (collect_phis instrs))) ==>
+  (MEM v (input_vars_from pred instrs live) <=> MEM v live)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >>
+      `MEM v (input_vars_from pred (collect_phis instrs) live)` by
+        metis_tac[input_vars_from_collect] >>
+      pop_assum (mp_tac o MATCH_MP input_vars_from_phi_correct_proof) >>
+      strip_tac >> gvs[] >>
+      `MEM (Var v) inst.inst_operands` by metis_tac[phi_pairs_mem_var] >>
+      gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  strip_tac >> irule input_vars_from_non_phi >> simp[] >>
+  rpt strip_tac >> gvs[MEM_MAP] >>
+  rename1 `MEM pair (phi_pairs inst.inst_operands)` >>
+  PairCases_on `pair` >> gvs[] >>
+  rename1 `MEM (source, value) (phi_pairs inst.inst_operands)` >>
+  `MEM (Var value) inst.inst_operands` by metis_tac[phi_pairs_mem_var] >>
+  gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
