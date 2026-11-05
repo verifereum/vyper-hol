@@ -286,3 +286,67 @@ Proof
   `i < frontier` by decide_tac >>
   `i IN tn.t_mem` by metis_tac[] >> metis_tac[]
 QED
+
+Theorem fresh_word_store_ghost_inv:
+  ghost_inv d cenv cx es G tn s /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  op_taint tn value = {} /\
+  (!name entry p sz b. lookup_scopes name es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME b ==>
+    val_wf entry.type entry.value /\
+    (w2n b + val_footprint entry.type entry.value <= w2n a \/
+     w2n a + 32 <= w2n b)) /\
+  tn1 = step_taint (mk_inst id MSTORE [Var dst; value] []) s
+    (mstore (w2n a) w s) tn ==>
+  ghost_inv d cenv cx es G tn1
+    (mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >> drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`ARB`, `G`, `id`] strip_assume_tac) >>
+  `tn1.t_var = tn.t_var /\ tn1.t_stor = tn.t_stor /\
+   tn1.t_trans = tn.t_trans /\
+   tn1.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}` by
+    metis_tac[] >>
+  `tn1.t_imm = tn.t_imm` by
+    (simp[step_taint_def, mk_inst_def, set_var_taint_def,
+      store_taint_def, adopt_reset_def, imm_taint_def]) >>
+  qpat_x_assum `tn1 = _` kall_tac >>
+  qpat_x_assum `step_prov _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `(step_taint _ _ _ _).t_var = _` kall_tac >>
+  qpat_x_assum `(step_taint _ _ _ _).t_stor = _` kall_tac >>
+  qpat_x_assum `(step_taint _ _ _ _).t_trans = _` kall_tac >>
+  qpat_x_assum `(step_taint _ _ _ _).t_mem = _` kall_tac >>
+  `!p sz. ptr_covers G tn1 p
+    (mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx) sz <=>
+    ptr_covers G tn p s sz` by
+    simp[ptr_covers_def, op_taint_def, lookup_var_def, mstore_def] >>
+  rewrite_tac[ghost_inv_def] >> conj_tac >- suspend "locals" >>
+  conj_tac
+  >- (Cases_on `d` >> simp[return_buf_ptr_def] >>
+      PairCases_on `x` >> gvs[ghost_inv_def, return_buf_ptr_def,
+        mstore_def, lookup_var_def] >> metis_tac[]) >>
+  gvs[ghost_inv_def, stor_taint_ok_def, op_taint_def, mstore_def]
+QED
+
+Resume fresh_word_store_ghost_inv[locals]:
+  rpt gen_tac >> strip_tac >>
+  `ptr_covers G tn p s sz /\
+   (!b mem. lookup_var p s = SOME b /\
+    mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory entry.type entry.value (w2n b) mem)` by
+    (qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[ghost_inv_def] >> strip_tac >>
+     qpat_x_assum `!name entry p sz. _ ==> ptr_covers _ _ _ _ _ /\ _`
+       drule_all >> simp[]) >>
+  conj_tac >- simp[] >> rpt strip_tac >>
+  `lookup_var p s = SOME w'` by gvs[lookup_var_def, mstore_def] >>
+  `val_wf entry.type entry.value /\
+    (w2n w' + val_footprint entry.type entry.value <= w2n a \/
+     w2n a + 32 <= w2n w')` by metis_tac[] >>
+  irule word_store_robust_exterior >> simp[] >>
+  qexistsl [`w2n a`, `s`, `tn.t_mem`, `w`] >> simp[] >>
+  gvs[mstore_def]
+QED
+
+Finalise fresh_word_store_ghost_inv
