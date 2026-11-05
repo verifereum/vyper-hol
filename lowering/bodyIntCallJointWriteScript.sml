@@ -1,7 +1,7 @@
 Theory bodyIntCallJointWrite
 Ancestors
   list finite_map exprSimAlloc exprSimHash exprLoweringProps compileEnv vyperState
-  venomState venomExecSemantics exprSimProps context venomInst words
+  venomState venomExecSemantics exprSimProps context venomInst words valueCopy
 
 (* All windows are framed at the same concrete bounded-write endpoint. *)
 Theorem joint_alloca_write_frame:
@@ -99,4 +99,41 @@ Proof
     `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]`, `sz`] >>
   simp[mk_inst_def] >> metis_tac[]
+QED
+
+Theorem joint_compile_store_word_run:
+  compile_store_memory ce src dst dst_ty src_ty sa = ((),sb) /\
+  is_word_type dst_ty /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME w /\
+  stmt_state_rel ctx func ce cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+  b <= w2n d /\ w2n d + 32 <= b + sz /\
+  (!name lb len. local_region ce es.scopes s name lb len ==>
+     regions_disjoint b sz lb len) /\
+  EVERY (\(off,len). regions_disjoint b sz off len) hs ==>
+  run_inst_seq (emitted_insts sa sb) s = OK (mstore (w2n d) w s) /\
+  same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  stmt_state_rel ctx func ce cx es (mstore (w2n d) w s) /\
+  EVERY (\(off,len).
+    mem_bytes_at off len (mstore (w2n d) w s).vs_memory =
+    mem_bytes_at off len s.vs_memory) hs /\
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+      NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+      name = SOME (tv,v) ==>
+    mem_bytes_at off (type_memory_size tv) (mstore (w2n d) w s).vs_memory =
+    mem_bytes_at off (type_memory_size tv) s.vs_memory)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_store_memory_def] >> strip_tac >>
+  drule_all emit_mstore_run >> strip_tac >> simp[] >>
+  irule joint_alloca_write_frame >> simp[] >>
+  qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >> metis_tac[]
 QED
