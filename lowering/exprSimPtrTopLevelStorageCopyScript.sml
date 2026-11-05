@@ -1,7 +1,7 @@
 (* Ghost interface probes for the concrete storage-copy loop. *)
 Theory exprSimPtrTopLevelStorageCopy
 Ancestors
-  exprSimPtrProps fragGasSeqAbort codegenRel contextCodegenRel
+  exprSimPtrProps fragGasSeqAbort fragGasSeqPtr codegenRel contextCodegenRel
   exprSimStorageCopy exprSimPtrTopLevelCopy typedCopyPtr decoderGhostFramePtr bodyPtrDefs
   fragGasPathPtr ptrDiscipline ptrSafeRun gasCount venomExecSemantics venomState venomInst
   words finite_map pred_set list
@@ -1000,4 +1000,78 @@ Proof
       FLOOKUP s.vs_allocas aid = SOME (b',sz) /\ b' <= i /\ i < b'+sz} = {}` by
     (simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem toplevel_copy_header_path:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  cv <> tv /\ dst <> tv /\ (!x. src = Var x ==> x <> tv) /\ MEM tv ds /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id EQ [Var cv;Lit (n2w n)] [tv];
+    mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?r G1 tn1. gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK r) /\
+    toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G1 tn1 r /\
+    ~r.vs_halted /\ r.vs_current_bb = (if k=n then exit_lbl else body_lbl) /\
+    r.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  drule toplevel_copy_inv_bounds >> strip_tac >>
+  drule toplevel_copy_inv_counter_value >> strip_tac >>
+  drule toplevel_copy_inv_counter >> strip_tac >>
+  `((n2w k):256 word = n2w n) <=> k=n` by
+    (`k < 2**256` by decide_tac >>
+     pure_rewrite_tac[n2w_11, dimword_def] >>
+     gvs[arithmeticTheory.LESS_MOD]) >>
+  `step_inst_base (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s =
+     OK (update_var tv (bool_to_word (k=n)) s)` by
+    simp[step_inst_base_def, exec_pure2_def, mk_inst_def,
+         eval_operands_def, eval_operand_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G tn
+     (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+          mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+     rpt strip_tac >> Cases_on `op` >> gvs[op_taint_def]) >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  qabbrev_tac `u = update_var tv (bool_to_word (k=n)) s` >>
+  qabbrev_tac `G1 = step_prov PG G (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) u` >>
+  qabbrev_tac `tn1 = step_taint (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s u tn` >>
+  qabbrev_tac `t = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G1 tn1 t` by
+    (simp[Abbr `t`, Abbr `G1`, Abbr `tn1`, Abbr `u`] >>
+     irule toplevel_copy_test_inv >> simp[] >> metis_tac[]) >>
+  `op_taint tn1 (Var tv) = {}` by
+    simp[Abbr `tn1`, step_taint_def, set_var_taint_def, out_taint_def,
+         mk_inst_def, op_taint_def, FLOOKUP_UPDATE, eval_operand_def] >>
+  `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = SUC s.vs_inst_idx /\
+    lookup_var tv t = SOME (bool_to_word (k=n))` by
+    simp[Abbr `t`, Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `step_inst_base (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t =
+    OK (jump_to (if k=n then exit_lbl else body_lbl) t)` by
+    (Cases_on `k=n` >>
+     simp[step_inst_base_def, mk_inst_def, eval_operand_def, bool_to_word_def]) >>
+  `ptr_inst_ok D 0 0 ctx fn G1 tn1
+    (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+          mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke, jump_to_def] >>
+     rpt strip_tac >> Cases_on `op` >> gvs[op_taint_def]) >>
+  `gas_path_ptr D 0 ctx fn PG G1 tn1 t 0 G1 tn1
+    (OK (jump_to (if k=n then exit_lbl else body_lbl) t))` by
+    (irule toplevel_copy_raw_jump_path >> conj_tac >- simp[] >>
+     qexistsl [`bb`, `mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []`] >>
+     simp[mk_inst_def] >> simp[GSYM mk_inst_def]) >>
+  qexistsl [`jump_to (if k=n then exit_lbl else body_lbl) t`, `G1`, `tn1`] >>
+  conj_tac
+  >- (irule (gas_path_ptr_step |> Q.INST
+        [`i` |-> `mk_inst id EQ [Var cv;Lit (n2w n)] [tv]`, `n` |-> `0`]
+        |> SRULE [mk_inst_def, is_terminator_def]) >>
+      simp[GSYM mk_inst_def] >>
+      qexistsl [`cv`, `id`, `n`, `tv`, `u`] >>
+      simp[] >> gvs[Abbr `G1`, Abbr `tn1`, Abbr `t`]) >>
+  simp[jump_to_def]
+
 QED
