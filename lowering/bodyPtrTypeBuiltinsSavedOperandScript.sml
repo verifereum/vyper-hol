@@ -3,6 +3,7 @@ Theory bodyPtrTypeBuiltinsSavedOperand
 Ancestors
   bodyPtrTypeBuiltinsRepresentation exprSimAttributeFields exprSimOperands
   loweringPosts bodyPtrDefs valueEncodingProofs valueEncoding arithmetic
+  exprBopSimProps
 
 Theorem saved_operand_footprint_window:
   !cenv cx ty sa sb es v op s tv w env ctx func e sc es' v' op' s'
@@ -46,4 +47,31 @@ Proof
       simp[] >> qexistsl_tac [`b`, `n`, `sz`] >> simp[] >>
       rpt strip_tac >> first_x_assum drule >> decide_tac) >>
   simp[mem_bytes_at_def]
+QED
+
+Theorem saved_ptr_mem_ok:
+  !cx ty v op G tn s cenv sa sb es env ctx func e sc es' v' op' s' G' tn'.
+    ptr_mem_ok cx ty v op G tn s /\
+    expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+    (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==> dynarray_free tv) /\
+    expr_sim_inv cenv cx env es /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\ (!l. op <> Label l) /\
+    expr_post ctx func cenv cx e es sb sc s es' v' op' s' /\
+    ghost_kept cenv es sb G tn s G' tn' ==>
+    ptr_mem_ok cx ty v op G' tn' s'
+Proof
+  rpt gen_tac >> strip_tac >> simp[ptr_mem_ok_def] >> rpt strip_tac >>
+  `val_wf tv v /\ ?w0. eval_operand op s = SOME w0` by
+    (gvs[expr_val_at_def] >> metis_tac[]) >>
+  `eval_operand op s' = SOME w0` by
+    (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sb`, `s`] >>
+     gvs[expr_post_def]) >>
+  gvs[] >>
+  drule_all saved_operand_footprint_window >> strip_tac
+  >~ [`val_in_memory _ _ _ _`]
+  >- (irule robust_val_in_memory_decreasing_taint_transport >> simp[] >>
+      qexistsl_tac [`s.vs_memory`, `s'.vs_memory`, `val_footprint tv v`,
+                     `w2n w`, `tn.t_mem`, `tn'.t_mem`] >>
+      simp[] >> gvs[ptr_mem_ok_def]) >>
+  gvs[ptr_mem_ok_def, ghost_kept_def] >> metis_tac[]
 QED
