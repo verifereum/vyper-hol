@@ -3,7 +3,7 @@
 Theory bodyIntCallCopyProbe
 Ancestors
   exprSimStorageCopy valueEncodingProps exprLoweringProps venomExecSemantics
-  venomState venomInst emitHelperProps
+  venomState venomInst emitHelperProps exprSimUnwrap
 
 Theorem copy_slot_tload_step[local]:
   !op a id out s.
@@ -340,8 +340,17 @@ QED
 
    This does NOT prove the held-entry contract at lines 250ff. expr_post is
    relative to s0 and does not by itself preserve every arbitrary held value
-   at the unwrap-entry state. C1.6.2.12.13 owns construction of the unframed
-   aggregate SML theorem using the explicit premises above. C1.6.2.12.14 owns
+   at the unwrap-entry state. The selected general unframed aggregate output
+   is the existing exprSimUnwrap.unwrap_value_sim, not a new wrapper. Besides
+   the common premises above, its old-operand premise uses vv_operand vv,
+   and its conditional size premise is explicitly:
+     !tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+          ~is_word_type (expr_type e) ==>
+          type_memory_bytes cenv (expr_type e) = type_memory_size tv /\
+          type_memory_size tv < 2 ** 64.
+   Apply it directly at the actual source endpoint es'. This audit does not
+   discharge that size premise for staging consumers or infer expr_sim_inv
+   at es' from scope-domain equality. C1.6.2.12.14 owns
    single-entry and EVERY preservation at the SAME allocation/copy execution
    witness, retaining each lo and advancing its upper boundary sm to sb.
    That proof must retain exact memory/static/old-operand frames, compose
@@ -351,3 +360,15 @@ QED
    the raw input only after this semantic frame is available.
    This comment certifies interface coverage, not either pending theorem.
 *)
+
+(* Certify the reused boundary without introducing a duplicate theorem. *)
+val () =
+  let
+    val th = exprSimUnwrapTheory.unwrap_value_sim
+    val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "UNFRAMED_UNWRAP_AUDIT unwrap_value_sim OK\n"
+    else raise Fail "unwrap_value_sim has unproved dependencies"
+  end;
