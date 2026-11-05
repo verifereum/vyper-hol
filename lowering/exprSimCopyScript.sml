@@ -1405,3 +1405,15 @@ Proof
   strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[]
 QED
+
+val () = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print ("ACTUAL_COPY_AUDIT " ^ name ^ " OK\n")
+    else raise Fail (name ^ " has unproved dependencies")
+  end)
+  [("copy_runtime_frag", copy_runtime_frag),
+   ("copy_runtime_contents", copy_runtime_contents),
+   ("unwrap_runtime_code_copy_sim", unwrap_runtime_code_copy_sim)];
