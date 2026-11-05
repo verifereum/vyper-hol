@@ -71,7 +71,12 @@ Resume dse_nonterminator_step[memory]:
       drule_all dse_local_agrees_load_step >> strip_tac >>
       qexistsl_tac [`P`, `t1`] >> simp[]) >>
   Cases_on `inst.inst_id IN ids`
-  >- (drule_all all_dead_stores_at >> strip_tac >>
+  >- suspend "deleted" >>
+  suspend "retained"
+QED
+
+Resume dse_nonterminator_step[deleted]:
+  drule_all all_dead_stores_at >> strip_tac >>
       drule_all all_dead_stores_suffix >> strip_tac >>
       `dse_inst ids sp inst = mk_nop_inst inst` by simp[dse_inst_def] >>
       Cases_on `inst.inst_opcode IN {MSTORE; MSTORE8}`
@@ -101,6 +106,10 @@ Resume dse_nonterminator_step[memory]:
           simp[] >> strip_tac >>
           qexistsl_tac [`P1`, `t`] >>
           simp[mk_nop_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
+      suspend "deleted_copy"
+QED
+
+Resume dse_nonterminator_step[deleted_copy]:
       `inst.inst_opcode <> RETURNDATACOPY /\ inst.inst_opcode <> EXTCODECOPY` by
         metis_tac[dse_returndatacopy_not_effects_in_space,
           dse_extcodecopy_not_effects_in_space] >>
@@ -119,7 +128,10 @@ Resume dse_nonterminator_step[memory]:
       `inst.inst_opcode IN {CALLDATACOPY; CODECOPY; DLOADBYTES}` by fs[] >>
       drule_all dse_local_agrees_external_copy_deleted_step >> strip_tac >>
       qexistsl_tac [`P1`, `t`] >>
-      simp[mk_nop_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
+      simp[mk_nop_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs]
+QED
+
+Resume dse_nonterminator_step[retained]:
   `dse_inst ids sp inst = inst` by simp[dse_inst_def] >>
   Cases_on `inst.inst_opcode IN {MSTORE; MSTORE8}`
   >- (drule_all dse_local_agrees_mstore_step >> simp[]) >>
@@ -172,12 +184,20 @@ Resume dse_nonterminator_step[residual]:
   >- (drule_all dse_istore_retained >> strip_tac >>
       drule_all dse_local_agrees_istore_step >> simp[]) >>
   Cases_on `inst.inst_opcode IN {SHA3; LOG}`
-  >- (`dse_inst ids sp inst = inst` by (irule dse_observer_retained >> simp[]) >>
+  >- suspend "observer" >>
+  suspend "memory_reader_or_external"
+QED
+
+Resume dse_nonterminator_step[observer]:
+  `dse_inst ids sp inst = inst` by (irule dse_observer_retained >> simp[]) >>
       `allocas_non_overlapping s` by fs[alloca_inv_def] >>
       drule_all dse_observer_step >> strip_tac >>
       `s.vs_inst_idx = t.vs_inst_idx` by
         fs[dse_local_agrees_def, dse_operational_agrees_def] >>
-      qexistsl_tac [`P`, `t1`] >> simp[dse_local_agrees_inst_idx]) >>
+      qexistsl_tac [`P`, `t1`] >> simp[dse_local_agrees_inst_idx]
+QED
+
+Resume dse_nonterminator_step[memory_reader_or_external]:
   Cases_on `inst.inst_opcode IN {MEMTOP; ILOAD}`
   >- (`sp IN {AddrSp_Storage; AddrSp_Transient}` by
         (qpat_assum `sp IN _` mp_tac >>
@@ -487,4 +507,25 @@ Proof
   drule_all dse_non_ok_step >> simp[] >> strip_tac >>
   Cases_on `step_inst fuel ctx (dse_inst ids sp inst) t` >>
   gvs[lift_result_def]
+QED
+
+(* Route successful terminators through the shared execution classification;
+   dse_jump_step owns the control-transfer simulation and pending transport. *)
+Theorem dse_terminator_step:
+  sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient} /\
+  wf_function fn /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  dse_local_agrees sp P s t /\
+  dse_pending_at (cfg_analyze fn) bp sp fn bb s.vs_inst_idx P s /\
+  is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK s1 /\
+  lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb1 ==>
+  ?t1. step_inst fuel ctx (dse_inst ids sp inst) t = OK t1 /\
+    dse_local_agrees sp P s1 t1 /\
+    dse_pending_at (cfg_analyze fn) bp sp fn bb1 0 P s1
+Proof
+  strip_tac >>
+  `inst.inst_opcode IN {JMP; JNZ; DJMP}` by
+    (drule_all step_inst_ok_terminator_jump >> simp[]) >>
+  drule_all dse_jump_step >> simp[]
 QED
