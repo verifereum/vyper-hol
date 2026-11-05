@@ -232,6 +232,19 @@ Proof
   metis_tac[]
 QED
 
+(* LowerDload keeps the inputs MakeSSA needs: it adds no PHI, keeps every
+   block reachable, and each variable it introduces is defined before its
+   uses in the same block. *)
+Theorem lower_dload_stage_make_ssa_input_ok:
+  !rpolicy view C C'.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    EVERY make_ssa_input_ok C.ctx_functions ==>
+    EVERY make_ssa_input_ok C'.ctx_functions
+Proof
+  (* admitted at base cut: new make_ssa_input_ok row of o1_inv 2 (argon's interface ruling) *)
+  cheat
+QED
+
 Theorem lower_dload_run_contract:
   o1_run_contract rpolicy D 1
 Proof
@@ -253,6 +266,8 @@ Proof
     (irule lower_dload_stage_fmp_free >> fs[o1_src_inv_def] >> metis_tac[]) >>
   `callee_first names C'.ctx_functions` by
     metis_tac[lower_dload_stage_callee_first] >>
+  `EVERY make_ssa_input_ok C'.ctx_functions` by
+    metis_tac[lower_dload_stage_make_ssa_input_ok] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
     (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>

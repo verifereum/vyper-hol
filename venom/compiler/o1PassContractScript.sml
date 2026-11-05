@@ -592,12 +592,46 @@ End
 (* The walk's input (row 0), SimplifyCFG's pre-walk output: every block
    reachable, definite assignment, and no PHI reading a variable written
    twice (vacuous here, with no PHI yet), which MakeSSA needs. *)
+(* What MakeSSA needs of a function it is run on: every block reachable,
+   definitions reaching their uses, and the PHIs already present (none on
+   the first run) single-defined, covering their predecessors along CFG
+   edges, and non-degenerate. *)
+Definition make_ssa_input_ok_def:
+  make_ssa_input_ok fn <=>
+    all_reachable fn /\ fn_defs_reach_uses fn /\
+    fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn /\
+    fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       inst.inst_opcode = PHI ==>
+       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+       !l v. MEM (l,v) (phi_pairs inst.inst_operands) ==>
+         fn_cfg_edge fn l bb.bb_label)
+End
+
+(* make_ssa_input_ok reads only the blocks, so sealing a function's fmp
+   signature keeps it. *)
+Theorem make_ssa_input_ok_fmp_signature[simp]:
+  make_ssa_input_ok (fn with fn_fmp_signature := x) <=> make_ssa_input_ok fn
+Proof
+  `!f p. is_fn_path (f with fn_fmp_signature := x) p = is_fn_path f p` by
+    (recInduct is_fn_path_ind >> simp[is_fn_path_def, fn_cfg_edge_def]) >>
+  `fn_cfg_edge (fn with fn_fmp_signature := x) = fn_cfg_edge fn` by
+    simp[FUN_EQ_THM, fn_cfg_edge_def] >>
+  `fn_entry_label (fn with fn_fmp_signature := x) = fn_entry_label fn` by
+    simp[fn_entry_label_def, entry_block_def] >>
+  simp[make_ssa_input_ok_def, all_reachable_def, fn_reachable_def,
+       fn_defs_reach_uses_def, def_on_all_paths_def,
+       fn_phi_operands_single_def_def, fn_phis_cover_preds_def,
+       fn_phi_outputs_single_def_def, fn_phis_non_degenerate_def, fn_insts_def]
+QED
+
 Definition o1_walk_src_inv_def:
   o1_walk_src_inv D C vs <=>
     o1_src_inv D C vs /\
     EVERY (\fn. all_reachable fn /\ fn_defs_reach_uses fn /\
                 fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn)
-      C.ctx_functions
+      C.ctx_functions /\
+    EVERY make_ssa_input_ok C.ctx_functions
 End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
@@ -617,10 +651,10 @@ Definition o1_lowered_inv_def:
     ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
 End
 
-(* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
-   second run establishes it and SimplifyCFG keeps it.  Row 6 also has
-   every block reachable, which SimplifyCFG establishes: SUE's copies of
-   literals keep wf_ssa only in reachable blocks. *)
+(* Rows 5 to 8 (SimplifyCFG's, SUE's, DFT's and the next run's input) add
+   wf_ssa: MakeSSA's second run establishes it and the later runs keep it.
+   Row 6 also has every block reachable, which SimplifyCFG establishes:
+   SUE's copies of literals keep wf_ssa only in reachable blocks. *)
 Definition o1_ssa_inv_def:
   o1_ssa_inv C vs <=> o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions
 End
@@ -638,14 +672,16 @@ Definition o1_inv_def:
     if k = 0 then
       (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k <= 2 then
-      (\C vs. o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
+      (\C vs. o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               ?names. callee_first names C.ctx_functions)
     else if k = 3 then
-      (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
-    else if k = 5 then o1_ssa_inv
+      (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               ?names. callee_first names C.ctx_functions)
+    else if k = 4 then
+      (\C vs. o1_lowered_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions)
+    else if k = 5 \/ k = 7 \/ k = 8 then o1_ssa_inv
     else if k = 6 then
       (\C vs. o1_ssa_inv C vs /\ EVERY all_reachable C.ctx_functions)
-    else if k = 8 then
-      (\C vs. o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions)
     else o1_lowered_inv
 End
 

@@ -529,7 +529,7 @@ Proof
     (qpat_x_assum `o1_walk_src_inv D pre.cu_context vs` mp_tac >>
      rewrite_tac[o1_walk_src_inv_def] >> strip_tac >> conj_tac
      >- (irule o1_src_inv_prune >> metis_tac[])
-     >> irule o1_prune_every >> first_assum ACCEPT_TAC) >>
+     >> conj_tac >> irule o1_prune_every >> first_assum ACCEPT_TAC) >>
   `ctx_sim D unit.cu_context
       (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs` by
     (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>

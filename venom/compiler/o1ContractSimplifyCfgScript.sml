@@ -258,6 +258,26 @@ Proof
   metis_tac[]
 QED
 
+Theorem simplify_cfg_pre_walk_make_ssa_input_ok:
+  o1_fn_shape C fn /\ fn_defs_reach_uses fn /\
+  EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) ==>
+  make_ssa_input_ok (simplify_cfg_fn fn)
+Proof
+  strip_tac >> drule_all simplify_cfg_pre_walk_structure >> strip_tac >>
+  `wf_function fn` by gvs[o1_fn_shape_def] >>
+  `simplify_cfg_fn_ok fn` by metis_tac[simplify_cfg_fn_ok_no_phi] >>
+  `EVERY (\i. i.inst_opcode <> PHI) (fn_insts (simplify_cfg_fn fn))` by
+    metis_tac[simplify_cfg_fn_no_phi] >>
+  `!bb inst. MEM bb (simplify_cfg_fn fn).fn_blocks /\
+    MEM inst bb.bb_instructions ==> inst.inst_opcode <> PHI` by
+    (rpt gen_tac >> strip_tac >>
+     `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+       (irule EVERY_fn_block >> metis_tac[]) >> gvs[EVERY_MEM]) >>
+  simp[make_ssa_input_ok_def, fn_phi_outputs_single_def_def,
+       fn_phis_non_degenerate_def] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem simplify_cfg_stage_bisim:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions ==>
@@ -349,8 +369,11 @@ Proof
         gvs[ctx_pass_stage_def] >>
       gvs[o1_src_inv_def] >> metis_tac[]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
-  simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  irule simplify_cfg_pre_walk_structure >>
+  simp[EVERY_MEM, MEM_MAP] >> conj_tac >> rpt gen_tac >> strip_tac >> gvs[]
+  >- (irule simplify_cfg_pre_walk_structure >>
+      gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
+      metis_tac[]) >>
+  irule simplify_cfg_pre_walk_make_ssa_input_ok >>
   gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
   metis_tac[]
 QED

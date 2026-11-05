@@ -1441,7 +1441,7 @@ Theorem cfg_norm_stage_walk:
 Proof
   simp[o1_run_contract_def, venomPassScheduleTheory.o1_fn_passes_def,
        o1_stage_contract_def, o1_inv_def] >> rpt gen_tac >> strip_tac >>
-  gvs[o1_lowered_inv_def, o1_run_state_ok_def,
+  gvs[o1_ssa_inv_def, o1_lowered_inv_def, o1_run_state_ok_def,
       unitTransformDefsTheory.o1_initial_state_ok_def] >>
   conj_tac >- (irule cfg_norm_stage_sim >> metis_tac[]) >>
   qexists_tac `eom` >>

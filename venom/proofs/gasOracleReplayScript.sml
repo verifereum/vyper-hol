@@ -657,16 +657,38 @@ Resume gas_base_data_dispatch[extcodecopy]:
   Cases_on `eval_operand d s` >> simp[lift_result_def]
 QED
 Resume gas_base_data_dispatch[log]:
-  (* admitted at base cut: static-frame LOG semantics (#1169) adds a cc_static Abort branch; Cases_on `a` finds no var *)
-  cheat
+  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `a` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def] >>
+  Cases_on `eval_operand (HD (REVERSE ops)) s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand (EL 1 (REVERSE ops)) s` >> simp[lift_result_def] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE ops)) s` >> simp[lift_result_def]
 QED
 Resume gas_base_data_dispatch[selfdestruct]:
-  (* admitted at base cut: static-frame SELFDESTRUCT semantics (#1169) adds a cc_static Abort branch; Cases_on `ops` finds no var *)
-  cheat
+  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  Cases_on `ops` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def, halt_state_def, set_returndata_def]
 QED
 Resume gas_base_data_dispatch[call]:
-  (* admitted at base cut: static-frame CALL semantics (#1169) adds a cc_static value guard; gas_exec_ext_call no longer matches *)
-  cheat
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "e r4"] >> simp[lift_result_def] >>
+  namedCases_on `r4` ["", "f r5"] >> simp[lift_result_def] >>
+  namedCases_on `r5` ["", "g r6"] >> simp[lift_result_def] >>
+  Cases_on `r6` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand e s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand f s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand g s` >> simp[lift_result_def] >>
+  IF_CASES_TAC >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
 QED
 Resume gas_base_data_dispatch[staticcall]:
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
@@ -701,12 +723,28 @@ Resume gas_base_data_dispatch[delegatecall]:
   irule (SRULE [gas_replay_at_def] gas_exec_delegatecall)
 QED
 Resume gas_base_data_dispatch[create]:
-  (* admitted at base cut: static-frame CREATE semantics (#1169) adds a cc_static Abort branch; namedCases_on `ops` finds no var *)
-  cheat
+  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  Cases_on `r2` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_create)
 QED
 Resume gas_base_data_dispatch[create2]:
-  (* admitted at base cut: static-frame CREATE2 semantics (#1169) adds a cc_static Abort branch; namedCases_on `ops` finds no var *)
-  cheat
+  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
+  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
+  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
+  Cases_on `r3` >> simp[lift_result_def] >>
+  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
+  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
+  irule (SRULE [gas_replay_at_def] gas_exec_create)
 QED
 Resume gas_base_data_dispatch[alloca]:
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
@@ -875,9 +913,6 @@ Theorem gas_base_non_gas:
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >> gvs[] >>
   all_tac
-  (* admitted at base cut: static-frame SSTORE/TSTORE semantics (#1169) add a cc_static Abort branch; Cases_on `outs` finds no var *)
-  >~ [`inst.inst_opcode = SSTORE`] >- cheat
-  >~ [`inst.inst_opcode = TSTORE`] >- cheat
   >~ [`inst.inst_opcode = MCOPY`] >- (irule gas_base_data_dispatch >> simp[])
   >~ [`inst.inst_opcode = ISTORE`] >- (irule gas_base_data_dispatch >> simp[])
   >~ [`inst.inst_opcode = CALLDATACOPY`] >- (irule gas_base_data_dispatch >> simp[])
@@ -924,6 +959,7 @@ Proof
   >>~- ([`gas_replay_at 0 (exec_read1 _ _) _`], irule gas_exec_read1 >> simp[])
   >>~- ([`gas_replay_at 0 (exec_write2 _ _) _`], irule gas_exec_write2 >> simp[]) >>
   simp[gas_replay_at_def, lift_result_def] >> gen_tac >>
+  Cases_on `s.vs_call_ctx.cc_static` >> simp[lift_result_def] >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def] >>
