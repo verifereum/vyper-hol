@@ -116,6 +116,16 @@ Proof
   >- (irule ao_cmp_nonphi_chunk >> metis_tac[])
 QED
 
+Theorem ao_cmp_operand_vars_eq:
+  !ops. dfgDefs$operand_vars ops = venomInst$operand_vars ops
+Proof
+  Induct
+  >- simp[dfgDefsTheory.operand_vars_def, venomInstTheory.operand_vars_def] >>
+  Cases_on `h` >>
+  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
+       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
+QED
+
 Theorem ao_cmp_phi_separation:
   !fn supply supply' fs inst flipped ignored.
   ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn))) /\
@@ -134,13 +144,7 @@ Proof
      simp[is_comparator_def]) >>
   `DISJOINT (set (inst_ir_vars inst)) ignored` by
     (gvs[] >> irule ao_cmp_ignored_inst_vars >> metis_tac[]) >>
-  `dfgDefs$operand_vars inst.inst_operands = venomInst$operand_vars inst.inst_operands` by
-    (Q.SPEC_TAC (`inst.inst_operands`, `ops`) >> Induct
-     >- simp[dfgDefsTheory.operand_vars_def, venomInstTheory.operand_vars_def] >>
-     Cases_on `h` >>
-     simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
-          venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
-  gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
+  gvs[ao_cmp_operand_vars_eq, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
       inst_ir_vars_def, inst_uses_def, MEM_APPEND,
       MEM_operand_vars_eq_Var] >>
   metis_tac[]
@@ -179,4 +183,18 @@ Proof
     (gen_tac >> strip_tac >> irule ao_cmp_phi_separation >> metis_tac[]) >>
   simp[ao_cmp_state_rel_indices] >>
   irule ao_cmp_eval_phis >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem ao_cmp_expand_take_phis:
+  !xs C. (!i. MEM i xs /\ i.inst_opcode = PHI ==> C i = [i]) ==>
+    FLAT (MAP C (TAKE (phi_prefix_length xs) xs)) =
+      TAKE (phi_prefix_length xs) xs /\
+    phi_prefix_length xs <= LENGTH xs
+Proof
+  Induct >> simp[phi_prefix_length_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def] >>
+  `C h = [h]` by metis_tac[MEM] >>
+  `FLAT (MAP C (TAKE (phi_prefix_length xs) xs)) =
+    TAKE (phi_prefix_length xs) xs /\ phi_prefix_length xs <= LENGTH xs` by
+    (first_x_assum irule >> metis_tac[MEM]) >> simp[]
 QED
