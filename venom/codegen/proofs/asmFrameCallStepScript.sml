@@ -238,6 +238,53 @@ Proof
   simp[bind_assoc, ignore_bind_def, asm_call_finish_def]
 QED
 
+Theorem asm_call_finish_balance:
+  u.contexts = (c,rb)::rest /\ LENGTH c.stack < stack_limit /\
+  stipend <= c.gasUsed /\ (lookup_account sender accounts).balance < value ==>
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (), u with contexts :=
+      (c with <| stack := 0w :: c.stack; returnData := [];
+                 gasUsed := c.gasUsed - stipend; pc updated_by SUC |>,rb)::rest)
+Proof
+  strip_tac >> drule_all asm_abort_call_value_state >>
+  simp[asm_call_finish_def]
+QED
+
+Theorem asm_call_finish_depth:
+  u.contexts = (c,rb)::rest /\ LENGTH c.stack < stack_limit /\
+  stipend <= c.gasUsed /\ value <= (lookup_account sender accounts).balance /\
+  1024 < LENGTH u.contexts ==>
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (), u with contexts :=
+      (c with <| stack := 0w :: c.stack; returnData := [];
+                 gasUsed := c.gasUsed - stipend; pc updated_by SUC |>,rb)::rest)
+Proof
+  strip_tac >> `LENGTH u.contexts = SUC (LENGTH rest)` by simp[] >>
+  simp[asm_call_finish_def, set_return_data_def, get_num_contexts_def,
+       bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `abort_unuse stipend v` >>
+  `v.contexts = (c with returnData := [],rb)::rest` by simp[Abbr `v`] >>
+  drule asm_abort_unuse_state >>
+  disch_then (qspec_then `stipend` mp_tac) >>
+  gvs[Abbr `v`, vfmConstantsTheory.stack_limit_def]
+QED
+
+Theorem asm_call_finish_proceed:
+  u.contexts = (c,rb)::rest /\
+  value <= (lookup_account sender accounts).balance /\
+  LENGTH u.contexts <= 1024 ==>
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    proceed_call op sender address value ao az code stipend
+      (Memory <| offset := ro; size := rs |>)
+      (u with contexts := (c with returnData := [],rb)::rest)
+Proof
+  strip_tac >> `LENGTH u.contexts = SUC (LENGTH rest)` by simp[] >>
+  simp[asm_call_finish_def, set_return_data_def, get_num_contexts_def,
+       bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, return_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
