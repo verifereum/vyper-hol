@@ -207,6 +207,82 @@ Proof
   gvs[EVERY_MEM]
 QED
 
+Theorem scfg_merge_block_layout[local]:
+  pseudos_prefix a /\ no_phis b /\ no_param_insts b.bb_instructions /\
+  (a.bb_label <> e ==> no_param_insts a.bb_instructions) /\
+  (a.bb_label = e ==> no_phis a) ==>
+  pseudos_prefix (merge_blocks a b) /\
+  ((merge_blocks a b).bb_label <> e ==>
+    no_param_insts (merge_blocks a b).bb_instructions) /\
+  ((merge_blocks a b).bb_label = e ==> no_phis (merge_blocks a b))
+Proof
+  strip_tac >> conj_tac
+  >- (irule scfg_pseudos_prefix_merge >>
+      gvs[no_phis_def, no_param_insts_def, EVERY_MEM,
+          scfg_pseudo_classification] >> metis_tac[]) >>
+  simp[merge_blocks_def, no_param_insts_def, no_phis_def] >>
+  conj_tac >> strip_tac >>
+  gvs[no_param_insts_def, no_phis_def] >>
+  qpat_x_assum `EVERY _ a.bb_instructions` mp_tac >>
+  qspec_tac (`a.bb_instructions`, `xs`) >> Induct >> simp[] >>
+  Cases_on `xs` >> gvs[]
+QED
+
+val block_param_layout = ``\e bb.
+  pseudos_prefix bb /\
+  (bb.bb_label <> e ==> no_param_insts bb.bb_instructions) /\
+  (bb.bb_label = e ==> no_phis bb)``;
+
+Theorem scfg_layout_blocks_iff[local]:
+  ^param_layout e f <=> EVERY (^block_param_layout e) f.fn_blocks
+Proof
+  BETA_TAC >> simp[fn_pseudos_prefix_def, no_phis_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem scfg_block_layout_map[local]:
+  (!i. MEM i bb.bb_instructions ==> (f i).inst_opcode = i.inst_opcode) /\
+  ^block_param_layout e bb ==>
+  ^block_param_layout e (bb with bb_instructions := MAP f bb.bb_instructions)
+Proof
+  BETA_TAC >> strip_tac >> conj_tac
+  >- (irule scfg_pseudos_prefix_map >> simp[] >> metis_tac[]) >>
+  gvs[no_param_insts_def, no_phis_def, EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem scfg_update_succ_layout[local]:
+  EVERY (^block_param_layout e) bbs ==>
+  EVERY (^block_param_layout e) (update_succ_phi_labels old new bbs succs)
+Proof
+  strip_tac >> irule scfg_update_succ_block_predicate >>
+  reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> disch_tac >> irule scfg_block_layout_map >>
+  conj_tac >- (rpt strip_tac >> Cases_on `i.inst_opcode = PHI` >>
+               simp[subst_label_inst_def]) >> (first_assum ACCEPT_TAC)
+QED
+
+Theorem scfg_chain_merge_layout[local]:
+  f.fn_blocks <> [] /\ first_block_no_preds f /\
+  (HD f.fn_blocks).bb_label = e /\ ^param_layout e f /\
+  lookup_block lbl f.fn_blocks = SOME a /\
+  lookup_block next f.fn_blocks = SOME b /\ can_merge_blocks f a b ==>
+  ^param_layout e (f with fn_blocks := update_succ_phi_labels next lbl
+    (replace_block lbl (merge_blocks a b) (remove_block next f.fn_blocks))
+    (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >>
+  `a.bb_label = lbl /\ b.bb_label = next /\
+   MEM a f.fn_blocks /\ MEM b f.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  `b.bb_label <> e` by
+    (drule_all can_merge_blocks_not_entry >> simp[]) >>
+  gvs[scfg_layout_blocks_iff] >>
+  irule scfg_update_succ_layout >> irule replace_block_every >> conj_tac
+  >- (BETA_TAC >> irule scfg_merge_block_layout >>
+      gvs[can_merge_blocks_def, EVERY_MEM] >> metis_tac[]) >>
+  irule remove_block_every >> simp[]
+QED
+
 Theorem simplify_cfg_fn_param_prefix:
   o1_fn_shape C fn /\ fn_pseudos_prefix fn /\
   EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
