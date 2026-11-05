@@ -9,12 +9,15 @@
  *)
 Theory bodyPtrIntCallCase
 Ancestors
+  bodyPtrIntCallEq bodyPtrIntCallWidened
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
 
-(* ADMITTED: a piece of the body induction.
+(* The piece of the body induction: bodyPtrIntCallEq proves the call at the
+   callee's declared return type; bodyPtrIntCallWidened holds the widened
+   call (RESIDUAL, posts-interface wave).
    Intuition.  Runtime only: the judgments assume ~cenv.ce_is_ctor, and
    body_inv makes it cx.in_deploy, so lookup_callable_function is the
    Internal lookup.  The S1 half of each post (expr_post, vv_post) is S1's
@@ -108,5 +111,11 @@ Theorem body_intcall_case_ptr:
        body_results_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >>
+  first_assum (assume_tac o MATCH_MP body_intcall_eq_ptr) >>
+  first_x_assum (assume_tac o MATCH_MP body_intcall_widened_ptr) >>
+  simp_tac std_ss [body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `lowered_value_type cenv (Call v16 (IntCall (src_id_opt,fn)) es v17) =
+            expr_type (Call v16 (IntCall (src_id_opt,fn)) es v17)` >>
+  metis_tac[]
 QED

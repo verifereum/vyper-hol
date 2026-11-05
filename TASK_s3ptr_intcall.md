@@ -4,19 +4,23 @@
 Status: planned
 Priority: P1
 Created: 2026-11-05
-Location: project root (target script lowering/bodyPtrIntCallCaseScript.sml)
+Location: project root (target script lowering/bodyPtrIntCallEqScript.sml)
 
 ## Theorem Statement (FROZEN)
 
-In lowering/bodyPtrIntCallCaseScript.sml: `body_intcall_case_ptr`, exactly as
-it stands in that file (the internal-call case
-`Call v16 (IntCall (src_id_opt,fn)) es v17` of `evaluate_ind`, for the
-predicates of lowering/bodyPtrPredsScript.sml). Its three induction
-hypotheses give `body_stmts_ptr_ok cxf body'` (the callee's body, at the
-context `push_function` makes), `body_exprs_ptr_ok cxd needed_dflts` (the
+In lowering/bodyPtrIntCallEqScript.sml: `body_intcall_eq_ptr`, exactly as
+it stands in that file. Its hypotheses are the three induction hypotheses
+of the internal-call case `Call v16 (IntCall (src_id_opt,fn)) es v17` of
+`evaluate_ind` for the predicates of lowering/bodyPtrPredsScript.sml:
+`body_stmts_ptr_ok cxf body'` (the callee's body, at the context
+`push_function` makes), `body_exprs_ptr_ok cxd needed_dflts` (the
 defaults, at the callee's stack) and `body_results_ptr_ok cx es` (the
-arguments); it concludes `body_expr_ptr_ok cx (Call v16 (IntCall
-(src_id_opt,fn)) es v17)`.
+arguments). Its conclusion is `body_expr_ptr_ok`'s for that call
+(`expr_sim_ptr` and `expr_vv_sim_ptr`), at a call whose annotation is the
+callee's declared return type:
+`lowered_value_type cenv e = expr_type e`. (The widened calls are held
+separately, in bodyPtrIntCallWidened, and bodyPtrIntCallCase combines the
+two; neither is your concern.)
 
 The predicates (`body_expr_ptr_ok`, `body_stmts_ptr_ok`, ...) are in
 lowering/bodyPtrPredsScript.sml. The judgments `expr_sim_ptr`,
@@ -34,13 +38,13 @@ venom/compiler/ptrDisciplineScript.sml.
 
 ## Completion Criteria
 
-1. `holbuild -j4 build bodyPtrIntCallCaseTheory` passes, with no `cheat` in
-   lowering/bodyPtrIntCallCaseScript.sml or in any theory you add.
-2. Helpers go in new leaf theories in lowering/ that bodyPtrIntCallCase
+1. `holbuild -j4 build bodyPtrIntCallEqTheory` passes, with no `cheat` in
+   lowering/bodyPtrIntCallEqScript.sml or in any theory you add.
+2. Helpers go in new leaf theories in lowering/ that bodyPtrIntCallEq
    imports (add them to its `Ancestors`), named `bodyPtrIntCall*`. Do not
    edit any other existing file: not bodyPtrDefs, bodyPtrPreds,
    fragGasPathPtr, fragGasSeqPtr, gasSummaryComposePtr, gasPathPtrExec,
-   stmtFragPtr, the ptr toolkit theories (fragExecPtr, typedCopy*Ptr,
+   stmtFragPtr, bodyPtrIntCallCase, bodyPtrIntCallWidened, the ptr toolkit theories (fragExecPtr, typedCopy*Ptr,
    wordCopyRobustPtr, robustCopyTransportPtr, representationCleanPtr,
    returnMetadataPtr, ghostPcTransportPtr, entryHaltPtr, ...), ptrSafeRun,
    ptrDiscipline, the S1 theories (bodySim*, exprSim*, stmtSim*, intCall*,
@@ -57,7 +61,7 @@ the tightest fix. Do NOT weaken the statement.
 ## Build
 
 ```
-holbuild -j4 build bodyPtrIntCallCaseTheory
+holbuild -j4 build bodyPtrIntCallEqTheory
 ```
 (from the project root, the directory containing holproject.toml)
 
@@ -145,7 +149,8 @@ theories into the build: read them for the shape only.
 
 | Resource | Location | Description |
 |---|---|---|
-| Target | lowering/bodyPtrIntCallCaseScript.sml | the theorem |
+| Target | lowering/bodyPtrIntCallEqScript.sml | the theorem |
+| Case and intuition | lowering/bodyPtrIntCallCaseScript.sml | the case it serves; intuition comment |
 | Predicates | lowering/bodyPtrPredsScript.sml | body_*_ptr_ok |
 | Judgments | lowering/bodyPtrDefsScript.sml | expr_sim_ptr, stmt_frag_ptr, frame_ret_ok_ptr, ghost_inv, ... |
 | Counted ptr paths | lowering/fragGasPathPtrScript.sml, lowering/fragGasSeqPtrScript.sml, lowering/gasSummaryComposePtrScript.sml, lowering/gasPathPtrExecScript.sml | path combinators |
@@ -162,4 +167,5 @@ theories into the build: read them for the shape only.
 ## Notes
 
 - Intermediate lemmas you add are yours to state; the target is frozen.
-- Intuition is in the comment above the statement.
+- Intuition is in the comment above body_intcall_case_ptr in
+  lowering/bodyPtrIntCallCaseScript.sml.
