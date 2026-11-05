@@ -4652,6 +4652,35 @@ Proof
   drule_at (Pat `step _ = _`) asm_call_nested_step_inl >> simp[]
 QED
 
+Theorem asm_call_run_collect:
+  (?d. s.msdomain = Collect d) /\ run_call s = SOME (r,t) ==>
+  ?d. t.msdomain = Collect d
+Proof
+  strip_tac >> gvs[run_call_def] >>
+  `(\p. ?d. (SND p).msdomain = Collect d) (r,t)` suffices_by simp[] >>
+  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
+  goal_assum $ drule_at Any >> simp[] >>
+  qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> strip_tac >>
+  Cases_on `step p1` >> rename1 `step p1 = (res,mid)` >> simp[] >>
+  drule_at (Pat `step _ = _`) step_preserves_collect >> simp[]
+QED
+
+Theorem asm_call_child_run_normal:
+  wf_state child /\ (?d. child.msdomain = Collect d) /\
+  2 <= LENGTH child.contexts ==>
+  ?t. run_call child = SOME (INL (),t) /\ wf_state t /\
+      LENGTH t.contexts + 1 = LENGTH child.contexts /\
+      (?d. t.msdomain = Collect d)
+Proof
+  strip_tac >> drule_all asm_call_child_run_classify >>
+  disch_then (qx_choose_then `r` (qx_choose_then `t` strip_assume_tac)) >>
+  `ISL r` by
+    (drule_at (Pat `run_call _ = _`) asm_call_nested_run_inl >> simp[]) >>
+  `?d. t.msdomain = Collect d` by
+    (drule_at (Pat `run_call _ = _`) asm_call_run_collect >> simp[]) >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
