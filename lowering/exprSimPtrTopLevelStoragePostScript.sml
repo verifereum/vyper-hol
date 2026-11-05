@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps exprSimPtrTopLevelCopy venomExecSemantics venomInst gasCount fragGasSeqPtr
   rich_list codegenRel decoderGhostFramePtr bodyPtrDefs ptrDiscipline venomState finite_map pred_set list words
 
-Theorem toplevel_copy_loop_post:
+Theorem toplevel_copy_loop_post_effects:
   compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
   fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
@@ -24,7 +24,8 @@ Theorem toplevel_copy_loop_post:
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     tnf.t_mem SUBSET toplevel_copy_taint_bound loc a b tn n /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `ptr_covers G tn dst s (32*n)` by
@@ -174,7 +175,7 @@ Proof
   drule_all toplevel_copy_store_taint_bound >> simp[]
 QED
 
-Theorem toplevel_copy_word_compiled_post:
+Theorem toplevel_copy_word_compiled_post_effects:
   do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
      emit_void MSTORE [Var dst;v] od sa = (out,sb) /\
   fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
@@ -192,7 +193,8 @@ Theorem toplevel_copy_word_compiled_post:
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     tnf.t_mem SUBSET toplevel_copy_taint_bound loc a b tn 1 /\
     ~r.vs_halted /\ r.vs_current_bb = sb.cs_current_bb /\
-    r.vs_inst_idx = LENGTH sb.cs_current_insts
+    r.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    LENGTH s.vs_memory <= LENGTH r.vs_memory
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule storage_copy_word_layout >> strip_tac >>
@@ -225,7 +227,7 @@ Proof
      qexists_tac `sa.cs_next_id` >> gvs[]) >>
   suspend "post"
 QED
-Resume toplevel_copy_word_compiled_post[post]:
+Resume toplevel_copy_word_compiled_post_effects[post]:
   `!x. x <> tmp ==> lookup_var x r = lookup_var x s /\
     FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm` by
@@ -246,6 +248,9 @@ Resume toplevel_copy_word_compiled_post[post]:
        simp[Abbr `i`, Abbr `opc`] >>
      rule_assum_tac (PURE_REWRITE_RULE[markerTheory.Abbrev_def]) >>
      drule_all toplevel_copy_word_memory_taint >> simp[]) >>
+  `LENGTH s.vs_memory <= LENGTH r.vs_memory` by
+    simp[Abbr `r`, Abbr `t`, Abbr `u1`, Abbr `u`,
+      venomMemPropsTheory.LENGTH_mstore_eq, update_var_def] >>
   qexistsl_tac [`r`, `Gf`, `tnf`] >> simp[] >>
   `tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm` by
     metis_tac[] >>
@@ -259,7 +264,95 @@ Resume toplevel_copy_word_compiled_post[post]:
   simp[same_blocks_def, emitted_insts_def, IS_PREFIX_APPEND] >>
   rpt strip_tac >> gvs[DROP_LENGTH_APPEND]
 QED
-Finalise toplevel_copy_word_compiled_post
+Finalise toplevel_copy_word_compiled_post_effects
+
+Theorem toplevel_copy_suffix_post_effects:
+  (if n = 1 then
+     do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+        emit_void MSTORE [Var dst;v] od
+   else do compile_word_copy_loop src (Var dst) n loc LocMemory F;
+           return () od) sa = (out,sb) /\
+  fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
+  32*n <= cap /\ n < 2**256 /\ b+cap < 2**256 /\
+  b+cap <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+    copy_prefix loc a b n s n t /\ copy_static t = copy_static s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    ptr_covers Gf tnf dst t cap /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_mem SUBSET toplevel_copy_taint_bound loc a b tn n /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `n = 1`
+  >- (qpat_x_assum `n = 1` SUBST_ALL_TAC >> gnvs[] >>
+      irule toplevel_copy_word_compiled_post_effects >>
+      rpt (goal_assum (drule_at Any)) >> simp[] >>
+      qexists_tac `src` >> simp[]) >>
+  gnvs[] >>
+  Cases_on `compile_word_copy_loop src (Var dst) n loc LocMemory F sa` >>
+  gnvs[compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_bind_def,
+    compileEnvTheory.comp_return_def] >>
+  irule toplevel_copy_loop_post_effects >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  qexists_tac `src` >> simp[]
+QED
+
+Theorem toplevel_copy_loop_post:
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
+  fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
+  32*n <= cap /\ n < 2**256 /\ b+cap < 2**256 /\
+  b+cap <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+    copy_prefix loc a b n s n t /\ copy_static t = copy_static s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    ptr_covers Gf tnf dst t cap /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_mem SUBSET toplevel_copy_taint_bound loc a b tn n /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule_all toplevel_copy_loop_post_effects >> metis_tac[]
+QED
+
+Theorem toplevel_copy_word_compiled_post:
+  do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+     emit_void MSTORE [Var dst;v] od sa = (out,sb) /\
+  fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
+  32 <= cap /\ b+cap < 2**256 /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK r) /\
+    copy_prefix loc a b 1 s 1 r /\ copy_static r = copy_static s /\
+    (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    ptr_covers Gf tnf dst r cap /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_mem SUBSET toplevel_copy_taint_bound loc a b tn 1 /\
+    ~r.vs_halted /\ r.vs_current_bb = sb.cs_current_bb /\
+    r.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule_all toplevel_copy_word_compiled_post_effects >> metis_tac[]
+QED
 
 Theorem toplevel_copy_suffix_post:
   (if n = 1 then
@@ -286,17 +379,5 @@ Theorem toplevel_copy_suffix_post:
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `n = 1`
-  >- (qpat_x_assum `n = 1` SUBST_ALL_TAC >> gnvs[] >>
-      irule toplevel_copy_word_compiled_post >>
-      rpt (goal_assum (drule_at Any)) >> simp[] >>
-      qexists_tac `src` >> simp[]) >>
-  gnvs[] >>
-  Cases_on `compile_word_copy_loop src (Var dst) n loc LocMemory F sa` >>
-  gnvs[compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_bind_def,
-    compileEnvTheory.comp_return_def] >>
-  irule toplevel_copy_loop_post >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  qexists_tac `src` >> simp[]
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule_all toplevel_copy_suffix_post_effects >> metis_tac[]
 QED
