@@ -599,3 +599,175 @@ Proof
     `s.vs_alloca_next`,`s.vs_memory`,`params`] >>
   asm_rewrite_tac[] >> fs[internal_args_rel_def]
 QED
+
+Theorem intcall_materialize_return_metadata:
+  !caps ce st ce' st'.
+  materialize_internal_params ce caps st = (ce',st') ==>
+  ce'.ce_return_pc = ce.ce_return_pc /\ ce'.ce_return_buf = ce.ce_return_buf
+Proof
+  Induct >- simp[moduleLoweringTheory.materialize_internal_params_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >>
+  simp[Once moduleLoweringTheory.materialize_internal_params_def] >>
+  Cases_on `h1`
+  >- (Cases_on `FLOOKUP ce.ce_vars h0` >> simp[]
+      >- metis_tac[] >>
+      Cases_on `x` >> simp[comp_bind_def, comp_ignore_bind_def] >>
+      rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def]) >> strip_tac >>
+      first_x_assum drule >> simp[]) >>
+  simp[] >> strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem intcall_stack_size_vars:
+  !params ce ce'. ce'.ce_vars = ce.ce_vars ==>
+    internal_stack_size ce' params = internal_stack_size ce params
+Proof
+  Induct >- simp[internal_stack_size_def] >>
+  PairCases >> simp[internal_stack_size_def]
+QED
+
+Theorem intcall_entry_materialize_code:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  materialize_internal_params ce1 caps stm = (ce2,st2) ==>
+  ce1.ce_vars = ce.ce_vars /\
+  MAP (\c. (FST c,FST (SND c))) caps = params /\
+  internal_stack_size ce1 params = internal_stack_size ce params /\
+  ce1.ce_return_pc = SOME (PtrVar rpc 0) /\ (?p. rpc = Var p) /\
+  ce2.ce_return_pc = ce1.ce_return_pc /\ ce2.ce_return_buf = ce1.ce_return_buf /\
+  DROP (LENGTH st.cs_current_insts) st2.cs_current_insts =
+    DROP (LENGTH st.cs_current_insts) stm.cs_current_insts ++
+    DROP (LENGTH stm.cs_current_insts) st2.cs_current_insts /\
+  LENGTH (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts) =
+    (if has_rb then 1 else 0) + LENGTH params + 1
+Proof
+  strip_tac >> drule intcall_entry_prefix_code >> strip_tac >>
+  drule intcall_materialize_append >> strip_tac >>
+  drule intcall_materialize_return_metadata >> strip_tac >>
+  `ce1.ce_vars = ce.ce_vars` by simp[] >>
+  `internal_stack_size ce1 params = internal_stack_size ce params` by
+    (irule intcall_stack_size_vars >> asm_rewrite_tac[]) >>
+  asm_rewrite_tac[] >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[NoAsms, GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]
+QED
+
+Theorem intcall_entry_materialize_path:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  materialize_internal_params ce1 caps stm = (ce2,st2) /\
+  internal_args_rel ce params src (if has_rb then 1 else 0)
+    s.vs_params s.vs_alloca_next s.vs_memory /\
+  intcall_entry_memory ce params src (if has_rb then 1 else 0) PG tn s /\
+  intcall_entry_return ce has_rb d PG s /\
+  (!name entry off sz. FLOOKUP src name = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (MemLoc off sz) ==>
+    val_footprint entry.type entry.value <= sz) /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH s.vs_params /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH PG /\
+  (if has_rb then 1 else 0) + LENGTH params < dimword (:256) /\
+  fresh_vars_wrt st s /\
+  (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts)
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  stor_taint_ok cx tn s /\
+  (!name. lookup_scopes name es.scopes = FLOOKUP src name) ==>
+  ?t G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv d ce2 cx es G' tn' t /\
+    intcall_completed src ce2 G' tn' t /\
+    return_buf_ptr d ce2 G' tn' t /\
+    eval_operand rpc t = SOME s.vs_return_pc_token /\ op_taint tn' rpc = {} /\
+    fresh_vars_wrt st2 t /\
+    (!aid. aid IN FDOM t.vs_allocas ==> aid < st2.cs_next_id) /\
+    t.vs_alloca_next = s.vs_alloca_next + internal_stack_size ce params /\
+    t.vs_inst_idx = s.vs_inst_idx +
+      LENGTH (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+    (!p k. ce2.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p) /\
+    (!p k. ce2.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p)
+Proof
+  strip_tac >> drule_all intcall_entry_materialize_code >> strip_tac >>
+  `isPREFIX (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts)
+    (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `isPREFIX _ _` mp_tac >>
+     asm_rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >>
+     strip_tac >> qexists_tac
+       `DROP (LENGTH stm.cs_current_insts) st2.cs_current_insts ++ l` >>
+     asm_rewrite_tac[APPEND_ASSOC]) >>
+  drule_all intcall_entry_prefix_path >>
+  disch_then (qspecl_then [`tn`,`G`,`D`] strip_assume_tac) >>
+  `intcall_mat_ready src FEMPTY ce1 caps stm G' tn' t /\
+    return_buf_ptr d ce1 G' tn' t` by suspend "ready" >>
+  `isPREFIX (DROP (LENGTH stm.cs_current_insts) st2.cs_current_insts)
+    (DROP t.vs_inst_idx bb.bb_instructions)` by suspend "suffix" >>
+  `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_halted = s.vs_halted /\ stor_taint_ok cx tn' t` by suspend "frame" >>
+  `(!x k. ce1.ce_return_pc = SOME (PtrVar (Var x) k) ==>
+    op_taint tn' (Var x) = {})` by (asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
+  `t.vs_alloca_next + internal_stack_size ce1 (MAP (\c. (FST c,FST (SND c))) caps)
+    < dimword (:256)` by asm_rewrite_tac[] >>
+  `lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\ ~t.vs_halted` by
+    asm_rewrite_tac[] >>
+  drule_all intcall_materialize_list_path >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`t'`,`G''`,`tn''`] >>
+  conj_tac >- suspend "path" >>
+  suspend "endpoint"
+QED
+
+Resume intcall_entry_materialize_path[ready]:
+  `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
+    tn'.t_mem = tn.t_mem` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+     qpat_x_assum `tn' with t_var := _ = tn` mp_tac >>
+     simp[venom_state_component_equality, taint_component_equality]) >>
+  drule_all intcall_entry_captured_ready >> simp[]
+QED
+
+Resume intcall_entry_materialize_path[frame]:
+  qpat_x_assum `t with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+  qpat_x_assum `tn' with t_var := _ = tn` mp_tac >>
+  simp[venom_state_component_equality, taint_component_equality] >>
+  rpt strip_tac >> gvs[stor_taint_ok_def]
+QED
+
+Resume intcall_entry_materialize_path[suffix]:
+  qpat_x_assum `isPREFIX (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) _` mp_tac >>
+  qpat_x_assum `DROP _ _ = _ ++ _` (fn th => pure_once_rewrite_tac[th]) >>
+  pure_rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  qexists_tac `l` >>
+  `t.vs_inst_idx = s.vs_inst_idx +
+     LENGTH (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts)` by
+    asm_rewrite_tac[ADD_ASSOC] >>
+  `DROP t.vs_inst_idx bb.bb_instructions =
+    DROP (LENGTH (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts))
+      (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `t.vs_inst_idx = s.vs_inst_idx + LENGTH _` (fn th =>
+       pure_rewrite_tac[th]) >> simp[NoAsms, DROP_DROP_T, ADD_COMM]) >>
+  qpat_x_assum `DROP t.vs_inst_idx _ = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `DROP _ _ = _ ++ _ ++ l` (fn th => pure_rewrite_tac[th]) >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]
+QED
+
+Resume intcall_entry_materialize_path[path]:
+  qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t)`
+    (mp_then Any mp_tac gas_path_ptr_then) >>
+  disch_then drule >> simp[]
+QED
+
+Resume intcall_entry_materialize_path[endpoint]:
+  `intcall_completed src ce2 G'' tn'' t'` by fs[intcall_mat_ready_def] >>
+  `ghost_inv d ce2 cx es G'' tn'' t'` by
+    (irule intcall_completed_ghost_inv >> asm_rewrite_tac[] >>
+     qexists_tac `src` >> asm_rewrite_tac[]) >>
+  `not_fresh_at stm p` by metis_tac[] >>
+  `lookup_var p t' = lookup_var p t` by metis_tac[] >>
+  asm_rewrite_tac[eval_operand_def] >>
+  fs[intcall_mat_ready_def] >>
+  conj_tac >-
+    (qpat_x_assum `eval_operand rpc t = _` mp_tac >>
+     asm_rewrite_tac[eval_operand_def]) >>
+  CONV_TAC (AC_CONV (ADD_ASSOC, ADD_COMM))
+QED
+Finalise intcall_entry_materialize_path

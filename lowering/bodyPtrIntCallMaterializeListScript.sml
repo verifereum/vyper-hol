@@ -301,7 +301,7 @@ QED
 (* The analogous S1 compiler-suffix facts are local to intCallCallee,
    as is loweringShapeProps' materialization shape rule.  This narrow
    append fact is the code-splitting interface needed by the ptr induction. *)
-Theorem intcall_materialize_append[local]:
+Theorem intcall_materialize_append:
   !caps cenv st ce st'.
     materialize_internal_params cenv caps st = (ce,st') ==>
     ?code. st'.cs_current_insts = st.cs_current_insts ++ code
@@ -563,7 +563,8 @@ Theorem intcall_materialize_list_path:
        internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps) /\
     t.vs_inst_idx = s.vs_inst_idx +
        LENGTH (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) /\
-    t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s)
 Proof
   Induct
   >- (simp[materialize_internal_params_def, comp_return_def,
@@ -657,6 +658,14 @@ Resume intcall_materialize_list_path[stack]:
      asm_rewrite_tac[] >> simp[]) >>
   qpat_x_assum `!ce st ce' st' src done G tn s ctx fn bb d cx PG D. _` drule_all >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `!x. not_fresh_at st x ==> lookup_var x t' = lookup_var x s` by
+    (qx_gen_tac `x` >> strip_tac >>
+     `not_fresh_at mid x` by
+       (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_ADD, LESS_EQ_TRANS]) >>
+     `x <> STRING #"%" (toString st.cs_next_var)` by
+       (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
+     qpat_x_assum `!x. not_fresh_at mid x ==> _` drule >>
+     asm_rewrite_tac[lookup_var_def, FLOOKUP_UPDATE] >> simp[]) >>
   qexistsl_tac [`t'`,`G''`,`tn''`] >>
   conj_tac
   >- (qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t)`
