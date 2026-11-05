@@ -2518,6 +2518,49 @@ QED
 
 Finalise asm_call_prepared_terminal_success_view
 
+Theorem asm_call_terminal_success_selected_effects:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR NONE,v) /\
+  t.contexts = (ct,rb)::rest /\ ct.stack = 1w::stk /\
+  ct.returnData = (FST (HD v.contexts)).returnData /\ ct.logs = c.logs /\
+  t.rollback.toDelete = s.rollback.toDelete /\
+  (value = 0 ==> t.rollback.accounts = s.rollback.accounts /\
+                t.rollback.tStorage = s.rollback.tStorage) /\
+  (op = StaticCall ==> value = 0) /\
+  a.as_accounts = s.rollback.accounts /\ a.as_transient = s.rollback.tStorage /\
+  a.as_logs = c.logs /\ a.as_pending_deletions = s.rollback.toDelete /\
+  out = FST (take_outcome (request_of s)
+    (outcome_of (request_of s).cr_kind t (LENGTH c.logs)
+      (LENGTH s.rollback.toDelete)::tail)) ==>
+  out.co_success /\ out.co_returnData = ct.returnData /\
+  adopt_outcome (request_of s) out (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
+    t.rollback.toDelete
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepared_request >> strip_tac >>
+  `computed_precompile (request_of s) ==>
+   precompile_result (request_of s).cr_target (request_of s).cr_data =
+     SOME (SOME ct.returnData)` by
+    (strip_tac >> drule_all asm_call_computed_finish_success >> simp[]) >>
+  qpat_x_assum `asm_call_prepare _ _ = _` kall_tac >>
+  qpat_x_assum `asm_call_finish _ _ _ = _` kall_tac >>
+  Cases_on `computed_precompile (request_of s)`
+  >- (`value = 0` by fs[computed_precompile_def] >>
+      gvs[take_outcome_def, outcome_of_def, failed_outcome_def,
+          adopt_outcome_def, adopt_outcome_deletions_def]) >>
+  gvs[take_outcome_def, outcome_of_def,
+      adopt_outcome_def, adopt_outcome_deletions_def] >>
+  Cases_on `op = StaticCall` >> gvs[]
+QED
+
 Theorem asm_frame_call_terminal_some:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
   a.as_pc < LENGTH prog /\
