@@ -39,7 +39,7 @@ Proof
   simp[allocas_from_def] >> metis_tac[]
 QED
 
-Theorem concretize_mload_demand_execution:
+Theorem concretize_mload_execution_clean_lanes:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -67,8 +67,9 @@ Theorem concretize_mload_demand_execution:
     step_inst_base inst t = OK tpost /\
     tpost = update_var v (mload (w2n dstT) t) t /\
     post = update_var v (mload (w2n dst) s) s /\
-    word_agree_except {i | i < 32 /\ w2n dst+i IN tn.t_mem}
-      (mload (w2n dst) s) (mload (w2n dstT) t)
+    (!i. i < 32 /\ w2n dst+i NOTIN tn.t_mem ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c
+        (w2n dst+i) (w2n dstT+i))
 Proof
   strip_tac >>
   drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
@@ -106,9 +107,6 @@ Proof
        qexists_tac `dst` >>
        `eval_operand opd t = SOME dst` by metis_tac[] >>
        simp[step_inst_base_def, exec_read1_def] >>
-       drule_then assume_tac local_rel_demand >>
-       irule demand_agree_mload >>
-       goal_assum (drule_at (Pat `demand_agree _ _ _`)) >>
        rpt strip_tac >> irule joint_relocation_demand_current >> simp[] >>
        conj_tac
        >- (simp[joint_observed_read_def, joint_reads_def, joint_mem_taint_def,
@@ -130,9 +128,6 @@ Proof
     metis_tac[resolved_activation_lookup] >>
   `lo <= b` by metis_tac[joint_activation_cache_lower_bound] >>
   qexists_tac `y` >> simp[step_inst_base_def, exec_read1_def] >>
-  drule_then assume_tac local_rel_demand >>
-  irule demand_agree_mload >>
-  goal_assum (drule_at (Pat `demand_agree _ _ _`)) >>
   rpt strip_tac >> irule joint_relocation_demand_current >> simp[] >>
   conj_tac
   >- (simp[joint_observed_read_def, joint_reads_def, joint_mem_taint_def,
@@ -144,4 +139,46 @@ QED
 val _ = List.app (fn th => if null (hyp th) then ()
                           else raise Fail "load production export has hypotheses")
   [frame_reachable_saved_allocas_from, joint_activation_cache_lower_bound,
-   concretize_mload_demand_execution];
+   concretize_mload_execution_clean_lanes];
+
+Theorem concretize_mload_demand_execution:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = MLOAD /\ inst.inst_operands = [opd] /\
+  inst.inst_outputs = [v] /\ eval_operand opd s = SOME dst ==>
+  ?dstT tpost. eval_operand opd t = SOME dstT /\
+    step_inst_base inst t = OK tpost /\
+    tpost = update_var v (mload (w2n dstT) t) t /\
+    post = update_var v (mload (w2n dst) s) s /\
+    word_agree_except {i | i < 32 /\ w2n dst+i IN tn.t_mem}
+      (mload (w2n dst) s) (mload (w2n dstT) t)
+Proof
+  strip_tac >> drule_all concretize_mload_execution_clean_lanes >> strip_tac >>
+  qexistsl_tac [`dstT`, `tpost`] >> asm_rewrite_tac[] >>
+  drule_then assume_tac local_rel_demand >>
+  irule demand_agree_mload >>
+  goal_assum (drule_at (Pat `demand_agree _ _ _`)) >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+val _ = if null (hyp concretize_mload_demand_execution) then ()
+        else raise Fail "load execution export has hypotheses";
