@@ -12,6 +12,11 @@ Ancestors
   accountsRelProps vyperStorageLayoutSafety bodyMemAssignTopWord
   exprSimTopLevelProps exprSimUnwrap exprLowering emitHelper
   vyperTypeSystem supportedTypes fragExec stmtSimAssignStorage bodyMemoryDefs
+  bodySim bodyExprPreFacts bodyStorageMetadata vyperTypeEnv
+  exprSimFieldLayout exprSimAttributeFields supportedStmtTraverse supportedStmts
+  supportedExprs vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
+  vyperLookup vyperTypeCallGraph supportedExprForms stmtSimAssignAttr
+  exprSimSource exprSimHypsDefs gasContext vyperPlaceResultTyping
 Libs
   monadsyntax
 
@@ -463,5 +468,71 @@ Theorem body_assign_attr_storage_mem:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e))
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e)) es
 Proof
-  cheat
+  Cases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >> rpt strip_tac >>
+  `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
+  `!ts vis mut id ty init.
+     MEM (VariableDecl vis mut id ty init) ts /\
+     (mut = Storage \/ mut = Transient) ==>
+     find_var_decl_by_name id ts <> NONE` by
+    (Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]) >>
+  `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
+   ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops` by
+    (qpat_x_assum `supported_storage_field_write _ _ _` mp_tac >>
+     simp[supported_storage_field_write_def, supported_storage_fields_def] >>
+     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
+     rename1 `SOME x` >> PairCases_on `x` >>
+     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+     Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
+     simp[] >> metis_tac[]) >> gvs[] >>
+  `get_module_code cx NONE = SOME tops /\ supported_program tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
+    fs[body_inv_def] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  `?tgt_ty. type_place_target env (TopLevelNameTarget (NONE,id)) = SOME (Type tgt_ty) /\
+    attribute_type env.type_defs tgt_ty fld = SOME fty` by
+    gvs[type_place_target_AttributeTarget, AllCaseEqs()] >>
+  `expr_type e = fty` by
+    (qpat_x_assum `type_stmt _ _ _ = SOME _` mp_tac >>
+     simp[type_stmt_def, atarget_accepts_def] >>
+     metis_tac[type_widens_to_word]) >>
+  gvs[type_place_target_TopLevelNameTarget]
+  >- (qpat_x_assum `env_consistent _ _ _`
+        (strip_assume_tac o REWRITE_RULE [env_consistent_def, env_context_consistent_def]) >>
+      first_x_assum drule >> strip_tac >> gvs[]) >>
+  drule_all env_consistent_toplevel_storage_static >> strip_tac >>
+  drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  rename1 `find_var_decl_by_name id tops = SOME (StorageVarDecl tr _, _)` >>
+  `tgt_ty = StructT sid` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[] >> drule_all build_maps_variable >> strip_tac >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld =
+    SOME (expr_type e,fsz)` by metis_tac[attribute_type_struct_field] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `lookup_var_slot_from_layout _ _ _ _ = SOME lslot` >>
+  rename1 `evaluate_type _ (StructT sid) = SOME stv` >>
+  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
+  drule_all struct_field_type >> strip_tac >>
+  drule struct_field_slot_exists >> strip_tac >>
+  rename1 `struct_field_slot fs fld = SOME (off,ftv)` >>
+  drule_all struct_field_offset_slots_eq >> strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `well_typed_expr env e` by gvs[type_stmt_def, atarget_accepts_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assignment_exists_def, int_calls_stmt_def,
+         int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `expr_vv_sim_mem ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_mem_ok_def] >>
+  irule compile_assign_attr_storage_mem >> simp[] >>
+  rpt strip_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  drule_all (SRULE [SF ETA_ss] exprSimSourceTheory.expr_body_pre_eval) >> strip_tac >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
+      value_runtime_typed_def]
 QED
