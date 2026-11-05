@@ -110,3 +110,35 @@ Proof
        bodyPtrDefsTheory.ghost_kept_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_gas_obs]
 QED
+
+Theorem typed_args_ready_ptr_admissible:
+  typed_args_ready_ptr d ctx PG func cenv cx arg_ty Inv (e::args) /\ Inv es /\
+  (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) ==>
+  gas_admissible (do r <- eval_expr cx e; read_result cx r od) expr_res_ok es
+Proof
+  simp[gasContextTheory.gas_admissible_def, typed_args_ready_ptr_def] >>
+  metis_tac[]
+QED
+
+Theorem typed_args_ready_ptr_marked_facts:
+  typed_args_ready_ptr d ctx PG func cenv cx arg_ty Inv (e::args) /\ Inv es /\
+  (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) /\
+  gas_marked_exec F (ctx,func)
+    (do r <- eval_expr cx e; read_result cx r od) (es,s0) marks (INL v) mid r ==>
+  Inv (mid with gas_obs := []) /\
+  typed_args_ready_ptr d ctx PG func cenv cx arg_ty Inv args /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes
+Proof
+  strip_tac >>
+  `(do r <- eval_expr cx e; read_result cx r od)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v, mid with gas_obs := [])` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[combinTheory.o_DEF]) >>
+  `Inv (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    metis_tac[] >>
+  drule_all typed_args_ready_ptr_head >> strip_tac >>
+  drule typed_args_ready_ptr_tail >>
+  drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >>
+  simp[] >> metis_tac[]
+QED
