@@ -299,3 +299,13 @@ Proof
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule fragGasPathPtrTheory.gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem raw_call_operand_actions:
+  eval_exprs cx (a::d::kws) =
+    do pair <- (do av <- bind (eval_expr cx a) (read_result cx);
+                   dv <- bind (eval_expr cx d) (read_result cx);
+                   return (av,dv) od);
+       kvs <- eval_exprs cx kws; return (FST pair::SND pair::kvs) od
+Proof
+  simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_assoc, bind_return]
+QED
