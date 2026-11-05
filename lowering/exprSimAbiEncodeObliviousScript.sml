@@ -14,7 +14,8 @@ QED
 
 Theorem lower_abi_encode_frag_facts:
   !ensure mid src info maxlen sa out sb.
-    lower_abi_encode ensure mid src info maxlen sa = (out,sb) ==>
+    lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+    (!l. src <> Label l) ==>
     cs_extends sa sb /\ frag_ops_free sa sb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
     ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
