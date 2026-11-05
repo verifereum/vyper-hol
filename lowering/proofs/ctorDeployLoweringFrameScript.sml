@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringFrame
 Ancestors
-  ctorDeployLoweringDefs o1PassContract bodySim
+  ctorDeployLoweringDefs ctorDeployLoweringBudget o1PassContract bodySim e2eDefs callTrace
 
 (* body_stmts_sim's premises for the constructor body at its start, and the
    side conditions of constructor_frame_ret_ok and constructor_exit_run. *)
@@ -13,6 +13,7 @@ Theorem deploy_ctor_body_frame:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
+    call_outcomes_ok am tx (MAP SND (call_trace es)) /\
     gas_variant vs (deploy_entry_state prog cplan tops es) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
