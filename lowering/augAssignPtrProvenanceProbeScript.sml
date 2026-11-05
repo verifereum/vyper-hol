@@ -15,12 +15,8 @@ Proof
   fs[FLOOKUP_DEF]
 QED
 
-Theorem word_ptr_val_ok_allows_provenance:
-  is_word_type ty /\ op_taint tn op = {} ==>
-  ptr_val_ok cx ty v op G tn s
-Proof
-  simp[ptr_val_ok_def]
-QED
+(* A tagged word cannot satisfy the strengthened ptr_val_ok word post.
+   The standalone obstruction below deliberately omits that postcondition. *)
 
 Theorem clean_add_guard_obstruction:
   FLOOKUP G left = NONE /\ FLOOKUP G right = SOME site /\ result <> left ==>

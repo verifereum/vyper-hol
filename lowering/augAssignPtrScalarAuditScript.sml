@@ -9,7 +9,9 @@
    metadata to build_func_info/build_func_return_type and struct metadata to
    make_struct_fields_map; expr_sim_inv fixes local declared types to
    ce_var_type and their representation to PtrVar. No assumption on arbitrary
-   ghost provenance of scalar operands follows just from ptr_val_ok.
+   ghost provenance was present in the pre-merge ptr_val_ok interface. The
+   strengthened word post now explicitly requires op_prov NONE, so this
+   historical source inventory is not a remaining cleanliness obstruction.
 
    compile_expr_body (2935-3029), exhaustive constructor partition:
    Literal: compile_literal_vv; word literals are Lit, complex literals are
