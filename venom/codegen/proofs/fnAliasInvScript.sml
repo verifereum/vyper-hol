@@ -437,6 +437,57 @@ Proof
       liveness_instrs_def, pred_setTheory.SUBSET_DEF]
 QED
 
+Theorem alias_fn_edge_succs:
+  wf_function fn /\ fn_cfg_edge fn a b ==>
+  MEM b (cfg_succs_of (cfg_analyze fn) a)
+Proof
+  rw[fn_cfg_edge_def] >>
+  irule cfgAnalysisPropsTheory.bb_succs_in_cfg_succs >> gvs[wf_function_def]
+QED
+
+Theorem alias_path_liveout_backward:
+  !tail fn d db endbb v.
+  wf_function fn /\ is_fn_path fn (d::tail) /\
+  (!l. MEM l (d::tail) ==> ?bb. lookup_block l fn.fn_blocks = SOME bb /\
+    MEM l (cfg_analyze fn).cfg_dfs_pre /\ phi_block_ready (liveness_analyze fn) bb) /\
+  (!l bb k. MEM l tail /\ lookup_block l fn.fn_blocks = SOME bb /\
+    k < LENGTH bb.bb_instructions ==> ~MEM v (inst_defs (EL k bb.bb_instructions))) /\
+  lookup_block d fn.fn_blocks = SOME db /\
+  lookup_block (LAST (d::tail)) fn.fn_blocks = SOME endbb /\
+  MEM v (live_vars_at (liveness_analyze fn) (LAST (d::tail)) (LENGTH endbb.bb_instructions)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) d (LENGTH db.bb_instructions))
+Proof
+  Induct >- (rpt strip_tac >> gvs[]) >> rpt strip_tac >>
+  `?hb. lookup_block h fn.fn_blocks = SOME hb /\
+    MEM h (cfg_analyze fn).cfg_dfs_pre /\ phi_block_ready (liveness_analyze fn) hb` by
+    metis_tac[MEM] >>
+  `MEM v (live_vars_at (liveness_analyze fn) h (LENGTH hb.bb_instructions))` by
+    (first_x_assum irule >> simp[] >>
+     gvs[is_fn_path_def, LAST_DEF] >> metis_tac[MEM]) >>
+  `LENGTH (collect_phis hb.bb_instructions) <= LENGTH hb.bb_instructions` by
+    (qspec_then `hb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+     pop_assum (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) h
+      (LENGTH (collect_phis hb.bb_instructions)))` by
+    (qspecl_then [`fn`, `h`, `hb`, `LENGTH (collect_phis hb.bb_instructions)`]
+       mp_tac livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+     simp[] >> disch_then irule >>
+     qexists_tac `LENGTH hb.bb_instructions` >> simp[] >> metis_tac[MEM]) >>
+  `MEM v (input_vars_from d hb.bb_instructions
+      (live_vars_at (liveness_analyze fn) h 0))` by
+    (irule alias_phi_ready_postprefix_input >> simp[] >>
+     rpt strip_tac >>
+     `k < LENGTH hb.bb_instructions` by decide_tac >> metis_tac[MEM]) >>
+  `fn_cfg_edge fn d h` by gvs[is_fn_path_def] >>
+  `MEM h (cfg_succs_of (cfg_analyze fn) d)` by
+    metis_tac[alias_fn_edge_succs] >>
+  `MEM d (cfg_analyze fn).cfg_dfs_pre` by metis_tac[MEM] >>
+  `cfg_reachable_of (cfg_analyze fn) d` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  metis_tac[alias_selected_input_liveout]
+QED
+
 Theorem alias_lineage_join_ordinary_coverage:
   liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
   cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
