@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem namespace_filter_distinct:
-  !fns. ALL_DISTINCT (FLAT (MAP fn_labels fns)) ==>
-        ALL_DISTINCT (FLAT (MAP fn_labels (FILTER P fns)))
+  !fns. ALL_DISTINCT (FLAT (MAP names fns)) ==>
+        ALL_DISTINCT (FLAT (MAP names (FILTER P fns)))
 Proof
   Induct >> simp[] >> gen_tac >> strip_tac >>
   Cases_on `P h` >> gvs[ALL_DISTINCT_APPEND] >>
@@ -99,7 +99,7 @@ QED
 
 (* ===== The label and PHI facts the source shape implies ===== *)
 
-Theorem bb_well_formed_terminator_last[local]:
+Theorem bb_well_formed_terminator_last:
   bb_well_formed bb /\ MEM inst bb.bb_instructions /\
   is_terminator inst.inst_opcode ==>
   inst = LAST bb.bb_instructions

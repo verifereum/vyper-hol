@@ -365,11 +365,14 @@ Definition o1_fn_shape_def:
        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
 End
 
-(* venom_wf without global instruction-id distinctness, which is the IR
-   supply's concern and not a pass's. *)
+(* Instruction ids are distinct across the context, as Python's global
+   counter makes them: ConcretizeMemLoc keys imported callee allocations
+   by ALLOCA id.  A pass keeps ids distinct within its function
+   (wf_function); across functions the IR supply keeps them apart. *)
 Definition o1_ctx_shape_def:
   o1_ctx_shape ctx <=>
-    ctx_wf ctx /\ EVERY (o1_fn_shape ctx) ctx.ctx_functions
+    ctx_wf ctx /\ ctx_inst_ids_distinct ctx /\
+    EVERY (o1_fn_shape ctx) ctx.ctx_functions
 End
 
 (* ===== Step contract: structural, per run ===== *)
@@ -412,10 +415,27 @@ End
    function at a time in a mixed context.  Row k holds of a function that
    has been through the first k walk passes; from row 3 on (after
    ConcretizeMemLoc) the function has no ALLOCA, which SingleUseExpansion
-   needs, since it would expand the literal operand of one. *)
+   needs, since it would expand the literal operand of one.  From row 4
+   (after FmpLowering, which puts the parameters first) to row 7 every
+   block's pseudo-instructions come first, and only the entry block has
+   parameter instructions: DFT keeps the pseudo-instructions in front of
+   the instructions it reschedules, so a PHI it found after another
+   instruction would move, and MakeSSA and SimplifyCFG keep the prefix
+   only because the blocks they rewrite or merge have no parameters.
+   From row 5 (after MakeSSA's second run) to row 7 the function is in
+   SSA form, as the stage rows 5 to 7 say of every function: off SSA, DFT
+   can schedule a use after a redefinition of its variable, which breaks
+   the call-check shape it owes.  Row 8 is DFT's output, and
+   CFGNormalization needs none of these of it.  Row 6 also has every block reachable,
+   as stage row 6 does: SingleUseExpansion keeps SSA only then. *)
 Definition o1_fn_row_def:
   o1_fn_row (k : num) fn <=>
-    3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)
+    (3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)) /\
+    (4 <= k /\ k <= 7 ==>
+       fn_pseudos_prefix fn /\
+       EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)) /\
+    (5 <= k /\ k <= 7 ==> wf_ssa fn) /\
+    (k = 6 ==> all_reachable fn)
 End
 
 (* The step contract of the k-th walk run: the step contract, with row k
@@ -472,11 +492,14 @@ QED
    as the entry state has it (FmpLowering seeds its pointer variable from
    vs_initial_fmp), and "code_end" bound to the code/data boundary
    (code_layout_valid), which LowerDload's ADD [_; Label "code_end"]
-   reads. *)
+   reads.  The call is not static, as the entry state's call is
+   (call_state_rel): under a static call SSTORE and the other state
+   writes abort, and DFT, which does not order them against the reads
+   after them, could then run a read the original run never reaches. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
     o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
-    code_layout_valid vs
+    code_layout_valid vs /\ ~vs.vs_call_ctx.cc_static
 End
 
 (* The lowered-phase fact with the frame pointer read off the state: the
@@ -666,13 +689,16 @@ End
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to.  Up to FmpLowering, which seals a
    function after its callees, the functions are in a callee-first
-   order. *)
+   order.  Rows 1 and 2 are in SSA form (MakeSSA's first run establishes
+   it, LowerDload's fresh variables keep it), which ConcretizeMemLoc's
+   pointer provenance needs. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k = 0 then
       (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k <= 2 then
       (\C vs. o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
