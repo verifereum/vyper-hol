@@ -10,7 +10,7 @@
 
 Theory exprSimBopRestWord
 Ancestors
-  exprSimBopRestWordIndex
+  exprSimBopRestWordLoads
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps
