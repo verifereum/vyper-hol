@@ -458,7 +458,7 @@ Proof
   >> qexists_tac `r` >> simp[]
 QED
 
-Theorem jnz_plan_decompose[local]:
+Theorem jnz_plan_decompose:
   inst.inst_opcode = JNZ /\
   inst.inst_operands = [cond; Label nz; Label z] /\
   ~is_label_operand cond /\ inst.inst_outputs = [] /\
@@ -658,7 +658,7 @@ Proof
   fs[venom_asm_rel_def]
 QED
 
-Theorem jnz_consume_rel[local]:
+Theorem jnz_consume_rel:
   venom_asm_rel lo ps v st /\ st.as_stack = w::tail ==>
   venom_asm_rel lo
     (release_dead_spills nl (ps with ps_stack := stack_pop 1 ps.ps_stack))
@@ -754,7 +754,7 @@ Proof
   irule jnz_consume_rel >> simp[]
 QED
 
-Theorem jnz_suffix[local]:
+Theorem jnz_suffix:
   asm_block_at prog st.as_pc
     [AsmPushLabel nz; AsmOp "JUMPI"; AsmPushLabel z; AsmOp "JUMP"] /\
   st.as_stack = w::tail /\
@@ -787,7 +787,7 @@ Proof
        asmSemTheory.asm_state_component_equality]
 QED
 
-Theorem frame_jump_context[local]:
+Theorem frame_jump_context:
   !cp lo ps fn ra vs st ps' out r label.
   context_venom_asm_rel cp lo ps (frame_view fn ra vs) st /\
   venom_asm_rel lo ps' (frame_view fn ra vs with vs_memory := st.as_memory) out /\
@@ -815,7 +815,7 @@ Proof
   simp[venom_asm_rel_jump_to]
 QED
 
-Theorem frame_jump_lift[local]:
+Theorem frame_jump_lift:
   !ctx cp lo fn ra rest mem0 ps vs ast top ps' out r label n o2pc prog.
   fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
   ast.as_stack = top ++ rest /\
