@@ -2651,3 +2651,45 @@ Proof
   >- (first_x_assum (qx_choose_then `e'` strip_assume_tac) >>
       simp[] >> disj1_tac >> metis_tac[])
 QED
+
+(* An OK terminator must transfer control, rather than finish execution.
+   Inspect result constructors only; memory slices and packed DRET states
+   are irrelevant to this classification. *)
+val terminator_result_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [AllCaseEqs(), exec_result_distinct, LET_THM, pairTheory.ELIM_UNCURRY];
+
+val terminator_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq]) >>
+  simp_tac terminator_result_ss [];
+
+Theorem step_inst_base_ok_terminator_jump:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  asm_simp_tac (bool_ss ++ simpLib.type_ssfrag ``:opcode`` ++
+    rewrites [is_terminator_def]) [] >>
+  terminator_ok_jump_tac
+QED
+
+Theorem step_inst_ok_terminator_jump:
+  !fuel ctx inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst fuel ctx inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  gvs[step_inst_non_invoke] >>
+  drule_all step_inst_base_ok_terminator_jump >> simp[]
+QED

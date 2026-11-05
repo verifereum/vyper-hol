@@ -151,34 +151,6 @@ Proof
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
-val term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[eval_operands_def, eval_operand_def, AllCaseEqs()] >>
-  rpt CASE_TAC >> gvs[] >> TRY pairarg_tac >> gvs[];
-
-Theorem step_inst_base_ok_terminator_jump[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- (term_ok_jump_tac >> rpt strip_tac >>
-      Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
-      Cases_on `r` >> gvs[])
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-QED
 
 Theorem step_non_ok_terminator[local]:
   !fuel ctx inst s s'.

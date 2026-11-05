@@ -674,3 +674,23 @@ Proof
   imp_res_tac run_block_preserves_labels >> gvs[] >>
   first_x_assum drule >> simp[]
 QED
+
+Theorem step_inst_base_ok_terminator_jump:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_ok_terminator_jump
+QED
+
+Theorem step_inst_ok_terminator_jump:
+  !fuel ctx inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst fuel ctx inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_ok_terminator_jump
+QED
