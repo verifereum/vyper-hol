@@ -435,3 +435,70 @@ Proof
   rpt gen_tac >> qspec_then `k` strip_assume_tac clear_outer_concrete_abort >>
   drule fragExecTheory.run_from_abort_no_halt >> simp[]
 QED
+
+Theorem clear_outer_not_target_case:
+  !k. ~target_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+    probe_deep_cenv probe_clear_source_context
+    (SubscriptTarget probe_clear_source_bt
+      (Literal (BaseT (UintT 256)) (IntL 0)))
+Proof
+  gen_tac >> strip_tac >>
+  qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[target_case_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`clear_source_env`, `probe_deep_source_state`] mp_tac) >>
+  disch_then (assume_tac o SRULE [clear_source_outer_target_pre]) >>
+  pop_assum mp_tac >> pure_rewrite_tac[target_sim_def] >> disch_tac >>
+  first_x_assum (qspecl_then
+    [`Type (BaseT (UintT 256))`, `initial_compile_state "entry"`,
+     `SND probe_descendant_outer`, `FST probe_descendant_outer`,
+     `INL (PlaceR (StoragePlace F 3w (BaseTV (UintT 256))))`,
+     `probe_clear_source_after`, `clear_outer_machine`] mp_tac) >>
+  simp[clear_source_outer_type, clear_source_outer_compile,
+       pairTheory.PAIR, probe_clear_source_bt_def, probe_clear_source_outer,
+       target_res_ok_def, clear_source_outer_has_code,
+       clear_source_outer_ids_distinct, clear_source_local_ptrs_reserved] >>
+  rewrite_tac[fragExecTheory.frag_exec_def] >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`probe_descendant_outer_caller`, `clear_outer_machine`] mp_tac) >>
+  disch_then (strip_assume_tac o SRULE
+    [clear_source_outer_has_code, clear_outer_machine_stmt_state_rel,
+     clear_outer_machine_position, vyperCompilerTheory.initial_compile_state_def]) >>
+  drule_all clear_outer_endpoint_stop >>
+  disch_then (qspec_then `k` strip_assume_tac) >>
+  qpat_x_assum `!fuel. _ ==> _` (qspec_then `fuel` mp_tac) >>
+  simp[] >> strip_tac >>
+  metis_tac[clear_outer_no_halt]
+QED
+
+(* All four frozen antecedents hold, but their claimed conclusion does not.
+   The final literal is pure; the destructive call is inside the base target.
+   A sufficient boundary repair must preserve read agreement for the captured
+   array header after base evaluation, even when that header has become dead
+   relative to its root. Outer-index purity alone cannot ensure this. *)
+Theorem clear_frozen_subscript_counterexample:
+  !k.
+    (target_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+       probe_deep_cenv probe_clear_source_context probe_clear_source_bt /\
+     ((?s pv s1. eval_base_place probe_clear_source_context probe_clear_source_bt s =
+         (INL pv,s1)) ==>
+       expr_sim_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+         probe_deep_cenv probe_clear_source_context
+         (Literal (BaseT (UintT 256)) (IntL 0)) /\
+       expr_vv_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+         probe_deep_cenv probe_clear_source_context
+         (Literal (BaseT (UintT 256)) (IntL 0))) /\
+     ~target_has_pop (SubscriptTarget probe_clear_source_bt
+         (Literal (BaseT (UintT 256)) (IntL 0))) /\
+     (!st r st' l.
+       compile_get_target_ptr compile_expr probe_deep_cenv probe_clear_source_bt st =
+         (r,st') /\ FST (SND r) = SOME l /\ is_slot_addressed l /\
+       (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
+       ~expr_has_effect (Literal (BaseT (UintT 256)) (IntL 0)))) /\
+    ~target_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+       probe_deep_cenv probe_clear_source_context
+       (SubscriptTarget probe_clear_source_bt
+         (Literal (BaseT (UintT 256)) (IntL 0)))
+Proof
+  simp[clear_base_case, clear_literal_cases, probe_clear_source_syntax,
+       clear_outer_not_target_case]
+QED
