@@ -357,6 +357,22 @@ Proof
   FULL_SIMP_TAC std_ss [] >> metis_tac[]
 QED
 
+Theorem expr_sim_inv_local_mem_src[local]:
+  !cenv cx env es id ty.
+    expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
+    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (?entry. lookup_scopes id es.scopes = SOME entry) /\
+    !entry. lookup_scopes id es.scopes = SOME entry ==>
+      evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  rpt gen_tac >>
+  pure_rewrite_tac [expr_sim_inv_def, env_consistent_def,
+    env_scopes_consistent_def] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (Cases_on `lookup_scopes id es.scopes` >>
+    metis_tac[optionTheory.IS_SOME_DEF]) >> metis_tac[]
+QED
+
 Theorem augassign_attr_source_fields_mem_src[local]:
   expr_sim_inv cenv cx env es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -369,7 +385,7 @@ Theorem augassign_attr_source_fields_mem_src[local]:
     evaluate_type (get_tenv cx) fty = SOME ftv /\ value_has_type ftv fv
 Proof
   strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all expr_sim_inv_local_mem_src >> strip_tac >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
     metis_tac[] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
@@ -736,7 +752,7 @@ Proof
   strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all augassign_attr_source_fields_mem_src >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all expr_sim_inv_local_mem_src >> strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word] >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by metis_tac[] >>
@@ -1036,6 +1052,8 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
+
+
 
 
 
