@@ -4765,17 +4765,16 @@ Theorem compile_array_memory_endpoint_post:
   expr_body_pre cenv cx env obj es0 /\
   expr_body_pre cenv cx env idx es /\ expr_type obj = ArrayT et bd /\
   ~expr_has_pop obj /\ ~expr_has_pop idx /\
-  eval_expr cx obj es0 = (INL (PlaceR (MemoryPlace id path)),es) /\
+  eval_expr cx obj es0 = (INL tv,es) /\
+  ((?v. tv = Value v) \/ (?id path. tv = PlaceR (MemoryPlace id path))) /\
   eval_expr cx idx es = (res,es') /\
   compile_expr cenv ty obj sa = (bvv,sm) /\
   lower_value compile_expr cenv ity idx sm = (iop,sn) /\
   vv_location bvv = SOME LocMemory /\ local_ptrs_reserved cenv sa /\
   stmt_state_rel ctx func cenv cx es0 s0 /\
-  vv_post ctx func cenv cx obj es0 sa sm s0 es
-    (PlaceR (MemoryPlace id path)) bvv q0 /\
+  vv_post ctx func cenv cx obj es0 sa sm s0 es tv bvv q0 /\
   expr_post ctx func cenv cx idx es sm sn q0 es' iv iop q1 ==>
-  vv_post ctx func cenv cx obj es0 sa sn s0 es'
-    (PlaceR (MemoryPlace id path)) bvv q1
+  vv_post ctx func cenv cx obj es0 sa sn s0 es' tv bvv q1
 Proof
   strip_tac >>
   `es.scopes = es0.scopes /\ es'.scopes = es.scopes` by
@@ -4795,9 +4794,10 @@ Proof
               lookup_var q q0 = SOME w ==> lookup_var q q1 = SOME w` by
     (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
        expr_post_cenv_ptr_vars >> simp[]) >>
-  `!v. read_result cx (PlaceR (MemoryPlace id path)) es' = (INL v,es') <=>
-       read_result cx (PlaceR (MemoryPlace id path)) es = (INL v,es)` by
-    (gen_tac >> irule read_result_source_components >> simp[]) >>
+  `!v. read_result cx tv es' = (INL v,es') <=>
+       read_result cx tv es = (INL v,es)` by
+    (gen_tac >> irule read_result_source_components >> simp[] >>
+     rpt strip_tac >> gvs[]) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `local_ptrs_rel func cenv es.scopes q0 /\
    local_ptrs_rel func cenv es'.scopes q1 /\ locals_kept cenv es q0 q1` by
@@ -4809,8 +4809,11 @@ Proof
      metis_tac[]) >>
   irule vv_post_expr_post_nonword_frame >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[is_word_type_def] >> rpt strip_tac
-  >~ [`(if tr then LocTransient else LocStorage) = LocMemory`] >-
-    (Cases_on `tr` >> gvs[]) >>
-  metis_tac[]
+  simp[is_word_type_def] >> rpt strip_tac >> gvs[] >>
+  rpt (all_tac >~ [`(if tr then LocTransient else LocStorage) = LocMemory`] >-
+    (Cases_on `tr` >> gvs[])) >>
+  rpt (all_tac >~ [`lookup_var q q1 = SOME w`] >-
+    (qpat_x_assum `!n q sz w. _` drule_all >> simp[])) >>
+  rpt (all_tac >~ [`mem_bytes_at b sz q1.vs_memory = _`] >-
+    (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule_all >> simp[]))
 QED
