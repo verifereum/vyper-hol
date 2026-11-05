@@ -33,6 +33,27 @@ Proof
       update_var_inst_idx] >> metis_tac[]
 QED
 
+Theorem dft_gas_gas_prefix_events:
+  l.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  (stack = [] ==> l.dft_occ_saved = []) /\
+  l.dft_occ_path = path /\ l.dft_occ_visit = visit /\
+  get_instruction bb s.vs_inst_idx = SOME x /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME y /\
+  x.inst_opcode = GAS /\ x.inst_outputs = [u] /\
+  y.inst_opcode = GAS /\ y.inst_outputs = [v] ==>
+  ((?h. h < 2 /\ dft_occ_gas_event i a
+      (FUNPOW (dft_occ_oracle_next w C) h l)) <=>
+   (i = x /\ a = path ++ [(visit,x.inst_id)]) \/
+   (i = y /\ a = path ++ [(visit,y.inst_id)]))
+Proof
+  strip_tac >> drule_all dft_suspend_gas_step >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  simp[dft_prefix_two_positions, FUNPOW] >>
+  gvs[dft_occ_gas_event_def, dft_occ_event_def, dft_occ_address_def,
+      update_var_inst_idx] >> metis_tac[]
+QED
+
 Theorem dft_ordinary_first_prefix_events:
   r.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
   MAP (dft_fill_frame 0) stack = stack /\
