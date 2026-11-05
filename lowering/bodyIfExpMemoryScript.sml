@@ -1875,6 +1875,31 @@ Proof
   drule_all ifexp_replace_popped_readable >> simp[]
 QED
 
+Theorem ifexp_entry_pop_readable[local]:
+  entry_pop_step entry mutation entry' /\
+  subscripts_type entry.type retained = SOME rty /\
+  read_memory_path entry retained = INL v ==>
+  ?w. read_memory_path entry' retained = INL w
+Proof
+  strip_tac >>
+  Cases_on `evaluate_subscripts entry.type entry.value mutation`
+  >- (drule_all ifexp_entry_pop_live_readable >> simp[]) >>
+  drule_all ifexp_entry_pop_history_readable >> simp[]
+QED
+
+Theorem ifexp_entry_pop_read_invariant[local]:
+  entry_pop_step entry mutation entry' /\
+  (subscripts_type entry.type retained = NONE \/
+   ?v. read_memory_path entry retained = INL v) ==>
+  subscripts_type entry'.type retained = NONE \/
+  ?w. read_memory_path entry' retained = INL w
+Proof
+  strip_tac >> drule vyperPlaceResultTypingTheory.entry_pop_step_metadata >>
+  strip_tac >> gvs[] >>
+  Cases_on `subscripts_type entry.type retained` >> simp[] >>
+  drule_all ifexp_entry_pop_readable >> simp[]
+QED
+
 
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
