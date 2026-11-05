@@ -140,3 +140,45 @@ Proof
   >- gvs[op_taint_def] >>
   gvs[stor_taint_ok_def, write_memory_with_expansion_def]
 QED
+
+Theorem calldatacopy_ghost_step:
+  !dst src count s d a n id fuel ctx PG G tn.
+    eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+    eval_operand count s = SOME n ==>
+    ghost_step fuel ctx PG G tn
+      (mk_inst id CALLDATACOPY [dst; src; count] []) s =
+    (G, tn with t_mem :=
+      tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n n})
+Proof
+  rpt strip_tac >>
+  simp[Once ghost_step_def, calldatacopy_step, calldatacopy_step_prov,
+       calldatacopy_step_taint, mk_inst_def] >>
+  simp[GSYM mk_inst_def] >>
+  `step_inst fuel ctx (mk_inst id CALLDATACOPY [dst; src; count'] []) s =
+    OK (write_memory_with_expansion (w2n d)
+      (TAKE (w2n n) (DROP (w2n a) s.vs_call_ctx.cc_calldata ++
+        REPLICATE (w2n n) 0w)) s)` by
+    (irule calldatacopy_step >> simp[]) >>
+  simp[] >> irule calldatacopy_step_taint >> metis_tac[]
+QED
+
+Theorem calldatacopy_ghost_kept:
+  !dst src count s d a n id fuel ctx PG G tn cenv es sa G0 tn0 s0.
+    eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+    eval_operand count s = SOME n /\
+    ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    ghost_kept cenv es sa G0 tn0 s0
+      (FST (ghost_step fuel ctx PG G tn
+        (mk_inst id CALLDATACOPY [dst; src; count] []) s))
+      (SND (ghost_step fuel ctx PG G tn
+        (mk_inst id CALLDATACOPY [dst; src; count] []) s))
+Proof
+  rpt strip_tac >>
+  `ghost_step fuel ctx PG G tn
+     (mk_inst id CALLDATACOPY [dst; src; count'] []) s =
+   (G, tn with t_mem := tn.t_mem DIFF
+     {i | w2n d <= i /\ i < w2n d + w2n n})` by
+    (irule calldatacopy_ghost_step >> metis_tac[]) >>
+  simp[] >> irule ghost_kept_mem_taint_decrease >>
+  simp[pred_setTheory.DIFF_SUBSET]
+QED
