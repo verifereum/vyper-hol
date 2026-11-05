@@ -148,6 +148,62 @@ Proof
     decide_tac >> asm_rewrite_tac[]
 QED
 
+Theorem place_store_dead_subregion:
+  !root path delta leaf.
+    storage_subregion root path delta leaf ==>
+    !base st j b. dead_bytes st (base + delta) leaf j b ==>
+      dead_bytes st base root j b
+Proof
+  ho_match_mp_tac vyperStoragePlaceRegionTheory.storage_subregion_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+  rpt strip_tac >> gvs[]
+  >- suspend "fixed"
+  >- suspend "dynamic"
+  >- suspend "struct"
+  >> suspend "tuple"
+QED
+
+Resume place_store_dead_subregion[fixed]:
+  simp[dead_bytes_def] >> qexists_tac `Num i` >> simp[] >>
+  first_x_assum drule >> disch_then irule >>
+  `base' + Num i * type_slot_size root + rest =
+   base' + (rest + Num i * type_slot_size root)` by decide_tac >>
+  asm_rewrite_tac[]
+QED
+
+Resume place_store_dead_subregion[dynamic]:
+  `dead_bytes st (base' + 1 + Num i * type_slot_size root) root j b` by
+    (first_x_assum drule >> disch_then irule >>
+     `base' + 1 + Num i * type_slot_size root + rest =
+      base' + (rest + (Num i * type_slot_size root + 1))` by decide_tac >>
+     asm_rewrite_tac[]) >>
+  simp[dead_bytes_def] >> qexists_tac `Num i` >> simp[] >>
+  IF_CASES_TAC
+  >- (`base' + (Num i * type_slot_size root + 1) =
+       base' + 1 + Num i * type_slot_size root` by decide_tac >>
+      asm_rewrite_tac[]) >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >> simp[] >> decide_tac
+QED
+
+Resume place_store_dead_subregion[struct]:
+  irule place_store_dead_struct_component >>
+  goal_assum (drule_at (Pat `struct_field_slot _ _ = _`)) >>
+  first_x_assum drule >> disch_then irule >>
+  asm_rewrite_tac[GSYM ADD_ASSOC]
+QED
+
+Resume place_store_dead_subregion[tuple]:
+  irule place_store_dead_tuple_component >>
+  goal_assum (drule_at Any) >>
+  first_x_assum drule >> disch_then irule >>
+  `base' + tuple_prefix_slot_size (Num i) types + rest =
+   base' + (rest + tuple_prefix_slot_size (Num i) types)` by decide_tac >>
+  asm_rewrite_tac[]
+QED
+
+Finalise place_store_dead_subregion
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
