@@ -543,6 +543,79 @@ Proof
       gvs[bind_def, expr_res_ok_def])
 QED
 
+Theorem ifexp_forced_arm_source[local]:
+  gas_admissible
+    (bind (bind (eval_expr cx e) (conditional_result cx)) (read_result cx))
+    expr_res_ok es ==>
+  !gs. bind (bind (eval_expr cx e) (conditional_result cx)) (read_result cx)
+         (es with gas_obs := gs) =
+       bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)
+Proof
+  rewrite_tac[gas_admissible_def] >> strip_tac >> gen_tac >>
+  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  rename1 `_ = (ar,ast)` >> Cases_on `ar` >> simp[bind_def] >>
+  rename1 `conditional_result cx raw ast` >>
+  Cases_on `(do r <- conditional_result cx raw; read_result cx r od) ast` >>
+  drule ifexp_conditional_read_cases >> strip_tac >> simp[bind_def] >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
+  gvs[bind_def, expr_res_ok_def]
+QED
+
+Theorem ifexp_forced_selected_source[local]:
+  gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
+    expr_res_ok es /\
+  (!tail. bind (eval_expr cx c) (read_result cx)
+    (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
+  !tail. bind (eval_expr cx (IfExp t c a b)) (read_result cx)
+    (es with gas_obs := xs ++ tail) =
+    bind (eval_expr cx (if sel then a else b)) (read_result cx)
+      (mid with gas_obs := tail)
+Proof
+  strip_tac >>
+  `gas_admissible
+    (bind (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
+      (read_result cx)) expr_res_ok (mid with gas_obs := [])` by
+    (rw[gas_admissible_def] >>
+     qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def] >> disch_then (qspec_then `xs ++ gs` mp_tac) >>
+     rewrite_tac[ifexp_root_eval_forced] >>
+     pure_once_rewrite_tac[bind_assoc] >>
+     pure_once_rewrite_tac[bind_def] >> simp[] >>
+     Cases_on `sel` >> gvs[bind_def]) >>
+  drule ifexp_forced_arm_source >> simp[] >> strip_tac >> gen_tac >>
+  simp[ifexp_root_eval_forced, bind_def] >>
+  first_x_assum (qspec_then `tail` mp_tac) >>
+  Cases_on `sel` >> gvs[bind_def]
+QED
+
+Theorem ifexp_forced_marked_prefix_mem[local]:
+  gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
+    expr_res_ok es /\
+  gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))
+    (es,s0) left (INL (BoolV sel)) mid (OK u) /\
+  gas_marked_exec T (ctx,func)
+    (bind (eval_expr cx (if sel then a else b)) (read_result cx))
+    (mid with gas_obs := [],u) right res fin r ==>
+  gas_marked_exec T (ctx,func)
+    (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
+    (es,s0) (left ++ right) res fin r
+Proof
+  strip_tac >>
+  `!tail. bind (eval_expr cx (IfExp t c a b)) (read_result cx)
+      (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ tail) =
+    bind (eval_expr cx (if sel then a else b)) (read_result cx)
+      (mid with gas_obs := tail)` by
+    (irule ifexp_forced_selected_source >> simp[] >>
+     fs[gas_marked_exec_def]) >>
+  `gas_explicit (left ++ right) s0.vs_gas_readings =
+    gas_explicit left s0.vs_gas_readings ++
+    gas_explicit right u.vs_gas_readings` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_explicit_append_path] >>
+  fs[gas_marked_exec_def] >> conj_tac
+  >- (pure_once_rewrite_tac[GSYM APPEND_ASSOC] >> pure_asm_rewrite_tac[] >> simp[]) >>
+  simp[LENGTH_APPEND] >> metis_tac[gas_marked_path_then]
+QED
+
 Theorem ifexp_read_conditional_cert[local]:
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -558,6 +631,46 @@ Proof
     (irule gas_exempt_cert_unforce_result >> simp[]) >>
   rewrite_tac[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
+QED
+
+Theorem ifexp_forced_selected_outcome_prefix_mem[local]:
+  gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
+    expr_res_ok es /\
+  gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))
+    (es,s0) marks (INL (BoolV sel)) mid (OK u) /\
+  gas_path_mem ctx func u 0 (OK v) /\
+  gas_outcome T tops (ctx,func)
+    (bind (eval_expr cx (if sel then a else b)) (read_result cx))
+    (mid with gas_obs := [],v) Q R ==>
+  gas_outcome T tops (ctx,func)
+    (bind (eval_expr cx (IfExp t c a b)) (read_result cx)) (es,s0) Q R
+Proof
+  strip_tac >>
+  `gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))
+    (es,s0) marks (INL (BoolV sel)) mid (OK v)` by
+    (irule ifexp_marked_zero_suffix_mem >> metis_tac[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (gvs[] >> qexists_tac `marks ++ marks'` >> disj1_tac >>
+      qexistsl_tac [`res`,`es_end`,`OK t'`] >> simp[] >>
+      irule ifexp_forced_marked_prefix_mem >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[])
+  >- (qexists_tac `marks ++ marks'` >> disj1_tac >>
+      qexistsl_tac [`res`,`es_end`,`r`] >> simp[] >>
+      irule ifexp_forced_marked_prefix_mem >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[]) >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_result >>
+  rewrite_tac[GSYM ignore_bind_def] >>
+  rewrite_tac[ifexp_root_eval_forced] >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  irule gas_exempt_cert_bind_value >>
+  qexistsl_tac [`mid`,`v`,`BoolV sel`] >> simp[] >>
+  Cases_on `sel` >> gvs[GSYM ignore_bind_def] >>
+  irule ifexp_read_conditional_cert >> simp[]
 QED
 
 Theorem ifexp_missing_flag_type_probe[local]:
@@ -722,5 +835,48 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_mem_def] >> rpt gen_tac >> strip_tac >>
   drule_all ifexp_word_lowering_result >> strip_tac >> gvs[] >>
-  cheat
+  `gas_admissible (eval_expr cx (IfExp (expr_type a) c a b)) expr_vv_res_ok es` by
+    (irule exprSimMemorySourceTheory.forced_expr_admissible_raw >> simp[]) >>
+  `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
+    (irule ifexp_root_condition_admissible >> goal_assum (drule_at Any)) >>
+  drule_all ifexp_root_code_layout >>
+  disch_then (qspec_then `T` strip_assume_tac) >>
+  qpat_x_assum `emit_inst JNZ _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst ASSIGN _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst JMP _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_expr cenv ty (if T then a else b) _ = _` kall_tac >>
+  qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` kall_tac >>
+  gvs[] >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ c _` mp_tac >>
+  simp[expr_sim_mem_def] >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (gvs[] >> suspend "selected_arm")
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`,`es_end`,`r`] >> simp[] >>
+      Cases_on `res` >> fs[expr_exit_def] >>
+      rewrite_tac[ifexp_root_eval_forced] >>
+      irule gas_marked_exec_bind_exception >>
+      irule gas_marked_exec_bind_exception >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_result >>
+  rewrite_tac[GSYM ignore_bind_def] >>
+  irule ifexp_root_condition_cert >> simp[]
+
 QED
+
+Resume compile_ifexp_word_sim_mem[selected_arm]:
+  `?sel. v = BoolV sel` by
+    (irule ifexp_root_condition_bool >> goal_assum (drule_at Any) >>
+     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> metis_tac[]) >>
+  gvs[] >>
+  cheat
+
+QED
+
+Finalise compile_ifexp_word_sim_mem
