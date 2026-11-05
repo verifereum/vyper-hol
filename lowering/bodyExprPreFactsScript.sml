@@ -71,9 +71,13 @@ QED
 
 Theorem supported_effect_main_int_calls[local]:
   (!tops e. supported_effect_expr tops e ==>
-      EVERY (\c. FST c = NONE) (int_calls_expr e)) /\
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_expr e)) /\
   (!tops e. supported_effect_place_expr tops e ==>
-      EVERY (\c. FST c = NONE) (int_calls_expr e))
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   rw[supported_effect_expr_def, int_calls_expr_def] >>
@@ -82,28 +86,58 @@ Proof
 QED
 
 (* A supported expression runs no EVM code, and its internal calls are to
-   the main module, as expr_body_pre asks. *)
+   internal functions of the main module, as expr_body_pre asks. *)
+(* A supported expression is no bare .code: supported_builtin_form
+   rejects Acc Code. *)
+Theorem supported_expr_not_extcode[local]:
+  !tops e. supported_expr tops e ==> ~is_extcode e
+Proof
+  rpt gen_tac >> Cases_on `is_extcode e` >> simp[] >>
+  Cases_on `e` >> gvs[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin _ b l` >> Cases_on `b` >>
+  gvs[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Acc a` >> Cases_on `a` >>
+  gvs[exprLoweringTheory.is_extcode_def] >>
+  Cases_on `l` >> gvs[exprLoweringTheory.is_extcode_def] >>
+  rename1 `_ :: tl` >> Cases_on `tl` >>
+  gvs[exprLoweringTheory.is_extcode_def,
+      supportedExprsTheory.supported_expr_def,
+      supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def,
+      supportedExprFormsTheory.supported_builtin_form_def]
+QED
+
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e)
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_expr e) /\
+    ~is_extcode e
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- metis_tac[supported_expr_no_evm_run] >>
+  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
+  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
   pop_assum mp_tac >> simp[supportedExprsTheory.supported_expr_def] >> strip_tac >>
   imp_res_tac supported_pure_int_calls >>
-  imp_res_tac supported_effect_main_int_calls >> gvs[]
+  imp_res_tac supported_effect_main_int_calls >>
+  gvs[listTheory.EVERY_CONJ]
 QED
 
 (* The same for a reason, which may also be a string literal. *)
 Theorem supported_string_reason_body_calls:
   !tops e. supported_string_reason tops e ==>
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e)
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_expr e) /\
+    ~is_extcode e
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `?t str. e = Literal t (StringL str)`
   >- gvs[expr_has_evm_run_def, supported_expr_exists_def,
-         expr_evm_run_root_def, int_calls_expr_def] >>
-  irule supported_expr_body_calls >> qexists_tac `tops` >>
+         expr_evm_run_root_def, int_calls_expr_def,
+         exprLoweringTheory.is_extcode_def] >>
+  irule supported_expr_body_calls >>
   simp[supportedExprsTheory.supported_expr_def] >>
   Cases_on `e` >> gvs[supported_string_reason_def] >>
   rename1 `Literal _ lit` >> Cases_on `lit` >>
@@ -115,11 +149,15 @@ Theorem stmt_expr_body_pre:
   !cenv cx env e es calls.
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+       (\e. ~is_extcode e /\
+             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+    ~is_extcode e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
-     ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops) /\
+     ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
+            EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+              (int_calls_expr e)) /\
     (!target. supported_expr_exists
        (expr_abi_decode_target_root target) e ==>
        occurs_abi_decode_target target (cx_tops cx)) /\
@@ -233,7 +271,8 @@ Theorem stmts_exprs_ok_EVERY:
   !cenv ss.
     EVERY (stmt_exprs_ok cenv) ss <=>
     ~supported_stmts_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) ss /\
+       (\e. ~is_extcode e /\
+             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) ss /\
     alloc_limits_stmts cenv ss /\
     (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv)
