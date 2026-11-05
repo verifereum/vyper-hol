@@ -2273,3 +2273,55 @@ Proof
  gvs[cse_phase_state_def, rich_listTheory.FOLDL_APPEND,
      cse_binding_fold_nonwriting]
 QED
+
+(* Interior PHI points below are syntactic analysis cuts, not runtime writes. *)
+Theorem cse_static_trace_phi_predecessor_barrier:
+ wf_function fn /\ fn_inst_wf fn /\ cse_static_trace fn ps /\
+ LAST ps = (bb.bb_label,0) /\
+ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+ k < phi_prefix_length bb.bb_instructions /\
+ cse_path_preorder fn (EL k bb.bb_instructions).inst_id src.inst_id /\
+ (EL k bb.bb_instructions).inst_id <> src.inst_id ==>
+ ~(?xs. FLOOKUP (ae_lookup_inst fn bb.bb_label 0) e = SOME xs /\ MEM src xs)
+Proof
+ strip_tac >>
+ `k < LENGTH bb.bb_instructions` by
+   (mp_tac phi_prefix_length_le >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+ `cse_static_trace fn (ps ++ GENLIST (\i. (bb.bb_label,SUC i)) k)` by
+   (qspecl_then [`k`, `ps`, `bb.bb_label`, `0`] mp_tac cse_static_trace_advance >>
+    simp[] >> disch_then irule >> simp[]) >>
+ `LAST (ps ++ GENLIST (\i. (bb.bb_label,SUC i)) k) = (bb.bb_label,k)` by
+   (Cases_on `k` >> simp[GENLIST]) >>
+ `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+   (drule cse_static_trace_reachable >> simp[] >>
+    metis_tac[cse_static_trace_nonempty, rich_listTheory.MEM_LAST, listTheory.list_CASES]) >>
+ `ae_lookup_inst fn bb.bb_label k = ae_lookup_inst fn bb.bb_label 0` by
+   (irule cse_avail_phi_prefix_unwrap >> simp[] >>
+    rpt strip_tac >>
+    qspec_then `bb.bb_instructions` mp_tac analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+    rewrite_tac[EVERY_EL] >> disch_then (qspec_then `j` mp_tac) >>
+    `j < phi_prefix_length bb.bb_instructions` by decide_tac >>
+    simp[LENGTH_TAKE, EL_TAKE, phi_prefix_length_le]) >>
+ `cse_point_has_id fn
+   (LAST (ps ++ GENLIST (\i. (bb.bb_label,SUC i)) k))
+   (EL k bb.bb_instructions).inst_id` by
+   simp[cse_point_has_id_def] >>
+ drule_all cse_static_trace_predecessor_barrier >> simp[] >> metis_tac[]
+QED
+
+Theorem cse_prefix_run_phi_predecessor_barrier:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseRun n s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ k < phi_prefix_length bb.bb_instructions /\
+ cse_path_preorder fn (EL k bb.bb_instructions).inst_id src.inst_id /\
+ (EL k bb.bb_instructions).inst_id <> src.inst_id ==>
+ ~cse_phase_has_source fn (CseRun n s) e src
+Proof
+ strip_tac >>
+ `s.vs_current_bb = bb.bb_label` by metis_tac[lookup_block_label] >>
+ drule_all cse_prefix_project_run >> strip_tac >>
+ `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by metis_tac[] >>
+ drule_all cse_static_trace_phi_predecessor_barrier >>
+ simp[cse_phase_has_source_def] >> metis_tac[]
+QED
