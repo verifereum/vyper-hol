@@ -2325,3 +2325,113 @@ Proof
  drule_all cse_static_trace_phi_predecessor_barrier >>
  simp[cse_phase_has_source_def] >> metis_tac[]
 QED
+
+Theorem cse_prefix_phi_input_cut[local]:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ !pre n bb s t post.
+ events = pre ++ [CsePhi n bb s t] ++ post ==>
+ cse_prefix ctx fn fuel0 s0 pre (CseRun (SUC n) s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+ Cases_on `post` using SNOC_CASES >>
+ gvs[GSYM rich_listTheory.SNOC_APPEND] >> metis_tac[]
+QED
+
+Theorem cse_source_interval_predecessor_nonwriting_all:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ events = pre ++ [CseStep m sb src u v] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+ MEM src (fn_insts fn) /\ MEM d (fn_insts fn) /\
+ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id src.inst_id /\ d.inst_id <> src.inst_id /\
+ (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+   cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+   cse_phase_has_source fn ph e src) ==>
+ EVERY (\ev. ~cse_event_writes ev x) (CseStep m sb src u v :: post)
+Proof
+ strip_tac >> Cases_on `d.inst_opcode = PHI`
+ >- suspend "phi"
+ >> drule_all cse_source_interval_predecessor_nonwriting >> simp[]
+QED
+
+Resume cse_source_interval_predecessor_nonwriting_all[phi]:
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ `EVERY (\ev. ~cse_event_writes ev x) post` by
+   (simp[EVERY_MEM] >> rpt strip_tac >>
+    `MEM ev events` by gvs[MEM_APPEND] >>
+    drule_all cse_prefix_writing_static_definer >> strip_tac >>
+    qpat_x_assum `MEM ev post` mp_tac >> rewrite_tac[MEM_SPLIT] >> strip_tac >>
+    rename1 `post = left ++ ev::right` >>
+    `events = (pre ++ [CseStep m sb src u v] ++ left) ++ [ev] ++ right` by
+      gvs[APPEND_ASSOC] >>
+    Cases_on `ev`
+    >- (qpat_x_assum `cse_event_covers _ _ _ _` mp_tac >>
+        rewrite_tac[cse_event_covers_def] >> strip_tac >>
+        rpt (qpat_x_assum `(_ :basic_block) = _` SUBST_ALL_TAC) >>
+        suspend "phi_writer") >>
+    qpat_x_assum `cse_event_covers _ _ _ _` mp_tac >>
+    rewrite_tac[cse_event_covers_def] >> strip_tac >>
+    rpt (qpat_x_assum `(_ :basic_block) = _` SUBST_ALL_TAC) >>
+    rpt (qpat_x_assum `(_ :instruction) = _` SUBST_ALL_TAC) >>
+    suspend "step_writer") >>
+ simp[cse_event_writes_def] >> strip_tac >>
+ `src = d` by (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[]) >>
+ gvs[]
+QED
+
+Resume cse_source_interval_predecessor_nonwriting_all[phi_writer]:
+ drule_all cse_prefix_phi_input_cut >> strip_tac >>
+     `TAKE (LENGTH (pre ++ [CseStep m sb src u v] ++ left)) events =
+        pre ++ [CseStep m sb src u v] ++ left` by
+       gvs[TAKE_APPEND1, TAKE_APPEND2] >>
+     rename1 `cse_prefix ctx fn fuel0 s0
+       (pre ++ [CseStep m sb src u v] ++ left) (CseRun q w)` >>
+     `cse_phase_has_source fn (CseRun q w) e src` by
+       (first_x_assum irule >>
+        qexists `LENGTH (pre ++ [CseStep m sb src u v] ++ left)` >> simp[] >> gvs[]) >>
+     `EL k bb'.bb_instructions = d` by gvs[get_instruction_def, AllCaseEqs()] >>
+     `~cse_phase_has_source fn (CseRun q w) e src` by
+       (irule cse_prefix_run_phi_predecessor_barrier >> metis_tac[]) >> simp[]
+QED
+
+Resume cse_source_interval_predecessor_nonwriting_all[step_writer]:
+ drule_all cse_prefix_step_input_cut >> strip_tac >>
+ `TAKE (LENGTH (pre ++ [CseStep m sb src u v] ++ left)) events =
+    pre ++ [CseStep m sb src u v] ++ left` by
+   gvs[TAKE_APPEND1, TAKE_APPEND2] >>
+ rename1 `cse_prefix ctx fn fuel0 s0
+   (pre ++ [CseStep m sb src u v] ++ left) (CseExec q blk w)` >>
+ `cse_phase_has_source fn (CseExec q blk w) e src` by
+   (first_x_assum irule >>
+    qexists `LENGTH (pre ++ [CseStep m sb src u v] ++ left)` >> simp[] >> gvs[]) >>
+ `~cse_phase_has_source fn (CseExec q blk w) e src` by
+   (irule cse_prefix_exec_predecessor_barrier >> metis_tac[]) >> simp[]
+QED
+
+Finalise cse_source_interval_predecessor_nonwriting_all
+
+Theorem cse_source_interval_predecessor_binding_all:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ events = pre ++ [CseStep m sb src u v] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+ MEM src (fn_insts fn) /\ MEM d (fn_insts fn) /\
+ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id src.inst_id /\ d.inst_id <> src.inst_id /\
+ (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+   cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+   cse_phase_has_source fn ph e src) ==>
+ lookup_var x s = lookup_var x u
+Proof
+ strip_tac >> drule_all cse_source_interval_predecessor_nonwriting_all >> strip_tac >>
+ qpat_assum `cse_prefix _ _ _ _ events _`
+   (mp_then Any (qspec_then `x` mp_tac) cse_prefix_binding_fold) >>
+ qpat_assum `cse_prefix _ _ _ _ pre _`
+   (mp_then Any (qspec_then `x` mp_tac) cse_prefix_binding_fold) >>
+ gvs[cse_phase_state_def, rich_listTheory.FOLDL_APPEND,
+     cse_binding_fold_nonwriting]
+QED
