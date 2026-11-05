@@ -612,3 +612,42 @@ Proof
        order_run_s20_memory_length] >>
   simp[order_run_s21_def, order_run_s20_def]
 QED
+
+(* Final bytestring length header, preserving the copied data byte. *)
+Definition order_run_s22_def:
+  order_run_s22 = order_run_s21 with
+    <|vs_memory := TAKE 256 order_run_s21.vs_memory ++
+        word_to_bytes (1w:bytes32) T ++ DROP 288 order_run_s21.vs_memory;
+      vs_inst_idx := 22|>
+End
+
+Theorem order_run_s21_buffer_operand:
+  lookup_var "%1" order_run_s21 = SOME 256w
+Proof
+  simp[venomStateTheory.lookup_var_def, order_run_s21_def, order_run_s20_def,
+       order_run_s19_def, order_run_s18_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s17_def, order_run_s16_def, order_run_s15_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s14_def, order_run_s13_def, order_run_s12_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s11_def, order_run_s10_def, order_run_s9_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s8_def, order_run_s7_def, order_run_s6_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[order_run_s5_def, order_run_s4_def, order_run_s3_def,
+       order_run_s2_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem order_run_step21:
+  step_inst_base (mk_inst 21 MSTORE [Var "%1";Lit 1w] []) order_run_s21 =
+    OK (order_run_s22 with vs_inst_idx := 21)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_write2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, order_run_s21_buffer_operand] >>
+  `LENGTH order_run_s21.vs_memory = 289` by
+    simp[order_run_s21_def, order_run_s20_memory_length] >>
+  simp[venomStateTheory.mstore_def,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  simp[order_run_s22_def, order_run_s21_def]
+QED
