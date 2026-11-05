@@ -23,14 +23,14 @@ Ancestors
   exprSimHypsDefs
   exprSimDefs
   loweringPosts
-  list rich_list finite_map pair
+  list rich_list finite_map pair vyperMisc
   fragExec  exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim supportedExprTraverse
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc vyperPureExpr
-  vyperScopePreservation
+  vyperScopePreservation vyperStatePreservation vyperCreateFrame
   venomState venomInst
 Libs
   pairLib
@@ -116,6 +116,248 @@ Theorem target_subscript_call_cleanup_scopes:
 Proof
   strip_tac >> drule finally_pop_function_then_scopes >>
   impl_tac >- metis_tac[target_subscript_unlock_scopes] >> simp[]
+QED
+
+Theorem target_subscript_nopop_scopes_mutual[local]:
+  (!cx:evaluation_context. !s:stmt. T) /\
+  (!cx:evaluation_context. !ss:stmt list. T) /\
+  (!cx:evaluation_context. !it:iterator. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx e st res st'.
+    ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e /\
+    eval_expr cx e st = (res,st') ==> st'.scopes = st.scopes) /\
+  (!cx es st res st'.
+    ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) es /\
+    eval_exprs cx es st = (res,st') ==> st'.scopes = st.scopes) /\
+  (!cx bt st res st'.
+    ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
+    eval_base_place cx bt st = (res,st') ==> st'.scopes = st.scopes) /\
+  (!cx bt st res st'.
+    ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
+    eval_target_place cx bt st = (res,st') ==> st'.scopes = st.scopes) /\
+  (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
+  (!cx es st res st'.
+    ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) es /\
+    eval_expr_results cx es st = (res,st') ==> st'.scopes = st.scopes)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  simp[supported_expr_exists_def]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, lift_option_type_def,
+          return_def, raise_def, AllCaseEqs()])
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >>
+      imp_res_tac lookup_global_scopes >> gvs[])
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >>
+      imp_res_tac lookup_flag_mem_scopes >> gvs[])
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def,
+          switch_BoolV_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac read_result_state >>
+      imp_res_tac conditional_result_state >> gvs[] >>
+      gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[])
+  >- (rpt strip_tac >> gvs[Once evaluate_def, return_def])
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+      fs[supported_exprs_exists_every, supported_fields_exists_every, EXISTS_MAP] >>
+      metis_tac[])
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+      gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `builtin_args_length_ok bt (LENGTH es)`
+      >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
+          Cases_on `bt = Env MsgGas` >>
+          gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+              assert_def, return_def, raise_def, AllCaseEqs()] >>
+          imp_res_tac result_array_length_state >>
+          imp_res_tac next_gas_reading_state >>
+          imp_res_tac precompile_call_success_state >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
+          Cases_on `es` >>
+          gvs[vyperContextTheory.builtin_args_length_ok_def,
+              supported_expr_exists_def] >> metis_tac[])
+      >> simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+              ignore_bind_def, raise_def])
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `type_builtin_args_length_ok tb (LENGTH es)` >>
+      rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac lift_sum_state >> gvs[] >>
+      first_x_assum drule >> simp[type_check_def, assert_def, return_def] >>
+      metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      Cases_on `LENGTH es = if has_gas then 3 else 2` >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def] >>
+      first_x_assum (qspecl_then [`st`, `st`] mp_tac) >>
+      simp[type_check_def, assert_def, return_def] >> strip_tac >>
+      rpt CASE_TAC >> rpt strip_tac >> gvs[] >>
+      first_x_assum drule >> strip_tac >> gvs[] >>
+      drule eval_send_preserves_non_accounts >> strip_tac >> gvs[] >>
+      metis_tac[])
+  >- (rpt strip_tac >>
+      fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
+      `EVERY (\e. ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e)
+         (TAKE 1 es)` by metis_tac[EVERY_TAKE] >>
+      `EVERY (\e. ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e)
+         (TAKE (LENGTH (FST (SND sig))) (DROP 1 es))` by
+        metis_tac[EVERY_TAKE, EVERY_DROP] >>
+      `EVERY (\e. ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e)
+         (DROP (LENGTH (FST (SND sig)) + 1) es)` by metis_tac[EVERY_DROP] >>
+      qpat_x_assum `eval_expr cx (Call _ (ExtCall _ _ _ _) _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+      strip_tac >> imp_res_tac eval_ext_call_preserves_non_accounts >>
+      imp_res_tac read_results_state >> gvs[] >>
+      rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+      rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
+      metis_tac[])
+  >- suspend "IntCall"
+  >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, type_check_def, assert_def, lift_option_type_def,
+           option_CASE_rator] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, type_check_def, assert_def, lift_option_type_def,
+           option_CASE_rator] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, check_def, type_check_def, assert_def, lift_option_def,
+           lift_option_type_def, push_log_def, option_CASE_rator] >>
+      strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[])
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+          raise_def, check_def, type_check_def, assert_def] >> metis_tac[])
+  >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, check_def, type_check_def, assert_def, lift_option_def,
+           lift_option_type_def, get_accounts_def, option_CASE_rator] >>
+      strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[])
+  >- suspend "CreateTarget"
+  >- simp[Once evaluate_def, return_def]
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_exprs cx (_::_) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+      strip_tac >> imp_res_tac read_result_state >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()])
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >>
+      imp_res_tac lookup_global_scopes >> gvs[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_base_place cx (AttributeTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac extend_place_state >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+      gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_target_place cx _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac get_place_state >> gvs[] >> metis_tac[])
+  >- simp[Once evaluate_def, return_def]
+  >> rpt strip_tac >>
+  qpat_x_assum `eval_expr_results cx (_::_) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  strip_tac >> metis_tac[]
+QED
+
+Resume target_subscript_nopop_scopes_mutual[CreateTarget]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
+  drule_then assume_tac EVERY_TAKE >>
+  drule_then assume_tac EVERY_DROP >>
+  `!n. EVERY ($~ o supported_expr_exists (\x. ?ty t. x = Pop ty t))
+      (TAKE n (DROP 2 es))` by metis_tac[EVERY_TAKE, EVERY_DROP] >>
+  `!n. EVERY ($~ o supported_expr_exists (\x. ?ty t. x = Pop ty t))
+      (DROP n (DROP 2 es))` by metis_tac[EVERY_DROP] >>
+  Cases_on `kind` >> gvs[] >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  imp_res_tac read_results_state >> gvs[] >>
+  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[]
+  >> rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac)
+  >> rpt (qpat_x_assum `!a b c d e f g h i j. _` drule_all >> strip_tac)
+  >> rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac)
+  >> gvs[]
+QED
+
+Resume target_subscript_nopop_scopes_mutual[IntCall]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!s t s1 ts t1 s2 tup t2 s3 t3 s4 vs t4 s5 prev t5 s6 t6. _` kall_tac >>
+  rule_assum_tac (SRULE [type_check_def, assert_def, lift_option_type_def,
+                        option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+      assert_def, lift_option_type_def, option_CASE_rator,
+      return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac finally_set_scopes >>
+  imp_res_tac (target_subscript_call_cleanup_scopes |>
+    Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>
+    SRULE [unlock_if_nr_def, ignore_bind_def]) >>
+  imp_res_tac read_results_state >>
+  gvs[get_scopes_def] >>
+  rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
+  gvs[return_def, push_function_def] >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt IF_CASES_TAC >>
+  simp[bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> Cases_on `cx.nonreentrant_slot` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  gvs[]
+QED
+
+Finalise target_subscript_nopop_scopes_mutual
+
+Theorem target_subscript_nopop_expr_scopes:
+  ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e /\
+  eval_expr cx e es = (res, ee) ==> ee.scopes = es.scopes
+Proof
+  metis_tac[cj 5 target_subscript_nopop_scopes_mutual]
+QED
+
+Theorem target_subscript_nopop_exprs_scopes:
+  ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
+  eval_exprs cx xs es = (res, ee) ==> ee.scopes = es.scopes
+Proof
+  metis_tac[cj 6 target_subscript_nopop_scopes_mutual]
+QED
+
+Theorem target_subscript_nopop_base_scopes:
+  ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
+  eval_base_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
+Proof
+  metis_tac[cj 7 target_subscript_nopop_scopes_mutual]
+QED
+
+Theorem target_subscript_nopop_target_scopes:
+  ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
+  eval_target_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
+Proof
+  metis_tac[cj 8 target_subscript_nopop_scopes_mutual]
+QED
+
+Theorem target_subscript_nopop_results_scopes:
+  ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
+  eval_expr_results cx xs es = (res, ee) ==> ee.scopes = es.scopes
+Proof
+  metis_tac[cj 11 target_subscript_nopop_scopes_mutual]
 QED
 
 (* A failed base consumes exactly the same marked path in the full target;
