@@ -3,6 +3,7 @@ Ancestors
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueSelection
   concretizePtrValueTransport ptrDiscipline unitShapeDefs
   venomExecSemantics venomState finite_map list
+  concretizeStepStructure passSharedDefs venomWf passSimulationDefs rich_list venomInst unitLabelMapIdentity venomExecProofs
 
 Theorem ptr_mixed_phis_token[local]:
   !insts s s'. eval_phis s insts = OK s' ==>
@@ -64,4 +65,76 @@ Proof
        FLOOKUP_DRESTRICT, op_taint_def] >>
   qpat_x_assum `ptr_mixed_vars births positions TG tn f g s t` kall_tac >>
   drule_all ptr_mixed_vars_lookup >> simp[op_taint_def]
+QED
+
+Theorem ptr_positions_eval_phis_map[local]:
+  !insts s. eval_phis s (MAP (concretize_inst_with_positions p) insts) =
+    eval_phis s insts
+Proof
+  Induct >> simp[eval_phis_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[concretize_positions_phi, eval_phis_def]
+QED
+
+(* Arbitrary deletions after the leading PHIs do not affect their parallel
+   evaluation. Unlike NOP-specific clearing interfaces this also covers
+   deleted non-PHI allocation instructions. *)
+Theorem ptr_eval_phis_filter_prefix:
+  !insts s P.
+  (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
+    (EL i insts).inst_opcode = PHI) /\
+  (!i. MEM i insts /\ i.inst_opcode = PHI ==> P i) ==>
+  eval_phis s (FILTER P insts) = eval_phis s insts
+Proof
+  Induct >- simp[eval_phis_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`P h` by metis_tac[MEM] >> simp[eval_phis_def] >>
+      `eval_phis s (FILTER P insts) = eval_phis s insts` by
+        (first_x_assum irule >> simp[MEM] >> rpt strip_tac
+         >- (qpat_x_assum `!i j. _` (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+             simp[EL_CONS]) >> metis_tac[MEM]) >> simp[]) >>
+  Cases_on `P h` >- simp[eval_phis_def] >>
+  simp[eval_phis_def] >> irule eval_phis_no_phis >>
+  simp[EVERY_FILTER, EVERY_EL] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[EL_CONS]
+QED
+
+Theorem ptr_positions_block_eval_phis:
+  bb_well_formed bb ==>
+  eval_phis s (clear_nops_block
+    (block_map_transform (concretize_inst_with_positions p) bb)).bb_instructions =
+  eval_phis s bb.bb_instructions
+Proof
+  strip_tac >>
+  drule concretize_positions_map_block_wf >>
+  disch_then (qspec_then `p` assume_tac) >>
+  simp[clear_nops_block_def] >>
+  irule EQ_TRANS >>
+  qexists_tac `eval_phis s
+    (block_map_transform (concretize_inst_with_positions p) bb).bb_instructions` >>
+  conj_tac
+  >- (irule ptr_eval_phis_filter_prefix >> fs[bb_well_formed_def] >>
+      rpt strip_tac >> simp[] >> metis_tac[]) >>
+  simp[block_map_transform_def, ptr_positions_eval_phis_map]
+QED
+
+Theorem ptr_mixed_eval_phis_production_block:
+  MEM bb f.fn_blocks /\ bb_well_formed bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  bbt = clear_nops_block
+    (block_map_transform (concretize_inst_with_positions p) bb) /\
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
+  s.vs_prev_bb = t.vs_prev_bb /\ retpc_shape_ok f /\
+  eval_phis t bbt.bb_instructions = OK t' ==>
+  ?s'. eval_phis s bb.bb_instructions = OK s' /\
+    ptr_mixed_vars births positions (phis_prov s.vs_prev_bb TG bb.bb_instructions)
+      (tn with t_var := phis_taint s.vs_prev_bb tn bb.bb_instructions)
+      f g s' t' /\ ptr_core_shared s' t'
+Proof
+  rpt strip_tac >> gvs[] >>
+  `eval_phis t bb.bb_instructions = OK t'` by
+    metis_tac[ptr_positions_block_eval_phis] >>
+  `EVERY (\i. MEM i (fn_insts f) /\ inst_wf i) bb.bb_instructions` by
+    (fs[EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
+  drule_all ptr_mixed_eval_phis >> simp[]
 QED
