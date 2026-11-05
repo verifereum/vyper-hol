@@ -40,20 +40,19 @@ Theorem raw_log_dynamic_frag:
        es sa sb s0 es' v (Lit 0w) s) (expr_exit res)
 Proof
   strip_tac >>
-  `expr_sim_inv cenv cx env es /\ source_supply es` by fs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule raw_log_body_pre_shape >> strip_tac >> gvs[] >>
   drule_all raw_log_literal_typed >> strip_tac >> gvs[] >>
   `body_exprs_ok cx topics` by
     (qpat_assum `body_exprs_ok cx [_;_]`
        (strip_assume_tac o REWRITE_RULE [body_exprs_ok_def]) >>
      drule_all raw_log_make_array_children_ok >> simp[]) >>
-  `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
+  `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env arg s /\ expr_type arg = BaseT (BytesT (Fixed 32))` by
     (rpt gen_tac >> strip_tac >> conj_tac
      >- (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
          qpat_x_assum `MEM arg topics` mp_tac >>
          qpat_x_assum `expr_sim_inv _ _ _ s` mp_tac >>
-         qpat_x_assum `source_supply s` mp_tac >>
          rpt (pop_assum kall_tac) >> rpt strip_tac >>
          metis_tac[expr_body_pre_raw_log_arg, expr_body_pre_builtin_arg, MEM]) >>
      fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
@@ -69,7 +68,7 @@ Proof
   rename1 `emit_op MLOAD [data_op] sn = (len_op,sl)` >>
   rename1 `emit_op ADD [data_op; Lit 32w] sl = (ptr_op,sp)` >>
   rename1 `emit_inst LOG _ [] sp = ((),sb)` >>
-  `!s. expr_sim_inv cenv cx env s /\ source_supply s ==>
+  `!s. expr_sim_inv cenv cx env s ==>
        expr_body_pre cenv cx env data s` by
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
@@ -106,7 +105,7 @@ Proof
       simp[wb_args_exit_def] >> strip_tac >>
       irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
   rename1 `eval_exprs cx topics es = (INL vals,es1)` >>
-  `expr_sim_inv cenv cx env es1 /\ source_supply es1` by
+  `expr_sim_inv cenv cx env es1` by
     (drule_all raw_log_body_topics_success >> simp[]) >>
   `body_expr_ok cx data` by
     (drule_all raw_log_literal_read_success >>
@@ -206,27 +205,26 @@ Theorem raw_log_fixed32_body_frag:
        es sa sb s0 es' v (Lit 0w) s) (expr_exit res)
 Proof
   strip_tac >>
-  `expr_sim_inv cenv cx env es /\ source_supply es` by fs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule raw_log_body_pre_shape >> strip_tac >> gvs[] >>
   drule_all raw_log_literal_typed >> strip_tac >> gvs[] >>
   `body_exprs_ok cx topics` by
     (qpat_assum `body_exprs_ok cx [_;_]`
        (strip_assume_tac o REWRITE_RULE [body_exprs_ok_def]) >>
      drule_all raw_log_make_array_children_ok >> simp[]) >>
-  `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
+  `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env arg s /\ expr_type arg = BaseT (BytesT (Fixed 32))` by
     (rpt gen_tac >> strip_tac >> conj_tac
      >- (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
          qpat_x_assum `MEM arg topics` mp_tac >>
          qpat_x_assum `expr_sim_inv _ _ _ s` mp_tac >>
-         qpat_x_assum `source_supply s` mp_tac >>
          rpt (pop_assum kall_tac) >> rpt strip_tac >>
          metis_tac[expr_body_pre_raw_log_arg, expr_body_pre_builtin_arg, MEM]) >>
      fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
   `wb_args_shape cenv expr_type topics` by
     (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
      simp[] >> rpt strip_tac >> res_tac >> simp[is_word_type_def]) >>
-  `!s. expr_sim_inv cenv cx env s /\ source_supply s ==>
+  `!s. expr_sim_inv cenv cx env s ==>
        expr_body_pre cenv cx env data s` by
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
@@ -240,7 +238,7 @@ Proof
      qexistsl_tac [`cx`, `env`, `es`] >> simp[is_word_type_def]) >>
   irule raw_log_fixed32_topics_frag >>
   goal_assum (drule_at Any) >> simp[] >>
-  qexists_tac `\s. expr_sim_inv cenv cx env s /\ source_supply s` >> simp[] >>
+  qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
   reverse conj_tac
   >- (conj_tac
       >- (rpt strip_tac >> drule_all raw_log_body_topics_success >> simp[]) >>
