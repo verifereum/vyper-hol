@@ -1659,6 +1659,28 @@ Proof
   gvs[type_widens_to_def, ifexp_arg_type_fits_refl]
 QED
 
+(* Typed IfExp adapters read an aggregate call at its physical return type. *)
+Theorem ifexp_intcall_copy_source:
+  expr_body_pre ce cx env (Call ty (IntCall fid) args drv) es /\
+  ~is_word_type ty /\ ~is_bytestring_type ty ==>
+  post_value_type ce (Call ty (IntCall fid) args drv) =
+    lowered_value_type ce (Call ty (IntCall fid) args drv) /\
+  type_widens_to (get_tenv cx)
+    (lowered_value_type ce (Call ty (IntCall fid) args drv)) ty /\
+  ?tvp. evaluate_type (get_tenv cx)
+    (lowered_value_type ce (Call ty (IntCall fid) args drv)) = SOME tvp
+Proof
+  strip_tac >> drule ifexp_body_pre_intcall_physical >> strip_tac >>
+  simp[] >>
+  `expr_sim_inv ce cx env es /\ well_typed_expr env
+     (Call ty (IntCall fid) args drv)` by gvs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  simp[vyperASTTheory.expr_type_def]
+QED
+
 Theorem word_size_monotone:
   !n m. n <= m ==> word_size n <= word_size m
 Proof

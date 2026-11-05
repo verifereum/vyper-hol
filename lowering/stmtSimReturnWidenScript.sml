@@ -104,7 +104,8 @@ Proof
   simp[]
 QED
 
-Theorem typed_return_store_frag[local]:
+(* Shared typed-store execution boundary, also used by expression adapters. *)
+Theorem typed_return_store_frag:
   compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields tenv /\
