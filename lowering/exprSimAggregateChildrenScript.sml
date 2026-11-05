@@ -24,13 +24,63 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
-  loweringPosts
+  loweringPosts vyperTypeSystem vyperValue valueEncoding
   exprSimAlloc
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+
+Theorem nonbytes_val_footprint:
+  (!n. tv <> BaseTV (BytesT (Dynamic n))) /\
+  (!n. tv <> BaseTV (StringT n)) ==>
+  val_footprint tv v = type_memory_size tv
+Proof
+  Cases_on `v` >> simp[val_footprint_def] >>
+  Cases_on `tv` >> simp[] >> rename1 `BaseTV bt` >>
+  Cases_on `bt` >> simp[] >> rename1 `BytesT bd` >>
+  Cases_on `bd` >> simp[]
+QED
+
+Theorem evaluated_nonbytes_footprint:
+  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_footprint tv v = type_memory_size tv
+Proof
+  strip_tac >> irule nonbytes_val_footprint >>
+  Cases_on `ty` >>
+  gvs[vyperValueTheory.evaluate_type_def, is_bytestring_type_def,
+      AllCaseEqs()]
+QED
+Theorem arg_fits_zero_memory_size:
+  (!sty dty. !stv dtv.
+    arg_type_fits sty dty /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv dty = SOME dtv ==>
+    (type_memory_size stv = 0 <=> type_memory_size dtv = 0)) /\
+  (!stys dtys. !stvs dtvs.
+    arg_types_fit stys dtys /\
+    OPT_MMAP (evaluate_type tenv) stys = SOME stvs /\
+    OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
+    (type_memory_size_list stvs = 0 <=> type_memory_size_list dtvs = 0))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def, vyperValueTheory.evaluate_type_def,
+     AllCaseEqs(), type_memory_size_def, evaluate_types_OPT_MMAP] >>
+  gvs[vyperValueTheory.evaluate_type_def, evaluate_types_OPT_MMAP,
+      type_memory_size_def]
+QED
+
+Theorem widening_zero_memory_size:
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\
+  evaluate_type tenv dty = SOME dtv ==>
+  (type_memory_size stv = 0 <=> type_memory_size dtv = 0)
+Proof
+  rw[type_widens_to_def] >> gvs[] >>
+  metis_tac[cj 1 arg_fits_zero_memory_size]
+QED
+
 
 Theorem vv_holds_materialise:
   read_result cx tv es = (INL v,es) /\
