@@ -170,3 +170,44 @@ Theorem dfs_block_state_lineage_state:
 Proof
   simp[dfs_block_state_def] >> metis_tac[dfs_lineage_mutual]
 QED
+
+Theorem dfs_edge_lineage_entry:
+  dfs_block_state lv dfg cfg fn ps0 pred pin /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  generate_block_plan lv dfg cfg fn pred_bb pin = SOME (ops,pout) /\
+  MEM succ (cfg_succs_of cfg pred) /\
+  dfs_block_state lv dfg cfg fn ps0 succ ps_succ ==>
+  lineage_entry lv dfg cfg fn ps0 pred succ
+    (ps_succ with <| ps_stack := pout.ps_stack;
+                    ps_spilled := pout.ps_spilled |>)
+Proof
+  strip_tac >>
+  `lineage_state lv dfg cfg fn ps0 pred pin`
+    by metis_tac[dfs_block_state_lineage_state] >>
+  simp[lineage_entry_def] >>
+  goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
+  simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem regional_dfs_join_target_distinct:
+  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred pred_bb bb pin
+   ops pout ps_succ.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred pin /\
+    generate_block_plan liveness dfg cfg fn pred_bb pin = SOME (ops,pout) /\
+    MEM bb.bb_label (cfg_succs_of cfg pred) /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_succ ==>
+    ALL_DISTINCT (MAP Var (input_vars_from pred bb.bb_instructions
+                            (live_vars_at liveness bb.bb_label 0)))
+Proof
+  rpt gen_tac >> strip_tac >> drule_all dfs_edge_lineage_entry >>
+  strip_tac >> drule_all regional_lineage_join_target_distinct >> simp[]
+QED
