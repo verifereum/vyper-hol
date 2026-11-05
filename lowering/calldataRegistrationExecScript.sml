@@ -164,6 +164,8 @@ Proof
     comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+    abiDecoderRangeTheory.compile_abi_dec_addr_zero,
+    compile_abi_decode_range_check_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (goal_assum $ drule_at Any) >> simp[]
 QED
