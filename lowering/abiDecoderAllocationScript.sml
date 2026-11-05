@@ -91,6 +91,27 @@ Proof
   simp[CARD_INSERT]
 QED
 
+Theorem abi_decoder_insert_separated[local]:
+  (!k p. k IN A /\ FLOOKUP m k = SOME (p,32:num) ==> p + 32 <= n) /\
+  (!i j p q. i IN A /\ j IN A /\ i <> j /\
+     FLOOKUP m i = SOME (p,32) /\ FLOOKUP m j = SOME (q,32) ==>
+     p + 32 <= q \/ q + 32 <= p) ==>
+  (!i j p q. i IN A /\ j IN A /\ i <> j /\
+     FLOOKUP (m |+ (id:num,(n,32))) i = SOME (p,32) /\
+     FLOOKUP (m |+ (id,(n,32))) j = SOME (q,32) ==>
+     p + 32 <= q \/ q + 32 <= p)
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `i = id`
+  >- (Cases_on `j = id` >> simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
+      gvs[] >> disj2_tac >> first_x_assum irule >> qexists_tac `j` >> simp[]) >>
+  Cases_on `j = id`
+  >- (simp[FLOOKUP_UPDATE] >> rpt strip_tac >> gvs[] >>
+      disj1_tac >> first_x_assum irule >> qexists_tac `i` >> simp[]) >>
+  simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
+  first_x_assum irule >> qexistsl_tac [`i`, `j`] >> simp[]
+QED
+
 Theorem abi_decoder_budget_insert:
   abi_decoder_budget first last b cap s /\
   id IN abi_decoder_ids first last /\ FLOOKUP s.vs_allocas id = NONE ==>
@@ -107,24 +128,21 @@ Proof
   qpat_x_assum `abi_decoder_budget _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[abi_decoder_budget_def] >> strip_tac >>
   simp_tac (srw_ss()) [] >>
-  rpt conj_tac >> TRY decide_tac
-  >- (asm_rewrite_tac[] >> decide_tac)
-  >- (rpt gen_tac >> simp_tac std_ss [FLOOKUP_UPDATE] >>
-      Cases_on `id = id'` >> asm_rewrite_tac[] >> strip_tac
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >- decide_tac >>
+  conj_tac >- (asm_rewrite_tac[] >> decide_tac) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`k`, `off`, `sz`] >>
+      Cases_on `id = k` >> simp_tac std_ss [FLOOKUP_UPDATE] >>
+      asm_rewrite_tac[] >> strip_tac
       >- (full_simp_tac std_ss [optionTheory.SOME_11, pairTheory.PAIR_EQ] >> decide_tac) >>
       qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` drule >>
-      disch_then drule >> strip_tac >> decide_tac) >>
-  qpat_x_assum `CARD _ = _` kall_tac >>
-  qpat_x_assum `abi_decoder_missing _ _ _ = _` kall_tac >>
-  rpt gen_tac >> simp_tac std_ss [FLOOKUP_UPDATE] >>
-  Cases_on `id = i` >> Cases_on `id = j` >>
-  asm_rewrite_tac[] >> rpt strip_tac >>
-  TRY (decide_tac >> NO_TAC) >>
-  qpat_x_assum `s.vs_alloca_next + _ <= _` kall_tac >>
-  qpat_assum `!id off sz. _ ==> sz = 32 /\ _` imp_res_tac >>
-  TRY (qpat_x_assum `SOME _ = SOME _` mp_tac >>
-       simp_tac std_ss [] >> strip_tac >> decide_tac >> NO_TAC) >>
-  metis_tac[]
+      disch_then drule >> strip_tac >> simp[] >> decide_tac) >>
+  ho_match_mp_tac abi_decoder_insert_separated >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` drule >>
+      disch_then drule >> simp[]) >>
+  asm_rewrite_tac[]
 QED
 
 Theorem abi_decoder_budget_update_var[simp]:

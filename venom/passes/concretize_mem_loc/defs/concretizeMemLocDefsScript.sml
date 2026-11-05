@@ -948,8 +948,10 @@ Definition imported_liveset_info_def:
       | SOME live => [(a,live,p,s)]) imports)
 End
 
-(* Context allocation uses imported fixed intervals at their own livesets,
-   rather than reserving an entire callee frame only at the INVOKE. *)
+(* Imported fixed intervals participate in backward liveat and forward used,
+   so they remain live between calls (including calls through different diamond
+   arms sharing an allocation). Do not also reserve synthetic [0,eom) frames:
+   those would hide reusable gaps and discard transitive allocation identity. *)
 
 Definition compute_alloc_map_fuel_in_context_def:
   compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
@@ -1210,13 +1212,14 @@ End
 
 Definition fn_needs_liveness_allocation_def:
   fn_needs_liveness_allocation fn =
-    insts_have_multiple_allocas (fn_insts fn)
+    (insts_have_multiple_allocas (fn_insts fn) \/
+     (fn_has_alloca fn /\
+      EXISTS (\inst. inst.inst_opcode = INVOKE) (fn_insts fn)))
 End
 
-(* Liveness can affect placement only when there is more than one allocation.
-   With zero or one ALLOCA, Python's allocation loop has no earlier local
-   interval whose liveset can conflict, so checked first-fit completion computes
-   the same layout without running both dataflow analyses to a fixpoint. *)
+(* A single local allocation may still conflict with a callee's frame when it
+   stays live across INVOKE. Only call-free single-allocation functions can
+   skip the interference analysis in the context-aware allocator below. *)
 Definition compute_function_layout_checked_def:
   compute_function_layout_checked fuel reserved fn =
     if fn_needs_liveness_allocation fn then
