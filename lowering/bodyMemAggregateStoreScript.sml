@@ -46,7 +46,7 @@ Theorem aggregate_store_memory_mem_ok:
   type_memory_size tv < dimword (:256) /\
   eval_operand dst s = SOME d /\
   w2n d + type_memory_size tv <= s.vs_alloca_next /\
-  (lowered_value_type ce e = expr_type e ==>
+  (~is_word_type (expr_type e) /\ lowered_value_type ce e = expr_type e ==>
    !sw. eval_operand src s = SOME sw ==>
         type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
@@ -118,7 +118,7 @@ Theorem aggregate_store_memory_path_mem:
   type_memory_size tv < dimword (:256) /\
   eval_operand dst s = SOME d /\
   w2n d + type_memory_size tv <= s.vs_alloca_next /\
-  (lowered_value_type ce e = expr_type e ==>
+  (~is_word_type (expr_type e) /\ lowered_value_type ce e = expr_type e ==>
    !sw. eval_operand src s = SOME sw ==>
         type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
@@ -134,7 +134,11 @@ Theorem aggregate_store_memory_path_mem:
 Proof
   strip_tac >> (
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
-    (irule aggregate_store_memory_mem_ok >> metis_tac[]) >>
+    (irule aggregate_store_memory_mem_ok >>
+     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+     simp[] >> qexistsl_tac [`env`, `v`] >> fs[arithmeticTheory.ADD_COMM] >>
+     first_assum ACCEPT_TAC) >>
   `compile_store_memory ce src dst (expr_type e) (expr_type e) sa = ((),sb)` by
     metis_tac[aggregate_mem_store_lowered_elem] >>
   drule_all (SRULE [] buffer_store_memory_encoding) >> strip_tac >>
@@ -171,7 +175,7 @@ Theorem aggregate_store_rebased_slice_mem:
   (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   expr_store_bound cx (expr_type e) v op s /\
   w2n w + type_memory_size tv <= s.vs_alloca_next /\
-  (lowered_value_type ce e = expr_type e ==>
+  (~is_word_type (expr_type e) /\ lowered_value_type ce e = expr_type e ==>
    !sw. eval_operand op s = SOME sw ==>
         type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\
