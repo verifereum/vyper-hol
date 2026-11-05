@@ -596,3 +596,22 @@ Premise-origin ledger:
   original index equation before splitting zero/successor indices.
 
 Recursive ASSIGN closure and endpoint constructor exclusions remain open.
+
+## Indexed terminal safety and constructor boundary (C1.12.70.3.2.3)
+
+Checked exports in `lowerDloadPtrTerminalScript.sml`:
+- `dload_indexed_terminal_safety` proves both target safety predicates at every
+  valid suffix offset. It uses the unchanged source reachability, block supply,
+  prefix alignment, support and non-retpc variable relation. No memory agreement
+  or source forwarding pair is added. Malformed REVERT arity has empty access
+  ranges; operand taint is transported from the actual reachable source.
+- `dload_indexed_terminal_constructor_exclusions` needs only the static suffix
+  shape. Every position excludes INVOKE and IntRet. Interior positions exclude
+  terminators (hence block transitions); the last position excludes OK (hence
+  both next and block transitions). Together these rule out call/ret everywhere
+  and every continuing constructor at REVERT. Interior next transitions use
+  `dload_terminal_assign_next`, not a second copy of the entry existential.
+
+Verification: two-target holbuild passed, evidence
+`TO_ld_ptr_v2-20261104T185312Z_m5792_t001`. This checks the terminal interfaces,
+not the global joint reachability induction or the frozen contract proof.
