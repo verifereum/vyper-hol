@@ -4,7 +4,9 @@ Ancestors
   exprSimSource exprSimHypsDefs vyperState vyperInterpreter vyperValue
   vyperPlaceResultTyping vyperPlaceStatePreservation vyperTypeEnvPreservation
   vyperTypeInvariants vyperTypeSystem vyperPlaceTyping vyperArray
-  vyperAST integer option list rich_list finite_map
+  vyperAST placeTypingProps allocLimits supportedExprTraverse
+  vyperTypeCallGraph vyperTypeCallStackSoundness
+  integer option list rich_list finite_map
 
 Theorem read_result_nonstorage_frame:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
@@ -406,4 +408,49 @@ Proof
      Cases_on `evaluate_type env.type_defs elem_ty` >> gvs[]) >>
   irule type_place_expr_value_typed >> simp[] >>
   first_x_assum drule >> simp[well_formed_vtype_def]
+QED
+
+Theorem expr_body_pre_array_subscript_base:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  expr_type obj = ArrayT et bd ==>
+  expr_body_pre cenv cx env obj s
+Proof
+  strip_tac >>
+  `well_typed_expr env obj` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, Once well_typed_expr_def] >>
+     strip_tac >> gvs[] >>
+     drule type_place_expr_vtype_annotation >> simp[] >>
+     Cases_on `vt` >> gvs[vtype_annotation_ok_def] >>
+     strip_tac >> gvs[] >>
+     irule type_place_expr_context_value_typed >>
+     conj_tac
+     >- (qexists_tac `ArrayT et bd` >> simp[]) >>
+     qexists_tac `cx` >>
+     gvs[expr_sim_inv_def, env_consistent_def]) >>
+  gvs[expr_body_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
+      int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND] >>
+  rpt conj_tac
+  >- (drule call_evaluation_safe_append_left >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
+    (qspec_then `target` irule) >>
+  simp[supported_expr_exists_def]
+QED
+
+Theorem expr_body_pre_subscript_index:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s ==>
+  expr_body_pre cenv cx env idx s
+Proof
+  strip_tac >>
+  `well_typed_expr env idx` by
+    (gvs[expr_body_pre_def, Once well_typed_expr_def]) >>
+  gvs[expr_body_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
+      int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND] >>
+  conj_tac
+  >- (drule call_evaluation_safe_append_right >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
+    (qspec_then `target` irule) >>
+  simp[supported_expr_exists_def]
 QED
