@@ -1382,7 +1382,7 @@ Proof
      Cases_on `P (h0,h1)` >> gvs[] >>
      fs[MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
-Theorem generated_plan_state_wf_release_dead_spills[local]:
+Theorem generated_plan_state_wf_release_dead_spills:
   !base next_liveness ps.
     generated_plan_state_wf base ps ==>
     generated_plan_state_wf base (release_dead_spills next_liveness ps)

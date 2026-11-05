@@ -7,7 +7,7 @@ Ancestors
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
-  fnFrameTerminalHalt
+  fnFrameTerminalHalt genericInputReady
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -2740,4 +2740,29 @@ Proof
   drule_all ordinary_inst_operand_frame_view >>
   disch_then (qspecl_then [`vs`, `ra`, `(frame_view fn ra vs).vs_memory`] mp_tac) >>
   simp[frame_view_def]
+QED
+
+Theorem rf_preparation_postpop_generated_wf:
+  !base opc inputs nl ps ins ps1 dfg ros ps2.
+  generated_plan_state_wf base ps /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  LENGTH inputs <= 16 /\
+  emit_input_plan opc inputs nl ps = (ins,ps1) /\
+  reorder_plan dfg inputs ps1 = (ros,ps2) ==>
+  generated_plan_state_wf base
+    (ps2 with ps_stack := stack_pop (LENGTH inputs) ps2.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `generated_plan_state_wf spillbase ps` >>
+  `residual_budget_wf spillbase [] ps` by
+    metis_tac[generated_plan_state_wf_residual_nil] >>
+  `residual_budget_wf spillbase inputs ps1` by
+    metis_tac[emit_input_plan_residual_budget_nil] >>
+  `!at. LIST_ELEM_COUNT at inputs <= LIST_ELEM_COUNT at ps1.ps_stack` by
+    (drule_all emit_input_plan_materialised >> simp[]) >>
+  `LENGTH inputs <= LENGTH ps1.ps_stack` by
+    (irule list_elem_count_dom_length >> simp[]) >>
+  drule_all reorder_plan_materialised_arranged >> strip_tac >>
+  drule plan_state_residual_wf_pop >>
+  simp[generated_plan_state_wf_def]
 QED
