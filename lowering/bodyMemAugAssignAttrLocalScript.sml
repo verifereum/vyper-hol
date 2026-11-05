@@ -896,11 +896,7 @@ Resume compile_augassign_attr_local_mem[rhs_normal]:
   `binop_frag_val_mem ctx func cenv cx bop ty ty NONE
      (if bop = Exp then expr_int_literal e else NONE)
      [ty; expr_type e] fv v (ee with gas_obs := [])` by
-    (irule binop_frag_word_typed_mem >> simp[] >> conj_tac
-     >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
-         Cases_on `expr_int_literal e` >> gvs[]) >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`expr_type e`, `get_tenv cx`, `ftv`, `etv`] >> simp[]) >>
+    suspend "typed_dispatch" >>
   suspend "operator"
 QED
 
@@ -1049,63 +1045,6 @@ Resume compile_augassign_attr_local_mem[operator_exit]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Finalise compile_augassign_attr_local_mem
-
-Theorem body_augassign_attr_local_mem:
-  !cx ty id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
-       eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' = (INL p,t') /\
-       read_place cx p s'3' = (INL cur,t'') /\
-       place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_mem_ok cx e) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) = SOME env' /\
-    stmt_exprs_ok cenv (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
-    call_evaluation_safe cx (int_calls_stmt (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) /\
-    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
-      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
-Proof
-  rpt strip_tac >>
-  `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-         supportedExprTraverseTheory.supported_expr_exists_def,
-         int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
-     qexists_tac `[]` >> simp[]) >>
-  drule augassign_attr_typing_mem_src >> strip_tac >>
-  `?sid. FLOOKUP env.var_types id = SOME (StructT sid) /\
-         attribute_type env.type_defs (StructT sid) fld = SOME ty` by
-    (gvs[well_typed_target_def,
-         vyperTypeEnvTheory.type_place_target_AttributeTarget,
-         vyperTypeEnvTheory.type_place_target_NameTarget, AllCaseEqs()] >>
-     Cases_on `tgt_ty` >> gvs[attribute_type_def]) >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
-                   (nsid_to_string sid)) fld = SOME (ty,fsz)` by
-    metis_tac[attribute_type_struct_field, expr_sim_inv_def] >>
-  drule_all augassign_attr_conditional_ih_mem_src >> strip_tac >>
-  irule compile_augassign_attr_local_mem >> simp[] >>
-  conj_tac
-  >- (gen_tac >>
-      qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
-      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
-        `es with gas_obs := gs`] mp_tac) >> simp[body_inv_def]) >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
-QED
 
 
 Theorem int_type_byte_width_mem_src[local]:
@@ -1929,5 +1868,115 @@ Proof
   simp[compile_binop_def, valueEncodingTheory.val_to_w256_def] >> strip_tac >>
   drule_at (Pat `compile_safe_pow _ _ _ _ _ _ = _`)
     compile_safe_pow_exponent_run_mem_src >> simp[] >> metis_tac[]
+QED
+
+
+Theorem binop_frag_augassign_typed_mem_src[local]:
+  !ctx func cenv cx bop ty t2 el tys v1 v2 es0 tenv tv1 tv2.
+    well_typed_binop ty bop ty t2 /\ type_bits ty MOD 8 = 0 /\
+    (bop = Exp ==> (?n. el = SOME n /\ 0 <= n) /\
+      (!n. el = SOME n ==> v2 = IntV n)) /\
+    (bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i) /\
+    word_value_type ty /\ word_value_type t2 /\
+    evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
+    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
+    binop_frag_val_mem ctx func cenv cx bop ty ty NONE el tys v1 v2 es0
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bop = ExpMod` >- gvs[well_typed_binop_def] >>
+  Cases_on `bop = Exp`
+  >- (gvs[] >> irule binop_frag_pow_exponent_mem_src >> metis_tac[]) >>
+  Cases_on `MEM bop [Add; Sub; Mul; Div; Mod]`
+  >- (`t2 = ty` by
+        (Cases_on `bop` >> gvs[well_typed_binop_def]) >>
+      qpat_x_assum `t2 = ty` SUBST_ALL_TAC >>
+      `tv2 = tv1` by gvs[] >> pop_assum SUBST_ALL_TAC >>
+      Cases_on `ty = BaseT DecimalT`
+      >- (gvs[] >> irule binop_frag_decimal_arith_mem_src >> simp[] >>
+          qexistsl_tac [`tenv`, `tv1`] >> simp[]) >>
+      `is_int_type ty` by (Cases_on `bop` >> gvs[well_typed_binop_def]) >>
+      irule binop_frag_int_arith_mem_src >> simp[] >>
+      qexistsl_tac [`tenv`, `tv1`] >> simp[]) >>
+  Cases_on `MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv]`
+  >- (`t2 = ty /\ is_int_type ty` by
+        (Cases_on `bop` >> gvs[well_typed_binop_def]) >>
+      gvs[] >> irule binop_frag_unsafe_typed_mem_src >> simp[] >>
+      qexistsl_tac [`tenv`, `tv1`] >> simp[]) >>
+  Cases_on `bop = ShL \/ bop = ShR`
+  >- (irule binop_frag_shift_572_mem_src >> metis_tac[]) >>
+  Cases_on `bop = In \/ bop = NotIn`
+  >- gvs[well_typed_binop_def, word_value_type_def] >>
+  `t2 = ty` by (Cases_on `bop` >> gvs[well_typed_binop_def]) >> gvs[] >>
+  Cases_on `bop = And \/ bop = Or \/ bop = XOr`
+  >- (irule binop_frag_bitwise_typed_mem_src >> metis_tac[]) >>
+  irule binop_frag_compare_typed_mem_src >>
+  `MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE; Min; Max]` by
+    (Cases_on `bop` >> gvs[]) >> metis_tac[]
+QED
+
+Resume compile_augassign_attr_local_mem[typed_dispatch]:
+  irule binop_frag_augassign_typed_mem_src >> simp[] >> conj_tac
+  >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+      Cases_on `expr_int_literal e` >> gvs[]) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`expr_type e`, `get_tenv cx`, `ftv`, `etv`] >> simp[]
+QED
+
+Finalise compile_augassign_attr_local_mem
+
+Theorem body_augassign_attr_local_mem:
+  !cx ty id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_mem_ok cx e) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) /\
+    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
+Proof
+  rpt strip_tac >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `cx_tops cx = tops` by
+    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supportedExprTraverseTheory.supported_expr_exists_def,
+         int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  drule augassign_attr_typing_mem_src >> strip_tac >>
+  `?sid. FLOOKUP env.var_types id = SOME (StructT sid) /\
+         attribute_type env.type_defs (StructT sid) fld = SOME ty` by
+    (gvs[well_typed_target_def,
+         vyperTypeEnvTheory.type_place_target_AttributeTarget,
+         vyperTypeEnvTheory.type_place_target_NameTarget, AllCaseEqs()] >>
+     Cases_on `tgt_ty` >> gvs[attribute_type_def]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                   (nsid_to_string sid)) fld = SOME (ty,fsz)` by
+    metis_tac[attribute_type_struct_field, expr_sim_inv_def] >>
+  drule_all augassign_attr_conditional_ih_mem_src >> strip_tac >>
+  irule compile_augassign_attr_local_mem >> simp[] >>
+  conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `body_expr_mem_ok cx e`
+        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
+        `es with gas_obs := gs`] mp_tac) >> simp[body_inv_def]) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
 
