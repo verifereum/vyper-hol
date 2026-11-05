@@ -308,3 +308,14 @@ Proof
      Cases_on `h` >> simp[]) >>
   gvs[release_dead_spills_domain]
 QED
+
+(* Deep swaps use scratch allocation; it is not an unchanged-state field. *)
+Theorem deep_swap_changes_allocator_probe:
+  (SND (do_swap 17
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack :=
+      MAP Var ["a";"b";"c";"d";"e";"f";"g";"h";"i";
+               "j";"k";"l";"m";"n";"o";"p";"q";"r"]))).ps_alloc <>
+    (init_cleanup_plan_state NONE [] 0 0).ps_alloc
+Proof
+  EVAL_TAC
+QED
