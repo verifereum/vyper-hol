@@ -1,7 +1,7 @@
 Theory stmtForArrayMemoryRounds
 Ancestors
   stmtForArrayControlMemory stmtForArrayMemoryRoundSupport
-  stmtSimForArrayLoop bodyMemoryDefs loweringPosts compileEnv
+  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv
   venomState allocaHistory fragGasMode fragGasPathMem finite_map list arithmetic
 
 Definition array_round_frame_def:
@@ -102,4 +102,46 @@ Proof
   qexists_tac `t` >> simp[gas_marked_path_def, ADD1] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
   rpt strip_tac >> metis_tac[]
+QED
+
+Theorem array_round_break:
+  stmt_lands (InLoop exit incr) sb (INR BreakException) s /\
+  ~s.vs_halted /\ stmt_state_rel ctx func cenv cx es s /\
+  ret_pc_ok cenv caller s /\ array_round_frame d func cenv caller orig s ==>
+  array_round_done d ctx func cenv cx caller orig exit es s
+Proof
+  simp[stmt_lands_def, array_round_done_def]
+QED
+
+Theorem array_round_postbody_entry:
+  !d ctx func cenv cx P vs id idx saved_base base p dst sz ainst caller
+   orig k es s exit incr sb sj r.
+  stmt_lands (InLoop exit incr) sb r s /\
+  (r = INL () \/ r = INR ContinueException) /\ ~s.vs_halted /\
+  (r = INL () ==> ~block_is_terminated sb) /\
+  (~block_is_terminated sb ==>
+    sj.cs_blocks = sb.cs_blocks /\ sj.cs_current_bb = sb.cs_current_bb /\
+    sj.cs_current_insts = sb.cs_current_insts ++
+      [mk_inst sb.cs_next_id JMP [Label incr] []] /\ fn_has_code sb sj func) /\
+  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+    ainst incr caller k es (jump_to incr s) /\
+  array_round_frame d func cenv caller orig s ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    array_round_inv d ctx func cenv cx P vs id idx saved_base base p dst sz
+      ainst incr caller orig k es t
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `r = INL ()`
+  >- (qexists_tac `jump_to incr s` >> conj_tac
+      >- (fs[stmt_lands_def] >> simp[gas_marked_path_def] >>
+          irule emit_jump_zero_path_mem >> simp[] >>
+          qexistsl_tac [`sb`, `sj`] >> simp[]) >>
+      simp[array_round_inv_def] >>
+      fs[array_round_frame_def, return_buf_frame_jump_to, jump_to_def,
+         lookup_var_def, alloca_history_def]) >>
+  qexists_tac `s` >> conj_tac
+  >- (simp[gas_marked_path_def] >> irule (cj 1 gas_path_mem_rules) >> simp[]) >>
+  fs[stmt_lands_def, array_round_inv_def, array_loop_inv_def,
+     stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def,
+     eval_operand_def, lookup_var_def]
 QED
