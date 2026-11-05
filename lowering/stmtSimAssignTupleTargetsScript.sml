@@ -85,6 +85,9 @@ Proof
      irule tuple_target_aligned_source >>
      qexistsl [`cenv`, `EL n tys`, `EL n vs`] >> simp[]) >>
   `LIST_REL value_has_type tvs vs` by simp[GSYM values_have_types_LIST_REL] >>
+  `~cx.txn.is_static` by
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
   drule_all assign_tuple_targets_safe >> strip_tac >>
   rename1 `assign_tuple_targets _ _ _ ee = (INL (),ee')` >>
   qpat_assum `assign_tuple_targets _ _ _ _ = _`
@@ -154,10 +157,7 @@ Resume assign_tuple_targets_suffix[stores]:
   qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   qexistsl [`ee'`, `sfv`] >> conj_tac
-  >- (`~cx.txn.is_static` by
-        (qpat_x_assum `stmt_state_rel _ _ _ _ ee' sfv` mp_tac >>
-         simp[stmt_state_rel_def, state_rel_def]) >>
-      drule_all assign_tuple_target_list_gas_obs >>
+  >- (drule_all assign_tuple_target_list_gas_obs >>
       simp[Once evaluate_def]) >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>
@@ -166,13 +166,6 @@ Resume assign_tuple_targets_suffix[stores]:
 QED
 
 Resume assign_tuple_targets_suffix[frame]:
-  conj_tac
-  >- (qpat_assum `stmt_state_rel _ _ _ _ ee' sfv` mp_tac >>
-      rpt (pop_assum kall_tac) >>
-      mp_tac (Q.INST [`es` |-> `ee'`, `s` |-> `sfv`,
-                      `gs` |-> `[]`, `readings` |-> `sfv.vs_gas_readings`,
-                      `k` |-> `sfv.vs_inst_idx`] msg_gas_state_frame) >>
-      simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   `not_fresh_at su x` by
     (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
