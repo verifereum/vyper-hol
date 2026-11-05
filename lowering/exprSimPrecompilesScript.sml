@@ -2931,7 +2931,8 @@ Proof
   irule wb_frame_trans >> conj_tac >- simp[] >>
   conj_tac
   >- (qexistsl_tac [`es'`, `sm`, `t`] >>
-      gvs[wb_frame_def, lookup_var_def] >> metis_tac[]) >>
+      gvs[wb_frame_def, lookup_var_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
 

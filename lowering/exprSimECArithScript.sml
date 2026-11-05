@@ -2181,8 +2181,8 @@ Theorem ec_source_tail_gas_obs[local]:
   ec_source_tail cx ann bt tys vs (es with gas_obs := g) =
     (r, es' with gas_obs := g)
 Proof
-  rpt strip_tac >> pop_assum mp_tac >> simp[ec_source_tail_cases] >>
-  rpt BasicProvers.CASE_TAC >> gvs[vyperStateTheory.evaluation_state_component_equality]
+  rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()] >>
+  simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
 Theorem ec_source_tail_scopes[local]:

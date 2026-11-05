@@ -465,6 +465,39 @@ QED
 
 (* ===== Counted gas: the CALL and the ASSERT as a gas path ===== *)
 
+(* The oracle's take and adopt never read or write the gas observations. *)
+Theorem take_call_outcome_gas_obs[local]:
+  take_call_outcome target calldata value_opt (st with gas_obs := tail) =
+  (FST (take_call_outcome target calldata value_opt st),
+   SND (take_call_outcome target calldata value_opt st) with gas_obs := tail)
+Proof
+  `call_outcome_request target calldata value_opt (st with gas_obs := tail) =
+   call_outcome_request target calldata value_opt st` by
+    simp[call_outcome_request_def] >>
+  Cases_on `st.outcomes` >> simp[take_call_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >>
+  Cases_on `take_outcome (call_outcome_request target calldata value_opt st) os` >>
+  rw[]
+QED
+
+Theorem adopt_call_outcome_gas_obs[local]:
+  adopt_call_outcome rq outcome (st with gas_obs := tail) =
+  (FST (adopt_call_outcome rq outcome st),
+   SND (adopt_call_outcome rq outcome st) with gas_obs := tail)
+Proof
+  rw[adopt_call_outcome_equation]
+QED
+
+Theorem frame_call_value_gas_obs[local]:
+  frame_call_value cx value_opt (st with gas_obs := tail) =
+  (FST (frame_call_value cx value_opt st),
+   SND (frame_call_value cx value_opt st) with gas_obs := tail)
+Proof
+  rw[frame_call_value_def, ignore_bind_def, bind_def, check_def, assert_def,
+     return_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
 (* send never reads or writes the gas observations. *)
 Theorem eval_send_gas_obs[local]:
   !cx has_gas vs st r st'.
@@ -474,16 +507,46 @@ Theorem eval_send_gas_obs[local]:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  rename1 `eval_send _ _ (to_v :: amount_v :: gas_vs) st` >>
+  pop_assum mp_tac >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       frame_call_value_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def,
-       vyperCallOutcomeTheory.call_outcome_request_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
+       assert_def, return_def, raise_def, lift_option_type_def] >>
+  Cases_on `LENGTH gas_vs = if has_gas then 1 else 0` >> simp[] >>
+  Cases_on `dest_AddressV to_v` >> simp[return_def, raise_def] >>
+  rename1 `dest_AddressV to_v = SOME toAddr` >>
+  Cases_on `dest_NumV amount_v` >> simp[return_def, raise_def] >>
+  rename1 `dest_NumV amount_v = SOME amount` >>
+  simp[frame_call_value_gas_obs] >>
+  Cases_on `frame_call_value cx (SOME amount) st` >>
+  rename1 `frame_call_value _ _ _ = (fres, st1)` >>
+  Cases_on `fres` >> simp[] >>
+  rename1 `_ = (INL value_opt, st1)` >>
+  Cases_on `st1.outcomes` >> simp[]
+  >- (simp[bind_def, ignore_bind_def, get_accounts_def,
+           get_transient_storage_def, lift_option_def, return_def] >>
+      Cases_on `run_ext_call cx.txn.target toAddr [] value_opt
+                  (forwarded_gas 0 (ext_call_kwarg EKGas [EKGas] gas_vs))
+                  st1.accounts st1.tStorage (vyper_to_tx_params cx.txn)` >>
+      simp[raise_def, return_def] >>
+      rename1 `_ = SOME res` >> PairCases_on `res` >>
+      simp[check_def, assert_def, update_accounts_def, update_transient_def,
+           append_logs_def, return_def, raise_def] >>
+      Cases_on `res0` >> simp[] >>
+      strip_tac >> gvs[evaluation_state_component_equality]) >>
+  simp[bind_def, ignore_bind_def, take_call_outcome_gas_obs] >>
+  Cases_on `take_call_outcome toAddr [] value_opt st1` >>
+  rename1 `take_call_outcome _ _ _ _ = (tres, st2)` >>
+  Cases_on `tres` >> simp[] >>
+  rename1 `_ = (INL ro, st2)` >> PairCases_on `ro` >>
+  simp[bind_def, ignore_bind_def, check_def, assert_def, return_def,
+       raise_def, adopt_call_outcome_gas_obs] >>
+  Cases_on `ro1.co_success` >> simp[] >>
+  Cases_on `adopt_call_outcome ro0 ro1 st2` >>
+  rename1 `adopt_call_outcome _ _ _ = (ares, st3)` >>
+  `ares = INL ()` by
+    (drule adopt_call_outcome_frame >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  gvs[]
 QED
 
 Theorem send_read_gas_obs[local]:
