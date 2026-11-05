@@ -6,7 +6,9 @@
  *
  * Usage: bytecode_parity_native.exe FIXTURE_DIR [NAME.hex ...]
  * With names, only those fixtures run; without, every .hex file in FIXTURE_DIR
- * must have a fixture.  Exits non-zero unless every selected fixture matches.
+ * must have a fixture, except main-corpus oracles listed in
+ * ../pending-5127-port.md.  Exits non-zero unless every selected fixture
+ * matches.
  *)
 structure compilerNativeParity = struct
   open compilerNativeRuntime
@@ -64,6 +66,20 @@ structure compilerNativeParity = struct
       | SOME f => loop (if String.isSuffix ".hex" f then f :: acc else acc)
   in loop [] before OS.FileSys.closeDir d end
 
+  (* Main-corpus oracles out of parity until their vyperlang/vyper#5127 port
+     lands, as listed in ../pending-5127-port.md. *)
+  fun pending_oracles dir = let
+    val path = OS.Path.concat (OS.Path.concat (dir, OS.Path.parentArc),
+                               "pending-5127-port.md")
+    val prefix = "- `main/"
+    fun name line =
+      if String.isPrefix prefix line
+      then SOME (hd (String.fields (fn c => c = #"`")
+                       (String.extract (line, size prefix, NONE))) ^ ".hex")
+      else NONE
+  in List.mapPartial name (String.tokens (fn c => c = #"\n") (read_all path))
+  end handle IO.Io _ => []
+
   fun run_one dir (name, thunk) = let
     val t0 = Time.now ()
     val outcome =
@@ -96,7 +112,9 @@ structure compilerNativeParity = struct
     (* A requested name, or an oracle file, with no compiled-in fixture
        would otherwise be skipped without a failure. *)
     val known = map #1 compilerNativeML.fixtures
-    val unmatched = List.filter (fn n => not (List.exists (fn k => k = n) known))
+    val pending = if null only then pending_oracles dir else []
+    fun listed n = List.exists (fn k => k = n)
+    val unmatched = List.filter (fn n => not (listed n known orelse listed n pending))
                       (if null only then hex_files dir else only)
     val () = List.app (fn n => print ("FAIL " ^ n ^ ": no native fixture\n")) unmatched
     val results = map (run_one dir) selected

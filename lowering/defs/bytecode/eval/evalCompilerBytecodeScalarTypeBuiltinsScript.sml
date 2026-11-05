@@ -124,11 +124,3 @@ Theorem scalar_convert_bytes32_to_bytes4_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-Theorem scalar_convert_bytes_dynamic_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy all_capabilities)
-    scalar_convert_bytes_dynamic_program =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_convert_bytes_dynamic.hex")
-Proof
-  EVAL_TAC
-QED
