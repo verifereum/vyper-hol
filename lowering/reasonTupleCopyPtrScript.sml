@@ -7,6 +7,19 @@ Ancestors
   emitHelper bodyPtrDefs venomInst compileEnv fragExec finite_map fragGasPathPtr
   exprSimBufferStore vfmConstants ghostPcTransportPtr exprSimProps
 
+(* Resetting the three scratch fields composes without identifying states
+   merely from their memory projections. *)
+Theorem reason_scratch_frame_trans:
+  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (u with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory;
+            vs_inst_idx := t.vs_inst_idx|>) = t ==>
+  (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_inst_idx := s.vs_inst_idx|>) = s
+Proof
+  simp[venom_state_component_equality] >> metis_tac[]
+QED
+
 (* Actual MCOPY taint, including arbitrary tainted padding, transports the
    robust representation. No cleanliness assumption on payload bytes is used. *)
 Theorem reason_mcopy_robust_representation:
@@ -147,6 +160,9 @@ Theorem reason_copy_binop_resources_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. p <> out ==>
@@ -171,7 +187,7 @@ Proof
          comp_ignore_bind_def, comp_return_def]) >>
   simp[Abbr `Gf`, Abbr `tnf`, Abbr `t`, copy_len_binop_ghost_frame,
        update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> simp[copy_len_binop_ghost_frame]
+  rpt strip_tac >> simp[copy_len_binop_ghost_frame, venom_state_component_equality]
 QED
 
 Theorem reason_copy_mload_resources_ptr:
@@ -187,6 +203,9 @@ Theorem reason_copy_mload_resources_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (mload (w2n a) s) /\
     op_taint tnf (Var out) = {} /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. p <> out ==>
@@ -215,7 +234,8 @@ Proof
   rpt strip_tac >>
   simp[Abbr `Gf`, Abbr `tnf`, step_prov_def, set_prov_def,
        out_prov_def, step_taint_def, set_var_taint_def, mk_inst_def,
-       op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+       op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+       venom_state_component_equality]
 QED
 
 (* Shared scalar rounding; the input may alias either output. *)
@@ -233,6 +253,9 @@ Theorem reason_round_scalar_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var rounded sf = SOME ((n + 31w) && i2w (-32)) /\
     op_taint tnf (Var rounded) = {} /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. p <> tmp /\ p <> rounded ==>
@@ -257,6 +280,9 @@ Proof
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
   >- metis_tac[gas_path_ptr_then, ADD_CLAUSES] >>
+  ` (s2 with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s` by
+    (irule reason_scratch_frame_trans >> qexists_tac `s1` >> gvs[]) >>
   simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
@@ -279,6 +305,9 @@ Theorem reason_load_round_ptr:
     op_taint tnf (Var len) = {} /\
     lookup_var rounded sf = SOME ((mload (w2n a) s + 31w) && i2w (-32)) /\
     op_taint tnf (Var rounded) = {} /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. p <> len /\ p <> tmp /\ p <> rounded ==>
@@ -294,6 +323,9 @@ Proof
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
   >- metis_tac[gas_path_ptr_then, ADD_CLAUSES] >>
+  ` (s2 with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s` by
+    (irule reason_scratch_frame_trans >> qexists_tac `s1` >> gvs[]) >>
   simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
@@ -315,6 +347,9 @@ Theorem reason_copy_round_prefix_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var v4 sf = SOME (32w + (mload (w2n a) s + 31w && i2w (-32))) /\
     op_taint tnf (Var v4) = {} /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4 ==>
@@ -345,6 +380,12 @@ Resume reason_copy_round_prefix_ptr[path]:
 QED
 
 Resume reason_copy_round_prefix_ptr[resources]:
+  ` (s3 with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s` by
+    (irule reason_scratch_frame_trans >> qexists_tac `s1` >> gvs[]) >>
+  ` (s4 with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s` by
+    (irule reason_scratch_frame_trans >> qexists_tac `s3` >> gvs[]) >>
   simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
@@ -371,6 +412,7 @@ Theorem reason_tuple_copy_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
       {w2n b + i | i < n /\ w2n a + i IN tn.t_mem} /\
@@ -403,6 +445,7 @@ Proof
   >- suspend "bb"
   >- suspend "index"
   >- suspend "halted"
+  >- suspend "allocas"
   >- suspend "memory"
   >- suspend "taint"
   >- suspend "coverage" >> suspend "variables"
@@ -434,6 +477,10 @@ Resume reason_tuple_copy_path_ptr[index]:
 QED
 
 Resume reason_tuple_copy_path_ptr[halted]:
+  simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def]
+QED
+
+Resume reason_tuple_copy_path_ptr[allocas]:
   simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def]
 QED
 
