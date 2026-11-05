@@ -799,7 +799,9 @@ using the backwards completion consumers below.
 ### 18.3 Exhaustive opcode consumer matrix
 
 Rows classify the ORIGINAL i at completion, not the generated j. Every row
-also requires the ancillary ledger in 18.4; no row below is a whole-Q proof.
+also requires the ancillary ledger in 18.4. The ASSIGN/PARAM/RETPC_PARAM row
+now has a whole normal-Q proof (C1.12.89); other normal completion rows remain
+boundary interfaces rather than whole-Q proofs.
 Names without a file prefix are in lowerDloadPtr<File>Script.sml as indicated.
 
 | Original opcode / input mode | Existing consumer and actual interface | Missing interface or origin |
@@ -809,8 +811,8 @@ Names without a file prefix are in lowerDloadPtr<File>Script.sml as indicated.
 | complete DLOAD | BackwardNext:62 `dload_tracked_backward_next` | Accepts arbitrary V,U; returns source step/reachability, boundary on `(r1::rs)`, Defs(U), next control, and `r1.dr_scratch = generated_id INSERT r.dr_scratch`. Needs actual freshness, headroom, offset, and full-prefix replay origins. Does NOT return whole Stack/Saved or allocation-map footprint. |
 | complete DLOADBYTES, ordinary write | BackwardNext:108 `dloadbytes_tracked_next` | Arbitrary V,U; returns source step/reachability, next control, boundary and Defs(U); explicitly requires `~in_revert_forward f s`. No allocation-map/call-address footprint is exported. |
 | ALLOCA singleton | JointAlloc:136 `dload_actual_alloca_boundary_next` | Arbitrary V, returns source step/reachability/control/boundary and exact updated head scratch-map identity. Does NOT return Defs(U), source call-address stability or full ancillary Saved/Support. |
-| ASSIGN singleton | Ordinary:95 `dload_boundary_core_assign_index`, JointNext:168 `dload_actual_assign_next` | BOTH fix relational set to `{v | ~retpc_var f v}`. Not consumers of exact V=U DIFF retpc. Need tracked ASSIGN boundary interface (including retpc output case), not monotonicity from smaller to larger set. |
-| PARAM, RETPC_PARAM | Parameters:37 `dload_boundary_core_parameter`, :85 actual next | Also fixes complement-only V. Need original-V version, respecting opaque RETPC_PARAM output. |
+| ASSIGN singleton | JointVariable `dload_joint_tracked_variable_next`, via Ordinary `dload_boundary_core_assign_tracked_index` | Whole normal-Q successor proved at arbitrary rule fuel, exact original V and U. Input tracking derives from original membership and `dload_assign_original_input_closed`; no source-success or successor-footprint premise. |
+| PARAM, RETPC_PARAM | Same JointVariable consumer, via Parameters `dload_boundary_core_parameter_tracked_index` | Whole normal-Q successor proved; RETPC_PARAM output exclusion derives from `dload_parameter_retpc_output`. No enlargement to complement-only V. |
 | LT, GT, EQ | Ordinary:289 `dload_boundary_core_compare_index` | Already arbitrary V,U and exports variable-only footprints. Use it, not a larger-set wrapper; operand origins and next packaging still needed. |
 | MUL, Div, SDIV, Mod, SMOD, Exp, ADDMOD, MULMOD, SLT, SGT, ISZERO, AND, OR, XOR, NOT, SIGNEXTEND, BYTE | Scalar:139 `dload_boundary_core_scalar_index` | Arbitrary V,U, returns boundary/Defs and variable-only footprints; JointNext:285 wrapper is complement-only and must NOT be used as-is. |
 | ADD, SUB | Affine:112 `dload_boundary_core_affine` | Arbitrary V,U boundary/Defs with variable-only footprints; :181 actual wrapper fixes complement V. Source affine/static/taint hypotheses must come from Q/A. |
@@ -873,7 +875,7 @@ allocation transport (never assume fs'=fs in allocation cases).
 | Source function membership/shape, fn_ptr_ok, safety | Source frame_reachable plus frame-to-raw certificate; EVERY static witness gives fn_ptr_ok; ptr_discipline gives access_ok/taint_ok. No source successful step follows from safety alone. |
 | Source successful step and reachability | The backwards consumers in 18.3 reflect target success; singleton next uses `dload_singleton_reachable_next_fields`, expanded next uses `dload_control_emission_next_fields` plus frame_reachable_next. Residual opcodes still need reflection. |
 | Original operand membership and non-retpc use | fn_ir_vars_operand from source instruction membership; opaque-use restrictions from source o1_fn_shape. PHI/ASSIGN/PARAM/RETPC_PARAM need their specialized tracked reasoning; cannot demand all operands in V unconditionally. |
-| Boundary on V and saved Ws | General-V cores are available for most existing families; ASSIGN and parameter cores still expose complement-only V. Expanded and original alloca cores return changed head frame. |
+| Boundary on V and saved Ws | General-V cores are available for most existing families, including the accepted tracked ASSIGN and parameter cores. JointVariable consumes those at exact original V. Expanded and original alloca cores return changed head frame. |
 | Defs(U) at new anchor | General cores explicitly export it except original ALLOCA consumer; ALLOCA must use its actual matching output updates and initial Defs, not pointer safety. Expanded DLOAD/bytes consumers explicitly export original-U definedness after freshness. |
 | Support for current and saved frames | Re-derive from `frame_reachable_prov_supported` at the actual new source reachability and EVERY(fn_ptr_ok P). Do not assume it for s2 or prove it from target boundary. PG and saved frames unchanged in next. |
 | Stack lengths | Same cs,ds; original ALLOCA and DLOAD replace only head frame, so prove LENGTH fs' = LENGTH fs. |
@@ -913,3 +915,31 @@ cannot repair complement-only ASSIGN/parameter statements, missing residual
 opcode semantics, or the syntactic scratch-map and Saved-address obligations.
 No theorem/definition was edited and no continuity/global certification is
 claimed.
+
+### 18.6 Checked variable-only singleton checkpoint (C1.12.89)
+
+Supersedes the ASSIGN/parameter gaps in the historical 18.5 list, not the
+remaining completion or global-closure obligations. The tracked kernels in
+Ordinary/Parameters preserve independent U and V and are implemented once;
+the complement-only interfaces remain compatibility consumers.
+
+`NormalNext.dload_normal_unchanged_successor` assembles full normal Q from
+actual successor reachability, original-V boundary and Defs(U), current
+control, target allocation-map stability and source call-address stability.
+It recomputes Support from source reachability and preserves Stack/Saved by
+index. `JointVariable.dload_joint_tracked_variable_next` now supplies all of
+these premises for ASSIGN, PARAM and RETPC_PARAM without externally assuming
+source success, operand trackedness, successor Support, or footprints.
+Singleton replay forces phase zero and equates the current target with its
+original anchor. The accepted indexed kernels reflect the literal arbitrary-
+fuel target step, give the bumped boundary and variable-only footprints;
+singleton control-next gives source reachability. The shared assembler then
+returns the exact whole normal-Q existential, including exact step_prov and
+step_taint at the literal target successor.
+
+Still unresolved: allocation/expansion footprints and head-frame completion;
+actual premise origins and whole-Q packaging for the other existing semantic
+families; residual opcode reflection/boundary or static exclusions; full
+literal-next integration; and global induction. This local theorem is not a
+proof of the frozen stage contract. Verification: holbuild targets
+lowerDloadPtrJointVariableTheory and o1ContractLowerDloadPtrTheory passed.
