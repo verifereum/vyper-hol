@@ -4346,6 +4346,28 @@ Proof
   rpt (goal_assum $ drule_at Any)
 QED
 
+Theorem place_store_wrap_probe_empty_module_vars_obstruction:
+  !ctx func cenv es s.
+    cenv.ce_module_vars = FEMPTY ==>
+    ~stmt_state_rel ctx func cenv
+      (place_store_wrap_probe_context with txn :=
+        (empty_call_txn with <|block_number := 1; block_hashes := [0w]|>)) es s
+Proof
+  rpt gen_tac >> strip_tac >>
+  disch_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[stmt_state_rel_def, state_rel_def] >>
+  strip_tac >>
+  qpat_x_assum `storage_vars_rel _ _` mp_tac >>
+  pure_rewrite_tac[storage_vars_rel_def] >> strip_tac >>
+  qpat_x_assum `!src ts name d id slot_num. _` 
+    (qspecl_then [`NONE`,
+      `[VariableDecl Private Storage "wrapped"
+        (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+        (SOME 0)]`, `"wrapped"`] mp_tac) >>
+  EVAL_TAC >> simp[var_decl_transient_def]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
