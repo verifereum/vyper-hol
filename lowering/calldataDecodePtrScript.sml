@@ -128,7 +128,18 @@ Proof
       write_memory_with_expansion_def, write_memory_def, expand_memory_def]
 QED
 
-Theorem calldata_bytestring_decoder_prefix:
+Theorem decoder_step_taint_memory_no_new_site[local]:
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  written_taint tn inst s = {} ==>
+  (step_taint inst s t tn).t_mem SUBSET tn.t_mem
+Proof
+  strip_tac >>
+  `new_site_bytes s t = {}` by
+    (simp[new_site_bytes_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  mp_tac (Q.INST [`R` |-> `{}:num set`] step_taint_memory_bound) >> simp[]
+QED
+
+Theorem calldata_bytestring_decoder_prefix_framed:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
@@ -152,6 +163,10 @@ Theorem calldata_bytestring_decoder_prefix:
     (!i. w2n dw <= i /\ i < w2n dw + C ==> i NOTIN tn'.t_mem) /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
@@ -195,12 +210,10 @@ Proof
    op_taint (step_taint i0 s s1 tn) src = {}` by
     (qpat_x_assum `step_inst_base i0 s = OK s1` mp_tac >>
      simp[Abbr `i0`, step_inst_base_def, exec_read1_def] >>
-     strip_tac >>
-     gvs[ptr_covers_def, step_prov_def, step_taint_def,
-       set_var_taint_def, set_prov_def, out_prov_def, mk_inst_def,
-       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
-       update_var_def, lookup_var_def, op_taint_def] >>
-     Cases_on `src` >> gvs[op_taint_def, FLOOKUP_UPDATE]) >>
+     strip_tac >> gvs[] >> conj_tac
+     >- (irule ptr_covers_step_frame >>
+         simp[mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+     simp[step_taint_single_output_preserves_other_operand]) >>
   qabbrev_tac `G1 = step_prov PG G i0 s1` >>
   qabbrev_tac `tn1 = step_taint i0 s s1 tn` >>
   qabbrev_tac `G2 = step_prov PG G1 i1 s2` >>
@@ -218,12 +231,11 @@ Proof
   `ptr_covers G2 tn2 p s2 C /\ op_taint tn2 src = {}` by
     (qpat_x_assum `step_inst_base i1 s1 = OK s2` mp_tac >>
      simp[Abbr `i1`, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
-     strip_tac >>
-     gvs[Abbr `G2`, Abbr `tn2`, ptr_covers_def,
-       step_prov_def, step_taint_def, set_var_taint_def, set_prov_def,
-       out_prov_def, mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
-       update_var_def, lookup_var_def, op_taint_def] >>
-     Cases_on `src` >> gvs[op_taint_def, FLOOKUP_UPDATE]) >>
+     strip_tac >> gvs[] >>
+     simp[Abbr `G2`, Abbr `tn2`] >> conj_tac
+     >- (irule ptr_covers_step_frame >>
+         simp[mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+     simp[step_taint_single_output_preserves_other_operand]) >>
   qabbrev_tac `G3 = step_prov PG G2 i2 s3` >>
   qabbrev_tac `tn3 = step_taint i2 s2 s3 tn2` >>
   `p <> v2 /\ src <> Var v2` by
@@ -231,12 +243,11 @@ Proof
   `ptr_covers G3 tn3 p s3 C /\ op_taint tn3 src = {}` by
     (qpat_x_assum `step_inst_base i2 s2 = OK s3` mp_tac >>
      simp[Abbr `i2`, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
-     strip_tac >>
-     gvs[Abbr `G3`, Abbr `tn3`, ptr_covers_def,
-       step_prov_def, step_taint_def, set_var_taint_def, set_prov_def,
-       out_prov_def, mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
-       update_var_def, lookup_var_def, op_taint_def] >>
-     Cases_on `src` >> gvs[op_taint_def, FLOOKUP_UPDATE]) >>
+     strip_tac >> gvs[] >>
+     simp[Abbr `G3`, Abbr `tn3`] >> conj_tac
+     >- (irule ptr_covers_step_frame >>
+         simp[mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+     simp[step_taint_single_output_preserves_other_operand]) >>
   `guarded = s3` by
     (qpat_x_assum `step_inst_base i3 s3 = OK guarded` mp_tac >>
      simp[Abbr `i3`, step_inst_base_def, mk_inst_def, AllCaseEqs()] >>
@@ -244,9 +255,11 @@ Proof
   qabbrev_tac `G4 = step_prov PG G3 i3 guarded` >>
   qabbrev_tac `tn4 = step_taint i3 s3 guarded tn3` >>
   `ptr_covers G4 tn4 p guarded C /\ op_taint tn4 src = {}` by
-    gvs[Abbr `G4`, Abbr `tn4`, Abbr `i3`, ptr_covers_def,
-        step_prov_def, step_taint_def, set_prov_def,
-        set_var_taint_def, mk_inst_def, op_taint_def, FLOOKUP_DRESTRICT] >>
+    (gvs[Abbr `G4`, Abbr `tn4`] >> conj_tac
+     >- (irule ptr_covers_step_frame >> simp[Abbr `i3`, mk_inst_def]) >>
+     Cases_on `src` >>
+     gvs[Abbr `i3`, op_taint_def, step_taint_def, set_var_taint_def,
+          mk_inst_def, FLOOKUP_DRESTRICT]) >>
   `eval_operand (Var p) guarded = SOME dw /\
    eval_operand src guarded = SOME sw` by metis_tac[] >>
   qabbrev_tac `i4 = mk_inst (sa.cs_next_id + 4) CALLDATACOPY
@@ -313,6 +326,53 @@ Proof
      simp[Abbr `copied`, write_memory_with_expansion_def,
           write_memory_def, expand_memory_def, eval_operand_def] >>
      Cases_on `src` >> gvs[eval_operand_def]) >>
+  `!x. not_fresh_at sa x ==>
+     FLOOKUP G5 x = FLOOKUP G x /\
+     op_taint tn5 (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> strip_tac >>
+     `x <> v0 /\ x <> v1 /\ x <> v2` by
+       (gvs[not_fresh_at_def, Abbr `v0`, Abbr `v1`, Abbr `v2`]) >>
+     simp[Abbr `G5`, Abbr `tn5`, step_prov_other_output,
+          step_taint_other_output, Abbr `i4`, mk_inst_def] >>
+     simp[Abbr `G4`, Abbr `tn4`, step_prov_other_output,
+          step_taint_other_output, Abbr `i3`, mk_inst_def] >>
+     simp[Abbr `G3`, Abbr `tn3`, step_prov_other_output,
+          step_taint_other_output, Abbr `i2`, mk_inst_def] >>
+     simp[Abbr `G2`, Abbr `tn2`, step_prov_other_output,
+          step_taint_other_output, Abbr `i1`, mk_inst_def] >>
+     simp[Abbr `G1`, Abbr `tn1`, step_prov_other_output,
+          step_taint_other_output, Abbr `i0`, mk_inst_def]) >>
+  `s1.vs_allocas = s.vs_allocas /\ s2.vs_allocas = s.vs_allocas /\
+   s1.vs_fmp = s.vs_fmp /\ s2.vs_fmp = s.vs_fmp /\
+   s3.vs_fmp = s.vs_fmp` by
+    (map_every (fn q => qpat_x_assum q mp_tac)
+       [`step_inst_base i0 s = OK s1`,
+        `step_inst_base i1 s1 = OK s2`,
+        `step_inst_base i2 s2 = OK s3`] >>
+     qunabbrev_tac `i0` >> qunabbrev_tac `i1` >> qunabbrev_tac `i2` >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >> fs[mk_inst_def] >>
+     fs[Once step_inst_base_def] >>
+     fs[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
+     gvs[update_var_def]) >>
+  `copied.vs_fmp = s3.vs_fmp` by
+    simp[Abbr `copied`, write_memory_with_expansion_def,
+         write_memory_def, expand_memory_def] >>
+  `tn1.t_mem SUBSET tn.t_mem` by
+    (simp[Abbr `tn1`] >> irule decoder_step_taint_memory_no_new_site >>
+     simp[Abbr `i0`, written_taint_def, mk_inst_def]) >>
+  `tn2.t_mem SUBSET tn1.t_mem` by
+    (simp[Abbr `tn2`] >> irule decoder_step_taint_memory_no_new_site >>
+     simp[Abbr `i1`, written_taint_def, mk_inst_def]) >>
+  `tn3.t_mem SUBSET tn2.t_mem` by
+    (simp[Abbr `tn3`] >> irule decoder_step_taint_memory_no_new_site >>
+     simp[Abbr `i2`, written_taint_def, mk_inst_def]) >>
+  `tn4.t_mem SUBSET tn3.t_mem` by
+    (simp[Abbr `tn4`] >> irule decoder_step_taint_memory_no_new_site >>
+     simp[Abbr `i3`, written_taint_def, mk_inst_def]) >>
+  `tn5.t_mem SUBSET tn4.t_mem` by
+    (simp[Abbr `tn5`] >> irule decoder_step_taint_memory_no_new_site >>
+     simp[Abbr `i4`, written_taint_def, mk_inst_def]) >>
+  `tn5.t_mem SUBSET tn.t_mem` by metis_tac[SUBSET_TRANS] >>
   qexistsl_tac [`copied with vs_inst_idx := LENGTH sb.cs_current_insts`, `G5`, `tn5`] >>
   `copied with vs_inst_idx := LENGTH sa.cs_current_insts = copied` by
     simp[venom_state_component_equality] >>
@@ -439,4 +499,36 @@ Proof
        source_memory_read_ranges_def, source_memory_write_ranges_def,
        step_inst_non_invoke] >>
   fs[allocas_from_def] >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem calldata_bytestring_decoder_prefix:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+    (DecBytestring m) sa = ((),sb) /\
+  C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
+  m < dimword (:256) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  abi_decode_load CALLDATALOAD sw s = n2w len /\ len <= m /\
+  fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
+  op_taint tn src = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) s' = SOME dw /\ eval_operand src s' = SOME sw /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p s' C /\
+    (!i. w2n dw <= i /\ i < w2n dw + C ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_bytestring_decoder_prefix_framed >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
