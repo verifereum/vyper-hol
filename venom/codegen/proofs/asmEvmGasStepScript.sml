@@ -62,6 +62,35 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem gas_singleton_step[local]:
+  es.contexts = [(ctxt,rb)] /\
+  FLOOKUP ctxt.msgParams.parsed ctxt.pc = SOME Gas /\
+  ctxt.jumpDest = NONE /\
+  (!a. ctxt.msgParams.outputTo <> Code a) ==>
+  (?es1 exc. step es = (INR (SOME exc),es1) /\
+             (exc = OutOfGas \/ exc = StackOverflow)) \/
+  ?w gas. step es = (INL (), es with contexts :=
+    [(ctxt with <|stack := w :: ctxt.stack; pc := ctxt.pc + 1;
+                  gasUsed := gas|>, rb)])
+Proof
+  strip_tac >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  simp[step_inst_def, step_context_def, bind_def, ignore_bind_def,
+       consume_gas_def, get_current_context_def, return_def,
+       assert_def, set_current_context_def] >>
+  IF_CASES_TAC
+  >- (simp[push_stack_def, bind_def, ignore_bind_def,
+           get_current_context_def, return_def, assert_def,
+           set_current_context_def] >>
+      IF_CASES_TAC
+      >- (simp[inc_pc_or_jump_def, bind_def, get_current_context_def,
+               return_def, set_current_context_def, is_call_def, opcode_def] >>
+          metis_tac[]) >>
+      simp[] >> disj1_tac >> irule gas_handle_step_starved >> simp[]) >>
+  simp[] >> disj1_tac >> irule gas_handle_step_starved >> simp[]
+QED
+
 Theorem asm_evm_gas_step:
   !prog data as es.
     asm_encoding_wf prog /\
