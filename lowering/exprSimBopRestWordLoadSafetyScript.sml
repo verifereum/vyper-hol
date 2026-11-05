@@ -3,7 +3,7 @@ Theory exprSimBopRestWordLoadSafety
 Ancestors
   exprSimBopRestWordLoads exprSimBopRestWordStorageLoads
   instMemFrontier fragExecMem memSafeRun emitHelper venomInst
-  words arithmetic list finite_map loweringPosts exprLoweringProps compileEnv
+  words arithmetic list rich_list finite_map loweringPosts exprLoweringProps compileEnv
 
 Theorem rest_word_load_safety_checks:
   MEM opc [MLOAD; ILOAD; SLOAD; TLOAD; DLOAD] /\
@@ -47,20 +47,45 @@ QED
 (* Constructor staging adds the zero immutable base before the memory load.
    The ADD changes only variables, hence preserves the allocation frontier. *)
 Theorem rest_word_staged_load_safety_probe:
+  MEM opc [MLOAD; ILOAD] /\
   eval_operand addr s = SOME a /\ eval_operand region s = SOME 0w /\
   w2n a + 32 <= s.vs_alloca_next ==>
   run_inst_seq_mem_ok
     [mk_inst iid ADD [addr; region] [tmp];
-     mk_inst jid MLOAD [Var tmp] outs] s
+     mk_inst jid opc [Var tmp] outs] s
 Proof
-  strip_tac >>
+  simp[] >> strip_tac >>
   qspecl_then [`addr`, `region`] mp_tac emitHelperPropsTheory.step_ADD >>
   disch_then (qspecl_then [`a`, `0w`, `iid`, `tmp`, `s`] mp_tac) >>
   simp[] >> strip_tac >>
   simp[run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
        inst_dload_in_section_def] >>
-  simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD,
+  simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD, below_frontier_ILOAD,
        inst_dload_in_section_def, mk_inst_def,
        venomStateTheory.update_var_def, venomStateTheory.eval_operand_def,
        venomStateTheory.lookup_var_def, FLOOKUP_UPDATE, WORD_ADD_0]
+QED
+
+Theorem rest_word_ptr_load_mem_ok:
+  context$compile_ptr_load ctor imm loc addr sa = (op,sb) /\
+  loc <> LocCalldata /\ eval_operand addr s = SOME a /\
+  ((loc = LocMemory \/ (loc = LocCode /\ ctor)) ==>
+    w2n a + 32 <= s.vs_alloca_next) /\
+  (loc = LocCode /\ ~ctor ==> w2n a <= LENGTH s.vs_data_section) /\
+  (loc = LocCode /\ ctor /\ imm <> NONE ==>
+    eval_operand (THE imm) s = SOME 0w) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  Cases_on `loc` >> Cases_on `ctor` >> Cases_on `imm` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND] >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD,
+       below_frontier_ILOAD, below_frontier_no_ranges,
+       inst_dload_in_section_def, mk_inst_def] >>
+  rewrite_tac[GSYM mk_inst_def] >>
+  irule rest_word_staged_load_safety_probe >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
