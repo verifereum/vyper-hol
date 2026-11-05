@@ -4415,12 +4415,15 @@ Resume regular_inst_ok_sim[prepared]:
     (`!bbs. EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions) bbs ==>
         EVERY codegen_ready_inst (fn_insts_blocks bbs)` by
        (Induct >> simp[fn_insts_blocks_def]) >>
-     qpat_x_assum `codegen_ready_fn fn` mp_tac >>
-     qpat_x_assum `MEM inst (fn_insts fn)` mp_tac >>
-     qpat_x_assum `!bbs. _ ==> EVERY codegen_ready_inst _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[codegen_ready_fn_def, fn_insts_def, EVERY_MEM, codegen_ready_inst_def] >>
-     metis_tac[]) >>
+     `codegen_ready_inst inst` by
+       (qpat_x_assum `codegen_ready_fn fn` mp_tac >>
+        qpat_x_assum `MEM inst (fn_insts fn)` mp_tac >>
+        qpat_x_assum `!bbs. _ ==> EVERY codegen_ready_inst _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[codegen_ready_fn_def, fn_insts_def, EVERY_MEM] >>
+        metis_tac[]) >>
+     qpat_x_assum `codegen_ready_inst inst` mp_tac >>
+     simp[codegen_ready_inst_def]) >>
   `plan_slots_bounded spill_base arranged` by
     fs[plan_state_residual_wf_def, residual_budget_wf_def] >>
   `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
