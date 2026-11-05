@@ -9,7 +9,8 @@ Ancestors
   bodyMemBiSha256 bodyMemBiWord bodyMemBiCeil bodyMemBiBlockHash
   bodyMemBiBlobHash bodyMemBiAcc bodyMemBiMethodId bodyMemBiECRecover
   bodyMemBiConcat bodyMemBiSlice bodyMemBiUint2Str
-  bodyMemoryPreds vyperTypeBuiltins vyperTypeSystem vyperState vyperAST
+  bodyMemoryPreds vyperTypeBuiltins vyperTypeSystem vyperContext vyperState
+  vyperAST
 
 (* A builtin applied to a number of operands it does not take fails to type
    check, so expr_body_pre never holds of it. *)
