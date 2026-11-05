@@ -390,8 +390,8 @@ Proof
      Cases_on `se` >> gvs[supported_string_reason_def] >>
      rename1 `Literal _ lit` >> Cases_on `lit` >>
      gvs[supported_string_reason_def]) >>
-  `!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
-           (INL (BoolV F), es1) ==>
+  `!gs es1. (do raw <- eval_expr cx e; read_result cx raw od)
+             (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
          expr_vv_sim ctx func cenv cx (expr_type se) se es1` by
     (rpt strip_tac >> irule assert_reason_vv_sim >>
      gvs[expr_sim_pre_body, stmt_exprs_ok_def,
