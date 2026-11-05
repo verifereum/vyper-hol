@@ -258,3 +258,18 @@ Proof
       metis_tac[]) >>
   metis_tac[rich_listTheory.IS_PREFIX_MEM]
 QED
+
+(* Source-body admission is stricter than expr_body_pre.  This excludes
+   using an actual Extract32 expression as the runtime-code origin. *)
+Theorem extract32_supported_expression_rejected:
+  !tops ty target es.
+    ~supportedExprs$supported_expr tops (TypeBuiltin ty Extract32 target es)
+Proof
+  rpt gen_tac >>
+  simp[supportedExprsTheory.supported_expr_def,
+       supportedExprsTheory.supported_pure_expr_def,
+       supportedExprsTheory.supported_effect_expr_def,
+       supportedExprFormsTheory.supported_type_builtin_form_def] >>
+  Cases_on `es` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[]
+QED
