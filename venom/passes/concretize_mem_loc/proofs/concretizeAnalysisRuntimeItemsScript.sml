@@ -158,23 +158,16 @@ QED
 Theorem activation_cache_source_static_item:
   joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
   o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
-  activation_cache q d owner aid (b,sz) /\ b <= byte /\ byte < b + sz ==>
+  activation_cache q d owner aid (b,sz) ==>
   ?items. static_alloca_items owner = SOME items /\
     MEM (Allocation aid,sz) items
 Proof
   strip_tac >>
-  `EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions` by
-    (gvs[EVERY_MEM, o1_ctx_shape_def] >> rpt strip_tac >>
-     metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
-  `EVERY wf_function C.ctx_functions` by
-    (gvs[EVERY_MEM, o1_ctx_shape_def] >> metis_tac[o1_fn_shape_def]) >>
-  `MEM owner C.ctx_functions` by metis_tac[activation_cache_source_owner] >>
+  drule_all activation_cache_source_allocation >> strip_tac >>
   drule_all source_static_alloca_items_total >> strip_tac >>
-  goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >>
-  irule activation_cache_static_item >>
-  goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
-  goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
-  simp[] >> metis_tac[]
+  drule_all static_alloca_items_ALLOCA_exact >> strip_tac >> gvs[] >>
+  drule static_alloca_items_MEM >> strip_tac >> metis_tac[]
+
 QED
 
 Theorem joint_open_call_runtime_summary:
