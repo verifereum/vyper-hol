@@ -145,3 +145,81 @@ Proof
       listTheory.LENGTH_TAKE] >>
   intLib.ARITH_TAC
 QED
+
+Theorem whole_trace_height_reflection:
+  &(LENGTH out1) = &(LENGTH in1) + trace_weight ops + correction /\
+  &(LENGTH out2) = &(LENGTH in2) + trace_weight ops + correction /\
+  LENGTH in1 = LENGTH in2 ==>
+  LENGTH out1 = LENGTH out2
+Proof
+  intLib.ARITH_TAC
+QED
+
+Theorem whole_trace_empty_reflection:
+  (0:int) = &(LENGTH in1) + trace_weight ops + correction /\
+  &(LENGTH out2) = &(LENGTH in2) + trace_weight ops + correction /\
+  LENGTH in1 = LENGTH in2 ==>
+  out2 = []
+Proof
+  strip_tac >> `LENGTH out2 = 0` by intLib.ARITH_TAC >>
+  fs[listTheory.LENGTH_NIL]
+QED
+
+(* Remaining certificate map (obligations, NOT assumptions or proved claims):
+ *
+ * Physical fragments:
+ *   fragment ps = (ops, qs) ==> &LENGTH qs.ps_stack =
+ *     &LENGTH ps.ps_stack + trace_weight ops.
+ * Needed for input/restore/reorder, popmany/optimistic-swap, and cleanup.
+ * planWf.emit_input_plan_wf_len supplies prefix_wf and prefix_end_len
+ * equality only when opc <> INVOKE and literal-label lookups succeed.
+ * planWf.reorder_plan_wf_len supplies those two facts under target length
+ * <= stack length and <=16. A bridge from prefix_wf/end_len to signed
+ * weight remains to prove, as does the INVOKE input variant. Existing
+ * planAlign.popmany_plan_contiguous_prefix_wf supplies only prefix_wf,
+ * requires present contiguous top operands, <=16 and strict stack bound;
+ * it is not the general popmany balance certificate. release_dead_spills
+ * does not modify the stack; spill/restore validity must still be carried.
+ *
+ * Non-underflow:
+ *   operand coverage + structural wf ==> LENGTH (compute_operands inst)
+ *     <= LENGTH (SND (emit_input_plan ...)).ps_stack.
+ * Reorder must preserve this bound before regular_silent_core_balance.
+ * This is needed on BOTH DFS and replay states, not just the DFS run.
+ *
+ * Source corrections:
+ *   regular: regular_correction inst topics (proved for silent core only).
+ *   PHI: correction 0 when valid in-range poke, duplication and dead-output
+ *     pop fragments balance. Must prove phi depth validity; phi readiness
+ *     excludes unwanted source retention, not a substitute for validity.
+ *   OFFSET: correction 0 (push trace matches pushed output); malformed
+ *     label branch leaves both unchanged. NOP/param body skips: 0.
+ *   prepare_params: add LENGTH (get_params entry.bb_instructions), since
+ *     each parameter silently pushes one output; remaining pop/swap trace
+ *     must balance. This correction is present only at the entry block.
+ *   fold: sum source-indexed corrections, with LOG topics computed from
+ *     the instruction, over non_param_insts. Need a successful-plan fold
+ *     theorem and all intermediate validity/bounds before summing.
+ *   block: SOLabel weight 0; parameter correction plus fold correction.
+ *     Successful revert rejection removes no emitted operations.
+ *
+ * Regional exhaustion and entry transfer (still unproved):
+ *   Actual DFS entries and saved sibling stacks on a RET-reaching region
+ *     need no markers and exact live support, plus sufficient ownership
+ *     to establish all pipeline bounds. Carry cleanup promise falsity
+ *     through actual DFS calls, with RetRegion excluding new safe elision.
+ *   lineage_entry_inventory gives non-marker slots/spills live at the
+ *     predecessor end and converse ownership, but permits markers.
+ *   lineage_entry_join_stack gives marker-prefix ++ input_vars_from stack,
+ *     but does not bound marker-prefix length or identify spill maps.
+ *   Need marker-free canonical joins and PHI overwrite initialization;
+ *     OFFSET outputs_used, SSA/dominance and empty NOP reads are needed
+ *     for exact support and RET DFS exit emptiness.
+ *   Need LENGTH ps_lineage.ps_stack = LENGTH ps_dfs.ps_stack for the same
+ *     regional label. At unique predecessors this requires a mutual DFS
+ *     call/saved-sibling invariant and lineage induction; at joins it
+ *     requires the marker-free canonical interface. dfs_fields alone is
+ *     insufficient. Arbitrary replay h/promised remain arbitrary.
+ * Once these certificates hold, whole_trace_empty_reflection uses equal
+ * WHOLE block ops and source correction, not cancellation of cleanup ops.
+ *)
