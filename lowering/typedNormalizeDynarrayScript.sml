@@ -134,7 +134,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE, word_mul_n2w, w2n_n2w]
 QED
 
-Theorem typed_dynarray_equal_shape[local]:
+Theorem typed_dynarray_equal_shape:
   compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) ==>
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_next_var = sa.cs_next_var + 6 /\

@@ -3239,7 +3239,7 @@ Proof
   metis_tac[typed_copy_memory_size]
 QED
 
-Theorem typed_copy_tuple_children_widen[local]:
+Theorem typed_copy_tuple_children_widen:
   !stys dtys dtvs.
     (stys = dtys \/ arg_types_fit stys dtys) /\
     OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
