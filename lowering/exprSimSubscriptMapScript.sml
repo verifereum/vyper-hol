@@ -14,10 +14,88 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeExprResult vyperRuntimeAccounts
   vyperExprNoControl vyperPlaceInvariants vyperTypeExprSoundness
   vyperTypeStoragePreservation exprSimMapKey
+  vyperStorageLayoutSafety vyperStorageBackend accountsRelProps
+  vyperTypeValues vyperLookupStorage
   exprSimTopLevelProps compileEnv finite_map
   fragGasPath fragGasMode vyperInterpreter
   vyperTypeEnv vyperStoragePlaceProvenance exprLoweringProps
   gasOutcome loweringPosts context venomState
+
+Theorem mapping_leaf_storage_valid:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  contract_storage_well_formed cx es ==>
+  slots_in_range (get_storage cx es tr) (w2n slot) tv /\
+  storage_read_live cx tr (get_storage cx es tr) slot tv
+Proof
+  strip_tac >>
+  qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >>
+  rewrite_tac[storage_mapping_region_def] >> strip_tac >>
+  qpat_x_assum `!subs leaf_slot leaf_tv. _`
+    (qspecl_then [`[]`, `slot`, `tv`] mp_tac) >>
+  simp[resolve_hashmap_leaf_def] >> strip_tac >>
+  conj_tac
+  >- (irule contract_storage_well_formed_region >>
+      simp[get_storage_backend_eq] >>
+      goal_assum (drule_at Any) >> qexists `es` >> simp[]) >>
+  irule declared_storage_region_read_live >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem mapping_leaf_nonoverflow:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  storage_layout_safe cx ==>
+  w2n slot + type_slot_size tv <= dimword (:256)
+Proof
+  strip_tac >>
+  qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >>
+  rewrite_tac[storage_mapping_region_def] >> strip_tac >>
+  qpat_x_assum `!subs leaf_slot leaf_tv. _`
+    (qspecl_then [`[]`, `slot`, `tv`] mp_tac) >>
+  simp[resolve_hashmap_leaf_def] >> strip_tac >>
+  drule_all storage_layout_safe_region_nonoverflow >> simp[]
+QED
+
+Theorem mapping_leaf_storage_holds:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  contract_storage_well_formed cx es /\
+  storage_layout_safe cx /\
+  stmt_state_rel ctx func cenv cx es s ==>
+  storage_holds cx tr typ (PlaceR (StoragePlace tr slot tv)) slot es s
+Proof
+  strip_tac >> drule_all mapping_leaf_storage_valid >> strip_tac >>
+  `w2n slot + type_slot_size tv <= dimword (:256)` by
+    (drule_all mapping_leaf_nonoverflow >> simp[]) >>
+  `storage_range_agree (get_storage cx es tr)
+    (if tr then contract_transient s else contract_storage s) slot tv` by
+    (irule storage_range_agree_of_live >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cx`, `tr`] >> simp[] >> Cases_on `tr` >>
+     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+         transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+         vfmStateTheory.lookup_account_def]) >>
+  drule evaluate_type_well_formed_type_value >> strip_tac >>
+  drule_all decode_value_from_slots_in_range >> strip_tac >>
+  simp[storage_holds_def, read_result_def, read_place_def,
+       read_storage_slot_def, bind_def, lift_option_def, return_def,
+       get_storage_backend_eq]
+QED
+
+Theorem mapping_leaf_vv_holds:
+  storage_mapping_region cx tr slot (Type typ) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  contract_storage_well_formed cx es /\
+  storage_layout_safe cx /\
+  stmt_state_rel ctx func cenv cx es s /\
+  p.ptr_location = slot_loc tr /\
+  eval_operand p.ptr_operand s = SOME slot ==>
+  vv_holds cenv cx typ (PlaceR (StoragePlace tr slot tv))
+    (LocatedValue typ p) es s
+Proof
+  strip_tac >> drule_all mapping_leaf_storage_holds >> strip_tac >>
+  Cases_on `tr` >> gvs[vv_holds_def, slot_loc_def]
+QED
 
 (* Counted source sequencing keeps the observation stream available to both
    operands; in particular the index is forced only after the base succeeds. *)
