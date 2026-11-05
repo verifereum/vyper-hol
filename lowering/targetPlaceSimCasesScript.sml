@@ -16,7 +16,7 @@
  *                          (targetSubscriptCase)
  *   target_case_all        — every target, by induction, from the indices'
  *                          judgments
- *   target_indices, target_idx_case_ok — the indices' judgments from
+ *   target_idx_case_ok     — the indices' judgments from
  *                          expr_ok, with no internal calls
  *   target_place_sim       — the judgment for eval_target_place: the place
  *                          of a target typed by a value type
@@ -34,10 +34,10 @@
 
 Theory targetPlaceSimCases
 Ancestors
-  targetSubscriptCase targetPlaceSimCasesBase
+  targetSubscriptCase targetPlaceSimCasesBase targetPlaceLive
   exprSimFieldLayout
   exprSimSource
-  targetPlaceSimDefs
+  targetPlaceSimDefs gasContext gasOutcome gasSummary gasExemptCert
   stmtSimProps
   exprSimProps
   exprSimHypsDefs
@@ -67,14 +67,6 @@ Proof
   irule target_attr_case >> metis_tac[]
 QED
 
-(* The indices of a target, in order. *)
-Definition target_indices_def:
-  target_indices (NameTarget id) = [] /\
-  target_indices (TopLevelNameTarget nsid) = [] /\
-  target_indices (AttributeTarget t fld) = target_indices t /\
-  target_indices (SubscriptTarget t e) = target_indices t ++ [e]
-End
-
 (* With no internal calls, the indices' judgments follow from expr_ok, as
    compile_expr_sim's induction hypotheses give it. *)
 Theorem target_idx_case_ok:
@@ -90,24 +82,79 @@ QED
 
 (* ===== Places ===== *)
 
+(* eval_target_place's results that lower to the target's code: a place,
+   or an error the code raises too. *)
+Definition target_place_res_ok_def:
+  target_place_res_ok (res : place + exception) <=>
+    (?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
+    (?d. res = INR (Error (RevertData d))) \/
+    (?str. res = INR (AssertException str))
+End
+
+(* eval_target_place reads the base's place. *)
+Theorem eval_target_place_bind[local]:
+  eval_target_place cx bt = bind (eval_base_place cx bt) get_place
+Proof
+  simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
+QED
+
 (* The judgment for eval_target_place: a target typed by a value type
    evaluates to a place, at the pointer. *)
 Theorem target_place_sim:
-  !ctx func cenv cx env bt es ty sa sb r res es' s0.
+  !ctx func cenv cx env bt es ty sa sb r s0.
     target_sim ctx func cenv cx env bt es /\
     type_place_target env bt = SOME (Type ty) /\
     compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-    eval_target_place cx bt es = (res, es') /\
-    ((?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
-     (?d. res = INR (Error (RevertData d))) \/
-     (?str. res = INR (AssertException str))) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?p. res = INL p /\
-               target_post ctx func cenv cx es sa sb s0 es' (PlaceR p)
-                 (Type ty) r s)
-      (expr_exit res)
+    local_ptrs_reserved cenv sa /\
+    gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx, func) (eval_target_place cx bt) (es, s0)
+      (\res ee t. ?p. res = INL p /\
+        target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty) r t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `gas_admissible _ _ _`
+    (assume_tac o PURE_REWRITE_RULE [eval_target_place_bind]) >>
+  pure_rewrite_tac[eval_target_place_bind] >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by (
+    qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+    rewrite_tac[gas_admissible_def] >> rpt strip_tac >>
+    first_x_assum (qspec_then `gs` mp_tac) >>
+    Cases_on `res` >> simp[bind_def, target_res_ok_def] >>
+    simp[target_place_res_ok_def]) >>
+  qpat_x_assum `target_sim _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [target_sim_def]) >>
+  disch_then (qspecl_then [`Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  rewrite_tac[gas_outcome_def] >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks`
+  >- (disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_summary_at_def, gas_marked_exec_def] >>
+      disch_then (qx_choosel_then [`res`, `fin`, `rr`] strip_assume_tac) >>
+      Cases_on `res` >> gvs[expr_exit_def]
+      >- (rename1 `target_post _ _ _ _ _ _ _ _ _ pv` >>
+          `?p. pv = PlaceR p` by (
+            qpat_x_assum `gas_admissible _ target_place_res_ok _` mp_tac >>
+            rewrite_tac[gas_admissible_def] >>
+            disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings`
+                          mp_tac) >>
+            first_x_assum (qspec_then `[]` mp_tac) >>
+            simp[bind_def] >> strip_tac >>
+            Cases_on `pv` >>
+            simp[get_place_def, raise_def, target_place_res_ok_def]) >>
+          gvs[] >> qexistsl_tac [`INL p`, `fin`, `OK t`] >>
+          simp[bind_def, get_place_def, return_def]) >>
+      rename1 `expr_exit (INR exc) rr` >>
+      qexistsl_tac [`INR exc`, `fin`, `rr`] >> simp[bind_def] >>
+      metis_tac[expr_exit_INR_type]) >>
+  disj2_tac >> rewrite_tac[ignore_bind_def, bind_assoc] >>
+  first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_result)
 QED
