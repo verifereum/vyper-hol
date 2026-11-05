@@ -8,7 +8,7 @@
  *)
 Theory concretizeStageShape
 Ancestors
-  o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher cfgWf
+  o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher venomPassSchedule venomFnScheduleRunner cfgWf
   staticLayoutFoldProofs staticLayoutDefs passSharedDefs venomWf passSimulationDefs list rich_list combin venomInst
 
 Theorem concretize_inst_positions_outputs[local]:
@@ -608,6 +608,90 @@ Proof
   gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
   drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
   irule apply_context_layout_no_raw_fmp >> simp[]
+QED
+
+Theorem concretize_stage_member[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  MEM g C'.ctx_functions ==>
+  ?f observed s out. MEM f C.ctx_functions /\
+    fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s f out /\
+    out.fpo_function = g
+Proof
+  simp[ctx_pass_stage_def, LIST_REL_EL_EQN, MEM_EL] >> strip_tac >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  impl_tac >- fs[] >> strip_tac >> metis_tac[]
+QED
+
+Theorem concretize_stage_make_ssa_input_ok:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  o1_ctx_shape C /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  EVERY make_ssa_input_ok C.ctx_functions ==>
+  EVERY make_ssa_input_ok C'.ctx_functions
+Proof
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all concretize_stage_member >> strip_tac >> gvs[] >>
+  irule concretize_step_make_ssa_input_ok >>
+  gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem concretize_stage_fmp_free:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ fmp_free_ctx C ==>
+  fmp_free_ctx C'
+Proof
+  strip_tac >> simp[fmp_free_ctx_def, EVERY_MEM] >> gen_tac >> disch_tac >>
+  drule_all concretize_stage_member >> strip_tac >> gvs[] >>
+  `f.fn_fmp_signature = NONE /\ no_raw_fmp_ops f /\ f.fn_eom = NONE`
+    by (gvs[fmp_free_ctx_def, EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[fn_pass_step_def, fn_pass_effects_hold_def,
+          fn_abi_effect_holds_def, fn_pass_abi_effect_def,
+          fn_pass_tag_def, fn_fmp_convention_eq_def]) >>
+  irule concretize_step_no_raw_fmp >> metis_tac[]
+QED
+
+Theorem concretize_stage_callee_first:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  callee_first names C.ctx_functions ==>
+  callee_first names C'.ctx_functions
+Proof
+  strip_tac >> simp[callee_first_def] >> rpt strip_tac >>
+  drule_all concretize_stage_member >> strip_tac >> gvs[] >>
+  gvs[fn_pass_step_def, introduces_no_invoke_edges_def,
+      fn_invoke_targets_def, callee_first_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem collect_fn_eoms_defined:
+  EVERY (\fn. IS_SOME fn.fn_eom) fns ==> ?es. collect_fn_eoms fns = SOME es
+Proof
+  Induct_on `fns` >> simp[collect_fn_eoms_def] >> strip_tac >>
+  Cases_on `h.fn_eom` >> gvs[] >>
+  Cases_on `collect_fn_eoms fns` >> gvs[]
+QED
+
+Theorem global_reserved_end_defined:
+  reserved_intervals_wf rs ==> !start. ?e. global_reserved_end rs start = SOME e
+Proof
+  Induct_on `rs` >- simp[global_reserved_end_def] >>
+  Cases_on `h` >> simp[reserved_intervals_wf_def, global_reserved_end_def]
+QED
+
+Theorem concretize_stage_max_live_eom:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  reserved_intervals_wf C.ctx_global_reserved ==>
+  ?eom. max_live_eom C' = SOME eom
+Proof
+  strip_tac >>
+  `EVERY (\fn. IS_SOME fn.fn_eom) C'.ctx_functions`
+    by (simp[EVERY_MEM] >> rpt strip_tac >>
+        drule_all concretize_stage_member >> strip_tac >> gvs[] >>
+        gvs[fn_pass_step_def, fn_pass_effects_hold_def,
+            fn_static_layout_effect_holds_def, fn_pass_static_layout_effect_def,
+            fn_pass_tag_def]) >>
+  drule collect_fn_eoms_defined >> strip_tac >>
+  drule global_reserved_end_defined >>
+  disch_then (qspec_then `0` strip_assume_tac) >>
+  gvs[ctx_pass_stage_def, max_live_eom_def]
 QED
 
 (* Why it holds (intuition, not a prescribed proof).
