@@ -357,6 +357,48 @@ Proof
   qexistsl_tac [`[]`, `path`] >> gvs[]
 QED
 
+Theorem alias_available_definition_visit:
+  wf_function fn /\ ssa_form fn /\
+  lookup_block d fn.fn_blocks = SOME db /\ j < LENGTH db.bb_instructions /\
+  MEM v (inst_defs (EL j db.bb_instructions)) /\
+  alias_path_available fn p n v /\ is_fn_path fn path /\ path <> [] /\
+  (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\ LAST path = p ==>
+  MEM d path
+Proof
+  strip_tac >>
+  qpat_x_assum `alias_path_available _ _ _ _` mp_tac >>
+  rewrite_tac[alias_path_available_def] >>
+  disch_then (qspec_then `path` mp_tac) >>
+  impl_tac >- metis_tac[] >> strip_tac
+  >- (`?i. i < LENGTH bb.bb_instructions /\ EL i bb.bb_instructions = inst` by
+        metis_tac[MEM_EL] >>
+      `d = EL k path` by metis_tac[alias_ssa_definition_position] >>
+      `k < LENGTH path` by decide_tac >>
+      qpat_x_assum `d = EL k path` SUBST1_TAC >>
+      irule EL_MEM >> simp[]) >>
+  `d = p` by metis_tac[alias_ssa_definition_position] >>
+  gvs[] >> simp[LAST_EL] >> irule EL_MEM >> Cases_on `path` >> gvs[]
+QED
+
+Theorem alias_definition_excludes_other_block:
+  wf_function fn /\ ssa_form fn /\
+  lookup_block d fn.fn_blocks = SOME db /\ j < LENGTH db.bb_instructions /\
+  MEM v (inst_defs (EL j db.bb_instructions)) /\
+  lookup_block l fn.fn_blocks = SOME bb /\ l <> d /\ k < LENGTH bb.bb_instructions ==>
+  ~MEM v (inst_defs (EL k bb.bb_instructions))
+Proof
+  metis_tac[alias_ssa_definition_position]
+QED
+
+Theorem alias_definition_excludes_other_index:
+  wf_function fn /\ ssa_form fn /\
+  lookup_block d fn.fn_blocks = SOME db /\ j < LENGTH db.bb_instructions /\
+  MEM v (inst_defs (EL j db.bb_instructions)) /\ k <> j /\ k < LENGTH db.bb_instructions ==>
+  ~MEM v (inst_defs (EL k db.bb_instructions))
+Proof
+  metis_tac[alias_ssa_definition_position]
+QED
+
 Theorem alias_phi_ready_postprefix_input:
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
