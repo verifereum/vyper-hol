@@ -618,7 +618,8 @@ Theorem mapping_suffix_shape:
    compile_mapping_subscript base_op key sa = (op,sb)) ==>
   same_blocks sa sb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> GAS)
     (emitted_insts sa sb) /\
   sb.cs_next_var = sa.cs_next_var + 3 /\
   (?v. op = Var v /\ not_fresh_at sb v)
@@ -857,7 +858,8 @@ Theorem compile_hashmap_tail_shape:
   compile_mapping_subscript base_op hashed sp = (slot,sb) ==>
   same_blocks sn sb /\
   sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> GAS)
     (emitted_insts sn sb)
 Proof
   strip_tac >>
@@ -893,6 +895,8 @@ Theorem compile_hashmap_tail_frag:
          stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv es sa s0 u) R
 Proof
   strip_tac >> drule_all compile_hashmap_tail_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sn sb)` by fs[EVERY_MEM] >>
   irule hash_run_frag >> simp[] >> rpt strip_tac >>
   drule_all compile_hashmap_tail_run >> strip_tac >>
   qexists_tac `u` >> simp[stmt_state_rel_inst_idx] >>
@@ -907,6 +911,34 @@ Proof
   strip_tac >> first_assum ACCEPT_TAC
 QED
 
+
+(* The mapping hash suffix has no GAS instruction: lift its concrete run
+   to the counted execution interface without changing its final data. *)
+Theorem compile_hashmap_tail_zero_path:
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  fn_has_code sn sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sn.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  run_inst_seq (emitted_insts sn sb) s = OK t ==>
+  gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >> drule_all compile_hashmap_tail_shape >> strip_tac >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sn sb) = []` by
+    (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sn sb)` by fs[EVERY_MEM] >>
+  gvs[fragExecTheory.fn_has_code_def, exprLoweringPropsTheory.same_blocks_def,
+      rich_listTheory.IS_PREFIX_APPEND] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  `isPREFIX (emitted_insts sn sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[rich_listTheory.DROP_APPEND1] >>
+  simp[fragGasModeTheory.gas_marked_path_def] >>
+  drule_all fragGasSeqTheory.tuple_run_inst_seq_gas_path >> simp[]
+QED
+
 Theorem compile_mapping_index_success_tail:
   expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
   expr_type idx = kt /\ hashmap_key_type kt /\
@@ -917,13 +949,17 @@ Theorem compile_mapping_index_success_tail:
   (!x. key = Var x ==> not_fresh_at sn x) /\
   (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
   eval_operand base_op s1 = SOME base_slot /\
-  fn_inst_ids_distinct func /\ fn_has_code sp sb func /\
+  fn_inst_ids_distinct func /\ fn_has_code sp sb func /\ fn_has_code sn sb func /\
   stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
   MAP FDOM em.scopes = MAP FDOM en.scopes /\
-  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id ==>
-  frag_exec ctx sn sb (\s. s = t)
-    (\u. eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em sm s1 u) R
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func t 0 (OK u) /\
+      eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+      stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em sm s1 u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
   `eval_operand base_op t = SOME base_slot` by
@@ -934,7 +970,30 @@ Proof
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `local_ptrs_reserved cenv sn` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_all compile_hashmap_tail_frag >>
-  disch_then (qspecl_then [`base_slot`, `R`] mp_tac) >>
-  disch_then (mp_then Any irule frag_exec_conseq) >> simp[]
+  drule_all compile_hashmap_tail_run >> strip_tac >>
+  `gas_marked_path F ctx func t 0
+     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (drule_all compile_hashmap_tail_zero_path >> simp[]) >>
+  `wb_frame cenv em sm s1 t` by
+    (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
+  `wb_frame cenv em sm s1 u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
+     conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
+     goal_assum (drule_at Any)) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- (qpat_x_assum `wb_frame cenv em sm s1 u` mp_tac >>
+      simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
+      strip_tac >> first_assum ACCEPT_TAC) >>
+  drule_all compile_hashmap_tail_shape >> strip_tac >>
+  `u.vs_current_bb = t.vs_current_bb` suffices_by
+    gvs[exprLoweringPropsTheory.same_blocks_def] >>
+  drule_at (Pos hd)
+    (Q.ISPEC `\s:venom_state. s.vs_current_bb`
+      exprLoweringPropsTheory.run_inst_seq_preserves_field) >>
+  simp[] >> disch_then irule >> rpt strip_tac >>
+  fs[EVERY_MEM] >>
+  metis_tac[venomInstProofsTheory.step_preserves_control_flow,
+            venomExecSemanticsTheory.step_inst_non_invoke]
 QED
