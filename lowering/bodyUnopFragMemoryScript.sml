@@ -52,7 +52,7 @@ Definition unop_frag_mem_def:
 End
 
 (* Fresh-write opcodes touch no memory and read no data section. *)
-Theorem writes_fresh_mem_ok[local]:
+Theorem writes_fresh_mem_ok:
   !sa code s. writes_fresh sa code ==> run_inst_seq_mem_ok code s
 Proof
   rpt strip_tac >> irule run_inst_seq_mem_ok_every >>
@@ -63,7 +63,7 @@ QED
 
 (* run_inst_seq_abort_zero_path (fragGasSeqAbort) on the memory-checked
    path. *)
-Theorem run_inst_seq_abort_zero_path_mem[local]:
+Theorem run_inst_seq_abort_zero_path_mem:
   !code s t a ctx func bb.
     ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
