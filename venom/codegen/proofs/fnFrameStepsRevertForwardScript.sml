@@ -7,6 +7,7 @@ Ancestors
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
+  fnFrameTerminalHalt
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -2446,18 +2447,20 @@ Proof
   decide_tac
 QED
 
-Theorem rf_source_copy_ok:
+Theorem rf_source_copy_result:
   inst.inst_opcode = RETURNDATACOPY /\
   inst.inst_operands = [dop;sop;zop] /\
   eval_operand dop vs = SOME dst /\ eval_operand sop vs = SOME src /\
-  eval_operand zop vs = SOME sz /\
-  w2n src + w2n sz <= LENGTH vs.vs_returndata ==>
-  step_inst fuel ctx inst vs = OK
-    (write_memory_with_expansion (w2n dst)
-      (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs)
+  eval_operand zop vs = SOME sz ==>
+  step_inst fuel ctx inst vs =
+    if w2n src + w2n sz <= LENGTH vs.vs_returndata then
+      OK (write_memory_with_expansion (w2n dst)
+        (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs)
+    else Abort ExHalt_abort (halt_state (set_returndata [] vs))
 Proof
   strip_tac >> simp[Once step_inst_def] >>
-  simp[Once step_inst_base_def]
+  simp[Once step_inst_base_def] >>
+  Cases_on `w2n src + w2n sz <= LENGTH vs.vs_returndata` >> simp[]
 QED
 
 Theorem rf_copy_interval_agreement:
@@ -2596,7 +2599,7 @@ Proof
   drule_all rf_preparation_arranged >> simp[]
 QED
 
-Theorem rf_entry_copy_success:
+Theorem rf_entry_copy_prepared:
   !base.
   codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
   inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
@@ -2613,23 +2616,23 @@ Theorem rf_entry_copy_success:
     operand_val (frame_view fn ra vs) lo
       (normalize_operand (dfg_build_function fn) [] at)) /\
   (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
-  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
-  operand_val (frame_view fn ra vs) lo sop = SOME src /\
-  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
-  w2n src + w2n sz <= LENGTH vs.vs_returndata /\
-  vs' = write_memory_with_expansion (w2n dst)
-    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs /\
   plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
-  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  st.as_stack = stk ++ rest /\
   asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
-  ?st' stk'.
-    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
-    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
-    st'.as_stack = stk' ++ rest /\
-    plan_stack_rel lo (frame_view fn ra vs') ps'.ps_stack stk' /\
-    venom_asm_terminal_rel vs' st' /\
-    TAKE (w2n sz) (DROP (w2n dst) vs'.vs_memory) =
-      TAKE (w2n sz) (DROP (w2n dst) st'.as_memory)
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (ins ++ ros))) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros))|>) /\
+    plan_stack_rel lo (frame_view fn ra vs)
+      (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk' /\
+    asm_block_at prog
+      (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+      [AsmOp "RETURNDATACOPY"] /\
+    ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
+    ps' = release_dead_spills nl
+      (ps2 with ps_stack := stack_pop 3 ps2.ps_stack) /\
+    dop <> dead_stack_marker /\ sop <> dead_stack_marker /\
+    zop <> dead_stack_marker
 Proof
   gen_tac >> strip_tac >>
   `compute_operands inst = [zop;sop;dop]` by
@@ -2650,23 +2653,91 @@ Proof
    EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
   drule_all rf_entry_preparation_execution >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `stk'` >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `ps2.ps_stack = _` mp_tac >> simp[] >>
+      disch_then (fn th => pure_once_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]) >>
+  qpat_x_assum `ps2.ps_stack = _` kall_tac >>
+  asm_rewrite_tac[] >>
+  rpt strip_tac >> gvs[dead_stack_marker_def,
+    stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem rf_entry_copy_execution:
+  !base.
+  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo
+      (normalize_operand (dfg_build_function fn) [] at)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo sop = SOME src /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  vs' = write_memory_with_expansion (w2n dst)
+    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  if w2n src + w2n sz <= LENGTH vs.vs_returndata then
+  (?st' stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    st'.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs') ps'.ps_stack stk' /\
+    venom_asm_terminal_rel vs' st' /\
+    TAKE (w2n sz) (DROP (w2n dst) vs'.vs_memory) =
+      TAKE (w2n sz) (DROP (w2n dst) st'.as_memory))
+  else
+  (?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmFault st' /\
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st')
+Proof
+  gen_tac >> strip_tac >>
+  drule_all rf_entry_copy_prepared >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `AsmOK mid` >>
-  `plan_stack_rel lo (frame_view fn ra vs)
-     (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk'` by
-    (qpat_x_assum `ps2.ps_stack = _` mp_tac >> simp[] >>
-     disch_then (fn th => pure_once_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]) >>
-  `dop <> dead_stack_marker /\ sop <> dead_stack_marker /\
-   zop <> dead_stack_marker` by
-    (rpt strip_tac >> gvs[dead_stack_marker_def,
-      stackPlanTypesTheory.is_label_operand_def]) >>
   `mid.as_stack = stk' ++ rest /\ venom_asm_terminal_rel vs mid /\
    asm_block_at prog mid.as_pc [AsmOp "RETURNDATACOPY"]` by
     (simp[Abbr `mid`] >> fs[venom_asm_terminal_rel_def]) >>
-  drule_all rf_copy_success_boundary >>
+  Cases_on `w2n src + w2n sz <= LENGTH vs.vs_returndata` >> simp[]
+  >- (drule_all rf_copy_success_boundary >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
+        (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
+      qexistsl_tac [`st'`, `stk''`] >>
+      gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
+          Abbr `mid`]) >>
+  `w2n src + w2n sz > LENGTH vs.vs_returndata` by simp[] >>
+  drule_all rf_copy_fault_boundary >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
     (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
-  qexistsl_tac [`st'`, `stk''`] >>
+  qexists_tac `st'` >>
   gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
       Abbr `mid`]
+QED
+
+(* The opaque return-PC representation is invisible to ordinary non-label uses. *)
+Theorem rf_ordinary_operand_value:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+  inst.inst_opcode <> DRET /\ MEM op inst.inst_operands /\
+  ~is_label_operand op ==>
+  operand_val (frame_view fn ra vs) lo op = eval_operand op vs
+Proof
+  strip_tac >> simp[operand_val_eq_eval] >>
+  drule_all ordinary_inst_operand_frame_view >>
+  disch_then (qspecl_then [`vs`, `ra`, `(frame_view fn ra vs).vs_memory`] mp_tac) >>
+  simp[frame_view_def]
 QED
