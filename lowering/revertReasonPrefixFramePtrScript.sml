@@ -2,6 +2,7 @@
 Theory revertReasonPrefixFramePtr
 Ancestors revertReasonPrefixPtr ghostObservationPtr decoderGhostFramePtr
   allocationPtr loweringHalt typedCopyPtr ptrDiscipline instIdxIndep
+  allocaSiteResource localPtrsProps exprSimProps stmtSimLogSuffixFrame
   fragGasSeqPtr revertReasonLayout context venomInst venomExecSemantics venomState finite_map
 
 Theorem inst_seq_ptr_other_output_frame:
@@ -140,10 +141,9 @@ Theorem mstore_literal_memory_taint_bound:
 Proof
   simp[step_inst_base_def, mk_inst_def, exec_write2_def,
        eval_operand_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule mstore_ghost_frame >>
-  disch_then (qspecl_then [`[]`, `FEMPTY`, `tn`, `id`, `Lit value`, `value`]
-    mp_tac) >>
-  simp[eval_operand_def, op_taint_def, mk_inst_def]
+  `eval_operand (Lit value) s = SOME value /\ op_taint tn (Lit value) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all (cj 5 mstore_ghost_frame) >> simp[mk_inst_def]
 QED
 
 Theorem add_step_memory_taint_frame:
@@ -304,4 +304,89 @@ Proof
   strip_tac >> qexistsl_tac [`b`, `c`] >> simp[] >>
   qpat_x_assum `_ SUBSET _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> SET_TAC[]
+QED
+
+Theorem revert_reason_prefix_allocation_frame:
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t ==>
+  !aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+    FLOOKUP t.vs_allocas aid = SOME site
+Proof
+  strip_tac >> drule log_run_old_allocas >>
+  simp[revert_reason_prefix_def, mk_inst_def]
+QED
+
+Theorem revert_reason_prefix_local_region_frame:
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  (!k. k < 3 ==> not_local_ptr cenv scopes (STRING #"%" (toString (v+k)))) /\
+  local_region cenv scopes s name b sz ==>
+  local_region cenv scopes t name b sz
+Proof
+  simp[compileEnvTheory.local_region_def] >> strip_tac >>
+  `lookup_var p t = lookup_var p s` by
+    (irule revert_reason_prefix_lookup_frame >>
+     goal_assum (drule_at Any) >> rpt strip_tac >>
+     fs[compileEnvTheory.not_local_ptr_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem revert_reason_prefix_local_exterior:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
+    [STRING #"%" (toString v)]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
+    [STRING #"%" (toString (v+2))]) (fn_insts func) /\
+  (!k. k < 3 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))) /\
+  64+ms < dimword (:256) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  FLOOKUP t.vs_allocas id = SOME (b,64+ms) /\
+  FLOOKUP t.vs_allocas (id+3) = SOME (c,ms) /\
+  local_region cenv es.scopes s name a sz /\ a <= i /\ i < a+sz ==>
+  i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule revert_reason_prefix_state_rel >> metis_tac[]) >>
+  `local_region cenv es.scopes t name a sz` by
+    (irule revert_reason_prefix_local_region_frame >> metis_tac[]) >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString v)) /\
+   not_local_ptr cenv es.scopes (STRING #"%" (toString (v+2)))` by
+    (qpat_x_assum `!k. _` mp_tac >>
+     disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
+       [`0`, `2`]) >> gvs[arithmeticTheory.ADD_COMM]) >>
+  `alloca_inv t /\ local_ptrs_rel func cenv es.scopes t` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `regions_disjoint b (64+ms) a sz` by
+    (irule local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `func`,
+       `mk_inst id ALLOCA [Lit (n2w (64+ms))] [STRING #"%" (toString v)]`] >>
+     simp[mk_inst_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `regions_disjoint c ms a sz` by
+    (irule local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `func`,
+       `mk_inst (id+3) ALLOCA [Lit (n2w ms)] [STRING #"%" (toString (v+2))]`] >>
+     simp[mk_inst_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem revert_reason_prefix_old_allocation_exterior:
+  alloca_inv t /\ sa.cs_next_id <= id /\
+  (!aid site. FLOOKUP s0.vs_allocas aid = SOME site ==>
+    FLOOKUP s.vs_allocas aid = SOME site) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  FLOOKUP t.vs_allocas id = SOME (b,64+ms) /\
+  FLOOKUP t.vs_allocas (id+3) = SOME (c,ms) /\
+  FLOOKUP s0.vs_allocas aid = SOME (a,sz) /\ aid < sa.cs_next_id /\
+  a <= i /\ i < a+sz ==>
+  i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})
+Proof
+  strip_tac >>
+  `FLOOKUP t.vs_allocas aid = SOME (a,sz)` by
+    (drule revert_reason_prefix_allocation_frame >>
+     disch_then irule >> metis_tac[]) >>
+  `aid <> id /\ aid <> id+3` by decide_tac >>
+  `venomMemDefs$regions_disjoint (a,sz) (b,64+ms)` by
+    (irule alloca_site_registered_disjoint >> metis_tac[]) >>
+  `venomMemDefs$regions_disjoint (a,sz) (c,ms)` by
+    (irule alloca_site_registered_disjoint >> metis_tac[]) >>
+  fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
