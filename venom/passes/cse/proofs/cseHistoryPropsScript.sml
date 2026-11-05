@@ -2435,3 +2435,60 @@ Proof
  gvs[cse_phase_state_def, rich_listTheory.FOLDL_APPEND,
      cse_binding_fold_nonwriting]
 QED
+
+(* An ASSIGN use rewinds to the input of its actual last writing visit,
+   not to an evaluation of the source operand in the consumer state. *)
+Theorem cse_prefix_assign_use_rewind:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var x) use.inst_operands /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [x] /\ copy.inst_operands = [arg] ==>
+ ?pre post m cb u t value.
+   events = pre ++ [CseStep m cb copy u t] ++ post /\
+   cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+   get_instruction cb u.vs_inst_idx = SOME copy /\
+   eval_operand arg u = SOME value /\
+   eval_operand (Var x) s = SOME value /\
+   EVERY (\ev. ~cse_event_writes ev x) post /\
+   LENGTH pre < LENGTH events
+Proof
+ strip_tac >> drule_all cse_prefix_ordinary_use_last_write >> strip_tac >>
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ `MEM ev events` by gvs[MEM_APPEND] >>
+ `MEM x copy.inst_outputs /\ copy.inst_opcode <> PHI` by simp[] >>
+ drule_all cse_prefix_nonphi_writer_step >> strip_tac >>
+ qpat_x_assum `ev = _` SUBST_ALL_TAC >>
+ drule_all cse_prefix_step_input_cut >> strip_tac >>
+ drule_all cse_prefix_event_provenance >>
+ simp[] >> strip_tac >>
+ qexistsl [`pre`, `post`, `m`, `sb`, `u`, `v`] >>
+ gvs[step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+ gvs[cse_event_output_def, eval_operand_def, lookup_var_def,
+     update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem cse_prefix_assign_use_rewind_dfg:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var x) use.inst_operands /\
+ FLOOKUP (dfg_build_function fn).dfg_defs x = SOME copy /\
+ copy.inst_opcode = ASSIGN /\ copy.inst_outputs = [x] /\
+ copy.inst_operands = [arg] ==>
+ ?pre post m cb u t value.
+   events = pre ++ [CseStep m cb copy u t] ++ post /\
+   cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+   get_instruction cb u.vs_inst_idx = SOME copy /\
+   eval_operand arg u = SOME value /\
+   eval_operand (Var x) s = SOME value /\
+   EVERY (\ev. ~cse_event_writes ev x) post /\
+   LENGTH pre < LENGTH events
+Proof
+ strip_tac >>
+ `dfg_get_def (dfg_build_function fn) x = SOME copy` by
+   simp[dfgDefsTheory.dfg_get_def_def] >>
+ drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+ irule cse_prefix_assign_use_rewind >> metis_tac[]
+QED
