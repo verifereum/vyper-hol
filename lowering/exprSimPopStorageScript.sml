@@ -1,7 +1,7 @@
 Theory exprSimPopStorage
 Ancestors
   exprSimDefs exprSimProps loweringPosts
-  exprSimPop exprSimLeaves accountsRelProps
+  exprSimPop exprSimLen exprSimLeaves accountsRelProps
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
   vyperStorageBackend vyperStorage
@@ -661,36 +661,13 @@ Proof
   Cases_on `tr` >> simp[get_storage_def, set_storage_def]
 QED
 
-Theorem pop_gsb_obs[local]:
-  !cx tr st g.
-    get_storage_backend cx tr (st with gas_obs := g) =
-    (FST (get_storage_backend cx tr st),
-     SND (get_storage_backend cx tr st) with gas_obs := g)
-Proof
-  Cases_on `tr` >>
-  simp[get_storage_backend_def, bind_def, get_accounts_def,
-       get_transient_storage_def, return_def]
-QED
-
-Theorem pop_rss_obs[local]:
-  !cx tr sl tv st g.
-    read_storage_slot cx tr sl tv (st with gas_obs := g) =
-    (FST (read_storage_slot cx tr sl tv st),
-     SND (read_storage_slot cx tr sl tv st) with gas_obs := g)
-Proof
-  rpt gen_tac >> simp[read_storage_slot_def, bind_def, pop_gsb_obs] >>
-  Cases_on `get_storage_backend cx tr st` >> Cases_on `q` >>
-  simp[lift_option_def, return_def, raise_def] >>
-  Cases_on `decode_value x (w2n sl) tv` >> simp[raise_def, return_def]
-QED
-
 Theorem pop_storage_holds_gas_obs[local]:
   storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w es s ==>
   storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w
     (es with gas_obs := g) s
 Proof
   rw[loweringPostsTheory.storage_holds_def, read_result_def, read_place_def] >>
-  qexistsl_tac [`tvt`, `v`] >> simp[pop_rss_obs, pop_storage_gas_obs]
+  qexistsl_tac [`tvt`, `v`] >> simp[len_rss_obs, pop_storage_gas_obs]
 QED
 
 Theorem pop_ssr_gas_obs[local]:
@@ -700,18 +677,6 @@ Proof
   strip_tac >> drule msg_gas_state_frame >>
   disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `g`] mp_tac) >>
   simp[NoAsms]
-QED
-
-Theorem pop_storage_code_prefix[local]:
-  !sa sb func. fn_has_code sa sb func /\ same_blocks sa sb /\
-  isPREFIX sa.cs_current_insts sb.cs_current_insts ==>
-  ?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
-       isPREFIX (emitted_insts sa sb)
-         (DROP (LENGTH sa.cs_current_insts) bb.bb_instructions)
-Proof
-  rpt strip_tac >> gvs[fn_has_code_def, same_blocks_def] >>
-  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-  simp[emitted_insts_def, DROP_APPEND1, DROP_APPEND2]
 QED
 
 Theorem compile_pop_storage_normalized_sim:
@@ -745,7 +710,7 @@ Proof
   qpat_x_assum `FLOOKUP cenv.ce_module_vars _ = _` kall_tac >>
   qpat_x_assum `cenv.ce_hashmap_info _ = _` kall_tac >>
   qpat_x_assum `cenv.ce_module_var_type _ = _` kall_tac >>
-  qspecl_then [`sa`, `r`, `func`] mp_tac pop_storage_code_prefix >>
+  qspecl_then [`sa`, `r`, `func`] mp_tac storageCopyGasPathTheory.storage_copy_code_prefix >>
   impl_tac
   >- simp[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
   strip_tac >>

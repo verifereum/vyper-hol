@@ -863,18 +863,6 @@ Proof
   simp[] >> strip_tac >> gvs[]
 QED
 
-Theorem pop_code_prefix[local]:
-  !sa sb func. fn_has_code sa sb func /\ same_blocks sa sb /\
-  isPREFIX sa.cs_current_insts sb.cs_current_insts ==>
-  ?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
-       isPREFIX (emitted_insts sa sb)
-         (DROP (LENGTH sa.cs_current_insts) bb.bb_instructions)
-Proof
-  rpt strip_tac >> gvs[fn_has_code_def, same_blocks_def] >>
-  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-  simp[emitted_insts_def, DROP_APPEND1, DROP_APPEND2]
-QED
-
 (* TOP-LEVEL *)
 Theorem compile_pop_name_sim:
   !ctx func cenv cx env ty ann id es.
@@ -897,7 +885,7 @@ Proof
   `!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
              ~MEM q [x0; x1; x2; x3; x4; x5; x6]` by
     (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  qspecl_then [`sa`, `sc`, `func`] mp_tac pop_code_prefix >>
+  qspecl_then [`sa`, `sc`, `func`] mp_tac storageCopyGasPathTheory.storage_copy_code_prefix >>
   impl_tac
   >- simp[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
   strip_tac >>
