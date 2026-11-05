@@ -245,10 +245,7 @@ Proof
   `prepared.cs_next_var <= limit_st.cs_next_var /\ child_end.cs_next_var <= limit_st.cs_next_var /\
     site < prepared.cs_next_id` by decide_tac >>
   `slot < dimword (:256)` by
-    (qpat_x_assum `abi_site_budget _ _ _ initial` mp_tac >>
-     simp_tac bool_ss [abi_site_budget_def] >> strip_tac >>
-     qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` (qspecl_then [`site`,`slot`,`32`] mp_tac) >>
-     asm_rewrite_tac[] >> decide_tac) >>
+    (drule_all abi_site_budget_site_bounds >> strip_tac >> decide_tac) >>
   `eval_operand dst initial = SOME (n2w d) /\ abi_decoder_operand_live st.cs_next_var dst`
     by fs[abi_site_encoder_input_def] >>
   `d+ho < dimword (:256)` by (fs[abi_site_encoder_input_def] >> decide_tac) >>

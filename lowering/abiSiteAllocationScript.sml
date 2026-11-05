@@ -23,6 +23,18 @@ Proof
   simp[abi_site_budget_def, abi_decoder_budget_def, abi_decoder_missing_def]
 QED
 
+Theorem abi_site_budget_site_bounds:
+  abi_site_budget A b cap s /\ site IN A /\
+  FLOOKUP s.vs_allocas site = SOME (slot,32) ==>
+  b <= slot /\ slot+32 <= s.vs_alloca_next /\ s.vs_alloca_next <= b+cap /\
+  b+cap < dimword (:256)
+Proof
+  simp_tac bool_ss [abi_site_budget_def] >> strip_tac >>
+  qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _`
+    (qspecl_then [`site`,`slot`,`32`] mp_tac) >>
+  asm_rewrite_tac[] >> decide_tac
+QED
+
 Theorem abi_site_budget_fields:
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next ==>
   (abi_site_budget A b cap t <=> abi_site_budget A b cap s)

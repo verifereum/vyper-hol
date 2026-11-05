@@ -1,6 +1,6 @@
 Theory abiScratchChild
 Ancestors
-  abiSiteEncoderContract abiScratchFrameCompose abiScratchEncoderContract abiScratchFootprint abiEncoderChildFrames
+  abiSiteAllocation abiSiteEncoderContract abiScratchFrameCompose abiScratchEncoderContract abiScratchFootprint abiEncoderChildFrames
   abiDecoderDynamicLoopSetup abiDecoderFootprint abiDecoderFrame venomState finite_map pred_set
   list arithmetic abiScratchEffect abiEncoderChildSuffixReach abiDecoderArrayInitExec
   abiDecoderAllocation abiDecoderReentry compileEnv valueEncoding contractABI words
@@ -14,6 +14,41 @@ Libs monadsyntax
 (* One precise frame for setup, recursive encoding and parent bookkeeping.
    TOP-LEVEL: abi_scratch_dynamic_child_frame keeps the head and encoded tail
    windows separate and charges the cursor store to its actual owned site. *)
+
+Theorem abi_encoder_dynamic_child_frame:
+  abi_decoder_address_frame next initial ready /\
+  abi_scratch_evolution ids b cap ready encoded /\
+  abi_decode_footprint_frame
+    ([(q,len)] ++ abi_decoder_child_scratch ids b cap ready) ready encoded /\
+  FINITE ids /\ site IN ids /\
+  FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
+  abi_decode_footprint_frame [(h,32);(slot,32)] encoded actual ==>
+  abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap initial) initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap ready) ready encoded` by
+    (simp_tac bool_ss [APPEND] >> irule abi_encoder_frame_extra_window >> gvs[APPEND]) >>
+  `MEM (slot,32) (abi_decoder_child_scratch ids b cap encoded)` by
+    (irule abi_scratch_registered_member >> asm_simp_tac bool_ss [] >>
+     qexists_tac `site` >> simp[]) >>
+  `abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap encoded) encoded actual` by
+    (irule abi_decode_footprint_frame_weaken >> qexists_tac `[(h,32);(slot,32)]` >>
+     asm_simp_tac bool_ss [] >> simp[] >> rpt gen_tac >> strip_tac
+     >- (qexistsl_tac [`h`,`32`] >> simp[]) >>
+     qexistsl_tac [`slot`,`32`] >> simp[]) >>
+  `abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap ready) encoded actual` by
+    (drule_all abi_scratch_frame_advance_append >> simp[]) >>
+  `abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap ready) ready actual` by
+    (irule abi_decode_footprint_frame_trans >> qexists_tac `encoded` >> simp[]) >>
+  `abi_decoder_child_scratch ids b cap ready = abi_decoder_child_scratch ids b cap initial` by
+    fs[abi_decoder_address_frame_def, abi_decoder_child_scratch_def] >>
+  irule abi_encoder_frame_after_address >> qexistsl_tac [`next`, `ready`] >> gvs[APPEND]
+QED
 
 Theorem abi_scratch_dynamic_child_frame:
   abi_decoder_address_frame next initial ready /\
@@ -34,26 +69,7 @@ Proof
     ([(q,len)] ++ abi_decoder_child_scratch ids b cap ready) ready encoded` by
     (irule abi_scratch_frame_subset_append >> asm_simp_tac bool_ss [] >>
      qexists_tac `abi_decoder_ids child_lo child_hi` >> simp[]) >>
-  `abi_decode_footprint_frame
-    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap ready) ready encoded` by
-    (simp_tac bool_ss [APPEND] >> irule abi_encoder_frame_extra_window >> gvs[APPEND]) >>
-  `MEM (slot,32) (abi_decoder_child_scratch ids b cap encoded)` by
-    (irule abi_scratch_registered_member >> asm_simp_tac bool_ss [] >>
-     qexists_tac `site` >> simp[]) >>
-  `abi_decode_footprint_frame
-    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap encoded) encoded actual` by
-    (irule abi_decode_footprint_frame_weaken >> qexists_tac `[(h,32);(slot,32)]` >>
-     asm_simp_tac bool_ss [] >> simp[] >> rpt gen_tac >> strip_tac >|
-     [qexistsl_tac [`h`, `32`] >> simp[], qexistsl_tac [`slot`, `32`] >> simp[]]) >>
-  `abi_decode_footprint_frame
-    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap ready) encoded actual` by
-    (drule_all abi_scratch_frame_advance_append >> simp[]) >>
-  `abi_decode_footprint_frame
-    ([(h,32);(q,len)] ++ abi_decoder_child_scratch ids b cap ready) ready actual` by
-    (irule abi_decode_footprint_frame_trans >> qexists_tac `encoded` >> simp[]) >>
-  `abi_decoder_child_scratch ids b cap ready = abi_decoder_child_scratch ids b cap initial` by
-    fs[abi_decoder_address_frame_def, abi_decoder_child_scratch_def] >>
-  irule abi_encoder_frame_after_address >> qexistsl_tac [`next`, `ready`] >> gvs[APPEND]
+  drule_all abi_encoder_dynamic_child_frame >> simp[]
 QED
 
 (* ===== Effect ===== *)
@@ -84,6 +100,72 @@ Proof
     (qspecl_then [`op`, `w`] mp_tac o List.last o CONJUNCTS o
       PURE_REWRITE_RULE [abi_encoder_child_suffix_post_def]) >> simp[]
 QED
+Theorem abi_site_child_effect:
+  abi_decoder_address_frame next initial ready /\
+  abi_site_encoder_effect A child_lo child_hi child_next limit_st q len b cap ready encoded /\
+  abi_encoder_child_suffix_post out suffix_st limit_st h slot off len encoded actual /\
+  lo <= child_lo /\ child_hi <= hi /\
+  next <= child_next /\ next <= suffix_st.cs_next_var /\
+  site IN A /\ site IN abi_decoder_ids lo hi /\
+  FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
+  d <= h /\ h+32 <= d+sz /\ d <= q /\ q+len <= d+sz ==>
+  abi_site_encoder_effect A lo hi next limit_st d sz b cap initial actual /\
+  abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap initial)
+    initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `FINITE A` by fs[abi_site_encoder_effect_def, abi_site_budget_def] >>
+  `FINITE (A INTER abi_decoder_ids lo hi) /\
+   (A INTER abi_decoder_ids lo hi) SUBSET A /\
+   (A INTER abi_decoder_ids child_lo child_hi) SUBSET (A INTER abi_decoder_ids lo hi) /\
+   site IN (A INTER abi_decoder_ids lo hi)` by
+    (simp[SUBSET_DEF, abi_decoder_ids_def] >> rpt strip_tac >> simp[] >> decide_tac) >>
+  `abi_scratch_evolution (A INTER abi_decoder_ids lo hi) b cap ready encoded` by
+    (irule abi_scratch_evolution_subset >> qexists_tac `A` >>
+     fs[abi_site_encoder_effect_def]) >>
+  `abi_decode_footprint_frame
+    ([(q,len)] ++ abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap ready)
+    ready encoded` by
+    (irule abi_scratch_frame_subset_append >> asm_rewrite_tac[] >>
+     qexists_tac `A INTER abi_decoder_ids child_lo child_hi` >>
+     fs[abi_site_encoder_effect_def]) >>
+  `abi_decode_footprint_frame [(h,32);(slot,32)] encoded actual` by
+    fs[abi_encoder_child_suffix_post_def] >>
+  drule_all abi_encoder_dynamic_child_frame >> strip_tac >>
+  `abi_decode_footprint_frame
+    ((d,sz)::abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap initial) initial actual` by
+    (irule abi_decode_footprint_frame_weaken >>
+     qexists_tac `[(h,32);(q,len)] ++ abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap initial` >>
+     asm_simp_tac bool_ss [] >> simp[] >> qx_genl_tac [`p`,`n`] >> strip_tac
+     >- (qexistsl_tac [`d`,`sz`] >> simp[])
+     >- (qexistsl_tac [`d`,`sz`] >> simp[]) >>
+     qexistsl_tac [`p`,`n`] >> simp[]) >>
+  `!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>
+    eval_operand op actual = SOME w` by
+    (rpt strip_tac >>
+     `abi_decoder_operand_live child_next op /\ abi_decoder_operand_live suffix_st.cs_next_var op` by
+       (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+     `eval_operand op ready = SOME w` by fs[abi_decoder_address_frame_def] >>
+     drule_all abi_site_effect_operand >> strip_tac >>
+     fs[abi_encoder_child_suffix_post_def]) >>
+  `(abi_scratch_evolution A b cap initial actual <=> abi_scratch_evolution A b cap ready encoded)` by
+    (irule abi_scratch_evolution_transport >>
+     fs[abi_decoder_address_frame_def, abi_encoder_child_suffix_post_def]) >>
+  `(abi_site_budget A b cap actual <=> abi_site_budget A b cap encoded)` by
+    (irule abi_site_budget_fields >> fs[abi_encoder_child_suffix_post_def]) >>
+  qpat_assum `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_encoder_effect_def]) >>
+  qpat_assum `abi_encoder_child_suffix_post _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_child_suffix_post_def]) >>
+  qpat_assum `abi_decoder_address_frame _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
+  `!id. id < lo \/ hi <= id ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id` by
+    (rpt gen_tac >> strip_tac >> `id < child_lo \/ child_hi <= id` by decide_tac >>
+     asm_simp_tac bool_ss []) >>
+  asm_simp_tac bool_ss [abi_site_encoder_effect_def] >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
 
 Theorem abi_scratch_child_effect:
   abi_decoder_address_frame next initial ready /\
@@ -99,45 +181,21 @@ Theorem abi_scratch_child_effect:
     initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_decoder_ids lo hi SUBSET abi_decoder_ids first last /\
-   abi_decoder_ids child_lo child_hi SUBSET abi_decoder_ids lo hi` by
-    (simp[SUBSET_DEF, abi_decoder_ids_def] >> decide_tac) >>
-  `FINITE (abi_decoder_ids lo hi)` by simp[] >>
-  `abi_decode_footprint_frame [(h,32);(slot,32)] encoded actual` by
-    fs[abi_encoder_child_suffix_post_def] >>
-  `abi_decode_footprint_frame
-    ([(h,32);(q,len)] ++ abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial)
-    initial actual` by
-    (drule_all (Q.INST [`ids` |-> `abi_decoder_ids lo hi`] abi_scratch_dynamic_child_frame) >> simp[]) >>
-  `abi_decode_footprint_frame
-    ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial) initial actual` by
-    (irule abi_decode_footprint_frame_weaken >>
-     qexists_tac `[(h,32);(q,len)] ++ abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial` >>
-     asm_simp_tac bool_ss [] >> simp[] >> qx_genl_tac [`p`, `n`] >> strip_tac >|
-     [qexistsl_tac [`d`, `sz`] >> simp[], qexistsl_tac [`d`, `sz`] >> simp[],
-      qexistsl_tac [`p`, `n`] >> simp[]]) >>
-  `!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>
-    eval_operand op actual = SOME w` by
-    (mp_tac (Q.SPECL [`next`, `child_next`, `suffix_st`, `initial`, `ready`, `encoded`, `actual`,
-       `first`, `last`, `child_lo`, `child_hi`, `limit_st`, `q`, `len`, `b`, `cap`, `out`, `h`,
-       `slot`, `off`] abi_scratch_child_operands) >>
-     impl_tac >- asm_simp_tac bool_ss [] >> simp[]) >>
-  `(abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual <=>
-    abi_scratch_evolution (abi_decoder_ids first last) b cap ready encoded)` by
-    (irule abi_scratch_evolution_transport >>
-     fs[abi_decoder_address_frame_def, abi_encoder_child_suffix_post_def]) >>
-  `(abi_decoder_budget first last b cap actual <=> abi_decoder_budget first last b cap encoded)` by
-    (irule abi_decoder_budget_transport >> fs[abi_encoder_child_suffix_post_def]) >>
-  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
-  qpat_assum `abi_encoder_child_suffix_post _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_child_suffix_post_def]) >>
-  qpat_assum `abi_decoder_address_frame _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  `!id. id < lo \/ hi <= id ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id` by
-    (rpt gen_tac >> strip_tac >> `id < child_lo \/ child_hi <= id` by decide_tac >>
-     asm_simp_tac bool_ss []) >>
-  asm_simp_tac bool_ss [abi_scratch_effect_def] >> gvs[] >> first_assum ACCEPT_TAC
+  `first <= child_lo /\ child_hi <= last /\
+   site IN abi_decoder_ids first last` by
+    (fs[abi_decoder_ids_def] >> decide_tac) >>
+  `abi_site_encoder_effect (abi_decoder_ids first last) child_lo child_hi child_next
+    limit_st q len b cap ready encoded` by
+    simp[abi_site_encoder_effect_interval] >>
+  `abi_decoder_ids first last INTER abi_decoder_ids lo hi = abi_decoder_ids lo hi` by
+    (simp[EXTENSION, abi_decoder_ids_def] >> decide_tac) >>
+  `abi_site_encoder_effect (abi_decoder_ids first last) lo hi next limit_st d sz b cap initial actual /\
+   abi_decode_footprint_frame
+    ([(h,32);(q,len)] ++ abi_decoder_child_scratch
+      (abi_decoder_ids first last INTER abi_decoder_ids lo hi) b cap initial) initial actual` by
+    (irule abi_site_child_effect >>
+     rpt (goal_assum (drule_at Any) >> asm_rewrite_tac[])) >>
+  gvs[abi_site_encoder_effect_interval]
 QED
 
 (* ===== Finish ===== *)
