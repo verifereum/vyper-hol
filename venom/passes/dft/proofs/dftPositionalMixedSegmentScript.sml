@@ -1,7 +1,7 @@
 Theory dftPositionalMixedSegment
 Ancestors
   dftPositionalGasSegment dftMixedSegmentAccount dftMixedCrossing
-  dftMixedResidualProbe instIdxIndep
+  dftMixedResidualProbe instIdxIndep dftOccurrenceOrdinaryClosure
   dftPositionalPhase dftPositionalRuntime dftPositionalEdit
   dftOccurrenceSuspended dftOccurrenceOrdinaryEdit dftOccurrenceReplay
   dftOccurrenceMachine dftOpenMachine dftOpenErase venomExecSemantics venomState
@@ -189,3 +189,70 @@ Proof
   fs[FUNPOW_1, FUNPOW_2] >>
   qpat_x_assum `!j f i t. _` mp_tac >> simp[]
 QED
+
+
+Theorem dft_pos_mixed_segment_next:
+  D = dft_pos_edit_ctx fi bi pre gas inst post C /\
+  dft_pos_runtime_ready C fi bi pre gas inst post /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  dft_pos_gas_phase C D fi bi pre l r /\
+  (!f g bb bb' s ls rs n.
+    l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls n /\
+    r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs n /\
+    dft_pos_slot C D fi bi f g bb bb' /\ s.vs_inst_idx = LENGTH pre ==>
+    !e. step_inst_base inst s <> Error e) ==>
+  (?a. (a = 1 \/ a = 2) /\
+    dft_pos_gas_phase C D fi bi pre
+      (FUNPOW (dft_occ_oracle_next w C) a l)
+      (FUNPOW (dft_occ_oracle_next w D) a r) /\
+    dft_pos_segment_account C D w a a l r) \/
+  (?f g bb bb' s ls rs n code t.
+    l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls n /\
+    r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs n /\
+    dft_pos_slot C D fi bi f g bb bb' /\
+    s.vs_inst_idx = LENGTH pre /\ step_inst_base inst s = Abort code t)
+Proof
+  strip_tac >>
+  `?ctl ctl' ls rs n.
+    l.dft_occ_core = DftOpen ctl ls n /\ r.dft_occ_core = DftOpen ctl' rs n /\
+    dft_pos_control C D fi bi pre ctl ctl'` by
+    (fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+  qpat_x_assum `dft_pos_control _ _ _ _ _ _ _` mp_tac >>
+  simp[dft_pos_control_def] >> strip_tac
+  >- suspend "enter"
+  >- suspend "at" >>
+  suspend "done"
+QED
+
+Resume dft_pos_mixed_segment_next[enter]:
+  gvs[] >> qexists `1` >>
+  pure_rewrite_tac[FUNPOW_1] >> simp[] >> conj_tac
+  >- (irule dft_pos_gas_enter_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  metis_tac[dftPositionalSegmentTheory.dft_pos_enter_account]
+QED
+Resume dft_pos_mixed_segment_next[done]:
+  gvs[] >> qexists `1` >>
+  pure_rewrite_tac[FUNPOW_1] >> simp[] >> conj_tac
+  >- (irule dft_pos_gas_done_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  metis_tac[dftPositionalSegmentTheory.dft_pos_done_one_account]
+QED
+Resume dft_pos_mixed_segment_next[at]:
+  gvs[] >> Cases_on `j = fi /\ k = bi /\ s.vs_inst_idx = LENGTH pre`
+  >- suspend "pair" >>
+  disj1_tac >> qexists `1` >> pure_rewrite_tac[FUNPOW_1] >> simp[] >> conj_tac
+  >- (irule dft_pos_gas_at_outside_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  irule dftPositionalSegmentTheory.dft_pos_at_outside_account >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+Resume dft_pos_mixed_segment_next[pair]:
+  gvs[] >>
+  `!e. step_inst_base inst s <> Error e` by metis_tac[] >>
+  drule_all dft_ordinary_result_cases >> strip_tac
+  >- (disj1_tac >> qexists `2` >> simp[] >>
+      irule dft_pos_mixed_pair_success >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+Finalise dft_pos_mixed_segment_next
