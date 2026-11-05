@@ -139,7 +139,8 @@ Theorem run_call_same_depth_step:
   step es = (INL (), es1) /\ LENGTH es1.contexts = LENGTH es.contexts ==>
   run_call es1 = run_call es
 Proof
-  cheat
+  strip_tac >> simp[run_call_eq_tr] >>
+  once_rewrite_tac[run_call_tr_def] >> simp[]
 QED
 
 Theorem run_call_enter_return:
@@ -148,12 +149,16 @@ Theorem run_call_enter_return:
   LENGTH es2.contexts = LENGTH es.contexts ==>
   run_call es2 = run_call es
 Proof
-  cheat
+  strip_tac >> drule run_call_step_equation >> disch_then SUBST1_TAC >>
+  `LENGTH es.contexts <= LENGTH es1.contexts` by simp[] >>
+  drule_all run_call_child_continuation >> disch_then SUBST1_TAC >>
+  simp[run_call_def, arithmeticTheory.GREATER_EQ]
 QED
 
 Theorem run_call_terminal_step:
   step es = (r, es1) /\ (ISR r \/ LENGTH es1.contexts < LENGTH es.contexts) ==>
   run_call es = SOME (r, es1)
 Proof
-  cheat
+  strip_tac >> simp[run_call_eq_tr] >>
+  once_rewrite_tac[run_call_tr_def] >> Cases_on `r` >> gvs[]
 QED
