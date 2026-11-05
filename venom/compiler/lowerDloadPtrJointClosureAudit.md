@@ -684,3 +684,37 @@ interface. The outer induction must still produce that phase/control inversion,
 branch membership, tracked operand use, source safety, Cover and target label
 distinctness. It does not establish the global joint reachability induction or
 the frozen stage contract.
+
+## Checked full return constructor (C1.12.83)
+
+`lowerDloadPtrJointReturnTheory.dload_joint_return_closed` uses exactly the
+normal/terminal disjunction of JointCall, expanded inline. Its input is
+`Q (d::ds) PH H un g ri t`; its output is
+`Q ds d.cf_params (DRESTRICT d.cf_prov (COMPL (set d.cf_inst.inst_outputs)))
+ (un with t_var := DRESTRICT d.cf_tvar (COMPL (set d.cf_inst.inst_outputs)))
+ d.cf_fn j (t' with vs_inst_idx := SUC d.cf_state.vs_inst_idx)`.
+The premises are the actual ret constructor's active instruction, arbitrary
+`IntRet rt tend`, binding into the saved caller, and resumed active instruction.
+No premise assumes RET, phase zero, tend=t, or source success.
+
+Premise origins: the existing `step_inst_intret_opcodes` theorem handles INVOKE
+as well as base execution. Emission inversion then forces the original
+singleton and phase zero. Source instruction membership and `fn_ptr_ok` exclude
+RETFMP/DRET, leaving RET; its equation yields tend=t. Zero-prefix inversion
+identifies all anchor fields. Source discipline supplies taint safety, and
+source static witness supplies pointer-use safety. Original-variable
+membership supplies operand definedness. Opaque return-use restrictions forbid
+a retpc variable in FRONT (using the actual nonempty RET operand list).
+Stack length equalities expose source caller and two allocation frames.
+The saved-head supply witness plus source caller shape gives distinct target
+caller labels; source caller membership comes from `frame_stack_prefix`.
+
+`dload_normal_return` is consumed whole, including popped boundary, source
+return/reachability, resumed control, all-original definedness, scratch stack,
+saved-frame witnesses and provenance support. Output normal witnesses use
+`cs0`, `c.cf_params`, restricted saved source provenance/taint, `c.cf_fn`, its
+resumed source state/control/supply, n=0, pfuel=0, the resumed target state,
+restricted saved target provenance/taint, and `ef::fs1`. Saved instruction
+equality reconciles restrictions. Terminal input is impossible by
+`dload_terminal_mode_no_return`. This certifies only the return constructor,
+not next closure, global induction, or the frozen stage theorem.
