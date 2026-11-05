@@ -2176,6 +2176,20 @@ Proof
   EVAL_TAC
 QED
 
+Theorem alias_probe_phi_prefix_live_and_spilled:
+  (SND (generate_phi_plan (EL 1 alias_probe_phis) ["p"; "q"; "r"] F
+    (SND (generate_phi_plan (HD alias_probe_phis) ["p"; "c"; "r"] F
+      ((init_plan_state 0) with ps_stack := [Var "r"; Var "a"; Var "c"]))))).ps_stack =
+    [Var "r"; Var "p"; Var "q"] /\
+  (SND (generate_phi_plan (EL 1 alias_probe_phis) ["p"; "q"; "r"] F
+    (SND (generate_phi_plan (HD alias_probe_phis) ["p"; "c"; "r"] F
+      ((init_plan_state 0) with <| ps_stack := [Var "r"; Var "a"];
+        ps_spilled := FEMPTY |+ (Var "c",0) |>))))).ps_stack =
+    [Var "r"; Var "p"]
+Proof
+  EVAL_TAC
+QED
+
 (* Input disjointness alone supplies neither output freshness nor static
    edge choice. In loops SSA alone also permits an output on a backedge.
    A proposed freshness proof must additionally use phi_block_ready's
