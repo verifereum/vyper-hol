@@ -2022,3 +2022,120 @@ val () =
        List.all (fn oracle => oracle = "DISK_THM") oracles then ()
     else raise Fail "Mapping root source frame has unproved dependencies"
   end;
+
+(* Typed consumer boundary: this starts AFTER a successful forced child;
+   it does not assert that all reachable keys have a framed producer. *)
+Theorem mapping_dynamic_key_post_hash_frag:
+  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) key mid /\
+  expr_type e = BaseT (BytesT (Dynamic cap)) /\
+  evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (BaseTV (BytesT (Dynamic cap))) /\
+  compile_keccak256_key key F sm = (out,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sm sb (\s. s = mid)
+    (\t. eval_operand out t = SOME
+          (encode_hashmap_key (BaseT (BytesT (Dynamic cap))) (BytesV bs)) /\
+      stmt_state_rel ctx func cenv cx es' t /\
+      t.vs_memory = mid.vs_memory /\ t.vs_allocas = mid.vs_allocas /\
+      contract_storage t = contract_storage mid /\
+      contract_transient t = contract_transient mid /\
+      (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x mid)) R
+Proof
+  strip_tac >>
+  drule_all exprSimHashTheory.hash_dynamic_post_view >> strip_tac >>
+  simp[vyperStorageTheory.encode_hashmap_key_def, byteTheory.word_of_bytes_be_def] >>
+  irule compile_keccak256_key_bytes_frame_frag >>
+  goal_assum (drule_at Any) >>
+  reverse conj_tac >- gvs[expr_post_def] >>
+  qexistsl [`key`, `n2w b`] >>
+  simp[GSYM mem_word_at_eq_mload, abiDecodeStaticPropsTheory.w2n_add_n2w_lt]
+QED
+
+(* The scalar MapPT branch uses typed encoding, never the untyped
+   length-20 heuristic. These equations also test fixed bytes20. *)
+Theorem mapping_scalar_key_encoding:
+  (!bt i. typed_val_to_w256 (BaseTV bt) (IntV i) =
+     encode_hashmap_key (BaseT bt) (IntV i)) /\
+  (!tv kt n. typed_val_to_w256 tv (FlagV n) =
+     encode_hashmap_key kt (FlagV n)) /\
+  (!bt b. typed_val_to_w256 (BaseTV bt) (BoolV b) =
+     encode_hashmap_key (BaseT bt) (BoolV b)) /\
+  (!bs. typed_val_to_w256 (BaseTV AddressT) (BytesV bs) =
+     encode_hashmap_key (BaseT AddressT) (BytesV bs)) /\
+  (!n bs. typed_val_to_w256 (BaseTV (BytesT (Fixed n))) (BytesV bs) =
+     encode_hashmap_key (BaseT (BytesT (Fixed n))) (BytesV bs))
+Proof
+  simp[typed_val_to_w256_def, val_to_w256_def,
+       vyperStorageTheory.encode_hashmap_key_def] >>
+  Cases >> simp[typed_val_to_w256_def, val_to_w256_def] >>
+  rename1 `BaseTV bt` >> Cases_on `bt` >>
+  simp[typed_val_to_w256_def, val_to_w256_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[typed_val_to_w256_def, val_to_w256_def]
+QED
+
+(* MapPT key handoff audit (expression dispatch only).
+
+   Child success/exception interface: expr_sim_def quantifies over
+     lower_value compile_expr cenv ty key sa = (op,sb),
+     (do r <- eval_expr cx key; read_result cx r od) es = (res,es'),
+     expr_res_ok res, fn_has_code sa sb func, fn_inst_ids_distinct func,
+     local_ptrs_reserved cenv sa.
+   It supplies frag_exec with entry s=s0 /\ stmt_state_rel ... es s,
+   post ?v. res=INL v /\ expr_post ... es' v op s, and expr_exit res.
+   expr_res_ok includes runtime/revert errors and assertions, not type
+   errors; expr_exit_def specifies the corresponding Abort outcomes.
+   This is NOT yet the needed same-execution storage/transient frame.
+   framed_vv_memory_stack_lower_value_frag only handles successful Value v
+   with StackValue or LocMemory, and takes the framed raw child as input.
+   Missing: total reachable FORCED producer (including exceptional reads,
+   storage/transient/immutable locations), not another success wrapper.
+
+   Encoding: mapping_scalar_key_encoding checks IntV, FlagV, BoolV,
+   AddressT/PAD_LEFT and Fixed bytes/PAD_RIGHT (including bytes20).
+   Decimal is not a hashmap_key_type. Dynamic bytes and strings use F in
+   compile_keccak256_key, never the fixed-bytes hashing branch.
+   hash_dynamic_post_view/hash_string_post_view require expr_post, the
+   exact expr_type and successful evaluate_type. They supply a pointer b,
+   length word, data at b+32, b+32<dimword and length<dimword. The checked
+   mapping_dynamic_key_post_hash_frag adapts precisely these facts via
+   mem_word_at_eq_mload and w2n_add_n2w_lt. evaluate_type is an explicit
+   input: support alone does not give its capacity/slot-size bounds.
+
+   Base operand lifetime: expr_post_def preserves every existing SOME
+   lookup at not_fresh_at sa variables. Together with safe_operand and
+   its known evaluation, safe_operand_value_preserved keeps the mapping
+   slot operand across lower_value. No absent-lookup equality is needed;
+   HashMapRef has no target memory payload. The suffix preserves old
+   lookups exactly. A reachable PLACE producer still must provide the
+   base slot and freshness, not ordinary expr_vv_res_ok for a mapping.
+
+   Scratch entry: local_ptrs_reserved_next_var transports reservation
+   given the compiler next-var inequality. fn_has_code_split transports
+   code given both cs_extends facts; compile_expr_extends,
+   unwrap_value_extends and suffix extension supply those boundaries.
+   stmt_state_rel is part of the actual expr_post and is retained by
+   compile_keccak256_key_bytes_frame_frag; it must not be transported
+   across arbitrary source outcomes by assumption.
+
+   Caller memory: expr_post_def keeps allocation entries and old regions
+   with aid<sa.cs_next_id disjoint from ALL local_region entries at the
+   child start, plus locals_kept. It does NOT frame arbitrary caller
+   bytes. The hashing suffix keeps memory and allocas exactly.
+   compile_mapping_subscript_frame_frag keeps old allocation entries,
+   every old allocation region (aid below scratch entry next_id), and
+   local regions. Composition therefore needs the original caller
+   region's initial disjointness and surviving entry, then id monotonicity;
+   it cannot remove the child's local-disjointness premise. Missing total
+   RAW/FORCED/PLACE producers must carry these same-endpoint posts and
+   storage projections. No unconditional nested producer follows here.
+*)
+
+val _ = List.app (fn th =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping key audit has unproved dependencies"
+  end) [mapping_dynamic_key_post_hash_frag, mapping_scalar_key_encoding];
