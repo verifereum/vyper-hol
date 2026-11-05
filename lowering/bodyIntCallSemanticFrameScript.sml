@@ -60,3 +60,25 @@ val () = List.app (fn th =>
     else raise Fail "Semantic frame probe has unproved dependencies"
   end) [run_inst_seq_observation, frag_exec_run_inst_seq_observation,
         frag_exec_run_inst_seq_storage_frame];
+
+Theorem frag_exec_observation_then:
+  cs_extends sa sm /\ cs_extends sm sb /\
+  frag_exec ctx sa sm P (\m. A m /\ obs m = saved) (\r. F) /\
+  (!m. A m ==> frag_exec ctx sm sb (\s. s = m)
+    (\t. B m t /\ obs t = obs m) (\r. F)) ==>
+  frag_exec ctx sa sb P (\t. (?m. A m /\ B m t) /\ obs t = saved) (\r. F)
+Proof
+  strip_tac >> drule frag_exec_then >> disch_then irule >> simp[] >>
+  rpt strip_tac >> qpat_x_assum `!m. A m ==> _` drule >>
+  strip_tac >> irule frag_exec_weaken >>
+  first_assum (irule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag frag_exec_observation_then)
+  in
+    if null axioms andalso null (Thm.hyp frag_exec_observation_then) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Observation composition has unproved dependencies"
+  end;
