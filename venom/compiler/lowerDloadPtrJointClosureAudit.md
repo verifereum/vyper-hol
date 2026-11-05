@@ -1080,3 +1080,23 @@ NormalNext then reconstruct the full Q, including saved frames and scratch
 identity. No caller semantic premise, definition, or existing theorem statement
 was changed. This local hash row is not global reachability closure or stage
 certification.
+
+## C1.12.98: original ALLOCA normal next row
+
+`lowerDloadPtrJointAllocClosureTheory.dload_joint_tracked_alloca_next` exports
+the complete JointHash normal-Q interface for original ALLOCA, with the literal
+incoming target frame_reachable premise added as specified. The budget is not
+assumed: paired source/target reachability, empty initial allocation table from
+o1_run_state_ok, actual current/saved supply witnesses and Q scratch identities
+feed dload_joint_runtime_scratch_budget. The accepted allocation boundary-next
+interface supplies the changed head pair and source successor, exact post
+boundary and post scratch identity. A successful-allocation lookup interface
+covers fresh and repeated sites alike: it defines exactly the instruction's
+outputs and preserves all other lookup definedness, plus call context.
+Reachable source provenance support supplies successor policy fields. The
+normal existential is rebuilt directly at phase zero with r1::rs; index zero
+uses the exported scratch identity, higher indices and DROP(SUC k) saved
+layouts do not observe the changed head. No unchanged-table claim, assumed
+budget, pre-to-post headroom claim, or new definition was used. Generated
+scratch ALLOCA and expansion completion remain separate obligations; this row
+does not certify global closure or the frozen contract.
