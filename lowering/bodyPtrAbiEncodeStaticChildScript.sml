@@ -31,7 +31,7 @@ Proof
 QED
 
 (* The offset boundary's run equation also fixes the control-site fields. *)
-Theorem abi_encode_static_child_address_control[local]:
+Theorem abi_encode_static_child_address_control:
   emit_op ADD [Var dst; Lit (n2w off)] st = (head,mid) /\
   lookup_var dst s = SOME a /\
   run_inst_seq (emitted_insts st mid) s = OK t ==>
@@ -42,7 +42,7 @@ Proof
       exec_pure2_def, eval_operand_def, update_var_def]
 QED
 
-Theorem abi_encode_static_child_sites[local]:
+Theorem abi_encode_static_child_sites:
   isPREFIX (xs ++ ys) (DROP k code) ==>
   isPREFIX xs (DROP k code) /\
   isPREFIX ys (DROP (k + LENGTH xs) code)
