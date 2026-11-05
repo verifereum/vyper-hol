@@ -3334,3 +3334,121 @@ Proof
   irule rf_copy_plan_spill_lookup >> goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
 QED
+
+Theorem rf_optimistic_inventory_subset:
+  optimistic_swap_plan dfg inst nl term ps = (ops,ps') ==>
+  !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  strip_tac >>
+  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  drule_at (Pat `do_swap _ _ = _`) do_swap_inventory_subset >> simp[]
+QED
+
+Theorem rf_assign_postfix_inventory:
+  ps.ps_stack = stack_push (Var out) tail /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  rf_inventory_inv fn ra lo entry ps s ==>
+  rf_inventory_inv fn ra lo entry (release_dead_spills nl ps9) s
+Proof
+  strip_tac >> irule rf_inventory_inv_release >>
+  irule rf_inventory_inv_vars_subset >> qexistsl_tac [`ps`, `s`] >> simp[] >>
+  Cases_on `MEM out nl`
+  >- (`pops = [] /\ ps8 = ps` by
+        (Cases_on `halting` >> gvs[popmany_plan_def]) >>
+      gvs[] >> drule rf_optimistic_inventory_subset >> simp[]) >>
+  gvs[] >> Cases_on `halting` >- gvs[] >>
+  `stack_get_depth (Var out) ps.ps_stack = SOME 0` by
+    simp[stack_push_def, REVERSE_SNOC, stack_get_depth_def, stack_find_def] >>
+  `popmany_plan [Var out] ps =
+    ([SOPop 1],ps with ps_stack := stack_pop 1 ps.ps_stack)` by
+    metis_tac[regularPostfixSimTheory.popmany_plan_top_singleton] >>
+  gvs[stack_pop_def] >> metis_tac[MEM_TAKE]
+QED
+
+Theorem rf_assign_plan_inventory:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  operand_val (frame_view fn ra s) lo rhs =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs) /\
+  step_inst fuel ctx inst s = OK s' /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') ==>
+  rf_inventory_inv fn ra lo entry ps' s'
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan ASSIGN [rhs] nl ps` >> rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) [rhs] ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  drule_all rf_assign_plan_result >> strip_tac >>
+  `rf_inventory_inv fn ra lo entry ps2 s` by
+    (irule rf_inventory_inv_preparation >>
+     qexistsl_tac [`ins`, `[rhs]`, `nl`, `ASSIGN`, `ps`, `ps1`, `ros`] >> simp[]) >>
+  qabbrev_tac `pushed = ps2 with ps_stack :=
+    stack_push (Var out) (stack_pop 1 ps2.ps_stack)` >>
+  `rf_inventory_inv fn ra lo entry pushed s'` by
+    (drule_at (Pat `step_inst _ _ _ _ = OK _`) rf_inventory_inv_assign >>
+     disch_then irule >> simp[] >> qexists_tac `ps2` >>
+     simp[Abbr `pushed`]) >>
+  gvs[] >> irule rf_assign_postfix_inventory >>
+  qexistsl_tac [`dfg_build_function fn`, `halting`, `inst`, `opts`, `out`,
+    `pops`, `pushed`, `ps8`, `stack_pop 1 ps2.ps_stack`, `term`] >>
+  simp[Abbr `pushed`]
+QED
+
+Theorem rf_assign_success_invariants:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI) /\
+  get_instruction bb k = SOME inst /\ k <= j /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  rf_spills_separated ps /\
+  rf_value_inv fn ra bb j lo entry k s /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  step_inst fuel ctx inst s = OK s' ==>
+  rf_spills_separated ps' /\
+  rf_value_inv fn ra bb j lo entry (SUC k) (s' with vs_inst_idx := SUC k) /\
+  rf_inventory_inv fn ra lo entry ps' (s' with vs_inst_idx := SUC k) /\
+  (!op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled)
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (irule mem_fn_insts_intro >> qexists_tac `bb` >>
+     fs[get_instruction_def] >> metis_tac[lookup_block_MEM, EL_MEM]) >>
+  `rf_live_use bb k j rhs` by
+    (irule rf_live_use_current >>
+     simp[compute_operands_def, python_stack_operands_def]) >>
+  `(is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled)` by
+    metis_tac[] >>
+  `operand_val (frame_view fn ra s) lo rhs =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs)` by
+    metis_tac[rf_value_inv_def] >>
+  `!off. ~MEM (SOSpill off) ops` by fs[] >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by simp[] >>
+  conj_tac >- (drule_all rf_assign_plan_spills_separated >> simp[]) >>
+  conj_tac
+  >- (simp[] >> drule_all rf_value_inv_assign >> simp[]) >>
+  conj_tac
+  >- (simp[] >> drule_all rf_assign_plan_inventory >> simp[]) >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    rf_assign_ready_future_owned >> simp[] >>
+  disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
+QED
