@@ -31,6 +31,8 @@ Theory exprSimPopImmutableTarget
 Ancestors
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
   exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode
+  exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
+  exprOperandVar
   bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases
   targetPlaceSimDefs
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
@@ -430,6 +432,251 @@ Proof
      goal_assum (drule_at Any) >>
      qexistsl [`ctx`, `env`, `func`] >> simp[]) >>
   fs[valueEncodingPropsTheory.val_in_memory_dynarray]
+QED
+
+Theorem imm_iload_step_frame[local]:
+  !inst s t.
+    inst.inst_opcode = ILOAD /\ step_inst_base inst s = OK t ==>
+    t = s with vs_vars := t.vs_vars /\
+    (!x. ~MEM x inst.inst_outputs ==>
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  rpt strip_tac >>
+  gvs[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      venomExecSemanticsTheory.exec_read1_def, AllCaseEqs()] >>
+  simp[venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem imm_readonly_opcode[local]:
+  !opc. fresh_write_op opc \/ opc = ILOAD ==>
+    ~is_terminator opc /\ opc <> INVOKE /\ ~is_ext_call_op opc /\ opc <> GAS
+Proof
+  simp[fresh_write_op_def] >> rpt strip_tac >>
+  gvs[venomInstTheory.is_terminator_def, venomInstTheory.is_ext_call_op_def]
+QED
+
+Theorem imm_readonly_seq_frame[local]:
+  !code sa s t.
+    EVERY (\inst. (fresh_write_op inst.inst_opcode \/ inst.inst_opcode = ILOAD) /\
+      EVERY (\x. ~not_fresh_at sa x) inst.inst_outputs) code /\
+    run_inst_seq code s = OK t ==>
+    t = s with vs_vars := t.vs_vars /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule emitHelperPropsTheory.run_inst_seq_protected_frame >>
+  goal_assum (drule_at Any) >> rpt strip_tac >>
+  fs[listTheory.EVERY_MEM] >>
+  `fresh_write_op i.inst_opcode \/ i.inst_opcode = ILOAD` by metis_tac[] >>
+  `!x. not_fresh_at sa x ==> ~MEM x i.inst_outputs` by metis_tac[] >>
+  metis_tac[freshWritesTheory.step_fresh_write_op, imm_iload_step_frame]
+QED
+
+Theorem imm_ctor_load_code[local]:
+  !region off sa p sb.
+    compile_imm_load_word T (SOME region) off sa = (p,sb) ==>
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\inst. (fresh_write_op inst.inst_opcode \/ inst.inst_opcode = ILOAD) /\
+      EVERY (\x. ~not_fresh_at sa x) inst.inst_outputs) (emitted_insts sa sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule contextTheory.compile_imm_load_word_ctor_result >> strip_tac >>
+  simp[emitted_insts_def, listTheory.DROP_APPEND, venomInstTheory.mk_inst_def,
+       freshWritesTheory.fresh_write_op_def, not_fresh_at_def] >>
+  qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+  simp[contextTheory.compile_imm_load_word_def, emitHelperTheory.emit_op_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, same_blocks_def] >> strip_tac >> gvs[]
+QED
+
+Theorem imm_array_ctor_code[local]:
+  !base idx dyn cnt ws esz sgn region sa p sb.
+    compile_array_subscript base idx dyn cnt ws esz sgn
+      (compile_ptr_load T (SOME region) LocCode) sa = (p,sb) ==>
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\inst. (fresh_write_op inst.inst_opcode \/ inst.inst_opcode = ILOAD) /\
+      EVERY (\x. ~not_fresh_at sa x) inst.inst_outputs) (emitted_insts sa sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_array_subscript_split, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  mp_tac straight_fresh_array_check_ptr >>
+  simp[freshWritesTheory.straight_fresh_def] >> disch_then drule >> strip_tac >>
+  reverse (Cases_on `dyn`) >>
+  gvs[comp_return_def, contextTheory.compile_ptr_load_def]
+  >- (fs[same_blocks_def, freshWritesTheory.writes_fresh_def, listTheory.EVERY_MEM] >>
+      metis_tac[]) >>
+  drule imm_ctor_load_code >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa cs' ++ emitted_insts cs' sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  gvs[same_blocks_def, listTheory.EVERY_APPEND] >>
+  fs[freshWritesTheory.writes_fresh_def, listTheory.EVERY_MEM, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem imm_array_len_ctor[local]:
+  !cnt region base_op s b.
+    eval_operand base_op s = SOME b /\
+    eval_operand region s = SOME 0w ==>
+    array_len_ok T cnt (compile_ptr_load T (SOME region) LocCode)
+      base_op s (mload (w2n b) s)
+Proof
+  rpt strip_tac >> rw[array_len_ok_def, contextTheory.compile_ptr_load_def] >>
+  drule_all immutable_ctor_load_frame >>
+  simp[immutable_operand_frame_def] >> metis_tac[]
+QED
+
+Theorem imm_array_ctor_run[local]:
+  !base idx dyn cnt ws esz sgn region sa p sb s b i len.
+    compile_array_subscript base idx dyn cnt ws esz sgn
+      (compile_ptr_load T (SOME region) LocCode) sa = (p,sb) /\
+    eval_operand base s = SOME b /\ eval_operand idx s = SOME i /\
+    eval_operand region s = SOME 0w /\
+    (!x. base = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!x. region = Var x ==> not_fresh_at sa x) /\
+    len = (if dyn then mload (w2n b) s else n2w cnt) ==>
+    if idx_in_range sgn i len then
+      ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        t = s with vs_vars := t.vs_vars /\
+        (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+    else ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `eval_operand bop s = SOME b` >>
+  `eval_operand bop (drop_fresh sa s) = SOME b /\
+   eval_operand idx (drop_fresh sa s) = SOME i /\
+   eval_operand region (drop_fresh sa s) = SOME 0w` by
+    simp[eval_operand_drop_fresh] >>
+  `array_len_ok dyn cnt (compile_ptr_load T (SOME region) LocCode)
+      bop (drop_fresh sa s) len` by
+    (reverse (Cases_on `dyn`) >> gvs[]
+     >- simp[array_len_ok_static] >>
+     `mload (w2n b) (drop_fresh sa s) = mload (w2n b) s` by
+       simp[drop_fresh_def, venomStateTheory.mload_def] >>
+     pop_assum (SUBST1_TAC o SYM) >> irule imm_array_len_ctor >> simp[]) >>
+  drule imm_array_ctor_code >> strip_tac >>
+  `EVERY (\inst. ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    ~is_ext_call_op inst.inst_opcode) (emitted_insts sa sb)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[imm_readonly_opcode]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+      (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  qspecl_then [`sa`, `s`] assume_tac fresh_vars_wrt_drop_fresh >>
+  Cases_on `idx_in_range sgn i len` >> simp[]
+  >- (drule_all compile_array_subscript_ok >> strip_tac >>
+      gvs[vars_ext_result_def, CaseEq "exec_result"] >>
+      conj_tac
+      >- (rename1 `vars_ext clean actual` >> fs[vars_ext_def] >>
+          qpat_x_assum `actual = _` (fn th => once_rewrite_tac[th]) >>
+          simp[eval_operand_vars_ext]) >>
+      qpat_assum `run_inst_seq _ s = OK _`
+        (mp_then Any mp_tac imm_readonly_seq_frame) >>
+      disch_then (qspec_then `sa` mp_tac) >> simp[]) >>
+  drule_all compile_array_subscript_oob >> strip_tac >>
+  gvs[vars_ext_result_def, CaseEq "exec_result"] >> metis_tac[]
+QED
+
+Theorem imm_array_ctor_path[local]:
+  !base idx dyn cnt ws esz sgn region sa p sb s b i len ctx func.
+    compile_array_subscript base idx dyn cnt ws esz sgn
+      (compile_ptr_load T (SOME region) LocCode) sa = (p,sb) /\
+    eval_operand base s = SOME b /\ eval_operand idx s = SOME i /\
+    eval_operand region s = SOME 0w /\
+    (!x. base = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!x. region = Var x ==> not_fresh_at sa x) /\
+    len = (if dyn then mload (w2n b) s else n2w cnt) /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    if idx_in_range sgn i len then
+      ?t. gas_marked_path F ctx func s 0
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        t = s with vs_vars := t.vs_vars /\
+        (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+    else ?t j. gas_marked_path F ctx func s 0
+          (Abort Revert_abort (t with vs_inst_idx := j))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule imm_array_ctor_code >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fragExecTheory.fn_has_code_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[listTheory.DROP_APPEND]) >>
+  `EVERY (\ins. ins.inst_opcode <> GAS /\ ins.inst_opcode <> INVOKE /\
+       ~is_terminator ins.inst_opcode) (emitted_insts sa sb)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[imm_readonly_opcode]) >>
+  drule_all imm_array_ctor_run >>
+  Cases_on `idx_in_range sgn i len` >> simp[] >> strip_tac
+  >- (qexists_tac `t` >> simp[] >>
+      `LENGTH (FILTER (\ins. ins.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+        (simp[listTheory.LENGTH_EQ_NUM_compute, listTheory.FILTER_EQ_NIL,
+              listTheory.EVERY_MEM] >> rpt strip_tac >>
+         qpat_x_assum `EVERY (\ins. ins.inst_opcode <> GAS /\ _) _`
+           (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+         disch_then drule >> simp[]) >>
+      drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+      simp[gas_marked_path_def] >> disch_then irule >>
+      conj_tac >- (fs[listTheory.EVERY_MEM]) >>
+      qexists_tac `bb` >> gvs[]) >>
+  drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem imm_array_ctor_counted[local]:
+  !base idx dyn cnt ws esz sgn region sa p sb s b i len ctx func cenv cx es.
+    compile_array_subscript base idx dyn cnt ws esz sgn
+      (compile_ptr_load T (SOME region) LocCode) sa = (p,sb) /\
+    eval_operand base s = SOME b /\ eval_operand idx s = SOME i /\
+    eval_operand region s = SOME 0w /\
+    (!x. base = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!x. region = Var x ==> not_fresh_at sa x) /\
+    len = (if dyn then mload (w2n b) s else n2w cnt) /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    (!x. p = Var x ==> not_fresh_at sb x) /\
+    if idx_in_range sgn i len then
+      ?t. gas_marked_path F ctx func s 0 (OK t) /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        stmt_state_rel ctx func cenv cx es t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+          lookup_var x t = SOME w) /\
+        t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+        locals_kept cenv es s t
+    else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (drule (cj 3 compiler_subscript_ops_var) >> simp[]) >>
+  drule_all imm_array_ctor_path >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  Cases_on `idx_in_range sgn i len` >> simp[] >> strip_tac
+  >- (`!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+         lookup_var x t = SOME w` by simp[lookup_var_def] >>
+      `stmt_state_rel ctx func cenv cx es t` by
+        (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+         irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
+         conj_tac >> rpt strip_tac >>
+         qmatch_goalsub_rename_tac `lookup_var zz` >>
+         `not_fresh_at sa zz` by
+           (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+         simp[lookup_var_def]) >>
+      qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+      simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+           eval_operand_def, lookup_var_def] >>
+      drule imm_array_ctor_code >> strip_tac >>
+      qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+      fs[same_blocks_def, exprSimPropsTheory.locals_kept_mem]) >>
+  goal_assum $ drule_at Any
 QED
 
 Theorem imm_place_at_extend[local]:
