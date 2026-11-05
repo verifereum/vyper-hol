@@ -348,20 +348,6 @@ Proof
   metis_tac[expr_sim_inv_gas_obs]
 QED
 
-Theorem raw_log_dynamic_data[local]:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
-  expr_type e = BaseT (BytesT (Dynamic cap)) /\
-  evaluate_type (get_tenv cx) (expr_type e) =
-    SOME (BaseTV (BytesT (Dynamic cap))) ==>
-  ?b. eval_operand op s = SOME (n2w b) /\
-    mload b s = n2w (LENGTH bs) /\
-    TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++
-      REPLICATE (LENGTH bs) 0w) = bs /\
-    b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256)
-Proof
-  ACCEPT_TAC raw_log_dynamic_data_view
-QED
-
 Theorem raw_log_operands_frame[local]:
   !ops ws.
   eval_operands ops s = SOME ws /\
@@ -429,7 +415,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem raw_log_dynamic_tail_frag[local]:
+Theorem raw_log_dynamic_tail_summary[local]:
   expr_post ctx func cenv cx data es sa sd s0 es2 (BytesV bs) ptr_op s /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type data) =
@@ -443,22 +429,64 @@ Theorem raw_log_dynamic_tail_frag[local]:
               (!l. op <> Label l)) ops /\
   eval_operands ops s = SOME (MAP event_value_to_word vs) /\
   LENGTH ops < dimword (:256) /\ local_ptrs_reserved cenv sd /\
-  sa.cs_next_var <= sd.cs_next_var /\ expr_type e = NoneT ==>
-  frag_exec ctx sd sb (\t. t = s)
-    (\t. expr_post ctx func cenv cx e es sa sb s0
-      (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs])
-      NoneV (Lit 0w) t) (expr_exit (INL NoneV))
+  sa.cs_next_var <= sd.cs_next_var /\ expr_type e = NoneT /\
+  fn_has_code sd sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sd.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
+  gas_summary_at F (ctx,func) []
+    (do bytes <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
+        type_check (LENGTH vs <= 4) "raw_log too many topics";
+        push_log (encode_raw_event_values cx.txn.target vs bytes);
+        return NoneV od) (es2,s)
+    (\rr ee t. rr = INL NoneV /\
+      expr_post ctx func cenv cx e es sa sb s0 ee NoneV (Lit 0w) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
-  strip_tac >> drule_all raw_log_dynamic_data >> strip_tac >>
+  strip_tac >> drule_all raw_log_dynamic_data_view >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es sa s0 s` by
     metis_tac[expr_post_state, expr_post_frame] >>
-  `(\t. t = s) = ($= s)` by simp[FUN_EQ_THM, EQ_SYM_EQ] >>
-  asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  Cases_on `u` >> fs[] >>
-  irule raw_log_dynamic_tail_core >> simp[] >>
-  qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  simp[] >> qexistsl_tac [`sl`, `ptr_op`, `b`] >>
-  fs[EVERY_CONJ]
+  `EVERY (\op. !p. op = Var p ==> not_fresh_at sd p) ops` by
+    gvs[EVERY_CONJ] >>
+  drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emit_inst LOG logops [] sm` >>
+  `?t'. step_inst_base (mk_inst sm.cs_next_id LOG logops []) t = OK t' /\
+    stmt_state_rel ctx func cenv cx
+      (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) t' /\
+    wb_frame cenv es sa s0 t'` by
+    (irule raw_log_core_frame >> simp[mk_inst_def, Abbr `logops`] >>
+     qexistsl_tac [`ops`, `len_op`, `data_op`,
+                  `n2w (b + 32)`, `n2w (LENGTH bs)`] >>
+     simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+  `sb.cs_current_bb = sd.cs_current_bb /\
+   sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb /\
+   emitted_insts sd sb = emitted_insts sd sm ++ [mk_inst sm.cs_next_id LOG logops []] /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sd sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sd sb) = []` by
+    (gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_var_def, fresh_id_def, emit_def, comp_return_def, emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq (emitted_insts sd sb) s = OK t'` by
+    (asm_rewrite_tac[] >> drule run_inst_seq_append >>
+     disch_then (fn th => rewrite_tac[th]) >> simp[run_inst_seq_def]) >>
+  drule_all hash_run_path >> simp[] >> strip_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
+  qexistsl_tac [`INL NoneV`,
+    `es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]`,
+    `OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  simp[dest_BytesV_def, lift_option_type_def, lift_option_def, type_check_def,
+       assert_def, push_log_def, bind_def, ignore_bind_def, return_def] >>
+  irule expr_post_none_intro >>
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
+  gvs[wb_frame_def, locals_kept_def, lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t'` mp_tac >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx ee t'` >>
+  `es2 with <|logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs];
+              gas_obs := []|> = ee with gas_obs := []` by simp[Abbr `ee`] >>
+  asm_rewrite_tac[] >> simp[]
 QED
 
 Theorem raw_log_fixed_tail_frag[local]:
@@ -645,7 +673,7 @@ Resume raw_log_dynamic_sim[tail]:
     (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   irule fragExecTheory.frag_exec_weaken >>
-  irule_at Any raw_log_dynamic_tail_frag >>
+  irule_at Any raw_log_dynamic_tail_summary >>
   qpat_assum `expr_post _ _ _ _ _ es sa _ _ _ _ _ _` (irule_at Any) >>
   simp[expr_type_def, vyperValueTheory.evaluate_type_def] >>
   qexistsl [`vs`, `topic_ops`,
