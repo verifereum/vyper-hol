@@ -248,3 +248,135 @@ QED
    This is a variable-class relation, never a relation renaming all words.
    Parent migration list and unresolved obligations are in the audit above.
 *)
+
+Definition ptr_mixed_vars_def:
+  ptr_mixed_vars births positions TG tn f g s t <=>
+    (!x. retpc_var f x <=> retpc_var g x) /\
+    ptr_opaque_env f s /\ ptr_opaque_env g t /\
+    (!x. retpc_var f x ==>
+      (FLOOKUP s.vs_vars x = NONE <=> FLOOKUP t.vs_vars x = NONE)) /\
+    (!x. ~retpc_var f x ==>
+      ptr_lookup_transport births positions (FLOOKUP TG x)
+        (op_taint tn (Var x)) (lookup_var x s) (lookup_var x t))
+End
+
+Definition ptr_nonopaque_operand_def:
+  (ptr_nonopaque_operand f (Var x) <=> ~retpc_var f x) /\
+  (ptr_nonopaque_operand f (Lit w) <=> T) /\
+  (ptr_nonopaque_operand f (Label l) <=> T)
+End
+
+Theorem ptr_mixed_vars_lookup:
+  ptr_mixed_vars births positions TG tn f g s t /\ ~retpc_var f x ==>
+  ptr_lookup_transport births positions (FLOOKUP TG x)
+    (op_taint tn (Var x)) (lookup_var x s) (lookup_var x t)
+Proof
+  simp[ptr_mixed_vars_def]
+QED
+
+Theorem ptr_mixed_vars_opaque_lookup:
+  ptr_mixed_vars births positions TG tn f g s t /\ retpc_var f x ==>
+  ((lookup_var x s = NONE /\ lookup_var x t = NONE) \/
+   (lookup_var x s = SOME s.vs_return_pc_token /\
+    lookup_var x t = SOME t.vs_return_pc_token))
+Proof
+  simp[ptr_mixed_vars_def, ptr_opaque_env_def, lookup_var_def] >>
+  rpt strip_tac >> Cases_on `FLOOKUP s.vs_vars x` >>
+  Cases_on `FLOOKUP t.vs_vars x` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ptr_mixed_vars_eval:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  ptr_nonopaque_operand f op /\ s.vs_labels = t.vs_labels ==>
+  ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
+    (eval_operand op s) (eval_operand op t)
+Proof
+  strip_tac >> Cases_on `op`
+  >- (gvs[ptr_nonopaque_operand_def, eval_operand_def,
+          ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >>
+      Cases_on `FLOOKUP t.vs_labels s'` >>
+      simp[ptr_lookup_transport_def, ptr_value_transport_refl])
+  >- (gvs[ptr_nonopaque_operand_def] >>
+      drule_all ptr_mixed_vars_lookup >>
+      simp[eval_operand_def, ptrDisciplineTheory.op_prov_def]) >>
+  Cases_on `FLOOKUP t.vs_labels s'` >>
+  simp[eval_operand_def, ptrDisciplineTheory.op_prov_def,
+       ptrDisciplineTheory.op_taint_def, ptr_lookup_transport_def,
+       ptr_value_transport_refl]
+QED
+
+Theorem ptr_mixed_vars_eval_operands:
+  !ops. ptr_mixed_vars births positions TG tn f g s t /\
+    EVERY (ptr_nonopaque_operand f) ops /\ s.vs_labels = t.vs_labels ==>
+    OPTREL (ptr_args_transport births positions
+      (MAP (op_prov TG) ops) (MAP (op_taint tn) ops))
+      (eval_operands ops s) (eval_operands ops t)
+Proof
+  Induct >> simp[eval_operands_def, optionTheory.OPTREL_def,
+    ptr_args_transport_def] >> rpt strip_tac >>
+  `ptr_lookup_transport births positions (op_prov TG h) (op_taint tn h)
+    (eval_operand h s) (eval_operand h t)` by
+    (irule ptr_mixed_vars_eval >> simp[] >> qexistsl_tac [`f`,`g`] >> simp[]) >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operand h t` >>
+  gvs[ptr_lookup_transport_def] >>
+  Cases_on `eval_operands ops s` >> Cases_on `eval_operands ops t` >>
+  gvs[optionTheory.OPTREL_def, ptr_args_transport_def]
+QED
+
+Theorem ptr_mixed_vars_setup:
+  (!x. retpc_var f x <=> retpc_var g x) /\
+  setup_callee f args s = SOME cs /\ setup_callee g argst t = SOME ct ==>
+  ptr_mixed_vars births positions TG tn f g cs ct
+Proof
+  simp[setup_callee_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  simp[ptr_mixed_vars_def, ptr_opaque_env_def, lookup_var_def,
+       ptr_lookup_transport_def]
+QED
+
+Theorem ptr_nonopaque_instruction_operands:
+  opaque_use_ok f /\ MEM inst (fn_insts f) /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET] ==>
+  EVERY (ptr_nonopaque_operand f) inst.inst_operands
+Proof
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >> Cases_on `e` >>
+  simp[ptr_nonopaque_operand_def] >> strip_tac >>
+  `retpc_use_ok inst s` by (irule opaque_use_ok_retpc_use >> simp[] >> qexists_tac `f` >> simp[]) >>
+  gvs[retpc_use_ok_def]
+QED
+
+Theorem ptr_mixed_vars_retpc_update:
+  ptr_mixed_vars births positions TG tn f g s t /\ retpc_var f out /\
+  (!x. ~retpc_var f x ==>
+    ptr_lookup_transport births positions (FLOOKUP TG' x)
+      (op_taint tn' (Var x)) (lookup_var x s) (lookup_var x t)) ==>
+  ptr_mixed_vars births positions TG' tn' f g
+    (update_var out s.vs_return_pc_token s)
+    (update_var out t.vs_return_pc_token t)
+Proof
+  simp[ptr_mixed_vars_def, ptr_opaque_env_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  Cases_on `x = out` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ptr_mixed_vars_retpc_step_transport:
+  ptr_mixed_vars births positions TG tn f g s t /\ retpc_var f out ==>
+  ptr_mixed_vars births positions
+    (step_prov PT TG (mk_inst id RETPC_PARAM [Lit idx] [out])
+      (update_var out s.vs_return_pc_token s))
+    (step_taint (mk_inst id RETPC_PARAM [Lit idx] [out]) s
+      (update_var out s.vs_return_pc_token s) tn)
+    f g (update_var out s.vs_return_pc_token s)
+      (update_var out t.vs_return_pc_token t)
+Proof
+  strip_tac >> irule ptr_mixed_vars_retpc_update >> simp[] >>
+  reverse conj_tac >- (qexistsl_tac [`TG`,`tn`] >> simp[]) >>
+  rpt strip_tac >>
+  `x <> out` by metis_tac[] >>
+  simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.out_prov_def,
+       ptrDisciplineTheory.set_prov_def, venomInstTheory.mk_inst_def,
+       ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
+       ptrDisciplineTheory.op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  drule_all ptr_mixed_vars_lookup >>
+  simp[ptrDisciplineTheory.op_taint_def]
+QED
