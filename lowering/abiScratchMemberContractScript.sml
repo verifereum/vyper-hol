@@ -192,6 +192,82 @@ Proof
   fs[abi_scratch_member_core_post_def]
 QED
 
+(* The cursor capability remembers the entry resources used to protect the
+   parent slot, independently of the client's recursive compiler guard. *)
+Definition abi_encoder_member_cursor_saved_def:
+  abi_encoder_member_cursor_saved (head,offset,dp,h,off,slot,site)
+      (A,b,cap,limit_st) (ei,dst,src,st,en,out) s <=>
+    abi_decoder_operand_live st.cs_next_var head /\
+    abi_decoder_operand_live st.cs_next_var offset /\
+    abi_decoder_operand_live st.cs_next_var dp /\
+    eval_operand head s = SOME (n2w h) /\ eval_operand offset s = SOME (n2w off) /\
+    eval_operand dp s = SOME (n2w slot) /\
+    site IN A /\ site < st.cs_next_id /\ FLOOKUP s.vs_allocas site = SOME (slot,32)
+End
+
+Definition abi_encoder_member_dynamic_pre_def:
+  abi_encoder_member_dynamic_pre value resources guard cursor c s <=>
+    abi_encoder_child_ready value resources guard c s /\
+    abi_encoder_member_cursor_saved cursor resources c s
+End
+
+Definition abi_encoder_member_dynamic_post_def:
+  abi_encoder_member_dynamic_post (ctx,func) value resources guard cursor c s t <=>
+    abi_encoder_child_post (ctx,func) value resources c s t /\
+    abi_encoder_member_dynamic_pre value resources guard cursor c s /\
+    abi_encoder_spine_core_code func c
+End
+
+Theorem abi_encoder_member_dynamic_run:
+  abi_encoder_spine_core_code func c /\
+  abi_encoder_member_dynamic_pre value resources guard cursor c s ==>
+  ?t. abi_decode_sim ctx func s t /\
+    abi_encoder_member_dynamic_post (ctx,func) value resources guard cursor c s t
+Proof
+  simp_tac bool_ss [abi_encoder_member_dynamic_pre_def, abi_encoder_member_dynamic_post_def] >>
+  strip_tac >> drule_all abi_encoder_child_ready_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[]
+QED
+
+Theorem abi_encoder_member_dynamic_saved:
+  abi_encoder_member_dynamic_post (ctx,func) (at,av,sb:num,source_cap:num,d)
+    (A,b,cap,limit_st) guard (head,offset,dp,h,off,slot,site)
+    (ei:abi_enc_info,dst:operand,src:operand,st,en,out) initial actual ==>
+  eval_operand head actual = SOME (n2w h) /\ eval_operand offset actual = SOME (n2w off) /\
+  eval_operand dp actual = SOME (n2w slot) /\
+  FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+  mload slot actual = mload slot initial /\ fresh_vars_wrt limit_st actual /\
+  abi_site_budget A b cap actual
+Proof
+  simp_tac bool_ss [abi_encoder_member_dynamic_post_def, abi_encoder_member_dynamic_pre_def,
+    abi_encoder_child_ready_def, abi_encoder_member_cursor_saved_def] >>
+  strip_tac >> drule_all abi_encoder_child_saved >> strip_tac >> metis_tac[]
+QED
+
+Theorem abi_encoder_member_dynamic_cursor_input:
+  abi_encoder_member_dynamic_post (ctx,func) (at,av,sb:num,source_cap:num,d)
+    (A,b,cap,limit_st) guard (head,offset,dp,h,off,slot,site)
+    (ei:abi_enc_info,dst:operand,src:operand,st,en,len) initial actual /\
+  h < dimword (:256) /\ slot < dimword (:256) /\
+  final.cs_next_var <= limit_st.cs_next_var ==>
+  abi_encoder_spine_cursor_input (head,dp,offset,len,en,final,limit_st) actual
+Proof
+  strip_tac >> drule_all abi_encoder_member_dynamic_saved >> strip_tac >>
+  qpat_assum `abi_encoder_member_dynamic_post _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_member_dynamic_post_def]) >>
+  qpat_assum `abi_encoder_spine_core_code _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_spine_core_code_def]) >>
+  drule abi_encoder_counters >> strip_tac >>
+  drule abi_encode_result_live >> strip_tac >>
+  `abi_decoder_operand_live en.cs_next_var dp` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >>
+     fs[abi_encoder_member_dynamic_pre_def, abi_encoder_member_cursor_saved_def]) >>
+  pure_rewrite_tac [abi_encoder_spine_cursor_input_def] >>
+  qexistsl_tac [`h`,`slot`,`off`,`LENGTH (enc at av)`] >>
+  fs[abi_encoder_child_post_def]
+QED
+
 val _ = List.app (fn (name, th) =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso

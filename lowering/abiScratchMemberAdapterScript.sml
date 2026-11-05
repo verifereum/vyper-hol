@@ -1,6 +1,7 @@
 (* Early physical-scratch interpretation of the common member spine. *)
 Theory abiScratchMemberAdapter
 Ancestors
+  abiSiteEncoderContract abiSiteAllocation
   abiEncoderExitPhi abiEncoderExtendSim abiEncoderChildPrefix abiEncoderChildCode
   abiDecoderProtectedScratch abiDecoderArrayInitExec abiEncoderChildSuffixReach abiEncoderChildEffect
   abiEncoderMemberSourceAdapter abiEncoderMemberSpine abiEncoderMemberPhaseRaw abiEncoderMemberPhaseEffect
@@ -169,6 +170,46 @@ Proof
   fs[abi_encoder_child_suffix_post_def]
 QED
 
+Theorem abi_site_dynamic_prepare_raw_transport:
+  abi_encode_child_prefix dst ho dyn_ptr st = (ops,prepared) /\
+  abi_site_encoder_input ei at av st src dst sb source_cap d output_size A b cap initial /\
+  eval_operand dyn_ptr initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
+  abi_decoder_operand_live st.cs_next_var dyn_ptr /\ slot < dimword (:256) /\
+  off+LENGTH (enc at av) <= output_size /\ abi_site_budget A b cap initial /\
+  prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_member_phase_raw st prepared initial ready ==>
+  abi_site_encoder_input ei at av prepared src (SND (SND ops)) sb source_cap (d+off)
+    (LENGTH (enc at av)) A b cap ready /\
+  eval_operand (FST ops) ready = SOME (n2w (d+ho)) /\
+  eval_operand (FST (SND ops)) ready = SOME (n2w off) /\
+  abi_decoder_operand_live prepared.cs_next_var (FST ops) /\
+  abi_decoder_operand_live prepared.cs_next_var (FST (SND ops)) /\
+  abi_decoder_operand_live prepared.cs_next_var (SND (SND ops)) /\
+  fresh_vars_wrt limit_st ready /\ abi_site_budget A b cap ready /\
+  abi_decoder_address_frame st.cs_next_var initial ready /\
+  abi_scratch_evolution A b cap initial ready /\
+  ready.vs_current_bb = prepared.cs_current_bb /\ ready.vs_inst_idx = LENGTH prepared.cs_current_insts /\
+  ~ready.vs_halted
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand dst initial = SOME (n2w d) /\ abi_decoder_operand_live st.cs_next_var dst` by
+    fs[abi_site_encoder_input_def] >>
+  drule abi_encode_child_prefix_shape >> strip_tac >>
+  drule abi_encode_child_prefix_live >> strip_tac >>
+  drule_all abi_encoder_member_prefix_transport >> strip_tac >>
+  drule_all abi_encoder_member_prefix_control >> strip_tac >>
+  `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
+  drule_all abi_site_address >>
+  disch_then (qspecl_then [`A`, `[]`] strip_assume_tac) >>
+  `FINITE A` by metis_tac[abi_site_budget_def] >>
+  `abi_site_encoder_input ei at av prepared src (SND (SND ops)) sb source_cap (d+off)
+    (LENGTH (enc at av)) A b cap ready` by
+    (drule_all abi_site_child_input_address >> simp[]) >>
+  asm_simp_tac bool_ss []
+QED
+
 Theorem abi_scratch_dynamic_prepare_raw_transport:
   abi_encode_child_prefix dst ho dyn_ptr st = (ops,prepared) /\
   abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
@@ -192,24 +233,8 @@ Theorem abi_scratch_dynamic_prepare_raw_transport:
   ready.vs_current_bb = prepared.cs_current_bb /\ ready.vs_inst_idx = LENGTH prepared.cs_current_insts /\
   ~ready.vs_halted
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `eval_operand dst initial = SOME (n2w d) /\ abi_decoder_operand_live st.cs_next_var dst` by
-    fs[abi_scratch_input_def] >>
-  drule abi_encode_child_prefix_shape >> strip_tac >>
-  drule abi_encode_child_prefix_live >> strip_tac >>
-  drule_all abi_encoder_member_prefix_transport >> strip_tac >>
-  drule_all abi_encoder_member_prefix_control >> strip_tac >>
-  `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
-    `t` |-> `ready:venom_state`, `ids` |-> `abi_decoder_ids first last`] abi_scratch_address) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_scratch_input ei at av prepared src (SND (SND ops)) sb source_cap (d+off)
-    (LENGTH (enc at av)) first last b cap ready` by
-    (mp_tac (Q.INST [`prepared` |-> `prepared:compile_state`,
-       `child_dst` |-> `SND (SND (ops:operand # operand # operand))`,
-       `actual` |-> `ready:venom_state`, `off` |-> `off:num`] abi_scratch_child_input_address) >>
-     asm_simp_tac bool_ss []) >>
-  asm_simp_tac bool_ss []
+  rewrite_tac[GSYM abi_site_encoder_input_interval, GSYM abi_site_budget_interval] >>
+  strip_tac >> drule_all abi_site_dynamic_prepare_raw_transport >> simp[]
 QED
 
 Theorem abi_scratch_dynamic_child_spine_reach:
@@ -341,3 +366,10 @@ Proof
   irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `u` >> asm_simp_tac bool_ss []
 QED
+
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean member adapter: " ^ name)
+  end) (DB.thms "abiScratchMemberAdapter");
