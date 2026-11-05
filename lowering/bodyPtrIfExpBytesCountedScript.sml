@@ -381,3 +381,23 @@ Proof
   disch_then (qspecl_then [`D`, `fn`, `PG`] mp_tac) >>
   simp[clean_emitted_prefix_def]
 QED
+
+Theorem mcopy_operand_seq_ptr:
+  !D ctx fn PG G tn s id dst src count_op a b n.
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
+    ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
+    ~ctx_has_dalloca ctx ==>
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MCOPY [Var dst;Var src;count_op] []] s G
+      (step_taint (mk_inst id MCOPY [Var dst;Var src;count_op] []) s
+        (mcopy (w2n b) (w2n a) (w2n n) s) tn)
+Proof
+  rpt strip_tac >>
+  `step_inst_base (mk_inst id MCOPY [Var dst;Var src;count_op] []) s =
+     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
+  simp[inst_seq_ptr_def] >>
+  conj_tac >- (irule fragExecPtrTheory.ptr_inst_ok_mcopy_operand >> simp[]) >>
+  simp[mcopy_operand_ghost_frame, eval_operand_def]
+QED
