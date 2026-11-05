@@ -3665,7 +3665,7 @@ Proof
   rpt strip_tac >> gvs[] >> sym_tac >>
   drule_all (SRULE [dimword_def,
     fcpLib.INDEX_CONV ``dimindex (:256)``] probe_word_invoke_local_memory) >>
-  disch_then (qspec_then `out` mp_tac) >> simp[update_var_def]
+  simp[update_var_def]
 QED
 
 Theorem probe_word_invoke_locals_kept:
@@ -4206,7 +4206,7 @@ Proof
     gvs[eval_operand_def, lookup_var_def, mstore_def] >>
   simp[exprSimTheory.vv_holds_def, contextTheory.base_ptr_def, contextTheory.mk_ptr_def,
        read_result_def, return_def, evaluate_type_def, is_word_type_def] >>
-  simp[valueEncodingTheory.val_in_memory_def,
+  simp[eval_operand_def, valueEncodingTheory.val_in_memory_def,
        valueEncodingPropsTheory.mstore_mem_word_at_same,
        valueEncodingTheory.typed_val_to_w256_def,
        valueEncodingTheory.val_to_w256_def, integer_wordTheory.i2w_def]
@@ -5895,3 +5895,231 @@ QED
    the checked store preserves slot 2 = 1, exactly as on the source side.
    This audit stops before return/call execution and does not establish
    universal base simulation or a general dead-header preservation fact. *)
+
+
+(* Arbitrary ctx callee: clear the root and final descendant, not slot 1.
+   These execution facts alone do not prove universal simulation premises. *)
+Definition probe_descendant_block_def:
+  probe_descendant_block = <| bb_label := "entry";
+    bb_instructions :=
+      [mk_inst 0 SSTORE [Lit 0w; Lit 0w] [];
+       mk_inst 1 SSTORE [Lit 2w; Lit 0w] [];
+       mk_inst 2 RET [Lit 0w; Lit 0w] []] |>
+End
+
+Definition probe_descendant_function_def:
+  probe_descendant_function = mk_raw_function "internal 0 shrink()_runtime" [probe_descendant_block]
+End
+
+Theorem probe_descendant_exec_block:
+  !fuel ctx ss.
+    ss.vs_inst_idx = 0 ==>
+    exec_block fuel ctx probe_descendant_block ss =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      ((sstore 2w 0w (sstore 0w 0w ss)) with vs_inst_idx := 2)
+Proof
+  rpt strip_tac >>
+  simp[Once exec_block_def, probe_descendant_block_def, get_instruction_def,
+       Once step_inst_def, step_SSTORE_literals, is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, Once step_inst_def,
+       step_SSTORE_literals, is_terminator_def, sstore_def] >>
+  simp[Once exec_block_def, get_instruction_def, Once step_inst_def,
+       probe_RET_literals, sstore_def]
+QED
+
+Theorem probe_descendant_run_blocks:
+  !fuel ctx ss.
+    ss.vs_current_bb = "entry" ==>
+    run_blocks (SUC fuel) ctx probe_descendant_function ss =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      ((sstore 2w 0w (sstore 0w 0w (ss with vs_inst_idx := 0)))
+        with vs_inst_idx := 2)
+Proof
+  rpt strip_tac >>
+  simp[Once run_blocks_def, probe_descendant_function_def, mk_raw_function_def,
+       lookup_block_def] >>
+  simp[probe_descendant_block_def, listTheory.FIND_thm,
+       eval_phis_def, phi_prefix_length_def] >>
+  rewrite_tac[GSYM probe_descendant_block_def] >>
+  simp[probe_descendant_exec_block]
+QED
+
+Theorem probe_descendant_invoke:
+  !fuel ctx ss id out cs.
+    lookup_function "internal 0 shrink()_runtime" ctx.ctx_functions = SOME probe_descendant_function /\
+    setup_callee probe_descendant_function [] ss = SOME cs ==>
+    step_inst (SUC fuel) ctx
+      (mk_inst id INVOKE [Label "internal 0 shrink()_runtime"] [out]) ss =
+    OK (update_var out 0w
+      (merge_callee_state ss
+        ((sstore 2w 0w (sstore 0w 0w (cs with vs_inst_idx := 0)))
+          with vs_inst_idx := 2)))
+Proof
+  rpt strip_tac >>
+  `cs.vs_current_bb = "entry"` by
+    gvs[setup_callee_def, probe_descendant_function_def, mk_raw_function_def,
+        probe_descendant_block_def] >>
+  simp[Once step_inst_def, decode_invoke_def, eval_operands_def,
+       probe_descendant_run_blocks, bind_outputs_def, adopt_return_fmp_def]
+QED
+
+Theorem probe_descendant_source_outer:
+  eval_base_place probe_deep_context
+    (SubscriptTarget
+      (SubscriptTarget
+        (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))
+        (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+      (Literal (BaseT (UintT 256)) (IntL 0)))
+    probe_deep_empty_donor_state =
+  (INL (PlaceR (StoragePlace F 3w (BaseTV (UintT 256)))),
+   set_storage probe_deep_context probe_deep_empty_donor_state F
+     (update_storage 0w 0w
+       (get_storage probe_deep_context probe_deep_empty_donor_state F)))
+Proof
+  simp[Once evaluate_def, bind_def, probe_deep_inner_root_shrink_base,
+       read_result_def, return_def] >>
+  simp[Once evaluate_def, vyperValueOperationTheory.evaluate_literal_def, return_def, bind_def] >>
+  simp[extend_place_storage_array_index, probe_deep_inner_root_shrink_capacity] >>
+  EVAL_TAC >> simp[return_def, word_add_n2w, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Definition probe_descendant_base_def:
+  probe_descendant_base =
+    compile_get_target_ptr compile_expr probe_deep_cenv
+      (SubscriptTarget
+        (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))
+        (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+      (initial_compile_state "entry")
+End
+
+Theorem probe_descendant_base_shape:
+  FST probe_descendant_base = (Var "%19",SOME LocStorage,
+    SOME (ValPT (ArrayT (BaseT (UintT 256)) (Dynamic 1))))
+Proof
+  EVAL_TAC
+QED
+
+Definition probe_descendant_caller_def:
+  probe_descendant_caller = mk_raw_function "caller"
+    [<| bb_label := "entry";
+        bb_instructions := (SND probe_descendant_base).cs_current_insts ++
+          [mk_inst 100 STOP [] []] |>]
+End
+
+Theorem probe_descendant_caller_execution:
+  case run_blocks 5 (ctx with ctx_functions := [probe_descendant_function])
+    probe_descendant_caller probe_deep_empty_donor_machine of
+    Halt s => lookup_var "%19" s = SOME 2w /\
+      sload 1w s = 1w /\ sload 2w s = 0w
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Definition probe_descendant_outer_def:
+  probe_descendant_outer =
+    compile_get_target_ptr compile_expr probe_deep_cenv
+      (SubscriptTarget
+        (SubscriptTarget
+          (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+            (Literal (BaseT (UintT 256)) (IntL 0)))
+          (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (initial_compile_state "entry")
+End
+
+Definition probe_descendant_outer_caller_def:
+  probe_descendant_outer_caller = mk_raw_function "caller"
+    [<| bb_label := "entry";
+        bb_instructions := (SND probe_descendant_outer).cs_current_insts ++
+          [mk_inst 100 STOP [] []] |>]
+End
+
+Theorem probe_descendant_outer_execution:
+  case run_blocks 5 (ctx with ctx_functions := [probe_descendant_function])
+    probe_descendant_outer_caller probe_deep_empty_donor_machine of
+    Abort Revert_abort s => lookup_var "%19" s = SOME 2w /\
+      sload 1w s = 1w /\ sload 2w s = 0w
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_descendant_outer_index_no_effect:
+  ~expr_has_effect (Literal (BaseT (UintT 256)) (IntL 0))
+Proof
+  EVAL_TAC
+QED
+
+(* Premise ledger: probe_deep_empty_donor_inv and
+   probe_deep_nested_target_pre prove concrete source entry admission.
+   probe_deep_inner_root_shrink_base proves the source base returns slot 2,
+   and probe_descendant_caller_execution now checks the ENTIRE compiled base,
+   including actual INVOKE, returning the same slot with header zero. The
+   intermediate slot 1 remains one. probe_descendant_source_outer succeeds
+   at slot 3 while probe_descendant_outer_execution aborts at the compiled
+   outer bounds assertion. The outer index is a pure literal.
+
+   Still NOT a frozen-theorem refutation: universal target_case for bt and
+   universal expr_sim_case/expr_vv_case for the literal, with compatible
+   machine entry simulation, are separate obligations. A single admitted
+   source state and a successful compiled base trace do not prove those
+   universally quantified antecedents. No universal premise is assumed or
+   discharged by these concrete execution probes. *)
+
+Theorem probe_descendant_trace_ctx_not_admitted:
+  !ctx cenv cx es s.
+    ~stmt_state_rel
+      (ctx with ctx_functions := [probe_descendant_function])
+      probe_descendant_outer_caller cenv cx es s
+Proof
+  rpt gen_tac >>
+  `lookup_function probe_descendant_outer_caller.fn_name
+    [probe_descendant_function] = NONE` by EVAL_TAC >>
+  simp[stmt_state_rel_def, alloca_room_def]
+QED
+
+(* Admissibility audit (one fixed tuple, not a counterexample):
+   nocalls = F; func = probe_descendant_outer_caller;
+   cenv = probe_deep_cenv; cx = probe_deep_context;
+   ctx = arbitrary context with ctx_functions := [probe_descendant_function].
+
+   EXCLUDED: probe_descendant_trace_ctx_not_admitted proves that no machine
+   state at all satisfies stmt_state_rel for this tuple. alloca_room requires
+   lookup_function func.fn_name ctx.ctx_functions = SOME func, but the trace
+   context contains only the callee. Thus the existing traces cannot refute
+   target_sim. Adding the caller to ctx is a possible NEW probe, not justified
+   by the present execution facts and not a discharge of universal premises.
+
+   Remaining ledger if a new context is proposed:
+   - Initial stmt_state_rel: local_ptrs_rel, storage_rel, storage_vars_rel,
+     transient_rel, transient_vars_rel, accounts_rel, immutables_rel, logs_rel,
+     call_ctx_rel, non-static call, outcomes, requests; alloca_inv,
+     alloca_room (caller lookup, finite acyclic reachability and budget),
+     immutable_alloca_sep, and per-ALLOCA size consistency. Source entry
+     admission is established separately by probe_deep_nested_target_pre.
+   - Compiler entry: type_place_target env bt = SOME vt, fn_has_code from
+     initial_compile_state to the compiled base/outer endpoints for the SAME
+     outer func, fn_inst_ids_distinct, and local_ptrs_reserved.
+   - target_case for bt: for EVERY env/es meeting target_pre, and every
+     compile position/code witness/s0 allowed by target_sim, need actual
+     fragment execution, stmt_state_rel at source endpoint, place_ptr_rel,
+     place_readable, not-fresh result, existing vars and allocas, disjoint
+     allocation memory preservation and locals_kept. A dead slot argument
+     only concerns one clause of accounts_rel and does not prove this.
+     Source errors require expr_exit rather than target_post. The arbitrary
+     callee always clears root even when donor is nonempty, whereas source
+     shrink copies donor; universal post-state agreement is therefore a
+     separate substantive concern, not validated by the empty-donor trace.
+   - Literal expression judgments: compile_literal_case_sim proves expr_ok
+     for every literal (exprSimLeaves). expr_ok_case gives T-case judgments;
+     because int_calls_expr literal = [], F-case premises imply expr_sim_pre
+     too. These existing interfaces are candidates for small universal
+     literal-case proofs, not proofs performed in this diagnostic audit.
+   - No-pop and outer-effect: structural computation; outer no-effect is
+     checked by probe_descendant_outer_index_no_effect. Neither excludes
+     effects inside bt.
+   No proof of the remaining universal base judgment has been selected. *)
