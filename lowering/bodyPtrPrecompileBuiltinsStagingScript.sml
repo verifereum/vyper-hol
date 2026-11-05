@@ -126,3 +126,95 @@ Proof
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   drule_all allocated_buffer_checked >> strip_tac >> metis_tac[]
 QED
+
+Theorem point_offset_trace:
+  ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
+  off + n <= capacity /\ w2n a + off < dimword (:256) /\
+  ~ctx_has_dalloca ctx ==>
+  ?t G' tn'.
+    run_inst_seq [mk_inst id ADD [Var root; Lit (n2w off)] [out]] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id ADD [Var root; Lit (n2w off)] [out]] s G' tn' /\
+    ptr_covers G' tn' out t n /\ lookup_var out t = SOME (a + n2w off) /\
+    t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    (!p. p <> out ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qexistsl [`update_var out (a + n2w off) s`,
+    `step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out])
+      (update_var out (a + n2w off) s)`,
+    `step_taint (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s
+      (update_var out (a + n2w off) s) tn`] >>
+  conj_tac
+  >- (simp[run_inst_seq_def] >>
+      pure_once_rewrite_tac[step_inst_base_def] >>
+      simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+  conj_tac >- (irule point_offset_checked >> metis_tac[]) >>
+  conj_tac >- (irule point_offset_covers >> metis_tac[]) >>
+  simp[copy_len_binop_ghost_frame, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE]
+QED
+
+Theorem clean_word_load_trace:
+  ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx ==>
+  ?t G' tn'.
+    run_inst_seq [mk_inst id MLOAD [Var src] [tmp]] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MLOAD [Var src] [tmp]] s G' tn' /\
+    op_taint tn' (Var tmp) = {} /\
+    lookup_var tmp t = SOME (mload (w2n a) s) /\
+    t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    (!p. p <> tmp ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qexistsl [`update_var tmp (mload (w2n a) s) s`,
+    `step_prov PG G (mk_inst id MLOAD [Var src] [tmp])
+      (update_var tmp (mload (w2n a) s) s)`,
+    `step_taint (mk_inst id MLOAD [Var src] [tmp]) s
+      (update_var tmp (mload (w2n a) s) s) tn`] >>
+  conj_tac
+  >- (simp[run_inst_seq_def] >>
+      pure_once_rewrite_tac[step_inst_base_def] >>
+      simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+  drule_all clean_word_load_checked >> strip_tac >> simp[] >>
+  `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
+  drule mload_ghost_clean >> strip_tac >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       set_var_taint_def, op_taint_def, mk_inst_def,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
+Theorem clean_word_store_trace:
+  ptr_covers G tn dst s 32 /\ op_taint tn v = {} /\
+  ~ctx_has_dalloca ctx /\ lookup_var dst s = SOME a /\
+  eval_operand v s = SOME w ==>
+  ?t tn'.
+    run_inst_seq [mk_inst id MSTORE [Var dst; v] []] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MSTORE [Var dst; v] []] s G tn' /\
+    t = mstore (w2n a) w s /\ tn'.t_var = tn.t_var /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MSTORE [Var dst; v] []) s =
+     OK (mstore (w2n a) w s)` by
+    (pure_once_rewrite_tac[step_inst_base_def] >>
+     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+  drule_all clean_word_store_checked >> strip_tac >>
+  drule_all mstore_ghost_frame >> strip_tac >>
+  qexistsl [`mstore (w2n a) w s`,
+    `step_taint (mk_inst id MSTORE [Var dst; v] []) s
+      (mstore (w2n a) w s) tn`] >>
+  simp[run_inst_seq_def] >> metis_tac[]
+QED
