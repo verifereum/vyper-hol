@@ -556,6 +556,82 @@ Proof
        fresh_id_def, fresh_var_def, emit_def, same_blocks_def] >> strip_tac >> gvs[]
 QED
 
+Theorem imm_emit_iload_correct[local]:
+  emit_op ILOAD [op1] st = (v,st') /\
+  eval_operand op1 ss = SOME a /\ fresh_vars_wrt st ss ==>
+  ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
+    eval_operand v ss' = SOME (mload (w2n a) ss) /\
+    same_blocks st st' /\ fresh_vars_wrt st' ss' /\
+    (!op w. eval_operand op ss = SOME w ==> eval_operand op ss' = SOME w) /\
+    ss'.vs_memory = ss.vs_memory /\ ss'.vs_accounts = ss.vs_accounts /\
+    ss'.vs_labels = ss.vs_labels
+Proof
+  rpt strip_tac >>
+  irule (BETA_RULE (Q.SPECL [`ILOAD`, `\a ss. mload (w2n a) ss`]
+    emitHelperPropsTheory.emit_op_read1_correct)) >>
+  simp[] >> qexists_tac `op1` >> simp[] >>
+  simp[venomInstTheory.mk_inst_def,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_read1_def]
+QED
+
+Theorem imm_array_len_ctor_none[local]:
+  !cnt base_op s b.
+    eval_operand base_op s = SOME b ==>
+    array_len_ok T cnt (compile_ptr_load T NONE LocCode)
+      base_op s (mload (w2n b) s)
+Proof
+  rpt strip_tac >>
+  rw[array_len_ok_def, contextTheory.compile_ptr_load_def,
+     contextTheory.compile_imm_load_word_def] >>
+  drule emit_op_extends >> strip_tac >> simp[] >>
+  drule_all imm_emit_iload_correct >> strip_tac >>
+  goal_assum $ drule_at Any >> simp[]
+QED
+
+Theorem imm_ctor_load_none_code[local]:
+  !off sa p sb.
+    compile_imm_load_word T NONE off sa = (p,sb) ==>
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\inst. (fresh_write_op inst.inst_opcode \/ inst.inst_opcode = ILOAD) /\
+      EVERY (\x. ~not_fresh_at sa x) inst.inst_outputs) (emitted_insts sa sb)
+Proof
+  rpt gen_tac >>
+  simp[contextTheory.compile_imm_load_word_def, emitHelperTheory.emit_op_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, same_blocks_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, listTheory.DROP_APPEND, venomInstTheory.mk_inst_def,
+       freshWritesTheory.fresh_write_op_def, not_fresh_at_def]
+QED
+
+Theorem imm_array_ctor_none_code[local]:
+  !base_op idx dyn cnt ws esz sgn sa p sb.
+    compile_array_subscript base_op idx dyn cnt ws esz sgn
+      (compile_ptr_load T NONE LocCode) sa = (p,sb) ==>
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\inst. (fresh_write_op inst.inst_opcode \/ inst.inst_opcode = ILOAD) /\
+      EVERY (\x. ~not_fresh_at sa x) inst.inst_outputs) (emitted_insts sa sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_array_subscript_split, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  mp_tac straight_fresh_array_check_ptr >>
+  simp[freshWritesTheory.straight_fresh_def] >> disch_then drule >> strip_tac >>
+  reverse (Cases_on `dyn`) >>
+  gvs[comp_return_def, contextTheory.compile_ptr_load_def]
+  >- (fs[same_blocks_def, freshWritesTheory.writes_fresh_def, listTheory.EVERY_MEM] >>
+      metis_tac[]) >>
+  drule imm_ctor_load_none_code >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa cs' ++ emitted_insts cs' sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  gvs[same_blocks_def, listTheory.EVERY_APPEND] >>
+  fs[freshWritesTheory.writes_fresh_def, listTheory.EVERY_MEM, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem imm_array_ctor_code[local]:
   !base idx dyn cnt ws esz sgn region sa p sb.
     compile_array_subscript base idx dyn cnt ws esz sgn
@@ -742,6 +818,154 @@ Proof
       qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
       fs[same_blocks_def, exprSimPropsTheory.locals_kept_mem]) >>
   goal_assum $ drule_at Any
+QED
+
+Theorem imm_array_ctor_none_run[local]:
+  !base_op idx dyn cnt ws esz sgn sa p sb s b i len.
+    compile_array_subscript base_op idx dyn cnt ws esz sgn
+      (compile_ptr_load T NONE LocCode) sa = (p,sb) /\
+    eval_operand base_op s = SOME b /\ eval_operand idx s = SOME i /\
+    (!x. base_op = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    len = (if dyn then mload (w2n b) s else n2w cnt) ==>
+    if idx_in_range sgn i len then
+      ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        t = s with vs_vars := t.vs_vars /\
+        (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+    else ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `eval_operand base_op (drop_fresh sa s) = SOME b /\
+   eval_operand idx (drop_fresh sa s) = SOME i` by
+    simp[eval_operand_drop_fresh] >>
+  `array_len_ok dyn cnt (compile_ptr_load T NONE LocCode)
+      base_op (drop_fresh sa s) len` by
+    (reverse (Cases_on `dyn`) >> gvs[]
+     >- simp[array_len_ok_static] >>
+     `mload (w2n b) (drop_fresh sa s) = mload (w2n b) s` by
+       simp[drop_fresh_def, venomStateTheory.mload_def] >>
+     pop_assum (SUBST1_TAC o SYM) >> irule imm_array_len_ctor_none >> simp[]) >>
+  drule imm_array_ctor_none_code >> strip_tac >>
+  `EVERY (\inst. ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    ~is_ext_call_op inst.inst_opcode) (emitted_insts sa sb)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[imm_readonly_opcode]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+      (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  qspecl_then [`sa`, `s`] assume_tac fresh_vars_wrt_drop_fresh >>
+  Cases_on `idx_in_range sgn i len` >> simp[]
+  >- (drule_all compile_array_subscript_ok >> strip_tac >>
+      gvs[vars_ext_result_def, CaseEq "exec_result"] >>
+      conj_tac
+      >- (rename1 `vars_ext clean actual` >> fs[vars_ext_def] >>
+          qpat_x_assum `actual = _` (fn th => once_rewrite_tac[th]) >>
+          simp[eval_operand_vars_ext]) >>
+      qpat_assum `run_inst_seq _ s = OK _`
+        (mp_then Any mp_tac imm_readonly_seq_frame) >>
+      disch_then (qspec_then `sa` mp_tac) >> simp[]) >>
+  drule_all compile_array_subscript_oob >> strip_tac >>
+  gvs[vars_ext_result_def, CaseEq "exec_result"] >> metis_tac[]
+QED
+
+Theorem imm_array_ctor_none_path[local]:
+  !base_op idx dyn cnt ws esz sgn sa p sb s b i len ctx func.
+    compile_array_subscript base_op idx dyn cnt ws esz sgn
+      (compile_ptr_load T NONE LocCode) sa = (p,sb) /\
+    eval_operand base_op s = SOME b /\ eval_operand idx s = SOME i /\
+    (!x. base_op = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    len = (if dyn then mload (w2n b) s else n2w cnt) /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    if idx_in_range sgn i len then
+      ?t. gas_marked_path F ctx func s 0
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        t = s with vs_vars := t.vs_vars /\
+        (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+    else ?t j. gas_marked_path F ctx func s 0
+          (Abort Revert_abort (t with vs_inst_idx := j))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule imm_array_ctor_none_code >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fragExecTheory.fn_has_code_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[listTheory.DROP_APPEND]) >>
+  `EVERY (\ins. ins.inst_opcode <> GAS /\ ins.inst_opcode <> INVOKE /\
+       ~is_terminator ins.inst_opcode) (emitted_insts sa sb)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[imm_readonly_opcode]) >>
+  drule_all imm_array_ctor_none_run >>
+  Cases_on `idx_in_range sgn i len` >> simp[] >> strip_tac
+  >- (qexists_tac `t` >> simp[] >>
+      `LENGTH (FILTER (\ins. ins.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+        (simp[listTheory.LENGTH_EQ_NUM_compute, listTheory.FILTER_EQ_NIL,
+              listTheory.EVERY_MEM] >> rpt strip_tac >>
+         qpat_x_assum `EVERY (\ins. ins.inst_opcode <> GAS /\ _) _`
+           (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+         disch_then drule >> simp[]) >>
+      drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+      simp[gas_marked_path_def] >> disch_then irule >>
+      conj_tac >- (fs[listTheory.EVERY_MEM]) >>
+      qexists_tac `bb` >> gvs[]) >>
+  drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem imm_array_ctor_counted_optional[local]:
+  !base_op idx dyn cnt ws esz sgn imm sa p sb s b i len ctx func cenv cx es.
+    compile_array_subscript base_op idx dyn cnt ws esz sgn
+      (compile_ptr_load T imm LocCode) sa = (p,sb) /\
+    eval_operand base_op s = SOME b /\ eval_operand idx s = SOME i /\
+    (!region. imm = SOME region ==> eval_operand region s = SOME 0w) /\
+    (!x. base_op = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!region x. imm = SOME region /\ region = Var x ==> not_fresh_at sa x) /\
+    len = (if dyn then mload (w2n b) s else n2w cnt) /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    (!x. p = Var x ==> not_fresh_at sb x) /\
+    if idx_in_range sgn i len then
+      ?t. gas_marked_path F ctx func s 0 (OK t) /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        stmt_state_rel ctx func cenv cx es t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+          lookup_var x t = SOME w) /\
+        t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+        locals_kept cenv es s t
+    else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
+Proof
+  rpt gen_tac >> Cases_on `imm` >> simp[] >> strip_tac
+  >- (conj_tac
+      >- (drule (cj 3 compiler_subscript_ops_var) >> simp[]) >>
+      drule_all imm_array_ctor_none_path >>
+      disch_then (qspec_then `ctx` mp_tac) >>
+      qpat_x_assum `len = _` SUBST_ALL_TAC >>
+      Cases_on `idx_in_range sgn i (if dyn then mload (w2n b) s else n2w cnt)` >> simp[] >> strip_tac
+      >- (`!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+             lookup_var x t = SOME w` by simp[lookup_var_def] >>
+          `stmt_state_rel ctx func cenv cx es t` by
+            (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+             irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
+             conj_tac >> rpt strip_tac >>
+             qmatch_goalsub_rename_tac `lookup_var zz` >>
+             `not_fresh_at sa zz` by
+               (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+             simp[lookup_var_def]) >>
+          qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+          simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+               eval_operand_def, lookup_var_def] >>
+          drule imm_array_ctor_none_code >> strip_tac >>
+          qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+          fs[same_blocks_def, exprSimPropsTheory.locals_kept_mem]) >>
+      goal_assum $ drule_at Any) >>
+  drule_all imm_array_ctor_counted >> simp[]
 QED
 
 Theorem imm_place_at_extend[local]:
@@ -1362,6 +1586,27 @@ Proof
   metis_tac[]
 QED
 
+Theorem imm_target_post_after_index_reset[local]:
+  !ctx func cenv cx es sa sm sn s0 pv ty rb t e gs res v op u.
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+    sm.cs_next_var <= sn.cs_next_var /\
+    imm_target_post ctx func cenv cx es sa sm s0 (es with gas_obs := []) pv ty rb t /\
+    pure_expr e /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (res,es with gas_obs := []) /\
+    (!l. FST rb <> Label l) /\
+    expr_post ctx func cenv cx e (es with gas_obs := []) sm sn t
+      (es with gas_obs := []) v op u ==>
+    imm_target_post ctx func cenv cx es sa sn s0 (es with gas_obs := []) pv ty rb u
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule (imm_target_post_after_index |> SPEC_ALL |>
+    Q.INST [`em` |-> `es with gas_obs := []`, `ee` |-> `es with gas_obs := []`] |>
+    GEN_ALL |> SRULE []) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem imm_gas_outcome_bind_result[local]:
   !memory tops ctx func (source : evaluation_state -> eval_result evaluation_result)
     es s0 P R next Q.
@@ -1533,6 +1778,500 @@ Proof
   rename1 `subscript_vtype (Type bty) _ = _` >>
   Cases_on `bty` >> gvs[subscript_vtype_def, AllCaseEqs()]
 QED
+
+Theorem imm_subscript_base_code[local]:
+  !cenv bt e sa rb sm r sb func.
+    compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+    compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb) /\
+    fn_has_code sa sb func ==>
+    fn_has_code sa sm func /\ cs_extends sm sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_get_target_ptr _ _ (SubscriptTarget _ _) _ = _`
+    (mp_tac o PURE_ONCE_REWRITE_RULE [compile_get_target_ptr_def]) >>
+  qmatch_goalsub_abbrev_tac `comp_bind _ rest` >>
+  `!result st. ci_mono st (SND (rest result st))` by
+    (rpt gen_tac >> Cases_on `SND (SND result)`
+     >- (simp[Abbr `rest`, LET_THM] >>
+         match_mp_tac ci_mono_bind >> conj_tac
+         >- simp[stmtLoweringMonoTheory.ci_mono_compile_expr_sa] >>
+         rpt gen_tac >> BETA_TAC >> match_mp_tac ci_mono_bind >>
+         simp[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load,
+              ci_mono_comp_return]) >>
+     rename1 `SND (SND result) = SOME pt` >> Cases_on `pt`
+     >- (simp[Abbr `rest`, LET_THM] >>
+         match_mp_tac ci_mono_bind >> conj_tac
+         >- simp[stmtLoweringMonoTheory.ci_mono_compile_expr_sa] >>
+         rpt gen_tac >> BETA_TAC >> match_mp_tac ci_mono_bind >> conj_tac
+         >- (rpt gen_tac >> IF_CASES_TAC >>
+             simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
+         rpt gen_tac >> BETA_TAC >> match_mp_tac ci_mono_bind >>
+         simp[ci_mono_compile_mapping_subscript, ci_mono_comp_return]) >>
+     simp[Abbr `rest`, LET_THM] >>
+     match_mp_tac ci_mono_bind >> conj_tac
+     >- simp[stmtLoweringMonoTheory.ci_mono_compile_expr_sa] >>
+     rpt gen_tac >> BETA_TAC >> match_mp_tac ci_mono_bind >>
+     simp[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load,
+          ci_mono_comp_return]) >>
+  simp[comp_bind_def] >> strip_tac >>
+  `ci_mono sm sb` by metis_tac[pairTheory.SND] >>
+  `ci_mono sa sm` by
+    metis_tac[stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr, pairTheory.SND] >>
+  gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]
+QED
+
+Theorem imm_expr_exit_inr[local]:
+  !(res : 'a + exception) r.
+    expr_exit res r <=>
+      ?exc. res = INR exc /\ expr_exit (INR exc : 'a + exception) r
+Proof
+  Cases >> simp[]
+QED
+
+Theorem imm_mapping_compile_not_label[local]:
+  !base_op key sa op sb.
+  compile_mapping_subscript base_op key sa = (op,sb) ==>
+  !l. op <> Label l
+Proof
+  rpt gen_tac >>
+  simp[compile_mapping_subscript_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  drule exprSafeOperandTheory.emit_op_safe_operand >>
+  simp[exprSafeOperandTheory.safe_operand_def]
+QED
+
+Theorem imm_array_compile_not_label[local]:
+  !base_op idx dyn cnt ws esz sgn loader sa op sb.
+  compile_array_subscript base_op idx dyn cnt ws esz sgn loader sa = (op,sb) ==>
+  !l. op <> Label l
+Proof
+  rpt gen_tac >>
+  simp[compile_array_subscript_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  drule exprSafeOperandTheory.emit_op_safe_operand >>
+  simp[exprSafeOperandTheory.safe_operand_def]
+QED
+
+Theorem imm_target_compile_not_label[local]:
+  compile_get_target_ptr cfn cenv bt sa = (r,sb) /\
+  target_root bt = TopLevelNameTarget (src,id) ==>
+  !l. FST r <> Label l
+Proof
+  Cases_on `bt` >> simp[target_root_def]
+  >- (simp[compile_get_target_ptr_def] >>
+      Cases_on `FLOOKUP cenv.ce_module_vars p` >> simp[comp_return_def] >>
+      Cases_on `x` >> simp[comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  simp[Once compile_get_target_ptr_def, LET_THM, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) 
+  >- (Cases_on `SND (SND result)`
+      >- (gvs[comp_bind_def, comp_return_def] >>
+          rpt (pairarg_tac >> gvs[]) >>
+          imp_res_tac imm_array_compile_not_label >> rpt strip_tac >> gvs[]) >>
+      Cases_on `x` >> gvs[comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      imp_res_tac imm_array_compile_not_label >>
+      imp_res_tac imm_mapping_compile_not_label >> rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[] >>
+  drule exprSafeOperandTheory.emit_op_safe_operand >>
+  simp[exprSafeOperandTheory.safe_operand_def]
+QED
+
+Theorem imm_field_offset_footprint[local]:
+  !fields id k child.
+    mem_field_offset fields id = SOME (k,child) ==>
+    k + type_memory_size child <= type_memory_size_fields fields
+Proof
+  Induct >> simp[mem_field_offset_def, valueEncodingTheory.type_memory_size_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[mem_field_offset_def, valueEncodingTheory.type_memory_size_def] >>
+  Cases_on `h0 = id` >> gvs[AllCaseEqs()] >>
+  simp[pairTheory.EXISTS_PROD] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem imm_tuple_offset_footprint[local]:
+  !tvs i. i < LENGTH tvs ==>
+    type_memory_size_list (TAKE i tvs) + type_memory_size (EL i tvs) <=
+      type_memory_size_list tvs
+Proof
+  Induct >> simp[] >> gen_tac >> Cases_on `i` >>
+  simp[valueEncodingTheory.type_memory_size_def] >> strip_tac >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem imm_step_offset_footprint[local]:
+  !tv sub k child.
+    mem_step_offset tv sub = SOME (k,child) ==>
+    k + type_memory_size child <= type_memory_size tv
+Proof
+  Cases >> Cases_on `sub` >> simp[mem_step_offset_def] >>
+  rpt gen_tac >>
+  TRY (rename1 `ValueSubscript value` >> Cases_on `value` >>
+       simp[mem_step_offset_def]) >>
+  simp[mem_step_offset_def, valueEncodingTheory.type_memory_size_def, AllCaseEqs()]
+  >- (strip_tac >> gvs[] >> drule imm_tuple_offset_footprint >> simp[])
+  >- (Cases_on `b` >> simp[mem_step_offset_def,
+        valueEncodingTheory.type_memory_size_def, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      `Num i + 1 <= n` by decide_tac >>
+      ` (Num i + 1) * type_memory_size child <= n * type_memory_size child` by
+        simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+      qpat_x_assum `(_ + 1) * _ <= _` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
+                       arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  metis_tac[imm_field_offset_footprint]
+QED
+
+Theorem imm_path_offset_footprint[local]:
+  !path tv k child.
+    mem_path_offset tv path = SOME (k,child) ==>
+    k + type_memory_size child <= type_memory_size tv
+Proof
+  Induct >> simp[mem_path_offset_def] >> rpt gen_tac >>
+  simp[AllCaseEqs(), pairTheory.EXISTS_PROD] >> strip_tac >> gvs[] >>
+  drule imm_step_offset_footprint >> strip_tac >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem imm_path_offset_nonwrap[local]:
+  !tv path k child off.
+    mem_path_offset tv path = SOME (k,child) /\
+    off + type_memory_size tv < dimword (:256) ==>
+    off + k < dimword (:256)
+Proof
+  rpt strip_tac >> drule imm_path_offset_footprint >> decide_tac
+QED
+
+Theorem imm_target_subscript_step[local]:
+  !nocalls ctx func cenv cx env es sa sb s0 bt e ty r src id.
+    cx.in_deploy /\ cenv.ce_is_ctor /\
+    expr_sim_inv cenv cx env es /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    target_root bt = TopLevelNameTarget (src,id) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) /\
+    target_idx_case nocalls ctx func cenv cx (SubscriptTarget bt e) /\
+    (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+    target_indices_pre cenv cx env (SubscriptTarget bt e) /\ pure_expr e /\
+    type_place_target env (SubscriptTarget bt e) = SOME (Type ty) /\
+    compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+    (!bty sm rb.
+      type_place_target env bt = SOME (Type bty) /\
+      compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+      fn_has_code sa sm func /\
+      gas_admissible (eval_base_place cx bt) target_res_ok es ==>
+      gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+        (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+          imm_target_post ctx func cenv cx es sa sm s0 ee pv bty rb t /\
+          t.vs_current_bb = sm.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sm.cs_current_insts)
+        (\res ee r. expr_exit res r)) ==>
+    gas_outcome F (cx_tops cx) (ctx,func)
+      (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
+      (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+        imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all imm_target_subscript_type >> strip_tac >>
+  Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
+  rename1 `compile_get_target_ptr compile_expr cenv bt sa = (rb,sm)` >>
+  drule_all imm_subscript_base_code >> strip_tac >>
+  `eval_base_place cx (SubscriptTarget bt e) =
+     bind (eval_base_place cx bt) (\pv.
+       bind (bind (eval_expr cx e) (read_result cx))
+         (\v. extend_place cx pv (ValueSubscript v)))` by
+    simp[FUN_EQ_THM, Once evaluate_def, vyperStateTheory.bind_assoc] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, bind_def] >> rpt strip_tac >>
+     Cases_on `res` >> simp[target_res_ok_def] >>
+     first_x_assum (qspec_then `gs` mp_tac) >> simp[target_res_ok_def]) >>
+  irule imm_gas_outcome_bind_result >>
+  qexists_tac `\pv ee t. ee = es with gas_obs := [] /\
+    imm_target_post ctx func cenv cx es sa sm s0 ee pv (ArrayT ty bd) rb t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+  reverse conj_tac
+  >- (simp[GSYM imm_expr_exit_inr] >> first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `FST (SND rb) = SOME LocCode /\
+   SND (SND rb) = SOME (ValPT (ArrayT ty bd))` by fs[imm_target_post_def] >>
+  drule_all imm_subscript_compile_parts >> strip_tac >> gvs[] >>
+  `eval_base_place cx bt
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+       (INL v,es with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_sim_case nocalls ctx func cenv cx e` by
+    (fs[target_idx_case_def] >> metis_tac[]) >>
+  `expr_body_pre cenv cx env e (es with gas_obs := [])` by
+    (fs[target_indices_pre_def] >> first_x_assum irule >> simp[]) >>
+  `nocalls ==> int_calls_expr e = []` by
+    fs[int_calls_expr_def] >>
+  `expr_sim ctx func cenv cx (expr_type e) e (es with gas_obs := [])` by
+    metis_tac[expr_sim_case_def] >>
+  `ci_mono sa sm` by
+    metis_tac[stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr, pairTheory.SND] >>
+  `ci_mono sm sn` by
+    metis_tac[stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND] >>
+  `ci_mono sn sb` by
+    (`!op st. ci_mono st
+        (SND (compile_ptr_load T cenv.ce_imm_alloca LocCode op st))` by
+       simp[ci_mono_compile_ptr_load] >>
+     drule ci_mono_compile_array_subscript >>
+     disch_then assume_tac >> metis_tac[pairTheory.SND]) >>
+  `fn_has_code sm sn func /\ fn_has_code sn sb func` by
+    (fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `local_ptrs_reserved cenv sm` by
+    (fs[local_ptrs_reserved_def, ci_mono_def] >>
+     conj_tac >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `!gs. mid with gas_obs := gs = es with gas_obs := gs` by
+    (gen_tac >>
+     qpat_x_assum `mid with gas_obs := [] = _`
+       (mp_tac o Q.AP_TERM `\st. st with gas_obs := gs`) >> simp[]) >>
+  `!gs. eval_base_place cx bt
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ gs) =
+      (INL v,es with gas_obs := gs)` by
+    fs[gas_marked_exec_def] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+     (es with gas_obs := [])` by
+    (simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
+     Cases_on `res` >- simp[expr_res_ok_def] >>
+     qpat_x_assum `gas_admissible (bind _ _) _ _`
+       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
+     simp[Once bind_def] >> simp[Once bind_def] >>
+     gvs[target_res_ok_def, expr_res_ok_def]) >>
+  `!exc r. expr_exit (INR exc : value + exception) r =
+      expr_exit (INR exc : eval_result + exception) r` by
+    (Cases >> Cases >> simp[expr_exit_def] >>
+     Cases_on `e'` >> simp[expr_exit_def]) >>
+  irule imm_gas_outcome_bind_value >>
+  qexists_tac `\iv ee u.
+    expr_post ctx func cenv cx e (es with gas_obs := []) sm sn t ee iv op u /\
+    u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
+  reverse conj_tac
+  >- (`(\(res:value + exception) ee r. ?exc. res = INR exc /\
+          expr_exit (INR exc : eval_result + exception) r) =
+        (\res (ee:evaluation_state) r. expr_exit res r)` by
+        (simp[FUN_EQ_THM] >> Cases >> simp[] >> metis_tac[]) >>
+      BETA_TAC >> pop_assum SUBST1_TAC >> BETA_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then irule >> simp[] >> fs[imm_target_post_def]) >>
+  rpt gen_tac >> strip_tac >>
+  suspend "suffix"
+QED
+
+Resume imm_target_subscript_step[suffix]:
+  gvs[] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `target_idx_case _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `target_indices_pre _ _ _ _` kall_tac >>
+  qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = _` kall_tac >>
+  qpat_x_assum `compile_get_target_ptr _ _ (SubscriptTarget _ _) _ = _` kall_tac >>
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks' t.vs_gas_readings) =
+     (INL v',mid' with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `?w. eval_operand (FST rb) t = SOME w /\
+        imm_place_at cenv cx es v w (ArrayT ty bd)` by
+    (fs[imm_target_post_frame] >> metis_tac[]) >>
+  drule_all imm_place_at_pure_index >> strip_tac >> gvs[] >>
+  `!l. FST rb <> Label l` by metis_tac[imm_target_compile_not_label] >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+   sm.cs_next_var <= sn.cs_next_var` by fs[ci_mono_def] >>
+  drule_all imm_target_post_after_index_reset >> strip_tac >>
+
+  `word_value_type (expr_type e)` by simp[word_value_type_def] >>
+  `expr_body_pre cenv cx env e
+     (es with gas_obs := gas_explicit marks' t.vs_gas_readings)` by simp[] >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.expr_body_pre_word_result) >>
+  strip_tac >>
+  qpat_x_assum `!tv. INL v' = INL tv ==> _`
+    (qspec_then `v'` mp_tac) >> simp[] >> strip_tac >>
+  drule_all vyperTypeStatePreservationTheory.int_typed_value_is_IntV >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `target_root _ = _` kall_tac >>
+  qpat_x_assum `!ts. get_module_code _ _ = _ ==> _` kall_tac >>
+  qpat_x_assum `nocalls ==> int_calls_target _ = _` kall_tac >>
+  qpat_x_assum `nocalls ==> int_calls_expr _ = _` kall_tac >>
+  qpat_x_assum `type_place_target _ _ = _` kall_tac >>
+  qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `gas_admissible (bind _ _) _ _` kall_tac >>
+  qpat_x_assum `gas_admissible (eval_base_place _ _) _ _` kall_tac >>
+  qpat_x_assum `gas_admissible (bind _ _) _ _` kall_tac >>
+  qpat_x_assum `gas_marked_exec _ _ (eval_base_place _ _) _ _ _ _ _` kall_tac >>
+  `~t'.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` kall_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` kall_tac >>
+  qpat_x_assum `!gs. eval_base_place _ _ _ = _` kall_tac >>
+  qpat_x_assum `!gs. mid with gas_obs := gs = _` kall_tac >>
+  qpat_x_assum `imm_target_post _ _ _ _ _ _ sm _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_res_ok _` kall_tac >>
+  qpat_x_assum `!exc r. _` kall_tac >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t' /\
+   ?bw. eval_operand (FST rb) t' = SOME bw /\
+        imm_place_at cenv cx es v bw (ArrayT ty bd)` by
+    fs[imm_target_post_frame] >>
+  `?iw. eval_operand op t' = SOME iw` by
+    fs[expr_post_def, expr_val_rel_def] >>
+  `!region. cenv.ce_imm_alloca = SOME region ==>
+      eval_operand region t' = SOME 0w` by
+    (fs[stmt_state_rel_def, immutable_base_zero_def]) >>
+  `local_ptrs_reserved cenv sn` by
+    (fs[local_ptrs_reserved_def, ci_mono_def] >>
+     conj_tac >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sm` >> simp[] >> metis_tac[]) >>
+  `!region x. cenv.ce_imm_alloca = SOME region /\ region = Var x ==>
+      not_fresh_at sn x` by fs[local_ptrs_reserved_def] >>
+  `!x. FST rb = Var x ==> not_fresh_at sn x` by
+    fs[imm_target_post_def] >>
+  `!x. op = Var x ==> not_fresh_at sn x` by
+    (rpt strip_tac >> irule exprOperandVarTheory.compile_lower_value_var >>
+     qexistsl [`cenv`, `e`, `op`, `sm`, `expr_type e`] >> simp[]) >>
+  drule_all (imm_array_ctor_counted_optional |> SPEC_ALL |>
+    Q.INST [`len` |-> `if dyn then mload (w2n b) s else n2w cnt`] |>
+    GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >> strip_tac >>
+  `iw = val_to_w256 (IntV i)` by
+    (drule exprSimSourceTheory.word_value_type_word >> strip_tac >>
+     fs[expr_post_def, expr_val_rel_def, exprSimPropsTheory.typed_val_to_w256_word_value]) >>
+  qpat_x_assum `monad_bind _ _ _ = _` kall_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `imm_place_at _ _ mid' _ _ _` kall_tac >>
+  qpat_x_assum `imm_place_at _ _ es v w _` kall_tac >>
+  qpat_x_assum `mid' with gas_obs := [] = _` kall_tac >>
+  qpat_x_assum `eval_operand (FST rb) t = _` kall_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
+  qpat_x_assum `pure_expr _` kall_tac >>
+  qpat_x_assum `well_typed_expr _ _` kall_tac >>
+  rpt (qpat_x_assum `fn_has_code _ _ _` kall_tac) >>
+  qpat_x_assum `fn_inst_ids_distinct _` kall_tac >>
+  rpt (qpat_x_assum `ci_mono _ _` kall_tac) >>
+  rpt (qpat_x_assum `local_ptrs_reserved _ _` kall_tac) >>
+  qpat_x_assum `cs_extends _ _` kall_tac >>
+  qpat_x_assum `t.vs_current_bb = _` kall_tac >>
+  qpat_x_assum `t.vs_inst_idx = _` kall_tac >>
+  qpat_x_assum `~t.vs_halted` kall_tac >>
+  Cases_on `v` >> fs[imm_place_at_def] >>
+  Cases_on `p` >> fs[imm_place_at_def] >>
+  drule_all imm_place_at_value_type >> strip_tac >>
+  `?etv. tv = ArrayTV etv bd /\ evaluate_type (get_tenv cx) ty = SOME etv` by
+    fs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  gvs[] >>
+  Cases_on `v` >> fs[vyperTypingTheory.value_has_type_def] >>
+  `off + k < dimword (:256)` by
+    (irule imm_path_offset_nonwrap >> goal_assum (drule_at Any) >> simp[]) >>
+  `val_in_memory (ArrayTV etv bd) (ArrayV a) (off+k) t'.vs_memory` by
+    (irule imm_readable_path_memory >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`ctx`, `env`, `func`] >> simp[]) >>
+  `((if (case bd of Fixed _ => F | Dynamic _ => T) then
+       mload ((k+off) MOD dimword (:256)) t'
+     else n2w (case bd of Fixed n => n | Dynamic _ => 0)) : bytes32) =
+     n2w (array_length (ArrayTV etv bd) a)` by
+    (Cases_on `bd` >> Cases_on `a` >>
+     gvs[vyperTypingTheory.value_has_type_def,
+         vyperValueOperationTheory.array_length_def,
+         valueEncodingPropsTheory.val_in_memory_dynarray,
+         mload_def, valueEncodingTheory.mem_word_at_def, arithmeticTheory.ADD_COMM]) >>
+  gvs[] >>
+  `(array_index (ArrayTV etv bd) a i = NONE <=>
+       ~idx_in_range (is_signed_type (expr_type e)) (val_to_w256 (IntV i))
+          (n2w (array_length (ArrayTV etv bd) a))) /\
+   (idx_in_range (is_signed_type (expr_type e)) (val_to_w256 (IntV i))
+       (n2w (array_length (ArrayTV etv bd) a)) ==>
+     val_to_w256 (IntV i) = n2w (Num i))` by
+    (irule imm_typed_array_index_range >> simp[] >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  qpat_x_assum `val_in_memory _ _ _ _` kall_tac >>
+  qpat_x_assum `(if _ then mload _ _ else _) = _` kall_tac >>
+  qpat_x_assum `k + type_memory_size _ <= _` kall_tac >>
+  `!gs. extend_place cx (PlaceR (ImmutablePlace cenv.ce_module s l))
+      (ValueSubscript (IntV i)) (es with gas_obs := gs) =
+    (case array_index (ArrayTV etv bd) a i of
+       NONE => (INR (Error (RuntimeError "evaluate_subscripts array_index")),
+                es with gas_obs := gs)
+     | SOME v => (INL (PlaceR (ImmutablePlace cenv.ce_module s
+                    (l ++ [ValueSubscript (IntV i)]))), es with gas_obs := gs))` by
+    (gen_tac >> irule imm_extend_place_index >> simp[]) >>
+  Cases_on `array_index (ArrayTV etv bd) a i`
+  >- suspend "out_of_bounds"
+  >> suspend "in_bounds"
+
+QED
+
+Resume imm_target_subscript_step[out_of_bounds]:
+  gvs[] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INR (Error (RuntimeError "evaluate_subscripts array_index"))`,
+    `es with gas_obs := []`, `Abort Revert_abort t`] >>
+  simp[gas_marked_exec_def, gas_explicit_nil, expr_exit_def,
+       fragExecTheory.exit_result_def]
+QED
+
+Resume imm_target_subscript_step[in_bounds]:
+  gvs[] >>
+  `imm_place_at cenv cx (es with gas_obs := [])
+      (PlaceR (ImmutablePlace cenv.ce_module s l)) (n2w (k+off))
+      (ArrayT ty bd)` by
+    (fs[imm_target_post_frame] >> metis_tac[optionTheory.SOME_11]) >>
+  `imm_place_at cenv cx (es with gas_obs := [])
+      (PlaceR (ImmutablePlace cenv.ce_module s (l ++ [ValueSubscript (IntV i)])))
+      (n2w (k+off) + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+         Num i * elem_size_in_location cenv LocCode ty)) ty` by
+    (drule_at (Pat `imm_place_at _ _ _ _ _ _`) imm_index_place_step >>
+     disch_then (qspec_then `env` mp_tac) >> simp[]) >>
+  `eval_operand dst t = SOME (n2w (k+off) +
+      n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+         Num i * elem_size_in_location cenv LocCode ty))` by
+    (qpat_x_assum `eval_operand dst t = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `bd` >>
+     simp[Once wordsTheory.word_add_n2w] >>
+     pure_rewrite_tac[word_scale_def, is_slot_addressed_def,
+          wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w,
+          arithmeticTheory.ADD_CLAUSES] >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  `wb_frame cenv es sa s0 t` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+     qexistsl_tac [`sn`, `t'`] >> simp[] >>
+     fs[imm_target_post_frame] >> decide_tac) >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INL (PlaceR (ImmutablePlace cenv.ce_module s
+                 (l ++ [ValueSubscript (IntV i)])))`,
+    `es with gas_obs := []`, `OK t`] >>
+  simp[gas_marked_exec_def, gas_explicit_nil, imm_target_post_frame] >>
+  qpat_x_assum `imm_place_at _ _ _ _ _ ty` mp_tac >>
+  simp[imm_place_at_gas_obs, arithmeticTheory.ADD_COMM]
+QED
+
+Finalise imm_target_subscript_step
 
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
