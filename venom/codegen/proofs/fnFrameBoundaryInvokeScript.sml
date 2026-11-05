@@ -34,7 +34,7 @@ Ancestors
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map
   callLayoutDefs fmpWfDefs list rich_list reorderSim planWf stackModel
-  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps
+  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps generatedPrefixSim
 
 Theorem invoke_source_ok:
   inst.inst_opcode = INVOKE /\
@@ -235,4 +235,120 @@ Proof
   irule invoke_return_preserves_caller_spills >>
   gvs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
   metis_tac[invoke_direct_call]
+QED
+
+Theorem invoke_label_free_one_input:
+  ~is_label_operand op ==>
+  emit_one_input INVOKE nl op ps = emit_one_input ADD nl op ps
+Proof
+  Cases_on `op` >> simp[is_label_operand_def, emit_one_input_def]
+QED
+
+Theorem invoke_label_free_input:
+  !operands nl ps. EVERY (\op. ~is_label_operand op) operands ==>
+  emit_input_plan INVOKE operands nl ps = emit_input_plan ADD operands nl ps
+Proof
+  Induct >> simp[emit_input_plan_def] >> rpt strip_tac >>
+  simp[invoke_label_free_one_input] >> pairarg_tac >> simp[]
+QED
+
+Theorem invoke_compute_operands:
+  unit_shape_ok unit /\ MEM fn unit.cu_context.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops ==>
+  compute_operands inst = arg_ops /\ EVERY (\op. ~is_label_operand op) arg_ops
+Proof
+  strip_tac >>
+  `label_positions_ok inst` by
+    (gvs[unit_shape_ok_def, fn_shape_ok_def, inst_shape_ok_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  gvs[label_positions_ok_def] >>
+  simp[compute_operands_def, get_non_label_operands_def, is_label_operand_def] >>
+  gvs[listTheory.FILTER_EQ_ID, EVERY_MEM, is_label_operand_def] >>
+  rpt strip_tac >> Cases_on `op` >> simp[] >>
+  metis_tac[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem invoke_arguments_not_retpc:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args /\
+  MEM (Var x) args ==> ~retpc_var fn x
+Proof
+  strip_tac >> strip_tac >>
+  `MEM (Var x) inst.inst_operands` by simp[] >>
+  drule_all opaque_use_ok_retpc_use >> simp[retpc_use_ok_def]
+QED
+
+Theorem invoke_operands_frame_values:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args ==>
+  eval_operands args (frame_view fn ra vs) = eval_operands args vs
+Proof
+  strip_tac >>
+  `!x. MEM (Var x) args ==> ~retpc_var fn x` by
+    metis_tac[invoke_arguments_not_retpc] >>
+  `frame_view fn ra vs with vs_memory := vs.vs_memory = frame_view fn ra vs` by
+    simp[frame_view_def, venom_state_component_equality] >>
+  drule eval_operands_frame_view >>
+  disch_then (qspecl_then [`vs`, `ra`, `vs.vs_memory`] mp_tac) >> simp[]
+QED
+
+Theorem invoke_input_prepared_sim:
+  EVERY (\op. ~is_label_operand op) operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE operands nl ps = (ops,ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded spill_base ps /\
+  residual_budget_wf spill_base [] ps /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  venom_asm_rel lo ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+  plan_slots_bounded spill_base ps' /\
+  residual_budget_wf spill_base operands ps' /\
+  pending_inventory_wf operands ps' /\
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+        venom_asm_rel lo ps' vs st' /\
+        st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >>
+  `emit_input_plan ADD operands nl ps = (ops,ps')` by
+    metis_tac[invoke_label_free_input] >>
+  irule emit_input_plan_prepared_sim >>
+  conj_tac
+  >- (gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  simp[] >> qexistsl [`nl`, `ADD`, `ps`] >> simp[]
+QED
+
+Theorem invoke_prepared_structural:
+  !base ps operands nl iops prepared dfg rops arranged outputs.
+  residual_budget_wf base [] ps /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE operands nl ps = (iops, prepared) /\
+  reorder_plan dfg operands prepared = (rops, arranged) /\
+  LENGTH operands <= 16 /\ LENGTH operands <= LENGTH prepared.ps_stack /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    outputs) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) outputs) ==>
+  plan_state_residual_wf base operands (LENGTH operands) arranged /\
+  ALL_DISTINCT (stack_pop (LENGTH operands) arranged.ps_stack) /\
+  DISJOINT (set (stack_pop (LENGTH operands) arranged.ps_stack))
+           (FDOM arranged.ps_spilled) /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    outputs) arranged.ps_stack /\
+  (!op. op IN FDOM arranged.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) outputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `residual_budget_wf spillbase [] ps` >>
+  `plan_state_residual_wf spillbase operands (LENGTH operands) arranged` by
+    metis_tac[selected_input_arranged, sortingTheory.PERM_REFL] >>
+  drule plan_state_residual_wf_pop >> strip_tac >> simp[] >>
+  drule_all emit_input_plan_output_exclusion >> strip_tac >>
+  `LENGTH operands <= 17` by decide_tac >>
+  drule_all reorder_plan_output_exclusion >> simp[]
 QED
