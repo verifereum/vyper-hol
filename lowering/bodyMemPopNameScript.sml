@@ -2,12 +2,12 @@
    local or a module variable. *)
 Theory bodyMemPopName
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemPopLocal bodyMemPopToplevel
 
 Theorem body_pop_name_mem_case:
   !cx ann bt.
     (?id. bt = NameTarget id) \/ (?nid. bt = TopLevelNameTarget nid) ==>
     body_expr_mem_ok cx (Pop ann bt)
 Proof
-  cheat
+  rpt strip_tac >> gvs[body_pop_local_mem, body_pop_toplevel_mem]
 QED
