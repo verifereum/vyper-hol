@@ -65,6 +65,90 @@ Proof
   simp[MEM_MAP]
 QED
 
+Theorem alias_ready_entry_no_preds:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl ==>
+  cfg_preds_of (cfg_analyze fn) lbl = []
+Proof
+  simp[codegen_ready_fn_def, block_entries_ready_def, fn_entry_label_def] >>
+  Cases_on `entry_block fn` >> simp[] >> rpt strip_tac >> gvs[NULL_EQ]
+QED
+
+Theorem alias_ready_join_predecessor_jmp:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  MEM pred (cfg_preds_of (cfg_analyze fn) lbl) /\
+  lookup_block pred fn.fn_blocks = SOME pb ==>
+  ~NULL pb.bb_instructions /\ (LAST pb.bb_instructions).inst_opcode = JMP
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  gvs[codegen_ready_fn_def, block_entries_ready_def, EVERY_MEM] >>
+  qpat_x_assum `!b. MEM b fn.fn_blocks ==> _ \/ _`
+    (qspec_then `bb` mp_tac) >> simp[] >>
+  disch_then assume_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem alias_ready_jmp_edge_operands:
+  codegen_ready_fn fn /\ lookup_block pred fn.fn_blocks = SOME pb /\
+  ~NULL pb.bb_instructions /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) ==>
+  (LAST pb.bb_instructions).inst_operands = [Label lbl]
+Proof
+  strip_tac >>
+  `MEM pb fn.fn_blocks /\ pb.bb_label = pred` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `wf_function fn /\ fn_inst_wf fn` by gvs[codegen_ready_fn_def] >>
+  `inst_wf (LAST pb.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, LAST_MEM, NULL_EQ] >>
+  gvs[inst_wf_def] >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+  strip_tac >> gvs[] >> Cases_on `pb.bb_instructions` >>
+  gvs[bb_succs_def, get_successors_def, get_label_def, is_terminator_def,
+      NULL_EQ]
+QED
+
+Theorem alias_lineage_join_historical_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) ==>
+  ?pred. lineage_entry liveness dfg cfg fn
+           (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
+         MEM pred (cfg_preds_of cfg lbl) /\
+         (!v. MEM v (input_vars_from pred bb.bb_instructions
+                        (live_vars_at liveness lbl 0)) ==>
+              MEM (Var v) ps.ps_stack)
+Proof
+  strip_tac >>
+  qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+  simp[Once lineage_state_cases] >> strip_tac
+  >- (gvs[] >> drule_all alias_ready_entry_no_preds >>
+      disch_then assume_tac >> gvs[]) >>
+  gvs[] >> qexists_tac `lbl'` >> conj_tac
+  >- (simp[lineage_entry_def] >> metis_tac[]) >>
+  conj_asm1_tac
+  >- metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  drule_all alias_ready_join_predecessor_jmp >> strip_tac >>
+  drule_all alias_ready_jmp_edge_operands >> strip_tac >>
+  `bb'.bb_label = lbl'` by metis_tac[lookup_block_label] >>
+  `?prefix. non_param_insts bb' = prefix ++ [LAST bb'.bb_instructions]` by
+    (qexists_tac `FILTER (\i. ~is_param_opcode i.inst_opcode)
+                     (FRONT bb'.bb_instructions)` >>
+     `bb'.bb_instructions = FRONT bb'.bb_instructions ++
+                              [LAST bb'.bb_instructions]` by
+       metis_tac[APPEND_FRONT_LAST, NULL_EQ] >>
+     simp[non_param_insts_def] >>
+     pop_assum (fn th => CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [th]))) >>
+     simp[FILTER_APPEND, is_param_opcode_def]) >>
+  rpt strip_tac >> irule alias_block_plan_final_jmp_inputs >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem alias_do_swap_stack:
   dist < LENGTH ps.ps_stack ==>
   (SND (do_swap dist ps)).ps_stack = stack_swap dist ps.ps_stack
