@@ -1385,3 +1385,87 @@ Proof
 QED
 
 
+
+Theorem pow_search_midpoint_mem_src[local]:
+  !lo hi fuel. lo + 1 < hi /\ hi - lo <= 2 ** SUC fuel ==>
+    lo <= (lo + hi) DIV 2 /\ (lo + hi) DIV 2 <= hi /\
+    (lo + hi) DIV 2 - lo <= 2 ** fuel /\
+    hi - (lo + hi) DIV 2 <= 2 ** fuel
+Proof
+  rpt gen_tac >> rewrite_tac[arithmeticTheory.EXP] >>
+  SPEC_TAC (``2 ** fuel``, ``n:num``) >> gen_tac >> strip_tac >>
+  qspec_then `2` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `lo + hi` mp_tac) >>
+  simp[Once arithmeticTheory.ADD_COMM] >>
+  strip_tac >>
+  `((hi + lo) MOD 2) < 2` by simp[] >> decide_tac
+QED
+
+Theorem largest_pow_base_search_bounds_mem_src[local]:
+  !fuel e L lo hi.
+    lo ** e < L /\ L <= hi ** e /\ lo <= hi /\ hi-lo <= 2 ** fuel ==>
+    let u = largest_pow_base_search fuel e L lo hi in
+      u ** e < L /\ L <= (u+1) ** e
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (simp[largest_pow_base_search_def] >>
+      `hi <= lo + 1` by gvs[] >>
+      `hi ** e <= (lo + 1) ** e` by
+        simp[arithmeticTheory.EXP_EXP_LE_MONO] >> simp[]) >>
+  simp[Once largest_pow_base_search_def] >>
+  Cases_on `hi <= lo + 1`
+  >- (`hi ** e <= (lo + 1) ** e` by
+        simp[arithmeticTheory.EXP_EXP_LE_MONO] >> simp[]) >>
+  `lo + 1 < hi` by decide_tac >>
+  drule_all pow_search_midpoint_mem_src >> strip_tac >>
+  `lo + hi = hi + lo` by decide_tac >>
+  fs[] >>
+  Cases_on `((hi + lo) DIV 2) ** e < L` >> simp[] >>
+  first_x_assum irule >> simp[]
+QED
+
+
+Theorem largest_pow_base_bounds_mem_src[local]:
+  !e bits signed. 0 < e ==>
+    let u = largest_pow_base e bits signed in
+      u ** e < 2 ** (bits - if signed then 1 else 0) /\
+      2 ** (bits - if signed then 1 else 0) <= (u+1) ** e
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[largest_pow_base_def] >>
+  irule (SIMP_RULE std_ss [LET_THM] largest_pow_base_search_bounds_mem_src) >>
+  simp[arithmeticTheory.ZERO_EXP] >>
+  mp_tac (Q.SPECL [`e`, `1`, `2 ** (bits - if signed then 1 else 0)`]
+    arithmeticTheory.EXP_BASE_LEQ_MONO_IMP) >> simp[]
+QED
+
+Theorem largest_pow_base_threshold_mem_src[local]:
+  !e bits signed k. 0 < e ==>
+    (k <= largest_pow_base e bits signed <=>
+     k ** e < 2 ** (bits - if signed then 1 else 0))
+Proof
+  rpt strip_tac >> drule largest_pow_base_bounds_mem_src >>
+  disch_then (qspecl_then [`bits`, `signed`] mp_tac) >> simp[] >> strip_tac >>
+  eq_tac >> strip_tac
+  >- (`k ** e <= largest_pow_base e bits signed ** e` by
+        simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac) >>
+  spose_not_then assume_tac >>
+  `largest_pow_base e bits signed + 1 <= k` by decide_tac >>
+  `(largest_pow_base e bits signed + 1) ** e <= k ** e` by
+    simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac
+QED
+
+Theorem largest_pow_base_lt_limit_mem_src[local]:
+  !e bits signed. 0 < e ==>
+    largest_pow_base e bits signed < 2 ** (bits - if signed then 1 else 0)
+Proof
+  rpt strip_tac >>
+  drule largest_pow_base_threshold_mem_src >>
+  disch_then (qspecl_then [`bits`, `signed`,
+    `2 ** (bits - if signed then 1 else 0)`] mp_tac) >>
+  `2 ** (bits - if signed then 1 else 0) <=
+   (2 ** (bits - if signed then 1 else 0)) ** e` by
+    (mp_tac (Q.SPECL [`e`, `1`, `2 ** (bits - if signed then 1 else 0)`]
+       arithmeticTheory.EXP_BASE_LEQ_MONO_IMP) >> simp[]) >> decide_tac
+QED
+
