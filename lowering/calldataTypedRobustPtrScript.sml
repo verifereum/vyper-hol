@@ -138,6 +138,79 @@ Proof
   simp[] >> decide_tac
 QED
 
+Theorem calldata_typed_clamped_word_robust:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+    (DecPrimWord clamp) sa = ((),sb) /\
+  abi_decoder_clamp_valid clamp (abi_decode_load CALLDATALOAD sw s) /\
+  abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
+    sa last src (Var p) CALLDATALOAD (Lit 0w) sbpos d b cap s /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  fresh_vars_wrt sa s /\ ptr_covers G tn p s 32 /\
+  op_taint tn src = {} /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) s' = SOME dw /\ eval_operand src s' = SOME sw /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p s' 32 /\
+    (!i. w2n dw <= i /\ i < w2n dw + 32 ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    mem_word_at (w2n dw) s'.vs_memory = abi_decode_load CALLDATALOAD sw s /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    abi_decoder_post tv v sb d 32 b cap s s' /\
+    (!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==>
+      val_in_memory tv v d mem)
+Proof
+  strip_tac >>
+  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    abi_decoder_post tv v sb d 32 b cap s t` by
+    (`sw = n2w sbpos` by
+       (qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp_tac (srw_ss()) [abi_decoder_recursive_pre_def, abi_decoder_pre_def,
+          abi_decoder_ranges_def] >> metis_tac[optionTheory.SOME_11]) >>
+     gvs[] >> irule abi_decoder_typed_clamped_word_sequence >> simp[] >>
+     metis_tac[]) >>
+  drule_all calldata_clamped_word_prefix_framed >>
+  disch_then (qspecl_then [`PG`, `D`]
+    (qx_choose_then `s'` (qx_choose_then `G'`
+      (qx_choose_then `tn'` strip_assume_tac)))) >>
+  `abi_decoder_post tv v sb d 32 b cap s s'` by
+    (gvs[] >> metis_tac[abi_decoder_post_inst_idx]) >>
+  qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[] >>
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE
+      [abi_decoder_recursive_pre_def, abi_decoder_pre_def, abi_decoder_metadata_def]) >>
+  `type_to_abi_dec_info sf ce ty = DecPrimWord clamp` by metis_tac[] >>
+  drule_all (cj 2 abi_decoder_primitive_cases) >> strip_tac >>
+  `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
+  `val_footprint tv v <= 32` by metis_tac[val_footprint_le] >>
+  `d = w2n dw` by
+    (qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [abi_decoder_ranges_def] >> strip_tac >>
+     `d < dimword (:256)` by decide_tac >>
+     `dw = n2w d` by
+       (qpat_x_assum `eval_operand (Var p) s = SOME dw` mp_tac >>
+        qpat_assum `eval_operand (Var p) s = SOME (n2w d)`
+          (fn th => rewrite_tac[th]) >> simp[]) >>
+     simp[]) >>
+  rpt strip_tac >> irule clean_footprint_val_in_memory_robust >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`s'.vs_memory`, `tn'.t_mem`] >>
+  fs[abi_decoder_post_def] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
 Theorem calldata_typed_unclamped_word_robust:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
     (DecPrimWord NoClamp) sa = ((),sb) /\
@@ -171,40 +244,7 @@ Theorem calldata_typed_unclamped_word_robust:
     (!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==>
       val_in_memory tv v d mem)
 Proof
-  strip_tac >>
-  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    abi_decoder_post tv v sb d 32 b cap s t` by
-    (`abi_decoder_clamp_valid NoClamp
-        (abi_decode_load CALLDATALOAD (n2w sbpos) s)` by
-       simp[abi_decoder_clamp_valid_def] >>
-     drule abi_decoder_typed_clamped_word_sequence >>
-     disch_then drule >> simp[abi_decoder_clamp_valid_def]) >>
-  drule_all calldata_unclamped_word_prefix_framed >>
-  disch_then (qspecl_then [`PG`, `D`]
-    (qx_choose_then `s'` (qx_choose_then `G'`
-      (qx_choose_then `tn'` strip_assume_tac)))) >>
-  `abi_decoder_post tv v sb d 32 b cap s s'` by
-    (gvs[] >> metis_tac[abi_decoder_post_inst_idx]) >>
-  qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[] >>
-  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o PURE_REWRITE_RULE
-      [abi_decoder_recursive_pre_def, abi_decoder_pre_def, abi_decoder_metadata_def]) >>
-  `type_to_abi_dec_info sf ce ty = DecPrimWord NoClamp` by metis_tac[] >>
-  drule_all (cj 2 abi_decoder_primitive_cases) >> strip_tac >>
-  `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
-  `val_footprint tv v <= 32` by metis_tac[val_footprint_le] >>
-  `d = w2n dw` by
-    (qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac (srw_ss()) [abi_decoder_ranges_def] >> strip_tac >>
-     `d < dimword (:256)` by decide_tac >>
-     `dw = n2w d` by
-       (qpat_x_assum `eval_operand (Var p) s = SOME dw` mp_tac >>
-        qpat_assum `eval_operand (Var p) s = SOME (n2w d)`
-          (fn th => rewrite_tac[th]) >> simp[]) >>
-     simp[]) >>
-  rpt strip_tac >> irule clean_footprint_val_in_memory_robust >>
-  conj_tac >- simp[] >>
-  qexistsl_tac [`s'.vs_memory`, `tn'.t_mem`] >>
-  fs[abi_decoder_post_def] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
+  strip_tac >> irule calldata_typed_clamped_word_robust >> simp[] >>
+  goal_assum (drule_at Any) >>
+  simp[abi_decoder_clamp_valid_def]
 QED
