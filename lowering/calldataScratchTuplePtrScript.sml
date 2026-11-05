@@ -1,6 +1,6 @@
 (* Heterogeneous calldata member traversal with original-state scratch ghosts. *)
 Theory calldataScratchTuplePtr
-Ancestors calldataScratchBytesPtr decoderNavigationPtr abiScratchDecoderTuple
+Ancestors calldataScratchBytesPtr decoderMemberPrefixPtr abiScratchDecoderTuple
   abiScratchDecoderMemberCons abiScratchDecoderMembersContract
   abiDecoderMemberInfos abiScratchLeafEffect abiDecoderLoop abiDecoderFrame
   abiScratchEncoderContract abiEncoder abiDecoderContract exprLowering compileEnv valueEncoding
