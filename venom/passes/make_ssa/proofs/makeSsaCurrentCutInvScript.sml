@@ -16,7 +16,7 @@ Theory makeSsaCurrentCutInv
 Ancestors
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
-  makeSsaCurrentTreePaths makeSsaCurrentTokens
+  makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -200,4 +200,26 @@ Theorem current_cut_inv_block_entry_prefix:
             IS_SOME (lookup_var v post)
 Proof
   cheat
+QED
+
+Theorem current_collapsed_carrier_owned_name:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_collapsed_carrier fn A renamed h v src ==>
+  ?t. MEM (t,v,src) H
+Proof
+  simp[current_collapsed_carrier_def] >> rpt strip_tac >>
+  irule current_carrier_copy_owned_name >> metis_tac[]
+QED
+
+Theorem current_cut_pair_owned_name:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_cut_pair fn A renamed H events l i n v ==>
+  ?t. MEM (t,v,n) H
+Proof
+  simp[current_cut_pair_def] >> rpt strip_tac
+  >- (gvs[arithmeticTheory.ADD_COMM] >>
+      drule_all (SRULE [arithmeticTheory.ADD_COMM] current_carrier_cut_token_owned_name) >> metis_tac[]) >>
+  irule current_collapsed_carrier_owned_name >> metis_tac[]
 QED
