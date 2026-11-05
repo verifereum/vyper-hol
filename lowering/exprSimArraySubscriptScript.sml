@@ -7,7 +7,7 @@ Ancestors
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
   exprSimForeignImmutableFrame emitHelperProps ASCIInumbers freshWrites
-  exprArrayOperandProvenance exprSimWordArgs
+  exprArrayOperandProvenance exprSimWordArgs vyperStoragePlaceProvenance
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -4985,3 +4985,181 @@ Proof
           is_slot_addressed_def]) >>
   drule expr_no_effect_int_calls >> simp[] >> strip_tac >> gvs[]
 QED
+
+Theorem compile_attribute_preserves_location[local]:
+  vv_location (FST (cfn cenv ty obj sc)) = SOME loc ==>
+  vv_location (FST (compile_attribute cfn cenv rt ty obj fld sc)) = SOME loc
+Proof
+  Cases_on `cfn cenv ty obj sc` >>
+  simp[exprLoweringTheory.compile_attribute_def, comp_bind_def, comp_return_def] >>
+  strip_tac >> pairarg_tac >>
+  simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def]
+QED
+
+Theorem compile_subscript_preserves_location[local]:
+  vv_location (FST (cfn cenv ty obj sc)) = SOME loc ==>
+  vv_location (FST (compile_subscript cfn cenv rt ty obj idx sc)) = SOME loc
+Proof
+  Cases_on `cfn cenv ty obj sc` >> strip_tac >>
+  Cases_on `place_type cenv obj`
+  >~ [`ValPT bt`]
+  >- (Cases_on `bt` >>
+      simp[exprLoweringTheory.compile_subscript_def,
+           comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def]) >>
+  simp[exprLoweringTheory.compile_subscript_def,
+       comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def]
+QED
+
+
+Theorem extend_storage_place_transient_flag[local]:
+  !cx tr slot tv sb (st:evaluation_state) tr' slot' leaf (st':evaluation_state).
+    extend_storage_place cx tr slot tv sb st =
+      (INL (StoragePlace tr' slot' leaf),st') ==> tr = tr'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qsuff_tac `?v d. StoragePlace tr' slot' leaf =
+    StoragePlace tr (slot + n2w d) v /\ storage_subregion tv [sb] d v`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  irule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+  qexistsl [`cx`, `st`, `st'`] >> first_assum ACCEPT_TAC
+QED
+
+
+Theorem select_result_storage_origin[local]:
+  select_result cx ty pv sb s = (INL out,t) /\
+  ((?slot vt. out = PlaceR (StoragePlace tr slot vt)) \/
+   (?slot kt vt. out = HashMapRef tr slot kt vt)) ==>
+  (?slot vt. pv = PlaceR (StoragePlace tr slot vt)) \/
+  (?slot kt vt. pv = HashMapRef tr slot kt vt)
+Proof
+  strip_tac >> Cases_on `pv` >>
+  gvs[select_result_def, lift_option_type_def, bind_def, lift_sum_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  rpt (all_tac >~ [`extend_place _ (PlaceR p) _ _ = _`] >-
+    (Cases_on `p` >>
+     gvs[extend_place_def, extend_memory_place_def,
+         bind_def, ignore_bind_def, return_def, raise_def,
+         lift_sum_def, AllCaseEqs()] >>
+     metis_tac [extend_storage_place_transient_flag])) >>
+  Cases_on `sb` >>
+  gvs[extend_place_def, bind_def, return_def, raise_def,
+      lift_option_type_def, AllCaseEqs()] >>
+  gvs[value_type_CASE_rator, bind_def, return_def, raise_def,
+      AllCaseEqs()]
+QED
+
+Theorem related_global_storage_result_location[local]:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  eval_expr cx (TopLevelName ann (md,name)) s = (INL res,t) /\
+  ((?slot vt. res = PlaceR (StoragePlace tr slot vt)) \/
+   (?slot kt vt. res = HashMapRef tr slot kt vt)) ==>
+  ?off. FLOOKUP cenv.ce_module_vars (md,name) =
+    SOME (if tr then TransientLoc off else StorageLoc off)
+Proof
+  strip_tac >>
+  gvs[Once evaluate_def, lookup_global_def,
+      bind_def, return_def, lift_option_type_def, raise_def,
+      get_immutables_def, get_address_immutables_def, lift_option_def,
+      vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+      var_decl_info_CASE_rator, AllCaseEqs()] >>
+  Cases_on `tr` >>
+  gvs[storage_vars_rel_def, transient_vars_rel_def] >>
+  qmatch_asmsub_rename_tac `lookup_var_slot_from_layout _ _ _ _ = SOME sn` >>
+  qexists `n2w sn` >> first_x_assum irule >>
+  simp[var_decl_transient_def] >> metis_tac[]
+QED
+
+Theorem eval_expr_storage_result_form[local]:
+  !e cx s out t tr.
+    ~expr_has_pop e /\ eval_expr cx e s = (INL out,t) /\
+    ((?slot vt. out = PlaceR (StoragePlace tr slot vt)) \/
+     (?slot kt vt. out = HashMapRef tr slot kt vt)) ==>
+    (?ann nsid. e = TopLevelName ann nsid) \/
+    (?ann obj idx. e = Subscript ann obj idx) \/
+    (?ann obj fld. e = Attribute ann obj fld)
+Proof
+  Cases >> rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt (all_tac >~ [`eval_expr _ (Name _ _) _ = _`] >- suspend "Name") >>
+  rpt (all_tac >~ [`eval_expr _ (FlagMember _ _ _) _ = _`] >- suspend "Flag") >>
+  rpt (all_tac >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`] >- suspend "If") >>
+  rpt (all_tac >~ [`eval_expr _ (Literal _ _) _ = _`] >- suspend "Literal") >>
+  rpt (all_tac >~ [`eval_expr _ (StructLit _ _ _) _ = _`] >- suspend "Struct") >>
+  rpt (all_tac >~ [`eval_expr _ (Builtin _ _ _) _ = _`] >- suspend "Builtin") >>
+  rpt (all_tac >~ [`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "Type") >>
+  rpt (all_tac >~ [`eval_expr _ (Pop _ _) _ = _`] >- suspend "Pop") >>
+  suspend "Call"
+QED
+
+Resume eval_expr_storage_result_form[Name]:
+  markerLib.RESUME_TAC >>
+  gvs[Once evaluate_def, get_scopes_def, type_check_def, bind_def,
+      ignore_bind_def, return_def, raise_def, assert_def, AllCaseEqs()]
+QED
+Resume eval_expr_storage_result_form[Flag]:
+  markerLib.RESUME_TAC >>
+  rename1 `FlagMember ann nsid fld` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def, lookup_flag_mem_def, bind_def, return_def,
+      raise_def, lift_sum_def, lift_option_type_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()]
+QED
+Resume eval_expr_storage_result_form[If]:
+  markerLib.RESUME_TAC >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  drule conditional_result_value_or_memory >> simp[]
+QED
+Resume eval_expr_storage_result_form[Literal]:
+  markerLib.RESUME_TAC >>
+  drule eval_expr_literal_value >> simp[]
+QED
+Resume eval_expr_storage_result_form[Struct]:
+  markerLib.RESUME_TAC >>
+  rename1 `StructLit ann nsid fields` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_storage_result_form[Builtin]:
+  markerLib.RESUME_TAC >>
+  drule eval_expr_builtin_value >> simp[]
+QED
+Resume eval_expr_storage_result_form[Type]:
+  markerLib.RESUME_TAC >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_storage_result_form[Pop]:
+  markerLib.RESUME_TAC >>
+  gvs[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def]
+QED
+
+Resume eval_expr_storage_result_form[Call]:
+  markerLib.RESUME_TAC >> (
+  rename1 `eval_expr cx (Call ann target args kws) st = _` >>
+  Cases_on `target` >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()]
+  >~ [`eval_expr _ (Call _ (IntCall _) _ _) _ = _`]
+  >- (rename1 `Call ann (IntCall nsid) args kws` >>
+      PairCases_on `nsid` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()])
+  >~ [`eval_ext_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_ext_call_value >> simp[])
+  >~ [`eval_send _ _ _ _ = _`]
+  >- (rename1 `eval_send cx has_gas vs send_st = _` >>
+      Cases_on `vs` >- gvs[eval_send_def, raise_def] >>
+      rename1 `eval_send cx has_gas (to_v::rest) send_st = _` >>
+      Cases_on `rest` >>
+      gvs[eval_send_def, bind_def, ignore_bind_def, return_def, raise_def,
+          vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()])
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> simp[])
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> simp[]) >>
+  qmatch_asmsub_rename_tac `eval_create cx kind _ _ _ _ _` >>
+  Cases_on `kind` >> gvs[bind_def, AllCaseEqs()] >>
+  drule eval_create_value >> simp[])
+QED
+Finalise eval_expr_storage_result_form
