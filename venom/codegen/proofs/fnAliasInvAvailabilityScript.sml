@@ -1,7 +1,8 @@
 Theory fnAliasInvAvailability
 Ancestors
   fnAliasInvLiveness venomWf rich_list list livenessDefs finite_map
-  pair indexedLists passSharedDefs
+  pair indexedLists passSharedDefs o1ContractSimplifyCfg cfgNormBase
+  venomExecProps
 Libs
   venomInstTheory
 
@@ -199,4 +200,77 @@ Proof
   `MEM (Var v) phi.inst_operands` by gvs[MEM_operand_vars_eq_Var] >>
   `phi_well_formed phi.inst_operands` by metis_tac[] >>
   drule_all phi_well_formed_var_pair >> metis_tac[]
+QED
+
+(* Representation adapter only: dominance-to-all-paths is imported from
+   o1ContractSimplifyCfg, rather than reproved in this leaf. *)
+Theorem alias_all_paths_indexed:
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!b. MEM b fn.fn_blocks ==>
+    lookup_block b.bb_label fn.fn_blocks = SOME b) /\
+  def_on_all_paths fn bb point v /\
+  (case point of NONE => LENGTH bb.bb_instructions <= i
+   | SOME use_inst => !j. j < LENGTH bb.bb_instructions /\
+       EL j bb.bb_instructions = use_inst ==> j <= i) ==>
+  alias_path_available fn bb.bb_label i v
+Proof
+  simp[def_on_all_paths_def, alias_path_available_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`k`,`def_bb`,`def_inst`] >>
+      simp[inst_defs_def] >> metis_tac[]) >>
+  disj2_tac >> qexists_tac `i'` >> simp[inst_defs_def] >>
+  Cases_on `point` >> gvs[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Theorem alias_ordinary_use_available:
+  wf_function fn /\ def_dominates_uses fn /\
+  MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode <> PHI /\
+  MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+  alias_path_available fn bb.bb_label i v
+Proof
+  strip_tac >>
+  `!b. MEM b fn.fn_blocks ==>
+     lookup_block b.bb_label fn.fn_blocks = SOME b` by
+    (rpt strip_tac >> irule MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  `def_available_at fn bb (SOME (EL i bb.bb_instructions)) v` by
+    (qpat_x_assum `def_dominates_uses fn` mp_tac >>
+     simp[def_dominates_uses_def] >>
+     disch_then (qspecl_then [`bb`,`EL i bb.bb_instructions`] mp_tac) >>
+     simp[EL_MEM] >> gvs[inst_uses_def, MEM_operand_vars_eq_Var]) >>
+  irule alias_all_paths_indexed >>
+  simp[] >> qexists_tac `SOME (EL i bb.bb_instructions)` >> simp[] >>
+  reverse conj_tac
+  >- (irule def_available_on_all_paths >> simp[]) >>
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\inst. inst.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_function_block_inst_ids_distinct] >>
+  `j = i` by
+    (drule ALL_DISTINCT_EL_IMP >>
+     disch_then (qspecl_then [`j`,`i`] mp_tac) >> simp[EL_MAP]) >>
+  simp[]
+QED
+
+Theorem alias_phi_edge_available:
+  wf_function fn /\ def_dominates_uses fn /\
+  MEM bb fn.fn_blocks /\ MEM phi bb.bb_instructions /\
+  phi.inst_opcode = PHI /\
+  MEM (pred,v) (phi_pairs phi.inst_operands) ==>
+  ?pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    alias_path_available fn pred (LENGTH pred_bb.bb_instructions) v
+Proof
+  strip_tac >>
+  `phi_edge_uses_wf fn bb phi` by
+    metis_tac[def_dominates_uses_def] >>
+  gvs[phi_edge_uses_wf_def] >>
+  first_x_assum drule >> strip_tac >>
+  `!b. MEM b fn.fn_blocks ==>
+     lookup_block b.bb_label fn.fn_blocks = SOME b` by
+    (rpt strip_tac >> irule MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  qpat_x_assum `pred_bb.bb_label = pred` (SUBST_ALL_TAC o SYM) >>
+  qexists_tac `pred_bb` >> simp[] >>
+  irule alias_all_paths_indexed >> simp[] >> qexists_tac `NONE` >> simp[] >>
+  irule def_available_on_all_paths >> simp[]
 QED
