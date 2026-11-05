@@ -4556,3 +4556,40 @@ Proof
   >- (rpt strip_tac >> metis_tac[eval_operand_drop_fresh]) >>
   rpt strip_tac >> simp[] >> drule_all array_check_ptr_oob >> simp[]
 QED
+
+(* Selection witnesses come from the actual operand evaluations, not from
+   an arbitrary historical snapshot at the extended path. *)
+Theorem eval_expr_nopop_memory_selection_after:
+  EVERY scope_well_typed s.scopes /\ ~expr_has_pop obj /\
+  eval_expr cx obj s = (INL (PlaceR (MemoryPlace id path)),mid) /\
+  ~expr_has_pop idx /\ eval_expr cx idx mid = (res,t) /\
+  eval_result_typed (env,cx,mid) (PlaceR (MemoryPlace id path)) (Type aty) /\
+  evaluate_type env.type_defs aty = SOME tv ==>
+  ?arr. value_has_type tv arr /\
+    read_result cx (PlaceR (MemoryPlace id path)) t = (INL arr,t) /\
+    (!sb v. evaluate_subscripts tv arr [sb] = INL v ==>
+      select_result cx aty (PlaceR (MemoryPlace id path)) sb t =
+        (INL (PlaceR (MemoryPlace id (path ++ [sb]))),t) /\
+      read_result cx (PlaceR (MemoryPlace id (path ++ [sb]))) t = (INL v,t)) /\
+    (!sb err. evaluate_subscripts tv arr [sb] = INR err ==>
+      select_result cx aty (PlaceR (MemoryPlace id path)) sb t = (INR (Error err),t))
+Proof
+  strip_tac >>
+  drule_all eval_expr_nopop_current_memory_path_after >> strip_tac >>
+  drule_all eval_expr_nopop_scopes >> strip_tac >>
+  gvs[eval_result_typed_def, runtime_place_typed_def, place_type_value_def,
+      get_scopes_def, bind_def, lift_option_type_def, return_def] >>
+  `lookup_scopes id t.scopes = SOME entry` by simp[] >>
+  qpat_x_assum `lookup_scopes id mid.scopes = _` kall_tac >>
+  qpat_x_assum `t.scopes = mid.scopes` kall_tac >>
+  qexists_tac `v` >> conj_tac >- simp[] >> conj_tac
+  >- simp[read_result_def, read_place_def, get_scopes_def, bind_def,
+          lift_option_type_def, lift_sum_def, return_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all select_result_current_memory >>
+      disch_then (qspecl_then [`aty`, `cx`] strip_assume_tac) >>
+      simp[read_result_def]) >>
+  rpt strip_tac >> irule select_result_current_memory_error >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
