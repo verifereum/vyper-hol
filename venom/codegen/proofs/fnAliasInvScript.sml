@@ -1510,6 +1510,26 @@ Proof
   metis_tac[alias_reorder_fold_bounds]
 QED
 
+Theorem alias_reorder_one_upper_support:
+  LENGTH targets <= LENGTH ps.ps_stack /\
+  reorder_one dfg targets idx op ps = (ops,qs) /\ plan_holds qs (Var x) ==>
+  plan_holds ps (Var x)
+Proof
+  strip_tac >> drule alias_var_mass_reorder_one >>
+  disch_then (qspecl_then [`x`, `op`, `idx`, `dfg`] mp_tac) >>
+  gvs[GSYM alias_var_mass_positive]
+QED
+
+Theorem alias_reorder_plan_upper_support:
+  LENGTH targets <= LENGTH ps.ps_stack /\
+  reorder_plan dfg targets ps = (ops,qs) /\ plan_holds qs (Var x) ==>
+  plan_holds ps (Var x)
+Proof
+  strip_tac >> drule alias_var_mass_reorder_plan >>
+  disch_then (qspecl_then [`x`, `dfg`] mp_tac) >>
+  gvs[GSYM alias_var_mass_positive]
+QED
+
 Theorem alias_var_budget_reorder_plan:
   LENGTH targets <= LENGTH ps.ps_stack /\ alias_var_budget pending ps ==>
   alias_var_budget pending (SND (reorder_plan dfg targets ps))
