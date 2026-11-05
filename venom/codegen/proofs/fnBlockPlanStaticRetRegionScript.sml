@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticRetRegion
 Ancestors
   stackPlanGen cfgAnalysisProps venomExecProps simplifyCfgStruct
-  venomWf venomInst cfgTransform
+  venomWf venomInst cfgTransform cfgDefs relation
 
 Theorem ready_block_ret_last:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -77,4 +77,27 @@ Proof
   `wf_function fn` by fs[codegen_ready_fn_def] >>
   drule_all cfg_analyze_preserves_bb_succs >>
   Cases_on `bb.bb_instructions` >> simp[bb_succs_def] >> gvs[]
+QED
+
+(* Reuse cfg_path, the existing finite successor reachability relation. *)
+Theorem cfg_path_first_step:
+  cfg_path cfg l t ==>
+  l = t \/ ?s. MEM s (cfg_succs_of cfg l) /\ cfg_path cfg s t
+Proof
+  simp[cfg_path_def, Once RTC_CASES1]
+QED
+
+Theorem cfg_path_predecessor_closed:
+  MEM s (cfg_succs_of cfg l) /\ cfg_path cfg s t ==>
+  cfg_path cfg l t
+Proof
+  strip_tac >> rewrite_tac[cfg_path_def] >>
+  once_rewrite_tac[RTC_CASES1] >>
+  disj2_tac >> qexists_tac `s` >> fs[cfg_path_def]
+QED
+
+Theorem cfg_path_successor_free:
+  cfg_succs_of cfg l = [] /\ cfg_path cfg l t ==> l = t
+Proof
+  strip_tac >> drule cfg_path_first_step >> simp[]
 QED
