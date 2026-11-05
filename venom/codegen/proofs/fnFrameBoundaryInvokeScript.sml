@@ -1098,3 +1098,46 @@ Proof
   Cases_on `ret.iret_adopt_fmp` >>
   simp[adopt_return_fmp_def, merge_callee_state_def]
 QED
+
+Theorem invoke_called_plan_fields:
+  !outs consumed ret_lbl called.
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      consumed outs) = (ret_lbl, called) ==>
+  called.ps_stack = consumed.ps_stack ++ MAP Var outs /\
+  called.ps_spilled = consumed.ps_spilled /\
+  called.ps_alloc = consumed.ps_alloc
+Proof
+  `!outs stk. FOLDL (\stk out. stack_push (Var out) stk) stk outs =
+    stk ++ MAP Var outs` by
+    (Induct >> simp[stack_push_def, APPEND_ASSOC]) >>
+  simp[fresh_label_def, emit_output_fold_stack] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem invoke_consumed_context:
+  !ctx cp lo fn ra rest mem0 arranged vs mid operands values saved.
+  fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+  arranged.ps_stack = stack_pop (LENGTH operands) arranged.ps_stack ++ operands /\
+  mid.as_stack = values ++ saved ++ rest /\
+  LENGTH values = LENGTH operands ==>
+  context_venom_asm_rel cp lo
+    (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack)
+    (frame_view fn ra vs) (mid with as_stack := saved)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 arranged vs mid` >>
+  `?top. mid.as_stack = top ++ rest /\
+    context_venom_asm_rel cplan lo arranged (frame_view fn ra vs)
+      (mid with as_stack := top)` by fs[fn_frame_inv_def] >>
+  `top = values ++ saved` by metis_tac[APPEND_ASSOC, APPEND_11] >>
+  `plan_stack_rel lo (frame_view fn ra vs) arranged.ps_stack top` by
+    gvs[context_venom_asm_rel_def] >>
+  `LENGTH operands <= LENGTH arranged.ps_stack` by
+    (qpat_x_assum `arranged.ps_stack = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     pure_rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
+  `plan_stack_rel lo (frame_view fn ra vs)
+    (stack_pop (LENGTH operands) arranged.ps_stack) (DROP (LENGTH operands) top)` by
+    (pure_rewrite_tac[stack_pop_def] >> irule plan_stack_rel_pop >> simp[]) >>
+  `DROP (LENGTH operands) values = []` by metis_tac[DROP_LENGTH_NIL] >>
+  gvs[context_venom_asm_rel_def, DROP_APPEND]
+QED
