@@ -964,6 +964,81 @@ Proof
   CONV_TAC prefix_plan_eval_conv
 QED
 
+val prefix_prog_expr_tm = ``
+  execute_plan (^prefix_context_plan_tm).cp_initial_fmp
+    (context_plan_ops ^prefix_context_plan_tm) ++
+  data_segment_asm (^prefix_final_unit_tm).cu_data_segment ++
+  [AsmDataHeader "code_end"]``;
+val prefix_prog_tm = ``
+ [AsmLabel "__deploy"; AsmPush [32w]; AsmPush []; AsmPush []; AsmOp "ADD";
+  AsmPushLabel "code_end"; AsmOp "ADD"; AsmPush []; AsmOp "SWAP1";
+  AsmOp "DUP2"; AsmOp "SWAP3"; AsmOp "SWAP2"; AsmOp "CODECOPY"; AsmOp "MLOAD";
+  AsmPush []; AsmOp "MSTORE"; AsmPush []; AsmPush []; AsmOp "DUP1";
+  AsmPushLabel "runtime_begin"; AsmOp "SWAP1"; AsmOp "CODECOPY"; AsmPush [];
+  AsmOp "RETURN"; AsmLabel "revert"; AsmPush []; AsmOp "DUP1"; AsmOp "REVERT";
+  AsmDataHeader "runtime_begin"; AsmDataItem []; AsmDataHeader "code_end"]``;
+
+Theorem deploy_prefix_negative_codegen:
+  codegen_assembly ^prefix_rp_tm ^prefix_final_unit_tm = SOME ^prefix_prog_tm
+Proof
+  rewrite_tac[codegenTheory.codegen_assembly_def] >>
+  pure_rewrite_tac[deploy_prefix_negative_context_plan] >>
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_assembly_safe:
+  assembly_target_safe (^prefix_rp_tm).rpol_target ^prefix_prog_tm
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_assembly_shape:
+  ^prefix_prog_tm = ^prefix_prog_expr_tm
+Proof
+  EVAL_TAC
+QED
+
+val prefix_deploy_bc_tm = rhs (concl (computeLib.EVAL_CONV ``assemble ^prefix_prog_tm``));
+
+Theorem deploy_prefix_negative_assembled:
+  assemble ^prefix_prog_tm = ^prefix_deploy_bc_tm
+Proof
+  EVAL_TAC
+QED
+
+val prefix_lower_unit_tm = deploy_prefix_negative_lowered_artifact |>
+  SIMP_RULE bool_ss [LET_THM] |> concl |> rhs |> rand;
+
+Theorem deploy_prefix_negative_resolve:
+  resolve_o1_policy (o1_policy all_capabilities) = SOME ^prefix_rp_tm
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_phases:
+  deploy_phases (o1_policy all_capabilities)
+    [FunctionDecl Deploy Payable F F "__init__"
+      [("x", BaseT (UintT 256))] [] NoneT []]
+    (^prefix_deploy_bc_tm, [])
+    (^prefix_rp_tm, ^prefix_lower_unit_tm,
+     <|po_unit := ^prefix_final_unit_tm; po_final_assembly := FAP_Optimize|>,
+     ^prefix_prog_tm, ^prefix_context_plan_tm)
+Proof
+  rewrite_tac[ctorDeployDefsTheory.deploy_phases_def] >>
+  pure_rewrite_tac[deploy_prefix_negative_resolve,
+    deploy_prefix_negative_lowered_artifact |>
+      SIMP_RULE bool_ss [LET_THM, optionTheory.THE_DEF, deploy_prefix_negative_resolve],
+    deploy_prefix_negative_pipeline_artifact |>
+      SIMP_RULE bool_ss [LET_THM, optionTheory.THE_DEF, deploy_prefix_negative_resolve,
+        deploy_prefix_negative_lowered_artifact |>
+          SIMP_RULE bool_ss [LET_THM, optionTheory.THE_DEF, deploy_prefix_negative_resolve]]] >>
+  simp_tac (srw_ss()) [deploy_prefix_negative_codegen,
+    deploy_prefix_negative_context_plan |> SIMP_RULE (srw_ss()) [],
+    deploy_prefix_negative_assembly_safe,
+    deploy_prefix_negative_assembly_shape |> SIMP_RULE (srw_ss()) []] >>
+  EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
