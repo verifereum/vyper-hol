@@ -4,7 +4,7 @@
  *)
 Theory ctorDeployMemory
 Ancestors
-  ctorDeployDefs o1PassContract unitTransformDefs ptrDiscipline
+  ctorDeployDefs o1PassContract gasSummary unitTransformDefs ptrDiscipline
 
 Theorem deploy_unit_memory_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
@@ -12,11 +12,13 @@ Theorem deploy_unit_memory_ok:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (entry_venom_state prog cplan es) /\
-    ~deploy_source_exempt tops (load_contract NONE [] am tx [(NONE, tops)] [])
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    (!marks. ~deploy_source_exempt tops
+               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+                  [(NONE, tops)] []))
     ==>
     raw_unit_memory_ok dunit.cu_context vs /\
-    ptr_discipline 0 dunit.cu_context vs /\
+    ptr_discipline (imm_len tops) dunit.cu_context vs /\
     taint_within deploy_dead dunit.cu_context vs
 Proof
   cheat

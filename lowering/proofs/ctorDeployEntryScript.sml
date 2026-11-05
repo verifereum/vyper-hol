@@ -20,8 +20,8 @@ Theorem deploy_entry_state_ok:
     LENGTH (FST (HD es.contexts)).msgParams.code <= 24576
     ==>
     initial_ctx_rel cplan prog dout.po_unit.cu_context
-      (entry_venom_state prog cplan es) (shadow_root es) /\
-    o1_run_state_ok (entry_venom_state prog cplan es)
+      (deploy_entry_state prog cplan tops es) (shadow_root es) /\
+    o1_run_state_ok (deploy_entry_state prog cplan tops es)
 Proof
   rpt gen_tac >> strip_tac >>
   `codegen_assembly rpolicy dout.po_unit = SOME prog /\
