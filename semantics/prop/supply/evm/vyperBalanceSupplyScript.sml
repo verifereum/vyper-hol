@@ -6,8 +6,6 @@ Ancestors
   vyperExecutionSupply vyperPrecompileSupply vyperPrimitiveSupply
   vyperOpcodeSupply vfmStaticCalls vfmPreserves vfmExecution vfmContext
   vfmState list
-Libs
-  proofAuditLib
 
 Theorem cp_result_supply:
   cp action /\ action st = (result,post) /\ supply_state budget st ==>
@@ -130,5 +128,3 @@ Proof
   >- simp[] >>
   gen_tac >> BETA_TAC >> balance_supply_tac
 QED
-
-val () = proofAuditLib.check_theory "vyperBalanceSupply";

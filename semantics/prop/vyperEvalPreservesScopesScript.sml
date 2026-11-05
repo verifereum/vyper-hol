@@ -1911,6 +1911,7 @@ Proof
     imp_res_tac lift_sum_state >>
     imp_res_tac read_result_state >>
     imp_res_tac result_array_length_state >>
+    imp_res_tac lift_option_type_state >> gvs[] >>
     imp_res_tac next_gas_reading_state >> gvs[] >>
     rpt(first_x_assum drule >> rw[]) >>
     gvs[get_accounts_def, return_def]) >>

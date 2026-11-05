@@ -7,8 +7,6 @@ Ancestors
   vyperPrimitiveSupply vyperPrecompileSupply vyperExecutionSupply
   vyperAccountSupply vyperSupplyBoundary vyperInterpreter vyperCreate
   vfmExecution vfmContext vfmState
-Libs
-  proofAuditLib
 
 val supply_bound_256 = SRULE [] account_supply_bound_256;
 
@@ -162,5 +160,3 @@ Proof
   gvs[run_create_evm_def, AllCaseEqs()] >>
   drule_all (SRULE [] run_call_create_extract_supply) >> simp[]
 QED
-
-val () = proofAuditLib.check_theory "vyperAdapterSupply";

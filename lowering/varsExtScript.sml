@@ -206,6 +206,17 @@ Proof
   simp exec_simps
 QED
 
+(* Applied to one selected opcode, not to the aggregate opcode case split. *)
+val vars_ext_opcode_tac =
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
+  >>~- ([`vars_ext_result (exec_pure1 _ _ _) _`], irule exec_pure1_vars_ext >> simp[])
+  >>~- ([`vars_ext_result (exec_pure2 _ _ _) _`], irule exec_pure2_vars_ext >> simp[])
+  >>~- ([`vars_ext_result (exec_pure3 _ _ _) _`], irule exec_pure3_vars_ext >> simp[])
+  >>~- ([`vars_ext_result (exec_read0 _ _ _) _`], irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
+  >>~- ([`vars_ext_result (exec_read1 _ _ _) _`], irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
+  >>~- ([`vars_ext_result (exec_write2 _ _ _) _`], irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
+  >> simp[exec_alloca_def] >> ext_tac;
+
 Theorem step_inst_base_vars_ext:
   !inst s V.
     s.vs_vars SUBMAP V /\ ~is_terminator inst.inst_opcode /\
@@ -216,37 +227,91 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
   fs[is_terminator_def, is_ext_call_op_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
-  >>~- ([`vars_ext_result (exec_pure1 _ _ _) _`],
-        irule exec_pure1_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_pure2 _ _ _) _`],
-        irule exec_pure2_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_pure3 _ _ _) _`],
-        irule exec_pure3_vars_ext >> simp[])
-  >>~- ([`vars_ext_result (exec_read0 _ _ _) _`],
-        irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
-  >>~- ([`vars_ext_result (exec_read1 _ _ _) _`],
-        irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
-  >>~- ([`vars_ext_result (exec_write2 _ _ _) _`],
-        irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps) >>
-  simp[exec_alloca_def]
-  (* one step per opcode: together they run past the step limit *)
-  >>~- ([`inst.inst_opcode = MCOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = CALLDATACOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = RETURNDATACOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = CODECOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = EXTCODECOPY`], ext_tac)
-  >>~- ([`inst.inst_opcode = DLOADBYTES`], ext_tac)
-  >>~- ([`inst.inst_opcode = SHA3`], ext_tac)
-  >>~- ([`inst.inst_opcode = ISTORE`], ext_tac)
-  >>~- ([`inst.inst_opcode = LOG`], ext_tac)
-  >>~- ([`inst.inst_opcode = ALLOCA`], ext_tac)
-  >>~- ([`inst.inst_opcode = DALLOCA`], ext_tac)
-  >>~- ([`inst.inst_opcode = BUMP`], ext_tac)
-  >>~- ([`inst.inst_opcode = ASSERT`], ext_tac)
-  >>~- ([`inst.inst_opcode = PARAM`], ext_tac)
-  >>~- ([`inst.inst_opcode = FMP_PARAM`], ext_tac) >>
-  ext_tac
+  all_tac
+  >>~- ([`inst.inst_opcode = ADD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SUB`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MUL`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = Div`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SDIV`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = Mod`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SMOD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = Exp`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ADDMOD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MULMOD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = EQ`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = LT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = GT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SLT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SGT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ISZERO`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = AND`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = OR`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = XOR`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = NOT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SHL`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SHR`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SAR`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SIGNEXTEND`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BYTE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MLOAD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MSTORE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MSTORE8`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MCOPY`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = MEMTOP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SLOAD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SSTORE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = TLOAD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = TSTORE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ILOAD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ISTORE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = PHI`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = PARAM`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ASSIGN`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = NOP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ALLOCA`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = DALLOCA`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = GETFMP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SETFMP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = RETFMP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = INITIAL_FMP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BUMP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = FMP_PARAM`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = RETPC_PARAM`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CALLER`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CALLVALUE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CALLDATALOAD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CALLDATASIZE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CALLDATACOPY`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ADDRESS`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ORIGIN`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = GASPRICE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = GAS`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = GASLIMIT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = COINBASE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = TIMESTAMP`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = NUMBER`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = PREVRANDAO`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CHAINID`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SELFBALANCE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BALANCE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BLOCKHASH`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BASEFEE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CODESIZE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = CODECOPY`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = EXTCODESIZE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = EXTCODEHASH`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = EXTCODECOPY`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = RETURNDATASIZE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = RETURNDATACOPY`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BLOBHASH`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = BLOBBASEFEE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = SHA3`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = LOG`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ASSERT`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = ASSERT_UNREACHABLE`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = DLOAD`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = DLOADBYTES`], vars_ext_opcode_tac)
+  >>~- ([`inst.inst_opcode = OFFSET`], vars_ext_opcode_tac)
 QED
 
 Theorem step_inst_base_vars_ext_state:

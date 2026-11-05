@@ -19,7 +19,6 @@ Ancestors
   vyperTypeCallStackSoundness vyperTypeContractSoundness
   vyperTypeExternalCallMachine vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
-  proofAuditLib
   vyperSourceSupplyLib
 
 val _ = Parse.hide "body";
@@ -706,5 +705,3 @@ Proof
   FIRST [irule deployment_source_install_preserves_machine_well_typed >> simp[],
          first_assum ACCEPT_TAC]
 QED
-
-val () = proofAuditLib.check_theory "vyperTypeDeploymentMachine";

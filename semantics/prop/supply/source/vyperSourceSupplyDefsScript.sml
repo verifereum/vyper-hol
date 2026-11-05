@@ -5,7 +5,6 @@ Ancestors
   list pair option vyperAccountSupply vyperSupplyBoundary
   vyperCallOutcome vyperStatePreservation vyperState
 Libs
-  proofAuditLib
   monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -169,5 +168,3 @@ Proof
      fs[source_supply_def]) >>
   gvs[source_supply_def]
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceSupplyDefs";

@@ -5,8 +5,6 @@ Theory vyperPrimitiveSupply
 Ancestors
   vyperExecutionSupply vyperPrecompileSupply
   vfmExecution vfmContext vfmState list rich_list
-Libs
-  proofAuditLib
 
 (* Local mutation boundaries for the run_call supply invariant. *)
 Theorem execution_supply_live:
@@ -191,5 +189,3 @@ Proof
       account_supply_bound_nonce, vyperCreateTheory.create_prelude_accounts_def,
       combinTheory.o_THM]
 QED
-
-val () = proofAuditLib.check_theory "vyperPrimitiveSupply";

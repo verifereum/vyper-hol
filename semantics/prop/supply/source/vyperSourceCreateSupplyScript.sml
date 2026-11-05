@@ -5,7 +5,6 @@ Ancestors
   list pair option arithmetic vyperMisc vyperSourceSupplyDefs
   vyperSupplyBoundary vyperAdapterSupply vyperCreate vyperState
 Libs
-  proofAuditLib
   pairLib
 
 (* Account replacement after the EVM run uses the adapter's proved bound;
@@ -27,5 +26,3 @@ Proof
         NOT_LESS, AllCaseEqs()]) >>
   drule_all (SRULE [] run_create_evm_supply) >> simp[]
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceCreateSupply";

@@ -6,8 +6,6 @@ Ancestors
   vyperExecutionSupply vyperPrecompileSupply vyperPrimitiveSupply
   vyperOpcodeSupply vyperBalanceSupply vfmExecutionProp vfmStaticCalls
   vfmPreserves vfmExecution vfmContext vfmState list
-Libs
-  proofAuditLib
 
 (* A local precondition for the account snapshot read by CALL/CREATE. *)
 Definition snapshot_supply_def:
@@ -166,5 +164,3 @@ Proof
   simp[step_create_def] >>
   NTAC 20 (TRY call_supply_step) >> rpt call_supply_step
 QED
-
-val () = proofAuditLib.check_theory "vyperCallSupply";

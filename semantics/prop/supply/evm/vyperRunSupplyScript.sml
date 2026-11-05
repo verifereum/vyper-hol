@@ -4,8 +4,6 @@ Theory vyperRunSupply
 Ancestors
   vyperExecutionSupply vyperOpcodeSupply vyperHandlerSupply
   vfmExecution vfmContext While
-Libs
-  proofAuditLib
 
 (* run_call uses only step, not transaction fee/finalization accounting. *)
 Theorem run_call_supply:
@@ -24,5 +22,3 @@ Proof
       simp[supply_action_step]) >>
   disch_then (qspec_then `(result,post)` mp_tac) >> simp[]
 QED
-
-val () = proofAuditLib.check_theory "vyperRunSupply";

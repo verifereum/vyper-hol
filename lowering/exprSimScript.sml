@@ -350,17 +350,16 @@ Proof
   gvs[]
 QED
 
-(* Only dynamic bytes and strings have a footprint other than their type's
-   memory size. *)
 Theorem val_footprint_cases[local]:
   !tv v.
     (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
     (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
     val_footprint tv v = type_memory_size tv
 Proof
-  Cases_on `v` >> simp[val_footprint_def] >>
-  Cases_on `tv` >> simp[] >> rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[] >> rename1 `BytesT bd` >> Cases_on `bd` >> simp[]
+  rpt gen_tac >> Cases_on `v` >> simp[val_footprint_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV bt` >> Cases_on `bt` >> simp[] >>
+  rename1 `BytesT sz` >> Cases_on `sz` >> simp[]
 QED
 
 (* A well-formed value's footprint fits its type's size. *)

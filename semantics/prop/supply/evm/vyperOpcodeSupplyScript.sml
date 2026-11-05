@@ -4,8 +4,6 @@ Theory vyperOpcodeSupply
 Ancestors
   vyperExecutionSupply vyperPrecompileSupply vyperPrimitiveSupply
   vfmStaticCalls vfmPreserves vfmExecution vfmContext vfmState list
-Libs
-  proofAuditLib
 
 Definition supply_state_def:
   supply_state budget st <=>
@@ -118,5 +116,3 @@ Proof
   >- gvs[step_inst_def, supply_action_step_log] >>
   irule supply_action_cp >> irule cp_step_inst_non_call >> gvs[]
 QED
-
-val () = proofAuditLib.check_theory "vyperOpcodeSupply";

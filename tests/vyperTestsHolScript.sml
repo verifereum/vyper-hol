@@ -22,6 +22,8 @@ Ancestors
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
+  vyperEventFixtureTest
+  vyperEventRegression
   vyperExtCallConsumptionTest
   vyperExtCallCpsCVKernelCheck
   vyperExtCallCpsCVTest
@@ -31,6 +33,7 @@ Ancestors
   vyperInStaticArrayTest
   vyperInvertTest
   vyperLoadTimingTest
+  vyperMembershipSemanticsTest
   vyperOracleEntryTest
   vyperOracleIntegrationTest
   vyperOracleStateTest

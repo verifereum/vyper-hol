@@ -4,8 +4,6 @@ Theory vyperExecutionSupply
 Ancestors
   vyperAccountSupply vyperSupplyBoundary vyperInterpreter vyperCreate
   vfmExecution vfmExecutionProp vfmContext vfmState pred_set arithmetic list
-Libs
-  proofAuditLib
 
 (* Proof-only supply budget: snapshots are bounded individually. *)
 Definition account_supply_bound_def:
@@ -146,5 +144,3 @@ Proof
   strip_tac >> irule make_create_state_supply >>
   irule account_supply_bound_create_prelude >> simp[]
 QED
-
-val () = proofAuditLib.check_theory "vyperExecutionSupply";

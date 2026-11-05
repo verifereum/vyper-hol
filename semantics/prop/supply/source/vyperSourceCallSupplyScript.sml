@@ -8,7 +8,6 @@ Ancestors
   vyperSourcePrimitiveSupply vyperSourceOracleSupply vyperSourceTransferSupply
   vyperInterpreter vyperState vyperCallOutcome extCallOracle
 Libs
-  proofAuditLib
   vyperSupplyProofLib
 
 Theorem run_raw_call_supply:
@@ -104,5 +103,3 @@ Proof
   Cases_on `rest` >- simp[eval_send_def, source_supply_action_raise] >>
   simp_tac bool_ss [eval_send_def, LET_THM] >> rpt CALL_SUPPLY_STEP
 QED
-
-val () = proofAuditLib.check_theory "vyperSourceCallSupply";

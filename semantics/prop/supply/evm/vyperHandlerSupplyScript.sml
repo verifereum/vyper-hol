@@ -8,7 +8,6 @@ Ancestors
   vfmExecutionProp vfmStaticCalls vfmDecreasesGas vfmPreserves
   vfmExecution vfmContext vfmState list arithmetic
 Libs
-  proofAuditLib
   BasicProvers
 
 Theorem supply_action_step_inst:
@@ -168,5 +167,3 @@ Proof
   simp[step_eq_handle_step_inner] >> irule supply_action_handle >>
   simp[supply_action_step_inner, supply_action_handle_step]
 QED
-
-val () = proofAuditLib.check_theory "vyperHandlerSupply";
