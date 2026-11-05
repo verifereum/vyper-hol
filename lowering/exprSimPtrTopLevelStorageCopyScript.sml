@@ -1075,3 +1075,141 @@ Proof
   simp[jump_to_def]
 
 QED
+
+Theorem toplevel_copy_seq_register_frame:
+  !code G tn s Gf tnf.
+    EVERY (\i. ~MEM x i.inst_outputs) code /\
+    inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+    FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tnf (Var x) = op_taint tn (Var x)
+Proof
+  Induct_on `code` >> simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  first_x_assum drule >>
+  simp[step_prov_other_output, step_taint_other_output]
+QED
+
+Theorem toplevel_copy_body_register_frame:
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+  !x. ~MEM x [cv;sv;vv;mv;dv;nv] ==>
+    FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tnf (Var x) = op_taint tn (Var x)
+Proof
+  strip_tac >> gen_tac >> disch_tac >>
+  `EVERY (\i. ~MEM x i.inst_outputs) code` by gvs[mk_inst_def] >>
+  drule_all toplevel_copy_seq_register_frame >> simp[]
+QED
+
+Theorem toplevel_copy_body_source_clean:
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  op_taint tn src = {} /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+  op_taint tnf src = {}
+Proof
+  strip_tac >> drule toplevel_copy_body_register_frame >>
+  disch_then drule >> strip_tac >>
+  Cases_on `src` >> gvs[op_taint_def] >> metis_tac[]
+QED
+
+Theorem toplevel_copy_body_destination_covers:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+  ptr_covers Gf tnf dst r (32*n)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_destination >> strip_tac >>
+  drule toplevel_copy_inv_destination >> strip_tac >>
+  drule_all toplevel_copy_body_register_frame >> strip_tac >>
+  gvs[ptr_covers_def]
+QED
+
+Theorem toplevel_copy_seq_storage_frame:
+  !code G tn s Gf tnf.
+    EVERY (\i. MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD;MSTORE]) code /\
+    inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm
+Proof
+  Induct_on `code` >> simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  first_x_assum drule >>
+  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+  gvs[]
+QED
+
+Theorem toplevel_copy_body_storage_frame:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD;MSTORE]) code` by
+    gvs[mk_inst_def] >>
+  drule_all toplevel_copy_seq_storage_frame >> simp[]
+QED
+
+Theorem toplevel_copy_counter_suffix_ghost:
+  FLOOKUP G cv = NONE /\ op_taint tn (Var cv) = {} /\ cv <> nv /\
+  run_inst_seq [mk_inst id ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+1) ASSIGN [Var nv] [cv]] s = OK r /\
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+1) ASSIGN [Var nv] [cv]] s Gf tnf ==>
+  FLOOKUP Gf cv = NONE /\ op_taint tnf (Var cv) = {}
+Proof
+  strip_tac >>
+  Cases_on `lookup_var cv s`
+  >- gvs[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_def,
+         exec_pure2_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
+  rename1 `lookup_var cv s = SOME w` >>
+  qabbrev_tac `i = mk_inst id ADD [Var cv;Lit 1w] [nv]` >>
+  qabbrev_tac `j = mk_inst (id+1) ASSIGN [Var nv] [cv]` >>
+  qabbrev_tac `u = update_var nv (w+1w) s` >>
+  `step_inst_base i s = OK u` by
+    simp[Abbr `i`, Abbr `u`, step_inst_base_def, exec_pure2_def,
+         mk_inst_def, eval_operands_def, eval_operand_def] >>
+  qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `step_inst_base j u1 = OK (update_var cv (w+1w) u1)` by
+    simp[Abbr `j`, Abbr `u1`, Abbr `u`, step_inst_base_def, exec_read1_def,
+         mk_inst_def, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >>
+  gvs[] >> simp[Abbr `i`, Abbr `j`] >>
+  irule toplevel_counter_assign_ghost >>
+  drule_all toplevel_counter_increment_ghost >> simp[]
+QED
