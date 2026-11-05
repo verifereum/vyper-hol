@@ -79,8 +79,8 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 | FMP_PARAM | vs_params index / OK | excluded | fn_ptr_ok_def excludes FMP_PARAM. |
 | RETPC_PARAM | update_var vs_return_pc_token / OK | B10; missing local adapter | Tokens may differ; guard opaque output, origin erase, actual taint and independent T, no equality of LAST args. |
 | CALLER, ADDRESS, CALLVALUE | exec_read0 call context / OK | complete | concretize_env_reader_local_complete consumes relocation_env (not inferred from Obs), actual ordinary event and independent taint order; constructs fresh clean result, actual G/T, successor D/O and environment. |
-| ORIGIN, GASPRICE, CHAINID | exec_read0 tx context / OK | missing | Same relevant tx-context field; read0 family producer. |
-| COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, BLOBBASEFEE | exec_read0 block context / OK | missing | Same relevant block-context field; read0 family producer. |
+| ORIGIN, GASPRICE, CHAINID | exec_read0 tx context / OK | complete | concretizeLayoutLocalContextReaders.concretize_context_reader_local_complete consumes relocation_reader_context and relocation_env, actual ordinary event, singleton output and independent taint order; produces V/G/D/O/T and both supplements. Incoming context equality remains a frame-composition obligation. |
+| COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, BLOBBASEFEE | exec_read0 block context / OK | complete | Same grouped concretize_context_reader_local_complete boundary and explicit incoming frame/context obligations; no full-state equality assumed. |
 | GAS | exec_gas / OK | complete | Reachable environment adapter consumes relocation_env with equal vs_gas_readings, consumes the same head (empty gives 0), preserves tails, constructs clean G/T and successor D/O. Obs alone supplies no gas-stream equality. |
 | BLOCKHASH | exec_read1 blockhash / OK | missing | Clean scalar index plus equal blockhash function; read1 family producer. |
 | BLOBHASH | exec_read1 indexed tx blobhashes / OK | missing | Clean scalar index plus equal blobhashes list including OOB zero case. |
