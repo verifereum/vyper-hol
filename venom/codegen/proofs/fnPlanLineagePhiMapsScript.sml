@@ -290,3 +290,107 @@ Proof
   disch_then (qspecl_then [`x1`, `p`, `i`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
+
+(* Matching keys are indexed PHI classes, even when no input variable refers
+   to them. This range fact lets consumers use native_phi_matching_class. *)
+Theorem phi_matching_fold_range[local]:
+  !phis n m bound.
+    n + LENGTH phis <= bound /\
+    (!i v. FLOOKUP m i = SOME v ==> i < bound) ==>
+    !i v. FLOOKUP (FOLDL (phi_matching_map_step p) m
+      (MAPi (\k phi. (n+k,phi)) phis)) i = SOME v ==> i < bound
+Proof
+  Induct >- (simp[] >> metis_tac[]) >> rpt gen_tac >> strip_tac >>
+  simp[MAPi_def, combinTheory.o_DEF] >>
+  `MAPi (\k phi. (n + SUC k,phi)) phis =
+   MAPi (\k phi. (SUC n + k,phi)) phis` by
+    (irule MAPi_CONG >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  first_x_assum (qspecl_then [`SUC n`, `phi_matching_map_step p m (n,h)`, `bound`] mp_tac) >>
+  (impl_tac >- (conj_tac >- gvs[] >>
+    simp[phi_matching_map_step_def] >>
+    Cases_on `FIND (\(l,v). l = p) (phi_pairs h.inst_operands)`
+    >- simp[] >> PairCases_on `x` >>
+    simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
+    Cases_on `n = i` >> gvs[] >> metis_tac[])) >> simp[]
+QED
+
+Theorem build_phi_maps_matching_range:
+  FLOOKUP (SND (build_phi_maps p phis)) i = SOME v ==> i < LENGTH phis
+Proof
+  qspecl_then [`phis`, `0`, `FEMPTY`, `LENGTH phis`] mp_tac phi_matching_fold_range >>
+  simp[build_phi_maps_split] >> metis_tac[]
+QED
+
+Theorem build_phi_maps_matching_operand:
+  phi_uses_disjoint phis /\
+  FLOOKUP (SND (build_phi_maps p phis)) i = SOME v ==>
+  FLOOKUP (FST (build_phi_maps p phis)) v = SOME i
+Proof
+  rpt strip_tac >>
+  `i < LENGTH phis` by metis_tac[build_phi_maps_matching_range] >>
+  drule native_phi_matching_class >>
+  disch_then (qspecl_then [`p`, `p`] mp_tac) >>
+  simp[native_phi_class_def] >>
+  disch_then (qspec_then `i` mp_tac) >> simp[]
+QED
+
+Theorem input_vars_fold_distinct[local]:
+  !live acc placed om mm.
+    ALL_DISTINCT live /\ ALL_DISTINCT acc /\
+    (!i v. FLOOKUP mm i = SOME v ==> FLOOKUP om v = SOME i) /\
+    (!v. MEM v acc ==> case FLOOKUP om v of
+       NONE => ~MEM v live | SOME i => MEM i placed) ==>
+    ALL_DISTINCT (FST (FOLDL (\(acc,placed) v.
+      case FLOOKUP om v of
+        SOME i => if MEM i placed then (acc,placed)
+          else (case FLOOKUP mm i of
+                  SOME w => (acc ++ [w],i::placed)
+                | NONE => (acc,placed))
+      | NONE => (acc ++ [v],placed)) (acc,placed) live))
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >> simp[] >>
+  Cases_on `FLOOKUP om h`
+  >- (simp[] >> first_x_assum irule >>
+      gvs[ALL_DISTINCT_APPEND, MEM_APPEND] >>
+      rpt strip_tac >> gvs[] >>
+      first_x_assum drule >> Cases_on `FLOOKUP om v` >> simp[]) >>
+  simp[] >> Cases_on `MEM x placed` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> rpt strip_tac >>
+      first_x_assum drule >> Cases_on `FLOOKUP om v` >> simp[]) >>
+  Cases_on `FLOOKUP mm x` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> rpt strip_tac >>
+      first_x_assum drule >> Cases_on `FLOOKUP om v` >> simp[]) >>
+  `FLOOKUP om x' = SOME x` by metis_tac[] >>
+  `~MEM x' acc` by
+    (strip_tac >> qpat_x_assum `!v. MEM v acc ==> _` drule >> simp[]) >>
+  first_x_assum irule >> simp[ALL_DISTINCT_APPEND, MEM_APPEND] >>
+  reverse conj_tac >- gvs[] >> gen_tac >> strip_tac
+  >- (qpat_x_assum `!w. MEM w acc ==> P w` (qspec_then `v` mp_tac) >>
+      simp[] >> Cases_on `FLOOKUP om v` >> simp[]) >>
+  gvs[] >> first_x_assum drule >> simp[]
+QED
+
+Theorem input_vars_from_distinct:
+  !pred insts live.
+    phi_uses_disjoint (collect_phis insts) /\ ALL_DISTINCT live ==>
+    ALL_DISTINCT (input_vars_from pred insts live)
+Proof
+  rpt strip_tac >> simp[input_vars_from_def] >>
+  IF_CASES_TAC >- simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qspecl_then [`live`, `[]`, `[]`, `op_map`, `matching`] mp_tac
+    input_vars_fold_distinct >> simp[] >>
+  impl_tac >- metis_tac[build_phi_maps_matching_operand, pairTheory.FST, pairTheory.SND] >>
+  simp[]
+QED
+
+(* Diagnostic for the proposed analyzed-list distinctness producer: a single
+   instruction may use the same input twice.  Single-use form counts using
+   instructions, not occurrences within one instruction. *)
+Theorem repeated_operand_liveness_not_distinct:
+  ~ALL_DISTINCT
+    (liveness_transfer [] (mk_inst 0 ADD [Var "x"; Var "x"] ["y"]) [])
+Proof
+  EVAL_TAC
+QED
