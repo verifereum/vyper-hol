@@ -9,7 +9,7 @@ Ancestors
   fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
-  allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs
+  allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs dftCommutation
 
 Theorem phi_delete_spills_domain[local]:
   !xs ps at.
@@ -1988,4 +1988,117 @@ Proof
   `inst.inst_outputs = [name]` by
     metis_tac[venomExecProofsTheory.eval_one_phi_imp_inst_outputs] >>
   gvs[] >> metis_tac[phi_eval_member_value]
+QED
+
+Theorem phi_collect_prefix_index:
+  !insts. LENGTH (collect_phis insts) <= LENGTH insts /\
+    (!k. k < LENGTH (collect_phis insts) ==>
+      EL k (collect_phis insts) = EL k insts)
+Proof
+  Induct >- simp[collect_phis_def] >>
+  gen_tac >> simp[collect_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  rpt strip_tac >> Cases_on `k` >> gvs[]
+QED
+
+Theorem phi_input_dead_at_successor:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  MEM (Var v) (EL i (collect_phis bb.bb_instructions)).inst_operands ==>
+  ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+Proof
+  strip_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM (EL i (collect_phis bb.bb_instructions))
+    (collect_phis bb.bb_instructions)` by simp[listTheory.EL_MEM] >>
+  `MEM v (inst_uses (EL i (collect_phis bb.bb_instructions)))` by
+    metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH (collect_phis bb.bb_instructions)))` by
+    metis_tac[phi_codegen_input_dead_after_prefix] >>
+  `phi_edge_uses_wf fn bb (EL i (collect_phis bb.bb_instructions))` by
+    metis_tac[phi_codegen_edge_wf] >>
+  `fn_reachable fn bb.bb_label` by metis_tac[phi_edge_operand_reachable] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    metis_tac[phi_codegen_uses_disjoint] >>
+  `!k. SUC i <= k /\ k < LENGTH (collect_phis bb.bb_instructions) ==>
+     ~MEM v (inst_defs (EL k bb.bb_instructions)) /\
+     ~MEM v (inst_uses (EL k bb.bb_instructions))` by
+    (gen_tac >> strip_tac >>
+     `EL k bb.bb_instructions = EL k (collect_phis bb.bb_instructions)` by
+       metis_tac[phi_collect_prefix_index] >>
+     `MEM (EL k (collect_phis bb.bb_instructions))
+       (collect_phis bb.bb_instructions)` by simp[listTheory.EL_MEM] >>
+     conj_tac
+     >- (simp[inst_defs_def] >> strip_tac >>
+         metis_tac[phi_prefix_output_not_operand]) >>
+     `i <> k` by decide_tac >>
+     drule_all phi_uses_disjoint_el >>
+     gvs[inst_uses_def, phi_operand_vars_mem]) >>
+  mp_tac (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_forward_or_used) >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then
+    [`bb`, `SUC i`, `LENGTH (collect_phis bb.bb_instructions)`, `v`] mp_tac) >>
+  simp[phi_collect_prefix_index] >> gen_tac >>
+  Cases_on `k <= i` >> simp[] >>
+  Cases_on `k < LENGTH (collect_phis bb.bb_instructions)` >> simp[] >>
+  `SUC i <= k` by decide_tac >> metis_tac[]
+QED
+
+Theorem phi_prefix_operand_lookup:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  MEM phi (collect_phis bb.bb_instructions) /\ MEM (Var v) phi.inst_operands /\
+  (!inst. MEM inst done ==> MEM inst (collect_phis bb.bb_instructions)) /\
+  eval_phis vs done = OK partial ==>
+  FLOOKUP partial.vs_vars v = FLOOKUP vs.vs_vars v
+Proof
+  strip_tac >> irule phi_eval_preserves_lookup >> qexists_tac `done` >>
+  simp[] >> simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  metis_tac[phi_prefix_output_not_operand]
+QED
+
+Theorem phi_output_retpc:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM out inst.inst_outputs /\ MEM (Var src) inst.inst_operands ==>
+  (retpc_var fn out <=> retpc_var fn src)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >>
+      qpat_x_assum `retpc_shape_ok fn` mp_tac >>
+      simp[retpc_shape_ok_def] >> strip_tac >>
+      qpat_x_assum `!inst x. MEM inst _ /\ MEM x _ /\ retpc_var _ _ ==> _`
+        (qspecl_then [`inst`, `out`] mp_tac) >>
+      simp[]) >>
+  simp[retpc_var_def] >> strip_tac >>
+  irule copy_phi_var_phi >> metis_tac[]
+QED
+
+Theorem phi_selected_frame_value:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM inst phis /\ EVERY (\i. i.inst_opcode = PHI) phis /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) phis)) /\
+  eval_phis vs phis = OK final /\ vs.vs_prev_bb = SOME pred /\
+  resolve_phi pred inst.inst_operands = SOME (Var src) ==>
+  operand_val (frame_view fn ra final) lo (Var (HD inst.inst_outputs)) =
+    operand_val (frame_view fn ra vs) lo (Var src)
+Proof
+  strip_tac >>
+  `?out value. eval_one_phi vs inst = SOME (out,value)` by
+    metis_tac[phi_eval_member_result] >>
+  `inst.inst_outputs = [out] /\ FLOOKUP vs.vs_vars src = SOME value` by
+    (qpat_x_assum `eval_one_phi _ _ = _` mp_tac >>
+     simp[eval_one_phi_def, eval_operand_def, lookup_var_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
+  `FLOOKUP final.vs_vars out = SOME value` by
+    metis_tac[phi_eval_member_value] >>
+  `MEM (Var src) inst.inst_operands` by
+    metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
+  `retpc_var fn out = retpc_var fn src` by
+    (irule phi_output_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
+  simp[operand_val_def, frame_view_vars_lookup]
 QED
