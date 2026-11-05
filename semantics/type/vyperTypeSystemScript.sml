@@ -787,13 +787,7 @@ Definition well_typed_expr_def:
     (well_typed_expr env e /\ attribute_type_ok env.type_defs (expr_type e) id ty /\
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
-    ((case (blt, es) of
-      | (Slice n, [Builtin code_ty (Acc Code) [addr]; start; len]) =>
-          well_typed_expr env addr /\ well_typed_exprs env [start; len] /\
-          well_typed_builtin_app code_ty (Acc Code) [expr_type addr] /\
-          well_formed_type env.type_defs code_ty
-      | _ => well_typed_exprs env es) /\
-     well_typed_builtin_app ty blt (MAP expr_type es) /\
+    (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
      slice_operands_ok blt es /\ builtin_operands_ok blt es /\
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
