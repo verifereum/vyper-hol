@@ -381,3 +381,124 @@ Proof
       metis_tac[lookup_var_def]) >>
   simp[update_var_def]
 QED
+
+Theorem target_array_check_ptr_run:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz) sa = (dst,sb) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  eval_operand len_op s = SOME len /\ fresh_vars_wrt sa s /\
+  idx_in_range sgn i len ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      eval_operand dst t =
+        SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
+Proof
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> fs[oneTheory.one] >>
+  drule_all array_bounds_check_ok >> strip_tac >>
+  `eval_operand base_op ss' = SOME b /\ eval_operand idx_op ss' = SOME i` by
+    metis_tac[] >>
+  drule_all array_elem_ptr_run >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` SUBST1_TAC >>
+  simp[]
+QED
+
+Theorem target_array_check_ptr_path:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz) sa = (dst,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. base_op = Var x ==> not_fresh_at sa x) /\
+  (!x. idx_op = Var x ==> not_fresh_at sa x) /\
+  (!x. len_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  eval_operand len_op s = SOME len /\ idx_in_range sgn i len ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      eval_operand dst t =
+        SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
+             lookup_var x t = SOME v) /\
+      (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
+                FLOOKUP t.vs_allocas aid = SOME a) /\
+      t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `straight_fresh (comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz))` by
+    simp[straight_fresh_array_check_ptr] >>
+  `eval_operand base_op (drop_fresh sa s) = SOME b /\
+   eval_operand idx_op (drop_fresh sa s) = SOME i /\
+   eval_operand len_op (drop_fresh sa s) = SOME len` by
+    simp[eval_operand_drop_fresh] >>
+  drule_at (Pat `comp_ignore_bind _ _ _ = _`) target_array_check_ptr_run >>
+  disch_then (qspec_then `drop_fresh sa s` mp_tac) >>
+  simp[fresh_vars_wrt_drop_fresh] >> strip_tac >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem target_array_check_ptr_abort_run:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz) sa = (dst,sb) /\
+  eval_operand idx_op s = SOME i /\ eval_operand len_op s = SOME len /\
+  fresh_vars_wrt sa s /\ ~idx_in_range sgn i len ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> fs[oneTheory.one] >>
+  drule_all array_bounds_check_oob >> strip_tac >>
+  `straight_fresh (array_bounds_check idx_op len_op sgn)` by
+    (rw[array_bounds_check_def, array_bounds_valid_def] >>
+     rpt (FIRST [irule straight_fresh_bind >> conj_tac,
+                 gen_tac >> BETA_TAC,
+                 irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+                 irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC,
+                 MATCH_ACCEPT_TAC straight_fresh_return,
+                 IF_CASES_TAC])) >>
+  `straight_fresh (array_elem_ptr base_op idx_op dyn ws esz)` by
+    (rw[array_elem_ptr_def] >>
+     rpt (FIRST [irule straight_fresh_bind >> conj_tac,
+                 gen_tac >> BETA_TAC,
+                 irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+                 MATCH_ACCEPT_TAC straight_fresh_return, IF_CASES_TAC])) >>
+  `cs'.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs'` by
+    metis_tac[straight_fresh_def] >>
+  `sb.cs_current_insts = cs'.cs_current_insts ++ emitted_insts cs' sb` by
+    metis_tac[straight_fresh_def] >>
+  `!u. run_inst_seq (emitted_insts sa cs') s <> OK u` by simp[] >>
+  qspecl_then [`sa`, `cs'`, `sb`, `s`] mp_tac
+    arithmeticPropsTheory.abort_propagates >> simp[] >> metis_tac[]
+QED
+
+Theorem target_array_check_ptr_abort_path:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz) sa = (dst,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. idx_op = Var x ==> not_fresh_at sa x) /\
+  (!x. len_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand idx_op s = SOME i /\ eval_operand len_op s = SOME len /\
+  ~idx_in_range sgn i len ==>
+  ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
+Proof
+  strip_tac >>
+  `straight_fresh (comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr base_op idx_op dyn ws esz))` by
+    simp[straight_fresh_array_check_ptr] >>
+  `eval_operand idx_op (drop_fresh sa s) = SOME i /\
+   eval_operand len_op (drop_fresh sa s) = SOME len` by
+    simp[eval_operand_drop_fresh] >>
+  drule_at (Pat `comp_ignore_bind _ _ _ = _`) target_array_check_ptr_abort_run >>
+  disch_then (qspec_then `drop_fresh sa s` mp_tac) >>
+  simp[fresh_vars_wrt_drop_fresh] >> strip_tac >>
+  drule_all straight_fresh_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >> metis_tac[]
+QED
