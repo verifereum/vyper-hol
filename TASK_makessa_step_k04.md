@@ -39,12 +39,10 @@ k = 0 and k = 4):
 - at k = 4 also: no ALLOCA, `fn_pseudos_prefix fn`, and no PARAM-family
   opcode outside the first block.
 
-Scope: the row conclusion `o1_fn_row (SUC k) out.fpo_function` is proved by
-hand separately as `make_ssa_step_rows` in a new theory
-`venom/compiler/o1MakeSsaRowsScript.sml`. You may assume it (cite it by name;
-if it doesn't exist yet when you get there, state it as a local `cheat`ed
-lemma in your OWN new helper theory with exactly this statement and say so
-at the end; it will be replaced):
+Scope: the row conclusion `o1_fn_row (SUC k) out.fpo_function` is already
+proved (no cheat) as `make_ssa_step_rows` in
+`venom/compiler/o1MakeSsaRowsScript.sml`; add `o1MakeSsaRows` to the
+target's Ancestors and cite it:
 
 ```sml
 Theorem make_ssa_step_rows:
@@ -70,7 +68,7 @@ Your job is the other four conjuncts: `o1_fn_shape`, `fresh_names_ok`,
 4. No change to any existing file other than
    `venom/compiler/o1ContractMakeSsaStepScript.sml`. New helper theories go
    in new files in `venom/compiler/` (next to the target). No new cheat
-   anywhere, except the stated `make_ssa_step_rows` stand-in above.
+   anywhere.
 5. No duplicate or near-duplicate lemmas: search before adding a helper.
    A proved lemma from the reference checkouts below may be ported into a
    new helper theory (adapted to this branch's definitions).
