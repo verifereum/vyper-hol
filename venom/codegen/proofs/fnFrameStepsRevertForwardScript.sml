@@ -2599,69 +2599,6 @@ Proof
   drule_all rf_preparation_arranged >> simp[]
 QED
 
-Theorem rf_entry_copy_prepared:
-  !base.
-  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
-  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
-  inst.inst_operands = [dop;sop;zop] /\
-  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
-  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
-  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
-    nl halting term lbl ps = (ops,ps') /\
-  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
-  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
-    operand_val (frame_view fn ra vs) lo at =
-    operand_val (frame_view fn ra vs) lo
-      (normalize_operand (dfg_build_function fn) [] at)) /\
-  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
-  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
-  st.as_stack = stk ++ rest /\
-  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
-  ?stk'.
-    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (ins ++ ros))) st =
-      AsmOK (st with <|as_stack := stk' ++ rest;
-        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros))|>) /\
-    plan_stack_rel lo (frame_view fn ra vs)
-      (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk' /\
-    asm_block_at prog
-      (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
-      [AsmOp "RETURNDATACOPY"] /\
-    ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
-    ps' = release_dead_spills nl
-      (ps2 with ps_stack := stack_pop 3 ps2.ps_stack) /\
-    dop <> dead_stack_marker /\ sop <> dead_stack_marker /\
-    zop <> dead_stack_marker
-Proof
-  gen_tac >> strip_tac >>
-  `compute_operands inst = [zop;sop;dop]` by
-    simp[compute_operands_def, python_stack_operands_def,
-         venomInstTheory.ir_specific_operand_order_def] >>
-  `ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
-   ps' = release_dead_spills nl
-     (ps2 with ps_stack := stack_pop 3 ps2.ps_stack)` by
-    (drule_all rf_copy_plan_result >> disch_then (fn th => fs[th])) >>
-  `asm_block_at prog st.as_pc (execute_plan initial_fmp (ins ++ ros)) /\
-   asm_block_at prog
-     (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
-     [AsmOp "RETURNDATACOPY"]` by
-    gvs[execute_plan_append, execute_plan_def, exec_stack_op_def, asm_block_at_append] >>
-  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
-         ~MEM (SORestore off) (ins ++ ros)` by fs[MEM_APPEND] >>
-  `RETURNDATACOPY <> INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
-   EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
-  drule_all rf_entry_preparation_execution >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  qexists_tac `stk'` >> conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (qpat_x_assum `ps2.ps_stack = _` mp_tac >> simp[] >>
-      disch_then (fn th => pure_once_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]) >>
-  qpat_x_assum `ps2.ps_stack = _` kall_tac >>
-  asm_rewrite_tac[] >>
-  rpt strip_tac >> gvs[dead_stack_marker_def,
-    stackPlanTypesTheory.is_label_operand_def]
-QED
 
 (* The opaque return-PC representation is invisible to ordinary non-label uses. *)
 Theorem rf_ordinary_operand_value:
@@ -2678,69 +2615,6 @@ Proof
   simp[frame_view_def]
 QED
 
-Theorem rf_entry_copy_execution:
-  !base.
-  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
-  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
-  inst.inst_operands = [dop;sop;zop] /\
-  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
-  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
-  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
-    nl halting term lbl ps = (ops,ps') /\
-  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
-  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
-    operand_val (frame_view fn ra vs) lo at =
-    operand_val (frame_view fn ra vs) lo
-      (normalize_operand (dfg_build_function fn) [] at)) /\
-  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
-  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
-  operand_val (frame_view fn ra vs) lo sop = SOME src /\
-  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
-  vs' = write_memory_with_expansion (w2n dst)
-    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs /\
-  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
-  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
-  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
-  if w2n src + w2n sz <= LENGTH vs.vs_returndata then
-  (?st' stk'.
-    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
-    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
-    st'.as_stack = stk' ++ rest /\
-    plan_stack_rel lo (frame_view fn ra vs') ps'.ps_stack stk' /\
-    venom_asm_terminal_rel vs' st' /\
-    TAKE (w2n sz) (DROP (w2n dst) vs'.vs_memory) =
-      TAKE (w2n sz) (DROP (w2n dst) st'.as_memory))
-  else
-  (?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
-      AsmFault st' /\
-    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st')
-Proof
-  gen_tac >> strip_tac >>
-  drule_all rf_entry_copy_prepared >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `AsmOK mid` >>
-  `mid.as_stack = stk' ++ rest /\ venom_asm_terminal_rel vs mid /\
-   asm_block_at prog mid.as_pc [AsmOp "RETURNDATACOPY"]` by
-    (simp[Abbr `mid`] >> fs[venom_asm_terminal_rel_def]) >>
-  Cases_on `w2n src + w2n sz <= LENGTH vs.vs_returndata` >> simp[]
-  >- (drule_all rf_copy_success_boundary >>
-      disch_then (qspec_then `o2pc` strip_assume_tac) >>
-      qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
-        (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
-      qexistsl_tac [`st'`, `stk''`] >>
-      gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
-          Abbr `mid`]) >>
-  `w2n src + w2n sz > LENGTH vs.vs_returndata` by simp[] >>
-  drule_all rf_copy_fault_boundary >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
-    (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
-  qexists_tac `st'` >>
-  gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
-      Abbr `mid`]
-QED
 
 
 Theorem rf_preparation_postpop_generated_wf:
@@ -2791,56 +2665,6 @@ Proof
   drule_all rf_preparation_postpop_generated_wf >> simp[]
 QED
 
-Theorem rf_copy_success_invariants:
-  !base.
-  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
-    ti.inst_opcode <> PHI) /\
-  get_instruction bb k = SOME inst /\ k <= j /\
-  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
-  LENGTH (compute_operands inst) <= 16 /\
-  generated_plan_state_wf base ps /\
-  rf_value_inv fn ra bb j lo entry k s /\
-  rf_inventory_inv fn ra lo entry ps s /\
-  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-  generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
-    (cfg_analyze fn) fn inst
-    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
-    halting term bb.bb_label ps = (ops,ps') /\
-  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
-  step_inst fuel ctx inst s = OK s' ==>
-  generated_plan_state_wf base ps' /\
-  rf_value_inv fn ra bb j lo entry (SUC k) (s' with vs_inst_idx := SUC k) /\
-  rf_inventory_inv fn ra lo entry ps' (s' with vs_inst_idx := SUC k) /\
-  (!op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
-    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled)
-Proof
-  gen_tac >> strip_tac >>
-  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
-    (rpt strip_tac >> first_x_assum irule >> simp[] >>
-     irule rf_live_use_current >> metis_tac[]) >>
-  `!op. MEM op (compute_operands inst) ==>
-    operand_val (frame_view fn ra s) lo op =
-    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
-    (rpt strip_tac >> fs[rf_value_inv_def] >> first_x_assum irule >>
-     irule rf_live_use_current >> metis_tac[]) >>
-  `s'.vs_vars = s.vs_vars` by
-    (drule_all rf_source_copy_ok_cases >> strip_tac >>
-     gvs[venomStateTheory.write_memory_with_expansion_def]) >>
-  conj_tac >- (drule_all rf_copy_plan_generated_wf >> simp[]) >>
-  conj_tac >- (drule_all rf_value_inv_returndatacopy >> simp[]) >>
-  conj_tac
-  >- (simp[] >>
-      drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-        rf_copy_plan_inventory >> simp[] >>
-      disch_then irule >> asm_rewrite_tac[] >>
-      qexists_tac `s` >> simp[]) >>
-  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    rf_copy_ready_future_owned >> simp[] >>
-  disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
-QED
 
 Theorem rf_copy_source_alignment:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
@@ -3451,4 +3275,329 @@ Proof
   drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     rf_assign_ready_future_owned >> simp[] >>
   disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem rf_suffix_copy_prepared:
+  codegen_ready_fn fn /\ rf_spills_separated ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (ins ++ ros))) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros))|>) /\
+    plan_stack_rel lo (frame_view fn ra vs)
+      (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk' /\
+    asm_block_at prog
+      (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+      [AsmOp "RETURNDATACOPY"] /\
+    ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
+    ps' = release_dead_spills nl
+      (ps2 with ps_stack := stack_pop 3 ps2.ps_stack) /\
+    dop <> dead_stack_marker /\ sop <> dead_stack_marker /\
+    zop <> dead_stack_marker
+Proof
+  strip_tac >>
+  `compute_operands inst = [zop;sop;dop]` by
+    simp[compute_operands_def, python_stack_operands_def,
+         venomInstTheory.ir_specific_operand_order_def] >>
+  `ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
+   ps' = release_dead_spills nl
+     (ps2 with ps_stack := stack_pop 3 ps2.ps_stack)` by
+    (drule_all rf_copy_plan_result >> disch_then (fn th => fs[th])) >>
+  `asm_block_at prog st.as_pc (execute_plan initial_fmp (ins ++ ros)) /\
+   asm_block_at prog
+     (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+     [AsmOp "RETURNDATACOPY"]` by
+    gvs[execute_plan_append, execute_plan_def, exec_stack_op_def, asm_block_at_append] >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)` by fs[MEM_APPEND] >>
+  `RETURNDATACOPY <> INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
+   EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
+  drule_all rf_suffix_preparation_execution >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `stk'` >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `ps2.ps_stack = _` mp_tac >> simp[] >>
+      disch_then (fn th => pure_once_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]) >>
+  qpat_x_assum `ps2.ps_stack = _` kall_tac >>
+  asm_rewrite_tac[] >>
+  rpt strip_tac >> gvs[dead_stack_marker_def,
+    stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem rf_suffix_copy_execution:
+  codegen_ready_fn fn /\ rf_spills_separated ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo sop = SOME src /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  vs' = write_memory_with_expansion (w2n dst)
+    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  if w2n src + w2n sz <= LENGTH vs.vs_returndata then
+  (?st' stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    st'.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs') ps'.ps_stack stk' /\
+    venom_asm_terminal_rel vs' st' /\
+    TAKE (w2n sz) (DROP (w2n dst) vs'.vs_memory) =
+      TAKE (w2n sz) (DROP (w2n dst) st'.as_memory))
+  else
+  (?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmFault st' /\
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st')
+Proof
+  strip_tac >>
+  drule_all rf_suffix_copy_prepared >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `AsmOK mid` >>
+  `mid.as_stack = stk' ++ rest /\ venom_asm_terminal_rel vs mid /\
+   asm_block_at prog mid.as_pc [AsmOp "RETURNDATACOPY"]` by
+    (simp[Abbr `mid`] >> fs[venom_asm_terminal_rel_def]) >>
+  Cases_on `w2n src + w2n sz <= LENGTH vs.vs_returndata` >> simp[]
+  >- (drule_all rf_copy_success_boundary >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
+        (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
+      qexistsl_tac [`st'`, `stk''`] >>
+      gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
+          Abbr `mid`]) >>
+  `w2n src + w2n sz > LENGTH vs.vs_returndata` by simp[] >>
+  drule_all rf_copy_fault_boundary >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
+    (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
+  qexists_tac `st'` >>
+  gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
+      Abbr `mid`]
+QED
+
+Theorem rf_inventory_inv_input_value:
+  rf_inventory_inv fn ra lo entry ps s /\
+  (is_var_operand op ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)
+Proof
+  strip_tac >> Cases_on `is_var_operand op`
+  >- metis_tac[rf_inventory_inv_def] >>
+  Cases_on `op` >>
+  gvs[stackPlanTypesTheory.is_var_operand_def, Once normalize_operand_def,
+    codegenRelTheory.operand_val_def, venomStateTheory.eval_operand_def]
+QED
+
+Theorem rf_entry_copy_prepared:
+  !base.
+  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo
+      (normalize_operand (dfg_build_function fn) [] at)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (ins ++ ros))) st =
+      AsmOK (st with <|as_stack := stk' ++ rest;
+        as_pc := st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros))|>) /\
+    plan_stack_rel lo (frame_view fn ra vs)
+      (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk' /\
+    asm_block_at prog
+      (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+      [AsmOp "RETURNDATACOPY"] /\
+    ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
+    ps' = release_dead_spills nl
+      (ps2 with ps_stack := stack_pop 3 ps2.ps_stack) /\
+    dop <> dead_stack_marker /\ sop <> dead_stack_marker /\
+    zop <> dead_stack_marker
+Proof
+  gen_tac >> strip_tac >>
+  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
+  `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
+    (irule rf_inventory_inv_entry >> first_assum ACCEPT_TAC) >>
+  `!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val (frame_view fn ra vs) lo
+      (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt strip_tac >> irule rf_inventory_inv_input_value >>
+     qexists_tac `ps` >> simp[]) >>
+  drule_all rf_suffix_copy_prepared >> simp[]
+QED
+
+Theorem rf_entry_copy_execution:
+  !base.
+  codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo
+      (normalize_operand (dfg_build_function fn) [] at)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo sop = SOME src /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  vs' = write_memory_with_expansion (w2n dst)
+    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  if w2n src + w2n sz <= LENGTH vs.vs_returndata then
+  (?st' stk'.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    st'.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs') ps'.ps_stack stk' /\
+    venom_asm_terminal_rel vs' st' /\
+    TAKE (w2n sz) (DROP (w2n dst) vs'.vs_memory) =
+      TAKE (w2n sz) (DROP (w2n dst) st'.as_memory))
+  else
+  (?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmFault st' /\
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st')
+Proof
+  gen_tac >> strip_tac >>
+  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
+  `rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs` by
+    (irule rf_inventory_inv_entry >> first_assum ACCEPT_TAC) >>
+  `!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val (frame_view fn ra vs) lo
+      (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt strip_tac >> irule rf_inventory_inv_input_value >>
+     qexists_tac `ps` >> simp[]) >>
+  drule_all rf_suffix_copy_execution >> simp[]
+QED
+
+Theorem rf_suffix_copy_success_invariants:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI) /\
+  get_instruction bb k = SOME inst /\ k <= j /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  rf_spills_separated ps /\
+  rf_value_inv fn ra bb j lo entry k s /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  step_inst fuel ctx inst s = OK s' ==>
+  rf_spills_separated ps' /\
+  rf_value_inv fn ra bb j lo entry (SUC k) (s' with vs_inst_idx := SUC k) /\
+  rf_inventory_inv fn ra lo entry ps' (s' with vs_inst_idx := SUC k) /\
+  (!op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled)
+Proof
+  strip_tac >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt strip_tac >> fs[rf_value_inv_def] >> first_x_assum irule >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `s'.vs_vars = s.vs_vars` by
+    (drule_all rf_source_copy_ok_cases >> strip_tac >>
+     gvs[venomStateTheory.write_memory_with_expansion_def]) >>
+  `!off. ~MEM (SOSpill off) ops` by fs[] >>
+  conj_tac >- (drule_all rf_copy_plan_spills_separated >> simp[]) >>
+  conj_tac >- (drule_all rf_value_inv_returndatacopy >> simp[]) >>
+  conj_tac
+  >- (simp[] >>
+      drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        rf_copy_plan_inventory >> simp[] >>
+      disch_then irule >> asm_rewrite_tac[] >>
+      qexists_tac `s` >> simp[]) >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    rf_copy_ready_future_owned >> simp[] >>
+  disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem rf_copy_success_invariants:
+  !base.
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI) /\
+  get_instruction bb k = SOME inst /\ k <= j /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  generated_plan_state_wf base ps /\
+  rf_value_inv fn ra bb j lo entry k s /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  step_inst fuel ctx inst s = OK s' ==>
+  generated_plan_state_wf base ps' /\
+  rf_value_inv fn ra bb j lo entry (SUC k) (s' with vs_inst_idx := SUC k) /\
+  rf_inventory_inv fn ra lo entry ps' (s' with vs_inst_idx := SUC k) /\
+  (!op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled)
+Proof
+  gen_tac >> strip_tac >>
+  `rf_spills_separated ps` by metis_tac[rf_spills_separated_entry] >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  conj_tac >- (drule_all rf_copy_plan_generated_wf >> simp[]) >>
+  drule_all rf_suffix_copy_success_invariants >> simp[]
 QED
