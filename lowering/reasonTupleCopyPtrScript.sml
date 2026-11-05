@@ -412,6 +412,8 @@ Theorem reason_tuple_copy_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf = (s with <|vs_vars := sf.vs_vars; vs_memory := sf.vs_memory;
+                  vs_inst_idx := sf.vs_inst_idx|>) /\
     sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
@@ -445,6 +447,7 @@ Proof
   >- suspend "bb"
   >- suspend "index"
   >- suspend "halted"
+  >- suspend "frame"
   >- suspend "allocas"
   >- suspend "memory"
   >- suspend "taint"
@@ -478,6 +481,12 @@ QED
 
 Resume reason_tuple_copy_path_ptr[halted]:
   simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def]
+QED
+
+Resume reason_tuple_copy_path_ptr[frame]:
+  qpat_x_assum `(_ with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
+  simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def,
+       venom_state_component_equality]
 QED
 
 Resume reason_tuple_copy_path_ptr[allocas]:
