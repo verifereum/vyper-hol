@@ -12,7 +12,9 @@ Theory asmFrameLocalStep
 Ancestors
   asmFrameRel frameObsStep evmStepTransplant asmEvmStepStarve asmEvmGasStep
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
-  callTrace frameOutcome vfmExecution vfmExecutionProp list rich_list vfmOperation alist asmEncodeParse
+  callTrace frameOutcome vfmExecution vfmExecutionProp list rich_list
+  vfmOperation alist asmEncodeParse vfmState vfmSameFrame vfmRunWithinFrame
+  vfmRunCall vfmContext
 
 Theorem frame_rel_singleton[local]:
   asm_evm_rel p a es /\ es.contexts = (c,rb)::rest ==>
@@ -124,6 +126,55 @@ Proof
   `opcode op = opcode Gas` by
     gvs[encode_inst_def, evm_opcode_byte_def, evm_opcode_table_def, opcode_def] >>
   `op = Gas` by (irule opcode_wf_inj >> simp[wf_opname_def]) >> simp[]
+QED
+
+Theorem frame_continue_transplant[local]:
+  es.contexts = (c,rb)::rest /\ wf_state es /\
+  (!op. next_opcode c = SOME op ==>
+    ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
+  step (es with contexts := [(c,rb)]) = (INL (),t) /\
+  LENGTH t.contexts = 1 /\ asm_evm_rel p a t ==>
+  ?es1. step es = (INL (),es1) /\
+    LENGTH es1.contexts = LENGTH es.contexts /\
+    run_call es1 = run_call es /\ asm_evm_rel p a es1
+Proof
+  strip_tac >> Cases_on `rest = []`
+  >- (`es with contexts := [(c,rb)] = es` by
+        (gvs[execution_state_component_equality]) >>
+      gvs[] >>
+      irule run_call_same_depth_step >> simp[]) >>
+  drule_all step_transplant_continue >> strip_tac >>
+  qexists_tac `t with contexts := (c',rb)::rest` >>
+  conj_tac >- simp[] >>
+  conj_asm1_tac >- simp[] >>
+  conj_tac >- (irule run_call_same_depth_step >> simp[]) >>
+  gvs[asm_evm_rel_def]
+QED
+
+Theorem frame_continue_rel[local]:
+  asm_frame_rel prog data es0 a es /\
+  step es = (INL (),es1) /\
+  LENGTH es1.contexts = LENGTH es.contexts /\
+  asm_evm_rel (prog ++ [AsmDataItem data]) a1 es1 /\
+  a1.as_requests = a.as_requests /\ call_trace es1 = call_trace es /\
+  a1.as_outcomes = MAP SND (call_trace es1) /\
+  a1.as_gas_readings = gas_readings es1 ==>
+  asm_frame_rel prog data es0 a1 es1
+Proof
+  strip_tac >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  simp[asm_frame_rel_def] >> strip_tac >>
+  `!addr. c.msgParams.outputTo <> Code addr` by
+    metis_tac[frame_rel_output_to] >>
+  `outputTo_consistent es` by gvs[outputTo_consistent_def] >>
+  `same_frame_rel es es1` by (irule step_same_frame >> simp[]) >>
+  `wf_state es1` by
+    (drule step_preserves_wf_state >> simp[]) >>
+  Cases_on `es1.contexts` >> gvs[same_frame_rel_def] >>
+  PairCases_on `h` >> gvs[] >>
+  `?d1. es1.msdomain = Collect d1` by
+    (Cases_on `es1.msdomain` >> gvs[msdomain_compatible_def]) >>
+  simp[asm_frame_rel_def] >> gvs[call_requests_def]
 QED
 
 Theorem asm_frame_local_step:
