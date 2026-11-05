@@ -815,6 +815,180 @@ Proof
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
 QED
 
+Theorem starve_expand_memory[local]:
+  !n (mem:byte list).
+    mem ++ REPLICATE (MAX (LENGTH mem) (32 * ((n + 31) DIV 32)) -
+                     LENGTH mem) 0w = asm_expand_memory n mem
+Proof
+  rpt gen_tac >> simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem starve_word_bytes[local]:
+  !bs:byte list. LENGTH bs = 32 ==>
+    word_of_bytes T (0w:bytes32) bs =
+    word_of_bytes F (0w:bytes32) (REVERSE bs)
+Proof
+  rpt strip_tac >>
+  rewrite_tac[GSYM byteTheory.word_of_bytes_be_def,
+              GSYM byteTheory.word_of_bytes_le_def] >>
+  simp[cv_stdTheory.word_of_bytes_be_eq_num_of_bytes,
+       cv_stdTheory.word_of_bytes_le_eq_num_of_bytes,
+       fcpLib.INDEX_CONV ``dimindex(:256)``, EVAL ``divides 8 256``] >>
+  `TAKE 32 (bs ++ REPLICATE 32 0w) = bs` by
+    (qpat_assum `LENGTH bs = 32` (fn th => once_rewrite_tac[GSYM th]) >>
+     simp[TAKE_LENGTH_APPEND]) >>
+  simp[byteTheory.be_bytes_thm]
+QED
+
+Theorem starve_mload_slice[local]:
+  !off (mem:byte list).
+    LENGTH (TAKE 32 (DROP off (asm_expand_memory (off + 32) mem))) = 32
+Proof
+  rpt gen_tac >> simp[listTheory.LENGTH_TAKE_EQ] >>
+  `!n. n = n DIV 32 * 32 + n MOD 32 /\ n MOD 32 < 32` by
+    (mp_tac (Q.SPEC `32` arithmeticTheory.DIVISION) >> simp[]) >>
+  first_x_assum (qspec_then `off + 63` strip_assume_tac) >>
+  `off + 32 <= ((off + 32 + 31) DIV 32) * 32` by
+    (`off + 32 + 31 = off + 63` by decide_tac >>
+     pop_assum SUBST1_TAC >> decide_tac) >>
+  Cases_on `32 * ((off + 63) DIV 32) <= LENGTH mem` >>
+  simp[asm_expand_memory_def, LET_THM] >> decide_tac
+QED
+
+Theorem starve_mload_expand[local]:
+  !off (mem:byte list).
+    mem ++ REPLICATE (MAX (LENGTH mem) (32 * ((off + 63) DIV 32)) -
+                     LENGTH mem) 0w = asm_expand_memory (off + 32) mem
+Proof
+  rpt gen_tac >> simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem starve_mload:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "MLOAD" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_mload as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_mload_def, LET_THM] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = MLoad` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_mload_def, pop_stack_def, LET_THM] >>
+  simp[consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def,
+       read_memory_def, vfmConstantsTheory.word_size_def,
+       assert_def, fail_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC
+  >- (simp[] >> Cases_on `LENGTH t < stack_limit`
+      >- (fs[] >> simp[] >> disj2_tac >>
+          simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+               bind_def, get_current_context_def, return_def,
+               set_current_context_def, is_call_def] >>
+          simp[vfmBufferTheory.buffer_take_to_list, vfmBufferTheory.buffer_to_list_extend,
+               starve_mload_expand,
+               starve_word_bytes, starve_mload_slice] >>
+          qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+          simp[asm_evm_rel_def] >> strip_tac >>
+          simp[asm_evm_rel_def, asm_next_def,
+               vfmBufferTheory.buffer_to_list_extend,
+               starve_mload_expand,
+               starve_word_bytes, starve_mload_slice] >>
+          once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+          simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>
+      fs[] >> disj1_tac >> irule starve_handle_resource >> simp[]) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
+Theorem starve_word_to_bytes[local]:
+  !v:bytes32. word_to_bytes v T = REVERSE (word_to_bytes v F)
+Proof
+  simp[GSYM byteTheory.word_to_bytes_be_def,
+       GSYM byteTheory.word_to_bytes_le_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num,
+       cv_stdTheory.word_to_bytes_le_eq_bytes_of_num]
+QED
+
+Theorem starve_mstore_write[local]:
+  !b off v.
+    buffer_to_list (buffer_write off (REVERSE (word_to_bytes (v:bytes32) F))
+      (buffer_extend
+        (MAX (buffer_length b) (32 * ((off + 63) DIV 32)) - buffer_length b) b)) =
+    TAKE off (asm_expand_memory (off + 32) (buffer_to_list b)) ++
+    word_to_bytes v T ++
+    DROP (off + 32) (asm_expand_memory (off + 32) (buffer_to_list b))
+Proof
+  rpt gen_tac >>
+  `off <= buffer_length (buffer_extend
+        (MAX (buffer_length b) (32 * ((off + 63) DIV 32)) - buffer_length b) b)` by
+    (mp_tac (Q.SPECL [`off`, `buffer_to_list b`] starve_mload_slice) >>
+     simp[GSYM starve_mload_expand, listTheory.LENGTH_TAKE_EQ, MAX_DEF] >>
+     IF_CASES_TAC >> simp[] >> decide_tac) >>
+  dep_rewrite.DEP_REWRITE_TAC[vfmBufferTheory.buffer_to_list_write_le] >> simp[] >>
+  rewrite_tac[vfmBufferTheory.buffer_to_list_extend,
+              GSYM vfmBufferTheory.LENGTH_buffer_to_list,
+              starve_mload_expand] >>
+  simp[starve_word_to_bytes,
+       fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
+Theorem starve_mstore:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "MSTORE" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_mstore as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_mstore_def, LET_THM] >>
+  Cases_on `t` >> simp[] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = MStore` by
+    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+     gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_mstore_def, pop_stack_def, LET_THM] >>
+  simp[consume_gas_def, memory_expansion_info_def, expand_memory_def,
+       write_memory_def, vfmConstantsTheory.word_size_def,
+       assert_def, fail_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC
+  >- (simp[] >> disj2_tac >>
+      simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+           bind_def, get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qspecl_then [`ctxt.memory`, `w2n h`, `h'`] mp_tac starve_mstore_write >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def] >> strip_tac >>
+      simp[asm_evm_rel_def, asm_next_def] >>
+      once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
+      simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>
+  simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
