@@ -1057,6 +1057,84 @@ Proof
   drule_all strict_dominating_def_excludes_outputs >> simp[]
 QED
 
+Theorem lineage_entry_marked[local]:
+  codegen_ready_fn fn /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps ==>
+  generated_plan_state_wf_marked spill_base ps
+Proof
+  strip_tac >> drule_all lineage_entry_edge >> strip_tac >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`) lineage_entry_inventory >>
+  disch_then (qspec_then `pb` mp_tac) >> simp[]
+QED
+
+Theorem lineage_entry_coverage[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+  ~MEM (Var v) (FLAT (MAP (\inst. inst.inst_operands)
+    (collect_phis bb.bb_instructions))) ==>
+  MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
+Proof
+  strip_tac >> drule_all lineage_entry_edge >> strip_tac >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`) lineage_entry_inventory >>
+  disch_then (qspec_then `pb` mp_tac) >> simp[] >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM pred (cfg_analyze fn).cfg_dfs_pre /\
+   MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
+  `MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
+    metis_tac[fn_cfg_edge_cfg_analyze] >>
+  `!inst. MEM inst (collect_phis bb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs inst.inst_operands))` by
+    (rpt strip_tac >>
+     qpat_x_assum `MEM v (MAP SND _)` mp_tac >>
+     simp[MEM_MAP, pairTheory.EXISTS_PROD] >> rpt strip_tac >>
+     drule phi_pairs_mem_var >> strip_tac >>
+     qpat_x_assum `~MEM (Var v) _` mp_tac >>
+     simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  drule_all (SIMP_RULE std_ss [LET_THM] live_vars_at_cross_block) >>
+  metis_tac[]
+QED
+
+Theorem lineage_entry_phi_sources[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps ==>
+  EVERY (\phi. ?!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled))
+    (collect_phis bb.bb_instructions)
+Proof
+  strip_tac >>
+  Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1`
+  >- (drule_all ready_small_preds_no_phis >> simp[]) >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl)` by decide_tac >>
+  drule_all lineage_entry_edge >> strip_tac >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`) lineage_entry_inventory >>
+  disch_then (qspec_then `pb` mp_tac) >> simp[] >> strip_tac >>
+  `!v. (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) <=>
+    MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))` by
+    (gen_tac >>
+     `MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) <=>
+      MEM v (input_vars_from pred bb.bb_instructions
+        (live_vars_at (liveness_analyze fn) lbl 0))` by
+       (irule ready_join_live_out >> metis_tac[]) >>
+     `Var v <> dead_stack_marker` by simp[dead_stack_marker_def] >>
+     eq_tac >- (strip_tac >>
+       `?u. Var v = Var u /\ MEM u (live_vars_at (liveness_analyze fn) pred
+         (LENGTH pb.bb_instructions))` by metis_tac[] >> gvs[]) >>
+     metis_tac[]) >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond] >>
+  drule_all ready_phi_input_exactly_one >> simp[]
+QED
+
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
    reorder's target, the predecessor-side PHI sources and the live-in
    variables; a source may be an output of the join itself (a loop header
