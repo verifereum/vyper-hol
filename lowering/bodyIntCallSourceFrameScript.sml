@@ -2,21 +2,21 @@
 Theory bodyIntCallSourceFrame
 Ancestors
   supportedExprs supportedExprForms vyperPureExpr vyperInterpreter vyperState
-  vyperStatePreservation vyperPlaceFrames loweringPosts exprSimHyps
+  vyperStatePreservation vyperPlaceFrames loweringPosts exprSimHyps exprSimHypsDefs exprSimSource
 
 Theorem outcomes_frame_trans[local]:
-  s1 = s0 with outcomes := s1.outcomes /\
-  s2 = s1 with outcomes := s2.outcomes ==>
-  s2 = s0 with outcomes := s2.outcomes
+  s1 = s0 with <| outcomes := s1.outcomes; gas_obs := s1.gas_obs |> /\
+  s2 = s1 with <| outcomes := s2.outcomes; gas_obs := s2.gas_obs |> ==>
+  s2 = s0 with <| outcomes := s2.outcomes; gas_obs := s2.gas_obs |>
 Proof
   simp[evaluation_state_component_equality] >> metis_tac[]
 QED
 
 Theorem outcomes_frame_bind[local]:
-  (!s r t. f s = (r,t) ==> t = s with outcomes := t.outcomes) /\
-  (!x s r t. g x s = (r,t) ==> t = s with outcomes := t.outcomes) /\
+  (!s r t. f s = (r,t) ==> t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>) /\
+  (!x s r t. g x s = (r,t) ==> t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>) /\
   bind f g s = (r,t) ==>
-  t = s with outcomes := t.outcomes
+  t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>
 Proof
   simp[bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   metis_tac[outcomes_frame_trans]
@@ -24,15 +24,15 @@ QED
 
 Theorem outcomes_frame_precompile[local]:
   precompile_call_success bt s = (r,t) ==>
-  t = s with outcomes := t.outcomes
+  t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>
 Proof
   strip_tac >> drule precompile_call_success_state >>
-  strip_tac >> gvs[]
+  strip_tac >> gvs[evaluation_state_component_equality]
 QED
 
-Theorem supported_builtin_no_gas_or_len[local]:
+Theorem supported_builtin_not_len[local]:
   supported_builtin_form tops ty blt es ==>
-  blt <> Env MsgGas /\ blt <> Len
+  blt <> Len
 Proof
   Cases_on `blt` >> simp[supported_builtin_form_def] >>
   rpt strip_tac >> gvs[] >> Cases_on `es` >> gvs[]
@@ -41,16 +41,16 @@ QED
 Theorem supported_eval_outcomes_frame:
   (!tops e. supported_pure_expr tops e ==>
     !cx s r t. eval_expr cx e s = (r,t) ==>
-      t = s with outcomes := t.outcomes) /\
+      t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>) /\
   (!tops es. supported_pure_exprs tops es ==>
     !cx s r t. eval_exprs cx es s = (r,t) ==>
-      t = s with outcomes := t.outcomes) /\
+      t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>) /\
   (!tops fields. supported_pure_fields tops fields ==>
     !cx s r t. eval_exprs cx (MAP SND fields) s = (r,t) ==>
-      t = s with outcomes := t.outcomes) /\
+      t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>) /\
   (!tops e. supported_place_expr tops e ==>
     !cx s r t. eval_expr cx e s = (r,t) ==>
-      t = s with outcomes := t.outcomes)
+      t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def] >>
@@ -87,7 +87,11 @@ Proof
     rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >>
     metis_tac[outcomes_frame_trans])
   >>~- ([`eval_expr _ (Builtin _ _ _) _ = _`],
-    drule supported_builtin_no_gas_or_len >> strip_tac >>
+    drule supported_builtin_not_len >> strip_tac >>
+    Cases_on `blt = Env MsgGas`
+    >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+            return_def, raise_def, next_gas_reading_def, AllCaseEqs(),
+            evaluation_state_component_equality]) >>
     gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
         type_check_def, assert_def, return_def, raise_def, get_accounts_def] >>
     imp_res_tac lift_sum_state >> gvs[] >>
@@ -100,7 +104,7 @@ QED
 
 Theorem supported_eval_expr_outcomes:
   supported_pure_expr tops e /\ eval_expr cx e s = (r,t) ==>
-  t = s with outcomes := t.outcomes
+  t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>
 Proof
   metis_tac[CONJUNCT1 supported_eval_outcomes_frame]
 QED
@@ -109,7 +113,7 @@ Theorem supported_eval_expr_results_outcomes:
   !args s r t.
     EVERY (supported_pure_expr tops) args /\
     eval_expr_results cx args s = (r,t) ==>
-    t = s with outcomes := t.outcomes
+    t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>
 Proof
   Induct_on `args` >> simp[Once evaluate_def, return_def] >>
   rpt gen_tac >> strip_tac >>
@@ -188,8 +192,8 @@ Proof
 QED
 
 Theorem immutable_holds_outcomes:
-  immutable_holds cenv cx t tv w (es with outcomes := os) <=>
-  immutable_holds cenv cx t tv w es
+  immutable_holds cenv cx t tv w (es with outcomes := os) s <=>
+  immutable_holds cenv cx t tv w es s
 Proof
   simp[immutable_holds_def, read_result_outcomes_iff]
 QED
