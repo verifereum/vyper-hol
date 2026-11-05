@@ -5109,6 +5109,142 @@ Proof
   qexists_tac `0` >> simp[]
 QED
 
+Theorem place_store_wrap_probe_entry_code:
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let sb = SND (compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa) in
+  !func. func.fn_blocks =
+    <|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+      sb.cs_blocks ==>
+    lookup_block "entry" func.fn_blocks = SOME
+      <|bb_label := "entry"; bb_instructions := [
+        mk_inst 0 ALLOCA [Lit 0w] ["%0"];
+        mk_inst 1 ASSIGN [Lit 0w] ["%1"];
+        mk_inst 2 JMP [Label "@typed_sa_cond_0"] []]|>
+Proof
+  mp_tac place_store_wrap_probe_code_listing >>
+  simp_tac pure_ss [LET_THM] >> disch_then SUBST1_TAC >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+
+Theorem place_store_gas_edge_nonterminator:
+  !ctx func s n t bb inst u.
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    ~is_terminator inst.inst_opcode /\
+    (!fuel. step_inst fuel ctx inst s = OK u) /\
+    gas_path_edge ctx func s n (OK t) ==>
+    t = (u with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[gas_path_edge_def, fragExecTheory.exit_result_def]
+QED
+
+Theorem place_store_wrap_probe_entry_alloca_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\ s.vs_current_bb = "entry" /\
+    s.vs_inst_idx = 0 /\
+    lookup_block "entry" func.fn_blocks = SOME
+      <|bb_label := "entry"; bb_instructions := [
+        mk_inst 0 ALLOCA [Lit 0w] ["%0"];
+        mk_inst 1 ASSIGN [Lit 0w] ["%1"];
+        mk_inst 2 JMP [Label "@typed_sa_cond_0"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[gas_path_edge_def, get_instruction_def] >>
+  gvs[mk_inst_def, is_terminator_def, fragExecTheory.exit_result_def] >>
+  fs[step_inst_non_invoke] >>
+  fs[step_inst_base_def, eval_operand_def]
+  >- (drule_all (SRULE [mk_inst_def] place_store_wrap_probe_phase_alloca) >>
+      simp[]) >>
+  qpat_x_assum `OK _ = _` (assume_tac o SYM) >>
+  gvs[fragExecTheory.exit_result_def]
+QED
+
+Theorem place_store_step_lt[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id LT args outs) s =
+    exec_pure2 (\x y. bool_to_word (w2n x < w2n y))
+      (mk_inst id LT args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_step_iszero[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id ISZERO args outs) s =
+    exec_pure1 (\x. bool_to_word (x = 0w))
+      (mk_inst id ISZERO args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_cond_step:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_cond_0" /\ s.vs_inst_idx < 2 /\
+    step_inst_base
+      (EL s.vs_inst_idx [
+        mk_inst 3 LT [Var "%1"; Lit 1w] ["%2"];
+        mk_inst 4 ISZERO [Var "%2"] ["%3"]]) s = OK t ==>
+    place_store_wrap_probe_phase
+      (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >>
+  `s.vs_inst_idx = 0 \/ s.vs_inst_idx = 1` by decide_tac >>
+  `k = 0 \/ k = 1` by decide_tac >>
+  gvs[] >>
+  fs[place_store_step_lt, place_store_step_iszero] >>
+  gvs[exec_pure1_def, exec_pure2_def, mk_inst_def,
+      eval_operand_def, bool_to_word_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def] >>
+  qexists_tac `w2n (THE (FLOOKUP s.vs_vars "%1"))` >> simp[]
+QED
+
+Theorem place_store_step_jnz[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id JNZ args outs) s =
+    (case args of
+       [cond; Label a; Label b] =>
+         (case eval_operand cond s of
+            SOME v => if v <> 0w then OK (jump_to a s) else OK (jump_to b s)
+          | NONE => Error "undefined condition")
+     | _ => Error "jnz requires cond and 2 labels")
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_cond_jump:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_cond_0" /\ s.vs_inst_idx = 2 /\
+    step_inst_base (mk_inst 5 JNZ
+      [Var "%3"; Label "@typed_sa_exit_2"; Label "@typed_sa_body_1"] []) s = OK t ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >> `k = 0 \/ k = 1` by decide_tac >>
+  gvs[place_store_step_jnz, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, jump_to_def,
+      mload_def, contract_storage_def]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
