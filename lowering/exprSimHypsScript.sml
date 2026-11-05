@@ -410,14 +410,17 @@ QED
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    ((!n. bi <> Slice n) \/ ~is_extcode e) /\
     expr_sim_inv cenv cx env es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm,
-     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+  rpt gen_tac >> strip_tac >>
+  `alloc_limits_expr cenv e` by
+    (irule alloc_limits_builtin_arg >> gvs[expr_sim_pre_def] >> metis_tac[]) >>
+  gvs[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+      byte_widths_expr_def, expr_has_evm_run_thm,
+      supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
-  drule_all alloc_limits_exprs_mem >>
   gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
 QED
 
