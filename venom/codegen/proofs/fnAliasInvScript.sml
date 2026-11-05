@@ -2785,6 +2785,37 @@ Proof
   EVAL_TAC >> simp[release_dead_spills_def, alias_release_fold_fields]
 QED
 
+(* Absent-source end-to-end audit (C1.21.2.1): reuse E0072, not a
+   duplicate fixture. alias_spill_probe_clean_and_phi proves that Var p is
+   absent from BOTH stack and spill domain (by plan_holds_def). The checked
+   alias_spill_probe_assign_fields nevertheless proves that full
+   generate_regular_inst_plan retains Var q. Its arguments are explicitly
+   alias_spill_probe_live, the built DFG and analyzed CFG of
+   alias_spill_probe_fn, instruction 23 ASSIGN p -> q, analyzed next-live
+   index 2, first-instruction flag T, halting flag F, label P, and the
+   concrete alias_spill_probe_clean state. This is the full planner call,
+   not just its consume/push fragment: it includes input emission, reorder
+   and optimistic-swap handling. The successful call is not an availability
+   certificate. The regular planner pushes outputs after consuming operands;
+   missing physical input does not prevent that construction.
+
+   The fixture has a checked static lineage entry (alias_spill_probe_lineage)
+   and checked cleanup/PHI behavior, but no general instruction-prefix
+   lineage predicate. Here p is a PHI self-root: runtime PHI definition can
+   supply its semantic equality without physical heldness. Therefore this
+   example does NOT show an alias failure or a frozen-target counterexample.
+
+   Exact residual producer required for the joint proof: whenever full
+   regular planning retains an ASSIGN output whose source was not held,
+   under the frozen block-entry/lineage/run premises derive semantic framed
+   alias equality of that source at the actual runtime instruction prefix
+   (or a sufficient backwards trace to initially held equality or a locally
+   executed self-root). The producer must cover nontrivial ASSIGN sources,
+   not merely this PHI example, and must track intervening root writes.
+   Conditional inventory/phi-heldness lemmas require source heldness and
+   cannot establish this residual implication. Static lineage constructors
+   alone do not relate the runtime predecessor to a chosen static edge.
+*)
 val () = computeLib.add_funs [stackPlanOpsTheory.release_dead_spills_def];
 
 (* Small computation fixture: an actual DFG, not an assumed equivalence. *)
