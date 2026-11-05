@@ -3255,6 +3255,148 @@ Proof
 QED
 
 (* compile_assign_value into (transient) storage, not a DynArray. *)
+Theorem place_store_typed_rank_path:
+  !n cenv tenv ctx dty sty dtv stv v.
+    type_rank cenv.ce_struct_fields dty = n /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty dty /\
+    evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v ==>
+    place_store_counted_entry cenv ctx dty sty dtv stv v
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type dty`
+  >- (irule place_store_counted_word_entry >> simp[] >> qexists_tac `tenv` >> simp[]) >>
+  Cases_on `is_bytestring_type dty` >- suspend "bytes" >>
+  Cases_on `dty`
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> gvs[is_word_type_def, is_bytestring_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_word_type_def, is_bytestring_type_def, evaluate_type_def, AllCaseEqs()])
+  >~ [`ArrayT de db`]
+  >- (Cases_on `db`
+      >- (irule place_store_counted_sarray_entry >> simp[] >> qexists_tac `tenv` >> simp[] >>
+          (conj_tac >- metis_tac[]) >> (rpt strip_tac >>
+           qpat_x_assum `!k. k < _ ==> _`
+             (qspec_then `type_rank cenv.ce_struct_fields cd` mp_tac) >>
+           simp[] >> disch_then irule >> simp[] >> qexists_tac `tenv` >> simp[] >> metis_tac[])) >>
+      irule place_store_counted_dynarray_entry >> simp[] >> qexists_tac `tenv` >> simp[] >>
+      (conj_tac >- metis_tac[]) >> (rpt strip_tac >>
+           qpat_x_assum `!k. k < _ ==> _`
+             (qspec_then `type_rank cenv.ce_struct_fields cd` mp_tac) >>
+           simp[] >> disch_then irule >> simp[] >> qexists_tac `tenv` >> simp[] >> metis_tac[]))
+  >~ [`TupleT dtys`]
+  >- (irule place_store_counted_tuple_entry >> simp[] >> qexists_tac `tenv` >> simp[] >>
+      (conj_tac >- metis_tac[]) >> (rpt strip_tac >>
+           qpat_x_assum `!k. k < _ ==> _`
+             (qspec_then `type_rank cenv.ce_struct_fields cd` mp_tac) >>
+           simp[] >> disch_then irule >> simp[] >> qexists_tac `tenv` >> simp[] >> metis_tac[]))
+  >~ [`StructT name`]
+  >- (irule place_store_counted_struct_entry >> simp[] >> qexists_tac `tenv` >> simp[] >>
+      (conj_tac >- metis_tac[]) >> (rpt strip_tac >>
+           qpat_x_assum `!k. k < _ ==> _`
+             (qspec_then `type_rank cenv.ce_struct_fields cd` mp_tac) >>
+           simp[] >> disch_then irule >> simp[] >> qexists_tac `tenv` >> simp[] >> metis_tac[])) >>
+  gvs[is_word_type_def, evaluate_type_def] >>
+  `sty = NoneT` by
+    (Cases_on `sty` >> fs[type_widens_to_def, arg_type_fits_def]) >> gvs[] >>
+  simp[place_store_counted_entry_def] >> rpt strip_tac >>
+  gvs[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+      is_bytestring_type_def, compileEnvTheory.type_memory_bytes_def,
+      contextTheory.compile_copy_memory_def, comp_return_def] >>
+  qexists_tac `s` >>
+  simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules,
+       valueEncodingTheory.val_in_memory_def,
+       typedMemoryCopyTheory.typed_copy_state_frame_def,
+       typedMemoryCopyTheory.typed_copy_frame_def, venom_state_component_equality]
+QED
+
+Resume place_store_typed_rank_path[bytes]:
+  drule_all typedMemoryCopyTheory.typed_copy_bytestring_source >> strip_tac >>
+  qpat_x_assum `!m. m < _ ==> _` kall_tac >>
+  simp[place_store_counted_entry_def] >> rpt strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def] >> strip_tac >>
+  `!ty tv. is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+     (?cap. tv = BaseTV (BytesT (Dynamic cap))) \/
+     (?cap. tv = BaseTV (StringT cap))` by
+    (Cases >> simp[is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def]
+     >~ [`BytesT bd`]
+     >- (Cases_on `bd` >> rw[is_bytestring_type_def, evaluate_type_def]) >>
+     rw[evaluate_type_def]) >>
+  `(?cap. stv = BaseTV (BytesT (Dynamic cap))) \/
+   (?cap. stv = BaseTV (StringT cap))` by metis_tac[] >>
+  `(?cap. dtv = BaseTV (BytesT (Dynamic cap))) \/
+   (?cap. dtv = BaseTV (StringT cap))` by metis_tac[] >>
+  gvs[] >> Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  (irule place_store_bytestring_path >> simp[] >>
+   goal_assum (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
+   FIRST [rename1 `StringV str` >> qexistsl_tac [`STRLEN str`, `sw`],
+          rename1 `BytesV bs` >> qexistsl_tac [`LENGTH bs`, `sw`]] >>
+   gvs[valueEncodingTheory.val_in_memory_def, loweringPostsTheory.val_footprint_def,
+       valueEncodingTheory.type_memory_size_def] >>
+   qmatch_goalsub_abbrev_tac `word_size len <= word_size capacity` >>
+   `word_size len <= word_size capacity` by
+     (irule exprSimHypsTheory.word_size_monotone >> simp[Abbr `len`]) >>
+   qspec_then `len` assume_tac exprSimPropsTheory.le_word_size_mul >> decide_tac)
+QED
+Finalise place_store_typed_rank_path
+
+Theorem place_store_memory_typed_path:
+  !cenv tenv dst dty src sty dtv stv v sa sb ctx func s dw sw.
+    compile_store_memory_typed cenv dst dty src sty sa = ((), sb) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty dty /\
+    evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size stv < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    (w2n sw + type_memory_size stv <= w2n dw \/
+     w2n dw + type_memory_size dtv <= w2n sw) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+                vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  `place_store_counted_entry cenv ctx dty sty dtv stv v` by
+    (irule place_store_typed_rank_path >> simp[] >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `place_store_counted_entry _ _ _ _ _ _ _` mp_tac >>
+  simp[place_store_counted_entry_def] >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`func`, `s`, `dw`, `sw`] mp_tac) >>
+  simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+  qexists_tac `t` >>
+  gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+      typedMemoryCopyTheory.typed_copy_frame_def] >> metis_tac[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
