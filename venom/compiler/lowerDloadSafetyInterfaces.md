@@ -672,3 +672,183 @@ No unconditional allocation fields were inferred from the conditional fresh
 advance theorem, and no saved-map erasure proof was duplicated. These are the
 remaining producer/factoring obligations for strategist review, not a completed
 allocation endpoint theorem.
+
+## Current singleton dispatch audit (.16, in progress)
+
+E0249 supersedes earlier claims that the actual four-instruction DLOAD
+endpoint is missing: `ld_dload_endpoint` and `ld_dloadbytes_endpoint` are
+exported in ExpansionEndpoint with empty kernel hypotheses. This does not
+close singleton dispatch. The following inventory is source inspection,
+not a claim that a dispatcher has been checked.
+
+The common P is not a gap: `ld_sync_def` explicitly includes
+`EVERY (fn_ptr_ok P) C.ctx_functions` (line 128). Arithmetic and assignment
+producers therefore do not need a different existential pointer policy.
+
+Inspected unconditional producers (all take successful target steps, not
+successful source steps or successor activity):
+
+* `ld_sync_arithmetic_effect`: MUL, Div, Mod, SDIV, SMOD, Exp, ADDMOD,
+  MULMOD, SLT, SGT, ISZERO, AND, OR, XOR, NOT, SIGNEXTEND, BYTE, OFFSET,
+  ADD, SUB, SHL, SHR, SAR.
+* `ld_sync_assignment_effect`: ASSIGN, RETPC_PARAM. Current opaque-return
+  policy must be retained; no return-token equality is required here.
+* `ld_sync_observational_read_effect`: CALLER, ADDRESS, CALLVALUE, GAS,
+  ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO,
+  GASLIMIT, BASEFEE, BLOBBASEFEE, CALLDATASIZE, RETURNDATASIZE, CODESIZE,
+  BLOCKHASH, BLOBHASH, CALLDATALOAD, BALANCE, SELFBALANCE, EXTCODESIZE,
+  EXTCODEHASH, SLOAD, TLOAD.
+* `ld_sync_classified_read_effect`: MLOAD, ILOAD, LT, GT, EQ; additionally
+  requires source non-revert for memory reads and source headroom invariant.
+* `ld_sync_param_effect`: PARAM; requires the stack-wide selected-Q
+  permission already present in the endpoint ambient premises.
+* `ld_sync_memory_write_effect`: MSTORE, MSTORE8, MCOPY; requires projected
+  shape, labels, non-revert, and target frontier below dimword.
+* `ld_sync_istore_effect`: ISTORE; same additional projections as writes.
+* `ld_sync_oracle_call_effect`: CALL, STATICCALL; non-revert and source
+  headroom invariant suffice with common sync/global/shape/discipline.
+
+The arithmetic, assignment, observational and classified-read producers
+export correlated ss,H', provenance support, memory/nonghost, unchanged
+allocation maps/frontiers and current/previous block fields. PARAM has the
+same output. Write producers preserve H and additionally export indices;
+oracle-call output also exports indices. Their assumptions listed above
+are not yet a checked final dispatcher application.
+
+Original ALLOCA cannot use the successor-conditioned owned-coverage theorem
+for unconditional success. `ld_fresh_alloca_structure` is unconditional,
+but consumes paired exec_alloca success, fresh source/target entries and A
+key, no private-id collision, correlated value/memory/nonghost effects,
+frontier lower bounds and H' support. It produces post maps/global/slots,
+suffix maps/vars and erasure preservation, intervals and charge/frontier
+facts. These inputs still need to be composed with fresh/cached effect
+producers in the actual singleton dispatcher.
+
+Classification pitfalls checked against current definitions:
+`fmp_free_ctx` excludes DALLOCA,DRET,GETFMP,SETFMP,RETFMP through
+`is_raw_fmp_opcode`; it does NOT itself exclude INITIAL_FMP,BUMP,FMP_PARAM,
+MEMTOP. `raw_opcode_ok` excludes all these plus PHI and ASSERT_UNREACHABLE;
+its availability must be obtained from the actual source shape contract.
+`is_terminator` excludes JMP,JNZ,DJMP,RET,RETURN,REVERT,STOP,SINK,
+SELFDESTRUCT,INVALID,DRET,RETFMP from this nonterminating interface.
+INVOKE is separately excluded. PHI step semantics returns Error outside
+the phi prefix, independently of whether raw shape excludes it.
+
+Still to finish in this audit: inspect storage/identity producer fields;
+classify CODECOPY,CALLDATACOPY,RETURNDATACOPY,EXTCODECOPY,SHA3,LOG,
+DELEGATECALL,CREATE,CREATE2 and malformed DLOAD/DLOADBYTES; verify raw-shape
+projections and original cached/fresh ALLOCA inputs; run and remove the
+checked arithmetic/assignment endpoint consumer experiment. No residual
+in this paragraph is asserted impossible merely from its opcode name.
+
+Additional inspected common-output producers:
+`ld_sync_storage_write_effect` covers SSTORE,TSTORE and
+`ld_sync_identity_effect` covers NOP,ASSERT,ASSERT_UNREACHABLE. Both have
+exactly the same unconditional ss,H' support/memory/allocation/control
+output shape as arithmetic, under sync/global/o1_ctx_shape/ptr_discipline
+and target OK. Thus ASSERT_UNREACHABLE need not be excluded for this
+producer even if a stronger raw source contract also excludes it.
+
+Important correction from inspecting o1PassContract lines 340–358:
+`o1_ctx_shape`/`o1_fn_shape` do NOT contain `raw_opcode_ok`. Consequently
+INITIAL_FMP,BUMP,FMP_PARAM,MEMTOP cannot be discarded using that absent
+premise. This is a genuine residual classification obligation, not an
+invitation to strengthen ambient assumptions. DALLOCA/GETFMP/SETFMP are
+excluded by fmp_free_ctx, DRET/RETFMP additionally by nontermination.
+The semantics of INITIAL_FMP/BUMP/FMP_PARAM/MEMTOP must be audited against
+ptr/taint/shape policy or given unconditional producers.
+
+### Completed .16 consumer experiment and exhaustive partition
+
+The temporary `ld_singleton_consumer_probe` was checked in ExpansionEndpoint
+with a `null (hyp ld_singleton_consumer_probe)` assertion, build evidence
+TO_ld_mem-20261104T190123Z_m8115_t001. It used exactly the ambient DLOAD
+endpoint premises with shape replaced by X=[inst] and arithmetic/assignment
+membership, and exactly the endpoint conclusion with Ar=A. No source-success
+or target/source successor-activity assumption was introduced. The probe and
+its temporary imports were then removed (no permanent specialized API).
+
+The checked construction is: preserve membership as a whole using
+REPEAT_TCL CONJUNCTS_THEN; substitute X and h=0 explicitly, use ld_prefix_zero
+to identify t0=t, project EVERY(fn_ptr_ok P) from ld_sync, get label distinctness
+via ld_sync_fn_shape, and get t.idx=p from ld_sync_envelope_position. Normalize
+target fuel with step_inst_non_invoke. Case split MEM_APPEND only inside the
+common effect subgoal; ld_sync_arithmetic_effect/ld_sync_assignment_effect give
+ss,H' unconditionally at fuel 0. Use step_inst_preserves_inst_idx for u.idx.
+Abbreviate tn'=step_taint and G'=step_prov and expose their equations before
+`drule_all ld_nonallocating_endpoint`. Record projections and
+ld_head_order_cong discharge remaining structural obligations. Successor sync
+comes solely from that common consumer and remains source-active conditional.
+Uncontrolled gvs/simp unfolds the long opcode membership and normalizes supply
+fields away from sync; explicit substitutions and std_ss avoid that issue.
+This experiment found no missing common consumer clause.
+
+Exhaustive partition of the opcode datatype in venomInst lines 24–68 follows.
+Each constructor occurs in exactly one row (valid expansions and malformed
+singletons are distinguished within the data-load row):
+
+| Constructors | Route / status |
+|---|---|
+| ADD SUB MUL Div SDIV Mod SMOD Exp ADDMOD MULMOD SLT SGT ISZERO AND OR XOR NOT SHL SHR SAR SIGNEXTEND BYTE OFFSET | ld_sync_arithmetic_effect, checked consumer above |
+| EQ LT GT MLOAD ILOAD | ld_sync_classified_read_effect |
+| MSTORE MSTORE8 MCOPY | ld_sync_memory_write_effect |
+| SLOAD TLOAD CALLER CALLVALUE CALLDATALOAD CALLDATASIZE ADDRESS ORIGIN GASPRICE GAS GASLIMIT COINBASE TIMESTAMP NUMBER PREVRANDAO CHAINID SELFBALANCE BALANCE BLOCKHASH BASEFEE CODESIZE EXTCODESIZE EXTCODEHASH RETURNDATASIZE BLOBHASH BLOBBASEFEE | ld_sync_observational_read_effect |
+| SSTORE TSTORE | ld_sync_storage_write_effect |
+| ISTORE | ld_sync_istore_effect |
+| ASSIGN RETPC_PARAM | ld_sync_assignment_effect, checked consumer above |
+| PARAM | ld_sync_param_effect |
+| NOP ASSERT ASSERT_UNREACHABLE | ld_sync_identity_effect |
+| CALL STATICCALL | ld_sync_oracle_call_effect |
+| JMP JNZ DJMP RET RETURN REVERT STOP SINK SELFDESTRUCT INVALID DRET RETFMP | excluded by ~is_terminator; no target OK assumption needed |
+| INVOKE | excluded explicitly |
+| PHI | step_inst_base returns Error "phi outside prefix", contradicting target OK for singleton |
+| DALLOCA GETFMP SETFMP | excluded by fmp_free_ctx at reachable source instruction (membership from ld_sync_source/ld_active_inst_member) |
+| MEMTOP FMP_PARAM | excluded by fn_ptr_ok P fn at source member, NOT by raw_opcode_ok or fmp_free_ctx |
+| ALLOCA | original fresh/cached allocation, audited below; unconditional effects available, assembly outstanding |
+| DLOAD DLOADBYTES | valid shapes handled by accepted ld_dload_endpoint/ld_dloadbytes_endpoint; malformed singleton shape cannot return OK: exec_read1 requires one operand/one output; DLOADBYTES requires three operands (outputs ignored, so nonempty outputs are NOT malformed) |
+| INITIAL_FMP BUMP | residual unconditional producers; not excluded by source shape/fmp-free; semantics update initial-fmp scalar / two outputs respectively |
+| CODECOPY CALLDATACOPY RETURNDATACOPY EXTCODECOPY | residual public byte-write producers; all can return OK; RETURNDATACOPY also has an Abort branch, which does not exclude its OK branch |
+| SHA3 LOG | residual memory-consumer producers; both can return OK |
+| DELEGATECALL CREATE CREATE2 | residual oracle producers; all can return OK |
+
+The MEMTOP/FMP_PARAM row corrects the earlier four-pseudo-opcode residual:
+fn_ptr_ok_def lines 123–126 explicitly excludes both. ld_sync contains the
+common P witness, and ld_sync_ptr_ok yields fn_ptr_ok P fn. INITIAL_FMP and
+BUMP remain genuine residuals. No definition/ambient premise was changed.
+For these residuals, source inspection of step_inst_base at lines 693–718,
+882–935, 983–1008, 1020ff, 1096–1125 shows successful OK branches. A search of
+task-created lowerDload*Script.sml found no corresponding unconditional effect
+producer (the only LOG mention is the boundary observation audit).
+
+Original allocation input audit:
+* `ld_cached_alloca_effect` (SafetyAllocation lines 87–108) consumes maps/vars,
+  tv equality, memory/nonghost, FRANGE H subset FDOM A, output membership and
+  output in fn_pv, opcode/output shape, a cached source entry, and target OK.
+  It gives source success, an exact update_var form for both states, selected
+  H update support, provenance and memory/nonghost unconditionally. Allocation,
+  frontier, block and index equalities follow from update_var, hence the common
+  nonallocating endpoint consumer applies. Output membership and fn_pv must be
+  projected from active source instruction and fn_ptr_ok; these are not extra
+  frozen assumptions. Cached source/target pairing follows ld_maps.
+* Fresh `ld_fresh_alloca_dispatch` gives literal size, source success and paired
+  exec_alloca plus exact state updates from target OK and absent entries.
+  `ld_sync_absent_alloca_key` and `ld_original_alloca_fresh` supply map-key and
+  target absence using configured supply freshness; no inverse (base,size)
+  lookup is needed. `ld_fresh_alloca_effect` gives the correlated H update,
+  provenance and value/byte effects using fresh A'.
+* `ld_fresh_alloca_structure` consumes those paired exec_alloca effects, absent
+  entries/key, no private-site collision, index-adjusted g, memory/nonghost,
+  lower frontiers and H' support. It gives maps/global/slots, suffix maps/vars,
+  erasure preservation on all frames, intervals and charge/frontier facts
+  unconditionally. Conditional next-sync still needs source next envelope and
+  frame_reachable_next, as for the accepted scratch endpoint. Existing
+  ld_sync_fresh_alloca_update / ld_fresh_alloca_advance are successor-conditioned
+  consumers, not unconditional source-success producers.
+
+Finite remaining singleton work (not a proof of those branches): assemble all
+existing common effects and original ALLOCA; prove the eleven residual opcode
+producers INITIAL_FMP,BUMP,CODECOPY,CALLDATACOPY,RETURNDATACOPY,EXTCODECOPY,SHA3,
+LOG,DELEGATECALL,CREATE,CREATE2 (generalizing shared write/oracle interfaces in
+place where appropriate); discharge the explicit exclusions and malformed
+shape contradictions. The checked common consumer establishes the endpoint
+assembly interface, not these remaining producer semantics or full coverage.
