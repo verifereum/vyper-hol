@@ -574,6 +574,21 @@ Proof
        contextTheory.mk_ptr_def, eval_operand_def, read_result_def, return_def]
 QED
 
+(* Full-post specialization: state relation remains an explicit premise.
+   This is not a compile_expr or source-execution witness. *)
+Theorem ifexp_missing_flag_full_post_probe[local]:
+  get_tenv cx = FEMPTY /\ expr_type e = FlagT nsid ==>
+  (vv_post ctx func cenv cx e es sa sb s es (Value NoneV)
+     (LocatedValue (FlagT nsid) (mk_ptr (Lit 0w) LocMemory)) s /\
+   vv_store_bound cx (expr_type e) es (Value NoneV)
+     (LocatedValue (FlagT nsid) (mk_ptr (Lit 0w) LocMemory)) s
+   <=> stmt_state_rel ctx func cenv cx es s)
+Proof
+  simp[vv_post_def, vv_at_def, vv_holds_def, vv_store_bound_def,
+       vyperValueTheory.evaluate_type_def, finite_mapTheory.FLOOKUP_EMPTY,
+       contextTheory.mk_ptr_def, eval_operand_def, read_result_def, return_def]
+QED
+
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
