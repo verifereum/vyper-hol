@@ -3528,3 +3528,90 @@ Proof
    (irule cse_prefix_some_operand_single_output_binding >> metis_tac[]) >>
  qexistsl [`pre`, `post`, `m`, `sb`, `u`, `v`] >> simp[]
 QED
+
+
+Theorem cse_surviving_step_memory[local]:
+ !fuel ctx inst s t e.
+ step_inst fuel ctx inst s = OK t /\ inst.inst_opcode <> ALLOCA /\
+ Eff_MEMORY IN root_effects e /\ avail_source_survives e inst ==>
+ t.vs_memory = s.vs_memory
+Proof
+ rpt gen_tac >> strip_tac >>
+ Cases_on `is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+           is_terminator inst.inst_opcode`
+ >- (Cases_on `inst.inst_opcode` >>
+     gvs[is_pseudo_def, is_terminator_def] >>
+     gvs[step_inst_non_invoke] >>
+     gvs[step_inst_base_opcode_eqs] >>
+     gvs[AllCaseEqs(), jump_to_def, update_var_def] >>
+     pairarg_tac >> gvs[]) >>
+ irule write_effects_sound_memory >>
+ qexistsl [`ctx`, `fuel`, `inst`] >> simp[] >>
+ conj_tac >- (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+ gvs[availExprProofsTheory.avail_source_survives_def] >>
+ metis_tac[pred_setTheory.IN_DISJOINT]
+QED
+
+Theorem cse_phi_memory_frame[local]:
+ !insts s t. eval_phis s insts = OK t ==> t.vs_memory = s.vs_memory
+Proof
+ Induct >> simp[Once eval_phis_def] >> rpt gen_tac >>
+ IF_CASES_TAC >> simp[] >>
+ gvs[AllCaseEqs(), update_var_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem cse_prefix_memory_fold[local]:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn /\
+ (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> ALLOCA) ==>
+ !e. Eff_MEMORY IN root_effects e ==>
+ (cse_phase_state phase).vs_memory =
+ FOLDL (\acc ev. if cse_event_survives e ev then acc
+                 else (cse_event_output ev).vs_memory) s0.vs_memory events
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac
+ >- simp[cse_phase_state_def]
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> rpt strip_tac >>
+     drule cse_phi_memory_frame >> strip_tac >>
+     simp[cse_phase_state_def, rich_listTheory.FOLDL_APPEND,
+          cse_event_survives_def] >> gvs[cse_phase_state_def])
+ >> rpt gen_tac >> strip_tac >> strip_tac >> rpt strip_tac >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ `MEM inst bb.bb_instructions` by
+   (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+ `MEM inst (fn_insts fn)` by
+   (`MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    simp[fn_insts_def] >>
+    qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
+    qspec_tac (`fn.fn_blocks`, `bbs`) >>
+    Induct >> simp[fn_insts_blocks_def] >> metis_tac[]) >>
+ `inst.inst_opcode <> ALLOCA` by metis_tac[] >>
+ simp[cse_phase_state_def, rich_listTheory.FOLDL_APPEND,
+      cse_event_survives_def, cse_event_output_def] >>
+ IF_CASES_TAC >> gvs[cse_phase_state_def] >>
+ metis_tac[cse_surviving_step_memory]
+QED
+
+Theorem cse_memory_fold_surviving[local]:
+ !post e acc. EVERY (cse_event_survives e) post ==>
+ FOLDL (\a ev. if cse_event_survives e ev then a
+              else (cse_event_output ev).vs_memory) acc post = acc
+Proof
+ Induct >> simp[]
+QED
+
+Theorem cse_prefix_surviving_memory_frame:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 pre ph0 /\
+ cse_prefix ctx fn fuel0 s0 (pre ++ post) ph1 /\
+ (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> ALLOCA) /\
+ Eff_MEMORY IN root_effects e /\ EVERY (cse_event_survives e) post ==>
+ (cse_phase_state ph1).vs_memory = (cse_phase_state ph0).vs_memory
+Proof
+ strip_tac >>
+ drule_all cse_prefix_memory_fold >> strip_tac >>
+ qpat_x_assum `cse_prefix ctx fn fuel0 s0 pre ph0`
+   (mp_then Any mp_tac cse_prefix_memory_fold) >>
+ simp[rich_listTheory.FOLDL_APPEND, cse_memory_fold_surviving]
+QED
