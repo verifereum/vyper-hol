@@ -2,7 +2,7 @@ Theory abiEncodeZeroSupplier
 Ancestors
   abiEncodeOwnership abiEncodeInputSupplier abiTupleEncodeZeroInput
   abiEncoderSourceAggregate abiEncoderSourceFootprint abiTupleEncodeLayout
-  exprSimDefs entryDecodeProps abiEncoderSourcePrimitive contractABI abiEncoderInput abiDecodeRanges
+  exprSimDefs loweringPosts entryDecodeProps abiEncoderSourcePrimitive contractABI abiEncoderInput abiDecodeRanges
   valueEncodingProps valueEncodingTyping valueEncoding vyperTyping vyperABI vyperValue compileEnv words
 
 Theorem abi_encode_nonword_zero_input_supplier:
