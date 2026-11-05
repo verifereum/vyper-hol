@@ -64,7 +64,6 @@
 
 Theory exprSimAggregates
 Ancestors
-  exprSimAggregatesStructCounted exprSimAggregatesArrayCounted
   exprSimAggregatesAllocCounted
   exprSimAbiDecode
   exprSimAbiEncode
@@ -214,7 +213,7 @@ Proof
   drule_all buffer_alloc_counted >> strip_tac >>
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
-  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_counted >>
+  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
   simp[] >> disch_then drule >>
   simp[] >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
@@ -311,7 +310,7 @@ Resume compile_make_array_vv_case[tuple]:
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) exprSimAggregatesLoopsCountedTheory.aggregate_make_tuple_counted >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
@@ -389,7 +388,7 @@ Resume compile_make_array_vv_case[array]:
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_counted >>
+  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
