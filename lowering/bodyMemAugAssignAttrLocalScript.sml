@@ -213,6 +213,30 @@ Proof
   gvs[gas_marked_exec_def]
 QED
 
+Theorem bop_result_augassign_mem_src[local]:
+  !cx ty bop t2 v1 v2 es tv.
+    bop <> In /\ bop <> NotIn ==>
+    bop_result cx ty bop [ty; t2] v1 v2 es =
+    case evaluate_binop
+      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+      tv bop v1 v2 of INL v => INL v | INR err => INR (Error err)
+Proof
+  rpt gen_tac >>
+  SIMP_TAC std_ss [bop_result_def, evaluate_builtin_def,
+    vyperASTTheory.builtin_case_def, listTheory.list_case_def, LET_THM] >>
+  Cases_on `bop` >>
+  SIMP_TAC std_ss [evaluate_binop_def, vyperASTTheory.binop_case_def]
+QED
+
+Theorem stmt_state_rel_gas_obs_mem_src[local]:
+  stmt_state_rel ctx func cenv cx (es with gas_obs := gs) s =
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  SIMP_TAC std_ss [stmt_state_rel_def, state_rel_def, storage_rel_def,
+    transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def,
+    immutable_alloca_sep_def, evaluation_state_accfupds]
+QED
+
 Theorem augassign_attr_binop_admissible_mem_src[local]:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
