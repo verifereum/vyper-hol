@@ -830,6 +830,124 @@ Resume place_store_encoded_copy_agree[live]:
 QED
 Finalise place_store_encoded_copy_agree
 
+Theorem place_store_alloc_buffer_path:
+  !func cenv cx es sa sm buf sz s ctx.
+    compile_alloc_buffer sz sa = (buf,sm) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    fn_has_code sa sm func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t w. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
+      sa.cs_next_id < sm.cs_next_id /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+         FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sa.cs_next_id /\
+         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (!name b len. local_region cenv es.scopes t name b len ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
+      ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      (FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,sz) \/
+       (FLOOKUP s.vs_allocas sa.cs_next_id = NONE /\
+        w2n w = s.vs_alloca_next))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  drule_all exprSimAllocTheory.literal_alloc_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
+  qmatch_asmsub_abbrev_tac `MEM inst (fn_insts func)` >>
+  `emitted_insts sa sm = [inst] /\
+   sm.cs_current_bb = sa.cs_current_bb /\
+   sm.cs_current_insts = sa.cs_current_insts ++ [inst]` by
+    suspend "layout" >>
+  `step_inst_base inst s = OK u /\
+   ~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    suspend "execution" >>
+  `gas_marked_path F ctx func s 0
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    suspend "path" >>
+  `FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,sz) \/
+   (FLOOKUP s.vs_allocas sa.cs_next_id = NONE /\
+    w2n w = s.vs_alloca_next)` suffices_by
+    (disch_tac >>
+     qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`, `w`] >>
+     suspend "transport") >>
+  suspend "address"
+QED
+Resume place_store_alloc_buffer_path[layout]:
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  gvs[Abbr `inst`] >>
+  gvs[emitHelperTheory.emit_op_def, compileEnvTheory.fresh_var_def,
+      compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+Resume place_store_alloc_buffer_path[execution]:
+  `step_inst_base inst s = OK u` by
+    (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+     simp[run_inst_seq_def] >> Cases_on `step_inst_base inst s` >> simp[]) >>
+  simp[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[Abbr `inst`, step_inst_base_def, mk_inst_def,
+       exec_alloca_def, eval_operand_def] >>
+  Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+  >- (strip_tac >> gvs[update_var_def]) >>
+  PairCases_on `x` >> strip_tac >> gvs[update_var_def]
+QED
+Resume place_store_alloc_buffer_path[path]:
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_path_edge ctx func s 0
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
+     simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+     disch_then (qspecl_then [`func`, `ctx`] mp_tac) >>
+     simp[Abbr `inst`, mk_inst_def, is_terminator_def]) >>
+  simp[gas_marked_path_def] >>
+  metis_tac[gas_path_rules, gas_path_edge_normal, ADD_0]
+QED
+Resume place_store_alloc_buffer_path[address]:
+  Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[Abbr `inst`, step_inst_base_def, mk_inst_def,
+           exec_alloca_def, eval_operand_def] >> strip_tac >>
+      gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  disj1_tac >>
+  qpat_x_assum `!aid entry. _` drule >>
+  gvs[]
+QED
+Resume place_store_alloc_buffer_path[transport]:
+  simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+       eval_operand_def, lookup_var_def, local_region_def] >>
+  metis_tac[eval_operand_def, lookup_var_def, local_region_def]
+QED
+Finalise place_store_alloc_buffer_path
+
+Theorem place_store_alloc_source_disjoint:
+  !s sa w sz src len.
+    (FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,sz) \/
+     (FLOOKUP s.vs_allocas sa.cs_next_id = NONE /\
+      w2n w = s.vs_alloca_next)) /\
+    src + len <= s.vs_alloca_next /\
+    (!aid b size. FLOOKUP s.vs_allocas aid = SOME (b,size) /\
+       sa.cs_next_id <= aid ==> src + len <= b \/ b + size <= src) ==>
+    regions_disjoint src len (w2n w) sz
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[regions_disjoint_def] >> metis_tac[LESS_EQ_REFL, ADD_COMM]
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
