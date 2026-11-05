@@ -1,6 +1,7 @@
 (* Current local memory representation for write-side subscripts. *)
 Theory targetSubscriptMemory
 Ancestors
+  fragGasFresh varsExt context
   targetPlaceSim targetPlaceSimCasesBase exprSimProps exprSimArrayIndex
   exprSimHypsDefs exprLoweringProps freshWrites option vyperPlaceResultTyping
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
@@ -325,3 +326,15 @@ Proof
   qmatch_goalsub_rename_tac `ALOOKUP sparse (Num i)` >>
   Cases_on `ALOOKUP sparse (Num i)` >> gvs[]
 QED
+
+Theorem target_array_subscript_straight_fresh:
+  (!p. straight_fresh (loader p)) ==>
+  straight_fresh (compile_array_subscript base_op idx_op dyn cnt ws esz sgn
+    loader)
+Proof
+  strip_tac >> rewrite_tac[compile_array_subscript_split] >>
+  match_mp_tac straight_fresh_bind >> conj_tac
+  >- (Cases_on `dyn` >> simp[straight_fresh_return]) >>
+  simp[straight_fresh_array_check_ptr]
+QED
+
