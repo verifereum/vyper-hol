@@ -471,3 +471,156 @@ Proof
   pure_rewrite_tac[ASCIInumbersTheory.toString_inj] >>
   strip_tac >> gvs[]
 QED
+
+Theorem word_abs_runtime_alloca_inv:
+  alloca_inv word_abs_runtime_s0
+Proof
+  EVAL_TAC >> rw[AllCaseEqs()] >> gvs[]
+QED
+
+Theorem word_abs_runtime_functions:
+  word_abs_runtime_unit.cu_context.ctx_functions = [word_abs_runtime_func]
+Proof
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``]) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[listTheory.INDEX_FIND_def]
+QED
+
+Theorem word_abs_runtime_no_calls_scratch:
+  EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> DALLOCA)
+    (fn_insts word_abs_runtime_func)
+Proof
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``]) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[listTheory.INDEX_FIND_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``])
+QED
+
+Theorem word_abs_runtime_no_reachable:
+  !g. ~TC (fn_directly_calls word_abs_runtime_unit.cu_context)
+    word_abs_runtime_func.fn_name g
+Proof
+  gen_tac >>
+  `!g. ~fn_directly_calls word_abs_runtime_unit.cu_context
+    word_abs_runtime_func.fn_name g` suffices_by
+    (strip_tac >> strip_tac >> drule relationTheory.TC_CASES1_E >> simp[]) >>
+  simp[fcgDefsTheory.fn_directly_calls_def, word_abs_runtime_functions,
+    word_abs_runtime_func_name, venomInstTheory.lookup_function_def,
+    listTheory.FIND_def, listTheory.INDEX_FIND_def] >>
+  mp_tac word_abs_runtime_no_calls_scratch >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem word_abs_runtime_fmp_room:
+  fmp_room word_abs_runtime_unit.cu_context word_abs_runtime_func
+    word_abs_runtime_s0
+Proof
+  simp[exprLoweringPropsTheory.fmp_room_def, word_abs_runtime_no_reachable, listTheory.EXISTS_MEM] >>
+  mp_tac word_abs_runtime_no_calls_scratch >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem word_abs_runtime_alloca_insts:
+  FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts word_abs_runtime_func) =
+    [<|inst_id := 17; inst_opcode := ALLOCA; inst_operands := [Lit 32w];
+       inst_outputs := ["%11"]|>]
+Proof
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``]) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[listTheory.INDEX_FIND_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``])
+QED
+
+Theorem word_abs_runtime_pending_alloca:
+  pending_alloca_size word_abs_runtime_func word_abs_runtime_s0 = 0
+Proof
+  rewrite_tac[exprLoweringPropsTheory.pending_alloca_size_def] >>
+  `FILTER (\i. i.inst_opcode = ALLOCA /\
+      i.inst_id NOTIN FDOM word_abs_runtime_s0.vs_allocas)
+      (fn_insts word_abs_runtime_func) =
+    FILTER (\i. i.inst_id NOTIN FDOM word_abs_runtime_s0.vs_allocas)
+      (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts word_abs_runtime_func))`
+    by (qspec_tac (`fn_insts word_abs_runtime_func`, `is`) >>
+        Induct >> simp[] >> gen_tac >>
+        Cases_on `h.inst_opcode = ALLOCA` >> simp[] >>
+        Cases_on `h.inst_id IN FDOM word_abs_runtime_s0.vs_allocas` >> simp[]) >>
+  pop_assum SUBST1_TAC >> rewrite_tac[word_abs_runtime_alloca_insts] >>
+  EVAL_TAC
+QED
+
+Theorem word_abs_runtime_alloca_room:
+  alloca_room word_abs_runtime_unit.cu_context word_abs_runtime_func
+    word_abs_runtime_s0
+Proof
+  simp[exprLoweringPropsTheory.alloca_room_def, word_abs_runtime_functions,
+    word_abs_runtime_no_reachable, word_abs_runtime_pending_alloca,
+    venomInstTheory.lookup_function_def, listTheory.FIND_def,
+    listTheory.INDEX_FIND_def, word_abs_runtime_func_name,
+    word_abs_runtime_s0_def, venomStateTheory.init_venom_state_def, wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
+Theorem word_abs_runtime_alloca_sizes:
+  !inst n base sz.
+    MEM inst (fn_insts word_abs_runtime_func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\
+    FLOOKUP word_abs_runtime_s0.vs_allocas inst.inst_id = SOME (base,sz) ==>
+    sz = w2n n
+Proof
+  rpt strip_tac >>
+  `MEM inst (FILTER (\i. i.inst_opcode = ALLOCA)
+    (fn_insts word_abs_runtime_func))` by simp[listTheory.MEM_FILTER] >>
+  gvs[word_abs_runtime_alloca_insts, word_abs_runtime_s0_def,
+    venomStateTheory.init_venom_state_def, finite_mapTheory.FLOOKUP_UPDATE,
+    wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
+Theorem word_abs_runtime_stmt_state:
+  stmt_state_rel word_abs_runtime_unit.cu_context word_abs_runtime_func
+    word_abs_runtime_frame_cenv word_abs_runtime_cx word_abs_runtime_es
+    word_abs_runtime_s0
+Proof
+  rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  simp[word_abs_runtime_state, word_abs_runtime_alloca_inv,
+    word_abs_runtime_alloca_room, word_abs_runtime_fmp_room] >>
+  conj_tac
+  >- CONV_TAC (computeLib.RESTR_EVAL_CONV
+       [``word_abs_runtime_func``, ``function_selector``, ``calldata_method_id``,
+        ``vyper_to_abi_types``]) >>
+  conj_tac
+  >- (CONV_TAC (computeLib.RESTR_EVAL_CONV
+       [``word_abs_runtime_func``, ``function_selector``, ``calldata_method_id``,
+        ``vyper_to_abi_types``]) >> simp[]) >>
+  metis_tac[word_abs_runtime_alloca_sizes]
+QED
