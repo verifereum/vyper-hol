@@ -13,7 +13,7 @@ Theory fnEntryParams
 Ancestors
   fnFrameBoundary fnFrameBoundaryEntryParams frameRel contextCodegenRel
   stackPlanGen stackPlanTypes venomExecSemantics venomState venomInst
-  venomWf livenessDefs dfgDefs list
+  venomWf livenessDefs dfgDefs list contextCodegenRelProps
 
 (* block_entries_ready: the entry block has no PHIs, so eval_phis leaves
    the state alone and the PHI prefix is empty. *)
@@ -113,6 +113,43 @@ Proof
         (fn th => once_rewrite_tac[th]) >> simp[]) >>
   qpat_x_assum `_ = _ ++ suffix`
     (fn th => simp[SimpLHS, Once th, EL_APPEND_EQN])
+QED
+
+Theorem entry_prefix_inv[local]:
+  !fn cp s st ra rest Inv ctx.
+    codegen_ready_fn fn /\ fn_entry_state_rel cp fn s st ra rest /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_inv Inv ctx fn s /\ reachability_closed Inv ctx ==>
+    !k. k <= LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
+    !inst. active_inst fn inst
+      (entry_bind_pairs
+        (entry_param_pairs s (TAKE k (get_params (HD fn.fn_blocks).bb_instructions))) s
+        with vs_inst_idx := k) ==>
+      Inv ctx fn inst
+      (entry_bind_pairs
+        (entry_param_pairs s (TAKE k (get_params (HD fn.fn_blocks).bb_instructions))) s
+        with vs_inst_idx := k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all bounded_entry_param_shape >> strip_tac >>
+  drule_all entry_prefix_enters >> strip_tac >>
+  Induct >> simp[entry_prefix_zero]
+  >- metis_tac[fn_entry_inv_active] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `k < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by decide_tac >>
+  `fn.fn_blocks <> [] /\ s.vs_current_bb = (HD fn.fn_blocks).bb_label` by
+    gvs[fn_entry_state_rel_def, codegen_ready_fn_def, wf_function_def, fn_has_entry_def] >>
+  drule_all entry_prefix_active >> strip_tac >>
+  drule_all entry_prefix_step >>
+  disch_then (qspecl_then [`0`, `ctx`] assume_tac) >>
+  `~is_terminator (EL k (get_params (HD fn.fn_blocks).bb_instructions)).inst_opcode` by
+    (gvs[EVERY_EL] >>
+     first_x_assum (qspec_then `k` mp_tac) >>
+     simp[entry_param_shape_def] >> rpt strip_tac >>
+     gvs[is_terminator_def]) >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) reachability_closed_next >>
+  simp[] >> disch_then irule >> simp[] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* entry_params_frame_sim (same premises, plus the Inv premises and the
