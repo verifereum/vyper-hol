@@ -38,6 +38,24 @@ Proof
        livenessTransferProofsTheory.list_union_set]
 QED
 
+Theorem alias_lineage_reachable:
+  wf_function fn /\
+  lineage_state liveness dfg (cfg_analyze fn) fn ps0 lbl ps ==>
+  cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  strip_tac >>
+  `?eb. entry_block fn = SOME eb` by
+    (gvs[wf_function_def, fn_has_entry_def, entry_block_def, NULL_EQ]) >>
+  `!l p. lineage_state liveness dfg (cfg_analyze fn) fn ps0 l p ==>
+     cfg_path (cfg_analyze fn) eb.bb_label l` suffices_by
+    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability] >>
+  ho_match_mp_tac lineage_state_ind >> conj_tac
+  >- (rpt strip_tac >> gvs[fn_entry_label_def, cfg_path_def]) >>
+  rpt strip_tac >> fs[cfg_path_def] >>
+  once_rewrite_tac[relationTheory.RTC_CASES2] >>
+  disj2_tac >> qexists_tac `l` >> simp[]
+QED
+
 (* A final successful JMP checks its target suffix; block finalization leaves
    that checked state unchanged.  No coverage assumption on entry is needed. *)
 Theorem alias_jmp_plan_join_reached:
