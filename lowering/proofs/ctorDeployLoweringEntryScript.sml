@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringEntry
 Ancestors
-  ctorDeployLoweringDefs o1PassContract stmtSimDefs
+  ctorDeployLoweringDefs o1PassContract stmtSimDefs ctorDeployLoweringEntryFmp
 
 (* The run from the unit's entry, after the payable check, the immutables
    region, the constructor arguments' registration and the lock, reaches
