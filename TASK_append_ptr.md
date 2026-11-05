@@ -59,7 +59,7 @@ All paths are relative to this directory (the vyper-hol project root).
 |----------|----------|-------------|
 | Piece theory | `lowering/bodyPtrLogCasesScript.sml` | The frozen target |
 | Predicates | `lowering/bodyPtrPredsScript.sml` | `body_stmt_ptr_ok`, `body_expr_ptr_ok`, `body_base_target_ptr_ok` |
-| Judgments | `lowering/bodyPtrDefsScript.sml` | `stmt_frag_ptr`, `expr_sim_ptr`, `ghost_inv`, `ghost_kept`, `ptr_val_ok`, `stor_taint_ok`, `cx_dead`, `stmt_exit_ptr` |
+| Judgments | `lowering/bodyPtrDefsScript.sml` | `stmt_frag_ptr`, `expr_sim_ptr` (its post includes `ptr_buf_ok`: a memory value's site covers `type_memory_bytes cenv (lowered_value_type cenv e)`), `ghost_inv`, `ghost_kept`, `ptr_val_ok`, `stor_taint_ok`, `cx_dead`, `stmt_exit_ptr` |
 | Counted ptr paths | `lowering/fragGasPathPtrScript.sml` | `gas_path_ptr_edge`, `gas_path_ptr`, `gas_summary_ptr_at`, `gas_outcome_ptr`, `gas_path_ptr_then` |
 | Composition | `lowering/gasSummaryComposePtrScript.sml` | `gas_marked_exec_ptr*`, `gas_outcome_ptr_bind`, `_bind_normal`, `_prefix`, `_conseq`, `_erase` |
 | Straight-line runs | `lowering/fragGasSeqPtrScript.sml` | `run_inst_seq_gas_path_ptr`, `inst_seq_ptr`, `gas_path_ptr_step`, `gas_path_ptr_abort`, `run_inst_seq_abort_gas_path_ptr` |
