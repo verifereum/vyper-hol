@@ -282,8 +282,8 @@ Proof
   gvs[]
 QED
 
-(* A copy of ctorReturnFrame's local constructor_exit_code. *)
-Theorem constructor_exit_code_mem[local]:
+(* The memory twins' copy of ctorReturnFrame's local constructor_exit_code. *)
+Theorem constructor_exit_code_mem:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st_exit = ((), st_epilogue) /\
   (nr ==> ut) /\ st_exit.cs_current_insts = [] /\

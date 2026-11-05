@@ -26,7 +26,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all deploy_unit_run_mem_safe >> strip_tac >>
-  drule deploy_imm_budget_ok >> strip_tac >>
+  drule deploy_imm_alloca_budget_ok >> strip_tac >>
   conj_tac
   >- (irule lowered_unit_dload_offset_ok >> metis_tac[]) >>
   irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
