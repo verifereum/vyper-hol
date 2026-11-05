@@ -386,3 +386,245 @@ Theorem toplevel_copy_inv_memory_taint:
 Proof
   simp[toplevel_copy_inv_def]
 QED
+
+(* Source-address arithmetic is clean even if the source has provenance. *)
+Theorem toplevel_copy_source_add_clean:
+  op_taint tn src = {} /\ op_taint tn (Var cv) = {} ==>
+  op_taint (step_taint (mk_inst id ADD [src; Var cv] [sv]) s t tn)
+    (Var sv) = {}
+Proof
+  strip_tac >>
+  simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
+       mk_inst_def, FLOOKUP_UPDATE] >>
+  Cases_on `eval_operand src s` >> simp[] >>
+  Cases_on `eval_operand (Var cv) s` >> gvs[op_taint_def]
+QED
+
+Theorem toplevel_copy_source_load_taint:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand (Var sv) s = SOME w ==>
+  op_taint (step_taint
+    (mk_inst id (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv])
+    s t tn) (Var vv) = key_taint (toplevel_copy_source_taint loc tn) w
+Proof
+  strip_tac >> gvs[toplevel_copy_source_taint_def] >>
+  simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
+       mk_inst_def, FLOOKUP_UPDATE]
+QED
+
+Theorem toplevel_copy_source_seq_ptr:
+  op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
+  ~ctx_has_dalloca ctx /\
+  i = mk_inst id ADD [src; Var cv] [sv] /\
+  j = mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv] /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  step_inst_base i s = OK u /\
+  G1 = step_prov PG G i u /\ tn1 = step_taint i s u tn /\
+  u1 = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  step_inst_base j u1 = OK t /\
+  Gf = step_prov PG G1 j t /\ tnf = step_taint j u1 t tn1 ==>
+  inst_seq_ptr D 0 ctx fn PG G tn [i;j] s Gf tnf
+Proof
+  strip_tac >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (gvs[] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
+  `op_taint tn1 (Var sv) = {}` by
+    (gvs[] >> irule toplevel_copy_source_add_clean >> simp[]) >>
+  `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
+    (gvs[] >> irule toplevel_ptr_inst_ok_load >> simp[]) >>
+  gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
+QED
+
+(* Register-only instructions cannot alter any memory taint component. *)
+Theorem toplevel_copy_register_taint_frame:
+  MEM inst.inst_opcode [ADD; MUL; ASSIGN; SLOAD; TLOAD] /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
+  (step_taint inst s t tn).t_mem = tn.t_mem /\
+  (step_taint inst s t tn).t_stor = tn.t_stor /\
+  (step_taint inst s t tn).t_trans = tn.t_trans /\
+  (step_taint inst s t tn).t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `new_site_bytes s t = {}` by
+    (simp[new_site_bytes_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  gvs[] >>
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+       store_taint_def, adopt_reset_def, imm_taint_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename1 `inst.inst_operands = h::ops` >>
+  Cases_on `ops` >> simp[] >>
+  rename1 `inst.inst_operands = h::h1::ops1` >>
+  Cases_on `ops1` >> simp[] >>
+  rename1 `inst.inst_operands = h::h1::h2::ops2` >>
+  Cases_on `ops2` >> simp[]
+QED
+
+Theorem toplevel_copy_source_destination_frame:
+  sv <> dst /\ vv <> dst /\ ptr_covers G tn dst s C /\
+  u = update_var sv w s /\
+  i = mk_inst id ADD [src; Var cv] [sv] /\
+  G1 = step_prov PG G i u /\ tn1 = step_taint i s u tn /\
+  u1 = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  j = mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv] /\
+  t = update_var vv v u1 ==>
+  ptr_covers (step_prov PG G1 j t) (step_taint j u1 t tn1) dst t C
+Proof
+  strip_tac >>
+  `ptr_covers G1 tn1 dst u C` by
+    (gvs[] >> irule ptr_covers_step_frame >>
+     simp[mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers G1 tn1 dst u1 C` by
+    gvs[ptr_covers_def, lookup_var_def] >>
+  irule ptr_covers_step_frame >>
+  gvs[mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem toplevel_copy_source_taint_frame:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  i = mk_inst id ADD [src; Var cv] [sv] /\
+  u = update_var sv w s /\ tn1 = step_taint i s u tn /\
+  u1 = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  j = mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv] /\
+  t = update_var vv v u1 /\ tnf = step_taint j u1 t tn1 ==>
+  tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `(step_taint i s u tn).t_mem = tn.t_mem /\
+   (step_taint i s u tn).t_stor = tn.t_stor /\
+   (step_taint i s u tn).t_trans = tn.t_trans /\
+   (step_taint i s u tn).t_imm = tn.t_imm` by
+    (irule toplevel_copy_register_taint_frame >>
+     gvs[mk_inst_def, update_var_def]) >>
+  `tnf.t_mem = tn1.t_mem /\ tnf.t_stor = tn1.t_stor /\
+   tnf.t_trans = tn1.t_trans /\ tnf.t_imm = tn1.t_imm` by
+    (qpat_x_assum `tnf = _` SUBST1_TAC >>
+     irule toplevel_copy_register_taint_frame >>
+     gvs[mk_inst_def, update_var_def]) >>
+  gvs[]
+QED
+
+Theorem toplevel_copy_ptr_inst_ok_mul:
+  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id MUL [Var cv; Lit 32w] [mv]) s
+Proof
+  strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, op_taint_def] >>
+  conj_tac >- (gen_tac >> Cases_on `op = Var cv` >>
+    gvs[op_taint_def] >> Cases_on `op = Lit 32w` >> gvs[op_taint_def]) >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem toplevel_copy_destination_seq_ptr:
+  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx /\
+  i = mk_inst id MUL [Var cv; Lit 32w] [mv] /\
+  j = mk_inst (id+1) ADD [Var dst; Var mv] [dv] /\
+  z = mk_inst (id+2) MSTORE [Var dv; Var vv] [] /\
+  step_inst_base i s = OK u /\
+  G1 = step_prov PG G i u /\ tn1 = step_taint i s u tn /\
+  u1 = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  ptr_covers G1 tn1 dst u1 (32*n) /\
+  lookup_var dst u1 = SOME w /\ k < n /\
+  w2n w + 32*n < dimword (:256) /\
+  step_inst_base j u1 = OK v /\ v = update_var dv (w + n2w (32*k)) u1 /\
+  G2 = step_prov PG G1 j v /\ tn2 = step_taint j u1 v tn1 /\
+  v1 = v with vs_inst_idx := SUC u1.vs_inst_idx /\
+  step_inst_base z v1 = OK t /\
+  Gf = step_prov PG G2 z t /\ tnf = step_taint z v1 t tn2 ==>
+  inst_seq_ptr D 0 ctx fn PG G tn [i;j;z] s Gf tnf
+Proof
+  strip_tac >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (gvs[] >> irule toplevel_copy_ptr_inst_ok_mul >> simp[]) >>
+  `op_taint tn1 (Var mv) = {}` by
+    gvs[toplevel_counter_offset_ghost] >>
+  `op_taint tn1 (Var dst) = {}` by gvs[ptr_covers_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
+    (gvs[] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
+  `ptr_covers G2 tn2 dv v 32` by
+    (qpat_x_assum `G2 = _` SUBST1_TAC >>
+     qpat_x_assum `tn2 = _` SUBST1_TAC >>
+     qpat_x_assum `j = _` SUBST1_TAC >>
+     qpat_x_assum `v = _` SUBST1_TAC >>
+     irule toplevel_destination_offset_covers >>
+     simp[] >> qexists_tac `n` >> gvs[] >> decide_tac) >>
+  `ptr_covers G2 tn2 dv v1 32` by gvs[ptr_covers_def, lookup_var_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G2 tn2 z v1` by
+    (gvs[] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+  gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
+QED
+
+Theorem toplevel_copy_ptr_inst_ok_assign:
+  op_taint tn (Var nv) = {} /\ ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id ASSIGN [Var nv] [cv]) s
+Proof
+  strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_read1_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem toplevel_copy_increment_seq_ptr:
+  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx /\
+  i = mk_inst id ADD [Var cv; Lit 1w] [nv] /\
+  j = mk_inst (id+1) ASSIGN [Var nv] [cv] /\
+  step_inst_base i s = OK u /\
+  G1 = step_prov PG G i u /\ tn1 = step_taint i s u tn /\
+  u1 = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  step_inst_base j u1 = OK t /\
+  Gf = step_prov PG G1 j t /\ tnf = step_taint j u1 t tn1 ==>
+  inst_seq_ptr D 0 ctx fn PG G tn [i;j] s Gf tnf
+Proof
+  strip_tac >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (gvs[] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `op_taint tn1 (Var nv) = {}` by
+    (gvs[] >> simp[step_taint_def, set_var_taint_def, out_taint_def,
+      op_taint_def, mk_inst_def, FLOOKUP_UPDATE] >>
+     Cases_on `eval_operand (Var cv) s` >> gvs[op_taint_def]) >>
+  `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
+    (gvs[] >> irule toplevel_copy_ptr_inst_ok_assign >> simp[]) >>
+  gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
+QED
+
+Theorem toplevel_copy_source_counted_ptr:
+  op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
+  ~ctx_has_dalloca ctx /\
+  i = mk_inst id ADD [src; Var cv] [sv] /\
+  j = mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv] /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  step_inst_base i s = OK u /\
+  G1 = step_prov PG G i u /\ tn1 = step_taint i s u tn /\
+  u1 = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  step_inst_base j u1 = OK t /\
+  Gf = step_prov PG G1 j t /\ tnf = step_taint j u1 t tn1 /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX [i;j] (DROP s.vs_inst_idx bb.bb_instructions) /\
+  run_inst_seq [i;j] s = OK r ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
+    (OK (r with vs_inst_idx := s.vs_inst_idx + 2))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn [i;j] s Gf tnf` by
+    (irule toplevel_copy_source_seq_ptr >> metis_tac[]) >>
+  `EVERY (\k. k.inst_opcode <> INVOKE /\ ~is_terminator k.inst_opcode)
+     [i;j] /\ LENGTH (FILTER (\k. k.inst_opcode = GAS) [i;j]) = 0` by
+    (gvs[mk_inst_def, is_terminator_def] >> rpt strip_tac >> gvs[]) >>
+  drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> simp[]
+QED
