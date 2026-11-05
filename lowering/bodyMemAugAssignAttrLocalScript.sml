@@ -1143,3 +1143,45 @@ Proof
   decide_tac
 QED
 
+
+Theorem word_value_type_value_cases_mem_src[local]:
+  !tenv t tv v.
+    word_value_type t /\ evaluate_type tenv t = SOME tv /\ value_has_type tv v ==>
+    (?n i. t = BaseT (UintT n) /\ tv = BaseTV (UintT n) /\ v = IntV i /\
+      0 < n /\ n <= 256 /\ within_int_bound (Unsigned n) i) \/
+    (?n i. t = BaseT (IntT n) /\ tv = BaseTV (IntT n) /\ v = IntV i /\
+      1 < n /\ n <= 256 /\ within_int_bound (Signed n) i) \/
+    (?d. t = BaseT DecimalT /\ tv = BaseTV DecimalT /\ v = DecimalV d /\
+      within_int_bound (Signed 168) d) \/
+    (?b. t = BaseT BoolT /\ tv = BaseTV BoolT /\ v = BoolV b) \/
+    (?nsid m k. t = FlagT nsid /\ tv = FlagTV m /\ v = FlagV k /\ m <= 256)
+Proof
+  rpt gen_tac >> Cases_on `t` >>
+  FULL_SIMP_TAC std_ss [word_value_type_def, is_numeric_type_def,
+    is_int_type_def, is_bool_type_def, is_flag_type_def,
+    vyperASTTheory.type_distinct] >>
+  (TRY (rename1 `evaluate_type tenv (BaseT bt) = SOME tv` >> Cases_on `bt`)) >>
+  FULL_SIMP_TAC std_ss [is_int_type_def, is_bool_type_def,
+    evaluate_type_def, AllCaseEqs(), LET_THM,
+    vyperASTTheory.type_distinct, vyperASTTheory.type_11,
+    vyperASTTheory.base_type_distinct, vyperASTTheory.base_type_11] >>
+  rpt strip_tac >>
+  first_x_assum (SUBST_ALL_TAC o SYM) >>
+  Cases_on `v` >>
+  FULL_SIMP_TAC std_ss [value_has_type_def, within_int_bound_def,
+    vyperValueTheory.value_distinct, vyperValueTheory.value_11] >>
+  qexists_tac `m` >> asm_rewrite_tac[]
+QED
+
+Theorem decimal_type_value_mem_src[local]:
+  !tenv tv v. evaluate_type tenv (BaseT DecimalT) = SOME tv /\
+    value_has_type tv v ==> ?d. v = DecimalV d /\ within_int_bound (Signed 168) d
+Proof
+  rpt strip_tac >>
+  `word_value_type (BaseT DecimalT)` by
+    (SIMP_TAC std_ss [word_value_type_def, is_numeric_type_def]) >>
+  drule_all word_value_type_value_cases_mem_src >>
+  SIMP_TAC std_ss [vyperASTTheory.type_distinct, vyperASTTheory.type_11,
+    vyperASTTheory.base_type_distinct, vyperASTTheory.base_type_11] >>
+  metis_tac[]
+QED
