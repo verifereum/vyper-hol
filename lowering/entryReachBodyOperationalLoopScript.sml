@@ -151,7 +151,7 @@ Proof
   simp[jump_to_def, mstore_def, write_memory_with_expansion_def, update_var_def]
 QED
 
-Theorem loop_child_effect_enlarge[local]:
+Theorem loop_child_effect_enlarge:
   abi_encoder_registered_effect child_ids
     [(d+32+j*type_memory_size tv,type_memory_size tv)] s t /\
   child_ids SUBSET ids /\ j < LENGTH xs ==>
@@ -256,9 +256,9 @@ Proof
   decide_tac
 QED
 
-Theorem loop_shell_header[local]:
-  entry_operational_loop_shell ctx fn site hdr body_lbl exit hid tail prefix bid
-    ip src iv cv cmp done nv p srcaddr tv xs d cap cid oid ids child_ids /\
+Theorem entry_operational_loop_header_phase:
+  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD iv cv cmp done /\
+  src <> Var iv /\ iv <> cv /\ LENGTH xs < dimword (:256) /\
   abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) j s /\
   entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap s /\
   entry_loop_prefix tv xs d j s /\
@@ -278,9 +278,76 @@ Proof
   >- (irule loop_header_resources >> simp[])
   >- fs[entry_loop_prefix_def, jump_to_def, abi_decode_header_state_def, update_var_def]
   >- simp[entry_loop_fields_def, jump_to_def, abi_decode_header_state_def, update_var_def]
-  >- (irule loop_header_path >> fs[entry_operational_loop_shell_def] >> metis_tac[]) >>
+  >- (irule loop_header_path >> metis_tac[]) >>
   irule loop_header_effect
 QED
+
+Theorem loop_shell_header[local]:
+  entry_operational_loop_shell ctx fn site hdr body_lbl exit hid tail prefix bid
+    ip src iv cv cmp done nv p srcaddr tv xs d cap cid oid ids child_ids /\
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) j s /\
+  entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap s /\
+  entry_loop_prefix tv xs d j s /\
+  t = jump_to (if j < LENGTH xs then body_lbl else exit)
+    (abi_decode_header_state iv cv cmp done j (LENGTH xs) s) ==>
+  (~t.vs_halted /\ t.vs_current_bb = (if j < LENGTH xs then body_lbl else exit) /\
+   t.vs_inst_idx = 0) /\
+  entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+  entry_loop_prefix tv xs d j t /\ entry_loop_fields s t /\
+  entry_decode_path ctx fn s t /\
+  abi_encoder_registered_effect ids [(d,32+LENGTH xs*type_memory_size tv)] s t
+Proof
+  strip_tac >> irule entry_operational_loop_header_phase >>
+  fs[entry_operational_loop_shell_def] >> metis_tac[]
+QED
+
+Theorem entry_operational_loop_backedge_phase:
+  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD iv cv cmp done /\
+  ip <> Var nv /\ src <> Var nv /\ LENGTH xs < dimword (:256) /\
+  EVERY (val_wf tv) xs /\ 32+LENGTH xs*type_memory_size tv <= cap /\
+  oid <> cid /\ cid IN ids /\
+  j < LENGTH xs /\
+  entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr (LENGTH xs) j s /\
+  entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap s /\
+  entry_loop_prefix tv xs d (SUC j) s /\
+  t = jump_to hdr (mstore (w2n p) (n2w (SUC j)) (update_var nv (n2w (SUC j)) s)) ==>
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) (SUC j) t /\
+  entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+  entry_loop_prefix tv xs d (SUC j) t /\ entry_loop_fields s t /\
+  entry_decode_path ctx fn s t /\
+  abi_encoder_registered_effect ids [(d,32+LENGTH xs*type_memory_size tv)] s t
+Proof
+  strip_tac >>
+  `SUC j <= LENGTH xs` by decide_tac >>
+  `32+SUC j*type_memory_size tv <= cap` by
+    (`SUC j*type_memory_size tv <= LENGTH xs*type_memory_size tv` by
+       (irule LESS_MONO_MULT >> simp[]) >> decide_tac) >>
+  gvs[] >> conj_tac >- suspend "ready" >> conj_tac
+  >- (irule loop_backedge_resources >> simp[]) >> conj_tac
+  >- (irule loop_backedge_prefix >> fs[entry_operational_loop_shell_def] >> metis_tac[]) >>
+  conj_tac
+  >- simp[entry_loop_fields_def, jump_to_def, mstore_def,
+          write_memory_with_expansion_def, update_var_def] >> conj_tac
+  >- (irule loop_backedge_path >>
+      fs[entry_operational_loop_shell_def, abi_decode_loop_cfg_def] >>
+      simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
+      qhdtm_assum `entry_loop_child_end` (irule_at Any) >> simp[] >> decide_tac) >>
+  irule loop_backedge_effect >> fs[entry_operational_loop_shell_def,
+    entry_operational_loop_resources_def] >> metis_tac[]
+QED
+
+Resume entry_operational_loop_backedge_phase[ready]:
+  fs[entry_operational_loop_shell_def, entry_loop_child_end_def] >>
+  simp[abi_decode_loop_ready_def, abi_decode_mload_jump,
+    mload_mstore_same_proof, abiDecoderContractTheory.abi_decode_load_def,
+    abiDecoderContractTheory.abi_decode_source_def,
+    jump_to_def, update_var_def, mstore_def, write_memory_with_expansion_def] >>
+  conj_tac >- (Cases_on `ip` >> gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  Cases_on `src` >> gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+    abiDecoderContractTheory.abi_decode_load_def, abiDecoderContractTheory.abi_decode_source_def]
+QED
+
+Finalise entry_operational_loop_backedge_phase
 
 Theorem loop_shell_backedge[local]:
   entry_operational_loop_shell ctx fn site hdr body_lbl exit hid tail prefix bid
@@ -296,35 +363,9 @@ Theorem loop_shell_backedge[local]:
   entry_decode_path ctx fn s t /\
   abi_encoder_registered_effect ids [(d,32+LENGTH xs*type_memory_size tv)] s t
 Proof
-  strip_tac >>
-  `SUC j <= LENGTH xs` by decide_tac >>
-  drule_all loop_shell_capacity >> strip_tac >>
-  gvs[] >> conj_tac >- suspend "ready" >> conj_tac
-  >- (irule loop_backedge_resources >> simp[]) >> conj_tac
-  >- (irule loop_backedge_prefix >> fs[entry_operational_loop_shell_def] >> metis_tac[]) >>
-  conj_tac
-  >- simp[entry_loop_fields_def, jump_to_def, mstore_def,
-          write_memory_with_expansion_def, update_var_def] >> conj_tac
-  >- (irule loop_backedge_path >>
-      fs[entry_operational_loop_shell_def, abi_decode_loop_cfg_def] >>
-      simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
-      qhdtm_assum `entry_loop_child_end` (irule_at Any) >> simp[] >> decide_tac) >>
-  irule loop_backedge_effect >> fs[entry_operational_loop_shell_def,
-    entry_operational_loop_resources_def] >> metis_tac[]
+  strip_tac >> irule entry_operational_loop_backedge_phase >>
+  fs[entry_operational_loop_shell_def] >> metis_tac[]
 QED
-
-Resume loop_shell_backedge[ready]:
-  fs[entry_operational_loop_shell_def, entry_loop_child_end_def] >>
-  simp[abi_decode_loop_ready_def, abi_decode_mload_jump,
-    mload_mstore_same_proof, abiDecoderContractTheory.abi_decode_load_def,
-    abiDecoderContractTheory.abi_decode_source_def,
-    jump_to_def, update_var_def, mstore_def, write_memory_with_expansion_def] >>
-  conj_tac >- (Cases_on `ip` >> gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]) >>
-  Cases_on `src` >> gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
-    abiDecoderContractTheory.abi_decode_load_def, abiDecoderContractTheory.abi_decode_source_def]
-QED
-
-Finalise loop_shell_backedge
 
 Definition entry_loop_trace_def:
   entry_loop_trace ctx fn ids outs s t <=>
@@ -332,14 +373,14 @@ Definition entry_loop_trace_def:
     abi_encoder_registered_effect ids outs s t
 End
 
-Theorem loop_trace_refl[local]:
+Theorem loop_trace_refl:
   entry_loop_trace ctx fn ids outs s s
 Proof
   simp[entry_loop_trace_def, entry_loop_fields_def,
        entry_decode_path_refl, abi_encoder_registered_effect_refl]
 QED
 
-Theorem loop_trace_trans[local]:
+Theorem loop_trace_trans:
   entry_loop_trace ctx fn ids outs s t /\ entry_loop_trace ctx fn ids outs t u ==>
   entry_loop_trace ctx fn ids outs s u
 Proof
@@ -411,7 +452,7 @@ Proof
   fs[entry_operational_loop_inv_def] >> metis_tac[]
 QED
 
-Theorem loop_trace_sim[local]:
+Theorem loop_trace_sim:
   entry_loop_trace ctx fn ids outs s t ==> abi_decode_sim ctx fn s t
 Proof
   simp_tac bool_ss [entry_loop_trace_def] >> strip_tac >>
