@@ -286,6 +286,70 @@ Proof
        GSYM LIST_ELEM_COUNT_MEM]
 QED
 
+Theorem stack_swap_mem_unbounded:
+  MEM at (stk : operand list) ==> MEM at (stack_swap dist stk)
+Proof
+  strip_tac >>
+  `0 < LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
+  `MIN dist (LENGTH stk - 1) < LENGTH stk` by simp[arithmeticTheory.MIN_DEF] >>
+  `stack_swap dist stk = stack_swap (MIN dist (LENGTH stk - 1)) stk` by
+    (simp[stack_swap_def, arithmeticTheory.MIN_DEF] >> IF_CASES_TAC >> simp[] >>
+     `LENGTH stk - (dist + 1) = 0` by decide_tac >> simp[]) >>
+  metis_tac[stack_swap_mem_iff]
+QED
+
+Theorem swap_desired_index_mem:
+  2 <= chunk /\ j < chunk ==>
+  MEM j ([chunk - 1] ++ GENLIST (\i. i + 1) (chunk - 2) ++ [0])
+Proof
+  strip_tac >> simp[MEM_GENLIST] >>
+  Cases_on `j = 0` >- simp[] >>
+  Cases_on `j = chunk - 1` >- simp[] >>
+  gvs[] >> qexists_tac `j - 1` >> decide_tac
+QED
+
+Theorem top_n_stack_decomposition:
+  TAKE (LENGTH stk - n) stk ++ top_n n stk = stk
+Proof
+  Cases_on `n <= LENGTH stk`
+  >- (simp[top_n_def, GSYM LASTN_def] >>
+      metis_tac[BUTLASTN_TAKE, APPEND_BUTLASTN_LASTN]) >>
+  simp[top_n_def, TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem swap_desired_values_mem:
+  2 <= chunk /\ LENGTH items <= chunk /\ MEM at items ==>
+  MEM at (MAP (\idx. EL idx items)
+    ([chunk - 1] ++ GENLIST (\i. i + 1) (chunk - 2) ++ [0]))
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM at items` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  pure_rewrite_tac[MEM_MAP] >> qexists_tac `n` >>
+  conj_tac >- simp[] >> irule swap_desired_index_mem >> decide_tac
+QED
+
+Theorem do_swap_plan_holds:
+  do_swap dist ps = (ops,ps') /\ plan_holds ps at ==> plan_holds ps' at
+Proof
+  Cases_on `dist = 0`
+  >- (simp[do_swap_def] >> strip_tac >> gvs[]) >>
+  Cases_on `dist <= 16`
+  >- (simp[do_swap_def] >> strip_tac >> gvs[plan_holds_def] >>
+      metis_tac[stack_swap_mem_unbounded]) >>
+  simp[do_swap_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  gvs[plan_holds_def] >>
+  `MEM at (TAKE (LENGTH ps.ps_stack - (dist + 1)) ps.ps_stack) \/
+   MEM at (top_n (dist + 1) ps.ps_stack)` by
+    metis_tac[top_n_stack_decomposition, MEM_APPEND] >>
+  simp[] >>
+  `MEM at (MAP (\idx. EL idx (top_n (dist + 1) ps.ps_stack))
+     ([dist] ++ GENLIST (\i. i + 1) (dist - 1) ++ [0]))` by
+    (drule_at (Pat `MEM _ _`) swap_desired_values_mem >>
+     disch_then (qspec_then `dist + 1` mp_tac) >>
+     simp[top_n_def, LENGTH_TAKE_EQ]) >>
+  gvs[]
+QED
+
 Theorem do_spill_at_plan_holds:
   dist < LENGTH ps.ps_stack /\ do_spill_at dist ps = (ops,ps') /\
   plan_holds ps at ==> plan_holds ps' at
