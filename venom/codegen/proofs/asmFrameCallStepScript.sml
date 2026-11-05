@@ -2751,6 +2751,138 @@ Proof
       ignore_bind_def, bind_def, return_def]
 QED
 
+Theorem asm_call_safe_inc_pc_or_jump:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  inc_pc_or_jump op s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `is_call op`
+  >- (rpt strip_tac >> gvs[inc_pc_or_jump_def, return_def]) >>
+  Cases_on `s.contexts` >> simp[] >>
+  simp[inc_pc_or_jump_def, get_current_context_def, bind_def] >>
+  Cases_on `(FST h).jumpDest` >>
+  simp[set_current_context_def, return_def, assert_def, ignore_bind_def, bind_def,
+       fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), vfm_abort_def]
+QED
+
+Theorem asm_call_safe_charge_push:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (consume_gas n) (\x. push_stack w) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_consume_gas] >>
+  metis_tac[asm_call_safe_push_stack]
+QED
+
+Theorem asm_call_safe_stack_op:
+  !cost result n s r t. s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (pop_stack n) (\args.
+    bind (consume_gas (cost args)) (\x. push_stack (result args))) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >>
+  ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_pop_stack] >>
+  metis_tac[asm_call_safe_charge_push]
+QED
+
+Theorem asm_call_unuse_gas_credit:
+  s.contexts = (c,rb)::rest /\ n <= c.gasUsed ==>
+  unuse_gas n s =
+    (INL (), s with contexts := (c with gasUsed := c.gasUsed - n,rb)::rest)
+Proof
+  simp[unuse_gas_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def]
+QED
+
+Theorem asm_call_safe_unuse_gas:
+  s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed /\
+  unuse_gas n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ t.msdomain = s.msdomain /\
+    (FST (HD t.contexts)).gasUsed = (FST (HD s.contexts)).gasUsed - n)
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  rpt strip_tac >> gvs[] >> drule_all asm_call_unuse_gas_credit >>
+  strip_tac >> gvs[]
+QED
+
+Theorem asm_call_safe_abort_call_value:
+  s.contexts = (c,rb)::rest /\ n <= c.gasUsed /\
+  abort_call_value n s = (INR e,t) ==> ~vfm_abort e
+Proof
+  Cases_on `LENGTH c.stack < stack_limit`
+  >- (rpt strip_tac >> drule_all asm_abort_call_value_state >> gvs[]) >>
+  rpt strip_tac >>
+  gvs[abort_call_value_def, push_stack_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def,
+       assert_def, fail_def, return_def, vfm_abort_def,
+       vfmConstantsTheory.stack_limit_def]
+QED
+
+Theorem asm_call_safe_abort_unuse:
+  s.contexts = (c,rb)::rest /\ n <= c.gasUsed /\
+  abort_unuse n s = (INR e,t) ==> ~vfm_abort e
+Proof
+  Cases_on `LENGTH c.stack < stack_limit`
+  >- (rpt strip_tac >> drule_all asm_abort_unuse_state >> gvs[]) >>
+  rpt strip_tac >>
+  gvs[abort_unuse_def, unuse_gas_def, push_stack_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, fail_def, return_def, vfm_abort_def,
+       vfmConstantsTheory.stack_limit_def]
+QED
+
+Theorem asm_call_finish_credit_safe:
+  s.contexts = (c,rb)::rest /\ stipend <= c.gasUsed /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) s =
+    (INR e,t) ==> ~vfm_abort e
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 2 disch_tac >>
+  Cases_on `(lookup_account sender accounts).balance < value`
+  >- (simp[asm_call_finish_def] >> strip_tac >>
+      drule_all asm_call_safe_abort_call_value >> simp[]) >>
+  simp[asm_call_finish_def, set_return_data_def, get_num_contexts_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `(if _ then _ else _) v` >>
+  `v.contexts = (c with returnData := [],rb)::rest /\
+   stipend <= (c with returnData := []).gasUsed` by simp[Abbr `v`] >>
+  IF_CASES_TAC >> strip_tac
+  >- (drule_all asm_call_safe_abort_unuse >> simp[]) >>
+  `v.contexts <> []` by simp[Abbr `v`] >>
+  drule_all asm_proceed_call_terminal_kind >> simp[]
+QED
+
+Theorem asm_call_prepared_finish_safe:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  EVERY (wf_context o FST) s.contexts /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR e,t) ==> ~vfm_abort e
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_stipend_paid >> disch_tac >>
+  `u.contexts <> []` by
+    (drule_all asm_call_prepare_success_view >> simp[LET_THM] >>
+     rpt strip_tac >> gvs[]) >>
+  Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  drule_all asm_call_finish_credit_safe >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
