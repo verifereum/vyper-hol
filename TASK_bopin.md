@@ -22,10 +22,10 @@ Theorem bop_in_expr_ptr_ok:
 
 ## Completion Criteria
 
-1. `holbuild -j4 build bodyPtrBopInTheory` passes, with `bop_in_expr_ptr_ok` proved with no `cheat` in its proof or in any theory you add (CHEAT warnings inherited from the locally admitted ancestors are expected; see Domain Constraints).
+1. `holbuild -j4 build bodyPtrBopInTheory` passes, with `bop_in_expr_ptr_ok` proved with no `cheat` in its proof or in any theory you add, except the two owner-approved RESIDUALs in `bodyPtrBopInHeld` (below) (CHEAT warnings inherited from the locally admitted ancestors are expected; see Domain Constraints).
 2. No duplicate lemmas: search before adding one; each helper exists once, in its most general form, in a new leaf theory under `lowering/`.
 
-**If the theorem is false as stated:** give a concrete counterexample, state the tightest sufficient fix, and stop. Do not weaken the statement.
+**The falsehood is already settled; do not re-verify it or stop on it.** The target is false for a non-word needle (the checked counterexample is in `lowering/bodyPtrBopInNonwordEvidenceScript.sml`; leave that file unchanged). The owner has decided how to handle it, as S1 does: `lowering/bodyPtrBopInHeldScript.sml` admits two owner-approved RESIDUALs, `bop_in_nonword_ptr_ok` (every non-word needle, held for the #742 type-checker repair) and `body_make_array_children_ptr_ok` (an array literal's elements, held for the child-closure wave). These two `cheat`s are owner-authorized and are the only exception to the no-cheat rule; do not edit, reprove, or add to them. Prove `bop_in_expr_ptr_ok` with `bodyPtrBopInHeld` in the target's `Ancestors`: dispatch the non-word needle case (`~is_word_type (expr_type e1)`, `es = [e1; e2]`) to `bop_in_nonword_ptr_ok`; for a word needle on a literal, get the elements' judgments from `body_make_array_children_ptr_ok`; prove every word-needle case (literal and array variable) for real. If a word-needle case is itself false, give a concrete counterexample for that case and stop. Finally delete the `bodyPtrBopIn*Probe*` theories and any other leaf theory the final proof and the evidence don't need.
 
 ## Build
 
@@ -44,7 +44,7 @@ S1's proof: `body_bop_in_literal_case` and the In/NotIn rows of `compile_bop_cas
 ## Domain Constraints
 
 - Statements frozen: the target and every theorem outside the files you add. Edit only the target's `Proof ... QED` in `lowering/bodyPtrBopInScript.sml` (and its `Ancestors` line), and add new leaf theories next to it in `lowering/`. Do not edit any existing theory other than the target file: no edits to bodyPtrDefs, bodyPtrPreds, bodyPtrExprCases, exprPtrUnwrap, fragGasPathPtr, the toolkit theories, ptrSafeRun, bodySim, exprSim*, stmtSim*, semantics or defs. If the proof needs a change to one of them, or a statement is false, stop and report the exact change and a counterexample.
-- About 140 theories of this tree have their proofs admitted locally (cheated in the working tree, hidden from git). Those inherited admissions are expected: CHEAT warnings that come from them are fine. Your own files and the target's proof must contain no `cheat`. The S1 lemmas you use may be among the admitted ones; use them anyway.
+- About 140 theories of this tree have their proofs admitted locally (cheated in the working tree, hidden from git). Those inherited admissions are expected: CHEAT warnings that come from them are fine. Your own files and the target's proof must contain no `cheat` (the two RESIDUALs in `bodyPtrBopInHeld` excepted). The S1 lemmas you use may be among the admitted ones; use them anyway.
 - holbuild's 2.5 s per-step tactic timeout stays: never raise it. No `TRY`/`ORELSE` around `metis_tac` or other search; select goals with `>-`, `>~`, `>|`. No `let` in statements. 50 lines per proof at most: split into helper lemmas.
 - New definitions are discouraged; if you add one, say why in a comment.
 - Name new theories without a `Lib` suffix, and prefix them with `bodyPtrBopIn` so they don't clash with sibling tasks' theories.
