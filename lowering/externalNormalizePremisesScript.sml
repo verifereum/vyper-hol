@@ -9,7 +9,7 @@ Ancestors
   stmtSimDecl stmtSimDeclPath loweringHalt entryDispatchProps compileVyper allocLimitsProps
   supportedProgram supportedDecls
 
-Theorem normalize_nonbytes_footprint[local]:
+Theorem normalize_nonbytes_footprint:
   evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\
   ~is_bytestring_type ty ==>
   val_footprint tv v = type_memory_size tv
