@@ -1765,3 +1765,55 @@ Proof
   strip_tac >> drule toplevel_copy_generated_vars >> strip_tac >>
   metis_tac[]
 QED
+
+Theorem toplevel_copy_body_counted:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
+    (OK (r with vs_inst_idx := s.vs_inst_idx+7)) /\
+    toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf
+      (r with vs_inst_idx := s.vs_inst_idx+7)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_ptr >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`] >> simp[] >>
+  `gas_path_ptr D 0 ctx fn PG G tn s
+     (LENGTH (FILTER (\i. i.inst_opcode = GAS) code)) Gf tnf
+     (OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH code))` by
+    (`EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+       (qpat_x_assum `code = _` SUBST1_TAC >>
+        Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def]) >>
+     irule run_inst_seq_gas_path_ptr >> metis_tac[]) >>
+  gvs[mk_inst_def]
+QED
+
+Theorem toplevel_copy_jmp_path:
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to lbl s))
+Proof
+  strip_tac >> irule toplevel_copy_raw_jump_path >>
+  conj_tac >- simp[] >> qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`] >>
+  simp[mk_inst_def, step_inst_base_def, ptr_inst_ok_def, access_ok_def,
+       taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, jump_to_def] >>
+  simp[step_inst_base_def, mk_inst_def, jump_to_def, op_taint_def]
+QED
+
