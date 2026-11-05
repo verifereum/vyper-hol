@@ -1978,6 +1978,37 @@ Proof
   metis_tac[inst_defs_def]
 QED
 
+Theorem alias_prepare_params_holds_output:
+  MEM x (MAP (\inst. HD inst.inst_outputs)
+    (get_params (HD fn.fn_blocks).bb_instructions)) /\
+  MEM x (live_vars_at liveness (HD fn.fn_blocks).bb_label
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+  plan_holds (SND (prepare_params_plan liveness fn ps)) (Var x)
+Proof
+  strip_tac >>
+  simp[prepare_params_plan_def, parameter_stack_fold] >>
+  IF_CASES_TAC >- gvs[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  irule optimistic_swap_plan_holds >> goal_assum (drule_at Any) >>
+  qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `popmany_plan dead_names prepared_state` >>
+  `~MEM (Var x) dead_names /\ plan_holds prepared_state (Var x)` by
+    (simp[Abbr `dead_names`, Abbr `prepared_state`, MEM_FILTER,
+          operand_to_string_def, plan_holds_def, MEM_MAP] >>
+     gvs[MEM_MAP] >> metis_tac[]) >>
+  drule popmany_plan_plan_holds >>
+  metis_tac[pairTheory.SND]
+QED
+
+Theorem alias_prepare_params_entry_demand:
+  codegen_ready_fn fn /\
+  MEM x (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+  plan_holds (SND (prepare_params_plan (liveness_analyze fn) fn ps)) (Var x)
+Proof
+  metis_tac[alias_prepare_params_holds_output, alias_entry_live_param_output]
+QED
+
 Theorem stack_poke_retains_other:
   MEM at stk /\ stack_peek d stk <> at ==>
   MEM at (stack_poke d ret stk)
