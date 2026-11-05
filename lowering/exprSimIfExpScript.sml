@@ -81,7 +81,7 @@ Theorem ifexp_round_size[local]:
      n2w (32 + 32 * word_size len))
 Proof
   rpt strip_tac >> drule ifexp_round_no_wrap >> strip_tac >>
-  rewrite_tac[exprSimTheory.buffer_round_mask, word_add_n2w] >>
+  rewrite_tac[exprSimPropsTheory.buffer_round_mask, word_add_n2w] >>
   `n2w (len + 31):bytes32 >>> 5 = n2w ((len + 31) DIV 32)` by
     (simp[GSYM n2w_DIV]) >>
   simp[word_size_def, word_lsl_n2w, word_add_n2w] >>
@@ -252,11 +252,11 @@ Proof
       gvs[is_bytestring_type_def, vyperValueTheory.evaluate_type_def] >>
       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
       drule ifexp_bytes_header >> strip_tac >>
-      qexists_tac `LENGTH l` >> simp[exprSimTheory.val_store_size_def]) >>
+      qexists_tac `LENGTH l` >> simp[exprSimPropsTheory.val_store_size_def]) >>
   gvs[vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
   drule ifexp_string_header >> strip_tac >>
-  qexists_tac `LENGTH s'` >> simp[exprSimTheory.val_store_size_def]
+  qexists_tac `LENGTH s'` >> simp[exprSimPropsTheory.val_store_size_def]
 QED
 
 Theorem ifexp_copy_source_bounds[local]:

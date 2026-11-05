@@ -46,10 +46,6 @@
  *                              ce_module_vars,
  *                              so the lowering may emit INVALID where the
  *                              source reads a value (#563 for immutables).
- *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
- *                              RuntimeError where BLOCKHASH returns 0 (#671),
- *                              and call_ctx_rel does not relate the block
- *                              hashes.
  *)
 
 Theory exprSimLeaves
@@ -75,6 +71,7 @@ Ancestors
   exprSimLiteralBytes
   exprSimEnv
   exprSimFlagWord
+  exprSimValues exprSimUnopProps gasNormalPrefix gasSummary fragGasMode fragGasSeq
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -197,56 +194,86 @@ QED
    BLOCKHASH, with no check.  call_ctx_rel's tx_env_ok makes the source's
    evaluate_block_hash (block_number - 1) succeed (block_number <> 0 and
    the hash list is nonempty) with EL 0 block_hashes, and its bc_blockhash
-   clause gives the same at block_number - 1.  Where tx_env_ok fails no
-   Venom state is related, so the error cases hold vacuously. *)
+   clause gives the same at block_number - 1.  So the source read succeeds
+   whatever the gas observations, and the three instructions, none of them
+   GAS, run as a zero-mark path from s0. *)
 Theorem compile_prevhash_sim:
   !cenv ann args. expr_sim_ok cenv (Builtin ann (Env PrevHash) args)
 Proof
   rw[expr_sim_ok_def] >>
   `args = [] /\ ann = env_item_type PrevHash` by
     gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  gvs[] >> rw[expr_sim_def] >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- simp[frag_exec_def] >>
+  gvs[] >> irule expr_sim_values >> rpt strip_tac >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   `tx_env_ok cx.txn` by gvs[call_ctx_rel_def] >>
-  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
-       builtin_args_length_ok_def, read_result_def] >>
-  simp[Once evaluate_def, bind_def, read_result_def, return_def,
-       evaluate_builtin_def, tx_env_ok_evaluate_prevhash] >>
-  strip_tac >> gvs[] >>
+  `!tail. bind (eval_expr cx (Builtin (env_item_type PrevHash) (Env PrevHash) []))
+            (read_result cx) (es with gas_obs := tail) =
+          (INL (BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))),
+           es with gas_obs := tail)` by
+    (simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+          builtin_args_length_ok_def, read_result_def] >>
+     simp[Once evaluate_def, bind_def, read_result_def, return_def,
+          evaluate_builtin_def, tx_env_ok_evaluate_prevhash]) >>
   drule lower_value_env >> strip_tac >>
-  irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
-                      s.vs_block_ctx = s0.vs_block_ctx`,
-                `\s. stmt_state_rel ctx func cenv cx es s /\
-                     eval_operand op s = SOME (HD cx.txn.block_hashes) /\
-                     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-                            lookup_var x s = SOME w) /\
-                     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                              FLOOKUP s.vs_allocas aid = SOME b) /\
-                     s.vs_memory = s0.vs_memory`, `\r. F`] >>
+  drule compile_prevhash_shape >> strip_tac >>
+  `fresh_vars_wrt sa (drop_fresh sa s0)` by simp[fresh_vars_wrt_drop_fresh] >>
+  drule_all compile_prevhash_run >> strip_tac >>
+  `(drop_fresh sa s0).vs_block_ctx = s0.vs_block_ctx` by simp[drop_fresh_def] >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0))
+     (run_inst_seq (emitted_insts sa sb) s0)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+     fs[listTheory.EVERY_MEM]) >>
+  gvs[vars_ext_result_def] >> rename1 `vars_ext tt t` >>
+  drule call_ctx_rel_prevhash >> strip_tac >>
+  `eval_operand op t = SOME (HD cx.txn.block_hashes)` by
+    (fs[vars_ext_def] >>
+     qpat_x_assum `t = tt with vs_vars := _` SUBST1_TAC >>
+     simp[eval_operand_vars_ext]) >>
+  drule_all compile_prevhash_frame >> strip_tac >>
+  `?bb. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb) (DROP s0.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def] >>
+     PURE_REWRITE_TAC[GSYM listTheory.APPEND_ASSOC,
+                      rich_listTheory.DROP_LENGTH_APPEND] >> simp[]) >>
+  `gas_path ctx func s0 0
+     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+     disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+     impl_tac >- fs[listTheory.EVERY_MEM] >>
+     `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+       (simp[listTheory.FILTER_EQ_NIL] >> fs[listTheory.EVERY_MEM] >>
+        rpt strip_tac >> first_x_assum drule >> rw[] >> gvs[]) >>
+     `s0.vs_inst_idx + LENGTH (emitted_insts sa sb) =
+      LENGTH sb.cs_current_insts` by
+       (gvs[rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def] >>
+        PURE_REWRITE_TAC[GSYM listTheory.APPEND_ASSOC,
+                      rich_listTheory.DROP_LENGTH_APPEND] >> simp[]) >>
+     simp[]) >>
+  `t.vs_allocas = s0.vs_allocas /\ t.vs_memory = s0.vs_memory /\
+   t.vs_halted = s0.vs_halted /\ t.vs_current_bb = s0.vs_current_bb /\
+   t.vs_gas_readings = s0.vs_gas_readings` by
+    (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
+     simp[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
+     irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+     simp[lookup_var_def] >> first_x_assum irule >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  drule msg_gas_state_frame >>
+  disch_then (qspecl_then [`t.vs_gas_readings`,
+    `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[]`, `BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))`,
+    `es`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
+       GSYM ETA_THM] >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
        PAD_RIGHT, length_word_to_bytes_be, word_of_bytes_be_to_bytes,
-       locals_kept_mem] >>
-  ho_match_mp_tac frag_exec_run_frame >>
-  qexists_tac `\a. F` >>
-  drule compile_prevhash_shape >> strip_tac >> simp[] >>
-  conj_tac
-  >- (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >> drule_all compile_prevhash_frame >> simp[]) >>
-  conj_tac
-  >- (rpt strip_tac >> simp[drop_fresh_def]) >>
-  rpt strip_tac >>
-  drule_all compile_prevhash_run >>
-  strip_tac >> drule call_ctx_rel_prevhash >> strip_tac >> gvs[] >>
-  goal_assum drule >> simp[]
+       locals_kept_mem, lookup_var_def]
 QED
 
 
