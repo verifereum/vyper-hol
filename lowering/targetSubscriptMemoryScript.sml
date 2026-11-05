@@ -1,0 +1,327 @@
+(* Current local memory representation for write-side subscripts. *)
+Theory targetSubscriptMemory
+Ancestors
+  targetPlaceSim targetPlaceSimCasesBase exprSimProps exprSimArrayIndex
+  exprSimHypsDefs exprLoweringProps freshWrites option vyperPlaceResultTyping
+  exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
+  vyperTypeExprSoundness vyperTypeInvariants vyperPlaceTyping
+  vyperTypeStatePreservation vyperPlaceStatePreservation vyperTyping valueEncoding valueEncodingProofs
+  valueEncodingProps loweringPosts exprLowering compileEnv vyperState vyperInterpreter
+  vyperTypeSystem vyperValue vyperValueOperation list rich_list pair
+  words arithmetic finite_map venomState venomMemDefs
+Libs
+  pairLib
+
+Theorem fields_in_memory_mem_field_offset:
+  !vals fs off mem id fv k ftv.
+    struct_has_type fs vals /\ fields_in_memory vals fs off mem /\
+    ALOOKUP vals id = SOME fv /\ mem_field_offset fs id = SOME (k,ftv) ==>
+    val_in_memory ftv fv (off + k) mem
+Proof
+  Induct >> Cases_on `fs` >> simp[value_has_type_def] >>
+  PairCases_on `h` >> Cases >>
+  rename1 `struct_has_type ((fname,fty)::fts) ((vname,vval)::vrest)` >>
+  simp[value_has_type_def, val_in_memory_def, mem_field_offset_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `fname = id` >> gvs[AllCaseEqs()] >>
+  rename1 `mem_field_offset fts id = SOME child_offset` >>
+  PairCases_on `child_offset` >> gvs[] >>
+  first_x_assum drule_all >> simp[AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem array_index_in_memory:
+  !tv av off mem i v k etv.
+    value_has_type tv (ArrayV av) /\
+    val_in_memory tv (ArrayV av) off mem /\
+    array_index tv av i = SOME v /\
+    mem_step_offset tv (ValueSubscript (IntV i)) = SOME (k,etv) ==>
+    val_in_memory etv v (off + k) mem
+Proof
+  rpt gen_tac >> Cases_on `tv` >> Cases_on `av` >>
+  gvs[value_has_type_def] >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd` >> gvs[value_has_type_def]) >>
+  simp[val_in_memory_def, array_index_def, mem_step_offset_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  gvs[oEL_THM, AllCaseEqs()]
+  >- (drule values_have_types_length >> strip_tac >>
+      drule_all tuple_in_memory_element >> simp[GSYM type_memory_size_list_sum])
+  >- (drule_all elems_in_memory_EL >> simp[AC ADD_ASSOC ADD_COMM]) >>
+  drule_all kvs_in_memory_lookup >> simp[]
+QED
+
+Theorem mem_step_offset_current_value:
+  !tv a sb v off mem k etv.
+    value_has_type tv a /\ val_in_memory tv a off mem /\
+    evaluate_subscripts tv a [sb] = INL v /\
+    mem_step_offset tv sb = SOME (k,etv) ==>
+    val_in_memory etv v (off + k) mem
+Proof
+  rpt gen_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
+      simp[evaluate_subscripts_def] >>
+      Cases_on `a` >> simp[evaluate_subscripts_def, AllCaseEqs()] >>
+      rpt strip_tac >> drule_all array_index_in_memory >> simp[]) >>
+  Cases_on `tv` >> Cases_on `a` >>
+  simp[evaluate_subscripts_def, mem_step_offset_def, value_has_type_def,
+       val_in_memory_def, AllCaseEqs()] >>
+  rpt strip_tac >> drule_all fields_in_memory_mem_field_offset >> simp[]
+QED
+
+Theorem mem_path_offset_current_value:
+  !path tv a v off mem k ptv.
+    value_has_type tv a /\ well_formed_type_value tv /\
+    val_in_memory tv a off mem /\
+    evaluate_subscripts tv a path = INL v /\
+    mem_path_offset tv path = SOME (k,ptv) ==>
+    val_in_memory ptv v (off + k) mem
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def, evaluate_subscripts_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  rename1 `mem_step_offset tv sb = SOME (delta,etv)` >>
+  `mem_path_offset tv [sb] = SOME (delta,etv)` by
+    simp[mem_path_offset_def] >>
+  drule mem_path_offset_sound >> simp[subscripts_type_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  drule evaluate_subscripts_cons_typed >>
+  disch_then (qspecl_then [`path`, `a`] assume_tac) >>
+  qpat_x_assum `evaluate_subscripts tv a (sb::path) = INL v` mp_tac >>
+  once_asm_rewrite_tac[] >> strip_tac >> gvs[AllCaseEqs()] >>
+  rename1 `evaluate_subscripts tv a [sb] = INL child` >>
+  `value_has_type etv child` by
+    (irule evaluate_subscripts_type >> goal_assum (drule_at Any) >>
+     simp[subscripts_type_def] >> goal_assum (drule_at Any) >> simp[]) >>
+  `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
+  drule_all mem_step_offset_current_value >> strip_tac >>
+  first_x_assum drule_all >> simp[NoAsms, AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem place_ptr_rel_memory_current:
+  !ctx func cenv cx env es s id path entry v w loc ty tv.
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    val_in_memory tv v (w2n w) s.vs_memory /\
+    value_has_type tv v /\ well_formed_type_value tv /\
+    subscripts_type entry.type path = SOME tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?ety. FLOOKUP env.var_types id = SOME ety` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     metis_tac[IS_SOME_EXISTS]) >>
+  `cenv.ce_var_type id = SOME ety /\
+   evaluate_type (get_tenv cx) ety = SOME entry.type` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     metis_tac[]) >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    (fs[expr_sim_inv_def, state_well_typed_def] >>
+     metis_tac[lookup_scopes_well_typed_value_has_type, lookup_scopes_well_typed_type]) >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `place_ptr_rel _ _ _ _ _ _ _` mp_tac >>
+  simp[place_ptr_rel_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+  simp[local_ptrs_rel_def] >> strip_tac >>
+  qpat_x_assum `!name entry p sz. _ ==> _` drule_all >> strip_tac >> gvs[] >>
+  drule_all mem_path_offset_current_value >> strip_tac >>
+  drule mem_path_offset_sound >> strip_tac >>
+  drule alloca_room_next_lt >> strip_tac >>
+  `w2n b + k < dimword (:256)` by decide_tac >>
+  `k < dimword (:256)` by decide_tac >>
+  simp[w2n_add_2, w2n_n2w, LESS_MOD] >> fs[ADD_COMM] >>
+  conj_tac
+  >- (irule evaluate_subscripts_type >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  drule_all subscripts_type_well_formed >> simp[]
+QED
+
+Theorem array_len_ok_memory_current:
+  !ctx func cenv cx env es s id path entry vs w loc ty etv cap ptr cnt.
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs)) /\
+    evaluate_type (get_tenv cx) ty = SOME (ArrayTV etv (Dynamic cap)) /\
+    eval_operand ptr s = SOME w ==>
+    array_len_ok T cnt
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory)
+      ptr s (n2w (LENGTH vs))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all place_ptr_rel_memory_current >>
+  simp[val_in_memory_def] >> strip_tac >>
+  drule array_len_ok_MLOAD >>
+  disch_then (qspecl_then [`cenv.ce_is_ctor`, `cenv.ce_imm_alloca`, `cnt`] mp_tac) >>
+  simp[GSYM mem_word_at_eq_mload]
+QED
+
+Theorem target_post_suffix_frame:
+  target_post ctx func cenv cx es sa sm s0 es' pv vt rb t /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  stmt_state_rel ctx func cenv cx es' u /\
+  (?w. eval_operand dst u = SOME w /\ place_ptr_rel cenv cx u pv' w loc vt') /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\
+  place_readable cx es' pv' /\
+  (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==>
+         lookup_var x u = SOME w) /\
+  (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+           FLOOKUP u.vs_allocas aid = SOME b) /\
+  u.vs_memory = t.vs_memory ==>
+  target_post ctx func cenv cx es sa sb s0 es' pv' vt'
+    (dst,loc,SOME (value_type_place vt')) u
+Proof
+  strip_tac >>
+  `locals_kept cenv es s0 u` by
+    (irule locals_kept_mem_tail >> qexists `t` >> gvs[target_post_def]) >>
+  gvs[target_post_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem place_ptr_rel_memory_step:
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  mem_step_offset tv sb = SOME (k,etv) /\
+  evaluate_type (get_tenv cx) ety = SOME etv ==>
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id (path ++ [sb])))
+    (w + n2w k) loc (Type ety)
+Proof
+  simp[place_ptr_rel_def] >> strip_tac >> gvs[] >>
+  drule_all mem_path_offset_snoc >> strip_tac >>
+  simp[place_ptr_rel_def, AC WORD_ADD_ASSOC WORD_ADD_COMM,
+       word_add_n2w, ADD_COMM]
+QED
+
+Theorem extend_place_memory_live_result:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  subscripts_type entry.type path = SOME tv ==>
+  extend_place cx (PlaceR (MemoryPlace id path)) sb es =
+    (case evaluate_subscripts tv v [sb] of
+     | INL w => (INL (PlaceR (MemoryPlace id (path ++ [sb]))),es)
+     | INR err => (INR (Error err),es))
+Proof
+  rpt strip_tac >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_scopes_def, bind_def, ignore_bind_def, lift_option_type_def,
+       lift_sum_def, return_def, raise_def, read_memory_path_def,
+       extend_memory_place_def] >>
+  Cases_on `evaluate_subscripts tv v [sb]` >>
+  simp[lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def]
+QED
+
+Theorem place_readable_memory_live:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL v ==>
+  place_readable cx es (PlaceR (MemoryPlace id path))
+Proof
+  rpt strip_tac >>
+  simp[place_readable_def, read_place_def, get_scopes_def, bind_def,
+       lift_option_type_def, lift_sum_def, return_def, read_memory_path_def]
+QED
+
+Theorem extend_place_memory_live:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  extend_place cx (PlaceR (MemoryPlace id path)) sb es = (INL pv,es') ==>
+  es' = es /\ pv = PlaceR (MemoryPlace id (path ++ [sb])) /\
+  ?w. evaluate_subscripts entry.type entry.value (path ++ [sb]) = INL w
+Proof
+  strip_tac >>
+  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_scopes_def, bind_def, ignore_bind_def, lift_option_type_def,
+       lift_sum_def, return_def, raise_def, read_memory_path_def,
+       extend_memory_place_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `subscripts_type entry.type path` >>
+  gvs[return_def, raise_def] >>
+  rename1 `subscripts_type entry.type path = SOME ptv` >>
+  Cases_on `evaluate_subscripts ptv v [sb]` >>
+  gvs[return_def, raise_def] >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[sb]` mp_tac) >> simp[]
+QED
+
+(* Preserve pointer values that already exist; fresh writes may create new ones. *)
+Theorem target_place_ptr_values_frame:
+  place_ptr_rel cenv cx s pv w loc vt /\ local_ptrs_reserved cenv sa /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
+         lookup_var x t = SOME v) ==>
+  place_ptr_rel cenv cx t pv w loc vt
+Proof
+  Cases_on `pv` >> simp[place_ptr_rel_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> simp[place_ptr_rel_def] >>
+  rpt strip_tac >> gvs[] >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  metis_tac[]
+QED
+
+Theorem target_post_memory_step:
+  target_post ctx func cenv cx es sa sm s0 es2
+    (PlaceR (MemoryPlace id path)) (Type ty) rb t /\
+  lookup_scopes id es2.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  extend_place cx (PlaceR (MemoryPlace id path)) sub es2 = (INL pv',es3) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  mem_step_offset tv sub = SOME (k,etv) /\
+  evaluate_type (get_tenv cx) ety = SOME etv /\
+  eval_operand (FST rb) t = SOME w /\
+  eval_operand dst u = SOME (w + n2w k) /\
+  stmt_state_rel ctx func cenv cx es2 u /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\
+  (!x z. not_fresh_at sm x /\ lookup_var x t = SOME z ==>
+         lookup_var x u = SOME z) /\
+  (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+           FLOOKUP u.vs_allocas aid = SOME b) /\
+  u.vs_memory = t.vs_memory ==>
+  target_post ctx func cenv cx es sa sb s0 es3 pv' (Type ety)
+    (dst,SOME LocMemory,SOME (ValPT ety)) u
+Proof
+  strip_tac >>
+  drule_all extend_place_memory_live >> strip_tac >> gvs[] >>
+  `place_ptr_rel cenv cx t (PlaceR (MemoryPlace id path)) w
+      (SOME LocMemory) (Type ty)` by
+    gvs[target_post_def, place_ptr_rel_def] >>
+  `place_ptr_rel cenv cx t
+     (PlaceR (MemoryPlace id (path ++ [sub]))) (w + n2w k)
+     (SOME LocMemory) (Type ety)` by
+    (irule place_ptr_rel_memory_step >> goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `place_ptr_rel cenv cx u
+     (PlaceR (MemoryPlace id (path ++ [sub]))) (w + n2w k)
+     (SOME LocMemory) (Type ety)` by
+    (irule target_place_ptr_values_frame >> qexistsl [`t`, `sm`] >> simp[]) >>
+  once_rewrite_tac[GSYM value_type_place_def] >>
+  drule_then irule target_post_suffix_frame >> simp[] >>
+  irule place_readable_memory_live >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem extend_place_memory_array_index:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+  subscripts_type entry.type path = SOME (ArrayTV et bd) /\
+  value_has_type (ArrayTV et bd) (ArrayV av) ==>
+  extend_place cx (PlaceR (MemoryPlace id path))
+    (ValueSubscript (IntV i)) es =
+  (if 0 <= i /\ Num i < array_length (ArrayTV et bd) av
+   then (INL (PlaceR (MemoryPlace id
+                (path ++ [ValueSubscript (IntV i)]))),es)
+   else (INR (Error (RuntimeError "evaluate_subscripts array_index")),es))
+Proof
+  strip_tac >>
+  drule_all extend_place_memory_live_result >>
+  disch_then (qspecl_then [`ValueSubscript (IntV i)`, `cx`] mp_tac) >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[value_has_type_def, evaluate_subscripts_def, array_length_def,
+      array_index_def, oEL_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  qmatch_goalsub_rename_tac `ALOOKUP sparse (Num i)` >>
+  Cases_on `ALOOKUP sparse (Num i)` >> gvs[]
+QED
