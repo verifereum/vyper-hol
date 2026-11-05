@@ -247,6 +247,65 @@ Proof
   EVAL_TAC
 QED
 
+Theorem deploy_prefix_negative_dload_artifact:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  let unit = THE (lower_vyper_deploy_unit tops rp []) in
+  let (pre,supply) = THE (venomPipelineRunner$run_pipeline_stages rp
+    venomPassSchedule$o1_pipeline_spec.ps_pre_walk_stages unit
+    (irSupply$init_ir_supply unit)) in
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass rp
+    [CFP_Simple VP_LowerDload] "__deploy" pre supply = SOME
+    (<|cu_context :=
+      <|ctx_functions :=
+        [<|fn_name := "__deploy";
+           fn_blocks :=
+             [<|bb_label := "__deploy"; bb_instructions :=
+                [<|inst_id := 0; inst_opcode := ALLOCA;
+                   inst_operands := [Lit 32w]; inst_outputs := ["%0"]|>;
+                 <|inst_id := 1; inst_opcode := ADD;
+                   inst_operands := [Lit 0w; Lit 0w]; inst_outputs := ["%1"]|>;
+                 <|inst_id := 8; inst_opcode := ALLOCA;
+                   inst_operands := [Lit 32w]; inst_outputs := ["formal_var_0"]|>;
+                 <|inst_id := 9; inst_opcode := ADD;
+                   inst_operands := [Var "%1"; Label "code_end"];
+                   inst_outputs := ["formal_var_1"]|>;
+                 <|inst_id := 10; inst_opcode := CODECOPY;
+                   inst_operands := [Var "formal_var_0"; Var "formal_var_1"; Lit 32w];
+                   inst_outputs := []|>;
+                 <|inst_id := 11; inst_opcode := MLOAD;
+                   inst_operands := [Var "formal_var_0"]; inst_outputs := ["%2"]|>;
+                 <|inst_id := 3; inst_opcode := MSTORE;
+                   inst_operands := [Var "%0"; Var "%2"]; inst_outputs := []|>;
+                 <|inst_id := 5; inst_opcode := ALLOCA;
+                   inst_operands := [Lit 0w]; inst_outputs := ["%3"]|>;
+                 <|inst_id := 6; inst_opcode := CODECOPY;
+                   inst_operands := [Var "%3"; Label "runtime_begin"; Lit 0w];
+                   inst_outputs := []|>;
+                 <|inst_id := 7; inst_opcode := RETURN;
+                   inst_operands := [Var "%3"; Lit 0w]; inst_outputs := []|>]|>];
+           fn_call_abi := <|ica_has_memory_return_buffer := NONE;
+                           ica_user_return_count := NONE|>;
+           fn_noinline := F; fn_forced_alloc_positions := FEMPTY;
+           fn_eom := NONE; fn_mems_used := []; fn_fmp_signature := NONE|>];
+        ctx_entry := SOME "__deploy"; ctx_global_reserved := []|>;
+      cu_data_segment := [<|ds_label := "runtime_begin"; ds_items := [DataBytes []]|>]|>,
+     <|irs_next_inst := 12; irs_next_var := 2; irs_next_label := 0;
+       irs_used_inst_ids := [11;10;9;8;0;1;2;3;4;5;6;7];
+       irs_used_vars := ["formal_var_1";"formal_var_0";
+                         "%0";"%1";"%2";"%1";"%0";"%2";"%3";"%3";"%3"];
+       irs_used_labels := ["code_end";"__deploy";"__deploy";"__deploy";
+                           "@ctor_exit_0";"@ctor_exit_0";"runtime_begin";
+                           "runtime_begin"]|>)
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  pure_rewrite_tac[deploy_prefix_negative_prewalk_artifact |>
+                    SIMP_RULE bool_ss [LET_THM]] >>
+  EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
