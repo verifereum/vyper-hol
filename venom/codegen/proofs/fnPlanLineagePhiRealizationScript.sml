@@ -18,6 +18,31 @@ Proof
   Cases_on `left` >> simp[]
 QED
 
+Theorem native_slot_cells_tagged:
+  !p q phis base.
+  phi_uses_disjoint phis /\
+  (!v i. MEM v base /\ FLOOKUP (FST (build_phi_maps p phis)) v = SOME i ==>
+    IS_SOME (FLOOKUP (SND (build_phi_maps p phis)) i) /\
+    IS_SOME (FLOOKUP (SND (build_phi_maps q phis)) i)) ==>
+  phi_origin_tagged (native_phi_class p phis)
+    (MAP (phi_slot_cell (SND (build_phi_maps p phis))
+                        (SND (build_phi_maps q phis)))
+      (phi_slot_trace (FST (build_phi_maps p phis)) base))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[phi_origin_tagged_def, listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+  rpt gen_tac >> strip_tac >> Cases_on `x`
+  >- (gvs[phi_slot_cell_def, native_phi_class_def, phi_slot_trace_inl_mem]) >>
+  simp[phi_slot_cell_def] >>
+  rename1 `MEM (INR i) (phi_slot_trace _ live)` >>
+  `?v. MEM v live /\ FLOOKUP (FST (build_phi_maps p phis)) v = SOME i` by
+    metis_tac[phi_slot_trace_inr_mem] >>
+  `i < LENGTH phis` by metis_tac[build_phi_maps_operand_range] >>
+  `IS_SOME (FLOOKUP (SND (build_phi_maps p phis)) i) /\
+   IS_SOME (FLOOKUP (SND (build_phi_maps q phis)) i)` by metis_tac[] >>
+  conj_tac >> irule native_phi_matching_class >> simp[]
+QED
+
 Theorem native_slot_cells_classes:
   !p q phis base.
   phi_uses_disjoint phis /\
@@ -29,17 +54,8 @@ Theorem native_slot_cells_classes:
                         (SND (build_phi_maps q phis)))
       (phi_slot_trace (FST (build_phi_maps p phis)) base))
 Proof
-  rpt gen_tac >> strip_tac >> simp[phi_origin_classes_def, listTheory.EVERY_MAP,
-                    listTheory.EVERY_MEM] >>
-  rpt gen_tac >> strip_tac >> Cases_on `x` >>
-  simp[phi_slot_cell_def] >> rpt strip_tac >> gvs[] >>
-  rename1 `MEM (INR i) (phi_slot_trace _ live)` >>
-  `?v. MEM v live /\ FLOOKUP (FST (build_phi_maps p phis)) v = SOME i` by
-    metis_tac[phi_slot_trace_inr_mem] >>
-  `i < LENGTH phis` by metis_tac[build_phi_maps_operand_range] >>
-  `IS_SOME (FLOOKUP (SND (build_phi_maps p phis)) i) /\
-   IS_SOME (FLOOKUP (SND (build_phi_maps q phis)) i)` by metis_tac[] >>
-  disj2_tac >> conj_tac >> irule native_phi_matching_class >> simp[]
+  rpt strip_tac >> irule phi_origin_tagged_classes >>
+  irule native_slot_cells_tagged >> metis_tac[]
 QED
 
 Theorem slot_cells_class_coverage:

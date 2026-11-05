@@ -758,6 +758,38 @@ Definition phi_origin_classes_def:
       a = b \/ (class_of a = SOME slot /\ class_of b = SOME slot)) cells
 End
 
+Definition phi_origin_tagged_def:
+  phi_origin_tagged class_of cells <=>
+    EVERY (\c. case c of
+      PhiCommon op => class_of op = NONE
+    | PhiOriginal i a b => class_of a = SOME i /\ class_of b = SOME i) cells
+End
+
+Theorem phi_origin_tagged_classes:
+  !class_of cells.
+    phi_origin_tagged class_of cells ==> phi_origin_classes class_of cells
+Proof
+  simp[phi_origin_tagged_def, phi_origin_classes_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem phi_origin_tagged_stage:
+  !class_of inst next halting p q cells cells1.
+    phi_origin_stage inst next halting p q cells cells1 /\
+    phi_origin_tagged class_of cells /\
+    class_of (Var (HD inst.inst_outputs)) = NONE ==>
+    phi_origin_tagged class_of cells1
+Proof
+  rpt gen_tac >> rewrite_tac[phi_origin_stage_def, phi_origin_tagged_def] >>
+  strip_tac >>
+  `phi_origin_tagged class_of written` by
+    (simp[phi_origin_tagged_def] >> gvs[] >>
+     irule phi_origin_write_every >> simp[] >> fs[phi_origin_incoming_def]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (gvs[phi_origin_tagged_def] >> irule phi_origin_pop_every >> simp[]) >>
+  gvs[phi_origin_tagged_def]
+QED
+
 Theorem phi_origin_classes_edits:
   !class_of cells keep d ret e.
     phi_origin_classes class_of cells /\ d < LENGTH cells /\
