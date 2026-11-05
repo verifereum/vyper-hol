@@ -27,7 +27,7 @@ Theory exprSimAggregateLayout
 Ancestors
   structFieldsProps vyperTypeSystem valueEncoding compileEnv
   exprSimHyps exprSimBufferEmpty vyperValue list pair finite_map vfmConstants
-  exprCallbackContracts exprLowering exprSimWordBuiltins
+  exprCallbackContracts exprLowering exprSimWordBuiltins exprSimAttributeFields
 
 Theorem struct_literal_decl_types:
   well_typed_expr env (StructLit ann nsid kes) ==>
@@ -111,6 +111,16 @@ Proof
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
       type_memory_bytes_def, type_memory_size_def, word_size_def] >>
   metis_tac[]
+QED
+
+Theorem expr_sim_inv_elem_size_in_location:
+  expr_sim_inv cenv cx env es /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  elem_size_in_location cenv loc ty =
+    if is_slot_addressed loc then type_slot_size tv else type_memory_size tv
+Proof
+  strip_tac >> drule_all expr_sim_inv_memory_size >>
+  simp[elem_size_in_location_def, slot_count_of_memory_size]
 QED
 
 

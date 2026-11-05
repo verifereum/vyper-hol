@@ -7,7 +7,7 @@ Ancestors
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
   exprSimForeignImmutableFrame emitHelperProps ASCIInumbers freshWrites
-  exprArrayOperandProvenance exprSimWordArgs vyperStoragePlaceProvenance
+  exprArrayOperandProvenance exprSimWordArgs vyperStoragePlaceProvenance exprSimAggregateLayout
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -4631,6 +4631,25 @@ Proof
   simp[straight_fresh_array_check_ptr] >> conj_tac
   >- (rpt strip_tac >> metis_tac[eval_operand_drop_fresh]) >>
   rpt strip_tac >> drule_all array_check_ptr_run >> simp[]
+QED
+
+(* The compiler's byte/slot stride agrees with the source array layout. *)
+Theorem array_elem_ptr_layout:
+  expr_sim_inv cenv cx env es /\
+  evaluate_type (get_tenv cx) et = SOME evt ==>
+  (if (case bd of Fixed cap => F | Dynamic cap => T)
+   then w + n2w (word_scale loc) else w) +
+      n2w j * n2w (elem_size_in_location cenv loc et) =
+    (w:bytes32) + n2w (if is_slot_addressed loc then
+      (case bd of Fixed cap => 0 | Dynamic cap => 1) + j * type_slot_size evt
+    else (case bd of Fixed cap => 0 | Dynamic cap => 32) + j * type_memory_size evt)
+Proof
+  strip_tac >> drule_all expr_sim_inv_elem_size_in_location >>
+  strip_tac >> Cases_on `bd` >> Cases_on `loc` >>
+  gvs[word_scale_def, is_slot_addressed_def, wordsTheory.word_mul_n2w,
+      wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC] >>
+  simp[GSYM wordsTheory.word_add_n2w,
+       AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM]
 QED
 
 Theorem array_check_ptr_vv_frag:
