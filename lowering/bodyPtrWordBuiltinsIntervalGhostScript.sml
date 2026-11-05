@@ -58,3 +58,19 @@ Proof
       metis_tac[]) >>
   simp[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem word_interval_ghost_inv_index:
+  ghost_inv d cenv cx es G tn (s with vs_inst_idx := i) <=>
+  ghost_inv d cenv cx es G tn s
+Proof
+  simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
+  Cases_on `d` >- simp[return_buf_ptr_def] >>
+  PairCases_on `x` >> simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
+QED
+
+Theorem word_interval_ghost_inv_jump:
+  ghost_inv d cenv cx es G tn (jump_to l s) <=>
+  ghost_inv d cenv cx es G tn s
+Proof
+  simp[jump_to_def, ghost_inv_jump_to]
+QED
