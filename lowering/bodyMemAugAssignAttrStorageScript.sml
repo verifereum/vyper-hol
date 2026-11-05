@@ -129,7 +129,8 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* S1 stmtSimAugAssignStorage's eval_augassign_place_forced. *)
+(* S1 stmtSimAugAssignAttrStorage's eval_augassign_storage_place, at a
+   fixed gas_obs. *)
 Theorem eval_augassign_place_forced_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
@@ -148,7 +149,7 @@ Proof
   Cases_on `raw` >> simp[bind_def]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_rhs_exception. *)
+(* S1 stmtSimAugAssignAttrStorage's augassign_storage_place_rhs_exception. *)
 Theorem augassign_place_rhs_exception_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
@@ -162,7 +163,7 @@ Proof
   simp[Once bind_def]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_rhs_normal. *)
+(* S1 stmtSimAugAssignAttrStorage's augassign_storage_place_rhs_normal. *)
 Theorem augassign_place_rhs_normal_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
@@ -178,7 +179,7 @@ Proof
   simp[Once bind_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_rhs_admissible. *)
+(* S1 stmtSimAugAssignAttrStorage's augassign_storage_place_rhs_admissible. *)
 Theorem augassign_place_rhs_admissible_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
@@ -205,7 +206,8 @@ Proof
   gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_binop_admissible. *)
+(* S1 stmtSimAugAssignAttrStorage's
+   augassign_storage_place_binop_admissible. *)
 Theorem augassign_place_binop_admissible_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
@@ -239,7 +241,7 @@ Proof
   gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_rhs_exempt. *)
+(* S1 stmtSimAugAssignAttrStorage's augassign_storage_place_rhs_exempt. *)
 Theorem augassign_place_rhs_exempt_mem_src[local]:
   read_storage_slot cx tr slot tvt es = (INL v0, es) /\
   gas_marked_exec memory (ctx,func)
@@ -296,8 +298,8 @@ Proof
   drule_all gas_marked_path_then >> simp[]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_rhs_exception_exec, at
-   either memory flag. *)
+(* S1 stmtSimAugAssignStorage's augassign_toplevel_rhs_exception_exec, for
+   any storage-place target and at either memory flag. *)
 Theorem augassign_place_rhs_exception_exec_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
@@ -315,8 +317,8 @@ Proof
   metis_tac[read_storage_slot_gas_obs_mem_src]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_place_rhs_normal_exec, at
-   either memory flag. *)
+(* S1 stmtSimAugAssignStorage's augassign_toplevel_rhs_normal_exec, for
+   any storage-place target and at either memory flag. *)
 Theorem augassign_place_rhs_normal_exec_mem_src[local]:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k tvt), es')) /\
