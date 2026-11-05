@@ -2,12 +2,24 @@
    builtins: len (S1: exprSimBuiltins' compile_len_case, exprSimLen). *)
 Theory bodyMemBiLen
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemBiLenCompose bodyMemBiLenFacts
+  exprSimSource exprSimHypsDefs builtinProps vyperTypeBuiltins vyperContext
 
 Theorem body_builtin_len_mem:
   !cx ty es.
     (builtin_args_length_ok Len (LENGTH es) ==> body_expr_mem_ok cx (HD es)) ==>
     body_expr_mem_ok cx (Builtin ty Len es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule len_pre_args >> strip_tac >> gvs[builtin_args_length_ok_def] >>
+  `expr_body_pre cenv cx env e es'` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then (qspecl_then [`e`, `es'`] mp_tac) >>
+     fs[expr_body_pre_def]) >>
+  `expr_vv_sim_mem ctx func cenv cx ty' e es'` by
+    (fs[body_expr_mem_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule compile_len_singleton_forced_sim_mem >> metis_tac[]) >>
+  irule compile_len_singleton_sim_mem >> metis_tac[]
 QED
