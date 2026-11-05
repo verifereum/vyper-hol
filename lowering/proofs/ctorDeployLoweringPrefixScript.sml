@@ -74,6 +74,31 @@ Proof
        venomInstTheory.fn_labels_def] >> EVAL_TAC
 QED
 
+Theorem deploy_prefix_negative_static_probe:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  staticLayoutWf$raw_static_inputs_wf
+    (THE (lower_vyper_deploy_unit tops rp [])).cu_context
+Proof
+  simp[LET_THM, staticLayoutWfTheory.raw_static_inputs_wf_def,
+       staticLayoutWfTheory.forced_positions_wf_def] >>
+  EVAL_TAC >> simp[wordsTheory.dimword_def,
+                   venomInstTheory.fn_insts_blocks_def] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_prewalk_probe:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  let unit = THE (lower_vyper_deploy_unit tops rp []) in
+  IS_SOME (venomPipelineRunner$run_pipeline_stages rp
+    venomPassSchedule$o1_pipeline_spec.ps_pre_walk_stages unit
+    (irSupply$init_ir_supply unit))
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
