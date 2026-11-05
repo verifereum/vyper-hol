@@ -188,6 +188,8 @@ Proof
   drule_all make_ssa_stage_src_rows >> strip_tac >>
   `EVERY make_ssa_input_ok C'.ctx_functions` by
     metis_tac[make_ssa_stage_input_ok] >>
+  `EVERY ssa_form C'.ctx_functions` by
+    metis_tac[make_ssa_stage_wf_ssa, wf_ssa_def, EVERY_MEM] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
     (irule make_ssa_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
