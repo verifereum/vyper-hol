@@ -612,3 +612,329 @@ Proof
   drule exprSafeOperandBuiltinsTheory.compile_subscript_not_label >>
   simp[]
 QED
+
+Theorem mapping_suffix_shape:
+  (compile_keccak256_key key F sa = (op,sb) \/
+   compile_mapping_subscript base_op key sa = (op,sb)) ==>
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  sb.cs_next_var = sa.cs_next_var + 3 /\
+  (?v. op = Var v /\ not_fresh_at sb v)
+Proof
+  strip_tac >>
+  gvs[compile_keccak256_key_def, compile_mapping_subscript_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+      fresh_var_def, emit_def, same_blocks_def, emitted_insts_def,
+      not_fresh_at_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[is_terminator_def, mk_inst_def] >>
+  qexists_tac `sa.cs_next_var + 2` >> simp[]
+QED
+
+Theorem mapping_suffix_next_id:
+  (compile_keccak256_key key F sa = (op,sb) ==>
+   sb.cs_next_id = sa.cs_next_id + 3) /\
+  (compile_mapping_subscript base_op key sa = (op,sb) ==>
+   sb.cs_next_id = sa.cs_next_id + 5)
+Proof
+  conj_tac >> strip_tac >>
+  gvs[compile_keccak256_key_def, compile_mapping_subscript_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+      fresh_var_def, emit_def]
+QED
+
+Theorem mapping_alloca_code:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  fn_has_code sa sb func ==>
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)
+Proof
+  strip_tac >> qpat_x_assum `compile_mapping_subscript _ _ _ = _` mp_tac >>
+  simp[compile_mapping_subscript_def,
+    contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
+  irule hash_emitted_inst_mem >> goal_assum (drule_at Any) >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
+QED
+
+Theorem compile_keccak256_key_run:
+  compile_keccak256_key key F sa = (op,sb) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand key s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule compile_keccak256_key_parts >> strip_tac >>
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_length_prefixed_hash_run >>
+  disch_then irule >> simp[] >>
+  qexistsl_tac [`b`, `key`, `sm`] >> gvs[wordsTheory.dimword_def]
+QED
+
+Theorem compile_hashmap_dynamic_key_frame:
+  expr_post ctx func cenv cx e es sa sm s0 es' kv key s /\
+  expr_type e = kt /\ is_bytestring_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  compile_keccak256_key key F sm = (op,sb) /\
+  (!x. key = Var x ==> not_fresh_at sm x) /\
+  local_ptrs_reserved cenv sm ==>
+  ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
+    eval_operand op t = SOME (encode_hashmap_key kt kv) /\
+    stmt_state_rel ctx func cenv cx es' t /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all expr_post_hashmap_bytestring >> strip_tac >>
+  drule_all compile_keccak256_key_run >> strip_tac >>
+  qexists_tac `t` >> simp[byteTheory.word_of_bytes_be_def] >>
+  irule hash_readonly_state_rel >> goal_assum (drule_at Any) >>
+  gvs[loweringPostsTheory.expr_post_def]
+QED
+
+Theorem compile_mapping_subscript_run:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  (!x. base_op = Var x ==> not_fresh_at sa x) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (hashmap_slot w0 w1) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+Proof
+  strip_tac >> drule compile_mapping_subscript_parts >> strip_tac >>
+  drule_all hash_alloc_two_words_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sq) s = OK staged` >>
+  `eval_operand (Lit 64w) staged = SOME 64w` by simp[eval_operand_def] >>
+  drule_at (Pat `emit_op SHA3 _ _ = _`) emit_SHA3_bytes_frame >>
+  simp[eval_operand_def] >> disch_then drule_all >> strip_tac >>
+  `t.vs_memory = staged.vs_memory /\ t.vs_allocas = staged.vs_allocas` by
+    (qpat_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `sb.cs_current_insts = sq.cs_current_insts ++ emitted_insts sq sb` by
+    (qpat_assum `emit_op SHA3 _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> simp[]) >>
+  `sq.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sq /\
+   sa.cs_next_var <= sq.cs_next_var` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     qpat_assum `emit_void MSTORE [buf.buf_operand; base_op] _ = _` mp_tac >>
+     qpat_assum `emit_op ADD _ _ = _` mp_tac >>
+     qpat_assum `emit_void MSTORE [ptr'; key] _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+       fresh_var_def, emit_def] >> rpt strip_tac >> gvs[] >>
+     rewrite_tac[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `local_ptrs_reserved cenv sq` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> qexistsl_tac [`staged`, `sq`] >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK t` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sq) s = OK staged`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
+  qexists_tac `t` >> simp[vyperStorageTheory.hashmap_slot_def, byteTheory.word_of_bytes_be_def] >> rpt conj_tac
+  >- (rpt strip_tac >> `not_fresh_at sq x` by
+        (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[])
+  >- (rpt strip_tac >> qpat_x_assum `!aid b len. _ ==> mem_bytes_at _ _ _ = _` drule_all >> simp[])
+  >> rpt strip_tac >> qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >> simp[]
+QED
+
+Theorem compile_mapping_subscript_frame:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  (!x. base_op = Var x ==> not_fresh_at sa x) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (hashmap_slot w0 w1) /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t
+Proof
+  strip_tac >> drule_all mapping_alloca_code >> strip_tac >>
+  drule_all compile_mapping_subscript_run >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  simp[loweringPostsTheory.wb_frame_def] >>
+  conj_tac >- metis_tac[] >>
+  irule locals_kept_regions >> first_assum ACCEPT_TAC
+QED
+
+Theorem compile_hashmap_tail_run:
+  expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sn x) /\
+  eval_operand base_op s = SOME base_slot /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sn /\
+  fn_has_code sp sb func ==>
+  ?u. run_inst_seq (emitted_insts sn sb) s = OK u /\
+    eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv en sn s u
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx en s` by
+    (drule exprSimWordArgsTheory.expr_post_state >> simp[]) >>
+  `?t. run_inst_seq (emitted_insts sn sp) s = OK t /\
+    eval_operand hashed t = SOME (encode_hashmap_key kt kv) /\
+    stmt_state_rel ctx func cenv cx en t /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x s)` by
+    (Cases_on `is_bytestring_type kt`
+     >- (gvs[] >> drule compile_hashmap_dynamic_key_frame >>
+         disch_then (qspecl_then [`tv`, `sp`, `hashed`, `expr_type e`] mp_tac) >>
+         simp[]) >>
+     gvs[] >> qexists_tac `s` >>
+     simp[emitted_insts_def, run_inst_seq_def] >>
+     irule expr_val_rel_hashmap_scalar >> simp[] >>
+     qexistsl_tac [`cx`, `tv`] >> gvs[loweringPostsTheory.expr_post_def]) >>
+  `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id /\
+   sp.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sp /\
+   (!x. hashed = Var x ==> not_fresh_at sp x)` by
+    (Cases_on `is_bytestring_type kt` >> gvs[]
+     >- (drule (cj 1 mapping_suffix_next_id) >> strip_tac >>
+         drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >>
+         strip_tac >> gvs[]) >>
+     simp[emitted_insts_def]) >>
+  `local_ptrs_reserved cenv sp` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `(!x. base_op = Var x ==> not_fresh_at sp x)` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `eval_operand base_op t = SOME base_slot` by
+    (Cases_on `base_op` >> gvs[eval_operand_def] >>
+     qpat_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[] >> metis_tac[]) >>
+  drule_all compile_mapping_subscript_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sp sb) t = OK u` >>
+  `sb.cs_current_insts = sp.cs_current_insts ++ emitted_insts sp sb` by
+    (drule (cj 2 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >> simp[]) >>
+  `run_inst_seq (emitted_insts sn sb) s = OK u` by
+    (qpat_assum `run_inst_seq (emitted_insts sn sp) s = OK t`
+       (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
+     disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
+  `wb_frame cenv en sn s t` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+     qexistsl_tac [`sn`, `s`] >>
+     gvs[exprSimWordArgsTheory.wb_frame_refl] >>
+     qpat_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[] >>
+     metis_tac[]) >>
+  qexists_tac `u` >> simp[] >>
+  irule exprSimWordArgsTheory.wb_frame_trans >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem compile_hashmap_tail_shape:
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) ==>
+  same_blocks sn sb /\
+  sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sn sb)
+Proof
+  strip_tac >>
+  drule (cj 2 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >> strip_tac >>
+  Cases_on `is_bytestring_type kt` >> gvs[]
+  >- (drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >>
+      strip_tac >>
+      `same_blocks sn sb` by metis_tac[exprLoweringPropsTheory.same_blocks_trans] >>
+      `emitted_insts sn sb = emitted_insts sn sp ++ emitted_insts sp sb` by
+        (irule emitted_insts_append >> simp[]) >>
+      simp[APPEND_ASSOC]) >>
+  simp[]
+QED
+
+(* This is solely a target fragment; counted source lifting is separate. *)
+Theorem compile_hashmap_tail_frag:
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sn x) /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sn /\
+  fn_has_code sp sb func /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM en.scopes /\
+  sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id ==>
+  frag_exec ctx sn sb
+    (\s. expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+         eval_operand base_op s = SOME base_slot)
+    (\u. eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv es sa s0 u) R
+Proof
+  strip_tac >> drule_all compile_hashmap_tail_shape >> strip_tac >>
+  irule hash_run_frag >> simp[] >> rpt strip_tac >>
+  drule_all compile_hashmap_tail_run >> strip_tac >>
+  qexists_tac `u` >> simp[stmt_state_rel_inst_idx] >>
+  `wb_frame cenv es sa s0 s` by
+    (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
+  `wb_frame cenv es sa s0 u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
+     conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
+     goal_assum (drule_at Any)) >>
+  qpat_x_assum `wb_frame cenv es sa s0 u` mp_tac >>
+  simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
+  strip_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem compile_mapping_index_success_tail:
+  expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
+  expr_type idx = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
+  eval_operand base_op s1 = SOME base_slot /\
+  fn_inst_ids_distinct func /\ fn_has_code sp sb func /\
+  stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM em.scopes = MAP FDOM en.scopes /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id ==>
+  frag_exec ctx sn sb (\s. s = t)
+    (\u. eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em sm s1 u) R
+Proof
+  strip_tac >>
+  `eval_operand base_op t = SOME base_slot` by
+    (irule eval_operand_frame >>
+     simp[] >> qexistsl_tac [`sm`, `s1`] >>
+     gvs[loweringPostsTheory.expr_post_def]) >>
+  `!x. base_op = Var x ==> not_fresh_at sn x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all compile_hashmap_tail_frag >>
+  disch_then (qspecl_then [`base_slot`, `R`] mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_conseq) >> simp[]
+QED
