@@ -17,6 +17,7 @@ Theory lowerDloadMakeSsaInput
 Ancestors
   o1ContractLowerDload o1PassContract lowerDloadDefs venomPassDispatcher
   venomFnScheduleRunner irSupply venomWf cfgWf venomInst list
+  cfgNormSupplyProofs
 
 Theorem lower_dload_step_supply[local]:
   fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out ==>
@@ -142,13 +143,6 @@ Proof
   first_x_assum drule >> strip_tac >> metis_tac[]
 QED
 
-Theorem lower_dload_block_supply_label[local]:
-  lower_dload_block_supply s a = (b,t) ==> b.bb_label = a.bb_label
-Proof
-  simp[lower_dload_block_supply_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem lower_dload_blocks_supply_output_count[local]:
   !s bs t v. lower_dload_blocks_supply s bbs = (bs,t) /\
   EVERY (\b. EVERY inst_wf b.bb_instructions) bbs /\
@@ -269,7 +263,7 @@ Proof
   `EVERY inst_wf a.bb_instructions` by
     (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   drule_all lower_dload_block_supply_definition >> strip_tac >>
-  drule lower_dload_block_supply_label >> strip_tac >> metis_tac[]
+  drule lower_dload_block_supply_structure >> strip_tac >> metis_tac[]
 QED
 
 Theorem lower_dload_def_on_all_paths_end[local]:
@@ -280,7 +274,7 @@ Theorem lower_dload_def_on_all_paths_end[local]:
 Proof
   strip_tac >> drule lower_dload_function_supply_path >> strip_tac >>
   drule lower_dload_function_supply_labels >> strip_tac >>
-  drule lower_dload_block_supply_label >> strip_tac >>
+  drule lower_dload_block_supply_structure >> strip_tac >>
   `EVERY inst_wf a.bb_instructions` by
     (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   gvs[def_on_all_paths_def] >> rpt strip_tac >>
@@ -382,7 +376,7 @@ Proof
       rename1 `MEM pred_bb g.fn_blocks` >>
       `?src u w. MEM src f.fn_blocks /\
          lower_dload_block_supply u src = (pred_bb,w)` by metis_tac[] >>
-      drule lower_dload_block_supply_label >> strip_tac >>
+      drule lower_dload_block_supply_structure >> strip_tac >>
       drule lower_dload_function_supply_cfg_edge >> strip_tac >>
       `def_on_all_paths f src NONE v` by
         (gvs[fn_defs_reach_uses_def] >> metis_tac[]) >>
@@ -391,7 +385,7 @@ Proof
   drule lower_dload_function_supply_pairing >> strip_tac >>
   `?a u w. MEM a f.fn_blocks /\ lower_dload_block_supply u a = (b,w)`
     by metis_tac[] >>
-  `b.bb_label = a.bb_label` by metis_tac[lower_dload_block_supply_label] >>
+  `b.bb_label = a.bb_label` by metis_tac[lower_dload_block_supply_structure] >>
   `?pre post. b.bb_instructions = pre ++ j::post` by metis_tac[MEM_SPLIT] >>
   `lower_dload_insts_supply u a.bb_instructions = (b.bb_instructions,w)` by
     gvs[lower_dload_block_supply_def, AllCaseEqs()] >>
@@ -450,19 +444,6 @@ Proof
   simp[] >> strip_tac >> gvs[fn_phis_non_degenerate_def] >> metis_tac[]
 QED
 
-Theorem lower_dload_phi_pair_use[local]:
-  !ops l v. MEM (l,v) (phi_pairs ops) ==> MEM v (venomInst$operand_vars ops)
-Proof
-  recInduct phi_pairs_ind >>
-  simp[phi_pairs_def, venomInstTheory.operand_vars_def,
-       venomInstTheory.operand_var_def] >>
-  rpt strip_tac >>
-  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
-  first_x_assum drule >> strip_tac >>
-  simp[] >>
-  CASE_TAC >> simp[]
-QED
-
 Theorem lower_dload_source_var_reserved[local]:
   ir_supply_covers_fn s f /\ MEM b f.fn_blocks /\
   MEM i b.bb_instructions /\ MEM v (inst_ir_vars i) ==>
@@ -483,7 +464,7 @@ Proof
   rename1 `MEM (pred,v) (phi_pairs i.inst_operands)` >>
   `MEM v (inst_ir_vars i)` by
     (simp[inst_ir_vars_def, inst_uses_def] >>
-     drule lower_dload_phi_pair_use >> simp[]) >>
+     drule MEM_phi_pairs_SND_operand_vars >> simp[]) >>
   `MEM v s.irs_used_vars` by metis_tac[lower_dload_source_var_reserved] >>
   drule_all lower_dload_function_supply_output_count >> strip_tac >>
   gvs[fn_phi_operands_single_def_def] >> metis_tac[]
