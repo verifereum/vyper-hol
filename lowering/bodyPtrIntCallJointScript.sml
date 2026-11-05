@@ -26,3 +26,12 @@ Proof
   strip_tac >> qexists_tac `t with vs_inst_idx := s.vs_inst_idx` >>
   simp[venom_state_component_equality]
 QED
+
+Theorem intcall_run_cursor_cons:
+  run_inst_seq [i] s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+  run_inst_seq code u = OK (t with vs_inst_idx := u.vs_inst_idx) /\
+  EVERY (\j. ~is_terminator j.inst_opcode) code ==>
+  run_inst_seq (i::code) s = OK (t with vs_inst_idx := s.vs_inst_idx)
+Proof
+  strip_tac >> drule_all intcall_run_cursor_append >> simp[]
+QED

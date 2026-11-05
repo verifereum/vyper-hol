@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIntCallParamPrefix bodyPtrIntCallMaterializeList
   fragGasSeqPtr fragGasPathPtr fragGasSeqAbort ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   finite_map words arithmetic pred_set contextCodegenRel codegenRel list rich_list intCallCallee
-  bodyPtrDefs valueEncoding compileEnv emitHelper
+  bodyPtrDefs valueEncoding compileEnv emitHelper bodyPtrIntCallJoint exprLoweringProps fragExec
 
 Theorem intcall_retpc_taint:
   step_taint (mk_inst id RETPC_PARAM [Lit idx] [p]) s
@@ -63,7 +63,9 @@ Theorem intcall_retpc_path:
     tn' with t_var := tn.t_var = tn /\
     (!q. q <> p ==> lookup_var q t = lookup_var q s /\
       FLOOKUP G' q = FLOOKUP G q /\
-      op_taint tn' (Var q) = op_taint tn (Var q))
+      op_taint tn' (Var q) = op_taint tn (Var q)) /\
+    run_inst_seq [mk_inst id RETPC_PARAM [Lit idx] [p]] s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule_all intcall_retpc_edge >> strip_tac >>
   qexistsl_tac [`(update_var p s.vs_return_pc_token s) with
@@ -76,7 +78,8 @@ Proof
       drule (cj 2 gas_path_ptr_rules) >>
       disch_then (qspec_then `0` mp_tac) >>
       simp[gas_path_ptr_rules, update_var_def]) >>
-  simp[lookup_var_def, update_var_def, set_prov_def, set_var_taint_def,
+  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+       lookup_var_def, update_var_def, set_prov_def, set_var_taint_def,
        op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> Cases_on `FLOOKUP tn.t_var q` >> simp[]
 QED
@@ -347,7 +350,11 @@ Theorem intcall_header_path:
     op_taint tn' (Var (STRING #"%" (toString (nv+n)))) = {} /\
     (!p. (!j. j <= n ==> p <> STRING #"%" (toString (nv+j))) ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
-      op_taint tn' (Var p) = op_taint tn (Var p))
+      op_taint tn' (Var p) = op_taint tn (Var p)) /\
+    run_inst_seq (GENLIST (\j. mk_inst (id+j) PARAM [Lit (n2w j)]
+      [STRING #"%" (toString (nv+j))]) n ++
+      [mk_inst rid RETPC_PARAM [Lit idx] [STRING #"%" (toString (nv+n))]]) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >>
   `isPREFIX (GENLIST (\j. mk_inst (id+j) PARAM [Lit (n2w j)]
@@ -374,6 +381,13 @@ Proof
   `~t.vs_halted /\ lookup_block t.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all intcall_retpc_path >>
   disch_then (qspecl_then [`tn'`,`PG`,`G'`,`D`] strip_assume_tac) >>
+  `run_inst_seq (GENLIST (\j. mk_inst (id+j) PARAM [Lit (n2w j)]
+      [STRING #"%" (toString (nv+j))]) n ++
+      [mk_inst rid RETPC_PARAM [Lit idx] [STRING #"%" (toString (nv+n))]]) s =
+      OK (t' with vs_inst_idx := s.vs_inst_idx)` by
+    (irule intcall_run_cursor_append >> conj_tac
+     >- (qexists_tac `t` >> fs[ADD_COMM]) >>
+     simp[mk_inst_def, is_terminator_def]) >>
   qexistsl_tac [`t'`,`G''`,`tn''`] >> conj_tac
   >- (drule_all gas_path_ptr_then >> simp[]) >>
   suspend "finish"
@@ -429,7 +443,9 @@ Theorem intcall_entry_prefix_path:
       op_taint tn' (Var (STRING #"%" (toString st.cs_next_var))) = {}) /\
     (!p. not_fresh_at st p ==> lookup_var p t = lookup_var p s /\
       FLOOKUP G' p = FLOOKUP G p /\
-      op_taint tn' (Var p) = op_taint tn (Var p))
+      op_taint tn' (Var p) = op_taint tn (Var p)) /\
+    run_inst_seq (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule intcall_entry_prefix_code >> strip_tac >>
   qpat_x_assum `compile_internal_entry_prefix _ _ _ _ = _` kall_tac >>
@@ -437,6 +453,10 @@ Proof
   pure_asm_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, GSYM ADD_ASSOC] >> strip_tac >>
   drule_all intcall_header_path >>
   disch_then (qspecl_then [`tn`,`G`,`D`] strip_assume_tac) >>
+  `run_inst_seq (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts) s =
+     OK (t with vs_inst_idx := s.vs_inst_idx)` by
+    (pure_asm_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, GSYM ADD_ASSOC] >>
+     REFL_TAC) >>
   qexistsl_tac [`t`,`G'`,`tn'`] >> simp[] >>
   suspend "endpoint"
 QED
@@ -685,7 +705,9 @@ Theorem intcall_entry_materialize_path:
       LENGTH (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
     (!p k. ce2.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p) /\
-    (!p k. ce2.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p)
+    (!p k. ce2.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p) /\
+    run_inst_seq (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule_all intcall_entry_materialize_code >> strip_tac >>
   `isPREFIX (DROP (LENGTH st.cs_current_insts) stm.cs_current_insts)
@@ -711,6 +733,11 @@ Proof
     asm_rewrite_tac[] >>
   drule_all intcall_materialize_list_path >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `run_inst_seq (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) s =
+     OK (t' with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `DROP _ _ = _ ++ _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule intcall_run_cursor_append >> conj_tac
+     >- (qexists_tac `t` >> asm_rewrite_tac[]) >> asm_rewrite_tac[]) >>
   qexistsl_tac [`t'`,`G''`,`tn''`] >>
   conj_tac >- suspend "path" >>
   suspend "endpoint"
@@ -771,3 +798,49 @@ Resume intcall_entry_materialize_path[endpoint]:
   CONV_TAC (AC_CONV (ADD_ASSOC, ADD_COMM))
 QED
 Finalise intcall_entry_materialize_path
+
+Theorem intcall_entry_materialize_joint_path:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  materialize_internal_params ce1 caps stm = (ce2,st2) /\
+  internal_args_rel ce params src (if has_rb then 1 else 0)
+    s.vs_params s.vs_alloca_next s.vs_memory /\
+  intcall_entry_memory ce params src (if has_rb then 1 else 0) PG tn s /\
+  intcall_entry_return ce has_rb d PG s /\
+  (!name entry off sz. FLOOKUP src name = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (MemLoc off sz) ==>
+    val_footprint entry.type entry.value <= sz) /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH s.vs_params /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH PG /\
+  (if has_rb then 1 else 0) + LENGTH params < dimword (:256) /\
+  fresh_vars_wrt st s /\
+  (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts)
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  stor_taint_ok cx tn s /\
+  (!name. lookup_scopes name es.scopes = FLOOKUP src name) ==>
+  ?t G' tn' u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv d ce2 cx es G' tn' t /\
+    intcall_completed src ce2 G' tn' t /\
+    return_buf_ptr d ce2 G' tn' t /\
+    eval_operand rpc t = SOME s.vs_return_pc_token /\ op_taint tn' rpc = {} /\
+    fresh_vars_wrt st2 t /\
+    (!aid. aid IN FDOM t.vs_allocas ==> aid < st2.cs_next_id) /\
+    t.vs_alloca_next = s.vs_alloca_next + internal_stack_size ce params /\
+    t.vs_inst_idx = s.vs_inst_idx +
+      LENGTH (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+    (!p k. ce2.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p) /\
+    (!p k. ce2.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at st2 p) /\
+    run_inst_seq (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts) s = OK u /\
+    t = u with vs_inst_idx := s.vs_inst_idx +
+      LENGTH (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts)
+Proof
+  strip_tac >> drule_all intcall_entry_materialize_path >>
+  disch_then (qspecl_then [`G`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`,`t with vs_inst_idx := s.vs_inst_idx`] >>
+  asm_rewrite_tac[] >> simp[venom_state_component_equality]
+QED

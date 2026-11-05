@@ -3,6 +3,7 @@ Ancestors
   bodyPtrIntCallAuxEntry fragGasSeqPtr fragGasPathPtr fragGasSeqAbort intCallCallee moduleLowering
   emitHelper compileEnv emitHelperProps ptrDiscipline venomExecSemantics venomInst venomState
   finite_map list rich_list words arithmetic ptrSafeRun codegenRel contextCodegenRel pred_set
+  bodyPtrIntCallJoint exprLoweringProps fragExec
 
 (* Only the output names and emitted code are absent from the exported
    internal_param_decls_projection. *)
@@ -107,11 +108,14 @@ Theorem intcall_params_path:
     (!p. (!j. j < n ==> p <> STRING #"%" (toString (nv+j))) ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp t)
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    run_inst_seq (GENLIST (\j. mk_inst (id+j) PARAM [Lit (n2w (idx+j))]
+      [STRING #"%" (toString (nv+j))]) n) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   Induct
   >- (rpt strip_tac >> qexistsl_tac [`s`,`G`,`tn`] >>
-      simp[gas_path_ptr_rules]) >>
+      simp[gas_path_ptr_rules, run_inst_seq_def, venom_state_component_equality]) >>
   rpt gen_tac >> strip_tac >>
   `GENLIST (\j. mk_inst (id+j) PARAM [Lit (n2w (idx+j))]
       [STRING #"%" (toString (nv+j))]) (SUC n) =
@@ -149,7 +153,8 @@ Proof
   >- suspend "pointwise" >>
   conj_tac
   >- suspend "frame" >>
-  simp[]
+  conj_tac >- simp[] >>
+  suspend "raw"
 QED
 
 Resume intcall_params_path[pointwise]:
@@ -195,6 +200,21 @@ Resume intcall_params_path[frame]:
   Cases_on `FLOOKUP tn.t_var p` >> gvs[]
 QED
 
+Resume intcall_params_path[raw]:
+  qpat_x_assum `gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `t with <|vs_vars := _; vs_inst_idx := _|> = _` kall_tac >>
+  qpat_x_assum `tn' with t_var := _ = _` kall_tac >>
+  qpat_x_assum `isPREFIX (_::_) _` kall_tac >>
+  qpat_x_assum `isPREFIX (GENLIST _ _) _` kall_tac >>
+  `run_inst_seq [mk_inst id PARAM [Lit (n2w idx)]
+     [STRING #"%" (toString nv)]] s = OK (u with vs_inst_idx := s.vs_inst_idx)` by
+    simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+         w2n_n2w, Abbr `u`, update_var_def] >>
+  irule intcall_run_cursor_cons >> conj_tac
+  >- (qexists_tac `u` >> simp[]) >>
+  simp[EVERY_GENLIST, mk_inst_def, is_terminator_def]
+QED
 Finalise intcall_params_path
 
 Theorem intcall_param_decls_path:
@@ -217,13 +237,14 @@ Theorem intcall_param_decls_path:
     (!p. ~(?name stack. MEM (name,stack,Var p) caps) ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp t)
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule intcall_param_decls_code >> strip_tac >>
   qpat_x_assum `isPREFIX (DROP _ _) _` mp_tac >>
   simp[DROP_APPEND] >> strip_tac >>
   qpat_x_assum `compile_internal_param_decls _ _ _ = _` kall_tac >>
-  qpat_x_assum `st'.cs_current_insts = _` kall_tac >>
   qpat_x_assum `st'.cs_next_var = _` kall_tac >>
   qspecl_then [`LENGTH params`,`st.cs_next_id`,`idx`,`st.cs_next_var`]
     mp_tac intcall_params_path >>
@@ -234,6 +255,7 @@ Proof
   >- (rpt strip_tac >>
       qpat_assum `!j. j < LENGTH params ==> lookup_var _ _ = _ /\ _`
         (qspec_then `j` strip_assume_tac) >> gvs[]) >>
+  reverse conj_tac >- fs[ADD_COMM] >>
   qx_gen_tac `p` >> strip_tac >>
   qpat_x_assum `!p. (!j. _ ==> _) ==> _` (qspec_then `p` mp_tac) >>
   impl_tac
