@@ -1,6 +1,7 @@
 (* Set-level boundaries only; no whole-run confinement is assumed here. *)
 Theory bodyPtrIntCallConfinement
 Ancestors bodyPtrDefs decoderGhostFramePtr ptrSafeRun ptrDiscipline
+  venomExecSemantics
   finite_map pred_set list
 
 Definition intcall_site_outside_def:
@@ -94,3 +95,69 @@ Theorem intcall_mem_frame_reset:
 Proof
   simp[intcall_mem_frame_def]
 QED
+
+(* Entry reset keeps the frontier but discards allocation ids. *)
+Theorem intcall_setup_allocator:
+  setup_callee fn args s = SOME cs ==>
+  cs.vs_allocas = FEMPTY /\ cs.vs_alloca_next = s.vs_alloca_next /\
+  cs.vs_fmp = s.vs_fmp /\ cs.vs_memory = s.vs_memory
+Proof
+  simp[setup_callee_def] >> IF_CASES_TAC >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+(* Ordinary merge restores the caller's allocator, not the callee frontier. *)
+Theorem intcall_merge_allocator:
+  (merge_callee_state s cs).vs_allocas = s.vs_allocas /\
+  (merge_callee_state s cs).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[merge_callee_state_def]
+QED
+
+(* C1.2.2 allocator/provenance premise ledger.
+   - setup_callee resets allocation ids, not vs_alloca_next or memory (checked
+     above). ALLOCA reuses existing ids, otherwise allocates at the frontier
+     (venomExecSemantics.exec_alloca_def). Thus required invariant: every
+     existing allocation site avoids P, and every byte at/above the current
+     frontier avoids P. Instruction-id freshness alone is insufficient.
+   - merge_callee_state restores the caller allocator (checked above).
+     A nested call can allocate in its own fresh map and return with a
+     larger private frontier; caller continuation reuses the old frontier.
+     This does not break confinement if both frontiers are above P, but
+     global frontier monotonicity through merge is the wrong invariant.
+   - ptr judgments assume ~ctx_has_dalloca. This excludes DALLOCA in every
+     context function; generic code with DALLOCA would additionally need
+     separation of FMP allocations and overflow control. new_site_bytes also
+     includes any FMP increase, not just new ALLOCA map entries.
+   - PARAM takes the entire EL idx PG site. ADD/SUB/ASSIGN take first_prov;
+     PHIs take op_prov of a selected input. These definitions support
+     site closure by finite-map/list reasoning, without narrowing a site
+     to the used value footprint. INVOKE restores only restricted caller G.
+     pointerConfinedDefs is structural pointer-use discipline, not this
+     dynamic protected-byte invariant.
+   - Actual staging (compile_stage_intcall_args_def) allocates fresh buffers
+     for F flags; T flags simply unwrap. unwrap_value returns the operand
+     unchanged for StackValue, or MLOADs a LocatedValue of word type. A
+     non-word LocatedValue in LocMemory unwraps to its original pointer.
+     Therefore the T branch can carry an old complete site unless the
+     pass-via-stack/typing invariant rules that case out. This call-site
+     exclusion and zero provenance for stack scalar values remain MISSING
+     as checked theorem interfaces (not claimed false).
+   - S1 stage_mem_arg_frag supplies ordinary values and memory equality,
+     not ghost-site separation. S1 compile_internal_prologue_entry supplies
+     no PG/G or protected-byte bound. Missing: pointer-counted staging,
+     P below caller frontier, whole-site separation of return buffer and
+     all inherited operand sites. local_region_below_frontier is local in
+     intCallFrame; a reusable boundary or direct derivation is still needed.
+   - A prospective whole-run theorem should preserve conjunction of
+     intcall_prov_outside P PG G, site exclusion of vs_allocas, frontier
+     lower bound above P, and intcall_mem_frame P tn0 tn. It must be mutual
+     over ghost_step/block/blocks with their lexicographic fuel/block-tail
+     measure, matching ptr_safe_step/block/blocks. Entry PHIs preserve site
+     exclusion; nested calls use the same fixed protected set, not the
+     callee's own ghost_kept protected set. Missing: written_taint bound
+     from access_ok under site exclusion, including fixed-region accesses
+     and in_revert_forward exceptions; allocator/FMP increase bound;
+     recursive nested-call closure. No whole-run claim follows just from
+     the checked conditional INVOKE boundary.
+*)
