@@ -65,6 +65,7 @@ Theorem forced_base_marked_facts:
     marks (INL v) mid (OK t) ==>
   expr_sim_inv cenv cx env (mid with gas_obs := []) /\
   value_has_type (BaseTV bt) v /\ body_exprs_ptr_ok cx args /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
   gas_admissible (eval_exprs cx args)
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc))
     (mid with gas_obs := []) /\ ~t.vs_halted
@@ -81,6 +82,8 @@ Proof
   `(do r <- eval_expr cx e; read_result cx r od)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL v, mid with gas_obs := [])` by fs[bind_def] >>
+  drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >>
+  simp[] >> strip_tac >>
   drule_all expr_body_pre_base_result >> strip_tac >>
   `body_exprs_ptr_ok cx args` by
     (fs[bodyPtrPredsTheory.body_exprs_ptr_ok_def, bind_def, AllCaseEqs()] >>
@@ -105,6 +108,7 @@ Theorem forced_base_outcome_facts:
       expr_sim_inv cenv cx env ee /\
       (?v. res = INL v /\ value_has_type (BaseTV bt) v) /\
       body_exprs_ptr_ok cx args /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       gas_admissible (eval_exprs cx args)
         (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) ee /\
       ~t.vs_halted) R
@@ -141,6 +145,7 @@ Theorem body_base_operand_outcome_ptr:
       ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
       expr_sim_inv cenv cx env ee /\ value_has_type (BaseTV bt) v /\
       body_exprs_ptr_ok cx args /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       gas_admissible (eval_exprs cx args)
         (\res. case res of INL vs => T | INR exc => expr_res_ok (INR exc)) ee /\
       ~t.vs_halted)
@@ -164,3 +169,119 @@ Proof
   POP_ASSUM_LIST (K all_tac) >> simp[] >> rpt strip_tac >> gvs[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem raw_call_addr_data_sim_ptr:
+  body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  gas_admissible (eval_exprs cx (a::d::kws))
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  fn_has_code sa s2 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (do av <- bind (eval_expr cx a) (read_result cx);
+        dv <- bind (eval_expr cx d) (read_result cx); return (av,dv) od)
+    (es,s0,G0,tn0)
+    (\rr ee G tn t. ?av bs ea ta.
+      rr = INL (av,BytesV bs) /\ value_has_type (BaseTV AddressT) av /\
+      ea.gas_obs = [] /\
+      expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
+      expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data t /\
+      expr_sim_inv cenv cx env ee /\ body_exprs_ptr_ok cx kws /\
+      t.vs_current_bb = s2.cs_current_bb /\
+      t.vs_inst_idx = LENGTH s2.cs_current_insts /\ ~t.vs_halted /\
+      ghost_inv dep cenv cx ee G tn t /\
+      ptr_val_ok cx (expr_type d) (BytesV bs) data G tn t /\
+      ptr_buf_ok cenv d data G t /\
+      ghost_kept cenv es sa G0 tn0 s0 G tn)
+    (\rr ee gt r. ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r)
+Proof
+  strip_tac >> drule raw_call_pre_operands >> strip_tac >> gvs[] >>
+  `ci_mono sa s1 /\ ci_mono s1 s2` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
+      exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND] >>
+  `cs_extends sa s1 /\ cs_extends s1 s2` by
+    fs[exprLoweringPropsTheory.ci_mono_def] >>
+  drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by
+    fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `expr_body_pre cenv cx env a es` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  drule_all body_base_operand_outcome_ptr >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule gas_outcome_ptr_bind >> rpt conj_tac
+  >- suspend "tail_cert"
+  >- suspend "head_cert"
+  >> suspend "head_bind"
+QED
+
+Resume raw_call_addr_data_sim_ptr[head_bind]:
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  conj_tac >- suspend "data" >>
+  simp[exprSimDefsTheory.expr_exit_def] >> rpt strip_tac >>
+  Cases_on `res` >> gvs[]
+QED
+
+Resume raw_call_addr_data_sim_ptr[head_cert]:
+  POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+  goal_assum (drule_at Any)
+QED
+
+Resume raw_call_addr_data_sim_ptr[tail_cert]:
+  POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
+QED
+
+Resume raw_call_addr_data_sim_ptr[data]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  `stmt_state_rel ctx func cenv cx ee t` by
+    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
+  `local_ptrs_reserved cenv s1` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var]) >>
+  `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x)` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
+  `expr_body_pre cenv cx env d ee` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  qpat_x_assum `body_exprs_ptr_ok cx (a::d::kws)` kall_tac >>
+  drule_all body_base_operand_outcome_ptr >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule operandOutcomePtrTheory.gas_outcome_ptr_map_return >>
+  goal_assum (drule_at Any) >> conj_tac
+  >- suspend "posts" >>
+  simp[exprSimDefsTheory.expr_exit_def] >> rpt strip_tac >> Cases_on `res` >> gvs[]
+QED
+
+Resume raw_call_addr_data_sim_ptr[posts]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
+    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+     >- (qexists_tac `func` >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >>
+     irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `value_has_type (BaseTV (BytesT _)) _` mp_tac >>
+  Cases_on `v'` >> simp[vyperTypingTheory.value_has_type_def] >>
+  strip_tac >> gvs[] >> qexistsl_tac [`ee`, `t`] >>
+  simp[compileEnvTheory.is_word_type_def]
+QED
+
+Finalise raw_call_addr_data_sim_ptr
