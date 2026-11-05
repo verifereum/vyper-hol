@@ -5,7 +5,10 @@ Ancestors
   exprSimAccounts allocaFootprint instMemFrontier memSafeRun fragGasPathMem
   stmtSimProps emitHelperProps freshWrites exprOperandVar exprLoweringProps
   fragGasMode compileEnv venomExecSemantics venomExecProofs venomInst venomState
-  list finite_map
+  list finite_map exprSimUnop exprUnopSimDefs accountsRelProps
+  valueEncodingProofs vyperInterpreter vyperTypeInvariants vyperTypeBytesCrypto
+  vfmState integer_word words byte builtinSimple vyperTypeSystem
+  valueEncoding exprSimDefs vyperContext
 
 (* Account-read counterpart of bodyMemEmitOpFrame.emit_op_word_path_frame_mem. *)
 Theorem emit_acc_path_frame_mem:
@@ -155,4 +158,74 @@ Proof
   qexists_tac `r` >>
   simp[comp_return_def, emitted_insts_refl, run_inst_seq_def] >>
   qexists_tac `r` >> simp[]
+QED
+
+Theorem compile_acc_frag_mem:
+  !ctx func cenv cx item bs es0.
+    item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed es0.accounts ==>
+    unop_frag_mem ctx func cenv cx
+      (\x. case item of
+             Balance => emit_op BALANCE [x]
+           | Codesize => emit_op EXTCODESIZE [x]
+           | Codehash => emit_op EXTCODEHASH [x]
+           | IsContract =>
+               comp_bind (emit_op EXTCODESIZE [x])
+                 (\c. emit_op GT [c; Lit 0w])
+           | Address => comp_return x
+           | Code => comp_return x)
+      (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
+      (account_item_type item)
+      (unop_result cx (account_item_type item) (Acc item) [BaseT AddressT]
+         (BytesV bs) es0) es0
+Proof
+  rpt strip_tac >>
+  simp[unop_result_def, evaluate_builtin_def] >>
+  qabbrev_tac `a = lookup_account (word_of_bytes_be bs) es0.accounts` >>
+  `a.balance < 2 ** 256 /\ LENGTH a.code <= 24576` by
+    gvs[Abbr `a`, accounts_well_typed_def, account_well_typed_def] >>
+  drule address_word_w2w >> strip_tac >>
+  Cases_on `item` >> gvs[]
+  >~ [`comp_return`]
+  >- (irule unop_frag_mem_straight >>
+      simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
+           evaluate_account_op_def, is_word_type_def, straight_fresh_return,
+           comp_return_def, emitted_insts_refl, run_inst_seq_def, expr_res_ok_def])
+  >~ [`comp_bind`]
+  >- (irule unop_frag_mem_read_then >>
+      simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
+           evaluate_account_op_def, is_word_type_def, is_terminator_def,
+           typed_val_to_w256_def, val_to_w256_def, straight_fresh_emit_op,
+           fresh_write_op_def] >>
+      qexists_tac `n2w (LENGTH a.code)` >>
+      rpt strip_tac
+      >~ [`step_inst_base`]
+      >- (`!addr. (lookup_account addr ss.vs_accounts).code =
+                  (lookup_account addr es0.accounts).code` by
+            (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+             metis_tac[accounts_agree_lookup]) >>
+          gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
+              typed_val_to_w256_def, Abbr `a`]) >>
+      drule emit_op_GT_correct >>
+      disch_then (qspecl_then [`n2w (LENGTH a.code)`, `0w`, `ss`] mp_tac) >>
+      impl_tac >- gvs[eval_operand_def] >>
+      strip_tac >> gvs[] >>
+      `LENGTH a.code < dimword (:256)` by fs[dimword_def] >>
+      Cases_on `a.code` >> gvs[bool_to_word_def]) >>
+  irule unop_frag_mem_read >>
+  simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
+       evaluate_account_op_def, is_word_type_def, is_terminator_def] >>
+  rpt strip_tac >>
+  `!addr. (lookup_account addr ss.vs_accounts).balance =
+          (lookup_account addr es0.accounts).balance /\
+          (lookup_account addr ss.vs_accounts).code =
+          (lookup_account addr es0.accounts).code /\
+          (lookup_account addr ss.vs_accounts).nonce =
+          (lookup_account addr es0.accounts).nonce` by
+    (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+     metis_tac[accounts_agree_lookup]) >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, Abbr `a`] >>
+  simp[typed_val_to_w256_def, val_to_w256_def, i2w_def] >>
+  rw[PAD_RIGHT, LENGTH_Keccak_256_w64, word_of_bytes_be_def,
+     word_of_bytes_replicate_zero] >>
+  gvs[vfmStateTheory.account_empty_def]
 QED
