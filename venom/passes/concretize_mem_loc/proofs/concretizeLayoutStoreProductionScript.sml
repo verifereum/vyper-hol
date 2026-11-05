@@ -10,6 +10,18 @@ Ancestors concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concreti
   contextCodegenRel finiteByteDemand codegenRel venomWf venomInst concretizePtrParamSupport
   venomExecSemantics venomMemProps frameOriginCache finite_map list words pred_set
 
+Theorem coherent_written_interval:
+  (!a z w. D a z /\ R a w ==> z = w) /\
+  (!i:num. i < len ==> R (dst+i) (dstT+i)) ==>
+  !a z. D a z /\ dst <= a /\ a < dst+len ==>
+    dstT <= z /\ z < dstT+len /\ a-dst = z-dstT
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `a = dst+(a-dst) /\ a-dst < len` by decide_tac >>
+  `R a (dstT+(a-dst))` by metis_tac[] >>
+  `z = dstT+(a-dst)` by metis_tac[] >> decide_tac
+QED
+
 Theorem joint_mstore_demand_address_coherence:
   joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
   c < LENGTH es /\
@@ -106,8 +118,16 @@ Proof
        w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
     suspend "address" >>
   pop_assum strip_assume_tac >>
-  qexistsl_tac [`dstT`, `valueT`, `Q`] >>
-  simp[step_inst_base_def, exec_write2_def] >> suspend "memory"
+  `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      w2n dst <= a /\ a < w2n dst+32 ==>
+      w2n dstT <= z /\ z < w2n dstT+32 /\ a-w2n dst = z-w2n dstT) /\
+   (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      ~(w2n dst <= a /\ a < w2n dst+32) ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
+      ~(w2n dstT <= z /\ z < w2n dstT+32))` by suspend "memory" >>
+  qexistsl_tac [`dstT`, `valueT`, `Q`] >> asm_rewrite_tac[] >>
+  (conj_tac >- simp[step_inst_base_def, exec_write2_def]) >>
+  qpat_x_assum `!a z. _ /\ ~_ ==> _` mp_tac >> simp[]
 QED
 
 Resume concretize_mstore_execution_geometry[support]:
@@ -161,14 +181,13 @@ Resume concretize_mstore_execution_geometry[memory]:
        (conj_tac >> irule step_writes_store >> metis_tac[]) >>
      fs[joint_writes_ordinary] >> metis_tac[]) >>
   conj_tac
-  >- (rpt strip_tac >>
-      `a = w2n dst + (a-w2n dst) /\ a-w2n dst < 32` by decide_tac >>
-      `relocation_pair lo (concretize_positions C') (EL c (q0::qs))
-          a (w2n dstT+(a-w2n dst))` by metis_tac[] >>
-      `z = w2n dstT+(a-w2n dst)` by
-        (irule joint_mstore_demand_address_coherence >>
-         `post.vs_allocas = s.vs_allocas` by simp[mstore_def] >> metis_tac[]) >>
-      decide_tac) >>
+  >- (ho_match_mp_tac (Q.INST
+        [`R` |-> `relocation_pair lo (concretize_positions C') (EL c (q0::qs))`]
+        coherent_written_interval) >>
+      conj_tac
+      >- (rpt strip_tac >> irule joint_mstore_demand_address_coherence >>
+          `post.vs_allocas = s.vs_allocas` by simp[mstore_def] >> metis_tac[]) >>
+      metis_tac[]) >>
   rpt strip_tac >>
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by
     (asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac) >>
