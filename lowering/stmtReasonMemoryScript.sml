@@ -135,7 +135,7 @@ QED
 
 (* ===== Stepping the encoder ===== *)
 
-Theorem dload_mk_inst_other[local]:
+Theorem dload_mk_inst_other:
   !id op ops outs s.
     op <> DLOAD /\ op <> DLOADBYTES ==>
     inst_dload_in_section (mk_inst id op ops outs) s
@@ -143,7 +143,7 @@ Proof
   simp[inst_dload_in_section_def, mk_inst_def]
 QED
 
-Theorem step_add_eq[local]:
+Theorem step_add_eq:
   step_inst_base (mk_inst id ADD [a; b] [out]) s =
     case (eval_operand a s, eval_operand b s) of
       (SOME x, SOME y) => OK (update_var out (x + y) s)
@@ -152,7 +152,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
 QED
 
-Theorem step_and_eq[local]:
+Theorem step_and_eq:
   step_inst_base (mk_inst id AND [a; b] [out]) s =
     case (eval_operand a s, eval_operand b s) of
       (SOME x, SOME y) => OK (update_var out (word_and x y) s)
@@ -161,7 +161,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
 QED
 
-Theorem step_mload_eq[local]:
+Theorem step_mload_eq:
   step_inst_base (mk_inst id MLOAD [a] [out]) s =
     case eval_operand a s of
       SOME x => OK (update_var out (mload (w2n x) s) s)
@@ -170,7 +170,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]
 QED
 
-Theorem step_mstore_eq[local]:
+Theorem step_mstore_eq:
   step_inst_base (mk_inst id MSTORE [a; b] []) s =
     case (eval_operand a s, eval_operand b s) of
       (SOME x, SOME y) => OK (mstore (w2n x) y s)
@@ -179,7 +179,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
-Theorem step_mcopy_eq[local]:
+Theorem step_mcopy_eq:
   step_inst_base (mk_inst id MCOPY [a; b; c] []) s =
     case (eval_operand a s, eval_operand b s, eval_operand c s) of
       (SOME d, SOME x, SOME n) => OK (mcopy (w2n d) (w2n x) (w2n n) s)
@@ -188,7 +188,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
-Theorem step_alloca_eq[local]:
+Theorem step_alloca_eq:
   step_inst_base (mk_inst id ALLOCA [Lit sz] [out]) s =
     case FLOOKUP s.vs_allocas id of
       SOME (off, n) => OK (update_var out (n2w off) s)
@@ -203,7 +203,7 @@ Proof
   PairCases_on `x` >> simp[]
 QED
 
-Theorem step_revert_eq[local]:
+Theorem step_revert_eq:
   step_inst_base (mk_inst id REVERT [a; b] []) s =
     case (eval_operand a s, eval_operand b s) of
       (SOME off, SOME sz) =>
@@ -232,7 +232,7 @@ Proof
        write_memory_with_expansion_def]
 QED
 
-Theorem mload_mstore_apart[local]:
+Theorem mload_mstore_apart:
   !a b w s. a + 32 <= b \/ b + 32 <= a ==>
     mload b (mstore a w s) = mload b s
 Proof
@@ -428,7 +428,7 @@ Proof
        write_memory_with_expansion_def]
 QED
 
-Theorem room_by_fields[local]:
+Theorem room_by_fields:
   !ctx func ss. alloca_room ctx func ss ==>
     !ss'. ss'.vs_allocas = ss.vs_allocas /\
           ss'.vs_alloca_next = ss.vs_alloca_next ==> alloca_room ctx func ss'
@@ -451,7 +451,7 @@ QED
 
 (* One ALLOCA of a site of the function: it hands out a fresh region at
    the frontier, or the region the site already holds. *)
-Theorem alloca_step_props[local]:
+Theorem alloca_step_props:
   !ctx func id n out s.
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ alloca_room ctx func s /\
