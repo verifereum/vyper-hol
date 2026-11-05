@@ -2739,3 +2739,146 @@ Proof
       irule popmany_individual_retains_other >> simp[]) >>
   irule popmany_individual_retains_other >> simp[]
 QED
+
+(* Pointwise upper transport; unlike the reserve bound this needs no
+   availability premise and charges a variable copy only when it is live. *)
+Theorem emit_one_input_inventory_upper[local]:
+  !opc nl op ps x.
+    LIST_ELEM_COUNT x (SND (emit_one_input opc nl op ps)).ps_stack +
+      (if x IN FDOM (SND (emit_one_input opc nl op ps)).ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) +
+      (if x = op /\ (~is_var_operand op \/ MEM x (MAP Var nl)) then 1 else 0)
+Proof
+  rpt gen_tac >> Cases_on `op`
+  >- (simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+           stack_push_def, rich_listTheory.SNOC_APPEND, elem_count_append,
+           LIST_ELEM_COUNT_THM] >>
+      rename1 `Lit c` >> Cases_on `x = Lit c` >> simp[LIST_ELEM_COUNT_DEF])
+  >- (rename1 `Var v` >>
+      Cases_on `FLOOKUP ps.ps_spilled (Var v)`
+      >- (simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
+          Cases_on `MEM v nl` >> simp[] >>
+          Cases_on `stack_get_depth (Var v) ps.ps_stack` >> simp[] >>
+          rename1 `stack_get_depth _ _ = SOME d` >>
+          drule stack_get_depth_props >> strip_tac >>
+          drule do_dup_stack_exact >> strip_tac >>
+          CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+          Cases_on `do_dup d ps` >>
+          drule deepResidualBudgetTheory.do_dup_spilled_eq >> strip_tac >>
+          gvs[elem_count_append, LIST_ELEM_COUNT_THM, MEM_MAP] >>
+          Cases_on `x = Var v` >> simp[LIST_ELEM_COUNT_DEF]) >>
+      rename1 `FLOOKUP ps.ps_spilled (Var v) = SOME off` >>
+      `Var v IN FDOM ps.ps_spilled` by metis_tac[flookup_thm] >>
+      simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+           do_restore_def] >>
+      Cases_on `MEM v nl` >> simp[]
+      >- (simp[stack_get_depth_def, stack_push_def, REVERSE_SNOC, stack_find_def] >>
+          qmatch_goalsub_abbrev_tac `do_dup d restored` >>
+          `d < LENGTH restored.ps_stack /\
+           stack_peek d restored.ps_stack = Var v` by
+            (gvs[Abbr `restored`, Abbr `d`, stack_get_depth_def,
+                 stack_push_def, stack_peek_def, REVERSE_SNOC,
+                 stack_find_def, rich_listTheory.SNOC_APPEND, EL_APPEND_EQN]) >>
+          drule do_dup_stack_exact >> strip_tac >>
+          CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+          Cases_on `do_dup d restored` >>
+          drule deepResidualBudgetTheory.do_dup_spilled_eq >> strip_tac >>
+          gvs[Abbr `d`, Abbr `restored`, stack_push_def, rich_listTheory.SNOC_APPEND,
+              elem_count_append, MEM_MAP] >>
+          Cases_on `x = Var v` >> gvs[LIST_ELEM_COUNT_DEF]) >>
+      simp[stack_push_def, rich_listTheory.SNOC_APPEND, elem_count_append] >>
+      Cases_on `x = Var v` >> gvs[LIST_ELEM_COUNT_DEF]) >>
+  Cases_on `opc = INVOKE` >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+       stack_push_def, rich_listTheory.SNOC_APPEND, elem_count_append, LIST_ELEM_COUNT_THM] >>
+  Cases_on `x = Label s` >> simp[LIST_ELEM_COUNT_DEF]
+QED
+
+Theorem emit_one_input_live_upper_acc[local]:
+  !done rest opc nl h ps.
+    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x done +
+      (if MEM x (MAP Var (operand_vars (h::rest) ++ nl)) then 1 else 0)) ==>
+    !x. LIST_ELEM_COUNT x (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_stack +
+      (if x IN FDOM (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_spilled
+       then 1 else 0) <=
+      LIST_ELEM_COUNT x (done ++ [h]) +
+      (if MEM x (MAP Var (operand_vars rest ++ nl)) then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  first_x_assum (qspec_then `x` assume_tac) >>
+  qspecl_then [`opc`, `operand_vars rest ++ nl`, `h`, `ps`, `x`]
+    assume_tac emit_one_input_inventory_upper >>
+  Cases_on `x IN FDOM ps.ps_spilled` >>
+  Cases_on `h` >> Cases_on `x` >>
+  gvs[venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, dfgDefsTheory.operand_var_def,
+      stackPlanTypesTheory.is_var_operand_def,
+      elem_count_append, MAP_APPEND, LIST_ELEM_COUNT_DEF, MEM_MAP] >>
+  rpt IF_CASES_TAC >> gvs[] >> decide_tac
+QED
+
+Theorem emit_input_plan_live_upper_acc[local]:
+  !rest done opc nl ps iops qs.
+    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x done +
+      (if MEM x (MAP Var (operand_vars rest ++ nl)) then 1 else 0)) /\
+    emit_input_plan opc rest nl ps = (iops,qs) ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x (done ++ rest) +
+      (if MEM x (MAP Var nl) then 1 else 0)
+Proof
+  Induct_on `rest` >- simp[venomInstTheory.operand_vars_def,
+                          dfgDefsTheory.operand_vars_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule emit_one_input_live_upper_acc >>
+  disch_then (qspec_then `opc` assume_tac) >>
+  Cases_on `emit_one_input opc (operand_vars rest ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
+  Cases_on `emit_input_plan opc rest nl mid` >>
+  gvs[emit_input_plan_cons] >>
+  first_x_assum drule >> disch_then drule >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem emit_input_plan_live_upper:
+  !opc operands nl ps iops qs.
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    set ps.ps_stack UNION FDOM ps.ps_spilled SUBSET
+      set (MAP Var (operand_vars operands ++ nl)) /\
+    emit_input_plan opc operands nl ps = (iops,qs) ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x operands + (if MEM x (MAP Var nl) then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!x. LIST_ELEM_COUNT x ps.ps_stack +
+    (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x [] +
+    (if MEM x (MAP Var (operand_vars operands ++ nl)) then 1 else 0)` by
+    (gen_tac >>
+     `LIST_ELEM_COUNT x ps.ps_stack <= 1` by
+       (`ALL_DISTINCT (FILTER (\y. y = x) ps.ps_stack)` by
+          simp[FILTER_ALL_DISTINCT] >>
+        `!y. MEM y (FILTER (\y. y = x) ps.ps_stack) ==> y = x` by
+          simp[MEM_FILTER] >>
+        simp[LIST_ELEM_COUNT_DEF] >>
+        qmatch_goalsub_abbrev_tac `LENGTH filtered` >>
+        qpat_x_assum `Abbrev _` (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+        Cases_on `filtered` >> gvs[] >>
+        Cases_on `t` >> gvs[]) >>
+     Cases_on `MEM x (MAP Var (operand_vars operands ++ nl))`
+     >- (Cases_on `x IN FDOM ps.ps_spilled` >>
+         gvs[DISJOINT_ALT, LIST_ELEM_COUNT_THM] >>
+         `~MEM x ps.ps_stack` by metis_tac[] >>
+         gvs[GSYM LIST_ELEM_COUNT_MEM, LIST_ELEM_COUNT_THM]) >>
+     `~MEM x ps.ps_stack /\ x NOTIN FDOM ps.ps_spilled` by
+       (gvs[SUBSET_DEF] >> metis_tac[]) >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM, LIST_ELEM_COUNT_THM]) >>
+  drule_all emit_input_plan_live_upper_acc >> simp[]
+QED
