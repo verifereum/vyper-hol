@@ -167,3 +167,59 @@ Proof
   >- metis_tac[origin_before_cleanup_transport] >>
   metis_tac[ssa_supply_extends_trans]
 QED
+
+Theorem origin_update_phi_operands:
+  !rs cur ops orig. origin_coherent orig (SND rs) ==>
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    (update_current_phi_for_pred rs cur ops) =
+  MAP (\op. case op of Var u => Var (orig u) | _ => op) ops
+Proof
+  ho_match_mp_tac update_current_phi_for_pred_ind >>
+  simp[update_current_phi_for_pred_def] >> rpt strip_tac >>
+  gvs[] >> simp[origin_latest_current_name] >>
+  Cases_on `l = cur` >> simp[origin_latest_current_name]
+QED
+
+Theorem origin_replace_block_every:
+  EVERY P bbs /\ P bb ==> EVERY P (replace_block lbl bb bbs)
+Proof
+  simp[cfgTransformTheory.replace_block_def, EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem origin_update_phi_inst:
+  origin_coherent orig (SND rs) /\ origin_before_cleanup fn orig i ==>
+  origin_before_cleanup fn orig
+    (if i.inst_opcode <> PHI then i else
+      i with inst_operands := update_current_phi_for_pred rs cur i.inst_operands)
+Proof
+  rpt strip_tac >> IF_CASES_TAC >- simp[] >>
+  irule origin_before_cleanup_same_image >>
+  qexistsl [`i`, `orig`] >> simp[origin_update_phi_operands]
+QED
+
+Theorem origin_update_succ_phis:
+  !succs bbs. origin_coherent orig (SND rs) /\
+  EVERY (\bb. EVERY (origin_before_cleanup fn orig) bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY (origin_before_cleanup fn orig) bb.bb_instructions)
+    (update_current_succ_phis rs cur bbs succs)
+Proof
+  Induct >> gvs[update_current_succ_phis_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >>
+  Cases_on `lookup_block h bbs` >> simp[] >>
+  irule origin_replace_block_every >> simp[] >>
+  `MEM x bbs` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  gvs[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  irule origin_update_phi_inst >> metis_tac[]
+QED
+
+Theorem origin_update_succ_phis_covered:
+  EVERY (\bb. EVERY (origin_inst_covered s) bb.bb_instructions) bbs /\
+  origin_stacks_covered s (SND rs) ==>
+  EVERY (\bb. EVERY (origin_inst_covered s) bb.bb_instructions)
+    (update_current_succ_phis rs cur bbs succs)
+Proof
+  simp[origin_blocks_covered_iff] >> rpt strip_tac >>
+  irule update_current_succ_phis_vars_covered >>
+  metis_tac[origin_stacks_values_covered]
+QED
