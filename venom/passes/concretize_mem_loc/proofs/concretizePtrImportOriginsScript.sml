@@ -5,7 +5,7 @@ Ancestors
   venomFnScheduleRunner venomWf venomInst fcgDefs fcgBridge list finite_map
   mem2varProofs
 
-Theorem ptr_unique_mems_subset[local]:
+Theorem ptr_unique_mems_subset:
   !xs item. MEM item (unique_mems_used xs) ==> MEM item xs
 Proof
   ho_match_mp_tac unique_mems_used_ind >> simp[unique_mems_used_def] >>
