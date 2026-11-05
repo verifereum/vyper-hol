@@ -477,6 +477,70 @@ Proof
   asm_rewrite_tac[]
 QED
 
+Theorem place_store_subregion_agree:
+  !cx tr mid name subs rootk root path delta leaf k st1 st2 st1' st2'.
+    declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+    storage_subregion root path delta leaf /\
+    w2n k = w2n rootk + delta /\ 0 < type_slot_size leaf /\
+    w2n rootk + type_slot_size root <= dimword (:256) /\
+    (!mid' name' subs' k' tv'.
+       declared_storage_region cx mid' name' subs' = SOME (tr,k',tv') /\
+       (k',tv') <> (rootk,root) ==>
+       ranges_disjoint (w2n rootk) (type_slot_size root)
+                       (w2n k') (type_slot_size tv')) /\
+    (!q. ~(w2n k <= w2n q /\ w2n q < w2n k + type_slot_size leaf) ==>
+       lookup_storage q st1' = lookup_storage q st1 /\
+       lookup_storage q st2' = lookup_storage q st2) /\
+    (!i b. i < type_slot_size leaf /\ b < 32 /\
+       ~dead_bytes st1' (w2n k) leaf (w2n k+i) b ==>
+       EL b (word_to_bytes (lookup_storage (k+n2w i) st1') T) =
+       EL b (word_to_bytes (lookup_storage (k+n2w i) st2') T)) /\
+    storage_agree (storage_dead cx tr st1) st1 st2 ==>
+    storage_agree (storage_dead cx tr st1') st1' st2'
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac (srw_ss()) [storage_agree_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `~storage_dead cx tr st1' (w2n q) b` >>
+  Cases_on `w2n k <= w2n q /\ w2n q < w2n k + type_slot_size leaf`
+  >- suspend "inside"
+  >> suspend "outside"
+QED
+Resume place_store_subregion_agree[inside]:
+  `~dead_bytes st1' (w2n k) leaf (w2n q) b` by
+    (strip_tac >>
+     `dead_bytes st1' (w2n rootk) root (w2n q) b` by
+       (drule place_store_dead_subregion >>
+        disch_then (qspec_then `w2n rootk` mp_tac) >>
+        asm_rewrite_tac[] >> metis_tac[]) >>
+     qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [storage_dead_def] >>
+     qexistsl_tac [`mid`, `name`, `subs`, `rootk`, `root`] >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     metis_tac[]) >>
+  `k + n2w (w2n q - w2n k) = q` by
+    (qpat_x_assum `w2n k = _` kall_tac >>
+     `w2n q - w2n k < dimword (:256)` by
+       (qspec_then `q` mp_tac wordsTheory.w2n_lt >> decide_tac) >>
+     `w2n k + (w2n q - w2n k) = w2n q` by decide_tac >>
+     simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w]) >>
+  first_x_assum (qspecl_then [`w2n q - w2n k`, `b`] mp_tac) >>
+  simp[] >> gvs[ADD_COMM]
+QED
+Resume place_store_subregion_agree[outside]:
+  `~storage_dead cx tr st1 (w2n q) b` by
+    (strip_tac >>
+     `storage_dead cx tr st1' (w2n q) b` suffices_by metis_tac[] >>
+     irule place_store_storage_dead_subregion_frame >>
+     goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+     qexists_tac `st1` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `storage_agree _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [storage_agree_def] >>
+  disch_then (qspecl_then [`q`, `b`] mp_tac) >>
+  first_x_assum (qspec_then `q` mp_tac) >> simp[]
+QED
+Finalise place_store_subregion_agree
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
