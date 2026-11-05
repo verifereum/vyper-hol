@@ -199,7 +199,7 @@ Finalise hash_literal_alloc_buffer_frame
 Theorem hash_ghost_kept_clean_tail:
   !cenv es sa G tn s G1 tn1 G2 tn2.
     ghost_kept cenv es sa G tn s G1 tn1 /\
-    (!x. FLOOKUP G2 x = FLOOKUP G1 x /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G2 x = FLOOKUP G1 x /\
       op_taint tn2 (Var x) = op_taint tn1 (Var x)) /\
     tn2.t_mem SUBSET tn1.t_mem ==>
     ghost_kept cenv es sa G tn s G2 tn2
@@ -230,6 +230,7 @@ Theorem hash_literal_alloc_store_frame:
       tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) s t tn /\
       G2 = step_prov PG G1 (mk_inst sid MSTORE [Var p;value] []) (mstore (w2n a) v t) /\
       tn2 = step_taint (mk_inst sid MSTORE [Var p;value] []) t (mstore (w2n a) v t) tn1 /\
+      stmt_state_rel ctx fn cenv cx es (mstore (w2n a) v t) /\
       ghost_inv d cenv cx es G2 tn2 (mstore (w2n a) v t) /\
       ghost_kept cenv es sa G tn s G2 tn2 /\
       ptr_covers G2 tn2 p (mstore (w2n a) v t) 32 /\
@@ -262,6 +263,7 @@ Resume hash_literal_alloc_store_frame[post]:
     (rpt strip_tac >>
      qpat_x_assum `!name b k. local_region cenv es.scopes t name b k ==> _`
        (drule_then mp_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  conj_tac >- suspend "state" >>
   conj_tac >- (drule_all hash_clean_mstore_frame >>
     disch_then (qspecl_then [`PG`, `sid`] mp_tac) >> simp[]) >>
   conj_tac >- suspend "kept" >>
@@ -274,6 +276,14 @@ Resume hash_literal_alloc_store_frame[kept]:
   drule_all mstore_ghost_frame >> strip_tac >>
   irule hash_ghost_kept_clean_tail >>
   qexistsl_tac [`G1`, `tn1`] >> simp[op_taint_def]
+QED
+
+Resume hash_literal_alloc_store_frame[state]:
+  irule literal_mstore_state_rel >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`w2n w`,
+    `mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]`, `32`] >>
+  conj_tac >- (rpt strip_tac >> fs[regions_disjoint_def] >> metis_tac[]) >>
+  gvs[mk_inst_def]
 QED
 
 Finalise hash_literal_alloc_store_frame
