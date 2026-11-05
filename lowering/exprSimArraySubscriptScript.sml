@@ -5570,3 +5570,157 @@ Proof
   disch_then (qspec_then `ty` strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem typed_array_selection_value:
+  value_has_type (ArrayTV evt bd) (ArrayV av) /\
+  well_formed_type_value (ArrayTV evt bd) /\
+  valid_index (ArrayTV evt bd) av i ==>
+  ?v. evaluate_subscripts (ArrayTV evt bd) (ArrayV av)
+        [ValueSubscript (IntV i)] = INL v /\ value_has_type evt v
+Proof
+  strip_tac >> drule array_index_valid >> strip_tac >>
+  Cases_on `array_index (ArrayTV evt bd) av i` >> gvs[] >>
+  rename1 `array_index _ av i = SOME v` >> qexists_tac `v` >>
+  `evaluate_subscripts (ArrayTV evt bd) (ArrayV av)
+     [ValueSubscript (IntV i)] = INL v` by simp[evaluate_subscripts_def] >>
+  simp[] >> irule vyperAssignPreservesTypeTheory.array_index_has_type >>
+  conj_tac >- fs[vyperTypingTheory.well_formed_type_value_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem expr_body_pre_nopop_result_type_frame:
+  expr_body_pre cenv cx env idx s /\ ~expr_has_pop idx /\
+  eval_expr cx idx s = (res,t) /\
+  eval_result_typed (env,cx,s) pv (Type ty) /\
+  (!name path. pv = PlaceR (ImmutablePlace NONE name path) ==>
+     int_calls_expr idx = []) ==>
+  eval_result_typed (env,cx,t) pv (Type ty)
+Proof
+  strip_tac >>
+  `t.scopes = s.scopes` by (drule_all eval_expr_nopop_scopes >> simp[]) >>
+  Cases_on `pv` >> gvs[eval_result_typed_def] >>
+  rename1 `runtime_place_typed cx s p tv` >> Cases_on `p` >>
+  gvs[vyperPlaceTypingTheory.runtime_place_typed_memory] >>
+  rename1 `ImmutablePlace md name path` >>
+  ` (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables md imms) =
+    (case ALOOKUP s.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables md imms)` by
+    (Cases_on `md`
+     >- (`int_calls_expr idx = []` by simp[] >>
+         drule_all eval_expr_callfree_nopop_immutables >> simp[]) >>
+     irule expr_body_pre_foreign_immutable_frame >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `ALOOKUP t.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP s.immutables cx.txn.target` >>
+  gvs[vyperPlaceTypingTheory.runtime_place_typed_immutable,
+      get_immutables_def, get_address_immutables_def, bind_def,
+      lift_option_type_def, lift_option_def, return_def, raise_def]
+QED
+
+Theorem eval_expr_nopop_array_selection_after:
+  EVERY scope_well_typed s.scopes /\ ~expr_has_pop obj /\ ~expr_has_pop idx /\
+  eval_expr cx obj s = (INL pv,mid) /\ eval_expr cx idx mid = (res,t) /\
+  eval_result_typed (env,cx,t) pv (Type (ArrayT et bd)) /\
+  env.type_defs = get_tenv cx /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV evt bd) /\
+  value_has_type (ArrayTV evt bd) (ArrayV av) /\
+  read_result cx pv t = (INL (ArrayV av),t) ==>
+  (!i. valid_index (ArrayTV evt bd) av i ==>
+    ?out v. select_result cx (ArrayT et bd) pv (ValueSubscript (IntV i)) t =
+      (INL out,t) /\ read_result cx out t = (INL v,t) /\
+      evaluate_subscripts (ArrayTV evt bd) (ArrayV av)
+        [ValueSubscript (IntV i)] = INL v /\ value_has_type evt v /\
+      (!id path. out = PlaceR (MemoryPlace id path) ==>
+        ?p0. pv = PlaceR (MemoryPlace id p0) /\
+          path = p0 ++ [ValueSubscript (IntV i)])) /\
+  (!i. ~valid_index (ArrayTV evt bd) av i ==>
+    ?msg. select_result cx (ArrayT et bd) pv (ValueSubscript (IntV i)) t =
+      (INR (Error (RuntimeError msg)),t))
+Proof
+  strip_tac >>
+  `well_formed_type_value (ArrayTV evt bd)` by
+    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `!i. valid_index (ArrayTV evt bd) av i ==>
+     ?v. evaluate_subscripts (ArrayTV evt bd) (ArrayV av)
+       [ValueSubscript (IntV i)] = INL v /\ value_has_type evt v` by
+    (rpt strip_tac >> drule_all typed_array_selection_value >> simp[]) >>
+  `!i. ~valid_index (ArrayTV evt bd) av i ==>
+     evaluate_subscripts (ArrayTV evt bd) (ArrayV av)
+       [ValueSubscript (IntV i)] =
+       INR (RuntimeError "evaluate_subscripts array_index")` by
+    (rpt strip_tac >> irule evaluate_subscripts_array_oob >> simp[] >>
+     Cases_on `av` >> Cases_on `bd` >>
+     gvs[vyperTypingTheory.value_has_type_def]) >>
+  Cases_on `pv`
+  >- suspend "value"
+  >- (rename1 `PlaceR p` >> Cases_on `p`
+      >- suspend "storage"
+      >- suspend "memory"
+      >> suspend "immutable") >>
+  gvs[eval_result_typed_def]
+QED
+
+Resume eval_expr_nopop_array_selection_after[value]:
+  gvs[read_result_def, return_def] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+      drule_all select_result_value >> strip_tac >>
+      qexistsl_tac [`Value v`, `v`] >> simp[read_result_def, return_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i. _ ==> evaluate_subscripts _ _ _ = INR _`
+    (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  drule_all select_result_value_error >> strip_tac >>
+  qexists_tac `"evaluate_subscripts array_index"` >> simp[]
+QED
+
+Resume eval_expr_nopop_array_selection_after[storage]:
+  gvs[eval_result_typed_def] >>
+  drule_all storage_array_read_selection >>
+  disch_then (qspec_then `ArrayT et bd` strip_assume_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. _ ==> ?v. _` drule_all >> strip_tac >>
+      qpat_x_assum `!i v. _ ==> ?out. _`
+        (qspecl_then [`i`, `v`] mp_tac) >> simp[] >> strip_tac >>
+      qexistsl_tac [`out`, `v`] >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i. _ ==> ?msg. _` (qspec_then `i` mp_tac) >> simp[]
+QED
+Resume eval_expr_nopop_array_selection_after[memory]:
+  rename1 `MemoryPlace id path` >>
+  `t.scopes = mid.scopes` by
+    (drule_all eval_expr_nopop_scopes >> simp[]) >>
+  `eval_result_typed (env,cx,mid) (PlaceR (MemoryPlace id path))
+     (Type (ArrayT et bd))` by
+    gvs[eval_result_typed_def, vyperPlaceTypingTheory.runtime_place_typed_memory] >>
+  `evaluate_type env.type_defs (ArrayT et bd) = SOME (ArrayTV evt bd)` by simp[] >>
+  drule_all eval_expr_nopop_memory_selection_after >> strip_tac >>
+  gvs[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. _ ==> ?v. _` drule_all >> strip_tac >>
+      qpat_x_assum `!sb v. _ ==> _` drule_all >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i. _ ==> evaluate_subscripts _ _ _ = INR _`
+    (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!sb err. _ ==> _` drule_all >> simp[] >>
+  metis_tac[]
+QED
+Resume eval_expr_nopop_array_selection_after[immutable]:
+  gvs[eval_result_typed_def] >>
+  drule_all immutable_read_selection >>
+  disch_then (qspec_then `ArrayT et bd` strip_assume_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. _ ==> ?v. _` drule_all >> strip_tac >>
+      qpat_x_assum `!sb v. _ ==> _` drule_all >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i. _ ==> evaluate_subscripts _ _ _ = INR _`
+    (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!sb err. _ ==> _` drule_all >> simp[] >> metis_tac[]
+QED
+Finalise eval_expr_nopop_array_selection_after
