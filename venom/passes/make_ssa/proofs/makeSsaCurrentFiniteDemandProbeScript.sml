@@ -126,3 +126,64 @@ End
    insertion result, initial rename state and dom tree. Expanding that entire
    existential trace by EVAL leaves a huge goal; global simp exceeds policy.
    No ownership or closure result may assume this extraction correct. *)
+
+Theorem current_finite_probe_tree_order:
+  dom_tree_labels (current_dom_tree current_probe_loop) = ["E";"D";"X"] /\
+  MAP (\bb. bb.bb_label) current_probe_loop.fn_blocks = ["E";"D";"X"] /\
+  dom_tree_labels (current_dom_tree history_probe_backedges) = ["E";"H";"S";"D"] /\
+  MAP (\bb. bb.bb_label) history_probe_backedges.fn_blocks = ["E";"H";"D";"S"]
+Proof
+  EVAL_TAC
+QED
+
+(* Event-history / final-occurrence interface audit (not certification):
+
+   Exact history: current_tree_trace_delta in TraceHistory yields
+     H' = H ++ FLAT (MAP (current_event_delta A) events).
+   Its local arity equations guard ZIP against truncation. This expression
+   follows events, whereas current_finite_history follows fn.fn_blocks.
+
+   Final-output preservation is already available BEFORE cleanup:
+     current_trace_final_event requires current_tree_trace,
+       ALL_DISTINCT (dom_tree_labels tree), events = before ++ ev::after;
+     it identifies lookup_block (current_event_label ev) bbs' with
+       current_replay_edges sm (ev::after) (current_event_renamed_block ev).
+     current_replay_edges_outputs has no hypotheses and preserves the entire
+       MAP instruction_inst_outputs list, not just one distinguished output.
+   Together these identify every event's local_delta with a delta computed
+   using its final precleanup block, without inspecting its environments.
+   HistoryProbe's history_probe_actual_rename relates these precleanup blocks
+   to cleanup output; extraction must use history_probe_rename, NOT cleaned
+   target order, since cleanup reorders the prefix.
+
+   Order: current_finite_probe_tree_order checks computed preorder and
+   fn block order for BOTH fixtures. Loop has E/D/X in both. Backedges has
+   E/H/S/D preorder but E/H/D/S block order: these are NOT equal. S has no
+   outputs, so its delta should be empty; that needs checking, not an assumed
+   reordering of histories. Prefer extracting in traversal order. These
+   computed tree orders are not yet proved to be the order of trace events.
+   Existing current_trace_event_labels gives membership in tree labels and
+   current_trace_event_labels_distinct gives distinctness from distinct tree
+   labels. Neither states exact order or that all labels emit an event.
+
+   Missing smallest boundary (general static statement):
+     current_tree_trace A sm tree s rs bbs H E visited
+       ctrs' s' bbs' H' visited' events /\
+     (!l. MEM l (dom_tree_labels tree) ==> ?bb. lookup_block l bbs = SOME bb)
+     ==> MAP current_event_label events = dom_tree_labels tree.
+   Prove simultaneously for children; lookup/label preservation across local
+   replacement and edge updates is needed to reuse the coverage premise.
+   A lookup is absent only on the explicit NONE branch of tree_trace.
+
+   After this boundary, bind genuine traces via the existing certificate or
+   current_actual_tree_trace, identify A l with actual block annotations,
+   use final-event plus replay-outputs pointwise, and LIST_EQ/MAP equality to
+   replace event-order deltas by current_finite_history on these fixtures.
+   Current candidate history remains UNTRUSTED until this is proved.
+
+   Then extract actual inserted/retained ownership and finite seed tables;
+   prove seed containment and read/read closure by concrete finite checks,
+   and finite_demand induction. Check transfer totality/equal Produced slots
+   independently, and report must-definition/entry demands separately.
+   None of those downstream obligations is discharged by this audit.
+*)
