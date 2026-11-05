@@ -651,3 +651,16 @@ Proof
        wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
   simp[order_run_s22_def, order_run_s21_def]
 QED
+
+Theorem order_run_output_byte:
+  read_memory 288 1 order_run_s22 = [30w]
+Proof
+  simp[venomStateTheory.read_memory_def, order_run_s22_def,
+       listTheory.DROP_APPEND, byteTheory.LENGTH_word_to_bytes,
+       venomMemPropsTheory.dimindex_256] >>
+  simp[order_run_s21_def, order_run_s20_memory_length,
+       listTheory.DROP_APPEND] >>
+  simp[listTheory.DROP_LENGTH_TOO_LONG, listTheory.LENGTH_TAKE,
+       byteTheory.LENGTH_word_to_bytes, venomMemPropsTheory.dimindex_256,
+       order_run_s20_memory_length]
+QED
