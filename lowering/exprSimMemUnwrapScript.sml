@@ -753,7 +753,7 @@ Proof
 QED
 
 (* expr_post of a value copied into a fresh buffer. *)
-Theorem buffer_post_transport[local]:
+Theorem buffer_post_transport:
   !ctx func cenv cx e es sa sm mid sb s0 es' v t p s u z tv buf w.
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     local_ptrs_reserved cenv sa /\
