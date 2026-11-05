@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay genericInputReady reorderSim doSwapSim stackPlanGen stackModel list rich_list
+  fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineageReduction genericInputReady reorderSim doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -2133,4 +2133,57 @@ Proof
     `[]`, `prefix`] mp_tac) >>
   simp[] >> strip_tac >>
   gvs[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem reduce_depth_plan_bottom_frame:
+  !fuel targets op f n ps prefix ops qs.
+    ~MEM op prefix /\ reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
+    reduce_depth_plan fuel targets op f n
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct_on `fuel` >- simp[reduce_depth_plan_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < n` >- gvs[reduce_depth_plan_def] >>
+  `stack_get_unfixed_depth op f n (prefix ++ ps.ps_stack) =
+    stack_get_unfixed_depth op f n ps.ps_stack` by
+      simp[stack_get_unfixed_depth_bottom_excluded] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack`
+  >- gvs[reduce_depth_plan_def] >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
+  Cases_on `dist <= 16` >- gvs[reduce_depth_plan_def] >>
+  `dist < LENGTH ps.ps_stack` by
+    metis_tac[stack_get_unfixed_depth_bound] >>
+  `select_spill_candidate (prefix ++ ps.ps_stack) targets dist n =
+    select_spill_candidate ps.ps_stack targets dist n` by
+      simp[select_spill_candidate_bottom_frame] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist n`
+  >- gvs[reduce_depth_plan_def] >>
+  rename1 `select_spill_candidate _ _ _ _ = SOME cand` >>
+  `cand <= 16 /\ cand < LENGTH ps.ps_stack` by
+    (drule_at (Pat `select_spill_candidate _ _ _ _ = SOME _`)
+       planWfTheory.select_spill_candidate_bound >>
+     simp[]) >>
+  Cases_on `do_spill_at cand ps` >>
+  rename1 `do_spill_at cand ps = (spill_ops, mid)` >>
+  drule_all do_spill_at_bottom_frame >>
+  disch_then (qspec_then `prefix` assume_tac) >>
+  Cases_on `reduce_depth_plan fuel targets op f n mid` >>
+  gvs[reduce_depth_plan_def] >>
+  first_x_assum drule >> disch_then drule >> simp[]
+QED
+
+Theorem reduce_depth_plan_height_bottom_frame:
+  !targets op f n ps prefix ops qs.
+    ~MEM op prefix /\
+    reduce_depth_plan (LENGTH ps.ps_stack) targets op f n ps = (ops,qs) ==>
+    reduce_depth_plan (LENGTH (prefix ++ ps.ps_stack)) targets op f n
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `reduce_depth_plan (LENGTH (prefix ++ ps.ps_stack)) targets op f n ps =
+   reduce_depth_plan (LENGTH ps.ps_stack) targets op f n ps` by
+    (irule reduce_depth_plan_adequate_fuel >> simp[]) >>
+  irule reduce_depth_plan_bottom_frame >> simp[]
 QED

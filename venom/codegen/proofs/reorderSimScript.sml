@@ -2615,7 +2615,7 @@ QED
 Theorem reduce_depth_plan_length_floor:
   !fuel target_ops target_op f target_len ps ops ps'.
     reduce_depth_plan fuel target_ops target_op f target_len ps = (ops, ps') ==>
-    MIN 17 (LENGTH ps.ps_stack) <= LENGTH ps'.ps_stack
+    MIN (MAX 17 target_len) (LENGTH ps.ps_stack) <= LENGTH ps'.ps_stack
 Proof
   Induct >> simp[reduce_depth_plan_def, LET_THM] >>
   rpt gen_tac >>
@@ -2633,10 +2633,11 @@ Proof
   `LENGTH ps1.ps_stack = LENGTH ps.ps_stack - 1` by (
     qspecl_then [`x'`, `ps`] mp_tac do_spill_at_stack_length >>
     simp[] >> gvs[]) >>
+  `target_len <= x'` by metis_tac[select_spill_candidate_below_target] >>
   first_x_assum
     (qspecl_then [`target_ops`, `target_op`, `f`, `target_len`, `ps1`,
                   `rest_ops`, `ps'`] mp_tac) >>
-  simp[] >> Cases_on `x <= 16` >> gvs[] >> decide_tac
+  simp[] >> Cases_on `x <= 16` >> gvs[MIN_DEF, MAX_DEF] >> decide_tac
 QED
 
 Theorem reorder_one_residual_budget_wf:
@@ -4785,6 +4786,41 @@ Proof
   metis_tac[reorder_one_preserves_fixed]
 QED
 
+Theorem reorder_one_target_length:
+  !dfg targets idx op ps ops qs.
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_one dfg targets idx op ps = (ops,qs) ==>
+    LENGTH targets <= LENGTH qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  rename1 `_ = (restore_ops, ps1)` >>
+  `LENGTH targets <= LENGTH ps1.ps_stack` by
+    (gvs[AllCaseEqs()] >>
+     qspecl_then [`op`, `ps`] mp_tac do_restore_length >> simp[] >> decide_tac) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+    (LENGTH targets) ps1.ps_stack` >- (simp[] >> strip_tac >> gvs[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (reduce_ops, ps2)` >>
+  `LENGTH targets <= LENGTH ps2.ps_stack` by
+    (gvs[AllCaseEqs()] >> drule reduce_depth_plan_length_floor >>
+     simp[MIN_DEF, MAX_DEF] >> decide_tac) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+    (LENGTH targets) ps2.ps_stack` >- (simp[] >> strip_tac >> gvs[]) >>
+  `x' < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >>
+  `LENGTH targets - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  Cases_on `x' = LENGTH targets - (idx + 1)`
+  >- (simp[] >> strip_tac >> gvs[]) >>
+  simp[] >> IF_CASES_TAC
+  >- (simp[stack_poke_def] >> strip_tac >> gvs[]) >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  qspecl_then [`x'`, `ps2`] mp_tac do_swap_length >>
+  qspecl_then [`LENGTH targets - (idx + 1)`, `ps3`] mp_tac do_swap_length >>
+  simp[] >> decide_tac
+QED
+
 Theorem reorder_one_materialised_length_floor:
   !dfg pending idx ps ops ps'.
     idx < LENGTH pending /\ LENGTH pending <= 16 /\
@@ -4796,54 +4832,7 @@ Theorem reorder_one_materialised_length_floor:
     reorder_one dfg pending idx (EL idx pending) ps = (ops,ps') ==>
     LENGTH pending <= LENGTH ps'.ps_stack
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack` by
-    (gen_tac >> Cases_on `MEM x pending`
-     >- simp[] >> gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
-  `?d. stack_get_unfixed_depth (EL idx pending)
-    (LENGTH pending - 1 - idx) (LENGTH pending) ps.ps_stack = SOME d` by
-    metis_tac[materialised_pending_next_on_stack_window] >>
-  gvs[] >>
-  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  simp[reorder_one_def, LET_THM] >>
-  Cases_on `d > 16` >> simp[]
-  >- (pairarg_tac >> simp[] >>
-      rename1 `reduce_depth_plan _ _ _ _ _ ps = (reduce_ops,ps2)` >>
-      `LENGTH pending <= LENGTH ps2.ps_stack` by
-        (drule reduce_depth_plan_length_floor >> simp[] >> decide_tac) >>
-      Cases_on `stack_get_unfixed_depth (EL idx pending)
-        (LENGTH pending - 1 - idx) (LENGTH pending) ps2.ps_stack` >> simp[]
-      >- (strip_tac >> gvs[]) >>
-      `x < LENGTH ps2.ps_stack` by
-        metis_tac[stack_get_unfixed_depth_props] >>
-      Cases_on `x = LENGTH pending - 1 - idx` >> simp[]
-      >- (strip_tac >> gvs[]) >>
-      `LENGTH pending - 1 - idx < LENGTH ps2.ps_stack` by decide_tac >>
-      simp[] >> Cases_on `operand_equiv dfg (EL idx pending)
-        (stack_peek (LENGTH pending - 1 - idx) ps2.ps_stack)` >>
-      simp[stack_poke_def, LENGTH_LUPDATE]
-      >- (strip_tac >> gvs[]) >>
-      Cases_on `do_swap x ps2` >> simp[] >>
-      rename1 `do_swap x ps2 = (s1,ps3)` >>
-      `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
-        (qspec_then `x` (qspec_then `ps2` mp_tac) do_swap_length >> simp[]) >>
-      Cases_on `do_swap (LENGTH pending - 1 - idx) ps3` >> simp[] >>
-      strip_tac >> gvs[] >>
-      qspecl_then [`LENGTH pending - 1 - idx`, `ps3`] mp_tac do_swap_length >>
-      simp[] >> decide_tac) >>
-  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_unfixed_depth_props] >>
-  Cases_on `d = LENGTH pending - 1 - idx` >> simp[]
-  >- (strip_tac >> gvs[]) >>
-  `LENGTH pending - 1 - idx < LENGTH ps.ps_stack` by decide_tac >>
-  simp[] >> Cases_on `operand_equiv dfg (EL idx pending)
-    (stack_peek (LENGTH pending - 1 - idx) ps.ps_stack)` >>
-  simp[stack_poke_def, LENGTH_LUPDATE]
-  >- (strip_tac >> gvs[]) >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  `LENGTH ps3.ps_stack = LENGTH ps.ps_stack` by
-    (qspecl_then [`d`, `ps`] mp_tac do_swap_length >> simp[]) >>
-  qspecl_then [`LENGTH pending - 1 - idx`, `ps3`] mp_tac do_swap_length >>
-  simp[] >> decide_tac
+  metis_tac[reorder_one_target_length]
 QED
 
 Theorem do_restore_preserves_not_spilled[local]:

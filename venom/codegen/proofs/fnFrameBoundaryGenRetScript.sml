@@ -159,7 +159,8 @@ Theorem reduce_depth_plan_small_result:
 Proof
   strip_tac >>
   `MIN 17 (LENGTH ps.ps_stack) <= LENGTH ps'.ps_stack` by
-    metis_tac[reduce_depth_plan_length_floor] >>
+    (drule reduce_depth_plan_length_floor >>
+     simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MAX_DEF] >> decide_tac) >>
   `LENGTH ps.ps_stack <= 16` by (gvs[arithmeticTheory.MIN_DEF] >> decide_tac) >>
   Cases_on `fuel` >> gvs[reduce_depth_plan_def] >>
   Cases_on `stack_get_unfixed_depth op f len ps.ps_stack` >> gvs[] >>
