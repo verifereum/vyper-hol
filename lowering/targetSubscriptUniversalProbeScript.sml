@@ -407,3 +407,59 @@ Proof
   simp[set_storage_def, lookup_account_def,
        lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
+
+Theorem clear_root_prefix:
+  !ss. run_inst_seq
+    (TAKE 9 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) ss =
+    if sload 0w ss = 0w then
+      Abort Revert_abort
+        (revert_state (set_returndata []
+          (update_var "%4" 0w (update_var "%3" 1w
+            (update_var "%2" 1w (update_var "%1" 0w
+              (update_var "%0" 0w ss)))))))
+    else
+      OK (update_var "%7" 1w (update_var "%6" 0w
+        (update_var "%5" 1w (update_var "%4" 1w
+          (update_var "%3" 0w (update_var "%2" 0w
+            (update_var "%1" 1w (update_var "%0" (sload 0w ss) ss))))))))
+Proof
+  gen_tac >> Cases_on `sload 0w ss = 0w` >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``step_inst_base``, ``sload``,
+    ``update_var``, ``revert_state``, ``set_returndata``]) >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[wordsTheory.WORD_OR_CLAUSES] >>
+  simp[GSYM arithmeticTheory.NOT_ZERO_LT_ZERO, wordsTheory.w2n_eq_0,
+       bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[wordsTheory.WORD_ADD_0, wordsTheory.WORD_MULT_CLAUSES]
+QED
