@@ -190,3 +190,24 @@ Proof
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   qexists_tac `u'` >> simp[EL_TAKE]
 QED
+
+(* Prefix positions are exposed without replaying the stored trace. *)
+Theorem ld_prefix_position:
+  ld_prefix C fn X p h t0 t /\ t0.vs_inst_idx = p ==>
+  t.vs_inst_idx = p+h
+Proof
+  Cases_on `h`
+  >- simp[ld_prefix_zero] >>
+  strip_tac >> drule ld_prefix_predecessor >> strip_tac >> gvs[]
+QED
+
+Theorem ld_prefix_next:
+  ld_prefix C fn X p h t0 t /\ t0.vs_inst_idx = p /\
+  SUC h < LENGTH X /\ step_inst 0 C (EL h X) t = OK u /\
+  active_inst fn (EL (SUC h) X) (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ld_prefix C fn X p (SUC h) t0 (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `t.vs_inst_idx = p+h` by (irule ld_prefix_position >> metis_tac[]) >>
+  irule ld_prefix_extend >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
