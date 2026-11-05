@@ -563,5 +563,19 @@ Theorem codegen_assembly_frame_prog_ok:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit ==>
   asm_frame_prog_ok prog
 Proof
-  cheat
+  strip_tac >>
+  `asm_encoding_wf prog` by
+    metis_tac[codegen_assembly_asm_encoding_wf] >>
+  `!name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (AsmOp name) prog` by metis_tac[codegen_assembly_no_forbidden] >>
+  simp[asm_frame_prog_ok_def] >> conj_tac
+  >- (qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
+      simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      qspecl_then [`execute_plan plan.cp_initial_fmp (context_plan_ops plan)`,
+        `data_segment_asm unit.cu_data_segment ++ [AsmDataHeader "code_end"]`]
+        mp_tac (Q.GENL [`xs`, `ys`] data_suffix_prefix_indices) >>
+      simp[execute_plan_no_data, data_suffix_all_data]) >>
+  rpt strip_tac >>
+  `MEM (AsmOp name) prog` by metis_tac[EL_MEM] >>
+  metis_tac[MEM]
 QED
