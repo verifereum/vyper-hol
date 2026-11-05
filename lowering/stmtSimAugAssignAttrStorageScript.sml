@@ -530,11 +530,8 @@ QED
    slot.  e may call internal functions: its simulation at ty is a
    premise. *)
 Theorem compile_augassign_attr_storage_case:
-  !ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es res es'
+  !ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
    ts tr id_str slot.
-    eval_stmt cx
-      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
-      es = (res, es') /\
     expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts =
@@ -551,7 +548,9 @@ Theorem compile_augassign_attr_storage_case:
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
             bop e))
-      es res es'
+      (eval_stmt cx
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>

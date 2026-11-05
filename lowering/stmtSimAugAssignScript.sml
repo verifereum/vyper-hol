@@ -374,8 +374,7 @@ QED
    (expr_sim_inv at the state after e), so the result's typed word is the
    word the store lays out at x's type (store_lays_out_word_value). *)
 Theorem compile_augassign_local_case:
-  !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
-    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     FLOOKUP env.var_types id = SOME ty /\
@@ -383,7 +382,8 @@ Theorem compile_augassign_local_case:
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
+      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
+      (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -468,15 +468,15 @@ QED
 
 (* compile_augassign_local_case for an operand with no internal call. *)
 Theorem compile_augassign_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
-    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME ty /\
     (bop = Exp ==> nonneg_int_literal e) /\
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
+      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
+      (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
   rpt strip_tac >> irule compile_augassign_local_case >>
   fs[expr_sim_pre_body, expr_sim_ok_case, DISJ_IMP_THM] >>
