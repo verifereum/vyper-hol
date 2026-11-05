@@ -3902,6 +3902,53 @@ Proof
   EVAL_TAC
 QED
 
+(* Two-PHI loop checks the actual lower input trigger, on both entry and
+   loop-carried edges, independently of the conditional stack interface. *)
+Definition alias_phi_trigger_fn_def:
+  alias_phi_trigger_fn = mk_raw_function "phi_trigger"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["a"];
+          mk_inst 1 CALLDATASIZE [] ["b"];
+          mk_inst 2 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 3 PHI [Label "entry"; Var "a"; Label "back"; Var "n"] ["p"];
+          mk_inst 4 PHI [Label "entry"; Var "b"; Label "back"; Var "m"] ["q"];
+          mk_inst 5 ASSERT [Var "p"] [];
+          mk_inst 6 ASSERT [Var "q"] [];
+          mk_inst 7 JMP [Label "back"] []] |>;
+     <| bb_label := "back"; bb_instructions :=
+         [mk_inst 8 ASSIGN [Lit 1w] ["n"];
+          mk_inst 9 ASSIGN [Lit 2w] ["m"];
+          mk_inst 10 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_phi_trigger_ready_probe:
+  codegen_ready_fn alias_phi_trigger_fn /\
+  cfg_reachable_of (cfg_analyze alias_phi_trigger_fn) "entry" /\
+  cfg_reachable_of (cfg_analyze alias_phi_trigger_fn) "back" /\
+  MEM "header" (cfg_succs_of (cfg_analyze alias_phi_trigger_fn) "entry") /\
+  MEM "header" (cfg_succs_of (cfg_analyze alias_phi_trigger_fn) "back")
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_phi_trigger_input_probe:
+  EVERY (\pred. EVERY (\phi. ?x.
+    MEM (pred,x) (phi_pairs phi.inst_operands) /\
+    MEM x (input_vars_from pred
+      (EL 1 alias_phi_trigger_fn.fn_blocks).bb_instructions
+      (live_vars_at (liveness_analyze alias_phi_trigger_fn) "header" 0)))
+    (collect_phis (EL 1 alias_phi_trigger_fn.fn_blocks).bb_instructions))
+    ["entry"; "back"] /\
+  EVERY (\x. MEM x
+    (live_vars_at (liveness_analyze alias_phi_trigger_fn) "header" 0))
+    ["a"; "b"; "n"; "m"] /\
+  EVERY (\phi. EVERY (\x. ~MEM x phi.inst_outputs) ["a"; "b"; "n"; "m"])
+    (collect_phis (EL 1 alias_phi_trigger_fn.fn_blocks).bb_instructions)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Definition alias_collision_fn_def:
   alias_collision_fn = mk_raw_function "collision"
     [<| bb_label := "E"; bb_instructions :=
