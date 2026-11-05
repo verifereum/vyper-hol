@@ -848,6 +848,223 @@ Proof
   decide_tac
 QED
 
+Theorem alias_unique_take_absent:
+  LIST_ELEM_COUNT at stk <= 1 /\ i < LENGTH stk /\ k <= i /\ EL i stk = at ==>
+  ~MEM at (TAKE k stk)
+Proof
+  strip_tac >>
+  `MEM at (DROP k stk)` by
+    (simp[MEM_EL] >> qexists_tac `i - k` >>
+     simp[EL_DROP] >> `k + (i - k) = i` by decide_tac >> simp[]) >>
+  `LIST_ELEM_COUNT at (TAKE k stk) + LIST_ELEM_COUNT at (DROP k stk) <= 1` by
+    metis_tac[TAKE_DROP, elem_count_append] >>
+  fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
+Theorem alias_pop_foldl_body_deletes:
+  LIST_ELEM_COUNT at ps.ps_stack <= 1 ==>
+  ~MEM at (SND (pop_foldl_body (ops,ps) at)).ps_stack
+Proof
+  strip_tac >> Cases_on `stack_get_depth at ps.ps_stack`
+  >- (simp[pop_foldl_body_def] >>
+      fs[stack_get_depth_NONE] >> strip_tac >> fs[MEM_EL] >>
+      first_x_assum (qspec_then `LENGTH ps.ps_stack - 1 - n` mp_tac) >>
+      simp[stack_peek_def] >>
+      `LENGTH ps.ps_stack - 1 - (LENGTH ps.ps_stack - 1 - n) = n` by decide_tac >>
+      simp[]) >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  simp[pop_foldl_body_def] >> IF_CASES_TAC >> simp[]
+  >- (simp[stack_pop_def] >> irule alias_unique_take_absent >> simp[] >>
+      qexists_tac `LENGTH ps.ps_stack - 1` >>
+      gvs[stack_peek_def]) >>
+  pairarg_tac >> simp[] >>
+  `ps1.ps_stack = stack_swap x ps.ps_stack` by
+    metis_tac[doSwapSimTheory.do_swap_stack_result, pairTheory.SND] >>
+  `LIST_ELEM_COUNT at ps1.ps_stack <= 1` by
+    metis_tac[doSwapSimTheory.do_swap_multiplicity, pairTheory.SND] >>
+  gvs[] >> simp[stack_pop_def] >> irule alias_unique_take_absent >> simp[] >>
+  qexists_tac `LENGTH ps.ps_stack - 1` >>
+  simp[] >> simp[stack_swap_def, EL_LUPDATE, stack_peek_def] >>
+  gvs[stack_peek_def]
+QED
+
+Theorem alias_pop_foldl_body_count:
+  LIST_ELEM_COUNT at (SND (pop_foldl_body (ops,ps) v)).ps_stack <=
+  LIST_ELEM_COUNT at ps.ps_stack
+Proof
+  `!stk:operand list. !n. LIST_ELEM_COUNT at (stack_pop n stk) <= LIST_ELEM_COUNT at stk` by
+    (simp[stack_pop_def] >> rpt gen_tac >>
+     `LIST_ELEM_COUNT at (TAKE (LENGTH stk - n) stk) +
+      LIST_ELEM_COUNT at (DROP (LENGTH stk - n) stk) = LIST_ELEM_COUNT at stk` by
+       metis_tac[elem_count_append, TAKE_DROP] >> decide_tac) >>
+  Cases_on `stack_get_depth v ps.ps_stack` >> simp[pop_foldl_body_def] >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  IF_CASES_TAC >> simp[] >> pairarg_tac >> simp[] >>
+  `LIST_ELEM_COUNT at ps1.ps_stack = LIST_ELEM_COUNT at ps.ps_stack` by
+    metis_tac[doSwapSimTheory.do_swap_multiplicity, pairTheory.SND] >>
+  metis_tac[]
+QED
+
+Theorem alias_pop_fold_count:
+  !xs ops ps. LIST_ELEM_COUNT at (SND (FOLDL pop_foldl_body (ops,ps) xs)).ps_stack <=
+    LIST_ELEM_COUNT at ps.ps_stack
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `pop_foldl_body (ops,ps) h` >> simp[] >>
+  first_x_assum (qspecl_then [`q`, `r`] mp_tac) >>
+  mp_tac (Q.INST [`v` |-> `h`] alias_pop_foldl_body_count) >> simp[] >> decide_tac
+QED
+
+Theorem alias_pop_fold_deletes:
+  !xs ops ps. MEM at xs /\ LIST_ELEM_COUNT at ps.ps_stack <= 1 ==>
+    ~MEM at (SND (FOLDL pop_foldl_body (ops,ps) xs)).ps_stack
+Proof
+  Induct >> simp[] >> rpt gen_tac >> disch_tac >>
+  Cases_on `pop_foldl_body (ops,ps) h` >> simp[] >>
+  `LIST_ELEM_COUNT at ps.ps_stack <= 1` by metis_tac[] >>
+  `LIST_ELEM_COUNT at r.ps_stack <= LIST_ELEM_COUNT at ps.ps_stack` by
+    metis_tac[alias_pop_foldl_body_count, pairTheory.SND] >>
+  Cases_on `at = h`
+  >- (`~MEM at r.ps_stack` by metis_tac[alias_pop_foldl_body_deletes, pairTheory.SND] >>
+      mp_tac (Q.SPECL [`xs`, `q`, `r`] alias_pop_fold_count) >>
+      gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  first_x_assum irule >> gvs[] >> decide_tac
+QED
+
+Theorem alias_popmany_individual_deletes:
+  MEM at to_pop /\ LIST_ELEM_COUNT at ps.ps_stack <= 1 ==>
+  ~MEM at (SND (popmany_individual to_pop ps)).ps_stack
+Proof
+  simp[popmany_individual_eq_foldl] >> strip_tac >>
+  irule alias_pop_fold_deletes >> simp[QSORT_MEM]
+QED
+
+Theorem alias_popmany_contiguous_depth:
+  MEM at to_pop /\
+  EVERY IS_SOME (MAP (\v. stack_get_depth v stk) to_pop) /\
+  is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v stk) to_pop)) ==>
+  ?d. stack_get_depth at stk = SOME d /\ 1 <= d /\ d <= LENGTH to_pop
+Proof
+  strip_tac >>
+  `IS_SOME (stack_get_depth at stk)` by (fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  Cases_on `stack_get_depth at stk` >> fs[] >>
+  `MEM x (MAP THE (MAP (\v. stack_get_depth v stk) to_pop))` by
+    (simp[MEM_MAP] >> qexists_tac `SOME x` >> simp[] >>
+     qexists_tac `at` >> simp[]) >>
+  fs[is_contiguous_top_def] >>
+  `MEM x (GENLIST SUC (LENGTH to_pop))` by metis_tac[QSORT_MEM] >>
+  fs[MEM_GENLIST] >> decide_tac
+QED
+
+Theorem alias_popmany_plan_deletes:
+  MEM at to_pop /\ LIST_ELEM_COUNT at ps.ps_stack <= 1 ==>
+  ~MEM at (SND (popmany_plan to_pop ps)).ps_stack
+Proof
+  disch_tac >> Cases_on `to_pop` >- fs[] >>
+  `MEM at (h::t) /\ LIST_ELEM_COUNT at ps.ps_stack <= 1` by metis_tac[] >>
+  qpat_x_assum `MEM _ _ /\ _` kall_tac >>
+  simp[Once popmany_plan_def] >>
+  reverse IF_CASES_TAC
+  >- metis_tac[alias_popmany_individual_deletes] >>
+  reverse IF_CASES_TAC
+  >- metis_tac[alias_popmany_individual_deletes] >>
+  `LENGTH (h::t) < LENGTH ps.ps_stack` by
+    (irule contiguous_top_stack_bound >> simp[]) >>
+  `?d. stack_get_depth at ps.ps_stack = SOME d /\ 1 <= d /\ d <= LENGTH (h::t)` by
+    (irule alias_popmany_contiguous_depth >> simp[]) >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  pairarg_tac >> simp[] >>
+  `ps'.ps_stack = stack_swap (SUC (LENGTH t)) ps.ps_stack` by
+    (mp_tac (Q.SPECL [`SUC (LENGTH (t:operand list))`, `ps`] doSwapSimTheory.do_swap_stack_result) >>
+     fs[]) >>
+  `LIST_ELEM_COUNT at ps'.ps_stack <= 1` by
+    (mp_tac (Q.SPECL [`SUC (LENGTH (t:operand list))`, `ps`]
+       doSwapSimTheory.do_swap_multiplicity) >> simp[] >>
+     impl_tac >- fs[] >> disch_then (qspec_then `at` mp_tac) >> simp[]) >>
+  suspend "positions"
+QED
+
+Resume alias_popmany_plan_deletes[positions]:
+  markerLib.RESUME_TAC >>
+  simp[stack_pop_def] >> irule alias_unique_take_absent >>
+  conj_tac >- gvs[] >>
+  qexists_tac `if d = SUC (LENGTH t) then LENGTH ps.ps_stack - 1
+              else LENGTH ps.ps_stack - 1 - d` >>
+  simp[] >>
+  `LENGTH ps'.ps_stack = LENGTH ps.ps_stack` by simp[] >>
+  `EL (if d = SUC (LENGTH t) then LENGTH ps.ps_stack - 1
+       else LENGTH ps.ps_stack - 1 - d) ps'.ps_stack = at` by
+    (Cases_on `d = SUC (LENGTH t)` >>
+     `LENGTH ps.ps_stack - 1 - SUC (LENGTH t) <> LENGTH ps.ps_stack - 1` by
+       (fs[] >> decide_tac) >>
+     simp[stack_swap_def, EL_LUPDATE] >>
+     gvs[stack_peek_def] >>
+     `LENGTH ps.ps_stack - 1 - d <> LENGTH ps.ps_stack - 1` by decide_tac >>
+     `LENGTH ps.ps_stack - 1 - d <> LENGTH ps.ps_stack - 1 - SUC (LENGTH t)` by
+       (fs[] >> decide_tac) >> simp[]) >>
+  gvs[] >> decide_tac
+QED
+
+Finalise alias_popmany_plan_deletes
+
+Theorem alias_pop_fold_mass_zero:
+  !xs ops ps. MEM (Var x) xs /\ alias_var_mass x ps <= 1 /\
+    Var x NOTIN FDOM ps.ps_spilled ==>
+    alias_var_mass x (SND (FOLDL pop_foldl_body (ops,ps) xs)) = 0
+Proof
+  Induct >> simp[] >> rpt gen_tac >> disch_tac >>
+  Cases_on `pop_foldl_body (ops,ps) h` >> simp[] >>
+  `alias_var_mass x ps <= 1 /\ Var x NOTIN FDOM ps.ps_spilled` by metis_tac[] >>
+  `alias_var_mass x r <= alias_var_mass x ps` by
+    metis_tac[alias_var_mass_pop_foldl_body, pairTheory.SND] >>
+  `Var x NOTIN FDOM r.ps_spilled` by
+    (qpat_x_assum `pop_foldl_body _ _ = _` mp_tac >>
+     Cases_on `stack_get_depth h ps.ps_stack`
+     >- (simp[pop_foldl_body_def] >> strip_tac >> gvs[]) >>
+     simp[pop_foldl_body_def] >> IF_CASES_TAC >> simp[]
+     >- (strip_tac >> gvs[]) >>
+     pairarg_tac >> simp[] >>
+     strip_tac >> gvs[] >>
+     metis_tac[do_swap_spilled_unchanged, pairTheory.SND]) >>
+  Cases_on `Var x = h`
+  >- (`LIST_ELEM_COUNT (Var x) ps.ps_stack <= 1` by
+        fs[alias_var_mass_def] >>
+      `~MEM (Var x) r.ps_stack` by
+        metis_tac[alias_pop_foldl_body_deletes, pairTheory.SND] >>
+      `alias_var_mass x r = 0` by
+        (gvs[alias_var_mass_def, GSYM LIST_ELEM_COUNT_MEM]) >>
+      mp_tac (Q.SPECL [`xs`, `q`, `r`] alias_var_mass_pop_fold) >> simp[]) >>
+  first_x_assum irule >> gvs[] >> decide_tac
+QED
+
+Theorem alias_popmany_plan_mass_zero:
+  MEM (Var x) to_pop /\ alias_var_mass x ps <= 1 /\
+    Var x NOTIN FDOM ps.ps_spilled ==>
+  alias_var_mass x (SND (popmany_plan to_pop ps)) = 0
+Proof
+  disch_tac >>
+  `MEM (Var x) to_pop /\ alias_var_mass x ps <= 1 /\
+   Var x NOTIN FDOM ps.ps_spilled` by metis_tac[] >>
+  qpat_x_assum `MEM _ _ /\ _` kall_tac >>
+  `LIST_ELEM_COUNT (Var x) ps.ps_stack <= 1` by fs[alias_var_mass_def] >>
+  `~MEM (Var x) (SND (popmany_plan to_pop ps)).ps_stack` by
+    metis_tac[alias_popmany_plan_deletes] >>
+  Cases_on `to_pop` >- fs[] >>
+  simp[Once popmany_plan_def] >>
+  reverse IF_CASES_TAC
+  >- (simp[popmany_individual_eq_foldl] >> irule alias_pop_fold_mass_zero >>
+      simp[QSORT_MEM]) >>
+  reverse IF_CASES_TAC
+  >- (simp[popmany_individual_eq_foldl] >> irule alias_pop_fold_mass_zero >>
+      simp[QSORT_MEM]) >>
+  pairarg_tac >> simp[] >>
+  `ps'.ps_spilled = ps.ps_spilled` by
+    metis_tac[do_swap_spilled_unchanged, pairTheory.SND] >>
+  qpat_x_assum `~MEM _ (SND _).ps_stack` mp_tac >>
+  simp[Once popmany_plan_def] >> simp[] >>
+  simp[alias_var_mass_def, GSYM LIST_ELEM_COUNT_MEM]
+QED
+
 Theorem alias_var_mass_optimistic_swap:
   alias_var_mass x (SND (optimistic_swap_plan dfg inst live next_term ps)) <=
   alias_var_mass x ps
