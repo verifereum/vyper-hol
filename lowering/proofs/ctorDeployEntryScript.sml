@@ -9,7 +9,8 @@ Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness o1PassContract
   e2eEntry immutableCodeLayout codegenEncodingWf contextPlanLayoutProps
   e2eDefs e2eDeployDefs compileEnv vyperArith unitShapeDefs callTrace
-  contextCodegenRel lowerDloadDefs words list rich_list
+  contextCodegenRel lowerDloadDefs venomState unitTransformDefs
+  words list rich_list
 
 Theorem deploy_entry_state_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es.
@@ -43,17 +44,20 @@ Proof
    gas_readings (shadow_root es) = gas_readings es` by
     simp[call_trace_def, gas_readings_def, shadow_root_frame_obs] >>
   `wf_state (shadow_root es)` by simp[shadow_root_wf_state] >>
+  simp[deploy_entry_state_def] >>
   conj_tac
   >- (simp[initial_ctx_rel_def] >>
       gvs[unit_shape_ok_def, entry_fn_first_def] >>
       simp[shadow_root_def, shadow_root_contexts_def] >>
       fs[shadow_root_def] >>
       simp[initial_state_rel_def, stack_params_rel_def,
-           entry_venom_state_fresh, entry_venom_state_frame_fields,
+           initial_codegen_state_rel_def, entry_venom_state_fresh, entry_venom_state_frame_fields,
            asm_pc_to_offset_zero, context_memory_rel_def] >>
       simp[entry_venom_state_def, msg_ctx_rel_def, tx_ctx_rel_def,
-           block_ctx_rel_def, blockhash_rel_def, w2n_n2w, DROP_APPEND]) >>
-  simp[o1_run_state_ok_def, entry_venom_state_fresh] >>
+           block_ctx_rel_def, blockhash_rel_def, w2n_n2w, DROP_APPEND,
+           init_venom_state_def]) >>
+  simp[o1_run_state_ok_def, o1_initial_state_ok_def,
+       entry_venom_state_fresh] >>
   conj_tac >- simp[entry_venom_state_def] >>
   simp[code_layout_valid_def, entry_venom_state_frame_fields, DROP_APPEND] >>
   simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
