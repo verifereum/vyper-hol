@@ -1567,7 +1567,7 @@ Proof
   ci_mono_chain_tac [ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_ptr_store[local]:
+Theorem ci_mono_compile_ptr_store:
   ∀ is_ctor imm loc op v sa.
     ci_mono sa (SND (compile_ptr_store is_ctor imm loc op v sa))
 Proof

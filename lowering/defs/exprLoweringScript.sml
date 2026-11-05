@@ -1089,21 +1089,22 @@ End
 
 (* ===== DynArray Append (location-aware) ===== *)
 (* Full dynarray append with overlap detection and location-aware store.
-   word_scale: 1 for storage/transient, 32 for memory
+   loc: the array's location; constructor immutables (LocCode) go through
+     the immutables buffer, as every other LocCode access does
+   word_scale: 1 for storage/transient, 32 for memory/immutables
    elem_size: size of element in location units
    capacity: compile-time max length
    is_prim: T for primitive single-word types
-   store_opc: MSTORE, SSTORE, or TSTORE
-   load_opc: MLOAD, SLOAD, or TLOAD
-   Mirrors Python: expr.py _lower_dynarray_append *)
+   Mirrors Python: expr.py _lower_dynarray_append, whose length and
+   primitive-element accesses go through ctx.load_word/ctx.store_word and
+   whose non-primitive immutable elements go through ctx.store_immutable *)
 Definition compile_dynarray_append_def:
   compile_dynarray_append cenv base_op val_op word_scale elem_size
                                dst_elem_ty src_elem_ty
-                               capacity is_prim
-                               (load_opc : opcode) (store_opc : opcode) =
+                               capacity is_prim loc =
     let overhead = word_scale in
     do (* Load current length *)
-       len_op <- emit_op load_opc [base_op];
+       len_op <- compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc base_op;
        (* Bounds check: length < capacity *)
        valid <- emit_op LT [len_op; Lit (n2w capacity)];
        emit_void ASSERT [valid];
@@ -1112,26 +1113,25 @@ Definition compile_dynarray_append_def:
        offset <- emit_op MUL [len_op; Lit (n2w elem_size)];
        elem_ptr <- emit_op ADD [data_ptr; offset];
        (* Store element. *)
-       (let dst_loc = (case store_opc of
-                         SSTORE => LocStorage
-                       | TSTORE => LocTransient
-                       | _ => LocMemory) in
-        if is_prim then emit_void store_opc [elem_ptr; val_op]
+       (if is_prim then
+          compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc elem_ptr val_op
+        else if loc = LocMemory then
+          do compile_store_memory cenv val_op elem_ptr
+                                  dst_elem_ty src_elem_ty;
+             return ()
+          od
+        else if loc = LocCode then
+          compile_imm_store_words cenv.ce_imm_alloca val_op elem_ptr
+                                  (elem_size DIV word_scale) 0
         else
-          if dst_loc = LocMemory then
-            do compile_store_memory cenv val_op elem_ptr
-                                    dst_elem_ty src_elem_ty;
-               return ()
-            od
-          else
-            let word_count = elem_size DIV word_scale in
-            do compile_word_copy_loop val_op elem_ptr word_count
-                                      LocMemory dst_loc F;
-               return ()
-            od);
+          let word_count = elem_size DIV word_scale in
+          do compile_word_copy_loop val_op elem_ptr word_count
+                                    LocMemory loc F;
+             return ()
+          od);
        (* Increment and store new length *)
        new_len <- emit_op ADD [len_op; Lit 1w];
-       emit_void store_opc [base_op; new_len]
+       compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc base_op new_len
     od
 End
 

@@ -84,25 +84,6 @@ Definition is_slot_addressed_def:
   is_slot_addressed LocCalldata = F
 End
 
-(* Load opcode for a location. For LocCode, always DLOAD (runtime).
-   Ctor uses ILOAD but must be handled separately. *)
-Definition load_opc_for_def:
-  load_opc_for LocMemory = MLOAD ∧
-  load_opc_for LocStorage = SLOAD ∧
-  load_opc_for LocTransient = TLOAD ∧
-  load_opc_for LocCode = DLOAD ∧
-  load_opc_for LocCalldata = CALLDATALOAD
-End
-
-(* Store opcode for a location *)
-Definition store_opc_for_def:
-  store_opc_for LocMemory = MSTORE ∧
-  store_opc_for LocStorage = SSTORE ∧
-  store_opc_for LocTransient = TSTORE ∧
-  store_opc_for LocCode = ISTORE ∧
-  store_opc_for LocCalldata = MSTORE  (* calldata is read-only; shouldn't be used *)
-End
-
 (* Where a Vyper variable lives in Venom execution *)
 Datatype:
   var_location =
