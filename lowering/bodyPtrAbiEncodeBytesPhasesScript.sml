@@ -1,7 +1,7 @@
 (* Full ten-instruction bytes path from the checked phase interfaces. *)
 Theory bodyPtrAbiEncodeBytesPhases
 Ancestors
-  bodyPtrAbiEncodeBytesSites bodyPtrAbiEncodeBytesPath bodyPtrAbiEncodeBytesPrefix bodyPtrAbiEncodeBytesSuffix
+  bodyPtrAbiEncodeBytesMemory bodyPtrAbiEncodeBytesSites bodyPtrAbiEncodeBytesPath bodyPtrAbiEncodeBytesPrefix bodyPtrAbiEncodeBytesSuffix
   bodyPtrAbiEncodeBytesCopy bodyPtrAbiEncodeCursorFrame bodyPtrDefs
   abiEncoderRounding abiEncoderBytesCode abiEncoderBytesPrefix exprLoweringProps emitHelperProps
   compileEnv emitHelper fragGasPathPtr ptrDiscipline venomState
@@ -31,6 +31,12 @@ Theorem abi_encode_bytes_phases_path:
     op_taint un (Var p) = {} /\ not_fresh_at en p /\
     ptr_covers H un dst t total /\
     (!i. w2n b <= i /\ i < w2n b+(32+contractABI$ceil32 cnt) ==> i NOTIN un.t_mem) /\
+    abi_encode_read_frame st
+      (mcopy (w2n b) (w2n a) (32+cnt)
+        (mstore (w2n b+contractABI$ceil32 cnt) 0w s)) G
+      (tn with t_mem := tn.t_mem DIFF
+        {i | w2n b+contractABI$ceil32 cnt <= i /\ i < w2n b+contractABI$ceil32 cnt+32}
+        DIFF {i | w2n b <= i /\ i < w2n b+(32+cnt)}) t H un /\
     fresh_vars_wrt limit_st t /\ t.vs_inst_idx = s.vs_inst_idx+10
 Proof
   gen_tac >> strip_tac >>
@@ -69,6 +75,9 @@ Proof
     (mp_then Any mp_tac abi_encode_bytes_written_clean) >>
   disch_then (qspec_then `contractABI$ceil32 cnt` mp_tac) >> simp[] >> strip_tac >>
   `ptr_covers H un dst t total'` by metis_tac[abi_encode_read_frame_covers] >>
+  qpat_assum `abi_encode_read_frame st s G tn t H un`
+    (mp_then Any mp_tac abi_encode_bytes_write_frame_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `abi_encode_read_frame ready written H clean t' H' un'` >>
   `ptr_covers H clean dst written total'` by
     (qpat_assum `ptr_covers H un dst t total'` mp_tac >>
@@ -100,6 +109,12 @@ Theorem abi_encode_bytes_checked_path:
     op_taint un (Var p) = {} /\ not_fresh_at en p /\
     ptr_covers H un dst t total /\
     (!i. w2n b <= i /\ i < w2n b+(32+contractABI$ceil32 cnt) ==> i NOTIN un.t_mem) /\
+    abi_encode_read_frame st
+      (mcopy (w2n b) (w2n a) (32+cnt)
+        (mstore (w2n b+contractABI$ceil32 cnt) 0w s)) G
+      (tn with t_mem := tn.t_mem DIFF
+        {i | w2n b+contractABI$ceil32 cnt <= i /\ i < w2n b+contractABI$ceil32 cnt+32}
+        DIFF {i | w2n b <= i /\ i < w2n b+(32+cnt)}) t H un /\
     fresh_vars_wrt limit_st t /\ t.vs_inst_idx = s.vs_inst_idx+10
 Proof
   gen_tac >> strip_tac >> drule_all abi_encode_bytes_phase_sites >> strip_tac >>
