@@ -73,7 +73,7 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 | GETFMP | update_var vs_fmp / OK | excluded | fn_ptr_ok_def excludes GETFMP. |
 | SETFMP | update vs_fmp / OK | excluded | fn_ptr_ok_def excludes SETFMP. |
 | RETFMP | eval_operands / IntRet with adopted fmp | excluded | fn_ptr_ok_def excludes RETFMP. |
-| INITIAL_FMP | update_var vs_initial_fmp / OK | missing | NOT excluded by fn_ptr_ok. Need equality/meaning of initial_fmp across activation and scalar root taint/G; local_rel alone insufficient. |
+| INITIAL_FMP | update_var vs_initial_fmp / OK | reachable producer checked with explicit initial_fmp equality | concretizeLayoutLocalInitialFmp.concretize_initial_fmp_local_complete derives empty operands from source success and preserves origin erasure, actual independent taint, successor demand, observations, environment supplements and initial_fmp equality. Incoming initial_fmp equality across activation remains a frame/dispatch obligation; it does not follow from local_rel. |
 | BUMP | two output writes / OK | missing | NOT excluded by fn_ptr_ok. Must inspect ptr_use_ok to derive scalar restrictions; paired double-write, actual multi-output set_prov erasure and taint, D/O/T. |
 | INVOKE | base default Error; step_inst setup/run/merge/bind / OK,Halt,Abort,Error | delegated | Generic frame lifting, fuel, callee lookup/metadata, argument roots incl opaque pc, static call context, saved state/gas/params, returned values, lifetime/demand. Not an ordinary base step. |
 | FMP_PARAM | vs_params index / OK | excluded | fn_ptr_ok_def excludes FMP_PARAM. |
