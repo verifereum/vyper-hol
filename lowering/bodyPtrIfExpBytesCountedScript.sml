@@ -447,3 +447,129 @@ Proof
       emit_def, comp_return_def] >>
   gvs[emitted_insts_def, DROP_APPEND1, DROP_APPEND]
 QED
+
+Theorem clean_emitted_prefix_mcopy:
+  !D ctx fn PG sa sm sb count_op n s G tn src dst a b.
+    clean_emitted_prefix D ctx fn PG sa sm count_op (n2w n) s G tn /\
+    emit_void MCOPY [Var dst;Var src;count_op] sm = ((),sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
+    n < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tnf sf.
+      inst_seq_ptr D 0 ctx fn PG G tn
+        (emitted_insts sa sm ++ emitted_insts sm sb) s Gf tnf /\
+      run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK sf /\
+      sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
+        {w2n b + i | i < n /\ w2n a + i IN tn.t_mem} /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `clean_emitted_prefix _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[clean_emitted_prefix_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `t` strip_assume_tac)))) >>
+  `lookup_var src t = SOME a /\ lookup_var dst t = SOME b /\
+   ptr_covers G1 tn1 src t n /\ ptr_covers G1 tn1 dst t n` by
+    (gvs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
+  `ptr_covers G1 tn1 src t (w2n (n2w n : bytes32)) /\
+   ptr_covers G1 tn1 dst t (w2n (n2w n : bytes32))` by simp[] >>
+  drule_all emit_mcopy_operand_seq_ptr >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`] (qx_choose_then `tn2` strip_assume_tac)) >>
+  `emitted_insts sm sb = [mk_inst sm.cs_next_id MCOPY [Var dst;Var src;count_op] []]` by
+    gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+        emit_def, comp_return_def, emitted_insts_def, DROP_APPEND1] >>
+  `step_inst_base (mk_inst sm.cs_next_id MCOPY [Var dst;Var src;count_op] []) t =
+     OK (mcopy (w2n b) (w2n a) n t)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
+  `inst_seq_ptr D 0 ctx fn PG G1 tn1 (emitted_insts sm sb)
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)) G1 tn2` by
+    (gvs[inst_seq_ptr_def] >>
+     gvs[step_inst_inst_idx_indep, mk_inst_def, is_terminator_def, exec_result_map_def] >>
+     irule (SRULE[mk_inst_def] fragExecPtrTheory.ptr_inst_ok_mcopy_operand) >> simp[]) >>
+  qexistsl_tac [`G1`, `tn2`, `mcopy (w2n b) (w2n a) n t`] >>
+  conj_tac >- (irule inst_seq_ptr_append_run >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK t`
+      (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_x_assum `t with vs_vars := _ = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  gvs[mcopy_def, write_memory_with_expansion_def, write_memory_def,
+      expand_memory_def, lookup_var_def, op_taint_def] >> metis_tac[]
+QED
+
+Theorem compile_store_bytestring_seq_ptr:
+  !D ctx fn PG sa sb src dst G tn s a b len n.
+    compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    n = 32 + 32 * ((len + 31) DIV 32) /\
+    len + 31 < dimword (:256) /\ n < dimword (:256) /\
+    mload (w2n a) s = n2w len /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+    ?Gf tnf sf.
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
+        {w2n b + i | i < n /\ w2n a + i IN tn.t_mem} /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule compile_store_bytestring_split >> strip_tac >>
+  `ptr_covers G tn src s 32` by
+    (gvs[bodyPtrDefsTheory.ptr_covers_def] >> decide_tac) >>
+  `((mload (w2n a) s + 31w && i2w (-32)) + 32w) = n2w n` by
+    (qspec_then `len` mp_tac exprSimBufferStoreTheory.buffer_round_size >>
+     gvs[vfmConstantsTheory.word_size_def]) >>
+  `clean_emitted_prefix D ctx fn PG sa sm count_op (n2w n) s G tn` by
+    (drule_all compile_bytestring_copy_len_clean_prefix >> simp[]) >>
+  drule_all clean_emitted_prefix_mcopy >> simp[]
+QED
+
+Theorem compile_store_bytestring_gas_path_ptr:
+  !D ctx fn PG sa sb src dst G tn s a b len n bb.
+    compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    n = 32 + 32 * ((len + 31) DIV 32) /\
+    len + 31 < dimword (:256) /\ n < dimword (:256) /\
+    mload (w2n a) s = n2w len /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+    ?Gf tnf sf.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
+        (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
+        {w2n b + i | i < n /\ w2n a + i IN tn.t_mem} /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt strip_tac >> drule_all compile_store_bytestring_seq_ptr >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
+  drule compile_store_bytestring_code >> strip_tac >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >> gvs[listTheory.EVERY_MEM]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by gvs[listTheory.EVERY_MEM] >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
