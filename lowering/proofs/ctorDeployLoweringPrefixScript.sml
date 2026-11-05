@@ -1797,6 +1797,72 @@ Proof
   simp[AllCaseEqs()]
 QED
 
+Theorem deploy_prefix_safe_exec_no_abort:
+  !bb s fuel ctx a ss.
+    EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE; JMP; CODECOPY; RETURN])
+      bb.bb_instructions ==> exec_block fuel ctx bb s <> Abort a ss
+Proof
+  rpt gen_tac >> qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> disch_tac >> disch_tac >>
+  simp[Once venomExecSemanticsTheory.exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >- simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `MEM inst bb.bb_instructions /\ s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (gvs[venomInstTheory.get_instruction_def] >> simp[listTheory.EL_MEM]) >>
+  `MEM inst.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE; JMP; CODECOPY; RETURN]` by
+    (qpat_x_assum `EVERY _ _` mp_tac >>
+     rewrite_tac[listTheory.EVERY_MEM] >>
+     disch_then (qspec_then `inst` mp_tac) >> simp[]) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[]
+  >- (Cases_on `is_terminator inst.inst_opcode` >- (Cases_on `v'.vs_halted` >> simp[]) >>
+      simp[] >> first_x_assum irule >> simp[])
+  >> qpat_x_assum `!y. _` kall_tac >>
+  drule_all deploy_prefix_safe_step_no_abort >> metis_tac[]
+QED
+
+Theorem deploy_prefix_safe_block_no_abort:
+  !bb s fuel ctx a ss.
+    EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE; JMP; CODECOPY; RETURN])
+      bb.bb_instructions ==> run_block fuel ctx bb s <> Abort a ss
+Proof
+  rpt gen_tac >> disch_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  simp[venomExecSemanticsTheory.run_block_def] >>
+  irule deploy_prefix_safe_exec_no_abort >> simp[]
+QED
+
+Theorem deploy_prefix_lookup_block_mem[local]:
+  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Proof
+  Induct_on `bbs` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+  rw[] >> disj2_tac >> first_x_assum irule >>
+  fs[venomInstTheory.lookup_block_def] >> metis_tac[]
+QED
+
+Theorem deploy_prefix_safe_blocks_no_abort:
+  !fuel fn s ctx a ss.
+    EVERY (\bb. EVERY (\i.
+      MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE; JMP; CODECOPY; RETURN])
+      bb.bb_instructions) fn.fn_blocks ==>
+    run_blocks fuel ctx fn s <> Abort a ss
+Proof
+  Induct_on `fuel` >- simp[Once venomExecSemanticsTheory.run_blocks_def] >>
+  rpt gen_tac >> disch_tac >>
+  simp[venomExecSemanticsTheory.run_blocks_unfold] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >- simp[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `MEM bb fn.fn_blocks` by metis_tac[deploy_prefix_lookup_block_mem] >>
+  `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE; JMP; CODECOPY; RETURN])
+    bb.bb_instructions` by
+    (qpat_x_assum `EVERY _ _` mp_tac >> rewrite_tac[listTheory.EVERY_MEM] >>
+     disch_then (qspec_then `bb` mp_tac) >> simp[]) >>
+  Cases_on `run_block fuel ctx bb s` >> simp[]
+  >- (Cases_on `v.vs_halted` >> simp[] >> first_x_assum irule >> simp[])
+  >> drule_all deploy_prefix_safe_block_no_abort >> metis_tac[]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
