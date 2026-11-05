@@ -449,3 +449,19 @@ Proof
   qexists_tac `actual` >>
   pure_rewrite_tac[Q.SPECL [`32*word_size (maxlen+4)`, `32`] ADD_COMM] >> simp[]
 QED
+
+Theorem abi_window_allocate_other_row:
+  id <> site ==>
+  FLOOKUP (abi_builtin_allocate_state site outsz s).vs_allocas id =
+    FLOOKUP s.vs_allocas id
+Proof
+  strip_tac >> Cases_on `FLOOKUP s.vs_allocas site = NONE` >>
+  simp[abi_builtin_allocate_state_def, FLOOKUP_UPDATE]
+QED
+
+Theorem abi_window_allocate_reused:
+  FLOOKUP s.vs_allocas site = SOME row ==>
+  abi_builtin_allocate_state site outsz s = s
+Proof
+  simp[abi_builtin_allocate_state_def]
+QED
