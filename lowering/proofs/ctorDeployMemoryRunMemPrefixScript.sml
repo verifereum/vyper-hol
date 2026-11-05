@@ -8,6 +8,50 @@
 Theory ctorDeployMemoryRunMemPrefix
 Ancestors
   ctorDeployLoweringDefs gasSummary memSafeRun venomInst
+  ctorDeployMemoryRunMemPrefixPrimitive ctorDeployMemoryRunMemPrefixFrontier
+  ctorDeployMemoryRunMemPrefixBytes ctorDeployMemoryRunMemPrefixDynamic
+
+Theorem ctor_prefix_unsigned_negative_encoding[local]:
+  vyper_to_abi_base (UintT 256) (vyperValue$IntV (-1)) =
+    SOME (contractABI$NumV 1)
+Proof
+  EVAL_TAC
+QED
+
+Theorem ctor_prefix_unsigned_negative_cast[local]:
+  safe_cast (BaseTV (UintT 256)) (vyperValue$IntV (-1)) = NONE
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem ctor_prefix_unsigned_negative_binding[local]:
+  bind_arguments tenv [("x", BaseT (UintT 256))]
+    [vyperValue$IntV (-1)] = NONE
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem ctor_prefix_binding_error_not_exempt[local]:
+  ~deploy_source_exempt tops
+    (INR (Error (RuntimeError "call bind_arguments")))
+Proof
+  simp[ctorDeployDefsTheory.deploy_source_exempt_def,
+       e2eDefsTheory.unspecified_behaviour_exempt_def]
+QED
+
+Theorem ctor_prefix_unsigned_positive_encoding[local]:
+  vyper_to_abi_base (UintT 256) (vyperValue$IntV 1) =
+    SOME (contractABI$NumV 1)
+Proof
+  EVAL_TAC
+QED
+
+Theorem ctor_prefix_unsigned_positive_binding[local]:
+  IS_SOME (bind_arguments tenv [("x", BaseT (UintT 256))]
+    [vyperValue$IntV 1])
+Proof
+  EVAL_TAC >> simp[]
+QED
 
 Theorem deploy_ctor_prefix_fail_run_mem_safe:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
