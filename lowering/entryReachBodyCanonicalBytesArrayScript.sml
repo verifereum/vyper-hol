@@ -926,3 +926,26 @@ Proof
   fs[Abbr `t`, abi_decode_loop_ready_def, entry_loop_fields_def,
     abi_decode_header_state_def, jump_to_def, update_var_def]
 QED
+
+Theorem entry_bytes_array_from_header[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared 0 s ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+      (w2n p) (LENGTH xs) prepared t /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_fields s t /\ abi_decode_sim ctx fn s t
+Proof
+  strip_tac >>
+  `?v. entry_bytes_array_state cfg prepared (LENGTH xs) v /\
+     entry_loop_fields s v /\ abi_decode_sim ctx fn s v` by
+    (irule entry_bytes_array_iterations >>
+     simp[SF SFY_ss] >> qexistsl_tac [`0`, `LENGTH xs`] >> gvs[]) >>
+  drule_all entry_bytes_array_exit >> strip_tac >>
+  goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
+  conj_tac >- fs[entry_loop_fields_def] >>
+  metis_tac[abi_decode_sim_trans]
+QED
