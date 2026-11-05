@@ -85,7 +85,8 @@ Proof
   rw[fn_ptr_ok_def, pp_out_roots, pp_out_not_phi_pv_all_var]
 QED
 
-(* The input meets the syntactic half for P = K {}. *)
+(* The input's roots and uses. Before fn_ptr_ok's definition clause the
+   input met fn_ptr_ok (K {}); the clause rejects B's v = ASSIGN 5. *)
 Theorem pp_in_roots:
   ptr_roots (K {}) pp_fn = {"v"}
 Proof
@@ -100,18 +101,6 @@ Proof
   simp[pointer_use_vars_def] >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC
-QED
-
-Theorem pp_in_fn_ptr_ok:
-  fn_ptr_ok (K {}) pp_fn
-Proof
-  simp[fn_ptr_ok_def, fn_pv_def, pp_in_roots, pointer_derived_vars_def,
-       SET_TO_LIST_SING, pp_in_use_vars, affine_pointer_ops_def,
-       phi_pv_all_var_def, ptr_use_ok_def] >>
-  simp[pp_fn_def, pp_inst_def, mk_raw_function_def, fn_insts_def,
-       fn_insts_blocks_def, DISJ_IMP_THM, FORALL_AND_THM,
-       LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
-  EVAL_TAC >> rw[] >> CCONTR_TAC >> gvs[]
 QED
 
 (* Second probe: a variable that is both a PARAM (at a pointer position)
@@ -221,8 +210,9 @@ Proof
   simp[fn_ptr_ok_def, pp2_out_roots, pp2_out_not_phi_pv_all_var]
 QED
 
-(* The input meets the syntactic half with position 0 a pointer
-   parameter: p's two definitions are both roots. *)
+(* The input's roots and uses, position 0 a pointer parameter. Before
+   fn_ptr_ok's definition clause the input met fn_ptr_ok (K {0}); the
+   clause rejects the PARAM output p, which is also an ALLOCA output. *)
 Theorem pp2_in_roots:
   alloca_roots pp2_fn = {"p"} /\ ptr_roots (K {0}) pp2_fn = {"p"}
 Proof
@@ -237,18 +227,4 @@ Proof
   simp[pointer_use_vars_def] >> conj_tac >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC
-QED
-
-Theorem pp2_in_fn_ptr_ok:
-  fn_ptr_ok (K {0}) pp2_fn
-Proof
-  `ptr_roots (K {0}) pp2_fn DIFF alloca_roots pp2_fn = {}` by
-    simp[pp2_in_roots] >>
-  simp[fn_ptr_ok_def, fn_pv_def, pp2_in_roots, pointer_derived_vars_def,
-       SET_TO_LIST_SING, pp2_in_use_vars, affine_pointer_ops_def,
-       phi_pv_all_var_def, ptr_use_ok_def] >>
-  simp[pp2_fn_def, pp_inst_def, mk_raw_function_def, fn_insts_def,
-       fn_insts_blocks_def, DISJ_IMP_THM, FORALL_AND_THM,
-       LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
-  EVAL_TAC >> rw[] >> CCONTR_TAC >> gvs[]
 QED
