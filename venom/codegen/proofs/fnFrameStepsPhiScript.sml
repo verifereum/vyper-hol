@@ -2746,3 +2746,49 @@ Proof
   simp[phi_stack_provenance_def, generated_plan_state_wf_marked_def,
        pred_setTheory.IN_DISJOINT] >> metis_tac[]
 QED
+
+Theorem phi_venom_rel_vars_transfer:
+  !lo ps u vars st.
+    venom_asm_rel lo ps u st /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (u with vs_vars := vars) lo at = operand_val u lo at) ==>
+    venom_asm_rel lo ps (u with vs_vars := vars) st
+Proof
+  rpt gen_tac >> simp[codegenRelTheory.venom_asm_rel_def] >> strip_tac >>
+  conj_tac
+  >- (gvs[codegenRelTheory.plan_stack_rel_def] >> rpt strip_tac >>
+      `MEM (EL i (REVERSE ps.ps_stack)) ps.ps_stack` by
+        metis_tac[listTheory.EL_MEM, listTheory.MEM_REVERSE, listTheory.LENGTH_REVERSE] >>
+      metis_tac[]) >>
+  gvs[codegenRelTheory.plan_spill_rel_def] >> rpt strip_tac >>
+  `op IN FDOM ps.ps_spilled` by
+    (qpat_x_assum `FLOOKUP _ op = SOME off` mp_tac >>
+     simp[finite_mapTheory.FLOOKUP_DEF] >> IF_CASES_TAC >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem phi_numeric_relabel:
+  !lo ps u vars st d out.
+    venom_asm_rel lo ps u st /\ d < LENGTH ps.ps_stack /\
+    stack_peek d ps.ps_stack <> dead_stack_marker /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (u with vs_vars := vars) lo at = operand_val u lo at) /\
+    operand_val (u with vs_vars := vars) lo (Var out) =
+      operand_val u lo (stack_peek d ps.ps_stack) ==>
+    venom_asm_rel lo
+      (ps with ps_stack := stack_poke d (Var out) ps.ps_stack)
+      (u with vs_vars := vars) st
+Proof
+  rpt gen_tac >> strip_tac >>
+  `venom_asm_rel lo ps (u with vs_vars := vars) st` by
+    metis_tac[phi_venom_rel_vars_transfer] >>
+  irule instSimHelpersTheory.venom_asm_rel_poke >> simp[] >>
+  qpat_x_assum `venom_asm_rel lo ps u st` mp_tac >>
+  simp[codegenRelTheory.venom_asm_rel_def, codegenRelTheory.plan_stack_rel_def] >>
+  strip_tac >>
+  qpat_x_assum `!i. i < LENGTH ps.ps_stack ==> _` (qspec_then `d` mp_tac) >>
+  `stack_peek d ps.ps_stack = EL d (REVERSE ps.ps_stack)` by
+    (simp[stackModelTheory.stack_peek_def, listTheory.EL_REVERSE] >>
+     AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  gvs[]
+QED
