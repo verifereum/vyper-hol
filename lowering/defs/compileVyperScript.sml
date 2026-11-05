@@ -1300,6 +1300,37 @@ Definition set_external_package_target_def:
      nr, nkey, use_trans, is_view, body, ret)
 End
 
+Theorem package_external_fn_return_buffer_ok:
+  !target tops use_trans nkeys mut nr rr name args dflts ret body'
+   lbl cenv pos_args min_cds is_payable nr' nkey ut iv body rt.
+  set_external_package_target target
+    (package_external_fn tops use_trans nkeys
+      (mut,nr,rr,name,args,dflts,ret,body')) =
+      (lbl,cenv,pos_args,min_cds,is_payable,nr',nkey,ut,iv,body,rt) /\
+  external_return_buffer_ok
+      (lbl,cenv,pos_args,min_cds,is_payable,nr',nkey,ut,iv,body,rt) ==>
+  (stmts_valued_return body /\ ~cenv.ce_raw_return ==>
+    return_buffer_ok cenv)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `ret = NoneT`
+  >- (qpat_x_assum `external_return_buffer_ok _` kall_tac >>
+      `return_buffer_ok
+         (build_compile_env tops External mut name args ret body' use_trans)`
+        by irule build_compile_env_return_buffer_ok >>
+      gvs[package_external_fn_def, set_external_package_target_def,
+          update_cenv_nonreentrant_def, return_buffer_ok_def]) >>
+  Cases_on `is_word_type ret`
+  >- (qpat_x_assum `external_return_buffer_ok _` kall_tac >>
+      drule update_cenv_ret_abi_word_return_buffer_ok >>
+      disch_then (qspec_then
+        `build_compile_env tops External mut name args ret body' use_trans
+           with ce_raw_return := rr` mp_tac) >>
+      gvs[package_external_fn_def, set_external_package_target_def,
+          update_cenv_nonreentrant_def, return_buffer_ok_def]) >>
+  gvs[package_external_fn_def, set_external_package_target_def,
+      external_return_buffer_ok_def]
+QED
+
 Definition set_internal_package_target_def:
   set_internal_package_target target
     (fn_lbl, cenv, params, has_ret_buf, nr, nkey, use_trans, is_view,
