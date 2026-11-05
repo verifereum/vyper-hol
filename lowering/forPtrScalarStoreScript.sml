@@ -100,3 +100,39 @@ Proof
    goal_assum (drule_at (Pat `op_taint _ _ = {}`)) >>
    simp[eval_operand_def] >> metis_tac[])
 QED
+
+Theorem scalar_mstore_install_ghost:
+  ghost_inv d cenv cx es G tn s /\
+  lookup_var dst s = SOME a /\
+  eval_operand value s = SOME (val_to_w256 entry.value) /\
+  op_taint tn value = {} /\ ptr_covers G tn dst s 32 /\
+  ((?x. entry.value = BoolV x) \/ (?x. entry.value = IntV x) \/
+   (?x. entry.value = FlagV x) \/ (?x. entry.value = DecimalV x)) /\
+  cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var dst) 32) /\
+  (!name e p sz.
+    lookup_scopes name es.scopes = SOME e /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+    val_wf e.type e.value /\
+    !b i. lookup_var p s = SOME b /\
+      w2n b <= i /\ i < w2n b + val_footprint e.type e.value ==>
+      i < w2n a \/ w2n a+32 <= i) ==>
+  ghost_inv d bc cx
+    (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) G
+    (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
+      (mstore (w2n a) (val_to_w256 entry.value) s) tn)
+    (mstore (w2n a) (val_to_w256 entry.value) s)
+Proof
+  strip_tac >>
+  (`ghost_inv d cenv cx es G
+      (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
+        (mstore (w2n a) (val_to_w256 entry.value) s) tn)
+      (mstore (w2n a) (val_to_w256 entry.value) s)` by
+      (irule scalar_mstore_outer_ghost >> metis_tac[]) >>
+   drule_all ghost_inv_push_top_ext >>
+   disch_then (mp_then Any mp_tac ghost_inv_set_top_entry) >>
+   disch_then (qspecl_then [`FEMPTY`, `es.scopes`, `id`, `entry`] mp_tac) >>
+   impl_tac
+   >- (simp[] >> irule scalar_mstore_binding_endpoint >> simp[]) >>
+   simp[])
+QED
