@@ -8,7 +8,7 @@ Theorem marked_result_then_outcome:
     (a : evaluation_state -> eval_result evaluation_result)
     (es,s0) left (INL v) mid (OK t) /\
   gas_outcome memory tops (ctx,func)
-    (k v : evaluation_state -> unit evaluation_result)
+    (k v : evaluation_state -> 'b evaluation_result)
     (mid with gas_obs := [],t) Q R ==>
   gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
 Proof
@@ -35,7 +35,7 @@ Theorem gas_outcome_bind_result_marked:
     gas_marked_exec memory (ctx,func) a (es,s0) left (INL v) mid (OK t) /\
     P (INL v) (mid with gas_obs := []) t ==>
     gas_outcome memory tops (ctx,func)
-      (k v : evaluation_state -> unit evaluation_result)
+      (k v : evaluation_state -> 'b evaluation_result)
       (mid with gas_obs := [],t) Q
       (\res ee r. ?exc. res = INR exc /\ E exc ee r)) /\
   (!res ee t. P res ee t ==> ?v. res = INL v) ==>
