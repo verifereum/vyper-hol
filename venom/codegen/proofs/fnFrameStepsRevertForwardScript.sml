@@ -2663,6 +2663,21 @@ Proof
     stackPlanTypesTheory.is_label_operand_def]
 QED
 
+(* The opaque return-PC representation is invisible to ordinary non-label uses. *)
+Theorem rf_ordinary_operand_value:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+  inst.inst_opcode <> DRET /\ MEM op inst.inst_operands /\
+  ~is_label_operand op ==>
+  operand_val (frame_view fn ra vs) lo op = eval_operand op vs
+Proof
+  strip_tac >> simp[operand_val_eq_eval] >>
+  drule_all ordinary_inst_operand_frame_view >>
+  disch_then (qspecl_then [`vs`, `ra`, `(frame_view fn ra vs).vs_memory`] mp_tac) >>
+  simp[frame_view_def]
+QED
+
 Theorem rf_entry_copy_execution:
   !base.
   codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
@@ -2727,20 +2742,6 @@ Proof
       Abbr `mid`]
 QED
 
-(* The opaque return-PC representation is invisible to ordinary non-label uses. *)
-Theorem rf_ordinary_operand_value:
-  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
-  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
-  inst.inst_opcode <> DRET /\ MEM op inst.inst_operands /\
-  ~is_label_operand op ==>
-  operand_val (frame_view fn ra vs) lo op = eval_operand op vs
-Proof
-  strip_tac >> simp[operand_val_eq_eval] >>
-  drule_all ordinary_inst_operand_frame_view >>
-  disch_then (qspecl_then [`vs`, `ra`, `(frame_view fn ra vs).vs_memory`] mp_tac) >>
-  simp[frame_view_def]
-QED
 
 Theorem rf_preparation_postpop_generated_wf:
   !base opc inputs nl ps ins ps1 dfg ros ps2.
@@ -2765,4 +2766,101 @@ Proof
   drule_all reorder_plan_materialised_arranged >> strip_tac >>
   drule plan_state_residual_wf_pop >>
   simp[generated_plan_state_wf_def]
+QED
+
+Theorem rf_copy_plan_generated_wf:
+  !base.
+  generated_plan_state_wf base ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') ==>
+  generated_plan_state_wf base ps'
+Proof
+  gen_tac >> strip_tac >>
+  Cases_on `emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps` >>
+  rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) (compute_operands inst) ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  drule_all rf_copy_plan_result >>
+  disch_then (fn th => fs[th]) >>
+  qpat_x_assum `release_dead_spills _ _ = ps'` (SUBST1_TAC o SYM) >>
+  irule generated_plan_state_wf_release_dead_spills >>
+  drule_all rf_preparation_postpop_generated_wf >> simp[]
+QED
+
+Theorem rf_copy_success_invariants:
+  !base.
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI) /\
+  get_instruction bb k = SOME inst /\ k <= j /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  LENGTH (compute_operands inst) <= 16 /\
+  generated_plan_state_wf base ps /\
+  rf_value_inv fn ra bb j lo entry k s /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  step_inst fuel ctx inst s = OK s' ==>
+  generated_plan_state_wf base ps' /\
+  rf_value_inv fn ra bb j lo entry (SUC k) (s' with vs_inst_idx := SUC k) /\
+  rf_inventory_inv fn ra lo entry ps' (s' with vs_inst_idx := SUC k) /\
+  (!op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled)
+Proof
+  gen_tac >> strip_tac >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt strip_tac >> fs[rf_value_inv_def] >> first_x_assum irule >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `s'.vs_vars = s.vs_vars` by
+    (drule_all rf_source_copy_ok_cases >> strip_tac >>
+     gvs[venomStateTheory.write_memory_with_expansion_def]) >>
+  conj_tac >- (drule_all rf_copy_plan_generated_wf >> simp[]) >>
+  conj_tac >- (drule_all rf_value_inv_returndatacopy >> simp[]) >>
+  conj_tac
+  >- (simp[] >>
+      drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        rf_copy_plan_inventory >> simp[] >>
+      disch_then irule >> asm_rewrite_tac[] >>
+      qexists_tac `s` >> simp[]) >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    rf_copy_ready_future_owned >> simp[] >>
+  disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem rf_copy_source_alignment:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo sop = SOME src /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz ==>
+  step_inst fuel ctx inst vs =
+    if w2n src + w2n sz <= LENGTH vs.vs_returndata then
+      OK (write_memory_with_expansion (w2n dst)
+        (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs)
+    else Abort ExHalt_abort (halt_state (set_returndata [] vs))
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+    operand_val (frame_view fn ra vs) lo op = eval_operand op vs` by
+    (rpt strip_tac >> irule rf_ordinary_operand_value >> simp[] >>
+     conj_tac >- gvs[EVERY_MEM] >>
+     qexists_tac `inst` >> gvs[]) >>
+  irule rf_source_copy_result >> simp[] >>
+  metis_tac[listTheory.MEM]
 QED
