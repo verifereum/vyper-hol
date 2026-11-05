@@ -6,6 +6,8 @@ Ancestors
   abiEncoderSequence abiDecoderExecution abiDecoderLoop abiDecoderLoopRegisters abiDecoderReentryPointer ctorAbiActualBytes
   abiDecoderTypedContract abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecoderDynamicLoopSetup
   abiDecoderArraySetupInputs abiDecoderArrayBackedge abiDecoderReentry venomMemProofs
+  abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderGuards abiDecoderDynarrayBound
+  abiDecoderArrayHeader abiDecoderIndexInit context
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
   venomExecSemantics venomExecProofs venomState venomInst venomMemDefs valueEncoding valueEncodingProps words list arithmetic finite_map
 
@@ -949,3 +951,74 @@ Proof
   conj_tac >- fs[entry_loop_fields_def] >>
   metis_tac[abi_decode_sim_trans]
 QED
+
+Theorem entry_bytes_array_initialized_state[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  fresh_vars_wrt limit_st prepared /\ ~prepared.vs_halted /\
+  mem_word_at d prepared.vs_memory = n2w (LENGTH xs) /\
+  eval_operand ip prepared = SOME p /\ eval_operand src prepared = SOME srcaddr /\
+  mload (w2n p) prepared = 0w /\
+  abi_decode_load CALLDATALOAD srcaddr prepared = n2w (LENGTH xs) /\
+  alloca_inv prepared /\ FLOOKUP prepared.vs_allocas oid = SOME (d,capacity) /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD prepared) =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) ==>
+  entry_bytes_array_state cfg prepared 0 (jump_to hdr prepared)
+Proof
+  strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  simp_tac bool_ss [entry_bytes_array_state_def] >>
+  `entry_bytes_array_inv next limit_st d
+     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) (w2n p) (LENGTH xs)
+     prepared prepared` by (irule entry_bytes_array_inv_init >> simp[]) >>
+  fs[entry_bytes_array_inv_def, entry_loop_prefix_def, abi_decode_loop_ready_def,
+     jump_to_def, abi_decoder_ranges_def, eval_operand_def, lookup_var_def,
+     abi_decode_load_def, abi_decode_source_def, fresh_vars_wrt_def,
+     entry_loop_fields_def, abi_decode_footprint_frame_def,
+     mload_def, alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem entry_array_initializer_outputs[local]:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+    (setup,loop_st) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode /\
+    EVERY (\x. ?k. x = STRING #"%" (toString k) /\ k < loop_st.cs_next_var)
+      i.inst_outputs) (emitted_insts st loop_st)
+Proof
+  simp[abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+       abi_decode_count_guard_def, abi_decode_dynarray_end_guard_def,
+       abi_decode_array_header_def, abi_decode_index_init_def,
+       compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def] >>
+  metis_tac[arithmeticTheory.LESS_ADD]
+QED
+
+Theorem entry_array_initializer_final_fresh[local]:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+    (setup,loop_st) /\
+  run_inst_seq (emitted_insts st loop_st) s = OK t /\
+  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  fresh_vars_wrt limit_st t
+Proof
+  strip_tac >> drule entry_array_initializer_outputs >> strip_tac >>
+  simp_tac bool_ss [fresh_vars_wrt_def] >> rpt strip_tac >>
+  `lookup_var (STRING #"%" (toString n)) t =
+   lookup_var (STRING #"%" (toString n)) s` by
+    (irule ctorAbiActualAllocTheory.ctor_actual_sequence_var_frame >>
+     goal_assum (drule_at Any) >> fs[EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> simp[] >>
+     qpat_x_assum `!x. MEM x i.inst_outputs ==> _` drule >>
+     strip_tac >> gvs[] >> decide_tac) >>
+  gvs[fresh_vars_wrt_def, lookup_var_def, FLOOKUP_DEF] >> metis_tac[]
+QED
+
