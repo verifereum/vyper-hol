@@ -4,7 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsPayloadRuns
           emitHelper context compileEnv venomState exprLoweringProps
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
           immutableMemoryFrame valueEncodingProps moduleLoweringProps
-          venomMemProps
+          venomMemProps immutableCopyExecution
 
 Theorem recovery_payload_run:
   (do emit_void MSTORE [buf; h];
@@ -155,4 +155,83 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
     finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[GSYM lookup_var_def, lookup_var_mstore]
+QED
+
+Theorem payload_operand_preserved:
+  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  (!x. op = Var x ==> not_fresh_at sa x) ==>
+  eval_operand op t = eval_operand op s
+Proof
+  strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = s`
+      (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
+  Cases_on `op` >> simp[eval_operand_def]
+QED
+
+Theorem payload_reset_trans:
+  (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u ==>
+  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
+Proof
+  strip_tac >>
+  qpat_x_assum `_ = u`
+    (mp_tac o Q.AP_TERM `\z. z with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>`) >>
+  simp[]
+QED
+
+Theorem mul_payload_stages_run:
+  (do src <- emit_op ADD [point; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 0w]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [point; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [dst; value] od)
+    sa = ((),sm) /\
+  (do dst <- emit_op ADD [buf; Lit 64w];
+      emit_void MSTORE [dst; scalar] od) sm = ((),sb) /\
+  eval_operand point s = SOME p /\ eval_operand buf s = SOME b /\
+  eval_operand scalar s = SOME w /\
+  (!x. MEM (Var x) [point;buf;scalar] ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  w2n p + 64 < dimword (:256) /\ w2n b + 96 < dimword (:256) /\
+  regions_disjoint (w2n b) 64 (w2n p) 64 ==>
+  ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
+    t.vs_memory = (mstore (w2n b+64) w
+      (mstore (w2n b+32) (mload (w2n p+32) s)
+        (mstore (w2n b) (mload (w2n p) s) s))).vs_memory /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    mem_bytes_at (w2n b) 96 t.vs_memory =
+      word_to_bytes (mload (w2n p) s) T ++
+      word_to_bytes (mload (w2n p+32) s) T ++ word_to_bytes w T
+Proof
+  strip_tac >>
+  `?u. run_inst_seq (emitted_insts sa sm) s = OK u /\
+    u.vs_memory = (mstore (w2n b+32) (mload (w2n p+32) s)
+      (mstore (w2n b) (mload (w2n p) s) s)).vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)` by
+    (simp[] >> irule (point_pair_payload_run |> SPEC_ALL |>
+       Q.INST [`off` |-> `0w`] |> SRULE [wordsTheory.WORD_ADD_0]) >> simp[] >>
+     qexistsl [`buf`,`point`] >> simp[] >> metis_tac[listTheory.MEM]) >>
+  `eval_operand buf u = SOME b /\ eval_operand scalar u = SOME w` by
+    (conj_tac >> irule EQ_TRANS >> goal_assum (drule_at Any) >>
+     irule payload_operand_preserved >> goal_assum (drule_at Any) >>
+     qexists `sa` >> simp[] >> metis_tac[listTheory.MEM]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (gvs[not_fresh_at_def] >> decide_tac) >>
+  `!x. scalar = Var x ==> not_fresh_at sm x` by
+    metis_tac[listTheory.MEM] >>
+  drule_all (offset_store_run |> SPEC_ALL |> Q.INST [`s` |-> `u`]) >> strip_tac >>
+  qexists `t` >>
+  `w2n (b+64w) = w2n b + 64` by
+    (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
+  `t.vs_memory = (mstore (w2n b+64) w
+      (mstore (w2n b+32) (mload (w2n p+32) s)
+        (mstore (w2n b) (mload (w2n p) s) s))).vs_memory` by
+    (simp[] >> irule immutable_mstore_memory_cong >> simp[]) >>
+  simp[scratch_three_word_stores] >>
+  conj_tac >- (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK u`
+    (mp_then Any mp_tac run_inst_seq_append) >> simp[]) >>
+  gvs[mstore_vars_memory_overwrite, update_var_def]
 QED
