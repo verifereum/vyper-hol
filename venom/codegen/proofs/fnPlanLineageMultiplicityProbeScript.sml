@@ -1,7 +1,7 @@
 Theory fnPlanLineageMultiplicityProbe
 Ancestors
   codegenReadyCompute stackPlanGen livenessDefs stackPlanOps stackPlanTypes
-  stackModel venomInst cfgTransform
+  stackModel venomInst cfgTransform fnPlanLineageInventory
 Libs wordsLib
 
 Definition repeated_use_fn_def:
@@ -163,3 +163,72 @@ QED
    these producers is supplied here. Global successful-function hypotheses
    exclude repeated_use_fn F, so the local obstruction does not refute the
    frozen theorem or the still-open success-conditioned scalar producer. *)
+
+(* Resource-interface audit: repeated target demand is not deduplicated, but
+   a shallow native JMP with unique input resources rejects that demand. *)
+Theorem repeated_target_resource_probe:
+  residual_budget_wf 0 []
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := [Var "x"; Var "z"]) /\
+  generate_inst_plan
+    (liveness_analyze (repeated_use_fn F))
+    (dfg_build_function (repeated_use_fn F)) (cfg_analyze (repeated_use_fn F))
+    (repeated_use_fn F) (mk_inst 2 JMP [Label "use"] []) ["x"] F T "entry"
+    ((init_cleanup_plan_state NONE [] 0 0) with
+      ps_stack := [dead_stack_marker; Var "x"; Var "z"]) = NONE
+Proof
+  EVAL_TAC >> simp[] >> gen_tac >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Definition resource_probe_targets_def:
+  resource_probe_targets = MAP Var
+    ["a";"b";"c";"d";"e";"f";"g";"h";"i";
+     "j";"k";"l";"m";"n";"o";"p";"q";"r"]
+End
+
+(* An unbounded target window with a nonzero marker prefix: the first
+   indexed step is already aligned and leaves the whole state unchanged.
+   This is a boundary probe, not a full-fold resource preservation proof. *)
+Theorem deep_target_marker_resource_probe:
+  LENGTH resource_probe_targets = 18 /\
+  reorder_one (dfg_build_function (repeated_use_fn F)) resource_probe_targets
+    0 (Var "a")
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack :=
+      dead_stack_marker :: resource_probe_targets) =
+    ([], (init_cleanup_plan_state NONE [] 0 0) with ps_stack :=
+      dead_stack_marker :: resource_probe_targets)
+Proof
+  EVAL_TAC
+QED
+
+(* Empty-pending JMP resource-interface audit (not a preservation theorem).
+   The existing repeated_use_liveness above certifies that input_vars_from
+   retains repeated unmapped base variables; it does not deduplicate them.
+   PHI classes are separately recorded by input_vars_from, but this does not
+   remove repetitions of untouched base variables. Native success rejects
+   the shallow repeated-target fixture even with an extra unique operand.
+
+   residual_budget_wf base [] (reorderSim) requires count(core,op)<=1 and
+   count(core,op)=0 for spilled operands, in addition to slot/layout facts.
+   The new success-conditioned inventory subset proves neither count bound.
+   The first-step 18-target test above checks a nonzero marker prefix only
+   in the aligned case. Attempted full-fold resource evaluation (both
+   reversed and aligned targets) exceeded the fixed 2.5-second tactic limit;
+   no whole-fold conclusion or falsehood was obtained from those attempts.
+
+   Existing resource interfaces: reorderSim.reorder_one_residual_budget_wf
+   needs target length<=16 and a full-stack floor. For larger targets,
+   deepResidualBudget.reorder_plan_residual_budget_wf_marked needs marked
+   budget, pending_inventory_wf, and a full-stack floor; it preserves budget
+   relative to pending targets, not an empty-pending distinct core.
+   These bundle allocator layout/slot bounds with count control. None is a
+   producer of a marker-free core floor or of target multiplicity from set
+   coverage. Caller live-out coverage now supplies only the set premise
+   (analyzed_terminal_jmp_target_coverage in fnPlanLineageCallers).
+
+   The candidate fixed-m, empty-pending resource contract remains unvalidated.
+   Before a general preservation proof, a strategy must supply a core-level
+   safe-swap/count argument across the restored reorder window (including
+   possible undersized deep windows), plus fixed-marker-prefix and allocator
+   layout preservation. Native suffix success and full-stack inventory alone
+   are not proofs of those obligations. These diagnostics establish no
+   counterexample to the candidate or to the frozen TASK theorem. *)
