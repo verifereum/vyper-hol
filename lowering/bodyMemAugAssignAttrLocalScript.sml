@@ -814,6 +814,73 @@ Proof
   pure_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> strip_tac >> asm_rewrite_tac []
 QED
 
+Theorem stmt_state_rel_write_field_mem_src[local]:
+  !func cenv cx es s id p sz w pre env entry rest fs vals flds fld ftv etv v ctx.
+    stmt_state_rel ctx func cenv cx es s /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w /\
+    entry.type = StructTV fs /\ entry.value = StructV vals /\
+    fields_layout flds fs /\ struct_has_type fs vals /\
+    ALOOKUP fs fld = SOME ftv /\ store_lays_out etv ftv v ==>
+    stmt_state_rel ctx func cenv cx
+      (es with scopes :=
+         pre ++ (env |+ (id, entry with
+                   <|value := StructV (AFUPDKEY fld (K v) vals);
+                     popped := []|>)) :: rest)
+      (mstore (w2n w + struct_field_offset flds fld)
+         (typed_val_to_w256 etv v) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    FULL_SIMP_TAC std_ss [stmt_state_rel_def, state_rel_def] >>
+  `type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
+   val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `struct_field_offset flds fld + 32 <= type_memory_size_fields fs` by
+    (drule_all struct_field_offset_le >>
+     FULL_SIMP_TAC std_ss [store_lays_out_def]) >>
+  `fields_val_wf vals fs /\ fields_in_memory vals fs (w2n w) s.vs_memory` by
+    (conj_tac
+     >- (qpat_x_assum `val_wf entry.type entry.value` mp_tac >>
+         ASM_SIMP_TAC std_ss [val_wf_def, type_value_case_def, value_case_def]) >>
+     qpat_x_assum `val_in_memory entry.type entry.value _ _` mp_tac >>
+     ASM_SIMP_TAC std_ss [val_in_memory_def, type_value_case_def, value_case_def]) >>
+  irule stmtSimAssignStoreTheory.stmt_state_rel_write_local >>
+  conj_tac >- asm_rewrite_tac [] >>
+  conj_tac
+  >- (ASM_SIMP_TAC std_ss [val_wf_def, type_value_case_def] >>
+      irule fields_val_wf_update_mem_src >>
+      FULL_SIMP_TAC std_ss [store_lays_out_def, val_wf_def,
+        type_value_case_def, value_case_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule stmtSimAssignStoreTheory.local_mstore_immutables_at >>
+      reverse conj_tac >- metis_tac[] >>
+      qexistsl_tac [`id`, `sz`] >> conj_tac
+      >- (qpat_x_assum `type_memory_size entry.type <= sz` mp_tac >>
+          ASM_SIMP_TAC std_ss [type_memory_size_def] >> decide_tac) >>
+      ASM_SIMP_TAC std_ss [local_region_def] >>
+      qexistsl_tac [`p`, `w`] >> asm_rewrite_tac []) >>
+  qexistsl_tac [`p`, `s`, `sz`, `w`] >>
+  ASM_SIMP_TAC std_ss [] >>
+  conj_tac
+  >- SIMP_TAC std_ss [lookup_var_def, mstore_def, LET_THM, venom_state_accfupds] >>
+  conj_tac
+  >- (rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+      FULL_SIMP_TAC std_ss [type_memory_size_def] >> decide_tac) >>
+  conj_tac
+  >- SIMP_TAC std_ss [mstore_def, LET_THM, venom_state_fupdfupds,
+                     venom_state_component_equality, venom_state_accfupds] >>
+  ASM_SIMP_TAC std_ss [val_in_memory_def, type_value_case_def, value_case_def] >>
+  irule fields_in_memory_mstore_field_mem_src >>
+  asm_rewrite_tac [] >> qexists_tac `ftv` >>
+  FULL_SIMP_TAC std_ss [store_lays_out_def]
+QED
+
 
 Theorem stmt_state_rel_field_word_mem_src[local]:
   !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
