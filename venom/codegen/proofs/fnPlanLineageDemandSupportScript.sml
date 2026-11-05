@@ -1,8 +1,8 @@
 Theory fnPlanLineageDemandSupport
 Ancestors
-  livenessTransferProofs venomExecProps finite_map indexedLists list rich_list
+  livenessTransferProofs venomExecProps venomExecProofs finite_map indexedLists list rich_list
 Libs
-  venomInstTheory livenessDefsTheory pairTheory
+  venomInstTheory venomWfTheory livenessDefsTheory pairTheory
 
 Definition raw_phi_inputs_def:
   raw_phi_inputs instrs =
@@ -126,4 +126,58 @@ Proof
   disj2_tac >>
   qspecl_then [`pred`, `collect_phis instrs`, `i`, `v`]
     mp_tac build_phi_maps_matching >> gvs[]
+QED
+
+Definition demand_available_def:
+  demand_available fn bb i v <=>
+    ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+      MEM v di.inst_outputs /\
+      fn_dominates fn db.bb_label bb.bb_label /\
+      (db = bb ==> ?k. k < i /\ k < LENGTH bb.bb_instructions /\
+                          EL k bb.bb_instructions = di)
+End
+
+Theorem demand_available_endpoint:
+  !fn bb v.
+    wf_function fn ==>
+    (demand_available fn bb (LENGTH bb.bb_instructions) v <=>
+     def_available_at fn bb NONE v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[demand_available_def, def_available_at_def] >>
+  eq_tac >> strip_tac
+  >- metis_tac[] >>
+  qexistsl_tac [`def_bb`, `def_inst`] >> simp[] >>
+  strip_tac >> gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem demand_available_predecessor:
+  !fn pb bb v.
+    wf_function fn /\ MEM pb fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+    fn_reachable fn pb.bb_label /\ fn_cfg_edge fn pb.bb_label bb.bb_label /\
+    demand_available fn bb 0 v ==>
+    def_available_at fn pb NONE v
+Proof
+  rpt strip_tac >> gvs[demand_available_def] >>
+  `db.bb_label <> bb.bb_label` by metis_tac[same_label_same_block] >>
+  `fn_dominates fn db.bb_label pb.bb_label` by
+    (irule fn_dominates_predecessor >> metis_tac[]) >>
+  simp[def_available_at_def] >> metis_tac[]
+QED
+
+Theorem demand_available_entry:
+  !fn eb v.
+    wf_function fn /\ entry_block fn = SOME eb ==>
+    ~demand_available fn eb 0 v
+Proof
+  rpt strip_tac >> gvs[demand_available_def] >>
+  `fn_entry_label fn = SOME eb.bb_label /\ MEM eb fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[entry_block_def, fn_entry_label_def]) >>
+  `db.bb_label = eb.bb_label` by
+    (qpat_x_assum `fn_dominates _ _ _` mp_tac >>
+     simp[fn_dominates_def] >> strip_tac >>
+     first_x_assum (qspec_then `[eb.bb_label]` mp_tac) >>
+     simp[is_fn_path_def]) >>
+  metis_tac[same_label_same_block]
 QED
