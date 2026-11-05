@@ -6,7 +6,9 @@ Ancestors
   abiEncoderChildPrefix abiEncoderCounters abiDecoderReentryAddress abiDecoderReentry
   abiEncoderMemberCode abiEncoder abiEncoderComplexCode abiBuiltinAllocation
   stmtSimLogScalarPrefix context stmtSimLogAllocResource venomMemDefs
-  valueEncodingProofs abiEncoderBytes abiDecoderDynamicLoopSetup
+  stmtSimLogScalarEncode abiEncoderInputFrame abiEncoderMembersInput abiEncoderComplexPrefix
+  abiEncoderComplexDynamic abiEncoderTuple abiEncoderOpenInput abiDecoderFrameCompose abiDecoderFrame
+  valueEncodingProofs abiCanonicalWindows abiEncoderBytes abiDecoderDynamicLoopSetup
   abiEncoderWindowBytesMem fragExecMem contractABI words arithmetic
   abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv list rich_list
   instMemFrontier venomExecSemantics venomInst venomState stmtReasonMemory moduleLoweringProps
@@ -368,3 +370,140 @@ Proof
   gvs[abi_builtin_allocate_state_def, alloca_next_valid_def] >>
   metis_tac[DECIDE ``p+32 < n ==> p < n``]
 QED
+
+Theorem log_scalar_memory_layout_frame[local]:
+  abi_encoder_input (AbiComplex infos) (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
+  EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos /\
+  LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
+  abi_decode_frame p 32 initial ready /\ (sb+cap <= p \/ p+32 <= sb) ==>
+  log_members_layout infos ats avs [] [] sb 0 0 db (head_lengths ats 0) outcap ready.vs_memory /\
+  abi_encoder_member_span infos <= cap /\
+  SUM (MAP (\(_,asz,_,_). asz) infos) = head_lengths ats 0
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decode_footprint_frame [(p,32)] initial ready` by
+    (irule (iffLR abi_decode_frame_footprint) >> first_assum ACCEPT_TAC) >>
+  `abi_footprint_disjoint sb cap [(p,32)]` by simp[abi_footprint_disjoint_def] >>
+  `abi_encoder_input (AbiComplex infos) (Tuple ats) (ListV avs) sb cap ready.vs_memory` by
+    (drule_all abi_encoder_input_frame >> simp[]) >>
+  conj_tac >- (irule log_members_layout_initial >> asm_simp_tac bool_ss [] >>
+    qexists_tac `cap` >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_x_assum `abi_encoder_input _ _ _ _ _ initial.vs_memory` mp_tac >>
+      simp_tac bool_ss [abi_encoder_complex_input_iff] >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  drule abi_encoder_complex_input_metadata >> simp[]
+QED
+
+Theorem log_scalar_tuple_mem_ok:
+  compile_abi_encode_to_buf dst src ei st = (out,end_st) /\
+  abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
+  ((?n. ei = AbiCopy n /\ n < dimword (:256)) \/
+   (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
+     EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) /\
+  LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
+  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w db) /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  sb+cap < dimword (:256) /\ db+outcap < dimword (:256) /\
+  (sb+cap <= db \/ db+outcap <= sb) /\
+  fresh_vars_wrt limit_st initial /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  ((?infos. ei = AbiComplex infos) ==>
+    ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+      FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32)) /\
+    p < dimword (:256) /\ (sb+cap <= p \/ p+32 <= sb) /\
+    (db+outcap <= p \/ p+32 <= db) /\
+    (FLOOKUP initial.vs_allocas st.cs_next_id <> NONE ==> p+32 <= initial.vs_alloca_next) /\
+    (abi_builtin_allocate_state st.cs_next_id 32 initial).vs_alloca_next < dimword (:256)) /\
+  sb+cap <= initial.vs_alloca_next /\ db+outcap <= initial.vs_alloca_next /\
+  initial.vs_alloca_next < dimword (:256) ==>
+  run_inst_seq_mem_ok (emitted_insts st end_st) initial /\
+  !actual. run_inst_seq (emitted_insts st end_st) initial = OK actual ==>
+    initial.vs_alloca_next <= actual.vs_alloca_next
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse conj_tac >- suspend "frontier" >>
+  qpat_x_assum `(?n. _ /\ _) \/ (?infos. _ /\ _ /\ _)`
+    (DISJ_CASES_THEN strip_assume_tac)
+  >- suspend "copy" >>
+  qpat_x_assum `ei = _` SUBST_ALL_TAC >>
+  qpat_x_assum `(?infos'. _ = AbiComplex infos') ==> _` mp_tac >>
+  simp_tac (srw_ss()) [Excl "enc_def"] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_complex_dynamic_trace >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule abi_encoder_members_bounds >> strip_tac >>
+  `prepared.cs_next_var <= limit_st.cs_next_var /\
+   middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all log_scalar_cursor_prefix_run >>
+  disch_then (qx_choose_then `ready` strip_assume_tac) >>
+  `log_members_run_pre infos ats avs [] [] sb 0 0 db (head_lengths ats 0) outcap
+     prepared limit_st src dst dyn_ptr p ready` by suspend "prepare" >>
+  `initial.vs_alloca_next <= ready.vs_alloca_next /\
+   p+32 <= ready.vs_alloca_next` by
+    (drule log_scalar_cursor_frontier >> simp[]) >>
+  `abi_encoder_member_span infos <= cap` by
+    (qpat_assum `abi_encoder_input _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_complex_input_iff] >> rpt strip_tac >>
+     first_assum ACCEPT_TAC) >>
+  `run_inst_seq_mem_ok (emitted_insts st prepared) initial` by
+    (drule log_scalar_cursor_prefix_mem_ok >> simp[] >> metis_tac[]) >>
+  `run_inst_seq_mem_ok (emitted_insts prepared middle) ready` by
+    (drule log_members_list_mem_ok >> disch_then drule >> simp[] >> decide_tac) >>
+  drule_all log_members_run_list >>
+  disch_then (qx_choose_then `encoded` strip_assume_tac) >>
+  suspend "finish"
+QED
+
+Resume log_scalar_tuple_mem_ok[frontier]:
+  drule log_scalar_tuple_run >> disch_then drule >>
+  disch_then (qspecl_then [`p`,`outcap`,`limit_st`,`db`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> rpt strip_tac >>
+  gvs[] >> simp[abi_builtin_allocate_state_def] >>
+  Cases_on `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` >> simp[]
+QED
+Resume log_scalar_tuple_mem_ok[copy]:
+  qpat_x_assum `ei = _` SUBST_ALL_TAC >>
+  drule abi_encode_copy_code >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qpat_x_assum `abi_encoder_input _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[abi_encoder_input_copy_iff] >> strip_tac >>
+  `LENGTH (enc (Tuple ats) (ListV avs)) = n` by
+    (drule_all (cj 1 enc_has_static_length) >> simp[]) >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MCOPY,
+    eval_operand_def, w2n_n2w] >> decide_tac
+QED
+Resume log_scalar_tuple_mem_ok[prepare]:
+  drule_all log_scalar_memory_layout_frame >>
+  disch_then (qspec_then `db` strip_assume_tac) >>
+  drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  `eval_operand src ready = SOME (n2w sb)` by (first_x_assum irule >> simp[]) >>
+  `eval_operand dst ready = SOME (n2w db)` by (first_x_assum irule >> simp[]) >>
+  `abi_decoder_operand_live prepared.cs_next_var src` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+  `abi_decoder_operand_live prepared.cs_next_var dst` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+  `abi_decoder_operand_live prepared.cs_next_var dyn_ptr` by
+    (asm_simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+     rpt strip_tac >> decide_tac) >>
+  simp_tac bool_ss [log_members_run_pre_def] >>
+  asm_simp_tac (srw_ss()) [abi_tuple_tails_def, Excl "enc_def"] >>
+  rpt conj_tac >> decide_tac
+QED
+Resume log_scalar_tuple_mem_ok[finish]:
+  `eval_operand dyn_ptr encoded = SOME (n2w p)` by
+    fs[log_members_run_pre_def] >>
+  `encoded.vs_alloca_next = ready.vs_alloca_next /\
+   run_inst_seq (emitted_insts prepared middle) ready = OK encoded /\
+   inst_extends prepared middle` by fs[log_members_run_post_def] >>
+  `run_inst_seq_mem_ok (emitted_insts middle end_st) encoded` by
+    simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD, w2n_n2w] >>
+  `inst_extends middle end_st` by simp[inst_extends_def] >>
+  `emitted_insts st end_st = emitted_insts st prepared ++
+    emitted_insts prepared middle ++ emitted_insts middle end_st` by
+    metis_tac[emitted_insts_append, inst_extends_trans, inst_extends_def] >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule run_inst_seq_mem_ok_append >>
+  simp[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
+  qpat_x_assum `run_inst_seq_mem_ok (emitted_insts middle end_st) encoded` mp_tac >>
+  simp[]
+QED
+Finalise log_scalar_tuple_mem_ok
