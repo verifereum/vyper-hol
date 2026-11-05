@@ -3,7 +3,7 @@ Theory exprSimExtCallOperands
 Ancestors
   exprSim exprSimHyps compileEnv context finite_map list arithmetic
   venomState vyperState vyperValueOperation exprSimOps freshWrites exprSimPop
-  exprPlaceTransport
+  exprPlaceTransport exprTypedOperand
 
 Definition operand_frame_def:
   operand_frame cenv es s cut es' s' <=>
@@ -750,3 +750,48 @@ val _ = List.app (fn (n,th) =>
   end)
   [("expr_sim_inv_typed_local_no_label", expr_sim_inv_typed_local_no_label),
    ("compile_name_vv_typed_no_label", compile_name_vv_typed_no_label)];
+
+Theorem compile_expr_typed_no_label:
+  expr_sim_inv ce cx env es /\ well_typed_expr env e /\
+  compile_expr ce ty e lo = (vv,hi) ==> ~is_label_operand (vv_operand vv)
+Proof
+  strip_tac >>
+  `!l. vv_operand vv <> Label l` by
+    (irule (cj 1 compile_expr_not_label) >>
+     goal_assum (drule_at Any) >> qexists_tac `env` >> simp[] >>
+     metis_tac[expr_sim_inv_typed_local_no_label]) >>
+  Cases_on `vv_operand vv` >> gvs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem lower_value_typed_no_label:
+  expr_sim_inv ce cx env es /\ well_typed_expr env e /\
+  lower_value compile_expr ce ty e lo = (op,hi) ==> ~is_label_operand op
+Proof
+  strip_tac >>
+  `!l. op <> Label l` by
+    (irule lower_value_compile_expr_not_label >>
+     goal_assum (drule_at Any) >> qexists_tac `env` >> simp[] >>
+     metis_tac[expr_sim_inv_typed_local_no_label]) >>
+  Cases_on `op` >> gvs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem compile_expr_typed_operand_frame:
+  expr_sim_inv ce cx env es /\ well_typed_expr env e /\
+  compile_expr ce ty e lo = (vv,hi) /\ local_ptrs_reserved ce lo /\
+  operand_frame ce es s hi es2 s2 /\
+  eval_operand (vv_operand vv) s = SOME w ==>
+  eval_operand (vv_operand vv) s2 = SOME w
+Proof
+  strip_tac >> irule compile_expr_operand_frame_no_label >>
+  conj_tac >- metis_tac[compile_expr_typed_no_label] >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+val _ = List.app (fn (n,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Typed compiler operand framing dependency: " ^ n) else ()
+  end)
+  [("compile_expr_typed_no_label", compile_expr_typed_no_label),
+   ("lower_value_typed_no_label", lower_value_typed_no_label),
+   ("compile_expr_typed_operand_frame", compile_expr_typed_operand_frame)];

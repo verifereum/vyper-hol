@@ -5,6 +5,7 @@ Ancestors
   exprLoweringProps freshWrites compileEnv emitHelper context
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
+  builtinStrings
 
 (* unwrap_value_not_label is the shared, type-independent unwrap boundary. *)
 Theorem lower_value_not_label:
@@ -19,7 +20,7 @@ Proof
 QED
 
 Theorem lower_value_child_not_label:
-  (!e ce t s vv s'. expr_size e < bound /\ f ce t e s = (vv,s') /\
+  (!e t s vv s'. expr_size e < bound /\ f ce t e s = (vv,s') /\
      well_typed_expr env e ==> !l. vv_operand vv <> Label l) /\
   well_typed_expr env e /\
   lower_value (expr_child_callback bound f) ce t e sa = (op,sb) ==>
@@ -28,7 +29,7 @@ Proof
   Cases_on `expr_size e < bound`
   >- (simp[lower_value_def, expr_child_callback_def, comp_bind_def] >>
       rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-      qpat_x_assum `!e ce t s vv s'. _` drule_all >>
+      qpat_x_assum `!e t s vv s'. _` drule_all >>
       strip_tac >> drule_all unwrap_value_not_label >> simp[]) >>
   simp[lower_value_def, expr_child_callback_def, invalid_expr_call_def,
        comp_bind_def, comp_return_def, unwrap_value_def] >>
@@ -484,3 +485,304 @@ val _ = List.app (fn th =>
          type_builtin_dispatch_body_not_label, builtin_scalar_not_label,
          builtin_hash_not_label, builtin_bop_not_label, builtin_len_not_label,
          compile_acc_not_label, builtin_acc_not_label];
+
+Theorem compile_make_tuple_result_operand[local]:
+  !es buf off sa op sb.
+    compile_make_tuple f ce es buf off sa = (op,sb) ==> op = buf
+Proof
+  Induct_on `es` >>
+  simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem compile_make_array_elems_result_operand[local]:
+  !es buf idx sa op sb.
+    compile_make_array_elems f ce es et sz lw buf idx sa = (op,sb) ==> op = buf
+Proof
+  Induct_on `es` >>
+  simp[Once compile_make_array_elems_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem compile_make_array_result_operand[local]:
+  compile_make_array f ce es et sz lw buf sa = (op,sb) ==> op = buf
+Proof
+  simp[compile_make_array_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[compile_make_array_elems_result_operand]
+QED
+
+Theorem builtin_make_array_not_label[local]:
+  compile_builtin_dispatch_body f ce vt ty (MakeArray et bd) args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `et` >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  drule_at (Pos last) as_ptr_val_not_label >>
+  (impl_tac >- metis_tac[compile_make_tuple_result_operand,
+     compile_make_array_result_operand, alloc_buffer_not_label]) >> simp[]
+QED
+
+Theorem builtin_ec_not_label[local]:
+  (bi = ECAdd \/ bi = ECMul) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule_at (Pos last) as_ptr_val_not_label >>
+  (impl_tac >- metis_tac[ec_arith_result_not_label]) >> simp[]
+QED
+
+Theorem builtin_concat_not_label[local]:
+  compile_builtin_dispatch_body f ce vt ty (Concat n) args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def, base_ptr_def] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem slice_out_buf_not_label[local]:
+  compile_slice_out_buf sz sa = ((buf,data),sb) ==> !l. buf <> Label l
+Proof
+  simp[compile_slice_out_buf_def, comp_bind_def, comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem slice_result_not_label[local]:
+  (compile_slice_data len data start cnt sz sa = (op,sb) ==> !l. op <> Label l) /\
+  (compile_slice_calldata start cnt sz sa = (op,sb) ==> !l. op <> Label l) /\
+  (compile_slice_code start cnt sz sa = (op,sb) ==> !l. op <> Label l) /\
+  ((!l. buf <> Label l) /\
+   compile_slice_extcode addr start cnt buf data sa = (op,sb) ==> !l. op <> Label l)
+Proof
+  rpt conj_tac >>
+  simp[compile_slice_data_def, compile_slice_calldata_def, compile_slice_code_def,
+       compile_slice_extcode_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  gvs[] >> metis_tac[alloc_buffer_not_label, slice_out_buf_not_label]
+QED
+
+Theorem builtin_slice_not_label[local]:
+  (bi = CalldataSlice n \/ bi = Slice n) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule_at (Pos last) as_ptr_val_not_label >>
+  (impl_tac >- metis_tac[slice_result_not_label, slice_out_buf_not_label]) >> simp[]
+QED
+
+Theorem compile_uint2str_not_label[local]:
+  compile_uint2str v n sz sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[compile_uint2str_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> gvs[]
+QED
+
+Theorem builtin_uint2str_not_label[local]:
+  compile_builtin_dispatch_body f ce vt ty (Uint2Str n) args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >> drule_at (Pos last) as_ptr_val_not_label >>
+  (impl_tac >- metis_tac[compile_uint2str_not_label]) >> simp[]
+QED
+
+Theorem compile_as_wei_value_decimal_not_label[local]:
+  compile_as_wei_value_decimal v scale divisor sa = (op,sb) ==> !l. op <> Label l
+Proof
+  Cases_on `scale = 1` >>
+  simp[compile_as_wei_value_decimal_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `emit_op Div _ _ = _` (mp_tac o MATCH_MP emit_op_safe_operand) >>
+  simp[safe_operand_def]
+QED
+
+Theorem compile_as_wei_value_int_not_label[local]:
+  (!l. v <> Label l) /\
+  compile_as_wei_value_int v scale signed sa = (op,sb) ==> !l. op <> Label l
+Proof
+  Cases_on `scale = 1` >>
+  simp[compile_as_wei_value_int_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[] >>
+  qpat_x_assum `emit_op MUL _ _ = _` (mp_tac o MATCH_MP emit_op_safe_operand) >>
+  simp[safe_operand_def]
+QED
+
+Theorem builtin_as_wei_value_not_label[local]:
+  (!e t s op s'. MEM e args /\ well_typed_expr env e /\
+    lower_value f ce t e s = (op,s') ==> !l. op <> Label l) /\
+  well_typed_expr env (Builtin vt (AsWeiValue denom) args) /\
+  compile_builtin_dispatch_body f ce vt ty (AsWeiValue denom) args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[well_typed_expr_def, well_typed_builtin_app_def] >>
+  Cases_on `args` >> simp[] >> rename1 `_ :: rest` >>
+  Cases_on `rest` >> simp[] >> rpt strip_tac >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM, well_typed_expr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  drule_at (Pos last) as_stack_val_not_label >>
+  (impl_tac >- metis_tac[compile_as_wei_value_decimal_not_label,
+                        compile_as_wei_value_int_not_label]) >> simp[]
+QED
+
+Theorem compile_method_id_runtime_not_label[local]:
+  compile_method_id_runtime ty v bytes4 sa = (op,sb) ==> !l. op <> Label l
+Proof
+  Cases_on `bytes4` >>
+  simp[compile_method_id_runtime_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> gvs[] >>
+  metis_tac[emit_op_safe_operand, safe_operand_def, alloc_buffer_not_label]
+QED
+
+Theorem builtin_method_id_not_label[local]:
+  compile_builtin_dispatch_body f ce vt ty MethodId args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  simp[compile_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[])
+  >~ [`compile_literal_vv _ _ _ = _`] >- metis_tac[compile_literal_vv_not_label] >>
+  gvs[AllCaseEqs()]
+  >~ [`as_stack_val _ _ = _`] >-
+    (drule_at (Pos last) as_stack_val_not_label >>
+     (impl_tac >- metis_tac[compile_method_id_runtime_not_label]) >> simp[]) >>
+  drule_at (Pos last) as_ptr_val_not_label >>
+  (impl_tac >- metis_tac[compile_method_id_runtime_not_label]) >> simp[]
+QED
+
+Theorem builtin_dispatch_body_not_label[local]:
+  (!e t s op s'. MEM e args /\ well_typed_expr env e /\
+    lower_value f ce t e s = (op,s') ==> !l. op <> Label l) /\
+  well_typed_expr env (Builtin vt bi args) /\
+  compile_builtin_dispatch_body f ce vt ty bi args sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `bi` >> rpt strip_tac
+  >~ [`Bop bop`] >- metis_tac[builtin_bop_not_label]
+  >~ [`Acc item`] >- metis_tac[builtin_acc_not_label]
+  >~ [`AsWeiValue denom`] >-
+    metis_tac[builtin_as_wei_value_not_label]
+  >~ [`Len`] >- metis_tac[builtin_len_not_label]
+  >~ [`MethodId`] >- metis_tac[builtin_method_id_not_label]
+  >~ [`MakeArray et bd`] >- metis_tac[builtin_make_array_not_label]
+  >~ [`Concat n`] >- metis_tac[builtin_concat_not_label]
+  >~ [`Uint2Str n`] >- metis_tac[builtin_uint2str_not_label]
+  >~ [`Slice n`] >- metis_tac[builtin_slice_not_label]
+  >~ [`CalldataSlice n`] >- metis_tac[builtin_slice_not_label]
+  >> metis_tac[builtin_scalar_not_label, builtin_hash_not_label, builtin_ec_not_label]
+QED
+
+val _ = List.app (fn th =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail "Typed aggregate dispatcher operand dependency" else ()
+  end) [compile_make_tuple_result_operand, compile_make_array_elems_result_operand,
+         compile_make_array_result_operand, builtin_make_array_not_label,
+         builtin_ec_not_label, builtin_concat_not_label, slice_out_buf_not_label,
+         slice_result_not_label, builtin_slice_not_label, compile_uint2str_not_label,
+         builtin_uint2str_not_label, compile_as_wei_value_decimal_not_label,
+         compile_as_wei_value_int_not_label, builtin_as_wei_value_not_label,
+         compile_method_id_runtime_not_label, builtin_method_id_not_label,
+         builtin_dispatch_body_not_label];
+
+Theorem compile_expr_not_label:
+  (!ce ty e sa env vv sb.
+    compile_expr ce ty e sa = (vv,sb) /\ well_typed_expr env e /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+      ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz))) ==>
+    !l. vv_operand vv <> Label l) /\
+  (!ce ann ty bi args sa env vv sb.
+    compile_builtin_dispatch ce ann ty bi args sa = (vv,sb) /\
+    well_typed_expr env (Builtin ann bi args) /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+      ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz))) ==>
+    !l. vv_operand vv <> Label l) /\
+  (!ce ann ty tb rt args sa env vv sb.
+    compile_type_builtin_dispatch ce ann ty tb rt args sa = (vv,sb) /\
+    well_typed_expr env (TypeBuiltin ann tb rt args) /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+      ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz))) ==>
+    !l. vv_operand vv <> Label l)
+Proof
+  ho_match_mp_tac compile_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "expr"
+  >- suspend "builtin"
+  >> suspend "type_builtin"
+QED
+
+Resume compile_expr_not_label[expr]:
+  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule compile_expr_body_not_label >>
+  goal_assum (drule_at (Pat `compile_expr_body`)) >>
+  qexists_tac `env` >> simp[] >> conj_tac >-
+    (rpt gen_tac >> simp[builtin_child_callback_def] >>
+     Cases_on `list_size expr_size args < expr_size e` >> simp[] >-
+       metis_tac[] >>
+     simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[vv_operand_def])) >>
+  rpt gen_tac >> simp[type_child_callback_def] >>
+  Cases_on `list_size expr_size args < expr_size e` >> simp[] >-
+    metis_tac[] >>
+  simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[vv_operand_def])
+QED
+
+Resume compile_expr_not_label[builtin]:
+  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule builtin_dispatch_body_not_label >>
+  goal_assum (drule_at (Pat `compile_builtin_dispatch_body`)) >>
+  qexists_tac `env` >> simp[] >> rpt strip_tac >>
+  drule_at (Pos last) lower_value_child_not_label >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >-
+    (conj_tac >- (qx_gen_tac `arg` >> rpt gen_tac >> strip_tac >>
+                  qpat_x_assum `!e ce ty sa. _` (qspec_then `arg` mp_tac) >>
+                  simp[] >> disch_then drule_all >> simp[]) >> simp[])) >> simp[]
+QED
+Resume compile_expr_not_label[type_builtin]:
+  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule type_builtin_dispatch_body_not_label >>
+  goal_assum (drule_at (Pat `compile_type_builtin_dispatch_body`)) >>
+  qexists_tac `env` >> simp[] >>
+  rpt strip_tac >> drule_at (Pos last) lower_value_child_not_label >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >-
+    (conj_tac >- (qx_gen_tac `arg` >> rpt gen_tac >> strip_tac >>
+                  qpat_x_assum `!e ce ty sa. _` (qspec_then `arg` mp_tac) >>
+                  simp[] >> disch_then drule_all >> simp[]) >> simp[])) >> simp[]
+QED
+Finalise compile_expr_not_label
+
+Theorem lower_value_compile_expr_not_label:
+  lower_value compile_expr ce ty e sa = (op,sb) /\ well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+    ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz))) ==>
+  !l. op <> Label l
+Proof
+  simp[lower_value_def, comp_bind_def] >> rpt strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule (cj 1 compile_expr_not_label) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all unwrap_value_not_label >> simp[]
+QED
+
+val _ = List.app (fn th =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail "Typed compiler no-label dependency" else ()
+  end) [compile_expr_not_label, lower_value_compile_expr_not_label];
