@@ -13,7 +13,7 @@
 Theory makeSsaCurrentLockstepShape
 Ancestors
   makeSsaCurrentProps makeSsaCurrentDefs o1PassContract unitShapeDefs
-  venomWf venomExecSemantics venomExecProofs irSupply venomInst list
+  venomWf venomExecSemantics venomExecProofs simplifyCfgStruct irSupply venomInst list
 
 (* List-level shape boundaries. *)
 Theorem phi_prefix_length_prepend:
@@ -54,17 +54,6 @@ Proof
   drule instruction_signatures_length >> strip_tac >>
   qpat_x_assum `MAP _ xs = MAP _ ys` (mp_tac o Q.AP_TERM `EL k`) >>
   simp[EL_MAP]
-QED
-
-Theorem replace_block_projection:
-  ALL_DISTINCT (MAP basic_block_bb_label bs) /\
-  lookup_block l bs = SOME b /\ f b' = f b ==>
-  MAP f (replace_block l b' bs) = MAP f bs
-Proof
-  rpt strip_tac >> simp[cfgTransformTheory.replace_block_def] >>
-  ho_match_mp_tac MAP_replace_at_FIND_distinct >>
-  qexists `b` >> simp[] >>
-  gvs[lookup_block_def, GSYM bb_label_eta]
 QED
 
 Theorem lookup_block_map_relation:
@@ -226,7 +215,7 @@ Proof
   drule makeSsaHelperTheory.lookup_block_label >> strip_tac >>
   simp[cfgTransformPropsTheory.fn_labels_replace_block] >>
   irule EQ_TRANS >> goal_assum (first_assum o mp_then Any mp_tac) >>
-  irule replace_block_projection >> simp[] >>
+  irule simplifyCfgStructTheory.replace_block_projection >> simp[] >>
   simp[MAP_MAP_o, combinTheory.o_DEF] >>
   irule MAP_CONG >> simp[] >> rpt strip_tac >>
   IF_CASES_TAC >> simp[]) >> simp[]
@@ -270,7 +259,7 @@ Proof
         (replace_block lbl (bb with bb_instructions := insts') bs) =
        MAP (\b. (b.bb_label,
         MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs`
-        by (irule replace_block_projection >> simp[]) >>
+        by (irule simplifyCfgStructTheory.replace_block_projection >> simp[]) >>
       metis_tac[])
   >- simp[rename_current_blocks_def] >>
   rpt strip_tac >> gvs[rename_current_blocks_def] >>
