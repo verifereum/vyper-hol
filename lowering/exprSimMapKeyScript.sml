@@ -6,6 +6,8 @@ Ancestors
   vyperInterpreter vyperState list rich_list compileEnv loweringPosts context venomState
   emitHelper emitHelperProps venomExecSemantics venomInst fragExec ASCIInumbers
   exprSimAlloc exprSimLiteralBuffer exprSimOps exprBopSimProps exprSimProps
+  exprLowering exprCallbackContracts exprCallBounds exprSafeOperandBuiltins
+  vyperTypeSystem vyperAST exprOperandVar freshWrites
 
 Theorem encode_hashmap_key_scalar:
   !kt kv tenv tv.
@@ -526,3 +528,87 @@ Resume emit_length_prefixed_hash_run[add_first]:
 QED
 
 Finalise emit_length_prefixed_hash_run
+
+(* Compiler shape boundaries keep emission internals out of consumers. *)
+Theorem compile_keccak256_key_parts:
+  compile_keccak256_key key F sa = (op,sb) ==>
+  ?data sm len sn.
+    emit_op ADD [key; Lit 32w] sa = (data,sm) /\
+    emit_op MLOAD [key] sm = (len,sn) /\
+    emit_op SHA3 [data; len] sn = (op,sb)
+Proof
+  Cases_on `emit_op ADD [key; Lit 32w] sa` >>
+  rename1 `_ = (data,sm)` >>
+  Cases_on `emit_op MLOAD [key] sm` >>
+  gvs[compile_keccak256_key_def, comp_bind_def]
+QED
+
+Theorem compile_mapping_subscript_parts:
+  compile_mapping_subscript base_op key sa = (op,sb) ==>
+  ?buf sm sn ptr sp sq.
+    compile_alloc_buffer 64 sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand; base_op] sm = ((),sn) /\
+    emit_op ADD [buf.buf_operand; Lit 32w] sn = (ptr,sp) /\
+    emit_void MSTORE [ptr; key] sp = ((),sq) /\
+    emit_op SHA3 [buf.buf_operand; Lit 64w] sq = (op,sb)
+Proof
+  Cases_on `compile_alloc_buffer 64 sa` >> rename1 `_ = (buf,sm)` >>
+  Cases_on `emit_void MSTORE [buf.buf_operand; base_op] sm` >>
+  rename1 `_ = (u,sn)` >> Cases_on `u` >>
+  Cases_on `emit_op ADD [buf.buf_operand; Lit 32w] sn` >>
+  rename1 `emit_op ADD _ _ = (keyptr,sp)` >>
+  Cases_on `emit_void MSTORE [keyptr; key] sp` >>
+  rename1 `_ = (u,sq)` >> Cases_on `u` >>
+  gvs[compile_mapping_subscript_def, comp_bind_def, comp_ignore_bind_def]
+QED
+
+Theorem compile_expr_mapping_subscript_parts:
+  compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
+  place_type cenv obj = MapPT kt vt ==>
+  ?bvv sm key sn hashed sp slot.
+    compile_expr cenv ty obj sa = (bvv,sm) /\
+    lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
+    (if is_bytestring_type kt then compile_keccak256_key key F sn
+     else (key,sn)) = (hashed,sp) /\
+    compile_mapping_subscript (vv_operand bvv) hashed sp = (slot,sb) /\
+    vv = LocatedValue ann (mk_ptr slot
+      (case vv_location bvv of SOME loc => loc | NONE => LocMemory))
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_subscript_def, comp_bind_def, comp_return_def,
+       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  qpat_x_assum `lower_value cb cenv ity idx sm = _` mp_tac >>
+  `lower_value
+     (expr_child_callback (expr_size idx + (expr_size obj + (type_size ann + 1)))
+        compile_expr) cenv (expr_type idx) idx =
+   lower_value compile_expr cenv (expr_type idx) idx` by
+    (irule exprCallbackContractsTheory.lower_value_callback_contract >>
+     simp[exprCallbackContractsTheory.expr_callbacks_agree_def,
+          FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def]) >>
+  simp[SF ETA_ss] >> strip_tac >>
+  Cases_on `is_bytestring_type kt` >> gvs[comp_return_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem compile_mapping_operand_not_label:
+  type_place_expr env obj = SOME (HashMapT kt vt) /\
+  compile_expr cenv ty obj sa = (vv,sm) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `obj` >> simp[well_typed_expr_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def]
+  >~ [`FLOOKUP cenv.ce_module_vars id`]
+  >- (Cases_on `FLOOKUP cenv.ce_module_vars id` >>
+      gvs[AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      rpt strip_tac >>
+      gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def])
+  >> strip_tac >>
+  drule exprSafeOperandBuiltinsTheory.compile_subscript_not_label >>
+  simp[]
+QED
