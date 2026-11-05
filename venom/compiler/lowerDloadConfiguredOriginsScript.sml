@@ -1,7 +1,8 @@
 (* Positions in the actual supply-threaded instruction expansion. *)
 Theory lowerDloadConfiguredOrigins
 Ancestors
-  o1ContractLowerDload o1PassContract o1PassLift fmpStepBridge lowerDloadDefs
+  o1ContractLowerDload o1PassContract o1PassLift o1ScheduleDecompHelpers
+  fmpStepBridge lowerDloadDefs
   venomPassDispatcher irSupply venomExecSemantics contextCodegenRel
   venomInst venomWf venomFnScheduleRunner venomExecProofs passSharedDefs list rich_list arithmetic
 
@@ -817,3 +818,41 @@ Proof
   drule lower_dload_function_supply_prefix >> strip_tac >>
   simp[] >> gvs[EVERY_MEM] >> metis_tac[]
 QED
+
+(* Choose covered supplies by source name, retaining the stage's actual
+   transformation rather than choosing an unrelated fresh supply. *)
+Theorem lower_dload_stage_covered_supplies:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  ALL_DISTINCT (MAP (\fn. fn.fn_name) C.ctx_functions) ==>
+  ?Sigma.
+    !fn. MEM fn C.ctx_functions ==>
+      ir_supply_covers_fn (Sigma fn.fn_name) fn /\
+      lookup_function fn.fn_name C'.ctx_functions =
+        SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))
+Proof
+  strip_tac >>
+  `!nm. ?u. !fn. lookup_function nm C.ctx_functions = SOME fn ==>
+    ir_supply_covers_fn u fn /\
+    lookup_function nm C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply u fn))` by
+    (gen_tac >> Cases_on `lookup_function nm C.ctx_functions`
+     >- simp[] >>
+     drule_all lower_dload_stage_supply_lookup >> strip_tac >>
+     qexists_tac `u` >> simp[]) >>
+  fs[SKOLEM_THM] >> qexists_tac `f` >> rpt strip_tac >>
+  `lookup_function fn.fn_name C.ctx_functions = SOME fn` by
+    (simp[lookup_function_member_iff]) >>
+  metis_tac[]
+QED
+
+Theorem o1_ctx_shape_distinct_names:
+  o1_ctx_shape C ==>
+  ALL_DISTINCT (MAP (\fn. fn.fn_name) C.ctx_functions)
+Proof
+  simp[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def,
+       ctx_fn_names_def]
+QED
+
+val _ = if null (hyp lower_dload_stage_covered_supplies) andalso
+           null (hyp o1_ctx_shape_distinct_names)
+        then () else raise Fail "covered supply boundary has hypotheses";
