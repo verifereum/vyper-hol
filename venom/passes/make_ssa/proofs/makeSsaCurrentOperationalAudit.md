@@ -433,3 +433,115 @@ obligations. This test therefore supports a focused rooted-path proof-design
 checkpoint, NOT global simulation integration and NOT another conditional
 store wrapper. In particular a proof of 7.2 alone must not be reported as
 operational readiness or completion of either frozen theorem.
+
+## 8. Exceptional demanded-origin interface test (C1.12.exceptional_origin_test)
+
+Successor checkpoint, not a claim that section 5's operational transfer is proved.
+Section 7.2's displayed graph candidate is now proved as
+`current_certificate_rooted_live_exit` in RootedTokens. RootedOrigin and
+ChronologicalOrigin supply the chronological last-site/default inversions.
+DemandOrigin supplies a definition on a demanded rooted route and, in the
+operand-excluded case, excludes default provenance and closes FirstArrival's
+physical-name residual. These results resolve the earlier STATIC token gap
+only under their displayed restrictions. They do not establish successful
+copies or preservation of y's current source value.
+
+### 8.1 Exact exceptional candidate
+
+With `Pgraph` exactly as in section 7.2 and `I = current_actual_inserted fn`,
+the candidate for a NEW theorem is:
+
+```
+Pgraph /\ LRC (fn_cfg_edge fn) route eb.bb_label p /\
+MEM ep events /\ current_event_label ep = p /\
+lookup_block p fn.fn_blocks = SOME pb /\
+current_demand fn v p (LENGTH pb.bb_instructions) /\
+(?ob phi. MEM ob fn.fn_blocks /\ MEM phi (collect_phis ob.bb_instructions) /\
+          MEM v (MAP SND (phi_pairs phi.inst_operands)))
+==>
+current_event_exit_env ep v =
+  current_chain_token fn I v (route ++ [p]) (CurrentDefault v)
+```
+
+There is deliberately NO exit-liveness premise. The proposed discharge below
+uses availability/unique dominance, not backward liveness transport. There is
+also no ir-supply premise: this is token equality, not equality of names.
+This exact candidate has not been installed or proved by this audit component.
+
+### 8.2 Checked interfaces and discharge map
+
+The following sources were read, including their actual antecedents:
+DemandedCut:10-19,32-76,78-101; PlacementCut:108-118;
+SingletonSelectors:95-164,194-245,247-290,311-338;
+DemandDominance:18-49; DemandOrigin; DominanceBridge:6-14.
+
+1. `current_phi_operand_single_bound` uses the existential leading-PHI
+   operand occurrence to bound the number of DEFINING INSTRUCTION occurrences
+   by one. `current_phi_operand_has_leading_phi` proves the leading-PHI flag.
+   Neither fact asserts a unique output slot.
+2. `current_demand_route_definition` supplies l, db, di on route ++ [p].
+   It requires fn_inst_wf, present in Pgraph. `lookup_block_MEM` and
+   `lookup_block_label` convert the witness to member-block/member-instruction
+   form. Thus there really is a defining instruction; the count cannot be zero.
+3. Choose its block/instruction indices b,i using MEM_EL. The existing
+   `current_defining_sites_member` and `current_single_definition_indexed_site`
+   give `current_defining_sites fn v = [(b,i)]`. The canonical token is
+   `current_canonical_instruction_token fn v (b,i)`, whose output slot is the
+   LAST matching slot, not slot 0 or an arbitrary occurrence.
+4. `current_single_definition_chain_token` applies to the chronological route:
+   its required defining-block label membership follows from step 2. It allows
+   repeated labels, arbitrary initial token t and repeated outputs. Internally
+   it uses `current_singleton_block_token` and localization of all changing
+   sites. PlacementCut's `current_actual_inserted_single_local` is the insertion
+   localization fact and explicitly requires the leading-PHI flag from step 1.
+   Thus every completed visit to the defining block resets to the SAME final
+   Original token, and every other block preserves it.
+5. For the STATIC certificate exit, do NOT invoke
+   `current_phi_operand_canonical_exit_token` at this arbitrary demanded p.
+   That lemma requires MEM (p,v) in an actual phi's pairs plus the selected CFG
+   edge to that phi's block. The global occurrence premise here does not give
+   those edge conditions. Its selector corollary is therefore insufficient.
+6. A different already-proved interface removes that apparent gap:
+   `current_demand_available` gives availability at p's exit, and
+   `current_available_unique_dominates` gives fn_dominates of the unique
+   defining block over p. Reachability of p comes from all_reachable and its
+   lookup. This implication requires only the count and member witness from
+   steps 1-2, not the selected PHI edge. Convert to analysis dominance with
+   `current_semantic_dominates`.
+7. `current_certificate_static_env` supplies the actual static ancestor path
+   and its block-exit scan. `current_actual_path_chain` gives the token chain.
+   If db.label=p, membership in path ++ [p] is immediate; otherwise strict
+   dominance plus `current_actual_chain_membership` gives membership in path.
+   Use `current_inherited_token_step`/`current_inherited_token_def` to express
+   the static block-exit token as a chain over path ++ [p]. Apply the SAME
+   `current_single_definition_chain_token` as in step 4. Both sides are the
+   same canonical token; no new general liveness theorem is necessary.
+
+This is a discharge map, not a checked proof of the new candidate. The missing
+work is a compact token-level assembly theorem at arbitrary demanded exits;
+the selected-edge selector must not be silently generalized. No new semantic
+invariant is proposed. The mathematical argument no longer has an unidentified
+static implication after including DemandDominance's unique-dominates boundary.
+
+### 8.3 Adversarial branch checks and operational residual
+
+* Empty route: p is entry; DemandOrigin still supplies a definition in that
+  block. The exit is after all instructions, so a local definition resets the
+  token. No claim about entry's initial store follows.
+* Repeated visits to the defining block: each reset is to the same canonical
+  final slot; acyclicity or ALL_DISTINCT route is unnecessary.
+* Repeated output destinations: the definition bound counts instructions, not
+  slots. SingletonSelectors:95-145 explicitly selects the last output slot,
+  so an earlier duplicate cannot be substituted into the argument.
+* A PHI operand occurrence somewhere else is NOT evidence of a selected p edge.
+  Step 6 is essential to avoid that unsound instantiation.
+* An insertion at the defining block can occur but its token is overwritten by
+  the full original scan on every complete visit; insertion-only resets at
+  other blocks are excluded by localization.
+
+Even a proof of the candidate above would establish token provenance only.
+Open operational obligations include deriving demand/liveness for the precise
+collapsed-copy consumer, classifying each physical y writer by owner-v changing
+sites, linking completed source instruction events to the target origin ledger,
+and the first successful copy/return-epoch induction. No target success, lookup
+SOME, equal-store clause, or copy-readiness assumption was added to this test.
