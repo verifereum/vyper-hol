@@ -445,3 +445,27 @@ Proof
        wordsTheory.word_add_n2w] >>
   simp[order_run_s15_def, order_run_s14_def, venomStateTheory.update_var_def]
 QED
+
+(* The end bound does not overflow the original start. *)
+Definition order_run_s16_def:
+  order_run_s16 = order_run_s15 with
+    <|vs_vars := order_run_s15.vs_vars |+ ("%13",0w); vs_inst_idx := 16|>
+End
+
+Theorem order_run_step15:
+  step_inst_base (mk_inst 15 LT [Var "%12";Var "%0"] ["%13"]) order_run_s15 =
+    OK (order_run_s16 with vs_inst_idx := 15)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%12" order_run_s15 = SOME 3w` by
+    simp[order_run_s15_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_var "%0" order_run_s15 = SOME 2w` by
+    (mp_tac order_run_s14_start_operand >>
+     simp[order_run_s15_def, venomStateTheory.lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[] >>
+  simp[order_run_s16_def, order_run_s15_def, venomStateTheory.update_var_def]
+QED
