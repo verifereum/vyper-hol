@@ -48,6 +48,7 @@ Theorem ld_full_endpoint:
     ld_nonghost (step_taint inst s ss tn) ss u /\
     ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
     EVERY (ld_maps Ar) fs /\
+    (!a. a IN FDOM A ==> FLOOKUP Ar a = FLOOKUP A a) /\
     EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
     EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
       j IN P f.lf_fn.fn_name) (g::fs) /\
@@ -121,7 +122,11 @@ Resume ld_full_endpoint[alloca]:
   drule ld_head_order_cong >> simp[]
 QED
 Resume ld_full_endpoint[fresh]:
+  `(f.lf_serial,inst.inst_id) NOTIN FDOM A` by
+    (drule_all ld_sync_original_site_fresh >> simp[]) >>
   drule_all ld_fresh_alloca_endpoint >> strip_tac >>
+  `!a. a IN FDOM A ==> FLOOKUP Ar a = FLOOKUP A a` by
+    (rpt strip_tac >> simp[FLOOKUP_UPDATE] >> metis_tac[]) >>
   qexistsl [`ss`,`Ar`,`g`] >> simp[] >>
   drule ld_head_order_cong >> simp[]
 QED
