@@ -6,6 +6,8 @@ Ancestors
   fragExecMem instMemFrontier stmtLowering emitHelper emitHelperProps
   exprLoweringProps context compileEnv valueEncoding valueEncodingProps
   valueEncodingProofs venomMemDefs venomMemProps venomExecSemantics venomState venomInst
+  fragExec fragGasSeqAbort fragGasMode fragGasPathMem gasCount instIdxIndep
+  venomInstProofs
   memSafeRun words arithmetic list rich_list finite_map
 Libs
   monadsyntax blastLib
@@ -286,6 +288,13 @@ val tail_step_tac =
 val tail_last_tac =
   (irule tail_last ORELSE irule (swap_concl tail_last)) >> simp tail_ss;
 
+val head_ss =
+  [reason_head_def, run_inst_seq_def, run_inst_seq_mem_ok_def,
+   step_alloca_eq, step_mstore_eq, step_add_eq,
+   below_frontier_MSTORE, below_frontier_no_ranges, dload_mk_inst_other,
+   eval_operand_def, lookup_var_update_var, FLOOKUP_UPDATE, word_add_n2w,
+   mload_mstore_apart, LESS_MOD];
+
 (* The encoder after unwrap_value, from a message pointer p whose length
    word len rounds up within the tuple buffer M and whose rounded footprint
    is below the frontier: every step is below the frontier and the run ends
@@ -404,4 +413,420 @@ Proof
     tail_step_tac >>
     tail_step_tac >>
   tail_last_tac
+QED
+
+Theorem head_fields[local,simp]:
+  (update_var x w s).vs_current_bb = s.vs_current_bb /\
+  (update_var x w s).vs_inst_idx = s.vs_inst_idx /\
+  (update_var x w s).vs_halted = s.vs_halted /\
+  (mstore a w s).vs_current_bb = s.vs_current_bb /\
+  (mstore a w s).vs_inst_idx = s.vs_inst_idx /\
+  (mstore a w s).vs_halted = s.vs_halted /\
+  lookup_var x (mstore a w s) = lookup_var x s
+Proof
+  simp[update_var_def, mstore_def, lookup_var_def,
+       write_memory_with_expansion_def]
+QED
+
+Theorem room_by_fields[local]:
+  !ctx func ss. alloca_room ctx func ss ==>
+    !ss'. ss'.vs_allocas = ss.vs_allocas /\
+          ss'.vs_alloca_next = ss.vs_alloca_next ==> alloca_room ctx func ss'
+Proof
+  metis_tac[alloca_room_fields]
+QED
+
+Theorem head_state_eqs[local,simp]:
+  (update_var x w s).vs_allocas = s.vs_allocas /\
+  (update_var x w s).vs_alloca_next = s.vs_alloca_next /\
+  (mstore a w s).vs_allocas = s.vs_allocas /\
+  (mstore a w s).vs_alloca_next = s.vs_alloca_next /\
+  mload b (update_var x w s) = mload b s /\
+  mload b (s with <| vs_allocas := A; vs_alloca_next := N |>) = mload b s /\
+  lookup_var x (s with <| vs_allocas := A; vs_alloca_next := N |>) =
+    lookup_var x s
+Proof
+  simp[update_var_def, mstore_def, mload_def, lookup_var_def]
+QED
+
+(* One ALLOCA of a site of the function: it hands out a fresh region at
+   the frontier, or the region the site already holds. *)
+Theorem alloca_step_props[local]:
+  !ctx func id n out s.
+    MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+    n < dimword (:256) /\ alloca_room ctx func s /\
+    (!b m. FLOOKUP s.vs_allocas id = SOME (b, m) ==>
+           m = n /\ b + m <= s.vs_alloca_next) ==>
+    ?B A N.
+      step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s =
+        OK (update_var out (n2w B)
+              (s with <| vs_allocas := A; vs_alloca_next := N |>)) /\
+      FLOOKUP A id = SOME (B, n) /\
+      (!a. a <> id ==> FLOOKUP A a = FLOOKUP s.vs_allocas a) /\
+      B + n <= N /\ s.vs_alloca_next <= N /\
+      (FLOOKUP s.vs_allocas id = NONE ==> B = s.vs_alloca_next) /\
+      (!x. FLOOKUP s.vs_allocas id = SOME x ==> B = FST x) /\
+      alloca_room ctx func (s with <| vs_allocas := A; vs_alloca_next := N |>)
+Proof
+  rpt strip_tac >>
+  Cases_on `FLOOKUP s.vs_allocas id`
+  >- (qspecl_then [`func`, `s`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`,
+                   `n2w n`, `ctx`] mp_tac alloca_room_fresh >>
+      impl_tac >- fs[mk_inst_def, FLOOKUP_DEF] >>
+      disch_then (strip_assume_tac o
+        SIMP_RULE (srw_ss()) [mk_inst_def, LESS_MOD,
+                              ASSUME ``n < dimword (:256)``]) >>
+      qexistsl [`s.vs_alloca_next`,
+                `s.vs_allocas |+ (id, (s.vs_alloca_next, n))`,
+                `s.vs_alloca_next + n`] >>
+      simp[step_alloca_eq, FLOOKUP_UPDATE, LESS_MOD]) >>
+  PairCases_on `x` >>
+  `x1 = n /\ x0 + x1 <= s.vs_alloca_next` by metis_tac[] >>
+  qexistsl [`x0`, `s.vs_allocas`, `s.vs_alloca_next`] >>
+  `s with <| vs_allocas := s.vs_allocas;
+             vs_alloca_next := s.vs_alloca_next |> = s` by
+    simp[venom_state_component_equality] >>
+  simp[step_alloca_eq]
+QED
+
+(* The encoder's head: the Error(string) buffer and its selector, the
+   payload pointer, and the tuple buffer.  Each ALLOCA hands out a fresh
+   region at the frontier or the region its site already holds, of the
+   size the site asks for. *)
+Theorem reason_head_run_mem:
+  !ctx func id v M s.
+    MEM (mk_inst id ALLOCA [Lit (n2w (64 + M))] ["%" ++ toString v])
+      (fn_insts func) /\
+    MEM (mk_inst (id + 3) ALLOCA [Lit (n2w M)] ["%" ++ toString (v + 2)])
+      (fn_insts func) /\
+    64 + M < dimword (:256) /\
+    alloca_room ctx func s /\ alloca_next_valid s /\
+    (* Stated through SND: as an assumption, a bare `n = _` conclusion
+       would rewrite every number. *)
+    (!x. FLOOKUP s.vs_allocas id = SOME x ==> SND x = 64 + M) /\
+    (!x. FLOOKUP s.vs_allocas (id + 3) = SOME x ==> SND x = M) ==>
+    ?B TP.
+      run_inst_seq_mem_ok (reason_head id v M) s /\
+      ?s1. run_inst_seq (reason_head id v M) s = OK s1 /\
+      lookup_var ("%" ++ toString v) s1 = SOME (n2w B) /\
+      lookup_var ("%" ++ toString (v + 1)) s1 = SOME (n2w (B + 32)) /\
+      lookup_var ("%" ++ toString (v + 2)) s1 = SOME (n2w TP) /\
+      (!x. x <> "%" ++ toString v /\ x <> "%" ++ toString (v + 1) /\
+           x <> "%" ++ toString (v + 2) ==>
+           lookup_var x s1 = lookup_var x s) /\
+      FLOOKUP s1.vs_allocas id = SOME (B, 64 + M) /\
+      FLOOKUP s1.vs_allocas (id + 3) = SOME (TP, M) /\
+      (!a. a <> id /\ a <> id + 3 ==>
+           FLOOKUP s1.vs_allocas a = FLOOKUP s.vs_allocas a) /\
+      (FLOOKUP s.vs_allocas id = NONE ==> B = s.vs_alloca_next) /\
+      (FLOOKUP s.vs_allocas (id + 3) = NONE ==> s.vs_alloca_next <= TP) /\
+      B + 64 + M <= s1.vs_alloca_next /\ TP + M <= s1.vs_alloca_next /\
+      s.vs_alloca_next <= s1.vs_alloca_next /\
+      alloca_room ctx func s1 /\
+      (!a. a + 32 <= B \/ B + 32 <= a ==> mload a s1 = mload a s) /\
+      s1.vs_current_bb = s.vs_current_bb /\
+      s1.vs_inst_idx = s.vs_inst_idx /\
+      s1.vs_halted = s.vs_halted /\
+      (!x. FLOOKUP s.vs_allocas id = SOME x ==> B = FST x) /\
+      (!x. FLOOKUP s.vs_allocas (id + 3) = SOME x ==> TP = FST x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `M < dimword (:256)` by decide_tac >>
+  qspecl_then [`ctx`, `func`, `id`, `64 + M`, `"%" ++ toString v`, `s`]
+    mp_tac alloca_step_props >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+               rpt strip_tac >> metis_tac[alloca_next_valid_def, pairTheory.SND]) >>
+  strip_tac >>
+  `(s with <| vs_allocas := A; vs_alloca_next := N |>).vs_alloca_next <
+   dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  pop_assum (assume_tac o
+    SIMP_RULE std_ss [venom_state_accfupds, combinTheory.K_THM]) >>
+  `B < dimword (:256)` by decide_tac >>
+  qabbrev_tac `sa0 = s with <| vs_allocas := A; vs_alloca_next := N |>` >>
+  `sa0.vs_allocas = A /\ sa0.vs_alloca_next = N` by simp[Abbr `sa0`] >>
+  qabbrev_tac `sd = update_var ("%" ++ toString (v + 1)) (n2w (B + 32))
+                      (mstore B 0x08c379a0w
+                        (update_var ("%" ++ toString v) (n2w B) sa0))` >>
+  `sd.vs_allocas = A /\ sd.vs_alloca_next = N` by simp[Abbr `sd`] >>
+  `alloca_room ctx func sd` by
+    (irule room_by_fields >> qexists `sa0` >> simp[]) >>
+  `id + 3 <> id /\ B + 32 <= N` by decide_tac >>
+  `FLOOKUP A (id + 3) = FLOOKUP s.vs_allocas (id + 3)` by metis_tac[] >>
+  `w2n (n2w B : bytes32) = B` by metis_tac[w2n_n2w, LESS_MOD] >>
+  `step_inst_base (mk_inst (id + 1) MSTORE
+      [Var ("%" ++ toString v); Lit (0x08c379a0w : bytes32)] [])
+      (update_var ("%" ++ toString v) (n2w B) sa0) =
+   OK (mstore B 0x08c379a0w (update_var ("%" ++ toString v) (n2w B) sa0))` by
+    asm_simp_tac (srw_ss())
+      [step_mstore_eq, eval_operand_def, lookup_var_update_var, LESS_MOD] >>
+  `step_inst_base (mk_inst (id + 2) ADD [Var ("%" ++ toString v); Lit 32w]
+      ["%" ++ toString (v + 1)])
+      (mstore B 0x08c379a0w (update_var ("%" ++ toString v) (n2w B) sa0)) =
+   OK sd` by
+    (qunabbrev_tac `sd` >>
+     asm_simp_tac (srw_ss())
+       [step_add_eq, eval_operand_def, lookup_var_update_var, word_add_n2w]) >>
+  qspecl_then [`ctx`, `func`, `id + 3`, `M`, `"%" ++ toString (v + 2)`, `sd`]
+    mp_tac alloca_step_props >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> strip_tac >>
+      `FLOOKUP s.vs_allocas (id + 3) = SOME (b, m)` by metis_tac[] >>
+      `m = M /\ b + m <= s.vs_alloca_next` by
+        metis_tac[alloca_next_valid_def, pairTheory.SND] >>
+      decide_tac) >>
+  disch_then (qx_choosel_then [`TP`, `A2`, `N2`] strip_assume_tac) >>
+  qabbrev_tac `sb0 = sd with <| vs_allocas := A2; vs_alloca_next := N2 |>` >>
+  `sb0.vs_allocas = A2 /\ sb0.vs_alloca_next = N2` by
+    (qunabbrev_tac `sb0` >> simp_tac (srw_ss()) []) >>
+  `N <= N2` by metis_tac[] >>
+  `run_inst_seq_mem_ok (reason_head id v M) s /\
+   run_inst_seq (reason_head id v M) s =
+     OK (update_var ("%" ++ toString (v + 2)) (n2w TP) sb0)` by
+    (simp_tac std_ss [reason_head_def, run_inst_seq_def,
+                      run_inst_seq_mem_ok_def] >>
+     asm_simp_tac (std_ss ++ simpLib.type_ssfrag ``:exec_result``) [] >>
+     asm_simp_tac (srw_ss())
+       [below_frontier_MSTORE, below_frontier_no_ranges,
+        dload_mk_inst_other, eval_operand_def, lookup_var_update_var,
+        LESS_MOD]) >>
+  `"%" ++ toString v <> "%" ++ toString (v + 1) /\
+   "%" ++ toString v <> "%" ++ toString (v + 2) /\
+   "%" ++ toString (v + 1) <> "%" ++ toString (v + 2)` by
+    simp_tac (srw_ss() ++ ARITH_ss) [ASCIInumbersTheory.toString_11] >>
+  qexistsl [`B`, `TP`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists `update_var ("%" ++ toString (v + 2)) (n2w TP) sb0` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt conj_tac
+  >- (qunabbrev_tac `sb0` >> qunabbrev_tac `sd` >>
+      asm_simp_tac (srw_ss()) [lookup_var_update_var])
+  >- (qunabbrev_tac `sb0` >> qunabbrev_tac `sd` >>
+      asm_simp_tac (srw_ss()) [lookup_var_update_var])
+  >- asm_simp_tac (srw_ss()) [lookup_var_update_var]
+  >- (rpt strip_tac >>
+      qunabbrev_tac `sb0` >> qunabbrev_tac `sd` >> qunabbrev_tac `sa0` >>
+      asm_simp_tac (srw_ss()) [lookup_var_update_var])
+  >- asm_simp_tac (srw_ss()) []
+  >- asm_simp_tac (srw_ss()) []
+  >- (rpt strip_tac >> asm_simp_tac (srw_ss()) [])
+  >- first_assum ACCEPT_TAC
+  >- (strip_tac >> `TP = N` by metis_tac[] >> decide_tac)
+  >- (asm_simp_tac (srw_ss()) [] >> decide_tac)
+  >- (asm_simp_tac (srw_ss()) [] >> decide_tac)
+  >- (asm_simp_tac (srw_ss()) [] >> decide_tac)
+  >- (irule room_by_fields >> qexists `sb0` >> asm_simp_tac (srw_ss()) [])
+  >- (rpt gen_tac >> disch_tac >>
+      `B + 32 <= a \/ a + 32 <= B` by metis_tac[DISJ_COMM] >>
+      qunabbrev_tac `sb0` >> qunabbrev_tac `sd` >> qunabbrev_tac `sa0` >>
+      asm_simp_tac (srw_ss()) [mload_mstore_apart]) >>
+  (first_assum ACCEPT_TAC ORELSE
+   (qunabbrev_tac `sb0` >> qunabbrev_tac `sd` >> qunabbrev_tac `sa0` >>
+    simp_tac (srw_ss()) [] >> NO_TAC) ORELSE
+   metis_tac[])
+QED
+
+(* ===== Straight-line code ending at a REVERT ===== *)
+
+Theorem step_revert_not_ok[local]:
+  !i s u. i.inst_opcode = REVERT ==> step_inst_base i s <> OK u
+Proof
+  rpt strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs] >> BasicProvers.every_case_tac >> simp[]
+QED
+
+Theorem step_revert_idx[local]:
+  !i s n. i.inst_opcode = REVERT ==>
+    step_inst_base i (s with vs_inst_idx := n) =
+    exec_result_map (\s'. s' with vs_inst_idx := n) (step_inst_base i s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_opcode_eqs, eval_op_inst_idx] >>
+  BasicProvers.every_case_tac >>
+  simp[exec_result_map_def, revert_state_def, set_returndata_def,
+       venom_state_component_equality]
+QED
+
+Theorem step_idx_revert[local]:
+  !i. (~is_terminator i.inst_opcode \/ i.inst_opcode = REVERT) ==>
+    !s n. step_inst_base i (s with vs_inst_idx := n) =
+          exec_result_map (\s'. s' with vs_inst_idx := n) (step_inst_base i s)
+Proof
+  metis_tac[step_inst_inst_idx_indep, step_revert_idx]
+QED
+
+Theorem run_idx_revert[local]:
+  !is s n.
+    EVERY (\i. is_terminator i.inst_opcode ==> i.inst_opcode = REVERT) is ==>
+    run_inst_seq is (s with vs_inst_idx := n) =
+    exec_result_map (\s'. s' with vs_inst_idx := n) (run_inst_seq is s)
+Proof
+  Induct >> rw[run_inst_seq_def, exec_result_map_def] >>
+  qspec_then `h` mp_tac step_idx_revert >>
+  impl_tac >- metis_tac[] >>
+  disch_then (fn th => simp[th]) >>
+  Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
+QED
+
+Theorem mem_ok_idx_revert[local]:
+  !is s n.
+    EVERY (\i. is_terminator i.inst_opcode ==> i.inst_opcode = REVERT) is ==>
+    (run_inst_seq_mem_ok is (s with vs_inst_idx := n) <=>
+     run_inst_seq_mem_ok is s)
+Proof
+  Induct >> rw[run_inst_seq_mem_ok_def] >>
+  qspec_then `h` mp_tac step_idx_revert >>
+  impl_tac >- metis_tac[] >>
+  disch_then (fn th => simp[th]) >>
+  Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
+QED
+
+Theorem gas_mem_path_abort_any[local]:
+  !ctx func s bb i a t.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME i /\
+    i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+    inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+    step_inst_base i s = Abort a t ==>
+    gas_marked_path T ctx func s 0 (Abort a t)
+Proof
+  rpt strip_tac >> simp[gas_marked_path_def] >>
+  irule (cj 3 gas_path_mem_rules) >> simp[exit_result_def] >>
+  `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
+  simp[gas_path_mem_edge_def] >> qexists_tac `0` >>
+  simp[gas_count_step_def, mem_safe_step_non_invoke, exit_result_def]
+QED
+
+(* Straight-line code that ends by aborting, REVERTs allowed among its
+   instructions: a memory-safe path with no GAS reads. *)
+Theorem run_inst_seq_revert_path_mem:
+  !code s t a ctx func bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT)) code /\
+    run_inst_seq_mem_ok code s /\
+    run_inst_seq code s = Abort a t ==>
+    ?j. gas_marked_path T ctx func s 0 (Abort a (t with vs_inst_idx := j))
+Proof
+  Induct_on `code` >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
+  >- (rename1 `step_inst_base h s = OK u` >>
+      `~is_terminator h.inst_opcode` by metis_tac[step_revert_not_ok] >>
+      `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. is_terminator i.inst_opcode ==> i.inst_opcode = REVERT)
+         code` by fs[EVERY_MEM] >>
+      first_x_assum
+        (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+      disch_then
+        (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+      simp[run_idx_revert, mem_ok_idx_revert, exec_result_map_def] >>
+      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      simp[] >> strip_tac >> qexists_tac `j` >>
+      drule_at (Pat `step_inst_base _ _ = OK _`) gas_marked_path_step >>
+      simp[] >> disch_then irule >> metis_tac[]) >>
+  qexists_tac `t.vs_inst_idx` >> simp[] >>
+  irule gas_mem_path_abort_any >> metis_tac[]
+QED
+
+(* ===== The encoder run, from a message pointer ===== *)
+
+(* The encoder with no unwrap code between head and tail, from a message
+   pointer op whose length word and rounded payload lie below the
+   frontier, apart from the selector word of a held Error buffer. *)
+Theorem reason_encoder_run_mem:
+  !ctx func id v op s p len M.
+    MEM (mk_inst id ALLOCA [Lit (n2w (64 + M))] ["%" ++ toString v])
+      (fn_insts func) /\
+    MEM (mk_inst (id + 3) ALLOCA [Lit (n2w M)] ["%" ++ toString (v + 2)])
+      (fn_insts func) /\
+    MEM (mk_inst (id + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v + 3 + 4)])
+      (fn_insts func) /\
+    64 + M < dimword (:256) /\
+    alloca_room ctx func s /\ alloca_next_valid s /\
+    (!x. FLOOKUP s.vs_allocas id = SOME x ==>
+         SND x = 64 + M /\ (p + 32 <= FST x \/ FST x + 32 <= p)) /\
+    (!x. FLOOKUP s.vs_allocas (id + 3) = SOME x ==> SND x = M) /\
+    (!x. FLOOKUP s.vs_allocas (id + 4 + 5) = SOME x ==>
+         SND x = 32 /\
+         !y. FLOOKUP s.vs_allocas (id + 3) = SOME y ==>
+             FST x + 32 <= FST y \/ FST y + 32 <= FST x) /\
+    (!x. op = Var x ==> !k. x <> "%" ++ toString (v + k)) /\
+    (!l. op <> Label l) /\
+    eval_operand op s = SOME (n2w p) /\ mload p s = n2w len /\
+    32 + ((len + 31) DIV 32) * 32 <= M /\
+    p + 32 + ((len + 31) DIV 32) * 32 <= s.vs_alloca_next ==>
+    run_inst_seq_mem_ok
+      (reason_head id v M ++ reason_tail (id + 4) (v + 3) v op) s /\
+    ?t. run_inst_seq
+          (reason_head id v M ++ reason_tail (id + 4) (v + 3) v op) s =
+        Abort Revert_abort t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`ctx`, `func`, `id`, `v`, `M`, `s`] mp_tac reason_head_run_mem >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  disch_then (qx_choosel_then [`B`, `TP`] strip_assume_tac) >>
+  `s1.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `!x. op = Var x ==>
+       x <> "%" ++ toString v /\ x <> "%" ++ toString (v + 1) /\
+       x <> "%" ++ toString (v + 2)` by
+    (rpt gen_tac >> strip_tac >>
+     `!k. x <> "%" ++ toString (v + k)` by metis_tac[] >>
+     rpt conj_tac >| [
+       first_x_assum (qspec_then `0` mp_tac),
+       first_x_assum (qspec_then `1` mp_tac),
+       first_x_assum (qspec_then `2` mp_tac)] >>
+     simp_tac std_ss [ADD_CLAUSES]) >>
+  `eval_operand op s1 = SOME (n2w p)` by
+    (Cases_on `op` >> fs[] >> qpat_x_assum `eval_operand _ s = _` mp_tac >>
+     simp_tac (srw_ss()) [eval_operand_def] >>
+     TRY (strip_tac >> metis_tac[])) >>
+  `mload p s1 = n2w len` by
+    (`p + 32 <= B \/ B + 32 <= p` by
+       (Cases_on `FLOOKUP s.vs_allocas id`
+        >- (`B = s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
+        `B = FST x` by metis_tac[] >> metis_tac[]) >>
+     metis_tac[]) >>
+  qspecl_then [`id + 4`, `v + 3`, `v`, `op`, `s1`, `p`, `len`, `M`, `B`, `TP`]
+    mp_tac reason_tail_run_mem >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >|
+      [(* the message operand is not a tail variable *)
+       metis_tac[ADD_ASSOC],
+       (* a fresh length word fits *)
+       strip_tac >>
+       qspecl_then [`func`, `s1`,
+         `mk_inst (id + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v + 3 + 4)]`,
+         `32w`, `ctx`] mp_tac alloca_room_fresh >>
+       impl_tac
+       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+           TRY (simp_tac (srw_ss()) [mk_inst_def] >> NO_TAC) >>
+           qpat_x_assum `FLOOKUP s1.vs_allocas _ = NONE` mp_tac >>
+           simp_tac (srw_ss()) [mk_inst_def, FLOOKUP_DEF]) >>
+       disch_then (mp_tac o CONJUNCT1) >> simp_tac (srw_ss()) [],
+       (* a held length word lies below the frontier, apart from the
+          tuple buffer *)
+       rpt gen_tac >> strip_tac >>
+       `id + 4 + 5 <> id /\ id + 4 + 5 <> id + 3` by decide_tac >>
+       `FLOOKUP s.vs_allocas (id + 4 + 5) = SOME (z, n)` by metis_tac[] >>
+       `n = 32 /\ z + n <= s.vs_alloca_next` by
+         metis_tac[alloca_next_valid_def, pairTheory.SND] >>
+       `z + 32 <= TP \/ TP + 32 <= z` by
+         (Cases_on `FLOOKUP s.vs_allocas (id + 3)`
+          >- (`s.vs_alloca_next <= TP` by metis_tac[] >> decide_tac) >>
+          `TP = FST x` by metis_tac[] >>
+          metis_tac[pairTheory.FST]) >>
+       conj_tac >> decide_tac]) >>
+  strip_tac >>
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_append >>
+      TRY (first_assum ACCEPT_TAC) >> metis_tac[exec_result_11]) >>
+  metis_tac[run_inst_seq_append]
 QED
