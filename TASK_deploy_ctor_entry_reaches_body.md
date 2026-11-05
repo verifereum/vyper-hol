@@ -86,7 +86,7 @@ Facts already checked on the statement:
   well-formed encoding.
 
 Prior work on decoding source-valued constructor arguments with DLOAD is in
-`alan-ref/ctor-abi/` (copied from an earlier, unfinished run; its root
+`alan-ref/ctor-abi/` (as `.sml.txt` files so the build ignores them; copied from an earlier, unfinished run; its root
 `compile_abi_decode_dload_source_actual_run` is still admitted there). Reuse
 what helps by copying lemmas into your helper theory; those files are not
 built in this project.
