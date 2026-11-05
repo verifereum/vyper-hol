@@ -97,3 +97,66 @@ Proof
        order_ptr_start_def, order_run_start_def,
        venomStateTheory.init_venom_state_def]
 QED
+
+(* Allocation leaves the input memory and pre-existing pointer unchanged. *)
+Definition order_ptr_s2_def:
+  order_ptr_s2 = order_ptr_start with
+    <|vs_vars := order_ptr_start.vs_vars |+ ("%0",2w) |+ ("%1",256w);
+      vs_inst_idx := 2; vs_allocas := FEMPTY |+ (1,(256,64));
+      vs_alloca_next := 320|>
+End
+
+Theorem order_ptr_step1:
+  step_inst_base (mk_inst 1 ALLOCA [Lit 64w] ["%1"]) order_ptr_s1 =
+    OK (order_ptr_s2 with vs_inst_idx := 1)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256] >>
+  simp[order_ptr_s1_def, order_ptr_s2_def,
+       venomStateTheory.update_var_def] >>
+  simp[order_ptr_start_def, order_run_start_def,
+       venomStateTheory.init_venom_state_def]
+QED
+
+(* Next straight-line snapshots expose only the changed variable map. *)
+Definition order_ptr_s3_def:
+  order_ptr_s3 = order_ptr_s2 with
+    <|vs_vars := order_ptr_s2.vs_vars |+ ("%2",288w); vs_inst_idx := 3|>
+End
+
+Theorem order_ptr_step2:
+  step_inst_base (mk_inst 2 ADD [Var "%1";Lit 32w] ["%2"]) order_ptr_s2 =
+    OK (order_ptr_s3 with vs_inst_idx := 2)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_ptr_s3_def, order_ptr_s2_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.word_add_n2w]
+QED
+
+Definition order_ptr_s4_def:
+  order_ptr_s4 = order_ptr_s3 with
+    <|vs_vars := order_ptr_s3.vs_vars |+ ("%3",2w); vs_inst_idx := 4|>
+End
+
+Theorem order_ptr_step3:
+  step_inst_base (mk_inst 3 MLOAD [Var "arr_ptr"] ["%3"]) order_ptr_s3 =
+    OK (order_ptr_s4 with vs_inst_idx := 3)
+Proof
+  `lookup_var "arr_ptr" order_ptr_s3 = SOME 128w` by
+    simp[venomStateTheory.lookup_var_def, order_ptr_s3_def,
+         order_ptr_s2_def, order_ptr_start_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `mload 128 order_ptr_s3 = 2w` by
+    (mp_tac order_ptr_start_array >>
+     simp[order_ptr_s3_def, order_ptr_s2_def, venomStateTheory.mload_def]) >>
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, wordsTheory.dimword_def,
+       venomMemPropsTheory.dimindex_256] >>
+  simp[order_ptr_s4_def, venomStateTheory.update_var_def,
+       order_ptr_s3_def, order_ptr_s2_def]
+QED
