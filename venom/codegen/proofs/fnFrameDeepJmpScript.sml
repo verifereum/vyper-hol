@@ -11,7 +11,7 @@
 
 Theory fnFrameDeepJmp
 Ancestors
-  deepResidualSim fnPlanPrefix genFrameSim frameRel contextCodegenRel
+  deepResidualSim deepResidualBudget fnPlanPrefix genFrameSim frameRel contextCodegenRel
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs list rich_list
@@ -188,7 +188,6 @@ Proof
       >~ [`residual_budget_wf_marked`]
       >- (irule residual_budget_wf_marked_nil_pending >>
           irule generated_plan_state_wf_marked_residual_nil >> simp[])
-      >~ [`LENGTH target_stack <= 16`] >- cheat
       >~ [`EVERY _ swap_ops`] >- gvs[EVERY_APPEND]
       >~ [`operand_val`]
       >- (rpt strip_tac >>
