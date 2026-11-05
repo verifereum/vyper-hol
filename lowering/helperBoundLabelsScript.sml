@@ -1235,13 +1235,14 @@ Theorem bound_labels_check_create_result[local]:
 Proof
   strip_tac >> simp[compile_check_create_result_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_emit_inst, bound_labels_new_block, comp_return_def]),
+    bound_labels_emit_inst, bound_labels_new_block, bound_labels_alloc_buffer,
+    comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
     irule bound_labels_bind, irule bound_labels_ignore_bind,
     conj_tac, IF_CASES_TAC])
 QED
 
-Theorem bound_labels_create_dispatch[local]:
+Theorem bound_labels_create_dispatch:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
@@ -1252,18 +1253,18 @@ Proof
   simp[bound_labels_emit_op, bound_labels_check_create_result]
 QED
 
-Theorem bound_labels_raw_create:
-  (!l. compiler_label l ==> P l) /\
+Theorem bound_labels_create_proxy_buf:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_raw_create ptr_op v salt revert_fail args_info s))))
+    (SND (compile_create_proxy_buf target s))))
 Proof
-  strip_tac >> Cases_on `args_info` >> simp[compile_raw_create_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
-    bound_labels_create_dispatch, bound_labels_alloc_buffer,
-    bound_labels_copy_memory_dynamic, cj 2 bound_labels_abi_encode,
-    comp_return_def]), gen_tac, strip_tac, split_pair_case_tac, pairarg_tac,
-    irule bound_labels_bind, irule bound_labels_ignore_bind, conj_tac])
+  strip_tac >> simp[compile_create_proxy_buf_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_check_create_result, bound_labels_alloc_buffer,
+    bound_labels_alloc_dynamic, bound_labels_copy_memory_dynamic,
+    comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
 
 Theorem bound_labels_create_proxy:
@@ -1273,10 +1274,8 @@ Theorem bound_labels_create_proxy:
     (SND (compile_create_proxy target v salt revert_fail s))))
 Proof
   strip_tac >> simp[compile_create_proxy_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_create_dispatch, bound_labels_alloc_buffer, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind,
-    irule bound_labels_ignore_bind, conj_tac])
+  irule bound_labels_bind >>
+  simp[bound_labels_create_proxy_buf, bound_labels_create_dispatch]
 QED
 
 Theorem bound_labels_create_copy:
@@ -1287,9 +1286,41 @@ Theorem bound_labels_create_copy:
 Proof
   strip_tac >> Cases_on `salt` >> simp[compile_create_copy_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_check_create_result, bound_labels_alloc_dynamic, comp_return_def]),
+    bound_labels_check_create_result, bound_labels_alloc_buffer,
+    bound_labels_alloc_dynamic, bound_labels_copy_memory_dynamic,
+    comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
-    irule bound_labels_ignore_bind, conj_tac])
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_create_blueprint_check:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_create_blueprint_check target offset s))))
+Proof
+  strip_tac >> simp[compile_create_blueprint_check_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_check_create_result, bound_labels_alloc_buffer,
+    bound_labels_alloc_dynamic, bound_labels_copy_memory_dynamic,
+    comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_create_blueprint_append:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_create_blueprint_append target v salt offset csz aptr alen
+            revert_fail s))))
+Proof
+  strip_tac >> Cases_on `salt` >> simp[compile_create_blueprint_append_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_check_create_result, bound_labels_alloc_buffer,
+    bound_labels_alloc_dynamic, bound_labels_copy_memory_dynamic,
+    comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
 
 Theorem bound_labels_create_blueprint:
@@ -1298,10 +1329,10 @@ Theorem bound_labels_create_blueprint:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_create_blueprint target v salt offset args_info revert_fail s))))
 Proof
-  strip_tac >> Cases_on `salt` >> Cases_on `args_info` >>
-  simp[compile_create_blueprint_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_check_create_result, bound_labels_alloc_dynamic, comp_return_def]),
-    gen_tac, strip_tac, split_pair_case_tac, pairarg_tac, irule bound_labels_bind,
-    irule bound_labels_ignore_bind, conj_tac])
+  strip_tac >>
+  `?p l. (case args_info of NONE => (Lit 0w,Lit 0w) | SOME info => info) =
+         (p,l)` by metis_tac[pairTheory.PAIR] >>
+  simp[compile_create_blueprint_def] >> irule bound_labels_bind >>
+  simp[bound_labels_create_blueprint_check,
+       bound_labels_create_blueprint_append]
 QED

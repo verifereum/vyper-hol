@@ -13,9 +13,9 @@ Proof
   strip_tac >>
   `EVERY (supported_declaration_header tops) tops` by
     gvs[supported_program_def, supported_declaration_headers_def] >>
-  `!mut ty slot. ~MEM (VariableDecl Public mut tx.function_name ty slot) tops` by
+  `!nr mut ty slot. ~MEM (VariableDecl (Public nr) mut tx.function_name ty slot) tops` by
     (fs[EVERY_MEM] >> metis_tac[supported_public_variables_rejected]) >>
-  `!tr kt vt slot. ~MEM (HashMapDecl Public tr tx.function_name kt vt slot) tops` by
+  `!nr tr kt vt slot. ~MEM (HashMapDecl (Public nr) tr tx.function_name kt vt slot) tops` by
     (rpt strip_tac >> fs[EVERY_MEM] >>
      first_x_assum drule >> simp[supported_hashmap_header_contract]) >>
   `tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
