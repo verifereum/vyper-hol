@@ -304,3 +304,173 @@ QED
    the exterior taint frame (semantic effect_parent alone is insufficient).
    No new proof or frozen-definition change is required for this diagnostic.
 *)
+
+(* Same-endpoint contract proposal (C1.4.17.6.10, diagnostic ONLY).
+   Nothing below is a theorem or a new HOL predicate. P/R/W below are textual
+   abbreviations for the displayed formulae, to specify the proposed statements
+   without installing an opaque recursive predicate. All free variables in each
+   proposed statement are universally quantified, except endpoint witnesses.
+
+   Resource pre P(st,en,src,dst,ei,at,av,B,K,D,C,s,G,tn,limit):
+     abi_encoder_window_pre ctx fn st en (Var dst) src ei at av B K D s /\
+     en.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
+     ~ctx_has_dalloca ctx /\ op_taint tn src = {} /\
+     op_taint tn (Var dst) = {} /\ not_fresh_at st dst /\
+     D < dimword(:256) /\ B < dimword(:256) /\
+     B+K <= dimword(:256) /\ D+C <= dimword(:256) /\
+     LENGTH (enc at av) <= C /\ LENGTH (enc at av) < dimword(:256) /\
+     (0 < C ==> ptr_covers G tn dst s C) /\
+     (0 < K ==> ?q. src = Var q /\ ptr_covers G tn q s K) /\
+     (!i. B <= i /\ i < B+K ==> i NOTIN tn.t_mem).
+   C is capacity retained by the ghost frame; only E=LENGTH(enc at av)
+   is writable. Choose C=E for recursive children. K is the semantic read
+   window, not encoded size. Literal src at K=0 is permitted. Semantic pre
+   already supplies the evaluated addresses, source/output disjointness,
+   alloca_inv/room, code/distinct IDs, and reused scratch separation from
+   source and LIVE output. P does not assert their closure under execution.
+
+   Write set W(st,en,D,E,t) is the following set expression, not a definition:
+     {i | D <= i /\ i < D+E} UNION
+     {i | ?id b n. id IN window_alloca_sites fn (frag_ids st en) /\
+                    FLOOKUP t.vs_allocas id = SOME(b,n) /\ b <= i /\ i < b+n}.
+   Using the ENDPOINT allocation map includes fresh and reused scratch and
+   avoids claiming exterior equality outside live output alone.
+
+   Resource post R(st,en,out,at,av,D,C,s,G,tn,t,H,un,limit):
+     window_strong_result ctx fn st en out at av D s t /\
+     gas_path_ptr gasD 0 ctx fn PG G tn s 0 H un (OK t) /\
+     op_taint un out = {} /\
+     (!q. out = Var q ==> not_fresh_at en q) /\
+     fresh_vars_wrt limit t /\
+     (!q. not_fresh_at st q ==>
+       lookup_var q t = lookup_var q s /\ FLOOKUP H q = FLOOKUP G q /\
+       op_taint un (Var q) = op_taint tn (Var q)) /\
+     (0 < C ==> ptr_covers H un dst t C) /\
+     (!i. D <= i /\ i < D+LENGTH(enc at av) ==> i NOTIN un.t_mem) /\
+     mem_agree_outside W(st,en,D,LENGTH(enc at av),t) s.vs_memory t.vs_memory /\
+     (!i. i NOTIN W(st,en,D,LENGTH(enc at av),t) ==>
+       (i IN un.t_mem <=> i IN tn.t_mem)).
+   Exact proposed to_buf statement after textual expansion:
+     compile_abi_encode_to_buf (Var dst) src ei st = (out,en) /\ P(...) ==>
+       ?t H un. R(...).
+   window_strong_result supplies semantic bytes/length, control endpoint,
+   registered actual-site effects, alloca growth/room/invariant, sizes and
+   extend_sim at THIS t. It is a required output to prove along the counted
+   run, not an independently chosen semantic witness. PG and gasD are arbitrary.
+   A generic ghost_inv is deliberately not asserted: callers reconstruct their
+   own older-frame invariant from the displayed frame and new clean values.
+
+   Required extra arithmetic checks before this proposal becomes executable:
+   the bytes instance needs len+31<dimword, 32+len<dimword and the strict
+   D+ceil32(len)<dimword. Derive from E<=C, D+C<=dimword and E<dimword
+   (E=32+ceil32(len)); len<=ceil32(len). Positive PrimWord/Copy windows
+   similarly have strict address bounds from positive coverage. K=0 uses
+   evaluated clean addresses, never positive provenance. If window_input
+   does not justify a minimal K, retain its witness and explicitly prove
+   the root covers that K; do not infer it from E.
+
+   Exact proposed child statement, using P/R expansion above:
+     compile_abi_encode_child (Var dst) src ei dyn h dp st = (out,en) /\
+     abi_encode_child_prefix (Var dst) h dp st = (ops,ready) /\
+     compile_abi_encode_to_buf (SND(SND ops)) src ei ready = (len,child_end)
+   is the DYNAMIC decomposition only. Do not require it when dyn=F.
+   Dynamic pre at s: P with destination D+off and capacity E for the
+   recursive call is to be established at the prefix endpoint prepared;
+   at entry require evaluated clean dp at slot, ptr_covers dp 32, clean
+   mem_word_at slot=n2w off, h+32<=C, off+E<=C, off+E<dimword,
+   D+C<=dimword, and regions_disjoint(slot,32)(D,C).
+   The parent source is disjoint from (D,C) and (slot,32). Prefix produces
+   head/offset/child-destination Vars and preserves all P resources. The
+   child post R is consumed to run the suffix at THE SAME t; suffix returns
+   eval_operand out=n2w E, stores n2w off at D+h and n2w(off+E) at slot.
+   Child scratch sites must exclude dp's registered site. The union write
+   set is child W UNION [D+h,D+h+32) UNION [slot,slot+32). Post is counted
+   path, freshness, older ghost frame, root C coverage, clean child output,
+   clean head/cursor and exterior memory/taint outside this union. It cannot
+   be R at destination D: child does not encode a complete parent at D.
+   Static pre instead uses h+E<=C and child P at D+h after ONE ADD;
+   dp is unused and has no resource premise. Post is R for child bytes at
+   D+h with enlarged write-set relative to parent; return length E, not h+E.
+
+   Exact member-traversal transition schema (one constructor per step):
+     compile_abi_encode_complex_elems (Var dst) src (DROP k infos)
+       (abi_encoder_member_span (TAKE k infos))
+       (SUM(MAP (\(_,az,_,_). az) (TAKE k infos))) dp st = (out,en)
+     /\ window_structural_members_inv ctx fn infos at ats avs k src (Var dst)
+          dp site slot B K D st en s
+     /\ the resource part of P for root infos, with current source window
+     /\ clean prefix windows in window_member_prefix infos ats avs k D s.vs_memory
+     /\ (EXISTS (\(_,_,_,dyn). dyn) infos ==> clean dp operand,
+          ptr_covers dp 32, clean [slot,slot+32), slot registered at site)
+     /\ common-limit freshness and final bound
+     ==> ?t H un. counted path s/G/tn -> t/H/un /\
+          window_member_prefix infos ats avs (LENGTH infos) D t.vs_memory /\
+          clean completed head and tail windows /\
+          (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+             mem_word_at slot t.vs_memory =
+               n2w(window_member_tail infos ats avs (LENGTH infos))) /\
+          older ghost frame, root C coverage, limit freshness /\
+          registered effects, growth, alloca resources and exterior
+          memory/taint outside root live output UNION actual scratch
+          UNION (if dynamic then [slot,slot+32) else EMPTY).
+   Here 'clean window', 'ptr_covers dp' mean respectively the explicit
+   universal byte formula in P and dp=Var q /\ ptr_covers G tn q s 32.
+   The semantic invariant's st/en parameter denotes REMAINING code; use
+   the remaining-pre transport boundary rather than pretending the compiled
+   suffix is compile_to_buf for the whole infos. Traversal returns Lit 0,
+   NOT the total encoded length, so op_taint out={} is trivial; no length
+   lookup post belongs to this statement. Nonempty complex reloads dp (or
+   returns literal head size) afterwards to produce the to_buf length.
+
+   Constructor premise/post map and unresolved caller implications:
+   - PrimWord: window_input gives K>=32, E=32; counted load/store plus
+     semantic leaf yield R with empty scratch set. Must prove source clean
+     load and preserve same t; semantic existence alone is insufficient.
+   - Copy: E=sz; for sz>0 take semantic K>=sz and slice to sz for MCOPY.
+     For sz=0 use ptr_inst_ok_mcopy_zero on evaluated clean addresses.
+     Both cases return Lit(n2w sz); exterior/older frame has no scratch.
+   - Bytes: accepted abi_encode_bytes_contract_path gives same t, bytes,
+     clean result and exterior frame, but NOT yet window_strong_result.
+     Prove semantic control, effects, resource/growth/extend projections on
+     that precise endpoint. Do not claim accepted bytes theorem equals R.
+   - Empty complex: s=t, H=G, un=tn, reflexive counted path, Lit 0; C=E=0
+     needs no provenance. Resource/semantic reflexivity supplies the rest.
+   - Static child: ADD gives D+h and Var, slice C_i=E_i; source K_i comes
+     from parent window witness, not from E_i. E_i=0 still executes ADD.
+   - Dynamic child: prefix yields saved head/offset and child dst, then R
+     preserves them by abi_encode_cursor_suffix_entry. Registered distinct
+     sites protect cursor; W disjointness plus exterior taint protects its
+     clean cell. Child live output disjointness protects head slot/prefix.
+   - Member cons: ADD source B+span; semantic window yields independent
+     K_i<=ms_i and span+K_i<=K. Slice coverage/cleanliness via Slice leaf;
+     if K_i>0 use Operand leaf; if zero use clean evaluated endpoint.
+     Current head/tail writes are disjoint from prior prefix by semantic
+     structural layout, NOT merely by allocation separation. Actual scratch
+     disjointness from prior output follows parent pre/live bounds and fresh
+     frontier, but must be proved. Apply child then recurse at k+1.
+   - Member nil: k=LENGTH infos, no instruction or write. Keep entire
+     prefix and cursor, return Lit 0. No source read is authorized.
+   - Complex nonempty: allocate/init cursor iff dynamic, preserve source
+     and root output using actual-site resource hypotheses; enter k=0;
+     after traversal load cursor or return head size. This is the closure
+     of R, not just the member prefix result. C may exceed E but stores
+     touch only E; old-var frame preserves C coverage without reserving C
+     against scratch writes. Exterior frame advertises actual scratch too.
+
+   Induction parameters: mutual compiler recursion supplies to_buf IHs for
+   child infos; member list induction/generalization must retain k, full
+   infos/ats/avs, B,K,D,C, dp/site/slot, st/en, limit, and G/tn. Endpoint
+   states and counters must remain universally quantified. Compose with
+   gas_path_ptr_then and older_frame_then, deriving semantic projections
+   during execution, not by joining existential results afterwards.
+
+   Review request: the formulae are an interface proposal, not validated
+   recursive closure. Assign executable proof leaves for base R instances,
+   same-endpoint bytes semantic resource completion, static/dynamic child
+   closure, member-cons/nil transport and complex entry/exit. Array closure
+   stays separate (.11). In particular the semantic structural member
+   invariant alone does NOT imply clean prefixes, ghost source slices,
+   clean registered cursor cells, or counted endpoints; those are explicit
+   additional maintained resources, not consequences silently attributed
+   to window_strong_contract. No frozen-target falsehood is claimed.
+*)
