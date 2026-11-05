@@ -61,3 +61,23 @@ Proof
   disch_then irule >>
   gvs[fn_has_code_def, emitted_blocks_def, GSYM mk_inst_def, ptr_inst_ok_alloca]
 QED
+
+(* Compiler layout, separate from all execution and ghost reasoning. *)
+Theorem reason_encoder_prefix_code:
+  compile_alloc_buffer n cc = (buf,c1) /\
+  emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
+  emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
+  compile_alloc_buffer m c3 = (tuple,c4) /\
+  buf.buf_operand = Var out /\ payload = Var x /\ tuple.buf_operand = Var out2 ==>
+  c4.cs_current_bb = cc.cs_current_bb /\ c4.cs_blocks = cc.cs_blocks /\
+  c4.cs_current_insts = cc.cs_current_insts ++
+    [mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out];
+     mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [];
+     mk_inst c2.cs_next_id ADD [Var out; Lit 32w] [x];
+     mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]]
+Proof
+  strip_tac >>
+  gvs[compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def, listTheory.APPEND_ASSOC]
+QED
