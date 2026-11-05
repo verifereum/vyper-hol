@@ -5472,6 +5472,57 @@ Proof
   gvs[gas_path_edge_def, fragExecTheory.exit_result_def]
 QED
 
+Theorem place_store_wrap_probe_code_boundaries:
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let sb = SND (compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa) in
+  !func. func.fn_blocks =
+    <|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+      sb.cs_blocks ==>
+    (!bb. MEM bb func.fn_blocks ==>
+       lookup_block bb.bb_label func.fn_blocks = SOME bb) /\
+    (!lbl bb s. lookup_block lbl func.fn_blocks = SOME bb ==>
+       eval_phis s bb.bb_instructions = OK s /\
+       phi_prefix_length bb.bb_instructions = 0)
+Proof
+  mp_tac place_store_wrap_probe_code_listing >>
+  simp_tac pure_ss [LET_THM] >> disch_then SUBST1_TAC >>
+  gen_tac >> strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_block_def, listTheory.FIND_thm, AllCaseEqs()] >>
+  simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_cond_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_cond_0" /\ s.vs_inst_idx < 2 /\
+    lookup_block "@typed_sa_cond_0" func.fn_blocks = SOME
+      <|bb_label := "@typed_sa_cond_0"; bb_instructions := [
+        mk_inst 3 LT [Var "%1"; Lit 1w] ["%2"];
+        mk_inst 4 ISZERO [Var "%2"] ["%3"];
+        mk_inst 5 JNZ [Var "%3"; Label "@typed_sa_exit_2"; Label "@typed_sa_body_1"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule place_store_gas_edge_nonterminator_preserves >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `s.vs_inst_idx = 0 \/ s.vs_inst_idx = 1` by decide_tac >>
+  gvs[get_instruction_def] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  drule place_store_wrap_probe_phase_cond_step >>
+  simp[mk_inst_def] >> disch_then drule >> simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
