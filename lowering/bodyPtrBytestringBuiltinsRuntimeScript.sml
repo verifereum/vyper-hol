@@ -62,7 +62,10 @@ Proof
   simp[valueEncodingTheory.typed_val_to_w256_def,
        GSYM valueEncodingProofsTheory.word_to_bytes_w2w_address,
        byteTheory.word_of_bytes_be_def,
-       vfmTypesTheory.word_to_bytes_word_of_bytes_256, wordsTheory.w2w_n2w]
+       vfmTypesTheory.word_to_bytes_word_of_bytes_256, wordsTheory.w2w_n2w,
+       fcpLib.INDEX_CONV ``dimindex(:160)``] >>
+  simp[bitTheory.BITS_THM, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex(:256)``]
 QED
 
 Theorem order_runtime_local_ptrs:
@@ -93,4 +96,54 @@ Proof
   simp[compileEnvTheory.state_rel_def, order_runtime_local_ptrs,
        order_runtime_call_context] >>
   EVAL_TAC >> rw[] >> gvs[]
+QED
+
+Theorem order_runtime_body_inv:
+  body_inv [] order_frame_unit.cu_context order_ptr_env order_runtime_cx
+Proof
+  mp_tac order_ptr_body_inv >>
+  simp[bodySimTheory.body_inv_def, order_runtime_cx_def,
+       vyperContextTheory.get_module_code_def, vyperContextTheory.get_tenv_def]
+QED
+
+Theorem order_runtime_sim_inv:
+  exprSimHypsDefs$expr_sim_inv order_ptr_env order_runtime_cx
+    order_ptr_tenv order_ptr_source
+Proof
+  mp_tac order_ptr_sim_inv >>
+  simp[exprSimHypsDefsTheory.expr_sim_inv_def, order_runtime_cx_def,
+       vyperContextTheory.get_module_code_def, vyperContextTheory.get_tenv_def] >>
+  strip_tac >> simp[] >> EVAL_TAC >> rw[] >> gvs[AllCaseEqs()] >>
+  fs[vyperStateTheory.lookup_flag_def,
+     vyperInterpreterTheory.lookup_function_def] >>
+  EVAL_TAC >> simp[finite_mapTheory.FUNION_FEMPTY_1, wordsTheory.dimword_def]
+QED
+
+Theorem order_runtime_call_safety:
+  call_evaluation_safe order_runtime_cx []
+Proof
+  simp[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def,
+       order_runtime_cx_def, order_ptr_cx_def] >>
+  qexists_tac `[]` >> EVAL_TAC >> rw[] >> gvs[AllCaseEqs()] >>
+  fs[vyperInterpreterTheory.lookup_function_def] >>
+  simp[relationTheory.irreflexive_def, Once relationTheory.TC_CASES1,
+       vyperTypeCallGraphSoundnessTheory.call_edge_rel_def]
+QED
+
+Theorem order_runtime_body_pre:
+  exprSimHypsDefs$expr_body_pre order_ptr_env order_runtime_cx order_ptr_tenv
+    bodyPtrBytestringBuiltinsOrderProbe$order_probe_expr order_ptr_source
+Proof
+  simp[exprSimHypsDefsTheory.expr_body_pre_def, order_runtime_sim_inv,
+       order_ptr_frame_expr_typed, order_runtime_call_safety,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_no_internal_calls,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_byte_widths,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_alloc_limits,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_no_evm_run] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  simp[order_runtime_cx_def, order_ptr_cx_def,
+       bodyPtrBytestringBuiltinsSourceFrameTheory.order_frame_cx_def,
+       gasContextTheory.cx_tops_def, vyperContextTheory.get_tenv_def,
+       vyperContextTheory.get_module_code_def] >>
+  EVAL_TAC >> simp[]
 QED
