@@ -2,7 +2,7 @@ Theory makeSsaRfAudit
 Ancestors
   makeSsaCurrentDefs makeSsaCurrentProps makeSsaCurrentInduct
   contextCodegenRel venomWf cfgWf venomInst irSupply
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract makeSsaCurrentRevertForward
 
 (* Import probe: the existing, permitted base of the RF proof. *)
 Theorem rf_same_after_assigns_empty:
