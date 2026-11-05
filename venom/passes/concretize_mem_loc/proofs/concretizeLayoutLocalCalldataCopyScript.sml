@@ -13,23 +13,31 @@ Ancestors concretizeLayoutLocalCopy concretizeLayoutLocalCalldataReaders
   frameRelocationMemory frameRelocationTaintOrder frameRelocationStoreSteps
   frameRelocationObservations
 
-(* The calldata source is identical; the destination is allowed to relocate. *)
+(* Immutable byte sources share one padded-slice write boundary. *)
+Definition clean_copy_source_def:
+  clean_copy_source inst s =
+    if inst.inst_opcode = CODECOPY then s.vs_code
+    else if inst.inst_opcode = DLOADBYTES then s.vs_data_section
+    else s.vs_call_ctx.cc_calldata
+End
 Theorem calldatacopy_execution:
-  inst.inst_opcode = CALLDATACOPY /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\
   inst.inst_operands = [opd;ops;opn] /\
   eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
   eval_operand opn s = SOME sz /\
   eval_operand opd t = SOME dstT /\ eval_operand ops t = SOME src /\
   eval_operand opn t = SOME sz /\ relocation_env s t /\
+  s.vs_code = t.vs_code /\ s.vs_data_section = t.vs_data_section /\
   step_inst_base inst s = OK post ==>
   post = write_memory_with_expansion (w2n dst)
-    (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++
+    (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++
       REPLICATE (w2n sz) 0w)) s /\
   step_inst_base inst t = OK (write_memory_with_expansion (w2n dstT)
-    (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++
+    (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++
       REPLICATE (w2n sz) 0w)) t)
 Proof
-  strip_tac >> qpat_x_assum `step_inst_base inst s = OK post` mp_tac >>
+  strip_tac >> fs[MEM, clean_copy_source_def] >>
+  qpat_x_assum `step_inst_base inst s = OK post` mp_tac >>
   pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[venomInstTheory.opcode_case_def] >> strip_tac >> gvs[] >>
   pure_once_rewrite_tac[step_inst_base_def] >>
@@ -42,7 +50,7 @@ val _ = if null (hyp calldatacopy_execution) then ()
 
 Theorem calldatacopy_scalar_origin_free[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
   MEM op [ops;opn] ==>
   !v. op = Var v ==> FLOOKUP rv v = NONE
@@ -60,7 +68,7 @@ QED
 Theorem calldatacopy_scalar_agreement:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
   s.vs_labels = t.vs_labels /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
@@ -89,7 +97,7 @@ Theorem joint_calldatacopy_scalar_agreement:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   s.vs_labels = t.vs_labels /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
     (guarded_bytes (retpc_var fn) rv tn) R Obs s t ==>
@@ -107,7 +115,7 @@ Proof
      rpt strip_tac >> irule reachable_resolved_support >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`) calldatacopy_scalar_agreement >>
-  disch_then irule >> simp[] >> metis_tac[]
+  disch_then irule >> fs[MEM] >> metis_tac[]
 QED
 
 Theorem concretize_calldatacopy_execution_geometry:
@@ -128,22 +136,23 @@ Theorem concretize_calldatacopy_execution_geometry:
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  relocation_env s t /\
+  relocation_env s t /\ s.vs_code = t.vs_code /\
+  s.vs_data_section = t.vs_data_section /\
   local_rel (\u. F)
     (guarded_ptr (retpc_var fn)
       (activation_lookup (0:num) (concretize_positions C')
         (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
     (guarded_bytes (retpc_var fn) rv tn)
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
   eval_operand opn s = SOME sz ==>
   ?dstT. eval_operand opd t = SOME dstT /\
     eval_operand ops t = SOME src /\ eval_operand opn t = SOME sz /\
     post = write_memory_with_expansion (w2n dst)
-      (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n sz) 0w)) s /\
+      (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++ REPLICATE (w2n sz) 0w)) s /\
     step_inst_base inst t = OK (write_memory_with_expansion (w2n dstT)
-      (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n sz) 0w)) t) /\
+      (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++ REPLICATE (w2n sz) 0w)) t) /\
     (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+w2n sz ==>
       w2n dstT <= z /\ z < w2n dstT+w2n sz /\ a-w2n dst = z-w2n dstT) /\
@@ -163,7 +172,7 @@ Proof
   `fn_ptr_ok Q fn` by suspend "fn" >>
   `eval_operand ops s = eval_operand ops t /\ eval_operand opn s = eval_operand opn t` by
     (drule_at (Pat `local_rel _ _ _ _ _ _ _`) joint_calldatacopy_scalar_agreement >>
-     disch_then irule >> simp[] >> metis_tac[]) >>
+     disch_then irule >> fs[MEM] >> metis_tac[]) >>
   `eval_operand ops t = SOME src /\ eval_operand opn t = SOME sz` by metis_tac[] >>
   `step_inst_base inst s = OK post` by suspend "step" >>
   Cases_on `w2n sz = 0` >- suspend "zero" >>
@@ -176,9 +185,9 @@ Proof
        w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by suspend "destination" >>
   pop_assum strip_assume_tac >>
   `post = write_memory_with_expansion (w2n dst)
-      (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n sz) 0w)) s /\
+      (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++ REPLICATE (w2n sz) 0w)) s /\
     step_inst_base inst t = OK (write_memory_with_expansion (w2n dstT)
-      (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n sz) 0w)) t)` by
+      (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++ REPLICATE (w2n sz) 0w)) t)` by
     (irule calldatacopy_execution >> simp[] >> metis_tac[]) >>
   qexists_tac `dstT` >> asm_rewrite_tac[] >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
@@ -204,14 +213,14 @@ Resume concretize_calldatacopy_execution_geometry[zero]:
   `?dstT. eval_operand opd t = SOME dstT` by
     (Cases_on `eval_operand opd t` >> metis_tac[operand_domain_agreement, optionTheory.NOT_SOME_NONE]) >>
   `post = write_memory_with_expansion (w2n dst)
-      (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n sz) 0w)) s /\
+      (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++ REPLICATE (w2n sz) 0w)) s /\
     step_inst_base inst t = OK (write_memory_with_expansion (w2n dstT)
-      (TAKE (w2n sz) (DROP (w2n src) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n sz) 0w)) t)` by
+      (TAKE (w2n sz) (DROP (w2n src) (clean_copy_source inst s) ++ REPLICATE (w2n sz) 0w)) t)` by
     (irule calldatacopy_execution >> simp[] >> metis_tac[]) >>
   qexists_tac `dstT` >> asm_rewrite_tac[] >> simp[] >> rpt strip_tac >>
   irule joint_relocation_demand_retained >>
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by
-    (simp[joint_writes_ordinary, step_writes_def, range_bytes_def,
+    (fs[MEM] >> simp[joint_writes_ordinary, step_writes_def, range_bytes_def,
           source_memory_write_ranges_def, sized_source_write_range_def] >> decide_tac) >>
   metis_tac[]
 QED
@@ -220,7 +229,7 @@ Resume concretize_calldatacopy_execution_geometry[destination]:
   conj_tac
   >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME opn;
                     iao_max_size := SOME opn |>` >>
-      simp[source_memory_write_ranges_def, sized_source_write_range_def, mem_write_ops_def]) >>
+      fs[MEM] >> simp[source_memory_write_ranges_def, sized_source_write_range_def, mem_write_ops_def]) >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]
@@ -240,8 +249,8 @@ Resume concretize_calldatacopy_execution_geometry[retained]:
   `joint_writes (EL c (q0::qs)) (EL c es) =
      range_bytes [(w2n dst,w2n sz)] /\
    step_writes inst t t = [(w2n dstT,w2n sz)]` by
-    simp[joint_writes_ordinary, step_writes_def,
-         source_memory_write_ranges_def, sized_source_write_range_def] >>
+    (fs[MEM] >> simp[joint_writes_ordinary, step_writes_def,
+         source_memory_write_ranges_def, sized_source_write_range_def]) >>
   `!w. w IN range_bytes (step_writes inst t t) ==> ?byte.
      byte IN joint_writes (EL c (q0::qs)) (EL c es) /\
      relocation_pair lo (concretize_positions C') (EL c (q0::qs)) byte w` by
@@ -270,7 +279,7 @@ QED
 Finalise concretize_calldatacopy_execution_geometry
 
 Theorem calldatacopy_ghosts:
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   inst.inst_outputs = [] /\ eval_operand opd s = SOME dst /\
   eval_operand ops s = SOME src /\ eval_operand opn s = SOME sz /\
   post = write_memory_with_expansion (w2n dst) xs s ==>
@@ -278,11 +287,11 @@ Theorem calldatacopy_ghosts:
   step_taint inst s post tn = tn with t_mem :=
     tn.t_mem DIFF range_bytes [(w2n dst,w2n sz)]
 Proof
-  strip_tac >> (conj_tac
+  strip_tac >> fs[MEM] >> (conj_tac
   >- simp[step_prov_def, set_prov_def, finite_mapTheory.DRESTRICT_UNIV]) >>
   `new_site_bytes s post = {}` by
     (irule new_site_bytes_unchanged >> simp[write_memory_with_expansion_def]) >>
-  simp[step_taint_def, mem_taint_def, step_writes_def,
+  gvs[] >> simp[step_taint_def, mem_taint_def, step_writes_def,
        source_memory_write_ranges_def, sized_source_write_range_def,
        written_taint_def, set_var_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def, taint_component_equality,
@@ -291,7 +300,7 @@ Proof
 QED
 
 Theorem calldatacopy_taint_order:
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   inst.inst_outputs = [] /\ eval_operand opd s = SOME dst /\
   eval_operand ops s = SOME src /\ eval_operand opn s = SOME sz /\
   eval_operand opd t = SOME dstT /\ eval_operand ops t = SOME src /\
@@ -335,6 +344,7 @@ Theorem concretize_calldatacopy_local_complete:
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   relocation_env s t /\ relocation_reader_context s t /\
+  s.vs_code = t.vs_code /\ s.vs_data_section = t.vs_data_section /\
   local_rel (\u. F)
     (guarded_ptr (retpc_var fn)
       (activation_lookup (0:num) (concretize_positions C')
@@ -342,7 +352,7 @@ Theorem concretize_calldatacopy_local_complete:
     (guarded_bytes (retpc_var fn) rv tn)
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
     (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
-  inst.inst_opcode = CALLDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
   eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
   eval_operand opn s = SOME sz /\
   relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un ==>
@@ -357,13 +367,14 @@ Theorem concretize_calldatacopy_local_complete:
     step_prov PG G inst post = G /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    relocation_env post tpost /\ relocation_reader_context post tpost
+    relocation_env post tpost /\ relocation_reader_context post tpost /\
+    post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section
 Proof
   strip_tac >>
   `inst_wf inst` by
     (fs[o1_fn_shape_def, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
   `inst.inst_outputs = []` by
-    (qpat_x_assum `inst_wf inst` mp_tac >> simp[inst_wf_def, opcode_case_def]) >>
+    (qpat_x_assum `inst_wf inst` mp_tac >> fs[MEM] >> simp[inst_wf_def, opcode_case_def]) >>
   drule_all concretize_calldatacopy_execution_geometry >> strip_tac >>
   qmatch_asmsub_abbrev_tac `post = write_memory_with_expansion (w2n dst) xs s` >>
   `LENGTH xs = w2n sz` by
