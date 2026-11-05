@@ -982,3 +982,74 @@ Resume target_memory_array_suffix[dynamic_exit]:
 QED
 
 Finalise target_memory_array_suffix
+
+(* Scratch allocation need not preserve all memory: the original allocation
+   windows and caller-local windows are the target judgment's frame. *)
+Theorem target_post_regions_suffix_frame:
+  !ctx func cenv cx es sa sm sb s0 es' pv vt rb t u pv' vt' dst loc.
+    target_post ctx func cenv cx es sa sm s0 es' pv vt rb t /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    stmt_state_rel ctx func cenv cx es' u /\
+    (?w. eval_operand dst u = SOME w /\
+         place_ptr_rel cenv cx u pv' w loc vt') /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    place_readable cx es' pv' /\
+    (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==>
+           lookup_var x u = SOME w) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP u.vs_allocas aid = SOME b) /\
+    (!aid b len. aid < sm.cs_next_id /\
+       FLOOKUP t.vs_allocas aid = SOME (b,len) ==>
+       mem_bytes_at b len u.vs_memory = mem_bytes_at b len t.vs_memory) /\
+    (!n b len. local_region cenv es'.scopes t n b len ==>
+       mem_bytes_at b len u.vs_memory = mem_bytes_at b len t.vs_memory) ==>
+    target_post ctx func cenv cx es sa sb s0 es' pv' vt'
+      (dst,loc,SOME (value_type_place vt')) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n b len. local_region cenv es.scopes s0 n b len ==>
+     mem_bytes_at b len u.vs_memory = mem_bytes_at b len t.vs_memory` by
+    (rpt strip_tac >>
+     `local_region cenv es'.scopes t n b len` by
+       (irule local_region_frame_fwd >>
+        qexistsl_tac [`s0`, `sa`, `es.scopes`] >>
+        gvs[target_post_def]) >>
+     first_x_assum drule >> simp[]) >>
+  `locals_kept cenv es s0 u` by
+    (irule locals_kept_regions_tail >> qexists_tac `t` >>
+     conj_tac >- first_assum ACCEPT_TAC >> gvs[target_post_def]) >>
+  gvs[target_post_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      metis_tac[]) 
+  >> rpt strip_tac >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by
+    (qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` drule >> simp[]) >>
+  `aid < sm.cs_next_id` by decide_tac >>
+  `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz t.vs_memory` by
+    (qpat_x_assum `!aid b len. aid < sm.cs_next_id /\ _ ==> _` irule >>
+     qexists_tac `aid` >> simp[]) >>
+  qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
+    drule_all >> simp[]
+QED
+
+Theorem compile_mapping_subscript_alloca_member:
+  compile_mapping_subscript slot_op key_op sa = (op,sb) /\
+  fn_has_code sa sb func ==>
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)
+Proof
+  strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+      [STRING #"%" (toString sa.cs_next_var)]) sb.cs_current_insts` by
+    gvs[compile_mapping_subscript_def, contextTheory.compile_alloc_buffer_def,
+        emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
+  gvs[MEM_APPEND]
+QED
