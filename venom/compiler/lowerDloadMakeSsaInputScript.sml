@@ -308,10 +308,10 @@ Proof
 QED
 
 Theorem lower_dload_source_prefix_definition[local]:
-  ALL_DISTINCT (pre ++ i::post) /\
-  n < m /\ m < LENGTH (pre ++ i::post) /\
-  EL m (pre ++ i::post) = i /\
-  MEM v (EL n (pre ++ i::post)).inst_outputs ==>
+  ALL_DISTINCT ((pre ++ [i]) ++ post) /\
+  n < m /\ m < LENGTH post + (LENGTH pre + 1) /\
+  EL m ((pre ++ [i]) ++ post) = i /\
+  MEM v (EL n ((pre ++ [i]) ++ post)).inst_outputs ==>
   ?d. MEM d pre /\ MEM v d.inst_outputs
 Proof
   strip_tac >>
@@ -321,6 +321,39 @@ Proof
      simp[EL_APPEND_EQN]) >>
   gvs[EL_APPEND_EQN] >> qexists `EL n pre` >> simp[MEM_EL] >>
   metis_tac[]
+QED
+
+Theorem lower_dload_def_on_all_paths_use[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_inst_wf f /\
+  fn_inst_ids_distinct f /\ MEM a f.fn_blocks /\
+  a.bb_instructions = pre ++ [i] ++ post /\
+  lower_dload_insts_supply u pre = (outpre,mid) /\
+  b.bb_instructions = outpre ++ localpre ++ [j] ++ suffix /\
+  b.bb_label = a.bb_label /\ def_on_all_paths f a (SOME i) v ==>
+  def_on_all_paths g b (SOME j) v
+Proof
+  strip_tac >> drule lower_dload_function_supply_path >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  `ALL_DISTINCT a.bb_instructions` by
+    metis_tac[lower_dload_source_block_distinct] >>
+  `EVERY inst_wf pre` by
+    (qpat_x_assum `fn_inst_wf f` mp_tac >>
+     simp[fn_inst_wf_def, EVERY_MEM] >>
+     disch_then (qspec_then `a` mp_tac) >> simp[] >>
+     metis_tac[]) >>
+  gvs[def_on_all_paths_def] >> rpt strip_tac >>
+  qpat_x_assum `!path. _` drule_all >> strip_tac
+  >- (disj1_tac >> drule_all lower_dload_function_supply_definition >>
+      strip_tac >> metis_tac[]) >>
+  `?d. MEM d pre /\ MEM v d.inst_outputs` by
+    (drule_all lower_dload_source_prefix_definition >> simp[]) >>
+  `?d. MEM d outpre /\ MEM v d.inst_outputs` by
+    (drule_all lower_dload_insts_supply_output_survives >> metis_tac[]) >>
+  disj2_tac >>
+  qpat_x_assum `MEM _ outpre` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `d0 = EL k outpre` >>
+  gvs[] >> qexists `k` >> simp[EL_APPEND_EQN] >>
+  qexists `LENGTH outpre + LENGTH localpre` >> simp[EL_APPEND_EQN]
 QED
 
 Theorem lower_dload_phi_location[local]:
@@ -333,6 +366,54 @@ Proof
   drule lower_dload_function_supply_retained_location >>
   disch_then (qspecl_then [`b.bb_label`,`i`] mp_tac) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem lower_dload_defs_reach_uses[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_inst_wf f /\
+  fn_inst_ids_distinct f /\ fn_defs_reach_uses f ==>
+  fn_defs_reach_uses g
+Proof
+  strip_tac >> simp[fn_defs_reach_uses_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `MEM j b.bb_instructions` >>
+  Cases_on `j.inst_opcode = PHI`
+  >- (simp[] >> rpt strip_tac >>
+      drule_all lower_dload_phi_location >> strip_tac >>
+      drule lower_dload_function_supply_pairing >> strip_tac >>
+      rename1 `MEM pred_bb g.fn_blocks` >>
+      `?src u w. MEM src f.fn_blocks /\
+         lower_dload_block_supply u src = (pred_bb,w)` by metis_tac[] >>
+      drule lower_dload_block_supply_label >> strip_tac >>
+      drule lower_dload_function_supply_cfg_edge >> strip_tac >>
+      `def_on_all_paths f src NONE v` by
+        (gvs[fn_defs_reach_uses_def] >> metis_tac[]) >>
+      drule_all lower_dload_def_on_all_paths_end >> simp[]) >>
+  simp[] >> qx_gen_tac `v` >> strip_tac >>
+  drule lower_dload_function_supply_pairing >> strip_tac >>
+  `?a u w. MEM a f.fn_blocks /\ lower_dload_block_supply u a = (b,w)`
+    by metis_tac[] >>
+  `b.bb_label = a.bb_label` by metis_tac[lower_dload_block_supply_label] >>
+  `?pre post. b.bb_instructions = pre ++ j::post` by metis_tac[MEM_SPLIT] >>
+  `lower_dload_insts_supply u a.bb_instructions = (b.bb_instructions,w)` by
+    gvs[lower_dload_block_supply_def, AllCaseEqs()] >>
+  drule_all lower_dload_insts_supply_occurrence >> strip_tac >>
+  drule lower_dload_inst_supply_ordered_operand >>
+  disch_then (qspecl_then [`v`,`yp`,`ys`,`j`] mp_tac) >>
+  simp[] >> strip_tac
+  >- (irule lower_dload_prefix_definition >>
+      goal_assum (drule_at Any) >> simp[MEM_APPEND] >>
+      qexistsl [`ys ++ bp`,`ap ++ yp`] >> simp[MEM_APPEND, APPEND_ASSOC]) >>
+  `MEM i a.bb_instructions` by simp[] >>
+  `def_on_all_paths f a (SOME i) v` by
+    (qpat_x_assum `fn_defs_reach_uses f` mp_tac >>
+     simp[fn_defs_reach_uses_def] >>
+     disch_then (qspecl_then [`a`,`i`] mp_tac) >> simp[]) >>
+  qpat_x_assum `lower_dload_insts_supply next _ = _` kall_tac >>
+  qpat_x_assum `lower_dload_insts_supply u a.bb_instructions = _` kall_tac >>
+  irule lower_dload_def_on_all_paths_use >>
+  goal_assum (drule_at (Pat `lower_dload_function_supply _ _ = _`)) >>
+  goal_assum (drule_at (Pat `def_on_all_paths _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `lower_dload_insts_supply u _ = (ap,mid)`)) >>
+  simp[] >> qexistsl [`yp`,`ys ++ bp`] >> simp[APPEND_ASSOC]
 QED
 
 Theorem lower_dload_all_reachable[local]:
