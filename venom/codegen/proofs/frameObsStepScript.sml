@@ -55,7 +55,9 @@ Theorem frame_obs_plain_step:
   ~observable_call (FST (HD es.contexts)) ==>
   call_trace es = call_trace es1 /\ gas_readings es = gas_readings es1
 Proof
-  cheat
+  strip_tac >>
+  simp[call_trace_def, gas_readings_def, frame_obs_def] >>
+  once_rewrite_tac[frame_obs_tr_def] >> simp[observe_def]
 QED
 
 Theorem frame_obs_gas_step:
@@ -64,7 +66,17 @@ Theorem frame_obs_gas_step:
   call_trace es = call_trace es1 /\
   gas_readings es = HD (FST (HD es1.contexts)).stack :: gas_readings es1
 Proof
-  cheat
+  strip_tac >>
+  simp[call_trace_def, gas_readings_def, frame_obs_def] >>
+  once_rewrite_tac[frame_obs_tr_def] >> simp[observe_def] >>
+  qspecl_then [`LENGTH es.contexts`,
+    `<|entries := []; readings := []; pending := NONE|>`] mp_tac
+    frame_obs_tr_prefix >>
+  disch_then (qspec_then `es1` mp_tac) >>
+  disch_then (qspecl_then [`FST (step es1)`, `SND (step es1)`] mp_tac) >>
+  disch_then (qspecl_then [`[]`, `[HD (FST (HD es1.contexts)).stack]`] mp_tac) >>
+  simp[] >> disch_then SUBST1_TAC >> simp[]
+
 QED
 
 Theorem frame_obs_call_same_depth:
@@ -77,7 +89,21 @@ Theorem frame_obs_call_same_depth:
     call_trace es1 /\
   gas_readings es = gas_readings es1
 Proof
-  cheat
+  strip_tac >>
+  `next_opcode (FST (HD es.contexts)) <> SOME Gas` by
+    (fs[observable_call_def] >> metis_tac[]) >>
+  simp[call_trace_def, gas_readings_def, frame_obs_def] >>
+  once_rewrite_tac[frame_obs_tr_def] >> simp[observe_def] >>
+  qspecl_then [`LENGTH es.contexts`,
+    `<|entries := []; readings := []; pending := NONE|>`] mp_tac
+    frame_obs_tr_prefix >>
+  disch_then (qspec_then `es1` mp_tac) >>
+  disch_then (qspecl_then [`FST (step es1)`, `SND (step es1)`] mp_tac) >>
+  disch_then (qspecl_then
+    [`[(request_of es, outcome_of (request_of es).cr_kind es1
+        (LENGTH (FST (HD es.contexts)).logs) (LENGTH es.rollback.toDelete))]`,
+     `[]`] mp_tac) >>
+  simp[] >> disch_then SUBST1_TAC >> simp[]
 QED
 
 (* The child's run_call ends at the first state back at the frame's depth. *)
