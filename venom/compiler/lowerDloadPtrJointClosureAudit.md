@@ -718,3 +718,198 @@ restricted saved target provenance/taint, and `ef::fs1`. Saved instruction
 equality reconciles restrictions. Terminal input is impossible by
 `dload_terminal_mode_no_return`. This certifies only the return constructor,
 not next closure, global induction, or the frozen stage theorem.
+
+## 18. Exact-Q next constructor audit (C1.12.84)
+
+This is an interface audit, NOT a checked next-closure theorem. Baseline
+`holbuild [lowerDloadPtrJointReturnTheory,o1ContractLowerDloadPtrTheory]` passed
+(TO_ld_ptr_v2-20261104T185312Z_m6386_t001). The task obligation remains open.
+Use section 1's **normal** existential exactly as expanded in JointReturn:28–64
+and JointCall, and replace section 1's obsolete terminal candidate by
+`dload_terminal_mode`. In this section Q, U, V, O, Support, Stack and Saved are
+only metanotation for those literal formulas; no new HOL constant is proposed.
+
+### 18.1 Exact proposed consumer
+
+The desired theorem, after expanding A and both occurrences of Q inline, is:
+
+```sml
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  Q ds PH H un g j t /\
+  frame_reachable vs C' ds PH H un g j t /\ active_inst g j t /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel C' j t = OK t1 /\
+  active_inst g j' (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  Q ds PH (step_prov PH H j t1) (step_taint j t t1 un)
+    g j' (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+```
+
+The six constructor premises (from the first `frame_reachable` through final
+`active_inst`) are literally ptrDisciplineScript.sml:469–472 with simultaneous
+renaming `(vs0,ctx,stk,PG,G,tn,fn,inst,inst',s,s')` to
+`(vs,C',ds,PH,H,un,g,j,j',t,t1)`. In particular arbitrary `fuel` is retained;
+there is NO `~t1.vs_halted` premise in next. Target reachability can be unused
+by the eventual consumer, but is not silently replaced by source reachability.
+There is no external source-success, phase-zero, successor-support, scratch-map,
+operand-safety or call-address premise.
+
+### 18.2 Fuel and phase partition
+
+Control gives `n < LENGTH emitted`. Thus exactly one of
+`SUC n < LENGTH emitted` and `SUC n = LENGTH emitted` holds. Supply inversion
+(Rel:322; PhaseNext:66) says a non-singleton emission is DLOAD of length 4 or
+DLOADBYTES of length 2. Every other emission is `[i]`, hence n=0 and j=i.
+At interior phases the source anchor s and target anchor t0 stay unchanged;
+at completion the new anchor is the actual bumped successor, with phase zero
+and a new emitted list supplied by `dload_control_emission_next_fields`.
+
+The existing `dload_actual_phase_next` (PhaseNext:95–118) is NOT directly
+applicable: its phase core and successful step share one fuel, whereas Q's
+prefix fuel `pfuel` is existential and the rule's fuel is arbitrary.
+There is a legitimate bridge, but it needs a checked interface:
+
+- Every instruction in a proper nonempty expanded prefix is one of ALLOCA,
+  ADD, CODECOPY, MLOAD, by supply inversion (including the last instruction
+  when extending to the complete prefix). None is INVOKE.
+- `step_inst_non_invoke` (venomExecSemantics:1829–1832) rewrites each such
+  step to `step_inst_base`, independent of fuel AND context. In particular
+  the final constructor step may be rewritten at **pfuel**, keeping the
+  preceding prefix unchanged. Then `dload_prefix_extend` at pfuel is legal.
+- Equivalently a bounded-prefix induction on dload_prefix_match_def:10–20
+  transports the entire prefix between fuels under
+  `!k. k < n ==> (EL k emitted).inst_opcode <> INVOKE`.
+  No such general fuel-transport export was found in Phase/PhaseNext.
+- For singleton completion `dload_prefix_zero` already identifies t=t0,
+  H=H0, un=un0 for every pfuel. Its one rule step can be replayed at the
+  arbitrary constructor fuel. No prefix-fuel equality is needed.
+
+Thus there is no semantic fuel obstruction, but substituting the rule's fuel
+for the existential witness without this argument would be an invalid proof.
+For the interior output preserve every ancillary witness verbatim (including
+Stack, which refers to t0, NOT t1); only prefix/control/current phase change.
+Control fields follow `dload_expanded_step_blocks` and
+`dload_control_interior_next_fields`; target label distinctness comes from
+Cover plus source shape. Extending to a *complete* prefix is required before
+using the backwards completion consumers below.
+
+### 18.3 Exhaustive opcode consumer matrix
+
+Rows classify the ORIGINAL i at completion, not the generated j. Every row
+also requires the ancillary ledger in 18.4; no row below is a whole-Q proof.
+Names without a file prefix are in lowerDloadPtr<File>Script.sml as indicated.
+
+| Original opcode / input mode | Existing consumer and actual interface | Missing interface or origin |
+|---|---|---|
+| terminal input, any next | TerminalClosure:121 `dload_terminal_mode_next` | Full terminal Q output already; distinct target labels still derive from stage/source shape, not terminal mode alone. |
+| interior DLOAD or DLOADBYTES | PhaseNext:95 `dload_actual_phase_next` | Fuel bridge above; preserve anchor ancillary fields. No source step here. |
+| complete DLOAD | BackwardNext:62 `dload_tracked_backward_next` | Accepts arbitrary V,U; returns source step/reachability, boundary on `(r1::rs)`, Defs(U), next control, and `r1.dr_scratch = generated_id INSERT r.dr_scratch`. Needs actual freshness, headroom, offset, and full-prefix replay origins. Does NOT return whole Stack/Saved or allocation-map footprint. |
+| complete DLOADBYTES, ordinary write | BackwardNext:108 `dloadbytes_tracked_next` | Arbitrary V,U; returns source step/reachability, next control, boundary and Defs(U); explicitly requires `~in_revert_forward f s`. No allocation-map/call-address footprint is exported. |
+| ALLOCA singleton | JointAlloc:136 `dload_actual_alloca_boundary_next` | Arbitrary V, returns source step/reachability/control/boundary and exact updated head scratch-map identity. Does NOT return Defs(U), source call-address stability or full ancillary Saved/Support. |
+| ASSIGN singleton | Ordinary:95 `dload_boundary_core_assign_index`, JointNext:168 `dload_actual_assign_next` | BOTH fix relational set to `{v | ~retpc_var f v}`. Not consumers of exact V=U DIFF retpc. Need tracked ASSIGN boundary interface (including retpc output case), not monotonicity from smaller to larger set. |
+| PARAM, RETPC_PARAM | Parameters:37 `dload_boundary_core_parameter`, :85 actual next | Also fixes complement-only V. Need original-V version, respecting opaque RETPC_PARAM output. |
+| LT, GT, EQ | Ordinary:289 `dload_boundary_core_compare_index` | Already arbitrary V,U and exports variable-only footprints. Use it, not a larger-set wrapper; operand origins and next packaging still needed. |
+| MUL, Div, SDIV, Mod, SMOD, Exp, ADDMOD, MULMOD, SLT, SGT, ISZERO, AND, OR, XOR, NOT, SIGNEXTEND, BYTE | Scalar:139 `dload_boundary_core_scalar_index` | Arbitrary V,U, returns boundary/Defs and variable-only footprints; JointNext:285 wrapper is complement-only and must NOT be used as-is. |
+| ADD, SUB | Affine:112 `dload_boundary_core_affine` | Arbitrary V,U boundary/Defs with variable-only footprints; :181 actual wrapper fixes complement V. Source affine/static/taint hypotheses must come from Q/A. |
+| MLOAD | MemoryRead:114 `dload_boundary_core_mload` | Arbitrary V,U boundary/Defs, variable-only footprints; requires source non-forwarding. :178 wrapper fixes complement V. |
+| MSTORE | MemoryStore:62 `dload_boundary_core_mstore` | Arbitrary V,U boundary/Defs; output arity from source shape. :156 wrapper fixes complement V. Need memory-only allocation/address footprint for ancillary packaging. |
+| MSTORE8 | ByteStore:71 `dload_boundary_core_mstore8` | Arbitrary V,U boundary/Defs; :164 actual wrapper fixes complement V; same footprint obligation. |
+| MCOPY | MCopy:176 `dload_boundary_core_mcopy` | Arbitrary V,U boundary/Defs, but actual wrapper fixes complement V; source non-forwarding required. |
+| SLOAD, TLOAD | Storage:121 `dload_boundary_core_storage_read` | Arbitrary V,U; returns variable-only footprints and Defs(U). Actual storage wrapper is complement-only. |
+| SSTORE, TSTORE | Storage:248 `dload_boundary_core_storage_write` | Arbitrary V,U; shared-store change is already handled inside boundary; allocation/address fields still needed outside it. |
+| CODECOPY, CALLDATACOPY, RETURNDATACOPY, non-exempt | Copy: boundary `dload_boundary_core_external_copy` (Finalise:215), actual :228 | Boundary accepts arbitrary V,U; actual wrapper fixes complement V and requires source non-forwarding. Must establish source non-forwarding from target guard/control or choose terminal row. |
+| RETURNDATACOPY, target exempt | TerminalClosure:55 `dload_actual_copy_terminal_mode` | Exact original V; returns whole terminal disjunct. Need actual arity `[dst;off;sz]`, source/target distinct labels and target `in_revert_forward \/ about_to_revert`; no new memory invariant is promised. |
+| SHA3 | Hash:109 `dload_boundary_core_sha3` | Arbitrary V,U; :182 actual wrapper fixes complement V. Same next/ancillary packaging requirement. |
+| MEMTOP, DRET, GETFMP, SETFMP, RETFMP, FMP_PARAM | ptrDiscipline:120–140 fn_ptr_ok | Impossible original members, not generic equal-environment steps. |
+| DALLOCA | Static:48 `lower_dload_function_no_dalloca`, source fmp-free invariant | Must obtain source exclusion from A. Supply retains DALLOCA, so it is not excluded by emission inversion alone. |
+| JMP, JNZ, DJMP, RET, RETURN, REVERT, STOP, SINK, SELFDESTRUCT, INVALID | venomInst:346 is_terminator; singleton supply | Impossible from literal next nonterminator premise. DRET/RETFMP also terminate and were excluded above. |
+| INVOKE | singleton supply and literal next premise | Impossible j=i; no invocation fuel theorem is needed. |
+| DELEGATECALL, CREATE, CREATE2, OFFSET | unitShapeDefs:312 inst_shape_ok | Impossible source members under o1_fn_shape. SELFDESTRUCT and DJMP are independently shape-excluded but already in terminator row. |
+| all other constructors (listed below) | No whole-boundary next consumer identified in existing next families | Remaining semantic work, not justified by equal_environment alone. |
+
+The final residual row is exactly:
+`SHL; SHR; SAR; ILOAD; ISTORE; PHI; NOP; INITIAL_FMP; BUMP; CALLER; CALLVALUE;
+CALLDATALOAD; CALLDATASIZE; ADDRESS; ORIGIN; GASPRICE; GAS; GASLIMIT;
+COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
+BLOCKHASH; BASEFEE; CODESIZE; EXTCODESIZE; EXTCODEHASH; EXTCODECOPY;
+RETURNDATASIZE; BLOBHASH; BLOBBASEFEE; CALL; STATICCALL; LOG; ASSERT;
+ASSERT_UNREACHABLE`.
+Together with the table these cover the opcode datatype verbatim
+(venomInst:23–69). Some residual constructors may be excluded by further source
+shape/fmp-free clauses or impossible OK results, but those inversions must be
+proved rather than treating this residual row as a single scalar step. In
+particular CALL/STATICCALL execute memory-observing external calls
+(venomExecSemantics:1072–1094), unlike read0. SHL/SHR/SAR are in neither Affine's ADD/SUB interface nor
+Scalar's enumerated list, and need masked shift/taint transport. ILOAD/ISTORE are not MLOAD/MSTORE instances.
+
+A normal source satisfying in_revert_forward needs endpoint classification too:
+contextCodegenRel:331–341 defines this predicate ONLY at either endpoint of a
+revert_forward_pair, not at every interior ASSIGN. By
+`revert_forward_pair_interval_opcode` (Forward:10), an active endpoint is
+RETURNDATACOPY or REVERT. Thus DLOAD/DLOADBYTES/MLOAD/MCOPY cannot satisfy
+source in_revert_forward. For an external copy, a source forwarding endpoint
+is the RETURNDATACOPY start, not a contradiction: transport the actual pair
+through the covering supply (Forward:384/470) to establish the target guard
+and use the terminal row. This is a required origin proof, not an extra
+assumption. The only copy exemption supported by the existing terminal entry
+is the actual RETURNDATACOPY case, not arbitrary CODECOPY/DLOADBYTES.
+
+### 18.4 Whole-boundary origin and preservation ledger
+
+For every completed normal emission, choose new source state s1 from the
+backward semantic consumer, source state `s2 = s1 with vs_inst_idx :=
+SUC s.vs_inst_idx`, and target anchor `t2 = t1 with vs_inst_idx :=
+SUC t.vs_inst_idx`. For expanded emissions t1 is the LAST constructor result;
+full-prefix replay includes its bumped index and actual final ghost updates.
+The new phase-zero prefix can use fuel 0. Keep cs,ds,PG,PH,f,g,q; change
+G,tn,H,un by the precise consumer ghost equations and choose fs' returned by
+allocation transport (never assume fs'=fs in allocation cases).
+
+| Field needed in new Q | Origin / missing preservation |
+|---|---|
+| Source function membership/shape, fn_ptr_ok, safety | Source frame_reachable plus frame-to-raw certificate; EVERY static witness gives fn_ptr_ok; ptr_discipline gives access_ok/taint_ok. No source successful step follows from safety alone. |
+| Source successful step and reachability | The backwards consumers in 18.3 reflect target success; singleton next uses `dload_singleton_reachable_next_fields`, expanded next uses `dload_control_emission_next_fields` plus frame_reachable_next. Residual opcodes still need reflection. |
+| Original operand membership and non-retpc use | fn_ir_vars_operand from source instruction membership; opaque-use restrictions from source o1_fn_shape. PHI/ASSIGN/PARAM/RETPC_PARAM need their specialized tracked reasoning; cannot demand all operands in V unconditionally. |
+| Boundary on V and saved Ws | General-V cores are available for most existing families; ASSIGN and parameter cores still expose complement-only V. Expanded and original alloca cores return changed head frame. |
+| Defs(U) at new anchor | General cores explicitly export it except original ALLOCA consumer; ALLOCA must use its actual matching output updates and initial Defs, not pointer safety. Expanded DLOAD/bytes consumers explicitly export original-U definedness after freshness. |
+| Support for current and saved frames | Re-derive from `frame_reachable_prov_supported` at the actual new source reachability and EVERY(fn_ptr_ok P). Do not assume it for s2 or prove it from target boundary. PG and saved frames unchanged in next. |
+| Stack lengths | Same cs,ds; original ALLOCA and DLOAD replace only head frame, so prove LENGTH fs' = LENGTH fs. |
+| Stack at k=0 | Non-allocation steps need actual target allocation-map stability. Original ALLOCA exports exact head identity (JointAlloc:159–160). DLOAD exports scratch insertion but still needs final-prefix FDOM update, generated id freshness outside O f and no later prefix map change. Cannot copy old Stack through scratch allocation. |
+| Stack at k=SUC k' | Saved states unchanged and tail fs unchanged for allocation families; prove tail equality of chosen fs'. Boundary table relation alone is NOT the syntactic scratch-map identity. |
+| Cover | Same f,g,q, so retain predecessor witnesses exactly; successor instruction/control existence comes from control-next, not a new supply. |
+| Saved layouts | At successor require DROP(SUC k) fs' layouts; head replacement drops out for all saved k, but explicitly prove this for chosen fs'. Saved states/frontiers unchanged. |
+| Saved environment, instruction, definedness, supply/control | Unchanged saved cs,ds; retain fields. |
+| Saved call-address equation | Must prove s2.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address. Index bump alone only proves equality with s1, not with s. Variable-only footprints in Ordinary/Scalar/Affine/read families suffice; memory/store/alloca/expanded/residual families need actual semantic footprints. Boundary equal_environment compares source to target and does not relate new source to old source. |
+| Scratch budget/freshness/headroom | JointBudget `dload_joint_runtime_scratch_budget` from full Stack/source reachability and frozen assumptions; Static member-covered/scratch-fresh facts from actual Cover; SourceInv offset/headroom from source reachable state. These are inputs derived at the old anchor, not new-Q fields. |
+
+### 18.5 Smallest missing interfaces for strategy review
+
+1. A bounded non-INVOKE replay fuel bridge (or local explicit non-INVOKE
+   rewrite at the extension step), then exact-Q **interior** packaging. It
+   must keep all ancillary anchor witnesses and work with arbitrary rule fuel.
+2. Tracked ASSIGN and PARAM/RETPC_PARAM boundary interfaces on original V,
+   retaining independent U; use existing implementations once, do not add
+   more complement-only actual-next wrappers. Other families should consume
+   their existing general-V cores directly.
+3. A reusable next ancillary assembler for unchanged allocation maps and
+   source call-address, plus allocation variants using actual fresh/repeated
+   head-frame equations. It must produce Defs(U) for original ALLOCA and
+   exact Stack for completed DLOAD; no externally assumed successor fields.
+4. Exhaustive residual-opcode reflection/boundary consumers or checked static
+   exclusions for the explicit residual list. Partition read0/read1, masked
+   shifts, immutables, external effects and no-op/assert/PHI/fmp
+   cases by semantics, not a giant case proof assuming equal observations.
+5. Full completion packaging with origin inversions, target-exempt copy switch
+   via the canonical terminal consumer, and zero-prefix reconstruction. Only
+   AFTER these checked producers should a full literal-next leaf and global
+   induction be authorized.
+
+This diagnostic identifies genuine interface gaps; it does not establish that
+all next cases close on paper. In particular tracked block/return success
+cannot repair complement-only ASSIGN/parameter statements, missing residual
+opcode semantics, or the syntactic scratch-map and Saved-address obligations.
+No theorem/definition was edited and no continuity/global certification is
+claimed.
