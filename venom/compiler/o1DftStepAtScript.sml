@@ -22,8 +22,7 @@ Proof
   metis_tac[dftScheduleOrderTheory.dft_fn_block_rel]
 QED
 
-(* dft_fn keeps every opcode, keeps SSA and puts each block's
-   pseudo-instructions first, so row 7 gives row 8. *)
+(* dft_fn keeps every opcode, so row 7 gives row 8 (no ALLOCA). *)
 Theorem dft_step_row:
   fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ o1_fn_row 7 fn ==>
@@ -34,12 +33,10 @@ Proof
     metis_tac[lookup_unique_function_member] >>
   `o1_fn_shape observed.cu_context fn` by
     gvs[o1_ctx_shape_def, EVERY_MEM] >>
-  gvs[o1_fn_row_def, dft_fn_pseudos_prefix] >> rpt conj_tac
-  >- (simp[EVERY_MEM] >> rpt strip_tac >>
-      drule_all dft_shape_instruction_source >> strip_tac >>
-      gvs[EVERY_MEM] >> metis_tac[flip_operands_not_alloca])
-  >- metis_tac[dft_shape_no_param_tl] >>
-  irule dft_fn_wf_ssa >> gvs[o1_fn_shape_def]
+  gvs[o1_fn_row_def] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all dft_shape_instruction_source >> strip_tac >>
+  gvs[EVERY_MEM] >> metis_tac[flip_operands_not_alloca]
 QED
 
 Theorem dft_step_contract_at:
