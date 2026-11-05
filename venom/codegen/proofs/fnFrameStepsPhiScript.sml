@@ -2967,3 +2967,34 @@ Proof
   drule_all phi_selected_frame_value >>
   simp[operand_val_def, frame_view_vars_lookup]
 QED
+
+Definition phi_run_context_def:
+  phi_run_context fn bb pred entry source final <=>
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\
+    MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+    source.vs_prev_bb = SOME pred /\
+    eval_phis source (collect_phis bb.bb_instructions) = OK final /\
+    (!inst op. MEM inst (collect_phis bb.bb_instructions) /\
+      is_var_operand op /\ MEM op inst.inst_operands /\ MEM op entry.ps_stack ==>
+      resolve_phi pred inst.inst_operands = SOME op) /\
+    (!inst out. MEM inst (collect_phis bb.bb_instructions) /\ MEM out inst.inst_outputs ==>
+      ~MEM (Var out) entry.ps_stack /\ Var out NOTIN FDOM entry.ps_spilled)
+End
+
+Definition phi_run_config_def:
+  phi_run_config fn ra lo base pred entry source m done todo ps st <=>
+    phi_stack_provenance base pred entry done todo ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (?partial. eval_phis source done = OK partial /\
+      venom_asm_rel lo ps ((frame_view fn ra partial) with vs_memory := m) st)
+End
+
+Theorem phi_run_init:
+  !base entry fn ra lo source m st phis pred.
+  generated_plan_state_wf_marked base entry /\
+  spill_alloc_layout_wf entry.ps_alloc entry.ps_spilled /\
+  venom_asm_rel lo entry ((frame_view fn ra source) with vs_memory := m) st ==>
+  phi_run_config fn ra lo base pred entry source m [] phis entry st
+Proof
+  simp[phi_run_config_def, phi_stack_provenance_init, eval_phis_def]
+QED
