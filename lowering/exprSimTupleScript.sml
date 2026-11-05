@@ -268,6 +268,13 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[decode_tuple_length]
 QED
 
+Theorem lift_option_not_tuple[local]:
+  lift_option x msg es = (INL (ArrayV (TupleV vs)), es1) ==>
+  x = SOME (ArrayV (TupleV vs))
+Proof
+  Cases_on `x` >> simp[lift_option_def, raise_def, return_def]
+QED
+
 (* An array decoded from storage is a static or dynamic array, never a
    tuple. *)
 Theorem read_storage_slot_array_not_tuple[local]:
@@ -280,7 +287,8 @@ Proof
        get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
   qmatch_goalsub_abbrev_tac `decode_value stor` >>
   simp[Once decode_value_def] >>
-  rpt (CASE_TAC >> simp[lift_option_def, raise_def, return_def])
+  strip_tac >> drule lift_option_not_tuple >>
+  simp[AllCaseEqs(), bool_case_eq]
 QED
 
 (* ===== The source's selection ===== *)
