@@ -664,3 +664,16 @@ Proof
        byteTheory.LENGTH_word_to_bytes, venomMemPropsTheory.dimindex_256,
        order_run_s20_memory_length]
 QED
+
+Theorem order_run_exec_last:
+  !fuel ctx bb.
+    get_instruction bb 21 = SOME (mk_inst 21 MSTORE [Var "%1";Lit 1w] []) ==>
+    exec_block fuel ctx bb order_run_s21 = exec_block fuel ctx bb order_run_s22
+Proof
+  rpt strip_tac >>
+  `order_run_s21.vs_inst_idx = 21` by simp[order_run_s21_def] >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [venomExecSemanticsTheory.exec_block_def])) >>
+  simp[venomExecSemanticsTheory.step_inst_def,
+       order_run_step21, venomInstTheory.is_terminator_def] >>
+  simp[order_run_s22_def]
+QED
