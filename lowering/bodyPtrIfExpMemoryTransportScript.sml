@@ -17,3 +17,15 @@ Theorem ptr_mem_ok_transport:
 Proof
   rw[ptr_mem_ok_def] >> metis_tac[]
 QED
+
+Theorem ptr_mem_ok_runtime_type:
+  !cx src dst v op G tn s.
+    ptr_mem_ok cx src v op G tn s /\
+    evaluate_type (get_tenv cx) dst = evaluate_type (get_tenv cx) src ==>
+    ptr_mem_ok cx dst v op G tn s
+Proof
+  rpt strip_tac >> irule ptr_mem_ok_transport >> conj_tac
+  >- (gvs[ptr_mem_ok_def] >> metis_tac[]) >>
+  qexists_tac `src` >> simp[]
+QED
+
