@@ -206,7 +206,7 @@ fun extract32_call_mono_tac eq =
     in assume_tac (REWRITE_RULE [eq, pairTheory.SND] inst) goal end)
     [ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
      ci_mono_emit_op, ci_mono_emit_inst, ci_mono_emit_void,
-     ci_mono_compile_ptr_load];
+     ci_mono_compile_ptr_load, ci_mono_compile_alloc_buffer];
 
 (* Apply a matched call boundary only once its side conditions simplify.
    Remove consumed equations so a repeated pass cannot duplicate suffixes. *)
@@ -300,4 +300,123 @@ Proof
   qpat_x_assum `!sa off sb ic imm src dst v. _` (drule_at (Pos last)) >>
   disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
   simp[listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]
+QED
+
+Theorem extract32_ensure_in_memory_result_excluded:
+  not_fresh_at sa v /\ ptr_op <> Var v /\
+  (!base. imm = SOME base ==> base <> Var v) /\
+  compile_ensure_in_memory ptr_op loc bytes wc ic imm sa = (r,sb) ==>
+  r <> Var v
+Proof
+  Cases_on `loc` >>
+  simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >>
+  every_assum (fn eq => TRY (extract32_call_mono_tac eq)) >>
+  imp_res_tac compiler_ci_mono_not_fresh >>
+  drule_at (Pos last) extract32_alloc_buffer_result_excluded >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
+
+
+fun extract32_materialization_finish_tac goal =
+  (rpt strip_tac >> gvs[] >>
+   every_assum (fn eq => TRY (extract32_call_mono_tac eq)) >>
+   ntac 2 (imp_res_tac compiler_ci_mono_not_fresh) >>
+   every_assum (fn eq => TRY (
+     mp_then (Pos last) (qspec_then `v` mp_tac) extract32_alloc_buffer_result_excluded eq >>
+     (impl_tac >- (simp[] >> NO_TAC)) >> strip_tac)) >>
+   rpt (CHANGED_TAC (every_assum (fn eq => TRY (
+     MAP_FIRST (fn boundary => fn g =>
+       (mp_then (Pos last) (qspec_then `v` mp_tac) boundary eq >>
+        (impl_tac >- (simp[] >> NO_TAC)) >> strip_tac >>
+        WEAKEN_TAC (aconv (concl eq))) g)
+       [extract32_alloc_buffer_delta_excluded,
+        extract32_storage_to_memory_delta_excluded,
+        extract32_transient_to_memory_delta_excluded,
+        extract32_imm_copy_to_memory_delta_excluded] ORELSE
+     extract32_call_delta_tac eq)))) >>
+   simp[listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]) goal;
+
+Theorem extract32_ensure_in_memory_delta_excluded:
+  not_fresh_at sa v /\ ptr_op <> Var v /\
+  (!base. imm = SOME base ==> base <> Var v) /\
+  compile_ensure_in_memory ptr_op loc bytes wc ic imm sa = (r,sb) ==>
+  ?delta.
+    FLAT (MAP (\b. b.bb_instructions) (REVERSE sb.cs_blocks)) ++ sb.cs_current_insts =
+    (FLAT (MAP (\b. b.bb_instructions) (REVERSE sa.cs_blocks)) ++ sa.cs_current_insts) ++ delta /\
+    EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta
+Proof
+  rpt gen_tac >> Cases_on `loc`
+  >- (simp[contextTheory.compile_ensure_in_memory_def, comp_return_def] >>
+      rpt strip_tac >> gvs[])
+  >- (Cases_on `compile_alloc_buffer bytes sa` >> rename1 `compile_alloc_buffer bytes sa = (buf,s1)` >>
+      Cases_on `wc = 1`
+      >- (Cases_on `emit_op SLOAD [ptr_op] s1` >> rename1 `emit_op SLOAD [ptr_op] s1 = (loaded,s2)` >>
+          Cases_on `emit_void MSTORE [buf.buf_operand;loaded] s2` >>
+          simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+               comp_ignore_bind_def, comp_return_def] >> extract32_materialization_finish_tac) >>
+      Cases_on `compile_storage_to_memory ptr_op buf.buf_operand wc s1` >>
+      simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def] >> extract32_materialization_finish_tac)
+  >- (Cases_on `compile_alloc_buffer bytes sa` >> rename1 `compile_alloc_buffer bytes sa = (buf,s1)` >>
+      Cases_on `wc = 1`
+      >- (Cases_on `emit_op TLOAD [ptr_op] s1` >> rename1 `emit_op TLOAD [ptr_op] s1 = (loaded,s2)` >>
+          Cases_on `emit_void MSTORE [buf.buf_operand;loaded] s2` >>
+          simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+               comp_ignore_bind_def, comp_return_def] >> extract32_materialization_finish_tac) >>
+      Cases_on `compile_transient_to_memory ptr_op buf.buf_operand wc s1` >>
+      simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def] >> extract32_materialization_finish_tac)
+  >- (Cases_on `compile_alloc_buffer bytes sa` >> rename1 `compile_alloc_buffer bytes sa = (buf,s1)` >>
+      Cases_on `compile_imm_copy_to_memory ic imm ptr_op buf.buf_operand ((bytes+31) DIV 32) 0 s1` >>
+      simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def] >> extract32_materialization_finish_tac) >>
+  Cases_on `emit_op CALLDATALOAD [ptr_op] sa` >> rename1 `emit_op CALLDATALOAD [ptr_op] sa = (len,s1)` >>
+  Cases_on `compile_alloc_buffer (bytes+32) s1` >> rename1 `compile_alloc_buffer (bytes+32) s1 = (buf,s2)` >>
+  Cases_on `emit_void MSTORE [buf.buf_operand;len] s2` >> rename1 `emit_void MSTORE [buf.buf_operand;len] s2 = (u,s3)` >>
+  Cases_on `emit_op ADD [buf.buf_operand; Lit 32w] s3` >> rename1 `emit_op ADD [buf.buf_operand; Lit 32w] s3 = (dst,s4)` >>
+  Cases_on `emit_op ADD [ptr_op; Lit 32w] s4` >> rename1 `emit_op ADD [ptr_op; Lit 32w] s4 = (src,s5)` >>
+  Cases_on `emit_void CALLDATACOPY [dst;src;len] s5` >>
+  simp[contextTheory.compile_ensure_in_memory_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >> extract32_materialization_finish_tac
+QED
+
+Theorem extract32_unwrap_value_result_excluded:
+  not_fresh_at sa v /\ vv_operand vv <> Var v /\
+  (!base. ce.ce_imm_alloca = SOME base ==> base <> Var v) /\
+  unwrap_value ce vv sa = (r,sb) ==> r <> Var v
+Proof
+  Cases_on `vv`
+  >- (simp[unwrap_value_def, contextTheory.vv_operand_def, comp_return_def] >>
+      rpt strip_tac >> gvs[]) >>
+  rename1 `LocatedValue ty p` >>
+  Cases_on `is_word_type ty`
+  >- (simp[unwrap_value_def, contextTheory.vv_operand_def] >>
+      metis_tac[extract32_ptr_load_result_excluded]) >>
+  Cases_on `p.ptr_location` >>
+  simp[unwrap_value_def, contextTheory.vv_operand_def, comp_return_def] >>
+  metis_tac[extract32_ensure_in_memory_result_excluded]
+QED
+
+Theorem extract32_unwrap_value_delta_excluded:
+  not_fresh_at sa v /\ vv_operand vv <> Var v /\
+  (!base. ce.ce_imm_alloca = SOME base ==> base <> Var v) /\
+  unwrap_value ce vv sa = (r,sb) ==>
+  ?delta.
+    FLAT (MAP (\b. b.bb_instructions) (REVERSE sb.cs_blocks)) ++ sb.cs_current_insts =
+    (FLAT (MAP (\b. b.bb_instructions) (REVERSE sa.cs_blocks)) ++ sa.cs_current_insts) ++ delta /\
+    EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta
+Proof
+  Cases_on `vv`
+  >- (simp[unwrap_value_def, contextTheory.vv_operand_def, comp_return_def] >>
+      rpt strip_tac >> gvs[]) >>
+  rename1 `LocatedValue ty p` >>
+  Cases_on `is_word_type ty`
+  >- (simp[unwrap_value_def, contextTheory.vv_operand_def] >>
+      metis_tac[extract32_ptr_load_delta_excluded]) >>
+  Cases_on `p.ptr_location` >>
+  simp[unwrap_value_def, contextTheory.vv_operand_def, comp_return_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[extract32_ensure_in_memory_delta_excluded]
 QED
