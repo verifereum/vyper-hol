@@ -33,6 +33,9 @@ Ancestors
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
   exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness vyperExprNoControl
 
+open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
+     gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
+
 Theorem len_pre_args[local]:
   !cenv cx env ann args es.
     expr_body_pre cenv cx env (Builtin ann Len args) es ==>
@@ -279,6 +282,251 @@ Proof
   cheat
 QED
 
+
+Theorem len_step_ILOAD[local]:
+  !id a out s w.
+    eval_operand a s = SOME w ==>
+    step_inst_base (mk_inst id ILOAD [a] [out]) s =
+    OK (update_var out (mload (w2n w) s) s)
+Proof
+  cheat
+QED
+Theorem len_step_ADD_imm_base[local]:
+  !ctx func cenv cx es id pop ib out s w.
+    stmt_state_rel ctx func cenv cx es s /\
+    cenv.ce_imm_alloca = SOME ib /\ eval_operand pop s = SOME w ==>
+    step_inst_base (mk_inst id ADD [pop; ib] [out]) s =
+    OK (update_var out w s)
+Proof
+  cheat
+QED
+Theorem len_emit_op_path[local]:
+  !ctx func cenv cx es opc args sa op sb s0 w.
+    emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
+    fn_has_code sa sb func /\
+    opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!out. step_inst_base (mk_inst sa.cs_next_id opc args [out]) s0 =
+           OK (update_var out w s0)) ==>
+    ?s. gas_path ctx func s0 0 (OK s) /\
+        s.vs_current_bb = sb.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w /\
+        (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+                lookup_var x s = SOME w') /\
+        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                 FLOOKUP s.vs_allocas aid = SOME b) /\
+        s.vs_memory = s0.vs_memory
+Proof
+  cheat
+QED
+Theorem len_emit_op_cs_extends[local]:
+  !opc args sm op sb. emit_op opc args sm = (op, sb) ==> cs_extends sm sb
+Proof
+  cheat
+QED
+
+Theorem len_imm_ctor_path[local]:
+  !ctx func cenv cx es pop sm op sb s0 w.
+    compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
+    local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sm.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    eval_operand pop s0 = SOME w ==>
+    ?s. gas_path ctx func s0 0 (OK s) /\
+        s.vs_current_bb = sb.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        stmt_state_rel ctx func cenv cx es s /\
+        eval_operand op s = SOME (mload (w2n w) s0) /\
+        (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
+                lookup_var x s = SOME w') /\
+        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                 FLOOKUP s.vs_allocas aid = SOME b) /\
+        s.vs_memory = s0.vs_memory
+Proof
+  cheat
+QED
+
+Theorem len_step_TLOAD[local]:
+  !op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ==>
+    step_inst_base (mk_inst id TLOAD [op1] [out]) ss =
+      OK (update_var out (tload v1 ss) ss)
+Proof
+  cheat
+QED
+
+Theorem len_load_path[local]:
+  !ctx func cenv cx es is_ctor pop loc sm op sb s0 w.
+    compile_builtin_len is_ctor cenv.ce_imm_alloca pop loc sm = (op, sb) /\
+    loc <> LocCalldata /\ local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sm.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    eval_operand pop s0 = SOME w ==>
+    ?s. gas_path ctx func s0 0 (OK s) /\
+        s.vs_current_bb = sb.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        stmt_state_rel ctx func cenv cx es s /\
+        eval_operand op s = SOME (ptr_load_val is_ctor loc w s0) /\
+        (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
+                lookup_var x s = SOME w') /\
+        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                 FLOOKUP s.vs_allocas aid = SOME b) /\
+        s.vs_memory = s0.vs_memory
+Proof
+  cheat
+QED
+
+Theorem len_option_rator[local]:
+  !x f g s. (case (x : 'a option) of NONE => f | SOME v => g v) s =
+            (case x of NONE => f s | SOME v => g v s)
+Proof
+  cheat
+QED
+
+Theorem len_gsb_obs[local]:
+  !cx tr st g.
+    get_storage_backend cx tr (st with gas_obs := g) =
+    (FST (get_storage_backend cx tr st), SND (get_storage_backend cx tr st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_rss_obs[local]:
+  !cx tr sl tv st g.
+    read_storage_slot cx tr sl tv (st with gas_obs := g) =
+    (FST (read_storage_slot cx tr sl tv st),
+     SND (read_storage_slot cx tr sl tv st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_rp_obs[local]:
+  !cx p st g.
+    read_place cx p (st with gas_obs := g) =
+    (FST (read_place cx p st), SND (read_place cx p st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_bind_obs[local]:
+  !m f.
+    (!st g. m (st with gas_obs := g) = (FST (m st), SND (m st) with gas_obs := g)) /\
+    (!v st g. f v (st with gas_obs := g) = (FST (f v st), SND (f v st) with gas_obs := g)) ==>
+    !st g. bind m f (st with gas_obs := g) =
+           (FST (bind m f st), SND (bind m f st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_rr_obs[local]:
+  !cx res st g.
+    read_result cx res (st with gas_obs := g) =
+    (FST (read_result cx res st), SND (read_result cx res st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_tail_obs[local]:
+  !v st g.
+    (case v of
+       ArrayV (DynArrayV vs) => return (LENGTH vs)
+     | ArrayV (SArrayV vs) => return (LENGTH vs)
+     | ArrayV (TupleV vs) => return (LENGTH vs)
+     | BytesV bs => return (LENGTH bs)
+     | StringV bs => return (STRLEN bs)
+     | _ => raise (Error (TypeError "result_array_length"))) (st with gas_obs := g) =
+    (FST ((case v of
+       ArrayV (DynArrayV vs) => return (LENGTH vs)
+     | ArrayV (SArrayV vs) => return (LENGTH vs)
+     | ArrayV (TupleV vs) => return (LENGTH vs)
+     | BytesV bs => return (LENGTH bs)
+     | StringV bs => return (STRLEN bs)
+     | _ => raise (Error (TypeError "result_array_length"))) st),
+     SND ((case v of
+       ArrayV (DynArrayV vs) => return (LENGTH vs)
+     | ArrayV (SArrayV vs) => return (LENGTH vs)
+     | ArrayV (TupleV vs) => return (LENGTH vs)
+     | BytesV bs => return (LENGTH bs)
+     | StringV bs => return (STRLEN bs)
+     | _ => raise (Error (TypeError "result_array_length"))) st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_ral_gas_obs0[local]:
+  !cx tv st g.
+    result_array_length cx tv (st with gas_obs := g) =
+    (FST (result_array_length cx tv st),
+     SND (result_array_length cx tv st) with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_ral_gas_obs[local]:
+  !cx tv st g r.
+    result_array_length cx tv st = (r, st) ==>
+    result_array_length cx tv (st with gas_obs := g) = (r, st with gas_obs := g)
+Proof
+  cheat
+QED
+
+Theorem len_vv_path[local]:
+  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t.
+    compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
+      (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    is_sized_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    env.type_defs = get_tenv cx /\
+    eval_result_typed (env,cx,es') tv (Type (expr_type e)) /\
+    (!v. read_result cx tv es' = (INL v,es') ==> value_has_type tvt v) /\
+    fn_has_code sm sb func /\ ~t.vs_halted /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv t ==>
+    ?t' n. gas_path ctx func t 0 (OK t') /\
+      t'.vs_current_bb = sb.cs_current_bb /\
+      t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      result_array_length cx tv es' = (INL n,es') /\
+      vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+        sa sb s0 es' (Value (IntV (&n)))
+        (StackValue (BaseT (UintT 256)) op) t'
+Proof
+  cheat
+QED
+
+Theorem len_source[local]:
+  !cx ann e.
+    eval_expr cx (Builtin ann Len [e]) =
+    bind (eval_expr cx e)
+      (\tv. bind (result_array_length cx tv) (\n. return (Value (IntV (&n)))))
+Proof
+  cheat
+QED
+
+Theorem len_operand_admissible[local]:
+  !cenv cx env e es.
+    expr_body_pre cenv cx env e es ==>
+    gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  cheat
+QED
+
+Theorem len_exempt_cert[local]:
+  !memory tops p cx ann e start marks out endpoint.
+    gas_exempt_cert memory tops p (ignore_bind (eval_expr cx e) (return ()))
+      start marks out endpoint ==>
+    gas_exempt_cert memory tops p
+      (ignore_bind (eval_expr cx (Builtin ann Len [e])) (return ()))
+      start marks out endpoint
+Proof
+  cheat
+QED
 
 Theorem compile_len_singleton_sim[local]:
   !ctx func cenv cx env ty e es.

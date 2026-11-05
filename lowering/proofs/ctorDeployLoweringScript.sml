@@ -11,7 +11,7 @@ Ancestors
   ctorDeployLoweringSource ctorDeployLoweringSourceOk ctorDeployLoweringEntry
   ctorDeployLoweringFrame ctorDeployLoweringFallthrough
   ctorDeployLoweringReturn ctorDeployLoweringHaltCode
-  ctorDeployLoweringFrameRet ctorDeployLoweringPendingTop ctorReturnFrame bodySimMain bodyAbiDecodeTarget stmtSimDefs stmtSimProps
+  ctorDeployLoweringFrameRet ctorReturnFrame bodySimMain bodyAbiDecodeTarget stmtSimDefs stmtSimProps
   loweringPosts gasOutcome gasContext gasExemptCert fragGasMode fragGasPath
   fragExec exprSimDefs compileEnv e2eDeployDefs vyperContext vyperInterpreter
 
@@ -83,7 +83,7 @@ Proof
   drule_all deploy_ctor_entry_reaches_body >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    (drule deploy_call_outcomes_pending >> simp[]) >>
+    fs[deploy_state_rel_def] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   drule deploy_ctor_code_facts >> strip_tac >>
   `?args. lookup_function NONE tx.function_name Deploy tops =
@@ -158,8 +158,7 @@ Proof
                (qspec_then `fuel1` mp_tac) >> simp[]) >>
           drule run_from_halt_code >> strip_tac >>
           qexists_tac `fuel2` >> simp[] >>
-          qunabbrev_tac `cx` >> irule deploy_venom_result_agree_rel >>
-          qexists_tac `am` >> irule deploy_ctor_return >> simp[] >> metis_tac[]) >>
+          qunabbrev_tac `cx` >> irule deploy_ctor_return >> simp[] >> metis_tac[]) >>
       (* the body exits *)
       drule_all gas_path_exit >> disch_then (qx_choose_then `fuel` assume_tac) >>
       `!e. r <> Error e` by metis_tac[exit_result_not_error] >>
@@ -187,8 +186,7 @@ Proof
         (`es' with <| scopes := []; gas_obs := [] |> = es' with scopes := []` by
            simp[Abbr `es'`] >>
          fs[Abbr `RetQ`]) >>
-      qunabbrev_tac `cx` >> irule deploy_venom_result_agree_rel >>
-          qexists_tac `am` >> irule deploy_ctor_return >> simp[] >> metis_tac[]) >>
+      qunabbrev_tac `cx` >> irule deploy_ctor_return >> simp[] >> metis_tac[]) >>
   (* the body fails with an exempt error *)
   drule gas_exempt_cert_execution >> strip_tac >>
   qabbrev_tac `gx = gas_explicit marks s0.vs_gas_readings` >>
