@@ -30,6 +30,7 @@ Ancestors
   valueEncoding
   compileEnv
   vyperAST
+  vyperGetter constSubst
   byte
 
 
@@ -305,8 +306,47 @@ Definition classify_function_def:
   classify_function _ acc = acc
 End
 
+Definition public_getter_def:
+  public_getter (VariableDecl (Public nr) mut id typ slot) =
+    (let ne = TopLevelName typ (NONE, id) in
+     if ~is_ArrayT typ then
+       SOME (View, nr, F, id, [], [], typ, [Return (SOME ne)])
+     else
+       let (gm, gn, args, dflts, ret, body) =
+         getter nr ne (BaseT (UintT 256)) (Type (ArrayT_type typ)) in
+       SOME (gm, gn, F, id, args, dflts, ret, body)) /\
+  public_getter (HashMapDecl (Public nr) tr id kt vt slot) =
+    (let (gm, gn, args, dflts, ret, body) =
+       getter nr (TopLevelName NoneT (NONE, id)) kt vt in
+     SOME (gm, gn, F, id, args, dflts, ret, body)) /\
+  public_getter _ = NONE
+End
+
+Definition public_getters_def:
+  public_getters [] = [] /\
+  public_getters (t :: ts) =
+    (case public_getter t of NONE => [] | SOME g => [g]) ++
+    public_getters ts
+End
+
+Theorem MEM_public_getters:
+  !tops g. MEM g (public_getters tops) <=>
+    ?top. MEM top tops /\ public_getter top = SOME g
+Proof
+  Induct >> simp[public_getters_def] >>
+  gen_tac >> Cases_on `public_getter h` >>
+  simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> metis_tac[]
+QED
+
 Definition classify_functions_def:
-  classify_functions tops = FOLDR classify_function ([], [], NONE, NONE) tops
+  classify_functions tops =
+    let env = module_consts_env tops [] in
+    let (exts, ints, fb, ctor) =
+      FOLDR classify_function ([], [], NONE, NONE) tops in
+    (MAP (subst_consts_fn env) (exts ++ public_getters tops),
+     MAP (subst_consts_fn env) ints,
+     OPTION_MAP (subst_consts_fn env) fb,
+     OPTION_MAP (subst_consts_fn env) ctor)
 End
 
 (* ===== Memory Allocation ===== *)

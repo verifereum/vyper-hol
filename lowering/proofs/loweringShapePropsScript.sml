@@ -32,7 +32,7 @@ Theory loweringShapeProps
 Ancestors
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
-  compileVyper abiEncoder supportedProgram supportedNames
+  compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
   supportedStmtTraverse supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST
 
 (* ===== Side conditions ===== *)
@@ -72,6 +72,142 @@ Definition expr_shape_root_def:
     (?ty tb target es. e = TypeBuiltin ty tb target es /\
                        LENGTH es < type_builtin_arity tb)
 End
+
+(* Constant inlining retains constructor arities and introduces only the
+   expression occurrences supplied by the replacement environment. *)
+Theorem subst_consts_exprs_length[simp]:
+  !es. LENGTH (subst_consts_exprs env es) = LENGTH es
+Proof
+  Induct >> simp[subst_consts_expr_def]
+QED
+
+Theorem subst_consts_expr_shape:
+  (!env e.
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists expr_shape_root (subst_consts_expr env e)) /\
+  (!env t.
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_target_exists expr_shape_root t ==>
+    ~supported_target_exists expr_shape_root (subst_consts_btarget env t)) /\
+  (!env es.
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_exprs_exists expr_shape_root es ==>
+    ~supported_exprs_exists expr_shape_root (subst_consts_exprs env es)) /\
+  (!env opt.
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_opt_exists expr_shape_root opt ==>
+    ~supported_opt_exists expr_shape_root (subst_consts_opt env opt)) /\
+  (!env fs.
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_fields_exists expr_shape_root fs ==>
+    ~supported_fields_exists expr_shape_root (subst_consts_fields env fs))
+Proof
+  ho_match_mp_tac subst_consts_expr_ind >>
+  simp[subst_consts_expr_def, supported_expr_exists_def, expr_shape_root_def] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `ns` >> simp[subst_consts_expr_def, supported_expr_exists_def,
+        expr_shape_root_def] >> Cases_on `ALOOKUP env id` >>
+        gvs[supported_expr_exists_def, expr_shape_root_def] >> metis_tac[])
+  >> metis_tac[]
+QED
+
+Theorem subst_consts_target_shape:
+  (!env t.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_assignment_exists expr_shape_root t ==>
+    ~supported_assignment_exists expr_shape_root (subst_consts_target env t)) /\
+  (!env ts.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_assignments_exists expr_shape_root ts ==>
+    ~supported_assignments_exists expr_shape_root (subst_consts_targets env ts))
+Proof
+  ho_match_mp_tac subst_consts_target_ind >>
+  simp[subst_consts_target_def, supported_assignment_exists_def] >>
+  metis_tac[subst_consts_expr_shape]
+QED
+
+Theorem supported_exprs_exists_map_snd:
+  supported_exprs_exists p (MAP SND fs) <=> supported_fields_exists p fs
+Proof
+  simp[supported_exprs_exists_every, supported_fields_exists_every, EXISTS_MAP,
+       combinTheory.o_DEF]
+QED
+
+Theorem subst_consts_error_shape:
+  (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_shape_root r) /\
+  ~EXISTS (supported_expr_exists expr_shape_root) (custom_error_exprs err) ==>
+  ~EXISTS (supported_expr_exists expr_shape_root)
+    (custom_error_exprs (subst_consts_error env err))
+Proof
+  Cases_on `err` >>
+  pure_rewrite_tac[subst_consts_error_def, custom_error_exprs_def, EXISTS_APPEND] >>
+  pure_rewrite_tac[GSYM supported_exprs_exists_every, supported_exprs_exists_map_snd] >>
+  rpt strip_tac >> imp_res_tac subst_consts_expr_shape >> metis_tac[]
+QED
+
+Theorem subst_consts_stmt_shape:
+  (!env s.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_stmt_expr_exists expr_shape_root s ==>
+    ~supported_stmt_expr_exists expr_shape_root (subst_consts_stmt env s)) /\
+  (!env ss.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_shape_root r) ==>
+    ~supported_stmts_expr_exists expr_shape_root ss ==>
+    ~supported_stmts_expr_exists expr_shape_root (subst_consts_stmts env ss))
+Proof
+  ho_match_mp_tac subst_consts_stmt_ind >>
+  simp[subst_consts_stmt_def, supported_stmt_expr_exists_def] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac
+  >> gvs[subst_consts_iter_def, subst_consts_areason_def, subst_consts_rreason_def,
+         supported_iterator_exists_def, supported_assert_exists_def,
+         supported_raise_exists_def, AllCaseEqs()]
+  >> imp_res_tac subst_consts_expr_shape
+  >> imp_res_tac subst_consts_target_shape >> gvs[]
+  >- (Cases_on `it` >> gvs[subst_consts_iter_def, supported_iterator_exists_def] >> metis_tac[])
+  >~ [`supported_assert_exists expr_shape_root (subst_consts_areason env r)`]
+  >- (Cases_on `r` >>
+      rule_assum_tac (PURE_REWRITE_RULE [supported_assert_exists_def]) >>
+      pure_rewrite_tac[subst_consts_areason_def, supported_assert_exists_def] >>
+      rpt strip_tac >>
+      imp_res_tac subst_consts_expr_shape >> metis_tac[subst_consts_error_shape])
+  >~ [`supported_raise_exists expr_shape_root (subst_consts_rreason env r)`]
+  >- (Cases_on `r` >>
+      rule_assum_tac (PURE_REWRITE_RULE [supported_raise_exists_def]) >>
+      pure_rewrite_tac[subst_consts_rreason_def, supported_raise_exists_def] >>
+      rpt strip_tac >>
+      imp_res_tac subst_consts_expr_shape >> metis_tac[subst_consts_error_shape])
+  >> metis_tac[]
+QED
+
+Theorem build_getter_shape:
+  !e kt vt n.
+    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists expr_shape_root (SND (SND (build_getter e kt vt n)))
+Proof
+  recInduct build_getter_ind >> rpt conj_tac >> rpt gen_tac >>
+  disch_tac >> disch_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >>
+  gvs[supported_expr_exists_def, expr_shape_root_def] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[pairTheory.SND]
+QED
+
+Theorem getter_body_shape:
+  getter nr e kt vt = (mut,nr',args,dflts,ret,gbody) /\
+  ~supported_expr_exists expr_shape_root e ==>
+  ~supported_stmts_expr_exists expr_shape_root gbody
+Proof
+  simp[getter_def] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  simp[supported_stmt_expr_exists_def, supported_expr_exists_def] >>
+  metis_tac[build_getter_shape, pairTheory.SND]
+QED
 
 Definition loc_shape_ok_def:
   loc_shape_ok st (PtrVar op sz) = plain_operand st op /\
@@ -13256,19 +13392,13 @@ QED
 (* The runtime unit lowers every function but the constructor. *)
 Definition runtime_bodies_shape_ok_def:
   runtime_bodies_shape_ok tops <=>
-    !vis mut nr rr name args dflts ret body.
-      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
-      vis <> Deploy ==>
+    !mut nr rr name args dflts ret body.
+      (MEM (mut,nr,rr,name,args,dflts,ret,body) (FST (classify_functions tops)) \/
+       MEM (mut,nr,rr,name,args,dflts,ret,body) (FST (SND (classify_functions tops))) \/
+       FST (SND (SND (classify_functions tops))) =
+         SOME (mut,nr,rr,name,args,dflts,ret,body)) ==>
       ~supported_stmts_expr_exists expr_shape_root body
 End
-
-Theorem supported_program_runtime_bodies_shape_ok:
-  !tops. supported_program tops ==> runtime_bodies_shape_ok tops
-Proof
-  rw[runtime_bodies_shape_ok_def] >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> simp[]
-QED
 
 Theorem add_module_var_locations_static:
   !tops vars.
@@ -13319,37 +13449,73 @@ Proof
   gvs[static_loc_def] >> metis_tac[]
 QED
 
+Theorem classify_fold_external_source:
+  !tops mut nr rr fname args defaults ret body.
+    MEM (mut,nr,rr,fname,args,defaults,ret,body)
+      (FST (FOLDR classify_function ([],[],NONE,NONE) tops)) ==>
+    MEM (FunctionDecl External mut nr rr fname args defaults ret body) tops
+Proof
+  Induct_on `tops` >- simp[] >> rpt gen_tac >>
+  simp[Once listTheory.FOLDR] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> fs[] >>
+  Cases_on `h` >> simp[classify_function_def] >>
+  rpt CASE_TAC >> gvs[] >> metis_tac[]
+QED
+
 Theorem classify_functions_external_source:
   !tops mut nr rr fname args defaults ret body.
     MEM (mut,nr,rr,fname,args,defaults,ret,body)
       (FST (classify_functions tops)) ==>
-    MEM (FunctionDecl External mut nr rr fname args defaults ret body) tops
+    ?rawdefaults rawbody.
+      (MEM (FunctionDecl External mut nr rr fname args rawdefaults ret rawbody) tops \/
+       ?top. MEM top tops /\
+         public_getter top = SOME (mut,nr,rr,fname,args,rawdefaults,ret,rawbody)) /\
+      (mut,nr,rr,fname,args,defaults,ret,body) =
+        subst_consts_fn (module_consts_env tops [])
+          (mut,nr,rr,fname,args,rawdefaults,ret,rawbody)
 Proof
-  Induct_on `tops` >- simp[classify_functions_def] >>
-  rpt gen_tac >>
-  simp[classify_functions_def, Once listTheory.FOLDR] >>
+  rpt gen_tac >> simp[classify_functions_def] >> pairarg_tac >>
+  simp[MEM_MAP, MEM_APPEND] >> strip_tac >>
+  PairCases_on `y` >> gvs[subst_consts_fn_def] >>
+  qexistsl_tac [`y5`, `y7`] >> simp[]
+  >- (disj1_tac >>
+      qspec_then `tops` mp_tac classify_fold_external_source >> simp[]) >>
+  disj2_tac >> gvs[MEM_public_getters] >> metis_tac[]
+QED
+
+Theorem classify_fold_internal:
+  !tops mut nr rr name args dflts ret body.
+    MEM (mut,nr,rr,name,args,dflts,ret,body)
+      (FST (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) <=>
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops
+Proof
+  Induct >> simp[] >> gen_tac >>
   qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >> fs[classify_functions_def] >>
-  Cases_on `h` >> simp[classify_function_def] >>
-  rpt CASE_TAC >> gvs[] >>
-  metis_tac[classify_functions_def]
+  PairCases_on `acc` >> Cases_on `h` >>
+  gvs[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> simp[classify_function_def] >>
+  IF_CASES_TAC >> simp[]
 QED
 
 Theorem MEM_classify_internal:
   !tops mut nr rr name args dflts ret body.
     MEM (mut,nr,rr,name,args,dflts,ret,body)
       (FST (SND (classify_functions tops))) <=>
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops
+    ?rawdflts rawbody.
+      MEM (FunctionDecl Internal mut nr rr name args rawdflts ret rawbody) tops /\
+      (mut,nr,rr,name,args,dflts,ret,body) =
+        subst_consts_fn (module_consts_env tops [])
+          (mut,nr,rr,name,args,rawdflts,ret,rawbody)
 Proof
-  Induct >> simp[classify_functions_def] >>
-  gen_tac >> fs[classify_functions_def] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >> Cases_on `h` >>
-  gvs[classify_function_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >>
-  simp[classify_function_def] >>
-  IF_CASES_TAC >> simp[]
+  rpt gen_tac >> simp[classify_functions_def] >> pairarg_tac >>
+  simp[MEM_MAP] >> eq_tac >> strip_tac
+  >- (PairCases_on `y` >> gvs[subst_consts_fn_def] >>
+      qexistsl_tac [`y5`, `y7`] >> simp[] >>
+      qspec_then `tops` mp_tac classify_fold_internal >> simp[] >> metis_tac[]) >>
+  qexists_tac `(mut,nr,rr,name,args,rawdflts,ret,rawbody)` >>
+  gvs[] >> qspec_then `tops` mp_tac classify_fold_internal >> simp[] >> metis_tac[]
 QED
 
 Theorem classify_function_fallback_source_step[local]:
@@ -13367,18 +13533,80 @@ Proof
   IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
 QED
 
+Theorem classify_fold_fallback_mem:
+  !tops mut nr rr fname args defaults ret body.
+    FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    MEM (FunctionDecl External mut nr rr fname args defaults ret body) tops
+Proof
+  Induct_on `tops` >- simp[] >> rpt gen_tac >>
+  simp[] >> strip_tac >>
+  drule classify_function_fallback_source_step >>
+  strip_tac >- simp[] >> metis_tac[]
+QED
+
 Theorem classify_functions_fallback_mem:
   !tops mut nr rr fname args defaults ret body.
     FST (SND (SND (classify_functions tops))) =
       SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
-    MEM (FunctionDecl External mut nr rr fname args defaults ret body) tops
+    ?rawdefaults rawbody.
+      MEM (FunctionDecl External mut nr rr fname args rawdefaults ret rawbody) tops /\
+      (mut,nr,rr,fname,args,defaults,ret,body) =
+        subst_consts_fn (module_consts_env tops [])
+          (mut,nr,rr,fname,args,rawdefaults,ret,rawbody)
 Proof
-  Induct_on `tops` >- simp[classify_functions_def] >>
+  rpt gen_tac >> simp[classify_functions_def] >> pairarg_tac >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  PairCases_on `z` >> gvs[subst_consts_fn_def] >>
+  qexistsl_tac [`z5`, `z7`] >> simp[] >>
+  qspec_then `tops` mp_tac classify_fold_fallback_mem >> simp[] >> metis_tac[]
+QED
+
+Theorem public_getter_body_shape:
+  !top mut nr rr name args dflts ret body.
+  public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,body) ==>
+  ~supported_stmts_expr_exists expr_shape_root body
+Proof
+  Cases_on `top` >> simp[public_getter_def] >>
   rpt gen_tac >>
-  simp[classify_functions_def] >> strip_tac >>
-  drule classify_function_fallback_source_step >>
-  strip_tac >- simp[] >>
-  fs[GSYM classify_functions_def] >> metis_tac[]
+  Cases_on `v` >> simp[public_getter_def] >>
+  rpt CASE_TAC >> gvs[] >> strip_tac >> gvs[] >>
+  simp[supported_stmt_expr_exists_def, supported_expr_exists_def, expr_shape_root_def] >>
+  pairarg_tac >> gvs[] >>
+  drule getter_body_shape >>
+  simp[supported_expr_exists_def, expr_shape_root_def]
+QED
+
+Theorem supported_headers_module_consts_env:
+  !ts tops acc.
+    EVERY (supported_declaration_header tops) ts ==>
+    module_consts_env ts acc = acc
+Proof
+  Induct >> simp[module_consts_env_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h` >> gvs[module_consts_env_def]
+  >~ [`VariableDecl vis mut name ty slot`]
+  >- (Cases_on `mut` >> Cases_on `vis` >>
+      gvs[module_consts_env_def, supportedDeclsTheory.supported_declaration_header_def] >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem supported_program_runtime_bodies_shape_ok:
+  !tops. supported_program tops ==> runtime_bodies_shape_ok tops
+Proof
+  rpt strip_tac >>
+  `module_consts_env tops [] = []` by
+    (irule supported_headers_module_consts_env >>
+     gvs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
+     metis_tac[]) >>
+  rw[runtime_bodies_shape_ok_def]
+  >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>
+      metis_tac[supported_program_function, supported_function_body_shape,
+                public_getter_body_shape])
+  >- (gvs[MEM_classify_internal] >>
+      metis_tac[supported_program_function, supported_function_body_shape]) >>
+  drule classify_functions_fallback_mem >> strip_tac >> gvs[] >>
+  metis_tac[supported_program_function, supported_function_body_shape]
 QED
 
 (* build_compile_env maps module variables to storage/transient slots or
@@ -13393,9 +13621,8 @@ Theorem package_external_fn_shape_ok:
          (package_external_fn tops use_trans nkey_map src))
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `src` >>
-  drule classify_functions_external_source >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7`
-    by (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
+    by (fs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
   simp[package_external_fn_def, set_external_package_target_def,
        external_fn_shape_ok_def] >>
   rpt CASE_TAC >>
@@ -13413,9 +13640,8 @@ Theorem package_internal_fn_shape_ok:
          (package_internal_fn tops use_trans nkey_map F 0 src))
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7`
-    by (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
+    by (fs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
@@ -13435,9 +13661,8 @@ Proof
   >- simp[package_fallback_fn_def, set_fallback_package_target_def,
           fallback_shape_ok_def] >>
   rename1 `_ = SOME src` >> PairCases_on `src` >>
-  drule classify_functions_fallback_mem >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7`
-    by (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
+    by (fs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
   simp[package_fallback_fn_def, set_fallback_package_target_def,
        fallback_shape_ok_def, build_compile_env_external_no_return_pc] >>
   simp[cenv_static_ok_def] >>

@@ -30,24 +30,20 @@ Proof
   simp[place_map_tables_agree_def]
 QED
 
+(* Compatibility exports; the shared proof now lives next to place typing. *)
 Theorem type_place_expr_vtype_annotation:
   !e env vt.
     type_place_expr env e = SOME vt ==> vtype_annotation_ok vt (expr_type e)
 Proof
-  Cases >> simp[Once well_typed_expr_def, vyperASTTheory.expr_type_def] >>
-  TRY (rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
-       simp[Once well_typed_expr_def]) >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
+  ACCEPT_TAC vyperTypeSystemTheory.type_place_expr_vtype_annotation
 QED
 
 Theorem type_place_expr_annotation:
   !e env ty. type_place_expr env e = SOME (Type ty) ==>
     expr_type e = ty
 Proof
-  rpt strip_tac >> drule type_place_expr_vtype_annotation >>
-  simp[vtype_annotation_ok_def]
+  ACCEPT_TAC vyperTypeSystemTheory.type_place_expr_annotation
 QED
-
 Theorem place_type_checked_place:
   !e cenv env vt.
     place_map_tables_agree cenv env /\

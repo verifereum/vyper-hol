@@ -1260,3 +1260,24 @@ Termination
             | INR ts => list_size stmt_size ts)` >>
   simp[stmt_size_def]
 End
+
+(* Place typing carries the expression's annotation, including module names. *)
+Theorem type_place_expr_vtype_annotation:
+  !e env vt. type_place_expr env e = SOME vt ==>
+    vtype_annotation_ok vt (expr_type e)
+Proof
+  Cases_on `e` >> simp[expr_type_def] >> rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]
+  >- (Cases_on `p` >>
+      simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]) >>
+  metis_tac[]
+QED
+
+Theorem type_place_expr_annotation:
+  !e env ty. type_place_expr env e = SOME (Type ty) ==>
+    expr_type e = ty
+Proof
+  rpt strip_tac >> drule type_place_expr_vtype_annotation >>
+  simp[vtype_annotation_ok_def]
+QED

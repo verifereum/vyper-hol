@@ -11,6 +11,7 @@ Ancestors
      assignment order, the O1 source-stage unit shape *)
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrder evalCompilerSourceShape
+  evalCompilerGettersConstantsParity evalCompilerGettersConstantsRegression
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest

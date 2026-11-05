@@ -1,0 +1,165 @@
+{
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "fixtures": {
+    "c02_const_string": {
+      "deploy_sha256": "d7d1b7554eef92ab71de9a5658f5f2c7ac3a3c191743df6a34374ecca0a5ca61",
+      "frontend_sha256": "aea6850ac24e30dfb446b52e813878de3da94214d45a40247e135bb29222cba5",
+      "runtime_sha256": "6b7afe206e67b276c842f07f98a31a8c413955e65200f8d4ff6bcb1a6d00c931",
+      "source": "sources/c02_const_string.vy",
+      "source_sha256": "6c3cd8c471e35030396f9d6df071aae78376a787f8ff428acd399da57a6e7294"
+    },
+    "c05_const_address": {
+      "deploy_sha256": "74a8f1321901d95cad5f9baa1b5ceebd7ff0163dcce14ce6213286ed50395a2e",
+      "frontend_sha256": "0a6ded74923cd1959522bab356436b45b785cc6fcaec631ee4cef83a048a4f63",
+      "runtime_sha256": "4bf1dae669ff8c24e24fc0d5f943c55544106c969620a3e36145c94c0ffd3ca3",
+      "source": "sources/c05_const_address.vy",
+      "source_sha256": "a0fd04a5d38efb29fcd874237bfb52407cae87e70e5ec67fb9538df2337fcb20"
+    },
+    "c09_const_bytes32": {
+      "deploy_sha256": "ecaa23d17ce6a6745f922f0f983c48df0acbedfbd1d7b5e353f3efbf86cfb0ca",
+      "frontend_sha256": "854eb72cc4f83195b1bd59fd09db222e6d8bc0794cb9bd96014f461a5e58eb62",
+      "runtime_sha256": "9f1e45253417b2409438e6908c8a98526f1c3dab3b16d710f2a92e450dce5f56",
+      "source": "sources/c09_const_bytes32.vy",
+      "source_sha256": "60c7aa02d24f0d829797f1760412880d08b05e6e003cbdd77e06b39ca65f2a6d"
+    },
+    "c11_const_decimal": {
+      "deploy_sha256": "5f96686b041cfd12f981f8c180a28d91b1cf1c31af2062cc7ecf811d4ad10990",
+      "frontend_sha256": "477195064345990821c1cf4c6e20a21c13fc44915de090c2a156809c27df07c0",
+      "runtime_sha256": "c305243ad6e955eb7cd6159f6f6b56cab7b6f3ed9a7d0461017f77d683958365",
+      "source": "sources/c11_const_decimal.vy",
+      "source_sha256": "5a103535d2369ce95d9759d54963c9bdbbc6faacdcdd0e32bbde555da411a0e8"
+    },
+    "c14_pub_const_string": {
+      "deploy_sha256": "70b743a576578743be4f05a10cc64a4e304e9d01f8742cecc4e954567a6d4895",
+      "frontend_sha256": "4c029c6e25f848ad61d653e5920214d5848a8d003bb8a3d04f43bfea94500f4e",
+      "runtime_sha256": "996519233f96bf19f3f74e0d74c33d6296d1e6c469899cc74a2356955957f245",
+      "source": "sources/c14_pub_const_string.vy",
+      "source_sha256": "cf42a6b02f90e5f0b404818569c1ab047a06f3c6527567b6dc0ba5e8e563e5f7"
+    },
+    "c26_const_array_local": {
+      "deploy_sha256": "3d00a2d6b129a95a05fa8f6acdcf69a30fd491ef7d39216dfdaff24061180526",
+      "frontend_sha256": "25e5eeebddd7550bc85927c8f95d3797e0d6448b02cb4c293f4046461a46c5ec",
+      "runtime_sha256": "34703e689047951853f95797a484b0850f9b6a9ef93fc30308e052976f24dd42",
+      "source": "sources/c26_const_array_local.vy",
+      "source_sha256": "a45dcad0a00e36f64437713232411dcb20888f53952804b467a48aae7231ebee"
+    },
+    "c_sha256_initializer": {
+      "deploy_sha256": "c70ac516ce066c14f6fe34086abcc114e2a2c05a5096285c2697d860fa80ed50",
+      "frontend_sha256": "fc085de5f15c444aeaca5ac3232253780cc952e838109fac3d7ba9b7ddab9c5f",
+      "runtime_sha256": "dccc6cec07a06df2888425477adf4710aeb970408011ec36988a34c2f43f07b6",
+      "source": "sources/c_sha256_initializer.vy",
+      "source_sha256": "7f0b0256123079f85ca9b9625c9bb6cbf826ff4fbbc868bf170c8ae318d378b7"
+    },
+    "g01_pub_uint256": {
+      "deploy_sha256": "e5516a112c9baa395b542859b081cdb113a3149f859f6a978f9b43fc53016ea3",
+      "frontend_sha256": "bcaea21dcba8bd41c9944b794bcbac7e9cab9d419c1f4b13cc6e71229bef9c5a",
+      "runtime_sha256": "7f7c1b68117f6198a2c9f9b39df4d783ca928c594cfdf12dd7e033ce03b48c01",
+      "source": "sources/g01_pub_uint256.vy",
+      "source_sha256": "5f001483c6b18c94ff8c1171cd8c1094136b1093dc9860c3f1bf079fa617d72f"
+    },
+    "g13_pub_dynarray": {
+      "deploy_sha256": "7d390ef0f7aeac4a195bd99b70be5c1c004ad9ac2877d3a956d4fafd8206e2b5",
+      "frontend_sha256": "5aca4f0df801a6591d5e7eaa1b41004fbb8b0bba8e686e74309ab61c5b8776c8",
+      "runtime_sha256": "fa4c77408e7d0894f4461d6c58897a68ae0d8902931be04ee22016a0306a3594",
+      "source": "sources/g13_pub_dynarray.vy",
+      "source_sha256": "9081d9a0389df5385b2f4fe191f3801838895290f78019e7ad035d639bb8ede8"
+    },
+    "g15_pub_hashmap": {
+      "deploy_sha256": "2ad5f9fe3995996cd92e1cccbbd472dabddb2a79e039a010995e85eac4489df8",
+      "frontend_sha256": "cfac99d72b5affa256341fd1ab23e0c8611e7a8617b87a8593cc5757765a4c43",
+      "runtime_sha256": "8948a732594c398e6dc121facb8221ecda8a497c61014fd74eb6d427a24d1e74",
+      "source": "sources/g15_pub_hashmap.vy",
+      "source_sha256": "fd6282e736cdc09f7a5658a459ce856a52075171030159bdfc5b418e6a6027dc"
+    },
+    "g17_pub_hashmap_nested": {
+      "deploy_sha256": "0ffb7614f77b5b3060f40c3b2147d634543d4aeb2e8d167d633173888626f87a",
+      "frontend_sha256": "b547b0db77d5231a7100b972762071aa5dda421e2a7e93939a2280beb7fc9913",
+      "runtime_sha256": "9a1d16d970d883815ec21f0505362eac0d104cfbb22d990e28a8f1749b91de00",
+      "source": "sources/g17_pub_hashmap_nested.vy",
+      "source_sha256": "d8be3b276a50cfbe4512737bbbb5c27c00d81de060a520a037d6fa7f2c980991"
+    },
+    "g21_pub_hashmap_array_val": {
+      "deploy_sha256": "0b8f1027236caee2714db3e7a05d75b7acfef489df41e27e76b91c90034f8c35",
+      "frontend_sha256": "332f80612163ad7b4ef4dc76d9d92576097644442bb9eb09f3d0fc80cdf0ad1e",
+      "runtime_sha256": "3a0ded2aeea9553a3eb12b0e41aa7a6031f988a0248d4dd39d02f096ab6088d6",
+      "source": "sources/g21_pub_hashmap_array_val.vy",
+      "source_sha256": "810f63961378bd0356b5634d3302d61b744b16b77a8ae5bdf776f51f780baaa7"
+    },
+    "g23_pub_transient_hashmap": {
+      "deploy_sha256": "5120169e1a91b4fa1fb0d5223d49f2bf7184be6375d17077e7a228f279f9bbde",
+      "frontend_sha256": "1d3a18cd017d40a34b3b7ab28d45f093af6059dce3a3f49c430e40152b9e2997",
+      "runtime_sha256": "46a547ddedf00238e8ec36e3e81c6c385c49df23a7500d65ff1fb0c4f002f465",
+      "source": "sources/g23_pub_transient_hashmap.vy",
+      "source_sha256": "fe0c913695fbb6c1b564de8e72cc53f5906e5ece5c28e5b5e73b8aa0ef90802c"
+    },
+    "g24_pub_2d_array": {
+      "deploy_sha256": "62bcf26b031ab52557bb3bc819a37b10e5bd3f14eb89fb3ee53cbec46a573558",
+      "frontend_sha256": "e97059495a1c5ce2a7f5ce0c34ee00cc3688835f19b103e4c44f09ddffce4a53",
+      "runtime_sha256": "4d4041438c151b8453b77a539b3fdcdd8b6bd59634a17f793b5864e050060aed",
+      "source": "sources/g24_pub_2d_array.vy",
+      "source_sha256": "1ae939f7e6367819b83f6c686a2fee45493257221417a03c49d56c05458e2511"
+    },
+    "g25_pub_with_external": {
+      "deploy_sha256": "af522a5b38f1318daf3bc5244703c939ada4dded5b87b399c399351ce9e96c2c",
+      "frontend_sha256": "f947a88b12add3e420f248d634b69d88276ba49b6f36fb3d72f41e0a438b747e",
+      "runtime_sha256": "ad7c7516d04494498e913333c9a77cb2f1c7378a3804abe7cb1e4d1697d1719c",
+      "source": "sources/g25_pub_with_external.vy",
+      "source_sha256": "43f0882da135ee1e339cc358669d1cf1d4b9c90e7baaf57d89b7770cbf4bff0a"
+    },
+    "g26_pub_with_default": {
+      "deploy_sha256": "998799c6a5a8147e7a30d9e503f3e0ba4d26059754f83ea99c41ef433b43d7eb",
+      "frontend_sha256": "759105e02139e8ea4d868177ab07bdc7b59972deb30373d6895e35f491c4186e",
+      "runtime_sha256": "929c508d5873f3bdc20039d437e4dd4a3de07a3a8e2a453551529923776a43a2",
+      "source": "sources/g26_pub_with_default.vy",
+      "source_sha256": "87145d471398f740be78a03bf31293a3ba5dd74280a4837c3dc2ea1eba56a1bb"
+    },
+    "g31_pub_hashmap_dynarray_val": {
+      "deploy_sha256": "2757453d67a07ea6dc50085ab1d83f9eed086c8bf9a3be84bf1f5900c1c94a33",
+      "frontend_sha256": "f08bb1a21db2b169ae5842cd63db05eb06bca0d381dbf64a8358368c3d43dcc2",
+      "runtime_sha256": "831381479118ad94a4175eea72f82f41315aaa2c8e1226f80287ee95ca83e7c7",
+      "source": "sources/g31_pub_hashmap_dynarray_val.vy",
+      "source_sha256": "2e2661f27b9c5dd5e85837a25a7cf88132392a2df8bbee1d279e5813aa4d4e0e"
+    },
+    "g37_pub_nonreentrancy_pragma": {
+      "deploy_sha256": "d65013571d3902d012a5b01ac74f4655881657e6e64da9d9ca804151cb51f935",
+      "frontend_sha256": "c062ce6bc1d6a9d8e177aa46d0e5a237638b00fb9ed70a26db3d7e2a2f2fd07c",
+      "runtime_sha256": "ce668e10b3d47d40d992f68be5131e47d11c8b7e28bd694fb7b22b326c258722",
+      "source": "sources/g37_pub_nonreentrancy_pragma.vy",
+      "source_sha256": "e83a7b2c7d6ed014810740c891b96c546323c7987c23328184cde1d17b653c44"
+    },
+    "i13_public_immut_address": {
+      "deploy_sha256": "e14a85afe4e0b3fa8d4a858af2797c0d405f789e8f4a78c990c4e6a305eb4bf6",
+      "frontend_sha256": "399bef0d0001323dc8e131d07b0d04ab9e4e0e548e113fdba4773d0266a23a01",
+      "runtime_sha256": "aacb725755c2f1960031ed65d21dc7743893d2d474b2c4ec215304ea1b677807",
+      "source": "sources/i13_public_immut_address.vy",
+      "source_sha256": "cdd46ae913ba8b93979af42afdb733be6ab5a0312e223be6984e7396e8463a9d"
+    }
+  },
+  "producer": "pinned Python Vyper",
+  "python_version": "3.11.11",
+  "schema_version": 2,
+  "settings": {
+    "bytecode_metadata": false,
+    "evm_version": "prague",
+    "experimental_codegen": true,
+    "final_assembly_optimization": false,
+    "optimization_level": "NONE",
+    "outputs": [
+      "bytecode",
+      "bytecode_runtime",
+      "annotated_ast_dict",
+      "layout"
+    ],
+    "venom_ir_pipeline": "O1"
+  },
+  "uv_version": "0.13.4 (aarch64-unknown-linux-gnu)",
+  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
+  "vyper_version": "0.5.0a4"
+}

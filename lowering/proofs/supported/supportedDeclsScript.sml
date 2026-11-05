@@ -35,13 +35,13 @@ Definition supported_declaration_header_def:
         ~nr /\ NULL defaults /\
         EVERY (supported_function_argument tops vis o SND) args /\
         supported_function_return tops vis ret
-    | VariableDecl Private Storage name ty (SOME slot) =>
+    | VariableDecl vis Storage name ty (SOME slot) =>
         supported_storage_type tops ty
-    | VariableDecl Private Transient name ty (SOME slot) =>
+    | VariableDecl vis Transient name ty (SOME slot) =>
         supported_storage_type tops ty
     | VariableDecl Private Immutable name ty NONE =>
         supported_value_type tops ty
-    | HashMapDecl Private transient name kt vt (SOME slot) =>
+    | HashMapDecl vis transient name kt vt (SOME slot) =>
         supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | StructDecl name fields =>
         ~NULL fields /\ EVERY (supported_place_type tops o SND) fields
@@ -155,7 +155,7 @@ QED
 Theorem supported_hashmap_header_contract:
   supported_declaration_header tops
     (HashMapDecl vis transient name kt vt slot) <=>
-  vis = Private /\ IS_SOME slot /\
+  IS_SOME slot /\
   supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
 Proof
   Cases_on `vis` >> Cases_on `slot` >> simp[supported_declaration_header_def]
@@ -169,10 +169,19 @@ Proof
   simp[supported_declaration_header_def]
 QED
 
-Theorem supported_public_variables_rejected:
-  ~supported_declaration_header tops (VariableDecl (Public nr) mut name ty slot)
+Theorem supported_public_storage_header_contract:
+  supported_declaration_header tops
+    (VariableDecl (Public nr) Storage name ty (SOME slot)) <=>
+  supported_storage_type tops ty
 Proof
-  Cases_on `mut` >> Cases_on `slot` >>
+  simp[supported_declaration_header_def]
+QED
+
+Theorem supported_public_transient_header_contract:
+  supported_declaration_header tops
+    (VariableDecl (Public nr) Transient name ty (SOME slot)) <=>
+  supported_storage_type tops ty
+Proof
   simp[supported_declaration_header_def]
 QED
 

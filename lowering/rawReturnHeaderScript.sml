@@ -1,6 +1,6 @@
 Theory rawReturnHeader
 Ancestors
-  e2eDefs supportedProgram supportedDecls vyperTypeContract vyperInterpreter
+  e2eDefs supportedProgram supportedDecls supportedTypes vyperGetter vyperTypeContract vyperInterpreter
 
 Theorem check_contract_none_return_plain[local]:
   !in_deploy layouts addr mods art src tls vis mut nr rr name args defaults body.
@@ -18,6 +18,26 @@ Proof
   simp[check_toplevel_decl_def, function_header_ok_def]
 QED
 
+Theorem supported_build_getter_return:
+  !e kt vt n args ret exp tops.
+    supported_hashmap_value tops vt /\
+    build_getter e kt vt n = (args,ret,exp) ==> ret <> NoneT
+Proof
+  recInduct build_getter_ind >> rpt strip_tac
+  >- (qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+      once_rewrite_tac[build_getter_def] >>
+      Cases_on `vt` >> simp[Once build_getter_def] >>
+      gvs[supported_hashmap_value_def]
+      >- (rename1 `supported_storage_type tops (ArrayT t b)` >>
+          Cases_on `b` >> gvs[supported_storage_array_depth] >>
+          pairarg_tac >> gvs[] >> metis_tac[])
+      >> gvs[supported_storage_type_def, Once supported_nested_type_def,
+             supported_full_word_type_def])
+  >> qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  pairarg_tac >> gvs[supported_hashmap_value_def] >> metis_tac[]
+QED
+
 Theorem supported_lookup_none_raw[local]:
   !ts ambient name mut nr args defaults body.
   EVERY (supported_declaration_header ambient) ts /\
@@ -31,13 +51,31 @@ Proof
   >- (simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
            listTheory.MEM] >>
       Cases_on `s = name /\ f = External` >> gvs[] >> metis_tac[])
-  >- (Cases_on `v` >>
-      simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM, supported_public_variables_rejected] >>
-      metis_tac[])
+  >- (Cases_on `v`
+      >- (Cases_on `v0` >> Cases_on `o'` >>
+          simp[listTheory.EVERY_DEF, supported_declaration_header_def] >>
+          (rpt strip_tac >> reverse (Cases_on `s = name`)
+          >- (gvs[lookup_function_def, lookup_raw_return_def, listTheory.MEM] >>
+              metis_tac[]) >>
+          gvs[lookup_function_def, lookup_raw_return_def, listTheory.MEM] >>
+          Cases_on `t` >> gvs[getter_def]
+          >- (Cases_on `b'` >> gvs[supported_storage_array_depth] >>
+              pairarg_tac >> gvs[] >>
+              metis_tac[supported_build_getter_return, supported_hashmap_value_def])
+          >> gvs[supported_storage_type_def, Once supported_nested_type_def,
+                 supported_full_word_type_def]))
+      >> simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
+              listTheory.MEM] >> metis_tac[])
   >- (simp[listTheory.EVERY_DEF, supported_hashmap_header_contract] >>
-      strip_tac >> gvs[lookup_function_def, lookup_raw_return_def,
-                      listTheory.MEM] >> metis_tac[])
+      strip_tac >> Cases_on `v` >>
+      gvs[lookup_function_def, lookup_raw_return_def, listTheory.MEM]
+      >- (reverse (Cases_on `s = name`)
+          >- (gvs[] >> metis_tac[]) >>
+          gvs[getter_def] >>
+          qpat_x_assum `(\(args,ret,exp). _) _ = _` mp_tac >>
+          pairarg_tac >> gvs[] >>
+          metis_tac[supported_build_getter_return])
+      >> metis_tac[])
   >> simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
           listTheory.MEM] >> metis_tac[]
 QED

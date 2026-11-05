@@ -236,8 +236,12 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
   simp[] >> strip_tac >>
-  `MEM (mut,nr,rr,name,args,dflts,ret,stmts) ints` by
-    metis_tac[MEM_classify_internal, pairTheory.FST, pairTheory.SND] >>
+  `MEM (subst_consts_fn (module_consts_env tops [])
+          (mut,nr,rr,name,args,dflts,ret,stmts)) ints` by
+    (qspec_then `tops` mp_tac MEM_classify_internal >>
+     simp[constSubstTheory.subst_consts_fn_def] >>
+     disch_then kall_tac >>
+     qexistsl_tac [`dflts`, `stmts`] >> simp[]) >>
   `MEM (source_internal_fn_descriptor tops F
           (mut,nr,rr,name,args,dflts,ret,stmts))
        (internal_fn_descriptors
@@ -246,7 +250,9 @@ Proof
     by (simp[GSYM MAP_MAP_o,
             internal_fn_descriptors_set_internal_package_target,
             internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP] >>
-    qexists_tac `(mut,nr,rr,name,args,dflts,ret,stmts)` >> simp[]) >>
+    qexists_tac `subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,stmts)` >>
+    simp[constSubstTheory.subst_consts_fn_def, source_internal_fn_descriptor_def]) >>
   Cases_on `source_internal_fn_descriptor tops F
               (mut,nr,rr,name,args,dflts,ret,stmts)` >>
   rename1 `_ = (lbl, rest)` >> PairCases_on `rest` >>
