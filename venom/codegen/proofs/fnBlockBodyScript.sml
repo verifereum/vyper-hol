@@ -53,9 +53,8 @@ Proof
   cheat
 QED
 
-(* A revert forwarding's code neither spills nor restores.  To come from
-   block_plan_state_static's revert-forwarding conjunct, which states
-   exactly this under the same hypotheses; it isn't on this branch yet. *)
+(* A revert forwarding's code neither spills nor restores:
+   block_plan_state_static's last conjunct. *)
 Theorem body_revert_no_spill[local]:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
    ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
@@ -95,7 +94,9 @@ Theorem body_revert_no_spill[local]:
         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops
 Proof
-  cheat
+  rpt gen_tac >>
+  disch_then (fn th => ACCEPT_TAC (last (CONJUNCTS
+    (MATCH_MP (SPEC_ALL block_plan_state_static) th))))
 QED
 
 Theorem log_case_topics[local]:

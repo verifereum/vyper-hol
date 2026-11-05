@@ -638,7 +638,14 @@ Theorem body_inv_static:
        (!k'' inst'' x. k <= k'' /\ k'' < k' /\
                        get_instruction bb k'' = SOME inst'' /\
                        op = Var x ==> ~MEM x inst''.inst_outputs) ==>
-       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled)
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!j. revert_forward_pair bb k j ==>
+     !ops ps_end.
+       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+         (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
+         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
+       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
 Proof
   strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
   qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,

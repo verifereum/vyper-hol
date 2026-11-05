@@ -1055,7 +1055,8 @@ Proof
            qpat_x_assum `asm_block_at prog pc0 _` (fn th2 =>
              ACCEPT_TAC (REWRITE_RULE [th] th2)))) >>
      qpat_x_assum `as.as_pc = _` SUBST1_TAC >> disch_then ACCEPT_TAC) >>
-  qpat_x_assum `!j. revert_forward_pair bb k j ==> _` drule >> strip_tac >>
+  qpat_x_assum `!j. revert_forward_pair bb k j ==> !k' inst' op. _` drule >>
+  strip_tac >>
   qpat_x_assum `DROP (k - _) (non_param_insts bb) = _` (fn dth =>
     qpat_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ ps =
                 SOME (rest_ops, ps_after)`
