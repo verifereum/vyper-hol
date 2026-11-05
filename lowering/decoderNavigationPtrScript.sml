@@ -5,6 +5,7 @@ Ancestors typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
   compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
+  abiDecoderMemberSetup
 
 Theorem emitted_ptr_offset_frag_ptr:
   !cx ctx PG sa sb id root out off s a G tn total n R.
@@ -360,3 +361,135 @@ Resume calldata_ep_source_frag_ptr[align]:
 QED
 
 Finalise calldata_ep_source_frag_ptr
+
+(* Supplied ordinary endpoint for a destination-navigation ADD. *)
+Theorem emit_ptr_offset_endpoint_ptr[local]:
+  !sa out sb root vo s t a G tn total n cx ctx PG R.
+    emit_op ADD [Var root; Lit (n2w vo)] sa = (out,sb) /\
+    lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
+    vo + n <= total /\ w2n a + vo < dimword(:256) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u q. out = Var q /\
+      lookup_var q t = SOME (n2w (w2n a + vo)) /\
+      ptr_covers H u q (t with vs_inst_idx := SUC s.vs_inst_idx) n /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qabbrev_tac `q = "%" ++ toString sa.cs_next_var` >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `t = update_var q (a + n2w vo) s` by
+    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+      eval_operand_def] >>
+  `!x. not_fresh_at sa x ==> x <> q` by
+    (simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
+  rename1 `ptr_covers G tn root s cap` >>
+  `vo + n <= cap /\ w2n a + vo < dimword(:256)` by decide_tac >>
+  drule_all emitted_ptr_offset_frag_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  qexistsl_tac [`Gf`,`tnf`] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, ptr_covers_def] >> metis_tac[]
+QED
+
+Theorem calldata_member_setup_frag_ptr:
+  !root src dyn ao vo sa ops sb s t a p G tn total n cx ctx PG R.
+    abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) dyn ao vo sa = (ops,sb) /\
+    eval_operand (Var root) s = SOME a /\ eval_operand src s = SOME p /\
+    not_fresh_at sa root /\ (!q. src = Var q ==> not_fresh_at sa q) /\
+    ptr_covers G tn root s total /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+    vo + n <= total /\ w2n a + vo < dimword(:256) /\ ~s.vs_halted /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u q. SND ops = Var q /\
+      eval_operand (SND ops) t = SOME (n2w (w2n a + vo)) /\
+      op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
+      ptr_covers H u q (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) n /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [abi_decode_member_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,mid)` >>
+  rename1 `emit_op ADD [Var root; Lit (n2w vo)] mid = (dst,sb)` >>
+  `inst_extends sa mid /\ inst_extends mid sb` by
+    (conj_tac >-
+      (Cases_on `dyn` >>
+       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
+       simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
+       metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
+     metis_tac[inst_extends_emit_op]) >>
+  `emitted_insts sa sb = emitted_insts sa mid ++ emitted_insts mid sb` by
+    (qspecl_then [`sa`,`mid`,`sb`] mp_tac emitted_insts_append >>
+     fs[inst_extends_def]) >>
+  `?v. run_inst_seq (emitted_insts sa mid) s = OK v` by
+    (spose_not_then assume_tac >>
+     qspecl_then [`emitted_insts sa mid`,`emitted_insts mid sb`,`s`] mp_tac run_inst_seq_append_err >>
+     gvs[]) >>
+  rename1 `run_inst_seq (emitted_insts sa mid) s = OK prepared` >>
+  `run_inst_seq (emitted_insts mid sb) prepared = OK t` by
+    (qpat_assum `run_inst_seq (emitted_insts sa mid) s = _`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts mid sb` mp_tac) >> fs[]) >>
+  drule_all calldata_ep_source_frag_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  rename1 `op_taint u1 ep = {}` >> rename1 `op_prov H1 ep = NONE` >>
+  `lookup_var root prepared = SOME a /\ ptr_covers H1 u1 root prepared total'` by
+    (gvs[eval_operand_def, ptr_covers_def] >> metis_tac[]) >>
+  qabbrev_tac `sp = prepared with vs_inst_idx := LENGTH (emitted_insts sa mid) + s.vs_inst_idx` >>
+  `run_inst_seq (emitted_insts mid sb) sp =
+     OK (t with vs_inst_idx := sp.vs_inst_idx)` by
+    (qpat_assum `emit_op ADD _ mid = _` (mp_then Any mp_tac emit_op_run_pc) >>
+     disch_then (qspecl_then [`prepared`,`sp.vs_inst_idx`] mp_tac) >>
+     simp[is_terminator_def, exec_result_map_def, Abbr `sp`]) >>
+  `lookup_var root sp = SOME a /\ ptr_covers H1 u1 root sp total' /\
+   vo + n <= total' /\ w2n a + vo < dimword(:256)` by
+    (gvs[Abbr `sp`, lookup_var_def, ptr_covers_def] >> decide_tac) >>
+  drule_all emit_ptr_offset_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  `LENGTH (emitted_insts mid sb) = 1` by metis_tac[emit_op_length] >>
+  `same_blocks sa mid /\ same_blocks mid sb` by
+    (conj_tac >-
+      (Cases_on `dyn` >>
+       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
+       simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
+       metis_tac[emit_op_same_blocks, same_blocks_trans]) >>
+     metis_tac[emit_op_same_blocks]) >>
+  `cs_extends sa mid /\ cs_extends mid sb` by
+    (conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def]) >>
+  `frag_exec_ptr cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = H /\ z = u /\
+      v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R` by
+    (irule frag_exec_ptr_seq >>
+     qexistsl_tac [`(\g z v. g = H1 /\ z = u1 /\ v = sp)`, `mid`] >>
+     `LENGTH (emitted_insts sa sb) + s.vs_inst_idx = SUC sp.vs_inst_idx` by
+       simp[Abbr `sp`, ADD1] >>
+     simp[] >>
+     qpat_x_assum `frag_exec_ptr _ _ _ mid sb _ _ _` mp_tac >>
+     simp_tac (srw_ss()) []) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at mid x` by
+    (drule abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters >> strip_tac >>
+     Cases_on `dyn` >> gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `!x. ep = Var x ==> not_fresh_at mid x` by
+    (drule abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters >> strip_tac >>
+     Cases_on `ep` >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `op_taint u ep = {} /\ op_prov H ep = NONE` by
+    (Cases_on `ep` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  qexistsl_tac [`H`,`u`,`q`] >>
+  gvs[Abbr `sp`, eval_operand_def, lookup_var_def, ptr_covers_def] >>
+  metis_tac[]
+QED
