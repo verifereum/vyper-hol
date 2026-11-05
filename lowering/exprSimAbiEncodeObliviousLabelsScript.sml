@@ -162,3 +162,81 @@ Proof
   >> rpt conj_tac >> strip_tac >> drule fresh_label_output_inj >> simp[]
 QED
 
+
+Theorem enc_label_between_disjoint:
+  !lo mid hi x y.
+    enc_label_between lo mid x /\ enc_label_between mid hi y ==> x <> y
+Proof
+  rw[enc_label_between_def]
+  >> strip_tac >> drule fresh_label_output_inj >> simp[]
+QED
+
+Theorem enc_label_between_not_mem:
+  !lo mid hi l xs.
+    enc_label_between lo mid l /\ EVERY (enc_label_between mid hi) xs ==>
+    ~MEM l xs
+Proof
+  simp[EVERY_MEM] >> metis_tac[enc_label_between_disjoint]
+QED
+
+Theorem label_step_reserved_close:
+  !a m b c l.
+    label_step a m /\ label_step m b /\ entry_shape b c /\
+    c.cs_next_label = b.cs_next_label /\ opened_labels b c = [l] /\
+    enc_label_between a.cs_next_label m.cs_next_label l /\
+    ~MEM l (opened_labels a m) ==>
+    label_step a c
+Proof
+  rpt strip_tac
+  >> `label_step a b` by metis_tac[label_step_trans]
+  >> `~MEM l (opened_labels m b)` by
+       (irule enc_label_between_not_mem
+        >> qexistsl_tac [`b.cs_next_label`, `a.cs_next_label`, `m.cs_next_label`]
+        >> gvs[label_step_def])
+  >> `opened_labels a b = opened_labels a m ++ opened_labels m b` by
+       (irule opened_labels_compose >> gvs[label_step_def])
+  >> `opened_labels a c = opened_labels a b ++ [l]` by
+       (gvs[label_step_def] >> drule_all opened_labels_compose >> simp[])
+  >> gvs[label_step_def]
+  >> simp[ALL_DISTINCT_APPEND, EVERY_APPEND]
+  >> conj_tac >- metis_tac[entry_shape_trans]
+  >> irule enc_label_between_mono
+  >> qexistsl_tac [`m.cs_next_label`, `a.cs_next_label`] >> simp[]
+QED
+
+Theorem label_action_dyn_loop_step:
+  !ei. (!dst src. label_action (compile_abi_encode_to_buf dst src ei)) ==>
+    !dst src asz msz len.
+      label_action (compile_abi_encode_dyn_loop dst src ei asz msz len)
+Proof
+  rpt strip_tac >> once_rewrite_tac[compile_abi_encode_child_def]
+  >> simp[label_action_def, compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, emit_inst_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+    fresh_id_def, emit_def, fresh_label_def, new_block_def]
+  >> rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[]
+  >> qpat_x_assum `!dst src. _` (mp_tac o SRULE[label_action_def])
+  >> disch_then drule >> strip_tac
+  >> qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac
+  >> qmatch_asmsub_abbrev_tac `label_step sm sc`
+  >> `label_step a sm` by
+       (simp[Abbr `sm`, label_step_def, opened_labels_def, emitted_blocks_def,
+             enc_label_between_three, ADD1]
+        >> conj_tac
+        >- (qpat_x_assum `label_step _ sc` kall_tac
+            >> rewrite_tac[entry_shape_def] >> disj2_tac
+            >> simp_tac pure_ss [compile_state_accfupds]
+            >> qmatch_goalsub_abbrev_tac `hdr :: entry :: a.cs_blocks`
+            >> qexists_tac `[hdr]` >> simp[Abbr `entry`, APPEND_ASSOC])
+        >> strip_tac >> drule fresh_label_output_inj >> simp[])
+  >> irule label_step_reserved_close
+  >> qexistsl_tac [`sc`, `fresh_label_output "enc_dyn_exit" (a.cs_next_label + 2)`, `sm`]
+  >> simp[]
+  >> reverse conj_tac
+  >- (simp[Abbr `sm`, opened_labels_def, emitted_blocks_def, ADD1,
+           enc_label_between_three]
+      >> rewrite_tac[entry_shape_def] >> disj2_tac >> qexists_tac `[]`
+      >> simp[APPEND_ASSOC])
+  >> simp[Abbr `sm`, opened_labels_def, emitted_blocks_def, ADD1]
+  >> rpt conj_tac >> strip_tac >> drule fresh_label_output_inj >> simp[]
+QED
