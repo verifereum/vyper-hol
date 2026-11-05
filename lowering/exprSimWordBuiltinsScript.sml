@@ -828,8 +828,8 @@ Proof
   `word_value_type (expr_type e)` by
     (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_body_pre_def]) >>
+    (drule expr_body_pre_builtin_typed_arg >> disch_then irule >>
+     gvs[expr_body_pre_def] >> strip_tac >> gvs[word_value_type_def]) >>
   drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
   simp[word_value_type_word]
 QED
@@ -887,7 +887,10 @@ Proof
   irule word_args_values_typed >> goal_assum (drule_at Any) >>
   qexistsl_tac [`cenv`, `env`] >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- (irule expr_body_pre_builtin_arg >> simp[] >>
+      >- (irule expr_body_pre_builtin_typed_arg >> simp[] >>
+          conj_tac
+          >- (strip_tac >> gvs[EVERY_MEM] >> first_x_assum drule >>
+              simp[word_value_type_def]) >>
           qexistsl_tac [`ann`, `args`, `bt`, `es`] >> simp[]) >>
       gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   gvs[expr_body_pre_def]
@@ -1100,7 +1103,8 @@ Proof
   qexists_tac `env` >> simp[] >>
   gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
   rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[expr_body_pre_builtin_arg]
+  >- (`!n. bt <> Slice n` by (rpt strip_tac >> gvs[]) >>
+      metis_tac[expr_body_pre_builtin_arg])
   >- metis_tac[int_calls_builtin_arg] >>
   drule_all word_builtin_operand_types >> simp[EVERY_MEM]
 QED
@@ -1143,6 +1147,8 @@ Proof
   gen_tac >> irule wb_args_ready_of_ok >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `MEM (expr_type e) (MAP expr_type args)` by metis_tac[MEM_MAP] >>
-  `expr_sim_pre cenv cx env e s` by metis_tac[expr_sim_pre_builtin_arg] >>
+  `expr_sim_pre cenv cx env e s` by
+    (irule expr_sim_pre_builtin_typed_arg >> simp[] >>
+     conj_tac >- (strip_tac >> gvs[]) >> metis_tac[]) >>
   gvs[]
 QED
