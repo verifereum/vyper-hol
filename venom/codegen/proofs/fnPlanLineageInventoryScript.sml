@@ -3825,3 +3825,75 @@ Proof
   metis_tac[reorder_plan_shallow_inventory_subset,
             restore_spilled_plan_inventory_subset]
 QED
+
+Theorem select_spill_candidate_target_ceiling[local]:
+  !stk forbidden dist n.
+    0 < n /\ LENGTH stk <= n ==>
+    select_spill_candidate stk forbidden dist n = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `select_spill_candidate stk forbidden dist n` >> simp[] >>
+  drule select_spill_candidate_props >> strip_tac >>
+  qpat_x_assum `select_spill_candidate _ _ _ _ = _` mp_tac >>
+  simp[select_spill_candidate_def, LET_THM] >> strip_tac >>
+  imp_res_tac FIND_SOME_MEM >> gvs[MEM_GENLIST] >>
+  gvs[arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem reduce_depth_plan_target_ceiling[local]:
+  !fuel forbidden op f n ps.
+    0 < n /\ LENGTH ps.ps_stack <= n ==>
+    reduce_depth_plan fuel forbidden op f n ps = ([],ps)
+Proof
+  rpt gen_tac >> Cases_on `fuel` >> simp[reduce_depth_plan_def] >> strip_tac >>
+  simp[select_spill_candidate_target_ceiling] >>
+  Cases_on `f + 1 < n` >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[]
+QED
+
+Theorem do_swap_target_ceiling:
+  !d ps ops qs n.
+    LENGTH ps.ps_stack <= n /\ d < n /\ do_swap d ps = (ops,qs) ==>
+    LENGTH qs.ps_stack <= n /\ qs.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `do_swap _ _ = _` mp_tac >> simp[do_swap_def, LET_THM] >>
+  Cases_on `d = 0` >> simp[] >- (strip_tac >> gvs[]) >>
+  Cases_on `d <= 16` >> simp[] >- (strip_tac >> gvs[]) >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem reorder_one_target_ceiling:
+  !dfg targets idx op ps ops qs.
+    idx < LENGTH targets /\ MEM op targets /\
+    LENGTH ps.ps_stack <= LENGTH targets /\
+    DISJOINT (set targets) (FDOM ps.ps_spilled) /\
+    reorder_one dfg targets idx op ps = (ops,qs) ==>
+    LENGTH qs.ps_stack <= LENGTH targets /\ qs.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FLOOKUP ps.ps_spilled op = NONE` by
+    (simp[FLOOKUP_DEF] >> fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM] >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH targets - (idx + 1)) (LENGTH targets) ps.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  `0 < LENGTH targets` by decide_tac >>
+  simp[reduce_depth_plan_target_ceiling] >>
+  Cases_on `x = LENGTH targets - (idx + 1)` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `LENGTH targets - (idx + 1) < LENGTH ps.ps_stack` >> simp[] >>
+  Cases_on `operand_equiv dfg op
+    (stack_peek (LENGTH targets - (idx + 1)) ps.ps_stack)` >> simp[] >>
+  all_tac >>~- ([`_ /\ (ps with ps_stack := _) = qs ==> _`],
+    strip_tac >> gvs[stack_poke_def]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >> gvs[] >>
+  `x < LENGTH targets /\ LENGTH targets - (idx + 1) < LENGTH targets` by decide_tac >>
+  `LENGTH ps3.ps_stack <= LENGTH targets /\ ps3.ps_spilled = ps.ps_spilled` by
+    (irule do_swap_target_ceiling >> simp[] >> qexistsl [`x`, `swap1_ops`] >> simp[]) >>
+  `LENGTH ps4.ps_stack <= LENGTH targets /\ ps4.ps_spilled = ps3.ps_spilled` by
+    (irule do_swap_target_ceiling >> simp[] >>
+     qexistsl [`LENGTH targets - (idx + 1)`, `swap2_ops`] >> simp[]) >> simp[]
+QED
