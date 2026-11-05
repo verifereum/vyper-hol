@@ -981,7 +981,33 @@ Theorem compile_subscript_map_map_case:
               expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_map_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rw[expr_map_case_def, expr_map_sim_def] >>
+  `expr_map_pre cenv cx env obj es` by
+    (drule_all expr_map_pre_subscript_base >> simp[]) >>
+  `?kt vt. type_place_expr env obj = SOME (HashMapT kt vt)` by
+    fs[expr_map_pre_def] >>
+  `place_map_tables_agree_on_defined cenv env` by
+    fs[expr_map_pre_def, expr_sim_inv_def] >>
+  `place_type cenv obj = MapPT kt vt` by
+    (drule_all place_type_checked_place_on_defined >> simp[value_type_place_def]) >>
+  irule gas_outcome_conseq >>
+  irule_at (Pos last) compile_mapping_subscript_outcome >>
+  simp[] >>
+  qexistsl_tac [`vv`, `vt`, `ty`, `sb`, `sa`, `nocalls`, `kt`, `env`, `cenv`, `expr_map_res_ok`] >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `?ikt ivt. vt = HashMapT ikt ivt` by
+    (qpat_x_assum `expr_map_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
+     simp[expr_map_pre_def, Once well_typed_expr_def] >>
+     Cases_on `vt` >> simp[subscript_vtype_def, AllCaseEqs()]) >>
+  gvs[vyperHashMapStorageTheory.select_result_hashmap_nested] >>
+  drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
+  simp[] >>
+  qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+
 QED
 
 (* With every smaller expression simulating, an expression naming a
@@ -1027,5 +1053,42 @@ Theorem compile_subscript_map_case:
     place_type cenv obj = MapPT kt vt ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rw[expr_vv_case_def, expr_vv_sim_def] >>
+  irule gas_outcome_conseq >>
+  irule_at (Pos last) compile_mapping_subscript_outcome >> simp[] >>
+  qexistsl_tac [`vv`, `vt`, `ty`, `sb`, `sa`, `nocalls`, `kt`, `env`, `cenv`, `expr_vv_res_ok`] >>
+  simp[subscript_result_predicates_exceptions] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    (drule_all expr_body_pre_map_subscript_base >> simp[]) >>
+  `type_place_expr env obj = SOME (HashMapT kt vt)` by
+    (drule_all expr_map_pre_checked_type >> simp[]) >>
+  `~well_typed_expr env obj` by
+    (metis_tac[well_typed_expr_not_hashmap_place]) >>
+  `vt = Type ann` by
+    (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
+     simp[expr_body_pre_def, Once well_typed_expr_def] >>
+     Cases_on `vt` >> simp[subscript_vtype_def, AllCaseEqs()]) >>
+  `tp = ann` by
+    (drule_all compile_expr_mapping_subscript_parts >>
+     strip_tac >> gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+  simp[select_result_def, extend_place_def, lift_option_type_def,
+       lift_option_def, bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  Cases_on `evaluate_type (get_tenv cx) ann` >>
+  gvs[raise_def, return_def] >>
+  drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
+  `contract_storage_well_formed cx ee /\ storage_layout_safe cx` by
+    gvs[expr_sim_inv_def] >>
+  drule_all mapping_leaf_vv_holds >> strip_tac >>
+  simp[vv_post_def, expr_type_def, vv_at_def] >>
+  conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
+  qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+
 QED
