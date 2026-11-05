@@ -21,7 +21,7 @@ Ancestors
   targetPlaceSim targetPlaceSimCases supportedStmts supportedTargets
   supportedStmtTraverse supportedProgram bodyExprPreFacts gasContext
   vyperTypeInvariants vyperTypeCallStackSoundness vyperCompiler
-  stmtLowering exprLowering compileEnv
+  stmtLowering exprLowering compileEnv compileVyper
   vyperInterpreter vyperState vyperTypeSystem
 
 (* Intuition (a statement check's derivation; ignore if unhelpful):
@@ -44,6 +44,32 @@ Ancestors
      with cx_tops_module.
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
      acyclic_struct_metadata: body_inv_def. *)
+Theorem assign_place_typing[local]:
+  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
+  well_typed_expr env e /\
+  ?dty. type_place_target env t = SOME (Type dty) /\
+        type_widens_to env.type_defs (expr_type e) dty /\
+        assignable_type env.type_defs (expr_type e)
+Proof
+  simp[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+  rpt strip_tac >> Cases_on `type_place_target env t` >> gvs[] >>
+  rename1 `SOME pt` >> Cases_on `pt` >> gvs[]
+QED
+
+Theorem body_inv_mcopy[local]:
+  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
+Proof
+  rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
+  >- (gvs[lower_vyper_deploy_unit_def, AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[vyperCompilerTheory.run_deploy_lowering_def, AllCaseEqs(),
+          vyperCompilerTheory.lowering_policy_ok_def]) >>
+  gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[vyperCompilerTheory.run_lowering_def, AllCaseEqs(),
+      vyperCompilerTheory.lowering_policy_ok_def]
+QED
+
 Theorem body_assign_place_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
