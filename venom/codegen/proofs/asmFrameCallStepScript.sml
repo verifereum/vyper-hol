@@ -3409,6 +3409,198 @@ Proof
   gvs[get_static_def, get_current_context_def, bind_def, return_def]
 QED
 
+Theorem asm_call_safe_monop:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_monop op f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_monop_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_pop_stack] >>
+  metis_tac[asm_call_safe_charge_push]
+QED
+
+Theorem asm_call_safe_modop:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_modop op f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_modop_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_pop_stack] >>
+  metis_tac[asm_call_safe_charge_push]
+QED
+
+Theorem asm_call_safe_push:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_push n ws s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_push_def, ignore_bind_def] >>
+  strip_tac >> drule_at (Pat `bind _ _ _ = _`) asm_call_safe_charge_push >> simp[]
+QED
+
+Theorem asm_call_safe_pop:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_pop s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_pop_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[asm_call_safe_pop_stack] >>
+  metis_tac[asm_call_safe_consume_gas]
+QED
+
+Theorem asm_call_safe_context:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_context op f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_context_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_push_stack] >>
+  metis_tac[asm_call_safe_get_context]
+QED
+
+Theorem asm_call_safe_msgParams:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_msgParams op f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_msgParams_def] >> metis_tac[asm_call_safe_context]
+QED
+
+Theorem asm_call_safe_txParams:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_txParams op f s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_txParams_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_get_tx_params] >>
+  metis_tac[asm_call_safe_push_stack]
+QED
+
+Theorem asm_call_safe_jump:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_jump s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_jump_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  metis_tac[asm_call_safe_set_jump_dest]
+QED
+
+Theorem asm_call_safe_jumpi:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_jumpi s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_jumpi_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  metis_tac[asm_call_safe_set_jump_dest]
+QED
+
+Theorem asm_call_safe_dup:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_dup n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_dup_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- (rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+      drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+      disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+      BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+      metis_tac[asm_call_safe_assert, asm_call_safe_push_stack, vfm_abort_def]) >>
+  metis_tac[asm_call_safe_get_context]
+QED
+
+Theorem asm_call_safe_swap:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_swap n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_swap_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- (rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+      drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+      disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+      BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+      metis_tac[asm_call_safe_assert, asm_call_safe_set_context, vfm_abort_def]) >>
+  metis_tac[asm_call_safe_get_context]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
