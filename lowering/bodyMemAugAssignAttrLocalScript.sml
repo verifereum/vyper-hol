@@ -1885,3 +1885,49 @@ Resume compile_safe_pow_exponent_run_mem_src[unsigned]:
 QED
 Finalise compile_safe_pow_exponent_run_mem_src
 
+
+Theorem straight_fresh_pow_exponent_mem_src[local]:
+  !x y ty b. straight_fresh (compile_safe_pow x y ty NONE (SOME b))
+Proof
+  rw[compile_safe_pow_def, LET_THM] >>
+  rpt (FIRST [irule straight_fresh_bind >> conj_tac,
+              irule straight_fresh_ignore_bind >> conj_tac,
+              gen_tac >> BETA_TAC,
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+              irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC])
+QED
+
+Theorem binop_frag_pow_exponent_mem_src[local]:
+  !ctx func cenv cx ann t1 t2 b tys v1 es0 tenv tv1 tv2.
+    well_typed_binop ann Exp t1 t2 /\ 0 <= b /\
+    evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
+    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 (IntV b) ==>
+    binop_frag_val_mem ctx func cenv cx Exp t1 ann NONE (SOME b)
+      tys v1 (IntV b) es0
+Proof
+  rpt gen_tac >> disch_tac >>
+  `is_int_type t1 /\ is_int_type t2` by gvs[well_typed_binop_def] >>
+  qspecl_then [`tenv`, `t1`, `tv1`, `v1`] mp_tac int_type_value_mem_src >>
+  qspecl_then [`tenv`, `t2`, `tv2`, `IntV b`] mp_tac int_type_value_mem_src >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  gvs[well_typed_binop_def] >>
+  rename1 `binop_frag_val_mem _ _ _ _ Exp _ _ _ _ _ (IntV a) _ _` >>
+  `type_bits ann MOD 8 = 0` by metis_tac[int_type_byte_width_mem_src] >>
+  drule_then assume_tac bop_result_power_mem_src >>
+  irule binop_frag_val_mem_straight >> conj_tac
+  >- simp[compile_binop_def, straight_fresh_pow_exponent_mem_src] >>
+  `~(b < 0)` by intLib.ARITH_TAC >>
+  Cases_on `within_int_bound
+    (if is_signed_type ann then Signed (type_bits ann) else Unsigned (type_bits ann))
+    (a ** Num b)`
+  >- (simp[word_value_def] >> strip_tac >> rpt gen_tac >>
+      simp[compile_binop_def, valueEncodingTheory.val_to_w256_def] >> strip_tac >>
+      drule_at (Pat `compile_safe_pow _ _ _ _ _ _ = _`)
+        compile_safe_pow_exponent_run_mem_src >> simp[] >> metis_tac[]) >>
+  simp[] >> strip_tac >> rpt gen_tac >>
+  simp[compile_binop_def, valueEncodingTheory.val_to_w256_def] >> strip_tac >>
+  drule_at (Pat `compile_safe_pow _ _ _ _ _ _ = _`)
+    compile_safe_pow_exponent_run_mem_src >> simp[] >> metis_tac[]
+QED
+
