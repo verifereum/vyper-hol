@@ -13,7 +13,8 @@
 Theory fnLiveDefDom
 Ancestors
   stackPlanGen livenessDefs venomWf codegenReadyCompute venomExecProps
-  livenessTransferProofs dfAnalyzeDefs
+  livenessTransferProofs dfAnalyzeDefs livenessBlockProofs
+  livenessTerminationProofs worklistDefs
 
 Definition ldd_available_def:
   ldd_available fn bb i v <=>
@@ -405,6 +406,74 @@ Proof
   rw[livenessBlockProofsTheory.liveness_out_def, mem_foldl_list_union,
      listTheory.MEM_MAP] >>
   irule ldd_edge_transfer >> metis_tac[]
+QED
+
+Theorem ldd_block_point[local]:
+  codegen_ready_fn fn /\ ldd_state fn st /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  !i v. i <= LENGTH bb.bb_instructions /\
+    MEM v (df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn) lbl st) lbl i) ==>
+    ldd_available fn bb i v \/ ldd_pending_phi bb i v
+Proof
+  strip_tac >>
+  `!n i v. LENGTH bb.bb_instructions = n + i /\
+    MEM v (df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn) lbl st) lbl i) ==>
+    ldd_available fn bb i v \/ ldd_pending_phi bb i v` suffices_by
+    (strip_tac >> rpt strip_tac >>
+     first_x_assum (qspec_then `LENGTH bb.bb_instructions - i` mp_tac) >>
+     simp[]) >>
+  Induct >- (rpt strip_tac >> gvs[] >>
+    `liveness_instrs fn.fn_blocks lbl = bb.bb_instructions` by
+      simp[liveness_instrs_def] >>
+    `MEM v (liveness_out fn.fn_blocks (cfg_analyze fn) lbl st)` by
+      metis_tac[liveness_block_exit] >>
+    disj1_tac >> irule ldd_live_out >> metis_tac[]) >>
+  rpt strip_tac >>
+  `i < LENGTH (liveness_instrs fn.fn_blocks lbl)` by simp[liveness_instrs_def] >>
+  drule liveness_block_transfer >> simp[liveness_instrs_def] >> strip_tac >>
+  irule ldd_instruction >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `df_at [] (liveness_block fn.fn_blocks (cfg_analyze fn) lbl st) lbl (SUC i)` >>
+  conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem ldd_state_block[local]:
+  codegen_ready_fn fn /\ ldd_state fn st ==>
+  ldd_state fn (liveness_block fn.fn_blocks (cfg_analyze fn) lbl st)
+Proof
+  strip_tac >> rw[ldd_state_def] >>
+  rename1 `lookup_block queried fn.fn_blocks = SOME bb` >>
+  Cases_on `queried = lbl`
+  >- (gvs[] >> drule_all ldd_block_point >> metis_tac[]) >>
+  gvs[liveness_block_other_inst] >> metis_tac[ldd_state_def]
+QED
+
+Theorem ldd_state_fuel[local]:
+  codegen_ready_fn fn ==>
+  !fuel wl st. ldd_state fn st ==>
+    ldd_state fn (SND (wl_iterate_fuel fuel (liveness_changed fn.fn_blocks)
+      (liveness_block fn.fn_blocks (cfg_analyze fn))
+      (cfg_preds_of (cfg_analyze fn)) wl st))
+Proof
+  strip_tac >> Induct >> simp[wl_iterate_fuel_def] >>
+  rpt strip_tac >> Cases_on `wl` >> simp[wl_iterate_fuel_def] >>
+  rename1 `label :: rest` >>
+  Cases_on `liveness_changed fn.fn_blocks label st
+    (liveness_block fn.fn_blocks (cfg_analyze fn) label st)` >>
+  simp[wl_step_def, ldd_state_block]
+QED
+
+Theorem ldd_state_analyze[local]:
+  codegen_ready_fn fn ==> ldd_state fn (liveness_analyze fn)
+Proof
+  strip_tac >>
+  `?fuel. liveness_recompute_fuel fuel fn = liveness_recompute fn` by
+    metis_tac[liveness_recompute_fuel_agreement] >>
+  `ldd_state fn (liveness_recompute_fuel fuel fn)` by
+    (simp_tac pure_ss [liveness_recompute_fuel_def, boolTheory.LET_THM] >>
+     irule ldd_state_fuel >> simp[ldd_state_init]) >>
+  gvs[liveness_analyze_def]
 QED
 
 (* Used by fnLineageStatic: no stack slot of a lineage state is an output
