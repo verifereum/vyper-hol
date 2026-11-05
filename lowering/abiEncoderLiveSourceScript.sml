@@ -1,7 +1,7 @@
 Theory abiEncoderLiveSource
 Ancestors
   externalReturnWindowResources abiEncoderWindowSource loweringPosts
-  abiEncoderProps compileEnv vyperABI contractABI
+  abiEncoderProps compileEnv vyperABI contractABI abiEncoderWindow abiEncoderInput
 
 Theorem abi_plan_bytes_inversion[local]:
   abi_enc_plan env (BaseT (BytesT (Dynamic n))) ei ==>
@@ -64,4 +64,15 @@ Proof
      SOME (contractABI$BytesV (MAP n2w_o_ORD str))` by
     simp[vyper_to_abi_def] >>
   drule_all abi_encoder_window_string_source >> simp[]
+QED
+
+Theorem abi_encoder_window_singleton:
+  abi_encoder_window_input ei at rv p cap mem /\ cap <= mem_sz ==>
+  abi_encoder_window_input
+    (AbiComplex [(ei,abi_member_head_size at,mem_sz,is_dynamic at)])
+    (Tuple [at]) (ListV [rv]) p cap mem
+Proof
+  strip_tac >> simp[abi_encoder_window_complex_iff,
+    abi_encoder_tuple_type_def, abi_encoder_member_span_def] >>
+  qexists_tac `cap` >> simp[]
 QED
