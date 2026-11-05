@@ -58,7 +58,8 @@ Proof
   `active_inst (FST (lower_dload_function_supply f.lf_supply fn)) ti
      (ts with vs_inst_idx := SUC p)` by
     (qpat_x_assum `active_inst (ld_image f) _ _` mp_tac >> simp[ld_image_def]) >>
-  drule_all ld_envelope_singleton_next >> strip_tac >>
+  drule_all (SRULE [GSYM arithmeticTheory.ADD1] (Q.INST [`X` |-> `[inst]`] ld_envelope_expansion_next)) >>
+  strip_tac >>
   qabbrev_tac `postframe = f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
       lf_tv := (step_taint inst s ss tn).t_var|>` >>
   qabbrev_tac `newframe = postframe with

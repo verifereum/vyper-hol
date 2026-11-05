@@ -12,17 +12,17 @@ Proof
   metis_tac[MEM_MAP]
 QED
 
-Theorem lower_dload_insts_supply_singleton_next:
+Theorem lower_dload_insts_supply_expansion_next:
   j < LENGTH ins /\
   lower_dload_insts_supply u (TAKE j ins) = (pre,u0) /\
-  lower_dload_inst_supply u0 (EL j ins) = ([inst],u1) /\
-  SUC (LENGTH pre) < LENGTH (FST (lower_dload_insts_supply u ins)) ==>
+  lower_dload_inst_supply u0 (EL j ins) = (X,u1) /\
+  LENGTH pre + LENGTH X < LENGTH (FST (lower_dload_insts_supply u ins)) ==>
   SUC j < LENGTH ins /\
   LENGTH (FST (lower_dload_insts_supply u (TAKE (SUC j) ins))) =
-    SUC (LENGTH pre)
+    LENGTH pre + LENGTH X
 Proof
   rpt strip_tac >>
-  `lower_dload_insts_supply u (TAKE (SUC j) ins) = (pre ++ [inst],u1)` by
+  `lower_dload_insts_supply u (TAKE (SUC j) ins) = (pre ++ X,u1)` by
     (irule lower_dload_insts_supply_next >> simp[] >> metis_tac[]) >>
   gvs[] >>
   Cases_on `SUC j < LENGTH ins` >> simp[] >>
@@ -30,14 +30,14 @@ Proof
   gvs[]
 QED
 
-Theorem ld_envelope_singleton_next:
+Theorem ld_envelope_expansion_next:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
-  ld_envelope u fn s j [inst] p /\
+  ld_envelope u fn s j X p /\
   t.vs_current_bb = s.vs_current_bb /\
   active_inst (FST (lower_dload_function_supply u fn)) ti
-    (t with vs_inst_idx := SUC p) ==>
+    (t with vs_inst_idx := p + LENGTH X) ==>
   ?next Y. active_inst fn next (s with vs_inst_idx := SUC j) /\
-    ld_envelope u fn (s with vs_inst_idx := SUC j) (SUC j) Y (SUC p)
+    ld_envelope u fn (s with vs_inst_idx := SUC j) (SUC j) Y (p + LENGTH X)
 Proof
   simp[ld_envelope_def, active_inst_def] >> rpt strip_tac >>
   qabbrev_tac `g = FST (lower_dload_function_supply u fn)` >>
@@ -53,18 +53,20 @@ Proof
      qexists_tac `g.fn_blocks` >> asm_rewrite_tac[]) >>
   gvs[] >>
   qmatch_asmsub_abbrev_tac `j < LENGTH src` >>
+  qabbrev_tac `X = FST (lower_dload_inst_supply
+    (SND (lower_dload_insts_supply u0 (TAKE j src))) (EL j src))` >>
   `lower_dload_insts_supply u0 (TAKE j src) =
     (FST (lower_dload_insts_supply u0 (TAKE j src)),
      SND (lower_dload_insts_supply u0 (TAKE j src)))` by simp[] >>
   `lower_dload_inst_supply
      (SND (lower_dload_insts_supply u0 (TAKE j src))) (EL j src) =
-     ([inst], SND (lower_dload_inst_supply
+     (X, SND (lower_dload_inst_supply
        (SND (lower_dload_insts_supply u0 (TAKE j src))) (EL j src)))` by
      (Cases_on `lower_dload_inst_supply
-       (SND (lower_dload_insts_supply u0 (TAKE j src))) (EL j src)` >> gvs[]) >>
-  `SUC (LENGTH (FST (lower_dload_insts_supply u0 (TAKE j src)))) <
+       (SND (lower_dload_insts_supply u0 (TAKE j src))) (EL j src)` >> gvs[Abbr `X`]) >>
+  `LENGTH (FST (lower_dload_insts_supply u0 (TAKE j src))) + LENGTH X <
     LENGTH (FST (lower_dload_insts_supply u0 src))` by simp[] >>
-  drule_all lower_dload_insts_supply_singleton_next >> strip_tac >>
+  drule_all lower_dload_insts_supply_expansion_next >> strip_tac >>
   qexists_tac `EL (SUC j) src` >>
   qexists_tac `FST (lower_dload_inst_supply
     (SND (lower_dload_insts_supply u0 (TAKE (SUC j) src))) (EL (SUC j) src))` >>

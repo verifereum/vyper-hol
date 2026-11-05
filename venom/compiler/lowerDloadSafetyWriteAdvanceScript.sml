@@ -37,7 +37,8 @@ Proof
     (`s.vs_current_bb = t.vs_current_bb` by
        (qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         pure_rewrite_tac[ld_sync_def] >> simp[] >> strip_tac >> simp[]) >> simp[]) >>
-  drule_all ld_envelope_singleton_next >> strip_tac >>
+  drule_all (SRULE [GSYM arithmeticTheory.ADD1] (Q.INST [`X` |-> `[inst]`] ld_envelope_expansion_next)) >>
+  strip_tac >>
   `G = ld_erase A o_f f.lf_H` by
     (drule ld_sync_ghosts >> simp[]) >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
