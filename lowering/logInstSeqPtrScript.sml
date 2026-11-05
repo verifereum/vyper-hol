@@ -264,3 +264,48 @@ Proof
   simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF] >>
   eq_tac >> rpt strip_tac >> gvs[] >> decide_tac
 QED
+
+(* A successful second phase is checked at its advanced cursor. Restore only
+   the raw semantic run's cursor when composing the two run_inst_seq witnesses. *)
+Theorem run_inst_seq_append_advanced:
+  EVERY (\i. ~is_terminator i.inst_opcode) ys /\
+  run_inst_seq xs s = OK t /\
+  run_inst_seq ys (t with vs_inst_idx := s.vs_inst_idx + LENGTH xs) = OK u ==>
+  run_inst_seq (xs ++ ys) s = OK (u with vs_inst_idx := t.vs_inst_idx)
+Proof
+  strip_tac >>
+  qpat_assum `run_inst_seq xs s = OK t`
+    (mp_then Any (qspec_then `ys` SUBST1_TAC) run_inst_seq_append) >>
+  qspec_then `t with vs_inst_idx := s.vs_inst_idx + LENGTH xs` mp_tac
+    (Q.SPEC `ys` run_inst_seq_inst_idx) >> simp[] >>
+  disch_then (qspec_then `t.vs_inst_idx` mp_tac) >>
+  simp[exec_result_map_def]
+QED
+
+Theorem successful_seq_ptr_append:
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode) ys /\
+  run_inst_seq xs s = OK t /\ inst_seq_ptr D lo ctx fn PG G tn xs s H tm /\
+  run_inst_seq ys (t with vs_inst_idx := s.vs_inst_idx + LENGTH xs) = OK u /\
+  inst_seq_ptr D lo ctx fn PG H tm ys
+    (t with vs_inst_idx := s.vs_inst_idx + LENGTH xs) Gf tk ==>
+  run_inst_seq (xs ++ ys) s = OK (u with vs_inst_idx := t.vs_inst_idx) /\
+  inst_seq_ptr D lo ctx fn PG G tn (xs ++ ys) s Gf tk
+Proof
+  strip_tac >> conj_tac
+  >- (irule run_inst_seq_append_advanced >> simp[]) >>
+  irule inst_seq_ptr_append >> simp[] >>
+  qexistsl_tac [`H`, `tm`] >> metis_tac[ADD_COMM]
+QED
+
+Theorem variable_ptr_frame_trans:
+  (!p. A p ==> B p) /\
+  (!p. A p ==> lookup_var p t = lookup_var p s /\
+    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
+  (!p. B p ==> lookup_var p u = lookup_var p t /\
+    FLOOKUP Gf p = FLOOKUP H p /\ op_taint tk (Var p) = op_taint tm (Var p)) ==>
+  !p. A p ==> lookup_var p u = lookup_var p s /\
+    FLOOKUP Gf p = FLOOKUP G p /\ op_taint tk (Var p) = op_taint tn (Var p)
+Proof
+  metis_tac[]
+QED
