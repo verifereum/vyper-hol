@@ -373,6 +373,48 @@ Proof
     metis_tac[optionTheory.IS_SOME_DEF]) >> metis_tac[]
 QED
 
+Theorem alookup_zip_field_mem_src[local]:
+  !fields tvs f fld fty fsz.
+    OPT_MMAP f (MAP (FST o SND) fields) = SOME tvs /\
+    ALOOKUP fields fld = SOME (fty,fsz) ==>
+    ?ftv. ALOOKUP (ZIP (MAP FST fields,tvs)) fld = SOME ftv /\
+      f fty = SOME ftv
+Proof
+  Induct >> FULL_SIMP_TAC list_ss [listTheory.OPT_MMAP_def, alistTheory.ALOOKUP_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  FULL_SIMP_TAC list_ss [listTheory.OPT_MMAP_def, alistTheory.ALOOKUP_def] >>
+  strip_tac >> qpat_x_assum `_:: _ = tvs` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `h0 = fld` >>
+  FULL_SIMP_TAC list_ss [alistTheory.ALOOKUP_def] >> metis_tac[]
+QED
+
+Theorem struct_field_type_mem_src[local]:
+  !cenv cx env es sid fs fld fty fsz.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld =
+      SOME (fty,fsz) ==>
+    ?ftv. ALOOKUP fs fld = SOME ftv /\
+      evaluate_type (get_tenv cx) fty = SOME ftv
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
+  SIMP_TAC std_ss [Once vyperValueTheory.evaluate_type_def, LET_THM,
+    AllCaseEqs()] >> strip_tac >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     pure_rewrite_tac [expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  pure_rewrite_tac [sfields_tenv_consistent_def] >> strip_tac >>
+  qpat_x_assum `v1 = StructArgs args` SUBST_ALL_TAC >>
+  first_x_assum drule >> strip_tac >>
+  FULL_SIMP_TAC std_ss [get_struct_fields_def] >>
+  drule (cj 2 evaluate_type_mono) >> strip_tac >>
+  FULL_SIMP_TAC std_ss [vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  FULL_SIMP_TAC list_ss [vyperValueTheory.type_value_11] >>
+  metis_tac[alookup_zip_field_mem_src]
+QED
+
 Theorem augassign_attr_source_fields_mem_src[local]:
   expr_sim_inv cenv cx env es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -389,7 +431,7 @@ Proof
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
     metis_tac[] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-  drule_all struct_field_type >> strip_tac >>
+  drule_all struct_field_type_mem_src >> strip_tac >>
   `value_has_type entry.type entry.value` by
     (fs[expr_sim_inv_def, state_well_typed_def] >>
      metis_tac[scope_well_typed_lookup_scopes]) >>
@@ -1052,6 +1094,8 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
+
+
 
 
 
