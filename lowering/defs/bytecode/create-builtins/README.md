@@ -4,15 +4,17 @@ This corpus contains the 23 witnesses from `.agent-files/TASK.md`: all four
 creation builtins, salted forms, constructor arguments, storage bytecode,
 the forwarder alias, nested creation, and the raw-argument domain boundary.
 
-The independent `oracle/` files were generated with pinned Vyper
-`0.5.0a4+commit.cd74ce4f`, Prague, experimental codegen, optimization `NONE`,
-and no bytecode metadata. `provenance.json` records source and output hashes.
+The independent `oracle/` files were generated with the `VYPER_PIN` Vyper
+(`0.5.0b1+commit.577d2534`), Prague, experimental codegen, optimization
+`NONE`, and no bytecode metadata. `provenance.json` records source and output
+hashes.
 
-The receipt is historical: it records `cd74ce4f`, rather than the current
-`VYPER_PIN`. The current compiler also rejects the retained
-`dom06_blueprint_rawargs_b32` source. Consequently, `prepare --check` cannot
-reproduce this entire archive at the current pin. Keep that diagnostic and
-its oracle files when checking the accepted fixtures.
+The compiler at the pin rejects `dom06_blueprint_rawargs_b32`, so its oracle
+files are kept from `0.5.0a4+commit.cd74ce4f`, and `prepare` cannot reproduce
+this corpus as a whole. Keep that diagnostic and its oracle files when
+regenerating the accepted fixtures. The fixtures whose bytecode changed at
+the pin through vyperlang/vyper#5127 are out of `parity-fixtures.txt` and
+listed in `../pending-5127-port.md`.
 
 With the `VYPER_PIN` compiler on `PATH`, compare an accepted fixture's deploy
 and runtime bytecode with its committed `.hex` file, for example:

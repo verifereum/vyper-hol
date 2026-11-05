@@ -82,6 +82,7 @@ from reverting one change at a time in the pinned compiler and recompiling.
 - `conversions/bys32_to_i8`
 - `conversions/bys32_to_u8`
 - `conversions/bys4_to_b4`
+- `create-builtins/cb03_blueprint_rawargs`
 - `deep-dup/arr_dyn_of_dyn`
 - `deep-dup/arr_fixed_of_dyn`
 - `main/external_arrays`
@@ -145,6 +146,10 @@ from reverting one change at a time in the pinned compiler and recompiling.
 
 ## P4 (direct ABI encoder)
 
+- `create-builtins/cb02_blueprint_args`
+- `create-builtins/cb05_blueprint_rof`
+- `create-builtins/cb07_blueprint_args_salt`
+- `create-builtins/rcr04_rawcreate_storage`
 - `external-calls/e40_extcall_gas`
 - `external-calls/e41_staticcall_gas`
 - `external-calls/e42_extcall_gas_value_order`
@@ -164,6 +169,7 @@ from reverting one change at a time in the pinned compiler and recompiling.
 ## P1 (ceil32) + P4 (direct ABI encoder)
 
 - `abi-codegen/enc_multi`
+- `create-builtins/cb06_blueprint_dyn_offset`
 - `external-calls/e25_arg_strlit_short`
 - `external-calls/e36_arg_bytes_literal`
 - `external-calls/e46_arg_storage_str`
@@ -171,6 +177,11 @@ from reverting one change at a time in the pinned compiler and recompiling.
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 
+- `create-builtins/rcr01_rawcreate`
+- `create-builtins/rcr02_rawcreate_args_salt`
+- `create-builtins/rcr03_rawcreate_rof`
+- `create-builtins/rcr05_rawcreate_args`
+- `create-builtins/rcr06_rawcreate_salt`
 - `external-calls/e27_arg_dyn_smaller`
 
 ## P1 (ceil32) + P2 (calldata argument guard) + P4 (direct ABI encoder)
@@ -189,3 +200,7 @@ from reverting one change at a time in the pinned compiler and recompiling.
 ## P7 (subscript overlap)
 
 - `load_timing/nested_retained_pop`
+
+The `raw_create` fixtures' ASTs changed at vyperlang/vyper#5127 as well: the
+bytecode argument is annotated with its own type (`Bytes[100]` in these
+sources) rather than the builtin's `Bytes[49152]` parameter type.
