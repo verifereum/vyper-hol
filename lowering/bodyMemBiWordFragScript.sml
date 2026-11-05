@@ -12,7 +12,7 @@ Ancestors
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState valueEncoding venomExecSemantics venomInst
   venomState vyperValue exprSimWordBuiltins
-  words integer_word vfmExecution builtinMath builtinMisc builtinSimple vyperContext
+  words integer_word vfmExecution builtinMath builtinMisc builtinSimple vyperContext builtinProps
 Libs
   pairLib
 
@@ -319,4 +319,84 @@ Proof
   qpat_x_assum `v2 = _` (fn th => once_rewrite_tac[th]) >>
   qpat_x_assum `v3 = _` (fn th => once_rewrite_tac[th]) >>
   MATCH_ACCEPT_TAC compile_modular_word_frag_mem
+QED
+
+Theorem compile_floor_word_frag_mem:
+  !ctx func cenv cx es ann ts i.
+    within_int_bound (Signed 168) i ==>
+    !sa sb xs op s0.
+      compile_floor (EL 0 xs) 10000000000 sa = (op,sb) /\
+      expr_res_ok (builtin_result cx es.accounts ann Floor ts [DecimalV i]) /\
+      EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+      alloca_history func s0 /\
+      LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [DecimalV i] /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      ?r. gas_marked_path T ctx func s0 0 r /\
+        ((?s v. r = OK s /\ builtin_result cx es.accounts ann Floor ts [DecimalV i] = INL v /\
+          word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+          eval_operand op s = SOME (val_to_w256 v) /\
+          (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
+          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
+          s.vs_memory = s0.vs_memory /\ ~s.vs_halted /\
+          s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next) \/
+         (exit_result r /\ expr_exit (builtin_result cx es.accounts ann Floor ts [DecimalV i]) r))
+Proof
+  ntac 8 gen_tac >> strip_tac >>
+  ho_match_mp_tac word_builtin_mem_success >>
+  simp[SF ETA_ss, builtin_result_def, evaluate_builtin_def, straight_fresh_floor, word_value_def] >>
+  rpt strip_tac >> gvs[LIST_REL_EL_EQN, val_to_w256_def] >>
+  drule_all compile_floor_correct >> strip_tac >>
+  qexists_tac `ss'` >> simp[] >>
+  drule decimal_floor_word >> simp[WORD_LTi, word_0_w2i]
+QED
+
+Theorem compile_as_wei_value_word_frag_mem:
+  !ctx func cenv cx es ann ts d (a:bytes32).
+    !sa sb xs op s0.
+      compile_as_wei_value_int (EL 0 xs) (denomination_multiplier d) F sa = (op,sb) /\
+      expr_res_ok (builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)]) /\
+      EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+      alloca_history func s0 /\
+      LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [IntV (&w2n a)] /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      ?r. gas_marked_path T ctx func s0 0 r /\
+        ((?s v. r = OK s /\
+          builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)] = INL v /\
+          word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+          eval_operand op s = SOME (val_to_w256 v) /\
+          (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
+          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
+          s.vs_memory = s0.vs_memory /\ ~s.vs_halted /\
+          s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next) \/
+         (exit_result r /\ expr_exit
+           (builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)]) r))
+Proof
+  ntac 9 gen_tac >>
+  qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
+  Cases_on `w2n a * denomination_multiplier d < dimword (:256)`
+  >- (rule_assum_tac (SIMP_RULE (srw_ss()) [dimword_def, arithmeticTheory.MULT_COMM]) >>
+      ho_match_mp_tac word_builtin_mem_success >>
+      simp[SF ETA_ss, builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint,
+           dimword_def, straight_fresh_as_wei_value_int, word_value_def] >>
+      rpt strip_tac >> gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+      `!z. x = Var z ==> not_fresh_at sa z` by
+        metis_tac[fresh_vars_wrt_not_fresh_at] >>
+      drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >>
+      simp[dimword_def, word_mul_def, w2n_n2w, arithmeticTheory.MULT_COMM]) >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) [dimword_def, arithmeticTheory.MULT_COMM]) >>
+  ho_match_mp_tac word_builtin_mem_revert >>
+  simp[SF ETA_ss, builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint,
+       dimword_def, straight_fresh_as_wei_value_int] >>
+  rpt strip_tac >> gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+  `!z. x = Var z ==> not_fresh_at sa z` by
+    metis_tac[fresh_vars_wrt_not_fresh_at] >>
+  drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >> simp[]
 QED
