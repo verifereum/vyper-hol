@@ -1,6 +1,6 @@
 Theory abiEncodeArgsTyping
 Ancestors
-  abiEncodeArgsCase exprSimAggregateSource vyperTypeABI exprSimHyps exprSim
+  abiEncodeArgsCase exprSimAggregateSource vyperTypeABI exprSimHyps exprSimDefs
 
 Theorem abi_encode_arg_success_typed:
   expr_body_pre ce cx env e es /\

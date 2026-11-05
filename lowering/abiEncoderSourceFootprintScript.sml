@@ -1,7 +1,7 @@
 Theory abiEncoderSourceFootprint
 Ancestors
   abiEncoderSourceProducer abiEncoderSourceAggregate abiEncoderOpenInput
-  abiEncoderProps exprSim valueEncoding vyperValue vyperTyping vyperABI
+  abiEncoderProps exprSimDefs valueEncoding vyperValue vyperTyping vyperABI
   abiEncoderSourceWindow abiBuiltinAllocation contractABI compileEnv vyperMisc list
 
 Theorem abi_encoder_source_footprint_rep:

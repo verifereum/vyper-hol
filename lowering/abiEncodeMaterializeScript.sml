@@ -1,7 +1,7 @@
 Theory abiEncodeMaterialize
 Ancestors
   abiEncodeMaterializeExec exprSimAggregateChildren exprSimUnwrap
-  exprSim context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
+  exprSimDefs context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
   exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
 
 (* Allocating a new buffer extends the allocation map, rather than leaving

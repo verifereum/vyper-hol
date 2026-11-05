@@ -1,7 +1,7 @@
 (* Actual source ownership at a fresh staging frontier. *)
 Theory abiEncodeOwnership
 Ancestors
-  abiEncodeInputSupplier exprSim exprLoweringProps compileEnv venomMemDefs
+  abiEncodeInputSupplier exprSimDefs exprLoweringProps compileEnv venomMemDefs
   abiEncodeArgsSim finite_map words arithmetic list rich_list
 
 Theorem abi_encode_local_region_frontier:
