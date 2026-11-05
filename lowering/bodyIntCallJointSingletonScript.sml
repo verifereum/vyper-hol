@@ -2,6 +2,9 @@ Theory bodyIntCallJointSingleton
 Ancestors
   exprSimAggregateSource exprSimWordArgs vyperState
   exprSimSource exprSimHypsDefs vyperTypeSystem
+  valueEncoding valueEncodingProps venomState
+  bodyIntCallGasPrefix bodyIntCallJointTuple exprSimBuffer exprSimAlloc
+  context compileEnv emitHelper exprLowering
 
 (* Materialise the sole child on its actual evaluation endpoint. *)
 Theorem joint_eval_make_tuple_singleton:
@@ -73,3 +76,88 @@ QED
    the existing existential aggregate simulation.  No ordinary-success proof
    would discharge gas_outcome's exempt alternative; enclosing source outcome
    transport must retain that branch separately. *)
+
+(* Singleton tuple encoding on the actual scalar-store endpoint. *)
+Theorem joint_singleton_int_store_encoding:
+  val_in_memory (TupleTV [tv]) (ArrayV (TupleV [IntV n])) off
+    (mstore off (val_to_w256 (IntV n)) s).vs_memory
+Proof
+  simp[valueEncodingTheory.val_in_memory_def,
+       valueEncodingTheory.val_to_w256_def, mstore_mem_word_at_same]
+QED
+
+(* The three register-producing steps use distinct monotonically fresh names. *)
+Theorem joint_alloc_gas_add_registers:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) ==>
+  buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var)) /\
+  gop = Var (STRING #"%" (toString sm.cs_next_var)) /\
+  dst = Var (STRING #"%" (toString sn.cs_next_var)) /\
+  sm.cs_next_var = sa.cs_next_var + 1 /\
+  sn.cs_next_var = sm.cs_next_var + 1 /\
+  sp.cs_next_var = sn.cs_next_var + 1 /\
+  sm.cs_next_id = sa.cs_next_id + 1 /\
+  sn.cs_next_id = sm.cs_next_id + 1 /\
+  sp.cs_next_id = sn.cs_next_id + 1
+Proof
+  simp[compile_alloc_buffer_def, compile_env_var_def,
+       emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem joint_alloc_gas_add_pointer_kept:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  eval_operand buf.buf_operand t = SOME p ==>
+  eval_operand buf.buf_operand
+    ((mstore (w2n p) w
+      (update_var (STRING #"%" (toString sn.cs_next_var)) p
+        (update_var (STRING #"%" (toString sm.cs_next_var)) w
+          (t with vs_gas_readings := tail))))
+       with vs_inst_idx := ix) = SOME p
+Proof
+  strip_tac >> drule_all joint_alloc_gas_add_registers >> strip_tac >>
+  gvs[eval_operand_def, lookup_var_def, update_var_def, mstore_def,
+      finite_mapTheory.FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]
+QED
+
+Theorem joint_alloc_gas_add_tuple_holds:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  eval_operand buf.buf_operand t = SOME p /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  vv_holds ce cx (TupleT [ty]) (Value (ArrayV (TupleV [IntV (&w2n w)])))
+    (LocatedValue (TupleT [ty]) (mk_ptr buf.buf_operand LocMemory)) ee
+    ((mstore (w2n p) w
+      (update_var (STRING #"%" (toString sn.cs_next_var)) p
+        (update_var (STRING #"%" (toString sm.cs_next_var)) w
+          (t with vs_gas_readings := tail))))
+       with vs_inst_idx := ix)
+Proof
+  strip_tac >> drule_all joint_alloc_gas_add_pointer_kept >>
+  disch_then (qspecl_then [`w`,`tail`,`ix`] assume_tac) >>
+  simp[loweringPostsTheory.vv_holds_def, mk_ptr_def, read_result_def,
+       return_def, vyperValueTheory.evaluate_type_def,
+       is_word_type_def] >>
+  qexists_tac `p` >> conj_tac
+  >- (qpat_x_assum `eval_operand _ (_ with vs_inst_idx := _) = _` mp_tac >>
+      Cases_on `buf.buf_operand` >>
+      simp[eval_operand_def, lookup_var_def, update_var_def, mstore_def]) >>
+  `val_to_w256 (IntV (&w2n w)) = w` by
+    simp[valueEncodingTheory.val_to_w256_def] >>
+  metis_tac[joint_singleton_int_store_encoding]
+QED
+
+Theorem joint_msg_gas_tuple_typed:
+  expr_sim_pre ce cx env
+    (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args]) es ==>
+  ann = TupleT [env_item_type MsgGas] /\
+  ga = env_item_type MsgGas /\ args = [] /\ compatible_bound bnd 1
+Proof
+  simp[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  Cases_on `args` >> simp[vyperASTTheory.expr_type_def]
+QED
