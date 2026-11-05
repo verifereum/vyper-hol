@@ -295,6 +295,8 @@ Theorem ld_extract_venom_effect:
   ?ss. extract_venom_result s w ro n R = SOME (v,ss) /\
     ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
     ss.vs_returndata = ts.vs_returndata /\
+    ss.vs_params = s.vs_params /\ ts.vs_params = t.vs_params /\
+    ss.vs_fmp = s.vs_fmp /\ ts.vs_fmp = t.vs_fmp /\
     ss.vs_vars = s.vs_vars /\ ts.vs_vars = t.vs_vars /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\

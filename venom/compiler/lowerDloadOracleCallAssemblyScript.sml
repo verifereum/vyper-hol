@@ -88,13 +88,13 @@ Theorem ld_oracle_call_scalar_index:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   ((inst.inst_opcode = CALL /\
     inst.inst_operands = [g;a;v;ao;az;ro;rz] /\ MEM i [0;1;2;4;6]) \/
-   (inst.inst_opcode = STATICCALL /\
+   (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\
     inst.inst_operands = [g;a;ao;az;ro;rz] /\ MEM i [0;1;3;5])) /\
   EL i inst.inst_operands = Var x ==>
   x NOTIN fn_pv P fn
 Proof
-  strip_tac >> (irule ld_ptr_use_scalar_index >>
-  reverse conj_tac >- simp[] >>
+  strip_tac >> (fs[] >> irule ld_ptr_use_scalar_index >>
+  (reverse conj_tac >- simp[]) >>
   qexistsl_tac [`i`,`inst`] >>
   simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def] >>
   qexistsl_tac [`if inst.inst_opcode = CALL then 3 else 2`,
@@ -109,7 +109,7 @@ Theorem ld_oracle_call_scalar_equal:
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
   ((inst.inst_opcode = CALL /\
     inst.inst_operands = [g;a;v;ao;az;ro;rz] /\ MEM i [0;1;2;4;6]) \/
-   (inst.inst_opcode = STATICCALL /\
+   (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\
     inst.inst_operands = [g;a;ao;az;ro;rz] /\ MEM i [0;1;3;5])) ==>
   eval_operand (EL i inst.inst_operands) f.lf_src =
   eval_operand (EL i inst.inst_operands) f.lf_tgt
@@ -257,7 +257,8 @@ Theorem ld_oracle_call_ranges:
   ~in_revert_forward fn s /\
   ((inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
     eval_operand v s = SOME value) \/
-   (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz])) /\
+   (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\
+    inst.inst_operands = [g;a;ao;az;ro;rz])) /\
   eval_operand g s = SOME gas /\ eval_operand a s = SOME addr /\
   eval_operand ao s = SOME x /\ eval_operand az s = SOME n /\
   eval_operand ro s = SOME r /\ eval_operand rz s = SOME rsize /\
@@ -280,7 +281,7 @@ Proof
    MEM (w2n r,w2n rsize) (source_memory_write_ranges inst s) /\
    ~about_to_revert fn inst s /\
    ~MEM inst.inst_opcode [MLOAD;ILOAD;MCOPY;RETURN]` by
-    (qpat_x_assum `_ \/ _` strip_assume_tac >>
+    (qpat_x_assum `_ \/ _` strip_assume_tac >> fs[] >>
      simp[mem_read_ops_def, mem_write_ops_def, source_memory_read_ranges_def,
        memory_range_of_operands_def, source_memory_write_ranges_def,
        fixed_source_write_range_def, eval_operands_def, about_to_revert_def]) >>
@@ -308,9 +309,10 @@ Proof
 QED
 
 Theorem ld_oracle_call_taint:
-  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+   inst.inst_opcode = DELEGATECALL) /\
   3 < LENGTH inst.inst_operands /\
-  source_memory_write_ranges inst s = [(w2n ro,w2n rz)] /\
+  source_memory_write_ranges inst s = [(w2n (ro:bytes32),w2n (rz:bytes32))] /\
   ss.vs_allocas = s.vs_allocas /\ ss.vs_fmp = s.vs_fmp ==>
   step_taint inst s ss tn = tn with <|
     t_var := set_var_taint tn.t_var inst.inst_outputs {};
@@ -436,7 +438,10 @@ Proof
        (mp_then Any mp_tac ld_exec_ext_call_frame) >> simp[]) >>
   `step_taint inst f.lf_src ss tn = tn' with
      t_var := set_var_taint f.lf_tv [out] {}` by
-    (drule_all ld_oracle_call_taint >> simp[]) >>
+    ((Q.SUBGOAL_THEN
+       `inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+        inst.inst_opcode = DELEGATECALL` assume_tac >- metis_tac[]) >>
+     drule_all ld_oracle_call_taint >> simp[]) >>
   qpat_x_assum `tn' = _` kall_tac >>
   qexists_tac `ss` >> simp[] >> irule ld_oracle_call_vars >> simp[] >>
   conj_tac >- (qexists_tac `w` >> simp[]) >>
