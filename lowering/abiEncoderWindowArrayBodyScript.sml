@@ -8,11 +8,25 @@ Ancestors
   abiEncoderAdmissible abiEncoder emitHelperProps emitHelper compileEnv
   pred_set instIdxIndep freshWrites exprLoweringProps fragExec venomState venomExecSemantics venomInst words list finite_map arithmetic
 
-Theorem window_array_mul_pure:
+Theorem window_array_register_high[local]:
+  emit_op opc ops st = (out,en) /\ opc <> INVOKE /\
+  window_pure_seq st en s t ==>
+  !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s
+Proof
+  rpt strip_tac >>
+  `lookup_var x (t with vs_inst_idx := t.vs_inst_idx) = lookup_var x s` suffices_by simp[] >>
+  irule window_seq_high_vars >> qexistsl_tac [`en`, `st`] >> simp[] >> conj_tac
+  >- (irule abiEncoderWindowLookupTheory.abi_window_emit_register_bounds >>
+      qexistsl_tac [`ops`, `opc`, `out`] >> asm_rewrite_tac[]) >>
+  metis_tac[window_pure_seq_def]
+QED
+
+Theorem window_array_mul_pure_observed:
   emit_op MUL [lhs;rhs] st = (out,en) /\
   eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b ==>
   ?t. window_pure_seq st en s t /\ eval_operand out t = SOME (a*b) /\
-    (!x. out = Var x ==> not_fresh_at en x)
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `run_inst_seq (emitted_insts st en) s =
@@ -20,9 +34,40 @@ Proof
     (drule emitted_insts_emit_op >> strip_tac >>
      asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
        exec_pure2_def, eval_operands_def]) >>
-  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a*b) s` >>
-  irule window_emit_register_pure >> (conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`[lhs;rhs]`, `MUL`] >> simp[is_terminator_def]
+  `?t. window_pure_seq st en s t /\ eval_operand out t = SOME (a*b) /\
+    (!x. out = Var x ==> not_fresh_at en x)` by
+    (qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a*b) s` >>
+     irule window_emit_register_pure >> (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`[lhs;rhs]`, `MUL`] >> simp[is_terminator_def]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >> rpt strip_tac >>
+  irule window_array_register_high >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`MUL`, `[lhs;rhs]`, `out`, `st`] >> simp[]
+QED
+
+Theorem window_array_mul_pure:
+  emit_op MUL [lhs;rhs] st = (out,en) /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b ==>
+  ?t. window_pure_seq st en s t /\ eval_operand out t = SOME (a*b) /\
+    (!x. out = Var x ==> not_fresh_at en x)
+Proof
+  strip_tac >> drule_all window_array_mul_pure_observed >> metis_tac[]
+QED
+
+Theorem window_array_mul_phase_observed:
+  emit_op MUL [lhs;rhs] st = (out,en) /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (a*b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_array_mul_pure_observed >> strip_tac >>
+  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
+  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
 QED
 
 Theorem window_array_mul_phase:
@@ -35,10 +80,7 @@ Theorem window_array_mul_phase:
     eval_operand out t = SOME (a*b) /\
     (!x. out = Var x ==> not_fresh_at en x)
 Proof
-  strip_tac >> drule_all window_array_mul_pure >> strip_tac >>
-  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+  strip_tac >> drule_all window_array_mul_phase_observed >> metis_tac[]
 QED
 
 Theorem window_array_phase_transition:
@@ -74,14 +116,15 @@ Proof
   irule abi_encode_static_info_agrees >> asm_rewrite_tac[]
 QED
 
-Theorem window_array_coordinates_pure:
+Theorem window_array_coordinates_pure_observed:
   abi_decode_indexed_coordinates base_op idx stride st = (ops,en) /\
   eval_operand base_op s = SOME (n2w b) /\ eval_operand idx s = SOME (n2w j) /\
   (!x. idx = Var x ==> not_fresh_at st x) ==>
   ?t. window_pure_seq st en s t /\
     eval_operand (FST ops) t = SOME (n2w (b+32)) /\
     eval_operand (SND ops) t = SOME (n2w (b+32+j*stride)) /\
-    (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x)
+    (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   simp_tac bool_ss [abiDecoderDynamicLoopSetupTheory.abi_decode_indexed_coordinates_def,
     comp_bind_def, comp_return_def, LET_THM] >>
@@ -114,8 +157,72 @@ Proof
   `eval_operand data_op t3 = SOME (n2w (b+32))` by
     (irule window_seq_eval >>
      metis_tac[window_pure_seq_def, not_fresh_at_mono]) >>
+  `!x. ~not_fresh_at c1 x ==> lookup_var x t1 = lookup_var x s` by
+    (rpt strip_tac >> irule window_array_register_high >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`ADD`, `[base_op; Lit 32w]`, `data_op`, `st`] >> simp[]) >>
+  `!x. ~not_fresh_at c2 x ==> lookup_var x t2 = lookup_var x t1` by
+    (rpt strip_tac >> irule window_array_register_high >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`MUL`, `[idx; Lit (n2w stride)]`, `off_op`, `c1`] >> simp[]) >>
+  `!x. ~not_fresh_at en x ==> lookup_var x t3 = lookup_var x t2` by
+    (rpt strip_tac >> irule window_array_register_high >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`ADD`, `[data_op;off_op]`, `address_op`, `c2`] >> simp[]) >>
   qexists_tac `t3` >> simp[] >> conj_tac
-  >- metis_tac[window_pure_seq_chain] >>
+  >- metis_tac[window_pure_seq_chain] >> conj_tac
+  >- metis_tac[not_fresh_at_mono] >>
+  metis_tac[not_fresh_at_mono]
+QED
+
+Theorem window_array_coordinates_pure:
+  abi_decode_indexed_coordinates base_op idx stride st = (ops,en) /\
+  eval_operand base_op s = SOME (n2w b) /\ eval_operand idx s = SOME (n2w j) /\
+  (!x. idx = Var x ==> not_fresh_at st x) ==>
+  ?t. window_pure_seq st en s t /\
+    eval_operand (FST ops) t = SOME (n2w (b+32)) /\
+    eval_operand (SND ops) t = SOME (n2w (b+32+j*stride)) /\
+    (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x)
+Proof
+  strip_tac >> drule_all window_array_coordinates_pure_observed >> metis_tac[]
+QED
+
+Theorem window_array_head_setup_pure_observed:
+  abi_decode_array_head_setup ip src stride st = (ops,en) /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
+  mload slot s = n2w j /\ eval_operand src s = SOME (n2w b) /\
+  (!x. src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_pure_seq st en s t /\
+    eval_operand (FST ops) t = SOME (n2w j) /\
+    eval_operand (FST (SND ops)) t = SOME (n2w (b+32)) /\
+    eval_operand (SND (SND ops)) t = SOME (n2w (b+32+j*stride)) /\
+    (!x. FST ops = Var x \/ FST (SND ops) = Var x \/ SND (SND ops) = Var x ==>
+      not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  simp_tac bool_ss [abiDecoderDynamicLoopSetupTheory.abi_decode_array_head_setup_def,
+    comp_bind_def, comp_return_def, LET_THM] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [ip] st = (idx,mid)` >>
+  rename1 `abi_decode_indexed_coordinates src idx stride mid = (coords,en)` >>
+  `?t1. window_pure_seq st mid s t1 /\ eval_operand idx t1 = SOME (n2w j) /\
+    (!x. idx = Var x ==> not_fresh_at mid x)` by
+    (drule_all window_emit_load_pure >> asm_rewrite_tac[]) >>
+  `eval_operand src t1 = SOME (n2w b)` by
+    (irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
+  `?t2. window_pure_seq mid en t1 t2 /\
+    eval_operand (FST coords) t2 = SOME (n2w (b+32)) /\
+    eval_operand (SND coords) t2 = SOME (n2w (b+32+j*stride)) /\
+    (!x. FST coords = Var x \/ SND coords = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t2 = lookup_var x t1)` by
+    (drule_all window_array_coordinates_pure_observed >> simp[]) >>
+  `eval_operand idx t2 = SOME (n2w j)` by
+    (irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
+  `mid.cs_next_var <= en.cs_next_var` by
+    metis_tac[window_pure_seq_def, window_seq_mono] >>
+  `!x. ~not_fresh_at mid x ==> lookup_var x t1 = lookup_var x s` by
+    (rpt strip_tac >> irule window_array_register_high >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`MLOAD`, `[ip]`, `idx`, `st`] >> simp[]) >>
+  qexists_tac `t2` >> simp[] >> conj_tac
+  >- metis_tac[window_pure_seq_chain] >> conj_tac
+  >- metis_tac[not_fresh_at_mono] >>
   metis_tac[not_fresh_at_mono]
 QED
 
@@ -131,27 +238,50 @@ Theorem window_array_head_setup_pure:
     (!x. FST ops = Var x \/ FST (SND ops) = Var x \/ SND (SND ops) = Var x ==>
       not_fresh_at en x)
 Proof
-  simp_tac bool_ss [abiDecoderDynamicLoopSetupTheory.abi_decode_array_head_setup_def,
-    comp_bind_def, comp_return_def, LET_THM] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
-  rename1 `emit_op MLOAD [ip] st = (idx,mid)` >>
-  rename1 `abi_decode_indexed_coordinates src idx stride mid = (coords,en)` >>
-  `?t1. window_pure_seq st mid s t1 /\ eval_operand idx t1 = SOME (n2w j) /\
-    (!x. idx = Var x ==> not_fresh_at mid x)` by
-    (drule_all window_emit_load_pure >> asm_rewrite_tac[]) >>
-  `eval_operand src t1 = SOME (n2w b)` by
+  strip_tac >> drule_all window_array_head_setup_pure_observed >> metis_tac[]
+QED
+
+Theorem window_array_addresses_pure_observed:
+  abi_encode_array_addresses ip src dst asz msz st = (coords,en) /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
+  mload slot s = n2w j /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) ==>
+  ?t. window_pure_seq st en s t /\
+    eval_operand (FST (FST coords)) t = SOME (n2w j) /\
+    eval_operand (SND (FST coords)) t = SOME (n2w (sb+32+j*msz)) /\
+    eval_operand (FST (SND coords)) t = SOME (n2w (d+32)) /\
+    eval_operand (SND (SND coords)) t = SOME (n2w (d+32+j*asz)) /\
+    (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
+         FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule abi_encode_array_addresses_trace >> strip_tac >> gvs[] >>
+  `?t1. window_pure_seq st middle s t1 /\
+    eval_operand (FST src_ops) t1 = SOME (n2w j) /\
+    eval_operand (FST (SND src_ops)) t1 = SOME (n2w (sb+32)) /\
+    eval_operand (SND (SND src_ops)) t1 = SOME (n2w (sb+32+j*msz)) /\
+    (!x. FST src_ops = Var x \/ FST (SND src_ops) = Var x \/ SND (SND src_ops) = Var x ==>
+      not_fresh_at middle x) /\
+    (!x. ~not_fresh_at middle x ==> lookup_var x t1 = lookup_var x s)` by
+    (`!x. src = Var x ==> not_fresh_at st x` by metis_tac[] >>
+     drule_all window_array_head_setup_pure_observed >> simp[]) >>
+  `eval_operand dst t1 = SOME (n2w d)` by
     (irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
-  `?t2. window_pure_seq mid en t1 t2 /\
-    eval_operand (FST coords) t2 = SOME (n2w (b+32)) /\
-    eval_operand (SND coords) t2 = SOME (n2w (b+32+j*stride)) /\
-    (!x. FST coords = Var x \/ SND coords = Var x ==> not_fresh_at en x)` by
-    (drule_all window_array_coordinates_pure >> simp[]) >>
-  `eval_operand idx t2 = SOME (n2w j)` by
-    (irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
-  `mid.cs_next_var <= en.cs_next_var` by
-    metis_tac[window_pure_seq_def, window_seq_mono] >>
+  `?t2. window_pure_seq middle en t1 t2 /\
+    eval_operand (FST dst_ops) t2 = SOME (n2w (d+32)) /\
+    eval_operand (SND dst_ops) t2 = SOME (n2w (d+32+j*asz)) /\
+    (!x. FST dst_ops = Var x \/ SND dst_ops = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t2 = lookup_var x t1)` by
+    (`!x. FST src_ops = Var x ==> not_fresh_at middle x` by metis_tac[] >>
+     drule_all window_array_coordinates_pure_observed >> simp[]) >>
+  `eval_operand (FST src_ops) t2 = SOME (n2w j) /\
+    eval_operand (SND (SND src_ops)) t2 = SOME (n2w (sb+32+j*msz))` by
+    (conj_tac >> irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
+  `middle.cs_next_var <= en.cs_next_var` by metis_tac[window_pure_seq_def, window_seq_mono] >>
   qexists_tac `t2` >> simp[] >> conj_tac
-  >- metis_tac[window_pure_seq_chain] >>
+  >- metis_tac[window_pure_seq_chain] >> conj_tac
+  >- metis_tac[not_fresh_at_mono] >>
   metis_tac[not_fresh_at_mono]
 QED
 
@@ -169,30 +299,32 @@ Theorem window_array_addresses_pure:
     (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
          FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x)
 Proof
-  strip_tac >> drule abi_encode_array_addresses_trace >> strip_tac >> gvs[] >>
-  `?t1. window_pure_seq st middle s t1 /\
-    eval_operand (FST src_ops) t1 = SOME (n2w j) /\
-    eval_operand (FST (SND src_ops)) t1 = SOME (n2w (sb+32)) /\
-    eval_operand (SND (SND src_ops)) t1 = SOME (n2w (sb+32+j*msz)) /\
-    (!x. FST src_ops = Var x \/ FST (SND src_ops) = Var x \/ SND (SND src_ops) = Var x ==>
-      not_fresh_at middle x)` by
-    (`!x. src = Var x ==> not_fresh_at st x` by metis_tac[] >>
-     drule_all window_array_head_setup_pure >> simp[]) >>
-  `eval_operand dst t1 = SOME (n2w d)` by
-    (irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
-  `?t2. window_pure_seq middle en t1 t2 /\
-    eval_operand (FST dst_ops) t2 = SOME (n2w (d+32)) /\
-    eval_operand (SND dst_ops) t2 = SOME (n2w (d+32+j*asz)) /\
-    (!x. FST dst_ops = Var x \/ SND dst_ops = Var x ==> not_fresh_at en x)` by
-    (`!x. FST src_ops = Var x ==> not_fresh_at middle x` by metis_tac[] >>
-     drule_all window_array_coordinates_pure >> simp[]) >>
-  `eval_operand (FST src_ops) t2 = SOME (n2w j) /\
-    eval_operand (SND (SND src_ops)) t2 = SOME (n2w (sb+32+j*msz))` by
-    (conj_tac >> irule window_seq_eval >> metis_tac[window_pure_seq_def]) >>
-  `middle.cs_next_var <= en.cs_next_var` by metis_tac[window_pure_seq_def, window_seq_mono] >>
-  qexists_tac `t2` >> simp[] >> conj_tac
-  >- metis_tac[window_pure_seq_chain] >>
-  metis_tac[not_fresh_at_mono]
+  strip_tac >> drule_all window_array_addresses_pure_observed >> metis_tac[]
+QED
+
+Theorem window_array_addresses_phase_observed:
+  abi_encode_array_addresses ip src dst asz msz st = (coords,en) /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
+  mload slot s = n2w j /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand (FST (FST coords)) t = SOME (n2w j) /\
+    eval_operand (SND (FST coords)) t = SOME (n2w (sb+32+j*msz)) /\
+    eval_operand (FST (SND coords)) t = SOME (n2w (d+32)) /\
+    eval_operand (SND (SND coords)) t = SOME (n2w (d+32+j*asz)) /\
+    (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
+         FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_array_addresses_pure_observed >> strip_tac >>
+  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
+  simp_tac (srw_ss()) [eval_op_inst_idx, lookup_var_def] >>
+  asm_rewrite_tac[] >> metis_tac[lookup_var_def]
 QED
 
 Theorem window_array_addresses_phase:
@@ -212,10 +344,7 @@ Theorem window_array_addresses_phase:
     (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
          FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x)
 Proof
-  strip_tac >> drule_all window_array_addresses_pure >> strip_tac >>
-  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
+  strip_tac >> drule_all window_array_addresses_phase_observed >> metis_tac[]
 QED
 
 (* Structural windows give exactly the two processed prefix lengths. *)
