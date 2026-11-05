@@ -76,7 +76,7 @@ Theorem single_pred_prefix_frame_sim:
     ps = ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |> /\
     generated_plan_state_wf_marked base ps /\
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-            normalize_operand dfg [] op = Var v ==>
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
             ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\

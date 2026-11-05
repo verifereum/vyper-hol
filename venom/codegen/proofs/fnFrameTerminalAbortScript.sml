@@ -824,16 +824,6 @@ Theorem gen_inst_ext_fault_frame_sim:
   ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
 Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED (codegen skeleton): the base cut gives
-   step_inst_create_abort and step_inst_create2_abort a
-   ~vs.vs_call_ctx.cc_static premise (static frames), so the CREATE and
-   CREATE2 cases also need the static-frame abort.  Repair piece; the
-   original proof, unchanged:
-
-Proof
   rpt gen_tac >> strip_tac >>
   `?name. venom_to_evm_name inst.inst_opcode = SOME name` by
     (gvs[venom_to_evm_name_def]) >>
@@ -900,4 +890,3 @@ Resume gen_inst_ext_fault_frame_sim[returndatacopy]:
 QED
 
 Finalise gen_inst_ext_fault_frame_sim
-*)

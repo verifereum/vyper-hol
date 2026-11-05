@@ -238,15 +238,6 @@ Theorem gen_inst_abort_frame_sim:
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED (codegen skeleton): since static frames, a step
-   in a static frame can also abort (SSTORE, TSTORE, LOG, SELFDESTRUCT,
-   CALL, CREATE, CREATE2), which the dispatch below does not cover.
-   Repair piece; the original proof, unchanged:
-
-Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode = REVERT`
   >- (drule_all gen_inst_revert_frame_sim >>
@@ -269,4 +260,3 @@ Proof
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`n`, `out`] >> simp[]
 QED
-*)
