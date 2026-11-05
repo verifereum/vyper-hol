@@ -288,3 +288,47 @@ Theorem clear_source_local_ptrs_reserved:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+Definition clear_outer_machine_def:
+  clear_outer_machine = (init_venom_state "entry") with
+    vs_accounts := probe_deep_source_state.accounts
+End
+
+Theorem clear_outer_machine_position:
+  ~clear_outer_machine.vs_halted /\
+  clear_outer_machine.vs_current_bb = "entry" /\
+  clear_outer_machine.vs_inst_idx = 0
+Proof
+  EVAL_TAC
+QED
+
+Theorem clear_outer_machine_state_rel:
+  state_rel probe_descendant_outer_caller probe_deep_cenv
+    probe_clear_source_context probe_deep_source_state clear_outer_machine
+Proof
+  rewrite_tac[state_rel_def] >> rpt conj_tac >> EVAL_TAC >> simp[] >>
+  rpt conj_tac >> rpt gen_tac >>
+  Cases_on `name = "outer"` >> gvs[find_var_decl_by_name_def] >>
+  Cases_on `name = "donor"` >> gvs[find_var_decl_by_name_def] >> EVAL_TAC >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem clear_outer_machine_alloca_room:
+  !k. alloca_room (probe_descendant_ctx k)
+    probe_descendant_outer_caller clear_outer_machine
+Proof
+  gen_tac >> irule exprLoweringPropsTheory.alloca_room_fields >>
+  qexists_tac `probe_deep_empty_donor_machine` >>
+  simp[probe_descendant_ctx_alloca_room] >> EVAL_TAC
+QED
+
+Theorem clear_outer_machine_stmt_state_rel:
+  !k. stmt_state_rel (probe_descendant_ctx k)
+    probe_descendant_outer_caller probe_deep_cenv
+    probe_clear_source_context probe_deep_source_state clear_outer_machine
+Proof
+  gen_tac >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_def,
+       clear_outer_machine_state_rel, clear_outer_machine_alloca_room] >>
+  rpt conj_tac >> EVAL_TAC >> simp[]
+QED
