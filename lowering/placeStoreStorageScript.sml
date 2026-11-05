@@ -1556,6 +1556,243 @@ Proof
     `type_memory_size_list dtvs`] >> simp[]
 QED
 
+Theorem place_store_counted_fields_from_semantics:
+  !dtys stys dtvs stvs vs.
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    LIST_REL (type_widens_to tenv) stys dtys /\
+    OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs /\
+    OPT_MMAP (evaluate_type tenv) stys = SOME stvs /\
+    values_have_types dtvs vs /\ values_have_types stvs vs /\
+    tuple_val_wf vs dtvs /\ tuple_val_wf vs stvs /\
+    (!cd cs cdt cst cv. MEM cd dtys ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      place_store_counted_entry cenv ctx cd cs cdt cst cv) ==>
+    LIST_REL (\(dty,dtv) (sty,stv,v).
+      type_memory_bytes cenv dty = type_memory_size dtv /\
+      type_memory_bytes cenv sty = type_memory_size stv /\
+      place_store_counted_entry cenv ctx dty sty dtv stv v)
+      (ZIP (dtys,dtvs)) (ZIP (stys,ZIP (stvs,vs))) /\
+    LENGTH dtys = LENGTH dtvs /\ LENGTH stys = LENGTH stvs /\ LENGTH stvs = LENGTH vs
+Proof
+  Induct >> Cases_on `stys` >> Cases_on `dtvs` >>
+  Cases_on `stvs` >> Cases_on `vs` >>
+  simp[AllCaseEqs(),
+       vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[typedMemoryCopyTheory.typed_copy_memory_size]
+QED
+
+Theorem place_store_tuple_children_widen:
+  !stys dtys dtvs.
+    (stys = dtys \/ arg_types_fit stys dtys) /\
+    OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
+    LIST_REL (type_widens_to tenv) stys dtys
+Proof
+  Induct >> Cases_on `dtys` >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  simp[type_widens_to_def, well_formed_type_def] >> metis_tac[]
+QED
+
+Theorem place_store_counted_tuple_entry:
+  !cenv tenv ctx dtys sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty (TupleT dtys) /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv (TupleT dtys) = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!cd cs cdt cst cv.
+      type_rank cenv.ce_struct_fields cd <
+        type_rank cenv.ce_struct_fields (TupleT dtys) ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      place_store_counted_entry cenv ctx cd cs cdt cst cv) ==>
+    place_store_counted_entry cenv ctx (TupleT dtys) sty dtv stv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?stys. sty = TupleT stys` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_tuple_widening] >> gvs[] >>
+  gvs[evaluate_type_def, AllCaseEqs(), vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  `LIST_REL (type_widens_to tenv) stys dtys` by
+    (irule place_store_tuple_children_widen >>
+     conj_tac >- metis_tac[] >>
+     drule typedMemoryCopyTheory.typed_copy_tuple_widening >> simp[]) >>
+  `LIST_REL (\(dty,dtv) (sty,stv,v).
+      type_memory_bytes cenv dty = type_memory_size dtv /\
+      type_memory_bytes cenv sty = type_memory_size stv /\
+      place_store_counted_entry cenv ctx dty sty dtv stv v)
+      (ZIP (dtys,tvs')) (ZIP (stys,ZIP (tvs,l))) /\
+   LENGTH dtys = LENGTH tvs' /\ LENGTH stys = LENGTH tvs /\ LENGTH tvs = LENGTH l` by
+    (irule place_store_counted_fields_from_semantics >>
+     (conj_tac >- gvs[valueEncodingTheory.val_wf_def]) >>
+     (conj_tac >- gvs[valueEncodingTheory.val_wf_def]) >>
+     (conj_tac >- simp[]) >> (conj_tac >- simp[]) >>
+     qexists_tac `tenv` >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     rpt strip_tac >> first_x_assum irule >> simp[] >>
+     metis_tac[typedCopyDomainTheory.member_rank_lt_tuple]) >>
+  simp[place_store_counted_entry_def] >> rpt strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def] >> strip_tac >>
+  drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`)
+    place_store_counted_tuple_path >> disch_then drule >>
+  disch_then (qspecl_then [`func`, `s`, `dw`, `sw`] mp_tac) >>
+  simp[valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def] >>
+  (impl_tac >- (gvs[valueEncodingTheory.val_wf_def,
+    valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def,
+    compileEnvTheory.regions_disjoint_def] >> decide_tac)) >> simp[]
+QED
+
+Theorem place_store_struct_tuple_values:
+  !names tvs fields.
+    LENGTH names = LENGTH tvs /\
+    struct_has_type (ZIP (names,tvs)) fields /\
+    fields_val_wf fields (ZIP (names,tvs)) ==>
+    values_have_types tvs (MAP SND fields) /\
+    tuple_val_wf (MAP SND fields) tvs /\
+    LENGTH fields = LENGTH tvs /\ MAP FST fields = names
+Proof
+  Induct >> Cases_on `tvs` >> Cases_on `fields` >>
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  PairCases_on `h'` >>
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  rpt strip_tac >> first_x_assum drule >> disch_then drule_all >>
+  strip_tac >> simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def]
+QED
+
+Theorem place_store_struct_layout:
+  !fields tvs.
+    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
+      sz = type_memory_size tv) fields /\
+    (!ty tv. evaluate_type tenv ty = SOME tv ==>
+      type_memory_bytes cenv ty = type_memory_size tv) ==>
+    EVERY (\(fname,fty,sz). sz = type_memory_bytes cenv fty) fields /\
+    SUM (MAP (SND o SND) fields) = type_memory_size_list tvs
+Proof
+  Induct >> simp[valueEncodingTheory.type_memory_size_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp[AllCaseEqs(), valueEncodingTheory.type_memory_size_def] >>
+  rpt strip_tac >> gvs[valueEncodingTheory.type_memory_size_def] >> metis_tac[]
+QED
+
+Theorem place_store_counted_struct_entry:
+  !cenv tenv ctx name sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty (StructT name) /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv (StructT name) = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!cd cs cdt cst cv.
+      type_rank cenv.ce_struct_fields cd <
+        type_rank cenv.ce_struct_fields (StructT name) ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      place_store_counted_entry cenv ctx cd cs cdt cst cv) ==>
+    place_store_counted_entry cenv ctx (StructT name) sty dtv stv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule typedMemoryCopyTheory.typed_copy_struct_widening >> strip_tac >> gvs[] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  rename1 `FLOOKUP tenv name = SOME (StructArgs args)` >>
+  `?fields. FLOOKUP cenv.ce_struct_fields (nsid_to_string name) = SOME fields /\
+     MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args` by
+    (fs[sfields_tenv_consistent_def] >> metis_tac[]) >>
+  `evaluate_types tenv (MAP SND args) [] = SOME tvs` by
+    metis_tac[cj 2 vyperTypeExprSoundnessTheory.evaluate_type_mono] >>
+  `LENGTH (MAP FST args) = LENGTH tvs` by
+    (gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
+     drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  `values_have_types tvs (MAP SND l) /\ tuple_val_wf (MAP SND l) tvs /\
+   LENGTH l = LENGTH tvs /\ MAP FST l = MAP FST args` by
+    metis_tac[place_store_struct_tuple_values, listTheory.LENGTH_MAP] >>
+  `OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs` by
+    gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  `LIST_REL (type_widens_to tenv) (MAP (FST o SND) fields)
+      (MAP (FST o SND) fields)` by
+    (irule place_store_tuple_children_widen >> simp[] >> metis_tac[]) >>
+  `LIST_REL (\(dty,dtv) (sty,stv,v).
+      type_memory_bytes cenv dty = type_memory_size dtv /\
+      type_memory_bytes cenv sty = type_memory_size stv /\
+      place_store_counted_entry cenv ctx dty sty dtv stv v)
+      (ZIP (MAP (FST o SND) fields,tvs))
+      (ZIP (MAP (FST o SND) fields,ZIP (tvs,MAP SND l))) /\
+   LENGTH (MAP (FST o SND) fields) = LENGTH tvs /\
+   LENGTH (MAP (FST o SND) fields) = LENGTH tvs /\ LENGTH tvs = LENGTH (MAP SND l)` by
+    (irule place_store_counted_fields_from_semantics >> simp[] >>
+     qexists_tac `tenv` >> gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
+     (conj_tac >- metis_tac[]) >> rpt strip_tac >>
+     first_x_assum irule >> simp[] >>
+     `MEM cd (MAP (FST o SND) fields)` by metis_tac[] >>
+     qpat_x_assum `MEM cd (MAP SND args)` kall_tac >>
+     fs[listTheory.MEM_MAP] >> PairCases_on `y` >> gvs[] >>
+     `MEM (y0,cd,y2) (get_struct_fields cenv.ce_struct_fields
+         (nsid_to_string name))` by simp[get_struct_fields_def] >>
+     drule_all typedCopyDomainTheory.member_rank_lt_struct >>
+     simp[typedCopyDomainTheory.type_rank_def, nsid_to_string_def]) >>
+  `EVERY (\(fname,fty,sz). sz = type_memory_bytes cenv fty) fields /\
+   SUM (MAP (SND o SND) fields) = type_memory_size_list tvs` by
+    (irule place_store_struct_layout >> qexists_tac `tenv` >> simp[] >>
+     (conj_tac >- (rpt strip_tac >> irule typedMemoryCopyTheory.typed_copy_memory_size >>
+       qexists_tac `tenv` >> simp[] >> metis_tac[])) >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP FST fields)` by metis_tac[] >>
+  simp[place_store_counted_entry_def] >> rpt strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def, get_struct_fields_def] >> strip_tac >>
+  `MAP (\(name,ty,sz). ty) fields = MAP (FST o SND) fields` by
+    (irule listTheory.MAP_CONG >> simp[pairTheory.FORALL_PROD]) >>
+  qpat_x_assum `compile_struct_typed_copy _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[typedMemoryCopyTheory.typed_copy_struct_fields_producer, listTheory.EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `LIST_REL _ (ZIP _) (ZIP _)` mp_tac >> simp[] >> strip_tac >>
+  drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`)
+    place_store_counted_tuple_path >> disch_then drule >>
+  disch_then (qspecl_then [`func`, `s`, `dw`, `sw`] mp_tac) >>
+  `type_memory_size_fields (ZIP (MAP FST args,tvs)) = type_memory_size_list tvs` by
+    (irule exprSimHypsTheory.struct_layout_size_zip >>
+     pure_rewrite_tac[listTheory.LENGTH_MAP] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!cd cs cdt cst cv. _` kall_tac >>
+  qpat_x_assum `!name fields. _` kall_tac >>
+  qpat_x_assum `LIST_REL _ (ZIP _) (ZIP _)` kall_tac >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE
+    [valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def,
+     valueEncodingProofsTheory.fields_in_memory_tuple, compileEnvTheory.regions_disjoint_def]) >>
+  pure_rewrite_tac[valueEncodingTheory.type_memory_size_def,
+      valueEncodingTheory.val_in_memory_def, valueEncodingProofsTheory.fields_in_memory_tuple,
+      listTheory.LENGTH_MAP, arithmeticTheory.ADD_0] >>
+  `MAP SND (ZIP (MAP FST args,tvs)) = tvs` by
+    (qpat_x_assum `LENGTH args = LENGTH tvs` mp_tac >>
+     simp[NoAsms, listTheory.MAP_ZIP]) >>
+  qpat_x_assum `type_memory_size_fields _ = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> pure_rewrite_tac[th]) >>
+  qpat_x_assum `MAP SND (ZIP _) = _` (fn th =>
+    RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [NoAsms, th]) >>
+    simp[NoAsms, th]) >>
+  (impl_tac >- (rpt conj_tac >> metis_tac[arithmeticTheory.ADD_COMM])) >>
+  strip_tac >> qexists_tac `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
