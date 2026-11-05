@@ -22,12 +22,7 @@ Theorem compile_convert_scalar_case:
   !nocalls ctx func cenv cx ann t e1.
     exprs_case nocalls ctx func cenv cx [e1] /\
     ~is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
-    ~int_convert_pair (expr_type e1) t /\
-    (* Interim exclusion, dropped once the expression contract exempts it:
-       bytes0 to a signed integer or decimal, where the source raises
-       "convert empty bytes to signed". *)
-    ~(expr_type e1 = BaseT (BytesT (Fixed 0)) /\
-      ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) ==>
+    ~int_convert_pair (expr_type e1) t ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
   rw[expr_vv_case_def] >>

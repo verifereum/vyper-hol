@@ -397,8 +397,14 @@ Theorem lower_typed_args_nil_sim:
        t.vs_inst_idx = LENGTH sa.cs_current_insts)
     (\rr ee r. wb_args_exit rr r)
 Proof
-  irule frag_exec_refl >>
-  simp[typed_args_post_def, wb_frame_refl] >> metis_tac[]
+  strip_tac >> rewrite_tac[fragGasModeTheory.gas_marked_path_def, gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  simp[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def,
+       fragGasModeTheory.gas_marked_path_def, eval_exprs_nil,
+       gasSummaryTheory.gas_explicit_def] >>
+  qexistsl_tac [`INL []`, `es`, `OK s0`] >>
+  simp[typed_args_post_def, wb_frame_refl] >>
+  irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]
 QED
 
 Theorem typed_args_post_cons:
