@@ -13,7 +13,7 @@ Theory asmFrameCallStep
 Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
-  vfmExecution vfmExecutionProp vfmRunCall vfmContextLength vfmDecreasesGas
+  vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
   vfmAccountFrame asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
   wordsLib
@@ -2000,6 +2000,24 @@ Proof
   rewrite_tac[vfmSameFrameTheory.preserves_same_frame_def] >>
   disch_then drule >> simp[] >> strip_tac >>
   gvs[vfmSameFrameTheory.same_frame_rel_def, Abbr `pushed`]
+QED
+
+Theorem asm_proceed_call_terminal_kind:
+  s.contexts <> [] /\
+  proceed_call op sender address value ao az code stipend outputTo s = (INR e,t) ==>
+  ~vfm_abort e /\ e <> SOME Reverted
+Proof
+  Cases_on `s.contexts` >> simp[] >>
+  simp[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_caller_def,
+       get_value_def, get_static_def, update_accounts_def,
+       push_context_def, get_current_context_def, return_def] >>
+  Cases_on `op <> CallCode /\ 0 < value` >>
+  Cases_on `fIN address precompile_addresses` >> simp[return_def] >>
+  strip_tac >> gvs[update_accounts_def, get_current_context_def, return_def] >>
+  qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed` >>
+  `pushed.contexts <> []` by simp[Abbr `pushed`] >>
+  drule_all dispatch_precompiles_inr_not_reverted_not_abort >> simp[]
 QED
 
 Theorem asm_frame_call_same_depth_transport:
