@@ -1185,3 +1185,26 @@ Proof
     vyperASTTheory.base_type_distinct, vyperASTTheory.base_type_11] >>
   metis_tac[]
 QED
+
+Theorem within_int_bound_unsigned_256_mem_src[local]:
+  !u n i. (u = Unsigned n \/ u = Signed n) /\ n <= 256 /\
+    within_int_bound u i /\ 0 <= i ==> within_int_bound (Unsigned 256) i
+Proof
+  rpt strip_tac >> qpat_x_assum `u = _` SUBST_ALL_TAC >>
+  FULL_SIMP_TAC std_ss [within_int_bound_def, LET_THM]
+  >- (`2 ** n <= 2 ** 256` by
+        (irule arithmeticTheory.EXP_BASE_LEQ_MONO_IMP >> asm_rewrite_tac[] >> decide_tac) >>
+      `Num i < 2 ** 256` suffices_by (SIMP_TAC std_ss []) >>
+      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  Cases_on `n = 0`
+  >- (FULL_SIMP_TAC std_ss [] >> EVAL_TAC) >>
+  FULL_SIMP_TAC std_ss [integerTheory.INT_NOT_LT] >>
+  `~(i < 0)` by intLib.ARITH_TAC >>
+  qpat_x_assum `if i < 0 then _ else _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  `2 ** (n - 1) <= 2 ** 256` by
+    (irule arithmeticTheory.EXP_BASE_LEQ_MONO_IMP >> decide_tac) >>
+  `Num i < 2 ** 256` suffices_by (SIMP_TAC std_ss []) >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
