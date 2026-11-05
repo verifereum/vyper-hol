@@ -2621,6 +2621,44 @@ Proof
   Cases_on `x = HD inst.inst_outputs` >> gvs[]
 QED
 
+Theorem alias_phi_upper_support:
+  plan_holds (SND (generate_phi_plan inst live halting ps)) (Var x) ==>
+  plan_holds ps (Var x) \/ x = HD inst.inst_outputs
+Proof
+  strip_tac >> Cases_on `x = HD inst.inst_outputs` >> simp[] >>
+  qspecl_then [`inst`, `live`, `halting`, `ps`, `x`] mp_tac alias_phi_mass_bound >>
+  gvs[GSYM alias_var_mass_positive] >> decide_tac
+QED
+
+Theorem alias_phi_prefix_upper_support:
+  !steps ps x.
+  plan_holds (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps steps) (Var x) ==>
+  plan_holds ps (Var x) \/ MEM x (MAP (\p. HD (FST p).inst_outputs) steps)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> simp[FOLDL] >>
+  strip_tac >> first_x_assum drule >>
+  metis_tac[alias_phi_upper_support]
+QED
+
+Theorem alias_phi_prefix_singleton_mass:
+  !steps ps.
+  EVERY (\p. LENGTH (FST p).inst_outputs = 1) steps /\
+  ALL_DISTINCT (MAP (\p. HD (FST p).inst_outputs) steps) /\
+  (!x. MEM x (MAP (\p. HD (FST p).inst_outputs) steps) ==> alias_var_mass x ps = 0) /\
+  (!x. alias_var_mass x ps <= 1) ==>
+  !x. alias_var_mass x
+    (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps steps) <= 1
+Proof
+  Induct >- simp[] >> rpt gen_tac >> simp[FOLDL] >> strip_tac >>
+  first_x_assum irule >> simp[] >>
+  conj_tac
+  >- (gen_tac >> irule alias_phi_preserves_fresh_singleton >> metis_tac[]) >>
+  rpt strip_tac >>
+  qspecl_then [`FST h`, `SND h`, `halting`, `ps`, `x`] mp_tac alias_phi_mass_bound >>
+  `x <> HD (FST h).inst_outputs /\ alias_var_mass x ps = 0` by metis_tac[] >>
+  simp[]
+QED
+
 Theorem alias_popmany_upper_support:
   popmany_plan to_pop ps = (ops,qs) /\ plan_holds qs (Var x) ==>
   plan_holds ps (Var x)
