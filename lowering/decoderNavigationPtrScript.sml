@@ -493,3 +493,49 @@ Proof
   gvs[Abbr `sp`, eval_operand_def, lookup_var_def, ptr_covers_def] >>
   metis_tac[]
 QED
+
+Theorem emit_mload_clean_endpoint_ptr:
+  !sa out sb q s t a G tn cx ctx PG R.
+    emit_op MLOAD [Var q] sa = (out,sb) /\
+    lookup_var q s = SOME a /\ ptr_covers G tn q s 32 /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u. op_taint u out = {} /\ op_prov H out = NONE /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qabbrev_tac `x = "%" ++ toString sa.cs_next_var` >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `t = update_var x (mload (w2n a) s) s` by
+    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+      eval_operand_def] >>
+  qabbrev_tac `ins = mk_inst sa.cs_next_id MLOAD [Var q] [x]` >>
+  qabbrev_tac `H = step_prov PG G ins t` >>
+  qabbrev_tac `u = step_taint ins s t tn` >>
+  `!y. not_fresh_at sa y ==> y <> x` by
+    (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
+  qexistsl_tac [`H`,`u`] >>
+  conj_tac >- (simp[Abbr `u`, Abbr `ins`, Abbr `x`] >>
+    irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def] >> metis_tac[]) >>
+  conj_tac >- simp[Abbr `H`, Abbr `ins`, Abbr `x`, op_prov_def, step_prov_def,
+    out_prov_def, set_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
+  conj_tac >- (irule ptr_fragment_step >> simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
+    rpt strip_tac >> gvs[] >> qexists_tac `update_var x (mload (w2n a) s) s` >>
+    simp[Abbr `H`, Abbr `u`, step_inst_base_def, mk_inst_def,
+      exec_read1_def, eval_operand_def, update_var_def] >>
+    rpt strip_tac >> irule (SRULE [mk_inst_def] ptr_inst_ok_mload) >> simp[]) >>
+  `u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans` by
+    (simp[Abbr `u`, Abbr `ins`] >>
+     metis_tac[mload_ghost_clean, eval_operand_def]) >>
+  simp[update_var_def] >> rpt strip_tac >>
+  simp[lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[Abbr `H`, Abbr `u`, Abbr `ins`, step_prov_other_output,
+    step_taint_other_output, mk_inst_def]
+QED
