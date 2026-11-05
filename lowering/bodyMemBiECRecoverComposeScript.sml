@@ -3,10 +3,12 @@ Ancestors
   bodyMemBiECRecoverPaths bodyArgsMemory exprSimPrecompiles exprSimWordArgs
   exprSimMemDefs gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath exprSimDefs vyperInterpreter vyperState list
-  bodyMemBiECRecoverFacts bodyMemBiECRecoverSuffix exprSimSource
-  exprLoweringProps fragExec compileEnv vyperAST exprSimHypsDefs
-  exprSimProps loweringPosts vyperTypeSystem vyperEvalExprPreservesScopesDom
-  rich_list
+  exprSimProps exprLowering exprLoweringProps exprSimHypsDefs vyperTyping
+  vyperAST vyperTypeSystem compileEnv rich_list builtinMisc loweringPosts
+  exprBopLowering vyperContext vyperValue vyperTypeInvariants valueEncoding
+  integer_word words byte context emitHelper emitHelperProps venomExecSemantics
+  venomInst venomState venomMemDefs venomCallOracleDefs extCallOracle
+  exprSimSource fragExec vyperEvalExprPreservesScopesDom
 
 (* Memory-mode counterpart of eval_exprs_suffix in exprSimPrecompiles. *)
 Theorem ecrecover_eval_exprs_suffix_mem:

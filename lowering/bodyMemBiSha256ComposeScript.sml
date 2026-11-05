@@ -272,16 +272,6 @@ Proof
   metis_tac[gas_exempt_cert_error_value]
 QED
 
-(* Restates local exprSimHash.expr_exit_INR_cast, which cannot be exported
-   under this task's source-edit restrictions. *)
-Theorem sha256_expr_exit_INR_cast[local]:
-  expr_exit (INR exc : value + exception) r ==>
-  expr_exit (INR exc : eval_result + exception) r
-Proof
-  Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
-QED
-
 Theorem compile_typed_sha256_unary_vv_sim_mem:
   expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
   expr_sim_mem ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
@@ -334,7 +324,7 @@ Proof
   first_assum (irule_at (Pat `expr_sim_mem _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> irule sha256_expr_exit_INR_cast >> simp[]) >>
+  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>

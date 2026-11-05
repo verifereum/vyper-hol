@@ -3,10 +3,12 @@
    compile_ecrecover_call_case). *)
 Theory bodyMemBiECRecover
 Ancestors
-  bodyMemoryPreds bodyMemBiECRecoverCompose bodyMemBiECRecoverFacts
-  bodyArgsMemory exprSimMemoryStack exprSimSource exprSimDefs
-  exprSimHypsDefs vyperTypeSystem vyperAST compileEnv vyperContext
-  exprLoweringProps
+  bodyMemoryPreds bodyMemBiECRecoverCompose exprSimPrecompiles exprSimDefs
+  exprSimProps exprLowering exprLoweringProps exprSimWordArgs exprSimHypsDefs
+  vyperTyping vyperAST vyperTypeSystem compileEnv list rich_list builtinMisc
+  loweringPosts exprBopLowering vyperInterpreter vyperState vyperContext
+  vyperValue vyperTypeInvariants valueEncoding integer_word words byte
+  bodyArgsMemory exprSimMemoryStack exprSimSource
 
 Theorem body_builtin_ecrecover_mem:
   !cx ty es.

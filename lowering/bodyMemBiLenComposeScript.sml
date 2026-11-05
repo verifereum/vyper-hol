@@ -1,15 +1,17 @@
 (* Counted operand/suffix composition for len. *)
 Theory bodyMemBiLenCompose
 Ancestors
-  bodyMemBiLenPath bodyMemBiLenFacts exprSimMemDefs exprSimMemUnwrap
-  exprSimUnwrap fragExec vyperTypeInvariants
-  exprSimSource exprSimProps exprSimHypsDefs exprSimHyps exprSimDefs
-  exprLoweringProps exprLowering builtinSimple builtinProps compileEnv
-  loweringPosts loweringSlice emitHelperProps gasContext gasOutcome gasSummary
-  gasSummaryCompose gasExemptCert fragGasMode fragGasPath fragGasPathMem
-  vyperTypeExprResult vyperTypeExprSoundness vyperExprNoControl
-  vyperInterpreter vyperState vyperValue vyperAST vyperTypeSystem
-  vyperContext context list
+  bodyMemBiLenPath exprSimLen exprSimSource exprSimProps exprSimHypsDefs
+  exprSimDefs loweringPosts list fragExec exprSimHyps exprSimWordBuiltins
+  exprBopLowering exprLowering exprLoweringProps builtinSimple emitHelper
+  compileEnv accountsRelProps valueEncoding venomExecSemantics venomInst
+  venomState vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
+  vyperTypeBuiltins vyperValue vyperTyping vyperStorage builtinProps
+  vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
+  exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness
+  vyperExprNoControl gasContext gasOutcome gasSummary gasSummaryCompose
+  gasExemptCert fragGasMode fragGasPath exprSimMemDefs exprSimMemUnwrap
+  fragGasPathMem
 
 Theorem compile_len_singleton_sim_mem:
   !ctx func cenv cx env ty e es.
