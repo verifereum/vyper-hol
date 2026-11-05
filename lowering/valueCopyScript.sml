@@ -318,7 +318,7 @@ Proof
   drule_all store_bytestring_run_exact >> simp[]
 QED
 
-Theorem emit_mstore_run[local]:
+Theorem emit_mstore_run:
   !sa sb dst src s d w.
     emit_void MSTORE [dst; src] sa = ((),sb) /\
     eval_operand dst s = SOME d /\ eval_operand src s = SOME w ==>
