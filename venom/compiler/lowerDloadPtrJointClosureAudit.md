@@ -943,3 +943,20 @@ families; residual opcode reflection/boundary or static exclusions; full
 literal-next integration; and global induction. This local theorem is not a
 proof of the frozen stage contract. Verification: holbuild targets
 lowerDloadPtrJointVariableTheory and o1ContractLowerDloadPtrTheory passed.
+
+### 18.7 Checked comparison/scalar normal-Q next consumer
+
+`lowerDloadPtrJointScalarTheory.dload_joint_tracked_scalar_next` builds with
+arbitrary literal fuel and exact step_prov/step_taint successors. It covers
+LT/GT/EQ and MUL, Div, SDIV, Mod, SMOD, Exp, ADDMOD, MULMOD, SLT, SGT,
+ISZERO, AND, OR, XOR, NOT, SIGNEXTEND, BYTE. Source access/taint safety comes
+from ptr_discipline at the incoming frame_reachable witness; fn_ptr_ok uses
+the separate Q policy P. Operand trackedness follows from source shape and
+opaque-use restrictions. Indexed semantic kernels retain exact non-retpc V
+and independent all-original U, without added source-success or footprint
+premises. Singleton control and NormalNext reconstruct every ancillary Q
+field. No definitions or existing theorem statements changed.
+
+This is only this opcode-family closure row. Allocation, expansion completion,
+other semantic families/residual opcodes, and global reachability closure
+remain unresolved; this does not certify the frozen stage contract.
