@@ -1,9 +1,9 @@
 (* Resource transport across the reason encoder's allocation prefix. *)
 Theory reasonPrefixResourcesPtr
 Ancestors
-  reasonBufferPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
+  reasonBufferPtr allocationPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
   bodyPtrDefs ptrDiscipline venomState venomInst pred_set arithmetic
-  loweringPosts compileEnv exprLoweringProps exprSimProps exprSimAlloc emitHelperProps exprSimHash
+  loweringPosts compileEnv exprLoweringProps exprSimProps exprSimAlloc emitHelperProps exprSimHash loweringHalt venomExecSemantics
 
 Theorem reason_encoder_store_robust_preserved:
   !tn s id dst value a w tv v p.
@@ -112,6 +112,10 @@ Theorem reason_encoder_alloc_buffer_post:
     sa.cs_next_var <= cc.cs_next_var ==>
     ?t w. run_inst_seq (emitted_insts cc cd) s = OK t /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString cc.cs_next_var)]) s = OK t /\
+      fresh_vars_wrt cd t /\ local_ptrs_reserved cenv cd /\
+      eval_operand op t = eval_operand op s /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas cc.cs_next_id = SOME (w2n w,n) /\
       w2n w + n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -133,6 +137,15 @@ Proof
   `expr_post ctx func cenv cx e es sa sb s0 es' v op t` by
     (irule reason_encoder_readonly_post >>
      simp[] >> qexistsl_tac [`cc`, `s`] >> simp[]) >>
+  `step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString cc.cs_next_var)]) s = OK t` by
+    (drule compile_alloc_buffer_insts >> strip_tac >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+         run_inst_seq_def, AllCaseEqs()]) >>
+  `fresh_vars_wrt cd t` by suspend "fresh" >>
+  `local_ptrs_reserved cenv cd` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `cc` >>
+     drule compile_alloc_buffer_parts >> simp[]) >>
   qexistsl_tac [`t`, `w`] >> asm_rewrite_tac[]
 QED
 
@@ -155,6 +168,14 @@ Resume reason_encoder_alloc_buffer_post[locals]:
       qexistsl_tac [`cc`, `es'.scopes`, `t`] >> simp[]) >>
   strip_tac >> irule local_region_frame_fwd >>
   qexistsl_tac [`s`, `cc`, `es'.scopes`] >> simp[]
+QED
+
+Resume reason_encoder_alloc_buffer_post[fresh]:
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  qpat_x_assum `step_inst_base _ s = OK t` mp_tac >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  gvs[fresh_vars_wrt_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Finalise reason_encoder_alloc_buffer_post
@@ -213,3 +234,83 @@ Resume reason_encoder_allocated_store_post[locals]:
 QED
 
 Finalise reason_encoder_allocated_store_post
+
+(* Unlike normalizationAllocPtr's endpoint-specific wrapper, this boundary
+   keeps the original expression interval while compilation advances at cc. *)
+Theorem reason_encoder_alloc_buffer_resources:
+  !ctx func cenv cx e es sa sb s0 es' v op s cc cd buf n tv ow PG G tn.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
+    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    fn_inst_ids_distinct func /\ n < dimword (:256) /\
+    sa.cs_next_var <= cc.cs_next_var /\ sb.cs_next_id <= cc.cs_next_id /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    ~is_word_type (expr_type e) /\ val_wf tv v /\
+    eval_operand op s = SOME ow /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n ow) m) ==>
+    ?t out i b G1 tn1.
+      buf.buf_operand = Var out /\
+      i = mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out] /\
+      step_inst_base i s = OK t /\
+      G1 = step_prov PG G i t /\ tn1 = step_taint i s t tn /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      fresh_vars_wrt cd t /\ local_ptrs_reserved cenv cd /\
+      eval_operand op t = SOME ow /\
+      eval_operand (Var out) t = SOME (n2w b) /\
+      FLOOKUP t.vs_allocas cc.cs_next_id = SOME (b,n) /\
+      b + n < dimword (:256) /\ ptr_covers G1 tn1 out t n /\
+      (!j. w2n ow <= j /\ j < w2n ow + val_footprint tv v ==>
+        ~(b <= j /\ j < b+n)) /\
+      (!m. mem_agree_outside tn1.t_mem t.vs_memory m ==>
+        val_in_memory tv v (w2n ow) m) /\
+      (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn1 p t k) /\
+      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all reason_encoder_alloc_buffer_post >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' s` by gvs[expr_post_def] >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  `expr_val_at cenv cx (expr_type e) sa sb es' v op s` by gvs[expr_post_def] >>
+  `not_local_ptr cenv es'.scopes (STRING #"%" (toString cc.cs_next_var))` by
+    (irule local_ptrs_reserved_fresh >> qexists_tac `cc` >> simp[]) >>
+  qexistsl_tac [`t`, `STRING #"%" (toString cc.cs_next_var)`,
+    `mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString cc.cs_next_var)]`, `w2n w`,
+    `step_prov PG G (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString cc.cs_next_var)]) t`,
+    `step_taint (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString cc.cs_next_var)]) s t tn`] >>
+  asm_rewrite_tac[wordsTheory.n2w_w2n] >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- (drule_all alloca_step_ptr_covers >> simp[])
+  >- suspend "separation"
+  >- suspend "robust"
+  >- suspend "oldptr" >>
+  strip_tac >> drule_all alloca_step_stor_taint_ok >> simp[expr_post_def]
+QED
+
+Resume reason_encoder_alloc_buffer_resources[separation]:
+  rpt gen_tac >> strip_tac >> irule alloca_step_expr_disjoint >>
+  metis_tac[]
+QED
+
+Resume reason_encoder_alloc_buffer_resources[robust]:
+  drule_at (Pat `step_inst_base _ _ = _`) alloca_step_expr_robust_preserved >>
+  disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (qspec_then `tn` mp_tac) >> simp[]
+QED
+
+Resume reason_encoder_alloc_buffer_resources[oldptr]:
+  rpt strip_tac >> irule alloca_step_old_ptr_covers >>
+  `lookup_var (STRING #"%" (toString cc.cs_next_var)) s = NONE` by
+    gvs[fresh_vars_wrt_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+  conj_tac
+  >- (strip_tac >> gvs[ptr_covers_def]) >>
+  simp[] >> qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >> simp[]
+QED
+
+Finalise reason_encoder_alloc_buffer_resources
