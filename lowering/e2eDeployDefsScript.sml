@@ -21,6 +21,7 @@ Definition constructor_args_encode_def:
       vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
         SOME (mut, F, args, [], NoneT, body) /\
       LENGTH tx.args = LENGTH args /\
+      IS_SOME (bind_arguments (type_env tops) args tx.args) /\
       vyper_to_abi_list (type_env tops) (MAP SND args) tx.args = SOME abi_vals /\
       bs = enc (Tuple (vyper_to_abi_types (type_env tops) (MAP SND args)))
                (ListV abi_vals)
@@ -111,6 +112,15 @@ Definition deploy_state_rel_def:
       tx_block_fields_rel tx es.txParams /\
       tx.function_name = "__init__" /\ ~tx.is_static /\
       call_outcomes_ok am tx (MAP SND (call_trace es)) /\
+      (* Under constructor_call_free the real call trace is empty, so this
+       * clause is vacuous. It could be discharged by proving that a
+       * call-free constructor compiles (through O1 and codegen) to code with
+       * no CALL-family instruction, leaving call_trace es empty; it is kept
+       * as a premise only to avoid that detour. *)
+      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
+                    (initial_state (am with <|accounts := co.co_accounts;
+                                              tStorage := co.co_tStorage|>) []))
+        (MAP SND (call_trace es)) /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
 
