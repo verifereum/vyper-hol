@@ -201,6 +201,120 @@ Proof
   first_x_assum drule >> gvs[]
 QED
 
+Theorem update_current_succ_phis_signatures:
+  ALL_DISTINCT (MAP basic_block_bb_label bs) ==>
+  MAP (\b. (b.bb_label,
+    MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions))
+    (update_current_succ_phis rs cur bs succs) =
+  MAP (\b. (b.bb_label,
+    MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP basic_block_bb_label
+      (update_current_succ_phis rs cur bs succs)) /\
+   MAP (\b. (b.bb_label,
+     MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions))
+     (update_current_succ_phis rs cur bs succs) =
+   MAP (\b. (b.bb_label,
+     MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs`
+    suffices_by simp[] >>
+  pure_rewrite_tac[update_current_succ_phis_def] >>
+  qmatch_goalsub_abbrev_tac `FOLDL upd bs succs` >>
+  qspecl_then [`succs`, `upd`, `bs`,
+    `\a. ALL_DISTINCT (MAP basic_block_bb_label a) /\
+     MAP (\b. (b.bb_label,
+       MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) a =
+     MAP (\b. (b.bb_label,
+       MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs`]
+    mp_tac FOLDL_preserves >>
+  impl_tac >- (
+  simp[Abbr `upd`] >> rpt strip_tac >>
+  Cases_on `lookup_block x a` >> gvs[] >>
+  drule makeSsaHelperTheory.lookup_block_label >> strip_tac >>
+  simp[cfgTransformPropsTheory.fn_labels_replace_block] >>
+  irule EQ_TRANS >> goal_assum (first_assum o mp_then Any mp_tac) >>
+  irule replace_block_projection >> simp[] >>
+  simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  irule MAP_CONG >> simp[] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[]) >> simp[]
+QED
+
+Theorem rename_current_blocks_signatures:
+  (!t s rs bs sm ctrs s' bs'.
+    ALL_DISTINCT (MAP basic_block_bb_label bs) /\
+    rename_current_blocks s rs bs sm t = (ctrs,s',bs') ==>
+    MAP (\b. (b.bb_label,
+      MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs' =
+    MAP (\b. (b.bb_label,
+      MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs) /\
+  (!ts s ctrs stacks bs sm ctrs' s' bs'.
+    ALL_DISTINCT (MAP basic_block_bb_label bs) /\
+    rename_current_children s ctrs stacks bs sm ts = (ctrs',s',bs') ==>
+    MAP (\b. (b.bb_label,
+      MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs' =
+    MAP (\b. (b.bb_label,
+      MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs)
+Proof
+  ho_match_mp_tac makeSsaCurrentInductTheory.current_dom_tree_induction >> rpt conj_tac
+  >- (rpt strip_tac >>
+      gvs[rename_current_blocks_def, AllCaseEqs()] >>
+      pairarg_tac >> gvs[] >>
+      drule makeSsaHelperTheory.lookup_block_label >> strip_tac >>
+      drule rename_current_block_insts_signatures >> strip_tac >>
+      first_x_assum (drule_at (Pat `rename_current_children _ _ _ _ _ _ = _`)) >>
+      simp[update_current_succ_phis_labels,
+        cfgTransformPropsTheory.fn_labels_replace_block] >>
+      strip_tac >>
+      `ALL_DISTINCT (MAP basic_block_bb_label
+        (replace_block lbl (bb with bb_instructions := insts') bs))`
+        by simp[cfgTransformPropsTheory.fn_labels_replace_block] >>
+      drule update_current_succ_phis_signatures >>
+      disch_then (qspecl_then
+        [`case ALOOKUP sm lbl of NONE => [] | SOME ss => ss`, `rs1`, `lbl`]
+        assume_tac) >>
+      `MAP (\b. (b.bb_label,
+        MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions))
+        (replace_block lbl (bb with bb_instructions := insts') bs) =
+       MAP (\b. (b.bb_label,
+        MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions)) bs`
+        by (irule replace_block_projection >> simp[]) >>
+      metis_tac[])
+  >- simp[rename_current_blocks_def] >>
+  rpt strip_tac >> gvs[rename_current_blocks_def] >>
+  pairarg_tac >> gvs[] >>
+  drule (CONJUNCT1 rename_current_blocks_labels) >> strip_tac >>
+  first_x_assum (drule_at (Pat `rename_current_blocks _ _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  first_x_assum (drule_at (Pat `rename_current_children _ _ _ _ _ _ = _`)) >>
+  simp[]
+QED
+
+Theorem lookup_block_projection:
+  !f bs cs l b.
+  MAP (\b. (b.bb_label,f b)) cs = MAP (\b. (b.bb_label,f b)) bs /\
+  lookup_block l bs = SOME b ==>
+  ?c. lookup_block l cs = SOME c /\ f c = f b
+Proof
+  gen_tac >> Induct >> Cases_on `cs` >> simp[lookup_block_def, FIND_thm] >>
+  rpt strip_tac >> Cases_on `h.bb_label = l` >> gvs[] >>
+  gvs[GSYM lookup_block_def] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem rename_current_blocks_lookup_signatures:
+  ALL_DISTINCT (MAP basic_block_bb_label bs) /\
+  rename_current_blocks s rs bs sm t = (ctrs,s',bs') /\
+  lookup_block l bs = SOME b ==>
+  ?b'. lookup_block l bs' = SOME b' /\
+    MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b'.bb_instructions =
+    MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions
+Proof
+  rpt strip_tac >>
+  drule_all (CONJUNCT1 rename_current_blocks_signatures) >> strip_tac >>
+  drule_all (BETA_RULE (Q.ISPEC
+    `\b. MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) b.bb_instructions`
+    lookup_block_projection)) >> simp[]
+QED
+
 Theorem make_ssa_current_fn_block_shape:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
