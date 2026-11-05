@@ -890,18 +890,35 @@ QED
 
 (* ===== S3: memory safety ===== *)
 
-(* A unit that lowers comes from run_lowering with the entry label
-   "__entry". *)
-Theorem lower_vyper_runtime_unit_run_lowering:
+(* The grouped-defaults lowering puts its entry first, as run_lowering does. *)
+Theorem run_grouped_lowering_entry[local]:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+    SOME unit ==>
+  unit.cu_context.ctx_entry = SOME entry_label /\
+  ?fn. lookup_function entry_label unit.cu_context.ctx_functions = SOME fn
+Proof
+  simp[run_grouped_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >>
+  gvs[AllCaseEqs(), extract_context_with_internals_def, mk_venom_context_def,
+      lookup_function_def, mk_raw_function_def, listTheory.FIND_thm]
+QED
+
+(* A unit that lowers, by run_lowering or by the grouped-defaults lowering,
+   passed lowering_context_ok and has its entry "__entry". *)
+Theorem lower_vyper_runtime_unit_context_entry:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
-    ?selectors external_fns internal_fns fallback_fn entry_info.
-      run_lowering selectors external_fns internal_fns fallback_fn rpolicy
-        0 0 [] entry_info "__entry" = SOME unit
+    lowering_context_ok unit.cu_context /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    ?fn. lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn
 Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-  strip_tac >> metis_tac[]
+  strip_tac >> Cases_on `EXISTS external_has_defaults q` >> gvs[] >>
+  imp_res_tac run_grouped_lowering_context >>
+  imp_res_tac run_grouped_lowering_entry >>
+  imp_res_tac run_lowering_context_ok >>
+  imp_res_tac run_lowering_entry >> simp[]
 QED
 
 (* The run from the unit's entry is memory-safe: every instruction it
@@ -938,7 +955,7 @@ QED
    bound.  The bridge's structural premises (an entry function with an entry
    block, distinct labels, an acyclic reachable call graph, the allocation
    budget below the word size) are lowering_context_ok, which run_lowering
-   checks. *)
+   and the grouped-defaults lowering check. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -953,9 +970,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     ==> raw_unit_memory_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>

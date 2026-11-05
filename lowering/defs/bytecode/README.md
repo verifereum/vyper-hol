@@ -106,6 +106,23 @@ those denominations. Their HOL definitions remain unchanged. See the linked
 coverage document for the complete constructor census and precise distinction
 between fixture inputs and lowering-arm execution.
 
+## External-entry regressions
+
+The external-entry regression corpus in `external-entries/` retains its source,
+sanitized AST and exact bytecode oracle. With the pinned Vyper installed, check
+these artifacts with:
+
+```sh
+python external-entries/generate.py --check
+```
+
+Run this command from this directory. To inspect a fixture's runtime IR:
+
+```sh
+vyper --experimental-codegen --optimize none --evm-version prague \
+  -f ir_runtime external-entries/sources/dflt_one_lit.vy
+```
+
 ## Fixture format
 
 Each `.hex` file contains canonical lowercase, even-length hexadecimal:
