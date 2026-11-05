@@ -75,3 +75,22 @@ Proof
   EVAL_TAC >> simp[wordsTheory.dimword_def]
 QED
 
+
+Theorem deploy_ctor_noninit_unit_wf_probe:
+  unit_wf (THE (lower_vyper_deploy_unit
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> []))
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def] >>
+  simp[venomInstTheory.fn_insts_blocks_def, venomWfTheory.bb_well_formed_def,
+       venomWfTheory.inst_wf_def, venomInstTheory.fn_labels_def,
+       venomStateTheory.get_label_def, venomInstTheory.is_terminator_def] >>
+  EVAL_TAC >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `i = 0 \/ i = 1 \/ i = 2` by decide_tac >>
+      gvs[venomInstTheory.is_terminator_def]) >>
+  rpt strip_tac >>
+  `j = 0 \/ j = 1 \/ j = 2` by decide_tac >> gvs[]
+QED
