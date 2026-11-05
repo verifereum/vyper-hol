@@ -1040,3 +1040,141 @@ Proof
   conj_tac >- metis_tac[ao_transform_insts_supply_front] >>
   metis_tac[ao_transform_insts_supply_phi_prefix]
 QED
+
+Theorem ao_offset_block_well_formed:
+  bb_well_formed bb ==>
+  bb_well_formed (bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions)
+Proof
+  simp[bb_well_formed_def, LAST_MAP, ao_handle_offset_inst_shape, EL_MAP] >>
+  rpt strip_tac >> gvs[EL_MAP, ao_handle_offset_inst_shape] >> metis_tac[]
+QED
+
+Theorem ao_transform_blocks_supply_well_formed:
+  !bbs s bbs' s'.
+    EVERY bb_well_formed bbs /\
+    ao_transform_blocks_supply dfg ra targets s bbs = (bbs',s') ==>
+    EVERY bb_well_formed bbs'
+Proof
+  Induct >> simp[Once ao_transform_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  rename1 `ao_transform_block_supply dfg ra targets s h = (bb,s1)` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets s1 bbs` >>
+  gvs[Once ao_transform_blocks_supply_def] >>
+  metis_tac[ao_transform_block_supply_well_formed]
+QED
+
+Theorem ao_offset_inst_successors:
+  get_successors (ao_handle_offset_inst inst) = get_successors inst
+Proof
+  Cases_on `inst.inst_opcode = ADD` >>
+  simp[ao_handle_offset_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  Cases_on `t'` >> simp[get_successors_def, is_terminator_def]
+QED
+
+Theorem ao_offset_block_successors:
+  bb_succs (bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) = bb_succs bb
+Proof
+  Cases_on `bb.bb_instructions` >>
+  simp[bb_succs_def, LAST_DEF, LAST_MAP, ao_offset_inst_successors] >>
+  Cases_on `t = []` >> simp[LAST_MAP, ao_offset_inst_successors]
+QED
+
+Theorem ao_transform_block_supply_successors:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  bb_succs bb' = bb_succs bb
+Proof
+  Cases_on `ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+    bb.bb_instructions` >>
+  gvs[ao_transform_block_supply_def] >> strip_tac >> gvs[] >>
+  drule ao_transform_insts_supply_nonempty >> strip_tac >>
+  Cases_on `bb.bb_instructions = []` >> gvs[bb_succs_def] >>
+  drule_all ao_transform_insts_supply_successors >> strip_tac >>
+  Cases_on `q` >> Cases_on `bb.bb_instructions` >> gvs[]
+QED
+
+Theorem ao_transform_blocks_supply_successors:
+  !bbs s bbs' s'.
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+       ~is_label_operand op) /\
+    ao_transform_blocks_supply dfg ra targets s bbs = (bbs',s') ==>
+    MAP (\bb. (bb.bb_label,bb_succs bb)) bbs' =
+    MAP (\bb. (bb.bb_label,bb_succs bb)) bbs
+Proof
+  Induct >> simp[Once ao_transform_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  rename1 `ao_transform_block_supply dfg ra targets s h = (bb,s1)` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets s1 bbs` >>
+  gvs[Once ao_transform_blocks_supply_def] >>
+  metis_tac[ao_transform_block_supply_successors, ao_transform_block_supply_label]
+QED
+
+Theorem ao_main_function_successors:
+  !fn fn0 sup bbs sup1 mid.
+    EVERY label_positions_ok (fn_insts fn) /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    ao_transform_blocks_supply (dfg_build_function fn0) (range_analyze fn0)
+      (ao_compute_fn_iszero_targets fn0) sup fn0.fn_blocks = (bbs,sup1) /\
+    mid = fn0 with fn_blocks := bbs ==>
+    MAP (\bb. (bb.bb_label,bb_succs bb)) mid.fn_blocks =
+    MAP (\bb. (bb.bb_label,bb_succs bb)) fn.fn_blocks
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_offset_function_label_contract >> strip_tac >>
+  drule ao_compute_iszero_targets_no_labels >> strip_tac >>
+  `!v chain op. ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain /\
+    MEM op chain ==> ~is_label_operand op` by
+    (rewrite_tac[ao_compute_fn_iszero_targets_def] >> metis_tac[]) >>
+  drule_all ao_transform_blocks_supply_successors >> strip_tac >>
+  gvs[MAP_MAP_o, combinTheory.o_DEF, ao_offset_block_successors]
+QED
+
+Theorem ao_main_function_well_formed:
+  !fn fn0 sup bbs sup1 mid.
+    wf_function fn /\ wf_ssa fn /\ ir_supply_inst_ok sup /\
+    ir_supply_covers_fn sup fn /\
+    EVERY label_positions_ok (fn_insts fn) /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    ao_transform_blocks_supply (dfg_build_function fn0) (range_analyze fn0)
+      (ao_compute_fn_iszero_targets fn0) sup fn0.fn_blocks = (bbs,sup1) /\
+    mid = fn0 with fn_blocks := bbs ==>
+    wf_function mid
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_main_function_distinct >> strip_tac >>
+  drule_all ao_main_function_labels >> strip_tac >>
+  drule_all ao_main_function_successors >> strip_tac >>
+  `EVERY bb_well_formed fn0.fn_blocks` by
+    (gvs[EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+     irule ao_offset_block_well_formed >> fs[wf_function_def]) >>
+  drule_all ao_transform_blocks_supply_well_formed >> strip_tac >>
+  `fn_succs_closed mid` by
+    (fs[fn_succs_closed_def] >> rpt strip_tac >>
+     `MEM (bb.bb_label,bb_succs bb)
+       (MAP (\bb. (bb.bb_label,bb_succs bb)) mid.fn_blocks)` by
+       (simp[MEM_MAP] >> metis_tac[]) >>
+     `MEM (bb.bb_label,bb_succs bb)
+       (MAP (\bb. (bb.bb_label,bb_succs bb)) fn.fn_blocks)` by gvs[] >>
+     qpat_x_assum `MEM _ (MAP _ fn.fn_blocks)` mp_tac >>
+     simp[MEM_MAP] >> strip_tac >> gvs[] >>
+     metis_tac[wf_function_def, fn_succs_closed_def]) >>
+  gvs[wf_function_def, fn_inst_ids_distinct_def, fn_insts_def,
+      MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF, EVERY_MEM] >>
+  conj_tac
+  >- (gvs[fn_has_entry_def, fn_labels_def] >>
+      Cases_on `bbs` >> gvs[]) >>
+  gvs[fn_insts_blocks_inst_ids, lambdify block_ir_inst_ids_def]
+QED
