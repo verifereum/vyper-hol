@@ -131,8 +131,9 @@ QED
    The postcondition is expr_post of v at the new operand, conjoined with
    the same EVERY at upper boundary sb instead of sm (lo is UNCHANGED).
    This is the exact held-entry shape of vv_post_deferred_prefix; that
-   theorem assumes compile_expr, not unwrap_value, so it cannot supply
-   the required frame by instantiation.  vv_post_read_result handles raw
+   theorem assumes compile_expr, not unwrap_value, and explicitly assumes
+   full local-window agreement and held immutable preservation. It cannot
+   supply the required frame by instantiation or from vv_post alone.  vv_post_read_result handles raw
    result interpretation but does not itself prove memory preservation.
 
    Dependency map: slot execution + full copied-prefix loop + allocation
@@ -279,8 +280,10 @@ QED
    record restoration, but requires destination room/counter bounds and
    does not identify any typed value. Existing type_memory_size_slots,
    expr_sim_inv_memory_size and val_in_memory_relocate are reusable, not
-   missing obligations. vv_post_deferred_prefix is checked for expression
-   evaluation, not forcing; it is not an unwrap composition theorem.
+   missing obligations. vv_post_deferred_prefix is a conditional consumer for
+   expression evaluation, not forcing; it is not an unwrap composition
+   theorem. The SAME counted execution must still supply local-window
+   agreement, immutable preservation, and storage/transient frames jointly.
 
    UNPROVED semantic outputs, in dependency order:
    - decoder-to-memory transfer for all type_value branches, including

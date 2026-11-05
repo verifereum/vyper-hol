@@ -122,15 +122,15 @@ Proof
 QED
 
 Theorem get_storage_outcomes[local]:
-  vyperStorageBackend$get_storage cx (es with outcomes := os) tr =
+  vyperStorageBackend$get_storage cx (es with <|outcomes := os; gas_obs := gs|>) tr =
   get_storage cx es tr
 Proof
   Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem read_place_outcomes:
-  read_place cx p (es with outcomes := os) =
-    (FST (read_place cx p es), es with outcomes := os)
+  read_place cx p (es with <|outcomes := os; gas_obs := gs|>) =
+    (FST (read_place cx p es), es with <|outcomes := os; gas_obs := gs|>)
 Proof
   Cases_on `p` >>
   simp[read_place_def, vyperStorageBackendTheory.read_storage_slot_eq,
@@ -141,8 +141,8 @@ Proof
 QED
 
 Theorem read_result_outcomes:
-  read_result cx raw (es with outcomes := os) =
-    (FST (read_result cx raw es), es with outcomes := os)
+  read_result cx raw (es with <|outcomes := os; gas_obs := gs|>) =
+    (FST (read_result cx raw es), es with <|outcomes := os; gas_obs := gs|>)
 Proof
   Cases_on `raw` >>
   simp[read_result_def, read_place_outcomes, return_def, raise_def] >>
@@ -150,8 +150,8 @@ Proof
 QED
 
 Theorem read_result_outcomes_iff:
-  read_result cx raw (es with outcomes := os) =
-    (res, es with outcomes := os) <=> read_result cx raw es = (res,es)
+  read_result cx raw (es with <|outcomes := os; gas_obs := gs|>) =
+    (res, es with <|outcomes := os; gas_obs := gs|>) <=> read_result cx raw es = (res,es)
 Proof
   simp[read_result_outcomes] >>
   Cases_on `read_result cx raw es` >>
@@ -159,8 +159,8 @@ Proof
 QED
 
 Theorem read_results_outcomes:
-  !raw es os. read_results cx raw (es with outcomes := os) =
-    (FST (read_results cx raw es), es with outcomes := os)
+  !raw es os gs. read_results cx raw (es with <|outcomes := os; gas_obs := gs|>) =
+    (FST (read_results cx raw es), es with <|outcomes := os; gas_obs := gs|>)
 Proof
   Induct_on `raw` >> simp[read_results_def, return_def] >>
   rpt gen_tac >>
@@ -174,8 +174,8 @@ Proof
 QED
 
 Theorem read_results_outcomes_iff:
-  read_results cx raw (es with outcomes := os) =
-    (res, es with outcomes := os) <=> read_results cx raw es = (res,es)
+  read_results cx raw (es with <|outcomes := os; gas_obs := gs|>) =
+    (res, es with <|outcomes := os; gas_obs := gs|>) <=> read_results cx raw es = (res,es)
 Proof
   simp[read_results_outcomes] >>
   Cases_on `read_results cx raw es` >>
@@ -183,7 +183,7 @@ Proof
 QED
 
 Theorem storage_holds_outcomes:
-  storage_holds cx tr t tv w (es with outcomes := os) s <=>
+  storage_holds cx tr t tv w (es with <|outcomes := os; gas_obs := gs|>) s <=>
   storage_holds cx tr t tv w es s
 Proof
   simp[storage_holds_def, read_result_outcomes_iff,
@@ -192,14 +192,14 @@ Proof
 QED
 
 Theorem immutable_holds_outcomes:
-  immutable_holds cenv cx t tv w (es with outcomes := os) s <=>
+  immutable_holds cenv cx t tv w (es with <|outcomes := os; gas_obs := gs|>) s <=>
   immutable_holds cenv cx t tv w es s
 Proof
   simp[immutable_holds_def, read_result_outcomes_iff]
 QED
 
 Theorem vv_holds_outcomes:
-  vv_holds cenv cx t tv vv (es with outcomes := os) s <=>
+  vv_holds cenv cx t tv vv (es with <|outcomes := os; gas_obs := gs|>) s <=>
   vv_holds cenv cx t tv vv es s
 Proof
   Cases_on `vv` >>
@@ -209,7 +209,7 @@ Proof
 QED
 
 Theorem vv_at_outcomes:
-  vv_at cenv cx t sa sb (es with outcomes := os) tv vv s <=>
+  vv_at cenv cx t sa sb (es with <|outcomes := os; gas_obs := gs|>) tv vv s <=>
   vv_at cenv cx t sa sb es tv vv s
 Proof
   Cases_on `vv` >>
