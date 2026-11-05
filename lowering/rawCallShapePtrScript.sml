@@ -4,7 +4,7 @@ Ancestors
   exprSimHypsDefs exprLowering exprLoweringProps builtinSystem
   vyperTyping vyperTypeSystem vyperInterpreter vyperState vyperValue
   supportedExprTraverse allocLimits list pair exprSimSend
-  exprSimSource vyperTypeCallGraph
+  exprSimSource vyperTypeCallGraph exprSimWordArgs compileEnv
 Libs
   pairLib
 
@@ -109,4 +109,42 @@ Proof
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+QED
+
+Theorem raw_call_kwargs_types:
+  raw_call_kws_ok flags es ==>
+  EVERY (\k. k = EKValue \/ k = EKGas) flags.rcf_kws /\
+  EVERY (\e. expr_type e = BaseT (UintT 256)) es
+Proof
+  simp[raw_call_kws_ok_def] >> strip_tac >>
+  `EVERY (\k. k = EKValue \/ k = EKGas) flags.rcf_kws` by
+    (simp[EVERY_MEM] >> rpt strip_tac >> Cases_on `k` >> gvs[]) >>
+  simp[] >>
+  `EVERY (\t. t = BaseT (UintT 256)) (MAP expr_type es)` suffices_by
+    simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> rename1 `MEM k flags.rcf_kws` >>
+  `k = EKValue \/ k = EKGas` by
+    (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM]) >>
+  gvs[ext_call_kw_type_def]
+QED
+
+Theorem raw_call_kwargs_word_args:
+  !ks es sa vo go d sb.
+    EVERY (\k. k = EKValue \/ k = EKGas) ks /\
+    LENGTH es = LENGTH ks /\
+    compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) ==>
+    ?xs. lower_word_args cenv (K (BaseT (UintT 256))) es sa = (xs,sb) /\
+         vo = ext_call_kwarg EKValue ks xs /\
+         go = ext_call_kwarg EKGas ks xs /\ d = NONE
+Proof
+  Induct >- simp[compile_ext_call_kwargs_def, lower_word_args_def,
+                comp_return_def, ext_call_kwarg_def] >>
+  rpt gen_tac >> Cases_on `es` >>
+  simp[compile_ext_call_kwargs_def, lower_word_args_def, comp_return_def] >>
+  strip_tac >>
+  gvs[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[ext_call_kwarg_def]
 QED
