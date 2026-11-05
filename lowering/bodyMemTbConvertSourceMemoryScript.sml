@@ -5,7 +5,7 @@ Ancestors
   vyperValue valueEncoding venomState context
   fragGasSeqMem fragGasPathMem emitHelperProps instMemFrontier
   exprLoweringProps fragExecMem venomExecProofs rich_list
-  emitHelper fragExec venomInst list
+  emitHelper fragExec venomInst list vyperTypeSystem
 
 Theorem convert_memory_unwrap_capacity:
   p.ptr_location = LocMemory /\ ~is_word_type t /\
@@ -69,4 +69,12 @@ Proof
   strip_tac >>
   gvs[unwrap_value_def, comp_return_def, vv_store_bound_def] >>
   metis_tac[]
+QED
+
+(* The checker alone does not ensure a two-word source window. *)
+Theorem convert_zero_bytes_capacity_probe:
+  valid_conversion (BaseT (BytesT (Dynamic 0))) (BaseT BoolT) /\
+  type_memory_bytes cenv (BaseT (BytesT (Dynamic 0))) = 32
+Proof
+  EVAL_TAC
 QED
