@@ -23,6 +23,15 @@ Definition phi_well_formed_def:
   phi_well_formed (_ :: _ :: rest) = F
 End
 
+Theorem phi_well_formed_var_pair:
+  !ops v.
+    phi_well_formed ops /\ MEM (Var v) ops ==>
+    ?lbl. MEM (lbl,v) (phi_pairs ops)
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rw[venomInstTheory.phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
+QED
+
 (* ==========================================================================
    Per-instruction well-formedness (inst_wf)
 
@@ -690,6 +699,33 @@ Definition fn_phis_cover_preds_def:
       inst.inst_opcode = PHI /\
       fn_cfg_edge fn pred bb.bb_label ==>
       ?v. MEM (pred,v) (phi_pairs inst.inst_operands)
+End
+
+(* A PHI's output has no other definition anywhere in the function, so
+   re-running SSA construction never adds a second PHI for it outside its
+   own block. *)
+Definition fn_phi_outputs_single_def_def:
+  fn_phi_outputs_single_def fn <=>
+    !bb inst v.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      MEM v inst.inst_outputs ==>
+      LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
+End
+
+(* Every PHI merges two distinct values, neither of them its own output,
+   so PHI cleanup never collapses it to a copy. *)
+Definition fn_phis_non_degenerate_def:
+  fn_phis_non_degenerate fn <=>
+    !inst out.
+      MEM inst (fn_insts fn) /\
+      inst.inst_opcode = PHI /\
+      inst.inst_outputs = [out] ==>
+      ?l1 v1 l2 v2.
+        MEM (l1,v1) (phi_pairs inst.inst_operands) /\
+        MEM (l2,v2) (phi_pairs inst.inst_operands) /\
+        v1 <> out /\ v2 <> out /\ v1 <> v2
 End
 
 (* Check if instruction is a PHI. *)

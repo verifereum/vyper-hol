@@ -8,9 +8,10 @@
  * subscripts (exprSimTuple's compile_subscript_tuple_sim), a dispatch that
  * disagrees with the base's type and subscripts of any base but an array, a
  * tuple or a mapping, which do not type.  Cheated, for the later #636 PRs:
- * array and mapping subscripts and pop on any other target, by kind
- * (compile_pop_storage_sim, compile_pop_nested_sim). Root immutable pop is
- * rejected by the source checker, as in Python.
+ * array and mapping subscripts.  Pop on a storage variable is
+ * compile_pop_storage_sim; pop on a nested target is compile_pop_nested_sim,
+ * by exprSimPopNested's pop_nested_sim, whose residuals are listed there.
+ * Root immutable pop is rejected by the source checker, as in Python.
  *
  * TOP-LEVEL:
  *   compile_subscript_case — static and dynamic arrays with the
@@ -46,7 +47,7 @@
 
 Theory exprSimPlaces
 Ancestors
-  list exprSim exprSimHyps exprSimPop exprSimPopStorage exprSimAttribute exprSimTuple
+  exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
   exprSimArrayIndex
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
@@ -274,26 +275,19 @@ Proof
     (qspec_then `ts` mp_tac) >> simp[]
 QED
 
-(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()).
-   Cheated: the lowering takes the array's pointer, location and type from
-   compile_get_target_ptr, as an assignment does, but no lemma relates
-   compile_get_target_ptr to the source's eval_target_place for a target
-   deeper than a name.  The proof needs that target/place judgment: by
-   induction on the target, with the hypothesis for the indices, the
-   pointer is the place's in memory (with the array bounds abort of each
-   index) or its slot in storage (with the mapping slot of each key); the
-   subscript lemmas need the same judgment for their bases (this file's
-   header).  Given it, a memory target pops as compile_pop_name_sim does at
-   the array's pointer, inside the local's region (locals_kept), and a
-   storage target as compile_pop_storage_sim does, which waits on the new
-   storage statement of #713. *)
+(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
+   exprSimPopNested's pop_nested_sim, by the target's root, with the
+   target's fragment judgment from pop_nested_expr_target_frag. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  cheat
+  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >> irule pop_nested_sim >>
+  qexists_tac `env` >> conj_tac
+  >- metis_tac[pop_nested_expr_target_frag] >>
+  gvs[expr_sim_pre_body]
 QED
 
 (* pop on a target other than a local: compile_pop_storage_sim,

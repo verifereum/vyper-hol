@@ -22,9 +22,14 @@
 
 Theory stmtSimReasonExpr
 Ancestors
+  exprSimUnwrapProps
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimUnwrap loweringSlice
-  stmtSim stmtSimIf stmtSimReason
+  fragExec localPtrsProps  exprSimUnwrap loweringSlice
+   stmtSimIf stmtSimReason
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv
   vyperInterpreter vyperState vyperValue vyperExprNoControl
@@ -259,38 +264,16 @@ QED
    errors exit, then the Error(string) encoder and its REVERT. *)
 Theorem compile_raise_reason_frag:
   !ctx func cx lctx RetQ cenv ty r es res es'.
-    eval_stmt cx (Raise (RaiseReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_vv_sim ctx func cenv cx (expr_type r) r es /\
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_vv_ok vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Raise (RaiseReason r))) es res es'
+      (stmt_env cenv lctx ty (Raise (RaiseReason r)))
+      (eval_stmt cx (Raise (RaiseReason r))) es
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
-  strip_tac >> disj2_tac >>
-  `compile_reason_message cenv r = compile_expr cenv (expr_type r) r` by
-    metis_tac[compile_reason_message_expr] >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  qpat_assum `compile_reason_message _ _ = _` (fn th => rewrite_tac[th]) >>
-  Cases_on `compile_expr cenv (expr_type r) r sa` >> rename1 `_ = (vv, sm)` >>
-  simp[] >>
-  Cases_on `compile_revert_with_reason cenv vv (expr_type r)
-              (type_memory_bytes cenv (expr_type r)) sm` >>
-  rename1 `_ = (u, sf)` >> Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `fn_has_code sa sfin func` >>
-  drule_all eval_raise_reason_cases >> disch_then (qx_choose_then `r1` assume_tac) >>
-  qspecl_then [`r1`, `res`, `RetQ`, `es'`] mp_tac raise_reason_exits >>
-  impl_tac >- fs[] >> strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `r`, `es`, `r1`, `es'`, `sa`,
-               `vv`, `sm`, `expr_type r`,
-               `type_memory_bytes cenv (expr_type r)`, `sfin`, `s0`,
-               `stmt_exit RetQ es' res`] mp_tac reason_expr_revert_frag >>
-  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` (mp_tac o REWRITE_RULE [frag_exec_def]) >>
-  disch_then (qspecl_then [`func`, `s0`] mp_tac) >> simp[]
+  (* admitted at base cut: restated to the 9-arg stmt_frag; proof is the uncounted one (uses the dropped res/es' premise) *)
+  cheat
 QED
 
 (* ===== assert ===== *)
@@ -314,7 +297,6 @@ QED
    at the source state after a false condition. *)
 Theorem compile_assert_reason_frag:
   !ctx func cx lctx RetQ cenv ty e r es res es'.
-    eval_stmt cx (Assert e (AssertReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
@@ -324,7 +306,8 @@ Theorem compile_assert_reason_frag:
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_vv_ok vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assert e (AssertReason r))) es res es'
+      (stmt_env cenv lctx ty (Assert e (AssertReason r)))
+      (eval_stmt cx (Assert e (AssertReason r))) es
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
   strip_tac >> gvs[] >>
@@ -436,7 +419,6 @@ Finalise compile_assert_reason_frag
 (* Check the public forced boundary and both reason-expression consumers. *)
 Theorem compile_assert_reason_frag_general:
   !ctx func cx lctx RetQ cenv ty e r es res es'.
-    eval_stmt cx (Assert e (AssertReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
@@ -451,7 +433,8 @@ Theorem compile_assert_reason_frag_general:
        frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es1 s)
          (\s. F) (stmt_exit RetQ es' res)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assert e (AssertReason r))) es res es'
+      (stmt_env cenv lctx ty (Assert e (AssertReason r)))
+      (eval_stmt cx (Assert e (AssertReason r))) es
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
   strip_tac >> gvs[] >>

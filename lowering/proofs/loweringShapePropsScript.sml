@@ -9,7 +9,7 @@
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
- *                                shape (msg.gas, raw_call, create
+ *                                shape (raw_call, create
  *                                calls) and builtins with too few arguments
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
@@ -65,12 +65,11 @@ Definition type_builtin_arity_def:
     | _ => 0
 End
 
-(* msg.gas returns a GAS output as an ordinary value; raw_call lowers to
+(* raw_call lowers to
    DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
    create calls emit CREATE/CREATE2, outside inst_shape_ok; a builtin with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
-    (?ty es. e = Builtin ty (Env MsgGas) es) \/
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
     (?ty kind salted rof order es d.
@@ -1483,6 +1482,24 @@ Proof
     `\st. plain_operand st dst /\ plain_operand st v`,
     `\x st. plain_operand st dst /\ plain_operand st v`] >>
   simp[] >> stmt_plain_void
+QED
+
+Theorem compile_ptr_store_cenv_shape[local]:
+  !cenv loc dst v internal.
+    shape_step internal compiler_label
+      (\st. cenv_shape_ok st cenv /\ plain_operand st dst /\ plain_operand st v)
+      (compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst v)
+      (\x st. cenv_shape_ok st cenv)
+Proof
+  rpt gen_tac >> Cases_on `loc = LocCode /\ cenv.ce_is_ctor`
+  >- (gvs[compile_ptr_store_def] >> irule compile_imm_store_word_shape) >>
+  `compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst v =
+   compile_ptr_store cenv.ce_is_ctor NONE loc dst v` by
+    (Cases_on `loc` >> gvs[compile_ptr_store_def]) >>
+  pop_assum SUBST1_TAC >>
+  irule shape_step_conseq >> irule_at Any shape_step_frame >>
+  irule_at Any compile_ptr_store_shape >>
+  qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]
 QED
 
 Theorem stmt_shape_stable_const[local]:
@@ -3311,7 +3328,7 @@ QED
 
 Theorem expr_shape_builtin[local]:
   ~supported_expr_exists expr_shape_root (Builtin ann bi es) <=>
-  bi <> Env MsgGas /\ builtin_arity bi <= LENGTH es /\
+  builtin_arity bi <= LENGTH es /\
   ~supported_exprs_exists expr_shape_root es
 Proof
   simp[supported_expr_exists_def, expr_shape_root_def, arithmeticTheory.NOT_LESS, CONJ_ASSOC]
@@ -3392,13 +3409,13 @@ QED
 
 Theorem builtin_child_callback_shape[local]:
   (!ce rt t bi args internal.
-     list_size expr_size args < bound /\ bi <> Env MsgGas /\
+     list_size expr_size args < bound /\
      builtin_arity bi <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (f ce rt t bi args) (\v st. value_shape_ok st v)) ==>
   !ce rt t bi args internal.
-    bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+    builtin_arity bi <= LENGTH args /\
     ~supported_exprs_exists expr_shape_root args ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
       (builtin_child_callback bound f ce rt t bi args)
@@ -3675,11 +3692,13 @@ Proof
 QED
 
 Theorem compile_env_var_shape[local]:
-  shape_stable R /\ item <> MsgGas ==>
+  shape_stable R ==>
   shape_step internal compiler_label R (compile_env_var item)
     (\op st. R st /\ plain_operand st op)
 Proof
   strip_tac >> Cases_on `item` >> gvs[compile_env_var_def]
+  >~ [`emit_op GAS []`]
+  >- (irule shape_step_emit_op_gas_plain >> simp[])
   >~ [`comp_bind (emit_op NUMBER []) _`]
   >- (match_mp_tac shape_step_bind >>
       qexists_tac `\op st. R st /\ plain_operand st op` >> conj_tac
@@ -3764,7 +3783,20 @@ Proof
     (simp[Abbr `L`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[len_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
   shape_scalar_emit_bind_tac `L` `data_ptr` (simp[Abbr `L`, Abbr `P`]) >>
-  shape_scalar_emit_bind_tac `L` `data_op` all_tac >>
+  shape_scalar_emit_bind_tac `L` `raw_data` all_tac >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\data_op st. L st /\ plain_operand st data_op` >> conj_tac
+  >- (Cases_on `shift_opc = SAR` >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `shape_step internal compiler_label M _ _` >>
+          `shape_stable M` by
+            (simp[Abbr `M`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[raw_data]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `M` `empty` (simp[Abbr `M`, Abbr `L`]) >>
+          shape_scalar_emit_bind_tac `M` `nonempty` all_tac >>
+          shape_under_tac shape_step_emit_op_plain `L` >>
+          simp[Abbr `M`] >> shape_opcode_tac) >>
+      irule shape_step_return >> simp[]) >>
+  qx_gen_tac `data_op` >> simp[] >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label D _ _` >>
   `shape_stable D` by
     (simp[Abbr `D`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
@@ -5253,10 +5285,10 @@ QED
 Finalise compile_acc_shape[local]
 
 Theorem compile_dynarray_pop_shape[local]:
-  shape_stable R /\ MEM load_opc [MLOAD; SLOAD; TLOAD] /\
-  MEM store_opc [MSTORE; SSTORE; TSTORE] ==>
+  shape_stable R /\ (!st. R st ==> cenv_shape_ok st cenv) ==>
   shape_step internal compiler_label (\st. R st /\ plain_operand st base_op)
-    (compile_dynarray_pop base_op scale elem_size load_opc store_opc)
+    (compile_dynarray_pop base_op scale elem_size cenv.ce_is_ctor
+       cenv.ce_imm_alloca loc)
     (\v st. R st /\ plain_operand st v)
 Proof
   strip_tac >> simp[compile_dynarray_pop_def] >>
@@ -5264,7 +5296,12 @@ Proof
   `shape_stable P` by
     (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[base_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
-  shape_scalar_emit_bind_tac `P` `len_op` (simp[Abbr `P`] >> gvs[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. P st /\ plain_operand st v` >> conj_tac
+  >- (irule shape_step_conseq >> irule_at Any shape_step_frame >>
+      irule_at Any compile_ptr_load_cenv_shape >> qexists_tac `P` >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[Abbr `P`]) >>
+  qx_gen_tac `len_op` >> simp[] >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label L _ _` >>
   `shape_stable L` by
     (simp[Abbr `L`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
@@ -5278,7 +5315,10 @@ Proof
     (simp[Abbr `N`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[new_len]:operand list` shape_stable_plain_operands) >> simp[]) >>
   match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. N st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `N` >> simp[Abbr `N`, Abbr `P`] >> gvs[] >> shape_opcode_tac) >>
+  >- (irule shape_step_conseq >> irule_at Any shape_step_frame >>
+      irule_at Any compile_ptr_store_cenv_shape >> qexists_tac `N` >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      gvs[Abbr `N`, Abbr `P`]) >>
   gen_tac >> simp[] >>
   shape_scalar_emit_bind_tac `N` `data_ptr` (simp[Abbr `N`, Abbr `P`]) >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label D _ _` >>
@@ -6287,8 +6327,8 @@ Resume compile_stage_intcall_args_shape_under[buffer]:
           >- (shape_under_tac compile_store_bytestring_shape_framed `BufFrame` >>
               simp[Abbr `BufFrame`, Abbr `ValFrame`]) >>
           gen_tac >> irule shape_step_return >> simp[]) >>
-      shape_under_tac shape_step_emit_void_plain `BufFrame` >>
-      simp[Abbr `BufFrame`, Abbr `ValFrame`] >> shape_opcode_tac) >>
+      shape_under_tac compile_store_memory_shape_framed `BufFrame` >>
+      simp[Abbr `BufFrame`, Abbr `ValFrame`]) >>
   gen_tac >> simp[] >>
   qabbrev_tac `HeadFrame = \st. R st /\ plain_operand st buf_alloc.buf_operand` >>
   `shape_stable HeadFrame` by
@@ -6331,6 +6371,40 @@ Proof
   gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
 QED
 
+(* An IfExp arm is either unwrapped as is or copied into a buffer laid out at
+   the result type; either way a plain operand. *)
+Theorem compile_ifexp_arm_shape[local]:
+  shape_stable R /\ (!st. R st ==> cenv_shape_ok st cenv) ==>
+  shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
+    (compile_ifexp_arm cenv res_ty arm_ty vv) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_ifexp_arm_def] >> IF_CASES_TAC
+  >- (pop_assum kall_tac >> shape_unwrap_value_tac `R` >> metis_tac[]) >>
+  qabbrev_tac `VVFrame = \st. R st /\ value_shape_ok st vv` >>
+  `shape_stable VVFrame` by
+    (simp[Abbr `VVFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[value_shape_ok_stable]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. VVFrame st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape_framed `VVFrame`) >>
+  qx_gen_tac `tmp` >> simp[] >>
+  qabbrev_tac `BufFrame = \st. R st /\ plain_operand st tmp.buf_operand` >>
+  `shape_stable BufFrame` by
+    (simp[Abbr `BufFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[tmp.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. BufFrame st /\ plain_operand st v` >> conj_tac
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. BufFrame st /\ value_shape_ok st vv`,
+                    `\v st. BufFrame st /\ plain_operand st v`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[Abbr `BufFrame`, Abbr `VVFrame`] >>
+      conj_tac >- simp[] >> shape_unwrap_value_tac `BufFrame` >>
+      simp[Abbr `BufFrame`] >> metis_tac[]) >>
+  qx_gen_tac `src` >> simp[] >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
+  >- (shape_under_tac compile_store_memory_shape_framed `BufFrame` >> simp[Abbr `BufFrame`]) >>
+  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
+QED
+
 Theorem compile_ext_call_kwarg_shape[local]:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -6341,7 +6415,7 @@ Theorem compile_ext_call_kwarg_shape[local]:
     (\v st. R st /\ plain_operand st (FST v))
 Proof
   disch_then strip_assume_tac >> rewrite_tac[compile_ext_call_kwarg_def] >> IF_CASES_TAC
-  >- (match_mp_tac shape_step_bind >>
+  >- (rewrite_tac[LET_THM] >> BETA_TAC >> match_mp_tac shape_step_bind >>
       qexists_tac `\v st. (R st /\ cenv_shape_ok st cenv) /\ value_shape_ok st v` >> conj_tac
       >- (match_mp_tac shape_step_conseq >>
           qexistsl_tac [`compiler_label`,
@@ -7143,6 +7217,29 @@ fun shape_raw_label_tac frame name sfx =
   >- (shape_under_tac shape_step_fresh_label_sfx frame >> qexists_tac `compiler_label` >> simp[]) >>
   qx_gen_tac name >> simp[] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac;
 
+Theorem callback_shape_framed[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_expr_exists expr_shape_root e /\ shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ cenv_shape_ok st cenv)
+    (cfn cenv ty e) (\v st. R st /\ value_shape_ok st v)
+Proof
+  strip_tac >> ho_match_mp_tac shape_step_frame >> simp[]
+QED
+
+(* One IfExp arm: the callback's value, then its copy at the result type. *)
+val ifexp_arm_tac =
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ResultFrame st /\ value_shape_ok st v` >> reverse conj_tac
+  >- (shape_under_tac callback_shape_framed `ResultFrame` >>
+      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  gen_tac >> simp[] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac compile_ifexp_arm_shape `ResultFrame` >>
+      simp[Abbr `ResultFrame`, Abbr `CondFrame`]);
+
 Theorem compile_ifexp_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -7187,10 +7284,7 @@ QED
 Resume compile_ifexp_shape[branches]:
   shape_raw_effect_tac `ResultFrame`
     (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
-  irule shape_step_uncurry >>
-  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
-  >- (shape_under_tac lower_value_callback_shape `ResultFrame` >>
-      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  ifexp_arm_tac >>
   qx_gen_tac `then_op` >> simp[] >>
   qabbrev_tac `ThenFrame = \st. ResultFrame st /\ plain_operand st then_op` >>
   `shape_stable ThenFrame` by
@@ -7205,10 +7299,7 @@ Resume compile_ifexp_shape[branches]:
      shape_opcode_tac >> simp[jump_label_ok_def]) >>
   shape_raw_effect_tac `ResultFrame`
     (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
-  irule shape_step_uncurry >>
-  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
-  >- (shape_under_tac lower_value_callback_shape `ResultFrame` >>
-      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  ifexp_arm_tac >>
   qx_gen_tac `else_op` >> simp[] >>
   qabbrev_tac `ElseFrame = \st. ResultFrame st /\ plain_operand st else_op` >>
   `shape_stable ElseFrame` by
@@ -8040,7 +8131,7 @@ Theorem compile_builtin_dispatch_body_shape[local]:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+  builtin_arity bi <= LENGTH args /\
   ~supported_exprs_exists expr_shape_root args ==>
   shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
@@ -8265,25 +8356,11 @@ Proof
   Cases_on `rest` >> Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
 QED
 
-Theorem pop_load_selector_mem[local]:
-  !loc. MEM (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
-    [MLOAD; SLOAD; TLOAD]
-Proof
-  Cases >> simp[]
-QED
-
-Theorem pop_store_selector_mem[local]:
-  !loc. MEM (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
-    [MSTORE; SSTORE; TSTORE]
-Proof
-  Cases >> simp[]
-QED
-
 Theorem compile_expr_body_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  (!ce ret t bi es. bi <> Env MsgGas /\ builtin_arity bi <= LENGTH es /\
+  (!ce ret t bi es. builtin_arity bi <= LENGTH es /\
      ~supported_exprs_exists expr_shape_root es ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (bfn ce ret t bi es) (\v st. value_shape_ok st v)) /\
@@ -8416,8 +8493,7 @@ Resume compile_expr_body_shape[pop]:
   qexists_tac `\op st. cenv_shape_ok st cenv /\ plain_operand st op` >>
   reverse conj_tac
   >- (shape_under_tac compile_dynarray_pop_shape `\st. cenv_shape_ok st cenv` >>
-      simp[cenv_shape_ok_stable, SRULE [MEM] pop_load_selector_mem,
-           SRULE [MEM] pop_store_selector_mem]) >>
+      simp[cenv_shape_ok_stable]) >>
   gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def] >>
   Cases_on `r1` >> gvs[]
 QED
@@ -8441,7 +8517,7 @@ Theorem compile_expr_shape_pointwise[local]:
     compile_expr ce ty e st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
     shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
   (!ce rt ty bi args st. !internal v st'.
-    bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+    builtin_arity bi <= LENGTH args /\
     ~supported_exprs_exists expr_shape_root args /\
     compile_builtin_dispatch ce rt ty bi args st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
     shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
@@ -8489,14 +8565,14 @@ QED
 
 (* compile_expr_shape_pointwise in shape_step form.  Immutable loads retain
    the environment invariant, including plainness of the optional staging base.
-   GAS is emitted only as the gas operand of the call right after it. *)
+   GAS results may be used as ordinary values. *)
 Theorem compile_expr_shape:
   (!cenv ty e internal.
      ~supported_expr_exists expr_shape_root e ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_expr cenv ty e) (\v st. value_shape_ok st v)) /\
   (!cenv ret_ty ty bi args internal.
-     bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+     builtin_arity bi <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_builtin_dispatch cenv ret_ty ty bi args)
@@ -12222,7 +12298,7 @@ Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
-Theorem cenv_shape_ok_install_imm_alloca[local]:
+Theorem cenv_shape_ok_install_imm_alloca:
   cenv_shape_ok st cenv /\ (!b. imm = SOME b ==> plain_operand st b) ==>
   cenv_shape_ok st (cenv with ce_imm_alloca := imm)
 Proof
@@ -12541,17 +12617,17 @@ Proof
   simp[rets_scoped_def]
 QED
 
-Theorem runtime_entry_blocks_shape:
-  !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
+Theorem initial_entry_blocks_shape:
+  !lbl st. shape_extends F jump_label_ok (initial_compile_state lbl) st ==>
     all_blocks st <> [] /\
-    (HD (all_blocks st)).bb_label = "__entry" /\
+    (HD (all_blocks st)).bb_label = lbl /\
     EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks st))) /\
     EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) (all_blocks st)
 Proof
-  gen_tac >> strip_tac >>
-  `state_insts (initial_compile_state "__entry") = [] /\
-   MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state "__entry")) =
-     ["__entry"]`
+  rpt gen_tac >> strip_tac >>
+  `state_insts (initial_compile_state lbl) = [] /\
+   MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state lbl)) =
+     [lbl]`
     by simp[initial_compile_state_def, state_insts_def, all_blocks_def] >>
   qpat_x_assum `shape_extends _ _ _ _` mp_tac >>
   rewrite_tac[shape_extends_def] >> strip_tac >>
@@ -12565,6 +12641,16 @@ Proof
   qpat_x_assum `EVERY (lowered_inst_ok F) _` mp_tac >>
   qpat_x_assum `_ ++ _ = added_insts _ _` (fn th => rewrite_tac[GSYM th]) >>
   simp[EVERY_FLAT, EVERY_MAP]
+QED
+
+Theorem runtime_entry_blocks_shape:
+  !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
+    all_blocks st <> [] /\
+    (HD (all_blocks st)).bb_label = "__entry" /\
+    EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks st))) /\
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) (all_blocks st)
+Proof
+  ACCEPT_TAC (Q.SPEC `"__entry"` initial_entry_blocks_shape)
 QED
 
 Theorem runtime_fallback_shape:
@@ -12697,7 +12783,7 @@ QED
 
 (* ===== Source side conditions from supported_program ===== *)
 
-(* supported_expr rejects Env MsgGas, every raw_call form and create calls,
+(* supported_expr rejects every raw_call form and create calls,
    and accepts builtins only at the arity their dispatcher reads. *)
 Theorem supported_builtin_form_shape_root[local]:
   supported_builtin_form tops ty bi es ==>
@@ -13374,6 +13460,89 @@ Proof
   simp[mk_raw_function_def]
 QED
 
+Theorem entry_unit_source_ok:
+  !entry_label entry descs segs data.
+    ~jump_label_ok entry_label /\ ~reserved_label entry_label /\
+    entry <> [] /\ (HD entry).bb_label = entry_label /\
+    EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) entry)) /\
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) entry /\
+    LIST_REL internal_segment_ok descs segs /\
+    EVERY (\d. internal_label_ok (FST d)) descs /\
+    EVERY (\bb. calls_flagged entry bb.bb_instructions) entry /\
+    EVERY (\seg. EVERY (\bb. calls_flagged seg bb.bb_instructions) seg) segs /\
+    opaque_insts_ok
+      (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+    (!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+           MEM x i.inst_outputs /\
+           opaque_out RETPC_PARAM
+             (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) x ==>
+           i.inst_opcode = RETPC_PARAM) /\
+    (!i j x.
+       MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+       MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+       i.inst_opcode = RETPC_PARAM /\
+       MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
+    rets_scoped (entry ++ FLAT segs) ==>
+    o1_source_unit_ok
+      <| cu_context :=
+           mk_venom_context
+             (mk_raw_function entry_label entry ::
+              MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                              (SND (SND d))) descs segs)
+             (SOME entry_label);
+         cu_data_segment := data |>
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `insts = FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))` >>
+  qabbrev_tac `ifns = MAP2 (\d seg. mk_internal_function (FST d) seg
+                                     (FST (SND d)) (SND (SND d))) descs segs` >>
+  `!inst. MEM inst (fn_insts (mk_raw_function entry_label entry)) ==>
+          MEM inst insts`
+    by (rw[fn_insts_def, mk_raw_function_fields, MEM_fn_insts_blocks_iff,
+           Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  `fn_shape_ok (mk_raw_function entry_label entry) /\
+   EVERY (lowered_inst_ok F) (fn_insts (mk_raw_function entry_label entry)) /\
+   first_block_no_preds (mk_raw_function entry_label entry)`
+    by (match_mp_tac
+          (Q.SPECL [`F`, `mk_raw_function entry_label entry`, `insts`]
+             lowered_fn_ok) >>
+        gs[mk_raw_function_fields, call_checks_ok_def] >>
+        gvs[fn_insts_def, MEM_fn_insts_blocks_iff, mk_raw_function_fields,
+            EVERY_MEM, lowered_inst_ok_def] >> metis_tac[]) >>
+  `!fn. MEM fn ifns ==>
+        fn_shape_ok fn /\ EVERY (lowered_inst_ok T) (fn_insts fn) /\
+        first_block_no_preds fn`
+    by (rpt gen_tac >> strip_tac >>
+        match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok) >>
+        gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+        conj_tac >- metis_tac[] >>
+        metis_tac[rets_scoped_segments]) >>
+  `entry_fn_no_ret (mk_raw_function entry_label entry)`
+    by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
+             mk_raw_function_fields, EVERY_MEM] >>
+        rpt strip_tac >> fs[EVERY_MEM, lowered_inst_ok_def] >> res_tac) >>
+  `get_params (HD entry).bb_instructions = []`
+    by (Cases_on `entry` >> fs[] >> rename1 `get_params bb0.bb_instructions` >>
+        Cases_on `bb0.bb_instructions` >>
+        fs[stackPlanGenTheory.get_params_def, lowered_inst_ok_def]) >>
+  `EVERY (\inst. raw_opcode_ok inst.inst_opcode)
+     (fn_insts (mk_raw_function entry_label entry))`
+    by fs[EVERY_MEM, lowered_inst_ok_def] >>
+  `EVERY fn_shape_ok ifns /\ EVERY first_block_no_preds ifns`
+    by fs[EVERY_MEM] >>
+  `EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn))
+     ifns`
+    by (simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+        fs[EVERY_MEM, lowered_inst_ok_def]) >>
+  `!fn. MEM fn ifns ==>
+        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn)`
+    by (rpt strip_tac >> res_tac >> fs[EVERY_MEM, lowered_inst_ok_def]) >>
+  simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
+       mk_venom_context_def, internal_termination_ok_def,
+       mk_raw_function_fields] >>
+  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+QED
+
 Theorem lowered_unit_source_ok:
   !entry descs segs data.
     entry <> [] /\ (HD entry).bb_label = "__entry" /\
@@ -13405,57 +13574,10 @@ Theorem lowered_unit_source_ok:
              (SOME "__entry");
          cu_data_segment := data |>
 Proof
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `insts = FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))` >>
-  qabbrev_tac `ifns = MAP2 (\d seg. mk_internal_function (FST d) seg
-                                     (FST (SND d)) (SND (SND d))) descs segs` >>
-  `~jump_label_ok "__entry"` by metis_tac[jump_label_ok_names] >>
-  `~reserved_label "__entry"` by EVAL_TAC >>
-  `!inst. MEM inst (fn_insts (mk_raw_function "__entry" entry)) ==>
-          MEM inst insts`
-    by (rw[fn_insts_def, mk_raw_function_fields, MEM_fn_insts_blocks_iff,
-           Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
-  `fn_shape_ok (mk_raw_function "__entry" entry) /\
-   EVERY (lowered_inst_ok F) (fn_insts (mk_raw_function "__entry" entry)) /\
-   first_block_no_preds (mk_raw_function "__entry" entry)`
-    by (match_mp_tac
-          (Q.SPECL [`F`, `mk_raw_function "__entry" entry`, `insts`]
-             lowered_fn_ok) >>
-        gs[mk_raw_function_fields, call_checks_ok_def] >>
-        gvs[fn_insts_def, MEM_fn_insts_blocks_iff, mk_raw_function_fields,
-            EVERY_MEM, lowered_inst_ok_def] >> metis_tac[]) >>
-  `!fn. MEM fn ifns ==>
-        fn_shape_ok fn /\ EVERY (lowered_inst_ok T) (fn_insts fn) /\
-        first_block_no_preds fn`
-    by (rpt gen_tac >> strip_tac >>
-        match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok) >>
-        gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-        conj_tac >- metis_tac[] >>
-        metis_tac[rets_scoped_segments]) >>
-  `entry_fn_no_ret (mk_raw_function "__entry" entry)`
-    by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
-             mk_raw_function_fields, EVERY_MEM] >>
-        rpt strip_tac >> fs[EVERY_MEM, lowered_inst_ok_def] >> res_tac) >>
-  `get_params (HD entry).bb_instructions = []`
-    by (Cases_on `entry` >> fs[] >> rename1 `get_params bb0.bb_instructions` >>
-        Cases_on `bb0.bb_instructions` >>
-        fs[stackPlanGenTheory.get_params_def, lowered_inst_ok_def]) >>
-  `EVERY (\inst. raw_opcode_ok inst.inst_opcode)
-     (fn_insts (mk_raw_function "__entry" entry))`
-    by fs[EVERY_MEM, lowered_inst_ok_def] >>
-  `EVERY fn_shape_ok ifns /\ EVERY first_block_no_preds ifns`
-    by fs[EVERY_MEM] >>
-  `EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn))
-     ifns`
-    by (simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
-        fs[EVERY_MEM, lowered_inst_ok_def]) >>
-  `!fn. MEM fn ifns ==>
-        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn)`
-    by (rpt strip_tac >> res_tac >> fs[EVERY_MEM, lowered_inst_ok_def]) >>
-  simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
-       mk_venom_context_def, internal_termination_ok_def,
-       mk_raw_function_fields] >>
-  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+  rpt strip_tac >> irule entry_unit_source_ok >>
+  pure_asm_rewrite_tac[] >> simp[] >> conj_tac
+  >- metis_tac[jump_label_ok_names]
+  >> EVAL_TAC
 QED
 
 (* package_internal_blocks splits the stream exactly at the segments. *)
@@ -13500,6 +13622,23 @@ Proof
       imp_res_tac internal_label_ok_append >> gvs[]) >>
   `n <> "__entry"` by metis_tac[internal_label_not_reserved] >>
   Cases_on `entry` >> gvs[EVERY_MEM] >> metis_tac[jump_label_ok_names]
+QED
+
+Theorem shape_state_source_certificates:
+  !st blocks. shape_state st /\ all_blocks st = blocks ==>
+    opaque_insts_ok (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+    (!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+       MEM x i.inst_outputs /\
+       opaque_out RETPC_PARAM (FLAT (MAP (\bb. bb.bb_instructions) blocks)) x ==>
+       i.inst_opcode = RETPC_PARAM) /\
+    (!i j x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+       MEM j (FLAT (MAP (\bb. bb.bb_instructions) blocks)) /\
+       i.inst_opcode = RETPC_PARAM /\
+       MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
+    raw_checked_blocks blocks /\ rets_scoped blocks
+Proof
+  rw[shape_state_def, shape_base_state_def, state_insts_def,
+     raw_checked_state_def] >> metis_tac[]
 QED
 
 Theorem run_lowering_source_unit_ok:

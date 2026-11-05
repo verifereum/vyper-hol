@@ -6,7 +6,7 @@
  *)
 Theory e2eCallChecks
 Ancestors
-  e2eCorrectness configuredE2ECorrectness e2eProducers e2eEntry
+  e2eCorrectness e2eDeployCorrectness configuredE2ECorrectness e2eProducers e2eEntry
   e2eDefs codegenCorrectness vyperLoweringCorrect loweringShapeProps unitTransformDefs
   contextPlanLayoutProps unitShapeDefs frameOutcome emitHelperProps
   compilePhasesProps venomExecSemantics venomState
@@ -86,7 +86,7 @@ val () = List.app (fn thy => List.app
   (fn (name,_) => check_object false (thy,name)) (DB.thms thy))
   ["e2eBoundaryTest", "e2eSourceBoundaryCVTest", "vyperOracleEntryTest"];
 val () = check_object true ("e2eCorrectness","vyper_call_correct");
-val () = check_object true ("e2eCorrectness","e2e_deploy_correctness");
+val () = check_object true ("e2eDeployCorrectness","e2e_deploy_correctness");
 
 (* Phase re-exports retain exact original public schemas, not just names. *)
 val () = List.app (fn name =>

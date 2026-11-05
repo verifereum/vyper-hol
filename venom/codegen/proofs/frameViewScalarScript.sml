@@ -70,6 +70,16 @@ Proof
   simp[frame_view_update_var, update_var_def, frame_view_def]
 QED
 
+Theorem exec_gas_frame_view:
+  (!x. MEM x inst.inst_outputs ==> ~retpc_var fn x) /\
+  exec_gas inst s = OK s' ==>
+  exec_gas inst (frame_view fn ra s with vs_memory := m) =
+  OK (frame_view fn ra s' with vs_memory := m) /\ s'.vs_memory = s.vs_memory
+Proof
+  simp[exec_gas_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[frame_view_update_var, update_var_def, frame_view_def]
+QED
+
 Theorem exec_read1_frame_view:
   (!x. MEM (Var x) inst.inst_operands ==> ~retpc_var fn x) /\
   (!x. MEM x inst.inst_outputs ==> ~retpc_var fn x) /\
@@ -155,7 +165,8 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[] >>
   qpat_assum `inst.inst_opcode = _`
     (fn th => fs[opcode_equation (rhs (concl th))]) >>
-  FIRST [irule exec_read0_frame_view, irule exec_read1_frame_view] >>
+  FIRST [irule exec_gas_frame_view, irule exec_read0_frame_view,
+         irule exec_read1_frame_view] >>
   simp[frame_view_def, sload_def, tload_def, contract_storage_def,
        contract_transient_def]
 QED
@@ -173,6 +184,13 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[] >>
   qpat_assum `inst.inst_opcode = _`
     (fn th => fs[opcode_equation (rhs (concl th))]) >>
+  (* the static-frame guard reads the same on both states *)
+  `eval_operands inst.inst_operands (frame_view fn ra s with vs_memory := m) =
+   eval_operands inst.inst_operands s`
+    by (irule eval_operands_frame_view >> simp[]) >>
+  `(frame_view fn ra s).vs_call_ctx = s.vs_call_ctx` by simp[frame_view_def] >>
+  Cases_on `s.vs_call_ctx.cc_static /\
+            IS_SOME (eval_operands inst.inst_operands s)` >> gvs[] >>
   irule exec_write2_frame_view >>
   simp[frame_view_def, sstore_def, tstore_def]
 QED

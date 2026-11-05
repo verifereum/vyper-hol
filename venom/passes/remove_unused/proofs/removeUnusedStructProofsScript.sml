@@ -6,7 +6,7 @@
  *   rusp_preserves_entry_label             — fn_entry_label unchanged (pass never relabels the entry block)
  *   rusp_preserves_labels                  — fn_labels unchanged (every block retains its label)
  *   rusp_preserves_fn_inst_wf              — fn_inst_wf survives (NOP is still well-formed)
- *   rusp_preserves_alloca_pointer_confined — alloca_pointer_confined survives (CHEATED)
+ *   rusp_preserves_alloca_pointer_confined — alloca_pointer_confined survives
  *   rusp_preserves_all                     — composite: all structural + SSA properties preserved in one step
  *
  * Also exports helpers needed by removeUnusedSsaPreservation:
@@ -22,7 +22,7 @@ Ancestors
   venomWf
   passSharedDefs
   venomInst
-  indexedLists pointerConfinedDefs
+  indexedLists pointerConfinedDefs pointerConfinedProps
   list rich_list combin
 
 (* ===== Structural preservation: remove_unused_single_pass ===== *)
@@ -90,12 +90,6 @@ Proof
   disch_then (qspecl_then [`P`, `fn`] mp_tac) >>
   impl_tac >- (rpt strip_tac >> metis_tac[]) >>
   metis_tac[]
-QED
-
-Theorem rusp_preserves_alloca_pointer_confined:
-  !fn. alloca_pointer_confined fn ==> alloca_pointer_confined (remove_unused_single_pass fn)
-Proof
-  cheat (* alloca_remap: remove_unused preserves pointer_confined *)
 QED
 
 Theorem rusp_preserves_fn_inst_wf:
@@ -666,6 +660,66 @@ Theorem fn_insts_blocks_flat_local[local]:
   !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
 Proof
   Induct >> simp[fn_insts_blocks_def]
+QED
+
+(* ===== alloca_pointer_confined preservation ===== *)
+
+(* ALLOCA, DALLOCA and SETFMP survive the pass unchanged. *)
+Theorem rusp_keeps_preserved_inst[local]:
+  !fn bb inst.
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    remove_unused_must_preserve_op inst.inst_opcode ==>
+    ?bb'. MEM bb' (remove_unused_single_pass fn).fn_blocks /\
+          MEM inst bb'.bb_instructions
+Proof
+  rw[remove_unused_single_pass_def, LET_THM, clear_nops_function_def,
+     function_map_transform_def, MEM_MAP, PULL_EXISTS] >>
+  qexists_tac `bb` >>
+  simp[clear_nops_block_def, remove_unused_block_def, MEM_FILTER,
+       MEM_MAPi] >>
+  conj_tac >- gvs[remove_unused_must_preserve_op_def] >>
+  qpat_x_assum `MEM inst _` (strip_assume_tac o SRULE [MEM_EL]) >>
+  qexists_tac `n` >> gvs[remove_unused_inst_def]
+QED
+
+Theorem rusp_alloca_roots_eq[local]:
+  !fn. alloca_roots (remove_unused_single_pass fn) = alloca_roots fn
+Proof
+  rw[alloca_roots_def, pred_setTheory.EXTENSION, fn_insts_def, fn_insts_blocks_flat_local,
+     MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  eq_tac >> rpt strip_tac >> gvs[]
+  >- (drule_all rusp_mem_inst_original >> metis_tac[])
+  >- (qspecl_then [`fn`, `bb`, `inst`] mp_tac rusp_keeps_preserved_inst >>
+      simp[remove_unused_must_preserve_op_def] >> metis_tac[])
+QED
+
+(* The pass keeps every ALLOCA and only drops instructions, so the
+   pointer-derived variables of the result are among those of the input. *)
+Theorem rusp_pointer_use_vars_sub[local]:
+  !fn vars v.
+    MEM v (pointer_use_vars (remove_unused_single_pass fn) vars) ==>
+    v IN set (pointer_use_vars fn vars)
+Proof
+  rpt gen_tac >> qid_spec_tac `v` >>
+  match_mp_tac pointer_use_vars_least >>
+  simp[pointer_use_vars_initial] >> rpt strip_tac >>
+  drule_all rusp_mem_inst_original >> strip_tac >>
+  irule pointer_use_vars_closed >> metis_tac[]
+QED
+
+Theorem rusp_preserves_alloca_pointer_confined:
+  !fn. alloca_pointer_confined fn ==> alloca_pointer_confined (remove_unused_single_pass fn)
+Proof
+  rw[alloca_pointer_confined_def, rusp_alloca_roots_eq, pointer_confined_def,
+     pointer_derived_vars_def] >>
+  drule_all rusp_mem_inst_original >>
+  disch_then (qx_choose_then `bb0` strip_assume_tac) >>
+  drule rusp_pointer_use_vars_sub >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`bb0`, `inst`, `v`] mp_tac) >> simp[] >>
+  strip_tac >> simp[] >>
+  (* only the pointer-preserving case is left: its outputs stay derived *)
+  rpt DISJ2_TAC >> simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+  irule pointer_use_vars_closed >> metis_tac[]
 QED
 
 (* FILTER preserves relative order of surviving elements (forward direction). *)

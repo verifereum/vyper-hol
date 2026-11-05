@@ -1,9 +1,10 @@
 (* General tuple assignment simulation. *)
 Theory stmtSimAssignTupleTargets
 Ancestors
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
-  tupleAssignMemory tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple stmtSim
-  exprSim exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites
+  tupleAssignMemory tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple 
+   exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding stmtLowering
   list rich_list finite_map stmtSimDecl stmtSimDeclMem
 Libs
@@ -11,14 +12,14 @@ Libs
 
 Theorem stmt_frag_storage_maps_intro:
   (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>
-     stmt_frag ctx func cx lctx RetQ cenv m es res es') ==>
-  stmt_frag ctx func cx lctx RetQ cenv m es res es'
+     stmt_frag ctx func cx lctx RetQ cenv m source es) ==>
+  stmt_frag ctx func cx lctx RetQ cenv m source es
 Proof
-  strip_tac >> rw[stmt_frag_def] >>
+  strip_tac >> rw[stmt_frag_def, stmt_framed_frag_def] >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     fs[stmt_state_rel_def, state_rel_def] >>
-  qpat_x_assum `_ /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [stmt_frag_def]) >>
+  qpat_x_assum `_ /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [stmt_frag_def, stmt_framed_frag_def]) >>
   simp[] >> disch_then drule >> simp[]
 QED
 
@@ -41,6 +42,7 @@ Theorem assign_tuple_targets_success_run:
   !ctx func cx lctx cenv ty gs e es es' tys tvs sa sf s0.
     eval_stmt cx (Assign (TupleTarget gs) e) es = (INL (),es') /\
     gs <> [] /\ expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
@@ -83,6 +85,7 @@ Proof
   `LENGTH tys = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
     (gvs[evaluate_type_def, AllCaseEqs()] >>
      metis_tac[LIST_REL_LENGTH, values_have_types_length]) >>
+  `lowered_value_type cenv e = expr_type e` by simp[] >>
   drule_all assign_tuple_targets_code_parts >> strip_tac >>
   suspend "prefix_setup"
 QED
@@ -167,9 +170,9 @@ QED
 Finalise assign_tuple_targets_success_run
 
 Theorem compile_assign_tuple_targets_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty gs e es res es' tys tvs.
-    eval_stmt cx (Assign (TupleTarget gs) e) es = (res,es') /\
+  !ctx func cx lctx RetQ cenv ty gs e es tys tvs.
     expr_type e = TupleT tys /\ LENGTH gs = LENGTH tys /\
+    lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
@@ -178,16 +181,19 @@ Theorem compile_assign_tuple_targets_stmt_frag:
       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs)) /\
     (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
       type_memory_size (EL i tvs) + 64 < dimword (:256)) /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
-      (INL v,es1) ==> value_has_type (TupleTV tvs) v) /\
-    (!vs es1 i.
-      (do result <- eval_expr cx e; read_result cx result od) es =
-        (INL (ArrayV (TupleV vs)),es1) /\ i < LENGTH gs ==>
+    (!obs v es1. (do result <- eval_expr cx e; read_result cx result od)
+      (es with gas_obs := obs) = (INL v,es1) ==>
+      value_has_type (TupleTV tvs) v) /\
+    (!obs vs es1 i.
+      (do result <- eval_expr cx e; read_result cx result od)
+        (es with gas_obs := obs) = (INL (ArrayV (TupleV vs)),es1) /\
+      i < LENGTH gs ==>
       tuple_target_layout es1.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
     gs <> [] /\
     expr_sim ctx func cenv cx (TupleT tys) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (TupleTarget gs) e)) es res es'
+      (stmt_env cenv lctx ty (Assign (TupleTarget gs) e))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -212,7 +218,10 @@ Proof
 QED
 
 Resume compile_assign_tuple_targets_stmt_frag[error_source]:
-  irule eval_assign_tuple_targets_error >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_assum `~cx.txn.is_static`
+    (mp_tac o MATCH_MP eval_assign_tuple_targets_error) >>
+  disch_then irule >>
   reverse conj_tac >- (qexists_tac `lctx` >> simp[]) >>
   qexists_tac `gs` >> simp[] >>
   rpt gen_tac >> strip_tac >>

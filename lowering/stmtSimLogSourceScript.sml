@@ -1,7 +1,8 @@
 Theory stmtSimLogSource
 Ancestors
-  stmtSim supportedTypes e2eDefs vyperTyping vyperValue vyperABI
-  vyperEvent valueEncoding vyperInterpreter vyperState exprSim vyperExprNoControl
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
+   supportedTypes e2eDefs vyperTyping vyperValue vyperABI
+  vyperEvent valueEncoding vyperInterpreter vyperState  vyperExprNoControl
 
 (* Source-only scalar conversion boundary. No compiler execution is unfolded. *)
 Theorem log_scalar_abi_exists:
@@ -138,26 +139,29 @@ Proof
   metis_tac[]
 QED
 
-(* Keep the encoding-error branch explicit: readiness only types successes. *)
+(* Keep the encoding-error branch explicit: readiness only types successes.
+   Outside a static frame; a static frame rejects the log write. *)
 Theorem log_eval_outcome:
-  eval_stmt cx (Log id args) es = (res, es') <=>
+  ~cx.txn.is_static ==>
+  (eval_stmt cx (Log id args) es = (res, es') <=>
   (?err. eval_exprs cx args es = (INR err, es') /\ res = INR err) \/
   (?vals mid. eval_exprs cx args es = (INL vals, mid) /\
     ((encode_source_event (get_tenv cx) cx.sources cx.txn.target id vals = NONE /\
       res = INR (Error (RuntimeError "Log encode event")) /\ es' = mid) \/
      (?event. encode_source_event (get_tenv cx) cx.sources cx.txn.target id vals =
                 SOME event /\ res = INL () /\
-              es' = mid with logs := mid.logs ++ [event])))
+              es' = mid with logs := mid.logs ++ [event]))))
 Proof
+  strip_tac >>
   Cases_on `eval_exprs cx args es` >>
   rename1 `eval_exprs cx args es = (result, mid)` >>
   Cases_on `result`
   >- (rename1 `eval_exprs cx args es = (INL vals, mid)` >>
       Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id vals` >>
-      simp[Once evaluate_def, bind_def, lift_option_def, push_log_def,
-           return_def, raise_def] >> metis_tac[]) >>
-  simp[Once evaluate_def, bind_def, lift_option_def, push_log_def,
-       return_def, raise_def] >> metis_tac[]
+      gs[Once evaluate_def, bind_def, ignore_bind_def, lift_option_def,
+         push_log_def, return_def, raise_def] >> metis_tac[]) >>
+  gs[Once evaluate_def, bind_def, lift_option_def, push_log_def,
+     return_def, raise_def] >> metis_tac[]
 QED
 
 Theorem log_argument_error_ok:

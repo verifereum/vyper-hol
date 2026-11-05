@@ -1,10 +1,11 @@
 (* Actual-site allocation for the two Log buffers, including re-entry. *)
 Theory stmtSimLogAllocate
 Ancestors
+  exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogTrace stmtSimLogAllocResource stmtSimLogScalarPrefix
   abiBuiltinAllocation localPtrsProps abiEncoderComplexPrefix abiEncoderComplexCode
   abiEncoderMemberCode abiEncoderChildContext fragExec
-  loweringSlice exprSimOperands exprSim stmtSimLogArgs exprLoweringProps
+  loweringSlice exprSimOperands  stmtSimLogArgs exprLoweringProps
   compileEnv context emitHelperProps venomExecSemantics venomInst venomState
   finite_map words list arithmetic string ASCIInumbers
 

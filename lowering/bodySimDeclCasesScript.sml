@@ -28,10 +28,12 @@
 
 Theory bodySimDeclCases
 Ancestors
+  exprSimSource
+  bodyExprPreFacts
+  stmtSimProps
+  exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases bodyExprPreFacts bodyAppendStorageFacts
-  allocLimits exprSim exprSimHyps
-  exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
+  list finite_map bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
@@ -130,10 +132,10 @@ Theorem body_annassign_word[local]:
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     is_word_type typ ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt strip_tac >>
   `FLOOKUP cenv.ce_vars id = NONE` by
@@ -232,8 +234,7 @@ QED
    (alloc_limits_stmt), so its buffer and a bytestring copy's length word
    fit below 2 ** 256. *)
 Theorem body_annassign_memory:
-  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
-   es'.
+  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
@@ -245,12 +246,16 @@ Theorem body_annassign_memory:
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
-    (expr_type e = typ \/ is_bytestring_type typ \/
-     has_length_word typ /\ is_empty_value_expr e) ==>
+    (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+     has_length_word typ /\ is_empty_value_expr e) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `FLOOKUP cenv.ce_vars id = NONE` by
@@ -286,6 +291,9 @@ Proof
 QED
 
 Resume body_annassign_memory[copy]:
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `expr_type e = typ \/ is_bytestring_type typ` by metis_tac[] >>
   `0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
    type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_bytes cenv typ` by
@@ -306,8 +314,7 @@ Resume body_annassign_memory[copy]:
       metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_lowered_typed,
                 type_widens_to_def] >>
     gvs[value_runtime_typed_def]) >>
-  metis_tac[lowered_value_type_shape, type_widens_to_def,
-            arg_type_fits_bytestring_source]
+  metis_tac[type_widens_to_def, arg_type_fits_bytestring_source]
 QED
 
 Resume body_annassign_memory[empty]:
@@ -356,12 +363,41 @@ Theorem body_annassign_other:
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\
     ~(expr_type e = typ \/ is_bytestring_type typ \/
       has_length_word typ /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  cheat
+QED
+
+(* RESIDUAL (#767): a memory-backed declaration of an internal call whose
+   return type widens to the call's type other than as a bytestring
+   (type_widens_to: a DynArray of a smaller bound, a tuple elementwise). *)
+Theorem body_annassign_widened_aggregate_call:
+  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
+   es'.
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AnnAssign id typ e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
+    ~(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   cheat
 QED
@@ -381,9 +417,17 @@ Proof
   >- (irule body_annassign_word >> metis_tac[]) >>
   `0 < type_memory_bytes cenv typ` by
     metis_tac[annassign_memory_bytes_pos] >>
-  Cases_on `expr_type e = typ \/ is_bytestring_type typ \/
+  Cases_on `expr_type e = typ \/ lowered_value_type cenv e = typ \/
+            is_bytestring_type typ \/
             has_length_word typ /\ is_empty_value_expr e`
-  >- (irule body_annassign_memory >> metis_tac[]) >>
+  >- (Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+           has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
+          irule body_annassign_memory >> metis_tac[]) >>
+      irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED
 
@@ -614,14 +658,12 @@ Theorem body_for_range_lit[local]:
       (int_calls_stmt
          (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
             stmts)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx
-      (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
-         stmts) es = (res, es') ==>
+    frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
-            stmts)) es res es'
+            stmts))
+      (eval_stmt cx (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n stmts)) es
 Proof
   rpt strip_tac >>
   `FLOOKUP cenv.ce_vars id = NONE` by
@@ -661,7 +703,7 @@ Proof
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def] >>
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
   MATCH_MP_TAC
     (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei`
                   compile_for_range_lit_frag)) >>
@@ -789,7 +831,8 @@ Theorem body_for_exprs_ok[local]:
     EVERY (stmt_exprs_ok cenv) body
 Proof
   simp[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
-       supported_stmt_expr_exists_def, alloc_limits_stmt_def]
+       supported_stmt_expr_exists_def, alloc_limits_stmt_def,
+       stmt_valued_return_def]
 QED
 
 (* Normalize only a paired outer binder at theorem application boundaries. *)
@@ -823,10 +866,10 @@ Theorem body_for_range:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (For id typ it n body) es = (res, es') /\
     (?e1 e2. it = Range e1 e2) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body)) es res es'
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt strip_tac >> gvs[] >>
   Cases_on `?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)`
@@ -1079,9 +1122,10 @@ Theorem array_body_fragment_callback[local]:
                           popped := []|>)) :: ei.scopes) = (r,ef) ==>
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
       (stmts_env bc (InLoop ex inc) ret_ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
-                          popped := []|>)) :: ei.scopes) r ef
+                          popped := []|>)) :: ei.scopes)
 Proof
   rpt gen_tac >> strip_tac >>
   `FLOOKUP cenv.ce_vars id = NONE` by
@@ -1247,10 +1291,10 @@ Theorem body_for_array:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (For id typ it n body) es = (res, es') /\
     (?e. it = Array e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body)) es res es'
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt gen_tac >> strip_tac >> qpat_x_assum `it = Array _` SUBST_ALL_TAC >>
   drule_all array_for_source_ready >> strip_tac >> gvs[] >>
@@ -1265,7 +1309,7 @@ Proof
    get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def] >>
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   rename1 `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ap) az)` >>
@@ -1310,10 +1354,10 @@ Theorem body_for_other:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (For id typ it n body) es = (res, es') /\
     ~(?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body)) es res es'
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt strip_tac >> Cases_on `it`
   >- (irule body_for_array >> simp[] >> metis_tac[]) >>

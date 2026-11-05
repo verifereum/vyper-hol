@@ -43,7 +43,7 @@
 
 Theory exprSimCalls
 Ancestors
-  list exprSim exprSimHyps exprSimSend vyperAST
+  list  exprSimHyps exprSimSend vyperAST
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.

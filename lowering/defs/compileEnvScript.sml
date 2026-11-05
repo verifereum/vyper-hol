@@ -493,6 +493,11 @@ Datatype:
        func_name → arg types. Spells the INVOKE target (internal_fn_label).
        Mirrors Python: func_t.arguments in expr.py lower_Call *)
     ce_func_param_types : string -> type list;
+    (* Internal function declared return types: func_name → return type.
+       The value of an internal call is its callee's return buffer, laid out
+       at this type even where the call is used at a wider type.
+       Mirrors Python: func_t.return_type in expr.py _lower_internal_call *)
+    ce_func_return_type : string -> type;
     (* Internal function ids: func_name → id. Spells the INVOKE target
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)
@@ -1451,6 +1456,7 @@ QED
    - the call context is not static: the entry relation (venom_env_rel)
      assumes it and the lowered code never writes cc_static, so a CALL
      asks a static request exactly when the source does.
+   - neither is the source frame (txn.is_static), so source writes succeed.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation; a request's
      snapshot of the running contract's storage agrees up to dead bytes.
@@ -1468,10 +1474,19 @@ Definition state_rel_def:
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
+     ¬cx.txn.is_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
      LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
 End
+
+Theorem state_rel_gas_obs:
+  state_rel func cenv cx (es with gas_obs := readings) s =
+  state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def]
+QED
 
 (* ===== Result Relation ===== *)
 
@@ -1532,6 +1547,18 @@ Definition result_rel_def:
   (* Everything else: no relation *)
   (result_rel _ _ _ _ _ _ = F)
 End
+
+Theorem result_rel_gas_obs:
+  result_rel func ret_tv cenv cx (res, es with gas_obs := readings) r =
+  result_rel func ret_tv cenv cx (res, es) r
+Proof
+  Cases_on `res`
+  >- (rename1 `INL u` >> Cases_on `u` >> Cases_on `r` >>
+      simp[result_rel_def, state_rel_gas_obs]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> Cases_on `r` >>
+  simp[result_rel_def, state_rel_gas_obs] >>
+  Cases_on `a` >> simp[result_rel_def]
+QED
 
 (* ===== Type Classification ===== *)
 
@@ -1780,3 +1807,18 @@ Definition elem_size_in_location_def:
     else
       type_memory_bytes cenv elem_ty
 End
+
+Theorem type_memory_bytes_struct_fields:
+  !c ty c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+            type_memory_bytes c' ty = type_memory_bytes c ty
+Proof
+  recInduct type_memory_bytes_ind >> rw[type_memory_bytes_def] >>
+  AP_TERM_TAC >> irule MAP_CONG >> simp[]
+QED
+
+Theorem type_memory_bytes_frame:
+  !c c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+         type_memory_bytes c' = type_memory_bytes c
+Proof
+  rw[FUN_EQ_THM] >> irule type_memory_bytes_struct_fields >> simp[]
+QED

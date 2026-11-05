@@ -15,11 +15,14 @@
  *   dfs_block_state             — the state the planner planned a block from
  *   lineage_state               — planner states along any CFG path that
  *                                 replays each block's DFS code
+ *   lineage_entry               — one lineage step, from an explicit
+ *                                 predecessor into its successor
  *   lineage_state_block_plan    — CHEATED successor transfer: a lineage
  *                                 state regenerates the block's DFS code
  * Helper:
  *   lineage_state_dfs_fields    — a lineage state is a DFS state with its
  *                                 stack and spill map replaced
+ *   lineage_entry_lineage_state — a lineage entry is a lineage state
  *)
 
 Theory fnPlanLineage
@@ -224,6 +227,36 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any)) >>
   qexistsl_tac [`pred`, `cells`, `prefixL`, `prefixD`] >> simp[]
+QED
+
+(* Entering block succ from block pred: the step rule of lineage_state with
+   the predecessor named, so a caller can tie it to the run-time
+   vs_prev_bb (the PHI values at succ's entry depend on which edge). *)
+Definition lineage_entry_def:
+  lineage_entry liveness dfg cfg fn ps0 pred succ ps <=>
+    ?ps_pred bb ps_dfs block_ops ps_dfs_after ch promised ps_after ps_succ.
+      lineage_state liveness dfg cfg fn ps0 pred ps_pred /\
+      lookup_block pred fn.fn_blocks = SOME bb /\
+      dfs_block_state liveness dfg cfg fn ps0 pred ps_dfs /\
+      generate_block_plan liveness dfg cfg fn bb ps_dfs =
+        SOME (block_ops, ps_dfs_after) /\
+      generate_block_plan liveness dfg cfg fn bb
+        (ps_pred with <| ps_cleanup_height := ch;
+                         ps_cleanup_promised := promised |>) =
+        SOME (block_ops, ps_after) /\
+      MEM succ (cfg_succs_of cfg pred) /\
+      dfs_block_state liveness dfg cfg fn ps0 succ ps_succ /\
+      ps = ps_succ with <| ps_stack := ps_after.ps_stack;
+                           ps_spilled := ps_after.ps_spilled |>
+End
+
+(* Helper: a lineage entry is a lineage state of its successor. *)
+Theorem lineage_entry_lineage_state:
+  !liveness dfg cfg fn ps0 pred succ ps.
+    lineage_entry liveness dfg cfg fn ps0 pred succ ps ==>
+    lineage_state liveness dfg cfg fn ps0 succ ps
+Proof
+  rw[lineage_entry_def] >> irule lineage_state_step >> metis_tac[]
 QED
 
 (* ===== Successor transfer ===== *)

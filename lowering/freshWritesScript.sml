@@ -31,8 +31,9 @@
 
 Theory freshWrites
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
-  fragExec varsExt exprSim
+  fragExec varsExt
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   venomExecSemantics venomInst venomState
 

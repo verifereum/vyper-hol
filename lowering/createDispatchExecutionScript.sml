@@ -9,6 +9,7 @@ Ancestors
 Theorem compile_create_dispatch_unchecked_execution:
   ∀code_ptr code_len value_op salt cs result cs' s v p n salt_value.
   compile_create_dispatch code_ptr code_len value_op salt F cs = (result,cs') ∧
+  ¬s.vs_call_ctx.cc_static ∧
   eval_operand value_op s = SOME v ∧
   eval_operand code_ptr s = SOME p ∧ eval_operand code_len s = SOME n ∧
   OPTREL (λop w. eval_operand op s = SOME w) salt salt_value ⇒

@@ -34,11 +34,20 @@
 
 Theory stmtSimAugAssignAttr
 Ancestors
+  exprBopSimDefs exprBopSimProps
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec freshWrites loweringSlice exprSim exprSimHyps exprSimOps
+  fragExec freshWrites loweringSlice  exprSimHyps exprSimOps
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimBuffer
   exprSimAttributeFields
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
+   stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
   stmtSimAugAssign stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
@@ -623,9 +632,7 @@ QED
    writes it at f's offset in x's region.  e may call internal functions:
    its simulation at f's type is a premise. *)
 Theorem compile_augassign_attr_local_case:
-  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es res es'.
-    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
     expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
@@ -636,7 +643,8 @@ Theorem compile_augassign_attr_local_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -752,9 +760,7 @@ Finalise compile_augassign_attr_local_case
 
 (* compile_augassign_attr_local_case for an e with no internal call. *)
 Theorem compile_augassign_attr_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es res es'.
-    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
@@ -765,7 +771,8 @@ Theorem compile_augassign_attr_local_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es
 Proof
   rpt strip_tac >> irule compile_augassign_attr_local_case >>
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>

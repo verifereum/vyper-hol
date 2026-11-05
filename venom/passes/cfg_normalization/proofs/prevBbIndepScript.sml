@@ -172,7 +172,7 @@ fun prev_bb_cases_tac ss =
 
 val exec_prev_bb_ss = prev_bb_case_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def, exec_write2_def];
+   exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def];
 
 val exec_prev_bb_tac = prev_bb_cases_tac exec_prev_bb_ss;
 
@@ -205,6 +205,14 @@ Theorem exec_read0_prev_bb[local]:
     (!s p. g (s with vs_prev_bb := p) = g s) ==>
     exec_read0 g inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_read0 g inst s)
+Proof
+  rpt strip_tac >> exec_prev_bb_tac
+QED
+
+Theorem exec_gas_prev_bb[local]:
+  !inst s p.
+    exec_gas inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_gas inst s)
 Proof
   rpt strip_tac >> exec_prev_bb_tac
 QED
@@ -381,14 +389,15 @@ val prev_bb_dispatch_tac =
 
 val opcode_prev_bb_ss = prev_bb_case_ss ++ rewrites
   (prev_bb_rw @ [exec_pure1_prev_bb, exec_pure2_prev_bb,
-                exec_pure3_prev_bb, exec_alloca_prev_bb,
+                exec_pure3_prev_bb, exec_gas_prev_bb, exec_alloca_prev_bb,
                 exec_ext_call_prev_bb, exec_delegatecall_prev_bb,
                 exec_create_prev_bb]);
 
 (* Direct envelopes need no exec_read/exec_write rule probes. *)
 val envelope_prev_bb_ss = prev_bb_case_ss ++ rewrites
   [eval_ops_prev_bb, jump_to_prev_bb, exec_ext_call_prev_bb,
-   exec_delegatecall_prev_bb, exec_create_prev_bb];
+   exec_delegatecall_prev_bb, exec_create_prev_bb,
+   halt_state_prev_bb, set_returndata_prev_bb];
 
 val prev_bb_envelope_tac =
   prev_bb_dispatch_tac >> prev_bb_cases_tac envelope_prev_bb_ss;
@@ -409,6 +418,15 @@ end;
 val prev_bb_opcode_tac =
   prev_bb_dispatch_tac >>
   simp_tac opcode_prev_bb_ss [] >> prev_bb_exec_tac;
+
+(* State writes first test the static-frame flag and whether the operands
+   are defined, which vs_prev_bb leaves alone: split on that test, then
+   treat the write as usual. *)
+val prev_bb_static_tac =
+  prev_bb_dispatch_tac >>
+  Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)` >>
+  asm_simp_tac (opcode_prev_bb_ss ++ rewrites [eval_ops_prev_bb]) [] >>
+  prev_bb_exec_tac;
 
 (* Keep EL, its bounds, and conditional payloads opaque in parameter access. *)
 val param_prev_bb_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
@@ -477,9 +495,9 @@ Proof
   >- prev_bb_opcode_tac (* MCOPY *)
   >- prev_bb_opcode_tac (* MEMTOP *)
   >- prev_bb_opcode_tac (* SLOAD *)
-  >- prev_bb_opcode_tac (* SSTORE *)
+  >- prev_bb_static_tac (* SSTORE *)
   >- prev_bb_opcode_tac (* TLOAD *)
-  >- prev_bb_opcode_tac (* TSTORE *)
+  >- prev_bb_static_tac (* TSTORE *)
   >- prev_bb_opcode_tac (* ILOAD *)
   >- prev_bb_opcode_tac (* ISTORE *)
   >- prev_bb_param_tac (* PARAM *)
@@ -528,7 +546,7 @@ Proof
   >- prev_bb_envelope_tac (* DELEGATECALL *)
   >- prev_bb_envelope_tac (* CREATE *)
   >- prev_bb_envelope_tac (* CREATE2 *)
-  >- prev_bb_opcode_tac (* LOG *)
+  >- prev_bb_static_tac (* LOG *)
   >- prev_bb_opcode_tac (* ASSERT *)
   >- prev_bb_opcode_tac (* ASSERT_UNREACHABLE *)
   >- prev_bb_opcode_tac (* DLOAD *)

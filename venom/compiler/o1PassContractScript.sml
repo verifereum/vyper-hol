@@ -156,11 +156,25 @@ Proof
   metis_tac[unit_result_rel_dead_result_rel]
 QED
 
-(* The gas-oracle hook: two initial states that may differ only in the
-   oracle list of GAS readings.  Equality until the oracle lands. *)
+(* Initial states may differ only in their GAS-reading oracle. *)
 Definition gas_variant_def:
-  gas_variant (s : venom_state) s' <=> s' = s
+  gas_variant (s : venom_state) s' <=>
+    s' = (s with vs_gas_readings := s'.vs_gas_readings)
 End
+
+Theorem gas_variant_refl:
+  gas_variant s s
+Proof
+  simp[gas_variant_def]
+QED
+
+Theorem gas_variant_trans:
+  gas_variant s1 s2 /\ gas_variant s2 s3 ==> gas_variant s1 s3
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `s3 = _` SUBST1_TAC >>
+  qpat_x_assum `s2 = _` SUBST1_TAC >> simp[]
+QED
 
 (* ===== One pass run ===== *)
 
@@ -475,27 +489,47 @@ End
 
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
-   by a run of C' up to the dead bytes D, and the stage invariant I of C
-   becomes I' of C'.  pre
+   by a run of C' up to a well-formed set D of dead bytes, and the stage
+   invariant I of C becomes I' of C'.  pre
    relates the input to the output (an ordering the pass keeps, say); a
    fact about the input alone belongs in I. *)
 Definition o1_stage_contract_def:
   o1_stage_contract rpolicy D pass view pre I I' <=>
     !C C' vs.
-      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
+      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
       ctx_sim D C C' vs vs /\ I' C' vs
 End
 
-(* Every initial state vs' of the output has a gas variant vs from which
-   the input's terminating runs are matched by the output's runs from vs'. *)
+(* Choose the input oracle before testing its invariant. Reachability-based
+   memory invariants can depend on GAS values. At the lowering boundary the
+   source producer supplies the invariant for the chosen input. *)
 Definition o1_stage_contract_gas_def:
   o1_stage_contract_gas rpolicy D pass view pre I I' <=>
     !C C' vs'.
-      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
-      o1_ctx_shape C /\ o1_run_state_ok vs' /\ I C vs' ==>
-      ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\ I' C' vs'
+      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
+      o1_ctx_shape C /\ o1_run_state_ok vs' ==>
+      ?vs. gas_variant vs vs' /\
+           (I C vs ==> ctx_sim D C C' vs vs' /\ I' C' vs')
 End
+
+Theorem gas_variant_run_state_ok:
+  gas_variant vs_in vs_out /\ o1_run_state_ok vs_out ==>
+  o1_run_state_ok vs_in
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `vs_out = _` mp_tac >>
+  disch_then (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE [th])) >>
+  gvs[o1_run_state_ok_def, o1_initial_state_ok_def, code_layout_valid_def]
+QED
+
+Theorem o1_stage_contract_imp_gas:
+  o1_stage_contract rp D pass view pre Inv Inv' ==>
+  o1_stage_contract_gas rp D pass view pre Inv Inv'
+Proof
+  rw[o1_stage_contract_def, o1_stage_contract_gas_def] >>
+  qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[]
+QED
 
 Definition any_view_def:
   any_view (C' : venom_context) (fn : ir_function)
@@ -532,13 +566,15 @@ End
    requires and the walk never changes; the lowering reserves nothing in
    the runtime unit and one interval in the deploy unit.  Also the no-wrap
    bound on DLOAD/DLOADBYTES source offsets that LowerDload's expansion
-   needs (dload_offset_ok). *)
+   needs (dload_offset_ok), and the alloca frontier headroom its new
+   scratch sites need (dload_headroom_ok). *)
 Definition o1_src_inv_def:
   o1_src_inv D C vs <=>
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
     EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
-    taint_within D C vs /\ fmp_free_ctx C /\ mem_inv dload_offset_ok C vs
+    taint_within D C vs /\ fmp_free_ctx C /\
+    mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs
 End
 
 (* The pre-walk's input, the lowering's output: no PHI, and every variable
@@ -556,12 +592,46 @@ End
 (* The walk's input (row 0), SimplifyCFG's pre-walk output: every block
    reachable, definite assignment, and no PHI reading a variable written
    twice (vacuous here, with no PHI yet), which MakeSSA needs. *)
+(* What MakeSSA needs of a function it is run on: every block reachable,
+   definitions reaching their uses, and the PHIs already present (none on
+   the first run) single-defined, covering their predecessors along CFG
+   edges, and non-degenerate. *)
+Definition make_ssa_input_ok_def:
+  make_ssa_input_ok fn <=>
+    all_reachable fn /\ fn_defs_reach_uses fn /\
+    fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn /\
+    fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       inst.inst_opcode = PHI ==>
+       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+       !l v. MEM (l,v) (phi_pairs inst.inst_operands) ==>
+         fn_cfg_edge fn l bb.bb_label)
+End
+
+(* make_ssa_input_ok reads only the blocks, so sealing a function's fmp
+   signature keeps it. *)
+Theorem make_ssa_input_ok_fmp_signature[simp]:
+  make_ssa_input_ok (fn with fn_fmp_signature := x) <=> make_ssa_input_ok fn
+Proof
+  `!f p. is_fn_path (f with fn_fmp_signature := x) p = is_fn_path f p` by
+    (recInduct is_fn_path_ind >> simp[is_fn_path_def, fn_cfg_edge_def]) >>
+  `fn_cfg_edge (fn with fn_fmp_signature := x) = fn_cfg_edge fn` by
+    simp[FUN_EQ_THM, fn_cfg_edge_def] >>
+  `fn_entry_label (fn with fn_fmp_signature := x) = fn_entry_label fn` by
+    simp[fn_entry_label_def, entry_block_def] >>
+  simp[make_ssa_input_ok_def, all_reachable_def, fn_reachable_def,
+       fn_defs_reach_uses_def, def_on_all_paths_def,
+       fn_phi_operands_single_def_def, fn_phis_cover_preds_def,
+       fn_phi_outputs_single_def_def, fn_phis_non_degenerate_def, fn_insts_def]
+QED
+
 Definition o1_walk_src_inv_def:
   o1_walk_src_inv D C vs <=>
     o1_src_inv D C vs /\
     EVERY (\fn. all_reachable fn /\ fn_defs_reach_uses fn /\
                 fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn)
-      C.ctx_functions
+      C.ctx_functions /\
+    EVERY make_ssa_input_ok C.ctx_functions
 End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
@@ -581,8 +651,10 @@ Definition o1_lowered_inv_def:
     ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
 End
 
-(* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
-   second run establishes it and SimplifyCFG keeps it. *)
+(* Rows 5 to 8 (SimplifyCFG's, SUE's, DFT's and the next run's input) add
+   wf_ssa: MakeSSA's second run establishes it and the later runs keep it.
+   Row 6 also has every block reachable, which SimplifyCFG establishes:
+   SUE's copies of literals keep wf_ssa only in reachable blocks. *)
 Definition o1_ssa_inv_def:
   o1_ssa_inv C vs <=> o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions
 End
@@ -600,10 +672,16 @@ Definition o1_inv_def:
     if k = 0 then
       (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k <= 2 then
-      (\C vs. o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
+      (\C vs. o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               ?names. callee_first names C.ctx_functions)
     else if k = 3 then
-      (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
-    else if k = 5 \/ k = 6 then o1_ssa_inv
+      (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               ?names. callee_first names C.ctx_functions)
+    else if k = 4 then
+      (\C vs. o1_lowered_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions)
+    else if k = 5 \/ k = 7 \/ k = 8 then o1_ssa_inv
+    else if k = 6 then
+      (\C vs. o1_ssa_inv C vs /\ EVERY all_reachable C.ctx_functions)
     else o1_lowered_inv
 End
 

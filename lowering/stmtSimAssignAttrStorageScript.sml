@@ -25,9 +25,14 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  exprSimFieldLayout
+  exprSimSource
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  loweringPosts
   list rich_list finite_map pred_set alist
-  storageStoreFrame fragExec exprSim exprSimHyps exprSimLeaves exprSimAttributeFields
-  stmtSim stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem
+  fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding accountsRelProps
@@ -343,11 +348,8 @@ QED
    field's slot.  e may call internal functions: its simulation is a
    premise. *)
 Theorem compile_assign_attr_storage_case:
-  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es res es' ts
+  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es ts
    tr id_str slot.
-    eval_stmt cx
-      (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
-         e) es = (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -362,7 +364,10 @@ Theorem compile_assign_attr_storage_case:
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
             fld)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
+            fld)) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -388,11 +393,8 @@ QED
 
 (* compile_assign_attr_storage_case for an e with no internal call. *)
 Theorem compile_assign_attr_storage_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es res es' ts
+  !ctx func cx lctx RetQ cenv ty env src id fld sid fty fsz e es ts
    tr id_str slot.
-    eval_stmt cx
-      (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
-         e) es = (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -406,7 +408,10 @@ Theorem compile_assign_attr_storage_stmt_frag:
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
             fld)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
+            fld)) e))
+      es
 Proof
   rpt strip_tac >> irule compile_assign_attr_storage_case >>
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>

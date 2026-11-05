@@ -1,7 +1,8 @@
 (* Readiness-parametric composition of argument evaluation and Log emission. *)
 Theory stmtSimLogCompose
 Ancestors
-  stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource stmtSim exprSim exprSimWordArgs
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
+  stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource   exprSimWordArgs
   stmtSimLogSuffixActual stmtSimLogSuffixFrame stmtSimLogSuffixCode stmtSimLogArgs freshWrites
   compileEnv stmtLowering fragExec loweringSlice exprLoweringProps emitHelperProps
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
@@ -33,7 +34,7 @@ Theorem log_ready_eval_outcome[local]:
      !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
        R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) /\
-  R args es /\ eval_stmt cx (Log id args) es = (res,es') /\
+  R args es /\ eval_stmt cx (Log id args) es = (res,es') /\ ~cx.txn.is_static /\
   lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
   MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
   EVERY supported_scalar_type tys ==>
@@ -109,7 +110,10 @@ Theorem compile_log_ready_stmt_frag:
     !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
       R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) /\
-  R args es /\ eval_stmt cx (Log id args) es = (res,es') /\
+  R args es /\
+  expr_sim_inv cenv cx env es /\ well_typed_exprs env args /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
   cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
   lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
   MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
@@ -117,9 +121,14 @@ Theorem compile_log_ready_stmt_frag:
   SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) < dimword (:256) /\
   abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
   stmt_frag ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ty (Log id args)) es res es'
+    (stmt_env cenv lctx ty (Log id args))
+      (eval_stmt cx (Log id args)) es
 Proof
   strip_tac >>
+  (* A static frame has no related target state. *)
+  Cases_on `cx.txn.is_static`
+  >- (simp[stmt_frag_def] >> rpt strip_tac >>
+      fs[stmt_state_rel_def, state_rel_def]) >>
   `(!e tail s. R (e::tail) s ==>
      !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
        R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

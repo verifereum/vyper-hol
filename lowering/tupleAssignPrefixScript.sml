@@ -1,8 +1,9 @@
 (* The target-independent expression, snapshot and load prefix. *)
 Theory tupleAssignPrefix
 Ancestors
-  tupleStageProps tupleTypedLoad exprSim exprOperandVar exprLoweringProps
-  stmtSim localPtrsProps compileEnv loweringSlice fragExec valueEncoding
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
+  tupleStageProps tupleTypedLoad  exprOperandVar exprLoweringProps
+   localPtrsProps compileEnv loweringSlice fragExec valueEncoding
   vyperValue vyperTyping vyperInterpreter freshWrites list rich_list finite_map
   exprLowering vyperTypeABI stmtSimAssignTuple stmtSimReturn
 Libs

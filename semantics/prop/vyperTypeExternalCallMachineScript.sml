@@ -58,8 +58,11 @@ Theorem call_lock_send_success_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) ==>
   body_st.scopes = [scope] /\
@@ -71,7 +74,7 @@ Proof
   `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
    state_well_typed body_st` by
     (irule call_lock_send_prefix_body_state_ready_c53 >> simp[] >>
-     qexistsl [`cx`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >> simp[bind_def, ignore_bind_def]) >>
+     qexistsl [`cx`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >> gvs[bind_def, ignore_bind_def]) >>
   `lock_st.accounts =
      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>).accounts` by
     metis_tac[call_lock_action_preserves_accounts_c53] >>
@@ -94,8 +97,11 @@ Theorem checked_explicit_body_from_states_preserves_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,st') ==>
@@ -132,8 +138,11 @@ Theorem checked_getter_body_from_states_preserves_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,st') ==>
@@ -190,8 +199,11 @@ Theorem checked_explicit_call_run_success_components:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
@@ -203,12 +215,15 @@ Proof
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qpat_x_assum `do _; _; _ od _ = _` mp_tac >>
-  simp[bind_def, ignore_bind_def] >>
+  simp[bind_def, ignore_bind_def] >> PURE_REWRITE_TAC [GSYM ignore_bind_def] >>
   Cases_on `(if nr then
                case cx.nonreentrant_slot of
                  NONE => raise (Error (TypeError "nonreentrant slot missing"))
-               | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                                (mut = View \/ mut = Pure)
+               | SOME slot => do
+                     acquire_nonreentrant_lock cx.txn.target slot
+                       ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                     if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                   od
              else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` >>
   Cases_on `q` >> gvs[]
   >- (Cases_on `send_call_value mut

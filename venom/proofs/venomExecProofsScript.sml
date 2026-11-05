@@ -1136,6 +1136,34 @@ QED
    Operand FDOM Properties
    ========================================================================== *)
 
+(* An operand list evaluates exactly when each operand does. *)
+Theorem eval_operands_IS_SOME_EVERY:
+  !ops s. IS_SOME (eval_operands ops s) <=>
+          EVERY (\op. IS_SOME (eval_operand op s)) ops
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `s` mp_tac) >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
+QED
+
+(* LOG reads its offset, size and topics off the reversed operand list, so
+   when they all evaluate, the whole list does. *)
+Theorem log_operands_defined:
+  !rest s off sz topics.
+    eval_operand (HD (REVERSE rest)) s = SOME off /\
+    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
+    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics ==>
+    IS_SOME (eval_operands rest s)
+Proof
+  rpt strip_tac >>
+  `?r. rest = REVERSE r` by (qexists_tac `REVERSE rest` >> simp[]) >>
+  gvs[eval_operands_IS_SOME_EVERY, rich_listTheory.EVERY_REVERSE] >>
+  Cases_on `r` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  `IS_SOME (eval_operands t' s)` by simp[] >>
+  fs[eval_operands_IS_SOME_EVERY]
+QED
+
+
 
 
 (* For non-excluded opcodes with inst_wf:
@@ -1507,7 +1535,7 @@ fun prove_fdom_group opcode_list = prove(
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
   simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
+      exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
       exec_alloca_def,
       istore_def, mstore_def, mstore8_def, sstore_def, tstore_def] >>
   BasicProvers.every_case_tac >> rpt strip_tac >>

@@ -67,7 +67,13 @@
 
 Theory exprSimBuiltins
 Ancestors
-  list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  exprUnopSimDefs exprSimUnopCompose
+  exprSimUnopProps
+  exprSimSource
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
+  list rich_list  exprSimHyps vyperAST exprSimWordBuiltins
   exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
   valueEncoding fragExec freshWrites varsExt builtinProps arithmeticProps emitHelper
   vyperInterpreter vyperState vyperContext
@@ -453,6 +459,7 @@ Proof
     mp_tac compile_unop_sim >>
   impl_tac >- (
     rpt conj_tac
+    >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[is_word_type_def]

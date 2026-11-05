@@ -562,7 +562,8 @@ Resume evaluate_read_only[intcall_after_defaults]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- suspend "intcall_after_lock" >>
   qpat_x_assum `mut = View \/ mut = Pure` strip_assume_tac >>
-  simp[machine_frame_internal_lock]
+  simp[machine_frame_internal_lock,
+       REWRITE_RULE [ignore_bind_def] machine_frame_internal_lock]
 QED
 
 Resume evaluate_read_only[intcall_after_lock]:
@@ -580,7 +581,8 @@ Resume evaluate_read_only[intcall_after_lock]:
   impl_tac
   >- (conj_tac >- (
         qpat_x_assum `push_function _ _ cx _ = _` mp_tac >>
-        simp[push_function_def, return_def] >> strip_tac >> gvs[] >>
+        simp[push_function_def, return_def] >> strip_tac >>
+        qpat_x_assum `cx with stk updated_by _ = _` (fn th => REWRITE_TAC [GSYM th]) >>
         qpat_x_assum `read_only_context mods cx` mp_tac >> simp[read_only_context_def]) >>
       simp[]) >>
   strip_tac >>

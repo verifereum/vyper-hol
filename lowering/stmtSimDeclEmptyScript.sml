@@ -14,8 +14,12 @@
 
 Theory stmtSimDeclEmpty
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem valueCopyBytes
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
@@ -228,8 +232,7 @@ QED
    local's buffer, whose region misses every other live local's, lays out
    T's default value (memory_length_word_layout). *)
 Theorem compile_annassign_empty_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' tyv.
-    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id vtyp e es tyv.
     cenv.ce_alloca_locals /\
     has_length_word vtyp /\ is_empty_value_expr e /\
     lookup_scopes id es.scopes = NONE /\
@@ -244,7 +247,8 @@ Theorem compile_annassign_empty_stmt_frag:
        !sa sb vv. compile_expr c (expr_type e) e sa = (vv, sb) ==>
                   cs_extends sa sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>

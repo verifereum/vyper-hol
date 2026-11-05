@@ -319,6 +319,12 @@ Proof
   `ctx_sim D C C vs vs` by
     (irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]) >>
   conj_tac >- fs[ctx_sim_def] >>
+  `EVERY make_ssa_input_ok C'.ctx_functions` by
+    (qpat_x_assum `LIST_REL _ C.ctx_functions C'.ctx_functions` mp_tac >>
+     qpat_x_assum `EVERY make_ssa_input_ok C.ctx_functions` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >>
+     metis_tac[make_ssa_input_ok_fmp_signature]) >>
   drule ctx_pass_stage_max_live_eom >>
   simp[fn_pass_tag_def, fn_pass_static_layout_effect_def] >>
   strip_tac >> qexists_tac `eom` >> simp[]

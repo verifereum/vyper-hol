@@ -20,7 +20,12 @@
 
 Theory exprSimLen
 Ancestors
-  list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
+  list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
   exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
   valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
@@ -229,27 +234,7 @@ Proof
   gvs[value_has_type_def, result_array_length_def, read_result_def, bind_def, return_def]
 QED
 
-Theorem expr_body_pre_runtime_typed:
-  !cenv cx env e es r es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (INL r,es') ==>
-    ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-          eval_result_typed (env,cx,es') r (Type (expr_type e)) /\
-          (!v. read_result cx r es' = (INL v,es') ==> value_has_type tvt v)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all expr_body_pre_eval_result >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
-  `?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` by
-    (gvs[eval_result_typed_def] >> Cases_on `r` >> gvs[]) >>
-  qexists_tac `tvt` >> simp[] >> rpt strip_tac >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INL v,es')` by
-    simp[bind_def] >>
-  drule_all expr_body_pre_eval >> strip_tac >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
-      value_result_typed_def]
-QED
+
 
 Theorem expr_sim_pre_runtime_typed:
   !cenv cx env e es r es'.
@@ -299,17 +284,19 @@ QED
 Theorem immutable_holds_memory[local]:
   !func cenv cx es s t tv w ctx.
     stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
-    immutable_holds cenv cx t tv w es ==>
+    immutable_holds cenv cx t tv w es s ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
             val_in_memory tvt v (w2n w) s.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
-  gvs[arithmeticTheory.ADD_COMM]
+     immutables_rel_def]
+  >~ [`sub_layout`]
+  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
+      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+      `off + k < dimword (:256)` by DECIDE_TAC >>
+      gvs[arithmeticTheory.ADD_COMM]) >>
+  `off + k < dimword (:256)` by DECIDE_TAC >> gvs[] >> metis_tac[]
 QED
 
 Theorem vv_holds_len_header:

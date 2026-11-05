@@ -25,10 +25,10 @@
 
 Theory stmtSimAssignTuple
 Ancestors
-  tupleAssignCode
+  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclMem
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimReturn exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
@@ -223,6 +223,7 @@ Theorem assign_tuple_locals_code_decompose:
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
     expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) ==>
     c = cenv /\
     ?vv sc op su staged sl elems ss.
@@ -276,7 +277,8 @@ Theorem assign_tuple_locals_code_parts[local]:
     stmt_env cenv lctx ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
@@ -319,7 +321,8 @@ Theorem assign_tuple_locals_success_run[local]:
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
                (INL v, es1) ==> value_has_type tup_tv v) /\
@@ -456,20 +459,20 @@ Finalise assign_tuple_locals_success_run
    store_lays_out of each element against its local's type are required of
    e's value after read_result, as for x = e. *)
 Theorem compile_assign_tuple_locals_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty ids e es res es' tys tup_tv.
-    eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty ids e es tys tup_tv.
     ids <> [] /\
     EVERY (\id. ?p sz vt. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
                           cenv.ce_var_type id = SOME vt /\ is_word_type vt)
       ids /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
-               (INL v, es1) ==> value_has_type tup_tv v) /\
-    (!tvs vs es1 i entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL (ArrayV (TupleV vs)), es1) /\
+    (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
+               (es with gas_obs := gs) = (INL v, es1) ==>
+               value_has_type tup_tv v) /\
+    (!gs tvs vs es1 i entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL (ArrayV (TupleV vs)), es1) /\
        tup_tv = TupleTV tvs /\ i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
        store_lays_out (EL i tvs) entry.type (EL i vs)) /\
@@ -477,7 +480,9 @@ Theorem compile_assign_tuple_locals_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
-      es res es'
+      (eval_stmt cx
+         (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>

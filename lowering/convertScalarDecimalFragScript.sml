@@ -1,5 +1,6 @@
 Theory convertScalarDecimalFrag
 Ancestors
+  exprUnopStraight
   convertScalarDecimalRun convertScalarProps exprSimUnop exprSimConvert
   exprLowering compileEnv valueEncoding vyperValue vyperValueOperation
   vyperDecimalBounds integer integer_word words arithmeticProps intExtension

@@ -91,6 +91,22 @@ Proof
   strip_tac >> match_mp_tac simplify_cfg_fn_phi_arity >> simp[]
 QED
 
+(* No step gives a PHI two inputs from one predecessor: bypassing drops
+   the bypassed block's input when another predecessor's already carries
+   the same value, merging and label substitution rename a predecessor
+   that no PHI already lists, and fixup only drops inputs.  Labels kept
+   out of JNZ conditions (label_positions_ok) keep a bypassed JNZ's
+   dropped edge out of the PHIs.  Admitted for now. *)
+Theorem simplify_cfg_phi_labels_distinct:
+  wf_function fn /\ fn_inst_wf fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+          ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
+         ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))
+Proof
+  cheat
+QED
+
 (* A bypass that makes a JNZ's targets meet turns it into a JMP
    (canon_jnz_inst); no other step changes a kept JNZ's targets. *)
 Theorem simplify_cfg_jnz_targets_distinct:

@@ -1,10 +1,11 @@
 (* Compiler certification and public boundary for fixed-array loops. *)
 Theory stmtSimForArrayFrag
 Ancestors
-  stmtSimForArrayLoop stmtSimForArrayParts stmtSim stmtLowering compileEnv
+  loweringPosts stmtSimDefs stmtSimProps
+  stmtSimForArrayLoop stmtSimForArrayParts  stmtLowering compileEnv
   exprLoweringProps fragExec loweringSlice localPtrsProps emitHelperProps
   venomInst venomState venomExecSemantics list rich_list finite_map arithmetic
-  stmtSimForParts
+  stmtSimForParts gasOutcome gasContext stmtSimForRounds vyperInterpreter
 
 Theorem array_declared_reserved[local]:
   declare_local cenv id et st =
@@ -213,6 +214,7 @@ QED
 
 Theorem array_allocation_safe[local]:
   local_ptrs_reserved bc sa /\
+  bc.ce_imm_alloca = cenv.ce_imm_alloca /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
   (!name. name <> id ==> FLOOKUP bc.ce_vars name = FLOOKUP cenv.ce_vars name) /\
   lookup_scopes id scopes = NONE /\ name <> id /\
@@ -220,6 +222,8 @@ Theorem array_allocation_safe[local]:
   not_local_ptr cenv scopes p /\ (!x. saved_base = Var x ==> x <> p)
 Proof
   strip_tac >> drule_all array_declared_ptr_unique >> strip_tac >>
+  `cenv.ce_imm_alloca <> SOME (Var p)` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   conj_tac
   >- (simp[not_local_ptr_def] >> rpt strip_tac >>
       `name' <> id` by (strip_tac >> gvs[]) >> metis_tac[]) >>
@@ -304,6 +308,8 @@ Theorem array_loop_initialize:
        ?fuel'. run_from fuel' ctx func s0 = rr)
 Proof
   strip_tac >>
+  `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    fs[array_for_code_def, compile_env_component_equality] >>
   dxrule array_code_initialization_fields >> strip_tac >>
   drule_all array_allocation_safe >> strip_tac >>
   drule_all array_allocate_ready >> strip_tac >>
@@ -340,7 +346,10 @@ Theorem array_loop_initialize_framed:
     array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es s /\ array_run_frame ctx func caller s0 s
 Proof
-  strip_tac >> dxrule array_code_initialization_fields >> strip_tac >>
+  strip_tac >>
+  `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    fs[array_for_code_def, compile_env_component_equality] >>
+  dxrule array_code_initialization_fields >> strip_tac >>
   drule_all array_allocation_safe >> strip_tac >>
   drule_all array_allocate_ready >> strip_tac >>
   rename1 `exec_alloca ainst s0 (n2w sz : bytes32) = OK s1` >>
@@ -549,11 +558,9 @@ Theorem array_unbound_body_ptr[local]:
   lookup_scopes id scopes = NONE ==>
   not_local_ptr bc (FEMPTY :: scopes) p
 Proof
-  simp[local_ptrs_reserved_def, not_local_ptr_def, vyperStateTheory.lookup_scopes_def] >>
   rpt strip_tac >>
-  qpat_x_assum `!n1 n2 p sz1 sz2. _`
-    (qspecl_then [`id`, `name`] mp_tac) >> simp[] >>
-  qexists_tac `sz'` >> simp[] >> strip_tac >> gvs[]
+  `not_local_ptr bc scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
+  fs[not_local_ptr_def, vyperStateTheory.lookup_scopes_def]
 QED
 
 Theorem array_invariant_layout[local]:
@@ -597,9 +604,10 @@ Theorem array_code_step_contract:
         :: ei.scopes) = (r,es2) ==>
     stmt_frag ctx func cx (InLoop exit incr) RetQ bc
       (stmts_env bc (InLoop exit incr) ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2) /\
+          :: ei.scopes)) /\
   (!ei k r es2 sc rest.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
     eval_stmts cx stmts (ei with scopes :=
@@ -655,9 +663,10 @@ Theorem array_public_body_callback[local]:
         :: ei.scopes) = (r,es2) ==>
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
       (stmts_env bc (InLoop ex inc) ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2) ==>
+          :: ei.scopes)) ==>
   !exit incr ei k r es2.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
     eval_stmts cx stmts (ei with scopes :=
@@ -665,9 +674,10 @@ Theorem array_public_body_callback[local]:
         :: ei.scopes) = (r,es2) ==>
     stmt_frag ctx func cx (InLoop exit incr) RetQ bc
       (stmts_env bc (InLoop exit incr) ty stmts)
+      (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2
+          :: ei.scopes)
 Proof
   rpt strip_tac >> first_x_assum drule_all >> simp[]
 QED
@@ -733,8 +743,10 @@ Proof
 QED
 
 Theorem compile_for_array_frag:
-  !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es res es' P.
-  eval_for cx tv id stmts vs es = (res,es') /\ LENGTH vs = n /\
+  !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
+  (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
+          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+  LENGTH vs = n /\
   n < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
   type_memory_bytes cenv et + 64 < dimword (:256) /\ cenv.ce_alloca_locals /\
@@ -750,22 +762,19 @@ Theorem compile_for_array_frag:
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs) (w2n base + k * type_memory_size tv) s.vs_memory /\
         w2n base + k * type_memory_size tv < dimword (:256))) /\
-  (!st0 bc sd ex inc ei k r es2.
+  (!st0 bc sd ex inc ei k.
     declare_local cenv id et st0 = (bc,sd) /\
-    P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
-    eval_stmts cx stmts (ei with scopes :=
-      (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-        :: ei.scopes) = (r,es2) ==>
+    P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs ==>
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
-      (stmts_env bc (InLoop ex inc) ty stmts)
+      (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-          :: ei.scopes) r es2) /\
-  (!ei k r es2.
+          :: ei.scopes)) /\
+  (!ei k gs r es2.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
-    eval_stmts cx stmts (ei with scopes :=
+    eval_stmts cx stmts (ei with <| scopes :=
       (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
-        :: ei.scopes) = (r,es2) ==>
+        :: ei.scopes; gas_obs := gs |>) = (r,es2) ==>
     (!ex inc. stmt_res_ok (InLoop ex inc) r) /\
     ?sc rest. es2.scopes = sc :: rest /\
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
@@ -773,9 +782,9 @@ Theorem compile_for_array_frag:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts))
-    es res es'
+    (eval_stmt cx (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts)) es
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_def] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,

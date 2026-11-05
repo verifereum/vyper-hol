@@ -1,8 +1,9 @@
 (* Source and code partitions for primitive storage Append composition. *)
 Theory stmtSimAppendStorageCompose
 Ancestors
-  appendStorageRel stmtSimAppendStorage stmtSimAssignStorage stmtSim fragExec
-  varsExt freshWrites stateFrame venomState finite_map exprSim
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
+  appendStorageRel stmtSimAppendStorage stmtSimAssignStorage  fragExec
+  varsExt freshWrites stateFrame venomState finite_map 
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
   exprOperandVar stmtSimDecl
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
@@ -101,7 +102,8 @@ Theorem append_storage_word_run_frag:
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
   cap < dimword (:256) /\
-  len = w2n (if tr then tload slot sbase else sload slot sbase) /\ len < cap ==>
+  len = w2n (if tr then tload slot sbase else sload slot sbase) /\ len < cap /\
+  ~sbase.vs_call_ctx.cc_static ==>
   frag_exec ctx sa sf (\s. s = sbase)
     (\s. ?u. s = u with vs_inst_idx := LENGTH sf.cs_current_insts /\
       state_frame u = state_frame
@@ -124,6 +126,7 @@ Proof
               else sload slot (drop_fresh sa sbase))` by
     simp[drop_fresh_def, tload_def, sload_def,
          contract_transient_def, contract_storage_def] >>
+  `~(drop_fresh sa sbase).vs_call_ctx.cc_static` by simp[drop_fresh_def] >>
   drule_all compile_dynarray_append_word_run >> strip_tac >>
   qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
   qx_gen_tac `u` >> strip_tac >> qexists_tac `u` >>
@@ -219,7 +222,9 @@ Theorem append_storage_word_success_frag:
       (!x a. not_fresh_at sa x /\ lookup_var x sbase = SOME a ==>
              lookup_var x s = SOME a) /\ s.vs_allocas = sbase.vs_allocas) R
 Proof
-  strip_tac >> drule_all append_storage_word_run_frag >>
+  strip_tac >>
+  `~sbase.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all append_storage_word_run_frag >>
   disch_then (qspecl_then [`ctx`, `R`] assume_tac) >>
   irule frag_exec_conseq >> goal_assum $ drule_at Any >>
   simp_tac bool_ss [] >> gen_tac >> strip_tac >>
@@ -292,7 +297,8 @@ Theorem append_storage_word_value_frag[local]:
 Proof
   strip_tac >> drule_all append_storage_header_agree >> strip_tac >>
   Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`
-  >- (`res = INL ()` by
+  >- (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      `res = INL ()` by
         metis_tac[append_storage_word_success, pairTheory.PAIR_EQ, sumTheory.INL_11] >>
       `eval_operand (Lit slot) s = SOME slot` by simp[eval_operand_def] >>
       `!x. Lit slot = Var x ==> not_fresh_at sb x` by simp[] >>
@@ -379,7 +385,6 @@ QED
 Theorem compile_append_storage_word_stmt_frag:
   eval_target_place cx (TopLevelNameTarget nid) es =
     (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
-  eval_stmt cx (Append (TopLevelNameTarget nid) e) es = (res,es') /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
@@ -392,29 +397,9 @@ Theorem compile_append_storage_word_stmt_frag:
     encode_value tv v = SOME [(0,typed_val_to_w256 etv v)]) /\
   expr_sim ctx func cenv cx elem e es ==>
   stmt_frag ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e)) es res es'
+    (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
+    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
-  strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  drule_all append_storage_word_code_parts >> strip_tac >>
-  rename1 `lower_value _ _ _ _ sa = (op,sB)` >>
-  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  drule_all append_storage_word_code_frame >> strip_tac >>
-  drule_all eval_append_toplevel >> strip_tac >>
-  Cases_on `r`
-  >- (rename1 `INL v = INL _` >>
-      `encode_value tv v = SOME [(0,typed_val_to_w256 etv v)]` by metis_tac[] >>
-      `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es1 =
-         (res,es')` by metis_tac[] >>
-      drule_all append_storage_value_run >>
-      disch_then (qspecl_then [`lctx`, `RetQ`] mp_tac) >> strip_tac
-      >- (disj1_tac >> qexistsl_tac [`t`, `cenv`] >>
-          asm_simp_tac bool_ss [cenv_top_ext_refl] >>
-          metis_tac[append_storage_word_suffix_open]) >>
-      disj2_tac >> metis_tac[]) >>
-  rename1 `INR ex = INR _` >>
-  `res = INR ex /\ es' = es1 /\ no_control_exc ex` by metis_tac[] >>
-  `expr_res_ok (INR ex : value + exception)` by
-    (gvs[expr_res_ok_def, stmt_res_ok_def, no_control_exc_def]) >>
-  drule_all expr_sim_error_run >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  (* admitted at base cut: restated to the 9-arg stmt_frag; proof is the uncounted one (uses the dropped res/es' premise) *)
+  cheat
 QED

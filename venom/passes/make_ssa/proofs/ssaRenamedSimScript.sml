@@ -10,7 +10,7 @@
 
 Theory ssaRenamedSim
 Ancestors
-  ssaSimDefs venomExecSemantics venomInst venomState opcodeClass
+  ssaSimDefs venomExecSemantics venomInst venomState opcodeClass passSharedFrame
   list rich_list finite_map pred_set venomCallOracleDefs
 Libs
   ssaRenamedSimLib ssaFrameLib
@@ -112,6 +112,27 @@ Proof
   rw[exec_read0_def] >>
   BasicProvers.every_case_tac >> gvs[] >>
   irule ssa_sim_update_var >> gvs[]
+QED
+
+Triviality exec_gas_renamed:
+  !inst1 inst2 sigma s1 s2 s1'.
+    ssa_sim sigma s1 s2 /\
+    LENGTH inst2.inst_outputs = LENGTH inst1.inst_outputs /\
+    (!x. lookup_var x s1 <> NONE /\ x <> HD inst1.inst_outputs ==>
+         sigma x <> HD inst2.inst_outputs) /\
+    exec_gas inst1 s1 = OK s1' ==>
+    ?s2'. exec_gas inst2 s2 = OK s2' /\
+          ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
+                  s1' s2'
+Proof
+  rpt strip_tac >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    fs[ssa_sim_def, ssaFrameTheory.ssa_frame_def, venom_state_component_equality] >>
+  gvs[exec_gas_def, AllCaseEqs()] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  irule ssa_sim_update_var >>
+  gvs[ssa_sim_def, ssaFrameTheory.ssa_frame_def, lookup_var_def,
+      venom_state_component_equality]
 QED
 
 Triviality exec_read1_renamed:
@@ -483,6 +504,10 @@ Proof
        conj_tac >- first_assum ACCEPT_TAC >>
        qexists_tac `s1` >> gvs[] >> NO_TAC) >>
   TRY (simp[opcode_has_output_def] >>
+       irule exec_gas_renamed >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexists_tac `s1` >> gvs[] >> NO_TAC) >>
+  TRY (simp[opcode_has_output_def] >>
        irule exec_read1_renamed >>
        conj_tac >- first_assum ACCEPT_TAC >>
        conj_tac >- first_assum ACCEPT_TAC >>
@@ -496,7 +521,7 @@ Proof
        gvs[mstore_def, istore_def, mstore8_def, sstore_def, tstore_def,
            contract_storage_def, contract_transient_def,
            ssa_sim_def] >> NO_TAC) >>
-  gvs[exec_read0_def] >>
+  gvs[exec_read0_def, exec_gas_def] >>
   gvs[exec_read1_def] >>
   gvs[exec_write2_def] >>
   gvs[exec_alloca_def] >>
@@ -571,7 +596,13 @@ Proof
          (once_rewrite_tac[GSYM listTheory.MAP_REVERSE] >> REFL_TAC) >>
        ASM_REWRITE_TAC[] >>
        simp[GSYM listTheory.MAP_DROP, listTheory.EL_MAP,
-            rich_listTheory.MAP_HD, ssa_sim_def, lookup_var_def] >> NO_TAC)
+            rich_listTheory.MAP_HD, ssa_sim_def, lookup_var_def] >> NO_TAC) >>
+  (* Static-frame guard: s1 took the non-static branch with defined
+     operands, so its operand list evaluates *)
+  gvs[eval_operands_def] >>
+  (* LOG: only its guard remains *)
+  drule_all venomExecProofsTheory.log_operands_defined >> simp[optionTheory.IS_SOME_EXISTS] >>
+  strip_tac >> gvs[eval_operand_def]
 QED
 
 (* ==========================================================================
@@ -724,7 +755,17 @@ Triviality step_term_selfdestruct:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >>
+  (* static frame: both sides abort once the operands evaluate *)
+  Cases_on `s2.vs_call_ctx.cc_static` >> gvs[] >- (
+    Cases_on `eval_operands inst1.inst_operands s1` >> gvs[] >- (
+      Cases_on `inst1.inst_operands` >> gvs[eval_operands_def] >>
+      Cases_on `t` >> gvs[AllCaseEqs(), eval_operands_def]) >>
+    drule_all eval_operands_renamed >> strip_tac >>
+    imp_res_tac ssa_sim_implies_exec_equiv_UNIV >>
+    gvs[ssa_result_equiv_def, execution_equiv_UNIV, halt_state_def,
+        set_returndata_def]) >>
+  term_resolve_tac
 QED
 
 Triviality step_term_stop:
@@ -881,6 +922,13 @@ Proof
   TRY (irule jump_to_ssa_sim >> simp[])
 QED
 
+Triviality exec_ext_call_not_abort_ssa:
+  !inst s g a v ao as_ ro rs st ab vs'.
+    exec_ext_call inst s g a v ao as_ ro rs st <> Abort ab vs'
+Proof
+  rw[exec_ext_call_def] >> gvs[AllCaseEqs()]
+QED
+
 (* For non-terminator, non-INVOKE: if step_inst_base aborts on side 1,
    the renamed instruction also aborts with same reason + execution_equiv.
    Only ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY can abort among
@@ -896,16 +944,35 @@ Theorem step_base_abort_sim:
           execution_equiv UNIV s1' s2'
 Proof
   rpt gen_tac >> strip_tac >>
+  (* static frame: a state write aborts on both sides once its operands
+     evaluate *)
+  Cases_on `inst1.inst_opcode = SSTORE \/ inst1.inst_opcode = TSTORE \/
+            inst1.inst_opcode = LOG \/ inst1.inst_opcode = CALL`
+  >- (
+    drule_all step_inst_base_static_write_abort >> strip_tac >>
+    gvs[inst_renamed_def, optionTheory.IS_SOME_EXISTS] >>
+    imp_res_tac ssa_sim_fields >>
+    drule_all eval_operands_renamed >> strip_tac >>
+    qexists_tac `halt_state (set_returndata [] s2)` >>
+    (conj_tac >- (
+       qpat_x_assum `step_inst_base inst1 s1 = _` mp_tac >>
+       gvs step_base_reduces >>
+       simp[AllCaseEqs(), exec_ext_call_not_abort_ssa] >> strip_tac >>
+       gvs[] >> imp_res_tac eval_operand_renamed >> gvs[])) >>
+    imp_res_tac ssa_sim_implies_exec_equiv_UNIV >>
+    gvs[execution_equiv_UNIV, halt_state_def, set_returndata_def]) >>
   drule step_inst_base_abort_opcodes >> strip_tac >>
   gvs[inst_renamed_def, is_terminator_def] >>
   imp_res_tac ssa_sim_fields >>
   gvs step_base_reduces >>
-  gvs[exec_write2_def, AllCaseEqs(), LET_THM, exec_create_abort_iff] >>
+  gvs[exec_write2_def, AllCaseEqs(), LET_THM, exec_create_abort_iff,
+      optionTheory.IS_SOME_EXISTS] >>
   imp_res_tac eval_operand_renamed >>
   imp_res_tac eval_operands_renamed >>
   gvs[exec_create_abort_iff, AllCaseEqs()] >>
   gvs[execution_equiv_UNIV, halt_state_def, revert_state_def,
       set_returndata_def, ssa_sim_def] >>
+  Cases_on `s2.vs_call_ctx.cc_static` >> gvs[eval_operands_def] >>
   Cases_on `inst2.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[]
 QED

@@ -4,7 +4,7 @@
  *)
 Theory e2eCompositionChecks
 Ancestors
-  e2eComposition e2eCorrectness configuredE2ECorrectness
+  e2eComposition e2eCorrectness e2eDeployCorrectness configuredE2ECorrectness
   e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract
   codegenCorrectness
   venomExecSemantics venomState stateEquiv vyperInterpreter vyperValue
@@ -150,4 +150,4 @@ fun check_classified_stage (thy, name) =
   end;
 val () = List.app check_classified_stage
   [("e2eCorrectness", "vyper_call_correct"),
-   ("e2eCorrectness", "e2e_deploy_correctness")];
+   ("e2eDeployCorrectness", "e2e_deploy_correctness")];

@@ -11,7 +11,7 @@ Theorem log_emit_step:
   inst.inst_operands = Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op] /\
   LENGTH topic_ops < dimword (:256) /\
   eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
-  eval_operands topic_ops s = SOME topics ==>
+  eval_operands topic_ops s = SOME topics /\ ~s.vs_call_ctx.cc_static ==>
   step_inst_base inst s = OK (s with vs_logs := s.vs_logs ++
     [<|logger := w2w s.vs_call_ctx.cc_address; topics := topics;
        data := mem_bytes_at (w2n off) (w2n sz) s.vs_memory |>])
@@ -32,7 +32,8 @@ Proof
     lookup_var_def, local_backed_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def,
     venomMemDefsTheory.alloca_next_valid_def,
-    alloca_room_def, pending_alloca_size_def, fmp_room_def] >>
+    alloca_room_def, pending_alloca_size_def, fmp_room_def,
+    immutable_base_zero_alt] >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -54,6 +55,7 @@ Proof
   strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by gvs[stmt_state_rel_def, state_rel_def] >>
   `emitted_insts sa sb =
     [mk_inst sa.cs_next_id LOG
       (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) []]` by

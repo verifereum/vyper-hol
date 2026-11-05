@@ -10,7 +10,7 @@ Ancestors
   prefixExec stackOpSim
   list rich_list arithmetic
 
-Theorem contiguous_top_stack_bound[local]:
+Theorem contiguous_top_stack_bound:
   !to_pop (stk : operand list).
     to_pop <> [] /\
     EVERY IS_SOME (MAP (\v. stack_get_depth v stk) to_pop) /\
@@ -58,7 +58,7 @@ Definition pop_foldl_body_def:
          ps1 with ps_stack := stack_pop 1 ps1.ps_stack)
 End
 
-Theorem popmany_individual_eq_foldl[local]:
+Theorem popmany_individual_eq_foldl:
   !to_pop ps.
     popmany_individual to_pop ps =
     FOLDL pop_foldl_body ([], ps)
@@ -136,7 +136,7 @@ Definition pop_one_step_def:
          ps1 with ps_stack := stack_pop 1 ps1.ps_stack)
 End
 
-Theorem pop_foldl_body_eq_foldl_body[local]:
+Theorem pop_foldl_body_eq_foldl_body:
   pop_foldl_body = foldl_body pop_one_step
 Proof
   simp[FUN_EQ_THM, pairTheory.FORALL_PROD] >>
@@ -584,7 +584,7 @@ Proof
   simp[] >> irule venom_asm_rel_mark_dead_stack >> simp[]
 QED
 
-Theorem popmany_plan_noncontig_new[local]:
+Theorem popmany_plan_noncontig_new:
   !ops ps ops2 ps2.
     ops <> [] /\
     ~(EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) ops) /\

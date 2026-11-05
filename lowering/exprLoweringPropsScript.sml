@@ -64,6 +64,27 @@ Ancestors
 Libs
   pairLib BasicProvers monadsyntax
 
+
+
+Theorem lower_value_nonword_memory:
+  compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
+  p.ptr_location = LocMemory /\ ~is_word_type t ==>
+  lower_value compile_expr cenv ty e sa = (p.ptr_operand,sm)
+Proof
+  rpt strip_tac >>
+  simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def]
+QED
+
+
+Theorem eval_expr_builtin_value:
+  !cx ann bi args es tv es'.
+    eval_expr cx (Builtin ann bi args) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, COND_RATOR] >>
+  rw[] >> gvs[AllCaseEqs()]
+QED
+
 (* The shared semantic predicate preserves the former ExtCall wrap test. *)
 Theorem needs_external_call_wrap_extcall:
   (if needs_external_call_wrap ty then TupleT [ty] else ty) =
@@ -841,6 +862,22 @@ Proof
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
        pending_alloca_size_def, immutable_alloca_sep_def,
        immutable_base_zero_alt]
+QED
+
+Theorem msg_gas_state_frame:
+  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx (es with gas_obs := gs)
+    (s with <|vs_gas_readings := readings; vs_inst_idx := k|>)
+Proof
+  strip_tac >>
+  gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
+       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def, fmp_room_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, accounts_rel_def, immutable_base_zero_alt] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -1711,15 +1748,16 @@ Proof
   rpt strip_tac >> simp[lower_value_def] >> irule ci_mono_bind >> simp[ci_mono_unwrap_value]
 QED
 
-Theorem ci_mono_compile_dynarray_pop[local]:
-  ∀ base_op ws es load_opc store_opc sa.
-    ci_mono sa (SND (compile_dynarray_pop base_op ws es load_opc store_opc sa))
+Theorem ci_mono_compile_dynarray_pop:
+  ∀ base_op ws es is_ctor imm loc sa.
+    ci_mono sa (SND (compile_dynarray_pop base_op ws es is_ctor imm loc sa))
 Proof
   simp[compile_dynarray_pop_def, LET_THM] >>
   rpt (CHANGED_TAC (rpt gen_tac >>
     (TRY (irule ci_mono_bind >> conj_tac) >>
      TRY (irule ci_mono_ignore_bind >> conj_tac) >>
-     simp[ci_mono_emit_op, ci_mono_emit_void])))
+     simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_ptr_load,
+          ci_mono_compile_ptr_store])))
 QED
 
 (* ===== compile_expr ci_mono by induction ===== *)
@@ -2745,12 +2783,20 @@ QED
 Theorem ci_mono_load_bytestring_as_word[local]:
   ∀ v shift_opc sa. ci_mono sa (SND (load_bytestring_as_word v shift_opc sa))
 Proof
+  rpt gen_tac >> Cases_on `shift_opc = SAR` >> (
+  simp_tac pure_ss [exprLoweringTheory.load_bytestring_as_word_def] >>
+  asm_rewrite_tac[] >> BETA_TAC >>
+  ntac 3 (ho_match_mp_tac ci_mono_bind >>
+          conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >>
+      rpt (ho_match_mp_tac ci_mono_bind >>
+           conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+      simp[ci_mono_emit_op, ci_mono_comp_return]) >>
   rpt gen_tac >>
-  rewrite_tac[exprLoweringTheory.load_bytestring_as_word_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  ntac 3 (ho_match_mp_tac ci_mono_bind >>
+          conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  simp[ci_mono_comp_return])
 QED
 
 Theorem ci_mono_compile_int_clamp:
@@ -2883,7 +2929,7 @@ Proof
   rpt gen_tac >> simp[abiEncoderTheory.compile_abi_bytes_clamp_def, LET_THM] >> BETA_TAC >> rpt (rpt gen_tac >> (ho_match_mp_tac ci_mono_ignore_bind ORELSE ho_match_mp_tac ci_mono_bind) >> conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_abi_clamp_basetype[local]:
+Theorem ci_mono_compile_abi_clamp_basetype:
   ∀ val_op clamp sa. ci_mono sa (SND (compile_abi_clamp_basetype val_op clamp sa))
 Proof
   Cases_on `clamp` >> simp[abiEncoderTheory.compile_abi_clamp_basetype_def, ci_mono_comp_return, ci_mono_compile_abi_int_clamp, ci_mono_compile_abi_bytes_clamp] >> rpt gen_tac >> TRY (irule ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_op, ci_mono_emit_void] >> NO_TAC) >> TRY (irule ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_op, ci_mono_emit_void] >> NO_TAC) >> TRY (irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac >> FIRST [irule ci_mono_ignore_bind, irule ci_mono_bind] >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac >> FIRST [irule ci_mono_ignore_bind, irule ci_mono_bind] >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return])
@@ -3417,7 +3463,7 @@ Proof
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (IF_CASES_TAC >> simp[ci_mono_emit_void] >>
-          IF_CASES_TAC >> simp[ci_mono_emit_void] >-
+          IF_CASES_TAC >> simp[ci_mono_compile_store_memory] >-
             (rpt strip_tac >>
              ho_match_mp_tac ci_mono_ignore_bind >>
              simp[ci_mono_compile_store_bytestring, ci_mono_comp_return])) >>
@@ -3473,8 +3519,8 @@ Theorem ci_mono_compile_ext_call_kwarg:
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_ext_call_kwarg cfn cenv rt k e sa))
 Proof
-  rpt strip_tac >> rewrite_tac[compile_ext_call_kwarg_def] >>
-  IF_CASES_TAC >> ho_match_mp_tac ci_mono_bind >> rpt strip_tac >> BETA_TAC
+  rpt strip_tac >> rewrite_tac[compile_ext_call_kwarg_def, LET_THM] >>
+  BETA_TAC >> IF_CASES_TAC >> ho_match_mp_tac ci_mono_bind >> rpt strip_tac >> BETA_TAC
   >- fs[]
   >- (ho_match_mp_tac ci_mono_bind >>
       simp[ci_mono_compile_materialize_vv, ci_mono_comp_return])
@@ -4026,6 +4072,20 @@ Proof
   simp[comp_bind_def, LET_THM, pairTheory.UNCURRY]
 QED
 
+Theorem ci_mono_compile_ifexp_arm:
+  ∀cenv res_ty arm_ty vv s.
+    ci_mono s (SND (compile_ifexp_arm cenv res_ty arm_ty vv s))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_ifexp_arm_def] >>
+  IF_CASES_TAC >- simp[ci_mono_unwrap_value] >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >>
+  simp[ci_mono_compile_store_memory, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_expr_ifexp[local]:
   (∀ce ty e s. ci_mono s (SND (f ce ty e s))) ⇒
   ci_mono st (SND (compile_expr_body f g h cenv ty
@@ -4034,7 +4094,8 @@ Proof
   strip_tac >> simp[compile_expr_body_def, LET_THM] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn, ci_mono_fresh_var,
-               ci_mono_fresh_label, ci_mono_emit_inst, ci_mono_new_block]
+               ci_mono_fresh_label, ci_mono_emit_inst, ci_mono_new_block,
+               ci_mono_compile_ifexp_arm]
        >> rpt gen_tac >> BETA_TAC) >>
   IF_CASES_TAC >> simp[ci_mono_refl]
 QED
@@ -4831,3 +4892,22 @@ val () = List.app
       else raise Fail ("expression lowering proof is not closed: " ^ name)
     end)
   (DB.thms "exprLoweringProps");
+
+Theorem as_stack_val_stack:
+  !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
+Proof
+  Cases_on `p` >> simp[as_stack_val_def]
+QED
+
+Theorem compile_literal_bytes_stack:
+  !ty bs st.
+    (!n. ty <> BaseT (BytesT (Dynamic n))) ==>
+    ?op. compile_literal_vv ty (BytesL bs) st = (StackValue ty op, st)
+Proof
+  rpt strip_tac >>
+  Cases_on `ty` >> simp[compile_literal_vv_def, comp_return_def] >>
+  rename1 `BaseT bt` >>
+  Cases_on `bt` >> gvs[compile_literal_vv_def, comp_return_def] >>
+  rename1 `BytesT bound` >>
+  Cases_on `bound` >> gvs[compile_literal_vv_def, comp_return_def]
+QED

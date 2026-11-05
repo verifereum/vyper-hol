@@ -31,8 +31,12 @@
 
 Theory exprSimPop
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map arithmetic words
-  fragExec loweringSlice exprSim exprSimHyps exprSimLeaves exprSimAggregateLayout
+  fragExec loweringSlice  exprSimHyps exprSimLeaves exprSimAggregateLayout
   exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
   emitHelperProps compileEnv localPtrsProps valueEncoding valueEncodingProps
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation
@@ -167,10 +171,11 @@ Theorem compile_expr_pop_name:
     compile_expr cenv ty (Pop ann (NameTarget id)) sa =
       (LocatedValue ann
          (mk_ptr (FST (compile_dynarray_pop (Var p) 32
-                         (type_memory_bytes cenv et) MLOAD MSTORE sa))
+                         (type_memory_bytes cenv et)
+                         cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa))
                  LocMemory),
        SND (compile_dynarray_pop (Var p) 32 (type_memory_bytes cenv et)
-              MLOAD MSTORE sa))
+              cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa))
 Proof
   rpt strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
@@ -180,8 +185,8 @@ Proof
 QED
 
 Theorem dynarray_pop_mem_shape:
-  !p esz sa r sb.
-    compile_dynarray_pop (Var p) 32 esz MLOAD MSTORE sa = (r, sb) ==>
+  !p esz is_ctor imm sa r sb.
+    compile_dynarray_pop (Var p) 32 esz is_ctor imm LocMemory sa = (r, sb) ==>
     ?x0 x1 x2 x3 x4 x5 x6.
       ALL_DISTINCT [x0; x1; x2; x3; x4; x5; x6] /\
       EVERY (\x. ~not_fresh_at sa x) [x0; x1; x2; x3; x4; x5; x6] /\
@@ -199,7 +204,9 @@ Theorem dynarray_pop_mem_shape:
          mk_inst (sa.cs_next_id + 7) MUL [Var x3; Lit (n2w esz)] [x5];
          mk_inst (sa.cs_next_id + 8) ADD [Var x4; Var x5] [x6]]
 Proof
-  simp[compile_dynarray_pop_def, emit_op_def, emit_void_def, fresh_id_def,
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def,
+       emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt strip_tac >> gvs[APPEND_ASSOC] >>
@@ -404,6 +411,8 @@ Theorem pop_name_facts:
       cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
       lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
       evaluate_type (get_tenv cx) ann = SOME etv /\
+      evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+        SOME (ArrayTV etv (Dynamic n)) /\
       entry.type = ArrayTV etv (Dynamic n) /\
       entry.value = ArrayV (DynArrayV vs) /\
       LENGTH vs <= n /\ n < dimword (:256) /\ elems_val_wf vs etv /\
@@ -437,6 +446,10 @@ Proof
   simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
   rename1 `evaluate_type _ ann = SOME etv` >>
   `entry.type = ArrayTV etv (Dynamic n)` by simp[] >>
+  `evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+     SOME (ArrayTV etv (Dynamic n))` by
+    (qpat_x_assum `ArrayTV _ _ = entry.type` kall_tac >>
+     simp[evaluate_type_def]) >>
   `value_has_type (ArrayTV etv (Dynamic n)) entry.value` by metis_tac[] >>
   drule value_has_type_dynarray >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes s0` by
@@ -674,7 +687,9 @@ Proof
   irule mstore_mem_bytes_at_disjoint >>
   Cases_on `nm = id`
   >- (`b' = w2n w` by gvs[local_region_def] >>
-      gvs[dynarray_local_def, dynarray_type_def]) >>
+      `dynarray_len_at cenv id 0` by
+        (irule dynarray_len_at_root >> metis_tac[]) >>
+      gvs[] >> first_x_assum drule >> simp[]) >>
   `regions_disjoint (w2n w) sz b' sz'` by
     (fs[local_ptrs_rel_def] >> metis_tac[]) >>
   gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
@@ -703,7 +718,9 @@ Theorem pop_vv_post:
     lookup_var x6 u =
       SOME (w + 32w + (n2w (LENGTH vs) - 1w) * n2w (type_memory_size etv)) /\
     EVERY (value_has_type etv) vs /\
-    evaluate_type (get_tenv cx) ann = SOME etv ==>
+    evaluate_type (get_tenv cx) ann = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+      SOME (ArrayTV etv (Dynamic n)) ==>
     vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
@@ -779,8 +796,13 @@ Proof
       `w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv +
          val_footprint etv (LAST vs) <= w2n w + sz` by
         (irule pop_elem_fits >> metis_tac[val_footprint_le]) >>
+      `local_val_at cenv cx id
+         (32 + (LENGTH vs - 1) * type_memory_size etv) etv (LAST vs)` by
+        (irule local_path_at_val_at >> simp[local_path_at_def] >>
+         qexists_tac `[ValueSubscript (IntV &(LENGTH vs - 1))]` >>
+         simp[mem_path_offset_def, mem_step_offset_def]) >>
       simp[] >> disj2_tac >> disj1_tac >>
-      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[])
+      qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[])
   >~ [`locals_kept`]
   >- (irule pop_locals_kept >>
       conj_tac
@@ -818,8 +840,8 @@ Proof
   drule_all pop_name_facts >> strip_tac >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Var p) 32 (type_memory_size etv)
-              MLOAD MSTORE sa` >>
-  qmatch_asmsub_rename_tac `compile_dynarray_pop _ _ _ _ _ _ = (rop, sc)` >>
+              cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa` >>
+  qmatch_asmsub_rename_tac `compile_dynarray_pop _ _ _ _ _ _ _ = (rop, sc)` >>
   gvs[] >>
   drule dynarray_pop_mem_shape >> strip_tac >> gvs[] >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>

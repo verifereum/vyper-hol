@@ -23,7 +23,7 @@
  *   place_ptr_rel_vars_frame, target_post_add — the pointer and the post
  *                          through code that writes only fresh variables
  *
- * Helpers: expr_exit_INR_type, alookup_zip_field, struct_field_type,
+ * Helpers: expr_exit_INR_type,
  *   alookup_fields_args, attribute_type_struct_field,
  *   extend_storage_place_attr, target_field_offset, target_field_type,
  *   compile_get_target_ptr_attr, extend_place_memory_attr,
@@ -33,8 +33,16 @@
 
 Theory targetPlaceSimCases
 Ancestors
+  exprSimFieldLayout
+  exprSimSource
+  targetPlaceSimDefs
+  stmtSimProps
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimBuffer exprSimAttributeFields
+  fragExec  exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
@@ -56,42 +64,6 @@ Theorem expr_exit_INR_type[local]:
 Proof
   rpt gen_tac >> Cases_on `rr` >> Cases_on `ex` >> simp[expr_exit_def] >>
   TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
-QED
-
-Theorem alookup_zip_field[local]:
-  !fields tvs f fld fty fsz.
-    OPT_MMAP f (MAP (FST o SND) fields) = SOME tvs /\
-    ALOOKUP fields fld = SOME (fty, fsz) ==>
-    ?ftv. ALOOKUP (ZIP (MAP FST fields, tvs)) fld = SOME ftv /\
-          f fty = SOME ftv
-Proof
-  Induct >> simp[] >> PairCases >> rpt gen_tac >> strip_tac >> gvs[] >>
-  rename1 `if h0 = fld then _ else _` >> Cases_on `h0 = fld` >> gvs[]
-QED
-
-(* A field of the lowering's struct table has, in the struct's type value,
-   the type value its declared type evaluates to. *)
-Theorem struct_field_type[local]:
-  !cenv cx env es sid fs fld fty fsz.
-    expr_sim_inv cenv cx env es /\
-    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
-    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
-      fld = SOME (fty, fsz) ==>
-    ?ftv. ALOOKUP fs fld = SOME ftv /\
-          evaluate_type (get_tenv cx) fty = SOME ftv
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-  simp[sfields_tenv_consistent_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[get_struct_fields_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  qpat_x_assum `MAP FST fields = _` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
-  drule_all alookup_zip_field >> strip_tac >> simp[] >>
-  metis_tac[cj 1 evaluate_type_mono]
 QED
 
 Theorem alookup_fields_args[local]:
@@ -181,7 +153,7 @@ Proof
         gvs[target_pre_def, target_indices_pre_def] >>
       Cases_on `eval_expr cx e es1` >> rename1 `(r2, es2)` >>
       `expr_sim_inv cenv cx env es2` by
-        metis_tac[exprSimHypsTheory.expr_body_pre_eval_result] >>
+        metis_tac[exprSimSourceTheory.expr_body_pre_eval_result] >>
       reverse (Cases_on `r2`) >> simp[] >- (strip_tac >> gvs[]) >>
       rename1 `eval_expr cx e es1 = (INL tv, es2)` >>
       Cases_on `read_result cx tv es2` >> rename1 `(r3, es3)` >>
@@ -534,11 +506,10 @@ Finalise target_attr_case
    (compile_mapping_subscript, with compile_keccak256_key for a bytes or
    string key) or the bounds check and the element's pointer
    (compile_array_subscript).  Cheated, for the later #636 PRs:
-   - the shared locals_kept frame exempts only a root DynArray's length.
-     A nested pop in an index, such as x[0][x[0].pop()], writes an inner
-     length word that this frame preserves.  Both target_post and the
-     index's expr_vv_case inherit this restriction; their shared frame
-     must be repaired before this case covers nested-pop indices;
+   - a nested pop in an index, such as x[0][x[0].pop()], writes an inner
+     length word, which the shared locals_kept frame exempts, but the
+     index's expr_vv_case for such a pop is exprSimPlaces' cheated
+     compile_pop_nested_sim;
    - the index runs after the base, so the base's target_post must survive
      its fragment: place_ptr_rel does (place_ptr_rel_vars_frame: the local
      pointers and the base's operand are not fresh at the index's start),

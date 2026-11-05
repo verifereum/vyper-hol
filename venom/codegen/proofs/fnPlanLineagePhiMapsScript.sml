@@ -257,7 +257,7 @@ Proof
        listTheory.MEM_FILTER] >>
   drule build_phi_maps_operand_class >>
   disch_then (qspecl_then [`s`, `p`, `i`] mp_tac) >>
-  metis_tac[removeUnusedSsaProofsTheory.phi_well_formed_var_pair,
+  metis_tac[venomWfTheory.phi_well_formed_var_pair,
             cfgNormBaseTheory.phi_pairs_mem_var]
 QED
 

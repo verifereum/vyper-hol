@@ -20,7 +20,7 @@
  *   compile_subscript_tuple_sim — expr_vv_case of a tuple subscript from
  *                               its base's
  *
- * Helpers: opt_mmap_el, values_have_types_el, tuple_val_wf_el,
+ * Helpers: values_have_types_el, tuple_val_wf_el,
  *   sum_take_el_le, compile_expr_tuple_subscript, map_elem_size_in_location,
  *   tuple_offset_memory, tuple_offset_code, tuple_offset_slots,
  *   tuple_in_memory_elem, decode_tuple_elem, read_storage_slot_tuple_elem,
@@ -50,8 +50,14 @@
 
 Theory exprSimTuple
 Ancestors
+  exprSimAttributeProps exprSimFieldLayout
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
+  fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute
   placeTypingProps
   exprLowering exprLoweringProps compileEnv context
@@ -63,18 +69,6 @@ Libs
   pairLib
 
 (* ===== Lists ===== *)
-
-Theorem opt_mmap_el[local]:
-  !l l' k f.
-    OPT_MMAP f l = SOME l' /\ k < LENGTH l ==>
-    LENGTH l' = LENGTH l /\ f (EL k l) = SOME (EL k l')
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `f h` >> simp[] >> Cases_on `OPT_MMAP f l` >> simp[] >>
-  strip_tac >> gvs[] >> rename1 `OPT_MMAP f l = SOME tl` >>
-  first_x_assum (qspecl_then [`tl`, `PRE k`, `f`] mp_tac) >>
-  Cases_on `k` >> gvs[] >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]
-QED
 
 Theorem values_have_types_el[local]:
   !tvs vs k.
@@ -275,12 +269,20 @@ Theorem read_storage_slot_array_not_tuple[local]:
     read_storage_slot cx tr slot (ArrayTV etv bd) es <>
       (INL (ArrayV (TupleV vs)), es1)
 Proof
-  rpt gen_tac >> Cases_on `tr` >> Cases_on `bd` >>
+  rpt gen_tac >> Cases_on `tr` >>
   simp[read_storage_slot_def, get_storage_backend_def,
        get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
   qmatch_goalsub_abbrev_tac `decode_value stor` >>
+  (namedCases_on `bd` ["n", "max"]
+  >- (simp[Once decode_value_def] >>
+      Cases_on `decode_static_array stor (w2n slot) etv n` >>
+      simp[lift_option_def, raise_def, return_def]) >>
   simp[Once decode_value_def] >>
-  rpt (CASE_TAC >> simp[lift_option_def, raise_def, return_def])
+  Cases_on `w2n (read_slot stor (w2n slot)) <= max` >>
+  simp[lift_option_def, raise_def, return_def] >>
+  Cases_on `decode_dyn_array stor (w2n slot + 1) etv
+              (MIN (w2n (read_slot stor (w2n slot))) max)` >>
+  simp[lift_option_def, raise_def, return_def])
 QED
 
 (* ===== The source's selection ===== *)
@@ -518,7 +520,7 @@ Theorem base_vv_holds_loc[local]:
            read_storage_slot cx T w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) tvt /\
            storage_range_agree (get_storage cx es T) (contract_transient s) w tvt) /\
-        (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
+        (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es s) /\
         vv_loc vv <> LocCalldata
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -532,8 +534,9 @@ QED
 Theorem base_vv_at_mem[local]:
   !cenv cx t sa sb es tv vv s v tvt w.
     vv_at cenv cx t sa sb es tv vv s /\ ~is_word_type t /\
-    ~dynarray_type t /\ read_result cx tv es = (INL v, es) /\
+    read_result cx tv es = (INL v, es) /\
     evaluate_type (get_tenv cx) t = SOME tvt /\
+    (!bt. tvt <> BaseTV bt) /\
     vv_loc vv = LocMemory /\ eval_operand (vv_operand vv) s = SOME w ==>
     val_wf tvt v /\
     ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
@@ -543,12 +546,12 @@ Theorem base_vv_at_mem[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-               (dynarray_local cenv n ==> b + 32 <= w2n w)) \/
+               local_path_at cenv cx n (w2n w - b) tvt) \/
      val_footprint tvt v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
-       expr_val_at_def] >>
+       expr_val_at_def, local_val_at_def] >>
   rpt strip_tac >> gvs[] >>
   TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >> metis_tac[]
 QED
@@ -577,7 +580,7 @@ Theorem tuple_elem_ptr[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es1.scopes q n b sz /\
                b <= w2n w /\ w2n w + type_memory_size_list tvs <= b + sz /\
-               (dynarray_local cenv n ==> b + 32 <= w2n w)) \/
+               local_path_at cenv cx n (w2n w - b) (TupleTV tvs)) \/
      type_memory_size_list tvs = 0)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -585,7 +588,7 @@ Proof
   qspecl_then [`cenv`, `cx`, `TupleT tys`, `sa`, `sn`, `es1`, `tv`, `bvv`,
                `q`, `ArrayV (TupleV vs)`, `TupleTV tvs`, `w`] mp_tac
     base_vv_at_mem >>
-  impl_tac >- simp[is_word_type_def, dynarray_type_def] >> strip_tac >>
+  impl_tac >- simp[is_word_type_def] >> strip_tac >>
   gvs[val_footprint_def, type_memory_size_def, val_wf_def] >>
   `SUM (TAKE k (MAP type_memory_size tvs)) + type_memory_size (EL k tvs) <=
    type_memory_size_list tvs` by
@@ -634,7 +637,13 @@ Proof
       first_assum ACCEPT_TAC)
   >~ [`local_region cenv es1.scopes q n b sz`]
   >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
-      rpt strip_tac >> res_tac >> decide_tac) >>
+      `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV &k)) =
+       SOME (SUM (TAKE k (MAP type_memory_size tvs)), EL k tvs)` by
+        simp[mem_step_offset_def, type_memory_size_list_sum, MAP_TAKE] >>
+      drule_all local_path_at_step >>
+      `w2n w - b + SUM (TAKE k (MAP type_memory_size tvs)) =
+       w2n w + SUM (TAKE k (MAP type_memory_size tvs)) - b` by decide_tac >>
+      simp[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
@@ -656,22 +665,30 @@ QED
 (* The element of a tuple an immutable's code pointer holds: the pointer
    plus the element's offset. *)
 Theorem immutable_holds_tuple_elem[local]:
-  !cenv cx tys tvs tv w es vs j tv'.
-    immutable_holds cenv cx (TupleT tys) tv w es /\
+  !cenv cx tys tvs tv w es s vs j tv'.
+    immutable_holds cenv cx (TupleT tys) tv w es s /\
     read_result cx tv es = (INL (ArrayV (TupleV vs)), es) /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     evaluate_type (get_tenv cx) (EL j tys) = SOME (EL j tvs) /\
     j < LENGTH tvs /\ read_result cx tv' es = (INL (EL j vs), es) ==>
     immutable_holds cenv cx (EL j tys) tv'
-      (w + n2w (SUM (TAKE j (MAP type_memory_size tvs)))) es
+      (w + n2w (SUM (TAKE j (MAP type_memory_size tvs)))) es s
 Proof
-  rw[immutable_holds_def] >> gvs[value_has_type_def] >>
+  rpt strip_tac >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    (fs[immutable_holds_def] >> gvs[]) >>
+  gvs[value_has_type_def] >>
   `LENGTH vs = LENGTH tvs /\ value_has_type (EL j tvs) (EL j vs)` by
     metis_tac[values_have_types_el] >>
-  qexistsl [`name`, `off`, `itv`, `iv`,
-            `k + SUM (TAKE j (MAP type_memory_size tvs))`] >>
-  simp[wordsTheory.word_add_n2w] >>
-  irule sub_layout_tuple_elem >> simp[]
+  `sub_layout (TupleTV tvs) (ArrayV (TupleV vs))
+     (SUM (TAKE j (MAP type_memory_size tvs))) (EL j tvs) (EL j vs)` by
+    (qspecl_then [`TupleTV tvs`, `ArrayV (TupleV vs)`, `0`, `tvs`, `vs`, `j`]
+       mp_tac sub_layout_tuple_elem >>
+     simp[sub_layout_def]) >>
+  irule immutable_holds_sub >>
+  qexistsl [`EL j tvs`, `EL j vs`, `TupleTV tvs`, `ArrayV (TupleV vs)`,
+            `TupleT tys`, `tv`] >>
+  simp[]
 QED
 
 (* ===== A tuple element's slots in storage ===== *)

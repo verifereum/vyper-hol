@@ -18,9 +18,9 @@ Current integration boundary:
 
 - S2 (`lower_vyper_runtime_unit_source_unit_ok`) is proved for any
   contract `check_contract` accepts, under `raw_shape_free_program tops`.
-  `raw_shape_free_program` excludes `msg.gas`
-  as a value and every `raw_call` from runtime bodies. The unit shape
-  rejects some of their lowerings (GAS as an ordinary operand, DELEGATECALL,
+  `raw_shape_free_program` excludes creation and every `raw_call` from
+  runtime bodies. Ordinary `msg.gas` values satisfy the shape. The unit shape
+  rejects some raw-call lowerings (DELEGATECALL,
   DALLOCA for `msg.data`); a plain CALL/STATICCALL `raw_call` passes the
   shape, but the body-shape proof has no case for it yet, so the exclusion
   is wider than the shape needs. The public `vyper_call_correct` theorem still

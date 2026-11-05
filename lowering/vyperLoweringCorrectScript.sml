@@ -30,6 +30,8 @@
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
  *     has no PARAM, no function has its FMP convention set
+ *   lower_vyper_runtime_unit_fn_ptr_ok -- the lowered functions and their
+ *     reachable parts are pointer-confined (fn_ptr_ok)
  *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
  *     every use is written on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
@@ -43,6 +45,7 @@
 Theory vyperLoweringCorrect
 Ancestors
   vyperCompiler
+  ptrOkCheck
   selectorDispatch
   moduleLoweringProps
   stmtLoweringProps
@@ -60,7 +63,7 @@ Ancestors
   unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
-  supportedNames
+  supportedNames ptrSafeRun
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -127,6 +130,7 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
+    ~tx.is_static /\
     vs.vs_prev_hashes = tx.block_hashes
 End
 
@@ -259,6 +263,8 @@ Theorem external_return_prim_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
     return_bytes_prim_value >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
@@ -326,6 +332,8 @@ Theorem external_return_none_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -360,6 +368,8 @@ Theorem external_fallthrough_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`] mp_tac
     compile_guarded_body_stop_unlock_frag >>
@@ -516,6 +526,8 @@ Theorem external_return_static_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -767,13 +779,15 @@ Theorem external_return_abi_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   drule_all return_abi_value_package >>
   disch_then (qspec_then
     `needs_external_call_wrap ret /\
      is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
   drule compile_external_return_abi_unlock_frag >>
   disch_then irule >>
-  asm_rewrite_tac[] >>
+  asm_rewrite_tac[] >> conj_tac >- (simp[] >> metis_tac[]) >>
   qexistsl_tac [`av`, `type_env tops`, `tv'`,
     `if needs_external_call_wrap ret /\
         is_dynamic (vyper_to_abi_type (type_env tops) ret)
@@ -1034,6 +1048,24 @@ Definition external_call_dead_def:
                           else {});
        d_imm := K {}; d_ret := K {} |>
 End
+
+(* The lowered unit's functions and their reachable parts are
+   pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
+   the return buffer, if any, and the arguments passed in memory:
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
+Theorem lower_vyper_runtime_unit_fn_ptr_ok:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
+        EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> simp[lowering_context_ok_def] >>
+  strip_tac >> drule ptr_ok_check_sound >> strip_tac >>
+  qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
+  fs[listTheory.EVERY_MEM]
+QED
 
 (* ===== Superseded admission provenance ===== *)
 (* TASK051 full-token consumer audit found no source consumer of

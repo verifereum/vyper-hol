@@ -52,7 +52,7 @@ Their exact premises are in the linked owners and
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
-| S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** -> `raw_unit_memory_ok` | 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** + no `DALLOCA` -> `raw_unit_memory_ok` | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + raw shape -> `unit_shape_ok` | 3 |
@@ -64,7 +64,7 @@ caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
 **Off the runtime call path:** `venomToAsmProps.gen_fn_simulation` is separately
-ADMITTED (4.2); meaningful `e2eCorrectness.e2e_deploy_correctness` is separately
+ADMITTED (4.2); meaningful `e2eDeployCorrectness.e2e_deploy_correctness` is separately
 ADMITTED (6 item 7), not the old proved `T` placeholder. Current top/generic
 logical closures contain neither, nor any retired API.
 
@@ -634,7 +634,7 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    `raw_create` are excluded, not future missing cases of S1. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
 7. **H6-deploy / owner Milestone 6 item7:** prove actual separately ADMITTED
-   `e2eCorrectness.e2e_deploy_correctness` using
+   `e2eDeployCorrectness.e2e_deploy_correctness` using
    [e2eDeployDefs](../lowering/e2eDeployDefsScript.sml): `constructor_args_encode`,
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,

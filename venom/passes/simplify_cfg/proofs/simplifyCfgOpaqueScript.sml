@@ -128,6 +128,51 @@ Proof
   metis_tac[canon_jnz_inst_var_subset]
 QED
 
+Theorem fix_phi_inst_retpc_legal:
+  (!x. B x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x) ==>
+  (!x. B x /\ MEM (Var x) (fix_phi_inst ps i).inst_operands ==>
+    retpc_use_ok (fix_phi_inst ps i) x)
+Proof
+  mp_tac (Q.INST [`A` |-> `\x. F`]
+    (SPEC_ALL (BETA_RULE fix_phi_inst_opaque_legal))) >> simp[]
+QED
+
+Theorem subst_label_inst_retpc_legal:
+  (!x. B x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x) ==>
+  (!x. B x /\ MEM (Var x) (subst_label_inst a b i).inst_operands ==>
+    retpc_use_ok (subst_label_inst a b i) x)
+Proof
+  mp_tac (Q.INST [`A` |-> `\x. F`]
+    (SPEC_ALL (BETA_RULE subst_label_inst_opaque_legal))) >> simp[]
+QED
+
+Theorem update_phi_bypass_retpc_legal:
+  (!x. B x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x) ==>
+  (!x. B x /\ MEM (Var x) (update_phi_bypass a b i).inst_operands ==>
+    retpc_use_ok (update_phi_bypass a b i) x)
+Proof
+  mp_tac (Q.INST [`A` |-> `\x. F`]
+    (SPEC_ALL (BETA_RULE update_phi_bypass_opaque_legal))) >> simp[]
+QED
+
+Theorem canon_jnz_inst_retpc_legal:
+  (!x. B x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x) ==>
+  (!x. B x /\ MEM (Var x) (canon_jnz_inst i).inst_operands ==>
+    retpc_use_ok (canon_jnz_inst i) x)
+Proof
+  mp_tac (Q.INST [`A` |-> `\x. F`]
+    (SPEC_ALL (BETA_RULE canon_jnz_inst_opaque_legal))) >> simp[]
+QED
+
+Theorem subst_block_labels_inst_retpc_legal:
+  (!x. B x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x) ==>
+  (!x. B x /\ MEM (Var x) (subst_block_labels_inst lm i).inst_operands ==>
+    retpc_use_ok (subst_block_labels_inst lm i) x)
+Proof
+  mp_tac (Q.INST [`A` |-> `\x. F`]
+    (SPEC_ALL (BETA_RULE subst_block_labels_inst_opaque_legal))) >> simp[]
+QED
+
 Theorem simplify_cfg_seed_source:
   origin <> NOP /\ origin <> ASSIGN /\ origin <> JMP ==>
   !i v. MEM i (fn_insts (FST (simplify_cfg_fn_with_labels f))) /\
@@ -210,17 +255,21 @@ QED
 Theorem simplify_cfg_opaque_legal:
   opaque_use_ok f ==>
   EVERY (\i.
-    (!x. gas_var f x /\ MEM (Var x) i.inst_operands ==> gas_use_ok i x) /\
     (!x. retpc_var f x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x))
     (fn_insts (FST (simplify_cfg_fn_with_labels f)))
 Proof
   strip_tac >> irule simplify_cfg_fn_with_labels_every >>
   BETA_TAC >> rpt conj_tac
-  >- (gen_tac >> disch_tac >> irule (BETA_RULE canon_jnz_inst_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE subst_label_inst_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE update_phi_bypass_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE fix_phi_inst_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE subst_block_labels_inst_opaque_legal) >> simp[]) >>
+  >- (rpt gen_tac >> disch_tac >>
+      ho_match_mp_tac canon_jnz_inst_retpc_legal >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      ho_match_mp_tac subst_label_inst_retpc_legal >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      ho_match_mp_tac update_phi_bypass_retpc_legal >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      ho_match_mp_tac fix_phi_inst_retpc_legal >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      ho_match_mp_tac subst_block_labels_inst_retpc_legal >> simp[]) >>
   gvs[EVERY_MEM, opaque_use_ok_def]
 QED
 

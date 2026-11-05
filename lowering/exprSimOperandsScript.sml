@@ -16,8 +16,8 @@
  *
  * A first operand in a live local's region (expr_val_at's other case)
  * is covered by expr_post_operand_local_kept.  It assumes the value lies
- * outside a DynArray local's mutable length word; locals_kept preserves
- * the remaining bytes through the second fragment.
+ * apart from the local's dynamic array length words, which a pop writes;
+ * locals_kept preserves the remaining bytes through the second fragment.
  *
  * TOP-LEVEL:
  *   expr_val_in_alloca      — a memory value sits in one of the
@@ -40,8 +40,11 @@
 
 Theory exprSimOperands
 Ancestors
+  exprBopSimProps
+  exprSimProps
+  loweringPosts
   finite_map
-  exprSim exprSimOps localPtrsProps compileEnv exprLoweringProps
+   exprSimOps localPtrsProps compileEnv exprLoweringProps
   valueEncodingProofs venomState venomInst
 
 (* ===== Values in an expression's own allocations ===== *)
@@ -243,16 +246,17 @@ Proof
   simp[expr_val_in_alloca_at]
 QED
 
-(* Local-region preservation for a non-dynamic-array value, assuming its
-   footprint excludes any mutable length word of the enclosing local. *)
+(* Local-region preservation for a value whose footprint is apart from the
+   enclosing local's dynamic array length words. *)
 Theorem expr_post_operand_local_kept:
   expr_val_rel cx ty v op s /\
-  ~is_word_type ty /\ ~dynarray_type ty /\
+  ~is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
   eval_operand op s = SOME w /\ eval_operand op s' = SOME w /\
   local_region cenv es.scopes s n b sz /\
   b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
-  (dynarray_local cenv n ==> b + 32 <= w2n w) /\
+  (!k. dynarray_len_at cenv n k ==>
+       w2n w + val_footprint tv v <= b + k \/ b + k + 32 <= w2n w) /\
   expr_post ctx func cenv cx e es sa sb s es' v' op' s' ==>
   expr_val_rel cx ty v op s'
 Proof

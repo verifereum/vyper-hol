@@ -1,10 +1,11 @@
 (* Compiler head boundaries for mixed tuple destinations. *)
 Theory tupleTargetStoreRun
 Ancestors
+  loweringPosts stmtSimDefs stmtSimProps
   tupleAssignParts
   tupleTargetStoreProps tupleLocalStoreRun stmtSimAssignStorage
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
-  storageStoreFrame stmtSim stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
+  storageStoreFrame  stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
   emitHelper emitHelperProps compileEnv list finite_map
   tupleMemoryFrame tupleMemoryLayout valueEncoding vyperTyping stmtLoweringMono
@@ -523,6 +524,7 @@ Proof
   `value_has_type tv v /\ val_wf tv v` by
     (qpat_x_assum `ih :- _` kall_tac >>
      fs[value_has_type_def, val_wf_def]) >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all tuple_target_list_cons_success >> strip_tac >>
   drule_all tuple_target_aligned_compiler >> strip_tac >>
   drule tuple_compiler_target_base >>

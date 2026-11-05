@@ -38,13 +38,19 @@
  *)
 Theory exprSimECArith
 Ancestors
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   exprOperandVar exprSafeOperand exprSafeOperandBuiltins
   fragExec exprSimHash exprSimWordBuiltins
   exprLowering exprSimHyps exprSimPrecompiles exprSimOperands
+  exprSimAttributeFields
   exprSimLiteralBuffer
   exprSimCalldataSlice entryDecodeStaticProps
   builtinMisc venomInst exprLoweringProps venomExecSemantics
-  venomState vyperTypeSystem vyperContext valueEncoding exprSim
+  venomState vyperTypeSystem vyperContext valueEncoding
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
   vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list
@@ -392,6 +398,7 @@ Theorem ec_point_operand_kept[local]:
   expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+  expr_sim_inv cenv cx env es /\
   (!w. eval_operand x t = SOME w ==> eval_operand x u = SOME w) /\
   local_ptrs_reserved cenv s1 /\ MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
   s1.cs_next_id <= s2.cs_next_id ==>
@@ -405,7 +412,7 @@ Proof
   `expr_val_at cenv cx (expr_type e1) sa s1 es1 v1 x t` by
     gvs[expr_post_def] >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_val_at_def, evaluate_type_def, is_word_type_def,
+  simp[expr_val_at_def, local_val_at_def, evaluate_type_def, is_word_type_def,
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   strip_tac
   >- (`expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t` by
@@ -414,28 +421,31 @@ Proof
          qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >> first_assum ACCEPT_TAC) >>
       drule_all expr_post_operand_kept_stable >> strip_tac >>
       drule expr_val_in_alloca_at >> strip_tac >>
-      gvs[expr_val_at_def, evaluate_type_def, is_word_type_def,
+      gvs[expr_val_at_def, local_val_at_def, evaluate_type_def, is_word_type_def,
           type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
       metis_tac[]) >>
   conj_tac
   >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
     expr_post_operand_local_kept >>
-  simp[is_word_type_def, dynarray_type_def, evaluate_type_def,
+  simp[is_word_type_def, evaluate_type_def,
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   disch_then irule >>
-  simp[is_word_type_def, dynarray_type_def, evaluate_type_def,
+  simp[is_word_type_def, evaluate_type_def,
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   conj_tac >- gvs[expr_post_def] >>
   qexistsl_tac [`b`, `n`, `sz`] >> simp[] >>
-  gvs[dynarray_type_def]) >>
+  rpt strip_tac >>
+  qspecl_then [`cenv`, `cx`, `env`, `es`, `n`, `w2n w - b`,
+               `ArrayTV (BaseTV (UintT 256)) (Fixed 2)`, `k`] mp_tac
+    local_path_at_dynarray_apart >>
+  simp[dynarray_free_fixed, dynarray_free_base, type_memory_size_def]) >>
   `local_region cenv es'.scopes u n b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`t`, `s1`, `es1.scopes`] >> simp[] >>
      gvs[expr_post_def]) >>
-  simp[expr_val_at_def, evaluate_type_def, is_word_type_def,
+  simp[expr_val_at_def, local_val_at_def, evaluate_type_def, is_word_type_def,
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
-  disj2_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[] >>
-  gvs[dynarray_type_def]
+  disj2_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
 Theorem ec_precompile_words[local]:
@@ -748,7 +758,7 @@ Proof
   conj_tac
   >- (disj1_tac >> qexistsl_tac [`aid`, `w2n w`, `64`] >>
       simp[] >> gvs[compileEnvTheory.regions_disjoint_def]) >>
-  gvs[exprSimWordArgsTheory.wb_frame_def] >> metis_tac[]
+  gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]
 QED
 
 Theorem ec_point_fresh_scratch_disjoint[local]:
@@ -765,7 +775,7 @@ Proof
   qexistsl_tac [`cenv`, `cx`, `es`, `pop`, `s`, `lo`, `sa`, `v`] >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]) >>
   metis_tac[]
 QED
@@ -1616,7 +1626,7 @@ Proof
       regions_disjoint (w2n wo) 64 b sz` by
     (rpt strip_tac >>
      qpat_x_assum `!name b sz. local_region cenv es.scopes st name b sz ==> _` irule >>
-     qexists `name` >> irule exprSimOpsTheory.local_region_frame >>
+     qexists `name` >> irule exprSimPropsTheory.local_region_frame >>
      simp[] >> conj_tac
      >- (qexists `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl [`sm`,`es.scopes`,`t`] >> simp[]) >>
@@ -2064,6 +2074,7 @@ Theorem ec_point_operands_then[local]:
   local_ptrs_reserved cenv s1 /\
   cs_extends sa s1 /\ cs_extends s1 sm /\ cs_extends sm sb /\
   expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+  expr_sim_inv cenv cx env es /\
   (!z. p = Var z ==> not_fresh_at s1 z) /\ (!l. p <> Label l) /\
   MAP FDOM es1.scopes = MAP FDOM es2.scopes /\ s1.cs_next_id <= sm.cs_next_id /\
   (!r. expr_exit r1 r ==> R r) /\
@@ -2201,7 +2212,9 @@ Proof
   `!l. p <> Label l` by gvs[safe_operand_def] >>
   `MAP FDOM es1.scopes = MAP FDOM es2.scopes` by
     metis_tac[exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   irule ec_point_operands_then >> simp[] >>
+  conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`a`, `b`, `es1`, `es2`, `p`, `q`, `INL point_value`, `r2`,
                 `s1`, `sm`, `expr_type a`, `expr_type b`] >> simp[] >>
   rpt conj_tac

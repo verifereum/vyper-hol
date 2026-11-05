@@ -117,7 +117,8 @@ Theorem effects_independent_commute_oracle:
     ~is_terminator inst1.inst_opcode /\
     ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\
-    ~is_alloca_op inst2.inst_opcode ==>
+    ~is_alloca_op inst2.inst_opcode /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     let r1 = (case step_inst fuel ctx inst1 s of
                 OK s1 => step_inst fuel ctx inst2 s1
               | other => other) in

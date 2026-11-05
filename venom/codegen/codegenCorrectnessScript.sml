@@ -10,9 +10,10 @@
  *   initial_ctx_rel, venom_frame_rel — exact initial/terminal frame interfaces
  *   TASK056: obsolete positioned codegen admission retired (inactive archive).
  *
- * STATUS: Whole-context codegen correctness is currently open/cheated and
- * depends on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
- * See docs/compiler-proof-roadmap.md.
+ * codegen_correct composes codegenEntrySim$codegen_entry_asm_sim
+ * (Venom to assembly) with codegenAsmRunCall$codegen_asm_run_call
+ * (assembly to the EVM frame).  The entry relations are defined in
+ * codegenEntryRel and re-exported here under their own names.
  *
  * MEMTOP Exclusion
  * ===============
@@ -60,6 +61,7 @@
 
 Theory codegenCorrectness
 Ancestors
+  codegenEntryRel codegenEntrySim codegenAsmRunCall
   asmToBytecodeProps venomToAsmProps codegen vfmExecution
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
@@ -70,95 +72,19 @@ Libs
 
 (* ===== Context Correspondence Helpers ===== *)
 
-(* Call context correspondence: Venom call context matches EVM message params *)
-Definition msg_ctx_rel_def:
-  msg_ctx_rel cc mp ⇔
-    cc.cc_caller = mp.caller ∧
-    cc.cc_address = mp.callee ∧
-    cc.cc_callvalue = n2w mp.value ∧
-    cc.cc_calldata = buffer_to_list mp.data ∧
-    cc.cc_static = mp.static
-End
+Theorem msg_ctx_rel_def = codegenEntryRelTheory.msg_ctx_rel_def
 
-(* Tx context correspondence: Venom tx context matches EVM tx parameters *)
-Definition tx_ctx_rel_def:
-  tx_ctx_rel tc tp ⇔
-    tc.tc_origin = tp.origin ∧
-    tc.tc_gasprice = n2w tp.gasPrice ∧
-    tc.tc_chainid = n2w tp.chainId ∧
-    tc.tc_blobhashes = tp.blobHashes
-End
+Theorem tx_ctx_rel_def = codegenEntryRelTheory.tx_ctx_rel_def
 
-(* Block context correspondence: Venom block context matches EVM block parameters *)
-Definition block_ctx_rel_def:
-  block_ctx_rel bc tp ⇔
-    bc.bc_coinbase = tp.blockCoinBase ∧
-    bc.bc_timestamp = n2w tp.blockTimeStamp ∧
-    bc.bc_number = n2w tp.blockNumber ∧
-    bc.bc_prevrandao = tp.prevRandao ∧
-    bc.bc_gaslimit = n2w tp.blockGasLimit ∧
-    bc.bc_basefee = n2w tp.baseFeePerGas ∧
-    bc.bc_blobbasefee = n2w tp.baseFeePerBlobGas
-End
+Theorem block_ctx_rel_def = codegenEntryRelTheory.block_ctx_rel_def
 
-(* Blockhash correspondence: Venom blockhash lookup matches EVM prevHashes.
-   Requires blockNumber < dimword(:256) for well-formed n2w conversion. *)
-Definition blockhash_rel_def:
-  blockhash_rel vs tp ⇔
-    vs.vs_prev_hashes = tp.prevHashes ∧
-    tp.blockNumber < dimword (:256) ∧
-    ∀n. vs.vs_block_ctx.bc_blockhash n =
-      let bn = w2n vs.vs_block_ctx.bc_number in
-      let idx = bn - n - 1 in
-      if n < bn ∧ bn − 256 ≤ n ∧
-         idx < LENGTH vs.vs_prev_hashes
-      then EL idx vs.vs_prev_hashes
-      else 0w
-End
+Theorem blockhash_rel_def = codegenEntryRelTheory.blockhash_rel_def
 
-(* Stack parameter correspondence: function PARAM variables match EVM stack.
-   First param deepest, last param TOS. *)
-Definition stack_params_rel_def:
-  stack_params_rel fn vs stack ⇔
-    let params = get_params (HD fn.fn_blocks).bb_instructions in
-    LENGTH params = LENGTH stack ∧
-    ∀i. i < LENGTH params ⇒
-      FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
-        SOME (EL i (REVERSE stack))
-End
+Theorem stack_params_rel_def = codegenEntryRelTheory.stack_params_rel_def
 
 (* ===== Initial State Correspondence ===== *)
 
-(* At a selected function-region entry, Venom and EVM states agree on
-   shared fields.  [off] is an assembly-instruction index; the EVM PC is
-   the corresponding byte offset in [prog]. *)
-Definition initial_state_rel_def:
-  initial_state_rel cp prog off fn vs es ⇔
-    (case es.contexts of
-       (ctxt, rb) :: _ =>
-         stack_params_rel fn vs ctxt.stack ∧
-         (* Live accounts and transient storage *)
-         es.rollback.accounts = vs.vs_accounts ∧
-         es.rollback.tStorage = vs.vs_transient ∧
-         es.rollback.toDelete = vs.vs_pending_deletions ∧
-         ctxt.returnData = vs.vs_returndata ∧
-         ctxt.logs = vs.vs_logs ∧
-         (* Equality is required only outside every context spill region. *)
-         context_memory_rel cp vs.vs_memory (buffer_to_list ctxt.memory) ∧
-         (* Translate the selected instruction index to an EVM byte PC. *)
-         ctxt.pc = asm_pc_to_offset prog off ∧
-         ctxt.jumpDest = NONE ∧
-         (* Venom state: not halted, at instruction 0 *)
-         vs.vs_halted = F ∧
-         vs.vs_inst_idx = 0 ∧
-         msg_ctx_rel vs.vs_call_ctx ctxt.msgParams ∧
-         tx_ctx_rel vs.vs_tx_ctx es.txParams ∧
-         block_ctx_rel vs.vs_block_ctx es.txParams ∧
-         blockhash_rel vs es.txParams ∧
-         vs.vs_code = ctxt.msgParams.code ∧
-         (∀a. ctxt.msgParams.outputTo ≠ Code a)
-     | [] => F)
-End
+Theorem initial_state_rel_def = codegenEntryRelTheory.initial_state_rel_def
 
 Theorem initial_state_rel_entry_clauses[local]:
   ∀cp prog off fn vs es ctxt rb rest.
@@ -260,7 +186,7 @@ Proof
                    as_outcomes := vs.vs_outcomes;
                    as_requests := vs.vs_requests;
                    as_pending_deletions := vs.vs_pending_deletions;
-                   as_gas_readings := [] |>` >>
+                   as_gas_readings := vs.vs_gas_readings |>` >>
   gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
       block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
       context_venom_asm_rel_def, fn_init_ps_def,
@@ -315,33 +241,9 @@ QED
 
 (* ===== Whole-Context Frame Interface ===== *)
 
-(* Moved from e2eDefs without changing the permanent FMP/token contract. *)
-Definition initial_codegen_state_rel_def:
-  initial_codegen_state_rel cp vs <=>
-    vs.vs_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_call_entry_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_return_pc_token = 0w
-End
+Theorem initial_codegen_state_rel_def = codegenEntryRelTheory.initial_codegen_state_rel_def
 
-(* First function, fresh non-static frame, live state, exact deployed code,
-   concrete labels, and the outcomes actually traced from our frame's run. *)
-Definition initial_ctx_rel_def:
-  initial_ctx_rel cp prog ctx vs es <=>
-    ?fn fns ctxt rb rest.
-      ctx.ctx_functions = fn :: fns /\ es.contexts = (ctxt, rb) :: rest /\
-      initial_state_rel cp prog 0 fn vs es /\
-      initial_codegen_state_rel cp vs /\
-      wf_state es /\ (?d. es.msdomain = Collect d) /\
-      ~ctxt.msgParams.static /\
-      ctxt.msgParams.code = assemble prog ++ vs.vs_data_section /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
-      LENGTH ctxt.msgParams.code <= 24576 /\
-      vs.vs_vars = FEMPTY /\
-      (!l. FLOOKUP vs.vs_labels l =
-           OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
-      vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = []
-End
+Theorem initial_ctx_rel_def = codegenEntryRelTheory.initial_ctx_rel_def
 
 (* Terminal oracle leftovers are not observable. Only success compares the
    executed requests/effects/logs; each abort has its precise frame clause. *)
@@ -363,14 +265,15 @@ Definition venom_frame_rel_def:
     | IntRet _ _ => F
 End
 
-(* PLANNED ADMISSION S7; proof owner Milestones 2.1 and 4.
+(* S7, proved from its two halves: the Venom-to-assembly simulation
+   (codegenEntrySim) and the assembly-to-EVM frame run (codegenAsmRunCall).
    Compose frame-aware Venom/assembly simulation with the observed EVM run.
-   Assembly starts with gas_readings es, NOT an equality with Venom GAS.
+   Venom starts with the frame's GAS readings (gas_readings es); generated
+   assembly pops the same list in the same order.
    Actual reachability supplies memory obligations and shape excludes opaque
    GAS misuse/forbidden opcodes/label collisions. Resource starvation is an
    explicit disjunct; a starved computed precompile is an oracle outcome. No sufficient-gas existential,
-   arbitrary label maps, or positional entry parameter is in this API.
-   The current non-GAS EVM lemmas do not yet prove this trace-aware statement. *)
+   arbitrary label maps, or positional entry parameter is in this API. *)
 Theorem codegen_correct:
   !fuel rpolicy unit cp prog Inv vs es.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -384,7 +287,18 @@ Theorem codegen_correct:
             (frame_resource_starved es r es' \/
              venom_frame_rel es r es' (run_context fuel unit.cu_context vs))
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all codegen_asm_run_call >> strip_tac >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  Cases_on `frame_resource_starved es r es'` >> gvs[] >>
+  drule_all codegen_entry_asm_sim >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  simp[venom_frame_rel_def] >>
+  Cases_on `run_context fuel unit.cu_context vs` >>
+  gvs[run_context_never_ok]
+  >- (res_tac >> gvs[venom_asm_terminal_rel_def]) >>
+  rename1 `Abort a _` >> Cases_on `a` >>
+  res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
 QED
 
 (* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;

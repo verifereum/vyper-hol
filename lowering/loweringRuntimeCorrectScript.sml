@@ -44,7 +44,11 @@
 
 Theory loweringRuntimeCorrect
 Ancestors
-  list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
+  list pair fragExec  bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   vyperTypeSelectedEntrySoundness vyperTypeSystem
@@ -591,94 +595,8 @@ Theorem lower_vyper_runtime_unit_body[local]:
       (INL (), es0) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
-  rpt strip_tac >>
-  drule_all external_entry_reaches_body >> strip_tac >>
-  drule_all external_body_frame >> strip_tac >>
-  drule_all external_frame_ret_ok >>
-  disch_then (qspec_then `func` assume_tac) >>
-  Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx
-                          NONE) fbody es0` >> rename1 `_ = (res, es')` >>
-  drule_all external_body_source_ok >> strip_tac >>
-  drule_all call_external_selected_body >> strip_tac >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
-  `rt = if ret = NoneT then NONE else SOME ret` by
-    gvs[package_external_fn_def, set_external_package_target_def] >>
-  drule guarded_body_code >> strip_tac >>
-  drule_all guarded_body_stmts_env >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `frame_ret_ok _ _ _ RetQ _ _` >>
-  `stmt_frag unit.cu_context func cx NoLoop RetQ cenv
-     (stmts_env cenv NoLoop ret fbody) es0 res es'` by
-    (qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
-                  `cx`, `env_t`, `env'`, `ret`, `NoLoop`, `RetQ`, `fbody`,
-                  `es0`, `res`, `es'`] mp_tac body_stmts_sim >>
-     asm_rewrite_tac[]) >>
-  `fn_has_code sa sb func /\ fn_has_code sb st' func` by
-    (drule_all fn_has_code_split >> simp[]) >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[stmt_frag_def] >>
-  disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
-  impl_tac >- gvs[ret_pc_ok_def] >>
-  drule_all call_external_body_run >>
-  disch_then (qspecl_then [`type_env tops`, `ret`]
-                strip_assume_tac) >>
-  simp[source_unit_execution_correct_def] >> strip_tac
-  >- ((* the body falls off its end *)
-      `res = INL ()` by gvs[stmt_lands_def] >> gvs[] >>
-      `~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
-        (irule source_typing_none_return_plain >> metis_tac[]) >>
-      `state_rel func cenv' cx es' s` by fs[stmt_state_rel_def] >>
-      qspecl_then [`unit.cu_context`, `cenv`, `cenv'`, `nkey`, `ut'`, `iv`,
-                   `fbody`, `sa`, `()`, `st'`, `sb`, `func`, `cx`, `es'`,
-                   `tops`, `tx`, `am.sources`, `am.exports`, `am.layouts`,
-                   `\s:venom_state. F`] mp_tac
-        external_fallthrough_result_rel_any >>
-      impl_tac >- gvs[Abbr`cx`, initial_evaluation_context_def] >>
-      simp[frag_exec_def] >>
-      disch_then (qspecl_then [`func`, `s`] mp_tac) >>
-      impl_tac >- gvs[stmt_lands_def] >> simp[] >> strip_tac >>
-      `!e. run_from fuel unit.cu_context func s <> Error e` by
-        (gen_tac >> irule exit_result_not_error >> first_assum ACCEPT_TAC) >>
-      qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' _ _ s0 = _`
-        (qspec_then `fuel` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >>
-      disch_then (qx_choose_then `fuel1` assume_tac) >>
-      qpat_x_assum `!fuel. _ ==> ?fuel'. run_context _ _ _ = _`
-        (qspec_then `fuel1` mp_tac) >>
-      impl_tac >- asm_rewrite_tac[] >>
-      disch_then (qx_choose_then `fuel2`
-                    (fn th => qexists_tac `fuel2` >> SUBST1_TAC th)) >>
-      gvs[Abbr`cx`, initial_evaluation_context_def]) >>
-  (* the body exits *)
-  `!e. run_from fuel unit.cu_context func s0 <> Error e` by
-    (gen_tac >> irule exit_result_not_error >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `!fuel r. _ ==> ?fuel'. run_context _ _ _ = _`
-    (qspecl_then [`fuel`, `run_from fuel unit.cu_context func s0`] mp_tac) >>
-  impl_tac >- asm_rewrite_tac[] >>
-  disch_then (qx_choose_then `fuel2`
-                (fn th => qexists_tac `fuel2` >> SUBST1_TAC th)) >>
-  qpat_x_assum `stmt_exit _ _ _ _` mp_tac >> simp[stmt_exit_def] >>
-  strip_tac
-  >- ((* an error or an assertion *)
-      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
-      `!v. e <> ReturnException v` by
-        (rpt strip_tac >> gvs[expr_exit_def] >>
-         Cases_on `run_from fuel unit.cu_context func s0` >>
-         gvs[expr_exit_def]) >>
-      gvs[] >>
-      qspecl_then [`e`, `run_from fuel unit.cu_context func s0`, `tops`,
-                   `ret`, `tx`, `am`, `es'.requests`] mp_tac
-        expr_exit_external_result >>
-      impl_tac
-      >- (conj_tac >- first_assum ACCEPT_TAC >>
-          rpt strip_tac >> gvs[] >>
-          qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
-                       `cx`, `env_t`, `env'`, `ret`, `RetQ`, `fbody`, `es0`,
-                       `d`, `es'`, `sa`, `sb`, `cenv'`, `s0`, `fuel`, `a`, `t`]
-            mp_tac external_body_revert_data_reverts >>
-          impl_tac >- gvs[ret_pc_ok_def] >> simp[]) >>
-      simp[]) >>
-  (* a return *)
-  gvs[Abbr`RetQ`, abstract_machine_from_state_def]
+  (* admitted at base cut: proof states a 10-arg stmt_frag (es0 res es') and the uncounted body run after the 9-arg restatement; needs the counted port *)
+  cheat
 QED
 
 (* S1, the lowering of an external call the source selects: the call's

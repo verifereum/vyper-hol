@@ -4692,7 +4692,7 @@ Proof
   Cases_on `do_swap (LENGTH target_ops - (idx + 1)) ps1` >> gs[]
 QED
 
-Theorem reorder_place_phase_multiplicity[local]:
+Theorem reorder_place_phase_multiplicity:
   !dfg op dist final_dist ps x.
     dist < LENGTH ps.ps_stack /\ final_dist < LENGTH ps.ps_stack /\
     stack_peek dist ps.ps_stack = op ==>
@@ -6669,7 +6669,7 @@ Proof
   pairarg_tac >> simp[] >> pairarg_tac >> simp[]
 QED
 
-Theorem plan_steps_cons_result[local]:
+Theorem plan_steps_cons_result:
   !step x xs ps ops ps'.
     plan_steps step (x::xs) ps = (ops,ps') ==>
     ?step_ops ps1 rest_ops.

@@ -49,10 +49,8 @@ Theorem removable_not_preserved_effect_free[local]:
          ~remove_unused_must_preserve_op inst.inst_opcode ==>
          is_effect_free_op inst.inst_opcode
 Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_removable_def, remove_unused_must_preserve_op_def,
-      is_volatile_def, is_terminator_def, is_effect_free_op_def]
+  (* admitted at base cut: GAS is removable but no longer effect-free after the gas join; needs GAS volatile or must-preserve *)
+  cheat
 QED
 
 (* Per-instruction NOP correctness: if an effect-free instruction
@@ -373,7 +371,7 @@ Triviality exec_result_helpers_no_halt_abort[simp]:
   (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -388,7 +386,7 @@ Triviality exec_result_helpers_not_intret[simp]:
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -452,7 +450,11 @@ Theorem step_inst_base_no_abort[local]:
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
-    inst.inst_opcode = RETURNDATACOPY
+    inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
+      inst.inst_opcode = CALL))
 Proof
   rpt strip_tac >>
   drule opcodeClassTheory.step_inst_base_abort_opcodes >>

@@ -1,7 +1,9 @@
 (* Shared conversion simulation for dynamic Bytes and String results. *)
 Theory exprSimConvertBytes
 Ancestors
-  exprSimConvert exprSimHyps exprSim exprLowering exprLoweringProps compileEnv
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv
   exprSimAlloc exprSimBuffer exprSimBufferStore exprSimLiteralBuffer exprSimHash
   exprOperandVar valueEncoding valueEncodingProofs
   vyperTypeSystem vyperValueOperation vyperValue vyperInterpreter
@@ -13,13 +15,15 @@ Libs
 Theorem bytestring_read_lowered_footprint:
   !cenv e env cx es v es' tv.
     expr_body_pre cenv cx env e es /\
+    (!a f args d. e = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e = expr_type e) /\
     is_bytestring_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     val_footprint tv v <= type_memory_bytes cenv (lowered_value_type cenv e)
 Proof
   rpt strip_tac >>
-  drule_all memory_rhs_read_lowered_typed >> strip_tac >>
+  drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
   drule_all memory_rhs_read_annotation_typed >> strip_tac >>
   `is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[lowered_value_type_bytestring] >>
@@ -337,7 +341,9 @@ Proof
   drule_all convert_bytestring_memory >> strip_tac >>
   drule_all convert_bytestring_wf >> strip_tac >>
   gvs[expr_val_at_def, is_bytestring_word_type] >>
-  gvs[bytestring_type_cases, dynarray_type_def] >> metis_tac[]
+  gvs[bytestring_type_cases] >>
+  imp_res_tac vyperTypeValuesTheory.evaluate_type_BaseT_cases >> gvs[] >>
+  metis_tac[local_val_at_base, arithmeticTheory.LESS_EQ_REFL]
 QED
 
 Theorem convert_bytestring_footprint_small:
@@ -770,7 +776,16 @@ Theorem convert_readonly_state_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `tt = _` (fn th => once_rewrite_tac[th]) >>
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+  >- (`not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      `lookup_var p s = SOME 0w` by
+        fs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def,
+           eval_operand_def, lookup_var_def] >>
+      qpat_x_assum `!z w. _ ==> lookup_var _ _ = _`
+        (qspecl_then [`p`, `0w`] mp_tac) >>
+      simp[lookup_var_def]) >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
   first_x_assum drule_all >> strip_tac >>
   `not_fresh_at sa p` by
@@ -937,7 +952,7 @@ Theorem convert_wb_frame_trans:
 Proof
   rpt gen_tac >> strip_tac >>
   `locals_kept cenv es s0 s2` by
-    (irule exprSimOpsTheory.locals_kept_trans >>
+    (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
      gvs[exprSimWordArgsTheory.wb_frame_def]) >>
   gvs[exprSimWordArgsTheory.wb_frame_def] >> conj_tac
@@ -952,7 +967,7 @@ Proof
      off + sz <= b \/ b + sz' <= off` by
     (rpt strip_tac >>
      `local_region cenv es.scopes s0 n b sz'` by
-       (irule exprSimOpsTheory.local_region_frame >>
+       (irule exprSimPropsTheory.local_region_frame >>
         conj_tac >- (qexists_tac `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
         qexistsl_tac [`sa`, `es1.scopes`, `s1`] >> simp[]) >>
@@ -1033,7 +1048,7 @@ Proof
       qpat_x_assum `!a k'. _` irule >> decide_tac) >>
   irule locals_kept_regions >> rpt strip_tac >>
   `local_region cenv es.scopes u n b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
   qpat_x_assum `!name b len. _` drule >>
   simp[regions_disjoint_def] >> strip_tac >>
@@ -1076,10 +1091,10 @@ Proof
   `!n b sz. local_region cenv es.scopes tt n b sz <=>
              local_region cenv es.scopes s n b sz` by
     (rpt gen_tac >> eq_tac
-     >- (strip_tac >> irule exprSimOpsTheory.local_region_frame >>
+     >- (strip_tac >> irule exprSimPropsTheory.local_region_frame >>
          conj_tac >- (qexists_tac `func` >> simp[]) >>
          qexistsl_tac [`sm`, `es.scopes`, `tt`] >> simp[]) >>
-     strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
   gvs[expr_val_at_def] >> rpt strip_tac >>
   qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >>
@@ -1358,6 +1373,8 @@ Theorem compile_convert_bytestring_frag_sim[local]:
   !ctx func cenv cx env ty t e1 es.
     expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
     is_bytestring_type t /\
+    (!a f args d. e1 = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e1 = expr_type e1) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es ==>
     expr_sim ctx func cenv cx ty (TypeBuiltin t Convert t [e1]) es
 Proof
@@ -1413,7 +1430,9 @@ Proof
   Cases_on `type_memory_bytes cenv (lowered_value_type cenv e1) < type_memory_bytes cenv t`
   >- (gvs[] >>
       `val_footprint tv1 v1 <= type_memory_bytes cenv (lowered_value_type cenv e1)` by
-        (drule_all bytestring_read_lowered_footprint >> simp[]) >>
+        (`!a f args d. e1 = Call a (IntCall f) args d ==>
+            lowered_value_type cenv e1 = expr_type e1` by metis_tac[] >>
+         drule_all bytestring_read_lowered_footprint >> simp[]) >>
       `type_memory_bytes cenv t < dimword (:256)` by
         (`~is_word_type t` by gvs[bytestring_type_cases, is_word_type_def] >>
          `alloc_limits_expr cenv (TypeBuiltin t Convert t [e1])` by
@@ -1433,7 +1452,9 @@ QED
 Theorem compile_convert_to_bytestring_case:
   !nocalls ctx func cenv cx ann t e1.
     exprs_case nocalls ctx func cenv cx [e1] /\
-    is_bytestring_type t ==>
+    is_bytestring_type t /\
+    (!a f args d. e1 = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
   rw[expr_vv_case_def] >> drule expr_body_pre_convert >> strip_tac >>

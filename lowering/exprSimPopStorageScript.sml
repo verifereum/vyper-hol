@@ -1,5 +1,6 @@
 Theory exprSimPopStorage
 Ancestors
+  exprSimDefs exprSimProps loweringPosts
   exprSimPop exprSimLeaves accountsRelProps
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
@@ -9,13 +10,15 @@ Ancestors
   exprLoweringProps venomState vyperLookupStorage list
   emitHelperProps venomExecSemantics venomInst
 
-(* Evaluation at a known declared dynamic-array slot.  This boundary does
-   not assume that all top-level declarations are storage declarations. *)
+(* Evaluation at a known declared dynamic-array slot, outside a static frame.
+   This boundary does not assume that all top-level declarations are storage
+   declarations. *)
 Theorem eval_pop_storage:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT et (Dynamic n)), name) /\
   lookup_var_slot_from_layout cx tr src name = SOME slot /\
-  evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) ==>
+  evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
+  ~cx.txn.is_static ==>
   eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
     let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr)) in
     if len = 0 then
@@ -66,7 +69,7 @@ Theorem compile_expr_pop_storage:
     let loc = if tr then LocTransient else LocStorage in
     let result = compile_dynarray_pop (Lit slot) 1
       (elem_size_in_location cenv loc et)
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa in
+      cenv.ce_is_ctor cenv.ce_imm_alloca loc sa in
     (LocatedValue ann (mk_ptr (FST result) loc), SND result)
 Proof
   strip_tac >> Cases_on `tr` >>
@@ -220,6 +223,10 @@ Proof
      simp[] >> Cases_on `tr` >>
      simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv s1` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def] >> Cases_on `tr` >>
+     simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
   irule stmt_state_rel_allocas_frame >> simp[] >>
   qexistsl [`es`, `s`] >> simp[] >>
   Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
@@ -327,14 +334,14 @@ Theorem pop_storage_holds:
   storage_holds cx tr ann (PlaceR (StoragePlace tr elem tv)) elem es s
 Proof
   strip_tac >> drule_all decode_value_from_slots_in_range >> strip_tac >>
-  simp[exprSimTheory.storage_holds_def, read_storage_slot_eq, read_result_def,
+  simp[loweringPostsTheory.storage_holds_def, read_storage_slot_eq, read_result_def,
        read_place_def]
 QED
 
 Theorem dynarray_pop_storage_shape:
-  !slot tr esz sa r sb.
-    compile_dynarray_pop (Lit slot) 1 esz
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = (r,sb) ==>
+  !slot tr esz is_ctor imm sa r sb.
+    compile_dynarray_pop (Lit slot) 1 esz is_ctor imm
+      (if tr then LocTransient else LocStorage) sa = (r,sb) ==>
     ?x0 x1 x2 x3 x4 x5 x6.
       ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
       EVERY (\x. ~not_fresh_at sa x) [x0;x1;x2;x3;x4;x5;x6] /\
@@ -352,7 +359,10 @@ Theorem dynarray_pop_storage_shape:
          mk_inst (sa.cs_next_id + 7) MUL [Var x3; Lit (n2w esz)] [x5];
          mk_inst (sa.cs_next_id + 8) ADD [Var x4; Var x5] [x6]]
 Proof
-  simp[compile_dynarray_pop_def, emit_op_def, emit_void_def, fresh_id_def,
+  rpt gen_tac >> Cases_on `tr` >>
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def,
+       emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
   rpt strip_tac >> gvs[APPEND_ASSOC] >>
@@ -373,7 +383,7 @@ Proof
 QED
 
 Theorem storage_pop_step_store[local]:
-  IS_SOME (lookup_var x s) ==>
+  IS_SOME (lookup_var x s) /\ ~s.vs_call_ctx.cc_static ==>
   step_inst_base (mk_inst id (if tr then TSTORE else SSTORE) [Lit slot; Var x] []) s =
     OK (if tr then tstore slot (THE (lookup_var x s)) s
         else sstore slot (THE (lookup_var x s)) s)
@@ -422,7 +432,7 @@ Proof
 QED
 
 Theorem dynarray_pop_storage_run:
-  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\ ~s.vs_call_ctx.cc_static /\
   (if tr then tload slot s else sload slot s) <> 0w ==>
   ?u. run_inst_seq
     [mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [x0];
@@ -457,9 +467,9 @@ Theorem pop_storage_vv_post:
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
   Cases_on `tr` >>
-  simp[exprSimTheory.vv_post_def, exprSimTheory.vv_holds_def,
-       exprSimTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
-       exprSimTheory.locals_kept_def, expr_type_def]
+  simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+       loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
+       loweringPostsTheory.locals_kept_def, expr_type_def]
 QED
 
 Theorem pop_declared_array_agree:
@@ -589,7 +599,7 @@ Proof
   strip_tac >> drule_all stmt_state_rel_pop_header >> strip_tac >>
   simp[apply_writes_def] >>
   qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule exprSimTheory.stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   first_x_assum (drule_then mp_tac) >>
   Cases_on `tr` >> gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]
@@ -650,13 +660,14 @@ Theorem compile_pop_storage_normalized_sim:
   evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) ==>
   expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  rw[exprSimTheory.expr_vv_sim_def] >>
+  rw[exprSimDefsTheory.expr_vv_sim_def] >>
   reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule fragExecTheory.frag_exec_false_pre) >>
   `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
-  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+   ~cx.txn.is_static` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
   drule_all pop_storage_compiler_facts >> strip_tac >>
@@ -664,7 +675,7 @@ Proof
     type_slot_size tv` by (irule pop_storage_element_size >> metis_tac[]) >>
   drule_all compile_expr_pop_storage >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Lit (n2w slot)) 1 (type_slot_size tv)
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa` >>
+    cenv.ce_is_ctor cenv.ce_imm_alloca (if tr then LocTransient else LocStorage) sa` >>
   drule dynarray_pop_storage_shape >> strip_tac >> gvs[] >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,ArrayTV tv (Dynamic n))` by
     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
@@ -672,7 +683,7 @@ Proof
   drule_all eval_pop_storage >> strip_tac >> gvs[] >>
   qpat_x_assum `!ty sa' ann'. _` kall_tac >>
   qpat_x_assum `!es'' ann'. _` kall_tac >>
-  qpat_x_assum `compile_dynarray_pop _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_dynarray_pop _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `FLOOKUP cenv.ce_module_vars _ = _` kall_tac >>
   qpat_x_assum `cenv.ce_hashmap_info _ = _` kall_tac >>
   qpat_x_assum `cenv.ce_module_var_type _ = _` kall_tac >>
@@ -686,7 +697,7 @@ Proof
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by simp[] >>
   rpt strip_tac >> gvs[] >>
   Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w` >> gvs[]
-  >- (simp[exprSimTheory.expr_exit_def] >>
+  >- (simp[exprSimDefsTheory.expr_exit_def] >>
       irule dynarray_pop_storage_run_empty >> simp[]) >>
   suspend "positive"
 QED
@@ -694,6 +705,8 @@ QED
 Resume compile_pop_storage_normalized_sim[positive]:
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
    (if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
+  `~s0.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
   drule_all dynarray_pop_storage_run >>
   disch_then (qspecl_then [`sa.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   qexists_tac `u` >> simp[] >>
