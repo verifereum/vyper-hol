@@ -437,6 +437,46 @@ Resume place_store_dead_subregion_frame[dynamic]:
 QED
 Finalise place_store_dead_subregion_frame
 
+Theorem place_store_storage_dead_subregion_frame:
+  !cx tr mid name subs rootk root path delta leaf st st' j b.
+    declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+    storage_subregion root path delta leaf /\
+    0 < type_slot_size leaf /\
+    (!q. ~(w2n rootk + delta <= w2n q /\
+           w2n q < w2n rootk + delta + type_slot_size leaf) ==>
+         lookup_storage q st' = lookup_storage q st) /\
+    ~(w2n rootk + delta <= j /\
+      j < w2n rootk + delta + type_slot_size leaf) /\
+    storage_dead cx tr st j b ==>
+    storage_dead cx tr st' j b
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [storage_dead_def] >> strip_tac >>
+  `dead_bytes st' (w2n slot) tv j b` suffices_by
+    (rpt strip_tac >> simp_tac (srw_ss()) [storage_dead_def] >>
+     goal_assum (drule_at (Pat `dead_bytes _ _ _ _ _`)) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  Cases_on `(slot,tv) = (rootk,root)`
+  >- (gvs[] >>
+      (irule place_store_dead_subregion_frame >>
+       conj_tac >- decide_tac >>
+       goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+       qexists_tac `st` >> simp[] >> metis_tac[])) >>
+  `ranges_disjoint (w2n slot) (type_slot_size tv)
+       (w2n rootk) (type_slot_size root)` by
+    (first_x_assum irule >> conj_tac
+     >- (goal_assum (drule_at Any)) >> gvs[] >> metis_tac[]) >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `dead_bytes st' (w2n slot) tv j b = dead_bytes st (w2n slot) tv j b` by
+    (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+     first_x_assum irule >>
+     `i < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.w2n_n2w] >>
+     gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
+  asm_rewrite_tac[]
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
