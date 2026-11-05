@@ -218,6 +218,24 @@ Definition expr_val_at_def:
            val_footprint tv v = 0)
 End
 
+(* expr_val_at without its local-region case: the value of type t held by
+   op sits in one of the expression's own allocations (clear of every live
+   local) or occupies no bytes.  An internal call whose value is laid out
+   at the callee's declared return type, not its annotation
+   (post_value_type), hands out its own return buffer, never a pointer
+   into a local. *)
+Definition expr_val_own_def:
+  expr_val_own cenv cx t sa sb es v op s <=>
+    !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
+      ?w. eval_operand op s = SOME w /\
+          ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+                       (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                   b + sz <= lb \/ lb + lsz <= b)) \/
+           val_footprint tv v = 0)
+End
+
 (* The type at which expr_post and vv_post describe e's value: the type its
    lowered memory is laid out at.  An internal call's value is its callee's
    return buffer, laid out at the callee's declared return type
@@ -271,17 +289,6 @@ Proof
 QED
 
 
-(* The operand op points outside every live local's region at scopes.  An
-   internal call whose value is laid out at the callee's declared return
-   type, not its annotation (post_value_type), hands out its own return
-   buffer, never a pointer into a local. *)
-Definition outside_locals_def:
-  outside_locals cenv scopes s op <=>
-    ?w. eval_operand op s = SOME w /\
-        !n b sz. local_region cenv scopes s n b sz ==>
-                 w2n w < b \/ b + sz <= w2n w
-End
-
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
    es', the operand op holding v (and, for a memory-backed value, placed as
@@ -304,7 +311,7 @@ Definition expr_post_def:
     expr_val_rel cx (post_value_type cenv e) v op s /\
     expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op s /\
     (post_value_type cenv e <> expr_type e ==>
-     outside_locals cenv es'.scopes s op) /\
+     expr_val_own cenv cx (post_value_type cenv e) sa sb es' v op s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -421,6 +428,23 @@ Definition vv_at_def:
             val_footprint tvt v = 0))
 End
 
+(* vv_at without its local-region case (expr_val_own). *)
+Definition vv_own_def:
+  (vv_own cenv cx t sa sb es tv (StackValue t' op) s <=>
+     !v. read_result cx tv es = (INL v, es) ==> expr_val_own cenv cx t sa sb es v op s) /\
+  (vv_own cenv cx t sa sb es tv (LocatedValue t' p) s <=>
+     p.ptr_location = LocMemory ==>
+     !v tvt. read_result cx tv es = (INL v, es) /\
+             evaluate_type (get_tenv cx) t = SOME tvt ==>
+       ?w. eval_operand p.ptr_operand s = SOME w /\
+           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+                        (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                    b + sz <= lb \/ lb + lsz <= b)) \/
+            val_footprint tvt v = 0))
+End
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
@@ -428,7 +452,7 @@ Definition vv_post_def:
     vv_holds cenv cx (post_value_type cenv e) tv vv es' s /\
     vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
     (post_value_type cenv e <> expr_type e ==>
-     outside_locals cenv es'.scopes s (vv_operand vv)) /\
+     vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

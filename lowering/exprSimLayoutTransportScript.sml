@@ -20,19 +20,14 @@ Theorem expr_val_at_nonword_transport[local]:
   evaluate_type (get_tenv cx) dst = SOME dv /\
   ~is_word_type src /\ ~is_word_type dst /\ val_wf dv v /\
   val_footprint sv v = val_footprint dv v /\
-  outside_locals cenv es.scopes s op /\
-  expr_val_at cenv cx src sa sb es v op s ==>
+  expr_val_own cenv cx src sa sb es v op s ==>
   expr_val_at cenv cx dst sa sb es v op s
 Proof
-  strip_tac >> fs[expr_val_at_def, outside_locals_def] >>
+  strip_tac >> fs[expr_val_at_def, expr_val_own_def] >>
   first_x_assum (qspec_then `sv` mp_tac) >> simp[] >>
-  strip_tac >> gvs[]
-  >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
-      first_assum ACCEPT_TAC) >>
-  first_x_assum drule >> strip_tac
-  >- gvs[] >>
-  `val_footprint dv v = 0` by gvs[] >>
-  simp[]
+  strip_tac >> qexists_tac `w` >> simp[] >>
+  disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem evaluated_layout_size:
@@ -169,8 +164,7 @@ Theorem expr_val_at_layout_transport:
   same_memory_layout cenv src dst /\ arg_type_fits src dst /\
   evaluate_type (get_tenv cx) src = SOME sv /\
   evaluate_type (get_tenv cx) dst = SOME dv /\ ~is_word_type dst /\
-  value_has_type dv v /\ outside_locals cenv es.scopes s op /\
-  expr_val_at cenv cx src sa sb es v op s ==>
+  value_has_type dv v /\ expr_val_own cenv cx src sa sb es v op s ==>
   expr_val_at cenv cx dst sa sb es v op s
 Proof
   strip_tac >> irule expr_val_at_nonword_transport >>

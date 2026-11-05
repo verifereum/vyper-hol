@@ -104,16 +104,6 @@ Ancestors
 Libs
   pairLib
 
-Theorem outside_locals_transport:
-  outside_locals cenv scopes s op /\
-  eval_operand op' t = eval_operand op s /\
-  (!n b sz. local_region cenv scopes' t n b sz ==>
-            local_region cenv scopes s n b sz) ==>
-  outside_locals cenv scopes' t op'
-Proof
-  simp[outside_locals_def] >> metis_tac[]
-QED
-
 (* ===== The judgment ===== *)
 
 (* The exits a source result allows: an error other than a type error
@@ -798,7 +788,7 @@ Proof
       first_x_assum (irule_at Any) >>
       rpt strip_tac >>
       gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-          read_result_def, return_def, contextTheory.vv_operand_def] >> first_assum ACCEPT_TAC) >>
+          read_result_def, return_def, vv_own_def] >> first_assum ACCEPT_TAC) >>
   rename1 `eval_expr cx e es = (INR exc, es')` >>
   `expr_res_ok (INR exc : value + exception)` by
     gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
