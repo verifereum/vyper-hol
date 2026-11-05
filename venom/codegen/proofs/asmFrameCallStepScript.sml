@@ -4617,6 +4617,23 @@ Proof
     (PURE_REWRITE_RULE[ignore_bind_def] asm_call_inst_pc_noabort) >> simp[]
 QED
 
+Theorem asm_call_nested_step_inl:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  2 <= LENGTH s.contexts /\ step s = (q,t) ==> ISL q
+Proof
+  strip_tac >>
+  qpat_x_assum `step _ = _` mp_tac >>
+  rewrite_tac[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner s` >> rename1 `step_inner s = (result,mid)` >>
+  Cases_on `result`
+  >- simp[] >>
+  rename1 `step_inner s = (INR exc,mid)` >>
+  simp[] >> disch_tac >>
+  `~vfm_abort exc` by
+    (drule_at (Pat `step_inner _ = _`) asm_call_step_inner_noabort >> simp[]) >>
+  drule_all asm_call_nested_handler_inl >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
