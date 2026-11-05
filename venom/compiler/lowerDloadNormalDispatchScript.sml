@@ -2,6 +2,7 @@ Theory lowerDloadNormalDispatch
 Ancestors
   lowerDloadNormalExisting lowerDloadResidualNonmemory
   lowerDloadResidualImmutable lowerDloadResidualCopy lowerDloadResidualRead
+  lowerDloadNormalOffset
   venomWf venomInst list
 
 (* Shape-only boundary for the literal parameter families.  In particular,
@@ -42,8 +43,7 @@ Proof
 QED
 
 (* This partition is exhaustive, but its ordinary arm is NOT yet a
-   preservation theorem.  OFFSET is deliberately visible in the complement:
-   none of the accepted normal-data wrappers covers it. *)
+   preservation theorem. OFFSET is covered by ld_normal_offset_backward. *)
 Theorem ld_normal_opcode_partition:
   ~MEM opc
     [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD;
@@ -55,11 +55,11 @@ Theorem ld_normal_opcode_partition:
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE] <=>
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] <=>
   MEM opc [MEMTOP; JMP; JNZ; DJMP; RET; RETURN; REVERT; STOP; SINK;
     PHI; ALLOCA; DALLOCA; DRET; GETFMP; SETFMP; RETFMP; INVOKE;
     FMP_PARAM; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2;
-    SELFDESTRUCT; INVALID; DLOAD; DLOADBYTES; OFFSET]
+    SELFDESTRUCT; INVALID; DLOAD; DLOADBYTES]
 Proof
   Cases_on `opc` >> simp[]
 QED
@@ -87,7 +87,7 @@ QED
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE] /\
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   step_inst fuel CT i t = OK t' ==>
@@ -152,11 +152,11 @@ RETURN/REVERT/STOP/SINK/INVALID: C2.terminal (some cannot return OK).
 CALL/STATICCALL/DELEGATECALL/CREATE/CREATE2/SELFDESTRUCT: C2.external,
 with terminal handling where appropriate.
 ALLOCA/DALLOCA/DLOAD/DLOADBYTES: C2.allocation and macro modes.
-OFFSET: a genuine unassigned ordinary producer gap found by this audit.
-  inst_wf_def permits [Lit v;Label lbl], one output; step_inst_base_def
-  executes exec_pure2 word_add.  It is NOT excluded by fn_ptr_ok_def or
-  o1_ctx_shape, and is NOT in any accepted normal-data wrapper family.
-  Do not claim complete ordinary coverage until a strategist-owned producer
-  or checked impossibility argument accounts for OFFSET.  The candidate
-  above explicitly excludes it, and the partition theorem keeps it visible.
+OFFSET: the gap found by this audit is now filled by the separate
+  ld_normal_offset_backward producer. Its premises are annotated reachability,
+  context shape, fn_ptr_ok for members, normal_data, opcode and target OK;
+  all are present in the candidate. Literal/label shape follows from inst_wf;
+  no variable support, pointer, opaque-use or normal-mode premise is needed.
+  The producer checks clean output provenance/taint and retains all companions.
+  This resolves the finite family gap, NOT recursive temporal coverage.
 *)
