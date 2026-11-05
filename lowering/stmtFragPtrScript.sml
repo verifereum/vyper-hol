@@ -7,6 +7,7 @@
  *     compile_expr_stmt_frag_ok
  *   stmt_frag_cons_env_ptr -- the twin of stmtSimSeqEnv's
  *     stmt_frag_cons_env
+ *   ghost_inv_jump_to -- the ghost ignores the control position
  *)
 Theory stmtFragPtr
 Ancestors
@@ -16,6 +17,17 @@ Ancestors
   fragGasMode fragGasPath fragExec compileEnv loweringSlice stmtLowering
   exprLoweringProps localPtrsProps vyperInterpreter vyperState
   vyperEvalPreservesScopes venomState list finite_map
+
+(* The ghost invariant ignores the control position (jump_to, say). *)
+Theorem ghost_inv_jump_to:
+  ghost_inv d cenv cx es G tn
+    (s with <| vs_prev_bb := p; vs_current_bb := l; vs_inst_idx := i |>) <=>
+  ghost_inv d cenv cx es G tn s
+Proof
+  simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
+  Cases_on `d` >> TRY (PairCases_on `x`) >>
+  simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
+QED
 
 Theorem cenv_top_ext_return_buf:
   !cenv c sc. cenv_top_ext cenv c sc ==> c.ce_return_buf = cenv.ce_return_buf

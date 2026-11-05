@@ -70,16 +70,6 @@ Proof
   metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ghost_inv_jump_to[local]:
-  ghost_inv d cenv cx es G tn
-    (s with <| vs_prev_bb := p; vs_current_bb := l; vs_inst_idx := i |>) <=>
-  ghost_inv d cenv cx es G tn s
-Proof
-  simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
-  Cases_on `d` >> TRY (PairCases_on `x`) >>
-  simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
-QED
-
 Theorem stmt_state_rel_clear_obs[local]:
   stmt_state_rel ctx func cenv cx es s ==>
   stmt_state_rel ctx func cenv cx (es with gas_obs := []) s
