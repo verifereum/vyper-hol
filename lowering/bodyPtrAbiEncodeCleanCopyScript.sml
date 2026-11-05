@@ -1,7 +1,7 @@
 (* Dynamic-length MCOPY has the same exact write/taint frame as fixed copies. *)
 Theory bodyPtrAbiEncodeCleanCopy
 Ancestors
-  bodyPtrAbiEncodeCleanStore typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
+  bodyPtrAbiEncodeCursorFrame bodyPtrDefs bodyPtrAbiEncodeCleanStore typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
   emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
   words list arithmetic pred_set finite_map codegenRel
@@ -63,4 +63,31 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st en)` by simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_gas_path_ptr >> simp[mk_inst_def]
+QED
+
+Theorem abi_encode_read_frame_copy:
+  abi_encode_read_frame st s G tn t H un ==>
+  abi_encode_read_frame st (mcopy db sb n s) G
+    (tn with t_mem := tn.t_mem DIFF removed)
+    ((mcopy db sb n t) with vs_inst_idx := k) H
+    (un with t_mem := un.t_mem DIFF removed)
+Proof
+  simp[abi_encode_read_frame_def, mcopy_def, write_memory_with_expansion_def,
+       lookup_var_def, op_taint_def]
+QED
+
+Theorem abi_encode_clean_copy_covers:
+  ptr_covers G tn q s n ==>
+  ptr_covers G (tn with t_mem := tn.t_mem DIFF removed) q
+    ((mcopy db sb sz s) with vs_inst_idx := k) n
+Proof
+  simp[ptr_covers_def, mcopy_def, write_memory_with_expansion_def,
+       lookup_var_def, op_taint_def]
+QED
+
+Theorem abi_encode_clean_copy_fresh:
+  fresh_vars_wrt limit_st s ==>
+  fresh_vars_wrt limit_st ((mcopy db sb n s) with vs_inst_idx := k)
+Proof
+  simp[fresh_vars_wrt_def, mcopy_def, write_memory_with_expansion_def, lookup_var_def]
 QED
