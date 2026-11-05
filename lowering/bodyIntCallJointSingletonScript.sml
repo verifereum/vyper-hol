@@ -4,8 +4,9 @@ Ancestors
   exprSimSource exprSimHypsDefs vyperTypeSystem
   valueEncoding valueEncodingProps venomState
   bodyIntCallGasPrefix bodyIntCallJointTuple bodyIntCallJointWrite
-  exprSimBuffer exprSimAlloc
-  context compileEnv emitHelper exprLowering exprLoweringProps
+  exprSimBuffer exprSimAlloc bufferAllocationExecution msgGasSim fragGasPath
+  gasOutcome gasSummary fragGasMode fragExec
+  context compileEnv emitHelper exprLowering exprLoweringProps exprCallBounds
 
 (* Materialise the sole child on its actual evaluation endpoint. *)
 Theorem joint_eval_make_tuple_singleton:
@@ -421,4 +422,265 @@ Proof
   gvs[] >>
   simp[LET_THM, mstore_def, update_var_def] >>
   gvs[mstore_def] >> first_assum ACCEPT_TAC
+QED
+
+(* One actual allocation/GAS/store path, retaining the allocation endpoint. *)
+Theorem joint_singleton_msg_gas_path:
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  compile_store_memory ce gop dst (env_item_type MsgGas) sty sp = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t p w.
+    run_inst_seq (emitted_insts sa sm) s0 = OK t /\
+    eval_operand buf.buf_operand t = SOME p /\
+    gas_prefix 1 s0.vs_gas_readings = [w] /\
+    gas_path ctx func s0 1
+      (OK ((mstore (w2n p) w
+        (update_var (STRING #"%" (toString sn.cs_next_var)) p
+          (update_var (STRING #"%" (toString sm.cs_next_var)) w
+            (t with vs_gas_readings := DROP 1 s0.vs_gas_readings))))
+        with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  drule_all joint_tuple_alloc_prefix_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all joint_alloc_gas_add_registers >> strip_tac >>
+  `t.vs_current_bb = s0.vs_current_bb /\
+   t.vs_gas_readings = s0.vs_gas_readings /\ ~t.vs_halted` by
+    (drule compile_alloc_buffer_execution >> strip_tac >>
+     gvs[] >>
+     Cases_on `FLOOKUP s0.vs_allocas sa.cs_next_id` >>
+     gvs[buffer_allocation_fields_def, update_var_def]) >>
+  `?out wg. gop = Var out /\ gas_prefix 1 s0.vs_gas_readings = [wg] /\
+    sn.cs_current_bb = sm.cs_current_bb /\
+    gas_path ctx func (t with vs_inst_idx := LENGTH sm.cs_current_insts) 1
+      (OK (update_var out wg
+        (t with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                  vs_inst_idx := LENGTH sn.cs_current_insts|>)))` by
+    (mp_tac (Q.INST [`s0` |-> `t with vs_inst_idx := LENGTH sm.cs_current_insts`,
+                     `sa` |-> `sm`, `sb` |-> `sn`, `op` |-> `gop`]
+      compile_msg_gas_path) >> simp[] >> metis_tac[]) >>
+  qabbrev_tac `u = update_var out wg
+    (t with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+              vs_inst_idx := LENGTH sn.cs_current_insts|>)` >>
+  `eval_operand buf.buf_operand u = SOME w /\
+   eval_operand gop u = SOME wg /\ ~u.vs_halted /\
+   u.vs_current_bb = sn.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sn.cs_current_insts /\
+   (!x. gop = Var x ==> x <> STRING #"%" (toString sn.cs_next_var))` by
+    (gvs[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]) >>
+  `is_word_type (env_item_type MsgGas)` by simp[env_item_type_def, is_word_type_def] >>
+  drule_all joint_tuple_word_suffix_path >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `sb.cs_current_bb = sn.cs_current_bb` by
+    (drule_all joint_tuple_word_suffix_run >> simp[]) >>
+  suspend "join"
+QED
+
+Resume joint_singleton_msg_gas_path[join]:
+  `gas_path ctx func s0 1 (OK u)` by
+    (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `1`]
+      (SPEC_ALL gas_path_then))) >>
+     qexists_tac `t with vs_inst_idx := LENGTH sm.cs_current_insts` >> simp[]) >>
+  `gas_path ctx func s0 1
+    (OK ((mstore (w2n w) wg
+      (update_var (STRING #"%" (toString sn.cs_next_var)) w u))
+      with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule (SRULE [] (Q.INST [`n` |-> `1`, `m` |-> `0`]
+      (SPEC_ALL gas_path_then))) >> qexists_tac `u` >> simp[]) >>
+  qexistsl_tac [`t`, `w`, `wg`] >>
+  simp[Abbr `u`, update_var_def, mstore_def] >>
+  gvs[update_var_def, mstore_def]
+QED
+Finalise joint_singleton_msg_gas_path
+
+
+Theorem joint_singleton_msg_gas_source:
+  compatible_bound bnd 1 ==>
+  eval_expr cx
+    (Builtin ann (MakeArray NONE bnd)
+      [Builtin (env_item_type MsgGas) (Env MsgGas) []])
+    (es with gas_obs := w::tail) =
+  (INL (Value (ArrayV (TupleV [IntV (&w2n w)]))), es with gas_obs := tail)
+Proof
+  strip_tac >> irule joint_eval_make_tuple_singleton >> simp[] >>
+  qexists_tac `Value (IntV (&w2n w))` >>
+  simp[eval_expr_msg_gas_source, read_result_def, return_def]
+QED
+
+Theorem joint_singleton_msg_gas_outcome:
+  expr_sim_pre ce cx env
+    (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args]) es /\
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  compile_store_memory ce gop dst (env_item_type MsgGas) sty sp = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  EVERY (\(off,len).
+    (?aid b sz. aid < sa.cs_next_id /\
+      FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\
+      b <= off /\ off + len <= b + sz) \/
+    (?name b sz. local_region ce es.scopes s0 name b sz /\
+      b <= off /\ off + len <= b + sz)) hs ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (eval_expr cx (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args]))
+    (es,s0)
+    (\res ee r. ?raw. res = INL raw /\
+      vv_post ctx func ce cx
+        (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args])
+        es sa sb s0 ee raw
+        (LocatedValue ann (mk_ptr buf.buf_operand LocMemory)) r /\
+      r.vs_current_bb = sb.cs_current_bb /\
+      r.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
+      EVERY (\(off,len). mem_bytes_at off len r.vs_memory =
+                         mem_bytes_at off len s0.vs_memory) hs /\
+      (ce.ce_is_ctor ==> !name tv v off.
+        FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+          NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+          name = SOME (tv,v) ==>
+        mem_bytes_at off (type_memory_size tv) r.vs_memory =
+        mem_bytes_at off (type_memory_size tv) s0.vs_memory))
+    (\res ee r. F)
+Proof
+  strip_tac >> drule joint_msg_gas_tuple_typed >> strip_tac >> gvs[] >>
+  drule_all joint_singleton_msg_gas_path >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_path ctx func s0 1 (OK r)` >>
+  `vv_post ctx func ce cx
+    (Builtin (TupleT [env_item_type MsgGas]) (MakeArray NONE bnd)
+      [Builtin (env_item_type MsgGas) (Env MsgGas) []])
+    es sa sb s0 (es with gas_obs := [])
+    (Value (ArrayV (TupleV [IntV (&w2n w)])))
+    (LocatedValue (TupleT [env_item_type MsgGas])
+      (mk_ptr buf.buf_operand LocMemory)) r` by
+    (simp[Abbr `r`] >> irule (SRULE [LET_THM] joint_singleton_endpoint_post) >>
+     metis_tac[]) >>
+  `EVERY (\(off,len). mem_bytes_at off len r.vs_memory =
+                       mem_bytes_at off len s0.vs_memory) hs /\
+   (ce.ce_is_ctor ==> !name tv v off.
+      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+        name = SOME (tv,v) ==>
+      mem_bytes_at off (type_memory_size tv) r.vs_memory =
+      mem_bytes_at off (type_memory_size tv) s0.vs_memory)` by
+    (simp[Abbr `r`] >>
+     irule (SRULE [LET_THM] joint_singleton_endpoint_resources) >>
+     simp[] >> metis_tac[]) >>
+  `r.vs_current_bb = sb.cs_current_bb /\
+   r.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    simp[Abbr `r`, update_var_def, mstore_def] >>
+  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[T]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def] >>
+  qexistsl_tac [`INL (Value (ArrayV (TupleV [IntV (&w2n w)])))`, `es`, `OK r`] >>
+  simp[gas_explicit_def, joint_singleton_msg_gas_source,
+       evaluation_state_component_equality] >> first_assum ACCEPT_TAC
+QED
+
+(* Invert the actual expression slice, rather than assuming its subcompilations. *)
+Theorem joint_singleton_msg_gas_compile:
+  compile_expr ce ty
+    (Builtin ann (MakeArray NONE bnd)
+      [Builtin (env_item_type MsgGas) (Env MsgGas) []]) sa = (vv,sb) ==>
+  ?buf sm gop sn dst sp.
+    compile_alloc_buffer 32 sa = (buf,sm) /\
+    compile_env_var MsgGas sm = (gop,sn) /\
+    emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+    compile_store_memory ce gop dst (env_item_type MsgGas)
+      (lowered_value_type ce (Builtin (env_item_type MsgGas) (Env MsgGas) []))
+      sp = ((),sb) /\
+    vv = LocatedValue ann (mk_ptr buf.buf_operand LocMemory)
+Proof
+  once_rewrite_tac[compile_expr_raw_def] >>
+  simp[compile_expr_body_def, builtin_child_callback_def,
+       expr_builtin_dispatch_bound] >>
+  once_rewrite_tac[compile_expr_raw_def] >>
+  simp[compile_builtin_dispatch_body_def, as_ptr_val_def,
+       compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, vyperASTTheory.expr_type_def] >>
+  simp[exprSimLeavesTheory.compile_expr_env, compile_builtin_dispatch_component_eq,
+       compile_builtin_dispatch_body_def, as_stack_val_def,
+       type_memory_bytes_def, env_item_type_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  simp[unwrap_value_def, as_ptr_val_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  rename1 `compile_alloc_buffer 32 sa = (abuf,alloc_end)` >>
+  Cases_on `compile_env_var MsgGas alloc_end` >>
+  gvs[as_stack_val_def, unwrap_value_def, comp_return_def] >> metis_tac[]
+QED
+
+Theorem joint_singleton_msg_gas_code_slices:
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  compile_store_memory ce gop dst ty sty sp = ((),sb) /\
+  fn_has_code sa sb func ==>
+  fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
+  `ci_mono sm sn` by
+    (qpat_x_assum `compile_env_var _ _ = _` mp_tac >>
+     simp[compile_env_var_def] >> strip_tac >>
+     metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
+  `ci_mono sn sp` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `ci_mono sp sb` by metis_tac[ci_mono_compile_store_memory, pairTheory.SND] >>
+  gvs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]
+QED
+
+Theorem compile_singleton_msg_gas_joint_outcome:
+  expr_sim_pre ce cx env
+    (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args]) es /\
+  compile_expr ce ty
+    (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args]) sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  EVERY (\(off,len).
+    (?aid b sz. aid < sa.cs_next_id /\
+      FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\
+      b <= off /\ off + len <= b + sz) \/
+    (?name b sz. local_region ce es.scopes s0 name b sz /\
+      b <= off /\ off + len <= b + sz)) hs ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (eval_expr cx (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args]))
+    (es,s0)
+    (\res ee r. ?raw. res = INL raw /\
+      vv_post ctx func ce cx
+        (Builtin ann (MakeArray NONE bnd) [Builtin ga (Env MsgGas) args])
+        es sa sb s0 ee raw vv r /\
+      r.vs_current_bb = sb.cs_current_bb /\
+      r.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
+      EVERY (\(off,len). mem_bytes_at off len r.vs_memory =
+                         mem_bytes_at off len s0.vs_memory) hs /\
+      (ce.ce_is_ctor ==> !name tv v off.
+        FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+          NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+          name = SOME (tv,v) ==>
+        mem_bytes_at off (type_memory_size tv) r.vs_memory =
+        mem_bytes_at off (type_memory_size tv) s0.vs_memory))
+    (\res ee r. F)
+Proof
+  strip_tac >> drule joint_msg_gas_tuple_typed >> strip_tac >> gvs[] >>
+  drule joint_singleton_msg_gas_compile >> strip_tac >> gvs[] >>
+  drule_all joint_singleton_msg_gas_code_slices >> strip_tac >>
+  irule joint_singleton_msg_gas_outcome >> simp[] >> metis_tac[]
 QED
