@@ -382,3 +382,31 @@ Proof
   irule list_elem_count_dom_length >>
   drule_all emit_input_plan_materialised >> simp[]
 QED
+
+(* Exact copy from fnAliasStepScript.sml, authorized by TASK criterion 2.
+   Keep fnAliasStep unedited and outside the lineage dependency boundary. *)
+Theorem generate_emit_ops_slots:
+  !inst ltc ps ops ps'.
+    generate_emit_ops inst ltc ps = (ops, ps') ==>
+    ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[generate_emit_ops_def] >>
+  Cases_on `venom_to_evm_name inst.inst_opcode` >> simp[] >>
+  strip_tac >> gvs[] >>
+  Cases_on `inst.inst_opcode = JNZ` >> gvs[]
+  >- (BasicProvers.every_case_tac >> gvs[]) >>
+  Cases_on `inst.inst_opcode = JMP` >> gvs[]
+  >- (BasicProvers.every_case_tac >> gvs[]) >>
+  Cases_on `inst.inst_opcode = DJMP` >> gvs[] >>
+  Cases_on `inst.inst_opcode = INVOKE` >> gvs[]
+  >- (Cases_on `HD inst.inst_operands` >> gvs[] >>
+      pairarg_tac >> gvs[fresh_label_def]) >>
+  Cases_on `inst.inst_opcode = RET` >> gvs[] >>
+  Cases_on `inst.inst_opcode = ASSERT` >> gvs[] >>
+  Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE` >> gvs[]
+  >- (pairarg_tac >> gvs[fresh_label_def]) >>
+  Cases_on `inst.inst_opcode = LOG` >> gvs[] >>
+  Cases_on `inst.inst_opcode = ISTORE` >> gvs[] >>
+  Cases_on `inst.inst_opcode = INITIAL_FMP` >> gvs[] >>
+  Cases_on `inst.inst_opcode = BUMP` >> gvs[]
+QED
