@@ -25,7 +25,7 @@ QED
 Theorem ptr_val_ok_none:
   ptr_val_ok cx NoneT NoneV (Lit 0w) G tn s
 Proof
-  simp[ptr_val_ok_def, ptr_mem_ok_def, op_taint_def,
+  simp[ptr_val_ok_def, ptr_mem_ok_def, op_taint_def, op_prov_def,
        evaluate_type_def, val_in_memory_def, val_footprint_def,
        type_memory_size_def]
 QED
