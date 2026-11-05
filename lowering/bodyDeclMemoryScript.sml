@@ -1,7 +1,7 @@
 (* Declaration store: source-state and memory continuation boundaries. *)
 Theory bodyDeclMemory
 Ancestors
-  loweringPosts
+  loweringPosts exprSimProps stmtSimProps exprSimHypsDefs
   bodyNameMemoryFacts
   bodyCopyMemory bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes exprOperandVar freshWrites
@@ -88,12 +88,13 @@ Theorem body_typed_store_memory_mem_ok:
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   rpt strip_tac >> drule val_footprint_le >> strip_tac >>
+  drule val_store_size_le >> strip_tac >>
   Cases_on `is_bytestring_type ann`
   >- (gvs[compile_store_memory_def] >>
       drule_all buffer_typed_bytestring_header >> strip_tac >>
       irule compile_store_bytestring_body_mem_ok >>
       qexistsl_tac [`d`, `dst`, `len`, `src`, `w`] >>
-      simp[] >> metis_tac[]) >>
+      simp[] >> fs[] >> decide_tac) >>
   gvs[compile_store_memory_def] >>
   irule compile_copy_memory_body_mem_ok >>
   qexistsl_tac [`d`, `dst`, `type_memory_size tv`, `src`, `w`] >> simp[]
@@ -820,11 +821,17 @@ Proof
     gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
   `type_memory_size tyv + 64 < dimword (:256)` by
     metis_tac[allocation_limit_word_room] >>
+  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+     is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
+    (gvs[body_inv_def] >> drule gasContextTheory.cx_tops_module >>
+     rw[] >> gvs[] >> metis_tac[]) >>
   `expr_sim_pre ce cx env (Name ty source_id) es` by
     (gvs[expr_sim_pre_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
          expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
-         call_evaluation_safe_def] >> metis_tac[]) >>
+         supportedProgramTheory.expr_abi_decode_target_root_def,
+         call_evaluation_safe_def] >>
+     metis_tac[]) >>
   drule stmt_env_annassign >> strip_tac >>
   `same_frame ce c` by
     (drule_then irule declare_local_same_frame >> simp[]) >>
@@ -832,7 +839,7 @@ Proof
   `c.ce_struct_fields = ce.ce_struct_fields` by
     fs[same_frame_def, compile_env_component_equality] >>
   `type_memory_bytes c = type_memory_bytes ce` by
-    (irule allocLimitsPropsTheory.type_memory_bytes_frame >> simp[]) >>
+    (irule compileEnvTheory.type_memory_bytes_frame >> simp[]) >>
   `expr_sim_pre c cx env (Name ty source_id) es` by
     gvs[expr_sim_pre_def, alloc_limits_expr_def, type_alloc_ok_def] >>
   drule_all declare_local_ptr >> strip_tac >>

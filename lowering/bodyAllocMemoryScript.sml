@@ -1,7 +1,7 @@
 (* Actual body allocation sites: membership and reused-site size. *)
 Theory bodyAllocMemory
 Ancestors
-  exprSimSource
+  exprSimSource exprSimProps
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps exprLowering
   exprSimAggregateChildren exprSimLiteralBuffer exprSimAlloc exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
