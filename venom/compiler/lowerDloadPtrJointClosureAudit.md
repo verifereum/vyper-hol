@@ -1066,3 +1066,17 @@ NormalNext rebuild every saved-frame, scratch, support and definedness field,
 with exact step_prov/step_taint successors. No extra caller premise was added.
 This certifies only local normal storage closure, not allocation, expansion
 completion, or the frozen stage theorem.
+
+## C1.12.97: SHA3 normal next row
+
+`lowerDloadPtrJointHashTheory.dload_joint_tracked_sha3_next` has exactly the
+MLOAD normal-Q interface with SHA3 as the original opcode. It derives source
+access/taint safety from ptr_discipline and frame reachability, operand
+admissibility from source shape, and non-forwarding from active source control
+and opcode exclusion. SHA3 is not about_to_revert. The existing Hash core
+reflects successful execution at literal fuel and returns the exact post ghosts
+and variable-only state footprints. Index update, singleton reachability and
+NormalNext then reconstruct the full Q, including saved frames and scratch
+identity. No caller semantic premise, definition, or existing theorem statement
+was changed. This local hash row is not global reachability closure or stage
+certification.
