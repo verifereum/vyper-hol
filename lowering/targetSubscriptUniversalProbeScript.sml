@@ -4,7 +4,7 @@ Ancestors
   vyperInterpreter vyperContext vyperValue vfmState
   venomExecSemantics venomState venomInst calleeTransport
   exprSimLeaves exprSimHyps vyperTypeCallGraph compileEnv exprLoweringProps
-  venomMemDefs
+  venomMemDefs stmtSimDecl
 Libs
   pairLib
 
@@ -687,3 +687,140 @@ Proof
   simp[stmt_state_rel_inst_idx] >>
   irule clear_stmt_update_var >> irule clear_stmt_transport >> simp[]
 QED
+
+Theorem clear_base_head_frag:
+  !k es sa s0 R.
+    sa.cs_next_id = 0 /\ sa.cs_next_var = 0 /\ sa.cs_current_insts = [] /\
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es s0 /\
+    lookup_storage 0w (get_storage probe_clear_source_context es F) <> 0w ==>
+    frag_exec (probe_descendant_ctx k) sa
+      (sa with <|cs_next_id := 14; cs_next_var := 12;
+        cs_current_insts := TAKE 14
+          (HD probe_descendant_outer_caller.fn_blocks).bb_instructions|>)
+      (\s. s = s0)
+      (\s. stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+        probe_deep_cenv probe_clear_source_context
+        (set_storage probe_clear_source_context es F
+          (update_storage 0w 0w (get_storage probe_clear_source_context es F))) s /\
+        sload 1w s = lookup_storage 1w (get_storage probe_clear_source_context es F) /\
+        lookup_var "%7" s = SOME 1w /\ lookup_var "%11" s = SOME 0w /\
+        (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+          FLOOKUP s.vs_allocas aid = SOME entry) /\
+        (!x. ~MEM x ["%0";"%1";"%2";"%3";"%4";"%5";"%6";"%7";
+                      "%8";"%9";"%10";"%11"] ==>
+          lookup_var x s = lookup_var x s0)) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH (TAKE 9 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) = 9`
+    by EVAL_TAC >>
+  `fn_inst_ids_distinct probe_descendant_outer_caller` by EVAL_TAC >>
+  qabbrev_tac `sb = sa with <|cs_next_id := 14; cs_next_var := 12;
+    cs_current_insts := TAKE 14
+      (HD probe_descendant_outer_caller.fn_blocks).bb_instructions|>` >>
+  qmatch_goalsub_abbrev_tac `frag_exec _ _ _ _ Post Exit` >>
+  qabbrev_tac `a = sa with <|cs_next_id := 9; cs_next_var := 8;
+    cs_current_insts := TAKE 9
+      (HD probe_descendant_outer_caller.fn_blocks).bb_instructions|>` >>
+  irule fragExecTheory.frag_exec_pointwise >> rpt strip_tac >> gvs[] >>
+  `sload 0w s0 <> 0w` by (drule clear_entry_root_header >> simp[]) >>
+  drule_all clear_root_prefix_framed >> strip_tac >>
+  rename1 `lookup_var "%7" root_state = SOME 1w` >>
+  irule fragExecTheory.frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. s = (root_state with vs_inst_idx := 9) /\
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es s`, `a`] >>
+  reverse conj_tac
+  >- (conj_tac >- simp[Abbr `a`, Abbr `sb`, cs_extends_def] >>
+      conj_tac
+      >- (simp[Abbr `a`, Abbr `sb`, cs_extends_def] >> EVAL_TAC >> simp[]) >>
+      irule fragExecTheory.frag_exec_run_inst_seq >>
+      simp[Abbr `a`, emitted_insts_def] >>
+      reverse conj_tac >- EVAL_TAC >>
+      simp[stmt_state_rel_inst_idx]) >>
+  suspend "allocate"
+QED
+
+Resume clear_base_head_frag[allocate]:
+  rpt strip_tac >> gvs[] >>
+  qabbrev_tac `b = a with <|cs_next_id := 10; cs_next_var := 9;
+    cs_current_insts := TAKE 10
+      (HD probe_descendant_outer_caller.fn_blocks).bb_instructions|>` >>
+  `emit_op ALLOCA [Lit 32w] a = (Var "%8", b)` by
+    (simp[Abbr `a`, Abbr `b`, emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def,
+      emitHelperTheory.emit_inst_def, emit_def, comp_bind_def, comp_return_def,
+      comp_ignore_bind_def] >> EVAL_TAC >> simp[]) >>
+  `MEM (mk_inst a.cs_next_id ALLOCA [Lit (n2w 32)] ["%8"])
+    (fn_insts probe_descendant_outer_caller)` by
+    (simp[Abbr `a`] >> EVAL_TAC) >>
+  `not_local_ptr probe_deep_cenv es.scopes "%8" /\
+    32 < dimword (:256)` by simp[clear_no_local_ptr, dimword_def,
+      fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  drule_all stmtSimDeclTheory.annassign_alloca_op_framed_frag >>
+  disch_then (qspec_then `Exit` strip_assume_tac) >>
+  rename1 `lookup_var "%8" allocated = SOME addr` >>
+  dxrule fragExecTheory.frag_exec_then >> disch_then irule >>
+  reverse conj_tac
+  >- (conj_tac
+      >- (simp[Abbr `a`, Abbr `b`, Abbr `sb`, cs_extends_def] >> EVAL_TAC >> simp[]) >>
+      simp[Abbr `a`, Abbr `b`, Abbr `sb`, cs_extends_def] >> EVAL_TAC >> simp[]) >>
+  suspend "invoke"
+QED
+
+Resume clear_base_head_frag[invoke]:
+  rpt strip_tac >> gvs[] >>
+  qabbrev_tac `c = b with <|cs_next_id := 11; cs_next_var := 10;
+    cs_current_insts := TAKE 11
+      (HD probe_descendant_outer_caller.fn_blocks).bb_instructions|>` >>
+  `c.cs_blocks = b.cs_blocks /\ c.cs_current_bb = b.cs_current_bb /\
+   c.cs_current_insts = b.cs_current_insts ++
+      [mk_inst 10 INVOKE [Label "internal 0 shrink()_runtime"] ["%9"]]` by
+    (simp[Abbr `c`, Abbr `b`] >> EVAL_TAC >> simp[]) >>
+  drule_all clear_invoke_frag >>
+  disch_then (qspec_then `Exit` mp_tac) >> strip_tac >>
+  qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
+  qpat_x_assum `MEM (mk_inst _ ALLOCA _ _) _` kall_tac >>
+  qpat_x_assum `not_local_ptr _ _ _` kall_tac >>
+  qpat_x_assum `32 < dimword _` kall_tac >>
+  qpat_x_assum `!op. op <> Var _ ==> eval_operand _ _ = _` kall_tac >>
+  qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
+  dxrule fragExecTheory.frag_exec_then >> disch_then irule >>
+  reverse conj_tac
+  >- (conj_tac
+      >- (simp[Abbr `a`, Abbr `b`, Abbr `c`, Abbr `sb`, cs_extends_def] >> EVAL_TAC >> simp[]) >>
+      simp[Abbr `a`, Abbr `b`, Abbr `c`, Abbr `sb`, cs_extends_def] >> EVAL_TAC >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel _ _ _ _ cleared invoked` >>
+  `lookup_var "%8" invoked = SOME addr /\
+   lookup_var "%9" invoked = SOME 0w /\
+   FLOOKUP invoked.vs_allocas 9 = SOME (w2n addr,32)` by
+    (simp[Abbr `invoked`, update_var_def, lookup_var_def, sstore_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+     gvs[Abbr `a`, lookup_var_def]) >>
+  drule_all clear_return_buffer_framed >> strip_tac >>
+  rename1 `lookup_var "%11" buffered = SOME 0w` >>
+  irule fragExecTheory.frag_exec_run_inst_seq >>
+  simp[Abbr `sb`, Abbr `c`, Abbr `b`, Abbr `a`, emitted_insts_def] >>
+  reverse conj_tac >- EVAL_TAC >>
+  `DROP (LENGTH (TAKE 10 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) + 1)
+    (TAKE 14 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) =
+    TAKE 3 (DROP 11 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions)`
+    by EVAL_TAC >>
+  `LENGTH (TAKE 14 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) = 14`
+    by EVAL_TAC >>
+  simp[Abbr `Post`, stmt_state_rel_inst_idx] >>
+  gvs[] >>
+  `sload 1w allocated = lookup_storage 1w (get_storage probe_clear_source_context es F)` by
+    (drule_all clear_entry_child_header >> simp[]) >>
+  `sload 1w invoked = sload 1w allocated` by
+    simp[NoAsms, Abbr `invoked`, sload_def, contract_storage_def,
+      update_var_def, sstore_def, lookup_account_def, lookup_storage_def, update_storage_def,
+      combinTheory.APPLY_UPDATE_THM, dimword_def,
+      fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  gvs[sload_def, contract_storage_def, lookup_var_def] >>
+  simp[Abbr `invoked`, update_var_def, sstore_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> simp[]
+QED
+
+Finalise clear_base_head_frag
