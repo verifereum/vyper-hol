@@ -5815,5 +5815,18 @@ Theorem make_ssa_current_fn_wf_ssa:
   make_ssa_current_fn s fn = (fn',s') ==>
   wf_ssa fn'
 Proof
-  cheat
+  strip_tac >> rewrite_tac[wf_ssa_def] >> conj_tac
+  >- (irule current_wf_run_ssa_form >> metis_tac[]) >>
+  Cases_on `entry_block fn`
+  >- (gvs[entry_block_def, fn_entry_label_def, make_ssa_current_fn_def,
+          def_dominates_uses_def, NULL_EQ]) >>
+  drule_all current_wf_named_structural_certificate >> strip_tac >>
+  qpat_x_assum `current_structural_certificate _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_precleanup_certificate_stages] >> strip_tac >>
+  `current_wf_phi_context s fn renamed s' A H events` by
+    (irule current_wf_phi_context_intro >> asm_rewrite_tac[]) >>
+  Cases_on `blocks_have_leading_phi fn.fn_blocks` >>
+  gvs[simplify_current_phis_if_def]
+  >- (irule current_wf_phi_context_cleanup_dominates >> simp[current_cleanup_phis_map] >> metis_tac[]) >>
+  irule current_wf_phi_context_no_cleanup_dominates >> metis_tac[]
 QED
