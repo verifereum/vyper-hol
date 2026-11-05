@@ -190,6 +190,7 @@ Proof
   fs[ptr_val_ok_def, ptr_mem_ok_def] >>
   gvs[] >> simp[ptr_covers_def] >>
   qexists_tac `w` >>
+  qspecl_then [`tv`, `v`] assume_tac exprSimPropsTheory.val_footprint_le_store_size >>
   gvs[eval_operand_def] >> decide_tac
 QED
 
