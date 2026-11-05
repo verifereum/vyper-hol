@@ -10,7 +10,7 @@
  *)
 Theory exprSimAggregatesArrayCounted
 Ancestors
-  exprSimAggregatesLoopsCounted
+  exprSimAggregatesLoopsCounted exprSimAggregateEncoding
   exprSimAggregateLoops exprSimAggregateChildren exprSimAlloc
   exprSimHyps exprSimHypsDefs exprSimSource exprSimProps exprSimDefs
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
@@ -73,7 +73,40 @@ Theorem aggregate_make_array_elems_counted:
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule compile_make_array_elems_as_tuple >>
+  disch_then (qspecl_then [`header`, `compile_expr`, `ce`, `Var x`, `idx`] mp_tac) >>
+  strip_tac >>
+  `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
+     SOME (REPLICATE (LENGTH args) tv)` by
+    (irule OPT_MMAP_uniform_map >> metis_tac[]) >>
+  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
+    (gvs[] >> metis_tac[]) >>
+  `off + type_memory_size_list (REPLICATE (LENGTH args) tv) <= asz` by
+    gvs[type_memory_size_list_replicate] >>
+  `ce.ce_is_ctor ==> !name itv iv io.
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) (b+off)
+       (type_memory_size_list (REPLICATE (LENGTH args) tv))` by
+    (gvs[type_memory_size_list_replicate] >> metis_tac[]) >>
+  drule_all aggregate_make_tuple_counted >>
+  pure_rewrite_tac [type_memory_size_list_replicate] >>
+  disch_then strip_assume_tac >> conj_tac >- asm_rewrite_tac[] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  pure_rewrite_tac [gas_outcome_def, gas_summary_at_def] >>
+  strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >>
+      gvs[] >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac [gas_marked_exec_def] >> strip_tac >>
+      first_x_assum (qspec_then `[]` mp_tac) >>
+      strip_tac >> drule eval_exprs_length >> strip_tac >>
+      metis_tac[tuple_in_memory_replicate_elems]) >>
+  metis_tac[]
 QED
 
 Theorem aggregate_make_array_counted:
