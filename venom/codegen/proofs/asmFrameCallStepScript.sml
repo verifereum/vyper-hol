@@ -2561,6 +2561,52 @@ Proof
   Cases_on `op = StaticCall` >> gvs[]
 QED
 
+Theorem asm_frame_call_terminal_none:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR NONE,v) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
+   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac >- metis_tac[]) >>
+  `next_opcode c = SOME op` by
+    (drule_all asm_frame_call_decode >> simp[] >> metis_tac[]) >>
+  `a.as_accounts = s.rollback.accounts /\ a.as_transient = s.rollback.tStorage /\
+   a.as_logs = c.logs /\ a.as_pending_deletions = s.rollback.toDelete /\
+   a.as_memory = buffer_to_list c.memory` by gvs[asm_evm_rel_def] >>
+  drule_all asm_call_prepared_terminal_success_view >> strip_tac >>
+  qabbrev_tac `out = FST (take_outcome (request_of s)
+    (outcome_of (request_of s).cr_kind t (LENGTH c.logs)
+      (LENGTH s.rollback.toDelete)::MAP SND (call_trace t)))` >>
+  `out = FST (take_outcome (request_of s)
+    (outcome_of (request_of s).cr_kind t (LENGTH c.logs)
+      (LENGTH s.rollback.toDelete)::MAP SND (call_trace t)))` by simp[Abbr `out`] >>
+  drule_all asm_call_terminal_success_selected_effects >> strip_tac >>
+  `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by
+    (drule_all asm_call_prepare_success_stack >> simp[]) >>
+  `observable_call c` by
+    (simp[observable_call_def] >> Cases_on `op = Call` >> gvs[call_has_value_def]) >>
+  `ct.stack = (if out.co_success then 1w else 0w)::
+     DROP (6 + (if call_has_value op then 1 else 0)) c.stack` by
+    asm_rewrite_tac[] >>
+  `ct.returnData = out.co_returnData` by metis_tac[] >>
+  `buffer_to_list ct.memory = TAKE ro (asm_call_memory ao az ro rs a.as_memory) ++
+     TAKE rs out.co_returnData ++ DROP (ro + LENGTH (TAKE rs out.co_returnData))
+       (asm_call_memory ao az ro rs a.as_memory)` by metis_tac[] >>
+  (Q.SUBGOAL_THEN `?d. t.msdomain = Collect d` assume_tac >- metis_tac[]) >>
+  drule_all asm_frame_call_same_depth_effects_step_ok >> simp[]
+QED
+
 Theorem asm_frame_call_terminal_some:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
   a.as_pc < LENGTH prog /\
@@ -2581,6 +2627,25 @@ Proof
   drule_all asm_call_prepared_terminal_kind >> strip_tac >>
   `exc <> Reverted` by gvs[] >>
   drule_all asm_frame_call_terminal_exception >> simp[]
+QED
+
+Theorem asm_frame_call_terminal:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR result,v) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  Cases_on `result`
+  >- (drule_all asm_frame_call_terminal_none >> simp[]) >>
+  drule_all asm_frame_call_terminal_some >> simp[]
 QED
 
 Theorem asm_frame_call_step:
