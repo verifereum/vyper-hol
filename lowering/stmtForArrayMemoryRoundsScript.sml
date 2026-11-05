@@ -4,7 +4,7 @@ Ancestors
   stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv
   venomState allocaHistory fragGasMode fragGasPathMem finite_map list arithmetic
   stmtForArrayMemoryCopy stmtForArrayMemoryBodyEntry rich_list emitHelper venomInst
-  bodyDeclMemoryCounted stmtLowering
+  bodyDeclMemoryCounted stmtLowering venomMemDefs
 
 Definition array_round_frame_def:
   array_round_frame d func cenv caller orig s <=>
@@ -252,4 +252,61 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH sb0.cs_current_insts` >>
   simp[gas_marked_path_def, stmt_state_rel_inst_idx] >>
   fs[venom_state_component_equality, lookup_var_def]
+QED
+
+(* Compiler packaging for the live copy boundary. *)
+Theorem array_code_copy_entry_mem:
+  array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
+    p sz ainst idx dv ov ep nv cond exit stmts_lbl incr
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst stmts_lbl caller k es s /\
+  k < LENGTH vs /\ evaluate_type (get_tenv cx) et = SOME tv /\
+  value_has_type tv (EL k vs) /\ val_wf tv (EL k vs) /\
+  val_in_memory tv (EL k vs) (w2n arr_base + k * stride) s.vs_memory /\
+  w2n arr_base + k * stride < dimword (:256) /\
+  w2n arr_base + LENGTH vs * stride <= s.vs_alloca_next /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  lookup_block stmts_lbl func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\ alloca_history func s ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\ alloca_history func t /\
+    stmt_state_rel ctx func bc cx
+      (es with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
+          :: es.scopes) t /\
+    ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = LENGTH sb0.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
+      lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `cenv_top_ext cenv bc (FEMPTY :: es.scopes)` by
+    (irule array_for_code_scope_frame >> goal_assum (drule_at Any) >>
+     fs[array_loop_inv_def]) >>
+  `alloca_inv s` by fs[array_loop_inv_def, stmt_state_rel_def] >>
+  `w2n dst + sz <= s.vs_alloca_next` by
+    (fs[array_loop_inv_def, alloca_inv_def, alloca_next_valid_def] >>
+     qpat_x_assum `!aid base sz. _` drule >> simp[ADD_COMM]) >>
+  `k * stride + stride <= LENGTH vs * stride` by
+    (`k + 1 <= LENGTH vs` by simp[] >>
+     ` (k + 1) * stride <= LENGTH vs * stride` by
+       simp[LE_MULT_RCANCEL] >>
+     qpat_x_assum `(_ + 1) * stride <= _` mp_tac >>
+     pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_LEFT_1] >> decide_tac) >>
+  drule array_for_code_prefix >> strip_tac >>
+  qhdtm_assum `array_for_code` mp_tac >>
+  pure_rewrite_tac[array_for_code_def] >> strip_tac >>
+  qhdtm_assum `array_loop_inv`
+    (strip_assume_tac o PURE_REWRITE_RULE [array_loop_inv_def]) >>
+  `w2n arr_base + k * stride + stride <= s.vs_alloca_next` by decide_tac >>
+  `w2n dst + stride <= s.vs_alloca_next` by decide_tac >>
+  `not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes ep` by
+    (qpat_x_assum `!scs. _` (qspec_then `es.scopes` strip_assume_tac) >> simp[]) >>
+  `p <> ov /\ p <> ep /\ (!x. saved_base = Var x ==> x <> ov)` by
+    (fs[ALL_DISTINCT] >> metis_tac[]) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  `type_memory_bytes cenv et = stride` by simp[] >>
+  drule_all array_round_copy_entry >> strip_tac >>
+  qexists_tac `t` >> simp[]
 QED
