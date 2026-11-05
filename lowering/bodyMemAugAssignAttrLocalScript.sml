@@ -754,6 +754,67 @@ Proof
   drule_all body_field_region_frontier >> simp[]
 QED
 
+Theorem fields_val_wf_update_mem_src[local]:
+  !vals fs fld v ftv.
+    struct_has_type fs vals /\ fields_val_wf vals fs /\
+    ALOOKUP fs fld = SOME ftv /\ val_wf ftv v ==>
+    fields_val_wf (AFUPDKEY fld (K v) vals) fs
+Proof
+  Induct >> Cases_on `fs` >>
+  FULL_SIMP_TAC list_ss [value_has_type_def, val_wf_def,
+    alistTheory.ALOOKUP_def, alistTheory.AFUPDKEY_def] >>
+  rpt gen_tac >> PairCases_on `h` >> PairCases_on `h'` >>
+  FULL_SIMP_TAC list_ss [value_has_type_def, val_wf_def,
+    alistTheory.ALOOKUP_def, alistTheory.AFUPDKEY_def] >>
+  strip_tac >> Cases_on `h0 = fld` >>
+  FULL_SIMP_TAC list_ss [alistTheory.ALOOKUP_def, alistTheory.AFUPDKEY_def,
+    val_wf_def, pairTheory.pair_case_def] >>
+  `fld <> h'0` by metis_tac[] >>
+  ASM_SIMP_TAC list_ss [val_wf_def, pairTheory.pair_case_def] >> metis_tac[]
+QED
+
+Theorem fields_in_memory_mstore_field_mem_src[local]:
+  !vals fs flds off s fld v wd ftv.
+    fields_layout flds fs /\ struct_has_type fs vals /\
+    fields_val_wf vals fs /\ fields_in_memory vals fs off s.vs_memory /\
+    ALOOKUP fs fld = SOME ftv /\ type_memory_size ftv = 32 /\
+    val_in_memory ftv v (off + struct_field_offset flds fld)
+      (mstore (off + struct_field_offset flds fld) wd s).vs_memory ==>
+    fields_in_memory (AFUPDKEY fld (K v) vals) fs off
+      (mstore (off + struct_field_offset flds fld) wd s).vs_memory
+Proof
+  Induct >> Cases_on `fs` >> Cases_on `flds` >>
+  FULL_SIMP_TAC list_ss [value_has_type_def, fields_layout_def,
+    alistTheory.ALOOKUP_def, alistTheory.AFUPDKEY_def, val_in_memory_def] >>
+  rpt gen_tac >> PairCases_on `h` >> PairCases_on `h'` >> PairCases_on `h''` >>
+  FULL_SIMP_TAC list_ss [value_has_type_def, fields_layout_def,
+    alistTheory.ALOOKUP_def, alistTheory.AFUPDKEY_def, val_in_memory_def,
+    val_wf_def, pairTheory.pair_case_def] >>
+  strip_tac >>
+  qpat_x_assum `h'0 = h0` SUBST_ALL_TAC >>
+  qpat_x_assum `h0 = h''0` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `h'2 = _` SUBST_ALL_TAC >>
+  FULL_SIMP_TAC list_ss [LET_THM, pairTheory.pair_case_def] >>
+  Cases_on `h0 = fld` >>
+  FULL_SIMP_TAC list_ss [struct_field_offset_def, alistTheory.AFUPDKEY_def,
+    val_in_memory_def, LET_THM, pairTheory.pair_case_def]
+  >- (SIMP_TAC std_ss [mstore_def, venom_state_accfupds, LET_THM] >>
+      irule (SIMP_RULE std_ss [mstore_def, venom_state_accfupds, LET_THM]
+        (cj 2 valueEncodingPropsTheory.mstore_preserves_val_in_memory)) >>
+      ASM_SIMP_TAC list_ss [] ) >>
+  conj_tac
+  >- (SIMP_TAC std_ss [mstore_def, venom_state_accfupds, LET_THM] >>
+      irule (SIMP_RULE std_ss [mstore_def, venom_state_accfupds, LET_THM]
+        (cj 1 valueEncodingPropsTheory.mstore_preserves_val_in_memory)) >>
+      ASM_SIMP_TAC arith_ss []) >>
+  once_rewrite_tac [arithmeticTheory.ADD_ASSOC] >>
+  first_x_assum irule >> asm_rewrite_tac [] >>
+  qexists_tac `ftv` >> asm_rewrite_tac [] >>
+  qpat_x_assum `val_in_memory ftv v _ _` mp_tac >>
+  pure_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> strip_tac >> asm_rewrite_tac []
+QED
+
+
 Theorem stmt_state_rel_field_word_mem_src[local]:
   !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
     stmt_state_rel ctx func cenv cx es s /\
