@@ -342,9 +342,9 @@ Proof
       metis_tac[immutable_deploy_assign_case]) >>
   `((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
       target_case F ctx func cenv cx t)` by metis_tac[body_target_case] >>
-  `target_env_ok cenv cx /\ cenv.ce_target CapMcopy /\
+  `cenv.ce_target CapMcopy /\
    acyclic_struct_metadata cenv.ce_struct_fields` by
-    metis_tac[body_inv_target_env_ok, body_inv_mcopy, body_inv_def] >>
+    metis_tac[body_inv_mcopy, body_inv_def] >>
   Cases_on `supported_target_pure tops t`
   >- metis_tac[compile_assign_place_case] >>
   metis_tac[assign_place_effectful_index_case]

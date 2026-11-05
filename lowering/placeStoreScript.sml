@@ -918,7 +918,6 @@ Proof
          conj_tac >- metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
          qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >>
          simp[]) >>
-      `byte_offset + type_memory_size tv <= LENGTH t.vs_memory` by decide_tac >>
       metis_tac[]) >>
   fs[immutables_rel_def] >> metis_tac[]
 QED
