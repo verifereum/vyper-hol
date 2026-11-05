@@ -97,3 +97,29 @@ Theorem order_ptr_frame_outcomes:
 Proof
   EVAL_TAC >> rw[] >> gvs[]
 QED
+
+Theorem order_ptr_frame_storage:
+  contract_storage_well_formed order_frame_cx order_ptr_source /\
+  storage_layout_safe order_frame_cx
+Proof
+  EVAL_TAC >> rw[] >> gvs[AllCaseEqs()]
+QED
+
+Theorem order_ptr_frame_oracle:
+  oracle_storage_ok order_frame_cx order_ptr_source
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem order_ptr_frame_sim_inv:
+  exprSimHypsDefs$expr_sim_inv order_ptr_env order_frame_cx
+    order_ptr_tenv order_ptr_source
+Proof
+  simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+       order_ptr_frame_env, order_ptr_frame_state_typed,
+       order_ptr_frame_accounts_typed, order_ptr_frame_context_typed,
+       order_ptr_frame_local_bindings, order_ptr_frame_outcomes,
+       order_ptr_frame_storage, order_ptr_frame_oracle] >>
+  EVAL_TAC >> rw[] >> gvs[AllCaseEqs(), vyperStateTheory.lookup_flag_def] >>
+  EVAL_TAC
+QED
