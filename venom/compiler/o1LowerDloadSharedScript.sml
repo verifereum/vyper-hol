@@ -17,6 +17,7 @@ Definition ld_shared_agree_def:
         (s.vs_immutables ' key) (t.vs_immutables ' key)) /\
     s.vs_logs = t.vs_logs /\ s.vs_outcomes = t.vs_outcomes /\
     s.vs_pending_deletions = t.vs_pending_deletions /\
+    s.vs_gas_readings = t.vs_gas_readings /\
     LIST_REL (request_agree_except D) s.vs_requests t.vs_requests
 End
 
@@ -147,4 +148,39 @@ Proof
     (irule ld_shared_immutables_observe >> metis_tac[]) >>
   gvs[dead_result_rel_def, ld_shared_agree_def, SUBSET_DEF] >>
   metis_tac[]
+QED
+
+Theorem ld_shared_gas_readings:
+  ld_shared_agree D A tn s t ==> s.vs_gas_readings = t.vs_gas_readings
+Proof
+  simp[ld_shared_agree_def]
+QED
+
+Theorem ld_shared_agree_gas_readings_update:
+  ld_shared_agree D A tn s t ==>
+  ld_shared_agree D A tn (s with vs_gas_readings := rs)
+    (t with vs_gas_readings := rs)
+Proof
+  simp[ld_shared_agree_def]
+QED
+
+Theorem ld_exec_gas_empty:
+  inst.inst_outputs = [out] /\ s.vs_gas_readings = [] ==>
+  exec_gas inst s = OK (update_var out 0w s)
+Proof
+  simp[exec_gas_def]
+QED
+
+Theorem ld_exec_gas_cons:
+  inst.inst_outputs = [out] /\ s.vs_gas_readings = r::rs ==>
+  exec_gas inst s = OK (update_var out r (s with vs_gas_readings := rs))
+Proof
+  simp[exec_gas_def]
+QED
+
+Theorem ld_setup_callee_gas_readings:
+  setup_callee fn args s = SOME sc ==>
+  sc.vs_gas_readings = s.vs_gas_readings
+Proof
+  simp[setup_callee_def] >> strip_tac >> gvs[]
 QED
