@@ -229,3 +229,78 @@ QED
        bytestring type even when runtime encoding is short or zero.
    No induction skeleton or new predicate is introduced by this diagnostic.
 *)
+
+(* Zero-footprint / scratch reuse audit (C1.4.17.6.9).
+   Exact existing checked boundaries are reused, not duplicated:
+   fragExecPtr.ptr_inst_ok_mcopy_zero (431-452) proves
+     eval_operand dst s=SOME a /\ eval_operand src s=SOME b /\
+     op_taint tn dst={} /\ op_taint tn src={} /\ ~ctx_has_dalloca ctx
+     ==> ptr_inst_ok D 0 fuel ctx fn G tn
+           (mk_inst id MCOPY [dst;src;Lit 0w] []) s.
+   Thus zero Copy needs evaluated clean addresses but NO provenance, even
+   when they are literals.  access_ok's range obligations guard len<>0;
+   MCOPY's taint_ok still requires clean operands.  Empty complex instead
+   emits no instruction.  Neither case establishes positive footprint.
+
+   Representative reused-32-byte boundary: instantiate n=32 in
+   allocationPtr.reused_alloca_ptr_covers (185-207).  Its exact premises are
+   FLOOKUP s.vs_allocas id=SOME(b,n) and b+n<dimword(:256); the conclusion
+   gives coverage n for out in update_var out (n2w b) s under step_prov and
+   step_taint, AND preserves any old ptr_covers G tn p s sz with p<>out.
+   allocationPtr.reused_alloca_step (154) identifies that precise endpoint;
+   reused_alloca_ghost (164) gives no new_site_bytes, G update only at out,
+   and t_var update only at out to {}; reused_alloca_memory_taint (221)
+   gives exact t_mem equality.  These are already general in n, so adding a
+   special 32-byte theorem would duplicate them.  Memory is unchanged by
+   update_var; subsequent MSTORE initialization, not ALLOCA reuse itself,
+   is where protected memory/taint disjointness becomes necessary.
+
+   Actual-site table (compiler defs/abiEncoderScript.sml):
+   constructor/phase             scratch sites                 protected
+   complex dynamic (311-317)     dyn_ptr, size 32                source, head/tails
+   array entry (285-300)         parent_dyn_ptr, size 32         source, output
+   static array loop (195-217)   i_ptr, size 32                  parent cursor
+   dynamic array loop (342-374)  i_ptr,dyn_ptr, size 32 each     parent cursor
+   recursive element            only its actual ALLOCA sites   outer cursors,
+                                                                source,prefix
+   primitive/Copy/bytes/empty    none                           source,prefix
+   At each site split FLOOKUP s.vs_allocas id into NONE and SOME(b,32).
+   NONE: allocationPtr.fresh_alloca_new_site_bytes/fresh_alloca_ghost,
+   fresh_alloca_ptr_covers and fresh_alloca_taint_below_frontier provide the
+   new-site facts; fresh_alloca_old_region_disjoint (123-133) excludes any
+   old registered region using alloca_inv s.  An arbitrary protected window
+   additionally needs its bytes below the initial frontier (or registered
+   region coverage).  SOME: use the representative reuse boundaries above;
+   later stores require regions_disjoint(protected,(b,32)) explicitly.
+   Saved pointer variables must differ from out; compiler freshness, not
+   allocation disjointness, must discharge that variable inequality.
+
+   Comparison with semantic resource contracts:
+   abiEncoderWindowContract.abi_encoder_window_pre (9-29) already assumes
+   every reused actual ALLOCA site in frag_ids has sz=32 and is disjoint
+   from source (sb,cap) and LIVE output (d,E).  It says nothing about arbitrary
+   outer protected windows or extra reserved output beyond E.  The stronger
+   reserved-capacity/protected invariant must either add these hypotheses or
+   reserve only live E and derive cursor separation from registered sites.
+   window_strong_result_effect/growth/sizes supply actual-site effects,
+   growth and 32-byte sizes at the endpoint, NOT pointer ghosts or taint.
+   abi_encoder_window_effect_parent (97-109) protects registered (p,n) if
+   FLOOKUP s.vs_allocas parent=SOME(p,n), parent NOTIN child ids, alloca_inv t,
+   registered child effect, and disjointness from child live output hold.
+   alloca_site_registered_disjoint is the used distinct-site separation rule.
+   window_array_body_sites (abiEncoderWindowArray 101-116) proves child body
+   sites exclude parent/index/dynamic-cursor sites from the actual code and
+   counter bounds: mid, mid+2, st are all NOTIN body sites.  Its premises
+   include owner=mid+(if active then 5 else 2), body_end+6=loop_end,
+   st<=mid and loop_end<=en plus abi_encoder_array_loop_code.  This is a
+   concrete available exclusion interface, not a claim that arbitrary
+   recursive fragments cannot reuse a parent's site.
+
+   Remaining caller implications: establish matching code/counter bounds
+   and registered outer cursor before applying site exclusion; transport
+   alloca_inv and the allocation registrations at the counted endpoint;
+   supply live-output disjointness for each protected cursor/prefix/source;
+   thread clean cursor cells through initialization and child writes using
+   the exterior taint frame (semantic effect_parent alone is insufficient).
+   No new proof or frozen-definition change is required for this diagnostic.
+*)
