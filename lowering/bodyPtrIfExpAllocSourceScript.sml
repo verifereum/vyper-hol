@@ -58,7 +58,8 @@ Theorem alloca_step_contracts:
   contract_storage u = contract_storage s /\
   contract_transient u = contract_transient s /\
   u.vs_accounts = s.vs_accounts /\ u.vs_call_ctx = s.vs_call_ctx /\
-  u.vs_transient = s.vs_transient
+  u.vs_transient = s.vs_transient /\
+  u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb
 Proof
   strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
   >- (drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
@@ -246,4 +247,19 @@ Proof
       simp[] >> metis_tac[]) >>
   gvs[GSYM contract_storage_def, GSYM contract_transient_def,
       step_taint_nonmemory_frame, mk_inst_def]
+QED
+
+Theorem ptr_vv_ok_inst_idx[simp]:
+  ptr_vv_ok cx ty raw vv es G tn (s with vs_inst_idx := k) <=>
+  ptr_vv_ok cx ty raw vv es G tn s
+Proof
+  Cases_on `vv` >>
+  simp[ptr_vv_ok_def, ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def,
+       lookup_var_def]
+QED
+
+Theorem ptr_buf_ok_inst_idx[simp]:
+  ptr_buf_ok cenv e op G (s with vs_inst_idx := k) <=> ptr_buf_ok cenv e op G s
+Proof
+  simp[ptr_buf_ok_def, eval_operand_def, lookup_var_def]
 QED
