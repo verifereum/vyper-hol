@@ -710,6 +710,89 @@ Proof
   simp[Abbr `before`, FILTER_SNOC]
 QED
 
+Theorem inventory_emit_spilled:
+  !operands ps ops qs.
+  emit_input_plan opc operands nl ps = (ops, qs) ==>
+  FLOOKUP qs.ps_spilled (Var v) =
+    (if MEM (Var v) operands then NONE else FLOOKUP ps.ps_spilled (Var v))
+Proof
+  Induct >> simp[emit_input_plan_def, LET_THM] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >>
+  drule inventory_emit_one_spilled >>
+  disch_then (qspec_then `v` assume_tac) >>
+  Cases_on `h = Var v` >> simp[]
+QED
+
+Theorem inventory_count_pos[local]:
+  !xs x. 0 < LENGTH (FILTER (\a. a = x) xs) <=> MEM x xs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h = x` >> simp[]
+QED
+
+Theorem inventory_operand_vars_mem[local]:
+  !operands v. MEM v (dfgDefs$operand_vars operands) <=> MEM (Var v) operands
+Proof
+  Induct >> simp[dfgDefsTheory.operand_vars_def] >> gen_tac >>
+  Cases_on `h` >> simp[dfgDefsTheory.operand_var_def]
+QED
+
+Theorem inventory_emit_count:
+  !operands ps ops qs.
+  emit_input_plan opc operands nl ps = (ops, qs) /\
+  (MEM (Var v) operands ==> MEM (Var v) ps.ps_stack \/ IS_SOME (FLOOKUP ps.ps_spilled (Var v))) ==>
+  LENGTH (FILTER (\a. a = Var v) qs.ps_stack) +
+    (if MEM (Var v) operands /\ ~MEM v nl then 1 else 0) =
+  LENGTH (FILTER (\a. a = Var v) ps.ps_stack) +
+    (if MEM (Var v) operands /\ IS_SOME (FLOOKUP ps.ps_spilled (Var v)) then 1 else 0) +
+  LENGTH (FILTER (\a. a = Var v) operands)
+Proof
+  Induct >> simp[emit_input_plan_def, LET_THM] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_one_input opc _ h ps = (step_ops, mid)` >>
+  `h = Var v ==> MEM (Var v) ps.ps_stack \/ IS_SOME (FLOOKUP ps.ps_spilled (Var v))` by metis_tac[] >>
+  drule_all inventory_emit_one_count >> strip_tac >>
+  drule inventory_emit_one_spilled >> disch_then (qspec_then `v` assume_tac) >>
+  `MEM (Var v) operands ==> MEM (Var v) mid.ps_stack \/ IS_SOME (FLOOKUP mid.ps_spilled (Var v))` by
+    (gvs[MEM_APPEND, inventory_operand_vars_mem] >>
+     Cases_on `h = Var v` >> gvs[] >>
+     Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var v))` >> gvs[] >>
+     gvs[GSYM inventory_count_pos] >> decide_tac) >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `h = Var v` >>
+  Cases_on `MEM (Var v) operands` >> Cases_on `MEM v nl` >>
+  Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var v))` >>
+  gvs[MEM_APPEND, inventory_operand_vars_mem] >> decide_tac
+QED
+
+Theorem inventory_distinct_count[local]:
+  !xs x. ALL_DISTINCT xs ==>
+  LENGTH (FILTER (\a. a = x) xs) = (if MEM x xs then 1 else 0)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> Cases_on `h = x` >>
+  gvs[] >> simp[FILTER_EQ_NIL, EVERY_MEM]
+QED
+
+Theorem inventory_emit_dead_count:
+  emit_input_plan opc operands nl ps = (ops, qs) /\
+  ~MEM v nl /\ MEM (Var v) operands /\ ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  (MEM (Var v) ps.ps_stack \/ IS_SOME (FLOOKUP ps.ps_spilled (Var v))) ==>
+  LENGTH (FILTER (\a. a = Var v) qs.ps_stack) =
+    LENGTH (FILTER (\a. a = Var v) operands) /\
+  FLOOKUP qs.ps_spilled (Var v) = NONE
+Proof
+  strip_tac >>
+  `MEM (Var v) operands ==> MEM (Var v) ps.ps_stack \/ IS_SOME (FLOOKUP ps.ps_spilled (Var v))` by simp[] >>
+  drule_all inventory_emit_count >>
+  drule inventory_emit_spilled >> disch_then (qspec_then `v` assume_tac) >>
+  drule inventory_distinct_count >> disch_then (qspec_then `Var v` assume_tac) >>
+  `~(MEM (Var v) ps.ps_stack /\ IS_SOME (FLOOKUP ps.ps_spilled (Var v)))` by
+    (gvs[DISJOINT_DEF, EXTENSION, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  Cases_on `MEM (Var v) ps.ps_stack` >>
+  Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var v))` >> gvs[] >> decide_tac
+QED
+
 (* Bounded contract checks: PHIs replace their unique incoming source,
    and discard a dead output on a non-halting path. *)
 Theorem regional_phi_live_probe:
