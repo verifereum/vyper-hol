@@ -546,12 +546,12 @@ Theorem calldata_coherent_nonbulk_array_owned_run:
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
-    (Lit 0w) di middle = ((),st1) /\
+    (Lit 0w) (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < middle.cs_next_id /\
