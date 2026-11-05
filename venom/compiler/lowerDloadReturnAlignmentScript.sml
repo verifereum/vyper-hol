@@ -127,3 +127,27 @@ Proof
       qpat_x_assum `g.fn_blocks = _` SUBST1_TAC >> simp[]) >>
   fs[]
 QED
+
+(* Aligned point boundary: all premises are exported by point alignment. *)
+Theorem ld_guarded_source_non_revert:
+  lower_dload_function_supply u fn = (g,v) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  EVERY inst_wf (fn_insts fn) /\ ir_supply_covers_fn u fn /\
+  active_inst fn inst s /\ ld_envelope u fn s s.vs_inst_idx X p /\
+  h < LENGTH X /\ t.vs_inst_idx = p+h /\
+  t.vs_current_bb = s.vs_current_bb /\
+  lookup_block t.vs_current_bb g.fn_blocks = SOME bb /\
+  ^ld_probe_guard C k bb t ==> ~in_revert_forward fn s
+Proof
+  strip_tac >> strip_tac >>
+  `?sb. lookup_block s.vs_current_bb fn.fn_blocks = SOME sb /\
+         get_instruction sb s.vs_inst_idx = SOME inst` by
+    (drule_all ld_active_lookup >> metis_tac[get_instruction_def]) >>
+  `inst.inst_opcode = RETURNDATACOPY \/ inst.inst_opcode = REVERT` by
+    (fs[in_revert_forward_def] >> gvs[] >>
+     drule_all revert_forward_at_opcode >> simp[]) >>
+  `X = [inst]` by (irule ld_envelope_ordinary >> simp[] >> metis_tac[]) >>
+  `h = 0` by fs[] >>
+  `in_revert_forward g t` by (irule ld_envelope_revert_forward >> simp[] >> metis_tac[]) >>
+  drule ld_guard_non_revert >> gvs[in_revert_forward_def]
+QED
