@@ -295,8 +295,10 @@ Theorem stmt_exprs_ok_from_traversal_bounds:
   EVERY (stmt_exprs_ok cenv) ss
 Proof
   `!e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e) =
-        (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)` by metis_tac[] >>
+        (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)` by simp[] >>
   simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmt_expr_exists_disj,
        supported_stmts_expr_exists_list, EXISTS_MEM] >>
-  Induct_on `ss` >> simp[allocLimitsTheory.alloc_limits_stmt_def] >> metis_tac[]
+  Induct_on `ss` >>
+  simp[allocLimitsTheory.alloc_limits_stmt_def, stmt_valued_return_def] >>
+  metis_tac[]
 QED

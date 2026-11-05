@@ -358,7 +358,7 @@ Theorem external_body_support_bounds:
   locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
   ?bindings. supported_stmts tops bindings ss
 Proof
-  strip_tac >>
+  disch_then strip_assume_tac >>
   drule_all supported_external_allocs_ok >> strip_tac >>
   drule_all fn_allocs_ok_body >> strip_tac >>
   `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
