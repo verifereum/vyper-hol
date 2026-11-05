@@ -1,11 +1,14 @@
 Theory concretizePtrPairedPrefixProbe
 Ancestors
-  concretizePtrPairedPrefix concretizePtrValueTransport
+  concretizePtrPairedPrefix concretizePtrPairedFields concretizePtrStructuralTranscript
+  concretizePtrStructuralTrace concretizePtrActivationChronology concretizePtrActivationBirths
+  concretizePtrValueTransport
   concretizePtrValueSelection concretizePtrAffineTransport
   concretizePtrOwnedAssignPrefix concretizePtrSharedFields
   concretizePtrChronologicalHistory
   concretizePtrDeletedGapHistory concretizePtrSourceOwnership
-  concretizePtrLedgerAlignment makeSsaHelper o1PassContract unitTransformDefs
+  concretizePtrLedgerAlignment concretizeStepStructure
+  makeSsaHelper o1PassContract unitTransformDefs
   contextCodegenRel ptrDiscipline venomExecSemantics lowerDloadDefs
   venomState list finite_map words
 
@@ -143,4 +146,100 @@ Proof
   simp[ptr_paired_sample_def] >> strip_tac >> conj_tac
   >- (irule ptr_assign_prefix_gap_transport >> simp[]) >>
   gvs[ptr_gap_scan_fields, ptr_shared_fields_def]
+QED
+
+Theorem ptr_paired_cursor_nop_next:
+  ptr_paired_cursor lp a at /\ a.po_inst.inst_opcode = NOP /\
+  lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb ==>
+  ptr_paired_cursor lp (ptr_gap_next bb a) at /\
+  SUC a.po_state.vs_inst_idx < LENGTH bb.bb_instructions
+Proof
+  simp[ptr_paired_cursor_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule ptr_ledger_alignment_cursor >> strip_tac >>
+  `at.po_state.vs_inst_idx < LENGTH bbt.bb_instructions` by gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  `a.po_state.vs_inst_idx < EL at.po_state.vs_inst_idx indices` by
+    (Cases_on `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices`
+     >- (gvs[] >> metis_tac[concretize_positions_nop]) >> decide_tac) >>
+  reverse conj_tac >- decide_tac >>
+  simp[ptr_gap_next_fields] >> qexists_tac `indices` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem ptr_paired_prefix_gap_next:
+  !W. ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls W /\
+  fn_inst_wf a.po_fn /\
+  lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
+  a.po_inst.inst_opcode = NOP ==>
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    (h ++ [ptr_gap_next bb a]) (ptr_gap_next bb a) ht at done
+    tokens registry births PT (step_prov PT TG a.po_inst a.po_state) saved entries
+    (H ++ [(tokens,registry,births,PT,step_prov PT TG a.po_inst a.po_state,saved,entries)]) calls W
+Proof
+  gen_tac >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule_all ptr_paired_cursor_nop_next >> strip_tac >>
+  `MEM bb a.po_fn.fn_blocks /\ bb.bb_label = a.po_state.vs_current_bb /\
+    a.po_inst = EL a.po_state.vs_inst_idx bb.bb_instructions` by
+    (qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
+     simp[ptr_paired_cursor_def] >> rpt strip_tac >> gvs[] >>
+     metis_tac[lookup_block_label]) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  drule ptr_ownership_overlay_fixed >> strip_tac >>
+  `ptr_tagged_chrono_step C (HD tokens) a (ptr_gap_next bb a)
+    PT TG saved PT (step_prov PT TG a.po_inst a.po_state) saved` by
+    (irule ptr_gap_tagged_next >> simp[]) >>
+  `ptr_activation_tokens h a (ptr_gap_next bb a) tokens = tokens /\
+   ptr_activation_registry h a (ptr_gap_next bb a) registry = registry /\
+   ptr_birth_overlay (HD tokens) (ptr_gap_next bb a).po_state.vs_allocas births = births` by
+    simp[ptr_activation_tokens_def, ptr_activation_registry_def, ptr_gap_next_fields] >>
+  drule ptr_paired_prefix_gap >>
+  disch_then (qspecl_then [`saved`,`ptr_gap_next bb a`,
+    `step_prov PT TG a.po_inst a.po_state`,`PT`] mp_tac) >>
+  simp[ptr_gap_next_fields] >> disch_then irule >> conj_tac
+  >- gvs[ptr_paired_params_def, ptr_gap_next_fields] >>
+  qpat_assum `a.po_inst = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  irule (PURE_REWRITE_RULE [ptr_gap_scan_def, ptr_gap_tag_scan_def]
+    (Q.INST [`n` |-> `SUC 0`] (SPEC_ALL ptr_paired_gap_scan_sample))) >>
+  simp[] >> rpt strip_tac >>
+  `q = a.po_state.vs_inst_idx` by decide_tac >> metis_tac[]
+QED
+
+
+Theorem ptr_paired_prefix_gap_scan:
+  !n a h TG H.
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  fn_inst_wf a.po_fn /\
+  lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
+  a.po_state.vs_inst_idx + n < LENGTH bb.bb_instructions /\
+  (!q. a.po_state.vs_inst_idx <= q /\ q < a.po_state.vs_inst_idx + n ==>
+    (EL q bb.bb_instructions).inst_opcode = NOP) ==>
+  ?delta snapshots. LENGTH delta = n /\ LENGTH snapshots = n /\
+    ptr_paired_prefix R lp positions lo vs0 C Ct
+      (h ++ delta) (ptr_gap_scan bb n a) ht at done tokens registry births PT
+      (ptr_gap_tag_scan bb n a PT TG) saved entries (H ++ snapshots) calls ws
+Proof
+  Induct
+  >- (rpt strip_tac >> qexistsl_tac [`[]`,`[]`] >>
+      simp[ptr_gap_scan_def, ptr_gap_tag_scan_def]) >>
+  rpt gen_tac >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `a.po_inst = EL a.po_state.vs_inst_idx bb.bb_instructions` by
+    (gvs[ptr_paired_cursor_def]) >>
+  `a.po_inst.inst_opcode = NOP` by
+    (first_x_assum (qspec_then `a.po_state.vs_inst_idx` mp_tac) >> simp[]) >>
+  drule_all ptr_paired_prefix_gap_next >> strip_tac >>
+  first_x_assum (qspecl_then [`ptr_gap_next bb a`,`h ++ [ptr_gap_next bb a]`,
+    `step_prov PT TG a.po_inst a.po_state`,
+    `H ++ [(tokens,registry,births,PT,step_prov PT TG a.po_inst a.po_state,saved,entries)]`] mp_tac) >>
+  simp[ptr_gap_next_fields, arithmeticTheory.ADD_CLAUSES] >>
+  strip_tac >>
+  qexistsl_tac [`ptr_gap_next bb a :: delta`,
+    `(tokens,registry,births,PT,step_prov PT TG a.po_inst a.po_state,saved,entries) :: snapshots`] >>
+  simp[ptr_gap_scan_def, ptr_gap_tag_scan_def] >>
+  pop_assum mp_tac >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
 QED

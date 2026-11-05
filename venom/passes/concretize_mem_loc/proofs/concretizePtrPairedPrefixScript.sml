@@ -1,7 +1,8 @@
 Theory concretizePtrPairedPrefix
 Ancestors
-  concretizePtrStructuralTranscript concretizePtrSharedFields
+  concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSharedFields
   concretizePtrValueSelection concretizePtrEventEmbedding concretizePtrPairedFields
+  concretizePtrChronologicalHistory concretizePtrActivationChronology concretizePtrActivationBirths
   list rich_list arithmetic pair
 
 (* The tuple is the actual source snapshot, not an endpoint witness
@@ -195,4 +196,100 @@ Theorem ptr_paired_alignment_params:
 Proof
   simp[ptr_paired_alignment_def] >> rpt strip_tac >>
   first_x_assum drule >> simp[ptr_paired_params_def]
+QED
+
+Theorem ptr_paired_alignment_gap:
+  ptr_paired_samples positions h ht done H /\
+  ptr_paired_alignment R local_positions positions h ht done H /\
+  ptr_paired_code R local_positions positions b.po_fn (EL (LENGTH done) ht).po_fn /\
+  ptr_paired_cursor local_positions b (EL (LENGTH done) ht) /\
+  ptr_paired_params positions b (EL (LENGTH done) ht) snapshot ==>
+  ptr_paired_alignment R local_positions positions (h ++ [b]) ht done (H ++ [snapshot])
+Proof
+  rewrite_tac[ptr_paired_samples_def, ptr_paired_alignment_def] >>
+  strip_tac >> gen_tac >> strip_tac >> Cases_on `j < LENGTH done`
+  >- (`EL j done < LENGTH h /\ EL j done < LENGTH H` by gvs[EVERY_EL] >>
+      first_x_assum (qspec_then `j` mp_tac) >> simp[EL_APPEND_EQN]) >>
+  `j = LENGTH done` by decide_tac >> simp[EL_APPEND_EQN]
+QED
+
+(* Semantic endpoint facts are separated from the frozen-history bookkeeping. *)
+Theorem ptr_paired_prefix_gap:
+  !W. ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls W /\
+  a.po_inst.inst_opcode = NOP /\
+  ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT' TG' saved' /\
+  b.po_stack = a.po_stack /\ saved' = saved /\
+  ptr_paired_sample positions b at
+    (ptr_activation_tokens h a b tokens,ptr_activation_registry h a b registry,
+     ptr_birth_overlay (HD (ptr_activation_tokens h a b tokens)) b.po_state.vs_allocas births,
+     PT',TG',saved',entries) /\
+  ptr_paired_code R lp positions b.po_fn at.po_fn /\
+  ptr_paired_cursor lp b at /\
+  ptr_paired_params positions b at
+    (ptr_activation_tokens h a b tokens,ptr_activation_registry h a b registry,
+     ptr_birth_overlay (HD (ptr_activation_tokens h a b tokens)) b.po_state.vs_allocas births,
+     PT',TG',saved',entries) ==>
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    (h ++ [b]) b ht at done
+    (ptr_activation_tokens h a b tokens) (ptr_activation_registry h a b registry)
+    (ptr_birth_overlay (HD (ptr_activation_tokens h a b tokens)) b.po_state.vs_allocas births)
+    PT' TG' saved' entries
+    (H ++ [(ptr_activation_tokens h a b tokens,ptr_activation_registry h a b registry,
+     ptr_birth_overlay (HD (ptr_activation_tokens h a b tokens)) b.po_state.vs_allocas births,
+     PT',TG',saved',entries)]) calls W
+Proof
+  gen_tac >> rewrite_tac[ptr_paired_prefix_def] >> strip_tac >>
+  qpat_x_assum `saved' = saved` SUBST_ALL_TAC >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  `EL (LENGTH done) ht = at` by
+    (gvs[ptr_paired_samples_def] >>
+     `PRE (LENGTH ht) = LENGTH done` by decide_tac >> gvs[LAST_EL]) >>
+  `EVERY (\n. SUC n < LENGTH h) done` by
+    (drule ptr_structural_trace_embedding >>
+     simp[ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
+     gen_tac >> strip_tac >>
+     qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
+     simp[EL_APPEND_EQN] >> decide_tac) >>
+  conj_tac >- (irule (cj 2 ptr_structural_transcript_rules) >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- (irule ptr_paired_samples_gap >> simp[]) >>
+  conj_tac >- (irule ptr_paired_alignment_gap >> metis_tac[]) >>
+  conj_tac
+  >- (irule (SRULE [] (Q.INST [`ts` |-> `[]`, `ds` |-> `[]`]
+        ptr_paired_callers_retained)) >>
+      gvs[ptr_paired_samples_def] >> qexistsl_tac [`a`,`LAST ht`] >> simp[]) >>
+  irule ptr_paired_writes_gap >> gvs[ptr_paired_samples_def]
+QED
+
+Theorem ptr_paired_prefix_endpoint:
+  !W. ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls W ==>
+  ptr_paired_sample positions a at (tokens,registry,births,PT,TG,saved,entries) /\
+  ptr_paired_code R lp positions a.po_fn at.po_fn /\
+  ptr_paired_cursor lp a at /\
+  ptr_paired_params positions a at (tokens,registry,births,PT,TG,saved,entries)
+Proof
+  gen_tac >> rewrite_tac[ptr_paired_prefix_def] >> strip_tac >>
+  drule ptr_structural_transcript_endpoint >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  imp_res_tac ptr_chrono_history_end >>
+  `H <> []` by (Cases_on `H` >> gvs[]) >>
+  qpat_x_assum `ptr_paired_samples _ _ _ _ _` mp_tac >>
+  simp[ptr_paired_samples_def] >> strip_tac >>
+  `EL (LENGTH done) ht = at /\ EL (LENGTH h - 1) h = a /\
+    EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (qpat_x_assum `LAST ht = at` mp_tac >>
+     qpat_x_assum `LAST h = a` mp_tac >>
+     qpat_x_assum `LAST H = _` mp_tac >>
+     simp[LAST_EL, PRE_SUB1]) >>
+  qpat_x_assum `!j. _ ==> ptr_paired_sample _ _ _ _`
+    (qspec_then `LENGTH done` mp_tac) >>
+  qpat_x_assum `ptr_paired_alignment _ _ _ _ _ _ _` mp_tac >>
+  simp[ptr_paired_alignment_def] >>
+  disch_then (qspec_then `LENGTH done` mp_tac) >> simp[EL_APPEND_EQN]
 QED
