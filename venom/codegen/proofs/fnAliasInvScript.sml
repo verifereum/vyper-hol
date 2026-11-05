@@ -479,6 +479,46 @@ Proof
   first_x_assum (qspec_then `x` mp_tac) >> decide_tac
 QED
 
+Theorem alias_var_mass_pop:
+  alias_var_mass x (ps with ps_stack := stack_pop n ps.ps_stack) +
+  LIST_ELEM_COUNT (Var x) (top_n n ps.ps_stack) = alias_var_mass x ps
+Proof
+  `TAKE (LENGTH ps.ps_stack - n) ps.ps_stack ++ top_n n ps.ps_stack =
+   ps.ps_stack` by
+    (Cases_on `n <= LENGTH ps.ps_stack`
+     >- simp[top_n_def, GSYM rich_listTheory.LASTN_def,
+             rich_listTheory.LASTN_DROP, TAKE_DROP] >>
+     `LENGTH ps.ps_stack <= n` by decide_tac >>
+     simp[top_n_def, TAKE_LENGTH_TOO_LONG]) >>
+  pop_assum (mp_tac o AP_TERM ``LIST_ELEM_COUNT (Var x)``) >>
+  simp[elem_count_append, alias_var_mass_def, stack_pop_def] >> decide_tac
+QED
+
+Theorem alias_var_budget_pop_window:
+  alias_var_budget (pending ++ consumed) ps /\
+  (!x. LIST_ELEM_COUNT (Var x) consumed <=
+       LIST_ELEM_COUNT (Var x) (top_n n ps.ps_stack)) ==>
+  alias_var_budget pending (ps with ps_stack := stack_pop n ps.ps_stack)
+Proof
+  rw[alias_var_budget_def] >>
+  first_x_assum (qspec_then `x` assume_tac) >>
+  first_x_assum (qspec_then `x` mp_tac) >>
+  mp_tac alias_var_mass_pop >> simp[elem_count_append] >> decide_tac
+QED
+
+Theorem alias_var_budget_reorder_pop:
+  qs = SND (reorder_plan dfg targets ps) /\
+  LENGTH targets <= LENGTH ps.ps_stack /\
+  alias_var_budget (pending ++ consumed) ps /\
+  (!x. LIST_ELEM_COUNT (Var x) consumed <=
+       LIST_ELEM_COUNT (Var x) (top_n n qs.ps_stack)) ==>
+  alias_var_budget pending (qs with ps_stack := stack_pop n qs.ps_stack)
+Proof
+  strip_tac >> irule alias_var_budget_pop_window >>
+  qexists_tac `consumed` >> simp[] >>
+  metis_tac[alias_var_budget_reorder_plan]
+QED
+
 Theorem alias_var_mass_emit_one:
   !opc live op ps x.
   alias_var_mass x (SND (emit_one_input opc live op ps)) <=
