@@ -2,7 +2,7 @@ Theory bodyIntCallSemanticFrame
 Ancestors
   fragExec exprLoweringProps venomCallOracleDefs venomState venomExecSemantics list rich_list
   loweringSlice venomExecProofs valueEncoding emitHelperProps compileEnv venomInst
-  localPtrsProps stmtSim exprLowering emitHelper finite_map
+  localPtrsProps stmtSim exprLowering emitHelper finite_map freshWrites varsExt exprSim
 
 Theorem run_inst_seq_observation:
   !insts s t obs.
@@ -199,3 +199,106 @@ val () =
        List.all (fn oracle => oracle = "DISK_THM") oracles then ()
     else raise Fail "Instruction storage frame has unproved dependencies"
   end;
+
+Theorem stmt_state_rel_fresh_vars:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> FLOOKUP V x = FLOOKUP s.vs_vars x) ==>
+  stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
+Proof
+  strip_tac >> irule stmt_state_rel_vars_frame >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      simp[lookup_var_def]) >>
+  rpt strip_tac >>
+  `not_fresh_at sa p` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  simp[lookup_var_def]
+QED
+
+Theorem writes_fresh_run_storage_frame_post:
+  writes_fresh sa insts /\ run_inst_seq insts s0 = OK t /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  eval_operand op t = SOME w ==>
+  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := n) /\
+  eval_operand op (t with vs_inst_idx := n) = SOME w /\
+  (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+    lookup_var x (t with vs_inst_idx := n) = SOME w') /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+    FLOOKUP (t with vs_inst_idx := n).vs_allocas aid = SOME b) /\
+  (t with vs_inst_idx := n).vs_memory = s0.vs_memory /\
+  contract_storage (t with vs_inst_idx := n) = contract_storage s0 /\
+  contract_transient (t with vs_inst_idx := n) = contract_transient s0
+Proof
+  strip_tac >> drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es (s0 with vs_vars := t.vs_vars)` by
+    (irule stmt_state_rel_fresh_vars >> simp[] >> qexists_tac `sa` >> simp[]) >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  simp[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
+       contract_storage_def, contract_transient_def] >>
+  rpt strip_tac >> gvs[lookup_var_def] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem writes_fresh_success_restore:
+  writes_fresh sa insts /\ P s0 /\
+  (!s. P s ==> P (drop_fresh sa s)) /\
+  (!s. fresh_vars_wrt sa s /\ P s ==>
+    ?t. run_inst_seq insts s = OK t /\ eval_operand op t = SOME w) ==>
+  ?t. run_inst_seq insts s0 = OK t /\ eval_operand op t = SOME w
+Proof
+  strip_tac >>
+  `fresh_vars_wrt sa (drop_fresh sa s0) /\ P (drop_fresh sa s0)` by
+    simp[fresh_vars_wrt_drop_fresh] >>
+  qpat_x_assum `!s. fresh_vars_wrt _ _ /\ _ ==> _` drule_all >> strip_tac >>
+  qspecl_then [`insts`, `drop_fresh sa s0`, `s0`] mp_tac run_inst_seq_vars_ext >>
+  (impl_tac >- (simp[vars_ext_drop_fresh] >>
+    gvs[writes_fresh_def, EVERY_MEM] >> metis_tac[fresh_write_op_simple])) >>
+  simp[vars_ext_result_def] >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  gvs[vars_ext_def] >> rename1 `partial.vs_vars SUBMAP full.vs_vars` >>
+  drule eval_operand_vars_ext >>
+  disch_then (qspec_then `op` mp_tac) >> simp[] >>
+  qpat_x_assum `full = _` SUBST1_TAC >> simp[]
+QED
+
+Theorem frag_exec_straight_fresh_storage_frame_success:
+  straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
+  (!s. P s ==> P (drop_fresh sa s)) /\
+  (!s. fresh_vars_wrt sa s /\ P s ==>
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\ eval_operand op t = SOME w) ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ P s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w /\
+      (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+        lookup_var x s = SOME w') /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+        FLOOKUP s.vs_allocas aid = SOME b) /\
+      s.vs_memory = s0.vs_memory /\
+      contract_storage s = contract_storage s0 /\
+      contract_transient s = contract_transient s0) R
+Proof
+  strip_tac >>
+  qpat_x_assum `straight_fresh _` (mp_tac o REWRITE_RULE [straight_fresh_def]) >>
+  disch_then drule >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)` by
+    (gvs[writes_fresh_def, EVERY_MEM] >> metis_tac[fresh_write_op_simple]) >>
+  irule frag_exec_run_inst_seq >> simp[IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> gvs[] >> disj1_tac >>
+  `?t. run_inst_seq (emitted_insts sa sb) s0 = OK t /\ eval_operand op t = SOME w` by
+    (irule writes_fresh_success_restore >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  goal_assum (drule_at Any) >>
+  drule_all writes_fresh_run_storage_frame_post >>
+  disch_then (qspec_then `LENGTH sb.cs_current_insts` mp_tac) >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Straight-fresh storage frame has unproved dependencies"
+  end) [stmt_state_rel_fresh_vars, writes_fresh_run_storage_frame_post,
+        writes_fresh_success_restore, frag_exec_straight_fresh_storage_frame_success];
