@@ -239,31 +239,30 @@ Theorem for_counter_increment_path_ptr:
   get_instruction bb (SUC s.vs_inst_idx) =
     SOME (mk_inst id2 ASSIGN [Var tmp] [ctr]) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  lookup_var ctr s = SOME (n2w k) /\ k < n /\ n < dimword(:256) /\
+  lookup_var ctr s = SOME w /\
   FLOOKUP G ctr = NONE /\ op_taint tn (Var ctr) = {} ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT (DRESTRICT G (COMPL {tmp})) (COMPL {ctr}))
     (tn with t_var := (tn.t_var |+ (tmp,{})) |+ (ctr,{}))
-    (OK ((update_var ctr (n2w (k+1))
-      (update_var tmp (n2w (k+1)) s))
+    (OK ((update_var ctr (w + 1w)
+      (update_var tmp (w + 1w) s))
       with vs_inst_idx := SUC (SUC s.vs_inst_idx)))
 Proof
   strip_tac >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {tmp}))
     (tn with t_var := tn.t_var |+ (tmp,{}))
-    (OK ((update_var tmp (n2w (k+1)) s)
+    (OK ((update_var tmp (w + 1w) s)
       with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (simp[GSYM wordsTheory.word_add_n2w] >>
-     irule for_add_scalar_path_ptr >> simp[] >> metis_tac[]) >>
-  qabbrev_tac `sm = (update_var tmp (n2w (k+1)) s)
+    (irule for_add_scalar_path_ptr >> simp[] >> metis_tac[]) >>
+  qabbrev_tac `sm = (update_var tmp (w + 1w) s)
     with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `tm = tn with t_var := tn.t_var |+ (tmp,{})` >>
   qabbrev_tac `Gm = DRESTRICT G (COMPL {tmp})` >>
   `gas_path_ptr D 0 ctx fn PG Gm tm sm 0
     (DRESTRICT Gm (COMPL {ctr}))
     (tm with t_var := tm.t_var |+ (ctr,{}))
-    (OK ((update_var ctr (n2w (k+1)) sm)
+    (OK ((update_var ctr (w + 1w) sm)
       with vs_inst_idx := SUC sm.vs_inst_idx))` by
     (irule for_assign_scalar_path_ptr >>
      simp[Abbr `sm`, Abbr `tm`, Abbr `Gm`, update_var_def,
@@ -285,19 +284,19 @@ Theorem for_counter_backedge_path_ptr:
   fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
   LENGTH sa.cs_current_insts = SUC (SUC s.vs_inst_idx) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  lookup_var ctr s = SOME (n2w k) /\ k < n /\ n < dimword(:256) /\
+  lookup_var ctr s = SOME w /\
   FLOOKUP G ctr = NONE /\ op_taint tn (Var ctr) = {} ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT (DRESTRICT G (COMPL {tmp})) (COMPL {ctr}))
     (tn with t_var := (tn.t_var |+ (tmp,{})) |+ (ctr,{}))
-    (OK (jump_to lbl (update_var ctr (n2w (k+1))
-      (update_var tmp (n2w (k+1)) s))))
+    (OK (jump_to lbl (update_var ctr (w + 1w)
+      (update_var tmp (w + 1w) s))))
 Proof
   strip_tac >>
   drule_all for_counter_increment_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
-  qabbrev_tac `sf = (update_var ctr (n2w (k+1))
-    (update_var tmp (n2w (k+1)) s))
+  qabbrev_tac `sf = (update_var ctr (w + 1w)
+    (update_var tmp (w + 1w) s))
       with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
   qabbrev_tac `Gf = DRESTRICT (DRESTRICT G (COMPL {tmp})) (COMPL {ctr})` >>
   qabbrev_tac `tf = tn with t_var := (tn.t_var |+ (tmp,{})) |+ (ctr,{})` >>
