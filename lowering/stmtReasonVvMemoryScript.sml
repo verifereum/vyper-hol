@@ -213,13 +213,14 @@ QED
 Theorem raise_reason_vv_outcome:
   !ctx func cx lctx RetQ cenv se es s sa vv sm sb Q.
     expr_vv_sim_mem ctx func cenv cx (expr_type se) se es /\
-    (!es sa vv sm sb s0 ee tv t.
+    (!es sa vv sm sb s0 ee tv t str.
        compile_expr cenv (expr_type se) se sa = (vv, sm) /\
        compile_revert_with_reason cenv vv (expr_type se)
          (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\
        vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       read_result cx tv ee = (INL (StringV str), ee) /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
@@ -272,7 +273,7 @@ Resume raise_reason_vv_outcome[normal]:
     (irule raise_reason_read_string >> metis_tac[]) >>
   qpat_x_assum `v = StringV str` SUBST_ALL_TAC >>
   first_x_assum (qspecl_then [`es`, `sa`, `vv`, `sm`, `sb`, `s`,
-    `es_end with gas_obs := []`, `tv`, `t`] mp_tac) >>
+    `es_end with gas_obs := []`, `tv`, `t`, `str`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `u` assume_tac) >>
   rewrite_tac[gas_summary_at_def] >>
@@ -305,13 +306,14 @@ Theorem compile_raise_reason_vv_frag_mem:
   !d ctx func cx lctx RetQ cenv ty se es.
     (!ml str. se <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_vv_sim_mem ctx func cenv cx (expr_type se) se es /\
-    (!es sa vv sm sb s0 ee tv t.
+    (!es sa vv sm sb s0 ee tv t str.
        compile_expr cenv (expr_type se) se sa = (vv, sm) /\
        compile_revert_with_reason cenv vv (expr_type se)
          (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\
        vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       read_result cx tv ee = (INL (StringV str), ee) /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
@@ -464,13 +466,14 @@ Theorem compile_assert_reason_vv_frag_mem:
        (do raw <- eval_expr cx e; read_result cx raw od)
          (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
        expr_vv_sim_mem ctx func cenv cx (expr_type se) se es1) /\
-    (!es sa vv sm sb s0 ee tv t.
+    (!es sa vv sm sb s0 ee tv t str.
        compile_expr cenv (expr_type se) se sa = (vv, sm) /\
        compile_revert_with_reason cenv vv (expr_type se)
          (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\
        vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       read_result cx tv ee = (INL (StringV str), ee) /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
