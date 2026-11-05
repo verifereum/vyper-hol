@@ -3,7 +3,7 @@
 Theory exprPtrUnwrapCopyEdges
 Ancestors
   fragGasSeqPtr fragGasPathPtr gasCount slotCopyExecution ptrSafeRun ptrDiscipline
-  venomExecProps bodyPtrDefs memLocDefs
+  venomExecProps bodyPtrDefs memLocDefs compileEnv vfmConstants
   venomExecSemantics venomInstProofs venomInst venomState finite_map codegenRel contextCodegenRel
 
 Theorem slot_load_output_taint:
@@ -214,4 +214,17 @@ Proof
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
   rpt strip_tac >> gvs[]
+QED
+
+(* Nonempty taint permitted in an unused bytes[32] payload slot. *)
+Theorem empty_bytes_dead_taint_probe:
+  lookup_storage 0w st = 0w /\ tn.t_stor = {(1w,0)} ==>
+  dead_bytes st 0 (BaseTV (BytesT (Dynamic 32))) 1 0 /\
+  op_taint (step_taint (mk_inst id SLOAD [Lit 1w] [out]) s u tn)
+    (Var out) = {0}
+Proof
+  strip_tac >> conj_tac
+  >- simp[dead_bytes_def, dyn_bytes_dead_def, word_size_def] >>
+  simp[Q.INST [`key` |-> `1w`] slot_load_output_taint, eval_operand_def,
+       key_taint_def, pred_setTheory.EXTENSION]
 QED
