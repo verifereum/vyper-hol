@@ -8,7 +8,8 @@
  *   supported_aug_toplevel_decl — a supported augmented top-level target
  *                       is a word variable of tops in storage or transient
  *                       storage (any word width, not only full words)
- *   body_augassign_other_leaf — body_augassign_other with target_env_ok
+ *   body_augassign_other_leaf — body_augassign_other, with the abi-decode
+ *                       premise of body_stmt_ok
  *   supported_aug_attr_toplevel_field — a supported augmented field of a
  *                       top-level variable is a supported storage field
  *)
@@ -20,6 +21,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
+  stmtSimAssignPlace
 
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
@@ -182,7 +184,7 @@ Theorem body_augassign_other_leaf:
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_ok cx e) /\ body_base_target_ok cx t /\
-    body_inv tops ctx cenv cx /\ target_env_ok cenv cx /\
+    body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
