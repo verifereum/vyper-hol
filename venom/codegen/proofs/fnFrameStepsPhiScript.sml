@@ -9,7 +9,7 @@ Ancestors
   fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
-  allocaRemapSSA
+  allocaRemapSSA fnPlanPrefix
 
 Theorem phi_delete_spills_domain[local]:
   !xs ps at.
@@ -714,4 +714,80 @@ Proof
   >- simp[] >>
   rename1 `_ = SOME pair` >> Cases_on `pair` >>
   simp[finite_mapTheory.FLOOKUP_UPDATE] >> decide_tac
+QED
+
+(* ===== The PHI prefix from any entry stack ===== *)
+
+(* phi_prefix_frame_sim without the join-entry facts: it assumes only that
+   each PHI's stack hit (the shallowest of its variable operands on the
+   entry stack, which generate_phi_plan pokes) is the operand resolve_phi
+   selects for the edge taken.  The join case (fnFrameSteps) and the
+   single-predecessor case both derive that from their entry stacks.
+
+   Why it should hold: each PHI pokes its hit's slot with its output
+   (phi_block_ready: no PHI operand is live past the prefix, so the dup
+   branch never runs), and a dead output is popped.  No PHI reads another
+   PHI output of the same block (it would then be live past the prefix),
+   so the hits stay the same while the prefix runs and the sequential code
+   agrees with eval_phis.  The freshness premise keeps every other slot's
+   value, and its root's, unchanged by eval_phis. *)
+Theorem phi_prefix_hits_frame_sim:
+  !ctx cp lo o2pc prog liveness dfg cfg fn bb pred base ps vs as s_phi phis
+   body ops ps3 r ra rest mem0.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    vs.vs_prev_bb = SOME pred /\
+    (!inst. MEM inst phis ==>
+       ?dist.
+         stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+           ps.ps_stack = SOME dist /\
+         resolve_phi pred inst.inst_operands =
+           SOME (stack_peek dist ps.ps_stack)) /\
+    generated_plan_state_wf_marked base ps /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+       ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+                       (collect_phis bb.bb_instructions))) /\
+       normalize_operand dfg [] op = Var v ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
+    ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+           off < dimword (:256)) /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    eval_phis vs bb.bb_instructions = OK s_phi /\
+    non_param_insts bb = phis ++ body /\
+    LENGTH phis = phi_prefix_length bb.bb_instructions /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (phis ++ body) ps = SOME (ops, ps3) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops)
+    ==>
+    ?phi_ops ps1 body_ops n as'.
+      ops = phi_ops ++ body_ops /\
+      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) 0 (LENGTH phis) (phis ++ body) ps =
+        SOME (phi_ops, ps1) /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (LENGTH phis) body ps1 =
+        SOME (body_ops, ps3) /\
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp phi_ops) /\
+      fn_frame_inv ctx cp lo fn ra rest mem0 ps1
+        (s_phi with vs_inst_idx := LENGTH phis) as' /\
+      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+         operand_val (frame_view fn ra s_phi) lo at =
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+Proof
+  cheat
 QED
