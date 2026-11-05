@@ -260,3 +260,46 @@ Proof
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE, taint_component_equality]
 QED
 
+
+Theorem literal_ptr_bytelike_shape:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) ==>
+  ?sm sh p.
+    compile_alloc_buffer (32+32*word_size (LENGTH bs)) sa = (buf,sm) /\
+    emit_void MSTORE [Var p; Lit (n2w (LENGTH bs))] sm = ((),sh) /\
+    compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
+    buf.buf_operand = Var p /\ p = STRING #"%" (toString sa.cs_next_var) /\
+    ~not_fresh_at sa p /\ not_fresh_at sm p /\ not_fresh_at sh p /\
+    (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
+    emitted_insts sa sm =
+      [mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]] /\
+    emitted_insts sa sb =
+      [mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32+32*word_size (LENGTH bs)))] [p];
+       mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] []] ++
+      emitted_insts sh sb /\
+    sa.cs_next_id < sm.cs_next_id /\
+    EVERY (\i. ~is_terminator i.inst_opcode)
+      (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+       emitted_insts sh sb)
+Proof
+  strip_tac >> drule literal_bytelike_counted_shape >> strip_tac >>
+  qpat_x_assum `compile_bytelike_literal _ _ _ = _` mp_tac >>
+  simp_tac (bool_ss ++ pairSimps.PAIR_ss)
+    [compile_bytelike_literal_def, LET_THM, comp_bind_def, comp_ignore_bind_def,
+     GSYM word_size_def] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [comp_return_def] >>
+  strip_tac >> gvs[] >>
+  rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
+  rename1 `emit_void MSTORE _ sm = (u,sh)` >> Cases_on `u` >>
+  rename1 `compile_store_byte_chunks _ _ _ sh = (u,sb)` >> Cases_on `u` >>
+  drule_all literal_ptr_buffer_prefix_shape >> strip_tac >>
+  drule literal_payload_chunks_shape >> strip_tac >>
+  `emitted_insts sa sh = emitted_insts sa sm ++ emitted_insts sm sh` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sa sb = emitted_insts sa sh ++ emitted_insts sh sb` by
+    (irule emitted_insts_append >> simp[] >> metis_tac[same_blocks_trans]) >>
+  gvs[] >> conj_tac
+  >- (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
