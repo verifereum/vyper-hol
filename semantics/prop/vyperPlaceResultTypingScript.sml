@@ -1395,83 +1395,26 @@ Proof
   gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
-Theorem builtin_continuation_scope_effect[local]:
-  scope_pop_effect (do
-    acc <- get_accounts;
-    v <- lift_sum (evaluate_builtin cx acc ty bt ts vs);
-    precompile_call_success bt;
-    return v
-  od)
-Proof
-  ho_match_mp_tac scope_pop_effect_bind >> simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[] >> gen_tac >>
-  rewrite_tac[ignore_bind_def] >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[]
-QED
-
-(* Specialize the mutual induction interface, then select by conclusion. *)
-val builtin_scope_case = let
-  val ps = [
-    ``\(cx:evaluation_context) (s:stmt). T``,
-    ``\(cx:evaluation_context) (ss:stmt list). T``,
-    ``\(cx:evaluation_context) (it:iterator). T``,
-    ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``,
-    ``\cx e. scope_pop_effect (eval_expr cx e)``,
-    ``\cx es. scope_pop_effect (eval_exprs cx es)``,
-    ``\cx bt. scope_pop_effect (eval_base_place cx bt)``,
-    ``\cx bt. scope_pop_effect (eval_target_place cx bt)``,
-    ``\(cx:evaluation_context) (g:assignment_target) (v:value). T``,
-    ``\(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T``,
-    ``\cx es. scope_pop_effect (eval_expr_results cx es)``]
-  val ind = CONV_RULE (DEPTH_CONV BETA_CONV) (SPECL ps evaluate_ind)
-  fun conclusion tm =
-    if is_forall tm then conclusion (snd (dest_forall tm))
-    else if is_imp tm then conclusion (snd (dest_imp tm)) else tm
-  fun is_builtin tm =
-    case strip_comb (conclusion tm) of
-      (h,[e]) => same_const h ``scope_pop_effect`` andalso
-        (case strip_comb e of
-           (_, [_,b]) => same_const (fst (strip_comb b)) ``Builtin``
-         | _ => false)
-    | _ => false
-in
-  case List.filter is_builtin (strip_conj (fst (dest_imp (concl ind)))) of
-    [tm] => tm
-  | _ => raise Fail "expected unique Builtin scope effect case"
-end;
-
-(* Select one constructor-guarded recursive premise before applying it. *)
-fun scope_builtin_operand (g as (asl,w)) = let
-  fun candidate tm = let
-    val (_,body) = strip_forall tm
-  in if not (is_imp body) then false else let
-    val (guard,c) = dest_imp body
-    val eqs = List.filter is_eq (strip_conj guard)
-    val defs = List.filter (is_var o lhs) eqs
-    fun expand t = let
-      val t' = subst (map (fn eq => lhs eq |-> rhs eq) defs) t
-    in if aconv t t' then t else expand t' end
-    fun pair eq = pairSyntax.is_pair (lhs eq) andalso
-      pairSyntax.is_pair (rhs eq) andalso
-      is_var (fst (pairSyntax.dest_pair (rhs eq)))
-  in case List.filter pair eqs of
-    [eq] => let
-      val pat = expand (rhs eq)
-    in case total (match_term pat) (lhs eq) of
-       SOME (s,_) => aconv (subst s (expand c)) w
-     | NONE => false end
-  | _ => false end end
-  val selected = case List.filter candidate asl of
-    [tm] => tm | ts => raise Fail ("expected one recursive Builtin premise: " ^
-      Int.toString (length ts))
-in
-  first_assum (fn th => if aconv (concl th) selected then irule th else NO_TAC) g
-end;
-
 Theorem eval_builtin_scope_effect[local]:
-  ^builtin_scope_case
+  (!st x middle.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
+    scope_pop_effect (eval_exprs cx es)) /\
+  (!st x middle code_ty addr.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = SOME (code_ty,addr) ==>
+    scope_pop_effect (eval_exprs cx (TL es))) /\
+  (!st x middle code_ty addr st1 tail_vs st2.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = SOME (code_ty,addr) /\
+    eval_exprs cx (TL es) st1 = (INL tail_vs,st2) ==>
+    scope_pop_effect (eval_exprs cx [addr])) /\
+  (!st x middle.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt = Len ==> scope_pop_effect (eval_expr cx (HD es))) ==>
+  scope_pop_effect (eval_expr cx (Builtin ty bt es))
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
+  strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
   ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac
@@ -1480,93 +1423,21 @@ Proof
           >- (first_x_assum irule >> metis_tac[]) >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       Cases_on `bt = Env MsgGas` >> simp[] >>
-      Cases_on `bt` >>
-      RULE_ASSUM_TAC (REWRITE_RULE []) >>
-      rpt (qpat_x_assum `T` kall_tac) >>
-      rpt (qpat_x_assum `F` CONTR_TAC) >> simp[NoAsms, Excl "precompile_call_success_not_builtin"]
-      >~ [`Slice n`] >- suspend "slice" >>
-      (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-       >- (scope_builtin_operand >>
-           rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >>
-           metis_tac[]) >>
-       gen_tac >> irule (REWRITE_RULE [ignore_bind_def]
-         builtin_continuation_scope_effect))) >> simp[]
-QED
-
-Resume eval_builtin_scope_effect[slice]:
-  `LENGTH es = 3` by
-    (qpat_assum `type_check _ _ _ = _` mp_tac >>
-     simp[NoAsms, type_check_def, assert_def, vyperContextTheory.builtin_args_length_ok_def,
-          return_def, raise_def, AllCaseEqs()] >> metis_tac[]) >>
-  qpat_x_assum `LENGTH es = 3` mp_tac >>
-  simp_tac (srw_ss()) [listTheory.LENGTH_EQ_NUM_compute,
-    Excl "precompile_call_success_not_builtin"] >> strip_tac >>
-  rpt (qpat_x_assum `(_:expr list) = _` SUBST_ALL_TAC) >>
-  rename1 `type_check (builtin_args_length_ok _ (LENGTH [first; start; len])) _ _ = _` >>
-  Cases_on `first` >> simp[NoAsms, Excl "precompile_call_success_not_builtin"]
-  >~ [`Builtin code_ty inner args`] >- suspend "slice_builtin" >>
-  (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-   >- (scope_builtin_operand >>
-       rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >>
-       metis_tac[]) >>
-   gen_tac >> irule (REWRITE_RULE [ignore_bind_def] builtin_continuation_scope_effect))
-QED
-
-Resume eval_builtin_scope_effect[slice_builtin]:
-  Cases_on `inner` >> simp[NoAsms, Excl "precompile_call_success_not_builtin"]
-  >~ [`scope_pop_effect (bind (case a of Address => _ | Balance => _ | Codehash => _ | Codesize => _ | IsContract => _ | Code => _) _)`] >- suspend "slice_acc" >>
-  (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-   >- (scope_builtin_operand >>
-       rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >>
-       metis_tac[]) >>
-   gen_tac >> irule (REWRITE_RULE [ignore_bind_def] builtin_continuation_scope_effect))
-QED
-
-Resume eval_builtin_scope_effect[slice_acc]:
-  Cases_on `a = Code`
-  >- (qpat_x_assum `a = Code` SUBST_ALL_TAC >> simp[NoAsms, Excl "precompile_call_success_not_builtin"] >>
-      suspend "slice_code") >>
-  Cases_on `a` >> RULE_ASSUM_TAC (REWRITE_RULE []) >>
-  rpt (qpat_x_assum `T` kall_tac) >>
-  rpt (qpat_x_assum `F` CONTR_TAC) >> simp[NoAsms, Excl "precompile_call_success_not_builtin"] >>
-  (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-   >- (scope_builtin_operand >>
-       rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >>
-       metis_tac[]) >>
-   gen_tac >> irule (REWRITE_RULE [ignore_bind_def] builtin_continuation_scope_effect))
-QED
-
-Resume eval_builtin_scope_effect[slice_code]:
-  Cases_on `args`
-  >- (simp[NoAsms, Excl "precompile_call_success_not_builtin"] >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-      >- (scope_builtin_operand >>
-          rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >> metis_tac[]) >>
-      gen_tac >> irule (REWRITE_RULE [ignore_bind_def] builtin_continuation_scope_effect)) >>
-  rename1 `Builtin code_ty (Acc Code) (addr::rest)` >>
-  Cases_on `rest`
-  >- (simp[NoAsms, Excl "precompile_call_success_not_builtin"] >> suspend "slice_reordered") >>
-  simp[NoAsms, Excl "precompile_call_success_not_builtin"] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (scope_builtin_operand >>
-      rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >> metis_tac[]) >>
-  gen_tac >> irule (REWRITE_RULE [ignore_bind_def] builtin_continuation_scope_effect)
+      >- (Cases_on `code_slice_source bt es` >> simp[]
+          >- (first_x_assum irule >> metis_tac[]) >>
+          rename1 `SOME p` >> PairCases_on `p` >> simp[] >>
+          ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
+          >- (first_x_assum irule >> metis_tac[]) >>
+          rpt gen_tac >> strip_tac >>
+          ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+          >- (first_x_assum irule >> metis_tac[]) >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
-
-Resume eval_builtin_scope_effect[slice_reordered]:
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
-      >- (scope_builtin_operand >>
-          rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >> metis_tac[]) >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-      >- (scope_builtin_operand >>
-          rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[] >> metis_tac[]) >>
-      simp[]) >>
-  gen_tac >> irule (REWRITE_RULE [ignore_bind_def] builtin_continuation_scope_effect)
-QED
-
-Finalise eval_builtin_scope_effect
 
 Theorem eval_typebuiltin_scope_effect[local]:
   (!st x middle.
@@ -1799,7 +1670,10 @@ Proof
   [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
-    suspend "IntCall" >>
+    suspend "IntCall" >~
+  [`scope_pop_effect (eval_expr _ (Builtin _ _ _))`] >-
+    (irule eval_builtin_scope_effect >> rpt conj_tac >> rpt strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
   FIRST ((simp[] >> NO_TAC) :: map (fn th => FIRST
     [MATCH_ACCEPT_TAC (GEN_ALL th),
      match_mp_tac (GEN_ALL th) >> rpt conj_tac >> first_assum ACCEPT_TAC] >> NO_TAC)
@@ -1811,7 +1685,7 @@ Proof
      eval_name_place_scope_effect, eval_toplevel_place_scope_effect,
      eval_attribute_base_place_scope_effect, eval_target_place_scope_effect,
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
-     eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
+     eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
       eval_raw_revert_scope_effect,
      eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])
