@@ -28,8 +28,8 @@ structure TraceDecode = JsonTraceDecodeFn (
       jsonast))))
 );
 
-(* The portable ABI grammar is a compatibility copy, not a stricter parser.
-   Compare terms and acceptance with the pinned implementation. *)
+(* The portable ABI grammar preserves the pinned parser's syntax and leniency.
+   Compare host-sized terms and acceptance with the pinned implementation. *)
 datatype abi_outcome = Parsed of term | Rejected;
 fun abi_outcome parse text =
   Parsed (parse text) handle _ => Rejected;
@@ -55,6 +55,41 @@ val () = List.app (check_abi_parity true)
 val () = List.app (check_abi_parity false)
   ["", "uint", "int", "fixed128x18", "tuple", "bool[", "()",
    "(uint8,)", "(uint8,(bool,address)[][2])"];
+
+(* ABI numbers are HOL naturals, not host Int values. Build expected terms
+   directly: the pinned parser itself overflows on sufficiently large bounds. *)
+fun check_abi_boundary digits = let
+  fun abi name = prim_mk_const {Thy="contractABI", Name=name}
+  val n = JsonImportHol.natural (valOf (IntInf.fromString digits))
+  val bound = optionSyntax.mk_some n
+  val uint8 = mk_comb (abi "Uint", numSyntax.term_of_int 8)
+  val array = list_mk_comb (abi "Array", [bound, uint8])
+  val tuple = mk_comb (abi "Tuple",
+    listSyntax.mk_list ([uint8, abi "Bool"],
+      mk_thy_type {Thy="contractABI", Tyop="abi_type", Args=[]}))
+  val cases =
+    [("uint" ^ digits, mk_comb (abi "Uint", n)),
+     ("int" ^ digits, mk_comb (abi "Int", n)),
+     ("bytes" ^ digits, mk_comb (abi "Bytes", bound)),
+     ("uint8[" ^ digits ^ "]", array),
+     ("(uint8,bool)[" ^ digits ^ "]",
+      list_mk_comb (abi "Array", [bound, tuple])),
+     ("uint8[" ^ digits ^ "][]",
+      list_mk_comb (abi "Array",
+        [optionSyntax.mk_none numSyntax.num, array])),
+     (* Large values retain numeric-prefix parsing too. *)
+     ("uint" ^ digits ^ "suffix", mk_comb (abi "Uint", n)),
+     ("int" ^ digits ^ "suffix", mk_comb (abi "Int", n)),
+     ("bytes" ^ digits ^ "suffix", mk_comb (abi "Bytes", bound)),
+     ("uint8[" ^ digits ^ "suffix]", array)]
+  fun check (text, expected) =
+    if aconv (TraceDecode.parse_abi_type text) expected then ()
+    else raise Fail ("ABI numeric boundary: " ^ text)
+in
+  List.app check cases
+end;
+val () = List.app check_abi_boundary
+  ["2147483647", "2147483648", "2147483649", "18446744073709551616"];
 
 fun assert_fixture label ok =
   if ok then () else raise Fail ("fixture resolution: " ^ label);

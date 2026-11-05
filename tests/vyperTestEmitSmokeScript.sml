@@ -50,6 +50,13 @@ val expected_status =
   [("test_basic_code",true), ("test_output_mismatch",false),
    ("test_expected_revert",true), ("test_unexpected_revert",false),
    ("test_null_code",true)];
+val expected_names = List.map #1 expected_status;
+val () =
+  if List.map #1 prepared = expected_names then ()
+  else raise Fail "prepared fixture names differ from expected names or order";
+val () =
+  if List.map #1 replays = expected_names then ()
+  else raise Fail "replayed fixture names differ from expected names or order";
 
 fun write_cv stream tm =
   if cvSyntax.is_cv_num tm then

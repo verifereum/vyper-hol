@@ -134,6 +134,32 @@ class NativeInputTests(unittest.TestCase):
                     self.assertEqual(self.passed_input([trace("")], source),
                                      self.passed_input([trace("0")], source))
 
+    def test_block_hash_keys_are_unbounded_and_sorted(self) -> None:
+        for source in ("stdin", "file"):
+            for block_number in (2147483649, 2**63 + 1):
+                with self.subTest(source=source, block_number=block_number):
+                    call = self.empty_call()
+                    block = call["env"]["block"]
+                    block["number"] = block_number
+                    block["block_hashes"] = {str(block_number - 1): "01"}
+                    expected = copy.deepcopy(call)
+                    # Only descending hash values, not their keys, are encoded.
+                    expected["env"]["block"]["block_hashes"] = {"0": "01"}
+                    self.assertEqual(self.passed_input([call], source),
+                                     self.passed_input([expected], source))
+                    block["block_hashes"] = {
+                        str(block_number - 2): "02",
+                        str(block_number - 1): "01",
+                    }
+                    expected["env"]["block"]["block_hashes"] = {"1": "01", "0": "02"}
+                    self.assertEqual(self.passed_input([call], source),
+                                     self.passed_input([expected], source))
+                    block["block_hashes"] = {
+                        str(block_number - 3): "02",
+                        str(block_number - 1): "01",
+                    }
+                    self.rejected(json.dumps([call]), source)
+
     def test_non_utf8_assertion_reason_is_valid_json(self) -> None:
         fixture = RUNNER.parents[1] / "fixtures/run_test_json/basic.json"
         exported = json.loads(fixture.read_text())
@@ -175,12 +201,18 @@ class NativeInputTests(unittest.TestCase):
                                  "AssertException: " + reason.decode("latin-1"))
 
     def test_byte_strings_keep_permissive_semantics(self) -> None:
-        # Byte strings strip only lowercase 0x, permit empty/odd inputs, and
-        # map invalid nibbles to zero. Word parsing must not replace this path.
+        # Flat trace bytes strip lowercase 0x once per HOL/cache layer, not
+        # recursively; small values traverse three layers. Odd inputs and
+        # invalid nibbles retain keccak's permissive semantics.
         for source in ("stdin", "file"):
             for text, canonical in (("", ""), ("0x", ""), ("a", "0a"),
                                     ("abc", "ab0c"), ("0X01", "0001"),
-                                    ("g1", "01"), ("1g", "10")):
+                                    ("g1", "01"), ("1g", "10"),
+                                    ("0x0x01", "01"), ("0x0x0x01", "01"),
+                                    ("0x0x0x0x01", "0001"),
+                                    ("0x0x0x0x0x01", "000001"),
+                                    ("0x0x0x", ""), ("0x0x0xa", "0a"),
+                                    ("0x0X01", "0001")):
                 with self.subTest(source=source, text=text):
                     call = self.empty_call()
                     call["call_args"]["calldata"] = text
@@ -188,6 +220,43 @@ class NativeInputTests(unittest.TestCase):
                     expected["call_args"]["calldata"] = canonical
                     self.assertEqual(self.passed_input([call], source),
                                      self.passed_input([expected], source))
+
+    def test_flat_byte_prefixes_follow_cache_chunk_boundaries(self) -> None:
+        # Sizes are measured after the HOL wrapper's first prefix removal.
+        # Medium values use 8 KiB chunks directly; large values enter the
+        # cached-flat helper, whose own threshold is checked after stripping.
+        cases = (
+            ("small_limit", "0x" * 3 + "01" + "00" * (8192 - 3),
+             "01" + "00" * (8192 - 3)),
+            ("medium_start", "0x" * 3 + "01" + "00" * (8193 - 3),
+             "0001" + "00" * (8193 - 3)),
+            ("medium_limit", "0x" * 3 + "01" + "00" * (65536 - 3),
+             "0001" + "00" * (65536 - 3)),
+            ("cached_small_limit", "0x" * 4 + "01" + "00" * (65537 - 4),
+             "0001" + "00" * (65537 - 4)),
+            ("cached_chunks_start", "0x" * 4 + "01" + "00" * (65538 - 4),
+             "01" + "00" * (65538 - 4)),
+            ("cached_bounded_prefixes", "0x" * 5 + "01" + "00" * (65539 - 5),
+             "0001" + "00" * (65539 - 5)),
+            ("medium_later_chunk", "0x" + "aa" * 8192 + "0x01",
+             "aa" * 8192 + "01"),
+            ("cached_later_chunk", "0x" * 3 + "aa" * 8192 + "0x01" +
+             "aa" * (65538 - 8192 - 4),
+             "aa" * 8192 + "01" + "aa" * (65538 - 8192 - 4)),
+        )
+        for source in ("stdin", "file"):
+            for name, text, canonical in cases:
+                with self.subTest(source=source, case=name):
+                    call = self.empty_call()
+                    call["call_args"]["calldata"] = text
+                    expected = copy.deepcopy(call)
+                    expected["call_args"]["calldata"] = canonical
+                    self.assertEqual(self.passed_input([call], source),
+                                     self.passed_input([expected], source))
+            with self.subTest(source=source, case="cached_partial_byte"):
+                call = self.empty_call()
+                call["call_args"]["calldata"] = "11" * 65536 + "1"
+                self.rejected(json.dumps([call]), source)
 
 
 if __name__ == "__main__":

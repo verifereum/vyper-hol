@@ -189,6 +189,16 @@ The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
 inputs and results for all five fixture cases and a passing stdin trace.
 The fixture has three passing cases and two intentional failures (an output
 mismatch and an unexpected revert).
+Before writing parity expectations, the kernel smoke requires both prepared
+and replayed case names to equal the five expected names in order. Missing,
+extra, duplicate, or reordered cases therefore fail rather than allowing an
+empty or incomplete comparison to pass.
+
+Boundary regressions cover block-hash keys and ABI type dimensions beyond
+signed 32-bit range using arbitrary-precision integers. Byte decoding preserves
+the pinned importer's bounded, chunk-dependent handling of repeated lowercase
+`0x` prefixes rather than stripping them recursively; AST hex decoding retains
+its separate single-prefix rule.
 
 ```bash
 # Build only; add --smoke for native/HOL parity checks:

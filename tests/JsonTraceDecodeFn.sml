@@ -69,10 +69,10 @@ fun from_term_option ty NONE = mk_none ty
 
 (* Compatibility copy of the grammar in the pinned Verifereum dependency:
    .holbuild/src/verifereum/util/contractABISyntax.sml, from
-   skip_to_matching_paren through parse_abi_type. Only term construction is
-   adapted to B. Keep accepted syntax AND inherited rejection/leniency behavior
-   in sync when updating that pin; do not independently extend this grammar.
-   vyperTestLibTestScript.sml checks parity with contractABISyntax.parse_abi_type. *)
+   skip_to_matching_paren through parse_abi_type. Term construction is adapted
+   to B and numeric values use IntInf to avoid host-dependent overflow. Keep
+   syntax and inherited rejection/leniency behavior in sync when updating that
+   pin; vyperTestLibTestScript.sml checks parity and arbitrary-precision bounds. *)
   fun skip_to_matching_paren ss = let
     fun skip_to_close i = let
       val c = Substring.sub(ss, i)
@@ -109,8 +109,8 @@ fun from_term_option ty NONE = mk_none ty
   end
 
   fun parse_optnum_ss ns =
-    case Int.fromString $ Substring.string ns
-      of SOME n => mk_some (natural (IntInf.fromInt n))
+    case IntInf.fromString $ Substring.string ns
+      of SOME n => mk_some (natural n)
        | NONE => mk_none num_ty
 
   fun parse_abi_type_ss ss =
@@ -128,13 +128,13 @@ fun from_term_option ty NONE = mk_none ty
     in mk_comb(Tuple_tm, ls) end
     else if Substring.isPrefix "uint" ss then let
       val ns = Substring.triml 4 ss
-      val SOME n = Int.fromString (Substring.string ns)
-      val nt = natural (IntInf.fromInt n)
+      val SOME n = IntInf.fromString (Substring.string ns)
+      val nt = natural n
     in mk_comb(Uint_tm, nt) end
     else if Substring.isPrefix "int" ss then let
       val ns = Substring.triml 3 ss
-      val SOME n = Int.fromString (Substring.string ns)
-      val nt = natural (IntInf.fromInt n)
+      val SOME n = IntInf.fromString (Substring.string ns)
+      val nt = natural n
     in mk_comb(Int_tm, nt) end
     else if Substring.isPrefix "bytes" ss then let
       val ns = Substring.triml 5 ss
@@ -187,17 +187,17 @@ val bytes : term decoder = JSONDecode.map flat_bytes_from_hex string
 val Call_tm = constant{Thy="vyperTestRunner",Name="Call"}
 
 local
-  fun descending [] = true
+  fun descending ([] : IntInf.int list) = true
     | descending [x] = true
     | descending (x::y::ls) = (x-1 = y) andalso descending (y::ls)
 
   fun ensure_not_empty s = if String.size s = 0 then "0" else s
 
-  fun descending_key (k1, _) (k2, _) = k2 < k1
+  fun descending_key (k1 : IntInf.int, _) (k2, _) = k2 < k1
 in
 val blockHashes : term decoder =
   JSONDecode.map (fn ls => let
-    fun f (k,v) = (Option.valOf (Int.fromString k),
+    fun f (k,v) = (Option.valOf (IntInf.fromString k),
                    decode (JSONDecode.map (bytes32_from_hex o ensure_not_empty) string) v)
     val ls = List.map f ls
     val ls = sort descending_key ls

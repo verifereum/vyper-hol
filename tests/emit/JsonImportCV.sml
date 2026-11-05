@@ -109,8 +109,10 @@ structure JsonImportCV = struct
         if tag=1 then Encoded x else raise Fail "expected SOME"
     | dest_some _ = raise Fail "expected SOME"
 
-  fun without_prefix s =
-    if String.isPrefix "0x" s then String.extract (s,2,NONE) else s
+  fun after_prefix s start stop =
+    if stop - start >= 2 andalso String.sub (s,start) = #"0"
+       andalso String.sub (s,start+1) = #"x"
+    then start + 2 else start
   fun digit c =
     if c >= #"0" andalso c <= #"9" then Char.ord c - Char.ord #"0"
     else if c >= #"a" andalso c <= #"f" then 10 + Char.ord c - Char.ord #"a"
@@ -130,19 +132,57 @@ structure JsonImportCV = struct
     | NONE => raise Fail "invalid hexadecimal word"
   fun address_from_hex s = word_literal (160,hex_number s)
   fun bytes32_from_hex s = word_literal (256,hex_number s)
-  fun bytes_from_hex text = let
-    val s = without_prefix text
-    val size = String.size s
-    val tail = if size mod 2 = 0 then [] else
-      [word_literal (8,IntInf.fromInt (byte_digit (String.sub (s,size-1))))]
+  fun hex_bytes text start stop result = let
+    val size = stop - start
+    val tail = if size mod 2 = 0 then result else
+      word_literal (8,IntInf.fromInt (byte_digit (String.sub (text,stop-1))))
+      :: result
     fun bytes i result =
-      if i < 0 then result
+      if i < start then result
       else bytes (i-2)
         (word_literal (8,IntInf.fromInt
-          (16*byte_digit (String.sub (s,i)) +
-           byte_digit (String.sub (s,i+1)))) :: result)
-  in mk_list (bytes (size - size mod 2 - 2) tail,word_ty 8) end
-  (* Native values are already concrete byte lists; no HOL cache flattening
-     is needed to match the trace importer's byte value. *)
-  val flat_bytes_from_hex = bytes_from_hex
+          (16*byte_digit (String.sub (text,i)) +
+           byte_digit (String.sub (text,i+1)))) :: result)
+  in bytes (stop - size mod 2 - 2) tail end
+  fun bytes_from_hex text = let
+    val stop = String.size text
+  in mk_list (hex_bytes text (after_prefix text 0 stop) stop [],word_ty 8) end
+
+  (* Mirror JsonImportHol and the pinned byteStringCacheLib layers, including
+     their bounded prefix removal at each layer and each chunk. Native lists
+     need no cache constants, but skipping those layers changes byte values. *)
+  fun flat_bytes_from_hex text = let
+    val stop = String.size text
+    val shared_chunk_hex = 2 * 8 * 1024
+    val cache_chunked_hex = 2 * 64 * 1024
+    val outer = after_prefix text 0 stop
+    fun chunks start = let
+      fun collect offset result =
+        if offset < start then result
+        else let
+          val chunk_stop = Int.min (offset + shared_chunk_hex,stop)
+          val chunk_start = after_prefix text offset chunk_stop
+        in collect (offset - shared_chunk_hex)
+             (hex_bytes text chunk_start chunk_stop result) end
+    in
+      if start = stop then []
+      else collect (start + ((stop-start-1) div shared_chunk_hex) *
+                    shared_chunk_hex) []
+    end
+    val bytes =
+      if shared_chunk_hex < stop - outer andalso
+         stop - outer <= cache_chunked_hex
+      then chunks outer
+      else let val cached = after_prefix text outer stop in
+        if stop - cached <= cache_chunked_hex
+        then hex_bytes text (after_prefix text cached stop) stop []
+        else let
+          val chunked = after_prefix text cached stop
+        in
+          if (stop - chunked) mod 2 <> 0
+          then raise Fail "cached_byte_chunks_from_hex: partial-byte chunk"
+          else chunks chunked
+        end
+      end
+  in mk_list (bytes,word_ty 8) end
 end
