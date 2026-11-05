@@ -1,7 +1,7 @@
 Theory abiEncodeArgsSim
 Ancestors
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows abiDecoderReentry
-  compileEnv exprSimDefs exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
+  compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
   abiArgsLabelBoundary
 
 Definition abi_args_post_def:

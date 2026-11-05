@@ -2,7 +2,7 @@ Theory abiEncodeListSupplier
 Ancestors
   abiEncodeZeroSupplier abiEncodeArgsSim abiEncodeTupleCongruence
   abiEncoderSourceAggregate abiEncoderSourcePrimitive abiTupleEncodeZeroInput
-  abiTupleEncodeLayout exprSimDefs compileEnv valueEncoding vyperABI vyperValue
+  abiTupleEncodeLayout exprSimDefs exprSimProps loweringPosts compileEnv valueEncoding vyperABI vyperValue
   contractABI abiDecodeRanges vyperTyping words list
 
 Theorem abi_encode_word_head_size[local]:

@@ -1,6 +1,6 @@
 Theory abiEncodeArgsWindows
 Ancestors
-  exprSimDefs loweringPosts compileEnv valueEncoding valueEncodingProofs entryDecodeStaticProps
+  exprSimDefs exprSimProps loweringPosts compileEnv valueEncoding valueEncodingProofs entryDecodeStaticProps
   vyperLookup finite_map
 
 (* A dynamic local's exempt header is fixed by the represented value at

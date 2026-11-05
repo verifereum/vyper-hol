@@ -3,7 +3,7 @@ Theory abiEncodeInputSupplier
 Ancestors
   abiEncoderSourceAggregate abiCallerTupleLayout abiDecodeRanges exprLowering compileEnv
   abiEncoderSourceFootprint abiTupleEncodeOpenInput abiTupleEncodeLayout
-  exprSimDefs loweringPosts valueEncodingProps valueEncodingTyping valueEncoding vyperTyping words
+  exprSimDefs exprSimProps loweringPosts valueEncodingProps valueEncodingTyping valueEncoding vyperTyping words
 
 Theorem source_rep_static_memory:
   source_rep env ty ei ct /\ evaluate_type env ty = SOME tv /\
