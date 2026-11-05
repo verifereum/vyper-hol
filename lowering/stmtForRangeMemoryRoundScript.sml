@@ -126,7 +126,12 @@ Theorem for_round_outcome_mem:
                         value := v; popped := []|>)) :: esk.scopes,s)
     B (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
   ~s.vs_halted /\
-  (!res ee t. B res ee t ==>
+  (!res ee t gs. B res ee t /\
+     eval_stmts cx stmts
+       ((esk with scopes :=
+         (FEMPTY |+ (id, <|assignable := F; type := tyv;
+                           value := v; popped := []|>)) :: esk.scopes)
+        with gas_obs := gs) = (res,ee) ==>
      (res = INL () \/ res = INR BreakException \/ res = INR ContinueException) /\
      ee.scopes <> [] /\
      ?u. gas_path_mem ctx func t 0 (OK u) /\
@@ -148,7 +153,11 @@ Proof
 QED
 
 Resume for_round_outcome_mem[normal]:
-  qpat_x_assum `!res ee t. _` drule >> strip_tac >>
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` assume_tac) >>
+  qpat_x_assum `!res ee t gs. _` drule >>
+  disch_then drule >> strip_tac >>
   Cases_on `es_end.scopes` >> gvs[] >>
   drule_all for_round_marked >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `H (INL broke) _ u` >>
