@@ -1,7 +1,7 @@
 (* Full ten-instruction bytes path from the checked phase interfaces. *)
 Theory bodyPtrAbiEncodeBytesPhases
 Ancestors
-  bodyPtrAbiEncodeBytesPath bodyPtrAbiEncodeBytesPrefix bodyPtrAbiEncodeBytesSuffix
+  bodyPtrAbiEncodeBytesSites bodyPtrAbiEncodeBytesPath bodyPtrAbiEncodeBytesPrefix bodyPtrAbiEncodeBytesSuffix
   bodyPtrAbiEncodeBytesCopy bodyPtrAbiEncodeCursorFrame bodyPtrDefs
   abiEncoderBytesCode abiEncoderBytesPrefix exprLoweringProps emitHelperProps
   compileEnv emitHelper fragGasPathPtr ptrDiscipline venomState
@@ -71,4 +71,29 @@ Proof
   `ptr_covers H' un' dst t' total'` by metis_tac[abi_encode_read_frame_covers] >>
   drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
   goal_assum $ drule_at Any >> fs[]
+QED
+
+Theorem abi_encode_bytes_checked_path:
+  !total.
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiBytestring maxlen) st = (out,en) /\
+  not_fresh_at st dst /\ not_fresh_at st src /\
+  lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
+  ptr_covers G tn dst s total /\ ptr_covers G tn src s (32+cnt) /\
+  (!i. w2n a <= i /\ i < w2n a+(32+cnt) ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n2w cnt /\ cnt+31 < dimword(:256) /\ 32+cnt < dimword(:256) /\
+  32+cnt <= total /\ contractABI$ceil32 cnt+32 <= total /\
+  w2n b+contractABI$ceil32 cnt < dimword(:256) /\
+  ~ctx_has_dalloca ctx /\ en.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st en) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?p t H un. out = Var p /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H un (OK t) /\
+    lookup_var p t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
+    op_taint un (Var p) = {} /\ not_fresh_at en p /\
+    ptr_covers H un dst t total /\
+    fresh_vars_wrt limit_st t /\ t.vs_inst_idx = s.vs_inst_idx+10
+Proof
+  gen_tac >> strip_tac >> drule_all abi_encode_bytes_phase_sites >> strip_tac >>
+  drule_all abi_encode_bytes_phases_path >> simp[]
 QED
