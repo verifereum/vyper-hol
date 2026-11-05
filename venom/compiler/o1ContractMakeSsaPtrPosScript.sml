@@ -10,6 +10,7 @@ Ancestors
   makeSsaCurrentLockstep makeSsaCurrentDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentRevertForward makeSsaDefs o1FrameLockstep
   ptrDiscipline contextCodegenRel o1PassContract venomWf venomInst
+  o1ContractMakeSsaSrcOpcodes cfgTransform venomExecProofs makeSsaCurrentInduct
 
 (* Structural interface for the insertion and renaming stages. *)
 Definition ptr_block_last_rel_def:
@@ -129,7 +130,119 @@ Proof
   metis_tac[ptr_block_last_list_trans]
 QED
 
-(* add_phi_nodes_supply only inserts PHIs at the head of a block,
+Theorem ptr_block_last_same_opcodes[local]:
+  a.bb_label = b.bb_label /\
+  MAP (\i. i.inst_opcode) a.bb_instructions =
+  MAP (\i. i.inst_opcode) b.bb_instructions ==>
+  ptr_block_last_rel a b
+Proof
+  strip_tac >>
+  `LENGTH a.bb_instructions = LENGTH b.bb_instructions` by
+    metis_tac[listTheory.LENGTH_MAP] >>
+  simp[ptr_block_last_rel_def] >> strip_tac >>
+  qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LAST`) >>
+  Cases_on `a.bb_instructions` >> Cases_on `b.bb_instructions` >>
+  gvs[listTheory.LAST_MAP]
+QED
+
+Theorem ptr_block_last_replace[local]:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  lookup_block l bbs = SOME bb /\ ptr_block_last_rel bb bb' ==>
+  LIST_REL ptr_block_last_rel bbs (replace_block l bb' bbs)
+Proof
+  rw[replace_block_def, listTheory.LIST_REL_EL_EQN] >>
+  rename1 `n < LENGTH bbs` >>
+  `MEM (EL n bbs) bbs` by simp[listTheory.EL_MEM] >>
+  simp[listTheory.EL_MAP] >>
+  qmatch_goalsub_abbrev_tac `if x.bb_label = l then _ else _` >>
+  Cases_on `x.bb_label = l`
+  >- (`lookup_block x.bb_label bbs = SOME x` by
+        (irule MEM_lookup_block >> simp[]) >> gvs[]) >>
+  simp[ptr_block_last_rel_refl]
+QED
+
+Theorem ptr_block_last_list_labels[local]:
+  !xs ys. LIST_REL ptr_block_last_rel xs ys ==>
+    MAP (\bb. bb.bb_label) xs = MAP (\bb. bb.bb_label) ys
+Proof
+  Induct >> Cases_on `ys` >> simp[] >>
+  rpt strip_tac >> gvs[ptr_block_last_rel_def] >> metis_tac[]
+QED
+
+Theorem ptr_block_last_fold[local]:
+  !xs upd bbs.
+    (!a x. ALL_DISTINCT (MAP (\bb. bb.bb_label) a) ==>
+      LIST_REL ptr_block_last_rel a (upd a x)) /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+    LIST_REL ptr_block_last_rel bbs (FOLDL upd bbs xs)
+Proof
+  Induct >> simp[ptr_block_last_list_refl] >> rpt strip_tac >>
+  `LIST_REL ptr_block_last_rel bbs (upd bbs h)` by simp[] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) (upd bbs h))` by
+    metis_tac[ptr_block_last_list_labels] >>
+  `LIST_REL ptr_block_last_rel (upd bbs h) (FOLDL upd (upd bbs h) xs)` by
+    (first_x_assum irule >> simp[]) >>
+  metis_tac[ptr_block_last_list_trans]
+QED
+
+Theorem update_current_succ_phis_block_last[local]:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+  LIST_REL ptr_block_last_rel bbs (update_current_succ_phis rs cur bbs succs)
+Proof
+  strip_tac >> simp[update_current_succ_phis_def] >>
+  irule ptr_block_last_fold >> simp[] >> rpt strip_tac >>
+  CASE_TAC >> simp[ptr_block_last_list_refl] >>
+  irule ptr_block_last_replace >> simp[] >>
+  irule ptr_block_last_same_opcodes >> simp[listTheory.MAP_MAP_o] >>
+  irule listTheory.MAP_CONG >> rw[]
+QED
+
+Theorem rename_current_blocks_block_last[local]:
+  (!s rs bbs sm t ctrs s' bbs'.
+     rename_current_blocks s rs bbs sm t = (ctrs,s',bbs') /\
+     ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+     LIST_REL ptr_block_last_rel bbs bbs') /\
+  (!s ctrs stacks bbs sm ts ctrs' s' bbs'.
+     rename_current_children s ctrs stacks bbs sm ts = (ctrs',s',bbs') /\
+     ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+     LIST_REL ptr_block_last_rel bbs bbs')
+Proof
+  qsuff_tac
+    `(!t s rs bbs sm ctrs s' bbs'.
+        rename_current_blocks s rs bbs sm t = (ctrs,s',bbs') /\
+        ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+        LIST_REL ptr_block_last_rel bbs bbs') /\
+     (!ts s ctrs stacks bbs sm ctrs' s' bbs'.
+        rename_current_children s ctrs stacks bbs sm ts = (ctrs',s',bbs') /\
+        ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+        LIST_REL ptr_block_last_rel bbs bbs')`
+  >- metis_tac[] >>
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[rename_current_blocks_def, AllCaseEqs(), ptr_block_last_list_refl] >>
+      pairarg_tac >> gvs[] >>
+      qmatch_asmsub_abbrev_tac `replace_block lbl bb' bbs` >>
+      `LIST_REL ptr_block_last_rel bbs (replace_block lbl bb' bbs)` by
+        (irule ptr_block_last_replace >> simp[] >>
+         irule ptr_block_last_same_opcodes >> simp[Abbr `bb'`] >>
+         metis_tac[rename_current_block_insts_opcodes]) >>
+      qmatch_asmsub_abbrev_tac `update_current_succ_phis rs1 lbl bbs1 succs` >>
+      `ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs1)` by
+        metis_tac[ptr_block_last_list_labels] >>
+      `LIST_REL ptr_block_last_rel bbs1
+         (update_current_succ_phis rs1 lbl bbs1 succs)` by
+        simp[update_current_succ_phis_block_last] >>
+      first_x_assum drule >>
+      impl_tac >- metis_tac[ptr_block_last_list_labels] >>
+      metis_tac[ptr_block_last_list_trans])
+  >- simp[rename_current_blocks_def, ptr_block_last_list_refl] >>
+  rpt strip_tac >> gvs[rename_current_blocks_def] >>
+  pairarg_tac >> gvs[] >> first_x_assum drule_all >> strip_tac >>
+  first_x_assum drule >>
+  impl_tac >- metis_tac[ptr_block_last_list_labels] >>
+  metis_tac[ptr_block_last_list_trans]
+QED
+
+(* PHI insertion only lengthens blocks at their heads;
    rename_current_blocks keeps each instruction's opcode and the block
    lengths, and simplify_current_phis_if only rewrites the leading PHIs
    (to PHI, ASSIGN or NOP, keeping the count).  A well-formed block ends
