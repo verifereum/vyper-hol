@@ -16,7 +16,7 @@ Ancestors
   fnPlanPrefix cleanOpsSim genFrameSim frameRel contextCodegenRel codegenRel
   planSpillBounds stackPlanGen stackPlanTypes planExec asmSem
   sorting list rich_list pair finite_map pred_set stackModel stackPlanOps reorderSim fnAliasStep
-  fnFrameStepsPhi doSwapSim
+  fnFrameStepsPhi doSwapSim fnFrameDeepInvoke
 
 Theorem do_swap_wf_marked:
   !base ps dist ops ps'.
@@ -297,6 +297,67 @@ Proof
   disch_then drule >>
   fs[generated_plan_state_wf_marked_def] >>
   metis_tac[]
+QED
+
+Theorem venom_asm_rel_forget_map:
+  !lo ps vs st f.
+    venom_asm_rel lo ps vs st /\
+    (!op. MEM op ps.ps_stack ==> f op = dead_stack_marker \/ f op = op) ==>
+    venom_asm_rel lo (ps with ps_stack := MAP f ps.ps_stack) vs st
+Proof
+  simp[venom_asm_rel_def] >> rpt strip_tac >>
+  metis_tac[plan_stack_rel_forget_map]
+QED
+
+Theorem clean_stack_plan_local_sim:
+  !base ps ops ps' lo o2pc prog vs st initial_fmp liveness cfg fn bb.
+    clean_stack_plan liveness cfg fn bb ps = (ops, ps') /\
+    generated_plan_state_wf_marked base ps /\
+    EVERY (\s. case s of SOSpill off => off < dimword (:256)
+      | SORestore off => off < dimword (:256) | _ => T) ops /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'.
+      asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      generated_plan_state_wf_marked base ps'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `generated_plan_state_wf_marked base' ps'` by
+    metis_tac[clean_stack_plan_wf_marked] >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[generated_plan_state_wf_marked_def] >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- (strip_tac >> gvs[] >> qexists `st` >>
+      simp[execute_plan_def, asm_steps_def]) >> simp[] >>
+  Cases_on `t`
+  >- (simp[] >> IF_CASES_TAC
+      >- (strip_tac >> gvs[] >> qexists `st` >>
+          simp[execute_plan_def, asm_steps_def]) >>
+      Cases_on `lookup_block h fn.fn_blocks`
+      >- (simp[] >> strip_tac >> gvs[] >> qexists `st` >>
+          simp[execute_plan_def, asm_steps_def]) >> simp[] >>
+      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+      IF_CASES_TAC
+      >- (strip_tac >> gvs[] >> qexists `st` >>
+          simp[execute_plan_def, asm_steps_def] >>
+          irule venom_asm_rel_forget_map >> simp[]) >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> strip_tac >> gvs[] >>
+          drule_all popmany_plan_sim_numeric >>
+          disch_then (qspec_then `o2pc` strip_assume_tac) >>
+          qexists `st'` >> simp[] >>
+          simp[mark_dead_stack_def] >>
+          irule venom_asm_rel_forget_map >> simp[] >>
+          rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
+      strip_tac >> drule_all popmany_plan_sim_numeric >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qexists `st'` >> simp[] >> decide_tac) >>
+  simp[] >> strip_tac >> gvs[] >> qexists `st` >>
+  simp[execute_plan_def, asm_steps_def]
 QED
 
 (* Used by fnFrameSinglePred$single_pred_prefix_frame_sim, for the cleanup
