@@ -1,5 +1,6 @@
 Theory abiScratchMembers
 Ancestors
+  abiSiteEncoderContract abiSiteAllocation
   abiScratchEncoderContract abiScratchEffect abiScratchFootprint abiScratchSubset
   abiEncoderInputFrame abiEncoderInput abiEncoderMembersInput abiDecoderDynamicLoopSetup
   abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry compileEnv
@@ -29,14 +30,61 @@ Definition abi_scratch_members_pre_def:
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 End
 
+Definition abi_site_members_pre_def:
+  abi_site_members_pre infos tys avs st src dst sb so d output_size A b cap s <=>
+    abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs)
+      (sb+so) (abi_encoder_member_span infos) s.vs_memory /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+    abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+    sb+so+abi_encoder_member_span infos < dimword (:256) /\
+    d+output_size < dimword (:256) /\
+    (sb+so+abi_encoder_member_span infos <= d \/ d+output_size <= sb+so) /\
+    abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
+      (abi_decoder_child_scratch A b cap s) /\
+    abi_footprint_disjoint d output_size (abi_decoder_child_scratch A b cap s)
+End
+
+Theorem abi_site_members_pre_interval:
+  abi_site_members_pre infos tys avs st src dst sb so d sz
+    (abi_decoder_ids first last) b cap s =
+  abi_scratch_members_pre infos tys avs st src dst sb so d sz first last b cap s
+Proof
+  simp[abi_site_members_pre_def, abi_scratch_members_pre_def]
+QED
+
+Theorem abi_site_members_pre_mono:
+  abi_site_members_pre infos tys avs st src dst sb so d sz A b cap s /\
+  st.cs_next_var <= prepared.cs_next_var ==>
+  abi_site_members_pre infos tys avs prepared src dst sb so d sz A b cap s
+Proof
+  simp_tac bool_ss [abi_site_members_pre_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> asm_simp_tac bool_ss [] >>
+  conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]
+QED
+
+Theorem abi_site_members_pre_address:
+  abi_site_members_pre infos tys avs st src dst sb so d sz A b cap initial /\
+  abi_decoder_address_frame st.cs_next_var initial actual /\
+  st.cs_next_var <= prepared.cs_next_var ==>
+  abi_site_members_pre infos tys avs prepared src dst sb so d sz A b cap actual
+Proof
+  simp_tac bool_ss [abi_site_members_pre_def, abi_decoder_address_frame_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand src actual = SOME (n2w sb) /\ eval_operand dst actual = SOME (n2w d)` by
+    (conj_tac >> first_x_assum irule >> asm_simp_tac bool_ss []) >>
+  `abi_decoder_child_scratch A b cap actual = abi_decoder_child_scratch A b cap initial` by
+    simp[abi_decoder_child_scratch_def] >>
+  asm_simp_tac bool_ss [] >>
+  conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]
+QED
+
 Theorem abi_scratch_members_pre_mono:
   abi_scratch_members_pre infos tys avs st src dst sb so d sz first last b cap s /\
   st.cs_next_var <= prepared.cs_next_var ==>
   abi_scratch_members_pre infos tys avs prepared src dst sb so d sz first last b cap s
 Proof
-  simp_tac bool_ss [abi_scratch_members_pre_def] >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> asm_simp_tac bool_ss [] >>
-  conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]
+  rewrite_tac[GSYM abi_site_members_pre_interval] >>
+  MATCH_ACCEPT_TAC abi_site_members_pre_mono
 QED
 
 Theorem abi_scratch_members_pre_address:
@@ -45,15 +93,40 @@ Theorem abi_scratch_members_pre_address:
   st.cs_next_var <= prepared.cs_next_var ==>
   abi_scratch_members_pre infos tys avs prepared src dst sb so d sz first last b cap actual
 Proof
-  simp_tac bool_ss [abi_scratch_members_pre_def, abi_decoder_address_frame_def] >>
+  rewrite_tac[GSYM abi_site_members_pre_interval] >>
+  MATCH_ACCEPT_TAC abi_site_members_pre_address
+QED
+
+Theorem abi_site_members_pre_effect:
+  abi_site_members_pre infos tys avs st src dst sb so d sz A b cap initial /\
+  abi_site_encoder_effect A lo hi st.cs_next_var limit_st d sz b cap initial actual ==>
+  abi_site_members_pre infos tys avs st src dst sb so d sz A b cap actual
+Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_site_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_pre_def]) >>
+  `FINITE A` by
+    (qpat_assum `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_site_encoder_effect_def, abi_site_budget_def] >> metis_tac[]) >>
+  `A INTER abi_decoder_ids lo hi SUBSET A` by simp[] >>
+  `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
+    (abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap initial)` by
+    (irule abi_scratch_disjoint_subset >> qexists_tac `A` >> simp[]) >>
+  `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
+    ((d,sz)::abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap initial)` by
+    simp[abi_scratch_disjoint_cons] >>
   `eval_operand src actual = SOME (n2w sb) /\ eval_operand dst actual = SOME (n2w d)` by
-    (conj_tac >> first_x_assum irule >> asm_simp_tac bool_ss []) >>
-  `abi_decoder_child_scratch (abi_decoder_ids first last) b cap actual =
-    abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial` by
-    simp[abi_decoder_child_scratch_def] >>
-  asm_simp_tac bool_ss [] >>
-  conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]
+    (imp_res_tac abi_site_effect_operand >> asm_simp_tac bool_ss []) >>
+  qpat_assum `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_encoder_effect_def]) >>
+  `abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs) (sb+so)
+    (abi_encoder_member_span infos) actual.vs_memory` by
+    (drule_all abi_encoder_input_frame >> simp[]) >>
+  `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
+      (abi_decoder_child_scratch A b cap actual) /\
+   abi_footprint_disjoint d sz (abi_decoder_child_scratch A b cap actual)` by
+    (conj_tac >> irule abi_scratch_disjoint_advance >> simp[] >> qexists_tac `initial` >> simp[]) >>
+  asm_simp_tac bool_ss [abi_site_members_pre_def]
 QED
 
 Theorem abi_scratch_members_pre_effect:
@@ -62,30 +135,10 @@ Theorem abi_scratch_members_pre_effect:
   first <= lo /\ hi <= last ==>
   abi_scratch_members_pre infos tys avs st src dst sb so d sz first last b cap actual
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_scratch_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_pre_def]) >>
-  `abi_decoder_ids lo hi SUBSET abi_decoder_ids first last` by
-    (simp[SUBSET_DEF, abi_decoder_ids_def] >> decide_tac) >>
-  `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
-    (abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial)` by
-    (irule abi_scratch_disjoint_subset >> qexists_tac `abi_decoder_ids first last` >> simp[]) >>
-  `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
-    ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial)` by
-    simp[abi_scratch_disjoint_cons] >>
-  `eval_operand src actual = SOME (n2w sb) /\ eval_operand dst actual = SOME (n2w d)` by
-    (imp_res_tac abi_scratch_effect_operand >> asm_simp_tac bool_ss []) >>
-  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
-  `abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs) (sb+so)
-    (abi_encoder_member_span infos) actual.vs_memory` by
-    (drule_all abi_encoder_input_frame >> simp[]) >>
-  `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos)
-      (abi_decoder_child_scratch (abi_decoder_ids first last) b cap actual) /\
-   abi_footprint_disjoint d sz
-      (abi_decoder_child_scratch (abi_decoder_ids first last) b cap actual)` by
-    (conj_tac >> irule abi_scratch_disjoint_advance >> simp[] >> qexists_tac `initial` >> simp[]) >>
-  asm_simp_tac bool_ss [abi_scratch_members_pre_def]
+  rewrite_tac[GSYM abi_site_members_pre_interval] >> strip_tac >>
+  `abi_site_encoder_effect (abi_decoder_ids first last) lo hi st.cs_next_var
+    limit_st d sz b cap initial actual` by simp[abi_site_encoder_effect_interval] >>
+  drule_all abi_site_members_pre_effect >> simp[]
 QED
 
 (* ===== Source ===== *)
@@ -93,6 +146,30 @@ QED
 (* Select the next member and advance the remaining physical source window.
    TOP-LEVEL: abi_scratch_members_pre_cons and abi_scratch_members_child_buffer.
    No numeric exclusion of the entire scratch arena is required. *)
+
+Theorem abi_site_members_pre_cons:
+  abi_site_members_pre ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    st src dst sb so d output_size A b cap s ==>
+  has_type ty av /\ has_types tys avs /\
+  abi_sz = abi_member_head_size ty /\ dyn = is_dynamic ty /\
+  abi_encoder_input ei ty av (sb+so) mem_sz s.vs_memory /\
+  abi_site_members_pre infos tys avs st src dst sb (so+mem_sz) d output_size A b cap s
+Proof
+  strip_tac >> qpat_x_assum `abi_site_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_pre_def]) >>
+  drule abi_encoder_members_input_cons >> strip_tac >>
+  `has_types tys avs` by (imp_res_tac abi_encoder_input_typed >> fs[Once has_type_def]) >>
+  `abi_encoder_member_span ((ei,abi_sz,mem_sz,dyn)::infos) = mem_sz+abi_encoder_member_span infos`
+    by simp[abi_encoder_member_span_def] >>
+  `abi_footprint_disjoint (sb+(so+mem_sz)) (abi_encoder_member_span infos)
+    (abi_decoder_child_scratch A b cap s)` by
+    (irule abi_footprint_disjoint_subwindow >>
+     qexistsl_tac [`sb+so`, `abi_encoder_member_span ((ei,abi_sz,mem_sz,dyn)::infos)`] >>
+     asm_simp_tac bool_ss [] >> decide_tac) >>
+  asm_simp_tac bool_ss [abi_site_members_pre_def] >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [ADD_ASSOC]) >> PURE_REWRITE_TAC [ADD_ASSOC] >>
+  asm_simp_tac bool_ss [] >> decide_tac
+QED
 
 Theorem abi_scratch_members_pre_cons:
   abi_scratch_members_pre ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
@@ -102,20 +179,28 @@ Theorem abi_scratch_members_pre_cons:
   abi_encoder_input ei ty av (sb+so) mem_sz s.vs_memory /\
   abi_scratch_members_pre infos tys avs st src dst sb (so+mem_sz) d output_size first last b cap s
 Proof
-  strip_tac >> qpat_x_assum `abi_scratch_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_pre_def]) >>
+  rewrite_tac[GSYM abi_site_members_pre_interval] >>
+  MATCH_ACCEPT_TAC abi_site_members_pre_cons
+QED
+
+Theorem abi_site_members_child_buffer:
+  abi_site_members_pre ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    st src dst sb so d output_size A b cap s /\
+  abi_decoder_operand_live st.cs_next_var elem_src /\
+  eval_operand elem_src s = SOME (n2w (sb+so)) /\ LENGTH (enc ty av) <= output_size ==>
+  abi_site_encoder_input ei ty av st elem_src dst (sb+so) mem_sz d output_size A b cap s
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `abi_site_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_pre_def]) >>
   drule abi_encoder_members_input_cons >> strip_tac >>
-  `has_types tys avs` by (imp_res_tac abi_encoder_input_typed >> fs[Once has_type_def]) >>
   `abi_encoder_member_span ((ei,abi_sz,mem_sz,dyn)::infos) = mem_sz+abi_encoder_member_span infos`
     by simp[abi_encoder_member_span_def] >>
-  `abi_footprint_disjoint (sb+(so+mem_sz)) (abi_encoder_member_span infos)
-    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+  `abi_footprint_disjoint (sb+so) mem_sz (abi_decoder_child_scratch A b cap s)` by
     (irule abi_footprint_disjoint_subwindow >>
      qexistsl_tac [`sb+so`, `abi_encoder_member_span ((ei,abi_sz,mem_sz,dyn)::infos)`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
-  asm_simp_tac bool_ss [abi_scratch_members_pre_def] >>
-  RULE_ASSUM_TAC (PURE_REWRITE_RULE [ADD_ASSOC]) >> PURE_REWRITE_TAC [ADD_ASSOC] >>
-  asm_simp_tac bool_ss [] >> decide_tac
+  asm_simp_tac bool_ss [abi_site_encoder_input_def] >> decide_tac
 QED
 
 Theorem abi_scratch_members_child_buffer:
@@ -125,18 +210,8 @@ Theorem abi_scratch_members_child_buffer:
   eval_operand elem_src s = SOME (n2w (sb+so)) /\ LENGTH (enc ty av) <= output_size ==>
   abi_scratch_input ei ty av st elem_src dst (sb+so) mem_sz d output_size first last b cap s
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_scratch_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_pre_def]) >>
-  drule abi_encoder_members_input_cons >> strip_tac >>
-  `abi_encoder_member_span ((ei,abi_sz,mem_sz,dyn)::infos) = mem_sz+abi_encoder_member_span infos`
-    by simp[abi_encoder_member_span_def] >>
-  `abi_footprint_disjoint (sb+so) mem_sz
-    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
-    (irule abi_footprint_disjoint_subwindow >>
-     qexistsl_tac [`sb+so`, `abi_encoder_member_span ((ei,abi_sz,mem_sz,dyn)::infos)`] >>
-     asm_simp_tac bool_ss [] >> decide_tac) >>
-  asm_simp_tac bool_ss [abi_scratch_input_def] >> decide_tac
+  rewrite_tac[GSYM abi_site_members_pre_interval, GSYM abi_site_encoder_input_interval] >>
+  MATCH_ACCEPT_TAC abi_site_members_child_buffer
 QED
 
 (* ===== State ===== *)
@@ -421,3 +496,10 @@ Proof
   qpat_assum `ho = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   qexists_tac `ready` >> asm_simp_tac bool_ss [abi_scratch_members_inv_def] >> decide_tac
 QED
+
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean members dependency: " ^ name)
+  end) (DB.thms "abiScratchMembers");
