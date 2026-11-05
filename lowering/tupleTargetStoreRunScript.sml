@@ -53,6 +53,7 @@ Theorem tuple_storage_store_head_path:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt strip_tac >>
+  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   `gas_marked_path F ctx func s 0
     (OK ((if tr then tstore slot (typed_val_to_w256 tv v) s
