@@ -3,7 +3,8 @@ Ancestors
   exprSimHyps exprSimHypsDefs memoryLocalRhsProps vyperState
   vyperAST vyperInterpreter vyperTyping vyperTypeInvariants vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeEvalSoundness vyperTypeSystem exprSimDefs finite_map
-  bodySim supportedDecls supportedProgram
+  bodySim supportedDecls supportedProgram supportedNames bodyPtrIfExpCallableReturn
+  exprLowering context compileEnv
 Libs
   monadsyntax
 
@@ -80,14 +81,52 @@ Proof
   gvs[expr_body_pre_def, expr_sim_inv_def, int_calls_expr_def, expr_type_def]
 QED
 
-(* Actual-frame return-map probe reduced to:
-   supported_program tops,
-   ce.ce_func_return_type = build_func_return_type tops,
-   get_module_code cx NONE = SOME tops,
-   lookup_callable_function cx.in_deploy name tops =
-     SOME (fm,nr,params,dflts,sig.ret_ty,body)
-   ==> build_func_return_type tops (nsid_to_string (NONE,name)) = sig.ret_ty.
-   The full body_inv, expr_body_pre and signature lookup remain available.
-   This is not just an Internal declaration inversion: callable lookup may
-   select Deploy, including the implicit default constructor. No compiler
-   map/signature equality or final call endpoint is asserted here. *)
+Theorem ifexp_internal_call_return_bridge:
+  !tops ctx ce cx env es ann id args drv sig.
+    body_inv tops ctx ce cx /\
+    expr_body_pre ce cx env (Call ann (IntCall id) args drv) es /\
+    FLOOKUP env.fn_sigs id = SOME sig ==>
+    ce.ce_func_return_type (nsid_to_string id) = sig.ret_ty
+Proof
+  rpt strip_tac >>
+  `ce.ce_func_return_type = build_func_return_type tops /\
+   supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    metis_tac[supported_program_def, supported_declaration_names_unique] >>
+  `expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
+  `FST id = NONE` by
+    gvs[expr_body_pre_def, int_calls_expr_def] >>
+  `fn_sigs_consistent env.fn_sigs cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  PairCases_on `id` >> gvs[] >>
+  qpat_x_assum `fn_sigs_consistent _ _` mp_tac >>
+  rewrite_tac[fn_sigs_consistent_def] >>
+  disch_then drule >> strip_tac >> gvs[] >>
+  simp[nsid_to_string_def] >>
+  drule_all ifexp_callable_return_map >> simp[]
+QED
+
+Theorem ifexp_internal_call_lowered_typed:
+  !tops ctx ce cx env es ann id args drv raw ee v er.
+    body_inv tops ctx ce cx /\
+    expr_body_pre ce cx env (Call ann (IntCall id) args drv) es /\
+    eval_expr cx (Call ann (IntCall id) args drv) es = (INL raw,ee) /\
+    read_result cx raw ee = (INL v,er) ==>
+    ?sv. evaluate_type (get_tenv cx)
+      (lowered_value_type ce (Call ann (IntCall id) args drv)) = SOME sv /\
+      value_has_type sv v
+Proof
+  rpt strip_tac >>
+  `expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
+  `?sig. FLOOKUP env.fn_sigs id = SOME sig` by
+    (Cases_on `id` >>
+     gvs[expr_body_pre_def, well_typed_expr_def, optionTheory.IS_SOME_EXISTS]) >>
+  `(do r <- eval_expr cx (Call ann (IntCall id) args drv);
+       read_result cx r od) es = (INL v,er)` by simp[bind_def] >>
+  drule_all ifexp_internal_call_read_signature_typed >> strip_tac >>
+  drule_all ifexp_internal_call_return_bridge >> strip_tac >>
+  `value_runtime_typed env (lowered_value_type ce (Call ann (IntCall id) args drv)) v` by
+    simp[lowered_value_type_def] >>
+  drule_all memory_rhs_runtime_layout >> metis_tac[]
+QED
