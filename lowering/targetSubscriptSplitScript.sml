@@ -34,6 +34,16 @@ Ancestors
 Libs
   pairLib
 
+(* Internal-call defaults and bodies are bracketed by scope restoration,
+   even on exceptions; this boundary requires no invariant on the callee. *)
+Theorem target_subscript_restore_scopes:
+  finally source (set_scopes prev) es = (res, ee) ==>
+  ee.scopes = prev
+Proof
+  simp[finally_def, bind_def, ignore_bind_def, set_scopes_def,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
 (* A failed base consumes exactly the same marked path in the full target;
    no index or pointer suffix is evaluated. *)
 Theorem target_subscript_base_exception:
