@@ -232,7 +232,7 @@ Proof
        dead_bytes_list st (base' + type_slot_size h) types j b` by
         (irule (cj 2 dead_bytes_frame) >> rpt strip_tac >>
          first_x_assum irule >>
-         `i < dimword (:256)` by decide_tac >>
+         `i < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
          simp[wordsTheory.w2n_n2w] >> decide_tac) >>
       asm_rewrite_tac[]) >>
   simp[listTheory.oEL_def, tuple_prefix_slot_size_def,
@@ -243,7 +243,7 @@ Proof
       `dead_bytes st' base' h j b = dead_bytes st base' h j b` by
         (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
          first_x_assum irule >>
-         `i < dimword (:256)` by decide_tac >>
+         `i < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
          simp[wordsTheory.w2n_n2w] >> decide_tac) >>
       asm_rewrite_tac[]) >>
   gvs[] >> disj2_tac >>
@@ -277,7 +277,7 @@ Proof
        dead_bytes_fields st (base' + type_slot_size elem) fields j b` by
         (irule (cj 3 dead_bytes_frame) >> rpt strip_tac >>
          first_x_assum irule >>
-         `i < dimword (:256)` by decide_tac >>
+         `i < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
          simp[wordsTheory.w2n_n2w] >> decide_tac) >>
       asm_rewrite_tac[]) >>
   simp[struct_field_slot_def, type_slot_size_def, dead_bytes_def,
@@ -288,7 +288,7 @@ Proof
        `dead_bytes st' base' h1 j b = dead_bytes st base' h1 j b` by
          (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
           first_x_assum irule >>
-          `i < dimword (:256)` by decide_tac >>
+          `i < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
           simp[wordsTheory.w2n_n2w] >> decide_tac) >>
        asm_rewrite_tac[]) >>
    gvs[] >> disj2_tac >>
@@ -316,7 +316,8 @@ Proof
   rpt conj_tac >> rpt gen_tac >>
   simp_tac (srw_ss())
     [Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
-  disch_tac >> gnvs[] >> rpt gen_tac >> disch_tac >> gnvs[] >>
+  strip_tac >> rpt (first_x_assum SUBST_ALL_TAC) >>
+  rpt gen_tac >> disch_tac >>
   all_tac
   >- (gvs[] >> drule (cj 1 dead_bytes_range) >> decide_tac)
   >- suspend "fixed"
@@ -326,29 +327,38 @@ Proof
 QED
 
 Resume place_store_dead_subregion_frame[struct]:
-  gvs[] >> rpt strip_tac >>
+  qpat_x_assum `?delta' elem rest. _` strip_assume_tac >>
+  qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rule_assum_tac (REWRITE_RULE [GSYM ADD_ASSOC]) >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
   (irule place_store_dead_struct_frame >>
-   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- (simp_tac (srw_ss()) [wordsTheory.dimword_def, ADD_ASSOC] >>
+     first_assum (ACCEPT_TAC o SRULE [wordsTheory.dimword_def, ADD_ASSOC])) >>
    goal_assum (drule_at (Pat `struct_field_slot _ _ = _`)) >>
    goal_assum (drule_at (Pat `dead_bytes _ _ _ _ _`)) >>
    qexistsl_tac [`type_slot_size leaf`, `base' + delta' + rest`] >>
    simp_tac (srw_ss()) [GSYM ADD_ASSOC] >>
-   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- (simp_tac (srw_ss()) [wordsTheory.dimword_def, ADD_ASSOC] >>
+     first_assum (ACCEPT_TAC o SRULE [wordsTheory.dimword_def, ADD_ASSOC])) >>
    conj_tac
    >- (rpt gen_tac >> strip_tac >>
        first_x_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
        disch_then irule >>
        drule vyperStoragePlaceRegionTheory.struct_field_slot_end_bound >>
        strip_tac >> simp[GSYM ADD_ASSOC] >>
-       qexists_tac `st` >> simp[] >> metis_tac[]) >>
+       qexists_tac `st` >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[]) >>
    decide_tac)
 QED
 Resume place_store_dead_subregion_frame[tuple]:
-  gvs[] >> rpt strip_tac >>
+  qpat_x_assum `_ /\ ?elem rest. _` strip_assume_tac >>
+  qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rule_assum_tac (REWRITE_RULE [GSYM ADD_ASSOC]) >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
   (irule place_store_dead_tuple_frame >>
-   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- (simp_tac (srw_ss()) [wordsTheory.dimword_def, ADD_ASSOC] >>
+     first_assum (ACCEPT_TAC o SRULE [wordsTheory.dimword_def, ADD_ASSOC])) >>
    goal_assum (drule_at (Pat `oEL _ _ = _`)) >>
    goal_assum (drule_at (Pat `dead_bytes _ _ _ _ _`)) >>
    qexistsl_tac [`type_slot_size leaf`,
@@ -361,7 +371,7 @@ Resume place_store_dead_subregion_frame[tuple]:
        disch_then irule >>
        drule vyperStoragePlaceRegionTheory.tuple_component_slot_end_bound >>
        strip_tac >> simp[GSYM ADD_ASSOC] >>
-       qexists_tac `st` >> simp[] >> metis_tac[]) >>
+       qexists_tac `st` >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[]) >>
    decide_tac)
 QED
 Resume place_store_dead_subregion_frame[fixed]:
@@ -373,16 +383,16 @@ Resume place_store_dead_subregion_frame[fixed]:
   `k * type_slot_size root + type_slot_size root <= n * type_slot_size root` by
     (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
   Cases_on `k = Num i`
-  >- (gvs[] >>
+  >- (qpat_x_assum `k = Num i` SUBST_ALL_TAC >>
       first_x_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
       disch_then irule >> simp[GSYM ADD_ASSOC] >>
-      qexists_tac `st` >> simp[] >> metis_tac[]) >>
+      qexists_tac `st` >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[]) >>
   `dead_bytes st' (base' + k * type_slot_size root) root j b =
    dead_bytes st (base' + k * type_slot_size root) root j b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      first_x_assum irule >>
      rename1 `base' + k * type_slot_size root <= idx` >>
-     `idx < dimword (:256)` by decide_tac >>
+     `idx < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
      simp[wordsTheory.w2n_n2w] >>
      Cases_on `k < Num i`
      >- (`k * type_slot_size root + type_slot_size root <= Num i * type_slot_size root` by
@@ -417,13 +427,13 @@ Resume place_store_dead_subregion_frame[dynamic]:
        >- (gvs[] >>
            asm_x "ih" (drule_at (Pat `storage_subregion _ _ _ _`)) >>
            disch_then irule >> simp[GSYM ADD_ASSOC] >>
-           qexists_tac `st` >> simp[] >> metis_tac[]) >>
+           qexists_tac `st` >> asm_rewrite_tac[]) >>
        `dead_bytes st' (base' + (k * type_slot_size root + 1)) root j b =
         dead_bytes st (base' + (k * type_slot_size root + 1)) root j b` by
          (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
           first_x_assum irule >>
           rename1 `base' + (k * type_slot_size root + 1) <= idx` >>
-          `idx < dimword (:256)` by decide_tac >>
+          `idx < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
           simp[wordsTheory.w2n_n2w] >>
           Cases_on `k < Num i`
           >- (`k * type_slot_size root + type_slot_size root <= Num i * type_slot_size root` by
@@ -460,9 +470,9 @@ Proof
   Cases_on `(slot,tv) = (rootk,root)`
   >- (gvs[] >>
       (irule place_store_dead_subregion_frame >>
-       conj_tac >- decide_tac >>
+       conj_tac >- (fs[wordsTheory.dimword_def] >> decide_tac) >>
        goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-       qexists_tac `st` >> simp[] >> metis_tac[])) >>
+       qexists_tac `st` >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[])) >>
   `ranges_disjoint (w2n slot) (type_slot_size tv)
        (w2n rootk) (type_slot_size root)` by
     (first_x_assum irule >> conj_tac
@@ -471,7 +481,7 @@ Proof
   `dead_bytes st' (w2n slot) tv j b = dead_bytes st (w2n slot) tv j b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      first_x_assum irule >>
-     `i < dimword (:256)` by decide_tac >>
+     `i < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
      simp[wordsTheory.w2n_n2w] >>
      gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
   asm_rewrite_tac[]
@@ -506,6 +516,8 @@ Proof
   >> suspend "outside"
 QED
 Resume place_store_subregion_agree[inside]:
+  qpat_x_assum `w2n rootk + type_slot_size root <= _`
+    (assume_tac o SRULE [wordsTheory.dimword_def, ADD_COMM]) >>
   `~dead_bytes st1' (w2n k) leaf (w2n q) b` by
     (strip_tac >>
      `dead_bytes st1' (w2n rootk) root (w2n q) b` by
@@ -515,7 +527,7 @@ Resume place_store_subregion_agree[inside]:
      qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
      simp_tac (srw_ss()) [storage_dead_def] >>
      qexistsl_tac [`mid`, `name`, `subs`, `rootk`, `root`] >>
-     simp[] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     simp[wordsTheory.dimword_def] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
      metis_tac[]) >>
   `k + n2w (w2n q - w2n k) = q` by
     (qpat_x_assum `w2n k = _` kall_tac >>
@@ -599,6 +611,130 @@ Proof
   Induct >> simp[vyperStorageTheory.apply_writes_def] >>
   Cases_on `h` >> simp[vyperStorageTheory.apply_writes_def,
     GSYM wordsTheory.word_add_n2w, ADD_COMM]
+QED
+
+Theorem place_store_bytes_live_bound:
+  !l src_cap dst_cap st base i b.
+    l <= src_cap /\ src_cap <= dst_cap /\
+    w2n (lookup_storage (n2w base) st) = l /\
+    i < 1 + word_size dst_cap /\ b < 32 /\
+    ~dyn_bytes_dead st base dst_cap (base+i) b ==>
+    i < 1 + word_size src_cap
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `i = 0` >- simp[] >>
+  gvs[dyn_bytes_dead_def, vfmConstantsTheory.word_size_def] >>
+  spose_not_then assume_tac >>
+  `(src_cap + 31) DIV 32 < i` by decide_tac >>
+  gvs[arithmeticTheory.DIV_LT_X] >> decide_tac
+QED
+
+Theorem place_store_bytes_memory_capacity:
+  !src dst bs a mem.
+    val_in_memory (BaseTV (BytesT (Dynamic src))) (BytesV bs) a mem =
+    val_in_memory (BaseTV (BytesT (Dynamic dst))) (BytesV bs) a mem
+Proof
+  simp[valueEncodingTheory.val_in_memory_def]
+QED
+
+Theorem place_store_string_memory_capacity:
+  !src dst s a mem.
+    val_in_memory (BaseTV (StringT src)) (StringV s) a mem =
+    val_in_memory (BaseTV (StringT dst)) (StringV s) a mem
+Proof
+  simp[valueEncodingTheory.val_in_memory_def]
+QED
+
+Theorem place_store_apply_writes_header:
+  !writes k st w.
+    MEM (0,w) writes /\
+    (!off v. MEM (off,v) writes ==> off < dimword (:256) /\
+      (off = 0 ==> v = w)) ==>
+    lookup_storage k (apply_writes k writes st) = w
+Proof
+  rpt strip_tac >> rewrite_tac[place_store_apply_writes_fold] >>
+  irule place_store_updates_hit >>
+  simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+  reverse conj_tac >- (qexists_tac `0` >> simp[wordsTheory.WORD_ADD_0]) >>
+  Cases >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  `n2w p_1 = (0w:bytes32)` by
+    (metis_tac[wordsTheory.WORD_EQ_ADD_LCANCEL, wordsTheory.WORD_ADD_0]) >>
+  gvs[wordsTheory.n2w_11]
+QED
+
+Theorem place_store_dyn_bytes_header:
+  !cap bs writes k st.
+    encode_dyn_bytes_slots cap bs = SOME writes /\
+    w2n k + 1 + word_size cap <= dimword (:256) ==>
+    lookup_storage k (apply_writes k writes st) = n2w (LENGTH bs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `value_has_type (BaseTV (BytesT (Dynamic cap))) (BytesV bs)` by
+    (gvs[vyperStorageTheory.encode_dyn_bytes_slots_def,
+         vyperTypingTheory.value_has_type_def, AllCaseEqs()]) >>
+  `encode_value (BaseTV (BytesT (Dynamic cap))) (BytesV bs) = SOME writes` by
+    simp[vyperStorageTheory.encode_value_def] >>
+  irule place_store_apply_writes_header >> reverse conj_tac
+  >- (gvs[vyperStorageTheory.encode_dyn_bytes_slots_def, AllCaseEqs()]) >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (`MEM off (MAP FST writes)` by
+        (simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+      drule_all (cj 1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
+      simp[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  strip_tac >> gvs[vyperStorageTheory.encode_dyn_bytes_slots_def,
+    AllCaseEqs(), indexedListsTheory.MEM_MAPi] >> gvs[]
+QED
+
+(* Both dynamic bytes and strings use encode_dyn_bytes_slots; keeping
+   the coverage boundary here avoids duplicating the identical arithmetic. *)
+Theorem place_store_dyn_bytes_live_bound:
+  !src_cap dst_cap bs writes k st i b.
+    LENGTH bs <= src_cap /\ src_cap <= dst_cap /\
+    encode_dyn_bytes_slots dst_cap bs = SOME writes /\
+    w2n k + 1 + word_size dst_cap <= dimword (:256) /\
+    i < 1 + word_size dst_cap /\ b < 32 /\
+    ~dyn_bytes_dead (apply_writes k writes st) (w2n k) dst_cap (w2n k+i) b ==>
+    i < 1 + word_size src_cap
+Proof
+  rpt strip_tac >>
+  drule_all place_store_dyn_bytes_header >> strip_tac >>
+  irule place_store_bytes_live_bound >>
+  goal_assum (drule_at (Pat `~dyn_bytes_dead _ _ _ _ _`)) >>
+  qexists_tac `w2n (n2w (LENGTH bs) : bytes32)` >>
+  simp[wordsTheory.w2n_n2w] >>
+  `LENGTH bs MOD dimword (:256) <= LENGTH bs` by
+    simp[arithmeticTheory.MOD_LESS_EQ] >> decide_tac
+QED
+
+Theorem place_store_bytestring_live_copy:
+  !tv v off mem k writes st src_cap dst_cap i b.
+    (tv = BaseTV (BytesT (Dynamic dst_cap)) \/ tv = BaseTV (StringT dst_cap)) /\
+    well_formed_type_value tv /\ value_has_type tv v /\
+    val_in_memory tv v off mem /\
+    (case v of BytesV bs => LENGTH bs <= src_cap
+             | StringV s => LENGTH s <= src_cap | _ => F) /\
+    src_cap <= dst_cap /\ encode_value tv v = SOME writes /\
+    w2n k + type_slot_size tv <= dimword (:256) /\
+    i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k+i) b ==>
+    i < 1 + word_size src_cap /\
+    EL b (word_to_bytes
+      (lookup_storage (n2w (w2n k+i)) (apply_writes k writes st)) T) =
+    EL b (word_to_bytes (mem_word_at (off+32*i) mem) T)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac
+  >- (qpat_x_assum `tv = _ \/ tv = _` strip_assume_tac >> gvs[] >>
+      Cases_on `v` >>
+      gvs[vyperTypingTheory.value_has_type_def,
+          vyperStorageTheory.encode_value_def, dead_bytes_def,
+          vyperValueTheory.type_slot_size_def] >>
+      gvs[wordsTheory.dimword_def, AC ADD_ASSOC ADD_COMM] >>
+      irule (SRULE [wordsTheory.dimword_def, AC ADD_ASSOC ADD_COMM]
+        place_store_dyn_bytes_live_bound) >>
+      goal_assum (drule_at (Pat `encode_dyn_bytes_slots _ _ = _`)) >>
+      goal_assum (drule_at (Pat `~dyn_bytes_dead _ _ _ _ _`)) >> simp[]) >>
+  drule_all storageCopyLiveTheory.encode_value_memory_live >> simp[]
 QED
 
 (* compile_assign_value into (transient) storage, not a DynArray. *)
