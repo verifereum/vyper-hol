@@ -218,8 +218,11 @@ val raise_reason_codegen_step2 = SIMP_CONV pure_ss
    raise_reason_raw_asm_eval,
    raise_reason_assembly_safe_eval]
   (rhs (concl raise_reason_codegen_step1))
+val raise_reason_codegen_step3 =
+  EVAL (rhs (concl raise_reason_codegen_step2))
 val raise_reason_codegen_assembly_eval =
-  TRANS raise_reason_codegen_step1 raise_reason_codegen_step2
+  TRANS raise_reason_codegen_step1
+    (TRANS raise_reason_codegen_step2 raise_reason_codegen_step3)
 val raise_reason_runtime_accessors =
   CONJUNCTS venomCompilerTypesTheory.pipeline_output_accessors @
   CONJUNCTS venomCompilerTypesTheory.resolved_compiler_policy_accessors
@@ -264,7 +267,22 @@ Proof
        raise_reason_runtime_pipeline_def,
        raise_reason_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> simp[] >>
+  rename1 `resolve_o1_policy _ = SOME rpolicy` >>
+  Cases_on `lower_vyper_runtime_unit tops rpolicy` >> simp[] >>
+  rename1 `lower_vyper_runtime_unit _ _ = SOME runtime_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              runtime_unit` >> simp[] >>
+  rename1 `run_venom_pipeline _ _ _ _ _ _ = SOME runtime_out` >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `finalize_codegen (K SOME) rpolicy runtime_out.po_unit` >> simp[] >>
+  rename1 `finalize_codegen _ _ _ = SOME runtime_bytecode` >>
+  Cases_on `lower_vyper_deploy_unit tops rpolicy runtime_bytecode` >> simp[] >>
+  rename1 `lower_vyper_deploy_unit _ _ _ = SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              deploy_unit` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  CASE_TAC >> simp[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

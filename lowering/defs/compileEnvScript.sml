@@ -1242,7 +1242,7 @@ Definition transient_vars_rel_def:
 End
 
 (* Check if a type is a bytestring (dynamic Bytes or String).
-   Used by log topics and bytestring-specific copy. *)
+   Used by bytestring-specific copy. *)
 Definition is_bytestring_type_def:
   is_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
   is_bytestring_type (BaseT (StringT _)) = T ∧

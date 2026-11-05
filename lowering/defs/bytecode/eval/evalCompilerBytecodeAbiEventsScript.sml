@@ -89,56 +89,13 @@ val mixed_event_types_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^mixed_event_types_unit).cu_context``
 val mixed_event_types_context_plan_step2 =
   EVAL (rhs (concl mixed_event_types_context_plan_step1))
-val mixed_event_types_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl mixed_event_types_context_plan_step2))
-val mixed_event_types_actual_plan_args = #2 (strip_comb mixed_event_types_actual_plan_call)
-val mixed_event_types_actual_fn = hd mixed_event_types_actual_plan_args
-val mixed_event_types_actual_liveness_eval =
-  EVAL ``liveness_analyze ^mixed_event_types_actual_fn``
-val mixed_event_types_actual_dfg_eval =
-  EVAL ``dfg_build_function ^mixed_event_types_actual_fn``
-val mixed_event_types_actual_cfg_eval =
-  EVAL ``cfg_analyze ^mixed_event_types_actual_fn``
-val mixed_event_types_actual_liveness =
-  rhs (concl mixed_event_types_actual_liveness_eval)
-val mixed_event_types_actual_dfg = rhs (concl mixed_event_types_actual_dfg_eval)
-val mixed_event_types_actual_cfg = rhs (concl mixed_event_types_actual_cfg_eval)
-val mixed_event_types_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed ^mixed_event_types_actual_liveness
-      ^mixed_event_types_actual_dfg ^mixed_event_types_actual_cfg
-      ^mixed_event_types_actual_fn ^mixed_event_types_max_eom 0``
-val mixed_event_types_actual_plan = rhs (concl mixed_event_types_actual_plan_eval)
-val mixed_event_types_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^mixed_event_types_actual_fn
-        ^mixed_event_types_max_eom 0``
-val mixed_event_types_actual_generate_step2 = PURE_REWRITE_CONV
-  [mixed_event_types_actual_liveness_eval,
-   mixed_event_types_actual_dfg_eval,
-   mixed_event_types_actual_cfg_eval]
-  (rhs (concl mixed_event_types_actual_generate_step1))
-val mixed_event_types_actual_generate_step3 =
-  REWR_CONV mixed_event_types_actual_plan_eval
-    (rhs (concl mixed_event_types_actual_generate_step2))
-val mixed_event_types_actual_generate_fn_plan =
-  TRANS mixed_event_types_actual_generate_step1
-    (TRANS mixed_event_types_actual_generate_step2
-      mixed_event_types_actual_generate_step3)
-val mixed_event_types_context_plan_step3 = PURE_REWRITE_CONV
-  [mixed_event_types_actual_generate_fn_plan]
-  (rhs (concl mixed_event_types_context_plan_step2))
+(* With generate_fn_plan scrubbed and replaced by the concrete plan above,
+   evaluation finishes the whole context plan. *)
 val mixed_event_types_context_plan_eval =
   TRANS mixed_event_types_context_plan_step1
-    (TRANS mixed_event_types_context_plan_step2
-      (TRANS mixed_event_types_context_plan_step3
-        (EVAL (rhs (concl mixed_event_types_context_plan_step3)))))
+    mixed_event_types_context_plan_step2
 val mixed_event_types_context_plan = optionSyntax.dest_some
   (rhs (concl mixed_event_types_context_plan_eval))
-val mixed_event_types_plan = mixed_event_types_actual_plan
-val mixed_event_types_plan_value = optionSyntax.dest_some mixed_event_types_plan
-val mixed_event_types_plan_pair = pairSyntax.dest_pair mixed_event_types_plan_value
-val mixed_event_types_plan_ops = #1 mixed_event_types_plan_pair
 val mixed_event_types_ops = #1 (listSyntax.dest_list mixed_event_types_plan_ops)
 val mixed_event_types_sopush = #1 (dest_comb
   ``SOPush (Lit (0w : bytes32))``)
@@ -237,8 +194,11 @@ val mixed_event_types_codegen_step2 = SIMP_CONV pure_ss
    mixed_event_types_raw_asm_eval,
    mixed_event_types_assembly_safe_eval]
   (rhs (concl mixed_event_types_codegen_step1))
+val mixed_event_types_codegen_step3 =
+  EVAL (rhs (concl mixed_event_types_codegen_step2))
 val mixed_event_types_codegen_assembly_eval =
-  TRANS mixed_event_types_codegen_step1 mixed_event_types_codegen_step2
+  TRANS mixed_event_types_codegen_step1
+    (TRANS mixed_event_types_codegen_step2 mixed_event_types_codegen_step3)
 val mixed_event_types_runtime_accessors =
   CONJUNCTS venomCompilerTypesTheory.pipeline_output_accessors @
   CONJUNCTS venomCompilerTypesTheory.resolved_compiler_policy_accessors
@@ -283,7 +243,22 @@ Proof
        mixed_event_types_runtime_pipeline_def,
        mixed_event_types_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> simp[] >>
+  rename1 `resolve_o1_policy _ = SOME rpolicy` >>
+  Cases_on `lower_vyper_runtime_unit tops rpolicy` >> simp[] >>
+  rename1 `lower_vyper_runtime_unit _ _ = SOME runtime_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              runtime_unit` >> simp[] >>
+  rename1 `run_venom_pipeline _ _ _ _ _ _ = SOME runtime_out` >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `finalize_codegen (K SOME) rpolicy runtime_out.po_unit` >> simp[] >>
+  rename1 `finalize_codegen _ _ _ = SOME runtime_bytecode` >>
+  Cases_on `lower_vyper_deploy_unit tops rpolicy runtime_bytecode` >> simp[] >>
+  rename1 `lower_vyper_deploy_unit _ _ _ = SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              deploy_unit` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  CASE_TAC >> simp[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval
