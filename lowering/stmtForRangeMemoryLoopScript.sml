@@ -4,6 +4,7 @@ Ancestors
   stmtForRangeMemoryEntry stmtForRangeMemoryRound bodyMemoryDefs
   stmtSimForLoop stmtSimDefs stmtSimProps stmtLowering compileEnv
   loweringPosts exprLoweringProps vyperState allocaHistory
+  stmtForRangeMemoryParts fragExec fragGasPathMem venomState venomInst memSafeRun
 
 Theorem for_body_outcome_mem:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
@@ -71,4 +72,136 @@ Proof
      metis_tac[]) >>
   simp[] >> irule return_buf_frame_frame >>
   qexistsl_tac [`cenv`, `cc`, `st`] >> simp[]
+QED
+
+Theorem for_body_pop_mem:
+  stmt_state_rel ctx func cbody cx es2 t /\
+  cenv_top_ext bc cbody es2.scopes /\ es2.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
+  lookup_scopes id rest = NONE /\
+  (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+  bc with <|ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
+            ce_dynarray_capacity := cenv.ce_dynarray_capacity|> = cenv ==>
+  stmt_state_rel ctx func cenv cx (es2 with scopes := rest) t
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func bc cx (es2 with scopes := rest) t` by
+    (irule stmt_state_rel_pop_top_ext >> conj_tac
+     >- (qexists_tac `sc` >> simp[]) >>
+     qexists_tac `cbody` >> simp[]) >>
+  irule stmt_state_rel_cenv_cong >> qexists_tac `bc` >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `n = id` >> gvs[]) >>
+  qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+(* The body fallthrough emits one JMP; loop-control landings already
+   occupy their destination.  No source or memory relation is unfolded. *)
+Theorem for_body_route_mem:
+  for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
+  (res = INL () ==> ~block_is_terminated sb1) ==>
+  ?u. gas_path_mem ctx func t 0 (OK u) /\
+    u = (if res = INL () then jump_to incr_lbl t else t) /\
+    u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+    (res = INR BreakException ==> u.vs_current_bb = exit_lbl) /\
+    (res <> INR BreakException ==> u.vs_current_bb = incr_lbl)
+Proof
+  strip_tac >> Cases_on `res = INL ()`
+  >- (gvs[stmt_lands_def] >>
+      `?bb. lookup_block sb1.cs_current_bb func.fn_blocks = SOME bb /\
+         get_instruction bb (LENGTH sb1.cs_current_insts) =
+           SOME (mk_inst sb1.cs_next_id JMP [Label incr_lbl] [])` by
+        (fs[for_code_def] >> drule_all fn_has_code_same_block >>
+         simp[] >> strip_tac >> qexists_tac `bb` >>
+         first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+      conj_tac
+      >- (irule for_range_jump_at_zero_path_mem >> simp[] >>
+          simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+               memSafeRunTheory.inst_dload_in_section_def,
+               venomExecProofsTheory.step_jmp_behavior] >>
+          irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]) >>
+      simp[jump_to_def]) >>
+  qexists_tac `t` >> gvs[stmt_lands_def] >>
+  irule (cj 1 gas_path_mem_rules) >> simp[]
+QED
+
+Theorem for_body_scope_mem:
+  eval_stmts cx stmts
+    (ei with scopes := (FEMPTY |+ (id, entry)) :: ei.scopes) = (res, es2) /\
+  lookup_scopes id ei.scopes = NONE /\ es2.scopes = sc :: rest ==>
+  lookup_scopes id rest = NONE /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE)
+Proof
+  strip_tac >>
+  `lookup_scopes id rest = NONE` by
+    (drule_all vyperEvalPreservesScopesTheory.eval_stmts_preserves_tail_lookup_none >> simp[]) >>
+  simp[] >> rpt strip_tac >> Cases_on `n = id` >- gvs[] >>
+  drule vyperEvalPreservesScopesTheory.eval_stmts_new_in_head_not_in_tail >>
+  disch_then (qspec_then `n` mp_tac) >> simp[]
+QED
+
+(* Landing transport consumes the normalized outer relation (for_body_pop_mem)
+   and original frame (for_body_original_frame_mem), not the body compiler frame. *)
+Theorem for_body_landing_mem:
+  for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
+  (res = INL () ==> ~block_is_terminated sb1) /\
+  stmt_state_rel ctx func cenv cx ee t /\ return_buf_frame d cenv st t /\
+  alloca_history func t /\ cc.vs_alloca_next <= t.vs_alloca_next /\
+  (!x. not_fresh_at st x ==> x <> cv /\ x <> nv) /\
+  (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x t = SOME v) /\
+  (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+  lookup_var cv t = SOME (i2w (n1 + &k)) /\
+  lookup_var ev t = SOME (i2w n2) /\ lookup_var p t = SOME w ==>
+  ?u. gas_path_mem ctx func t 0 (OK u) /\
+    u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+    stmt_state_rel ctx func cenv cx ee u /\ return_buf_frame d cenv st u /\
+    alloca_history func u /\ cc.vs_alloca_next <= u.vs_alloca_next /\
+    (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x u = SOME v) /\
+    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP u.vs_allocas a = SOME b) /\
+    (res = INR BreakException ==> u.vs_current_bb = exit_lbl) /\
+    (res <> INR BreakException ==> u.vs_current_bb = cond_lbl /\
+       lookup_var cv u = SOME (i2w (n1 + &(k + 1))) /\
+       lookup_var ev u = SOME (i2w n2) /\ lookup_var p u = SOME w)
+Proof
+  strip_tac >> drule_all for_body_route_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `stmt_state_rel ctx func cenv cx ee u /\ return_buf_frame d cenv st u /\
+   u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next /\
+   (!x. lookup_var x u = lookup_var x t)` by
+    (Cases_on `res = INL ()` >> gvs[] >>
+     simp[stmt_state_rel_jump_to, return_buf_frame_jump_to] >>
+     simp[jump_to_def, lookup_var_def]) >>
+  qpat_x_assum `u = _` kall_tac >>
+  `alloca_history func u` by (irule alloca_history_jump >> simp[] >> qexists_tac `t` >> simp[]) >>
+  Cases_on `res = INR BreakException`
+  >- (qexists_tac `u` >> simp[] >> metis_tac[]) >>
+  `lookup_var cv u = SOME (i2w (n1 + &k))` by metis_tac[] >>
+  `gas_path_mem ctx func u 0
+    (OK (jump_to cond_lbl (update_var cv (i2w (n1 + &k) + 1w)
+        (update_var nv (i2w (n1 + &k) + 1w) u))))` by
+    (irule for_incr_zero_path_mem >> fs[for_code_def] >> metis_tac[]) >>
+  qabbrev_tac `v = jump_to cond_lbl (update_var cv (i2w (n1 + &k) + 1w)
+                    (update_var nv (i2w (n1 + &k) + 1w) u))` >>
+  qexists_tac `v` >> conj_tac
+  >- (drule_all gas_path_mem_then >> simp[Abbr `v`]) >>
+  `!x z. not_fresh_at st x /\ lookup_var x t = SOME z ==> lookup_var x v = SOME z` by
+    (rpt strip_tac >> simp[Abbr `v`, jump_to_def, update_var_def, lookup_var_def,
+                           finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `res = INL ()` >> gvs[lookup_var_def]) >>
+  `return_buf_frame d cenv st v` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `t`, `st`] >>
+     simp[Abbr `v`, jump_to_def, update_var_def]) >>
+  `alloca_history func v` by
+    (irule alloca_history_jump >> simp[Abbr `v`, jump_to_def, update_var_def] >>
+     qexists_tac `u` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx ee v` by
+    (simp[Abbr `v`, stmt_state_rel_jump_to] >> irule stmt_state_rel_update_var >>
+     fs[for_code_def] >> irule stmt_state_rel_update_var >> simp[]) >>
+  simp[Abbr `v`, jump_to_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, stmtSimForPartsTheory.i2w_counter_suc] >>
+  fs[for_code_def, lookup_var_def] >> metis_tac[]
 QED
