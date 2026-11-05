@@ -9,14 +9,15 @@
 
 Theory placeStoreMemory
 Ancestors
-  stmtSimDefs loweringPosts fragGasMode
+  stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
+  loweringPosts fragGasMode
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState
 
 (* compile_assign_value into memory. *)
 Theorem place_store_value_memory_run:
-  !ctx func cenv cx ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
+  !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
       (case dty of
@@ -40,6 +41,22 @@ Theorem place_store_value_memory_run:
               w2n sw + type_memory_size stv <= w2n w \/
               w2n w + type_memory_size dtv <= w2n sw \/
               sw = w /\ stv = dtv) /\
+    expr_sim_inv cenv cx env ee /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    (!id path entry t0.
+       p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
+       cenv.ce_var_type id = SOME t0 ==>
+       evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+    (~is_word_type sty ==>
+     !sw. eval_operand op s = SOME sw ==>
+          w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+          !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+                     sa.cs_next_id <= aid ==>
+                     w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
+    (loc = LocMemory ==>
+     !dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
+           w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     stmt_state_rel ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
