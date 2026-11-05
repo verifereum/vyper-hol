@@ -173,6 +173,71 @@ Proof
        set_current_context_def, assert_def, return_def, b2w_def]
 QED
 
+Definition asm_call_prepare_def:
+  asm_call_prepare op = do
+    valueOffset <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + valueOffset);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < valueOffset then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + valueOffset) args;
+    argsSize <<- w2n $ EL (3 + valueOffset) args;
+    retOffset <<- w2n $ EL (4 + valueOffset) args;
+    retSize <<- w2n $ EL (5 + valueOffset) args;
+    (offset, size) <<- max_expansion_range
+      (argsOffset, argsSize) (retOffset, retSize);
+    mx <- memory_expansion_info offset size;
+    accessCost <- access_address address;
+    positiveValueCost <<- if 0 < value then call_value_cost else 0;
+    accounts <- get_accounts;
+    toAccount <<- lookup_account address accounts;
+    (code, delegateCost) <- case get_delegate toAccount.code of
+               NONE => return (toAccount.code, 0)
+             | SOME delegate => do
+                 cost <- access_address delegate;
+                 return ((lookup_account delegate accounts).code, cost)
+               od;
+    createCost <<- if op = Call /\ 0 < value /\ account_empty toAccount
+                   then new_account_cost else 0;
+    gasLeft <- get_gas_left;
+    (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
+                                accessCost + positiveValueCost + createCost + delegateCost;
+    consume_gas $ static_gas op + dynamicGas + mx.cost;
+    if op = Call /\ 0 < value then assert_not_static else return ();
+    expand_memory mx.expand_by;
+    sender <- get_callee;
+    return (sender,address,value,argsOffset,argsSize,code,stipend,retOffset,retSize,accounts)
+  od
+End
+
+Definition asm_call_finish_def:
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) =
+    if (lookup_account sender accounts).balance < value
+    then abort_call_value stipend
+    else do
+      set_return_data [];
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024
+      then abort_unuse stipend
+      else proceed_call op sender address value ao az code stipend
+             (Memory <| offset := ro; size := rs |>)
+    od
+End
+
+Theorem asm_uncurry_projection[local]:
+  !f. UNCURRY f = (\p. f (FST p) (SND p))
+Proof
+  gen_tac >> simp[FUN_EQ_THM] >> gen_tac >> Cases_on `p` >> simp[]
+QED
+
+Theorem asm_step_call_factor:
+  step_call op s = vfmExecution$bind (asm_call_prepare op) (asm_call_finish op) s
+Proof
+  rewrite_tac[asm_call_prepare_def, asm_call_finish_def, step_call_def,
+              asm_uncurry_projection, LET_THM] >>
+  simp[bind_assoc, ignore_bind_def, asm_call_finish_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
