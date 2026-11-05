@@ -29,8 +29,7 @@ Theorem gen_invoke_frame_sim:
     Inv ctx fn inst vs /\ active_inst fn inst vs /\
     inst.inst_opcode = INVOKE /\
     inst.inst_operands = Label nm :: arg_ops /\
-    EVERY (\f. EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS)
-      bb.bb_instructions) f.fn_blocks) ctx.ctx_functions /\
+    ~vs.vs_call_ctx.cc_static /\
     (!f inst callee_name args callee.
        MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
@@ -49,7 +48,9 @@ Theorem gen_invoke_frame_sim:
        MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
        (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
        fn_entry_inv Inv ctx callee cvs /\
+       ~cvs.vs_call_ctx.cc_static /\
        asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
+       LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
        fn_entry_state_rel cp callee cvs cas cra crest /\
        (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
        (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
@@ -172,5 +173,7 @@ vyper-hol proves the Venom-to-EVM-assembly code generator correct. The function-
 | Asm semantics | `venom/codegen/defs/asmSemScript.sml` | `asm_steps`, `asm_jump` |
 
 ## Notes
+
+- The frozen statement was updated on 2026-11-05 (branch skeleton change): the no-GAS context premise was dropped, `~vs.vs_call_ctx.cc_static` added, and the callee hypothesis now also takes `~cvs.vs_call_ctx.cc_static` and `LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256)`. Both new callee premises follow from the caller's premises (`setup_callee` keeps the call context; INVOKE's argument count is at most 16, and the callee has one more parameter). Lemmas already proved that only depend on the old statement's premises remain valid.
 
 - The dependency cone of fnFrameBoundary is prebuilt in this worktree; `holbuild -j4 build fnFrameBoundaryInvokeTheory` builds just the helper leaf.
