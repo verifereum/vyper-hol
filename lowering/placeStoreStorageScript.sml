@@ -737,6 +737,99 @@ Proof
   drule_all storageCopyLiveTheory.encode_value_memory_live >> simp[]
 QED
 
+Theorem place_store_encoded_copy_agree:
+  !cx tr mid name subs rootk root path delta tv base writes v n read_word st1 st2.
+    declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+    storage_subregion root path delta tv /\
+    base = w2n rootk + delta /\ 0 < type_slot_size tv /\
+    w2n rootk + type_slot_size root <= dimword (:256) /\
+    (!mid' name' subs' k' tv'.
+       declared_storage_region cx mid' name' subs' = SOME (tr,k',tv') /\
+       (k',tv') <> (rootk,root) ==>
+       ranges_disjoint (w2n rootk) (type_slot_size root)
+                       (w2n k') (type_slot_size tv')) /\
+    encode_value tv v = SOME writes /\ value_has_type tv v /\
+    base + type_slot_size tv <= dimword (:256) /\
+    n <= type_slot_size tv /\
+    (!i b. i < type_slot_size tv /\ b < 32 /\
+       ~dead_bytes (apply_writes (n2w base) writes st1) base tv (base+i) b ==>
+       i < n /\
+       EL b (word_to_bytes (lookup_storage (n2w (base+i))
+         (apply_writes (n2w base) writes st1)) T) =
+       EL b (word_to_bytes (read_word i) T)) /\
+    storage_agree (storage_dead cx tr st1) st1 st2 ==>
+    storage_agree (storage_dead cx tr (apply_writes (n2w base) writes st1))
+      (apply_writes (n2w base) writes st1)
+      (FOLDL (\st i. update_storage (n2w (base+i)) (read_word i) st)
+        st2 (COUNT_LIST n))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `apply_writes (n2w start) writes st1` >>
+  `start < dimword (:256)` by decide_tac >>
+  irule place_store_subregion_agree >>
+  goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+  qexists_tac `(n2w start):bytes32` >>
+  goal_assum (drule_at (Pat `storage_agree _ _ _`)) >>
+  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+  `w2n ((n2w start):bytes32) = start` by simp[wordsTheory.w2n_n2w] >>
+  qpat_x_assum `start = _` (mk_asm "origin") >>
+  simp[wordsTheory.w2n_n2w, GSYM wordsTheory.word_add_n2w] >>
+  conj_tac >- suspend "frame" >> suspend "live"
+QED
+Resume place_store_encoded_copy_agree[frame]:
+  gen_tac >> disch_tac >> conj_tac
+  >- (rewrite_tac[place_store_apply_writes_fold] >>
+      irule place_store_updates_miss >>
+      simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, listTheory.MEM_MAP,
+           pairTheory.EXISTS_PROD] >>
+      rpt strip_tac >>
+      rename1 `MEM (off,word) writes` >>
+      `off < type_slot_size tv` by
+        (irule (CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
+         goal_assum (drule_at (Pat `encode_value _ _ = _`)) >>
+         simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+      `start + off < dimword (:256)` by decide_tac >>
+      gvs[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >> decide_tac) >>
+  rename1 `FOLDL (\st i. update_storage (n2w start + n2w i) (rd i) st) st2 (COUNT_LIST n)` >>
+  `~MEM q (MAP FST (MAP (\i. ((n2w start + n2w i):bytes32,rd i))
+       (COUNT_LIST n)))` by
+    (simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, listTheory.MEM_MAP,
+          rich_listTheory.MEM_COUNT_LIST] >>
+     rpt strip_tac >>
+     `start + i < dimword (:256)` by decide_tac >>
+     gvs[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >> decide_tac) >>
+  drule place_store_updates_miss >>
+  disch_then (qspec_then `st2` mp_tac) >> simp[rich_listTheory.FOLDL_MAP]
+QED
+Resume place_store_encoded_copy_agree[live]:
+  reverse conj_tac >- (asm "origin" mp_tac >> simp[ADD_COMM]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `FOLDL (\st j. update_storage (n2w start + n2w j) (rd j) st) st2 (COUNT_LIST n)` >>
+  `i < n /\
+   EL b (word_to_bytes (lookup_storage (n2w (start+i))
+     (apply_writes (n2w start) writes st1)) T) =
+   EL b (word_to_bytes (rd i) T)` by
+    (first_x_assum irule >> simp[ADD_COMM]) >>
+  `lookup_storage (n2w start + n2w i)
+     (FOLDL (\st j. update_storage (n2w start + n2w j) (rd j) st)
+       st2 (COUNT_LIST n)) = rd i` suffices_by
+    gvs[GSYM wordsTheory.word_add_n2w] >>
+  `MEM ((n2w start + n2w i):bytes32,rd i)
+     (MAP (\j. (n2w start + n2w j,rd j)) (COUNT_LIST n))` by
+    (simp[listTheory.MEM_MAP, rich_listTheory.MEM_COUNT_LIST] >>
+     qexists_tac `i` >> simp[]) >>
+  drule place_store_updates_hit >>
+  disch_then (qspec_then `st2` mp_tac) >>
+  simp[rich_listTheory.FOLDL_MAP, listTheory.MEM_MAP,
+       rich_listTheory.MEM_COUNT_LIST] >>
+  impl_tac >- (rpt strip_tac >> gvs[] >>
+    `i < dimword (:256)` by decide_tac >>
+    `j < dimword (:256)` by decide_tac >>
+    gvs[wordsTheory.n2w_11]) >> simp[]
+QED
+Finalise place_store_encoded_copy_agree
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
