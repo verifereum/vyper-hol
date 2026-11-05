@@ -137,6 +137,58 @@ Proof
   gvs[EL_APPEND_EQN, EVERY_EL]
 QED
 
+(* Proof notation, expanded in theorems rather than a logical definition. *)
+val param_layout = ``\e f.
+  fn_pseudos_prefix f /\
+  EVERY (\bb. bb.bb_label <> e ==> no_param_insts bb.bb_instructions) f.fn_blocks /\
+  EVERY (\bb. bb.bb_label = e ==>
+    EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions) f.fn_blocks``;
+
+Theorem scfg_remove_unreachable_layout[local]:
+  ^param_layout e f ==> ^param_layout e (remove_unreachable_blocks f)
+Proof
+  BETA_TAC >> simp[remove_unreachable_blocks_def] >>
+  Cases_on `fn_entry_label f` >>
+  simp[fn_pseudos_prefix_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem scfg_fix_all_phis_layout[local]:
+  ^param_layout e f ==> ^param_layout e (fix_all_phis f)
+Proof
+  BETA_TAC >> simp[fix_all_phis_def, fn_pseudos_prefix_def,
+                  EVERY_MAP, EVERY_MEM, MEM_MAP] >>
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[] >> Cases_on `bb'.bb_label = e`
+      >- (`no_phis bb'` by (simp[no_phis_def, EVERY_MEM] >> metis_tac[]) >>
+          drule scfg_fix_phis_no_phis >> simp[]) >>
+      irule (cj 2 scfg_fix_phis_layout) >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `bb'.bb_label <> e` by gvs[fix_phis_in_block_def] >>
+      gvs[] >> irule (cj 1 scfg_fix_phis_layout) >> metis_tac[]) >>
+  rpt strip_tac >>
+  `bb'.bb_label = e` by gvs[fix_phis_in_block_def] >>
+  `no_phis bb'` by (simp[no_phis_def, EVERY_MEM] >> metis_tac[]) >>
+  drule scfg_fix_phis_no_phis >> strip_tac >> gvs[no_phis_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem scfg_subst_labels_layout[local]:
+  ^param_layout e f ==> ^param_layout e (subst_block_labels_fn lm f)
+Proof
+  BETA_TAC >>
+  `!i. (subst_block_labels_inst lm i).inst_opcode = i.inst_opcode` by
+    (gen_tac >> simp[subst_block_labels_inst_def, subst_label_map_inst_def] >>
+     Cases_on `is_block_label_opcode i.inst_opcode` >> simp[]) >>
+  simp[subst_block_labels_fn_def, fn_pseudos_prefix_def, EVERY_MAP,
+       EVERY_MEM, MEM_MAP] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[subst_block_labels_block_def] >>
+      irule scfg_pseudos_prefix_map >> simp[] >> metis_tac[]) >>
+  conj_tac >> rpt strip_tac >>
+  gvs[subst_block_labels_block_def, no_param_insts_def, EVERY_MAP,
+      EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
 Theorem simplify_cfg_fn_param_prefix:
   o1_fn_shape C fn /\ fn_pseudos_prefix fn /\
   EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
