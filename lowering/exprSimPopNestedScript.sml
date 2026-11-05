@@ -8,8 +8,8 @@
  * fragment judgment (pop_target_frag, which targetPlaceSimCases'
  * target_place_sim gives from target_sim) and split on the target's root.
  * pop_target_frag, the helpers and pop_nested_storage_pure_sim are in
- * exprSimPopNestedBase; each RESIDUAL is in its own theory, named after
- * it (exprSimPopNestedStorageEffectful, exprSimPopNestedImmutableDeploy,
+ * exprSimPopNestedBase; each other lemma is in its own theory, named
+ * after it (exprSimPopNestedStorageEffectful, exprSimPopNestedImmutableDeploy,
  * exprSimPopNestedLocal, exprSimPopNestedTargetFrag,
  * bodyPopNestedTargetFrag):
  *
@@ -31,10 +31,8 @@
  *                             nested length word locals_kept does not
  *                             exempt yet.
  *
- *   pop_nested_expr_target_frag — RESIDUAL: the target's fragment judgment
- *                             at the expression level; target_pre's
- *                             target_env_ok asks for every declaration's
- *                             metadata, where the target needs its root's.
+ *   pop_nested_expr_target_frag — the target's fragment judgment at the
+ *                             expression level.
  *)
 
 Theory exprSimPopNested
