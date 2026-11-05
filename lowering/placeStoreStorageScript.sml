@@ -2428,6 +2428,80 @@ Proof
       vyperTypingTheory.value_has_type_def]
 QED
 
+Theorem place_store_counted_dynarray_bulk_data_path:
+  emit_op MUL [length; Lit (n2w (type_memory_size tv))] sa = (bytes,b) /\
+  compile_copy_memory_dynamic dst src bytes b = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  eval_operand length s = SOME (n2w N) /\
+  (!i. i < N ==> val_wf tv (f i) /\
+    val_in_memory tv (f i) (w2n sw + i * type_memory_size tv) s.vs_memory) /\
+  w2n sw + N * type_memory_size tv < dimword (:256) /\
+  w2n dw + N * type_memory_size tv < dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      (!i. i < N ==> val_in_memory tv (f i)
+        (w2n dw + i * type_memory_size tv) t.vs_memory) /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n dw) (N * type_memory_size tv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `N * type_memory_size tv < dimword (:256)` by decide_tac >>
+  `ci_mono sa b /\ ci_mono b sb` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono,
+      contextTheory.compile_copy_memory_dynamic_def,
+      exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND] >>
+  `fn_has_code sa b func /\ fn_has_code b sb func` by
+    (gvs[ci_mono_def] >>
+     metis_tac[fragExecTheory.fn_has_code_mid, cs_extends_refl]) >>
+  `?u. gas_marked_path F ctx func s 0 (OK u) /\
+       eval_operand bytes u = SOME (n2w (N * type_memory_size tv)) /\
+       u.vs_memory = s.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame sa off len s u) /\
+       ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\
+       u.vs_inst_idx = LENGTH b.cs_current_insts` by
+    (irule place_store_emit_op_path >> simp[] >>
+     qexistsl_tac [`[length; Lit (n2w (type_memory_size tv))]`, `MUL`] >>
+     simp[venomInstTheory.is_terminator_def, step_inst_base_opcode_eqs,
+       mk_inst_def, exec_pure2_def, eval_operand_def, GSYM wordsTheory.word_mul_n2w]) >>
+  `eval_operand src u = SOME sw /\ eval_operand dst u = SOME dw` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand] >>
+  drule_all place_store_copy_dynamic_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `(mcopy (w2n dw) (w2n sw) (N * type_memory_size tv) u)
+     with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `gas_marked_path F ctx func s 0
+     (OK ((mcopy (w2n dw) (w2n sw) (N * type_memory_size tv) u)
+       with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (qpat_x_assum `gas_marked_path F ctx func u _ _` mp_tac >>
+     simp[wordsTheory.w2n_n2w, LESS_MOD] >>
+     metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      irule valueCopyTheory.val_in_memory_relocate >>
+      conj_tac >- metis_tac[] >>
+      qexistsl_tac [`w2n sw + i * type_memory_size tv`,
+                    `type_memory_size tv`, `u.vs_memory`] >>
+      simp[] >> conj_tac
+      >- metis_tac[exprSimPropsTheory.val_footprint_le] >>
+      irule valueEncodingProofsTheory.mem_bytes_at_translated_window >>
+      qexists_tac `N * type_memory_size tv` >>
+      simp[valueEncodingProofsTheory.mcopy_mem_bytes_at_same] >>
+      `SUC i <= N` by decide_tac >>
+      `SUC i * type_memory_size tv <= N * type_memory_size tv` by
+        simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+      qpat_x_assum `SUC i * _ <= _` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  conj_tac
+  >- (irule typedMemoryCopyTheory.typed_copy_state_frame_trans >>
+      qexists_tac `u` >>
+      simp[typedMemoryCopyTheory.typed_copy_mcopy_state_frame]) >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
 Theorem place_store_counted_tuple_path:
   !dtys stys dtvs stvs vs dst src doff soff sa sb s dw sw.
   LIST_REL (\(dty,dtv) (sty,stv,v).
