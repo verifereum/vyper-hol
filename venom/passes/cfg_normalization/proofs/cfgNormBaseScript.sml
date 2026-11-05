@@ -2863,12 +2863,16 @@ Theorem step_inst_base_selfdestruct_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
       (step_inst_base inst s)
 Proof
-  rpt strip_tac >> simp[step_inst_base_def] >>
+  rpt strip_tac >> simp[step_inst_base_def, eval_operands_prev_bb] >>
+  IF_CASES_TAC
+  >- simp[exec_result_map_prev_bb_def, halt_state_def, set_returndata_def,
+          venom_state_fupdcanon] >>
   Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
   Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
   simp[eval_operand_prev_bb] >>
   Cases_on `eval_operand h s` >>
-  simp[exec_result_map_prev_bb_def, halt_state_def, venom_state_fupdcanon]
+  simp[exec_result_map_prev_bb_def, halt_state_def, set_returndata_def,
+       venom_state_fupdcanon]
 QED
 
 Theorem step_inst_base_dret_prev_bb[local]:
