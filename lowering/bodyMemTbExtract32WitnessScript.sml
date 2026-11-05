@@ -93,3 +93,31 @@ Proof
   metis_tac[relationTheory.TC_CASES1,
             vyperTypeCallGraphSoundnessTheory.call_edge_rel_def, listTheory.MEM]
 QED
+
+Theorem extract32_empty_runtime_exists:
+  ?unit. lower_vyper_runtime_unit []
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> = SOME unit
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem extract32_empty_runtime_body_inv:
+  ?unit. lower_vyper_runtime_unit []
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> = SOME unit /\
+    body_inv [] unit.cu_context
+      (build_compile_env [] External View "probe" [] NoneT [] F)
+      (empty_evaluation_context with <| sources :=
+        [(empty_evaluation_context.txn.target, [(NONE,[])])];
+        stk := [(NONE,"probe")] |>)
+Proof
+  strip_assume_tac extract32_empty_runtime_exists >>
+  qexists_tac `unit` >> simp[body_inv_def] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac
+  >- (qexistsl_tac [`<| rpol_target := all_capabilities;
+                        rpol_frontend_dispatch := Linear;
+                        rpol_final_assembly := FAP_Optimize |>`, `unit`] >> simp[] >> EVAL_TAC) >>
+  EVAL_TAC >> simp[]
+QED
