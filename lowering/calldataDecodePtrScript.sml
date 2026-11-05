@@ -3,7 +3,7 @@ Theory calldataDecodePtr
 Ancestors bodyPtrDefs ptrDiscipline venomInst venomState venomExecSemantics
   codegenRel contextCodegenRel memLocDefs pred_set abiEncoder compileEnv emitHelper
   entryDispatchPtr ptrSafeRun list finite_map abiDecoderGuards exprLoweringProps
-  fragExec words abiDecoderContract ghostPcTransportPtr
+  fragExec words abiDecoderContract ghostPcTransportPtr decoderGhostFramePtr
 
 Theorem calldatacopy_access_ok:
   eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) ==>
