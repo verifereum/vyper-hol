@@ -10,7 +10,7 @@
 
 Theory fnBlockStep
 Ancestors
-  fnBlockBody fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
+  fnBlockBody fnFrameSinglePred fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
   venomExecSemantics
 
