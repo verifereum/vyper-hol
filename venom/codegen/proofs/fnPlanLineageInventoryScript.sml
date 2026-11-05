@@ -2823,6 +2823,31 @@ Proof
   Cases_on `x = Label s` >> simp[LIST_ELEM_COUNT_DEF]
 QED
 
+Theorem emit_input_plan_variable_origins:
+  !opc operands nl ps ops qs v.
+    emit_input_plan opc operands nl ps = (ops,qs) /\
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/
+    MEM (Var v) operands
+Proof
+  gen_tac >> Induct >> rpt gen_tac
+  >- simp[emit_input_plan_def] >>
+  namedCases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` ["step_ops ps1"] >>
+  namedCases_on `emit_input_plan opc operands nl ps1` ["rest_ops ps2"] >>
+  simp[emit_input_plan_def] >> strip_tac >> gvs[] >>
+  `MEM (Var v) ps1.ps_stack \/ Var v IN FDOM ps1.ps_spilled \/ MEM (Var v) operands` by
+    metis_tac[] >>
+  Cases_on `MEM (Var v) operands` >- simp[] >>
+  qspecl_then [`opc`, `operand_vars operands ++ nl`, `h`, `ps`, `Var v`]
+    mp_tac emit_one_input_inventory_upper >>
+  gvs[] >>
+  Cases_on `MEM (Var v) ps.ps_stack` >- simp[] >>
+  Cases_on `Var v IN FDOM ps.ps_spilled` >- simp[] >>
+  Cases_on `Var v = h` >- simp[] >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `Var v IN FDOM ps1.ps_spilled` >> gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
 Theorem emit_one_input_live_upper_acc[local]:
   !done rest opc nl h ps.
     (!x. LIST_ELEM_COUNT x ps.ps_stack +
