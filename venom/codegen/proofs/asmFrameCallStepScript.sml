@@ -32,6 +32,24 @@ Proof
   Cases_on `parents` >> gvs[]
 QED
 
+Theorem asm_call_child_run_classify:
+  wf_state child /\ 2 <= LENGTH child.contexts ==>
+  ?r t. run_call child = SOME (r,t) /\ wf_state t /\
+    ((r = INL () /\ LENGTH t.contexts + 1 = LENGTH child.contexts) \/
+     (?e. r = INR e /\ vfm_abort e))
+Proof
+  strip_tac >>
+  Cases_on `run_call_tr (LENGTH child.contexts) (step child)` >>
+  rename1 `run_call_tr _ _ = (result,finished)` >>
+  `run_call child = SOME (result,finished)` by simp[run_call_eq_tr] >>
+  qexistsl_tac [`result`, `finished`] >> simp[] >>
+  conj_tac >- metis_tac[run_call_preserves_wf_state] >>
+  Cases_on `result`
+  >- (Cases_on `x` >> simp[] >> metis_tac[run_call_inl_length]) >>
+  simp[] >> irule run_call_inr_requires_abort_ge2 >>
+  qexistsl_tac [`child`, `finished`] >> simp[]
+QED
+
 Theorem asm_frame_call_decode:
   asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   a.as_pc < LENGTH prog /\
