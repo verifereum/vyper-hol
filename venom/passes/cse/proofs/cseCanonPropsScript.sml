@@ -1206,3 +1206,77 @@ Proof
      GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC, listTheory.EVERY_MEM] >>
  metis_tac[]
 QED
+
+Theorem cse_static_trace_splice:
+ !tail pre p stem.
+ cse_static_trace fn (pre ++ p::tail) /\ cse_static_trace fn stem /\
+ LAST stem = p ==> cse_static_trace fn (stem ++ tail)
+Proof
+ Induct_on `tail` using rich_listTheory.SNOC_INDUCT
+ >- simp[] >>
+ rpt strip_tac >>
+ `cse_static_trace fn (pre ++ p::tail)` by
+   (irule cse_static_trace_prefix >>
+    conj_tac >- (Cases_on `pre` >> simp[listTheory.APPEND]) >>
+    qexists `[x]` >>
+    metis_tac[rich_listTheory.SNOC_APPEND, listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
+ `cse_static_trace fn (stem ++ tail)` by metis_tac[] >>
+ qpat_x_assum `cse_static_trace fn (pre ++ p::SNOC x tail)`
+   (strip_assume_tac o PURE_ONCE_REWRITE_RULE [cse_static_trace_cases]) >>
+ gvs[rich_listTheory.SNOC_APPEND, listTheory.APPEND_ASSOC] >>
+ Cases_on `tail` >>
+ gvs[listTheory.APPEND, rich_listTheory.LAST_APPEND_NOT_NIL] >>
+ FIRST [irule (cj 2 cse_static_trace_rules),
+        irule (cj 3 cse_static_trace_rules)] >>
+ simp[] >> qexists `bb` >> simp[]
+QED
+
+Theorem cse_static_trace_first_predecessor_excludes[local]:
+ wf_function fn /\ cse_static_trace fn (left ++ [p]) /\
+ cse_point_has_id fn p d /\ ~MEM p left /\ cse_path_preorder fn d a ==>
+ ~(?q. MEM q left /\ cse_point_has_id fn q a)
+Proof
+ strip_tac >> strip_tac >>
+ `cse_static_trace fn left` by
+   (irule cse_static_trace_prefix >>
+    conj_tac >- (Cases_on `left` >> gvs[]) >>
+    qexists `[p]` >> simp[]) >>
+ drule_all cse_static_trace_member_prefix >> strip_tac >>
+ `?r. MEM r pre /\ cse_point_has_id fn r d` by
+   metis_tac[cse_path_preorder_def] >>
+ `r = p` by metis_tac[cse_point_has_id_injective] >>
+ gvs[listTheory.MEM_APPEND]
+QED
+
+Theorem cse_path_preorder_suffix_crossing:
+ wf_function fn /\ cse_static_trace fn (pre ++ p::tail) /\
+ cse_point_has_id fn p d /\ cse_path_preorder fn d a /\ d <> a /\
+ cse_path_preorder fn a c /\ cse_point_has_id fn (LAST (p::tail)) c ==>
+ ?q. MEM q tail /\ cse_point_has_id fn q a
+Proof
+ strip_tac >>
+ `MEM p (pre ++ p::tail)` by simp[listTheory.MEM_APPEND] >>
+ `?left right. pre ++ p::tail = left ++ p::right /\ ~MEM p left` by
+   (qpat_x_assum `MEM p (pre ++ p::tail)`
+      (strip_assume_tac o PURE_ONCE_REWRITE_RULE [listTheory.MEM_SPLIT_APPEND_first]) >>
+    qexistsl [`pfx`, `sfx`] >> gvs[listTheory.APPEND]) >>
+ `cse_static_trace fn (left ++ [p])` by
+   (irule cse_static_trace_prefix >>
+    conj_tac >- (Cases_on `left` >> simp[listTheory.APPEND]) >>
+    qexists `right` >> metis_tac[listTheory.APPEND, listTheory.APPEND_ASSOC]) >>
+ `~(?q. MEM q left /\ cse_point_has_id fn q a)` by
+   metis_tac[cse_static_trace_first_predecessor_excludes] >>
+ `cse_static_trace fn ((left ++ [p]) ++ tail)` by
+   (irule cse_static_trace_splice >> simp[] >>
+    qexists `pre` >> simp[]) >>
+ `?q. MEM q ((left ++ [p]) ++ tail) /\ cse_point_has_id fn q a` by
+   (qpat_x_assum `cse_path_preorder fn a c` mp_tac >>
+    pure_rewrite_tac[cse_path_preorder_def] >>
+    disch_then (qspecl_then [`(left ++ [p]) ++ tail`,
+                            `LAST ((left ++ [p]) ++ tail)`] mp_tac) >>
+    simp[] >> Cases_on `tail` >>
+    gvs[listTheory.APPEND, rich_listTheory.LAST_APPEND_NOT_NIL]) >>
+ `~cse_point_has_id fn p a` by
+   (PairCases_on `p` >> gvs[cse_point_has_id_def] >> metis_tac[]) >>
+ gvs[listTheory.MEM_APPEND] >> metis_tac[]
+QED
