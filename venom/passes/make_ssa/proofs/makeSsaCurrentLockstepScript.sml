@@ -13,7 +13,8 @@ Ancestors
   o1FrameLockstep o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst
   irSupply unitShapeDefs o1PassContract venomState stateFrame venomExecSemantics
   venomExecProps venomExecProofs contextCodegenRel list rich_list
-  makeSsaCurrentCutInv makeSsaCurrentWfSsa
+  makeSsaCurrentCutInv makeSsaCurrentWfSsa o1MakeSsaFormats
+  makeSsaCurrentLockstepShape analysisSimProofsBase
 
 Definition make_ssa_pos_def:
   make_ssa_pos fn fn' l k =
@@ -192,6 +193,82 @@ Proof
   `wf_function fn /\ all_reachable fn /\ first_block_no_preds fn` by
     fs[current_wf_phi_context_def] >>
   metis_tac[current_wf_inserted_nonentry]
+QED
+
+Theorem enters_block_no_phi:
+  lookup_block st.vs_current_bb fn.fn_blocks = SOME bb /\
+  EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions /\
+  st.vs_inst_idx = 0 ==>
+  (enters_block fn st post <=> post = st)
+Proof
+  strip_tac >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (Cases_on `bb.bb_instructions` >> gvs[phi_prefix_length_def]) >>
+  drule phi_prefix_length_zero_eval_phis_ok >>
+  disch_then (qspec_then `st` assume_tac) >>
+  simp[enters_block_def]
+QED
+
+Theorem make_ssa_lockstep_entry_states:
+  make_ssa_current_fn s fn = (fn',s') /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  fn_entry_state fn st /\ enters_block fn' st post' ==>
+  enters_block fn st st /\ post' = st
+Proof
+  strip_tac >>
+  drule_all make_ssa_current_fn_first_block_no_phi >> strip_tac >>
+  drule o1MakeSsaCfgTheory.make_ssa_current_fn_entry_label >> strip_tac >>
+  `fn_entry_state fn' st` by gvs[fn_entry_state_def] >>
+  `?bb. lookup_block st.vs_current_bb fn.fn_blocks = SOME bb /\
+    EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+    (gvs[fn_entry_state_def, fn_entry_label_def, entry_block_def,
+         first_block_no_phi_def, AllCaseEqs()] >>
+     Cases_on `fn.fn_blocks` >> gvs[lookup_block_def, FIND_thm]) >>
+  `?bb'. lookup_block st.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    EVERY (\i. i.inst_opcode <> PHI) bb'.bb_instructions` by
+    (gvs[fn_entry_state_def, fn_entry_label_def, entry_block_def,
+         first_block_no_phi_def, AllCaseEqs()] >>
+     Cases_on `fn'.fn_blocks` >> gvs[lookup_block_def, FIND_thm]) >>
+  `st.vs_inst_idx = 0` by fs[fn_entry_state_def] >>
+  metis_tac[enters_block_no_phi]
+QED
+
+Theorem current_phi_context_entry_cut:
+  current_wf_phi_context s fn renamed s' A H events /\
+  fn' = fn with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
+  ctx_bisim C C' /\ entry_block fn = SOME eb /\ fn_entry_state fn st ==>
+  ?bb'. lookup_block eb.bb_label fn.fn_blocks = SOME eb /\
+    lookup_block eb.bb_label fn'.fn_blocks = SOME bb' /\
+    A eb.bb_label = current_block_annotations eb [] /\
+    LENGTH bb'.bb_instructions = LENGTH eb.bb_instructions /\
+    LENGTH (collect_phis eb.bb_instructions) = 0 /\
+    make_ssa_pos fn fn' eb.bb_label 0 = 0 /\
+    current_cut_inv fn A renamed H events eb.bb_label 0 st st /\
+    current_cut_sg fn A renamed H events eb.bb_label 0 = FEMPTY
+Proof
+  strip_tac >>
+  `wf_function fn /\ first_block_no_phi fn` by
+    fs[current_wf_phi_context_def] >>
+  `MEM eb fn.fn_blocks /\ fn_entry_label fn = SOME eb.bb_label` by
+    (Cases_on `fn.fn_blocks` >> gvs[entry_block_def, fn_entry_label_def]) >>
+  `lookup_block eb.bb_label fn.fn_blocks = SOME eb` by
+    (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+  `A eb.bb_label = current_block_annotations eb []` by
+    metis_tac[current_phi_context_entry_annotation] >>
+  `EVERY (\i. i.inst_opcode <> PHI) eb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[entry_block_def, first_block_no_phi_def]) >>
+  `LENGTH (collect_phis eb.bb_instructions) = 0` by
+    (Cases_on `eb.bb_instructions` >> gvs[livenessDefsTheory.collect_phis_def]) >>
+  `0 < LENGTH eb.bb_instructions` by
+    (fs[wf_function_def, EVERY_MEM] >>
+     `bb_well_formed eb` by metis_tac[] >>
+     fs[bb_well_formed_def] >> Cases_on `eb.bb_instructions` >> gvs[]) >>
+  `st.vs_current_bb = eb.bb_label` by fs[fn_entry_state_def] >>
+  drule_all current_cut_inv_entry >> strip_tac >>
+  `LENGTH (collect_phis eb.bb_instructions) <= 0` by decide_tac >>
+  drule_all current_cut_inv_ordinary_step >> strip_tac >>
+  qexists_tac `bb'` >> gvs[make_ssa_pos_def]
 QED
 
 Theorem make_ssa_current_fn_frame_lockstep:
