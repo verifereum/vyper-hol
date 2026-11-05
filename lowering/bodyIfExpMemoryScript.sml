@@ -843,6 +843,41 @@ Proof
   rewrite_tac[GSYM mk_inst_def, below_frontier_MLOAD] >> simp[]
 QED
 
+(* A successful forced Name outcome checks the load even when its FlagT
+   annotation has no evaluated type.  The endpoint must be beyond entry. *)
+Theorem ifexp_name_forced_frontier_probe[local]:
+  lookup_scopes name es.scopes = SOME entry /\
+  FLOOKUP cenv.ce_vars name = SOME (PtrVar (Lit w) sz) /\
+  emit_op MLOAD [Lit w] sa = (op,sb) /\
+  gas_outcome T tops (ctx,func)
+    (bind (eval_expr cx (Name (FlagT nsid) name)) (read_result cx))
+    (es,s0)
+    (\res ee z. z.vs_current_bb = sb.cs_current_bb /\
+                z.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r) /\
+  ~(s0.vs_current_bb = sb.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sb.cs_current_insts) /\
+  lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s0.vs_inst_idx = SOME (mk_inst iid MLOAD [Lit w] outs) /\
+  ~revert_forward_at bb s0.vs_inst_idx ==>
+  w2n w + 32 <= s0.vs_alloca_next
+Proof
+  strip_tac >> drule_all ifexp_name_forced_summary_probe >> strip_tac >>
+  gvs[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def]
+  >- (`z <> s0` by metis_tac[] >>
+      drule gas_path_mem_first_mload_bound >>
+      disch_then (qspecl_then [`outs`, `Lit w`, `iid`, `bb`, `w`] mp_tac) >>
+      simp[eval_operand_def]) >>
+  qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+  `lookup_scopes name
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings).scopes =
+    SOME entry` by simp[] >>
+  drule ifexp_name_source_probe >>
+  disch_then (qspecl_then [`nsid`, `cx`] strip_assume_tac) >>
+  simp[] >> strip_tac >>
+  gvs[expr_exit_def]
+QED
+
 (* Successful raw StackValue endpoint: the actual arm emits no unwrap code. *)
 Theorem ifexp_stack_arm_endpoint_mem[local]:
   compile_expr cenv ty e sa = (StackValue st op,sm) /\
