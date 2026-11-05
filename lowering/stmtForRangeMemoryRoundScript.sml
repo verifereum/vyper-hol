@@ -309,3 +309,13 @@ Resume for_round_false_source_mem[continue]:
   gvs[Abbr `E`]
 QED
 Finalise for_round_false_source_mem
+
+Theorem for_outcome_consequence_mem:
+  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
+  (!res ee t. Q res ee t ==> Q' res ee t) /\
+  (!res ee r. R res ee r ==> R' res ee r) ==>
+  gas_outcome memory tops (ctx,func) source (es,s) Q' R'
+Proof
+  rw[gas_outcome_def, gas_summary_at_def] >>
+  qexists_tac `marks` >> metis_tac[]
+QED
