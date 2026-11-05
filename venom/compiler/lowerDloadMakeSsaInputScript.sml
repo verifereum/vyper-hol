@@ -19,7 +19,7 @@ Ancestors
   venomFnScheduleRunner irSupply venomWf cfgWf venomInst list
   cfgNormSupplyProofs
 
-Theorem lower_dload_step_supply[local]:
+Theorem lower_dload_step_supply:
   fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out ==>
   ir_supply_covers_fn s fn /\
   ?s'. lower_dload_function_supply s fn = (out.fpo_function,s')
