@@ -69,7 +69,9 @@ Theorem rest_word_vv_memory_bound:
   expr_type e = ArrayT et bd /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   eval_operand (vv_operand vv) s = SOME w ==>
-  w2n w + type_memory_size tv < dimword (:256)
+  w2n w + type_memory_size tv < dimword (:256) /\
+  (0 < type_memory_size tv ==>
+   w2n w + type_memory_size tv <= s.vs_alloca_next)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
