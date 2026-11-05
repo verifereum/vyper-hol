@@ -78,7 +78,7 @@ Theorem lower_vyper_runtime_unit_run_mem_safe:
 Proof
   rpt gen_tac >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    (first_assum (qspec_then `[] : bool list` mp_tac) >> simp[gas_explicit_nil]) >>
+    metis_tac[gas_explicit_nil] >>
   `?mut args fbody.
      lookup_function NONE tx.function_name External tops =
        SOME (mut, F, args, [], ret, fbody) /\
@@ -125,7 +125,7 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
 Proof
   rpt strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    (first_assum (qspec_then `[] : bool list` mp_tac) >> simp[gas_explicit_nil]) >>
+    metis_tac[gas_explicit_nil] >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> strip_tac >>
   drule run_lowering_entry >> strip_tac >>
