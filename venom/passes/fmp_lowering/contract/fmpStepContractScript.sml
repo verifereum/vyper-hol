@@ -12,6 +12,7 @@ Theory fmpStepContract
 Ancestors
   o1PassContract fmpLowerDefs venomPassDispatcher
   fmpStepBridge fmpStepShape fmpStepStructural fmpStepRestrictions fmpStepLayout
+  fmpWfDefs callLayoutDefs venomWf venomInst list rich_list
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -72,23 +73,26 @@ Proof
 QED
 
 Theorem pseudos_prefix_split:
-  bb.bb_instructions = ps ++ rest /  EVERY (\i. is_pseudo i.inst_opcode) ps /  EVERY (\i. ~is_pseudo i.inst_opcode) rest ==> pseudos_prefix bb
+  bb.bb_instructions = xs ++ ys /\
+  EVERY (\i. is_pseudo i.inst_opcode) xs /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) ys ==> pseudos_prefix bb
 Proof
   rw[pseudos_prefix_def] >> gvs[EVERY_EL] >>
-  Cases_on `i < LENGTH ps` >> gvs[EL_APPEND1] >>
-  `LENGTH ps <= j` by decide_tac >>
-  `j - LENGTH ps < LENGTH rest` by decide_tac >>
+  Cases_on `i < LENGTH xs` >> gvs[EL_APPEND1] >>
+  `LENGTH xs <= j` by decide_tac >>
+  `j - LENGTH xs < LENGTH ys` by decide_tac >>
   gvs[EL_APPEND2]
 QED
 
 Theorem canonical_entry_params_split:
   !k insts. canonical_entry_params_from k insts ==>
-    ?ps rest. insts = ps ++ rest /      EVERY (\i. is_param_opcode i.inst_opcode) ps /\ no_param_insts rest
+    ?xs ys. insts = xs ++ ys /\
+      EVERY (\i. is_param_opcode i.inst_opcode) xs /\ no_param_insts ys
 Proof
   Induct_on `insts` >> simp[canonical_entry_params_from_def] >>
   rpt gen_tac >> rpt IF_CASES_TAC >> strip_tac
   >- (first_x_assum drule >> strip_tac >>
-      qexistsl [`h::ps`, `rest`] >> gvs[is_param_opcode_def])
+      qexistsl [`h::xs`, `ys`] >> gvs[is_param_opcode_def])
   >- (Cases_on `insts` >> gvs[canonical_after_fmp_def]
       >- (qexistsl [`[h]`, `[]`] >> gvs[is_param_opcode_def, no_param_insts_def])
       >> Cases_on `h'.inst_opcode = RETPC_PARAM` >> gvs[]
@@ -102,13 +106,14 @@ QED
    PHI prefix of every block, makes the pseudo instructions a prefix. *)
 Theorem canonical_param_prefix_pseudos:
   canonical_param_prefix fn /\ wf_function fn /\ first_block_no_phi fn ==>
-  fn_pseudos_prefix fn /  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)
+  fn_pseudos_prefix fn /\
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)
 Proof
   strip_tac >>
   Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def] >>
   simp[fn_pseudos_prefix_def] >> rpt strip_tac >> gvs[]
   >- (drule canonical_entry_params_split >> strip_tac >>
-      irule pseudos_prefix_split >> qexistsl [`ps`, `rest`] >>
+      irule pseudos_prefix_split >> qexistsl [`xs`, `ys`] >>
       gvs[first_block_no_phi_def, no_param_insts_def, EVERY_MEM,
           is_pseudo_param_or_phi] >>
       rpt strip_tac >> res_tac >> gvs[is_param_opcode_def]) >>

@@ -547,7 +547,8 @@ Proof
     (gvs[fn_pass_step_def] >>
      metis_tac[venomFnScheduleRunnerPropsTheory.lookup_unique_function_member]) >>
   `o1_fn_shape observed.cu_context fn` by gvs[o1_ctx_shape_def, EVERY_MEM] >>
-  `fn_pseudos_prefix (simplify_cfg_fn fn) /   EVERY (\bb. no_param_insts bb.bb_instructions)
+  `fn_pseudos_prefix (simplify_cfg_fn fn) /\
+   EVERY (\bb. no_param_insts bb.bb_instructions)
      (TL (simplify_cfg_fn fn).fn_blocks)` by
     (drule simplify_cfg_fn_param_prefix >> simp[]) >>
   `wf_ssa (simplify_cfg_fn fn)` by
