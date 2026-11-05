@@ -11,7 +11,8 @@ Ancestors
   exprBopLowering loweringSlice localPtrsProps
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState valueEncoding venomExecSemantics venomInst
-  venomState vyperValue
+  venomState vyperValue exprSimWordBuiltins
+  words integer_word vfmExecution builtinMath builtinMisc builtinSimple vyperContext
 Libs
   pairLib
 
@@ -149,4 +150,83 @@ Proof
   (impl_tac >- (simp[] >> fs[EVERY_MEM])) >> strip_tac >>
   qexists_tac `Abort Revert_abort (endt with vs_inst_idx := j)` >>
   simp[exit_result_def, expr_exit_def]
+QED
+
+Theorem compile_pow_mod256_word_frag_mem:
+  !ctx func cenv cx es ann ts (a:bytes32) (b:bytes32).
+    !sa sb xs op s0.
+      compile_pow_mod256 (EL 0 xs) (EL 1 xs) sa = (op, sb) /\
+      expr_res_ok (builtin_result cx es.accounts ann PowMod256 ts
+        [IntV (&w2n a); IntV (&w2n b)]) /\
+      EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\
+      stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs
+        [IntV (&w2n a); IntV (&w2n b)] /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      ?r. gas_marked_path T ctx func s0 0 r /\
+        ((?s v. r = OK s /\
+                builtin_result cx es.accounts ann PowMod256 ts
+                  [IntV (&w2n a); IntV (&w2n b)] = INL v /\ word_value v /\
+                stmt_state_rel ctx func cenv cx es s /\
+                eval_operand op s = SOME (val_to_w256 v) /\
+                (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+                       lookup_var z s = SOME w) /\
+                (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                         FLOOKUP s.vs_allocas aid = SOME b) /\
+                s.vs_memory = s0.vs_memory /\ ~s.vs_halted /\
+                s.vs_current_bb = sb.cs_current_bb /\
+                s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+                alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next) \/
+         (exit_result r /\ expr_exit (builtin_result cx es.accounts ann PowMod256 ts
+           [IntV (&w2n a); IntV (&w2n b)]) r))
+Proof
+  ntac 9 gen_tac >>
+  ho_match_mp_tac word_builtin_mem_success >>
+  simp[builtin_result_def, evaluate_builtin_def] >>
+  simp[SF ETA_ss, straight_fresh_compile_modular, word_value_def] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+  drule_all compile_pow_mod256_run >>
+  simp[word_exp_modexp, dimword_def]
+QED
+
+Theorem compile_pow_mod256_typed_frag_mem:
+  !ctx func cenv cx es ann ts v1 v2.
+    value_has_type (BaseTV (UintT 256)) v1 /\
+    value_has_type (BaseTV (UintT 256)) v2 ==>
+    !sa sb xs op s0.
+      compile_pow_mod256 (EL 0 xs) (EL 1 xs) sa = (op, sb) /\
+      expr_res_ok (builtin_result cx es.accounts ann PowMod256 ts [v1; v2]) /\
+      EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\
+      stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [v1; v2] /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      ?r. gas_marked_path T ctx func s0 0 r /\
+        ((?s v. r = OK s /\
+                builtin_result cx es.accounts ann PowMod256 ts [v1; v2] = INL v /\
+                word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+                eval_operand op s = SOME (val_to_w256 v) /\
+                (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+                       lookup_var z s = SOME w) /\
+                (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                         FLOOKUP s.vs_allocas aid = SOME b) /\
+                s.vs_memory = s0.vs_memory /\ ~s.vs_halted /\
+                s.vs_current_bb = sb.cs_current_bb /\
+                s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+                alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next) \/
+         (exit_result r /\ expr_exit
+           (builtin_result cx es.accounts ann PowMod256 ts [v1; v2]) r))
+Proof
+  ntac 9 gen_tac >> strip_tac >>
+  `v1 = IntV (&w2n (val_to_w256 v1)) /\
+   v2 = IntV (&w2n (val_to_w256 v2))` by
+    metis_tac[uint_value_word_rep, arithmeticTheory.LESS_EQ_REFL] >>
+  qpat_x_assum `v1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `v2 = _` (fn th => once_rewrite_tac[th]) >>
+  MATCH_ACCEPT_TAC compile_pow_mod256_word_frag_mem
 QED
