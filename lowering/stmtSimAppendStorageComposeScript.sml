@@ -308,7 +308,7 @@ QED
 (* From the operand's state, the suffix either aborts on a full array or
    stores the element and the new length, along an actual path with no GAS
    reads. *)
-Theorem append_storage_word_suffix_path[local]:
+Theorem append_storage_word_suffix_path:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
   fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
@@ -393,7 +393,7 @@ Resume append_storage_word_suffix_path[store]:
   metis_tac[FLOOKUP_SUBMAP]
 QED
 
-Finalise append_storage_word_suffix_path
+Finalise append_storage_word_suffix_path[local]
 
 (* The stored state relates to the source after the append. *)
 Theorem append_storage_word_success_post[local]:
