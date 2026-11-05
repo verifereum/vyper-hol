@@ -510,5 +510,17 @@ Theorem live_def_dominates:
       (def_bb.bb_label = lbl ==>
        ?i. i < idx /\ EL i bb.bb_instructions = def_inst)
 Proof
-  cheat
+  rpt strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  drule ldd_state_analyze >>
+  simp[ldd_state_def, GSYM live_vars_at_def] >>
+  disch_then (drule_all_then strip_assume_tac)
+  >- (gvs[ldd_available_def] >> metis_tac[]) >>
+  gvs[ldd_pending_phi_def] >> metis_tac[]
 QED
+
+(* Reject admitted dependencies, including any inherited by the main theorem. *)
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in live definition dominance proof")
+  (DB.thms "fnLiveDefDom");
