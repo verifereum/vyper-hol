@@ -639,3 +639,31 @@ This certifies terminal-mode propagation only. Normal Support/Stack/Saved
 propagation and the full target `frame_reachable` induction remain open, as
 does the frozen stage contract. The next strategy review must address those
 normal-mode joint consumers, not another terminal inventory.
+
+## 15. Tracked block successor interface (C1.12.77–78)
+
+`dload_boundary_core_phis_tracked` and
+`lower_dload_function_supply_enters_boundary_tracked` in BlockEntry now separate
+relational V from definedness U. Their PHI-only backward closure premise is
+proved for V = set(fn_ir_vars f) DIFF {v | retpc_var f v} by
+`dload_original_phi_input_tracked`. Old statements remain specialization wrappers.
+The original-V/U block-entry consumer was checked and removed to avoid a duplicate
+export (TO_ld_ptr_v2-20261104T185312Z_m6086_t001).
+
+Branch now exports `dload_boundary_core_branch_tracked` and
+`dload_actual_branch_block_tracked`. They reflect target JMP/JNZ/DJMP success
+without assuming source success and produce actual source block reachability,
+successor control, original-variable definedness and entry ghost boundary.
+The latter uses arbitrary V with explicit PHI closure. Its original-V consumer
+was checked (TO_ld_ptr_v2-20261104T185312Z_m6112_t001) and removed; original operand
+membership followed from singleton control and fn_ir_vars_operand, while
+non-retpc branch operand use remained explicit. Historical branch theorem
+statements are unchanged, with short specialization proofs.
+
+These interfaces do NOT certify normal-Q block closure. Stack/Saved/Support
+propagation and phase/terminator inversion remain downstream obligations.
+The outer constructor must still produce singleton phase-zero control, source
+reachability, static fn_ptr_ok, FDOM support, source taint safety, non-retpc
+operand use, Cover and distinct target block labels. Target step/nonhalting,
+enters_block and activity are the target frame_reachable_block premises.
+The frozen contract remains unfinished.
