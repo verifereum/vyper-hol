@@ -6,7 +6,9 @@ Ancestors
   calldataMembers calldataSafeIteration abiDecoderMemberCons abiDecoderMemberCode abiEncoder
   compileEnv emitHelper emitHelperProps fragExec venomState venomExecSemantics
   abiDecoderValidMemberCursor calldataValidMemberEndpoint
-  words list pair arithmetic
+  calldataMemberResourceFrame exprLoweringProps abiDecoderTypedContract abiDecoderContract
+  abiDecoderReentry
+  words list rich_list pair arithmetic
 
 Theorem calldata_members_success_relation[local]:
   !fn dst src I R.
@@ -171,3 +173,301 @@ Proof
   rpt gen_tac >> strip_tac >> PairCases_on `e` >> gvs[] >>
   first_x_assum drule >> simp[] >> strip_tac >> simp[]
 QED
+
+(* Positions, not descriptor equality, determine the completed source values. *)
+Definition calldata_source_member_cursor_def:
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    ao0 vo0 first final initial rest ao vo a s <=>
+  ?n scratch.
+    n <= LENGTH xs /\ rest = DROP n xs /\
+    ao = ao0 + SUM (MAP (\(ei,az,mz). az) (TAKE n xs)) /\
+    vo = vo0 + SUM (MAP (\(ei,az,mz). mz) (TAKE n xs)) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) rest ao vo a = ((),final) /\
+    cs_extends first a /\ cs_extends a final /\ ci_mono first a /\ ci_mono a final /\
+    abi_decoder_operand_live a.cs_next_var src /\
+    abi_decoder_operand_live a.cs_next_var dst /\
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+    mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+    calldata_member_resource_frame ctx fn site limit_st first.cs_next_id
+      final.cs_next_id first.cs_next_var d outsz initial s scratch /\
+    abi_decoder_members ce env sf (DROP n tys) (DROP n tvs)
+      (abi_decode_members (MAP (vyper_to_abi_type env) (DROP n tys)) bs
+        (DROP (SUM (MAP abi_member_head_size
+          (MAP (vyper_to_abi_type env) (TAKE n tys)))) bs)) (DROP n vs) /\
+    EVERY (\i. val_wf (EL i tvs) (EL i vs) /\
+      val_in_memory (EL i tvs) (EL i vs)
+        (d+vo0+SUM (MAP type_memory_size (TAKE i tvs))) s.vs_memory)
+      (GENLIST I n)
+End
+
+Theorem calldata_source_member_cursor_initial[local]:
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao0 vo0 first = ((),final) /\
+  cs_extends first final /\ ci_mono first final /\
+  abi_decoder_operand_live first.cs_next_var src /\
+  abi_decoder_operand_live first.cs_next_var dst /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap initial /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
+  FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
+  fresh_vars_wrt limit_st initial /\ alloca_inv initial /\
+  alloca_frontier_inv ctx fn site initial /\
+  calldata_member_own fn first.cs_next_id final.cs_next_id initial /\
+  abi_decoder_members ce env sf tys tvs
+    (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs ==>
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    ao0 vo0 first final initial xs ao0 vo0 first initial
+Proof
+  strip_tac >> rewrite_tac[calldata_source_member_cursor_def] >>
+  qexistsl_tac [`0`,`[]`] >>
+  simp[cs_extends_refl, ci_mono_refl] >>
+  irule calldata_member_resource_identity >> simp[]
+QED
+
+Theorem calldata_source_member_cursor_terminal[local]:
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    ao0 vo0 first final initial [] ao vo a s /\ LENGTH tvs = LENGTH xs ==>
+  ?scratch.
+    calldata_member_resource_frame ctx fn site limit_st first.cs_next_id
+      final.cs_next_id first.cs_next_var d outsz initial s scratch /\
+    EVERY (\i. val_wf (EL i tvs) (EL i vs) /\
+      val_in_memory (EL i tvs) (EL i vs)
+        (d+vo0+SUM (MAP type_memory_size (TAKE i tvs))) s.vs_memory)
+      (GENLIST I (LENGTH tvs)) /\
+    ao = ao0 + SUM (MAP (\(ei,az,mz). az) xs) /\
+    vo = vo0 + SUM (MAP (\(ei,az,mz). mz) xs)
+Proof
+  rewrite_tac[calldata_source_member_cursor_def] >> strip_tac >>
+  `n = LENGTH xs` by (fs[DROP_EQ_NIL] >> decide_tac) >>
+  gvs[] >> qexists_tac `scratch` >> simp[]
+QED
+
+(* Navigation supplies the recursive child with its actual source window and
+   a resource frame at that same endpoint; no successful continuation is used. *)
+Theorem calldata_source_member_navigation[local]:
+  let at = vyper_to_abi_type env ty;
+      ao = SUM (MAP abi_member_head_size pre);
+      off = abi_decode_member_offset at bs ao;
+      childbs = abi_decode_member_bytes at bs (DROP ao bs) in
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
+  fn_has_code st ready fn /\ abi_decoder_coherent ce env sf ty tv /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
+  (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
+  abi_to_vyper env ty (dec at childbs) = SOME v /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz base_addr cap s /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
+  vo + type_memory_bytes ce ty <= outsz /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ calldata_member_own fn lo hi s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t.
+    abi_decoder_valid_pre ce env sf ty tv childbs v ready (FST ops) (SND ops)
+      CALLDATALOAD (Lit 0w) (sb+off) (d+vo) base_addr cap t /\
+    ~t.vs_halted /\ t.vs_current_bb = ready.cs_current_bb /\
+    t.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var d outsz s t [] /\
+    ((!fuel. mem_safe_run fuel ctx fn t) ==> !fuel. mem_safe_run fuel ctx fn s) /\
+    (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' ctx fn s = r /\
+        (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s))
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [LET_THM] calldata_valid_member_address_endpoint) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
+    d outsz s endpoint []` by
+    (irule calldata_member_resource_unchanged >> simp[]) >>
+  qexists_tac `endpoint` >> simp[]
+QED
+
+Theorem calldata_source_member_position[local]:
+  n < LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
+  abi_decoder_members ce env sf (DROP n tys) (DROP n tvs)
+    (abi_decode_members (MAP (vyper_to_abi_type env) (DROP n tys)) bs
+      (DROP (SUM (MAP abi_member_head_size
+        (MAP (vyper_to_abi_type env) (TAKE n tys)))) bs)) (DROP n vs) ==>
+  abi_decoder_coherent ce env sf (EL n tys) (EL n tvs) /\
+  abi_to_vyper env (EL n tys)
+    (dec (vyper_to_abi_type env (EL n tys))
+      (abi_decode_member_bytes (vyper_to_abi_type env (EL n tys)) bs
+        (DROP (SUM (MAP abi_member_head_size
+          (MAP (vyper_to_abi_type env) (TAKE n tys)))) bs))) = SOME (EL n vs) /\
+  value_has_type (EL n tvs) (EL n vs) /\
+  type_memory_size (EL n tvs) = type_memory_bytes ce (EL n tys) /\
+  abi_embedded_static_size ce.ce_struct_fields (EL n tys) =
+    abi_member_head_size (vyper_to_abi_type env (EL n tys)) /\
+  abi_decoder_members ce env sf (DROP (SUC n) tys) (DROP (SUC n) tvs)
+    (abi_decode_members (MAP (vyper_to_abi_type env) (DROP (SUC n) tys)) bs
+      (DROP (SUM (MAP abi_member_head_size
+        (MAP (vyper_to_abi_type env) (TAKE (SUC n) tys)))) bs)) (DROP (SUC n) vs)
+Proof
+  strip_tac >>
+  `DROP n tys = EL n tys::DROP (SUC n) tys /\
+   DROP n tvs = EL n tvs::DROP (SUC n) tvs /\
+   DROP n vs = EL n vs::DROP (SUC n) vs` by
+    simp[DROP_EL_CONS, ADD1] >>
+  gvs[] >> drule (SIMP_RULE bool_ss [MAP] abi_decoder_valid_member_cursor) >>
+  simp[TAKE_SUC, EL_TAKE]
+QED
+
+Theorem calldata_source_member_memory_advance[local]:
+  calldata_member_resource_frame ctx fn site limit_st lo hi live q sz s t scratch /\
+  (oid < lo \/ hi <= oid) /\ FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+  (!i. i < n ==> base_addr <= d+vo0+SUM (MAP type_memory_size (TAKE i tvs)) /\
+    d+vo0+SUM (MAP type_memory_size (TAKE i tvs))+type_memory_size (EL i tvs) <= q) /\
+  q <= base_addr+cap /\
+  EVERY (\i. val_wf (EL i tvs) (EL i vs) /\
+    val_in_memory (EL i tvs) (EL i vs)
+      (d+vo0+SUM (MAP type_memory_size (TAKE i tvs))) s.vs_memory) (GENLIST I n) /\
+  val_wf (EL n tvs) (EL n vs) /\
+  val_in_memory (EL n tvs) (EL n vs)
+    (d+vo0+SUM (MAP type_memory_size (TAKE n tvs))) t.vs_memory ==>
+  EVERY (\i. val_wf (EL i tvs) (EL i vs) /\
+    val_in_memory (EL i tvs) (EL i vs)
+      (d+vo0+SUM (MAP type_memory_size (TAKE i tvs))) t.vs_memory) (GENLIST I (SUC n))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule calldata_member_resource_endpoint >> strip_tac >>
+  drule calldata_member_resource_observations >> strip_tac >>
+  rule_assum_tac (SIMP_RULE bool_ss [EVERY_GENLIST, combinTheory.I_THM, ADD_ASSOC]) >>
+  simp_tac bool_ss [EVERY_GENLIST, combinTheory.I_THM, ADD_ASSOC] >> gen_tac >> disch_tac >>
+  Cases_on `i = n` >- gvs[] >>
+  `i < n` by decide_tac >>
+  `val_wf (EL i tvs) (EL i vs) /\
+   val_in_memory (EL i tvs) (EL i vs)
+    (d+vo0+SUM (MAP type_memory_size (TAKE i tvs))) s.vs_memory` by simp[] >>
+  simp[] >> irule calldata_member_value_preserved >>
+  qpat_assum `abi_decode_footprint_frame _ _ _` (irule_at Any) >>
+  qpat_assum `FLOOKUP _ _ = SOME _` (irule_at Any) >>
+  qexistsl_tac [`lo`,`hi`] >>
+  fs[calldata_member_wit_def] >> metis_tac[LESS_EQ_TRANS]
+QED
+
+(* The inline-empty branch is a complete successful member, not an offset
+   navigation followed by an assumed recursive call. *)
+Theorem calldata_source_empty_member_resources[local]:
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
+  fn_has_code st last fn /\ abi_decoder_coherent ce env sf ty tv /\
+  type_to_abi_dec_info sf ce ty = DecComplex T [] /\
+  abi_to_vyper env ty (dec (vyper_to_abi_type env ty) childbs) = SOME v /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ calldata_member_own fn lo hi s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t.
+    val_in_memory tv v (d+vo) t.vs_memory /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var d outsz s t [] /\
+    ((!fuel. mem_safe_run fuel ctx fn t) ==> !fuel. mem_safe_run fuel ctx fn s) /\
+    (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' ctx fn s = r /\
+        (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s))
+Proof
+  strip_tac >> drule_all calldata_empty_member_endpoint >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
+    d outsz s endpoint []` by
+    (irule calldata_member_resource_unchanged >> simp[]) >>
+  qexists_tac `endpoint` >> simp[]
+QED
+
+(* CALLDATALOAD inputs are persistent across recursive scratch allocation and
+   destination writes; the destination owner and reservation are distinct. *)
+Theorem calldata_source_member_inputs_preserved[local]:
+  calldata_member_resource_frame ctx fn site limit_st lo hi live p len s t scratch /\
+  abi_decoder_operand_live live src /\ abi_decoder_operand_live live dst /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
+  FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) ==>
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap t /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD t) = bs /\
+  FLOOKUP t.vs_allocas oid = SOME (base_addr,cap)
+Proof
+  strip_tac >> drule calldata_member_resource_observations >> strip_tac >>
+  `eval_operand src t = eval_operand src s /\ eval_operand dst t = eval_operand dst s` by
+    metis_tac[] >>
+  fs[abi_decoder_ranges_def, abi_decode_source_def]
+QED
+
+(* Deterministic cursor reconstruction after a successful member.  The actual
+   navigation/child rule must supply RF and the typed child, not this cursor. *)
+Theorem calldata_source_member_cursor_advance[local]:
+  let n = LENGTH xs - LENGTH ((ei,az,mz)::rest) in
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    ao0 vo0 first final initial ((ei,az,mz)::rest) ao vo a s /\
+  LENGTH tys = LENGTH xs /\ LENGTH tvs = LENGTH xs /\ LENGTH vs = LENGTH xs /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    rest (ao+az) (vo+mz) next = ((),final) /\
+  cs_extends a next /\ cs_extends next final /\ ci_mono a next /\ ci_mono next final /\
+  calldata_member_resource_frame ctx fn site limit_st a.cs_next_id next.cs_next_id
+    a.cs_next_var (d+vo) (type_memory_size (EL n tvs)) s t scratch /\
+  (oid < a.cs_next_id \/ next.cs_next_id <= oid) /\
+  vo + type_memory_size (EL n tvs) <= outsz /\ d+vo <= base_addr+cap /\
+  (!i. i < n ==> base_addr <= d+vo0+SUM (MAP type_memory_size (TAKE i tvs)) /\
+    d+vo0+SUM (MAP type_memory_size (TAKE i tvs))+type_memory_size (EL i tvs) <= d+vo) /\
+  val_wf (EL n tvs) (EL n vs) /\
+  val_in_memory (EL n tvs) (EL n vs)
+    (d+vo0+SUM (MAP type_memory_size (TAKE n tvs))) t.vs_memory ==>
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    ao0 vo0 first final initial rest (ao+az) (vo+mz) next t
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qhdtm_x_assum `calldata_source_member_cursor`
+    (strip_assume_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
+  `LENGTH ((ei,az,mz)::rest) = LENGTH (DROP n xs)` by metis_tac[] >>
+  `n < LENGTH xs /\ LENGTH xs - LENGTH ((ei,az,mz)::rest) = n` by
+    (qpat_x_assum `LENGTH (_::rest) = _` mp_tac >> simp[LENGTH_DROP] >> decide_tac) >>
+  qpat_x_assum `LENGTH xs - LENGTH (_::rest) = n`
+    (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+  `n < LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys` by decide_tac >>
+  drule_all calldata_source_member_position >> strip_tac >>
+  suspend "reconstruct"
+QED
+
+Resume calldata_source_member_cursor_advance[reconstruct]:
+  qhdtm_x_assum `abi_decoder_coherent` kall_tac >>
+  qhdtm_x_assum `abi_to_vyper` kall_tac >>
+  qhdtm_x_assum `value_has_type` kall_tac >>
+  qpat_x_assum `type_memory_size _ = _` kall_tac >>
+  qpat_x_assum `abi_embedded_static_size _ _ = _` kall_tac >>
+  drule_all calldata_source_member_inputs_preserved >> strip_tac >>
+  drule_all calldata_source_member_memory_advance >> disch_tac >>
+  `first.cs_next_id <= a.cs_next_id /\ a.cs_next_id <= next.cs_next_id /\
+   next.cs_next_id <= final.cs_next_id /\ first.cs_next_var <= a.cs_next_var /\
+   a.cs_next_var <= next.cs_next_var /\ d <= d+vo /\
+   d+vo+type_memory_size (EL n tvs) <= d+outsz` by
+    (gns[ci_mono_def] >> decide_tac) >>
+  `calldata_member_resource_frame ctx fn site limit_st first.cs_next_id final.cs_next_id
+    first.cs_next_var d outsz initial t (scratch' ++ scratch)` by
+    (drule_all calldata_member_resource_extend >> disch_then ACCEPT_TAC) >>
+  suspend "lists"
+QED
+
+Resume calldata_source_member_cursor_advance[lists]:
+  `EL n xs = (ei,az,mz) /\ rest = DROP (SUC n) xs` by
+    (qpat_x_assum `_::rest = DROP n xs` mp_tac >>
+     simp[Once DROP_EL_CONS, GSYM ADD1] >> metis_tac[]) >>
+  `cs_extends first next` by metis_tac[cs_extends_trans] >>
+  `ci_mono first next` by (gns[ci_mono_def] >> decide_tac) >>
+  `abi_decoder_operand_live next.cs_next_var src /\
+   abi_decoder_operand_live next.cs_next_var dst` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  rewrite_tac[calldata_source_member_cursor_def] >>
+  qexistsl_tac [`SUC n`,`scratch' ++ scratch`] >>
+  asm_simp_tac (srw_ss()) [TAKE_SUC, EL_TAKE, MAP_APPEND, SUM_APPEND, ADD_ASSOC] >> decide_tac
+QED
+Finalise calldata_source_member_cursor_advance
