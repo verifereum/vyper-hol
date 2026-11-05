@@ -591,16 +591,38 @@ QED
 
 Theorem stmt_exprs_ok_from_traversal_bounds:
   ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
-  ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
+  ~supported_stmts_expr_exists
+     (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) ss /\
   alloc_limits_stmts cenv ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
   EVERY (stmt_exprs_ok cenv) ss
 Proof
-  `!e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e) =
-        (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)` by simp[] >>
-  simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmt_expr_exists_disj,
-       supported_stmts_expr_exists_list, EXISTS_MEM] >>
+  strip_tac >>
+  `~supported_stmts_expr_exists
+      (\e. ~is_extcode e /\ ~byte_widths_expr e) ss` by
+    (qpat_x_assum `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) _`
+       mp_tac >>
+     `(\e. ~byte_widths_expr e) =
+      (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+           (is_extcode e /\ ~byte_widths_expr e))` by
+       (simp[FUN_EQ_THM] >> metis_tac[]) >>
+     pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]) >>
+  `~supported_stmts_expr_exists
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e))
+      ss` by
+    (`(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
+      (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+           (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+       (simp[FUN_EQ_THM] >> metis_tac[]) >>
+     pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]) >>
+  qpat_x_assum `~supported_stmts_expr_exists (\e. ~is_extcode e /\ ~(_ /\ _)) _`
+    mp_tac >>
+  qpat_x_assum `alloc_limits_stmts _ _` mp_tac >>
+  qpat_x_assum `_ ==> return_buffer_ok _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmts_expr_exists_list,
+       EXISTS_MEM] >>
   Induct_on `ss` >>
   simp[allocLimitsTheory.alloc_limits_stmt_def, stmt_valued_return_def] >>
   metis_tac[]
