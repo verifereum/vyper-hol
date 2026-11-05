@@ -1383,3 +1383,90 @@ Theorem phi_origin_count_reverse:
 Proof
   simp[phi_origin_count_def, listTheory.FILTER_REVERSE]
 QED
+
+Theorem filter_lupdate_count:
+  !xs n P x. n < LENGTH xs ==>
+    LENGTH (FILTER P (LUPDATE x n xs)) + (if P (EL n xs) then 1 else 0) =
+    LENGTH (FILTER P xs) + (if P x then 1 else 0)
+Proof
+  Induct >> simp[] >> Cases_on `n` >> simp[listTheory.LUPDATE_def] >> rpt strip_tac
+  >- (Cases_on `P h` >> Cases_on `P x` >> simp[]) >>
+  first_x_assum drule >> disch_then (qspecl_then [`P`, `x`] mp_tac) >>
+  Cases_on `P h` >> Cases_on `P x` >> simp[] >> decide_tac
+QED
+
+Theorem filter_take_count_le:
+  !xs n P. LENGTH (FILTER P (TAKE n xs)) <= LENGTH (FILTER P xs)
+Proof
+  Induct >> Cases_on `n` >> simp[] >> rpt gen_tac >>
+  Cases_on `P h` >> simp[]
+QED
+
+Theorem phi_origin_write_keep:
+  !d ret cells. phi_origin_write T d ret cells = cells ++ [PhiCommon ret]
+Proof
+  simp[phi_origin_write_def, stack_poke_def, stack_dup_def,
+    listTheory.SNOC_APPEND, rich_listTheory.LUPDATE_APPEND2, listTheory.LUPDATE_def]
+QED
+
+Theorem filter_stack_swap_count:
+  !P d xs. LENGTH (FILTER P (stack_swap d xs)) = LENGTH (FILTER P xs)
+Proof
+  rpt gen_tac >> Cases_on `xs = []` >- gvs[stack_swap_def, listTheory.LUPDATE_def] >>
+  `LENGTH xs - 1 < LENGTH xs /\ LENGTH xs - 1 - d < LENGTH xs` by
+    (Cases_on `xs` >> gvs[]) >>
+  qspecl_then [`xs`, `LENGTH xs - 1`, `P`, `EL (LENGTH xs - 1 - d) xs`]
+    mp_tac filter_lupdate_count >> simp[] >> strip_tac >>
+  qspecl_then [`LUPDATE (EL (LENGTH xs - 1 - d) xs) (LENGTH xs - 1) xs`,
+    `LENGTH xs - 1 - d`, `P`, `EL (LENGTH xs - 1) xs`]
+    mp_tac filter_lupdate_count >>
+  simp[listTheory.EL_LUPDATE, stack_swap_def] >>
+  Cases_on `P (EL (LENGTH xs - 1) xs)` >>
+  Cases_on `P (EL (LENGTH xs - 1 - d) xs)` >> gvs[] >> decide_tac
+QED
+
+Theorem phi_origin_write_count_le:
+  !i keep d ret cells.
+    phi_origin_count i (phi_origin_write keep d ret cells) <= phi_origin_count i cells
+Proof
+  rpt gen_tac >> Cases_on `keep`
+  >- simp[phi_origin_write_keep, phi_origin_count_def, listTheory.FILTER_APPEND_DISTRIB] >>
+  simp[phi_origin_write_def, stack_poke_def, phi_origin_count_def] >>
+  Cases_on `LENGTH cells - 1 - d < LENGTH cells`
+  >- (drule filter_lupdate_count >>
+      disch_then (qspecl_then [`\c. case c of PhiOriginal j a b => j = i | PhiCommon op => F`,
+                              `PhiCommon ret`] mp_tac) >> simp[] >> decide_tac) >>
+  Cases_on `cells` >> gvs[listTheory.LUPDATE_def]
+QED
+
+Theorem phi_origin_pop_count_le:
+  !i d cells. phi_origin_count i (phi_origin_pop d cells) <= phi_origin_count i cells
+Proof
+  rpt gen_tac >> simp[phi_origin_pop_def, phi_origin_count_def, stack_pop_def] >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  irule_at Any filter_take_count_le >> simp[filter_stack_swap_count]
+QED
+
+Theorem phi_origin_stage_count_le:
+  !inst next halting p q cells cells1 i.
+    phi_origin_stage inst next halting p q cells cells1 ==>
+    phi_origin_count i cells1 <= phi_origin_count i cells
+Proof
+  rpt gen_tac >> rewrite_tac[phi_origin_stage_def] >> strip_tac >>
+  `phi_origin_count i written <= phi_origin_count i cells` by
+    (gvs[] >> irule phi_origin_write_count_le) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (gvs[] >> irule arithmeticTheory.LESS_EQ_TRANS >>
+      goal_assum (drule_at Any) >> irule phi_origin_pop_count_le) >>
+  gvs[]
+QED
+
+Theorem phi_origin_stage_unique:
+  !inst next halting p q cells cells1 i.
+    phi_origin_stage inst next halting p q cells cells1 /\
+    phi_origin_count i cells <= 1 ==>
+    phi_origin_count i cells1 <= 1
+Proof
+  rpt strip_tac >> drule phi_origin_stage_count_le >>
+  disch_then (qspec_then `i` mp_tac) >> decide_tac
+QED
