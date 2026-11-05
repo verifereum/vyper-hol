@@ -189,6 +189,24 @@ Proof
       EVERY_MEM, MEM_MAP] >> metis_tac[]
 QED
 
+Theorem scfg_update_succ_block_predicate[local]:
+  (!bb old new.
+    P bb ==> P (bb with bb_instructions :=
+      MAP (\i. if i.inst_opcode <> PHI then i
+               else subst_label_inst old new i) bb.bb_instructions)) ==>
+  !succs bbs. EVERY P bbs ==>
+    EVERY P (update_succ_phi_labels old new bbs succs)
+Proof
+  strip_tac >> Induct_on `succs` >>
+  simp[update_succ_phi_labels_def] >> rpt strip_tac >>
+  qpat_x_assum `!bbs. _` (mp_tac o SRULE [update_succ_phi_labels_def, LET_THM]) >>
+  disch_then irule >>
+  Cases_on `lookup_block h bbs` >> simp[] >>
+  irule replace_block_every >> simp[] >> first_x_assum irule >>
+  drule lookup_block_member_label >> strip_tac >>
+  gvs[EVERY_MEM]
+QED
+
 Theorem simplify_cfg_fn_param_prefix:
   o1_fn_shape C fn /\ fn_pseudos_prefix fn /\
   EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
