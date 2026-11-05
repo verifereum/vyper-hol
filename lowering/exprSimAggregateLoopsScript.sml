@@ -132,7 +132,8 @@ Theorem aggregate_make_tuple_sim:
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
   (~nocalls ==> !e. MEM e args ==>
-     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e \/
+     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -205,13 +206,7 @@ Resume aggregate_make_tuple_sim[cons]:
     metis_tac[listTheory.MEM] >>
   `expr_vv_sim ctx func ce cx (expr_type h) h es` by
     (gvs[exprs_case_def, expr_vv_case_def] >> metis_tac[]) >>
-  `compile_store_memory ce op dst (expr_type h) (expr_type h) su = ((),ss)` by
-    (`well_typed_expr env h` by metis_tac[expr_body_pre_def, listTheory.MEM] >>
-     `lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
-       (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM]) >>
-     metis_tac[aggregate_store_lowered_elem]) >>
-  qpat_x_assum `compile_store_memory ce op dst (expr_type h) (lowered_value_type ce h) su = _`
-    kall_tac >>
+
   drule aggregate_eval_exprs_cons >> strip_tac
   >- suspend "child_error"
   >- suspend "materialise_error" >>
@@ -270,9 +265,9 @@ Resume aggregate_make_tuple_sim[child_success]:
 QED
 
 Resume aggregate_make_tuple_sim[after_add]:
-  `post_value_type ce h = expr_type h` by
-    (Cases_on `nocalls` >>
-     metis_tac[post_value_type_no_calls, post_value_type_lowered]) >>
+  `(int_calls_expr h <> [] /\ lowered_value_type ce h <> expr_type h ==>
+      acyclic_struct_metadata ce.ce_struct_fields)` by
+    (Cases_on `nocalls` >> metis_tac[listTheory.MEM]) >>
   drule_all aggregate_child_metadata_frame >> strip_tac >>
   `(ce.ce_is_ctor ==>
     !name itv iv io.
@@ -343,12 +338,15 @@ Resume aggregate_make_tuple_sim[after_add]:
   reverse conj_tac
   >- (conj_tac >- metis_tac[ci_mono_def, cs_extends_trans] >>
       conj_tac >- fs[ci_mono_def] >>
-      irule aggregate_unwrap_store_slice_sim >>
+      irule aggregate_body_child_store_slice_sim >>
+      qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >>
+      qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
       qpat_assum `unwrap_value _ _ _ = _` (irule_at Any) >>
       qpat_assum `compile_store_memory _ _ _ _ _ _ = _` (irule_at Any) >>
       qpat_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       qexists_tac `n2w (b+off)` >>
-      fs[ci_mono_def] >> rpt conj_tac
+      fs[ci_mono_def, bind_def] >>
+      qexistsl_tac [`asz`, `inst.inst_id`, `b`] >> simp[] >> rpt conj_tac
       >- (rpt strip_tac >> first_x_assum drule >> simp[arithmeticTheory.ADD_ASSOC])
       >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
           first_x_assum irule >>
@@ -561,7 +559,8 @@ Theorem aggregate_struct_fields_sim:
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx (MAP SND fields) /\
   (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e \/
+     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -639,7 +638,8 @@ Theorem aggregate_make_array_elems_sim:
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
   (~nocalls ==> !e. MEM e args ==>
-     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e \/
+     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -711,7 +711,8 @@ Theorem aggregate_make_array_start_sim:
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
   (~nocalls ==> !e. MEM e args ==>
-     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e \/
+     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -787,7 +788,8 @@ Theorem aggregate_make_array_sim:
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
   (~nocalls ==> !e. MEM e args ==>
-     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e \/
+     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\

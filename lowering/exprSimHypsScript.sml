@@ -1779,3 +1779,81 @@ Proof
   ho_match_mp_tac lowered_value_type_ind >>
   simp[lowered_value_type_def, is_bytestring_type_def]
 QED
+
+(* Shared physical internal-call typing, formerly local to memoryLocalRhsProps. *)
+Theorem frame_signature_return_well_formed:
+  !cenv cx env es id sig.
+    expr_sim_inv cenv cx env es /\ FLOOKUP env.fn_sigs id = SOME sig ==>
+    well_formed_type env.type_defs sig.ret_ty
+Proof
+  rpt strip_tac >>
+  `env_consistent env cx es /\ functions_well_typed cx` by
+    gvs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx /\ fn_sigs_consistent env.fn_sigs cx` by
+    (qpat_x_assum `env_consistent _ _ _` mp_tac >>
+     simp[vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  Cases_on `id` >>
+  qpat_assum `fn_sigs_consistent _ _` mp_tac >>
+  pure_rewrite_tac[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
+  disch_then drule >> strip_tac >>
+  `IS_SOME (FLOOKUP env.fn_sigs (q,r))` by simp[] >>
+  drule_all callable_body_typing_from_env_consistent >>
+  simp[] >> strip_tac >>
+  simp[well_formed_type_def]
+QED
+
+Theorem internal_call_annotation_eval:
+  !cx a b id args drv.
+    eval_expr cx (Call a (IntCall id) args drv) =
+    eval_expr cx (Call b (IntCall id) args drv)
+Proof
+  rpt gen_tac >> Cases_on `id` >> once_rewrite_tac[evaluate_def] >> REFL_TAC
+QED
+
+Theorem internal_call_read_signature_typed:
+  !cenv cx env es ann id args drv sig v es'.
+    expr_body_pre cenv cx env (Call ann (IntCall id) args drv) es /\
+    expr_sim_inv cenv cx env es /\ FLOOKUP env.fn_sigs id = SOME sig /\
+    (do r <- eval_expr cx (Call ann (IntCall id) args drv);
+        read_result cx r od) es = (INL v, es') ==>
+    value_runtime_typed env sig.ret_ty v
+Proof
+  rpt strip_tac >>
+  `well_formed_type env.type_defs sig.ret_ty` by
+    (drule_all frame_signature_return_well_formed >> simp[]) >>
+  `well_typed_expr env (Call sig.ret_ty (IntCall id) args drv)` by
+    (Cases_on `id` >>
+     gvs[expr_body_pre_def, well_typed_expr_def, type_widens_to_def] >>
+     metis_tac[]) >>
+  `(do r <- eval_expr cx (Call sig.ret_ty (IntCall id) args drv);
+       read_result cx r od) es = (INL v, es')` by
+    metis_tac[internal_call_annotation_eval] >>
+  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+  disch_then (qspec_then `env` mp_tac) >>
+  gvs[expr_body_pre_def, expr_sim_inv_def, int_calls_expr_def, expr_type_def]
+QED
+
+Theorem memory_rhs_read_post_typed:
+  !ce cx env e es v es'.
+    expr_body_pre ce cx env e es /\
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
+    value_runtime_typed env (post_value_type ce e) v
+Proof
+  rpt strip_tac >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- metis_tac[memory_rhs_read_annotation_typed] >>
+  `?ty fid args drv. e = Call ty (IntCall fid) args drv` by
+    metis_tac[post_value_type_not_int_call] >> gvs[] >>
+  `expr_sim_inv ce cx env es /\
+   well_typed_expr env (Call ty (IntCall fid) args drv)` by
+    gvs[expr_body_pre_def] >>
+  `?sig. FLOOKUP env.fn_sigs fid = SOME sig` by
+    (Cases_on `fid` >> gvs[well_typed_expr_def]) >>
+  `value_runtime_typed env sig.ret_ty v` by
+    (drule_all internal_call_read_signature_typed >> simp[]) >>
+  `ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  gvs[post_value_type_def, lowered_value_type_def, expr_type_def] >>
+  Cases_on `is_word_type ty \/ is_bytestring_type ty` >> gvs[]
+QED

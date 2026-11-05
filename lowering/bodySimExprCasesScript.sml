@@ -125,7 +125,25 @@ Theorem body_struct_lit_widened_call_elem:
       expr_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
       expr_vv_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `exprs_case F ctx func cenv cx (MAP SND kes)` by
+    (irule body_exprs_ok_case >> metis_tac[]) >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  drule compile_struct_lit_case >>
+  disch_then (qspecl_then [`v7`, `(src_id_opt,id)`] mp_tac) >>
+  simp[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
+QED
+
+(* A builtin's operands are as many as builtin_args_length_ok allows. *)
+Theorem well_typed_builtin_app_length[local]:
+  !ty bt ts.
+    well_typed_builtin_app ty bt ts ==> builtin_args_length_ok bt (LENGTH ts)
+Proof
+  Cases_on `bt` >>
+  rw[vyperTypeSystemTheory.well_typed_builtin_app_def, builtin_args_length_ok_def]
+  >~ [`well_typed_builtin_app _ (MakeArray o' _) _`]
+  >- (Cases_on `o'` >> gvs[vyperTypeSystemTheory.well_typed_builtin_app_def]) >>
+  gvs[]
 QED
 
 Theorem body_make_array_widened_call_elem:
@@ -140,7 +158,16 @@ Theorem body_make_array_widened_call_elem:
       expr_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
       expr_vv_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
 Proof
-  cheat
+  rpt strip_tac >>
+  `builtin_args_length_ok (MakeArray t n) (LENGTH es)` by
+    (fs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+     drule well_typed_builtin_app_length >> simp[]) >>
+  `exprs_case F ctx func cenv cx es` by
+    (irule body_exprs_ok_case >> metis_tac[]) >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  drule compile_make_array_case >>
+  disch_then (qspecl_then [`ty`, `t`, `n`] mp_tac) >>
+  simp[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 
 (* exprSimAggregates' compile_struct_lit_case. *)
@@ -220,17 +247,6 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-(* A builtin's operands are as many as builtin_args_length_ok allows. *)
-Theorem well_typed_builtin_app_length[local]:
-  !ty bt ts.
-    well_typed_builtin_app ty bt ts ==> builtin_args_length_ok bt (LENGTH ts)
-Proof
-  Cases_on `bt` >>
-  rw[vyperTypeSystemTheory.well_typed_builtin_app_def, builtin_args_length_ok_def]
-  >~ [`well_typed_builtin_app _ (MakeArray o' _) _`]
-  >- (Cases_on `o'` >> gvs[vyperTypeSystemTheory.well_typed_builtin_app_def]) >>
-  gvs[]
-QED
 
 (* Array literals: exprSimAggregates' compile_make_array_case, from the
    elements' body_exprs_ok; a count the bound does not admit fails to type

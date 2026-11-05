@@ -631,6 +631,37 @@ QED
    (exprSimCopy).  The buffer is type_memory_bytes of the value_vv's type,
    which vv_post makes the expression's; the last premise says that is the
    value's memory size and fits Python's allocation limit. *)
+Theorem unwrap_copy_physical_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+     p.ptr_location = LocCode) /\ ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt /\
+           ~is_word_type (post_value_type cenv e) ==>
+           type_memory_bytes cenv (post_value_type cenv e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
+    frag_exec ctx sm sb
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+             (LocatedValue t p) s)
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >>
+  (reverse (Cases_on `t = post_value_type cenv e`)
+   >- (irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
+       gvs[fragExecTheory.frag_exec_false_pre, vv_post_def, vv_holds_def])) >>
+  gvs[]
+  >~ [`p.ptr_location = LocCode`]
+  >- (Cases_on `cenv.ce_is_ctor`
+      >- (irule exprSimCopyTheory.unwrap_ctor_code_copy_sim >> gvs[]) >>
+      irule exprSimCopyTheory.unwrap_runtime_code_copy_sim >> gvs[]) >>
+  irule exprSimCopyTheory.unwrap_storage_copy_sim >> gvs[]
+QED
+
 Theorem unwrap_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     post_value_type cenv e = expr_type e /\
@@ -651,16 +682,7 @@ Theorem unwrap_copy_sim:
              (LocatedValue t p) s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  rpt strip_tac >>
-  (reverse (Cases_on `t = expr_type e`)
-   >- (irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
-       gvs[fragExecTheory.frag_exec_false_pre, vv_post_def, vv_holds_def])) >>
-  gvs[]
-  >~ [`p.ptr_location = LocCode`]
-  >- (Cases_on `cenv.ce_is_ctor`
-      >- (irule exprSimCopyTheory.unwrap_ctor_code_copy_sim >> gvs[]) >>
-      irule exprSimCopyTheory.unwrap_runtime_code_copy_sim >> gvs[]) >>
-  irule exprSimCopyTheory.unwrap_storage_copy_sim >> gvs[]
+  rpt strip_tac >> irule unwrap_copy_physical_sim >> simp[]
 QED
 
 (* No value_vv points into calldata. *)
@@ -672,18 +694,17 @@ Proof
   rw[vv_post_def, vv_holds_def]
 QED
 
-Theorem unwrap_value_sim:
+Theorem unwrap_value_physical_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op R.
-    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-           ~is_word_type (expr_type e) ==>
-           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+    (!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt /\
+           ~is_word_type (post_value_type cenv e) ==>
+           type_memory_bytes cenv (post_value_type cenv e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s)
@@ -704,11 +725,11 @@ Proof
   Cases_on `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
   >- (Cases_on `is_word_type t`
       >- (irule unwrap_storage_word_sim >> gvs[]) >>
-      irule unwrap_copy_sim >> gvs[] >>
+      irule unwrap_copy_physical_sim >> gvs[] >>
       qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
   Cases_on `p.ptr_location = LocCode`
   >- (reverse (Cases_on `is_word_type t`)
-      >- (irule unwrap_copy_sim >> gvs[]) >>
+      >- (irule unwrap_copy_physical_sim >> gvs[]) >>
       Cases_on `cenv.ce_is_ctor`
       >- (irule unwrap_ctor_immutable_word_sim >> gvs[]) >>
       irule unwrap_runtime_immutable_word_sim >>
@@ -716,6 +737,26 @@ Proof
           contextTheory.compile_imm_load_word_def]) >>
   `p.ptr_location = LocMemory` by (Cases_on `p.ptr_location` >> gvs[]) >>
   irule unwrap_memory_sim >> simp[]
+QED
+
+Theorem unwrap_value_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' v vv op R.
+    post_value_type cenv e = expr_type e /\
+    unwrap_value cenv vv sm = (op, sb) /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
+    frag_exec ctx sm sb
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s)
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >> irule unwrap_value_physical_sim >> simp[]
 QED
 
 (* vv_post holds of a result only where it reads. *)
