@@ -3,6 +3,10 @@ Ancestors
   lowerDloadNormalExisting lowerDloadAccessClassification lowerDloadMemoryExecution
   lowerDloadNormalData lowerDloadCoverageInvariant lowerDloadVariableTransport lowerDloadMloadProducer
   lowerDloadPairedBoundary lowerDloadParamProducer lowerDloadOpaqueExecution
+  lowerDloadStoreExecution lowerDloadStoreProducer lowerDloadImmutableWrite
+  lowerDloadSharedState lowerDloadMaskedStorage lowerDloadAllocation lowerDloadRelocation
+  lowerDloadCertificateProbe lowerDloadFrameCertificate lowerDloadMaskBounds lowerDloadOperand
+  lowerDloadLifetime
   lowerDloadProvenanceSupport lowerDloadReachableDiscipline
   lowerDloadOwnership ptrDiscipline memLocDefs venomExecSemantics venomState
   venomInst pointerConfinedDefs contextCodegenRel codegenRel o1PassContract
@@ -188,3 +192,219 @@ Resume ld_normal_iload_backward[completion]:
 QED
 
 Finalise ld_normal_iload_backward
+
+Theorem ld_istore_memory_projection:
+  i.inst_opcode = ISTORE /\ i.inst_operands = [dst;value] /\
+  eval_operand dst s = SOME off /\ eval_operand value s = SOME x ==>
+  (step_taint i s (istore (w2n off) x s) tn).t_mem =
+    (step_taint (i with inst_opcode := MSTORE) s (mstore (w2n off) x s) tn).t_mem /\
+  (!a n. read_memory a n (istore (w2n off) x s) =
+    read_memory a n (mstore (w2n off) x s))
+Proof
+  simp[step_taint_def, mem_taint_def, new_site_bytes_def, written_taint_def,
+    step_writes_def, source_memory_write_ranges_def, fixed_source_write_range_def,
+    istore_def, mstore_def, read_memory_def]
+QED
+
+Theorem ld_istore_byte_rel:
+  i.inst_opcode = ISTORE /\ i.inst_operands = [dst;value] /\ i.inst_outputs = [] /\
+  eval_operand dst s = SOME off /\ eval_operand dst t = SOME off /\
+  eval_operand value s = SOME x /\ eval_operand value t = SOME y /\
+  op_taint tn value SUBSET count 32 /\ op_taint un value SUBSET count 32 /\
+  ld_mask_word (op_taint tn value) (op_taint un value) x y /\
+  ld_byte_rel R tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
+  (!a b. R a b ==> ((w2n off <= a /\ a < w2n off+32) <=>
+                       (w2n off <= b /\ b < w2n off+32))) /\
+  (!a b. R a b /\ w2n off <= a /\ a < w2n off+32 ==> a=b) ==>
+  ld_byte_rel R
+    (step_taint i s (istore (w2n off) x s) tn).t_mem
+    (step_taint i t (istore (w2n off) y t) un).t_mem
+    (\a. read_memory a 1 (istore (w2n off) x s))
+    (\b. read_memory b 1 (istore (w2n off) y t))
+Proof
+  strip_tac >>
+  `step_inst 0 C (i with inst_opcode := MSTORE) t = OK (mstore (w2n off) y t)` by
+    (simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
+     simp[exec_write2_def]) >>
+  `!s'. step_inst 0 C (i with inst_opcode := MSTORE) s = OK s' ==>
+     s' = mstore (w2n off) x s` by
+    (simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
+     simp[exec_write2_def]) >>
+  drule_at (Pat `step_inst _ _ _ _ = OK _`) ld_mstore_memory_backward >> simp[] >>
+  disch_then (drule_at (Pat `ld_byte_rel _ _ _ _ _`)) >> simp[] >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >> gvs[] >>
+  simp[ld_istore_memory_projection] >>
+  qpat_x_assum `ld_byte_rel R tn.t_mem un.t_mem _ _` kall_tac >>
+  gvs[ld_byte_rel_def, istore_def, read_memory_def] >> metis_tac[]
+QED
+
+(* ISTORE has a two-field footprint. Shared immutable bookkeeping is supplied
+   separately from the byte relation; neither is inferred from the other. *)
+Theorem ld_normal_istore_complete:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  i.inst_outputs = [] /\
+  ld_shared_state
+    (step_taint i s (istore p x s) tn) (step_taint i t (istore q y t) un)
+    (istore p x s) (istore q y t) /\
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    (step_taint i s (istore p x s) tn).t_mem
+    (step_taint i t (istore q y t) un).t_mem
+    (\a. read_memory a 1 (istore p x s)) (\b. read_memory b 1 (istore q y t)) ==>
+  ld_normal_data CS fn V U lo E L H AP BP
+    (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+    (step_taint i s (istore p x s) tn) (step_taint i t (istore q y t) un)
+    (istore p x s) (istore q y t) astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `ld_frame_data V U E L H AP BP AG BH tn un s t` by
+    metis_tac[ld_normal_data_frame] >>
+  `ld_owned_vars U E AG BH
+    (step_taint i s (istore p x s) tn) (step_taint i t (istore q y t) un)
+    (istore p x s) (istore q y t)` by
+    (irule (iffRL ld_owned_vars_tvar_cong) >>
+     simp[ld_empty_outputs_prov_tvar] >> qexistsl_tac [`tn`,`un`] >>
+     gvs[ld_frame_data_def, ld_owned_vars_def, istore_def, mstore_def, lookup_var_def]) >>
+  `ld_frame_data V U E L H AP BP AG BH
+    (step_taint i s (istore p x s) tn) (step_taint i t (istore q y t) un)
+    (istore p x s) (istore q y t)` by
+    (fs[ld_frame_data_def] >>
+     simp[ld_frame_embedding_def, istore_def, mstore_def, lookup_var_def] >>
+     fs[ld_frame_embedding_def, lookup_var_def] >> asm_rewrite_tac[]) >>
+  `((step_taint i t (istore q y t) un).t_stor SUBSET
+      (step_taint i s (istore p x s) tn).t_stor) /\
+   ((step_taint i t (istore q y t) un).t_trans SUBSET
+      (step_taint i s (istore p x s) tn).t_trans) /\
+   ((step_taint i t (istore q y t) un).t_imm SUBSET
+      (step_taint i s (istore p x s) tn).t_imm)` by
+    fs[ld_shared_state_def] >>
+  gvs[ld_normal_data_def, ld_empty_outputs_prov_tvar,
+      ld_alloc_account_def, istore_def, mstore_def, allocas_from_def, op_taint_def] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem ld_istore_owned_backward:
+  i.inst_opcode = ISTORE /\ i.inst_operands = [dst;value] /\
+  ld_owned_vars U E AG BH tn un s t /\
+  (!v. MEM (Var v) [dst;value] ==> v IN U) /\
+  ld_op_prov AG dst = NONE /\ ld_op_prov AG value = NONE /\
+  op_taint tn dst = {} /\ step_inst fuel CT i t = OK t' ==>
+  ?off x y. eval_operand dst s = SOME off /\ eval_operand dst t = SOME off /\
+    eval_operand value s = SOME x /\ eval_operand value t = SOME y /\
+    ld_mask_word (op_taint tn value) (op_taint un value) x y /\
+    step_inst fuel CS i s = OK (istore (w2n off) x s) /\
+    t' = istore (w2n off) y t
+Proof
+  strip_tac >>
+  `eval_operand dst s = eval_operand dst t` by
+    (irule ld_owned_operand_clean >>
+     goal_assum (drule_at (Pat `ld_owned_vars _ _ _ _ _ _ _ _`)) >> simp[] >> metis_tac[MEM]) >>
+  qpat_x_assum `step_inst fuel CT i t = OK t'` mp_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[] >> simp[exec_write2_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `eval_operand dst t = SOME off` >>
+  rename1 `eval_operand value t = SOME y` >>
+  `eval_operand value s <> NONE` by
+    (drule ld_owned_operand_defined >>
+     disch_then (qspec_then `value` mp_tac) >> simp[] >> metis_tac[MEM]) >>
+  Cases_on `eval_operand value s` >> gvs[] >>
+  rename1 `eval_operand value s = SOME x` >>
+  `ld_owned_value E NONE (ld_op_prov BH value)
+    (op_taint tn value) (op_taint un value) x y` by
+    (drule_at (Pat `eval_operand _ _ = SOME _`) ld_owned_operand_value >>
+     simp[] >> metis_tac[MEM]) >>
+  `ld_mask_word (op_taint tn value) (op_taint un value) x y` by
+    fs[ld_owned_value_def] >>
+  simp[] >>
+  simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
+  simp[exec_write2_def]
+QED
+
+Theorem ld_normal_istore_backward:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  i.inst_opcode = ISTORE /\ i.inst_operands = [dst;value] /\ i.inst_outputs = [] /\
+  ~in_revert_forward fn s /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >> qpat_x_assum `U = _` SUBST_ALL_TAC >>
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) [dst;value] ==> v IN {v | v IN V /\ ~retpc_var fn v}` by
+    (rpt strip_tac >> simp[] >> conj_tac >- metis_tac[] >>
+     irule ld_retpc_observable_operand >> simp[] >> qexists_tac `i` >>
+     simp[] >> metis_tac[MEM]) >>
+  `ld_owned_vars {v | v IN V /\ ~retpc_var fn v} E AG BH tn un s t /\
+   ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `access_ok lo (ld_erase AG) fn i s` by metis_tac[ld_annotated_access_ok] >>
+  `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
+  `op_taint tn dst = {}` by
+    (irule ld_taint_store_address_clean >> qexistsl_tac [`fn`,`i`,`s`,`value`] >> simp[]) >>
+  `!op. MEM op [dst;value] ==> ld_op_prov AG op = NONE` by
+    (rpt strip_tac >> irule ld_annotated_immutable_scalar >>
+     goal_assum (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[MEM]) >>
+  `?off x y. eval_operand dst s = SOME off /\ eval_operand dst t = SOME off /\
+    eval_operand value s = SOME x /\ eval_operand value t = SOME y /\
+    ld_mask_word (op_taint tn value) (op_taint un value) x y /\
+    step_inst fuel CS i s = OK (istore (w2n off) x s) /\
+    t' = istore (w2n off) y t` by
+    (irule ld_istore_owned_backward >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     goal_assum (drule_at (Pat `ld_owned_vars _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  qexists_tac `istore (w2n off) x s` >> (conj_tac >- asm_rewrite_tac[]) >>
+  gvs[] >> irule ld_normal_istore_complete >> simp[] >>
+  conj_tac >- suspend "shared" >> suspend "bytes"
+QED
+
+Resume ld_normal_istore_backward[shared]:
+  `word_agree_except (op_taint tn value INTER count 32) x y /\
+   op_taint un value SUBSET op_taint tn value` by
+    (fs[ld_mask_word_def, word_agree_except_def] >> metis_tac[]) >>
+  drule_all ld_shared_istore >>
+  disch_then (qspec_then `w2n off` mp_tac) >>
+  simp[step_taint_def, imm_taint_def, store_taint_def, adopt_reset_def,
+       ld_shared_state_def]
+QED
+
+Resume ld_normal_istore_backward[bytes]:
+  `w2n off + 32 <= lo` by
+    (irule ld_immutable_scalar_access_low >>
+     goal_assum (drule_at (Pat `access_ok _ _ _ _ _`)) >> simp[]) >>
+  `op_taint tn value SUBSET count 32 /\ op_taint un value SUBSET count 32` by
+    (drule ld_normal_data_masks >> strip_tac >>
+     conj_tac >> irule ld_op_taint_bound >> simp[]) >>
+  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+      ((w2n off <= a /\ a < w2n off+32) <=> (w2n off <= b /\ b < w2n off+32))) /\
+   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+      w2n off <= a /\ a < w2n off+32 ==> a=b)` by
+    (drule ld_normal_data_geometry >> strip_tac >>
+     `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+        ((w2n off <= a /\ a < w2n off+32) <=> (w2n off <= b /\ b < w2n off+32))) /\
+      (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+        w2n off <= a /\ a < w2n off+32 ==> a-w2n off=b-w2n off)` by
+       (irule ld_fixed_live_write_footprint >> simp[] >> metis_tac[]) >>
+     conj_tac >- metis_tac[] >>
+     rpt strip_tac >>
+     `w2n off <= b /\ b < w2n off + 32` by metis_tac[] >>
+     `a - w2n off = b - w2n off` by metis_tac[] >>
+     decide_tac) >>
+  irule ld_istore_byte_rel >> simp[] >>
+  drule ld_normal_data_memory >> simp[] >> metis_tac[]
+QED
+
+Finalise ld_normal_istore_backward
