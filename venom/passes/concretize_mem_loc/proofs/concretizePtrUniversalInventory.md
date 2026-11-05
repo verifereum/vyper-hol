@@ -699,3 +699,47 @@ biconditional; maximum containment alone did not give this for truncated call
 output writes. This interface assumes neither source step success nor target
 suffix exclusion. Historical transport, production writer ownership, distinct
 owner separation and universal source-prefix construction remain to integrate.
+
+## Owned-demand ordinary-write integration (.67, partial)
+
+Checked `ptr_demand_protected_token_interval` in
+`concretizePtrDemandWriteExclusionTheory` selects ProtectedLivesets' w ONCE,
+retains its source write/no-later-write, production livesets and used/read seeds,
+and derives the demanded token's presence at every historical snapshot from w
+through the current endpoint. This bridges the same-w lifetime/token interfaces;
+it does NOT conclude target write exclusion. No exclusion theorem is installed.
+
+Premise suppliers for this checked bridge are the existing endpoint conditions of
+ProtectedLivesets plus ONE exact transcript and the endpoint bottom token. The
+transcript supplies source history and its own endpoint snapshot. ProtectedLivesets
+supplies interval depth/cache/non-revert facts. TokenInterval supplies bottom-token
+continuity on exactly that interval, including w and LENGTH h-1. No pairwise
+placement disjointness or historical liveness premise was added.
+
+Integration exposes a still-missing fixed-write production geometry boundary:
+
+```
+actual stage C -> C', NONE source eoms, shape/distinct ids/callee-first,
+fixed_region_reserved lo C, ptr_stage_placements C' positions,
+FLOOKUP positions (Allocation aid) = SOME(p,sz), k < sz
+  ==> lo <= p+k
+```
+
+The owned/fixed row needs this (or equivalent disjointness from every global
+reserved interval). `ptr_write_transport_fixed_exact` then identifies target
+fixed footprints with source fixed footprints below lo. Strict/maximum eom
+bounds do NOT give a lower bound, and StagePlacements/HistoricalPlacement export
+metadata/coherence but not allocation/global-reserved separation. LayoutOutput's
+exported separation results compare local/local and local/import at a common
+liveness cursor, not global reservations. The stage induction must account for
+both own and imported metadata. Completion's exported
+`complete_alloc_positions_with_imports_fresh_disjoint` only covers NONE entries
+of the merged map against imported intervals; it is not the needed global
+reserved fact for forced/preserved positions. The generic reserved-disjoint
+completion lemmas are local. No conditional geometry premise has been added to
+the integration theorem, and no new semantic supplier was invented locally.
+
+The other integration rows still require assembly: full same-owner exact
+footprint transfer at matched actual instructions; common-cursor local/local and
+both suspended ancestor directions using historical placements; actual stage
+production witness extraction. The checked token bridge does not close these.
