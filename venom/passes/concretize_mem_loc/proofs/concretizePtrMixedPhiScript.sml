@@ -4,6 +4,7 @@ Ancestors
   concretizePtrValueTransport ptrDiscipline unitShapeDefs
   venomExecSemantics venomState finite_map list
   concretizeStepStructure passSharedDefs venomWf passSimulationDefs rich_list venomInst unitLabelMapIdentity venomExecProofs
+  contextCodegenRel passSimulationProps
 
 Theorem ptr_mixed_phis_token[local]:
   !insts s s'. eval_phis s insts = OK s' ==>
@@ -137,4 +138,42 @@ Proof
   `EVERY (\i. MEM i (fn_insts f) /\ inst_wf i) bb.bb_instructions` by
     (fs[EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
   drule_all ptr_mixed_eval_phis >> simp[]
+QED
+
+Theorem ptr_mixed_enters_production_block:
+  g.fn_blocks = (concretize_function_with_positions p f).fn_blocks /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  MEM bb f.fn_blocks /\ bb_well_formed bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  s.vs_current_bb = t.vs_current_bb /\ s.vs_prev_bb = t.vs_prev_bb /\
+  retpc_shape_ok f /\ ptr_mixed_vars births positions TG tn f g s t /\
+  ptr_core_shared s t /\ enters_block g t t' ==>
+  ?s'. enters_block f s s' /\
+    ptr_mixed_vars births positions (phis_prov s.vs_prev_bb TG bb.bb_instructions)
+      (tn with t_var := phis_taint s.vs_prev_bb tn bb.bb_instructions) f g s' t' /\
+    ptr_core_shared s' t' /\ s'.vs_current_bb = t'.vs_current_bb /\
+    s'.vs_prev_bb = t'.vs_prev_bb
+Proof
+  rpt strip_tac >>
+  `lookup_block t.vs_current_bb g.fn_blocks = SOME
+    (clear_nops_block (block_map_transform (concretize_inst_with_positions p) bb))` by
+    (qpat_x_assum `g.fn_blocks = _` SUBST1_TAC >>
+     simp[concretize_positions_blocks, lookup_block_map,
+          concretize_positions_block_label] >> metis_tac[]) >>
+  qpat_x_assum `enters_block g t t'` mp_tac >>
+  simp[enters_block_def] >> strip_tac >> gvs[] >>
+  `?u. eval_phis s bb.bb_instructions = OK u /\
+    ptr_mixed_vars births positions (phis_prov s.vs_prev_bb TG bb.bb_instructions)
+      (tn with t_var := phis_taint s.vs_prev_bb tn bb.bb_instructions) f g u s_phi /\
+    ptr_core_shared u s_phi` by
+    metis_tac[ptr_mixed_eval_phis_production_block] >>
+  qexists_tac `u with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
+  conj_tac
+  >- (simp[enters_block_def] >> metis_tac[]) >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  gvs[ptr_mixed_vars_def, ptr_opaque_env_def, ptr_core_shared_def,
+      ptr_shared_fields_def, lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `u = _` SUBST1_TAC >>
+  qpat_x_assum `s_phi = _` SUBST1_TAC >> simp[]
 QED
