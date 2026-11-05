@@ -760,7 +760,7 @@ Proof
   disch_then (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
   irule compile_assign_local_memory_widen_stmt_frag >> gns[] >>
   rpt conj_tac >>~- ([`val_footprint _ _ <= _`],
-    rpt gen_tac >> strip_tac >> metis_tac[body_assign_local_memory_read, type_widens_to_def]) >>
+    rpt gen_tac >> strip_tac >> metis_tac[body_assign_local_memory_read, expr_body_pre_gas_obs, type_widens_to_def]) >>
   metis_tac[type_widens_to_def, arg_type_fits_bytestring_source]
 QED
 
