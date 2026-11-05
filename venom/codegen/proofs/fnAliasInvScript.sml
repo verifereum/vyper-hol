@@ -3074,6 +3074,73 @@ Proof
   drule_all (SRULE [arithmeticTheory.GREATER_DEF] alias_regular_plan_var_live_support) >> simp[]
 QED
 
+(* Bounded OFFSET inventory-interface probes: syntactic use versus demand. *)
+Definition alias_offset_unreachable_fn_def:
+  alias_offset_unreachable_fn = mk_raw_function "offset_unreachable"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 OFFSET [Lit 0w; Label "entry"] ["v"];
+          mk_inst 1 STOP [] []] |>;
+     <| bb_label := "unused"; bb_instructions :=
+         [mk_inst 2 ASSERT [Var "v"] [];
+          mk_inst 3 STOP [] []] |>]
+End
+
+Theorem alias_offset_unreachable_probe:
+  offset_outputs_used alias_offset_unreachable_fn /\
+  ~MEM "v" (live_vars_at (liveness_analyze alias_offset_unreachable_fn) "entry" 1) /\
+  ~def_dominates_uses alias_offset_unreachable_fn /\
+  ~codegen_ready_fn alias_offset_unreachable_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_offset_unreachable_readiness_clauses:
+  canonical_param_prefix alias_offset_unreachable_fn /\
+  wf_function alias_offset_unreachable_fn /\
+  fn_inst_wf alias_offset_unreachable_fn /\
+  ssa_form alias_offset_unreachable_fn /\
+  single_use_form alias_offset_unreachable_fn /\
+  cfg_is_normalized (cfg_analyze alias_offset_unreachable_fn) alias_offset_unreachable_fn /\
+  block_entries_ready (cfg_analyze alias_offset_unreachable_fn) alias_offset_unreachable_fn /\
+  phi_operands_ready alias_offset_unreachable_fn /\
+  EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions) alias_offset_unreachable_fn.fn_blocks /\
+  phis_at_joins (cfg_analyze alias_offset_unreachable_fn) alias_offset_unreachable_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_offset_branch_fn_def:
+  alias_offset_branch_fn = mk_raw_function "offset_branch"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["cond"];
+          mk_inst 1 OFFSET [Lit 0w; Label "use"] ["v"];
+          mk_inst 2 JNZ [Var "cond"; Label "use"; Label "skip"] []] |>;
+     <| bb_label := "use"; bb_instructions :=
+         [mk_inst 3 ASSERT [Var "v"] [];
+          mk_inst 4 STOP [] []] |>;
+     <| bb_label := "skip"; bb_instructions :=
+         [mk_inst 5 STOP [] []] |>]
+End
+
+Theorem alias_offset_branch_ready:
+  codegen_ready_fn alias_offset_branch_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_offset_branch_liveness:
+  MEM "v" (live_vars_at (liveness_analyze alias_offset_branch_fn) "entry" 2) /\
+  MEM "v" (live_vars_at (liveness_analyze alias_offset_branch_fn) "entry" 3) /\
+  MEM "v" (input_vars_from "entry"
+    (EL 1 alias_offset_branch_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_offset_branch_fn) "use" 0)) /\
+  ~MEM "v" (input_vars_from "entry"
+    (EL 2 alias_offset_branch_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_offset_branch_fn) "skip" 0))
+Proof
+  EVAL_TAC
+QED
+
 Definition alias_collision_fn_def:
   alias_collision_fn = mk_raw_function "collision"
     [<| bb_label := "E"; bb_instructions :=
