@@ -2611,6 +2611,52 @@ Proof
   gvs[] >> drule select_result_immutable_success_path >> simp[] >> metis_tac[]
 QED
 
+Theorem conditional_result_value_or_memory:
+  conditional_result cx tv s = (INL res,t) ==>
+  (?v. res = Value v) \/
+  (?id path. res = PlaceR (MemoryPlace id path))
+Proof
+  Cases_on `tv` >>
+  simp[conditional_result_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `p` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem select_result_value_or_memory:
+  ((?v. pv = Value v) \/
+   (?id path. pv = PlaceR (MemoryPlace id path))) /\
+  select_result cx ty pv sb s = (INL res,t) ==>
+  (?v. res = Value v) \/
+  (?id path. res = PlaceR (MemoryPlace id path))
+Proof
+  strip_tac >>
+  gvs[select_result_def, extend_place_def, extend_memory_place_def,
+      bind_def, ignore_bind_def, return_def, raise_def,
+      lift_sum_def, lift_option_type_def, AllCaseEqs()]
+QED
+
+(* Compiler failure returns a stack placeholder, not a materialized source
+   value. This conditional probe is not a task-theorem counterexample. *)
+Theorem compile_global_missing_immutable_origin_obstruction[local]:
+  FLOOKUP cenv.ce_module_vars (md,name) = NONE /\
+  find_var_decl_by_name name ts = NONE /\
+  get_module_code cx md = SOME ts /\
+  eval_expr cx (TopLevelName ann (md,name)) s = (INL res,t) ==>
+  vv_location (FST (compile_expr cenv ty (TopLevelName ann (md,name)) sc)) = NONE /\
+  ~((?v. res = Value v) \/
+    (?id path. res = PlaceR (MemoryPlace id path)))
+Proof
+  strip_tac >> drule_all eval_global_no_decl_immutable >> strip_tac >>
+  Cases_on `emit_inst INVALID [] [] sc` >>
+  simp[Once exprLoweringTheory.compile_expr_def,
+       contextTheory.vv_location_def]
+QED
+
 Theorem compile_attribute_code_origin:
   vv_location (FST (compile_attribute cfn cenv rt ty obj fld sc)) = SOME LocCode ==>
   vv_location (FST (cfn cenv ty obj sc)) = SOME LocCode
