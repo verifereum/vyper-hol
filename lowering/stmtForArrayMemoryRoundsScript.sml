@@ -391,3 +391,66 @@ Proof
     `FST (stmts_env bc (InLoop exit incr) ty stmts sb0)`] mp_tac) >>
   simp[GSYM array_body_post_mem_def, SF ETA_ss]
 QED
+
+Theorem array_body_round_restore_mem:
+  array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst lbl caller orig k es s /\
+  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r es2 t /\
+  cenv_top_ext cenv bc ei.scopes /\ bc.ce_return_buf = cenv.ce_return_buf /\
+  eval_stmts cx stmts ei = (r,es2) /\ es2.scopes = sc :: rest /\
+  (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+  ((r = INL () \/ r = INR ContinueException) ==>
+    P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE) /\
+  caller.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  (!x. not_fresh_at caller x ==> x <> ov /\ x <> ep) /\
+  not_fresh_at sa idx /\ idx <> ov /\ idx <> ep /\
+  not_fresh_at sa p /\ p <> ov /\ p <> ep /\
+  (!x. saved_base = Var x ==> not_fresh_at sa x /\ x <> ov /\ x <> ep) /\
+  (!l. saved_base <> Label l) /\
+  s_body.vs_allocas = s.vs_allocas /\ s_body.vs_alloca_next = s.vs_alloca_next /\
+  (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
+    lookup_var x s_body = lookup_var x s) ==>
+  array_round_frame d func cenv caller orig t /\ ret_pc_ok cenv caller t /\
+  stmt_lands (InLoop exit incr) sb1 r t /\ ~t.vs_halted /\
+  (r = INL () ==> ~block_is_terminated sb1) /\
+  ((r = INL () \/ r = INR ContinueException) ==>
+    array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+      ainst incr caller k (es2 with scopes := rest) (jump_to incr t)) /\
+  (r = INR BreakException ==>
+    array_round_done d ctx func cenv cx caller orig exit (es2 with scopes := rest) t)
+Proof
+  strip_tac >>
+  `cenv.ce_return_buf = bc.ce_return_buf` by simp[] >>
+  drule_all (PURE_REWRITE_RULE [GSYM array_body_post_mem_def]
+    array_body_mem_post_projection) >> strip_tac >>
+  `!x w. not_fresh_at sa x /\ x <> ov /\ x <> ep /\ lookup_var x s = SOME w ==>
+    lookup_var x t = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at sb0 x` by (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  `!x w. not_fresh_at caller x /\ lookup_var x s = SOME w ==>
+    lookup_var x t = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at sa x` by (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  `array_round_frame d func cenv caller orig t` by
+    (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
+     fs[array_round_inv_def] >> metis_tac[]) >>
+  `ret_pc_ok cenv caller t` by
+    (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s`, `caller`] >>
+     fs[array_round_inv_def, array_loop_inv_def]) >>
+  `lookup_var idx t = SOME (n2w k) /\ lookup_var p t = SOME dst /\
+    FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n dst,sz)` by
+    (fs[array_round_inv_def, array_loop_inv_def] >> metis_tac[]) >>
+  `eval_operand saved_base t = SOME arr_base` by
+    (irule array_saved_operand_frame >> simp[] >> qexists_tac `s` >>
+     fs[array_round_inv_def, array_loop_inv_def] >>
+     rpt strip_tac >>
+     Cases_on `lookup_var x s` >> fs[eval_operand_def] >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (strip_tac >>
+      fs[array_round_inv_def, array_loop_inv_def, stmt_state_rel_jump_to,
+         ret_pc_ok_jump_to, jump_to_def, eval_operand_def, lookup_var_def]) >>
+  strip_tac >> irule array_round_break >> simp[] >>
+  qexistsl_tac [`incr`, `sb1`] >> gvs[]
+QED
