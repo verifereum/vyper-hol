@@ -3818,6 +3818,496 @@ Proof
   metis_tac[asm_call_safe_read_memory, asm_call_safe_push_stack]
 QED
 
+Theorem asm_call_safe_sstore_gas_consumption:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_sstore_gas_consumption address key value s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_sstore_gas_consumption_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_get_gas_left] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_assert, vfm_abort_def] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_get_accounts] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_get_original] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_access_slot] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_update_gas_refund, asm_call_safe_consume_gas]
+QED
+
+Theorem asm_call_safe_sstore_write:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind assert_not_static (\_. if transient then write_transient_storage address key value
+                              else write_storage address key value) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  Cases_on `transient` >> simp[] >>
+  metis_tac[asm_call_safe_assert_not_static, asm_call_safe_write_storage,
+            asm_call_safe_write_transient_storage]
+QED
+
+Theorem asm_call_safe_sstore:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_sstore transient s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `transient` >> (rewrite_tac[step_sstore_def, ignore_bind_def] >>
+  simp[] >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_get_callee] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_sstore_gas_consumption, asm_call_safe_consume_gas,
+            SRULE [] (Q.INST [`transient` |-> `T`] asm_call_safe_sstore_write),
+            SRULE [] (Q.INST [`transient` |-> `F`] asm_call_safe_sstore_write)])
+QED
+
+Theorem asm_call_safe_block_hash:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_block_hash s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_block_hash_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_get_tx_params, asm_call_safe_push_stack]
+QED
+
+Theorem asm_call_safe_blob_hash:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_blob_hash s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_blob_hash_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_get_tx_params, asm_call_safe_push_stack]
+QED
+
+Theorem asm_call_safe_self_balance:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_self_balance s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_self_balance_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_get_accounts] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_get_callee, asm_call_safe_push_stack]
+QED
+
+Theorem asm_call_safe_account_query:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (pop_stack 1) (\args.
+    bind (access_address (w2w (EL 0 args))) (\cost.
+    bind (consume_gas ((baseCost:num) + cost)) (\_.
+    bind get_accounts (\accounts.
+    push_stack (f (w2w (EL 0 args):address) accounts))))) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_access_address] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_get_accounts, asm_call_safe_push_stack]
+QED
+
+Theorem asm_call_safe_balance:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_balance s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_balance_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  irule asm_call_safe_account_query >>
+  simp[] >> goal_assum (drule_at Any) >>
+  qexistsl [`static_gas Balance`, `\address accounts. n2w (lookup_account address accounts).balance`] >>
+  gvs[]
+QED
+
+Theorem asm_call_safe_ext_code_size:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_ext_code_size s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_ext_code_size_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  irule asm_call_safe_account_query >> simp[] >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`static_gas ExtCodeSize`, `\address accounts. n2w (LENGTH (lookup_account address accounts).code)`] >>
+  gvs[]
+QED
+
+Theorem asm_call_safe_ext_code_hash:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_ext_code_hash s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_ext_code_hash_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  irule asm_call_safe_account_query >> simp[] >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`static_gas ExtCodeHash`, `\address accounts.
+    if account_empty (lookup_account address accounts) then 0w else
+    word_of_bytes T (0w:bytes32) (Keccak_256_w64 (lookup_account address accounts).code)`] >>
+  gvs[]
+QED
+
+Theorem asm_call_safe_stop:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (set_return_data []) (\_. finish) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  metis_tac[asm_call_safe_set_return_data, asm_call_safe_finish]
+QED
+
+Theorem asm_call_safe_return_end:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (set_return_data bytes) (\_. if b then finish else revert) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> Cases_on `b` >> simp[] >>
+  metis_tac[asm_call_safe_set_return_data, asm_call_safe_finish, asm_call_safe_revert]
+QED
+
+Theorem asm_call_safe_step_return:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_return b s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_return_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_memory_expansion_info] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_expand_memory] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_read_memory, asm_call_safe_return_end]
+QED
+
+Theorem asm_call_safe_sload_read:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (if transient then bind get_tStorage (\ts. return (lookup_transient_storage address ts))
+        else bind get_accounts (\acs. return (lookup_account address acs).storage))
+       (\storage. push_stack (lookup_storage key storage)) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `transient` >> (simp[] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_get_accounts, asm_call_safe_get_tStorage,
+            asm_call_safe_push_stack])
+QED
+
+Theorem asm_call_safe_sload:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_sload transient s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_sload_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_get_callee] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- (Cases_on `transient` >> simp[] >> metis_tac[asm_call_safe_return, asm_call_safe_access_slot]) >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_consume_gas, asm_call_safe_sload_read]
+QED
+
+Theorem asm_call_safe_log_end:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind get_callee (\address. bind (vfmExecution$read_memory offset memSize) (\bytes.
+    push_logs [<| logger := address; topics := topics; data := bytes |>])) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_get_callee] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_read_memory, asm_call_safe_push_logs]
+QED
+
+Theorem asm_call_safe_log:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_log n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_log_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_memory_expansion_info] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_expand_memory] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_assert_not_static, asm_call_safe_log_end]
+QED
+
+Theorem asm_call_safe_self_destruct_delete:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (update_accounts (update_account address (sender with balance := 0)))
+       (\_. add_to_delete address) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >>
+  metis_tac[asm_call_safe_update_accounts, asm_call_safe_add_to_delete]
+QED
+
+Theorem asm_call_safe_self_destruct_end:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind get_original (\original.
+    bind (if account_empty (lookup_account address original)
+          then bind (update_accounts (update_account address (sender with balance := 0)))
+                    (\_. add_to_delete address)
+          else return ()) (\_. finish)) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_get_original] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  Cases_on `account_empty (lookup_account address x)` >> simp[] >>
+  metis_tac[asm_call_safe_self_destruct_delete, asm_call_safe_return, asm_call_safe_finish]
+QED
+
+Theorem asm_call_safe_self_destruct_transfer:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  bind (consume_gas cost) (\_. bind assert_not_static (\_.
+    bind (update_accounts (transfer_value senderAddress address sender.balance)) (\_.
+    bind get_original (\original.
+    bind (if account_empty (lookup_account senderAddress original)
+          then bind (update_accounts (update_account senderAddress (sender with balance := 0)))
+                    (\_. add_to_delete senderAddress)
+          else return ()) (\_. finish))))) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_assert_not_static] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_update_accounts, asm_call_safe_self_destruct_end]
+QED
+
+Theorem asm_call_safe_self_destruct:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_self_destruct s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[step_self_destruct_def, ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_pop_stack] >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_access_address] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_get_callee] >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> reverse conj_tac
+  >- metis_tac[asm_call_safe_set_return_data] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >>
+  metis_tac[asm_call_safe_get_accounts, asm_call_safe_self_destruct_transfer]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
