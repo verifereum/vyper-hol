@@ -612,3 +612,63 @@ Proof
   irule expr_post_of_vv_post_memory >> simp[] >>
   drule vv_post_read_result >> metis_tac[]
 QED
+
+Theorem body_attribute_name_source_tail:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value [AttrSubscript fld] = INL fv ==>
+  (!tail. eval_expr cx (Attribute ann (Name (StructT sid) id) fld)
+      (es with gas_obs := tail) =
+    (INL (PlaceR (MemoryPlace id [AttrSubscript fld])), es with gas_obs := tail)) /\
+  (!tail. read_result cx (PlaceR (MemoryPlace id [AttrSubscript fld]))
+      (es with gas_obs := tail) = (INL fv, es with gas_obs := tail))
+Proof
+  strip_tac >> conj_tac
+  >- simp[body_attribute_name_eval, Once evaluate_def, bind_def,
+          get_scopes_def, return_def, type_check_def, assert_def,
+          check_def, ignore_bind_def, select_result_def, extend_place_def,
+          place_type_value_def, read_place_def, lift_option_type_def,
+          lift_sum_def, read_memory_path_def, subscripts_type_def,
+          evaluate_subscripts_def, extend_memory_place_def] >>
+  simp[read_result_def, read_place_def, get_scopes_def, bind_def,
+       lift_option_type_def, lift_sum_def, read_memory_path_def, return_def]
+QED
+
+Theorem body_attribute_name_source:
+  expr_body_pre cenv cx env (Attribute ann (Name (StructT sid) id) fld) es /\
+  stmt_state_rel ctx func cenv cx es s ==>
+  ?entry fs ftv vals fv.
+    lookup_scopes id es.scopes = SOME entry /\
+    entry.type = StructTV fs /\ entry.value = StructV vals /\
+    fields_layout (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
+    struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
+    evaluate_type (get_tenv cx) ann = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+    (!tail. eval_expr cx (Attribute ann (Name (StructT sid) id) fld)
+        (es with gas_obs := tail) =
+      (INL (PlaceR (MemoryPlace id [AttrSubscript fld])), es with gas_obs := tail)) /\
+    (!tail. read_result cx (PlaceR (MemoryPlace id [AttrSubscript fld]))
+        (es with gas_obs := tail) = (INL fv, es with gas_obs := tail))
+Proof
+  strip_tac >> drule body_attribute_name_pre >> strip_tac >>
+  `expr_sim_pre cenv cx env (Name (StructT sid) id) es` by
+    simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  drule_all body_name_source_region >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
+  drule_all attribute_type_evaluates >> strip_tac >>
+  `?vals. entry.value = StructV vals /\ struct_has_type fs vals` by
+    (Cases_on `entry.value` >> gvs[value_has_type_def] >>
+     rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]) >>
+  `?fv. ALOOKUP vals fld = SOME fv` by
+    (drule struct_has_type_map_fst >> strip_tac >>
+     Cases_on `ALOOKUP vals fld` >> gvs[] >>
+     fs[alistTheory.ALOOKUP_FAILS] >>
+     drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+     `MEM fld (MAP FST fs)` by
+       (simp[MEM_MAP] >> qexists_tac `(fld,tv)` >> simp[]) >>
+     `MEM fld (MAP FST vals)` by metis_tac[] >>
+     pop_assum mp_tac >> simp[MEM_MAP, pairTheory.EXISTS_PROD]) >>
+  `evaluate_subscripts entry.type entry.value [AttrSubscript fld] = INL fv` by
+    simp[evaluate_subscripts_def] >>
+  drule_all body_attribute_name_source_tail >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
