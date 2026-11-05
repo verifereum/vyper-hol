@@ -1,6 +1,6 @@
 Theory o1MakeSsaShapeProbe
 Ancestors
-  o1PassContract makeSsaCurrentDefs irSupply unitShapeDefs venomInst list
+  o1PassContract makeSsaCurrentDefs irSupply unitShapeDefs venomInst list o1MakeSsaReachable
 
 (* A return-PC use precedes its unique writer along one arm. *)
 Definition probe_diamond_def:
@@ -176,3 +176,78 @@ Proof
        LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> EVAL_TAC >> simp[]
 QED
 
+
+Theorem probe_diamond_result_labels_reachable:
+  !l. MEM l ["entry";"left";"right";"join"] ==>
+      fn_reachable probe_diamond_result l
+Proof
+  `fn_entry_label probe_diamond_result = fn_entry_label probe_diamond` by EVAL_TAC >>
+  mp_tac probe_diamond_labels_reachable >>
+  simp[venomWfTheory.fn_reachable_def, probe_diamond_result_edges]
+QED
+
+Theorem probe_diamond_result_all_reachable:
+  !bb. MEM bb probe_diamond_result.fn_blocks ==>
+       fn_reachable probe_diamond_result bb.bb_label
+Proof
+  rpt strip_tac >> irule probe_diamond_result_labels_reachable >>
+  pop_assum mp_tac >> simp[probe_diamond_result_def, mk_raw_function_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem probe_diamond_result_preds:
+  reachable_preds probe_diamond_result "join" = ["left";"right"]
+Proof
+  simp[reachable_preds_all_reachable, probe_diamond_result_all_reachable] >>
+  simp[probe_diamond_result_edges, probe_diamond_result_def, mk_raw_function_def,
+       venomWfTheory.fn_cfg_edge_def, probe_diamond_def,
+       LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> EVAL_TAC
+QED
+
+Theorem probe_diamond_result_inst_fixed:
+  !bb i. MEM bb probe_diamond_result.fn_blocks /\ MEM i bb.bb_instructions ==>
+    reachable_inst probe_diamond_result bb.bb_label i = i
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM bb probe_diamond_result.fn_blocks` mp_tac >>
+  CONV_TAC (LAND_CONV EVAL) >> strip_tac >>
+  gvs[mk_inst_def, reachable_inst_def, probe_diamond_result_preds] >> EVAL_TAC
+QED
+
+Theorem probe_diamond_result_reachable:
+  reachable_fn probe_diamond_result = probe_diamond_result
+Proof
+  irule reachable_fn_fixed >>
+  simp[probe_diamond_result_all_reachable, probe_diamond_result_inst_fixed]
+QED
+
+Theorem probe_diamond_result_seed:
+  retpc_var probe_diamond_result "formal_var_0"
+Proof
+  simp[retpc_var_def] >> irule copy_phi_var_seed >>
+  qexists_tac `mk_inst 3 RETPC_PARAM [Lit (n2w 0)] ["formal_var_0"]` >> EVAL_TAC
+QED
+
+Theorem probe_diamond_result_phi:
+  retpc_var probe_diamond_result "r"
+Proof
+  simp[retpc_var_def] >> irule copy_phi_var_phi >>
+  qexistsl_tac [`mk_inst 6 PHI
+    [Label "left";Var "r";Label "right";Var "formal_var_0"] ["r"]`,
+    `"formal_var_0"`] >>
+  simp[GSYM retpc_var_def, probe_diamond_result_seed] >> EVAL_TAC
+QED
+
+Theorem probe_diamond_retpc_output:
+  retpc_shape_ok (FST (make_ssa_current_fn probe_supply probe_diamond))
+Proof
+  rewrite_tac[probe_diamond_result_eq, retpc_shape_ok_def,
+              probe_diamond_result_reachable] >>
+  mp_tac probe_diamond_result_seed >> mp_tac probe_diamond_result_phi >>
+  simp[probe_diamond_result_def, mk_raw_function_def, mk_inst_def] >>
+  rpt strip_tac >>
+  gvs[probe_diamond_result_def, mk_raw_function_def, fn_insts_def,
+       fn_insts_blocks_def, mk_inst_def, GSYM AND_IMP_INTRO,
+       DISJ_IMP_THM, FORALL_AND_THM, APPEND_EQ_CONS] >>
+  qexists_tac `"r"` >> simp[]
+QED
