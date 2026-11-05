@@ -465,3 +465,17 @@ Theorem abi_window_allocate_reused:
 Proof
   simp[abi_builtin_allocate_state_def]
 QED
+
+Theorem abi_window_fresh_vars_fields:
+  t.vs_vars = s.vs_vars /\ fresh_vars_wrt limit_st s ==>
+  fresh_vars_wrt limit_st t
+Proof
+  simp[fresh_vars_wrt_def]
+QED
+
+Theorem abi_window_empty_sequence_fresh[local]:
+  run_inst_seq [] s = OK t /\ fresh_vars_wrt limit_st s ==>
+  fresh_vars_wrt limit_st t
+Proof
+  simp[run_inst_seq_def] >> metis_tac[]
+QED
