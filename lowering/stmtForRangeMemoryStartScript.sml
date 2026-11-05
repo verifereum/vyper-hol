@@ -23,7 +23,8 @@ Theorem for_range_alloca_start_mem:
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
       (!id ent. FLOOKUP s0.vs_allocas id = SOME ent ==> FLOOKUP ee.vs_allocas id = SOME ent) /\
-      (!x. x <> p ==> lookup_var x ee = lookup_var x s0)
+      (!x. x <> p ==> lookup_var x ee = lookup_var x s0) /\
+      ee.vs_labels = s0.vs_labels
 Proof
   rpt gen_tac >> strip_tac >>
   `?s1. exec_alloca aa s0 (n2w sz:bytes32) = OK s1` by
@@ -85,6 +86,10 @@ Resume for_range_alloca_start_mem[frames]:
   `ret_pc_ok cenv sa (jump_to entry_lbl s1)` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
      simp[] >> simp[jump_to_def]) >>
+  `s1.vs_labels = s0.vs_labels` by
+    (qpat_assum `exec_alloca _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[exec_alloca_def, AllCaseEqs(), update_var_def] >> rpt strip_tac >> gvs[]) >>
   qexistsl_tac [`jump_to entry_lbl s1`, `w`] >>
   simp[jump_to_def, stmt_state_rel_jump_to, lookup_var_def] >>
   fs[lookup_var_def]
@@ -127,7 +132,8 @@ Proof
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
       (!id ent. FLOOKUP s0.vs_allocas id = SOME ent ==> FLOOKUP ee.vs_allocas id = SOME ent) /\
-      (!x. x <> p ==> lookup_var x ee = lookup_var x s0)` by
+      (!x. x <> p ==> lookup_var x ee = lookup_var x s0) /\
+      ee.vs_labels = s0.vs_labels` by
     (irule for_range_alloca_start_mem >>
      qpat_assum `aa = _` (fn th => rewrite_tac[GSYM th]) >> simp[] >>
      conj_tac >- metis_tac[] >> qexists_tac `j` >> simp[]) >>
