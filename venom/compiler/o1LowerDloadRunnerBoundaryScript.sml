@@ -66,3 +66,32 @@ Proof
   irule ld_nonterminator_successor >> simp[] >>
   qexists_tac `callinst` >> simp[is_terminator_def]
 QED
+
+Theorem ld_terminator_ok_branch:
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK s1 ==>
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\ s1.vs_halted = s.vs_halted
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs(), jump_to_def] >> rpt strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem ld_step_ok_halted:
+  step_inst fuel C inst s = OK s1 ==> s1.vs_halted = s.vs_halted
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (drule_all ld_terminator_ok_branch >> simp[]) >>
+  drule_all step_preserves_halted >> simp[]
+QED
+
+Theorem ld_enters_block_halted:
+  enters_block fn s s1 ==> s1.vs_halted = s.vs_halted
+Proof
+  simp[enters_block_def] >> strip_tac >> gvs[] >>
+  drule eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+QED

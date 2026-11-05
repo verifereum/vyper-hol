@@ -24,7 +24,8 @@ Ancestors
   o1LowerDloadJointCall o1LowerDloadInvokeArguments o1LowerDloadAbortResult
   o1LowerDloadHaltResult o1LowerDloadBranchExec o1LowerDloadSegmentContinuation
   o1LowerDloadOrdinaryDispatch o1LowerDloadEntryFetch o1LowerDloadRootResult
-  o1LowerDloadRunnerBoundary
+  o1LowerDloadRunnerBoundary o1LowerDloadRootEntry o1LowerDloadJointEntry
+  venomExecSemantics
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
@@ -68,6 +69,46 @@ Proof
   drule lower_dload_function_supply_labels >> strip_tac >>
   Cases_on `src.fn_name = name` >> gvs[] >>
   fs[GSYM lookup_function_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_stage_root_entry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
+  run_context fuel C vs = r /\ terminates r ==>
+  ?lo name fn fn' lbl s0 s1 inst bb.
+    ptr_discipline lo C vs /\
+    C.ctx_entry = SOME name /\ C'.ctx_entry = SOME name /\
+    lookup_function name C.ctx_functions = SOME fn /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn = SOME lbl /\ fn_entry_label fn' = SOME lbl /\
+    s0 = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+    run_blocks fuel C fn s0 = r /\
+    (!m. run_context m C' vs = run_blocks m C' fn' s0) /\
+    enters_block fn s0 s1 /\ enters_block fn' s0 s1 /\
+    ~s0.vs_halted /\ ~s1.vs_halted /\
+    lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s1.vs_inst_idx = SOME inst /\ active_inst fn inst s1 /\
+    ld_joint_boundary vs C C' lo D [] [] FEMPTY entry_taint fn inst s1 s1
+      1 0 [] FEMPTY [] FEMPTY FEMPTY FEMPTY []
+Proof
+  strip_tac >> drule_all ld_run_context_entry >> strip_tac >>
+  drule_all lower_dload_stage_lookup_supply >> strip_tac >>
+  `?lo. ptr_discipline lo C vs` by metis_tac[o1_src_inv_def] >>
+  `wf_function fn` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >>
+     `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+     first_x_assum drule >> simp[o1_fn_shape_def]) >>
+  `~s0.vs_halted` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  `~s1.vs_halted` by metis_tac[ld_enters_block_halted] >>
+  drule_all ld_wf_enters_block_fetch >> strip_tac >>
+  qpat_x_assum `s0 = _` SUBST_ALL_TAC >>
+  drule_all ld_joint_entry >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  qexistsl_tac [`lo`, `name`, `fn`, `g`, `lbl`,
+    `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
+    `s1`, `inst`, `bb`] >>
+  fs[ctx_pass_stage_def, run_context_def, run_function_def]
 QED
 
 (* Zero-size allocation provenance cannot license a pointer comparison. *)
