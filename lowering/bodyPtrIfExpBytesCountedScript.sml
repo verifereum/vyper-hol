@@ -401,3 +401,49 @@ Proof
   conj_tac >- (irule fragExecPtrTheory.ptr_inst_ok_mcopy_operand >> simp[]) >>
   simp[mcopy_operand_ghost_frame, eval_operand_def]
 QED
+
+Theorem emit_mcopy_operand_seq_ptr:
+  !D ctx fn PG G tn s sa sb dst src count_op a b n.
+    emit_void MCOPY [Var dst;Var src;count_op] sa = ((),sb) /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
+    ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
+    ~ctx_has_dalloca ctx ==>
+    ?tnf.
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tnf /\
+      run_inst_seq (emitted_insts sa sb) s =
+        OK (mcopy (w2n b) (w2n a) (w2n n) s) /\
+      tnf.t_var = tn.t_var /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
+        {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem}
+Proof
+  rpt strip_tac >>
+  `emitted_insts sa sb = [mk_inst sa.cs_next_id MCOPY [Var dst;Var src;count_op] []]` by
+    gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+        emit_def, comp_return_def, emitted_insts_def, DROP_APPEND1] >>
+  qexists_tac `step_taint (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;count_op] []) s
+    (mcopy (w2n b) (w2n a) (w2n n) s) tn` >>
+  conj_tac >- (simp[] >> irule mcopy_operand_seq_ptr >> metis_tac[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;count_op] []) s =
+     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
+  simp[run_inst_seq_def, mcopy_operand_ghost_frame, eval_operand_def]
+QED
+
+Theorem compile_store_bytestring_split:
+  !src dst sa sb.
+    compile_store_bytestring src dst sa = ((),sb) ==>
+    ?count_op sm.
+      compile_bytestring_copy_len src sa = (count_op,sm) /\
+      emit_void MCOPY [dst;src;count_op] sm = ((),sb) /\
+      emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb
+Proof
+  rpt gen_tac >>
+  simp[compile_store_bytestring_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >>
+  gvs[compile_bytestring_copy_len_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+      emit_def, comp_return_def] >>
+  gvs[emitted_insts_def, DROP_APPEND1, DROP_APPEND]
+QED
