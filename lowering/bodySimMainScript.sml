@@ -119,10 +119,9 @@ Theorem body_stmts_sim:
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmts cx ss es = (res, es') ==>
+    frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
     stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
-      es res es'
+      (eval_stmts cx ss) es
 Proof
   metis_tac[body_sim_mutual, body_stmts_ok_def]
 QED
@@ -134,10 +133,9 @@ Theorem body_stmt_sim:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
     call_evaluation_safe cx (int_calls_stmt s) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx s es = (res, es') ==>
+    frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
     stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
-      es res es'
+      (eval_stmt cx s) es
 Proof
   metis_tac[body_sim_mutual, body_stmt_ok_def]
 QED

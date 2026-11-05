@@ -252,12 +252,12 @@ Theorem body_raise_reason_other:
     stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (Raise (RaiseReason e)) es = (res, es') /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     (!sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
                 reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Raise (RaiseReason e))) es res es'
+      (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
+      (eval_stmt cx (Raise (RaiseReason e))) es
 Proof
   rpt strip_tac >>
   Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
@@ -309,7 +309,6 @@ Theorem body_assert_reason_other:
     stmt_exprs_ok cenv (Assert e (AssertReason se)) /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (Assert e (AssertReason se)) es = (res, es') /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
     (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
              (INL (BoolV F), es1) ==>
@@ -317,7 +316,8 @@ Theorem body_assert_reason_other:
     (!sa vv sb. compile_expr cenv (expr_type se) se sa = (vv, sb) ==>
                 reason_code_vv vv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assert e (AssertReason se))) es res es'
+      (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
+      (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
   rpt strip_tac >>
   `expr_type e = BaseT BoolT` by gvs[type_stmt_def] >>
@@ -478,11 +478,10 @@ Theorem body_assign_local_word[local]:
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
     FLOOKUP env.var_types id = SOME ty /\ is_word_type ty ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt strip_tac >>
   `well_typed_expr env e /\ expr_type e = ty` by
@@ -590,12 +589,11 @@ Theorem body_assign_toplevel_word[local]:
       SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) /\
     call_evaluation_safe cx
-      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) /\
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) es =
-      (res, es') ==>
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
-         (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) es res es'
+         (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) es
 Proof
   rpt strip_tac >>
   drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
@@ -716,7 +714,6 @@ Theorem body_assign_local_memory:
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
     FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
     (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
@@ -727,7 +724,7 @@ Theorem body_assign_local_memory:
      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `supported_program tops /\
@@ -782,15 +779,13 @@ Theorem body_assign_attr_local[local]:
     call_evaluation_safe cx
       (int_calls_stmt
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)) /\
-    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-      es = (res, es') /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     attribute_type env.type_defs (StructT sid) fld = SOME fty /\
     is_word_type fty ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)) es
 Proof
   rpt strip_tac >>
   `well_typed_expr env e /\ expr_type e = fty` by
@@ -860,14 +855,12 @@ Theorem body_assign_attr_storage[local]:
     call_evaluation_safe cx
       (int_calls_stmt
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
-            fld)) e)) /\
-    eval_stmt cx
-      (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
-         e) es = (res, es') ==>
+            fld)) e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
-            fld)) e)) es res es'
+            fld)) e))
+      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld)) e)) es
 Proof
   rpt strip_tac >>
   `well_typed_expr env e /\ expr_type e = fty` by
@@ -1129,12 +1122,11 @@ Theorem body_assign_toplevel_copy[local]:
       SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     call_evaluation_safe cx
-      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e) es =
-      (res, es') ==>
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
-         (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es res es'
+         (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
   rpt gen_tac >> Cases_on `nsid` >>
   rename1 `supported_variable_decl tops (src,id)` >> strip_tac >> (
@@ -1222,7 +1214,6 @@ Theorem body_assign_other:
     stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
               is_word_type ty) /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
@@ -1246,7 +1237,8 @@ Theorem body_assign_other:
         supported_storage_field_write tops nsid fld /\
         type_place_target env t = SOME (Type fty) /\ is_word_type fty) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   cheat
 QED
@@ -1264,7 +1256,6 @@ Theorem body_assign_widened_aggregate_call:
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
     FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
     ~(lowered_value_type cenv e = expr_type e \/
@@ -1273,7 +1264,7 @@ Theorem body_assign_widened_aggregate_call:
      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   cheat
 QED
@@ -1439,8 +1430,6 @@ Theorem body_assign_tuple_locals[local]:
     call_evaluation_safe cx
       (int_calls_stmt
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)) /\
-    eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
-      es = (res, es') /\
     ids <> [] /\
     EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
                      0 < type_memory_bytes cenv ty) ids /\
@@ -1448,7 +1437,7 @@ Theorem body_assign_tuple_locals[local]:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
-      es res es'
+      (eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)) es
 Proof
   rpt strip_tac >>
   `env.type_defs = get_tenv cx` by
@@ -1738,7 +1727,6 @@ Theorem body_assign_tuple_targets[local]:
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (Assign (TupleTarget gs) e) es = (res, es') /\
     lowered_value_type cenv e = expr_type e /\
     EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
                         FLOOKUP env.var_types id = SOME ty /\
@@ -1752,7 +1740,8 @@ Theorem body_assign_tuple_targets[local]:
                     (AttributeTarget (TopLevelNameTarget nsid) fld) =
                     SOME (Type fty) /\ is_word_type fty)) gs ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e)) es res es'
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt strip_tac >>
   irule stmtSimAssignTupleTargetsTheory.stmt_frag_storage_maps_intro >> strip_tac >>
@@ -1821,7 +1810,6 @@ Theorem body_assign_tuple_other:
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (Assign (TupleTarget gs) e) es = (res, es') /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
     ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
@@ -1836,7 +1824,8 @@ Theorem body_assign_tuple_other:
                      (AttributeTarget (TopLevelNameTarget nsid) fld) =
                      SOME (Type fty) /\ is_word_type fty)) gs ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e)) es res es'
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   cheat
 QED
@@ -1851,11 +1840,10 @@ Theorem body_assign_tuple_widened_call[local]:
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    eval_stmt cx (Assign (TupleTarget gs) e) es = (res, es') /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      es res es'
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   cheat
 QED
@@ -1911,11 +1899,10 @@ Theorem body_augassign_local[local]:
     type_stmt env ret_ty (AugAssign ty (NameTarget id) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty (NameTarget id) bop e) /\
     call_evaluation_safe cx
-      (int_calls_stmt (AugAssign ty (NameTarget id) bop e)) /\
-    eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') ==>
+      (int_calls_stmt (AugAssign ty (NameTarget id) bop e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty (NameTarget id) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
@@ -1969,13 +1956,11 @@ Theorem body_augassign_attr_local[local]:
       (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
     call_evaluation_safe cx
       (int_calls_stmt
-         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) /\
-    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
-      es = (res, es') ==>
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
@@ -2030,12 +2015,11 @@ Theorem body_augassign_toplevel_word[local]:
       SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty (TopLevelNameTarget (src, id)) bop e) /\
     call_evaluation_safe cx
-      (int_calls_stmt (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) /\
-    eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
-      (res, es') ==>
+      (int_calls_stmt (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
-         (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es res es'
+         (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
+      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
@@ -2112,14 +2096,12 @@ Theorem body_augassign_attr_storage[local]:
     call_evaluation_safe cx
       (int_calls_stmt
          (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-            bop e)) /\
-    eval_stmt cx
-      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
-      es = (res, es') ==>
+            bop e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-            bop e)) es res es'
+            bop e))
+      (eval_stmt cx (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)) es
 Proof
   rpt strip_tac >>
   drule_then strip_assume_tac supported_expr_body_calls >>
@@ -2196,7 +2178,6 @@ Theorem body_augassign_other:
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
     ~(?id. t = NameTarget id) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\
              supported_scalar_target tops nsid) /\
@@ -2204,7 +2185,8 @@ Theorem body_augassign_other:
     ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
                  supported_storage_field_write tops nsid fld) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
+      (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
   cheat
 QED

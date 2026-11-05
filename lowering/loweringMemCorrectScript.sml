@@ -56,10 +56,10 @@ Theorem body_stmts_sim_mem:
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-    eval_stmts cx ss es = (res, es') ==>
+    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmts_env cenv lctx ret_ty ss) es res es'
+      (stmts_env cenv lctx ret_ty ss)
+      (eval_stmts cx ss) es
 Proof
   cheat
 QED
@@ -250,8 +250,9 @@ Proof
 QED
 
 Theorem stmt_frag_mem_complete:
-  !d ctx func cx lctx RetQ cenv m es res es' sa sb s0 cenv'.
-    stmt_frag_mem d ctx func cx lctx RetQ cenv m es res es' /\
+  !d ctx func cx lctx RetQ cenv m source es res es' sa sb s0 cenv'.
+    stmt_frag_mem d ctx func cx lctx RetQ cenv m source es /\
+    source es = (res, es') /\
     m sa = (cenv', sb) /\ fn_has_code sa sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\

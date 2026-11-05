@@ -132,10 +132,10 @@ Theorem body_annassign_word[local]:
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     is_word_type typ ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt strip_tac >>
   `FLOOKUP cenv.ce_vars id = NONE` by
@@ -363,12 +363,12 @@ Theorem body_annassign_other:
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\
     ~(expr_type e = typ \/ is_bytestring_type typ \/
       has_length_word typ /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   cheat
 QED
@@ -390,14 +390,14 @@ Theorem body_annassign_widened_aggregate_call:
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
     ~(lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   cheat
 QED
@@ -658,14 +658,12 @@ Theorem body_for_range_lit[local]:
       (int_calls_stmt
          (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
             stmts)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx
-      (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
-         stmts) es = (res, es') ==>
+    frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n
-            stmts)) es res es'
+            stmts))
+      (eval_stmt cx (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n stmts)) es
 Proof
   rpt strip_tac >>
   `FLOOKUP cenv.ce_vars id = NONE` by
@@ -868,10 +866,10 @@ Theorem body_for_range:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (For id typ it n body) es = (res, es') /\
     (?e1 e2. it = Range e1 e2) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body)) es res es'
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt strip_tac >> gvs[] >>
   Cases_on `?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)`
@@ -1292,10 +1290,10 @@ Theorem body_for_array:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (For id typ it n body) es = (res, es') /\
     (?e. it = Array e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body)) es res es'
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt gen_tac >> strip_tac >> qpat_x_assum `it = Array _` SUBST_ALL_TAC >>
   drule_all array_for_source_ready >> strip_tac >> gvs[] >>
@@ -1355,10 +1353,10 @@ Theorem body_for_other:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (For id typ it n body) es = (res, es') /\
     ~(?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body)) es res es'
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt strip_tac >> Cases_on `it`
   >- (irule body_for_array >> simp[] >> metis_tac[]) >>
