@@ -11,7 +11,7 @@ Theory simplifyCfgProof
 Ancestors
   simplifyCfgDefs o1PassLift unitShapeDefs venomWf
   simplifyCfgRoundSemantics simplifyCfgStaticInterface simplifyCfgSimTools
-  simplifyCfgShapeCore
+  simplifyCfgShapeCore simplifyCfgFrameRf
 
 (* Merged blocks need less fuel, so the fuel is existential each way.
    fn_shape_ok bans DJMP and keeps labels out of every terminator operand
@@ -56,5 +56,10 @@ Theorem simplify_cfg_frame_sim_rf:
   simplify_cfg_fn_ok fn ==>
   frame_sim_rf L C C' fn (simplify_cfg_fn fn)
 Proof
-  cheat
+  strip_tac >> irule frame_sim_rf_trans >>
+  qexistsl_tac [`C'`, `fn`] >> simp[scfg_frame_sim_rf_ctx_bisim] >>
+  qspecl_then [`LENGTH fn.fn_blocks`, `fn`] mp_tac
+    (Q.INST [`C` |-> `C'`] scfg_iter_frame_sim_rf) >>
+  simp[scfg_static_def, fn_shape_ok_scfg_shape, simplify_cfg_fn_def,
+       simplify_cfg_fn_with_labels_def]
 QED
