@@ -6,6 +6,7 @@ Ancestors
   typedNormalizeFrame typedMemoryCopy stmtSimReturn
   venomState compileEnv memContinuation typedCopyAgreement emitHelper arithmetic valueCopyBytes
   exprSimBufferStore exprSim exprSimAggregateChildren exprLoweringProps
+  context vyperTypeSystem vyperValue vyperTyping valueEncoding
 
 Theorem typed_store_word_mem_cont:
   is_word_type dty /\ type_widens_to tenv sty dty /\
@@ -116,3 +117,31 @@ Finalise typed_store_bytestring_mem_cont
    universally; only the destination type_rank is bounded. Tuple/nominal
    semantic field adapters and fast-copy/empty wrappers precede that induction.
 *)
+
+Theorem typed_store_empty_mem_cont:
+  acyclic_struct_metadata ce.ce_struct_fields /\ value_has_type dtv v /\
+  type_widens_to tenv sty NoneT /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv NoneT = SOME dtv /\
+  compile_store_memory_typed ce dst NoneT src sty sa = ((),sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. mem_cont_sim ctx fn s t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size dtv <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `sty = NoneT` by
+    (Cases_on `sty` >> fs[type_widens_to_def, arg_type_fits_def]) >>
+  gvs[Once compile_store_memory_typed_def, is_word_type_def,
+    is_bytestring_type_def, type_memory_bytes_def, compile_copy_memory_def,
+    comp_return_def, evaluate_type_def, value_has_type_def] >>
+  qexists_tac `s` >> simp[mem_cont_sim_refl, val_in_memory_def,
+    venom_state_component_equality]
+QED
