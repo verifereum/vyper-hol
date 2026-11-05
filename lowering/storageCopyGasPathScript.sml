@@ -171,7 +171,7 @@ Proof
   cheat
 QED
 
-Theorem storage_copy_code_prefix[local]:
+Theorem storage_copy_code_prefix:
   !sa sb func. fn_has_code sa sb func /\ same_blocks sa sb /\
   isPREFIX sa.cs_current_insts sb.cs_current_insts ==>
   ?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\

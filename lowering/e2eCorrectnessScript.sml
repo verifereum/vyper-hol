@@ -212,14 +212,14 @@ End
 (* The reconstructed raw oracle need not satisfy initial_ctx_rel: that
    relation ties the output entry state to the actual EVM readings. *)
 Theorem e2e_vyper_to_evm_states:
-  !tops ret am tx ctx ctx' vs_in vs_out es.
+  !gobs tops ret am tx ctx ctx' vs_in vs_out es.
     vs_in.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel tops ret tx
-              (call_external (SOME vs_in.vs_outcomes) [] am tx)
+              (call_external (SOME vs_in.vs_outcomes) gobs am tx)
               (run_context fuel ctx vs_in)) /\
-    (~source_exempt tops (call_external (SOME vs_in.vs_outcomes) [] am tx) ==>
+    (~source_exempt tops (call_external (SOME vs_in.vs_outcomes) gobs am tx) ==>
        ctx_sim (external_call_dead tx
-                  (call_external (SOME vs_in.vs_outcomes) [] am tx))
+                  (call_external (SOME vs_in.vs_outcomes) gobs am tx))
          ctx ctx' vs_in vs_out /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
@@ -228,20 +228,20 @@ Theorem e2e_vyper_to_evm_states:
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/ precompile_call_starved es \/
-             call_result_rel tops ret am tx es r es')
+             call_result_rel_at gobs tops ret am tx es r es')
 Proof
   cheat
 QED
 
 Theorem e2e_vyper_to_evm:
-  !tops ret am tx ctx ctx' vs es.
+  !gobs tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel tops ret tx
-              (call_external (SOME vs.vs_outcomes) [] am tx)
+              (call_external (SOME vs.vs_outcomes) gobs am tx)
               (run_context fuel ctx vs)) /\
-    (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
+    (~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) ==>
        ctx_sim (external_call_dead tx
-                  (call_external (SOME vs.vs_outcomes) [] am tx))
+                  (call_external (SOME vs.vs_outcomes) gobs am tx))
          ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
@@ -250,7 +250,7 @@ Theorem e2e_vyper_to_evm:
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/
-             call_result_rel tops ret am tx es r es')
+             call_result_rel_at gobs tops ret am tx es r es')
 Proof
   cheat
 QED

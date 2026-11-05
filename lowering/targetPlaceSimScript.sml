@@ -35,6 +35,7 @@
  *                          case form (as expr_vv_case: nocalls = T for
  *                          compile_expr_sim, F for the body simulation)
  *   target_name_case       — a local: its pointer, no code
+ *   toplevel_target_env    — a module variable's compile env entries
  *   target_toplevel_case   — a storage or transient variable or a mapping:
  *                          its slot, no code
  * The steps (fields, subscripts) and the induction over targets are in
@@ -48,7 +49,7 @@ Theory targetPlaceSim
 Ancestors
   exprSimFieldLayout
   targetPlaceSimDefs
-  exprSimHypsDefs
+  exprSimHypsDefs placeTypingProps
   loweringPosts
   list rich_list finite_map pair
   fragExec  exprSimHyps exprSimAttributeFields
@@ -117,8 +118,8 @@ End
 
 Definition target_pre_def:
   target_pre cenv cx env bt es <=>
-    expr_sim_inv cenv cx env es /\ target_env_ok cenv cx /\
-    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt
+    expr_sim_inv cenv cx env es /\ ~immutable_root cx bt /\
+    target_indices_pre cenv cx env bt
 End
 
 (* The shared case form, as expr_vv_case: target_sim at every state meeting
@@ -232,6 +233,25 @@ Theorem toplevel_target_decl[local]:
                  find_var_decl_by_name id ts =
                    SOME (HashMapVarDecl tr kt vt', id_str) /\
                  lookup_var_slot_from_layout cx tr src id_str = SOME slot))
+Proof
+  cheat
+QED
+
+(* A typed module variable target has its compile environment entries: a
+   storage or transient variable is not a mapping and has its declared
+   type, a mapping its declared key and value types (expr_sim_inv's
+   storage clause and place_map_tables_agree_on_defined). *)
+Theorem toplevel_target_env:
+  !cenv cx env es src id vt ts d id_str.
+    expr_sim_inv cenv cx env es /\
+    type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (d, id_str) ==>
+    (!tr typ. d = StorageVarDecl tr typ ==>
+              cenv.ce_hashmap_info (src,id) = NONE /\
+              cenv.ce_module_var_type (src,id) = SOME typ) /\
+    (!tr kt vt'. d = HashMapVarDecl tr kt vt' ==>
+                 ?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt'))
 Proof
   cheat
 QED

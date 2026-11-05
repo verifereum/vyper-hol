@@ -16,7 +16,9 @@
  * Also exported: bytes_buffer_write_encoding, bytes_buffer_write_state_rel,
  *   bytes_buffer_write_frame (a bytes value written into a fresh buffer);
  *   mstore_equal_memory, write_memory_with_expansion_equal_memory;
- *   vv_at_start_mono, vv_post_prefix_frame.
+ *   vv_at_start_mono, vv_post_prefix_frame;
+ *   compile_unary_builtin_rel_vv_sim (a unary builtin whose counted suffix
+ *   also has the entry state relation).
  *)
 
 Theory exprSimCalldataSlice
@@ -39,6 +41,7 @@ Ancestors
   exprSimWordBuiltins exprSimWordArgs emitHelperProps freshWrites
   exprSimPrecompiles exprSimHash valueEncodingProps valueCopy exprSimLiteralBuffer
   loweringHalt valueTypingMemoryProps
+  gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext fragGasPath
 
 Theorem calldata_slice_typing[local]:
   well_typed_expr env (Builtin ann (CalldataSlice n) args) ==>
@@ -414,6 +417,32 @@ Proof
   cheat
 QED
 
+Theorem slice_calldata_path[local]:
+  !ctx func cenv cx e es sa sb op p n a s0 bres.
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
+    (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ context_well_typed cx /\
+  0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
+  32 + 32 * word_size n < 2 ** 64 /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
+           INL v => INL v | INR err => INR (Error err)) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?m r. gas_marked_path F ctx func s0 m r /\
+    ((?u. r = OK u /\
+          (?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
+             (Value rv) (LocatedValue (expr_type e) p) u) /\
+          u.vs_current_bb = sb.cs_current_bb /\
+          u.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r /\ expr_exit bres r))
+Proof
+  cheat
+QED
+
 Theorem vv_at_start_mono:
   sa.cs_next_id <= sm.cs_next_id /\
   vv_at cenv cx ty sm sb es tv vv u ==>
@@ -433,24 +462,49 @@ Proof
   cheat
 QED
 
-Theorem slice_calldata_uint_compose[local]:
-  expr_type e = BaseT (UintT 256) /\
-  expr_body_pre cenv cx env e es /\
-  expr_sim ctx func cenv cx (expr_type e) e es /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV (&a)),es') /\
-  lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sm = (out,sc) /\
-  context_well_typed cx /\ 0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
-  32 + 32 * word_size n < 2 ** 64 /\
-  fn_has_code sa sc func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  res = (case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
-           INL v => INL (Value v) | INR err => INR (Error err)) ==>
-  frag_exec ctx sa sc (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
-        es sa sc s0 es' tv
-        (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) s)
-    (expr_exit res)
+Theorem slice_expr_exit_INR_cast[local]:
+  expr_exit (INR exc : value + exception) r ==>
+  expr_exit (INR exc : eval_result + exception) r
+Proof
+  cheat
+QED
+
+(* compile_typed_unary_builtin_vv_sim (exprSimHash) whose suffix also has
+   the entry state relation. *)
+(* Unary composition keeps the complete argument postcondition available to
+   the suffix, including the footprint and protected-allocation frame. The
+   suffix is an actual counted target path from every operand endpoint. *)
+Theorem compile_unary_builtin_rel_vv_sim:
+  expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
+    ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+      code x sm = (vv,sb)) /\
+  (!x. cs_appends (code x)) /\
+  (!sa sm sb x vv s0 v gs es' s.
+    lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    code x sm = (vv,sb) /\ fn_has_code sm sb func /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    local_ptrs_reserved cenv sm /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (INL v,es') /\
+    value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
+    expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?n r. gas_marked_path F ctx func s n r /\
+      ((?t rv. r = OK t /\
+          builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
+          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+            (Value rv) vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\
+        expr_exit (builtin_result cx es'.accounts ann bt [expr_type e] [v]) r))) ==>
+  expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   cheat
 QED

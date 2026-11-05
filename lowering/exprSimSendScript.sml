@@ -41,6 +41,7 @@ Ancestors
   loweringPosts
   allocLimits
   list pair vyperMisc fragExec loweringSlice  exprSimHyps exprSimWordArgs
+  gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasPath
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
@@ -292,6 +293,118 @@ Theorem send_tail_frag:
     (\s. ?v. res = INL v /\
              expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
     (expr_exit res)
+Proof
+  cheat
+QED
+
+(* ===== Counted gas: the CALL and the ASSERT as a gas path ===== *)
+
+(* The oracle's take and adopt never read or write the gas observations. *)
+Theorem take_call_outcome_gas_obs[local]:
+  take_call_outcome target calldata value_opt (st with gas_obs := tail) =
+  (FST (take_call_outcome target calldata value_opt st),
+   SND (take_call_outcome target calldata value_opt st) with gas_obs := tail)
+Proof
+  cheat
+QED
+
+Theorem adopt_call_outcome_gas_obs[local]:
+  adopt_call_outcome rq outcome (st with gas_obs := tail) =
+  (FST (adopt_call_outcome rq outcome st),
+   SND (adopt_call_outcome rq outcome st) with gas_obs := tail)
+Proof
+  cheat
+QED
+
+Theorem frame_call_value_gas_obs[local]:
+  frame_call_value cx value_opt (st with gas_obs := tail) =
+  (FST (frame_call_value cx value_opt st),
+   SND (frame_call_value cx value_opt st) with gas_obs := tail)
+Proof
+  cheat
+QED
+
+(* send never reads or writes the gas observations. *)
+Theorem eval_send_gas_obs[local]:
+  !cx has_gas vs st r st'.
+    eval_send cx has_gas vs st = (r, st') ==>
+    !tail. eval_send cx has_gas vs (st with gas_obs := tail) =
+             (r, st' with gas_obs := tail)
+Proof
+  cheat
+QED
+
+Theorem send_read_gas_obs[local]:
+  bind (eval_send cx has_gas vs) (read_result cx) st = (res, st') ==>
+  !tail. bind (eval_send cx has_gas vs) (read_result cx)
+           (st with gas_obs := tail) = (res, st' with gas_obs := tail)
+Proof
+  cheat
+QED
+
+Theorem eval_expr_send_read_action[local]:
+  LENGTH args = (if has_gas then 3 else 2) ==>
+  bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx) =
+  bind (eval_exprs cx args) (\vs. bind (eval_send cx has_gas vs) (read_result cx))
+Proof
+  cheat
+QED
+
+Theorem send_tail_path[local]:
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  fn_has_code sm sb func /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  IS_SOME (eval_operand gas_op t) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') /\
+  expr_type e = NoneT ==>
+  ?n r. gas_marked_path F ctx func t n r /\
+    ((?w. r = OK w /\
+          (?v. res = INL v /\
+               expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w) /\
+          w.vs_current_bb = sb.cs_current_bb /\
+          w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r /\ expr_exit res r))
+Proof
+  cheat
+QED
+
+Theorem send_tail_summary[local]:
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  fn_has_code sm sb func /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ es1.gas_obs = [] /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  IS_SOME (eval_operand gas_op t) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx)
+    es1 = (res, es') /\
+  expr_type e = NoneT ==>
+  ?marks. gas_summary_at F (ctx,func) marks
+    (bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx))
+    (es1, t)
+    (\res ee t. ?v. res = INL v /\
+       expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
 Proof
   cheat
 QED

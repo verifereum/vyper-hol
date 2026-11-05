@@ -12,7 +12,7 @@
  *                           expr_vv_case and expr_sim_case, for
  *                           compile_expr_sim and the body simulation;
  *                           compile_attribute_vv_sim follows
- *   attr_add_frag, attr_extends, stmt_state_rel_region_lt,
+ *   attr_add_frag, attr_add_path, attr_extends, stmt_state_rel_region_lt,
  *   immutable_holds_read, field_ptr_w2n — the offset's fragment and the
  *                           pointer facts, which exprSimTuple shares
  *
@@ -53,6 +53,9 @@ Ancestors
 Libs
   pairLib
 
+open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
+     gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
+
 (* ===== The lowering ===== *)
 
 (* The location compile_attribute reads the base's pointer in. *)
@@ -62,7 +65,7 @@ Libs
    and transient storage, bytes elsewhere. *)
 
 
-Theorem compile_expr_attribute[local]:
+Theorem compile_expr_attribute:
   !cenv ty ann obj fld st vv st'.
     compile_expr cenv ty (Attribute ann obj fld) st = (vv, st') ==>
     ?bvv st1 p.
@@ -75,7 +78,7 @@ Proof
   cheat
 QED
 
-Theorem eval_expr_attribute[local]:
+Theorem eval_expr_attribute:
   !cx ann obj fld es.
     eval_expr cx (Attribute ann obj fld) es =
     (do r <- eval_expr cx obj;
@@ -84,7 +87,7 @@ Proof
   cheat
 QED
 
-Theorem attr_pre_base[local]:
+Theorem attr_pre_base:
   !cenv cx env ann obj fld es.
     expr_body_pre cenv cx env (Attribute ann obj fld) es ==>
     expr_body_pre cenv cx env obj es /\
@@ -133,7 +136,7 @@ QED
 
 
 
-Theorem struct_value_shape[local]:
+Theorem struct_value_shape:
   !fs v. value_has_type (StructTV fs) v ==>
          ?vals. v = StructV vals /\ struct_has_type fs vals
 Proof
@@ -248,7 +251,7 @@ Proof
 QED
 
 (* The field's value_vv after the ADD, from the base's. *)
-Theorem attr_vv_post[local]:
+Theorem attr_vv_post:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     eval_operand (vv_operand bvv) q = SOME w /\
@@ -271,6 +274,133 @@ Proof
 QED
 
 (* ===== The simulation ===== *)
+
+Theorem attr_eval_inst_idx[local]:
+  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
+Proof
+  cheat
+QED
+
+(* The offset's ADD as a target path with no GAS reads. *)
+Theorem attr_add_path:
+  !ctx func cenv cx e es ty sa vv sm off dst sn s0 es' tv t.
+    compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
+    fn_has_code sm sn func /\ ~t.vs_halted /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv t ==>
+    ?t' w. gas_path ctx func t 0 (OK t') /\
+      t'.vs_current_bb = sn.cs_current_bb /\
+      t'.vs_inst_idx = LENGTH sn.cs_current_insts /\
+      vv_post ctx func cenv cx e es sa sn s0 es' tv vv t' /\
+      eval_operand (vv_operand vv) t' = SOME w /\
+      eval_operand dst t' = SOME (w + n2w off)
+Proof
+  cheat
+QED
+
+Theorem attr_source[local]:
+  !cx ann obj fld.
+    eval_expr cx (Attribute ann obj fld) =
+    bind (eval_expr cx obj)
+      (\r. select_result cx (expr_type obj) r (AttrSubscript fld))
+Proof
+  cheat
+QED
+
+(* The field's selection reads no gas observation. *)
+Theorem attr_select_gas_obs[local]:
+  !cx ty tv fld ee r.
+    select_result cx ty tv (AttrSubscript fld) ee = (r, ee) ==>
+    !tail. select_result cx ty tv (AttrSubscript fld)
+             (ee with gas_obs := tail) = (r, ee with gas_obs := tail)
+Proof
+  cheat
+QED
+
+Theorem attr_operand_admissible[local]:
+  !cenv cx env e es.
+    expr_body_pre cenv cx env e es ==>
+    gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  cheat
+QED
+
+Theorem attr_exempt_cert[local]:
+  !memory tops p cx ann obj fld start marks out endpoint.
+    gas_exempt_cert memory tops p (ignore_bind (eval_expr cx obj) (return ()))
+      start marks out endpoint ==>
+    gas_exempt_cert memory tops p
+      (ignore_bind (eval_expr cx (Attribute ann obj fld)) (return ()))
+      start marks out endpoint
+Proof
+  cheat
+QED
+
+(* The source facts at the base's actual end state. *)
+Theorem attr_base_facts[local]:
+  !cenv cx env ann obj fld es sid es0 btv es1.
+    expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
+    expr_body_pre cenv cx env obj es0 /\ expr_type obj = StructT sid /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME ann /\
+    eval_expr cx obj es0 = (INL btv, es1) ==>
+    ?fs ftv.
+      evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+      fields_layout
+        (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
+      ALOOKUP fs fld = SOME ftv /\
+      evaluate_type (get_tenv cx) ann = SOME ftv /\
+      (!v. read_result cx btv es1 = (INL v, es1) ==>
+           value_has_type (StructTV fs) v) /\
+      ~popped_at_field btv fld es1 /\
+      !res es2.
+        select_result cx (StructT sid) btv (AttrSubscript fld) es1 =
+          (res, es2) ==> !m. res <> INR (Error (TypeError m))
+Proof
+  cheat
+QED
+
+(* A completed base execution: the ADD's path and the field's post. *)
+Theorem attr_summary_ok[local]:
+  !ctx func cenv cx env ty ann obj fld es sid sa sm p sb bvv s0 marks btv fe
+   t R.
+    expr_body_pre cenv cx env (Attribute ann obj fld) es /\
+    expr_body_pre cenv cx env obj es /\ expr_type obj = StructT sid /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME ann /\
+    compile_expr cenv ty obj sa = (bvv, sm) /\ local_ptrs_reserved cenv sa /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [vv_operand bvv;
+                 Lit (n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld))]
+      sm = (p, sb) /\
+    fn_has_code sm sb func /\
+    gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks
+      (INL btv) fe (OK t) /\
+    vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    gas_summary_at F (ctx,func) marks (eval_expr cx (Attribute ann obj fld))
+      (es,s0)
+      (\res ee t. ?tv. res = INL tv /\
+         vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv
+           (LocatedValue ann (mk_ptr p (vv_loc bvv))) t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts) R
+Proof
+  cheat
+QED
+
+Theorem attr_vv_sim[local]:
+  !ctx func cenv cx env ty ann obj fld es sid.
+    expr_body_pre cenv cx env (Attribute ann obj fld) es /\
+    expr_body_pre cenv cx env obj es /\ expr_type obj = StructT sid /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME ann /\
+    expr_vv_sim ctx func cenv cx ty obj es ==>
+    expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
+Proof
+  cheat
+QED
 
 Theorem compile_attribute_vv_case:
   !nocalls ctx func cenv cx ann obj fld.

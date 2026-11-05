@@ -405,6 +405,19 @@ QED
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    ((!n. bi <> Slice n) \/ ~is_extcode e) /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_sim_pre cenv cx env e es'
+Proof
+  cheat
+QED
+
+(* An operand that isn't of the account-code type is never a slice's
+   .code source. *)
+Theorem expr_sim_pre_builtin_typed_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_type e <> BaseT (BytesT (Dynamic 24576)) /\
     expr_sim_inv cenv cx env es' ==>
     expr_sim_pre cenv cx env e es'
 Proof

@@ -68,6 +68,9 @@ Ancestors
 Libs
   pairLib
 
+open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
+     gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
+
 (* ===== Lists ===== *)
 
 Theorem values_have_types_el[local]:
@@ -596,6 +599,111 @@ Theorem tuple_popped_clash_unreachable:
     expr_body_pre cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
     ~tuple_popped_clash cx obj idx es
+Proof
+  cheat
+QED
+
+(* The element's selection reads no gas observation. *)
+Theorem tuple_select_gas_obs[local]:
+  !cx ty tv i ee r.
+    select_result cx ty tv (ValueSubscript (IntV i)) ee = (r, ee) ==>
+    !tail. select_result cx ty tv (ValueSubscript (IntV i))
+             (ee with gas_obs := tail) = (r, ee with gas_obs := tail)
+Proof
+  cheat
+QED
+
+Theorem tuple_source[local]:
+  !cx ann obj ity k.
+    eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) =
+    bind (eval_expr cx obj)
+      (\r. select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))))
+Proof
+  cheat
+QED
+
+Theorem tuple_operand_admissible[local]:
+  !cenv cx env e es.
+    expr_body_pre cenv cx env e es ==>
+    gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  cheat
+QED
+
+Theorem tuple_exempt_cert[local]:
+  !memory tops p cx ann obj ity k start marks out endpoint.
+    gas_exempt_cert memory tops p (ignore_bind (eval_expr cx obj) (return ()))
+      start marks out endpoint ==>
+    gas_exempt_cert memory tops p
+      (ignore_bind (eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))))
+        (return ()))
+      start marks out endpoint
+Proof
+  cheat
+QED
+
+(* The source facts at the base's actual end state. *)
+Theorem tuple_base_facts[local]:
+  !cenv cx env obj ity k es0 tys btv es1.
+    expr_body_pre cenv cx env
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es0 /\
+    expr_body_pre cenv cx env obj es0 /\ expr_type obj = TupleT tys /\
+    eval_expr cx obj es0 = (INL btv, es1) ==>
+    ?tvs.
+      evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+      OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+      LENGTH tvs = LENGTH tys /\
+      (!v. read_result cx btv es1 = (INL v, es1) ==>
+           value_has_type (TupleTV tvs) v) /\
+      ~popped_at_elem btv k es1 /\
+      !res es2.
+        select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k))) es1 =
+          (res, es2) ==> !m. res <> INR (Error (TypeError m))
+Proof
+  cheat
+QED
+
+(* A completed base execution: the ADD's path and the element's post. *)
+Theorem tuple_summary_ok[local]:
+  !ctx func cenv cx env ty obj ity k es tys sa sm p sb bvv s0 marks btv fe
+   t R.
+    expr_body_pre cenv cx env
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
+    expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
+    k < LENGTH tys /\
+    compile_expr cenv ty obj sa = (bvv, sm) /\ local_ptrs_reserved cenv sa /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [vv_operand bvv;
+                 Lit (n2w (tuple_offset cenv tys (vv_loc bvv) k))]
+      sm = (p, sb) /\
+    fn_has_code sm sb func /\
+    gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks
+      (INL btv) fe (OK t) /\
+    vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    gas_summary_at F (ctx,func) marks
+      (eval_expr cx (Subscript (EL k tys) obj (Literal ity (IntL (&k)))))
+      (es,s0)
+      (\res ee t. ?tv. res = INL tv /\
+         vv_post ctx func cenv cx
+           (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0
+           ee tv (LocatedValue (EL k tys) (mk_ptr p (vv_loc bvv))) t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts) R
+Proof
+  cheat
+QED
+
+Theorem tuple_vv_sim[local]:
+  !ctx func cenv cx env ty obj ity k es tys.
+    expr_body_pre cenv cx env
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
+    expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
+    place_type cenv obj = ValPT (TupleT tys) /\ k < LENGTH tys /\
+    expr_vv_sim ctx func cenv cx ty obj es ==>
+    expr_vv_sim ctx func cenv cx ty
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es
 Proof
   cheat
 QED

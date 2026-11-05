@@ -43,6 +43,7 @@ Ancestors
   vyperLookup vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeEnv
   vyperTypeExprResult vyperTypeExprSoundness
   venomExecSemantics venomInst venomState
+  gasOutcome gasSummary fragGasMode fragGasPath fragGasSeq fragGasSeqAbort
 Libs
   pairLib
 
@@ -507,6 +508,29 @@ Theorem pop_vv_post:
       (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
       (LocatedValue ann (mk_ptr (Var x6) LocMemory))
       (u with vs_inst_idx := k)
+Proof
+  cheat
+QED
+
+(* The empty pop raises without touching the state. *)
+Theorem eval_pop_name_empty[local]:
+  !cx ann id es entry.
+    lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
+    entry.value = ArrayV (DynArrayV []) ==>
+    eval_expr cx (Pop ann (NameTarget id)) es =
+      (INR (Error (RuntimeError "pop empty memory array")), es)
+Proof
+  cheat
+QED
+
+Theorem eval_pop_name_ok[local]:
+  !cx ann id es entry vs pre env rest.
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
+    entry.value = ArrayV (DynArrayV vs) /\ vs <> [] ==>
+    eval_expr cx (Pop ann (NameTarget id)) es =
+      (INL (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))])),
+       es with scopes := pre ++ env |+ (id, pop_name_entry entry vs) :: rest)
 Proof
   cheat
 QED

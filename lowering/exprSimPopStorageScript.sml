@@ -1,14 +1,16 @@
 Theory exprSimPopStorage
 Ancestors
   exprSimDefs exprSimProps loweringPosts
-  exprSimPop exprSimLeaves accountsRelProps
+  exprSimPop exprSimLen exprSimLeaves accountsRelProps
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
   vyperStorageBackend vyperStorage
   exprLowering compileEnv vyperAST emitHelper
-  exprSimHyps exprSimAttributeFields vfmState
+  exprSimHyps exprSimHypsDefs exprSimAttributeFields exprSimFieldLayout vfmState
   exprLoweringProps venomState vyperLookupStorage list
-  emitHelperProps venomExecSemantics venomInst
+  emitHelperProps venomExecSemantics venomInst exprSimVVFrame
+  gasOutcome gasSummary fragExec fragGasMode fragGasPath fragGasSeq fragGasSeqAbort
+  exprSimTopLevelProps
 
 (* Evaluation at a known declared dynamic-array slot, outside a static frame.
    This boundary does not assume that all top-level declarations are storage
@@ -379,6 +381,29 @@ Theorem pop_storage_positive_holds:
         with vs_vars := u.vs_vars ==>
   storage_holds cx tr ann (PlaceR (StoragePlace tr elem tv)) elem
     (set_storage cx es tr (apply_writes w [(0,n2w (len - 1))] (get_storage cx es tr))) u
+Proof
+  cheat
+QED
+
+Theorem pop_storage_gas_obs[local]:
+  get_storage cx (es with gas_obs := g) tr = get_storage cx es tr /\
+  set_storage cx (es with gas_obs := g) tr X =
+    set_storage cx es tr X with gas_obs := g
+Proof
+  cheat
+QED
+
+Theorem pop_storage_holds_gas_obs[local]:
+  storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w es s ==>
+  storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w
+    (es with gas_obs := g) s
+Proof
+  cheat
+QED
+
+Theorem pop_ssr_gas_obs[local]:
+  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx (es with gas_obs := g) s
 Proof
   cheat
 QED

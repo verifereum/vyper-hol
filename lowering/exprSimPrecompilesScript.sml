@@ -22,6 +22,9 @@
  *     computed_static_exec_state_rel,
  *     computed_static_exec_wb_frame, write_memory_stmt_state_rel,
  *     wb_frame_readonly_input
+ *   - counted composition: eval_exprs_suffix (operands, then a
+ *     continuation), run_inst_seq_gas_path (a straight-line run as a
+ *     counted path)
  *   - the GAS/STATICCALL/ASSERT suffix: computed_suffix_shape,
  *     computed_suffix_success, computed_suffix_failure,
  *     computed_suffix_output, computed_suffix_preserves
@@ -67,6 +70,9 @@ Ancestors
   vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
 Libs
   monadsyntax
+
+open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
+     gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
 
 Theorem padded_num_bytes_aux[local]:
   !k n. n < 256 ** k ==>
@@ -316,6 +322,26 @@ Proof
   cheat
 QED
 
+Theorem typed_args_head_admissible[local]:
+  typed_args_ready ctx func cenv cx arg_ty Inv (e::args) /\ Inv es /\
+  (!es gs. Inv es ==> Inv (es with gas_obs := gs)) ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  cheat
+QED
+
+Theorem typed_args_head_marked_facts[local]:
+  typed_args_ready ctx func cenv cx arg_ty Inv (e::args) /\ Inv es /\
+  (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\
+  gas_marked_exec F (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (es,s0) marks (INL v) mid r ==>
+  Inv (mid with gas_obs := []) /\
+  typed_args_ready ctx func cenv cx arg_ty Inv args /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes
+Proof
+  cheat
+QED
+
 Theorem lower_typed_args_sim:
   !args ctx func cenv cx arg_ty Inv es sa xs sb s0.
     typed_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
@@ -336,6 +362,7 @@ Theorem lower_typed_args_sim:
 Proof
   cheat
 QED
+
 
 Theorem num_of_bytes_l2n:
   !bs. num_of_bytes bs = l2n 256 (MAP w2n bs)
@@ -1522,6 +1549,94 @@ Theorem ecrecover_read_cases[local]:
     (case builtin_result cx es1.accounts ann ECRecover (MAP expr_type args) vs of
        INR exc => res = INR exc /\ es' = es1
      | INL w => (do precompile_call_success ECRecover; return w od) es1 = (res,es'))
+Proof
+  cheat
+QED
+
+(* An argument list's gas outcome, then a continuation on its values. *)
+Theorem eval_exprs_suffix:
+  gas_outcome F tops (ctx,func) (eval_exprs cx args) (es,s0)
+    (\rr ee t. ?vs. rr = INL vs /\ P vs ee t) (\rr ee r. wb_args_exit rr r) /\
+  (!exc ee r. wb_args_exit (INR exc) r ==> R (INR exc) ee r) /\
+  (!gs vs ee t.
+     eval_exprs cx args (es with gas_obs := gs) = (INL vs, ee) /\
+     ee.gas_obs = [] /\ P vs ee t /\ ~t.vs_halted ==>
+     ?marks. gas_summary_at F (ctx,func) marks (k vs) (ee,t) Q R) ==>
+  gas_outcome F tops (ctx,func) (bind (eval_exprs cx args) k) (es,s0) Q R
+Proof
+  cheat
+QED
+
+(* frag_exec_run_inst_seq's premise, concluding a counted target path. *)
+Theorem run_inst_seq_gas_path:
+  !ctx func st st' s Q R.
+  fn_has_code st st' func /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  isPREFIX st.cs_current_insts st'.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st') /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ((?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+         Q (s' with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
+   (?a s'. run_inst_seq (emitted_insts st st') s = Abort a s' /\
+           !n. R (Abort a (s' with vs_inst_idx := n)))) ==>
+  ?n r. gas_marked_path F ctx func s n r /\
+    ((?u. r = OK u /\ Q u /\ u.vs_current_bb = st'.cs_current_bb /\
+          u.vs_inst_idx = LENGTH st'.cs_current_insts) \/
+     (exit_result r /\ R r))
+Proof
+  cheat
+QED
+
+Theorem eval_expr_ecrecover_read_action[local]:
+  LENGTH args = 4 ==>
+  bind (eval_expr cx (Builtin ann ECRecover args)) (read_result cx) =
+  bind (eval_exprs cx args)
+    (\vs ee. case builtin_result cx ee.accounts ann ECRecover (MAP expr_type args) vs of
+       INR exc => (INR exc, ee)
+     | INL w => (do precompile_call_success ECRecover; return w od) ee)
+Proof
+  cheat
+QED
+
+Theorem ecrecover_success_path[local]:
+  compile_ecrecover h v r sig sm = (op,sb) /\ fn_has_code sm sb func /\
+  t.vs_outcomes = co::rest /\ co.co_success /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
+  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
+  wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  stmt_state_rel ctx func cenv cx es' t /\
+  eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
+  eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?n u. gas_marked_path F ctx func t n (OK u) /\
+    expr_post ctx func cenv cx (Builtin (BaseT AddressT) ECRecover args)
+      es sa sb s0 (es' with outcomes := SOME rest)
+      (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
+        NONE => 0w | SOME a => a)) op u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  cheat
+QED
+
+Theorem ecrecover_failure_path[local]:
+  compile_ecrecover h v r sig sm = (op,sb) /\
+  eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
+  eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
+  stmt_state_rel ctx func cenv cx es t /\ fn_inst_ids_distinct func /\
+  fn_has_code sm sb func /\
+  ~(?co rest. t.vs_outcomes = co::rest /\ co.co_success) /\
+  local_ptrs_reserved cenv sm /\
+  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?n a u. gas_marked_path F ctx func t n (Abort a u)
 Proof
   cheat
 QED

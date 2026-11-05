@@ -32,7 +32,7 @@ Ancestors
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst
-  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes oracleExecProps
 
 Theorem vv_holds_materialise:
   read_result cx tv es = (INL v,es) /\
@@ -375,6 +375,14 @@ Proof
   cheat
 QED
 
+(* Code without GAS leaves the gas readings alone. *)
+Theorem buffer_run_gas_readings[local]:
+  !code s t. EVERY (\i. i.inst_opcode <> GAS) code /\
+    run_inst_seq code s = OK t ==> t.vs_gas_readings = s.vs_gas_readings
+Proof
+  cheat
+QED
+
 Theorem buffer_alloc_frag:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
@@ -388,6 +396,7 @@ Theorem buffer_alloc_frag:
         lookup_var x t = SOME (n2w b) /\
         FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
         b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
+        t.vs_gas_readings = s0.vs_gas_readings /\
         (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) /\
         (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
           FLOOKUP t.vs_allocas aid = SOME a) /\

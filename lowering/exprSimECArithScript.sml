@@ -31,9 +31,10 @@
  *   ec_scratch_stores_memory, ec_scratch_stores_capacity and
  *   ec_scratch_stores_frame preserve disjoint regions and immutable bytes;
  *   ec_points_run,
- *   ec_binary_call_then composes exprs_case operands under expr_body_pre,
- *   taking an immediate exit when the first operand fails;
- *   ec_points_frag and compile_ec_call_case share the EC pipeline atop
+ *   ec_outcome_then composes a value step with a counted continuation;
+ *   ec_binary_call_gas composes exprs_case operands under expr_body_pre as
+ *   counted gas outcomes;
+ *   ec_points_path and compile_ec_call_case share the EC pipeline atop
  *   exprSimPrecompiles' allocated_payload_run and computed-call suffix.
  *)
 Theory exprSimECArith
@@ -54,7 +55,8 @@ Ancestors
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
   vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list
-  numposrep cv_std[ignore_grammar]
+  numposrep gasOutcome gasSummary gasSummaryCompose gasExemptCert
+  fragGasPath fragGasMode cv_std[ignore_grammar]
 
 Theorem lower_value_name_safe_operand[local]:
   expr_body_pre cenv cx env (Name ann id) es /\
@@ -1030,7 +1032,7 @@ Proof
   cheat
 QED
 
-Theorem ec_points_frag[local]:
+Theorem ec_points_path[local]:
   (!p scalar sf res sb func cenv cx es s lo v k e ctx ann tys r es'.
   compile_ecmul_point p scalar sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -1043,12 +1045,18 @@ Theorem ec_points_frag[local]:
   expr_val_rel cx (BaseT (UintT 256)) k scalar s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  ec_source_tail cx ann ECMul tys [v;k] es = (r,es') ==>
-  frag_exec ctx sf sb (\t. t = s)
-    (\t. ?a. r = INL a /\
-      vv_post ctx func cenv cx e es sf sb s es' a
-        (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t)
-    (expr_exit r)) /\
+  ec_source_tail cx ann ECMul tys [v;k] es = (r,es') /\
+  fn_has_code sf sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sf.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sf.cs_current_insts ==>
+  ?n r'. gas_marked_path F ctx func s n r' /\
+    ((?w. r' = OK w /\
+        (?a. r = INL a /\
+           vv_post ctx func cenv cx e es sf sb s es' a
+             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w) /\
+        w.vs_current_bb = sb.cs_current_bb /\
+        w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r' /\ expr_exit r r'))) /\
   (!p1 p2 sf res sb func cenv cx es s lo v1 v2 e ctx ann tys r es'.
   compile_ecadd_points p1 p2 sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -1062,43 +1070,62 @@ Theorem ec_points_frag[local]:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  ec_source_tail cx ann ECAdd tys [v1;v2] es = (r,es') ==>
-  frag_exec ctx sf sb (\t. t = s)
-    (\t. ?a. r = INL a /\
-      vv_post ctx func cenv cx e es sf sb s es' a
-        (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t)
-    (expr_exit r))
+  ec_source_tail cx ann ECAdd tys [v1;v2] es = (r,es') /\
+  fn_has_code sf sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sf.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sf.cs_current_insts ==>
+  ?n r'. gas_marked_path F ctx func s n r' /\
+    ((?w. r' = OK w /\
+        (?a. r = INL a /\
+           vv_post ctx func cenv cx e es sf sb s es' a
+             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w) /\
+        w.vs_current_bb = sb.cs_current_bb /\
+        w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r' /\ expr_exit r r')))
 Proof
   cheat
 QED
 
 
 
-Theorem ec_point_operands_then[local]:
-  expr_sim ctx func cenv cx ty1 a es /\
-  expr_sim ctx func cenv cx ty2 b es1 /\
-  lower_value compile_expr cenv ty1 a sa = (p,s1) /\
-  lower_value compile_expr cenv ty2 b s1 = (q,sm) /\
-  (do r <- eval_expr cx a; read_result cx r od) es = (r1,es1) /\
-  (do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2) /\
-  expr_res_ok r1 /\ expr_res_ok r2 /\
-  fn_has_code sa s1 func /\ fn_has_code s1 sm func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  local_ptrs_reserved cenv s1 /\
-  cs_extends sa s1 /\ cs_extends s1 sm /\ cs_extends sm sb /\
-  expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  expr_sim_inv cenv cx env es /\
-  (!z. p = Var z ==> not_fresh_at s1 z) /\ (!l. p <> Label l) /\
-  MAP FDOM es1.scopes = MAP FDOM es2.scopes /\ s1.cs_next_id <= sm.cs_next_id /\
-  (!r. expr_exit r1 r ==> R r) /\
-  (!v r. r1 = INL v /\ expr_exit r2 r ==> R r) /\
-  (!v1 v2 t u. r1 = INL v1 /\ r2 = INL v2 /\
-    expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
-    expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
-    expr_val_rel cx (expr_type a) v1 p u /\
-    expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u ==>
-    frag_exec ctx sm sb (\s. s = u) Q R) ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) Q R
+Theorem ec_expr_exit_INR_cast[local]:
+  expr_exit (INR exc : value + exception) r ==>
+  expr_exit (INR exc : eval_result + exception) r
+Proof
+  cheat
+QED
+
+(* A value step followed by a continuation whose outcome is counted from
+   every normal endpoint of the step. *)
+Theorem ec_outcome_then[local]:
+  gas_outcome F tops (ctx,func)
+    (m : evaluation_state -> value evaluation_result) (es,s0)
+    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
+     R (INR exc) ee r) /\
+  (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
+     P v ee t /\ ~t.vs_halted ==>
+     gas_outcome F tops (ctx,func) (k v) (ee,t) Q R) ==>
+  gas_outcome F tops (ctx,func) (bind m k) (es,s0) Q R
+Proof
+  cheat
+QED
+
+Theorem ec_eval_bind[local]:
+  (bt = ECAdd \/ bt = ECMul) ==>
+  eval_expr cx (Builtin ann bt [a;b]) =
+  bind (bind (eval_expr cx a) (read_result cx))
+    (\v1. bind (bind (eval_expr cx b) (read_result cx))
+      (\v2. ec_source_tail cx ann bt [expr_type a; expr_type b] [v1;v2]))
+Proof
+  cheat
+QED
+
+Theorem ec_source_tail_gas_obs[local]:
+  (bt = ECAdd \/ bt = ECMul) /\
+  ec_source_tail cx ann bt tys vs es = (r,es') ==>
+  ec_source_tail cx ann bt tys vs (es with gas_obs := g) =
+    (r, es' with gas_obs := g)
 Proof
   cheat
 QED
@@ -1111,41 +1138,51 @@ Proof
   cheat
 QED
 
-Theorem ec_binary_call_then[local]:
+(* Both operands as counted outcomes, then the point suffix as an actual
+   counted target path from every pair of operand endpoints. *)
+Theorem ec_binary_call_gas[local]:
   exprs_case nocalls ctx func cenv cx [a;b] /\
   expr_body_pre cenv cx env (Builtin ann bt [a;b]) es /\
   (nocalls ==> int_calls_expr (Builtin ann bt [a;b]) = []) /\
-  (bt = ECAdd \/ bt = ECMul) /\ builtin_args_length_ok bt 2 /\
+  (bt = ECAdd \/ bt = ECMul) /\
   expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   lower_value compile_expr cenv (expr_type a) a sa = (p,s1) /\
   lower_value compile_expr cenv (expr_type b) b s1 = (q,sm) /\
   cs_extends sm sb /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  eval_expr cx (Builtin ann bt [a;b]) es = (res,es') /\
-  (!es1 es2 v1 v2 t u.
-    (do r <- eval_expr cx a; read_result cx r od) es = (INL v1,es1) /\
-    (do r <- eval_expr cx b; read_result cx r od) es1 = (INL v2,es2) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!es1 es2 v1 v2 t u res es'.
     expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
     expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
     expr_val_rel cx (expr_type a) v1 p u /\
     expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u /\
     expr_result_typed env a (Value v1) /\ expr_result_typed env b (Value v2) /\
     stmt_state_rel ctx func cenv cx es2 u /\ local_ptrs_reserved cenv sm /\
-    fn_has_code sm sb func /\
+    fn_has_code sm sb func /\ ~u.vs_halted /\
+    u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
     (!z. MEM (Var z) [p;q] ==> not_fresh_at sm z) /\
     ec_source_tail cx ann bt [expr_type a;expr_type b] [v1;v2] es2 = (res,es') ==>
-    frag_exec ctx sm sb (\s. s = u)
-      (\s. ?v. res = INL v /\
-        vv_post ctx func cenv cx (Builtin ann bt [a;b]) es2 sm sb u es' v vv s)
-      (expr_exit res)) ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?v. res = INL v /\
-      vv_post ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 es' v vv s)
-    (expr_exit res)
+    ?n r. gas_marked_path F ctx func u n r /\
+      ((?w. r = OK w /\
+          (?tv. res = INL tv /\
+             vv_post ctx func cenv cx (Builtin ann bt [a;b]) es2 sm sb u es'
+               tv vv w) /\
+          w.vs_current_bb = sb.cs_current_bb /\
+          w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\ expr_exit res r))) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (Builtin ann bt [a;b]))
+    (es,s0)
+    (\res ee t. ?tv. res = INL tv /\
+       vv_post ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
 Proof
   cheat
 QED
-
 
 Theorem compile_ec_call_case[local]:
   (!nocalls ctx func cenv cx ann args.

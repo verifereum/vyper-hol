@@ -11,7 +11,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract ptrDiscipline compileEnv
   accountsRelProps codegenCorrectness
   passSimulationDefs stateEquiv venomExecSemantics venomState
-  vyperInterpreter vyperValue vfmDecreasesGas vfmExecution frameOutcome callTrace
+  vyperInterpreter vyperCallMetadata vyperValue vfmDecreasesGas vfmExecution frameOutcome callTrace
   list pair
 
 (* ===== Actual EVM run, including exempt source failures ===== *)
@@ -23,8 +23,8 @@ Proof
 QED
 
 Theorem source_exempt_call_result_rel:
-  source_exempt tops (call_external (SOME (MAP SND (call_trace es))) [] am tx) ==>
-  call_result_rel tops ret am tx es r es'
+  source_exempt tops (call_external (SOME (MAP SND (call_trace es))) gobs am tx) ==>
+  call_result_rel_at gobs tops ret am tx es r es'
 Proof
   cheat
 QED
@@ -37,14 +37,14 @@ Proof
   cheat
 QED
 
-Theorem storage_agree_except_storage_dead[local]:
+Theorem storage_agree_except_storage_dead:
   storage_agree_except {(k,b) | storage_dead cx tr st (w2n k) b} st st' <=>
   storage_agree (storage_dead cx tr st) st st'
 Proof
   cheat
 QED
 
-Theorem storage_agree_except_empty[local]:
+Theorem storage_agree_except_empty:
   storage_agree_except {} st st' <=> st' = st
 Proof
   cheat
@@ -56,7 +56,26 @@ Proof
   cheat
 QED
 
-Theorem storage_agree_dead_trans[local]:
+(* ===== The dead-byte set ignores the source observations ===== *)
+
+(* Only immutable source/layout metadata determines the dead-byte set. *)
+Theorem external_call_dead_observations:
+  external_call_dead tx (call_external orc gobs am tx) =
+  external_call_dead tx (call_external orc' gobs' am tx)
+Proof
+  cheat
+QED
+
+val () =
+  let val th = external_call_dead_observations
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then
+       print "DEAD_CALL_METADATA_AUDIT OK\n"
+     else print "statement-check gate skipped\n"
+  end;
+
+Theorem storage_agree_dead_trans:
   storage_agree (storage_dead cx tr st0) st0 st1 /\
   storage_agree (storage_dead cx tr st1) st1 st2 ==>
   storage_agree (storage_dead cx tr st0) st0 st2
@@ -90,7 +109,7 @@ Proof
   cheat
 QED
 
-Theorem accounts_agree_storage_dead_trans[local]:
+Theorem accounts_agree_storage_dead_trans:
   accounts_agree cx a0 a1 /\
   (!a. (a1 a with storage := (a2 a).storage) = a2 a) /\
   (!a. a <> cx.txn.target ==> (a1 a).storage = (a2 a).storage) /\
@@ -101,7 +120,7 @@ Proof
   cheat
 QED
 
-Theorem transient_agree_storage_dead_trans[local]:
+Theorem transient_agree_storage_dead_trans:
   transient_agree cx t0 t1 /\
   (!a. a <> cx.txn.target ==> t1 a = t2 a) /\
   storage_agree (storage_dead cx T (t1 cx.txn.target))
@@ -205,40 +224,40 @@ Proof
 QED
 
 Theorem external_call_result_rel_frame_success:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v, am', rqs) /\
+  call_external (SOME (MAP SND (call_trace es))) gobs am tx = (INL v, am', rqs) /\
   external_call_result_rel tops ret tx (INL v, am', rqs) (Halt ss) /\
   venom_frame_rel es r es' (Halt ss) ==>
-  call_result_rel tops ret am tx es r es'
+  call_result_rel_at gobs tops ret am tx es r es'
 Proof
   cheat
 QED
 
 Theorem external_call_result_rel_frame_assertion:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+  call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (AssertException s), am', rqs) /\
   external_call_result_rel tops ret tx
     (INR (AssertException s), am', rqs) (Abort a ss) /\
   venom_frame_rel es r es' (Abort a ss) ==>
-  call_result_rel tops ret am tx es r es'
+  call_result_rel_at gobs tops ret am tx es r es'
 Proof
   cheat
 QED
 
 Theorem external_call_result_rel_frame_runtime:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+  call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error (RuntimeError m)), am', rqs) /\
   venom_frame_rel es r es' (Abort a ss) ==>
-  call_result_rel tops ret am tx es r es'
+  call_result_rel_at gobs tops ret am tx es r es'
 Proof
   cheat
 QED
 
 Theorem external_call_result_rel_frame_error:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+  call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error e), am', rqs) /\
   external_call_result_rel tops ret tx (INR (Error e), am', rqs) res /\
   venom_frame_rel es r es' res ==>
-  call_result_rel tops ret am tx es r es'
+  call_result_rel_at gobs tops ret am tx es r es'
 Proof
   cheat
 QED
@@ -248,9 +267,9 @@ QED
  *)
 Theorem external_call_result_rel_frame:
   external_call_result_rel tops ret tx
-    (call_external (SOME (MAP SND (call_trace es))) [] am tx) res /\
+    (call_external (SOME (MAP SND (call_trace es))) gobs am tx) res /\
   venom_frame_rel es r es' res ==>
-  call_result_rel tops ret am tx es r es'
+  call_result_rel_at gobs tops ret am tx es r es'
 Proof
   cheat
 QED

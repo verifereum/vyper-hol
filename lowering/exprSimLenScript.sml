@@ -388,7 +388,7 @@ Proof
   cheat
 QED
 
-Theorem len_gsb_obs[local]:
+Theorem len_gsb_obs:
   !cx tr st g.
     get_storage_backend cx tr (st with gas_obs := g) =
     (FST (get_storage_backend cx tr st), SND (get_storage_backend cx tr st) with gas_obs := g)
@@ -396,7 +396,7 @@ Proof
   cheat
 QED
 
-Theorem len_rss_obs[local]:
+Theorem len_rss_obs:
   !cx tr sl tv st g.
     read_storage_slot cx tr sl tv (st with gas_obs := g) =
     (FST (read_storage_slot cx tr sl tv st),
