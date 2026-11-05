@@ -83,18 +83,6 @@ Proof
   metis_tac[supply_prefix_terminator_entry]
 QED
 
-Theorem supply_frame_reach_not_halted:
-  !ctx f s0 inst st. frame_reach ctx f s0 inst st ==>
-  (~s0.vs_halted ==> ~st.vs_halted)
-Proof
-  ho_match_mp_tac frame_reach_ind >> rpt conj_tac
-  >- (rpt strip_tac >> gvs[enters_block_def] >>
-      metis_tac[eval_phis_preserves_halted])
-  >- (rpt strip_tac >> drule step_inst_ok_halted >> gvs[]) >>
-  rpt strip_tac >> gvs[enters_block_def] >>
-  metis_tac[eval_phis_preserves_halted]
-QED
-
 Theorem supply_frame_reach_terminator_entry:
   wf_function f /\ fn_inst_wf f /\ fn_entry_state f s0 /\
   frame_reach ctx f s0 inst st /\ is_terminator inst.inst_opcode /\
@@ -654,12 +642,6 @@ Proof
   gvs[inst_wf_def, decode_invoke_def]
 QED
 
-Theorem supply_mem_corr_trans:
-  mem_corr i a j b /\ mem_corr j b k c ==> mem_corr i a k c
-Proof
-  simp[mem_corr_def] >> metis_tac[]
-QED
-
 Theorem supply_call_corr_trans:
   call_corr i a j b /\ call_corr j b k c ==> call_corr i a k c
 Proof
@@ -684,7 +666,7 @@ Theorem supply_frame_sim_trans:
 Proof
   simp[frame_sim_def] >> rpt strip_tac >>
   `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
-  metis_tac[supply_mem_corr_trans, supply_call_corr_trans]
+  metis_tac[mem_corr_trans, supply_call_corr_trans]
 QED
 
 Theorem supply_run_blocks_frame_refl:
@@ -1216,18 +1198,6 @@ Proof
   metis_tac[supply_mem_corr_refl]
 QED
 
-Theorem supply_frame_sim_rf_trans:
-  frame_sim_rf L C1 C2 f g /\ frame_sim_rf L C2 C3 g h /\
-  fn_entry_label f = fn_entry_label g ==> frame_sim_rf L C1 C3 f h
-Proof
-  simp[frame_sim_rf_def] >> rpt strip_tac >>
-  `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
-  `?inst s. frame_reach C2 g s0 inst s /\ ~in_revert_forward g s /\
-     mem_corr inst s inst' s'` by metis_tac[] >>
-  `inst_mem_ranges inst s <> []` by gvs[mem_corr_def] >>
-  metis_tac[supply_mem_corr_trans]
-QED
-
 Theorem supply_round_frame_sim_rf:
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   cfg_norm_round_supply s fn = (fn',changed,s') ==>
@@ -1263,7 +1233,7 @@ Proof
    fn_entry_label mid = fn_entry_label fn` by metis_tac[supply_round_semantics] >>
   `frame_sim_rf L C C fn mid` by metis_tac[supply_round_frame_sim_rf] >>
   Cases_on `changed` >> gvs[cfg_norm_iter_supply_def]
-  >- metis_tac[supply_frame_sim_rf_trans] >> metis_tac[]
+  >- metis_tac[frame_sim_rf_trans] >> metis_tac[]
 QED
 
 Theorem cfg_norm_function_supply_frame_sim_rf:

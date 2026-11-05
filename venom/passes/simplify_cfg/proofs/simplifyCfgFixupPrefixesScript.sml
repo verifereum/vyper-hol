@@ -240,7 +240,7 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem scfg_phi_tail_nonempty[local]:
+Theorem scfg_phi_tail_nonempty:
   bb_well_formed bb /\ bb.bb_instructions = ps ++ tail /\
   EVERY (\i. i.inst_opcode = PHI) ps ==> tail <> []
 Proof
@@ -250,7 +250,7 @@ Proof
   gvs[is_terminator_def]
 QED
 
-Theorem scfg_converted_assigns[local]:
+Theorem scfg_converted_assigns:
   EVERY (\i. i.inst_opcode = PHI) ps /\
   EVERY (\i. (fix_phi_inst actual_preds i).inst_opcode <> NOP) ps /\
   cs = FILTER (\i. (fix_phi_inst actual_preds i).inst_opcode <> PHI) ps ==>

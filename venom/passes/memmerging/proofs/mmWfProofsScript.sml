@@ -384,7 +384,7 @@ Proof
 QED
 
 (* fn_inst_ids_distinct: same inst_id implies same instruction *)
-Theorem fn_inst_ids_distinct_inj[local]:
+Theorem fn_inst_ids_distinct_inj:
   !fn x y. fn_inst_ids_distinct fn /\ MEM x (fn_insts fn) /\
             MEM y (fn_insts fn) /\ x.inst_id = y.inst_id ==> x = y
 Proof
