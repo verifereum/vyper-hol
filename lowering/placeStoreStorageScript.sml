@@ -5671,6 +5671,406 @@ Proof
    simp[] >> disch_then drule >> simp[])
 QED
 
+Theorem place_store_step_eq[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id EQ args outs) s =
+    exec_pure2 (\x y. bool_to_word (x = y)) (mk_inst id EQ args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_wcond_step:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_cond_3" /\ s.vs_inst_idx = 0 /\
+    step_inst_base (mk_inst 20 EQ
+      [Var "%13"; Lit (n2w (dimword (:256) DIV 32))] ["%14"]) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := 1)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >>
+  `j < dimword (:256)` by
+    (fs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
+  fs[place_store_step_eq, exec_pure2_def, mk_inst_def, eval_operand_def] >>
+  gvs[wordsTheory.n2w_11, arithmeticTheory.LESS_MOD] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def] >>
+  qexists_tac `j` >>
+  Cases_on `j = dimword (:256) DIV 32` >> gvs[bool_to_word_def]
+QED
+
+Theorem place_store_wrap_probe_phase_wcond_jump:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_cond_3" /\ s.vs_inst_idx = 1 /\
+    step_inst_base (mk_inst 21 JNZ
+      [Var "%14"; Label "@wcopy_exit_5"; Label "@wcopy_body_4"] []) s = OK t ==>
+    place_store_wrap_probe_phase t /\ t.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >> Cases_on `j = dimword (:256) DIV 32` >>
+  gvs[place_store_step_jnz, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, jump_to_def,
+      mload_def, contract_storage_def] >>
+  qexists_tac `j` >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_wbody_arith:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_body_4" /\
+    (s.vs_inst_idx = 0 \/ s.vs_inst_idx = 1 \/ s.vs_inst_idx = 3) /\
+    step_inst_base (EL s.vs_inst_idx [
+      mk_inst 22 MUL [Var "%13"; Lit 32w] ["%15"];
+      mk_inst 23 ADD [Var "%0"; Var "%15"] ["%16"];
+      mk_inst 24 MLOAD [Var "%16"] ["%17"];
+      mk_inst 25 ADD [Lit 0w; Var "%13"] ["%18"]]) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >>
+  `j < dimword (:256)` by
+    (fs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
+  fs[place_store_step_mul, place_store_step_add] >>
+  gvs[exec_pure2_def, mk_inst_def, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def] >>
+  qexists_tac `j` >>
+  simp[GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w,
+       arithmeticTheory.LESS_MOD]
+QED
+
+Theorem place_store_wrap_probe_phase_wbody_load:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_body_4" /\ s.vs_inst_idx = 2 /\
+    step_inst_base (mk_inst 24 MLOAD [Var "%16"] ["%17"]) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := 3)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >>
+  fs[place_store_step_mload, exec_read1_def, mk_inst_def, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def] >>
+  qexists_tac `j` >> simp[] >> strip_tac >>
+  gvs[place_store_wrap_probe_wrap_address]
+QED
+
+Theorem place_store_step_sstore[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id SSTORE args outs) s =
+    (if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands args s) then
+       Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key value u. sstore key value u)
+       (mk_inst id SSTORE args outs) s)
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_wbody_store:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_body_4" /\ s.vs_inst_idx = 4 /\
+    step_inst_base (mk_inst 26 SSTORE [Var "%18"; Var "%17"] []) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := 5)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >>
+  fs[place_store_step_sstore, exec_write2_def, mk_inst_def,
+     eval_operands_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[] >>
+  drule_all (SRULE [] place_store_wrap_probe_store_observation) >> strip_tac >>
+  gvs[place_store_wrap_probe_phase_def, sstore_def, contract_storage_def,
+      mload_def, lookup_var_def] >>
+  qexists_tac `j` >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_wbody_tail:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_body_4" /\
+    5 <= s.vs_inst_idx /\ s.vs_inst_idx < 7 /\
+    step_inst_base (EL (s.vs_inst_idx - 5) [
+      mk_inst 27 ADD [Var "%13"; Lit 1w] ["%19"];
+      mk_inst 28 ASSIGN [Var "%19"] ["%13"]]) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >> `s.vs_inst_idx = 5 \/ s.vs_inst_idx = 6` by decide_tac >>
+  gvs[] >> fs[place_store_step_add, place_store_step_assign] >>
+  gvs[exec_pure2_def, mk_inst_def, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def] >>
+  qexists_tac `j` >> simp[GSYM wordsTheory.word_add_n2w]
+QED
+
+Theorem place_store_wrap_probe_phase_wbody_jump:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_body_4" /\ s.vs_inst_idx = 7 /\
+    step_inst_base (mk_inst 29 JMP [Label "@wcopy_cond_3"] []) s = OK t ==>
+    place_store_wrap_probe_phase t /\ t.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[place_store_step_jmp] >>
+  gvs[place_store_wrap_probe_phase_def, jump_to_def,
+      mload_def, contract_storage_def] >>
+  qexists_tac `j+1` >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_wbody_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_body_4" /\ s.vs_inst_idx < 7 /\
+    lookup_block "@wcopy_body_4" func.fn_blocks = SOME
+      <|bb_label := "@wcopy_body_4"; bb_instructions := [
+        mk_inst 22 MUL [Var "%13"; Lit 32w] ["%15"];
+        mk_inst 23 ADD [Var "%0"; Var "%15"] ["%16"];
+        mk_inst 24 MLOAD [Var "%16"] ["%17"];
+        mk_inst 25 ADD [Lit 0w; Var "%13"] ["%18"];
+        mk_inst 26 SSTORE [Var "%18"; Var "%17"] [];
+        mk_inst 27 ADD [Var "%13"; Lit 1w] ["%19"];
+        mk_inst 28 ASSIGN [Var "%19"] ["%13"];
+        mk_inst 29 JMP [Label "@wcopy_cond_3"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `s.vs_inst_idx = 0 \/ s.vs_inst_idx = 1 \/ s.vs_inst_idx = 3`
+  >- (gvs[] >>
+      (irule place_store_gas_edge_nonterminator_preserves >>
+       goal_assum (drule_at Any) >> simp[] >>
+       gvs[get_instruction_def] >>
+       simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+       drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_wbody_arith) >>
+       simp[] >> disch_then drule >> simp[])) >>
+  Cases_on `s.vs_inst_idx = 2`
+  >- (irule place_store_gas_edge_nonterminator_preserves >>
+      goal_assum (drule_at Any) >> simp[] >>
+      gvs[get_instruction_def] >>
+      simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+      drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_wbody_load) >>
+      simp[] >> disch_then drule >> simp[]) >>
+  Cases_on `s.vs_inst_idx = 4`
+  >- (irule place_store_gas_edge_nonterminator_preserves >>
+      goal_assum (drule_at Any) >> simp[] >>
+      gvs[get_instruction_def] >>
+      simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+      drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_wbody_store) >>
+      simp[] >> disch_then drule >> simp[]) >>
+  `s.vs_inst_idx = 5 \/ s.vs_inst_idx = 6` by decide_tac >>
+  (irule place_store_gas_edge_nonterminator_preserves >>
+   goal_assum (drule_at Any) >> simp[] >>
+   gvs[get_instruction_def] >>
+   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+   drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_wbody_tail) >>
+   simp[] >> disch_then drule >> simp[])
+QED
+
+Theorem place_store_wrap_probe_phase_wcond_edge:
+  !ctx func s n t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@wcopy_cond_3" /\ s.vs_inst_idx = 0 /\
+    lookup_block "@wcopy_cond_3" func.fn_blocks = SOME
+      <|bb_label := "@wcopy_cond_3"; bb_instructions := [
+        mk_inst 20 EQ [Var "%13"; Lit (n2w (dimword (:256) DIV 32))] ["%14"];
+        mk_inst 21 JNZ [Var "%14"; Label "@wcopy_exit_5"; Label "@wcopy_body_4"] []]|> /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule place_store_gas_edge_nonterminator_preserves >>
+  goal_assum (drule_at Any) >> simp[get_instruction_def] >>
+  simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+  drule (SRULE [mk_inst_def] place_store_wrap_probe_phase_wcond_step) >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_wjump_edge:
+  !ctx func s n t bb inst.
+    place_store_wrap_probe_phase s /\
+    ((s.vs_current_bb = "@wcopy_cond_3" /\ s.vs_inst_idx = 1 /\
+      inst = mk_inst 21 JNZ
+        [Var "%14"; Label "@wcopy_exit_5"; Label "@wcopy_body_4"] []) \/
+     (s.vs_current_bb = "@wcopy_body_4" /\ s.vs_inst_idx = 7 /\
+      inst = mk_inst 29 JMP [Label "@wcopy_cond_3"] [])) /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    (!l b u. lookup_block l func.fn_blocks = SOME b ==>
+       eval_phis u b.bb_instructions = OK u /\
+       phi_prefix_length b.bb_instructions = 0) /\
+    gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  (irule place_store_gas_edge_terminator_preserves >>
+   goal_assum (drule_at Any) >> simp[] >>
+   qexists_tac `inst` >>
+   gvs[mk_inst_def, is_terminator_def] >> conj_tac
+   >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+   rpt strip_tac >>
+   metis_tac[SRULE [mk_inst_def] place_store_wrap_probe_phase_wcond_jump,
+             SRULE [mk_inst_def] place_store_wrap_probe_phase_wbody_jump])
+QED
+
+Theorem place_store_gas_edge_empty_block:
+  !ctx func s n t bb.
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    bb.bb_instructions = [] ==>
+    ~gas_path_edge ctx func s n (OK t)
+Proof
+  rpt strip_tac >>
+  gvs[gas_path_edge_def, get_instruction_def]
+QED
+
+Theorem place_store_wrap_probe_phase_edge:
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let sb = SND (compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa) in
+  !ctx func s n t.
+    func.fn_blocks =
+      <|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+        sb.cs_blocks /\
+    place_store_wrap_probe_phase s /\ gas_path_edge ctx func s n (OK t) ==>
+    place_store_wrap_probe_phase t
+Proof
+  mp_tac place_store_wrap_probe_code_boundaries >>
+  mp_tac place_store_wrap_probe_code_listing >>
+  simp_tac pure_ss [LET_THM] >> disch_then SUBST1_TAC >>
+  simp_tac (srw_ss()) [] >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `func` mp_tac) >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  qpat_x_assum `!bb. _ ==> lookup_block _ _ = SOME bb` kall_tac >>
+  qpat_x_assum `func.fn_blocks = _` (fn th =>
+    rule_assum_tac (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
+  Cases_on `s.vs_current_bb = "entry"` >- suspend "entry" >>
+  Cases_on `s.vs_current_bb = "@typed_sa_cond_0"` >- suspend "typed_cond" >>
+  Cases_on `s.vs_current_bb = "@typed_sa_body_1"` >- suspend "typed_body" >>
+  Cases_on `s.vs_current_bb = "@typed_sa_exit_2"` >- suspend "typed_exit" >>
+  Cases_on `s.vs_current_bb = "@wcopy_cond_3"` >- suspend "word_cond" >>
+  Cases_on `s.vs_current_bb = "@wcopy_body_4"` >- suspend "word_body" >>
+  suspend "exit"
+QED
+
+Resume place_store_wrap_probe_phase_edge[entry]:
+  `s.vs_inst_idx <= 2` by fs[place_store_wrap_probe_phase_def] >>
+  Cases_on `s.vs_inst_idx = 0`
+  >- (irule place_store_wrap_probe_entry_alloca_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  Cases_on `s.vs_inst_idx = 1`
+  >- (irule place_store_wrap_probe_phase_entry_assign_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  `s.vs_inst_idx = 2` by decide_tac >>
+  irule place_store_wrap_probe_phase_jmp_edge >>
+  goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+  qexistsl [`<|bb_label := "entry"; bb_instructions := [
+    mk_inst 0 ALLOCA [Lit 0w] ["%0"]; mk_inst 1 ASSIGN [Lit 0w] ["%1"];
+    mk_inst 2 JMP [Label "@typed_sa_cond_0"] []]|>`, `2`, `"@typed_sa_cond_0"`] >>
+  simp[get_instruction_def] >>
+  simp[lookup_block_def, listTheory.FIND_thm] >>
+  qpat_x_assum `!lbl bb s. _` mp_tac >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+
+Resume place_store_wrap_probe_phase_edge[typed_cond]:
+  `s.vs_inst_idx <= 2` by fs[place_store_wrap_probe_phase_def] >>
+  Cases_on `s.vs_inst_idx < 2`
+  >- (irule place_store_wrap_probe_phase_cond_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  `s.vs_inst_idx = 2` by decide_tac >>
+  irule place_store_wrap_probe_phase_cond_jump_edge >>
+  goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  qpat_x_assum `!lbl bb s. _` mp_tac >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+Resume place_store_wrap_probe_phase_edge[typed_body]:
+  `s.vs_inst_idx <= 11` by fs[place_store_wrap_probe_phase_def] >>
+  Cases_on `s.vs_inst_idx < 11`
+  >- (irule place_store_wrap_probe_phase_body_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  `s.vs_inst_idx = 11` by decide_tac >>
+  irule place_store_wrap_probe_phase_jmp_edge >>
+  goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  qexists_tac `17` >> simp[] >>
+  qpat_x_assum `!lbl bb s. _` mp_tac >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+Resume place_store_wrap_probe_phase_edge[typed_exit]:
+  `s.vs_inst_idx <= 1` by fs[place_store_wrap_probe_phase_def] >>
+  Cases_on `s.vs_inst_idx = 0`
+  >- (irule place_store_wrap_probe_phase_typed_exit_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  `s.vs_inst_idx = 1` by decide_tac >>
+  irule place_store_wrap_probe_phase_jmp_edge >>
+  goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  qexists_tac `19` >> simp[] >>
+  qpat_x_assum `!lbl bb s. _` mp_tac >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+Resume place_store_wrap_probe_phase_edge[word_cond]:
+  `s.vs_inst_idx <= 1` by fs[place_store_wrap_probe_phase_def] >>
+  Cases_on `s.vs_inst_idx = 0`
+  >- (irule place_store_wrap_probe_phase_wcond_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  `s.vs_inst_idx = 1` by decide_tac >>
+  irule place_store_wrap_probe_phase_wjump_edge >>
+  goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  qpat_x_assum `!lbl bb s. _` mp_tac >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+Resume place_store_wrap_probe_phase_edge[word_body]:
+  `s.vs_inst_idx <= 7` by fs[place_store_wrap_probe_phase_def] >>
+  Cases_on `s.vs_inst_idx < 7`
+  >- (irule place_store_wrap_probe_phase_wbody_edge >>
+      goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+      simp[lookup_block_def, listTheory.FIND_thm]) >>
+  `s.vs_inst_idx = 7` by decide_tac >>
+  irule place_store_wrap_probe_phase_wjump_edge >>
+  goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  qpat_x_assum `!lbl bb s. _` mp_tac >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+Resume place_store_wrap_probe_phase_edge[exit]:
+  `s.vs_current_bb = "@wcopy_exit_5"` by fs[place_store_wrap_probe_phase_def] >>
+  `~gas_path_edge ctx func s n (OK t)` suffices_by simp[] >>
+  irule place_store_gas_edge_empty_block >>
+  simp[lookup_block_def, listTheory.FIND_thm]
+QED
+Finalise place_store_wrap_probe_phase_edge
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
