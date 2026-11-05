@@ -161,3 +161,11 @@ are not available here.
   "call outcome accounts" error, as in send.
 - A static frame with nonzero value: the source errors in `frame_call_value`;
   `state_rel` gives `~cc_static` and Venom's CALL aborts on static-with-value.
+- The base moved under a previous alan run (its helpers in
+  `lowering/abi*Script.sml` were cherry-picked here; its PLAN/STATE/LEARNINGS
+  carry over). The base repair re-indexed gas to `call_result_rel_at gobs`,
+  split the oracle, added revert data and the builtin-operand premise
+  `(!n. bi <> Slice n) \/ ~is_extcode e`, and `expr_body_pre` now has the
+  `~supported_expr_exists call_operands_effect_root e` conjunct.
+  `alan-ref/send-counted/exprSimSendScript.sml.txt` is refreshed to the
+  current proved `send`; re-check helpers against it before relying on them.
