@@ -6,9 +6,6 @@
  * body_make_array_children_ok extracts the elements' from it.
  *
  * TOP-LEVEL:
- *   body_expr_ok_case  — body_expr_ok gives the shared judgments at
- *                        nocalls = F in every frame
- *   body_exprs_ok_case — body_exprs_ok is exprs_case at nocalls = F
  *   body_bop_in_literal_word_case — that case, by exprSimBopInLiteralWord's
  *                        compile_bop_in_literal_word_case
  *)
@@ -20,23 +17,6 @@ Ancestors
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
-
-Theorem body_expr_ok_case:
-  !cx e tops ctx func cenv.
-    body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
-    expr_sim_case F ctx func cenv cx e /\ expr_vv_case F ctx func cenv cx e
-Proof
-  rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
-QED
-
-Theorem body_exprs_ok_case:
-  !cx es tops ctx func cenv.
-    body_exprs_ok cx es /\ body_inv tops ctx cenv cx ==>
-    exprs_case F ctx func cenv cx es
-Proof
-  gen_tac >> Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
-  metis_tac[body_expr_ok_case]
-QED
 
 Theorem body_bop_in_literal_word_case:
   !cx ty bop e1 a t n elems.
@@ -56,10 +36,12 @@ Proof
        (mp_then Any mp_tac
           vyperTypeBuiltinsTheory.well_typed_builtin_app_length) >>
      simp[]) >>
+  `!xs. body_exprs_ok cx xs ==> exprs_case F ctx func cenv cx xs` by
+    (Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
+     gvs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
+     metis_tac[]) >>
   `exprs_case F ctx func cenv cx (e1::elems)` by
-    (simp[exprs_case_def] >> rpt conj_tac
-     >- metis_tac[body_expr_ok_case] >- metis_tac[body_expr_ok_case] >>
-     rpt strip_tac >> irule body_exprs_ok_case >> metis_tac[]) >>
+    (first_x_assum irule >> simp[body_exprs_ok_def] >> metis_tac[]) >>
   `expr_sim_case F ctx func cenv cx
      (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems]) /\
    expr_vv_case F ctx func cenv cx
