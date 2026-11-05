@@ -85,3 +85,44 @@ Proof
   rpt strip_tac >> gvs[listTheory.LAST_DEF] >>
   first_x_assum irule >> goal_assum drule >> simp[]
 QED
+
+Theorem phi_non_param_jmp_last[local]:
+  !xs. xs <> [] /\ (LAST xs).inst_opcode = JMP ==>
+    FILTER (\inst. ~is_param_opcode inst.inst_opcode) xs <> [] /\
+    LAST (FILTER (\inst. ~is_param_opcode inst.inst_opcode) xs) = LAST xs
+Proof
+  Induct_on `xs` >- simp[] >>
+  gen_tac >> Cases_on `xs = []`
+  >- gvs[venomInstTheory.is_param_opcode_def] >>
+  simp[listTheory.LAST_DEF] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `is_param_opcode h.inst_opcode` >> simp[listTheory.LAST_DEF]
+QED
+
+Theorem phi_jmp_block_spill_support:
+  generate_block_plan liveness dfg cfg fn pb ps = SOME (ops, ps') /\
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  at IN FDOM ps'.ps_spilled ==>
+  ?v. at = Var v /\
+    MEM v (live_vars_at liveness pb.bb_label (LENGTH pb.bb_instructions))
+Proof
+  strip_tac >>
+  `non_param_insts pb <> [] /\
+   (LAST (non_param_insts pb)).inst_opcode = JMP` by
+    (drule_all phi_non_param_jmp_last >> simp[non_param_insts_def]) >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule_all phi_terminal_jmp_spill_support >> simp[]
+QED
+
+Theorem phi_jmp_block_spill_fresh:
+  generate_block_plan liveness dfg cfg fn pb ps = SOME (ops, ps') /\
+  pb.bb_instructions <> [] /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  ~MEM out (live_vars_at liveness pb.bb_label (LENGTH pb.bb_instructions)) ==>
+  ~(Var out IN FDOM ps'.ps_spilled)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all phi_jmp_block_spill_support >> simp[]
+QED
