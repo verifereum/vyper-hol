@@ -700,46 +700,147 @@ output writes. This interface assumes neither source step success nor target
 suffix exclusion. Historical transport, production writer ownership, distinct
 owner separation and universal source-prefix construction remain to integrate.
 
-## Owned-demand ordinary-write integration (.67, partial)
+## Owned-demand ordinary-write integration (.67, checked conditional boundary)
 
-Checked `ptr_demand_protected_token_interval` in
-`concretizePtrDemandWriteExclusionTheory` selects ProtectedLivesets' w ONCE,
-retains its source write/no-later-write, production livesets and used/read seeds,
-and derives the demanded token's presence at every historical snapshot from w
-through the current endpoint. This bridges the same-w lifetime/token interfaces;
-it does NOT conclude target write exclusion. No exclusion theorem is installed.
+E0306, commit a7457f6d1, completes the authorized conditional exclusion.
+`ptr_demand_protected_token_interval` selects the original initializing writer
+once. `ptr_demand_interval` packages those premises and the SAME w.
+`ptr_demand_owner_layout` extracts actual production witnesses for either owner;
+`ptr_demand_other_owner_separation` is Finalised and handles all equal/strict
+bottom-depth orientations, including the actual Var write-use premise.
+`ptr_demand_ordinary_write_exclusion` (DemandWriteExclusion:698-765) combines
+fixed, identical-owner exact, and distinct-owner containment/separation rows.
+No geometry premise is assumed by that consumer. Its fixed lower bound uses
+`ptr_stage_placements_reserved_prefix`; its owned word endpoint input has a
+checked supplier `ptr_stage_placements_strict_bound` (PlacementBounds:117-128).
 
-Premise suppliers for this checked bridge are the existing endpoint conditions of
-ProtectedLivesets plus ONE exact transcript and the endpoint bottom token. The
-transcript supplies source history and its own endpoint snapshot. ProtectedLivesets
-supplies interval depth/cache/non-revert facts. TokenInterval supplies bottom-token
-continuity on exactly that interval, including w and LENGTH h-1. No pairwise
-placement disjointness or historical liveness premise was added.
+This is NOT universal coverage. The consumer explicitly requires paired
+historical value transport, classification and bounds, same labels, source
+step_writes/chrono-write equivalence and paired CALL returndata lengths.
+Zero-sized requests outside the numerical containment premises are caller cases.
+No claim that structural_transcript alone supplies these semantic inputs is made.
 
-Integration exposes a still-missing fixed-write production geometry boundary:
+## MCOPY architecture probe (.67.5)
+
+### Actual dependency ledger (not specification macros)
+
+Fix a SINGLE source observation A=EL j h and ownership snapshot
+EL j H=(tsj,rj,bj,PTj,TGj,sj,ej). The source state is A.po_state, not a fresh
+independent state. The target state t must be the paired prestate at its retained
+aligned instruction. This pairing and its historical transport are still
+**invariant data to construct**, not a theorem of structural_transcript.
+
+1. **Definedness from target to source.** For the retained MCOPY with operands
+   [dop;sop;nop], use `ptr_vars_transport_eval_all` (ValueTransport:98-110), same
+   source/target labels, and `ptr_lookup_transport_some_right` (128-133) on EACH
+   successful target evaluation. This yields three source values and their exact
+   value-transport relations. No byte-content agreement is required. The scalar
+   size is identical only after obtaining `op_prov TGj nop=NONE` and empty size
+   taint, then `ptr_value_transport_scalar_empty` (37-42). Unlike definedness,
+   numerical equality of the size is NOT automatic for an arbitrary tagged nop.
+   Scalar/label operand cases must not be lost by only using eval for Var/Lit.
+
+2. **Source discipline from this snapshot.** `ptr_structural_transcript_ownership`
+   / `ptr_demand_interval_snapshot` supply ownership at A. Erasing the transcript
+   supplies its actual source chronological history, whose reachability follows
+   from `ptr_chrono_history_reachable` (ChronologicalHistory:103-113). Unfolding
+   `ptr_discipline_def` (ptrDiscipline:625-635) gives BOTH access_ok and taint_ok
+   at A. They are not assumed for the target. `taint_ok_def` (566-585), opcode
+   MCOPY and operand membership force ALL THREE operand masks empty: MCOPY is
+   not one of the allowed tainted-variable uses. Memory-read bytes may be tainted.
+   `ptr_write_max_size_untainted` / `ptr_write_max_size_no_provenance` in
+   WritePurity give the scalar-size interface once source fn_ptr_ok is available;
+   source fn membership/wellformedness must be retained/derived from reachability.
+
+3. **Requested-range classification, not actual-footprint bounds.**
+   `ptr_source_write_classification` and `ptr_classified_write_range_def`
+   (WriteClassification:47-104) give the MCOPY request (w2n d,w2n n), requiring
+   all three source evaluations. For nonzero n outside revert forwarding,
+   `access_ok_def` (ptrDiscipline:530-545) gives the fixed row if the numerical
+   destination provenance is NONE and end<=lo; otherwise it supplies a Var
+   destination with numerical (db,sb) and db<=w2n d, end<=db+sb. Exact historical
+   erasure (`ptr_source_ownership_prov_erases`, SourceOwnership:300-306, plus
+   `ptr_ledger_erases_def`/`ptr_owner_project_def`) produces the corresponding
+   TGj tag and birth lookup; totality excludes a dangling tagged birth masquerading
+   as numerical NONE. `ptr_transcript_historical_placement` gives this SAME live
+   owner's coherent positions tuple. `ptr_stage_placements_strict_bound` gives
+   pb+sb<dimword(:256) from stage/shape/NONE-eoms/callee-first and that lookup.
+   These are existing checked suppliers; the consumer assembly from access_ok
+   is not yet an exported checked lemma. No actual empty footprint implies a
+   requested-range bound.
+
+4. **Success and chronological correspondence.** MCOPY semantics in
+   venomExecSemantics:639-647 succeeds whenever the three evaluations succeed;
+   it returns OK(mcopy ... s). There is no memory-value test, fuel check,
+   call-state check, or static-context prohibition in this branch.
+   `step_inst_non_invoke` (1870-1876) lifts base execution to step_inst.
+   Therefore SOURCE SUCCESS CAN BE CONSTRUCTED BEFORE READ AGREEMENT.
+   Once success is known, `ptr_chrono_write_def` (ChronologicalHistory:132-137)
+   reduces to requested-range membership for MCOPY, which is nonterminating and
+   non-INVOKE. `step_writes_def` and `ptr_step_write_range`
+   (WriteClassification:5-17) do not truncate MCOPY. Thus source actual footprint
+   equals the requested footprint, and hence chrono_write, without requiring
+   a new read-agreement premise or post-returndata equality. The exact adjacent
+   source poststate still belongs to the same constructed source history.
+
+5. **Masked content / ledger extension.** `ptr_mcopy_masked_content`
+   (CopyContent:7-31) already proves paired base success and immediate postwrite
+   masked byte equality FROM untainted old-read-byte agreement, all six operand
+   evaluations, and a common size. It uses `mcopy_establishes_equiv`; do NOT
+   re-prove opcode content. Upgrade with step_inst_non_invoke and determinism
+   to the already chosen actual transitions. The read-agreement premise remains
+   the genuine ledger/noninterference obligation: same-w exclusion for historical
+   intervening writes plus immediate agreements at their matched initializing
+   events. Structural history does not store those paired events/agreements.
+
+### Edge-case and cycle audit
+
+- n=0: scalar size equality makes both actual written ranges empty, regardless
+  of operand addresses. Do not apply access_ok's nonzero implication or infer
+  placement containment. Source success still requires all three operands defined.
+  Zero bytes does not imply equality of whole poststates (memory expansion fields
+  may change); only byte-content/footprint claims are vacuous.
+- Revert forwarding: access_ok deliberately supplies no range bound there.
+  For a protected owned demand's same-w interval the checked interval gives
+  non-forwarding at each j; a more general dispatcher must keep the forwarding
+  exception, not manufacture fixed/owned bounds.
+- Tainted old source bytes: no equality required there. mem_taint/written_taint
+  transfer masks to destination bytes; CopyContent uses that exact postwrite mask.
+- Overlap: mcopy_def (venomExecSemantics:80-84) computes data from OLD memory,
+  then writes. Neither a byte-by-byte evolving-memory copy nor nonoverlap is an
+  admissible replacement. Existing CopyContent handles overlap.
+- CALL contrast: its actual step_writes truncates requested length by post-return
+  data length. That extra paired-outcome dependency is absent for MCOPY and is
+  NOT solved by this probe.
+
+### Finite dependency graph and smallest next semantic boundary
 
 ```
-actual stage C -> C', NONE source eoms, shape/distinct ids/callee-first,
-fixed_region_reserved lo C, ptr_stage_placements C' positions,
-FLOOKUP positions (Allocation aid) = SOME(p,sz), k < sz
-  ==> lo <= p+k
+paired prestate transport + target operand evaluations + equal labels
+  -> three defined source operands (+ exact value transport)
+  -> source MCOPY OK (no memory agreement)
+  -> source next observation can be constructed when its cursor is aligned
+  -> source ptr_discipline access/taint facts at current observation
+source size purity + value transport -> same requested size
+source access + historical tags + stage positions/bounds
+  -> fixed/owned classification (or zero-length/non-forwarding case)
+source success + nontruncated MCOPY -> footprint/chrono equivalence
+retained earlier paired transport/agreements + same-w interval
+  -> conditional historical exclusion -> current untainted read agreement
+current read agreement + existing CopyContent -> immediate masked write agreement
 ```
 
-The owned/fixed row needs this (or equivalent disjointness from every global
-reserved interval). `ptr_write_transport_fixed_exact` then identifies target
-fixed footprints with source fixed footprints below lo. Strict/maximum eom
-bounds do NOT give a lower bound, and StagePlacements/HistoricalPlacement export
-metadata/coherence but not allocation/global-reserved separation. LayoutOutput's
-exported separation results compare local/local and local/import at a common
-liveness cursor, not global reservations. The stage induction must account for
-both own and imported metadata. Completion's exported
-`complete_alloc_positions_with_imports_fresh_disjoint` only covers NONE entries
-of the merged map against imported intervals; it is not the needed global
-reserved fact for forced/preserved positions. The generic reserved-disjoint
-completion lemmas are local. No conditional geometry premise has been added to
-the integration theorem, and no new semantic supplier was invented locally.
+The first arrow through source success is the smallest missing named semantic
+implication. The proposed exact HOL term is typechecked, NOT asserted, in
+`concretizePtrMcopyArchitectureProbeScript.sml:8-26`. It quantifies typed births,
+positions, TG, tn, source/target states, instruction and three operands/target
+values, fuel and context, and concludes existential source values, all three
+source evaluations/value relations and explicit successful step_inst. Its
+antecedent is only MCOPY shape, ptr_vars_transport, equal labels, and three
+successful target evaluations. In particular it has NO source OK, byte equality,
+future exclusion, numerical range bound, read demand or independent ownership
+witness premise. This does not by itself install a global invariant.
 
-The other integration rows still require assembly: full same-owner exact
-footprint transfer at matched actual instructions; common-cursor local/local and
-both suspended ancestor directions using historical placements; actual stage
-production witness extraction. The checked token bridge does not close these.
+Directly consulted run-owned suppliers and the syntax-only probe were rebuilt
+with holbuild (outputs m10853, m10865 and m10872). No scratch unproved theorem or specification
+macro was installed. Universal source-prefix extension is still unproved.
