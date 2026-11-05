@@ -62,6 +62,113 @@ Proof
   simp[generate_offset_plan_def, plan_holds_def, stackModelTheory.stack_push_def]
 QED
 
+(* Small computation fixture: an actual DFG, not an assumed equivalence. *)
+Definition alias_probe_fn_def:
+  alias_probe_fn = mk_raw_function "alias_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 PARAM [] ["r"];
+       mk_inst 1 ASSIGN [Var "r"] ["a"];
+       mk_inst 2 STOP [] []] |>]
+End
+
+Theorem alias_probe_normalize:
+  normalize_operand (dfg_build_function alias_probe_fn) [] (Var "a") = Var "r"
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_probe_phi_slots:
+  (SND (generate_phi_plan
+    (mk_inst 3 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"])
+    ["p"] F ((init_plan_state 0) with ps_stack := [Var "a"; Var "b"]))).ps_stack =
+    [Var "a"; Var "p"] /\
+  (SND (generate_phi_plan
+    (mk_inst 3 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"])
+    ["p"] F ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "p"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_probe_phi_live_and_dead:
+  (SND (generate_phi_plan
+    (mk_inst 3 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"])
+    ["a"; "p"] F ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack =
+    [Var "a"; Var "p"] /\
+  (SND (generate_phi_plan
+    (mk_inst 3 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"])
+    [] F ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack = [] /\
+  (SND (generate_phi_plan
+    (mk_inst 3 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"])
+    [] F ((init_plan_state 0) with ps_stack := [Var "a"; Var "a"]))).ps_stack =
+    [Var "a"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_probe_regular_consumption:
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ISZERO [Var "a"] ["z"])
+    [] F F "entry" ((init_plan_state 0) with ps_stack := [Var "a"]))).ps_stack = [] /\
+  (SND (generate_regular_inst_plan ARB (dfg_build_function alias_probe_fn)
+    ARB alias_probe_fn (mk_inst 4 ISZERO [Var "a"] ["z"])
+    [] F F "entry" ((init_plan_state 0) with ps_stack := [Var "a"; Var "a"]))).ps_stack =
+    [Var "a"]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Definition alias_probe_clean_def:
+  alias_probe_clean inputs stk height promised =
+    clean_stack_plan
+      <| ds_inst := FEMPTY |++ [(("pred",0),["a"; "b"]); (("edge",0),inputs)];
+         ds_boundary := FEMPTY |>
+      (ARB with <| cfg_preds := FEMPTY |+ ("edge",["pred"]);
+                   cfg_succs := FEMPTY |+ ("pred",["edge"; "other"]) |>)
+      (mk_raw_function "clean_probe"
+        [<| bb_label := "pred"; bb_instructions := [] |>])
+      <| bb_label := "edge"; bb_instructions := [] |>
+      ((init_plan_state 0) with <| ps_stack := stk;
+        ps_cleanup_height := height; ps_cleanup_promised := promised |> )
+End
+
+Theorem alias_probe_clean_slots:
+  (SND (alias_probe_clean ["b"] [Var "a"; Var "b"] NONE T)).ps_stack =
+    [dead_stack_marker; Var "b"] /\
+  (SND (alias_probe_clean ["b"] [Var "a"; Var "b"] NONE F)).ps_stack =
+    [Var "b"] /\
+  (SND (alias_probe_clean ["a"; "b"] [Var "a"; Var "b"] NONE T)).ps_stack =
+    [Var "a"; Var "b"] /\
+  (SND (alias_probe_clean [] [Var "a"; Var "b"] NONE T)).ps_stack =
+    [dead_stack_marker; dead_stack_marker] /\
+  (SND (alias_probe_clean ["a"] [Var "a"; Var "b"] NONE T)).ps_stack =
+    [Var "a"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_probe_jmp_residual:
+  (SND (reorder_plan (dfg_build_function alias_probe_fn) [Var "b"]
+    ((init_plan_state 0) with ps_stack := [Var "a"; Var "b"]))).ps_stack =
+    [Var "a"; Var "b"] /\
+  (SND (reorder_plan (dfg_build_function alias_probe_fn) [Var "r"; Var "a"]
+    ((init_plan_state 0) with ps_stack := [Var "a"; Var "r"]))).ps_stack =
+    [Var "r"; Var "a"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_probe_spilled_phi:
+  (SND (generate_phi_plan
+    (mk_inst 3 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"])
+    ["p"] F ((init_plan_state 0) with ps_spilled := FEMPTY |+ (Var "a",0))))
+      .ps_spilled = FEMPTY |+ (Var "a",0) /\
+  (release_dead_spills []
+    ((init_plan_state 0) with ps_spilled := FEMPTY |+ (Var "a",0))).ps_spilled = FEMPTY
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
