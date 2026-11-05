@@ -117,3 +117,53 @@ Proof
        build_phi_inst_supply_def, label_positions_ok_def, is_read0_opcode_def,
        MAP_MAP_o, combinTheory.o_DEF]
 QED
+
+Theorem ordered_set_insert_distinct:
+  ALL_DISTINCT xs ==> ALL_DISTINCT (ordered_set_insert x xs)
+Proof
+  simp[ordered_set_insert_def] >> IF_CASES_TAC >> simp[ALL_DISTINCT_APPEND]
+QED
+
+Theorem preds_foldr_distinct[local]:
+  !targets m source.
+  (!k. ALL_DISTINCT (fmap_lookup_list m k)) ==>
+  !k. ALL_DISTINCT (fmap_lookup_list
+    (FOLDR (\succ m2. m2 |+ (succ,
+      ordered_set_insert source (fmap_lookup_list m2 succ))) m targets) k)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  simp[fmap_lookup_list_update] >> IF_CASES_TAC >>
+  simp[ordered_set_insert_distinct]
+QED
+
+Theorem preds_foldl_distinct[local]:
+  !bbs m succs.
+  (!k. ALL_DISTINCT (fmap_lookup_list m k)) ==>
+  !k. ALL_DISTINCT (fmap_lookup_list
+    (FOLDL (\m bb.
+      FOLDR (\succ m2. m2 |+ (succ,
+        ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
+        m (fmap_lookup_list succs bb.bb_label)) m bbs) k)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  irule preds_foldr_distinct >> simp[]
+QED
+
+Theorem init_preds_distinct:
+  !bbs. !k. ALL_DISTINCT (fmap_lookup_list (init_preds bbs) k)
+Proof
+  qsuff_tac `!bbs m. (!k. ALL_DISTINCT (fmap_lookup_list m k)) ==>
+    !k. ALL_DISTINCT (fmap_lookup_list
+      (FOLDL (\m bb. m |+ (bb.bb_label, [])) m bbs) k)`
+  >- (strip_tac >> simp[init_preds_def] >> first_x_assum irule >>
+      simp[fmap_lookup_list_fempty]) >>
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  simp[fmap_lookup_list_update] >> gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem cfg_preds_distinct:
+  ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) lbl)
+Proof
+  simp[cfg_analyze_preds, build_preds_def] >>
+  irule preds_foldl_distinct >> simp[init_preds_distinct]
+QED
