@@ -899,3 +899,102 @@ val _ =
     if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
     then raise Fail "Body expression origin dependency" else ()
   end;
+
+(* Joint S/Q/T interface draft, NOT a theorem or an added simulation premise.
+   StageValidate must test these proposed conclusions against primitive consumers.
+
+   Canonical cuts:
+     a0 -- lower_value address --> a1 -- compile_multi_vvs ps --> a2
+        -- compile_ext_call_kwargs opts ks --> a3 -- optional GAS --> a5
+        -- compile_external_call_kwargs --> a6.
+   Q introduces an internal q cut immediately BEFORE CALL/STATICCALL; T starts
+   at q (and includes the call). Neither q nor its buffers is known at a3.
+
+   The source prefix includes read_results. Its errors map to expr_exit just
+   like errors from target, positional, and keyword evaluation. The success
+   witnesses retain the three source evaluation equations: the conditional
+   frozen hypotheses must be specialized from those equations, not asserted
+   unconditionally. The stage predicate below intentionally has no request
+   agreement or final call postcondition in its input.
+
+   Pending semantic owners:
+     S.Compose: all fragment execution and capture-history reconstruction;
+     Representation: raw vv_holds/vv_at at lowered_value_type (not expr_type);
+     Q: optional GAS frame, tuple materialization, encoder, precheck, request;
+     T: oracle step, revert/void/default/decode, final frame projections.
+
+   Keyword policy: ext_call_kwarg and compile_ext_call_kwargs both select the
+   first occurrence, not the last. well_typed_expr additionally supplies
+   ALL_DISTINCT opts and matching keyword lengths. Default's materialized
+   type is lowered_value_type ce e only in the nonword-return branch; the
+   word branch returns ret_ty as its type. These facts must be proved from
+   the two recursions, not guessed from an option membership test.
+*)
+val _ = ``
+  let call = Call ann (ExtCall stat skip sig opts) (addr::rest) dflt;
+      ps = TAKE (LENGTH (FST (SND sig))) rest;
+      ks = DROP (LENGTH (FST (SND sig))) rest;
+      ret_ty = SND (SND sig)
+  in
+  expr_body_pre ce cx env call es0 /\
+  exprs_case nocalls ctx func ce cx [addr] /\
+  (!es target esA. eval_exprs cx [addr] es = (INL target,esA) ==>
+     results_case nocalls ctx func ce cx ps) /\
+  (!es target esA esP0 rs esP.
+     eval_exprs cx [addr] es = (INL target,esA) /\
+     eval_expr_results cx ps esP0 = (INL rs,esP) ==>
+     exprs_case nocalls ctx func ce cx ks) /\
+  lower_value compile_expr ce (BaseT AddressT) addr a0 = (addr_op,a1) /\
+  compile_multi_vvs compile_expr ce ps a1 = (vvs,a2) /\
+  compile_ext_call_kwargs compile_expr ce ret_ty opts ks a2 =
+    ((value_opt,gas_opt,default_opt),a3) /\
+  (do target <- eval_exprs cx [addr];
+      rs <- eval_expr_results cx ps;
+      kwargs <- eval_exprs cx ks;
+      vs <- read_results cx rs;
+      vyperState$return (target,rs,kwargs,vs)
+   od) es0 = (res,esK) /\
+  expr_res_ok (case res of INL _ => INL NoneV | INR ex => INR ex) /\
+  fn_has_code a0 a3 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce a0 ==>
+  frag_exec ctx a0 a3
+    (\s. s = s0 /\ stmt_state_rel ctx func ce cx es0 s)
+    (\sK. ?target rs kwargs vs esA esP los his.
+      res = INL (target,rs,kwargs,vs) /\
+      eval_exprs cx [addr] es0 = (INL target,esA) /\
+      eval_expr_results cx ps esA = (INL rs,esP) /\
+      eval_exprs cx ks esP = (INL kwargs,esK) /\
+      read_results cx rs esK = (INL vs,esK) /\
+      LENGTH target = 1 /\
+      expr_val_rel cx (BaseT AddressT) (HD target) addr_op sK /\
+      expr_val_at ce cx (BaseT AddressT) a0 a3 esK (HD target) addr_op sK /\
+      LENGTH rs = LENGTH vvs /\ LENGTH rs = LENGTH ps /\
+      LENGTH rs = LENGTH los /\ LENGTH rs = LENGTH his /\
+      (!i. i < LENGTH rs ==>
+        compile_expr ce (expr_type (EL i ps)) (EL i ps) (EL i los) =
+          (EL i vvs,EL i his) /\
+        vv_holds ce cx (lowered_value_type ce (EL i ps))
+          (EL i rs) (EL i vvs) esK sK /\
+        vv_at ce cx (lowered_value_type ce (EL i ps)) (EL i los) a3
+          esK (EL i rs) (EL i vvs) sK) /\
+      LENGTH kwargs = LENGTH opts /\ LENGTH kwargs = LENGTH ks /\
+      (case ext_call_kwarg EKValue opts kwargs of
+         NONE => value_opt = NONE
+       | SOME v => ?op. value_opt = SOME op /\
+           expr_val_rel cx (BaseT (UintT 256)) v op sK) /\
+      (case ext_call_kwarg EKGas opts kwargs of
+         NONE => gas_opt = NONE
+       | SOME v => ?op. gas_opt = SOME op /\
+           expr_val_rel cx (BaseT (UintT 256)) v op sK) /\
+      (case ext_call_kwarg EKDefault opts kwargs of
+         NONE => default_opt = NONE
+       | SOME v => ?op ty i. default_opt = SOME (op,ty) /\
+           i < LENGTH ks /\ EL i opts = EKDefault /\
+           ty = (if is_word_type ret_ty then ret_ty
+                 else lowered_value_type ce (EL i ks)) /\
+           expr_val_rel cx ty v op sK /\
+           expr_val_at ce cx ty a0 a3 esK v op sK) /\
+      stmt_state_rel ctx func ce cx esK sK /\ expr_sim_inv ce cx env esK /\
+      operand_frame ce es0 s0 a0 esK sK /\ local_ptrs_reserved ce a3)
+    (expr_exit res)
+``;
