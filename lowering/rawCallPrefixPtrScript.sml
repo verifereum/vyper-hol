@@ -302,10 +302,8 @@ QED
 
 Theorem raw_call_operand_actions:
   eval_exprs cx (a::d::kws) =
-    do pair <- (do av <- bind (eval_expr cx a) (read_result cx);
-                   dv <- bind (eval_expr cx d) (read_result cx);
-                   return (av,dv) od);
-       kvs <- eval_exprs cx kws; return (FST pair::SND pair::kvs) od
+    do vs <- eval_exprs cx [a;d];
+       kvs <- eval_exprs cx kws; return (vs ++ kvs) od
 Proof
-  simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_assoc, bind_return]
+  mp_tac (Q.SPECL [`[a;d]`, `kws`, `cx`] eval_exprs_append_action) >> simp[]
 QED

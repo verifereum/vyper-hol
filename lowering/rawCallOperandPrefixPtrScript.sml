@@ -347,11 +347,10 @@ Theorem raw_call_addr_data_header_sim_ptr:
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-    (do av <- bind (eval_expr cx a) (read_result cx);
-        dv <- bind (eval_expr cx d) (read_result cx); return (av,dv) od)
+    (eval_exprs cx [a;d])
     (es,s0,G0,tn0)
     (\rr ee G tn t. ?av bs ea ta tb b x base sz.
-      rr = INL (av,BytesV bs) /\ value_has_type (BaseTV AddressT) av /\
+      rr = INL [av;BytesV bs] /\ value_has_type (BaseTV AddressT) av /\
       ea.gas_obs = [] /\
       expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data tb /\
@@ -376,7 +375,14 @@ Theorem raw_call_addr_data_header_sim_ptr:
         not_fresh_at sm v))
     (\rr ee gt r. ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r)
 Proof
-  strip_tac >> drule raw_call_pre_operands >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `eval_exprs cx [a;d] =
+     do av <- bind (eval_expr cx a) (read_result cx);
+        dv <- bind (eval_expr cx d) (read_result cx); return [av;dv] od` by
+    (rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+     simp[Once vyperInterpreterTheory.evaluate_def, bind_return, bind_assoc]) >>
+  pop_assum (fn th => rewrite_tac[th]) >>
+  drule raw_call_pre_operands >> strip_tac >> gvs[] >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sl /\ ci_mono sl sm` by
     metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
       exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND,
@@ -591,7 +597,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_return]:
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >>
   simp[fragGasPathPtrTheory.gas_summary_ptr_at_def, vyperStateTheory.return_def] >>
-  qexistsl_tac [`INL (v,BytesV bs)`, `ee'`, `H`, `un`, `OK u`] >> simp[] >>
+  qexistsl_tac [`INL [v;BytesV bs]`, `ee'`, `H`, `un`, `OK u`] >> simp[] >>
   qexistsl_tac [`ee`, `t`, `t'`, `w2n w`] >>
   simp[wordsTheory.n2w_w2n, wordsTheory.word_add_n2w,
        venomStateTheory.mload_def] >>
