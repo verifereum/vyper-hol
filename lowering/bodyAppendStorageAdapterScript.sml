@@ -1,7 +1,7 @@
 (* Body-side discharge for primitive storage Append. *)
 Theory bodyAppendStorageAdapter
 Ancestors
-  stmtSimDefs
+  stmtSimDefs exprSimSource exprSimHypsDefs
   bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorage bodySim exprSimHyps supportedStmts supportedStmtTraverse
   vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv
@@ -15,17 +15,23 @@ Theorem body_append_expr_pre:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) ==>
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (Append (TopLevelNameTarget nid) e) ==>
+            occurs_abi_decode_target target tops) ==>
   expr_body_pre cenv cx env e es
 Proof
   strip_tac >> drule supported_expr_body_calls >> strip_tac >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     fs[body_inv_def] >>
+  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   irule stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       supportedExprTraverseTheory.supported_expr_exists_def,
-      int_calls_stmt_def, int_calls_expr_def] >>
-  qexists_tac `[]` >> simp[]
+      int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
+  rpt conj_tac
+  >~ [`call_evaluation_safe`] >- (qexists_tac `[]` >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem body_append_word_encoding:
@@ -47,12 +53,15 @@ Theorem stmt_frag_storage_rel_discharge[local]:
     stmt_frag ctx func cx lctx RetQ cenv m source es) ==>
   stmt_frag ctx func cx lctx RetQ cenv m source es
 Proof
-  strip_tac >> rewrite_tac[stmtSimDefsTheory.stmt_frag_def, stmtSimDefsTheory.stmt_framed_frag_def] >>
+  strip_tac >>
+  rewrite_tac[stmtSimDefsTheory.stmt_frag_def,
+              stmtSimDefsTheory.stmt_framed_frag_def] >>
   rpt gen_tac >> strip_tac >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `_ ==> stmt_frag _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [stmtSimDefsTheory.stmt_frag_def, stmtSimDefsTheory.stmt_framed_frag_def]) >>
+    (mp_tac o REWRITE_RULE [stmtSimDefsTheory.stmt_frag_def,
+                            stmtSimDefsTheory.stmt_framed_frag_def]) >>
   simp[] >> metis_tac[]
 QED
 
@@ -63,10 +72,13 @@ Theorem body_append_storage_fragment:
   supported_expr tops e /\ expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) ==>
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (Append (TopLevelNameTarget (src,id)) e) ==>
+            occurs_abi_decode_target target tops) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
-      (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
+    (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
 Proof
   strip_tac >> drule_all body_append_target_bounds >> strip_tac >>
   drule append_typing_target >> strip_tac >>
@@ -90,6 +102,8 @@ Proof
   simp[] >>
   qexistsl_tac [`src`, `id`] >>
   simp[declared_storage_region_def, evaluate_type_def] >>
-  rpt strip_tac >> irule body_append_word_encoding >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rpt strip_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  drule body_append_word_encoding >> simp[] >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED
