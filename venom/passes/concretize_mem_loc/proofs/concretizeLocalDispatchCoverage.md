@@ -224,3 +224,22 @@ semantic read fact does not reclassify it as a clean scalar. RETPC_PARAM still
 needs the opaque-output adapter. Verified by holbuild alongside the existing
 frame/environment and local memory helpers (TO_concretize_sim-20261105T054124Z_m10375_t001,
 TO_concretize_sim-20261105T054124Z_m10384_t001).
+
+## Checked caller argument-root producer
+
+`concretizeLayoutArgumentRootsTheory.argument_roots_evaluation` now constructs
+successful target `eval_operands` and the concrete indexed `parameter_roots`
+from the caller guarded local relation and label equality. Variable roots carry
+both guarded pointer and source-mask byte relations; constants/labels carry
+equality. `argument_roots_setup` composes evaluation with paired callee setup,
+without assuming a parameter relation at the call site. Nonopaque roots expose
+`copy_ptr`/`copy_bytes`; clean scalar roots imply equal values. Opaque roots
+intentionally need not be equal. Empty argument lists and arbitrary list lengths
+are included by structural induction.
+
+This produces the caller-value portion of the incoming parameter interface;
+callee resolved-origin/parameter-taint ghost transport, independent target taint,
+control alignment and generic execution composition remain open. In particular
+no callee execution or full INVOKE simulation is asserted. Build checked with
+parameter and frame-environment theories
+(TO_concretize_sim-20261105T054124Z_m10411_t001).
