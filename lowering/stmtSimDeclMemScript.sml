@@ -981,7 +981,12 @@ Proof
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest|>`, `t`] >>
   conj_tac
   >- simp[gas_marked_exec_def] >>
-  simp[stmt_post_def, stmt_lands_def]
+  simp[stmt_post_def, stmt_lands_def] >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ (ee with scopes := scs) _` >>
+  `ee with <|scopes := scs; gas_obs := []|> =
+   (ee with scopes := scs) with gas_obs := []`
+    by simp[evaluation_state_component_equality] >>
+  metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
 QED
 
 (* x: T = e for a type T that is not a word type, where e is not the
