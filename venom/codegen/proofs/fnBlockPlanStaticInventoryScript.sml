@@ -1456,6 +1456,43 @@ Proof
   decide_tac
 QED
 
+Theorem inventory_physical_length_floor:
+  ALL_DISTINCT pending /\ set pending SUBSET set stk ==>
+  LENGTH pending <= LENGTH stk
+Proof
+  strip_tac >>
+  `CARD (set pending) <= CARD (set stk)` by
+    (irule CARD_SUBSET >> simp[]) >>
+  `CARD (set pending) = LENGTH pending` by
+    simp[ALL_DISTINCT_CARD_LIST_TO_SET] >>
+  `CARD (set stk) <= LENGTH stk` by simp[CARD_LIST_TO_SET] >>
+  decide_tac
+QED
+
+Theorem inventory_reduce_physical_pending:
+  reduce_depth_plan fuel pending op f (LENGTH pending) ps = (ops,qs) /\
+  set pending SUBSET set ps.ps_stack ==>
+  set pending SUBSET set qs.ps_stack
+Proof
+  strip_tac >> simp[SUBSET_DEF] >> rpt strip_tac >>
+  `MEM x ps.ps_stack` by gvs[SUBSET_DEF] >>
+  `LIST_ELEM_COUNT x qs.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
+    metis_tac[reduce_depth_plan_pending_stack_count_unconditional] >>
+  metis_tac[LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem inventory_exchange_membership[local]:
+  d < LENGTH (stk : operand list) /\ e < LENGTH stk ==>
+  (!x. MEM x (stack_poke e (stack_peek d stk)
+    (stack_poke d (stack_peek e stk) stk)) <=> MEM x stk)
+Proof
+  rpt strip_tac >>
+  `LIST_ELEM_COUNT x (stack_poke e (stack_peek d stk)
+     (stack_poke d (stack_peek e stk) stk)) = LIST_ELEM_COUNT x stk` by
+    metis_tac[stack_poke_exchange_multiplicity] >>
+  metis_tac[LIST_ELEM_COUNT_MEM]
+QED
+
 Theorem inventory_exchange_distinct[local]:
   !stk d e. d < LENGTH stk /\ e < LENGTH stk /\ ALL_DISTINCT stk ==>
   ALL_DISTINCT (stack_poke e (stack_peek d stk)
@@ -1578,6 +1615,141 @@ Proof
   strip_tac >> conj_tac >- metis_tac[inventory_exchange_distinct] >>
   `MEM op stk /\ MEM (stack_peek e stk) stk` by metis_tac[stack_peek_mem] >>
   gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[inventory_poke_physical_origin]
+QED
+
+Theorem inventory_two_valid_swaps[local]:
+  d < LENGTH ps.ps_stack /\ f < LENGTH ps.ps_stack /\
+  do_swap d ps = (ops,mid) /\ do_swap f mid = (ops',qs) /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
+  set qs.ps_stack = set ps.ps_stack /\ ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  strip_tac >>
+  `LENGTH mid.ps_stack = LENGTH ps.ps_stack` by
+    metis_tac[do_swap_length, pairTheory.SND] >>
+  `PERM mid.ps_stack ps.ps_stack /\ PERM qs.ps_stack mid.ps_stack` by
+    metis_tac[do_swap_stack_perm, pairTheory.SND] >>
+  `ALL_DISTINCT mid.ps_stack /\ DISJOINT (set mid.ps_stack) (FDOM mid.ps_spilled)` by
+    metis_tac[inventory_swap_partition] >>
+  `ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)` by
+    metis_tac[inventory_swap_partition] >>
+  simp[] >> gvs[EXTENSION] >> metis_tac[PERM_MEM_EQ]
+QED
+
+Theorem inventory_reorder_finish[local]:
+  d < LENGTH ps.ps_stack /\ f < LENGTH ps.ps_stack /\
+  stack_peek d ps.ps_stack = op /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  (if d = f then (pre,ps)
+   else if operand_equiv dfg op (stack_peek f ps.ps_stack) then
+     (pre,ps with ps_stack := stack_poke f op
+       (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+   else let (ops1,mid) = do_swap d ps;
+            (ops2,last) = do_swap f mid in (pre ++ ops1 ++ ops2,last)) = (ops,qs) ==>
+  set qs.ps_stack = set ps.ps_stack /\ ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  strip_tac >> Cases_on `d = f` >> gvs[] >>
+  Cases_on `operand_equiv dfg (stack_peek d ps.ps_stack)
+    (stack_peek f ps.ps_stack)` >> gvs[]
+  >- (conj_tac
+      >- (simp[EXTENSION] >> metis_tac[inventory_exchange_membership]) >>
+      metis_tac[inventory_exchange_partition]) >>
+  qpat_x_assum `(_ : stack_op list # plan_state) = _` mp_tac >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  irule inventory_two_valid_swaps >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem inventory_reorder_one_physical:
+  ALL_DISTINCT pending /\ MEM op pending /\ idx < LENGTH pending /\
+  set pending SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  reorder_one dfg pending idx op ps = (ops,qs) ==>
+  set pending SUBSET set qs.ps_stack /\ ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled) /\
+  set qs.ps_stack SUBSET set ps.ps_stack
+Proof
+  strip_tac >>
+  `FLOOKUP ps.ps_spilled op = NONE` by
+    (gvs[SUBSET_DEF, DISJOINT_DEF, EXTENSION, finite_mapTheory.FLOOKUP_DEF] >>
+     metis_tac[]) >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [reorder_one_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `stack_get_unfixed_depth op f n` >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack`
+  >- (simp[] >> strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
+  asm_simp_tac (srw_ss()) [] >> pairarg_tac >>
+  `set pending SUBSET set ps2.ps_stack /\ ALL_DISTINCT ps2.ps_stack /\
+   DISJOINT (set ps2.ps_stack) (FDOM ps2.ps_spilled) /\
+   set ps2.ps_stack SUBSET set ps.ps_stack` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     conj_tac >- (irule inventory_reduce_physical_pending >>
+       goal_assum (drule_at Any) >> simp[Abbr `n`] >> metis_tac[]) >>
+     conj_tac >- metis_tac[inventory_reduce_partition] >>
+     conj_tac >- metis_tac[inventory_reduce_partition] >>
+     simp[SUBSET_DEF] >> metis_tac[inventory_reduce_physical_origin]) >>
+  `LENGTH pending <= LENGTH ps2.ps_stack` by
+    metis_tac[inventory_physical_length_floor] >>
+  `f < LENGTH ps2.ps_stack` by
+    (simp[Abbr `f`, Abbr `n`] >> decide_tac) >>
+  asm_simp_tac (srw_ss()) [] >>
+  Cases_on `stack_get_unfixed_depth op f n ps2.ps_stack`
+  >- (simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `stack_get_unfixed_depth op f n ps2.ps_stack = SOME depth` >>
+  `depth < LENGTH ps2.ps_stack /\ stack_peek depth ps2.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  asm_simp_tac (srw_ss()) [] >> strip_tac >>
+  `set qs.ps_stack = set ps2.ps_stack /\ ALL_DISTINCT qs.ps_stack /\
+   DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)` by
+    (qpat_x_assum `stack_peek depth _ = op` (SUBST_ALL_TAC o SYM) >>
+     irule inventory_reorder_finish >> simp[] >>
+     qexistsl [`depth`, `dfg`, `f`] >> simp[] >>
+     goal_assum (drule_at Any)) >>
+  gvs[]
+QED
+
+Theorem inventory_reorder_one_pending:
+  ALL_DISTINCT pending /\ MEM op pending /\ idx < LENGTH pending /\
+  set pending SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  reorder_one dfg pending idx op ps = (ops,qs) ==>
+  set pending SUBSET set qs.ps_stack
+Proof
+  metis_tac[inventory_reorder_one_physical]
+QED
+
+Theorem inventory_reorder_one_physical_distinct:
+  ALL_DISTINCT pending /\ MEM op pending /\ idx < LENGTH pending /\
+  set pending SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  reorder_one dfg pending idx op ps = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack
+Proof
+  metis_tac[inventory_reorder_one_physical]
+QED
+
+Theorem inventory_reorder_one_physical_disjoint:
+  ALL_DISTINCT pending /\ MEM op pending /\ idx < LENGTH pending /\
+  set pending SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  reorder_one dfg pending idx op ps = (ops,qs) ==>
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  metis_tac[inventory_reorder_one_physical]
+QED
+
+Theorem inventory_reorder_one_physical_subset:
+  ALL_DISTINCT pending /\ MEM op pending /\ idx < LENGTH pending /\
+  set pending SUBSET set ps.ps_stack /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  reorder_one dfg pending idx op ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  strip_tac >> drule_all inventory_reorder_one_physical >>
+  simp[SUBSET_DEF]
 QED
 
 Theorem inventory_reorder_one_partition:
