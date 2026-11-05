@@ -21,7 +21,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
-  stmtSimAssignPlace bodyExprPreFacts bodySimExprCases
+  bodyExprPreFacts bodySimExprCases
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
 
 Theorem supported_word_type_is_word:
@@ -126,7 +126,7 @@ Theorem augassign_place_effectful_index_case:
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty bt bop e) /\
     type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
-    target_case F ctx func cenv cx bt /\ target_env_ok cenv cx /\
+    target_case F ctx func cenv cx bt /\
     ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
     ((?s p s1 s2 cur s3 s4 ptv s5.
         eval_target_place cx bt s = (INL p,s1) /\
@@ -400,7 +400,6 @@ Proof
         fs[expr_sim_inv_def, env_consistent_def, body_inv_def] >>
       drule_all augassign_immutable_runtime_untyped >> strip_tac >>
       gvs[type_stmt_def, well_typed_target_def]) >>
-  `target_env_ok cenv cx` by metis_tac[body_inv_target_env_ok] >>
   (qmatch_goalsub_abbrev_tac `AugAssign ty bt bop e` >>
   `((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k))` by
     simp[Abbr `bt`] >>

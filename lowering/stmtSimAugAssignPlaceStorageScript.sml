@@ -1031,7 +1031,7 @@ Theorem compile_augassign_place_storage_case:
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty bt bop e) /\
     type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
-    target_case F ctx func cenv cx bt /\ target_env_ok cenv cx /\
+    target_case F ctx func cenv cx bt /\
     ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
     ((?s p s1 s2 cur s3 s4 ptv s5.
         eval_target_place cx bt s = (INL p,s1) /\
