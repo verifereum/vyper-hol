@@ -106,5 +106,8 @@ Theorem asm_frame_rel_entry:
   initial_ctx_rel cplan prog ctx vs es ==>
   asm_frame_rel prog vs.vs_data_section es (entry_asm_state vs es) es
 Proof
-  cheat
+  rw[initial_ctx_rel_def, initial_state_rel_def, asm_frame_rel_def,
+     asm_evm_rel_def, entry_asm_state_def, msg_ctx_rel_def, tx_ctx_rel_def,
+     block_ctx_rel_def, blockhash_rel_def, data_suffix_assemble] >>
+  gvs[asm_pc_to_offset_def, CONJ_ASSOC]
 QED
