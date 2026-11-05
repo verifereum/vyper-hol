@@ -17,7 +17,7 @@ Ancestors
   stmtSimDefs stmtSimDeclMem valueEncodingProps vyperState
   valueCopyBytes valueTypingMemoryProps abiBuiltinAllocation exprSimBufferStore
   stmtLowering fragExec exprSimProps freshWrites fragGasPathMem exprOperandVar
-  bodyDeclCopyMemory
+  bodyDeclCopyMemory gasExemptCert exprSimSource gasOracleReplay
 Libs
   monadsyntax
 
@@ -631,6 +631,156 @@ Proof
   irule local_memory_store_body_path >> simp[] >>
   goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >> simp[]
 QED
+
+Theorem compile_assign_local_memory_widen_stmt_frag_mem[local]:
+  !d tops ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv etv ltv env.
+    body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+    body_expr_mem_ok cx e /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    cenv.ce_var_type id = SOME vtyp /\ ~is_word_type vtyp /\
+    ~is_word_type (expr_type e) /\
+    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    ((vtyp = expr_type e /\ vtyp = lowered_value_type cenv e) \/
+     is_bytestring_type vtyp /\ is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e)) /\
+    evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\
+    type_memory_bytes cenv vtyp = type_memory_size tyv /\
+    type_memory_bytes cenv (expr_type e) = type_memory_size etv /\
+    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
+    type_memory_size tyv + 64 < dimword (:256) /\
+    type_memory_size etv < 2 ** 64 /\
+    type_memory_size ltv < dimword (:256) /\
+    0 < type_memory_size etv /\ 0 < type_memory_size ltv /\
+    (!gs v es1 entry.
+       bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, es1) /\
+       lookup_scopes id es1.scopes = SOME entry ==>
+       entry.type = tyv /\ value_has_type tyv v /\
+       value_has_type etv v /\ value_has_type ltv v) ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  SUBGOAL_THEN ``lowered_value_type cenv e = vtyp \/ is_bytestring_type vtyp``
+    assume_tac
+  >- (qpat_x_assum `(_ /\ _) \/ _` mp_tac >> metis_tac[]) >>
+  drule_all assign_local_memory_widen_code_parts >> strip_tac >>
+  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (drule assign_local_admissible_rhs >> simp[]) >>
+  `!m res ee r. gas_marked_exec T (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (write_place cx (MemoryPlace id []))) (es,s0) m res ee r ==>
+    gas_marked_exec T (ctx,func)
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0) m res ee r` by
+    (drule assign_local_admissible_run >> rpt strip_tac >> fs[gas_marked_exec_def]) >>
+  drule_all assign_local_rhs_located_mem >>
+  qpat_x_assum `body_inv _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
+  qpat_x_assum `body_expr_mem_ok _ _` kall_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
+  simp[gas_outcome_def, gas_summary_at_def] >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qpat_x_assum `?res es_end r. _` strip_assume_tac >> gnvs[]
+      >- suspend "normal"
+      >> suspend "exception") >>
+  qexists_tac `marks` >> disj2_tac >> pop_assum strip_assume_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  irule assign_local_exempt >> simp[] >> metis_tac[gas_exempt_cert_unforce_result]
+QED
+
+Resume compile_assign_local_memory_widen_stmt_frag_mem[exception]:
+  markerLib.RESUME_TAC >> (
+  Cases_on `res` >- fs[expr_exit_def] >>
+  qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
+  >- (first_x_assum irule >> irule gas_marked_exec_bind_exception >> simp[]) >>
+  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+QED
+
+Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:
+  markerLib.RESUME_TAC >> (
+  `!tail. bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+       (INL v, es_end with gas_obs := tail)` by fs[gas_marked_exec_def] >>
+  drule_all assign_local_continuation_all_tails >> strip_tac >>
+  `lookup_scopes id es_end.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `entry.type = tyv /\ value_has_type tyv v /\
+   value_has_type etv v /\ value_has_type ltv v` by
+    (qpat_x_assum `!gs v es1 entry. _` irule >>
+     qexistsl [`es_end with gas_obs := []`,
+       `gas_explicit marks s0.vs_gas_readings`] >>
+     qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  `sa.cs_next_var <= sB.cs_next_var` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `return_buf_frame d cenv sB t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_post_def] >> strip_tac >>
+     irule return_buf_frame_frame >> qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
+     qpat_x_assum `cs_extends sa sB` mp_tac >> simp[cs_extends_def]) >>
+  `not_fresh_at sa p` by
+    (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     drule gas_marked_path_exec >> strip_tac >>
+     drule fragGasPathTheory.gas_path_normal >> simp[]) >>
+  drule assign_local_memory_post_path_mem >>
+  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >>
+  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
+  simp[] >> disch_then (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
+  simp[] >> strip_tac >>
+  rename1 `gas_path_mem ctx func t 0 (OK u)` >>
+  qexistsl [`INL ()`,
+    `es_end with scopes := pre ++
+      (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `OK u`] >>
+  conj_tac
+  >- (qpat_x_assum `!m res ee r. gas_marked_exec _ _ _ _ _ _ _ _ ==> _` irule >>
+      irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+        |> REWRITE_RULE [APPEND_NIL]) >>
+      qexistsl [`es_end with gas_obs := []`, `t`, `v`] >> simp[] >>
+      conj_tac
+      >- (irule stmtSimDeclComposeTheory.gas_marked_exec_end_gas_obs >> simp[]) >>
+      simp[gas_marked_exec_def, gas_explicit_def, gas_prefix_def,
+           fragGasModeTheory.gas_marked_path_def]) >>
+  `0 < type_memory_bytes cenv vtyp` by
+    (Cases_on `vtyp = expr_type e /\ vtyp = lowered_value_type cenv e`
+     >- gvs[] >>
+     `is_bytestring_type vtyp` by gvs[] >>
+     metis_tac[bytestring_memory_bytes_positive]) >>
+  `~block_is_terminated sb` by
+    (drule_at (Pos last) stmtSimDeclMemTheory.compile_assign_value_memory_widen_open >> simp[]) >>
+  disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_post_def] >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with <|scopes := _; gas_obs := _|>) u` mp_tac >>
+      qmatch_goalsub_abbrev_tac `es_end with scopes := scs` >>
+      `es_end with <|scopes := scs; gas_obs := []|> =
+       (es_end with scopes := scs) with gas_obs := []` by
+        simp[evaluation_state_component_equality] >>
+      qpat_x_assum `es_end with <|scopes := scs; gas_obs := []|> = _`
+        (fn th => pure_once_rewrite_tac [th]) >>
+      pure_rewrite_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sB x` by
+        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      qpat_x_assum `!x. not_fresh_at sB x ==> _` drule >>
+      qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` drule_all >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` drule >>
+  disch_then assume_tac >>
+  qpat_x_assum `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> _` drule >> simp[])
+QED
+
+Finalise compile_assign_local_memory_widen_stmt_frag_mem
 
 Theorem body_assign_local_memory_mem:
   !cx id e ty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
