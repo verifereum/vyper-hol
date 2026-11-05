@@ -125,5 +125,18 @@ Theorem order_probe_address_first:
     INL (AddressV 2w, Value (IntV 1))
 Proof
   rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def,
-    vyperStateTheory.bind_def] >> EVAL_TAC
+    vyperStateTheory.bind_def] >> EVAL_TAC >>
+  simp[vyperStateTheory.return_def]
+QED
+
+Theorem order_probe_source_slice:
+  !cx st acc.
+    FST (eval_expr cx order_probe_expr
+      (st with <|scopes := order_probe_scopes;
+        accounts := (\a. (acc:account_state) with code := [10w;20w;30w])|>)) =
+    INL (Value (BytesV [20w]))
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[vyperStateTheory.return_def,
+    vyperStateTheory.bind_def] >> EVAL_TAC >>
+  simp[vyperStateTheory.return_def]
 QED
