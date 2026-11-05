@@ -4,7 +4,7 @@
    MSTORE there. *)
 Theory bodyMemAugAssignAttrLocal
 Ancestors
-  bodyMemoryPreds stmtSimAugAssignAttr stmtSimAugAssign
+  bodyMemoryPreds stmtSimAugAssignAttr stmtSimAugAssign stmtSimAssignAttr
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasPathMem
   exprBopSimDefs exprBopSimProps exprSimSource exprSimDefs stmtSimDefs
@@ -16,7 +16,7 @@ Ancestors
   exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps
   venomExecSemantics venomInst venomState
   fragExec fragExecMem allocLimits valueEncoding freshWrites
-  vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
+  vyperLookup vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs
   monadsyntax
@@ -575,6 +575,78 @@ Proof
     metis_tac[not_fresh_at_mono] >>
   qexists_tac `t2` >> gvs[eval_operand_def, mload_def] >>
   metis_tac[not_fresh_at_mono]
+QED
+
+(* The store uses the live local region after RHS/operator evaluation. *)
+Theorem assign_attr_local_word_store_path_mem[local]:
+  emit_void MSTORE [dst; op] st = ((),st') /\
+  fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
+  lookup_var p s = SOME wbase /\
+  eval_operand dst s = SOME (wbase + n2w (struct_field_offset fields fld)) /\
+  eval_operand op s = SOME (typed_val_to_w256 ftv v) /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  fields_layout fields fs /\ struct_has_type fs vals /\
+  ALOOKUP fs fld = SOME ftv /\ word_value_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME ftv /\ store_lays_out ftv ftv v ==>
+  ?t. stmt_state_rel ctx func cenv cx
+        (es with scopes := pre ++
+          (env |+ (id, entry with
+            <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
+      ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+      t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+      (!x. lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t)
+Proof
+  strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `w2n (wbase + n2w (struct_field_offset fields fld)) + 32 <= s.vs_alloca_next` by
+    (irule augassign_field_address_bound_mem >> metis_tac[]) >>
+  `w2n (wbase + n2w (struct_field_offset fields fld)) =
+     w2n wbase + struct_field_offset fields fld` by
+    ( `w2n wbase + type_memory_size_fields fs <= s.vs_alloca_next` by
+        (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+         first_x_assum drule_all >> simp[type_memory_size_def] >> decide_tac) >>
+      `s.vs_alloca_next < dimword (:256)` by
+        metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
+      drule_all body_field_address_no_wrap >> simp[]) >>
+  drule_all stmt_state_rel_write_field >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n (wbase + n2w (struct_field_offset fields fld)))
+                          (typed_val_to_w256 ftv v) s` >>
+  `run_inst_seq (emitted_insts st st') s = OK u` by
+    (`step_inst_base (mk_inst st.cs_next_id MSTORE [dst; op] []) s = OK u` by
+       (qunabbrev_tac `u` >> irule step_MSTORE >> simp[]) >>
+     simp[run_inst_seq_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    (irule emit_mstore_mem_ok >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+     ~is_terminator i.inst_opcode) (emitted_insts st st')` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `gas_path_mem ctx func s 0
+     (OK (u with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
+   ~u.vs_halted /\ u.vs_current_bb = st'.cs_current_bb` by
+    (irule body_decl_cursor_path >> simp[is_terminator_def] >>
+     qexists_tac `st` >> simp[is_terminator_def]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_history func (u with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (irule body_store_memory_history >> simp[is_terminator_def] >>
+     qexistsl_tac [`s`, `st`] >> simp[is_terminator_def]) >>
+  `stmt_state_rel ctx func cenv cx
+      (es with scopes := pre ++
+        (env |+ (id, entry with
+          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) u` by
+    simp[Abbr `u`] >>
+  qexists_tac `u with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  simp[stmt_state_rel_inst_idx, gas_marked_path_def] >>
+  simp[Abbr `u`, lookup_var_def, mstore_def]
 QED
 
 Theorem body_augassign_attr_local_mem:
