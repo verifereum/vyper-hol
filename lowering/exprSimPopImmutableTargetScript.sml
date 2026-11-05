@@ -1300,6 +1300,68 @@ Proof
   qpat_x_assum `ix = &Num ix` SUBST1_TAC >> simp[] >> decide_tac
 QED
 
+Theorem imm_index_place_step[local]:
+  !cenv cx env es pv w et bd ix pv' ee.
+    expr_sim_inv cenv cx env es /\
+    imm_place_at cenv cx es pv w (ArrayT et bd) /\
+    extend_place cx pv (ValueSubscript (IntV ix)) es = (INL pv',ee) ==>
+    ee = es /\
+    imm_place_at cenv cx es pv'
+      (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+                Num ix * elem_size_in_location cenv LocCode et)) et
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `pv` >> gvs[imm_place_at_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> gvs[imm_place_at_def] >>
+  `?etv. tv = ArrayTV etv bd /\
+          evaluate_type (get_tenv cx) et = SOME etv` by
+    gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> gvs[] >>
+  drule_all imm_place_at_value_type >> strip_tac >>
+  `?av. v = ArrayV av` by
+    (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >> gvs[] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  drule_all imm_extend_place_index >>
+  Cases_on `array_index (ArrayTV etv bd) av ix` >> simp[] >> strip_tac >> gvs[] >>
+  drule_all imm_typed_array_step_offset >> strip_tac >>
+  drule_all exprSimPropsTheory.mem_path_offset_snoc >> strip_tac >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[ValueSubscript (IntV ix)]` assume_tac) >>
+  simp[imm_place_at_def, evaluate_subscripts_def] >>
+  pure_rewrite_tac[wordsTheory.word_add_n2w, arithmeticTheory.ADD_ASSOC] >>
+  REFL_TAC
+QED
+
+Theorem imm_target_post_after_index[local]:
+  !ctx func cenv cx es sa sm sn s0 em pv ty rb t e gs res ee v op u.
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM em.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+    sm.cs_next_var <= sn.cs_next_var /\
+    imm_target_post ctx func cenv cx es sa sm s0 em pv ty rb t /\
+    pure_expr e /\
+    bind (eval_expr cx e) (read_result cx) (em with gas_obs := gs) = (res,ee) /\
+    (!l. FST rb <> Label l) /\
+    expr_post ctx func cenv cx e em sm sn t (ee with gas_obs := []) v op u ==>
+    imm_target_post ctx func cenv cx es sa sn s0 (ee with gas_obs := []) pv ty rb u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?w. eval_operand (FST rb) t = SOME w /\ imm_place_at cenv cx em pv w ty`
+    by (fs[imm_target_post_frame] >> metis_tac[]) >>
+  `!x. FST rb = Var x ==> not_fresh_at sm x` by fs[imm_target_post_frame] >>
+  drule_all imm_place_at_index_post >> strip_tac >>
+  gvs[imm_place_at_gas_obs] >>
+  simp[imm_target_post_frame] >> rpt conj_tac
+  >- fs[expr_post_def]
+  >- fs[imm_target_post_frame]
+  >- fs[imm_target_post_frame]
+  >- (fs[imm_target_post_frame] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  irule wb_frame_trans >> simp[] >> conj_tac
+  >- (qexistsl_tac [`em`, `sm`, `t`] >>
+      fs[imm_target_post_frame] >>
+      metis_tac[expr_post_frame]) >>
+  metis_tac[]
+QED
+
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
