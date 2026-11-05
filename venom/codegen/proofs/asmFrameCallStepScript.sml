@@ -1135,6 +1135,58 @@ Proof
   drule_all asm_call_step_terminal >> simp[]
 QED
 
+Theorem asm_call_prepare_failure_view:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  asm_call_prepare op s = (INR e,t) ==>
+  t.contexts = (c with stack := DROP (6 + (if call_has_value op then 1 else 0)) c.stack,rb)::rest /\
+  t.txParams = s.txParams
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  qabbrev_tac `vo:num = if call_has_value op then 1 else 0` >>
+  qabbrev_tac `args = TAKE (6 + vo) c.stack` >>
+  qabbrev_tac `gas = w2n (EL 0 args)` >>
+  qabbrev_tac `address' = w2w (EL 1 args) : address` >>
+  qabbrev_tac `value' = if 0 < vo then w2n (EL 2 args) else 0` >>
+  qabbrev_tac `ao' = w2n (EL (2 + vo) args)` >>
+  qabbrev_tac `az' = w2n (EL (3 + vo) args)` >>
+  qabbrev_tac `ro' = w2n (EL (4 + vo) args)` >>
+  qabbrev_tac `rs' = w2n (EL (5 + vo) args)` >>
+  qabbrev_tac `range' = max_expansion_range (ao',az') (ro',rs')` >>
+  qabbrev_tac `newSize = if 0 < SND range' then word_size (FST range' + SND range') * 32 else 0` >>
+  qabbrev_tac `mxCost = memory_expansion_cost (buffer_length c.memory) newSize` >>
+  qabbrev_tac `expansion = MAX (buffer_length c.memory) newSize - buffer_length c.memory` >>
+  qabbrev_tac `ac = if fIN address' s.rollback.accesses.addresses then warm_access_cost else cold_access_cost` >>
+  qabbrev_tac `warmed = s with <| contexts := (c with stack := DROP (6 + vo) c.stack,rb)::rest;
+    rollback := s.rollback with accesses := s.rollback.accesses with
+      addresses := fINSERT address' s.rollback.accesses.addresses;
+    msdomain := Collect (d with addresses updated_by fINSERT address') |>` >>
+  qabbrev_tac `accounts' = s.rollback.accounts` >>
+  qabbrev_tac `target = lookup_account address' accounts'` >>
+  qabbrev_tac `resolved = case get_delegate target.code of
+    NONE => (target.code,0,warmed)
+  | SOME delegate => ((lookup_account delegate accounts').code,
+      (if fIN delegate warmed.rollback.accesses.addresses then warm_access_cost else cold_access_cost),
+      warmed with <| rollback := warmed.rollback with accesses := warmed.rollback.accesses with
+        addresses := fINSERT delegate warmed.rollback.accesses.addresses;
+        msdomain := Collect (d with addresses updated_by (fINSERT delegate o fINSERT address')) |>)` >>
+  PairCases_on `resolved` >>
+  qabbrev_tac `vc = if 0 < value' then call_value_cost else 0` >>
+  qabbrev_tac `cc = if op = Call /\ 0 < value' /\ account_empty target then new_account_cost else 0` >>
+  qabbrev_tac `cg = call_gas value' gas (c.msgParams.gasLimit - c.gasUsed) mxCost (ac+vc+cc+resolved1)` >>
+  qabbrev_tac `charge = static_gas op + FST cg + mxCost` >>
+  rule_assum_tac (REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by metis_tac[] >>
+  drule_all asm_call_prepare_collect_eq >>
+  qpat_x_assum `asm_call_prepare _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  Cases_on `c.msgParams.gasLimit < c.gasUsed + charge` >> simp[] >>
+  strip_tac >>
+  Cases_on `get_delegate target.code` >>
+  qpat_x_assum `(resolved0,resolved1,resolved2) = _` mp_tac >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
 
 Theorem asm_expand_memory_append_zeros[local]:
   asm_expand_memory n mem =
