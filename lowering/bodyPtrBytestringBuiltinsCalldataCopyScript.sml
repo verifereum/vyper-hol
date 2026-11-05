@@ -26,3 +26,24 @@ Proof
   Cases_on `eval_operand src s` >>
   simp[eval_operand_def, write_memory_with_expansion_def]
 QED
+
+Theorem calldatacopy_step:
+  !dst s d src a count n fuel ctx id.
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+  eval_operand count s = SOME n ==>
+  step_inst fuel ctx (mk_inst id CALLDATACOPY [dst; src; count] []) s =
+    OK (write_memory_with_expansion (w2n d)
+      (TAKE (w2n n) (DROP (w2n a) s.vs_call_ctx.cc_calldata ++
+                     REPLICATE (w2n n) 0w)) s)
+Proof
+  rpt strip_tac >> simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem calldatacopy_step_prov:
+  !PG G id dst src count s'.
+    step_prov PG G (mk_inst id CALLDATACOPY [dst; src; count] []) s' = G
+Proof
+  simp[step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV]
+QED
