@@ -1270,7 +1270,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fn_cfg_edge_iff_fn_succ[local]:
+Theorem fn_cfg_edge_iff_fn_succ:
   ALL_DISTINCT (fn_labels func) ==>
   (fn_cfg_edge func src dst <=> fn_succ func src dst)
 Proof
@@ -1635,7 +1635,7 @@ Proof
 QED
 
 
-Theorem do_merge_jump_metadata[local]:
+Theorem do_merge_jump_metadata:
   do_merge_jump func a b label_map = SOME (func',label_map') ==>
   fn_identity_metadata_eq func' func /\
   fn_static_input_eq func' func /\

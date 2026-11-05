@@ -385,6 +385,7 @@ Proof
     fs[listTheory.EVERY_MEM] >>
   drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_run_ptr_safe_composed >> strip_tac >>
+  `0 <= vs.vs_alloca_next` by simp[] >>
   drule_all ptrSafeRunTheory.ptr_safe_ptr_discipline >> simp[]
 QED
 
@@ -524,4 +525,42 @@ Proof
   `w2n off <= LENGTH s.vs_data_section` by
     (fs[inst_dload_in_section_def] >> metis_tac[]) >>
   gvs[code_layout_valid_def, wordsTheory.dimword_def]
+QED
+
+(* Every reachable alloca frontier, plus 32 bytes per DLOAD in the unit,
+   stays below 2^256, so LowerDload's scratch sites do not wrap:
+   alloca_frontier_inv bounds the frontier by unit_alloca_budget, and
+   lowering_context_ok, which run_lowering checks, leaves 32 bytes per
+   DLOAD above that budget. *)
+Theorem lower_vyper_runtime_unit_dload_headroom_ok:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    initial_venom_state_rel tops am tx vs
+    ==> mem_inv dload_headroom_ok unit.cu_context vs
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule run_lowering_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  drule lowering_context_ok_integrity >> strip_tac >>
+  drule lowering_context_ok_static_integrity >> strip_tac >>
+  drule lowering_context_ok_dload_budget >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `?lbl. fn_entry_label fn = SOME lbl` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  simp[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+  qexists_tac `alloca_frontier_inv` >> rpt conj_tac
+  >- (irule alloca_frontier_inv_closed >> simp[])
+  >- (irule alloca_frontier_inv_entry >>
+      simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
+           reachable_call_graph_acyclic_def] >>
+      fs[initial_venom_state_rel_def] >> metis_tac[]) >>
+  rw[dload_headroom_ok_def, alloca_frontier_inv_def, ctx_dload_count_def] >>
+  fs[rich_listTheory.FILTER_FLAT, rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o,
+     combinTheory.o_DEF] >>
+  decide_tac
 QED

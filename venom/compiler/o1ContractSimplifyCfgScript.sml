@@ -312,8 +312,9 @@ QED
 
 (* The source rows besides the memory invariant: no layout end, no
    DALLOCA, the pointer discipline above a reserved fixed region, taint
-   only in the dead bytes D, no FMP convention or operation, and DLOAD
-   offsets that fit after the code.  The
+   only in the dead bytes D, no FMP convention or operation, DLOAD
+   offsets that fit after the code, and alloca headroom for LowerDload's
+   scratch sites.  The
    pre-walk run keeps them.  Admitted for now. *)
 Theorem simplify_cfg_stage_src_extras:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
@@ -321,7 +322,8 @@ Theorem simplify_cfg_stage_src_extras:
   o1_src_inv D C vs ==>
   EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
   (?lo. fixed_region_reserved lo C' /\ ptr_discipline lo C' vs) /\
-  taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs
+  taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
+  mem_inv dload_headroom_ok C' vs
 Proof
   cheat
 QED
@@ -364,17 +366,21 @@ Proof
      rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
      metis_tac[o1_fn_shape_def]) >>
   conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
-  simp[o1_ssa_inv_def] >> conj_tac
+  simp[o1_ssa_inv_def, GSYM CONJ_ASSOC] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
       qexists_tac `eom` >> conj_tac
       >- metis_tac[simplify_cfg_stage_max_live_eom] >>
       irule simplify_cfg_stage_mem_inv_rf >>
       metis_tac[mem_corr_closed_rf_lowered_mem_fact]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
-  simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  `simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>
-  irule simplify_cfg_preserves_wf_ssa >>
-  gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
+  simp[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> conj_tac >> rpt strip_tac
+  >- (`simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>
+      irule simplify_cfg_preserves_wf_ssa >>
+      gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
+      `o1_fn_shape C y` by metis_tac[] >>
+      gvs[o1_fn_shape_def]) >>
+  irule simplify_cfg_establishes_all_reachable >>
+  gvs[o1_ctx_shape_def, EVERY_MEM] >>
   `o1_fn_shape C y` by metis_tac[] >>
   gvs[o1_fn_shape_def]
 QED

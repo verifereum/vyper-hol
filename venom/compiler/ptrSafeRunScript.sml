@@ -1079,7 +1079,8 @@ Theorem ptr_safe_ptr_discipline:
     EVERY (\f. fn_ptr_ok P (reachable_fn f)) ctx.ctx_functions /\
     (!fuel. ptr_safe_blocks D lo fuel ctx fn [] FEMPTY entry_taint
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                          vs_inst_idx := 0 |>)) ==>
+                          vs_inst_idx := 0 |>)) /\
+    lo <= vs.vs_alloca_next ==>
     ptr_discipline lo ctx vs /\ taint_within D ctx vs
 Proof
   rpt gen_tac >> strip_tac >>

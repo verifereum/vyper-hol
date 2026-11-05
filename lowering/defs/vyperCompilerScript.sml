@@ -477,14 +477,20 @@ End
    unit: every function's labels distinct and an entry block, and the
    reachable call graph acyclic.  ptr_ok_check is what S3's pointer
    discipline asks of it (fn_ptr_ok).  Like the inst-id and budget checks, they
-   are decided on the unit rather than proved of the lowering. *)
+   are decided on the unit rather than proved of the lowering.  The budget
+   check leaves room for 32 bytes per DLOAD: LowerDload gives each DLOAD a
+   32-byte scratch ALLOCA, so its output's frontier runs that far past the
+   input's. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
     wf_invoke_targets_check ctx /\
     ctx_inst_ids_distinct ctx /\
     forced_alloc_inputs_check ctx /\
-    unit_alloca_budget ctx < dimword (:256) /\
+    unit_alloca_budget ctx +
+      32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                     (FLAT (MAP fn_insts ctx.ctx_functions))) <
+      dimword (:256) /\
     EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
       ctx.ctx_functions /\
     reachable_fcg_acyclic ctx (fcg_analyze ctx) /\
@@ -527,6 +533,16 @@ QED
 Theorem lowering_context_ok_alloca_budget:
   !ctx. lowering_context_ok ctx ==>
         unit_alloca_budget ctx < dimword (:256)
+Proof
+  simp[lowering_context_ok_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem lowering_context_ok_dload_budget:
+  !ctx. lowering_context_ok ctx ==>
+        unit_alloca_budget ctx +
+          32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                         (FLAT (MAP fn_insts ctx.ctx_functions))) <
+          dimword (:256)
 Proof
   simp[lowering_context_ok_def]
 QED

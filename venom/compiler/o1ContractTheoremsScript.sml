@@ -22,7 +22,9 @@
 Theory o1ContractTheorems
 Ancestors
   o1PassContract o1DretDesugarContract o1ContractFmpLowering unitMemInv
-  venomPassSchedule venomCompilerTypes o1ContractSimplifyCfg
+  o1ContractCfgNorm
+  venomPassSchedule venomCompilerTypes o1ContractLowerDloadStage
+  o1ContractSimplifyCfg o1ContractSue
 
 (* ===== The pre-walk runs ===== *)
 
@@ -45,12 +47,8 @@ Proof
   cheat
 QED
 
-Theorem o1_contract_lower_dload:
-  o1_step_contract_at 1 rpolicy (CFP_Simple VP_LowerDload) /\
-  o1_run_contract rpolicy D 1
-Proof
-  cheat
-QED
+Theorem o1_contract_lower_dload =
+  o1ContractLowerDloadStageTheory.o1_contract_lower_dload
 
 (* ConcretizeMemLoc reads callee layouts (the walk view): the raw
    invariant becomes the static one. *)
@@ -76,12 +74,8 @@ QED
 Theorem o1_contract_simplify_cfg =
   o1ContractSimplifyCfgTheory.o1_contract_simplify_cfg
 
-Theorem o1_contract_sue:
-  o1_step_contract_at 6 rpolicy (CFP_Simple VP_SingleUseExpansion) /\
-  o1_run_contract rpolicy D 6
-Proof
-  cheat
-QED
+Theorem o1_contract_sue =
+  o1ContractSueTheory.o1_contract_sue
 
 (* DFT reorders GAS reads: forall-out exists-in over the oracle. *)
 Theorem o1_contract_dft:
@@ -91,9 +85,5 @@ Proof
   cheat
 QED
 
-Theorem o1_contract_cfg_normalization:
-  o1_step_contract_at 8 rpolicy (CFP_Simple VP_CFGNormalization) /\
-  o1_run_contract rpolicy D 8
-Proof
-  cheat
-QED
+Theorem o1_contract_cfg_normalization =
+  o1ContractCfgNormTheory.o1_contract_cfg_normalization

@@ -2498,6 +2498,103 @@ Resume copy_fact_transfer_sound_thm[fwd_alloca]:
   gvs[cf_key_size_ok_def, ce_memloc_ml_size_only_sz]
 QED
 
+(* Static source bounds: resolution does not require an execution step. *)
+Theorem copy_fact_resolve_alloca[local]:
+  !bp dfg cfl op src sz s final_op final_src.
+    bp_assigns_stable bp dfg /\
+    cf_keys_ok bp cfl /\ cf_alloca_ok bp cfl s /\
+    (op = MCOPY ==> memloc_within_alloca (ce_memloc_from_ops bp src sz) s) /\
+    copy_fact_resolve bp dfg cfl op src sz = (final_op, final_src) ==>
+    (final_op = MCOPY ==>
+     memloc_within_alloca (ce_memloc_from_ops bp final_src sz) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `copy_fact_resolve _ _ _ _ _ _ = _` mp_tac >>
+  simp[copy_fact_resolve_def] >> IF_CASES_TAC
+  >- (CASE_TAC
+      >- (strip_tac >> gvs[]) >>
+      simp[LET_THM] >> strip_tac >> gvs[] >> strip_tac >>
+      rename1 `FLOOKUP _ _ = SOME src_cf` >>
+      drule_all cf_entry_facts_from_flookup >> strip_tac >> gvs[] >>
+      `memloc_within_alloca
+         (ce_memloc_from_ops bp (normalize_operand dfg [] src_cf.cf_source)
+            src_cf.cf_size) s` by
+        (irule memloc_within_alloca_normalize >> simp[]) >>
+      irule (iffRL memloc_within_alloca_change_sz) >>
+      qexists `src_cf.cf_size` >> simp[] >>
+      `!l. src_cf.cf_source <> Label l` by
+        metis_tac[ce_memloc_fixed_not_label] >>
+      simp[ce_memloc_ml_size_only_sz] >>
+      `!l. src <> Label l` by metis_tac[ce_memloc_fixed_not_label] >>
+      gvs[cf_key_size_ok_def, ce_memloc_ml_size_only_sz] >>
+      Cases_on `normalize_operand dfg [] src_cf.cf_source` >>
+      simp[ce_memloc_size_projection]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem cf_alloca_ok_opt_transfer:
+  !ctx fn s bb inst a.
+    bp_assigns_stable ctx.ce_bp ctx.ce_dfg /\
+    bp_ptrs_bounded ctx.ce_bp fn s /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    cf_keys_ok_opt ctx.ce_bp a /\ cf_alloca_ok_opt ctx.ce_bp a s ==>
+    cf_alloca_ok_opt ctx.ce_bp (copy_fact_transfer ctx inst a) s
+Proof
+  rpt strip_tac >>
+  `cf_alloca_ok ctx.ce_bp (unwrap_copy_facts a) s` by
+    (irule cf_alloca_ok_opt_unwrap >> simp[]) >>
+  simp[copy_fact_transfer_def, LET_THM] >> IF_CASES_TAC
+  >- suspend "copy" >>
+  IF_CASES_TAC
+  >- (simp[cf_alloca_ok_opt_def, copy_fact_invalidate_def] >>
+      IF_CASES_TAC >> simp[cf_alloca_ok_fempty] >>
+      irule cf_alloca_ok_drestrict >> simp[]) >>
+  IF_CASES_TAC
+  >- simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty] >>
+  simp[cf_alloca_ok_opt_def, copy_fact_prune_vars_def] >>
+  irule cf_alloca_ok_drestrict >> simp[]
+QED
+
+Resume cf_alloca_ok_opt_transfer[copy]:
+  Cases_on `inst.inst_operands`
+  >- simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty] >>
+  rename1 `inst.inst_operands = dst::rest` >> Cases_on `rest`
+  >- simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty] >>
+  rename1 `inst.inst_operands = dst::src::rest` >> Cases_on `rest`
+  >- simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty] >>
+  rename1 `inst.inst_operands = dst::src::sz::rest` >> Cases_on `rest`
+  >- (simp[] >> pairarg_tac >> gvs[] >>
+      IF_CASES_TAC >- simp[cf_alloca_ok_opt_def] >>
+      IF_CASES_TAC
+      >- suspend "insert" >>
+      simp[cf_alloca_ok_opt_def, copy_fact_invalidate_def] >>
+      IF_CASES_TAC >> simp[cf_alloca_ok_fempty] >>
+      irule cf_alloca_ok_drestrict >> simp[]) >>
+  simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty]
+QED
+
+Resume cf_alloca_ok_opt_transfer[insert]:
+  irule cf_alloca_ok_opt_invalidate_fupdate_step >> qexists `s` >> simp[] >>
+  conj_tac
+  >- (`cf_keys_ok ctx.ce_bp (unwrap_copy_facts a)` by
+        (irule cf_keys_ok_opt_unwrap >> simp[]) >>
+      `inst.inst_opcode = MCOPY ==>
+       memloc_within_alloca (ce_memloc_from_ops ctx.ce_bp src sz) s` by
+        (strip_tac >> irule bp_ptrs_bounded_mcopy_read_loc >> metis_tac[]) >>
+      metis_tac[copy_fact_resolve_alloca]) >>
+  `bp_get_write_location ctx.ce_bp inst AddrSp_Memory =
+    ce_memloc_from_ops ctx.ce_bp dst sz` by
+    (irule is_copy_write_loc_eq >> simp[]) >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> INVOKE /\
+   ~is_raw_fmp_opcode inst.inst_opcode /\
+   Eff_MEMORY IN write_effects inst.inst_opcode` by
+    (drule copy_opcode_cases >> strip_tac >>
+     gvs[write_effects_def, is_raw_fmp_opcode_def]) >>
+  drule_all bp_ptrs_bounded_write_loc >> simp[]
+QED
+
+Finalise cf_alloca_ok_opt_transfer
+
 (* LENGTH of the TAKE/DROP/REPLICATE bytes used in MCOPY *)
 Triviality mcopy_bytes_length[local]:
   !src sz mem. LENGTH (TAKE sz (DROP src mem ++ REPLICATE sz 0w)) = sz

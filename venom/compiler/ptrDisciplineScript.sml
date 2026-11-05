@@ -33,7 +33,9 @@
  * with a non-pointer, ASSIGN/PHI, and INVOKE arguments at P's positions
  * (fn_ptr_ok); and at every frame_reachable state each nonempty access
  * lies inside the site its address operand points into (access_ok), and
- * tainted data is only copied or stored (taint_ok).
+ * tainted data is only copied or stored (taint_ok).  The run starts with
+ * its alloca frontier at or above lo, so a pass that adds ALLOCA sites
+ * still places them at or above lo.
  *
  * ALLOCA and DALLOCA pointers are covered; GETFMP, SETFMP, RETFMP and
  * FMP_PARAM are excluded, as no source emits them.  After ConcretizeMemLoc, static
@@ -522,8 +524,9 @@ End
 (* Each nonempty access ending above lo, and each nonempty access through
    a pointer, lies inside the site its address operand points into, unless it is part of a revert forwarding, which
    copies the callee's revert data to a zero-size site and reverts with
-   it.  Two compared pointers point into the same site, or just past its
-   end. *)
+   it.  Two compared pointers point into the same nonempty site, or just
+   past its end: nonempty sites are disjoint, so (b,sz) names one site,
+   while two zero-size sites can share it. *)
 Definition access_ok_def:
   access_ok lo G fn inst s <=>
     (~in_revert_forward fn s ==>
@@ -547,6 +550,7 @@ Definition access_ok_def:
        inst.inst_operands = [Var u; Var w] /\
        (u IN FDOM G \/ w IN FDOM G) ==>
        ?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
+                  0 < sz /\
                   eval_operand (Var u) s = SOME x /\
                   eval_operand (Var w) s = SOME y /\
                   b <= w2n x /\ w2n x <= b + sz /\
@@ -620,6 +624,7 @@ End
    allowed on pointers may then compare a pointer with a non-pointer. *)
 Definition ptr_discipline_def:
   ptr_discipline (lo:num) ctx vs <=>
+    lo <= vs.vs_alloca_next /\
     ?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
           ctx.ctx_functions /\
         !stk PG G tn fn inst s.

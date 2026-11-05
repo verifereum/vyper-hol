@@ -788,6 +788,7 @@ Proof
   drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_dload_offset_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_dload_headroom_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by

@@ -259,3 +259,108 @@ Proof
   first_x_assum drule >>
   PairCases_on `e` >> simp[] >> metis_tac[]
 QED
+
+(* Backwards traversal of ASSIGN copies; instruction lists are latest first. *)
+Theorem resolve_block_assigns_nonvar[simp]:
+  (!xs w. resolve_block_assigns xs (Lit w) = Lit w) /\
+  (!xs l. resolve_block_assigns xs (Label l) = Label l)
+Proof
+  conj_tac >> Cases >> simp[resolve_block_assigns_def]
+QED
+
+Theorem step_back_assign_no_write:
+  (case op of Var v => ~MEM v inst.inst_outputs | _ => T) ==>
+  step_back_assign inst op = SOME op
+Proof
+  Cases_on `op` >> simp[step_back_assign_def]
+QED
+
+Theorem resolve_block_assigns_no_write:
+  EVERY (\a. case op of Var v => ~MEM v a.inst_outputs | _ => T) xs ==>
+  resolve_block_assigns xs op = op
+Proof
+  Cases_on `op` >> Induct_on `xs` >> simp[resolve_block_assigns_def]
+QED
+
+Theorem step_back_assign_copy:
+  inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [v] /\
+  inst.inst_operands = [src] ==>
+  step_back_assign inst op = SOME (if op = Var v then src else op)
+Proof
+  Cases_on `op` >> simp[step_back_assign_def] >> metis_tac[]
+QED
+
+Theorem resolve_block_assigns_copy_cons:
+  inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [v] /\
+  inst.inst_operands = [src] ==>
+  resolve_block_assigns (inst::xs) op =
+    resolve_block_assigns xs (if op = Var v then src else op)
+Proof
+  Cases_on `op` >> simp[resolve_block_assigns_def] >> metis_tac[]
+QED
+
+Theorem resolve_block_assigns_copy_append:
+  EVERY (\a. a.inst_opcode = ASSIGN /\ LENGTH a.inst_outputs = 1 /\
+              LENGTH a.inst_operands = 1) xs ==>
+  resolve_block_assigns (xs ++ ys) op =
+    resolve_block_assigns ys (resolve_block_assigns xs op)
+Proof
+  qid_spec_tac `op` >> Induct_on `xs`
+  >- simp[resolve_block_assigns_def]
+  >> simp[] >> rpt strip_tac
+  >> gvs[listTheory.LENGTH_EQ_NUM_compute]
+  >> drule_all resolve_block_assigns_copy_cons
+  >> disch_then (fn th => rewrite_tac[th])
+  >> simp[]
+QED
+
+Theorem same_after_assigns_refl[simp]:
+  same_after_assigns xs op op
+Proof
+  Cases_on `xs` >> simp[same_after_assigns_def]
+QED
+
+Theorem same_after_assigns_copy_prefix:
+  EVERY (\a. a.inst_opcode = ASSIGN /\ LENGTH a.inst_outputs = 1 /\
+              LENGTH a.inst_operands = 1) xs /\
+  same_after_assigns ys (resolve_block_assigns xs p)
+                        (resolve_block_assigns xs q) ==>
+  same_after_assigns (xs ++ ys) p q
+Proof
+  map_every qid_spec_tac [`q`,`p`] >> Induct_on `xs`
+  >- simp[resolve_block_assigns_def]
+  >> rpt gen_tac >> strip_tac
+  >> gvs[listTheory.LENGTH_EQ_NUM_compute]
+  >> Cases_on `p = q` >- simp[]
+  >> drule_all step_back_assign_copy
+  >> disch_then (fn th => simp[same_after_assigns_def, th])
+  >> first_x_assum irule
+  >> drule_all resolve_block_assigns_copy_cons
+  >> disch_then (fn th => gvs[th])
+QED
+
+Theorem step_back_assign_preserves_vars:
+  (!v. op = Var v ==> v IN P) /\
+  (!v. MEM (Var v) inst.inst_operands ==> v IN P) /\
+  step_back_assign inst op = SOME op' ==>
+  (!v. op' = Var v ==> v IN P)
+Proof
+  Cases_on `op` >> simp[step_back_assign_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >> metis_tac[listTheory.MEM]
+QED
+
+Theorem resolve_block_assigns_preserves_vars:
+  !xs op P.
+  (!v. op = Var v ==> v IN P) /\
+  EVERY (\inst. !v. MEM (Var v) inst.inst_operands ==> v IN P) xs ==>
+  (!v. resolve_block_assigns xs op = Var v ==> v IN P)
+Proof
+  Induct >> simp[resolve_block_assigns_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> simp[Once resolve_block_assigns_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute]
+  >- (rename1 `h.inst_operands = [operand]` >>
+      first_x_assum (qspecl_then [`operand`, `P`] mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`Var s`, `P`] mp_tac) >> simp[]
+QED

@@ -475,14 +475,14 @@ End
 
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
-   by a run of C' up to the dead bytes D, and the stage invariant I of C
-   becomes I' of C'.  pre
+   by a run of C' up to a well-formed set D of dead bytes, and the stage
+   invariant I of C becomes I' of C'.  pre
    relates the input to the output (an ordering the pass keeps, say); a
    fact about the input alone belongs in I. *)
 Definition o1_stage_contract_def:
   o1_stage_contract rpolicy D pass view pre I I' <=>
     !C C' vs.
-      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
+      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
       ctx_sim D C C' vs vs /\ I' C' vs
 End
@@ -492,7 +492,7 @@ End
 Definition o1_stage_contract_gas_def:
   o1_stage_contract_gas rpolicy D pass view pre I I' <=>
     !C C' vs'.
-      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
+      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs' /\ I C vs' ==>
       ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\ I' C' vs'
 End
@@ -532,13 +532,15 @@ End
    requires and the walk never changes; the lowering reserves nothing in
    the runtime unit and one interval in the deploy unit.  Also the no-wrap
    bound on DLOAD/DLOADBYTES source offsets that LowerDload's expansion
-   needs (dload_offset_ok). *)
+   needs (dload_offset_ok), and the alloca frontier headroom its new
+   scratch sites need (dload_headroom_ok). *)
 Definition o1_src_inv_def:
   o1_src_inv D C vs <=>
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
     EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
-    taint_within D C vs /\ fmp_free_ctx C /\ mem_inv dload_offset_ok C vs
+    taint_within D C vs /\ fmp_free_ctx C /\
+    mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs
 End
 
 (* The pre-walk's input, the lowering's output: no PHI, and every variable
@@ -582,7 +584,9 @@ Definition o1_lowered_inv_def:
 End
 
 (* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
-   second run establishes it and SimplifyCFG keeps it. *)
+   second run establishes it and SimplifyCFG keeps it.  Row 6 also has
+   every block reachable, which SimplifyCFG establishes: SUE's copies of
+   literals keep wf_ssa only in reachable blocks. *)
 Definition o1_ssa_inv_def:
   o1_ssa_inv C vs <=> o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions
 End
@@ -603,7 +607,11 @@ Definition o1_inv_def:
       (\C vs. o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
-    else if k = 5 \/ k = 6 then o1_ssa_inv
+    else if k = 5 then o1_ssa_inv
+    else if k = 6 then
+      (\C vs. o1_ssa_inv C vs /\ EVERY all_reachable C.ctx_functions)
+    else if k = 8 then
+      (\C vs. o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions)
     else o1_lowered_inv
 End
 
