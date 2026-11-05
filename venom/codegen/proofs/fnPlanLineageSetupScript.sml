@@ -854,3 +854,28 @@ Resume native_regular_live_lower[tail]:
 QED
 
 Finalise native_regular_live_lower
+
+(* Native opcode emission changes neither storage nor allocator resources. *)
+Theorem generate_emit_ops_residual_budget_wf:
+  !inst topics ps ops qs base pending.
+    generate_emit_ops inst topics ps = (ops,qs) /\
+    residual_budget_wf base pending ps ==>
+    residual_budget_wf base pending qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule allocMonoTheory.generate_emit_ops_alloc >> strip_tac >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> strip_tac >>
+  gvs[residual_budget_wf_def, plan_slots_bounded_def] >> metis_tac[]
+QED
+
+Theorem generate_emit_ops_core_resource:
+  !inst topics ps ops qs base pending core.
+    generate_emit_ops inst topics ps = (ops,qs) /\
+    residual_budget_wf base pending (ps with ps_stack := core) ==>
+    residual_budget_wf base pending (qs with ps_stack := core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule allocMonoTheory.generate_emit_ops_alloc >> strip_tac >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> strip_tac >>
+  gvs[residual_budget_wf_def, plan_slots_bounded_def] >> metis_tac[]
+QED
