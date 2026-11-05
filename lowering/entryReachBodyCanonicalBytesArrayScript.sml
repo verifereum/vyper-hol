@@ -1182,7 +1182,7 @@ Proof
   pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
 QED
 
-Theorem entry_bytes_array_code_split[local]:
+Theorem entry_bytes_array_code_split:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
     (DecDynArray (DecBytestring n) asz msz T maxn) st = ((),final) /\
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
@@ -1244,7 +1244,7 @@ Proof
   gvs[] >> simp[SF SFY_ss]
 QED
 
-Theorem entry_bytes_array_concrete_config[local]:
+Theorem entry_bytes_array_concrete_config:
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
