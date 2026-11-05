@@ -2794,3 +2794,36 @@ Proof
    (irule cse_prefix_none_leaf_eval >> metis_tac[]) >>
  gvs[eval_operand_def]
 QED
+
+Theorem cse_prefix_some_operand_epoch:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) seen op = SOME producer ==>
+ ?before ev middle tail m cb u terminal_use x d wb wi.
+ events = before ++ [ev] ++ middle ++ tail /\
+ cse_prefix ctx fn fuel0 s0 (before ++ [ev] ++ middle) (CseExec m cb u) /\
+ get_instruction cb u.vs_inst_idx = SOME terminal_use /\
+ terminal_use.inst_opcode <> PHI /\ MEM (Var x) terminal_use.inst_operands /\
+ FLOOKUP (dfg_build_function fn).dfg_defs x = SOME d /\
+ d.inst_opcode <> ASSIGN /\ d.inst_id = producer /\
+ MEM wb fn.fn_blocks /\ get_instruction wb wi = SOME d /\
+ MEM x d.inst_outputs /\ cse_event_covers ev wb wi d /\
+ cse_event_writes ev x /\
+ EVERY (\e. ~cse_event_writes e x) middle /\
+ eval_operand op s = eval_operand (Var x) u /\
+ eval_operand op s = lookup_var x (cse_event_output ev)
+Proof
+ strip_tac >> drule_all cse_prefix_operand_producer_rewind >> strip_tac >>
+ `dfg_get_def (dfg_build_function fn) v = SOME definer` by
+   simp[dfgDefsTheory.dfg_get_def_def] >>
+ drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+ drule_all cse_prefix_ordinary_use_last_write >> strip_tac >>
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ `MEM ev pre` by gvs[MEM_APPEND] >>
+ drule_all cse_prefix_writing_static_definer >> strip_tac >>
+ qexistsl [`pre'`, `ev`, `post'`, `post`, `m`, `cb`, `u`,
+           `terminal_use`, `v`, `definer`, `bb'`, `k`] >>
+ gvs[APPEND_ASSOC, eval_operand_def]
+QED
