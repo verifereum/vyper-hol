@@ -22,10 +22,9 @@ Proof
 QED
 
 Theorem parameter_push_fold:
-  !params ps.
-    FOLDL (\p inst. p with ps_stack :=
-      stack_push (Var (HD inst.inst_outputs)) p.ps_stack) ps params =
-    ps with ps_stack := ps.ps_stack ++ MAP (\inst. Var (HD inst.inst_outputs)) params
+  !xs ps f.
+    FOLDL (\p x. p with ps_stack := stack_push (f x) p.ps_stack) ps xs =
+    ps with ps_stack := ps.ps_stack ++ MAP f xs
 Proof
   Induct >> simp[stack_push_def, SNOC_APPEND] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
@@ -216,4 +215,58 @@ Proof
   irule do_spill_at_lineage_inventory >>
   simp[] >> conj_tac >- (qexists_tac `v` >> simp[]) >>
   irule native_parameter_lineage_inventory >> simp[]
+QED
+
+(* Fresh output insertion does not change persistent resources. *)
+Theorem fresh_outputs_residual_budget:
+  !outputs ps spillbase.
+    residual_budget_wf spillbase [] ps /\ ALL_DISTINCT outputs /\
+    EVERY (\v. ~MEM (Var v) ps.ps_stack /\
+      Var v NOTIN FDOM ps.ps_spilled) outputs ==>
+    residual_budget_wf spillbase []
+      (ps with ps_stack := ps.ps_stack ++ MAP Var outputs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `residual_budget_wf spillbase []
+     (ps with ps_stack := ps.ps_stack ++ [Var h])` by
+    (gvs[residual_budget_wf_def, elem_count_append, LIST_ELEM_COUNT_THM] >>
+     conj_tac >> rpt strip_tac >> Cases_on `op = Var h` >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM, LIST_ELEM_COUNT_DEF] >>
+     first_x_assum (qspec_then `op` mp_tac) >> simp[] >> decide_tac) >>
+  first_x_assum (qspecl_then
+    [`ps with ps_stack := ps.ps_stack ++ [Var h]`, `spillbase`] mp_tac) >>
+  simp[EVERY_MEM, MEM_MAP, APPEND_ASSOC] >>
+  impl_tac >- (rpt strip_tac >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem output_push_marker_core:
+  !ps m core spillbase outputs qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    ALL_DISTINCT outputs /\
+    EVERY (\v. ~MEM (Var v) core /\ Var v NOTIN FDOM ps.ps_spilled) outputs /\
+    qs = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+      ps outputs ==>
+    qs.ps_stack = REPLICATE m dead_stack_marker ++ (core ++ MAP Var outputs) /\
+    qs.ps_spilled = ps.ps_spilled /\ qs.ps_alloc = ps.ps_alloc /\
+    residual_budget_wf spillbase [] (qs with ps_stack := core ++ MAP Var outputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule fresh_outputs_residual_budget >>
+  disch_then (qspec_then `outputs` mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[parameter_push_fold, APPEND_ASSOC]
+QED
+
+Theorem output_push_core_coverage:
+  !ps core outputs qs nl.
+    (!v. MEM v nl ==> MEM v outputs \/ MEM (Var v) core \/
+      Var v IN FDOM ps.ps_spilled) /\
+    qs = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+      ps outputs ==>
+    !v. MEM v nl ==> MEM (Var v) (core ++ MAP Var outputs) \/
+      Var v IN FDOM qs.ps_spilled
+Proof
+  simp[parameter_push_fold, MEM_MAP] >> metis_tac[]
 QED
