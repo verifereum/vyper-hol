@@ -1133,6 +1133,17 @@ Proof
   CONV_TAC (RHS_CONV computeLib.EVAL_CONV) >> REFL_TAC
 QED
 
+Theorem deploy_prefix_short_parse:
+  parse_code 0 FEMPTY [91w;96w;32w] =
+    FEMPTY |+ (0, JumpDest) |+ (1, Push 1 [32w])
+Proof
+  simp[Once vfmContextTheory.parse_code_def, vfmOperationTheory.parse_opcode_cond_thm,
+       vfmOperationTheory.opcode_def, wordsTheory.dimword_8] >>
+  simp[Once vfmContextTheory.parse_code_def, vfmOperationTheory.parse_opcode_cond_thm,
+       vfmOperationTheory.opcode_def, wordsTheory.dimword_8] >>
+  simp[Once vfmContextTheory.parse_code_def] >> EVAL_TAC
+QED
+
 Theorem deploy_prefix_negative_wf_state:
   wf_state ^prefix_es_tm
 Proof
