@@ -1905,6 +1905,94 @@ Proof
        bind_def, return_def, lift_option_type_def, read_result_def, raise_def]
 QED
 
+Theorem ifexp_raw_conditional_outcome_mem[local]:
+  gas_outcome T tops (ctx,func) (eval_expr cx e) (es,s0) P
+    (\res ee r. expr_exit res r) /\
+  (!res ee s. P res ee s ==> ?raw. res = INL raw) /\
+  (!marks raw ee s.
+    gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
+      marks (INL raw) ee (OK s) /\ P (INL raw) (ee with gas_obs := []) s ==>
+    ?tv q. gas_marked_exec T (ctx,func) (conditional_result cx raw)
+      (ee with gas_obs := [],s) [] (INL tv) (ee with gas_obs := []) (OK q) /\
+      Q (INL tv) (ee with gas_obs := []) q) ==>
+  gas_outcome T tops (ctx,func)
+    (bind (eval_expr cx e) (conditional_result cx)) (es,s0) Q
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (gvs[] >>
+      `?raw. res = INL raw` by metis_tac[] >> gvs[] >>
+      qpat_x_assum `!marks raw ee s. _` drule_all >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INL tv`,`es_end with gas_obs := []`,`OK q`] >> simp[] >>
+      irule (SRULE [] (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[])
+  >- (gvs[] >> Cases_on `res` >> gvs[expr_exit_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INR y`,`es_end`,`r`] >> simp[] >>
+      irule gas_marked_exec_bind_exception >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
+QED
+
+Theorem compile_ifexp_word_vv_sim_mem[local]:
+  !ctx func cenv cx ty t c a b es.
+    is_word_type t /\
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
+    (!gs tv es1.
+       (do result <- eval_expr cx c; read_result cx result od)
+         (es with gas_obs := gs) = (INL tv, es1) ==>
+       expr_sim_mem ctx func cenv cx ty a es1 /\
+       expr_sim_mem ctx func cenv cx ty b es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty a es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty b es1) ==>
+    expr_vv_sim_mem ctx func cenv cx ty (IfExp t c a b) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
+    (irule ifexp_root_condition_admissible >> goal_assum (drule_at Any)) >>
+  drule_all ifexp_root_code_layout >>
+  disch_then (qspec_then `T` strip_assume_tac) >>
+  qpat_x_assum `emit_inst JNZ _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst ASSIGN _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst JMP _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_expr cenv ty (if T then a else b) _ = _` kall_tac >>
+  qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` kall_tac >>
+  gvs[] >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ c _` mp_tac >>
+  simp[expr_sim_mem_def] >> disch_then drule_all >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ root_post root_exit` >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (gvs[] >> suspend "selected")
+  >- (pure_rewrite_tac[GSYM gas_summary_at_def, GSYM gas_outcome_def] >>
+      simp[Abbr `root_exit`] >> irule ifexp_condition_exit_mem >>
+      goal_assum (drule_at Any) >> gvs[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  irule ifexp_root_condition_cert >> simp[]
+QED
+
+Resume compile_ifexp_word_vv_sim_mem[selected]:
+  cheat
+QED
+
+Finalise compile_ifexp_word_vv_sim_mem
+
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
