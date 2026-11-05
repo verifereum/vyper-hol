@@ -11,6 +11,7 @@ Ancestors
   list rich_list finite_map words vyperAST memoryLocalRhsProps
   exprSimSource bodyMemoryPreds exprSimDefs loweringPosts valueEncoding
   vyperTypeExprResult vyperTypeExprSoundness
+  exprSimMemDefs venomMemDefs vyperValue exprSimProps
 Libs
   monadsyntax
 
@@ -289,4 +290,44 @@ Proof
   strip_tac >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
   gvs[type_memory_size_slots]
+QED
+
+Theorem topcopy_val_store_size:
+  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_store_size tv v = type_memory_size tv
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[val_store_size_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
+  Cases_on `ty` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
+QED
+
+Theorem topcopy_source_bound:
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\
+  expr_store_bound cx ty v op s /\ eval_operand op s = SOME b /\
+  0 < type_memory_size tv ==>
+  w2n b + type_memory_size tv <= s.vs_alloca_next
+Proof
+  strip_tac >> drule_all topcopy_val_store_size >> disch_tac >>
+  gvs[expr_store_bound_def]
+QED
+
+Theorem topcopy_index_bound:
+  w2n b + 32*n <= s.vs_alloca_next /\ i < n ==>
+  w2n (b + n2w i * 32w : 256 word) + 32 <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  `b + n2w i * 32w = n2w (w2n b + 32*i)` by
+    simp[GSYM word_add_n2w, GSYM word_mul_n2w, arithmeticTheory.MULT_COMM,
+         WORD_MULT_COMM] >>
+  asm_rewrite_tac[] >>
+  `w2n (n2w (w2n b + 32*i) : 256 word) <= w2n b + 32*i` by
+    simp[w2n_n2w, arithmeticTheory.MOD_LESS_EQ] >>
+  decide_tac
 QED
