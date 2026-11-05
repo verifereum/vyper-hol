@@ -4,7 +4,7 @@ Ancestors bodyPtrHashBuiltinsKeccakBytesRun fragGasSeqPtr ptrDiscipline
   venomState venomInst venomExecSemantics words finite_map pred_set
   typedCopyPtr typedCopyLoopHeaderPtr exprSimHash list bodyPtrDefs valueEncodingProps
   emitHelper emitHelperProps compileEnv exprLoweringProps ASCIInumbers rich_list arithmetic
-  bodyPtrHashBuiltinsGhostFrame
+  bodyPtrHashBuiltinsGhostFrame exprSimProps
 
 Theorem hash_bytes_prepare_inst_seq:
   !D ctx fn PG G tn s il ia x l p b base cap n.
@@ -181,3 +181,28 @@ Resume hash_bytes_prepare_frame[coverage]:
   rpt strip_tac >> gvs[]
 QED
 Finalise hash_bytes_prepare_frame
+
+Theorem hash_readonly_input_window:
+  (t with vs_vars := s.vs_vars) = s /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_id <= sb.cs_next_id /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  (n = 0 \/
+   (?aid b k. FLOOKUP s.vs_allocas aid = SOME (b,k) /\
+      aid < sa.cs_next_id /\ b <= a /\ a+n <= b+k) \/
+   (?name b k. local_region cenv es.scopes s name b k /\
+      b <= a /\ a+n <= b+k)) ==>
+  (n = 0 \/
+   (?aid b k. FLOOKUP t.vs_allocas aid = SOME (b,k) /\
+      aid < sb.cs_next_id /\ b <= a /\ a+n <= b+k) \/
+   (?name b k. local_region cenv es.scopes t name b k /\
+      b <= a /\ a+n <= b+k))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `t.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `(t with vs_vars := _) = s`
+       (mp_tac o Q.AP_TERM `\v. v.vs_allocas`) >> simp[]) >>
+  qpat_x_assum `n = 0 \/ _` strip_assume_tac >- simp[]
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`aid`, `b`, `k`] >> simp[] >> decide_tac) >>
+  disj2_tac >> disj2_tac >> qexistsl_tac [`name`, `b`, `k`] >> simp[] >>
+  irule local_region_frame_fwd >> qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]
+QED
