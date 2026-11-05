@@ -536,12 +536,23 @@ Theorem reason_encoder_add_post:
     emit_op ADD [src; Lit d] cc = (result,cd) /\
     eval_operand src s = SOME a /\
     (!z. op = Var z ==> not_fresh_at cc z) ==>
-    ?t. run_inst_seq (emitted_insts cc cd) s = OK t /\
+    ?t x. result = Var x /\ ~not_fresh_at cc x /\
+      t = update_var x (a + d) s /\
+      step_inst_base (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s = OK t /\
+      run_inst_seq (emitted_insts cc cd) s = OK t /\
       eval_operand result t = SOME (a + d) /\ fresh_vars_wrt cd t /\
       local_ptrs_reserved cenv cd /\
       eval_operand op t = eval_operand op s /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
-      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      (!PG G tn.
+        (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_mem = tn.t_mem /\
+        (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_stor = tn.t_stor /\
+        (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_trans = tn.t_trans /\
+        (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
+          ptr_covers
+            (step_prov PG G (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) t)
+            (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn) p t k))
 Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -567,5 +578,16 @@ Proof
      (update_var x (a + d) s)` by
     (irule reason_encoder_fresh_update_post >> simp[] >>
      qexists_tac `cc` >> simp[]) >>
-  qexists_tac `update_var x (a + d) s` >> simp[update_var_def]
+  qexistsl_tac [`update_var x (a + d) s`, `x`] >>
+  simp[copy_len_binop_ghost_frame] >> suspend "ghost"
 QED
+
+Resume reason_encoder_add_post[ghost]:
+  rpt gen_tac >> rpt conj_tac
+  >- simp[update_var_def] >>
+  rpt strip_tac >> `p <> x` by metis_tac[] >>
+  gvs[ptr_covers_def, copy_len_binop_ghost_frame,
+      lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Finalise reason_encoder_add_post
