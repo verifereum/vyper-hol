@@ -3,7 +3,8 @@
 Theory bodyMemAssignAttrStorage
 Ancestors
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
-  vyperStorageBackend
+  vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
+  exprSimMemUnwrap exprLoweringProps exprSimMemDefs
 Libs
   monadsyntax
 
@@ -28,6 +29,75 @@ Proof
   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
   simp[write_place_def, bind_def] >>
   Cases_on `read_result cx x' r` >> Cases_on `q` >> simp[]
+QED
+
+Theorem vv_at_start_var_mem_src[local]:
+  vv_at ce cx ty (sa with cs_next_var := n) sb es tv vv s <=>
+  vv_at ce cx ty sa sb es tv vv s
+Proof
+  Cases_on `vv` >> simp[vv_at_def, expr_val_at_def]
+QED
+
+Theorem vv_post_rebase_mem_src[local]:
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s ==>
+  vv_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
+    sm s ee tv vv s
+Proof
+  simp[vv_post_def, vv_at_start_var_mem_src, locals_kept_refl]
+QED
+
+Theorem expr_post_rebased_operand_mem_src[local]:
+  expr_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
+    sb s ee v op u /\
+  (?x. dst = Var x /\ not_fresh_at sm x) /\
+  eval_operand dst s = SOME w ==>
+  eval_operand dst u = SOME w
+Proof
+  strip_tac >> gvs[eval_operand_def] >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> strip_tac >>
+  first_x_assum irule >> gvs[not_fresh_at_def]
+QED
+
+Theorem unwrap_value_rebased_read_mem_src[local]:
+  unwrap_value cenv vv sm = (op,sb) /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  is_word_type (expr_type e) /\
+  (?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt) /\
+  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+  vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
+  alloca_history func s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (?x. dst = Var x /\ not_fresh_at sm x) /\
+  eval_operand dst s = SOME w ==>
+  ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
+          [] (INL v) ee (OK u) /\
+    expr_post ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
+      sb s ee v op u /\
+    expr_store_bound cx (expr_type e) v op u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
+    eval_operand dst u = SOME w
+Proof
+  strip_tac >>
+  drule vv_post_rebase_mem_src >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `local_ptrs_reserved cenv (sa with cs_next_var := sm.cs_next_var)` by
+    (qpat_x_assum `local_ptrs_reserved cenv sm` mp_tac >>
+     simp_tac (srw_ss()) [local_ptrs_reserved_def, not_fresh_at_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `vv_post _ _ _ _ _ es _ _ _ _ _ _ _` kall_tac >>
+  drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexistsl_tac [`v`, `u`] >> simp[] >>
+  irule expr_post_rebased_operand_mem_src >> goal_assum (drule_at Any) >> gvs[]
 QED
 
 Theorem body_assign_attr_storage_mem:
