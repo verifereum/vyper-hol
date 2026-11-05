@@ -18,7 +18,7 @@
 
 Theory stmtSimAssignTuplePlaces
 Ancestors
-  targetPlaceSim targetPlaceSimDefs
+  placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
   stmtSimDefs exprSimHypsDefs exprSimDefs loweringPosts
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperTypeSystem
@@ -31,7 +31,7 @@ Theorem compile_assign_tuple_places_stmt_frag:
     assignable_type (get_tenv cx) (TupleT tys) /\
     lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-    cenv.ce_target CapMcopy /\
+    (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
       type_memory_size (TupleTV tvs) < dimword (:256)) /\
     (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
