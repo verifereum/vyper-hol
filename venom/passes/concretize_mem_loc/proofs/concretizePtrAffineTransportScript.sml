@@ -17,9 +17,10 @@ Proof
       ptr_lookup_transport_def]
 QED
 
-Theorem ptr_assign_transport:
+Theorem ptr_assign_transport_lookup[local]:
   ptr_vars_transport births positions TG tn s t /\
-  ((?v. op = Var v) \/ (?w. op = Lit w)) /\
+  ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
+    (eval_operand op s) (eval_operand op t) /\
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
   inst.inst_outputs = [out] /\ step_inst fuel C inst s = OK s' ==>
   ?t'. step_inst fuel C' inst t = OK t' /\
@@ -27,9 +28,6 @@ Theorem ptr_assign_transport:
       (step_taint inst s s' tn) s' t'
 Proof
   strip_tac >>
-  `ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
-     (eval_operand op s) (eval_operand op t)` by
-    (irule ptr_vars_transport_eval >> simp[]) >>
   gvs[Once run_defs, step_inst_base_def, AllCaseEqs()] >>
   gvs[ptr_lookup_transport_some] >>
   qexists_tac `update_var out z t` >>
@@ -42,9 +40,10 @@ Proof
   qexists_tac `mask` >> Cases_on `tag` >> gvs[]
 QED
 
-Theorem ptr_assign_transport_back:
+Theorem ptr_assign_transport_back_lookup[local]:
   ptr_vars_transport births positions TG tn s t /\
-  ((?v. op = Var v) \/ (?w. op = Lit w)) /\
+  ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
+    (eval_operand op s) (eval_operand op t) /\
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
   inst.inst_outputs = [out] /\ step_inst fuel C' inst t = OK t' ==>
   ?s'. step_inst fuel C inst s = OK s' /\
@@ -52,9 +51,6 @@ Theorem ptr_assign_transport_back:
       (step_taint inst s s' tn) s' t'
 Proof
   strip_tac >>
-  `ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
-     (eval_operand op s) (eval_operand op t)` by
-    (irule ptr_vars_transport_eval >> simp[]) >>
   gvs[Once run_defs, step_inst_base_def, AllCaseEqs()] >>
   gvs[ptr_lookup_transport_some_right] >>
   qexists_tac `update_var out z s` >>
@@ -67,6 +63,58 @@ Proof
   qexists_tac `mask` >> Cases_on `tag` >> gvs[]
 QED
 
+Theorem ptr_assign_transport:
+  ptr_vars_transport births positions TG tn s t /\
+  ((?v. op = Var v) \/ (?w. op = Lit w)) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  inst.inst_outputs = [out] /\ step_inst fuel C inst s = OK s' ==>
+  ?t'. step_inst fuel C' inst t = OK t' /\
+    ptr_vars_transport births positions (step_prov PT TG inst s')
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >> irule ptr_assign_transport_lookup >>
+  simp[] >> (conj_tac >- metis_tac[]) >> irule ptr_vars_transport_eval >> simp[]
+QED
+
+Theorem ptr_assign_transport_all:
+  ptr_vars_transport births positions TG tn s t /\
+  s.vs_labels = t.vs_labels /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  inst.inst_outputs = [out] /\ step_inst fuel C inst s = OK s' ==>
+  ?t'. step_inst fuel C' inst t = OK t' /\
+    ptr_vars_transport births positions (step_prov PT TG inst s')
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >> irule ptr_assign_transport_lookup >>
+  simp[] >> (conj_tac >- metis_tac[]) >> irule ptr_vars_transport_eval_all >> simp[]
+QED
+
+Theorem ptr_assign_transport_back:
+  ptr_vars_transport births positions TG tn s t /\
+  ((?v. op = Var v) \/ (?w. op = Lit w)) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  inst.inst_outputs = [out] /\ step_inst fuel C' inst t = OK t' ==>
+  ?s'. step_inst fuel C inst s = OK s' /\
+    ptr_vars_transport births positions (step_prov PT TG inst s')
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >> irule ptr_assign_transport_back_lookup >>
+  simp[] >> qexistsl_tac [`C'`, `t`] >> simp[] >> irule ptr_vars_transport_eval >> simp[]
+QED
+
+Theorem ptr_assign_transport_back_all:
+  ptr_vars_transport births positions TG tn s t /\
+  s.vs_labels = t.vs_labels /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  inst.inst_outputs = [out] /\ step_inst fuel C' inst t = OK t' ==>
+  ?s'. step_inst fuel C inst s = OK s' /\
+    ptr_vars_transport births positions (step_prov PT TG inst s')
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >> irule ptr_assign_transport_back_lookup >>
+  simp[] >> qexistsl_tac [`C'`, `t`] >> simp[] >> irule ptr_vars_transport_eval_all >> simp[]
+QED
+
 (* Only these affine shapes preserve a single owner displacement. *)
 Theorem ptr_affine_step:
   (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
@@ -74,6 +122,41 @@ Theorem ptr_affine_step:
     exec_pure2 (if inst.inst_opcode = ADD then word_add else word_sub) inst s
 Proof
   strip_tac >> simp[Once step_inst_def] >> simp[step_inst_base_def]
+QED
+
+Theorem ptr_affine_transport_lookup[local]:
+  ptr_vars_transport births positions TG tn s t /\
+  ptr_lookup_transport births positions (op_prov TG a) {}
+    (eval_operand a s) (eval_operand a t) /\
+  ptr_lookup_transport births positions (op_prov TG b) {}
+    (eval_operand b s) (eval_operand b t) /\
+  inst.inst_operands = [a;b] /\ inst.inst_outputs = [out] /\
+  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+  (inst.inst_opcode = ADD ==> op_prov TG a = NONE \/ op_prov TG b = NONE) /\
+  (inst.inst_opcode = SUB ==> op_prov TG b = NONE) /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  ((?s'. step_inst fuel C inst s = OK s') \/
+   (?t'. step_inst fuel C' inst t = OK t')) ==>
+  ?s' t'. step_inst fuel C inst s = OK s' /\
+    step_inst fuel C' inst t = OK t' /\
+    ptr_vars_transport births positions (step_prov PT TG inst s')
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  gs[] >>
+  gs[ptr_affine_step, exec_pure2_def, AllCaseEqs()] >>
+  gs[ptr_lookup_transport_some, ptr_lookup_transport_some_right] >>
+  rpt (qpat_x_assum `update_var _ _ _ = _` (SUBST_ALL_TAC o SYM)) >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[step_prov_def, out_prov_def, first_prov_def] >>
+  irule ptr_vars_transport_update >>
+  rpt (goal_assum (drule_at Any)) >>
+  qexists_tac `{}` >>
+  simp[step_taint_def, out_taint_def] >>
+  Cases_on `op_prov TG a` >> Cases_on `op_prov TG b` >>
+  gvs[ptr_value_transport_scalar_empty] >>
+  metis_tac[ptr_value_transport_add_left, ptr_value_transport_add_right,
+            ptr_value_transport_sub_right, WORD_ADD_COMM]
 QED
 
 Theorem ptr_affine_transport:
@@ -99,20 +182,32 @@ Proof
   `ptr_lookup_transport births positions (op_prov TG b) {}
      (eval_operand b s) (eval_operand b t)` by
     (drule ptr_vars_transport_eval >> disch_then (qspec_then `b` mp_tac) >> simp[]) >>
-  gs[] >>
-  gs[ptr_affine_step, exec_pure2_def, AllCaseEqs()] >>
-  gs[ptr_lookup_transport_some, ptr_lookup_transport_some_right] >>
-  rpt (qpat_x_assum `update_var _ _ _ = _` (SUBST_ALL_TAC o SYM)) >>
-  rpt (goal_assum (drule_at Any)) >>
-  simp[step_prov_def, out_prov_def, first_prov_def] >>
-  irule ptr_vars_transport_update >>
-  rpt (goal_assum (drule_at Any)) >>
-  qexists_tac `{}` >>
-  simp[step_taint_def, out_taint_def] >>
-  Cases_on `op_prov TG a` >> Cases_on `op_prov TG b` >>
-  gvs[ptr_value_transport_scalar_empty] >>
-  metis_tac[ptr_value_transport_add_left, ptr_value_transport_add_right,
-            ptr_value_transport_sub_right, WORD_ADD_COMM]
+  irule ptr_affine_transport_lookup >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_affine_transport_all:
+  ptr_vars_transport births positions TG tn s t /\
+  s.vs_labels = t.vs_labels /\
+  inst.inst_operands = [a;b] /\ inst.inst_outputs = [out] /\
+  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+  (inst.inst_opcode = ADD ==> op_prov TG a = NONE \/ op_prov TG b = NONE) /\
+  (inst.inst_opcode = SUB ==> op_prov TG b = NONE) /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  ((?s'. step_inst fuel C inst s = OK s') \/
+   (?t'. step_inst fuel C' inst t = OK t')) ==>
+  ?s' t'. step_inst fuel C inst s = OK s' /\
+    step_inst fuel C' inst t = OK t' /\
+    ptr_vars_transport births positions (step_prov PT TG inst s')
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `ptr_lookup_transport births positions (op_prov TG a) {}
+     (eval_operand a s) (eval_operand a t)` by
+    (drule_all ptr_vars_transport_eval_all >> disch_then (qspec_then `a` mp_tac) >> simp[]) >>
+  `ptr_lookup_transport births positions (op_prov TG b) {}
+     (eval_operand b s) (eval_operand b t)` by
+    (drule_all ptr_vars_transport_eval_all >> disch_then (qspec_then `b` mp_tac) >> simp[]) >>
+  irule ptr_affine_transport_lookup >> simp[] >> metis_tac[]
 QED
 
 (* Concrete operational probes use a zero-sized birth and cross the word
@@ -169,10 +264,11 @@ QED
      any right pointer operand for SUB. Turning this into the op_prov
      hypotheses requires dynamic-tag support in fn_pv, still owned by the
      global invariant; value transport alone does not imply that support.
-   - fn_ptr_ok excludes Label operands when an arithmetic operand is in
-     fn_pv. For all-scalar arithmetic, successful evaluation plus related
-     labels/cursors must supply the Var/Lit boundary or a separate label
-     evaluation case. This file does not claim that case is discharged.
+   - ptr_vars_transport_eval_all and the *_transport_all boundaries cover
+     scalar Labels, including missing lookups, conditional on label-map
+     equality. The global target-prefix construction must establish and
+     preserve that equality across entry, calls and return; it is not a
+     consequence of ptr_vars_transport alone.
    ASSIGN keeps the selected mask rather than requiring it to be empty.
    The disjunction of successful steps in ptr_affine_transport allows the
    construction to start on either side; determinism identifies the given

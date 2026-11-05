@@ -95,6 +95,20 @@ Proof
       ptr_value_transport_refl]
 QED
 
+Theorem ptr_vars_transport_eval_all:
+  ptr_vars_transport births positions TG tn s t /\
+  s.vs_labels = t.vs_labels ==>
+  ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
+    (eval_operand op s) (eval_operand op t)
+Proof
+  strip_tac >> Cases_on `op`
+  >- (irule ptr_vars_transport_eval >> simp[])
+  >- (irule ptr_vars_transport_eval >> simp[]) >>
+  simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  Cases_on `FLOOKUP t.vs_labels s'` >>
+  simp[ptr_lookup_transport_def, ptr_value_transport_refl]
+QED
+
 Theorem ptr_args_transport_lengths:
   ptr_args_transport births positions tags masks xs ys ==>
   LENGTH tags = LENGTH xs /\ LENGTH masks = LENGTH xs /\ LENGTH ys = LENGTH xs
@@ -122,4 +136,16 @@ Theorem ptr_lookup_transport_none_right:
   ptr_lookup_transport births positions tag mask x NONE <=> x = NONE
 Proof
   Cases_on `x` >> simp[ptr_lookup_transport_def]
+QED
+
+(* Both branches of label resolution, including simultaneous failure. *)
+Theorem ptr_label_lookup_probe:
+  eval_operand (Label "code_end")
+    ((init_venom_state "entry") with
+      vs_labels := FEMPTY |+ ("code_end", 64w)) = SOME 64w /\
+  eval_operand (Label "missing")
+    ((init_venom_state "entry") with
+      vs_labels := FEMPTY |+ ("code_end", 64w)) = NONE
+Proof
+  EVAL_TAC
 QED
