@@ -14,13 +14,13 @@ Ancestors
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
-  stmtLowering vyperTypeSystem vyperState lowerDloadDefs
+  stmtLowering vyperTypeSystem vyperState lowerDloadDefs entryValueRejectBridge
 
 val _ = Parse.hide "body";
 
 (* ===== The entry (#639, #867) ===== *)
 
-(* ADMITTED (#639): external_entry_value_revert's run is memory-safe. *)
+(* A rejected call value aborts memory-safely after selector dispatch. *)
 Theorem external_entry_value_revert_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env e st efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -46,5 +46,6 @@ Theorem external_entry_value_revert_mem:
              (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                          vs_inst_idx := 0 |>)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule source_entry_value_reject_mem_safe >> metis_tac[]
 QED
