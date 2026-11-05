@@ -2,7 +2,7 @@ Theory jsonToVyperExprCV
 Ancestors
   jsonToVyperExpr jsonToVyperTypeCV jsonAST vyperAST list option cv cv_rep
 Libs
-  cv_transLib jsonToVyperCVLib
+  wordsLib cv_transLib jsonToVyperCVLib
 
 (* Eliminate higher-order recursive OPTION_MAP specializations without changing
    which optional operands are translated. *)

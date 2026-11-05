@@ -135,8 +135,7 @@ Release instructions, including the prebuilt holbuild archive artefact, are in [
 ### Native JSON semantics runner
 
 The EmitML runner executes the existing CV-translated Vyper semantics on
-exported JSON deployment/call traces. Native execution is a trusted regression
-check, not a kernel proof; `vyperJsonReplayLib` provides kernel-checked replay.
+exported JSON deployment/call traces.
 
 With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`, run:
 
@@ -144,8 +143,8 @@ With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`, run:
 ./tools/demo_run_test.sh
 ```
 
-The script builds `tests/.emit/run-test`, checks its encoded inputs and results
-against HOL kernel replay, and demonstrates both supported input forms:
+The demo builds `tests/.emit/run-test`, compares its encoded inputs and results
+with HOL kernel replay for five bundled cases, and demonstrates both input forms:
 
 ```bash
 # Exporter JSON containing named tests and their setup fixtures:
@@ -155,43 +154,22 @@ tests/.emit/run-test tests/fixtures/run_test_json/basic.json
 tests/.emit/run-test < traces.json
 ```
 
-The bundled export has three passing cases and two intentional failures (an
-output mismatch and an unexpected revert). The demo handles its expected exit
-status of 1, then pipes a passing deployment/call trace array into the runner.
 Each case produces one JSON line with `name`, `status`, and, on failure, `error`.
 The runner exits 0 when every case passes, or 1 on a failed case or import error.
+The bundled export intentionally has three passes and two failures; the demo
+checks its expected exit status of 1. Import errors go to stderr.
 
 To build without running the demo, use `python3 tools/emit_run_test.py`.
 Add `--smoke` to check native/HOL parity. The executable accepts
-`--dump-input [export.json]` for diagnostic CV input/result encodings; normal
-operation takes JSON, not CV trees. The native executable is not itself a kernel
-proof; `vyperJsonReplayLib.replay_file` provides kernel-checked replay.
-The CV frontend retains defined-input preconditions; the native executable does
-not discharge them for each input.
+`--dump-input [export.json]` for diagnostic CV input/result encodings.
+
+Native execution is a trusted regression check, not a kernel proof. It trusts
+the SML emission, compiler and runtime, and JSON decoding. The CV frontend retains
+defined-input preconditions that the executable does not discharge per input.
+Use `vyperJsonReplayLib.replay_file` for kernel-checked replay.
 
 CI builds the CV frontend, emitter and kernel replay smoke theories through the
-project roots, at holbuild's default proof-step timeout. MLton compilation remains
-an explicit local step.
-
-The smoke check compares exact encoded inputs and results for all five bundled
-cases, not just pass/fail status. Import errors are reported on stderr; `{}` is
-rejected because it contains no tests, while `[]` runs the empty trace successfully.
-HOL replay uses the same complete-document parser. Hexadecimal words reject
-leading signs, and JSON result messages escape non-ASCII bytes as `\u00XX` so
-arbitrary assertion reasons still produce valid UTF-8 JSON.
-Test names retain their original UTF-8 text; byte escaping applies only to error
-messages, whose contents need not be valid UTF-8.
-
-The build first emits HOL-derived SML, then invokes MLton. Native compilation can
-take substantially longer than emission. The emitter normalizes word dimensions
-with a progress-checked conversion: plain `EVAL` leaves `dimindex (:8)` unchanged
-and can loop indefinitely when used inside `DEPTH_CONV`.
-
-The shared JSON importers retain the current frontend's override aliases,
-custom errors, folded metadata and nested storage paths. The CV frontend uses
-proved first-order equations for lexical statement traversal, override defaults,
-datatype sizes, initialized paths and nominal-source resolution; it does not
-replace those operations with a separate semantics implementation.
+project roots. MLton compilation remains an explicit local step.
 
 ### Running the Vyper test suite
 

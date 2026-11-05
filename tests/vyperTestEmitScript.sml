@@ -4,7 +4,7 @@ Ancestors
   vyperTestRunner cv jsonToVyper vyperState vyperValueOperation
   jsonToVyperCV
 Libs
-  EmitML cv_transLib cv_repLib cv_typeLib cv_miscLib wordsLib
+  EmitML cv_transLib cv_repLib cv_typeLib cv_miscLib
 
 fun holbuild_extra_outputs (_ : string list) = ();
 val () = holbuild_extra_outputs
@@ -52,27 +52,6 @@ val summary = prim_mk_const
 fun head_of th = fst (strip_comb (lhs (concl (SPEC_ALL th))));
 fun add_equation (th,acc) =
   if List.exists (aconv (head_of th) o head_of) acc then acc else th :: acc;
-(* Word translations can retain closed DIMINDEX arithmetic inside Num.
-   EVAL alone leaves DIMINDEX unchanged; DEPTH_CONV repeats successful conversions,
-   so require progress as well as using the word-aware kernel conversion. *)
-fun normalize_cv_literals (i,{thm = DefnBase.STDEQNS th,...}
-                              : DefnBase.defn_presentation) = let
-      val normalized = CONV_RULE (DEPTH_CONV (fn tm =>
-        if cvSyntax.is_cv_num tm andalso null (free_vars (rand tm)) andalso
-           not (numSyntax.is_numeral (rand tm))
-        then RAND_CONV (CHANGED_CONV wordsLib.WORD_EVAL_CONV) tm
-        else NO_CONV tm)) th
-    in
-      if aconv (concl th) (concl normalized) then () else let
-        val name = "native_cv_literals_" ^ Int.toString i
-        val _ = save_thm (name,normalized)
-      in DefnBase.register_defn {tag = "user",thmname = name} end
-    end
-  | normalize_cv_literals _ = ();
-val () = List.app normalize_cv_literals (Lib.enumerate 0
-  (List.concat (map (fn thy => DefnBase.thy_userdefs {thyname = thy})
-    ["jsonToVyperTypeCV","jsonToVyperExprCV","jsonToVyperCV"])));
-
 val equations = List.foldl add_equation []
   (cv_eqs_for entry @ cv_eqs_for frontend @ cv_eqs_for summary);
 val () = print ("Emitting run_test: " ^ Int.toString (length equations) ^
