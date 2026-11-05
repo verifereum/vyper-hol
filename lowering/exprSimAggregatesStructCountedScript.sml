@@ -92,5 +92,23 @@ Theorem aggregate_struct_fields_counted:
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule exprSimAggregateLayoutTheory.compile_struct_lit_as_tuple >>
+  disch_then (qspecl_then [`compile_expr`, `Var x`, `off`] assume_tac) >>
+  gvs[] >>
+  drule aggregate_make_tuple_counted >>
+  disch_then drule >>
+  disch_then (drule_at (Pat `exprs_case _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
+  disch_then (qspec_then `es` mp_tac) >>
+  (impl_tac >- (simp[] >> conj_tac >- metis_tac[] >>
+    first_assum ACCEPT_TAC)) >>
+  strip_tac >> simp[] >>
+  drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
+  irule struct_gas_outcome_post >>
+  goal_assum (drule_at Any) >>
+  BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>
+  conj_tac >- (irule struct_tuple_memory_post >> simp[]) >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
