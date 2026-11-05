@@ -591,3 +591,77 @@ Resume reason_encoder_add_post[ghost]:
 QED
 
 Finalise reason_encoder_add_post
+
+(* The original source interval survives all four prefix operations. *)
+Theorem reason_encoder_prefix_post:
+  !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 c3 c4 buf payload tuple n m tv ow PG G tn.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
+    emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
+    emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
+    compile_alloc_buffer m c3 = (tuple,c4) /\ fn_has_code c3 c4 func /\
+    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    fn_inst_ids_distinct func /\ 32 <= n /\ n < dimword (:256) /\
+    m < dimword (:256) /\
+    sa.cs_next_var <= cc.cs_next_var /\
+    sa.cs_next_id <= cc.cs_next_id /\ sb.cs_next_id <= cc.cs_next_id /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    ~is_word_type (expr_type e) /\ val_wf tv v /\
+    eval_operand op s = SOME ow /\
+    (!z. op = Var z ==> not_fresh_at cc z) /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv v (w2n ow) mem) ==>
+    ?t out b G1 tn1 u tn2 r x z out2 b2.
+      buf.buf_operand = Var out /\
+      step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
+      G1 = step_prov PG G (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) t /\
+      tn1 = step_taint (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s t tn /\
+      u = mstore b 0x08c379a0w t /\
+      run_inst_seq (emitted_insts c1 c2) t = OK u /\
+      tn2 = step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t u tn1 /\
+      payload = Var x /\
+      r = update_var x (n2w b + 32w) u /\
+      run_inst_seq (emitted_insts c2 c3) u = OK r /\
+      tuple.buf_operand = Var out2 /\
+      step_inst_base (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) r = OK z /\
+      eval_operand tuple.buf_operand z = SOME (n2w b2) /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
+      fresh_vars_wrt c4 z /\ local_ptrs_reserved cenv c4 /\
+      eval_operand op z = SOME ow
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all reason_encoder_selector_resources >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  `cc.cs_next_var <= c2.cs_next_var /\ cc.cs_next_id <= c2.cs_next_id` by
+    suspend "counters" >>
+  `eval_operand buf.buf_operand u = SOME (n2w b)` by
+    simp[eval_operand_mstore] >>
+  `!z. op = Var z ==> not_fresh_at c2 z` by
+    (rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `sa.cs_next_var <= c2.cs_next_var` by decide_tac >>
+  drule_all reason_encoder_add_post >> strip_tac >>
+  suspend "allocate"
+QED
+
+Resume reason_encoder_prefix_post[counters]:
+  qpat_assum `compile_alloc_buffer n cc = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  drule emitted_insts_emit_void >> strip_tac >> simp[]
+QED
+
+Resume reason_encoder_prefix_post[allocate]:
+  qexistsl_tac [`t`, `out`, `b`, `G1`, `tn1`, `u`, `tn2`, `t'`, `x`] >>
+  pure_asm_rewrite_tac[] >>
+  `sa.cs_next_var <= c3.cs_next_var` by
+    (drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  drule_all reason_encoder_alloc_buffer_post >> strip_tac >>
+  qpat_assum `compile_alloc_buffer m c3 = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  qexistsl_tac [`t''`, `STRING #"%" (toString c3.cs_next_var)`, `w2n w`] >> simp[] >>
+  qpat_x_assum `t' = update_var _ _ _` SUBST_ALL_TAC >>
+  qpat_x_assum `u = mstore _ _ _` SUBST_ALL_TAC >> simp[]
+QED
+
+Finalise reason_encoder_prefix_post
