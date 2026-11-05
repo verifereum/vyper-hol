@@ -3,6 +3,7 @@ Ancestors
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst
   fnBlockPlanStaticRetRegion genericInputReady
+  fnBlockPlanStaticBalance fnFrameBoundaryGenRet
 
 Theorem inventory_do_swap_promised:
   !d ps. (SND (do_swap d ps)).ps_cleanup_promised = ps.ps_cleanup_promised
@@ -1901,26 +1902,22 @@ Proof
 QED
 
 Theorem inventory_outputs_dead_pop_support:
-  ALL_DISTINCT ps.ps_stack /\ ALL_DISTINCT outputs /\
-  EVERY (\x. ~MEM (Var x) ps.ps_stack) outputs /\
-  EVERY (\op. ?v. op = Var v /\ MEM v nl) ps.ps_stack ==>
+  ALL_DISTINCT stk /\ ALL_DISTINCT outputs /\
+  EVERY (\x. ~MEM (Var x) stk) outputs /\
+  EVERY (\op. ?v. op = Var v /\ MEM v nl) stk /\
+  ps.ps_stack = stk ++ MAP Var outputs ==>
   EVERY (\op. ?v. op = Var v /\ MEM v nl)
-    (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs))
-      (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
-        ps outputs))).ps_stack
+    (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps)).ps_stack
 Proof
   strip_tac >>
-  qmatch_goalsub_abbrev_tac `popmany_plan dead pushed` >>
-  `pushed.ps_stack = ps.ps_stack ++ MAP Var outputs` by
-    simp[Abbr `pushed`, inventory_output_push_stack] >>
   `ALL_DISTINCT (MAP Var outputs)` by
     (irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
-  `ALL_DISTINCT pushed.ps_stack` by
+  `ALL_DISTINCT ps.ps_stack` by
     (gvs[ALL_DISTINCT_APPEND, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
-  drule inventory_popmany >> disch_then (qspec_then `dead` mp_tac) >>
+  drule inventory_popmany >>
+  disch_then (qspec_then `MAP Var (FILTER (\v. ~MEM v nl) outputs)` mp_tac) >>
   simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
-  gvs[Abbr `dead`, MEM_MAP, MEM_FILTER, MEM_APPEND, EVERY_MEM] >>
-  metis_tac[]
+  gvs[MEM_MAP, MEM_FILTER, MEM_APPEND, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem inventory_regular_core_resources:
@@ -1956,4 +1953,91 @@ Proof
   `plan_state_residual_wf sb pending (LENGTH pending) arranged` by
     (drule_all reorder_plan_materialised_arranged >> simp[]) >>
   drule plan_state_residual_wf_pop >> simp[]
+QED
+
+
+Theorem inventory_selected_reorder[local]:
+  (if is_commutative opc /\ LENGTH operands >= 2 then
+     let (oa,sa) = reorder_plan dfg operands ps in
+     let (ob,sb) = reorder_plan dfg
+       (TAKE (LENGTH operands - 2) operands ++
+        [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]) ps in
+     if reorder_cost oa < reorder_cost ob then (oa,sa) else (ob,sb)
+   else reorder_plan dfg operands ps) = (ops,qs) ==>
+  ?pending. PERM pending operands /\ reorder_plan dfg pending ps = (ops,qs)
+Proof
+  IF_CASES_TAC >- (
+    simp[LET_THM] >> rpt (pairarg_tac >> gvs[]) >>
+    IF_CASES_TAC >> strip_tac >> gvs[]
+    >- (qexists_tac `operands` >> simp[]) >>
+    goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+    fs[arithmeticTheory.GREATER_EQ] >>
+    metis_tac[last_two_reorder_perm, PERM_SYM]) >>
+  strip_tac >> qexists_tac `operands` >> simp[]
+QED
+
+Theorem inventory_regular_live_support:
+  inst.inst_opcode <> JMP /\
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  EVERY (\op. ?v. op = Var v /\ (MEM v nl \/ MEM op (compute_operands inst))) ps.ps_stack /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\
+    Var v NOTIN FDOM ps.ps_spilled /\ ~MEM (Var v) (compute_operands inst)) inst.inst_outputs /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl F next_term lbl ps = (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v nl) qs.ps_stack
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,mid)` >>
+  rename1 `_ = (rops,arranged)` >>
+  `?pending. PERM pending (compute_operands inst) /\
+    reorder_plan dfg pending mid = (rops,arranged)` by
+      (irule inventory_selected_reorder >> qexists_tac `inst.inst_opcode` >>
+       simp[LET_THM]) >>
+  qpat_x_assum `(if _ then _ else _) = (rops,arranged)` kall_tac >>
+  fs[] >>
+  `ALL_DISTINCT (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)` by
+    (drule_all inventory_regular_core_resources >> simp[]) >>
+  `EVERY (\op. ?v. op = Var v /\ MEM v nl)
+    (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)` by
+    (drule_all inventory_regular_core_live_support_unconditional >> simp[]) >>
+  `EVERY (\v. ~MEM (Var v)
+    (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)) inst.inst_outputs` by
+    (drule inventory_emit_physical_origin >> strip_tac >>
+     `LENGTH pending <= 16` by metis_tac[PERM_LENGTH] >>
+     `!x. MEM x arranged.ps_stack ==> MEM x mid.ps_stack \/ MEM x pending` by
+       metis_tac[inventory_reorder_bounded_physical_origin] >>
+     gvs[EVERY_MEM, stack_pop_def] >>
+     metis_tac[rich_listTheory.MEM_TAKE, PERM_MEM_EQ]) >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics pushed` >>
+  `pushed.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+    MAP Var inst.inst_outputs` by
+    simp[Abbr `pushed`, inventory_output_push_stack] >>
+  pairarg_tac >> simp[] >>
+  rename1 `generate_emit_ops _ _ _ = (eops,emitted)` >>
+  `emitted.ps_stack = pushed.ps_stack` by metis_tac[generate_emit_ops_stack, pairTheory.SND] >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  qpat_x_assum `Abbrev (pushed = _)` kall_tac >>
+  Cases_on `inst.inst_outputs = []`
+  >- (simp[] >> strip_tac >> gvs[release_dead_spills_stack]) >>
+  `EVERY (\op. ?v. op = Var v /\ MEM v nl)
+    (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted)).ps_stack` by
+    (irule inventory_outputs_dead_pop_support >> simp[] >>
+     goal_assum (drule_at (Pat `_ = _ ++ MAP Var _`)) >> simp[]) >>
+  simp[] >> pairarg_tac >> fs[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (oopt,optimised)` >>
+  `EVERY (\op. ?v. op = Var v /\ MEM v nl) optimised.ps_stack` by
+    (Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> gvs[] >>
+     metis_tac[inventory_optimistic_swap_every, pairTheory.SND]) >>
+  strip_tac >> gvs[release_dead_spills_stack]
 QED
