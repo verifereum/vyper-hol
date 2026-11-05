@@ -144,7 +144,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
@@ -202,7 +202,7 @@ Proof
 QED
 
 Theorem calldata_bulk_rejected_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   maxn < dimword (:256) /\ maxn < w2n (abi_decode_load CALLDATALOAD p s) ==>
@@ -349,7 +349,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_prefix_safe:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -401,7 +401,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -451,7 +451,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_live_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
@@ -509,7 +509,7 @@ Proof
 QED
 
 Theorem calldata_bulk_rejected_live_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p s) ==>
@@ -537,7 +537,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_prefix_safe_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\
@@ -590,7 +590,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_frag_mem_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\

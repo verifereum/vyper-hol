@@ -7,9 +7,9 @@ Ancestors
 
 Theorem calldata_recursive_member_appends[local]:
   cs_appends
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od)
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od)
 Proof
   ho_match_mp_tac cs_appends_bind >> conj_tac
   >- simp[cs_appends_abi_member_pointer] >> gen_tac >>
@@ -22,7 +22,7 @@ Theorem calldata_recursive_nonbulk_owned[local]:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   (is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) st = ((),final) /\
   fn_has_code st final fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -46,7 +46,7 @@ Theorem calldata_recursive_nonbulk_owned[local]:
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   (!middle last cdst csrc.
-    compile_abi_decode_to_buf cdst csrc CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf cdst csrc CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
     fn_has_code middle last fn /\
     st.cs_next_id <= middle.cs_next_id /\ last.cs_next_id <= final.cs_next_id /\
@@ -191,7 +191,7 @@ QED
 Theorem calldata_coherent_owned_run:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
   !dst src st final fn initial p d ctx site oid base_addr cap.
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),final) /\
   fn_has_code st final fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\

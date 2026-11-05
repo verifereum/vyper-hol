@@ -110,7 +110,7 @@ QED
 Finalise calldata_index_init_owned_fields
 
 Theorem calldata_array_loop_init_owned:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -257,7 +257,7 @@ QED
 (* Use the very same successful phase executions for values, safety, and
    the full old-variable frame.  In particular, NONE is preserved too. *)
 Theorem calldata_array_loop_init_safe_live:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -482,7 +482,7 @@ QED
 Finalise calldata_array_loop_init_safe_live
 
 Theorem calldata_array_loop_init_owned_live:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -1226,7 +1226,7 @@ Proof
 QED
 
 Theorem calldata_dynamic_setup_repeat:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\ dec_info_needs_offset di /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -1292,7 +1292,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_repeat:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -1320,7 +1320,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_repeat_frag_mem:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -1555,7 +1555,7 @@ QED
 (* Exact concrete initial header boundary; H deliberately includes equality
    of absent as well as present old operands. *)
 Theorem calldata_owned_header_initial:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -2031,7 +2031,7 @@ Proof
 QED
 
 Theorem calldata_owned_header_step:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -2748,7 +2748,7 @@ Theorem calldata_owned_header_initial_apply[local]:
       !q k. MEM (q,k) scratch ==> ?id.
         st.cs_next_id <= id /\ id < end_st.cs_next_id /\
         FLOOKUP u.vs_allocas id = SOME (q,k)) /\
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -2822,7 +2822,7 @@ Theorem calldata_owned_header_step_apply[local]:
       !q k. MEM (q,k) scratch ==> ?id.
         st.cs_next_id <= id /\ id < end_st.cs_next_id /\
         FLOOKUP u.vs_allocas id = SOME (q,k)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -3004,7 +3004,7 @@ Proof
 QED
 
 Theorem calldata_nonbulk_owned:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -3012,7 +3012,7 @@ Theorem calldata_nonbulk_owned:
   abi_decode_index_init header_st = (ip,loop_st) /\
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
     (Lit 0w) di middle = ((),st1) /\
@@ -3647,7 +3647,7 @@ Proof
 QED
 
 Theorem calldata_array_loop_init_repeat_safe:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -3864,7 +3864,7 @@ QED
 Finalise calldata_array_loop_init_repeat_safe
 
 Theorem calldata_owned_header_initial_repeat:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -4076,7 +4076,7 @@ Finalise calldata_owned_header_initial_repeat
 
 (* Composition from the owned header boundary, independently of register freshness. *)
 Theorem calldata_owned_after_initial_repeat[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -4400,7 +4400,7 @@ QED
 Finalise calldata_owned_after_initial_repeat
 
 Theorem calldata_nonbulk_owned_repeat:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -4408,7 +4408,7 @@ Theorem calldata_nonbulk_owned_repeat:
   abi_decode_index_init header_st = (ip,loop_st) /\
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
     (Lit 0w) di middle = ((),st1) /\
@@ -4658,7 +4658,7 @@ Proof
 QED
 
 Theorem calldata_array_loop_init_repeat_safe_mod:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -4704,7 +4704,7 @@ Proof
     (qpat_assum `abi_decode_dynarray_prefix _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_dynarray_prefix_def, comp_bind_def,
         calldata_count_guard_mod_limit]) >>
-  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
     (qpat_assum `abi_decode_array_loop_init _ _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
@@ -4907,7 +4907,7 @@ QED
    case the old step can use the observed count as its capacity without
    changing any footprint, destination extent, or child obligation. *)
 Theorem calldata_owned_header_step_observed:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5065,7 +5065,7 @@ Proof
 QED
 
 Theorem calldata_owned_header_initial_repeat_observed:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -5150,7 +5150,7 @@ Proof
     (qpat_assum `abi_decode_dynarray_prefix _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_dynarray_prefix_def, comp_bind_def,
         calldata_count_guard_mod_limit]) >>
-  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
     (qpat_assum `abi_decode_array_loop_init _ _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
@@ -5208,7 +5208,7 @@ Theorem calldata_owned_header_step_apply_observed[local]:
       !q k. MEM (q,k) scratch ==> ?id.
         st.cs_next_id <= id /\ id < end_st.cs_next_id /\
         FLOOKUP u.vs_allocas id = SOME (q,k)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5357,7 +5357,7 @@ Proof
 QED
 
 Theorem calldata_owned_after_initial_repeat_observed[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5681,7 +5681,7 @@ QED
 Finalise calldata_owned_after_initial_repeat_observed
 
 Theorem calldata_nonbulk_owned_repeat_observed:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -5689,7 +5689,7 @@ Theorem calldata_nonbulk_owned_repeat_observed:
   abi_decode_index_init header_st = (ip,loop_st) /\
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
     (Lit 0w) di middle = ((),st1) /\

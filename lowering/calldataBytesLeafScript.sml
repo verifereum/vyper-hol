@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem calldata_bytes_accepted_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
   maxn < dimword (:256) /\ fresh_vars_wrt st s /\
@@ -44,7 +44,7 @@ Proof
 QED
 
 Theorem calldata_bytes_allocation_shape:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               ~is_alloca_op i.inst_opcode) (emitted_insts st st')
 Proof
@@ -56,7 +56,7 @@ Proof
 QED
 
 Theorem calldata_bytes_accepted_allocation:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
   maxn < dimword (:256) /\ fresh_vars_wrt st s /\
@@ -122,7 +122,7 @@ Proof
 QED
 
 Theorem calldata_bytes_rejected_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ maxn < dimword (:256) /\
   maxn < w2n (abi_decode_load CALLDATALOAD p s) /\ fresh_vars_wrt st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
@@ -183,7 +183,7 @@ Proof
 QED
 
 Theorem calldata_bytes_prefix_safe:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
   d + abi_decode_bytes_copy_size maxn <= s.vs_alloca_next /\
@@ -223,7 +223,7 @@ Proof
 QED
 
 Theorem calldata_bytes_accepted_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
   d + abi_decode_bytes_copy_size maxn <= initial.vs_alloca_next /\
@@ -257,7 +257,7 @@ Proof
 QED
 
 Theorem calldata_bytes_rejected_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
   d + abi_decode_bytes_copy_size maxn <= initial.vs_alloca_next /\
@@ -279,7 +279,7 @@ Proof
 QED
 
 Theorem calldata_bytes_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
   d + abi_decode_bytes_copy_size maxn <= initial.vs_alloca_next /\

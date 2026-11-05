@@ -150,12 +150,12 @@ QED
    Thus its clamps use the existing arbitrary-input decoder theorem too. *)
 Theorem registration_primitive_decoder_prelude:
   compile_decode_args ce [(name,T,dyn,sz,DecPrimWord c)] off
-    CALLDATALOAD (Lit 0w) 4 st = ((),last) /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 4 st = ((),last) /\
   FLOOKUP ce.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst ==>
   ?src first.
     emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (src,first) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecPrimWord c) first = ((),last)
 Proof
   strip_tac >>
@@ -170,7 +170,7 @@ QED
 
 Theorem registration_decoder_prelude:
   compile_decode_args ce [(name,prim,dyn,sz,info)] off
-    CALLDATALOAD (Lit 0w) 4 st = ((),last) /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 4 st = ((),last) /\
   FLOOKUP ce.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst /\
   (prim ==> ?c. info = DecPrimWord c) ==>
@@ -181,7 +181,7 @@ Theorem registration_decoder_prelude:
          emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
          emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
      else src = head /\ first = after_head) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last)
 Proof
   Cases_on `prim` >> simp[] >> strip_tac
   >- (gvs[] >> drule_all registration_primitive_decoder_prelude >>
@@ -300,7 +300,7 @@ Theorem registration_singleton_owned_prefix:
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?dst src first ready p.
     FLOOKUP cef.ce_vars name = SOME (PtrVar dst n) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first =
       ((),final) /\ fn_has_code first final fn /\
     st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\

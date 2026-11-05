@@ -107,7 +107,7 @@ QED
 
 Theorem calldata_bulk_sentinel:
   ~dec_info_needs_clamp ei ==>
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) =
   do cnt <- abi_decode_count_guard CALLDATALOAD src maxn;
      abi_decode_bulk_body dst src CALLDATALOAD mem_sz
@@ -123,7 +123,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\
@@ -162,7 +162,7 @@ Proof
 QED
 
 Theorem calldata_bulk_allocation_shape:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -178,7 +178,7 @@ Proof
 QED
 
 Theorem calldata_bulk_rejected_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   maxn < dimword (:256) /\ maxn < w2n (abi_decode_load CALLDATALOAD p s) /\
@@ -204,7 +204,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_allocation:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\
@@ -413,7 +413,7 @@ Proof
 QED
 
 Theorem calldata_bulk_prefix_safe:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -458,7 +458,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -491,7 +491,7 @@ Proof
 QED
 
 Theorem calldata_bulk_rejected_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -514,7 +514,7 @@ Proof
 QED
 
 Theorem calldata_bulk_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\ maxn < dimword (:256) /\

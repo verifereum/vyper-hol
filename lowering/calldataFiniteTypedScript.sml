@@ -22,7 +22,7 @@ QED
 
 Theorem calldata_coherent_word_owned_run:
   abi_decoder_coherent ce env sf ty tv /\ is_word_type ty /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
   fn_has_code st last fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -130,7 +130,7 @@ QED
 
 Theorem calldata_coherent_bytes_owned_run:
   abi_decoder_coherent ce env sf ty tv /\ ty = BaseT (BytesT (Dynamic maxn)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
   fn_has_code st last fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -218,7 +218,7 @@ QED
 
 Theorem calldata_coherent_string_owned_run:
   abi_decoder_coherent ce env sf ty tv /\ ty = BaseT (StringT maxn) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
   fn_has_code st last fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -345,7 +345,7 @@ Theorem calldata_coherent_bulk_array_owned_run:
   abi_decoder_coherent ce env sf ty tv /\ ty = ArrayT ety (Dynamic maxn) /\
   type_to_abi_dec_info sf ce ty = DecDynArray ei abi_sz mem_sz F maxn /\
   ~dec_info_needs_clamp ei /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
   fn_has_code st last fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\

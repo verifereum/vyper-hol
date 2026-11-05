@@ -272,7 +272,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_reentry:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -317,7 +317,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_memory_shape:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') ==>
   ?out tail. emitted_insts st st' =
     mk_inst st.cs_next_id MLOAD [ip] [out] :: tail /\
@@ -338,7 +338,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_prefix_safe:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip s = SOME p /\ w2n p+32 <= s.vs_alloca_next ==>
   !pre i post u.
@@ -353,7 +353,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_frag_mem:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   eval_operand src initial = SOME (n2w sb) /\
