@@ -136,3 +136,51 @@ Proof
     `latest_current_name (ev9,ev10)`] >>
   irule current_local_trace_source_rf >> metis_tac[]
 QED
+
+Theorem rf_map_operand_identity[simp]:
+  rf_map_operand I op = op
+Proof
+  Cases_on `op` >> simp[rf_map_operand_def]
+QED
+
+Theorem rf_local_step_identity:
+  rf_local_step V I I inst inst
+Proof
+  `rf_map_operand I = I` by simp[FUN_EQ_THM] >>
+  simp[rf_local_step_def, MAP_ID]
+QED
+
+Theorem rf_back_trace_identity:
+  !insts. EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) insts ==>
+  rf_back_trace V I I (REVERSE insts) (REVERSE insts)
+Proof
+  Induct >> simp[rf_back_trace_def] >> rpt strip_tac >>
+  irule rf_back_trace_append >> qexists_tac `I` >>
+  simp[rf_back_trace_def, rf_local_step_identity]
+QED
+
+Theorem rf_trace_final_block_boundary:
+  current_tree_trace A sm tree s rs bbs H E visited
+    ctrs' s' bbs' H' visited' events /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  EVERY (current_event_valid A V) events /\
+  EVERY (current_event_names H' V) events /\
+  lookup_block q bbs = SOME old /\ lookup_block q bbs' = SOME final /\
+  EVERY (\i. ALL_DISTINCT i.inst_outputs /\
+    EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
+  ?renamed f g.
+    rf_back_trace V f g (REVERSE old.bb_instructions)
+      (REVERSE renamed.bb_instructions) /\
+    LIST_REL rf_copy_shape renamed.bb_instructions final.bb_instructions
+Proof
+  strip_tac >> drule_all current_trace_final_block >> strip_tac
+  >- (qexistsl_tac [`old`, `I`, `I`] >> conj_tac
+      >- (irule rf_back_trace_identity >> fs[EVERY_MEM] >> metis_tac[]) >>
+      metis_tac[current_edge_shape_copy_shape]) >>
+  `current_event_valid A V ev` by fs[EVERY_MEM] >>
+  `?f g. rf_back_trace V f g (REVERSE old.bb_instructions)
+     (REVERSE (current_event_renamed_block ev).bb_instructions)` by
+    (irule current_event_source_rf_trace >> metis_tac[]) >>
+  qexistsl_tac [`current_event_renamed_block ev`, `f`, `g`] >>
+  metis_tac[current_edge_shape_copy_shape]
+QED
