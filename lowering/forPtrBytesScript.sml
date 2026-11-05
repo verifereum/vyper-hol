@@ -1,6 +1,6 @@
 (* Counted bytestring copies: only the length word must be clean. *)
 Theory forPtrBytes
-Ancestors forPtrSeqCompose forPtrBulk typedCopyPtr representationCleanPtr valueCopyBytes
+Ancestors instIdxIndep forPtrSeqCompose forPtrBulk typedCopyPtr representationCleanPtr valueCopyBytes
   exprSimBufferStore valueEncoding valueEncodingProps bodyPtrDefs
   loweringPosts venomState venomExecSemantics venomInst ptrSafeRun
   ptrDiscipline fragGasSeqPtr ghostPcTransportPtr finite_map exprLoweringProps
@@ -196,4 +196,252 @@ Proof
   `update_var tmp (f a b) (s with vs_inst_idx := k) =
     (update_var tmp (f a b) s) with vs_inst_idx := k` by simp[update_var_def] >>
   simp[]
+QED
+
+Theorem for_copy_len_binop_endpoint:
+  (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?u g t.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id opc [left;right] [tmp]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id opc [left;right] [tmp]) s = OK u /\
+    run_inst_seq [mk_inst id opc [left;right] [tmp]] s = OK u /\
+    lookup_var tmp u = SOME (f a b) /\ op_taint t (Var tmp) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!p. p <> tmp ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `u = update_var tmp (f a b) s` >>
+  qabbrev_tac `g = step_prov PG G (mk_inst id opc [left;right] [tmp]) u` >>
+  qabbrev_tac `t = step_taint (mk_inst id opc [left;right] [tmp]) s u tn` >>
+  qexistsl [`u`, `g`, `t`] >> conj_tac
+  >- (irule for_copy_len_binop_cons >> simp[inst_seq_ptr_def] >>
+      qexists `f` >> simp[Abbr `u`, Abbr `g`, Abbr `t`]) >>
+  conj_tac >- (simp[Abbr `u`] >> irule for_copy_len_binop_step >> simp[]) >>
+  qsuff_tac `inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id opc [left;right] [tmp]] s g t /\
+    run_inst_seq [mk_inst id opc [left;right] [tmp]] s = OK u /\
+    lookup_var tmp u = SOME (f a b) /\ op_taint t (Var tmp) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!p. p <> tmp ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))`
+  >- simp[] >>
+  irule for_copy_len_binop_checked >> simp[Abbr `u`, Abbr `g`, Abbr `t`]
+QED
+
+Theorem for_copy_len_last_two:
+  lookup_var p s = SOME w /\ op_taint tn (Var p) = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id AND [Var p; Lit (i2w (-32))] [q];
+       mk_inst (id+1) ADD [Var q; Lit 32w] [r]]
+      (s with vs_inst_idx := k) gf tf) /\
+    run_inst_seq [mk_inst id AND [Var p; Lit (i2w (-32))] [q];
+       mk_inst (id+1) ADD [Var q; Lit 32w] [r]] s = OK sf /\
+    lookup_var r sf = SOME ((w && i2w (-32)) + 32w) /\
+    op_taint tf (Var r) = {} /\ sf.vs_memory = s.vs_memory /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!x. x <> q /\ x <> r ==> lookup_var x sf = lookup_var x s /\
+      FLOOKUP gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `?u g t.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id AND [Var p; Lit (i2w (-32))] [q]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id AND [Var p; Lit (i2w (-32))] [q]) s = OK u /\
+    run_inst_seq [mk_inst id AND [Var p; Lit (i2w (-32))] [q]] s = OK u /\
+    lookup_var q u = SOME (w && i2w (-32)) /\ op_taint t (Var q) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!x. x <> q ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP g x = FLOOKUP G x /\ op_taint t (Var x) = op_taint tn (Var x))` by
+    (irule for_copy_len_binop_endpoint >> simp[eval_operand_def, op_taint_def]) >>
+  `?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG g t
+      [mk_inst (id+1) ADD [Var q; Lit 32w] [r]] (u with vs_inst_idx := k) gf tf) /\
+    step_inst_base (mk_inst (id+1) ADD [Var q; Lit 32w] [r]) u = OK sf /\
+    run_inst_seq [mk_inst (id+1) ADD [Var q; Lit 32w] [r]] u = OK sf /\
+    lookup_var r sf = SOME ((w && i2w (-32)) + 32w) /\ op_taint tf (Var r) = {} /\
+    sf.vs_memory = u.vs_memory /\ tf.t_mem = t.t_mem /\
+    tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\
+    (!x. x <> r ==> lookup_var x sf = lookup_var x u /\
+      FLOOKUP gf x = FLOOKUP g x /\ op_taint tf (Var x) = op_taint t (Var x))` by
+    (irule for_copy_len_binop_endpoint >> simp[eval_operand_def, op_taint_def]) >>
+  qexistsl [`sf`, `gf`, `tf`] >> conj_tac
+  >- (irule for_inst_seq_ptr_cons_nonterminator >>
+      conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+      qexistsl [`g`, `t`, `u`] >> simp[]) >>
+  simp[run_inst_seq_def] >> metis_tac[]
+QED
+
+Theorem for_copy_len_suffix:
+  lookup_var t0 s = SOME w /\ op_taint tn (Var t0) = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]]
+      (s with vs_inst_idx := k) gf tf) /\
+    run_inst_seq [mk_inst id ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]] s = OK sf /\
+    lookup_var t3 sf = SOME (((w + 31w) && i2w (-32)) + 32w) /\
+    op_taint tf (Var t3) = {} /\ sf.vs_memory = s.vs_memory /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. p <> t1 /\ p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p s /\
+      FLOOKUP gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `?u g t.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id ADD [Var t0; Lit 31w] [t1]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id ADD [Var t0; Lit 31w] [t1]) s = OK u /\
+    run_inst_seq [mk_inst id ADD [Var t0; Lit 31w] [t1]] s = OK u /\
+    lookup_var t1 u = SOME (w+31w) /\ op_taint t (Var t1) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!p. p <> t1 ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))` by
+    (irule for_copy_len_binop_endpoint >> simp[eval_operand_def, op_taint_def]) >>
+  `?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG g t
+      [mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]] (u with vs_inst_idx := k) gf tf) /\
+    run_inst_seq [mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]] u = OK sf /\
+    lookup_var t3 sf = SOME (((w+31w) && i2w (-32)) + 32w) /\
+    op_taint tf (Var t3) = {} /\ sf.vs_memory = u.vs_memory /\
+    tf.t_mem = t.t_mem /\ tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\
+    (!p. p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p u /\
+      FLOOKUP gf p = FLOOKUP g p /\ op_taint tf (Var p) = op_taint t (Var p))` by
+    (irule (SRULE [GSYM ADD_ASSOC]
+      (Q.INST [`id` |-> `id+1`] (SPEC_ALL for_copy_len_last_two))) >> simp[]) >>
+  qexistsl [`sf`, `gf`, `tf`] >> conj_tac
+  >- (irule for_inst_seq_ptr_cons_nonterminator >>
+      conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+      qexistsl [`g`, `t`, `u`] >> simp[]) >>
+  simp[Once run_inst_seq_def] >> metis_tac[]
+QED
+
+Theorem for_copy_header_variable_frame:
+  p <> tmp ==>
+  lookup_var p (update_var tmp w s) = lookup_var p s /\
+  FLOOKUP (step_prov PG G (mk_inst id MLOAD [src] [tmp])
+    (update_var tmp w s)) p = FLOOKUP G p /\
+  op_taint (step_taint (mk_inst id MLOAD [src] [tmp]) s
+    (update_var tmp w s) tn) (Var p) = op_taint tn (Var p)
+Proof
+  strip_tac >>
+  gvs[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+      set_var_taint_def, op_taint_def, mk_inst_def, update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
+Theorem for_copy_header_endpoint:
+  lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx ==>
+  ?u g t.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MLOAD [Var src] [tmp]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s = OK u /\
+    lookup_var tmp u = SOME (mload (w2n a) s) /\ op_taint t (Var tmp) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!p. p <> tmp ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qabbrev_tac `u = update_var tmp (mload (w2n a) s) s` >>
+  qabbrev_tac `g = step_prov PG G (mk_inst id MLOAD [Var src] [tmp]) u` >>
+  qabbrev_tac `t = step_taint (mk_inst id MLOAD [Var src] [tmp]) s u tn` >>
+  `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s = OK u` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[mk_inst_def, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_read1_def, eval_operand_def, Abbr `u`]) >>
+  `~is_terminator (mk_inst id MLOAD [Var src] [tmp]).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  qexistsl [`u`, `g`, `t`] >> conj_tac
+  >- (gen_tac >> simp[inst_seq_ptr_def, step_inst_inst_idx_indep,
+                      exec_result_map_def, Abbr `g`, Abbr `t`] >>
+      irule ptr_inst_ok_mload >> simp[]) >>
+  simp[] >> conj_tac
+  >- simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `op_taint t (Var tmp) = {} /\ t.t_mem = tn.t_mem /\
+   t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans` by
+    (simp[Abbr `t`, Abbr `u`] >> irule mload_ghost_clean >> simp[eval_operand_def]) >>
+  simp[] >> conj_tac >- simp[Abbr `u`, update_var_def] >>
+  gen_tac >> disch_tac >>
+  simp_tac pure_ss [Abbr `g`, Abbr `t`, Abbr `u`] >>
+  irule for_copy_header_variable_frame >> simp[]
+QED
+
+Theorem for_bytes_length_prefix:
+  lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx ==>
+  ?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MLOAD [Var src] [t0];
+       mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]]
+      (s with vs_inst_idx := k) gf tf) /\
+    run_inst_seq [mk_inst id MLOAD [Var src] [t0];
+       mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] s = OK sf /\
+    lookup_var t3 sf = SOME (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) /\
+    op_taint tf (Var t3) = {} /\ sf.vs_memory = s.vs_memory /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. p <> t0 /\ p <> t1 /\ p <> t2 /\ p <> t3 ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `?u g t.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id MLOAD [Var src] [t0]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id MLOAD [Var src] [t0]) s = OK u /\
+    lookup_var t0 u = SOME (mload (w2n a) s) /\ op_taint t (Var t0) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!p. p <> t0 ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))` by
+    (irule for_copy_header_endpoint >> simp[]) >>
+  `?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG g t
+      [mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] (u with vs_inst_idx := k) gf tf) /\
+    run_inst_seq [mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] u = OK sf /\
+    lookup_var t3 sf = SOME (((mload (w2n a) s+31w) && i2w (-32)) + 32w) /\
+    op_taint tf (Var t3) = {} /\ sf.vs_memory = u.vs_memory /\
+    tf.t_mem = t.t_mem /\ tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\
+    (!p. p <> t1 /\ p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p u /\
+      FLOOKUP gf p = FLOOKUP g p /\ op_taint tf (Var p) = op_taint t (Var p))` by
+    (irule (SRULE [GSYM ADD_ASSOC]
+      (Q.INST [`id` |-> `id+1`] (SPEC_ALL for_copy_len_suffix))) >> simp[]) >>
+  qexistsl [`sf`, `gf`, `tf`] >> conj_tac
+  >- (irule for_inst_seq_ptr_cons_nonterminator >>
+      conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+      qexistsl [`g`, `t`, `u`] >> simp[]) >>
+  simp[Once run_inst_seq_def] >> metis_tac[]
+QED
+
+Theorem for_ptr_covers_transport:
+  lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
+  op_taint tf (Var p) = op_taint tn (Var p) ==>
+  (ptr_covers gf tf p sf n <=> ptr_covers G tn p s n)
+Proof
+  simp[ptr_covers_def]
 QED
