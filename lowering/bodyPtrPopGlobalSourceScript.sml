@@ -5,6 +5,7 @@ Ancestors
   bodyPtrPreds vyperTypeCallGraphSoundness vyperTypeCallGraph
   vyperTypeContractFunction vyperValue vyperInterpreter vyperTypeContract
   vyperTypeSystem vyperTypeContractContext vyperStorageBackend
+  vyperStorageLayoutSafety vyperLookupStorage
 
 (* Closed diagnostic context fixes the actual module and declared slot layout.
    The enclosing expression is tested in its own nonrecursive call frame. *)
@@ -18,7 +19,7 @@ End
 Theorem pop_global_source_module:
   get_module_code pop_global_cx NONE = SOME pop_global_tops
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[]
 QED
 
 Theorem pop_global_source_callable:
@@ -31,7 +32,7 @@ QED
 Theorem pop_global_source_context_typed:
   context_well_typed pop_global_cx
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[]
 QED
 
 Theorem pop_global_source_operand:
@@ -126,13 +127,13 @@ Theorem pop_global_source_initial_context:
   pop_global_cx = (initial_evaluation_context pop_global_cx.sources
     pop_global_cx.layouts pop_global_cx.txn NONE) with stk := [(NONE,"probe")]
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[]
 QED
 
 Theorem pop_global_source_artifact_env:
   pop_global_env = artifact_env pop_global_art pop_global_mods NONE
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[]
 QED
 
 Theorem pop_global_source_env_context:
@@ -190,3 +191,70 @@ Theorem pop_global_source_accounts_typed:
 Proof
   EVAL_TAC >> gen_tac >> Cases_on `addr = 0w` >> simp[]
 QED
+
+Theorem pop_global_source_storage_info:
+  storage_var_info pop_global_cx mid n = SOME (b,off,tv) <=>
+  mid = NONE /\ b = F /\
+  ((n = "A" /\ off = 0) \/ (n = "B" /\ off = 4)) /\
+  tv = StructTV [("a",ArrayTV
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1))]
+Proof
+  Cases_on `mid` >> EVAL_TAC >>
+  Cases_on `n = "A"` >> Cases_on `n = "B"` >> gvs[] >>
+  EVAL_TAC >> simp[SF wordsLib.SIZES_ss, type_slot_size_def] >> EVAL_TAC >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem pop_global_source_storage_regions:
+  declared_storage_region pop_global_cx mid n subs = SOME (b,slot,tv) <=>
+  mid = NONE /\ b = F /\ subs = [] /\
+  ((n = "A" /\ slot = 0w) \/ (n = "B" /\ slot = 4w)) /\
+  tv = StructTV [("a",ArrayTV
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1))]
+Proof
+  Cases_on `mid` >> EVAL_TAC >>
+  Cases_on `n = "A"` >> Cases_on `n = "B"` >> simp[] >>
+  Cases_on `subs = []` >> gvs[] >>
+  EVAL_TAC >> simp[SF wordsLib.SIZES_ss, type_slot_size_def] >> EVAL_TAC >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem pop_global_source_layout_safe:
+  storage_layout_safe pop_global_cx
+Proof
+  simp[storage_layout_safe_def, well_formed_layout_def,
+       pop_global_source_storage_info, pop_global_source_storage_regions,
+       nonreentrant_slot_separated_def, pop_global_cx_def,
+       empty_evaluation_context_def] >>
+  rpt strip_tac >> gvs[] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem pop_global_source_slots:
+  slots_in_range pop_global_storage 0
+    (StructTV [("a",ArrayTV
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1))]) /\
+  slots_in_range pop_global_storage 4
+    (StructTV [("a",ArrayTV
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1))])
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem pop_global_source_backend:
+  get_storage_backend pop_global_cx F pop_global_es =
+    (INL pop_global_storage,pop_global_es)
+Proof
+  simp[pop_global_es_def, get_storage_backend_eq, get_storage_after_set]
+QED
+
+Theorem pop_global_source_storage_well_formed:
+  contract_storage_well_formed pop_global_cx pop_global_es
+Proof
+  simp[contract_storage_well_formed_def, well_formed_storage_def,
+       storage_var_in_range_def, pop_global_source_storage_info,
+       pop_global_source_storage_regions] >>
+  rpt strip_tac >> gvs[pop_global_source_backend] >>
+  simp[pop_global_source_slots]
+QED
+
