@@ -87,3 +87,104 @@ Theorem ld_noncurrent_merge_callee:
 Proof
   simp[merge_callee_state_def]
 QED
+
+Theorem ld_key_update_mono:
+  Y SUBSET X /\ n SUBSET m ==>
+  key_update Y key n SUBSET key_update X key m
+Proof
+  rw[key_update_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ld_shared_sload:
+  ld_shared_state tn un s t ==>
+  word_agree_except (key_taint tn.t_stor key) (sload key s) (sload key t)
+Proof
+  simp[ld_shared_state_def, sload_def, contract_storage_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.lookup_storage_def,
+       storage_agree_except_def] >> metis_tac[]
+QED
+
+Theorem ld_shared_tload:
+  ld_shared_state tn un s t ==>
+  word_agree_except (key_taint tn.t_trans key) (tload key s) (tload key t)
+Proof
+  simp[ld_shared_state_def, tload_def, contract_transient_def,
+       vfmStateTheory.lookup_storage_def, storage_agree_except_def] >> metis_tac[]
+QED
+
+Theorem ld_noncurrent_sstore:
+  (!a. a <> s.vs_call_ctx.cc_address ==>
+    (s.vs_accounts a).storage = (t.vs_accounts a).storage) /\
+  (!a. a <> s.vs_call_ctx.cc_address ==>
+    s.vs_transient a = t.vs_transient a) /\
+  s.vs_call_ctx = t.vs_call_ctx ==>
+  (!a. a <> (sstore key x s).vs_call_ctx.cc_address ==>
+    ((sstore key x s).vs_accounts a).storage =
+    ((sstore key y t).vs_accounts a).storage) /\
+  (!a. a <> (sstore key x s).vs_call_ctx.cc_address ==>
+    (sstore key x s).vs_transient a = (sstore key y t).vs_transient a)
+Proof
+  simp[sstore_def, combinTheory.APPLY_UPDATE_THM] >> metis_tac[]
+QED
+
+Theorem ld_noncurrent_tstore:
+  (!a. a <> s.vs_call_ctx.cc_address ==>
+    (s.vs_accounts a).storage = (t.vs_accounts a).storage) /\
+  (!a. a <> s.vs_call_ctx.cc_address ==>
+    s.vs_transient a = t.vs_transient a) /\
+  s.vs_call_ctx = t.vs_call_ctx ==>
+  (!a. a <> (tstore key x s).vs_call_ctx.cc_address ==>
+    ((tstore key x s).vs_accounts a).storage =
+    ((tstore key y t).vs_accounts a).storage) /\
+  (!a. a <> (tstore key x s).vs_call_ctx.cc_address ==>
+    (tstore key x s).vs_transient a = (tstore key y t).vs_transient a)
+Proof
+  simp[tstore_def, combinTheory.APPLY_UPDATE_THM] >> metis_tac[]
+QED
+
+Theorem ld_shared_sstore:
+  ld_shared_state tn un s t /\
+  (!a. a <> s.vs_call_ctx.cc_address ==>
+    (s.vs_accounts a).storage = (t.vs_accounts a).storage) /\
+  word_agree_except (m INTER count 32) x y /\ n SUBSET m ==>
+  ld_shared_state (tn with t_stor := key_update tn.t_stor key m)
+    (un with t_stor := key_update un.t_stor key n)
+    (sstore key x s) (sstore key y t)
+Proof
+  strip_tac >>
+  `key_update un.t_stor key n SUBSET key_update tn.t_stor key m` by
+    (irule ld_key_update_mono >> gvs[ld_shared_state_def]) >>
+  gvs[ld_shared_state_def, sstore_def, vfmStateTheory.lookup_account_def,
+      vfmStateTheory.update_storage_def] >>
+  conj_tac
+  >- (gen_tac >> Cases_on `a = t.vs_call_ctx.cc_address` >>
+      simp[combinTheory.APPLY_UPDATE_THM] >>
+      qpat_x_assum `!a. _ with storage := _ = _`
+        (qspec_then `t.vs_call_ctx.cc_address` mp_tac) >>
+      simp[vfmStateTheory.account_state_component_equality]) >>
+  gen_tac >> Cases_on `a = t.vs_call_ctx.cc_address`
+  >- (simp[combinTheory.APPLY_UPDATE_THM] >>
+      irule ld_storage_masked_update >> simp[]) >>
+  simp[combinTheory.APPLY_UPDATE_THM, storage_agree_except_def,
+       word_agree_except_def]
+QED
+
+Theorem ld_shared_tstore:
+  ld_shared_state tn un s t /\
+  (!a. a <> s.vs_call_ctx.cc_address ==>
+    s.vs_transient a = t.vs_transient a) /\
+  word_agree_except (m INTER count 32) x y /\ n SUBSET m ==>
+  ld_shared_state (tn with t_trans := key_update tn.t_trans key m)
+    (un with t_trans := key_update un.t_trans key n)
+    (tstore key x s) (tstore key y t)
+Proof
+  strip_tac >>
+  `key_update un.t_trans key n SUBSET key_update tn.t_trans key m` by
+    (irule ld_key_update_mono >> gvs[ld_shared_state_def]) >>
+  gvs[ld_shared_state_def, tstore_def, vfmStateTheory.update_storage_def] >>
+  gen_tac >> Cases_on `a = t.vs_call_ctx.cc_address`
+  >- (simp[combinTheory.APPLY_UPDATE_THM] >>
+      irule ld_storage_masked_update >> simp[]) >>
+  simp[combinTheory.APPLY_UPDATE_THM, storage_agree_except_def,
+       word_agree_except_def]
+QED
