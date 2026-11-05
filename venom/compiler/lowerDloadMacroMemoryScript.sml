@@ -1,6 +1,6 @@
 Theory lowerDloadMacroMemory
 Ancestors
-  lowerDloadMacroBoundary lowerDloadPhaseBoundary lowerDloadRelocation lowerDloadProofs ptrDiscipline
+  lowerDloadMacroBoundary lowerDloadPhaseBoundary lowerDloadRelocation ptrDiscipline
   regularCallEmitSim regularMemorySim codegenRel
   venomState venomExecSemantics finite_map words list pred_set
 
@@ -56,7 +56,7 @@ Proof
   strip_tac >> drule_all ld_load_second_prefix >>
   disch_then (fn th => gvs[th]) >>
   `eval_operand (Var av) (update_var bv (x + y) r) = eval_operand (Var av) r` by
-    (irule eval_operand_update_var_other >> simp[]) >>
+    (gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qmatch_goalsub_abbrev_tac `SOME (n2w ptr)` >>
   drule_at (Pat `ld_target_prefix _ _ _ _ _ _ _`) (SRULE [] ld_load_first_outside) >>
   disch_then (qspec_then `ptr` mp_tac) >> simp[Abbr `ptr`] >> strip_tac >>

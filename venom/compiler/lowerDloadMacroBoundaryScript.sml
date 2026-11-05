@@ -1,6 +1,6 @@
 Theory lowerDloadMacroBoundary
 Ancestors
-  lowerDloadPhaseBoundary lowerDloadPairedBoundary lowerDloadDefs lowerDloadProofs
+  lowerDloadPhaseBoundary lowerDloadPairedBoundary lowerDloadDefs
   venomExecSemantics venomState venomInst finite_map words list
 
 Theorem ld_configured_bytes_code:
@@ -78,9 +78,11 @@ Theorem ld_bytes_copy_after_add:
 Proof
   strip_tac >>
   `eval_operand dst (update_var av sum t0) = eval_operand dst t0` by
-    (irule eval_operand_update_var_other >> metis_tac[]) >>
+    (Cases_on `dst` >> simp[eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE] >> metis_tac[]) >>
   `eval_operand sz (update_var av sum t0) = eval_operand sz t0` by
-    (irule eval_operand_update_var_other >> metis_tac[]) >>
+    (Cases_on `sz` >> simp[eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE] >> metis_tac[]) >>
   drule_all ld_macro_copy_step >>
   disch_then (fn th => rewrite_tac[th]) >>
   simp[ld_macro_operand_pc] >>
@@ -319,7 +321,8 @@ Proof
         FLOOKUP_UPDATE] >> metis_tac[]) >>
   rename1 `SOME p` >> PairCases_on `p` >>
   simp[ld_macro_operand_pc] >>
-  irule eval_operand_update_var_other >> metis_tac[]
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
+    FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 Theorem ld_load_second_prefix:
@@ -392,7 +395,7 @@ Proof
   drule_all (SRULE [] ld_load_first_pointer) >> strip_tac >>
   `eval_operand (Var av) (update_var bv (x + y) r) =
     eval_operand (Var av) r` by
-    (irule eval_operand_update_var_other >> simp[]) >>
+    (gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   simp[ld_macro_operand_pc] >>
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
