@@ -885,3 +885,137 @@ Proof
   drule_all abi_decoder_members_child_phi >> strip_tac >>
   qexistsl_tac [`(ep,dp)`,`ready`] >> fs[ADD_COMM]
 QED
+
+Theorem calldata_source_member_cursor_step[local]:
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    0 0 first final initial ((ei,az,mz)::rest) ao vo a s /\
+  xs = abi_decoder_member_infos sf ce tys /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
+  LENGTH vs = LENGTH tys /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+      dp <- emit_op ADD [dst; Lit (n2w vo)];
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+  fn_has_code a final fn /\
+  (a.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  final.cs_next_var <= limit_st.cs_next_var /\
+  (oid < first.cs_next_id \/ final.cs_next_id <= oid) /\
+  base_addr <= d /\ d + SUM (MAP type_memory_size tvs) <= base_addr+cap /\
+  SUM (MAP type_memory_size tvs) <= outsz /\
+  d + SUM (MAP type_memory_size tvs) < dimword(:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (!i. i < LENGTH tys ==> calldata_member_child_contract ce env sf ctx fn site limit_st
+    (EL i tys) (EL i tvs)) ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = next.cs_current_bb /\
+    t.vs_inst_idx = LENGTH next.cs_current_insts /\
+    calldata_source_member_cursor ce env sf ctx fn site limit_st
+      xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+      0 0 first final initial rest (ao+az) (vo+mz) next t /\
+    calldata_member_transfers ctx fn s t
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all calldata_source_cursor_compilation >>
+  disch_then (qx_choose_then `ops` (qx_choose_then `ready`
+    (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  drule_all (SIMP_RULE bool_ss [LET_THM] calldata_source_cursor_head) >> strip_tac >>
+  qabbrev_tac `n = LENGTH (abi_decoder_member_infos sf ce tys) - LENGTH ((ei,az,mz)::rest)` >>
+  suspend "child"
+QED
+
+Resume calldata_source_member_cursor_step[child]:
+
+  `vo + type_memory_size (EL n tvs) <= SUM (MAP type_memory_size tvs)` by
+    (qpat_assum `vo = _` (fn th => rewrite_tac[th]) >>
+     irule abi_encoder_prefix_sum_bound >> simp[]) >>
+  `ci_mono first a /\ abi_decoder_operand_live a.cs_next_var src /\
+   abi_decoder_operand_live a.cs_next_var dst /\
+   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
+   FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+   fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+   calldata_member_own fn first.cs_next_id final.cs_next_id s` by
+    (qhdtm_assum `calldata_source_member_cursor`
+      (strip_assume_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
+     drule calldata_member_resource_endpoint >> simp[]) >>
+  `calldata_member_own fn a.cs_next_id next.cs_next_id s` by
+    (irule calldata_member_own_nested >>
+     qhdtm_assum `calldata_member_own` (irule_at Any) >>
+     fs[ci_mono_def]) >>
+  `type_memory_size (EL n tvs) = type_memory_bytes ce (EL n tys)` by
+    (drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
+  suspend "apply"
+QED
+
+Resume calldata_source_member_cursor_step[apply]:
+  `?t scratch. calldata_member_success ctx fn site limit_st a next (d+vo)
+    (type_memory_size (EL n tvs)) (EL n tvs) (EL n vs) s t scratch` suffices_by
+    (strip_tac >> suspend "advance") >>
+  qhdtm_x_assum `calldata_source_member_cursor` kall_tac >>
+  qpat_x_assum `(do ep <- _; _ od) a = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` kall_tac >>
+  `MAP (vyper_to_abi_type env) tys =
+    MAP (vyper_to_abi_type env) (TAKE n tys) ++
+    vyper_to_abi_type env (EL n tys)::MAP (vyper_to_abi_type env) (DROP (SUC n) tys)` by
+    (`DROP n tys = EL n tys::DROP (SUC n) tys` by simp[DROP_EL_CONS, ADD1] >>
+     pure_rewrite_tac[GSYM MAP, GSYM MAP_APPEND] >> AP_TERM_TAC >>
+     qpat_x_assum `DROP n tys = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+     simp[TAKE_DROP]) >>
+  `d+vo+type_memory_size (EL n tvs) < dimword(:256) /\
+   next.cs_next_var <= limit_st.cs_next_var /\ base_addr <= d+vo /\
+   d+vo+type_memory_size (EL n tvs) <= base_addr+cap /\
+   vo+type_memory_bytes ce (EL n tys) <= outsz /\
+   (oid < ready.cs_next_id \/ next.cs_next_id <= oid)` by
+    (gns[ci_mono_def] >> decide_tac) >>
+  qpat_x_assum `ei = _` SUBST_ALL_TAC >>
+  qpat_x_assum `ao = _` SUBST_ALL_TAC >>
+  qpat_x_assum `vo = _` kall_tac >>
+  qpat_x_assum `type_memory_size (EL n tvs) = _` kall_tac >>
+  irule (SIMP_RULE bool_ss [LET_THM] calldata_source_member_success) >>
+  asm_simp_tac bool_ss [] >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `FLOOKUP s.vs_allocas oid = _` (irule_at Any) >>
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qexistsl_tac [`env`,`MAP (vyper_to_abi_type env) (DROP (SUC n) tys)`] >>
+  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `MAP (vyper_to_abi_type env) tys = _`
+    (fn th => pure_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]
+QED
+
+Resume calldata_source_member_cursor_step[advance]:
+  drule calldata_member_success_observations >> strip_tac >>
+  `a.cs_next_var <= ready.cs_next_var` by
+    (drule abi_decode_member_setup_counters >> simp[]) >>
+  `ready.cs_next_var <= next.cs_next_var` by
+    (mp_tac (cj 1 abi_decoder_vars_mono_mutual) >>
+     rewrite_tac[abi_decoder_vars_mono_def] >>
+     disch_then (qspecl_then [`SND ops`,`FST ops`,`CALLDATALOAD`,`Lit 0w`,`ei`,`ready`] mp_tac) >>
+     simp[]) >>
+  `ci_mono a next /\ ci_mono next final` by
+    (gns[ci_mono_def] >> decide_tac) >>
+  `LENGTH tys = LENGTH xs /\ LENGTH tvs = LENGTH xs /\ LENGTH vs = LENGTH xs` by
+    (fs[abi_decoder_member_infos_def, LIST_REL_EL_EQN]) >>
+  `n = LENGTH xs - LENGTH ((ei,az,mz)::rest)` by simp[Abbr `n`] >>
+  qexists_tac `t` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule (SIMP_RULE bool_ss [LET_THM] calldata_source_member_cursor_advance) >>
+  qhdtm_assum `calldata_source_member_cursor` (irule_at Any) >>
+  qexists_tac `scratch` >>
+  qpat_x_assum `n = LENGTH xs - _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_x_assum `xs = _` kall_tac >>
+  qpat_x_assum `vo = _` (fn th => assume_tac (SYM th)) >>
+  qpat_x_assum `type_memory_size (EL n tvs) = _` kall_tac >>
+  asm_simp_tac bool_ss [] >>
+  conj_tac >- decide_tac >>
+  conj_tac >- (gns[ci_mono_def] >> decide_tac) >>
+  conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[] >> decide_tac) >>
+  simp[] >> decide_tac
+QED
+Finalise calldata_source_member_cursor_step
