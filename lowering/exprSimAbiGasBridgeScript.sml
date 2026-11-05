@@ -1465,6 +1465,95 @@ Proof
   simp[MEM_MAP, MEM_APPEND] >> metis_tac[]
 QED
 
+Theorem frag_relabel_observer_name[simp]:
+  (frag_relabel_observer sa sb L ids fn id).fn_name = fn.fn_name
+Proof
+  simp[frag_relabel_observer_def]
+QED
+
+Theorem frag_relabel_observer_phi_zero:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb ==>
+  !bb. lookup_block sb.cs_current_bb
+    (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) sb.cs_current_insts` by
+    (fs[frag_ops_free_def, frag_code_def, NULL_EQ, EVERY_APPEND, EVERY_MEM] >>
+     metis_tac[]) >>
+  simp[frag_relabel_observer_cut] >>
+  Cases_on `sb.cs_current_insts` >> fs[phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem frag_relabel_observer_provenance:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ fn_has_code sa sb fn /\
+  MEM inst (fn_insts (frag_relabel_observer sa sb L ids fn id)) /\
+  inst.inst_opcode <> STOP /\ inst.inst_opcode <> NOP ==>
+  MEM inst (fn_insts fn)
+Proof
+  strip_tac >> drule_all start_swap_emitted_blocks >> strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  fs[fn_insts_def, frag_relabel_observer_def, frag_fn_insts_blocks_member,
+     MEM_APPEND, MEM_MAP] >> gvs[]
+  >- (fs[fn_has_code_def] >>
+      `MEM inst bb.bb_instructions` by
+        metis_tac[IS_PREFIX_APPEND, MEM_APPEND] >>
+      drule lookup_block_MEM >> metis_tac[])
+  >- (`MEM bb (emitted_blocks sa sb)` by
+        (`emitted_blocks sa sb = FRONT (emitted_blocks sa sb) ++
+           [LAST (emitted_blocks sa sb)]` by simp[APPEND_FRONT_LAST] >>
+         metis_tac[MEM_APPEND]) >>
+      fs[fn_has_code_def] >>
+      `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by metis_tac[] >>
+      drule lookup_block_MEM >> metis_tac[])
+  >- gvs[MEM_MAP, mk_inst_def] >>
+  `MEM inst (LAST (emitted_blocks sa sb)).bb_instructions` by
+    metis_tac[TAKE_DROP, MEM_APPEND] >>
+  fs[fn_has_code_def] >>
+  `lookup_block (LAST (emitted_blocks sa sb)).bb_label fn.fn_blocks =
+    SOME (LAST (emitted_blocks sa sb))` by metis_tac[MEM_LAST_NOT_NIL] >>
+  drule lookup_block_MEM >> metis_tac[]
+QED
+
+Theorem frag_relabel_observer_exists:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ frag_ops_free sa sb /\
+  fn_has_code sa sb fn /\
+  ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) ==>
+  ?L ids id.
+    LENGTH ids = LENGTH sa.cs_current_insts /\ L <> sb.cs_current_bb /\
+    ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
+    EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb) /\
+    frag_gas_free (start_relabel L ids sa) (start_swap sa L ids sb) /\
+    fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb)
+      (frag_relabel_observer sa sb L ids fn id) /\
+    fn_inst_ids_distinct (frag_relabel_observer sa sb L ids fn id) /\
+    (!i. MEM i (fn_insts (frag_relabel_observer sa sb L ids fn id)) /\
+         i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==> MEM i (fn_insts fn)) /\
+    (!bb. lookup_block sb.cs_current_bb
+       (frag_relabel_observer sa sb L ids fn id).fn_blocks = SOME bb ==>
+       phi_prefix_length bb.bb_instructions = 0)
+Proof
+  strip_tac >>
+  `?L. L <> sb.cs_current_bb /\
+       ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
+       EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb)` by
+    metis_tac[frag_relabel_fresh_label] >>
+  `?ids id. LENGTH ids = LENGTH sa.cs_current_insts /\ ALL_DISTINCT ids /\
+       ~MEM id ids /\ (!i. MEM i (frag_code sa sb) ==>
+         ~MEM i.inst_id ids /\ i.inst_id <> id)` by
+    metis_tac[frag_relabel_fresh_ids] >>
+  qexistsl_tac [`L`, `ids`, `id`] >> simp[] >> rpt conj_tac
+  >- metis_tac[start_relabel_gas_free]
+  >- metis_tac[frag_relabel_observer_has_code]
+  >- metis_tac[frag_relabel_observer_ids]
+  >- metis_tac[frag_relabel_observer_provenance] >>
+  metis_tac[frag_relabel_observer_phi_zero]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
