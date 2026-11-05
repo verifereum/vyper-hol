@@ -1184,3 +1184,103 @@ val _ = ``
    must be derived by the designated components. No quotation above is a
    theorem and no diagnostic quotation is a usable assumption in assembly.
 *)
+
+(* StageValidate: primitive compatibility report (no simulation asserted).
+
+   1. a3 -> materialization (MISMATCH, Representation/Q).
+      compile_extcall_store_values_def uses unwrap_value ce vv, whose type
+      is carried by vv, then dispatches the store on lowered_value_type ce e.
+      unwrap_value_sim (exprSimUnwrap:665-679) consumes a FULL vv_post for
+      (Value v), at expr_type e, and scope-domain equality, cut monotonicity,
+      vv_operand freshness and the nonword size/evaluate_type equation.
+      The draft payload only has vv_holds/vv_at at tys, not this vv_post or
+      the connection between tys and vv's carried type. The read-result
+      wrapper (exprSimUnwrap:766-782) is local and still uses expr_type e.
+      Thus direct drule/irule cannot consume the quoted payload. A boundary
+      must relate actual raw compile_expr results to the actual unwrap/store
+      run; merely retyping an evaluated operand does not do that. There is
+      currently no semantic theorem for compile_extcall_store_values (only
+      compiler monotonicity and shape theorems). Representation.Probe must
+      test this interface before its universal proof; Q owns list storage.
+
+   2. stored tuple -> encoding (MISSING DERIVATION, Q).
+      abi_encoder_correct_run (abiEncoderCorrect:42-58) requires:
+        abi_encoder_pre ei at av start src dst sb source_cap d b cap s,
+        abi_decoder_budget first last b cap s, fresh_vars_wrt limit_st s,
+        compiler-id/var bounds, current block/index, nonhalted and phi facts.
+      Its result is exact bytes enc at av AND the emitted length word.
+      abi_encoder_pre additionally requires abi_encoder_input for the actual
+      memory, source/destination/scratch separation, operand liveness and
+      nonwrapping ranges (abiEncoderCorrect:9-18). The S payload cannot
+      directly supply these: Q must allocate, materialize, establish input
+      and allocator resources, then apply correctness. abi_tuple_encode_input
+      (abiTupleEncodeInput:8-19) similarly demands encoder_input for nonwords,
+      not just val_in_memory or source typing. Original-call ext_call_alloc_ok
+      bounds static sizes only, not current runtime addresses or scratch.
+      Exact calldata follows only after proving enc at av is the declared
+      parameter encoding in build_ext_calldata, plus selector placement and
+      the ADD 4 result. The zero-argument branch must bypass tuple encoding.
+
+   3. q -> oracle (PARTIAL MATCH, Q/T).
+      exec_ext_call_oracle_step (extCallOracleStep:159-184) requires state_rel,
+      a singleton output instruction, target/value word equations,
+      stat = IS_NONE value_opt, and a successful take_call_outcome equation.
+      ready explicitly supplies the word equations and stmt_state_rel (which
+      projects state_rel), but not the take equation or actual instruction.
+      Compiler cut factorization supplies the singleton CALL/STATICCALL;
+      source take must be obtained using esK's outcomes invariant and the
+      exact calldata equation. This is not a new premise on the frozen case.
+      The generic lemma already provides the bounded write equation and
+      returndata; reuse it, do not add an extcall-specific oracle lemma.
+      Its final state_rel implication needs local_ptrs_rel/immutables_rel.
+      ready's forall bytes frame supplies these for TAKE rz returnData once
+      rz < 2**256 is extracted from original allocation bounds. The generic
+      lemma's other changed fields do not affect those two relations; use
+      local_ptrs_rel_oracle_fields and the immutable field projections.
+      On failure use the taken source state before adoption; matching
+      RevertData is a T obligation, not the success state_rel implication.
+
+   4. q -> default (MISMATCH, Q/T).
+      ready pins default representation and placement only BEFORE CALL.
+      Neither generic oracle correctness nor the ready write-frame proves
+      that representation after the return write: the frame only speaks
+      about local_ptrs_rel/immutables_rel, not arbitrary earlier temporary
+      buffers. Need default footprint separation from the shared buffer,
+      operand preservation, and composition with decoder/result allocations.
+      Nonword default may alias locals. vv_at plus actual fresh allocations
+      is the proposed derivation, but not an existing application here.
+      Source default also checks code using POST-adoption accounts
+      (vyperInterpreter:1057-1062); precheck at esK is not that check.
+
+   5. oracle -> decoder (DIFFERENT ENTRY, T).
+      lower_abi_decode_valid_source (abiBuiltinValidSource:105-123) compiles
+      lower_abi_decode, with a length-prefixed BytesV input. The extcall suffix
+      instead compiles compile_return_value_decode followed by
+      compile_abi_decode_to_buf. It is not a direct consumer of that builtin
+      theorem. abi_decoder_valid_decode (abiDecoderValidRecursive:86-102)
+      matches the latter compiler operation, but needs abi_decoder_valid_pre,
+      budgets, freshness, entry block/index and phi facts. valid_pre
+      (abiDecoderValidContract:17-29) needs coherent wrapped metadata, valid
+      source bytes, window ranges and operand liveness. T must connect
+      evaluate_abi_decode_return to those facts for the WRAPPED type, copying
+      only bounded returndata and constructing hi. Generic oracle correctness
+      alone supplies neither decode windows nor allocation resources. Reject
+      is owned solely by extcall_returndata_decode_reject, not a success lemma.
+
+   6. exits/composition (UNPROVED, S.Compose/Q/T).
+      S carries target/results/kwargs/read_results equations. On prefix
+      failure, source bind propagation identifies the overall exception;
+      expr_exit is insensitive to the success type. On success Q's residual
+      eval_ext_call input is target_v::(vs++kwargs), and source typing gives
+      the lengths/options/address/precheck classification. Q still needs a
+      precheck-abort fragment theorem. T needs actual CALL/JNZ/revert/default/
+      decode fragments and their frame projections. No quoted fragment has
+      been proved, and no source-prefix preservation theorem can replace it.
+
+   Verdict: NOT semantically validated for assembly. The draft records the
+   right source order and compiler cuts, but the current primitive interfaces
+   do not directly consume its representations or establish its resources.
+   No counterexample is asserted by this report. StageValidate is complete
+   as a bounded diagnostic; Representation/Q/T need reviewed interface work
+   before the shared anchor or Compose can claim validated compatibility.
+*)
