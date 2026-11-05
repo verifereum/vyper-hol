@@ -6,7 +6,7 @@ Ancestors
   exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent fragExec venomInst
   exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps ASCIInumbers exprSimRawLog
-  bodySimRawLogSource bodySimRawLogBodySource bodySimRawLogTails
+  bodySimRawLogSource bodySimRawLogBodySource bodySimRawLogTails bodySimRawLogTopics
 Libs
   pairLib
 
@@ -278,32 +278,4 @@ Proof
   asm_rewrite_tac[] >> simp[SF ETA_ss]
 QED
 
-Theorem raw_log_body_topics_sim:
-  body_inv tops ctx cenv cx /\ body_exprs_ok cx topics /\
-  (!e s. MEM e topics /\ expr_sim_inv cenv cx env s ==>
-     expr_body_pre cenv cx env e s /\ expr_type e = BaseT (BytesT (Fixed 32))) /\
-  expr_sim_inv cenv cx env es /\
-  lower_word_args cenv expr_type topics sa = (ops,sb) /\
-  eval_exprs cx topics es = (rr,es') /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?vs. rr = INL vs /\ wb_args_post ctx func cenv cx es sa s0 es' ops vs s)
-    (wb_args_exit rr)
-Proof
-  strip_tac >>
-  `typed_args_ready ctx func cenv cx expr_type
-     (\s. expr_sim_inv cenv cx env s) topics` by
-    metis_tac[raw_log_body_topics_ready] >>
-  `wb_args_shape cenv expr_type topics` by
-    (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
-     simp[] >> rpt strip_tac >> res_tac >> simp[is_word_type_def]) >>
-  drule lower_typed_args_sim >> simp[] >>
-  disch_then (qspec_then `es` mp_tac) >> simp[] >>
-  disch_then drule >> disch_then drule >> simp[] >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  disch_then (mp_then Any irule frag_exec_weaken) >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all raw_log_body_topics_values >> strip_tac >>
-  irule raw_log_topics_post_wb >> simp[] >> qexists_tac `topics` >> simp[]
-QED
 
