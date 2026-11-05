@@ -1,6 +1,6 @@
 Theory bodyMemEcArithAssemble
 Ancestors
-  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc
+  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks
   fragGasSeqMem allocaHistoryFragment exprSimProps exprSimPrecompiles
   exprLoweringProps emitHelperProps compileEnv context venomState venomInst
   loweringHalt fragExecMem loweringPosts vyperValue
@@ -188,4 +188,156 @@ Proof
   irule run_inst_seq_mem_ok_append >> conj_tac
   >- (rpt strip_tac >> gvs[]) >>
   irule ec_alloc_buffer_mem_ok >> goal_assum (drule_at Any)
+QED
+
+Theorem ecmul_prefix_run:
+  compile_ecmul_point p scalar sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  eval_operand p s = SOME point /\ eval_operand scalar s = SOME wscalar /\
+  (!x. MEM (Var x) [p;scalar] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) ==>
+  ?ib ob sm t pi po.
+    (do gas <- emit_op GAS [];
+        success <- emit_op STATICCALL
+          [gas; Lit 7w; ib.buf_operand; Lit 96w; ob.buf_operand; Lit 64w];
+        emit_void ASSERT [success]; return ob.buf_operand od) sm = (res,sb) /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    LENGTH (emitted_insts sf sm) = 12 /\
+    sm.cs_current_insts = sf.cs_current_insts ++ emitted_insts sf sm /\
+    same_blocks sf sm /\
+    (!i. MEM i (emitted_insts sf sm) ==>
+      MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
+    run_inst_seq (emitted_insts sf sm) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    eval_operand ib.buf_operand t = SOME pi /\
+    eval_operand ob.buf_operand t = SOME po /\
+    w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
+    w2n pi + 96 <= t.vs_alloca_next /\ w2n po + 64 <= t.vs_alloca_next /\
+    mem_bytes_at (w2n pi) 96 t.vs_memory =
+      word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
+      word_to_bytes wscalar T /\
+    (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
+    (!x. ib.buf_operand = Var x ==> not_fresh_at sm x) /\
+    (!x. ob.buf_operand = Var x ==> not_fresh_at sm x)
+Proof
+  strip_tac >> drule_all ecmul_points_prefix >> strip_tac >>
+  drule_all ecmul_prefix_code >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `mem_bytes_at _ _ _ = bytes` >>
+  mp_tac (Q.INST [`insz` |-> `96`, `outsz` |-> `64`, `sb` |-> `sp`,
+    `code` |-> `emitted_insts sa sp`, `bytes` |-> `bytes`]
+    (SPEC_ALL ec_allocated_payload_capacity_run)) >>
+  (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt strip_tac >>
+    `eval_operand p s1 = SOME point /\ eval_operand scalar s1 = SOME wscalar` by
+      (conj_tac >> Cases_on `p` >> Cases_on `scalar` >>
+       gvs[eval_operand_def] >> metis_tac[]) >>
+    `!x. MEM (Var x) [p;ib.buf_operand;scalar] ==> not_fresh_at sa x` by
+      (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    `regions_disjoint (w2n wi) 96 (w2n point) 64` by
+      (irule ec_point_fresh_scratch_disjoint >>
+       goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+       qexists_tac `s1` >> simp[] >> rpt strip_tac >>
+       first_assum drule_all >> simp[]) >>
+    `cenv.ce_is_ctor ==> !name tv iv off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+      regions_disjoint (w2n wi) 96 off (type_memory_size tv)` by
+      (match_mp_tac (Q.INST [`s` |-> `s1`,
+         `inst` |-> `mk_inst sf.cs_next_id ALLOCA [Lit 96w]
+           [STRING #"%" (toString sf.cs_next_var)]`]
+         precompile_alloca_immutable_disjoint) >> simp[mk_inst_def]) >>
+    `sf.cs_next_id <= sa.cs_next_id` by decide_tac >>
+    gvs[] >>
+    qpat_assum `w2n point + 64 < dimword (:256)`
+      (assume_tac o SRULE [wordsTheory.dimword_def]) >>
+    `sf.cs_next_id <= sa.cs_next_id` by decide_tac >>
+    qpat_assum `_ sa = ((),sp)`
+      (mp_then Any mp_tac (SRULE [wordsTheory.dimword_def] ecmul_payload_callback)) >>
+    disch_then (drule_all o SRULE []) >> strip_tac >>
+    qexists_tac `t` >> gvs[Abbr `bytes`] )) >>
+  strip_tac >> qexistsl [`ib`,`ob`,`sm`,`t`,`pi'`,`po`] >>
+  gvs[Abbr `bytes`] >> first_assum ACCEPT_TAC
+QED
+
+Theorem ecadd_prefix_run:
+  compile_ecadd_points p q sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo2 sf es v2 q s /\
+  eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
+  (!x. MEM (Var x) [p;q] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\ w2n point2 + 64 < dimword (:256) ==>
+  ?ib ob sm t pi po.
+    (do gas <- emit_op GAS [];
+        success <- emit_op STATICCALL
+          [gas; Lit 6w; ib.buf_operand; Lit 128w; ob.buf_operand; Lit 64w];
+        emit_void ASSERT [success]; return ob.buf_operand od) sm = (res,sb) /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    LENGTH (emitted_insts sf sm) = 18 /\
+    sm.cs_current_insts = sf.cs_current_insts ++ emitted_insts sf sm /\
+    same_blocks sf sm /\
+    (!i. MEM i (emitted_insts sf sm) ==>
+      MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
+    run_inst_seq (emitted_insts sf sm) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    eval_operand ib.buf_operand t = SOME pi /\
+    eval_operand ob.buf_operand t = SOME po /\
+    w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
+    w2n pi + 128 <= t.vs_alloca_next /\ w2n po + 64 <= t.vs_alloca_next /\
+    mem_bytes_at (w2n pi) 128 t.vs_memory =
+      word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point2) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point2+32) s.vs_memory) T /\
+    (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
+    (!x. ib.buf_operand = Var x ==> not_fresh_at sm x) /\
+    (!x. ob.buf_operand = Var x ==> not_fresh_at sm x)
+Proof
+  strip_tac >> drule_all ecadd_points_prefix >> strip_tac >>
+  drule_all ecadd_prefix_code >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `mem_bytes_at _ _ _ = bytes` >>
+  mp_tac (Q.INST [`insz` |-> `128`, `outsz` |-> `64`, `sb` |-> `sp`,
+    `code` |-> `emitted_insts sa sp`, `bytes` |-> `bytes`]
+    (SPEC_ALL ec_allocated_payload_capacity_run)) >>
+  (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt strip_tac >>
+    `eval_operand p s1 = SOME point /\ eval_operand q s1 = SOME point2` by
+      (conj_tac >> Cases_on `p` >> Cases_on `q` >>
+       gvs[eval_operand_def] >> metis_tac[]) >>
+    `!x. MEM (Var x) [p;q;ib.buf_operand] ==> not_fresh_at sa x` by
+      (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    `regions_disjoint (w2n wi) 128 (w2n point) 64` by
+      (qpat_assum `expr_val_at _ _ _ lo _ _ _ p _`
+         (mp_then Any mp_tac ec_point_fresh_scratch_disjoint) >>
+       disch_then drule_all >> simp[]) >>
+    `regions_disjoint (w2n wi) 128 (w2n point2) 64` by
+      (qpat_assum `expr_val_at _ _ _ lo2 _ _ _ q _`
+         (mp_then Any mp_tac ec_point_fresh_scratch_disjoint) >>
+       disch_then drule_all >> simp[]) >>
+    `cenv.ce_is_ctor ==> !name tv iv off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+      regions_disjoint (w2n wi) 128 off (type_memory_size tv)` by
+      (match_mp_tac (Q.INST [`s` |-> `s1`,
+         `inst` |-> `mk_inst sf.cs_next_id ALLOCA [Lit 128w]
+           [STRING #"%" (toString sf.cs_next_var)]`]
+         precompile_alloca_immutable_disjoint) >> simp[mk_inst_def]) >>
+    gvs[] >>
+    qpat_assum `w2n point + 64 < dimword (:256)`
+      (assume_tac o SRULE [wordsTheory.dimword_def]) >>
+    qpat_assum `w2n point2 + 64 < dimword (:256)`
+      (assume_tac o SRULE [wordsTheory.dimword_def]) >>
+    `sf.cs_next_id <= sa.cs_next_id` by decide_tac >>
+    qpat_assum `_ sa = ((),sp)`
+      (mp_then Any mp_tac (SRULE [wordsTheory.dimword_def] ecadd_payload_callback)) >>
+    disch_then (drule_all o SRULE []) >> strip_tac >>
+    qexists_tac `t` >> gvs[Abbr `bytes`] )) >>
+  strip_tac >> qexistsl [`ib`,`ob`,`sm`,`t`,`pi'`,`po`] >>
+  gvs[Abbr `bytes`] >> first_assum ACCEPT_TAC
 QED
