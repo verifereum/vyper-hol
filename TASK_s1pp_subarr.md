@@ -35,13 +35,13 @@ Theorem compile_subscript_array_framed_base_case:
 ## Completion Criteria
 
 1. `holbuild -j4 build exprSimSubscriptArrayTheory exprSimPlacesTheory` passes with no CHEAT warning for `compile_subscript_array_framed_base_case` (`compile_subscript_array_place_base_case` keeps its).
-2. An `array_len_ok` lemma for a dynamic array in code at runtime (compile_imm_load_word's DLOAD), next to `array_len_ok_MLOAD`/`SLOAD`/`TLOAD` in `lowering/exprSimArrayIndexScript.sml`, if the proof needs it.
-3. No duplicate or near-duplicate lemmas: search `lowering/` and `semantics/` before proving a helper; each helper exists once, in its most general form. Put this case's machinery in new leaf theories (e.g. `lowering/exprSimSubscriptArrayFramedScript.sml`) that `exprSimSubscriptArray` imports, registered like the others in `holproject.toml`; don't edit low-level shared ancestors except to add a lemma next to its definition where it belongs (as in criterion 2).
+2. An `array_len_ok` lemma for a dynamic array in code at runtime (compile_imm_load_word's DLOAD) lives in `lowering/exprSimSubscriptArrayFramedScript.sml`, not in `exprSimArrayIndexScript.sml` (`array_len_ok_DLOAD` is there now; add nothing to exprSimArrayIndex).
+3. No duplicate or near-duplicate lemmas: search `lowering/` and `semantics/` before proving a helper; each helper exists once, in its most general form. Put this case's machinery in new leaf theories (e.g. `lowering/exprSimSubscriptArrayFramedScript.sml`) that `exprSimSubscriptArray` imports (it already imports `exprSimSubscriptArrayFramed`, and the theories build through that import; add no `holproject.toml` roots); don't edit shared ancestors.
 4. No `TRY`/`ORELSE` around `metis_tac` or other search; select goals with `>~`, `>-`, `>|`. No tactic-timeout override. No new `cheat`, axiom, or changed statement anywhere. Don't change any definition in `semantics/`, `frontend/`, `lowering/defs/`, `venom/`, or any judgment (`exprSim*Defs`, `exprSimHyps*`, `loweringPosts`, `bodySim*`, `*Main`).
 5. Commit messages end with these two lines:
    `Bot: opus (Claude Opus 5.5)`
    `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
-   Commit only `.sml` sources you changed or added (and `holproject.toml` if you register a theory). Never commit the 30 files the working tree has modified as a local admission overlay (they're listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
+   Commit only `.sml` sources you changed or added . Never commit the 30 files the working tree has modified as a local admission overlay (they're listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
 
 **If the theorem is false as stated:** produce a HOL4 counterexample, state the tightest sufficient fix, and do NOT silently weaken the statement.
 
@@ -59,7 +59,7 @@ Source: `eval_expr` of `Subscript` (semantics/vyperInterpreterScript.sml) evalua
 
 Lowering: `compile_subscript` (lowering/defs/exprLoweringScript.sml) lowers the base, then the index (`lower_value`), then `compile_array_subscript`: the bounds check (an ASSERT, which aborts; the source raises a RuntimeError, allowed by `expr_exit`, see exprSimArrayIndex) against the length the loader (`compile_ptr_load`) reads, and the element's pointer.
 
-`compile_subscript_array_case` (same file) dispatches to this theorem and the three admitted subcases; it is consumed by `compile_subscript_case` in `lowering/exprSimPlacesScript.sml`.
+`compile_subscript_array_case` (same file) dispatches to this theorem and the admitted residual; it is consumed by `compile_subscript_case` in `lowering/exprSimPlacesScript.sml`.
 
 ## Domain Constraints
 

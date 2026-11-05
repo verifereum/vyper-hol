@@ -14,7 +14,7 @@
 Theory exprSimSubscriptArray
 Ancestors
   exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
-  exprSimArrayIndex
+  exprSimArrayIndex exprSimSubscriptArrayFramed
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* An element of an array whose index leaves the locals and the immutables
