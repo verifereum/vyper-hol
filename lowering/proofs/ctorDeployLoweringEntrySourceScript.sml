@@ -1,7 +1,8 @@
 (* Small source-selection and emitted-cursor boundaries for deploy entry. *)
 Theory ctorDeployLoweringEntrySource
 Ancestors
-  ctorDeployLoweringDefs e2eDeployDefs emitHelperProps
+  ctorDeployLoweringDefs e2eDeployDefs emitHelperProps compileVyper
+  vyperInterpreter vyperTypeContract
 
 Theorem deploy_ctor_start_nonreentrant_false:
   !tops deploy_bc am tx es mut nr body am_c es0.
@@ -29,4 +30,17 @@ Theorem deploy_ctor_fresh_label_cursor:
   st'.cs_next_id = st.cs_next_id
 Proof
   strip_tac >> drule fresh_label_props >> simp[]
+QED
+
+(* Adversarial selection check: deployment visibility does not constrain name. *)
+Theorem deploy_ctor_noninit_selection_probe:
+  function_header_ok Deploy Payable F F "other" [] [] NoneT /\
+  vyperInterpreter$lookup_function NONE "__init__" Deploy
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]] =
+      SOME (Payable,F,[],[],NoneT,[]) /\
+  classify_functions
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]] =
+      ([],[],NONE,SOME (Payable,F,F,"other",[],[],NoneT,[Return NONE]))
+Proof
+  EVAL_TAC
 QED
