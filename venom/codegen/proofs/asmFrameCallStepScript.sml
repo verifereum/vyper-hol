@@ -5635,6 +5635,27 @@ Proof
   qexistsl_tac [`ex`,`u`,`c`,`rb`,`c'`] >> simp[]
 QED
 
+Theorem asm_call_returned_outcome_adoption:
+  rq.cr_kind = MessageCall /\ t.contexts = (c,rb)::rest /\
+  out = outcome_of MessageCall t (LENGTH logs) (LENGTH pending) /\
+  ((rq.cr_static \/ ~out.co_success) ==>
+    t.rollback.accounts = accounts /\ t.rollback.tStorage = ts /\
+    c.logs = logs /\ t.rollback.toDelete = pending) /\
+  ((~rq.cr_static /\ out.co_success) ==>
+    (?added. c.logs = logs ++ added) /\
+    (?added. t.rollback.toDelete = added ++ pending)) ==>
+  adopt_outcome rq out (accounts,ts,logs) =
+    (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+  adopt_outcome_deletions rq out pending = t.rollback.toDelete
+Proof
+  strip_tac >> Cases_on `rq.cr_static \/ ~out.co_success`
+  >- (gvs[adopt_outcome_def, adopt_outcome_deletions_def]) >>
+  `~rq.cr_static /\ out.co_success` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[adopt_outcome_def, adopt_outcome_deletions_def, outcome_of_def,
+      TAKE_LENGTH_APPEND, DROP_APPEND]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
