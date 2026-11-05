@@ -96,3 +96,19 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_check_create_result out flag sm` >>
   qexistsl_tac [`out`, `sm`] >> simp[Abbr `sm`]
 QED
+
+(* Reads of a comparison are either explicit inputs or local results. *)
+Theorem extract32_compare_operand_provenance:
+  compile_compare cmp x y ty sa = (r,sb) ==>
+  ?delta.
+    sb.cs_current_insts = sa.cs_current_insts ++ delta /\
+    !v. x <> Var v /\ y <> Var v /\
+        EVERY (\i. ~MEM v i.inst_outputs) delta ==>
+        r <> Var v /\
+        EVERY (\i. ~MEM (Var v) i.inst_operands) delta
+Proof
+  Cases_on `cmp` >> Cases_on `is_uint256 ty` >>
+  simp[compile_compare_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_inst_def, fresh_id_def,
+       fresh_var_def, emit_def] >> rpt strip_tac >> gvs[]
+QED
