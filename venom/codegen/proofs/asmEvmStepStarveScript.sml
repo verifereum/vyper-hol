@@ -461,6 +461,198 @@ Proof
   simp[]
 QED
 
+Theorem starve_binop_result:
+  !prog as es op f.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\ step_inst op = step_binop op f ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_binop f as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `asm_binop f as` >> simp[]
+  >- (irule starve_binop >> metis_tac[]) >>
+  gvs[asm_binop_def, AllCaseEqs()]
+QED
+
+Theorem starve_unop_result:
+  !prog as es op f.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\ step_inst op = step_monop op f ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_unop f as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `asm_unop f as` >> simp[]
+  >- (irule starve_unop >> metis_tac[]) >>
+  gvs[asm_unop_def, AllCaseEqs()]
+QED
+
+(* Opcode selection is the only varying input to these pure stack cases. *)
+fun starve_pure_dispatch_tac bridge opq extra =
+  irule bridge >> simp[] >> qexists opq >>
+  simp ([step_inst_def, opcode_def, encode_inst_def,
+         wf_opname_def, is_call_def] @ extra) >> EVAL_TAC;
+
+Theorem starve_compare_dispatch:
+  !prog as es name r.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    EL as.as_pc prog = AsmOp name /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    asm_step_compare name as = SOME r ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case r of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `asm_step_compare _ _ = _` mp_tac >>
+  simp[asm_step_compare_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
+  >- starve_pure_dispatch_tac starve_binop_result `LT` []
+  >- starve_pure_dispatch_tac starve_binop_result `GT` []
+  >- starve_pure_dispatch_tac starve_binop_result `SLT` []
+  >- starve_pure_dispatch_tac starve_binop_result `SGT` []
+  >- starve_pure_dispatch_tac starve_binop_result `Eq` [] >>
+  starve_pure_dispatch_tac starve_unop_result `IsZero` []
+QED
+
+Theorem starve_bitwise_dispatch:
+  !prog as es name r.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    EL as.as_pc prog = AsmOp name /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    asm_step_bitwise name as = SOME r ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case r of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `asm_step_bitwise _ _ = _` mp_tac >>
+  simp[asm_step_bitwise_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
+  >- starve_pure_dispatch_tac starve_binop_result `And` []
+  >- starve_pure_dispatch_tac starve_binop_result `Or` []
+  >- starve_pure_dispatch_tac starve_binop_result `XOr` []
+  >- starve_pure_dispatch_tac starve_unop_result `Not` []
+  >- starve_pure_dispatch_tac starve_binop_result `ShL` []
+  >- starve_pure_dispatch_tac starve_binop_result `ShR` []
+  >- starve_pure_dispatch_tac starve_binop_result `SAR` []
+  >- starve_pure_dispatch_tac starve_binop_result `SignExtend` [] >>
+  starve_pure_dispatch_tac starve_binop_result `Byte` []
+QED
+
+Theorem starve_ternop_result:
+  !prog as es op f.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    opcode op = encode_inst (SND (compute_label_offsets prog))
+                            (EL as.as_pc prog) /\
+    wf_opname op /\ ~is_call op /\
+    step_inst op = (do args <- pop_stack 3; consume_gas (static_gas op);
+                      push_stack (f (EL 0 args) (EL 1 args) (EL 2 args)) od) ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_ternop f as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >> Cases_on `asm_ternop f as` >> simp[]
+  >- (irule starve_ternop >> metis_tac[]) >>
+  gvs[asm_ternop_def, AllCaseEqs()]
+QED
+
+Theorem starve_exp_result:
+  !prog as es.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    EL as.as_pc prog = AsmOp "EXP" ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case asm_binop word_exp as of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt strip_tac >>
+  Cases_on `as.as_stack` >> simp[asm_binop_def] >>
+  Cases_on `t` >> simp[] >>
+  drule_at (Pos (el 2)) starve_stack_step >>
+  disch_then (qspecl_then [`Exp`, `2`,
+    `\args. static_gas Exp + exp_per_byte_cost *
+       (if EL 1 args = 0w then 0 else SUC (LOG2 (w2n (EL 1 args)) DIV 8))`,
+    `\args. word_exp (EL 0 args) (EL 1 args)`] mp_tac) >>
+  simp[step_inst_def, step_exp_def, LET_THM, opcode_def, encode_inst_def,
+       wf_opname_def, is_call_def] >>
+  EVAL_TAC
+QED
+
+Theorem starve_arith_dispatch:
+  !prog as es name r.
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\
+    LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
+    EL as.as_pc prog = AsmOp name /\
+    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    asm_step_arith name as = SOME r ==>
+    (?es1 exc. step es = (INR (SOME exc), es1) /\
+               (exc = OutOfGas \/ exc = StackOverflow)) \/
+    case r of
+      AsmOK as1 => ?es1. step es = (INL (), es1) /\
+                         asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
+    | AsmError _ => T
+    | _ => F
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `asm_step_arith _ _ = _` mp_tac >>
+  simp[asm_step_arith_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
+  >- starve_pure_dispatch_tac starve_binop_result `Add` []
+  >- starve_pure_dispatch_tac starve_binop_result `Mul` []
+  >- starve_pure_dispatch_tac starve_binop_result `Sub` []
+  >- starve_pure_dispatch_tac starve_binop_result `Div`
+       [step_binop_def, with_zero_def]
+  >- starve_pure_dispatch_tac starve_binop_result `SDiv`
+       [step_binop_def, with_zero_def]
+  >- starve_pure_dispatch_tac starve_binop_result `Mod`
+       [step_binop_def, with_zero_def]
+  >- starve_pure_dispatch_tac starve_binop_result `SMod`
+       [step_binop_def, with_zero_def]
+  >- (irule starve_exp_result >> simp[])
+  >- starve_pure_dispatch_tac starve_ternop_result `AddMod`
+       [step_modop_def, LET_THM, wordsTheory.w2n_eq_0] >>
+  starve_pure_dispatch_tac starve_ternop_result `MulMod`
+    [step_modop_def, LET_THM, wordsTheory.w2n_eq_0]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
