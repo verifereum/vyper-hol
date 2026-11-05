@@ -5145,6 +5145,14 @@ Proof
   gvs[gas_path_edge_def, fragExecTheory.exit_result_def]
 QED
 
+Theorem place_store_step_alloca_zero[local]:
+  !s. step_inst_base (mk_inst 0 ALLOCA [Lit 0w] ["%0"]) s =
+      exec_alloca (mk_inst 0 ALLOCA [Lit 0w] ["%0"]) s (0w:bytes32)
+Proof
+  gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def]
+QED
+
 Theorem place_store_wrap_probe_entry_alloca_edge:
   !ctx func s n t.
     place_store_wrap_probe_phase s /\ s.vs_current_bb = "entry" /\
@@ -5161,7 +5169,7 @@ Proof
   gvs[gas_path_edge_def, get_instruction_def] >>
   gvs[mk_inst_def, is_terminator_def, fragExecTheory.exit_result_def] >>
   fs[step_inst_non_invoke] >>
-  fs[step_inst_base_def, eval_operand_def]
+  fs[SRULE [mk_inst_def] place_store_step_alloca_zero]
   >- (drule_all (SRULE [mk_inst_def] place_store_wrap_probe_phase_alloca) >>
       simp[]) >>
   qpat_x_assum `OK _ = _` (assume_tac o SYM) >>
@@ -5243,6 +5251,225 @@ Proof
   gvs[place_store_step_jnz, eval_operand_def] >>
   gvs[place_store_wrap_probe_phase_def, jump_to_def,
       mload_def, contract_storage_def]
+QED
+
+Theorem place_store_step_mul[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id MUL args outs) s =
+    exec_pure2 word_mul (mk_inst id MUL args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_step_add[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id ADD args outs) s =
+    exec_pure2 word_add (mk_inst id ADD args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_step_and[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id AND args outs) s =
+    exec_pure2 word_and (mk_inst id AND args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_step_mload[local]:
+  !id args outs s.
+    step_inst_base (mk_inst id MLOAD args outs) s =
+    exec_read1 (\addr s. mload (w2n addr) s) (mk_inst id MLOAD args outs) s
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_body_pure:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_body_1" /\ s.vs_inst_idx < 8 /\
+    step_inst_base
+      (EL s.vs_inst_idx [
+        mk_inst 6 MUL [Var "%1"; Lit 64w] ["%4"];
+        mk_inst 7 MUL [Var "%1"; Lit 0w] ["%5"];
+        mk_inst 8 ADD [Lit 0w; Var "%4"] ["%6"];
+        mk_inst 9 ADD [Var "%0"; Var "%5"] ["%7"];
+        mk_inst 10 MLOAD [Var "%6"] ["%8"];
+        mk_inst 11 ADD [Var "%8"; Lit 31w] ["%9"];
+        mk_inst 12 AND [Var "%9"; Lit (-32w)] ["%10"];
+        mk_inst 13 ADD [Var "%10"; Lit 32w] ["%11"]]) s = OK t ==>
+    place_store_wrap_probe_phase
+      (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >>
+  `s.vs_inst_idx = 0 \/ s.vs_inst_idx = 1 \/ s.vs_inst_idx = 2 \/
+   s.vs_inst_idx = 3 \/ s.vs_inst_idx = 4 \/ s.vs_inst_idx = 5 \/
+   s.vs_inst_idx = 6 \/ s.vs_inst_idx = 7` by decide_tac >>
+  gvs[] >>
+  fs[place_store_step_mul, place_store_step_add,
+     place_store_step_and, place_store_step_mload] >>
+  gvs[exec_pure2_def, exec_read1_def, mk_inst_def, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def] >>
+  EVAL_TAC
+QED
+
+Theorem place_store_step_mcopy[local]:
+  !id dst src sz s.
+    step_inst_base (mk_inst id MCOPY [dst; src; sz] []) s =
+    (case (eval_operand dst s, eval_operand src s, eval_operand sz s) of
+       (SOME d, SOME r, SOME n) => OK (mcopy (w2n d) (w2n r) (w2n n) s)
+     | _ => Error "undefined operand")
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_step_assign[local]:
+  !id arg out s.
+    step_inst_base (mk_inst id ASSIGN [arg] [out]) s =
+    (case eval_operand arg s of
+       SOME v => OK (update_var out v s)
+     | NONE => Error "undefined operand")
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_step_jmp[local]:
+  !id lbl s.
+    step_inst_base (mk_inst id JMP [Label lbl] []) s = OK (jump_to lbl s)
+Proof
+  rpt gen_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  simp[mk_inst_def]
+QED
+
+Theorem place_store_wrap_probe_phase_body_mcopy:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_body_1" /\ s.vs_inst_idx = 8 /\
+    step_inst_base (mk_inst 14 MCOPY [Var "%7"; Var "%6"; Var "%11"] []) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := 9)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >> fs[place_store_step_mcopy, eval_operand_def] >>
+  gvs[] >>
+  `mload 0 (mcopy (dimword (:256)-32) 0 64 s) = 1w` by
+    simp[place_store_wrap_probe_mcopy_zero] >>
+  simp[place_store_wrap_probe_phase_def, mload_def, contract_storage_def,
+       lookup_var_def, mcopy_def, write_memory_with_expansion_def] >>
+  gvs[mload_def, mcopy_def, write_memory_with_expansion_def,
+      lookup_var_def, contract_storage_def]
+QED
+
+Theorem place_store_wrap_probe_phase_body_tail:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_body_1" /\
+    9 <= s.vs_inst_idx /\ s.vs_inst_idx < 11 /\
+    step_inst_base (EL (s.vs_inst_idx - 9) [
+      mk_inst 15 ADD [Var "%1"; Lit 1w] ["%12"];
+      mk_inst 16 ASSIGN [Var "%12"] ["%1"]]) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[] >> `s.vs_inst_idx = 9 \/ s.vs_inst_idx = 10` by decide_tac >>
+  gvs[] >> fs[place_store_step_add, place_store_step_assign] >>
+  gvs[exec_pure2_def, mk_inst_def, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def]
+QED
+
+Theorem place_store_wrap_probe_phase_body_jump:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_body_1" /\ s.vs_inst_idx = 11 /\
+    step_inst_base (mk_inst 17 JMP [Label "@typed_sa_cond_0"] []) s = OK t ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[place_store_step_jmp] >>
+  gvs[place_store_wrap_probe_phase_def, jump_to_def, mload_def,
+      contract_storage_def] >>
+  qexists_tac `1` >> simp[]
+QED
+
+Theorem place_store_wrap_probe_phase_typed_exit:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_exit_2" /\ s.vs_inst_idx = 0 /\
+    step_inst_base (mk_inst 18 ASSIGN [Lit 0w] ["%13"]) s = OK t ==>
+    place_store_wrap_probe_phase (t with vs_inst_idx := 1)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[place_store_step_assign, eval_operand_def] >>
+  gvs[place_store_wrap_probe_phase_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE, mload_def, contract_storage_def]
+QED
+
+Theorem place_store_wrap_probe_phase_typed_exit_jump:
+  !s t.
+    place_store_wrap_probe_phase s /\
+    s.vs_current_bb = "@typed_sa_exit_2" /\ s.vs_inst_idx = 1 /\
+    step_inst_base (mk_inst 19 JMP [Label "@wcopy_cond_3"] []) s = OK t ==>
+    place_store_wrap_probe_phase t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `place_store_wrap_probe_phase s`
+    (strip_assume_tac o SRULE [place_store_wrap_probe_phase_def]) >>
+  gvs[place_store_step_jmp] >>
+  gvs[place_store_wrap_probe_phase_def, jump_to_def, mload_def,
+      contract_storage_def] >>
+  qexists_tac `0` >> simp[]
+QED
+
+Theorem place_store_gas_edge_nonterminator_preserves:
+  !P ctx func s n t bb inst.
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    (!u. step_inst_base inst s = OK u ==>
+         P (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+    gas_path_edge ctx func s n (OK t) ==> P t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!fuel. step_inst fuel ctx inst s = step_inst_base inst s` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  gvs[gas_path_edge_def, fragExecTheory.exit_result_def] >>
+  qpat_x_assum `OK _ = _` (assume_tac o SYM) >>
+  gvs[fragExecTheory.exit_result_def]
+QED
+
+Theorem place_store_gas_edge_terminator_preserves:
+  !P ctx func s n t bb inst.
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    (!u. step_inst_base inst s = OK u ==> P u /\ u.vs_inst_idx = 0) /\
+    (!u target. step_inst_base inst s = OK u /\
+        lookup_block u.vs_current_bb func.fn_blocks = SOME target ==>
+        eval_phis u target.bb_instructions = OK u /\
+        phi_prefix_length target.bb_instructions = 0) /\
+    gas_path_edge ctx func s n (OK t) ==> P t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!fuel. step_inst fuel ctx inst s = step_inst_base inst s` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  gvs[gas_path_edge_def, fragExecTheory.exit_result_def]
 QED
 
 Theorem place_store_value_storage_run:
