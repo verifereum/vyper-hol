@@ -4,9 +4,10 @@
  * TOP-LEVEL (CHEATED, a piece):
  *   lineage_entry_inventory — entering a block from pred, the planner state
  *                             is well formed (dead_stack_marker slots
- *                             repeated) and every other stack slot and every
+ *                             repeated), every other stack slot and every
  *                             spilled operand is a variable live at the end
- *                             of pred
+ *                             of pred, and every such variable is on the
+ *                             stack or spilled
  *)
 
 Theory fnLineageInv
@@ -28,7 +29,9 @@ Ancestors
    its target stack, join_reached).  Hence an induction over lineage_state
    with the full inventory (a dead_stack_marker prefix, then distinct
    variables, disjoint from the spill map, that together with it are the
-   live set), of which this is the upper half. *)
+   live set).  Nothing is live at the function's entry
+   (fnLiveDefDom$live_def_dominates at index 0 of the entry block), which
+   starts the lower half. *)
 Theorem lineage_entry_inventory:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn pred pred_bb succ ps.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
@@ -38,11 +41,13 @@ Theorem lineage_entry_inventory:
       (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred succ ps
     ==>
     generated_plan_state_wf_marked spill_base ps /\
-    !op. (MEM op ps.ps_stack /\ op <> dead_stack_marker) \/
-         op IN FDOM ps.ps_spilled ==>
-         ?v. op = Var v /\
-             MEM v (live_vars_at liveness pred
-                      (LENGTH pred_bb.bb_instructions))
+    (!op. (MEM op ps.ps_stack /\ op <> dead_stack_marker) \/
+          op IN FDOM ps.ps_spilled ==>
+          ?v. op = Var v /\
+              MEM v (live_vars_at liveness pred
+                       (LENGTH pred_bb.bb_instructions))) /\
+    !v. MEM v (live_vars_at liveness pred (LENGTH pred_bb.bb_instructions)) ==>
+        MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
 Proof
   cheat
 QED
