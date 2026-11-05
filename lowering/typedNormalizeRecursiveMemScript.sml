@@ -1,7 +1,8 @@
 (* Recursive typed-store memory continuation: endpoint-normalized leaves. *)
 Theory typedNormalizeRecursiveMem
 Ancestors
-  typedNormalizeSemanticMem typedNormalizeFrame typedMemoryCopy stmtSimReturn
+  typedNormalizeSemanticMem typedNormalizeTupleSemanticMem
+  typedNormalizeFrame typedMemoryCopy stmtSimReturn
   venomState compileEnv memContinuation typedCopyAgreement emitHelper arithmetic valueCopyBytes
   exprSimBufferStore exprSim exprSimAggregateChildren exprLoweringProps
 

@@ -358,7 +358,7 @@ Proof
 QED
 
 (* Prefix arithmetic shared by the concrete tuple and nominal-layout folds. *)
-Theorem normalize_prefix_step[local]:
+Theorem normalize_prefix_step:
   i < LENGTH xs ==>
   SUM (MAP f (TAKE (SUC i) xs)) =
     SUM (MAP f (TAKE i xs)) + f (EL i xs)
