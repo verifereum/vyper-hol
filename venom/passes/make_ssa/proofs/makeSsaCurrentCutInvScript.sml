@@ -17,6 +17,7 @@ Ancestors
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
+  makeSsaCurrentCutTransport
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -267,4 +268,55 @@ Proof
   drule current_cut_functional_alist_lookup >> disch_then (rewrite_tac o single) >>
   simp[listTheory.MEM_FILTER] >>
   metis_tac[current_cut_pair_unique_owner]
+QED
+
+Theorem current_cut_pair_precleanup_output_exclusion:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  lookup_block l renamed = SOME new /\
+  A l = current_block_annotations old pre /\ i < LENGTH old.bb_instructions /\
+  current_cut_pair fn A renamed H events l (SUC i) n v /\
+  ~MEM v (EL i old.bb_instructions).inst_outputs ==>
+  ~MEM n (EL (LENGTH pre + i) new.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `?t. MEM (t,v,n) H` by metis_tac[current_cut_pair_owned_name] >>
+  metis_tac[current_transport_precleanup_output_exclusion,
+    arithmeticTheory.ADD_COMM]
+QED
+
+Theorem current_cut_pair_unaffected_predecessor:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  LENGTH (collect_phis old.bb_instructions) <= i /\
+  i < LENGTH old.bb_instructions /\
+  ~MEM v (EL i old.bb_instructions).inst_outputs /\
+  current_cut_pair fn A renamed H events l (SUC i) n v ==>
+  current_cut_pair fn A renamed H events l i n v
+Proof
+  strip_tac >>
+  qpat_x_assum `current_cut_pair _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_cut_pair_def] >> strip_tac >>
+  `old' = old` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `old' = old` SUBST_ALL_TAC >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  `current_event_trace A H ev` by metis_tac[listTheory.EVERY_MEM] >>
+  `LENGTH pre + i <= LENGTH (current_event_input_block ev).bb_instructions` by
+    (drule current_transport_source_cut_bound >> decide_tac) >>
+  drule_all current_wf_event_source_cut_exists >> strip_tac >>
+  `old.bb_label = l` by metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  `E' v = E v` by
+    (irule current_transport_source_cut_unaffected >> metis_tac[]) >>
+  `current_demand fn v l i` by
+    (irule (cj 3 current_demand_rules) >>
+     simp[venomInstTheory.inst_defs_def] >> metis_tac[]) >>
+  simp[current_cut_pair_def] >>
+  qexistsl_tac [`ev`, `pre`, `rs'`, `E'`] >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
