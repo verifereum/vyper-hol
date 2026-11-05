@@ -28,7 +28,7 @@ Default tactic timeout and memory limits. Some ancestor theories are admitted by
 
 ## Background
 
-The frozen statements gained one conjunct in the `fn'` hypothesis since the previous run: `(!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE)`. It only weakens what has to be shown about `fn'`. The previous run's commits on this branch (observer structure, ID distinctness, STOP observer witness package, lookup and alias boundary lemmas, up to 533e937b3) stay valid; build on them.
+The frozen statements gained one conjunct in the `fn'` hypothesis since the previous run: `(!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE)`. It only weakens what has to be shown about `fn'`. The previous run's commits on this branch (observer structure, ID distinctness, STOP observer witness package, lookup and alias boundary lemmas, up to 533e937b3) stay valid; build on them. `frag_relabel_base_ordinary` (line ~1737) currently fails to build; the previous run was working on it. `jumpIndep` (an ancestor the previous run added) fails to build at this branch's base (`step_inst_base_jump_indep`), so it is admitted by the local overlay here like the other overlaid ancestors.
 
 
 The existing bridges need `frag_gas_free`, whose two label conjuncts fail when the fragment's entry label `sa.cs_current_bb` equals a label the fragment generates (e.g. its exit label). Nothing at the expression boundary excludes that. Dropping the label conjuncts makes the bridges false (an emitted block `L: JMP L` makes `abi_decode_sim`/`frag_exec` vacuous).
