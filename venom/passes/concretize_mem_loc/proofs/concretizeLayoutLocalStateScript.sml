@@ -10,6 +10,7 @@ Theorem concretize_state_local_complete:
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
   joint_trace vs0 C q0 es qs q /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -23,12 +24,20 @@ Theorem concretize_state_local_complete:
         (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
     (guarded_bytes (retpc_var fn) rv tn)
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
-    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
+    (\s t. dead_result_rel
+      <| d_stor := K (K UNIV); d_trans := K (K UNIV); d_imm := K UNIV;
+         d_ret := K {} |> (Halt s) (Halt t)) s t /\
   relocation_taint_le
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un /\
-  storage_agree_except tn.t_stor (contract_storage s) (contract_storage t) /\
-  storage_agree_except tn.t_trans (contract_transient s) (contract_transient t) /\
-  s.vs_outcomes = t.vs_outcomes /\ dead_wf D /\ taint_within D C vs0 /\
+  accounts_agree_except
+    (D with d_stor := (\a st. if a = s.vs_call_ctx.cc_address then tn.t_stor else {}))
+    s.vs_accounts t.vs_accounts /\
+  transient_agree_except
+    (D with d_trans := (\a st. if a = s.vs_call_ctx.cc_address then tn.t_trans else {}))
+    s.vs_transient t.vs_transient /\
+  imms_agree_except (D with d_imm := K tn.t_imm) s.vs_immutables t.vs_immutables /\
+  LIST_REL (request_agree_except D) s.vs_requests t.vs_requests /\
+  s.vs_outcomes = t.vs_outcomes /\
   c < LENGTH es /\ EL c es = SOME (OriginOrdinary fuel post) /\
   MEM inst.inst_opcode [SLOAD; TLOAD; SSTORE; TSTORE; ISTORE; RETURNDATACOPY] /\
   step_inst_base inst s = OK post ==>
@@ -41,17 +50,23 @@ Theorem concretize_state_local_complete:
       (guarded_bytes (retpc_var fn) (origin_set rv inst.inst_outputs NONE)
         (step_taint inst s post tn))
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
-      (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
+      (\s t. dead_result_rel
+        <| d_stor := K (K UNIV); d_trans := K (K UNIV); d_imm := K UNIV;
+           d_ret := K {} |> (Halt s) (Halt t)) post tpost /\
     step_prov PG (SND o_f rv) inst post =
       SND o_f (origin_set rv inst.inst_outputs NONE) /\
     relocation_taint_le
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost /\
-    storage_agree_except (step_taint inst s post tn).t_stor
-      (contract_storage post) (contract_storage tpost) /\
-    storage_agree_except (step_taint inst s post tn).t_trans
-      (contract_transient post) (contract_transient tpost) /\
+    accounts_agree_except
+      (D with d_stor := (\a st. if a = post.vs_call_ctx.cc_address then (step_taint inst s post tn).t_stor else {}))
+      post.vs_accounts tpost.vs_accounts /\
+    transient_agree_except
+      (D with d_trans := (\a st. if a = post.vs_call_ctx.cc_address then (step_taint inst s post tn).t_trans else {}))
+      post.vs_transient tpost.vs_transient /\
+    imms_agree_except (D with d_imm := K (step_taint inst s post tn).t_imm) post.vs_immutables tpost.vs_immutables /\
+    LIST_REL (request_agree_except D) post.vs_requests tpost.vs_requests /\
     post.vs_outcomes = tpost.vs_outcomes
 Proof
   cheat
