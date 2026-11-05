@@ -838,3 +838,46 @@ val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag storage_holds_live_suffix) in
   if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
   then raise Fail "Live storage suffix dependency" else ()
 end;
+
+(* Interface diagnostic only: these quotations are typechecked signatures,
+   NOT theorems or assumptions.  The first implication is still open.
+   storage_place_region (capacity-only paths) is not enough for dynamic
+   element liveness: a successful index check at the captured state is needed.
+
+   Shared compiler cuts: a0 -> a1 lowers the address; a1 -> a2 compiles raw
+   positional values; a2 -> a3 evaluates kwargs.  The delayed-read endpoint
+   is a3 (before optional GAS at a5 and before call-buffer allocation).
+   Q must consume these exact raw values at MAP (lowered_value_type ce) ps;
+   compile_multi_vvs itself calls compile_expr at expr_type, not at that map.
+   T starts from compile_external_call_kwargs at a5 and must preserve the
+   resulting stage relation, not re-evaluate positional operands. *)
+val _ = ``
+  expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
+  eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot tvt)), es1) ==>
+  storage_read_live cx tr (get_storage cx es1 tr) slot tvt /\
+  slots_in_range (get_storage cx es1 tr) (w2n slot) tvt
+``;
+
+(* Typechecked successful payload/cuts only; the actual simulation theorem
+   must wrap this payload in frag_exec and send failing prefixes to expr_exit.
+   In particular, it must DERIVE, not assume, final holds for captured places. *)
+val _ = ``
+  lower_value compile_expr ce (BaseT AddressT) addr a0 = (addr_op,a1) /\
+  compile_multi_vvs compile_expr ce ps a1 = (vvs,a2) /\
+  compile_ext_call_kwargs compile_expr ce ret_ty opts ks a2 =
+    ((value_opt,gas_opt,default_opt),a3) /\
+  eval_exprs cx [addr] es0 = (INL target,esA) /\
+  eval_expr_results cx ps esA = (INL rs,esP) /\
+  eval_exprs cx ks esP = (INL kwargs,esK) /\
+  read_results cx rs esK = (INL vs,esK) /\
+  tys = MAP (lowered_value_type ce) ps /\
+  LENGTH rs = LENGTH vvs /\ LENGTH rs = LENGTH tys /\
+  LENGTH rs = LENGTH los /\ LENGTH rs = LENGTH his /\
+  (!i. i < LENGTH rs ==>
+    compile_expr ce (expr_type (EL i ps)) (EL i ps) (EL i los) =
+      (EL i vvs,EL i his) /\
+    vv_holds ce cx (EL i tys) (EL i rs) (EL i vvs) esK sK /\
+    vv_at ce cx (EL i tys) (EL i los) a3 esK (EL i rs) (EL i vvs) sK) /\
+  stmt_state_rel ctx func ce cx esK sK /\ expr_sim_inv ce cx env esK /\
+  fn_has_code a0 a3 func /\ local_ptrs_reserved ce a3
+``;
