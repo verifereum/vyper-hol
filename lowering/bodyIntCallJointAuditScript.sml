@@ -4,7 +4,7 @@
 Theory bodyIntCallJointAudit
 Ancestors
   bodyIntCallJointTuple bodyIntCallArgLifetime bodyIntCallGasPrefix
-  bodyIntCallJointCounted
+  bodyIntCallJointCounted bodyIntCallJointSingleton
   exprSimHypsDefs gasOutcome gasContext
 
 val _ = ``
