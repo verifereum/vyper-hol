@@ -8,7 +8,9 @@
  * (S1's deploy_ctor_body_frame) covers the constructor's internal callees,
  * and it either returns (RunMemFrameRet) or falls off its end
  * (RunMemFallthrough) into the unlock and the epilogue.  An exempt source
- * error contradicts the excluded exemption.
+ * error contradicts the excluded exemption.  The body frame's call outcomes
+ * come from S1's deploy_call_outcomes_pending until the top-level premise
+ * lands.
  * TOP-LEVEL: deploy_unit_run_mem_safe.
  *)
 Theory ctorDeployMemoryRunMem
@@ -16,6 +18,7 @@ Ancestors
   ctorDeployDefs gasSummary memSafeRun venomInst
   ctorDeployLoweringDefs ctorDeployLoweringCode ctorDeployLoweringEntry
   ctorDeployLoweringFrame ctorDeployLoweringSource ctorDeployLoweringSourceOk
+  ctorDeployLoweringPendingTop
   ctorDeployMemoryRunMemNoCtor ctorDeployMemoryRunMemPrefix
   ctorDeployMemoryRunMemEntry ctorDeployMemoryRunMemFrameRet
   ctorDeployMemoryRunMemFallthrough
@@ -59,6 +62,8 @@ Proof
     (drule_all deploy_ctor_entry_reaches_body >> strip_tac >> simp[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all deploy_ctor_entry_run_mem >> strip_tac >>
+  `call_outcomes_ok am tx (MAP SND (call_trace es))` by
+    metis_tac[deploy_call_outcomes_pending] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   `cenv.ce_ctor_exit_label = SOME exit_lbl /\
    st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
