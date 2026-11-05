@@ -685,6 +685,47 @@ QED
 
 Finalise asm_call_prepare_success_view
 
+Theorem asm_call_prepare_contexts_wf:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  EVERY (wf_context o FST) s.contexts /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  EVERY (wf_context o FST) u.contexts
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  gvs[wf_context_def, LENGTH_DROP] >> decide_tac
+QED
+
+Theorem asm_call_prepare_stack_room:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  EVERY (wf_context o FST) s.contexts /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  LENGTH (FST (HD u.contexts)).stack < stack_limit
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  gvs[wf_context_def, LENGTH_DROP] >> decide_tac
+QED
+
+Theorem asm_call_prepare_stipend_paid:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  EVERY (wf_context o FST) s.contexts /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  stipend <= (FST (HD u.contexts)).gasUsed
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >> gvs[]
+QED
+
 Theorem asm_pop_and_incorporate_context_state:
   s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
   child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
