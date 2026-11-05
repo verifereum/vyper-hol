@@ -11,7 +11,7 @@
 Theory makeSsaCurrentNonDegenerate
 Ancestors
   makeSsaCurrentDefs venomWf cfgWf venomInst irSupply unitShapeDefs
-  o1PassContract
+  o1PassContract makeSsaCurrentNonDegTransport makeSsaCurrentNonDegPhiInput
 
 (* Why it holds (intuition only; the proof's structure is free).
 
@@ -28,9 +28,9 @@ Ancestors
 
    PHI-free input (had_phis = F, so bbs3 = bbs2 and every output PHI is a
    placed one): a PHI for x at block B was placed because B is in DF(D) for
-   a block D that defines x, either originally or by a PHI placed earlier;
-   follow the iteration back to the first such D, which is not B unless B
-   itself has an original definition of x.  x is live into B, so by
+   a block D that defines x, either originally or by a PHI placed earlier.
+   Use this immediate frontier source: D is not B unless B itself has an
+   original definition of x.  x is live into B, so by
    fn_defs_reach_uses every predecessor has a reaching definition.  D
    dominates a predecessor p1 of B, so the name renamed in on the edge
    p1 -> B is defined inside D's dominator subtree after B's own PHI (if
@@ -48,5 +48,7 @@ Theorem make_ssa_current_fn_phis_non_degenerate:
   make_ssa_current_fn s fn = (fn',s') ==>
   fn_phis_non_degenerate fn'
 Proof
-  cheat
+  strip_tac >> Cases_on `blocks_have_leading_phi fn.fn_blocks`
+  >- (drule_all current_nondeg_phi_input >> simp[]) >>
+  drule_all current_nondeg_phi_free_run >> simp[]
 QED
