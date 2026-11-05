@@ -1022,6 +1022,22 @@ Proof
   simp[] >> strip_tac >> gvs[expr_exit_def]
 QED
 
+(* gas_source_bind_normal and gas_source_bind_exception already provide
+   the all-tail success composition and short-circuit boundaries. *)
+Theorem ifexp_next_gas_tail[local]:
+  !tail. next_gas_reading (es with gas_obs := w::tail) =
+    (INL (IntV (&w2n (w:bytes32))),es with gas_obs := tail)
+Proof
+  simp[next_gas_reading_def, return_def]
+QED
+
+Theorem ifexp_next_gas_exhausted[local]:
+  next_gas_reading (es with gas_obs := []) =
+    (INR (Error (RuntimeError "msg.gas: no gas reading")),es with gas_obs := [])
+Proof
+  simp[next_gas_reading_def, raise_def]
+QED
+
 Theorem ifexp_gas_zero_test_source[local]:
   es.gas_obs = w::ws ==>
   eval_expr cx
