@@ -1000,6 +1000,55 @@ Proof
   simp[Abbr `prepared`]
 QED
 
+Theorem asm_call_step_success:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INL (),v) ==>
+  step s = (INL (),v)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `FLOOKUP c.msgParams.parsed c.pc = SOME op` by
+    (qpat_x_assum `next_opcode c = _` mp_tac >>
+     simp[next_opcode_def] >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
+  simp_tac (srw_ss()) [step_def, get_current_context_def, handle_def,
+    bind_def, ignore_bind_def, return_def] >>
+  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+  gvs[step_inst_def, inc_pc_or_jump_def, is_call_def, bind_def,
+       ignore_bind_def, return_def]
+QED
+
+Theorem asm_call_abort_outcome:
+  s.contexts = (c,rb)::rest /\ t.contexts = (c',rb)::rest /\
+  c'.stack = 0w::stk /\ c'.returnData = [] /\ c'.logs = c.logs /\
+  t.rollback.accounts = s.rollback.accounts /\
+  t.rollback.tStorage = s.rollback.tStorage /\
+  t.rollback.toDelete = s.rollback.toDelete /\
+  (next_opcode c = SOME Call \/ next_opcode c = SOME StaticCall) ==>
+  outcome_of (request_of s).cr_kind t (LENGTH c.logs) (LENGTH s.rollback.toDelete) =
+    failed_outcome (request_of s)
+Proof
+  strip_tac >>
+  simp[outcome_of_def, request_of_def, failed_outcome_def]
+QED
+
+Theorem asm_consume_call_failed:
+  a.as_outcomes = failed_outcome rq :: os /\ rq.cr_kind = MessageCall ==>
+  asm_consume_call_outcome rq ro rs stk a =
+    AsmOK (asm_next (a with <|
+      as_stack := 0w::stk; as_outcomes := os;
+      as_requests := record_request rq a.as_requests;
+      as_returndata := [] |>))
+Proof
+  strip_tac >>
+  simp[asm_consume_call_outcome_eq, asm_take_outcome_failed_head] >>
+  simp[failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       TAKE_DROP] >>
+  AP_TERM_TAC >> simp[asm_state_component_equality]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
