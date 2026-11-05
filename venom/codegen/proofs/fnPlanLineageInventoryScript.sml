@@ -2634,3 +2634,108 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[SUBSET_REFL]
 QED
+
+Theorem stack_pop_swap_retains_other:
+  !(s : operand list) d x. d < LENGTH s /\ MEM x s /\ x <> stack_peek d s ==>
+    MEM x (stack_pop 1 (stack_swap d s))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `PERM (stack_swap d s) s` by
+    (qspec_then `ARB with ps_stack := s` mp_tac
+       (Q.SPEC `d` do_swap_stack_perm) >> simp[do_swap_stack_result]) >>
+  `set (stack_swap d s) = set s` by metis_tac[sortingTheory.PERM_LIST_TO_SET] >>
+  `stack_swap d s <> []` by
+    (strip_tac >> gvs[stack_swap_def]) >>
+  `LAST (stack_swap d s) = stack_peek d s` by
+    (`PRE (LENGTH s) = LENGTH s - 1` by decide_tac >>
+     simp[LAST_EL, stack_swap_def, stack_peek_def, EL_LUPDATE] >>
+     rpt IF_CASES_TAC >> gvs[]) >>
+  `MEM x (stack_swap d s)` by ASM_SET_TAC[] >>
+  `MEM x (FRONT (stack_swap d s))` by
+    metis_tac[MEM_SNOC, SNOC_LAST_FRONT] >>
+  gvs[stack_pop_def, FRONT_BY_TAKE]
+QED
+
+Theorem popmany_fold_retains_other[local]:
+  !to_pop ops ps x.
+    MEM x ps.ps_stack /\ ~MEM x to_pop ==>
+    MEM x (SND (FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+          (ops ++ FST (if dist = 0 then ([], ps) else do_swap dist ps) ++ [SOPop 1],
+           (SND (if dist = 0 then ([], ps) else do_swap dist ps)) with
+             ps_stack := stack_pop 1
+               (SND (if dist = 0 then ([], ps) else do_swap dist ps)).ps_stack))
+      (ops, ps) to_pop)).ps_stack
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_depth h ps.ps_stack` >> simp[] >>
+  `(if x' = 0 then ([], ps) else do_swap x' ps) = do_swap x' ps` by
+    (Cases_on `x' = 0` >> simp[do_swap_def]) >>
+  simp[] >> first_x_assum irule >> simp[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  simp[do_swap_stack_result] >> irule stack_pop_swap_retains_other >> simp[]
+QED
+
+Theorem popmany_individual_retains_other:
+  !to_pop ps x. MEM x ps.ps_stack /\ ~MEM x to_pop ==>
+    MEM x (SND (popmany_individual to_pop ps)).ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[popmany_individual_def, LET_THM, pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
+  irule (SRULE [pairTheory.pair_CASE_def, pairTheory.UNCURRY] popmany_fold_retains_other) >>
+  simp[sortingTheory.QSORT_MEM]
+QED
+
+Theorem popmany_contiguous_retains_other[local]:
+  !to_pop ps x.
+    to_pop <> [] /\ set to_pop SUBSET set ps.ps_stack /\
+    is_contiguous_top (MAP THE (MAP (\op. stack_get_depth op ps.ps_stack) to_pop)) /\
+    MEM x ps.ps_stack /\ ~MEM x to_pop ==>
+    MEM x (stack_pop (LENGTH to_pop) (SND (do_swap (LENGTH to_pop) ps)).ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH to_pop < LENGTH ps.ps_stack /\
+   set to_pop = set (MAP (\d. stack_peek d ps.ps_stack)
+     (GENLIST SUC (LENGTH to_pop)))` by
+    (mp_tac (Q.SPECL [`to_pop`, `[]`, `ps.ps_stack`, `ps`] contiguous_depths_core) >> simp[]) >>
+  `ps.ps_stack <> []` by (strip_tac >> gvs[]) >>
+  `?rest top. ps.ps_stack = SNOC top rest` by metis_tac[SNOC_CASES] >>
+  `LENGTH to_pop <= LENGTH rest` by gvs[] >>
+  `?lower removed. ps.ps_stack = lower ++ removed ++ [top] /\
+    LENGTH removed = LENGTH to_pop` by
+    (qexistsl_tac [`TAKE (LENGTH rest - LENGTH to_pop) rest`,
+                  `DROP (LENGTH rest - LENGTH to_pop) rest`] >>
+     conj_tac
+     >- (pure_rewrite_tac[GSYM APPEND_ASSOC, TAKE_DROP] >> simp[SNOC_APPEND]) >>
+     simp[LENGTH_DROP]) >>
+  `set to_pop = set removed` by
+    (qpat_x_assum `LENGTH removed = _` (assume_tac o SYM) >>
+     gvs[stack_peek_contiguous]) >>
+  `MEM x (lower ++ [top])` by (gvs[] >> ASM_SET_TAC[]) >>
+  simp[do_swap_stack_result] >>
+  qpat_x_assum `LENGTH removed = _` (assume_tac o SYM) >>
+  simp[stack_pop_contiguous] >> gvs[]
+QED
+
+Theorem popmany_plan_retains_other:
+  !to_pop ps x. MEM x ps.ps_stack /\ ~MEM x to_pop ==>
+    MEM x (SND (popmany_plan to_pop ps)).ps_stack
+Proof
+  Cases >- simp[popmany_plan_def] >> rpt gen_tac >> strip_tac >>
+  simp[popmany_plan_def, LET_THM] >> IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (pairarg_tac >> gvs[] >>
+          mp_tac (Q.SPECL [`h::t`, `ps`, `x`] popmany_contiguous_retains_other) >>
+          simp[] >> disch_then irule >>
+          simp[SUBSET_DEF] >> rpt strip_tac >>
+          rename1 `MEM y ps.ps_stack` >>
+          `IS_SOME (stack_get_depth y ps.ps_stack)` by
+            (gvs[EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+          Cases_on `stack_get_depth y ps.ps_stack` >> gvs[] >>
+          drule stack_get_depth_props >> strip_tac >>
+          gvs[stack_peek_def] >> irule EL_MEM >> decide_tac) >>
+      irule popmany_individual_retains_other >> simp[]) >>
+  irule popmany_individual_retains_other >> simp[]
+QED

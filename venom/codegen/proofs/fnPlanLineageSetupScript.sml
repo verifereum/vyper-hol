@@ -691,3 +691,166 @@ Proof
       simp[EVERY_MEM] >> ASM_SET_TAC[]) >>
   qexists_tac `rest` >> metis_tac[lineage_core_def]
 QED
+
+Theorem optimistic_swap_plan_slots:
+  !dfg inst live term ps.
+    set (SND (optimistic_swap_plan dfg inst live term ps)).ps_stack = set ps.ps_stack /\
+    (SND (optimistic_swap_plan dfg inst live term ps)).ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >>
+  `ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` by simp[] >>
+  drule optimistic_swap_plan_core_step >> simp[] >>
+  disch_then (qspecl_then [`dfg`, `inst`, `live`, `term`] strip_assume_tac) >> gvs[] >>
+  simp[do_swap_spilled_unchanged] >>
+  metis_tac[do_swap_stack_perm, sortingTheory.PERM_LIST_TO_SET]
+QED
+
+Theorem regular_post_emit_tail_live_coverage:
+  !ps outputs live halting dfg inst term ps8 ps9 final.
+    (!v. MEM v live ==> MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    ps8 = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v live) outputs)) ps)
+      else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []
+      then SND (optimistic_swap_plan dfg inst live term ps8) else ps8) /\
+    final = release_dead_spills live ps9 ==>
+    !v. MEM v live ==> MEM (Var v) final.ps_stack \/ Var v IN FDOM final.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v live ==> MEM (Var v) ps8.ps_stack \/ Var v IN FDOM ps8.ps_spilled` by
+    (Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)`
+     >- (qpat_x_assum `ps8 = _` SUBST_ALL_TAC >>
+         simp[popmany_plan_spilled_unchanged] >>
+         rpt strip_tac >> first_x_assum drule >> strip_tac
+         >- (disj1_tac >> irule popmany_plan_retains_other >>
+             simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >> simp[]) >>
+     gvs[]) >>
+  `!v. MEM v live ==> MEM (Var v) ps9.ps_stack \/ Var v IN FDOM ps9.ps_spilled` by
+    (qspecl_then [`dfg`, `inst`, `live`, `term`, `ps8`] strip_assume_tac
+       optimistic_swap_plan_slots >>
+     Cases_on `outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []` >>
+     qpat_x_assum `ps9 = _` SUBST_ALL_TAC >> simp[] >> ASM_SET_TAC[]) >>
+  `final.ps_stack = ps9.ps_stack` by
+    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
+     rpt (pop_assum kall_tac) >> simp[release_dead_spills_def] >>
+     qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v live | Label v => T)
+       (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
+     qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
+     Cases_on `h` >> simp[]) >>
+  gvs[release_dead_spills_domain, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem emit_reorder_output_live_coverage:
+  !ps m core spillbase operands selected opc nl outputs dfg iops ps1 rops ps4.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
+    (!v. MEM (Var v) operands \/ (MEM v nl /\ ~MEM v outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\ emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps4) ==>
+    !v. MEM v nl ==>
+      MEM (Var v) ((stack_pop (LENGTH operands) ps4.ps_stack) ++ MAP Var outputs) \/
+      Var v IN FDOM ps4.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `keep = FILTER (\v. ~MEM v outputs) nl` >>
+  `set keep SUBSET set nl` by (simp[Abbr `keep`, SUBSET_DEF, MEM_FILTER]) >>
+  `!v. MEM (Var v) operands \/ MEM v keep ==>
+     MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    (simp_tac bool_ss [Abbr `keep`, MEM_FILTER] >> metis_tac[]) >>
+  drule emit_reorder_pop_marker_core_protected_reserve >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >>
+  simp[] >> strip_tac >>
+  rpt strip_tac >> Cases_on `MEM v outputs` >- simp[MEM_MAP] >>
+  `MEM v keep` by simp[Abbr `keep`, MEM_FILTER] >>
+  first_x_assum drule >> simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem native_regular_live_lower:
+  !liveness dfg cfg fn inst nl halting term lbl ps m core spillbase ops qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
+    (!v. MEM (Var v) (compute_operands inst) \/
+      (MEM v nl /\ ~MEM v inst.inst_outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs)
+    ==> !v. MEM v nl ==> MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  namedCases_on `emit_input_plan inst.inst_opcode (compute_operands inst) nl ps` ["iops ps1"] >>
+  qabbrev_tac `swapped = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+    [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+     EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]` >>
+  qabbrev_tac `choice =
+    if is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) then
+      if reorder_cost (FST (reorder_plan dfg (compute_operands inst) ps1)) <
+         reorder_cost (FST (reorder_plan dfg swapped ps1))
+      then reorder_plan dfg (compute_operands inst) ps1 else reorder_plan dfg swapped ps1
+    else reorder_plan dfg (compute_operands inst) ps1` >>
+  namedCases_on `choice` ["rops ps4"] >>
+  `?selected. PERM (compute_operands inst) selected /\
+    reorder_plan dfg selected ps1 = (rops,ps4)` by
+    (Cases_on `is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst)`
+     >- (Cases_on `reorder_cost (FST (reorder_plan dfg (compute_operands inst) ps1)) <
+           reorder_cost (FST (reorder_plan dfg swapped ps1))`
+         >- (qexists_tac `compute_operands inst` >> gvs[markerTheory.Abbrev_def]) >>
+         qexists_tac `swapped` >> gvs[markerTheory.Abbrev_def] >>
+         irule genericInputReadyTheory.last_two_reorder_perm >> simp[]) >>
+     qexists_tac `compute_operands inst` >> gvs[markerTheory.Abbrev_def]) >>
+  `!v. MEM v nl ==>
+    MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack ++ MAP Var inst.inst_outputs) \/
+    Var v IN FDOM ps4.ps_spilled` by
+    (drule emit_reorder_output_live_coverage >>
+     disch_then drule >> disch_then drule >> disch_then drule >>
+     disch_then drule >> disch_then drule >> disch_then drule >>
+     disch_then drule >> simp[]) >>
+  suspend "tail"
+QED
+
+Resume native_regular_live_lower[tail]:
+  qpat_x_assum `ps.ps_stack = _` kall_tac >>
+  qpat_x_assum `residual_budget_wf _ _ _` kall_tac >>
+  qpat_x_assum `LENGTH _ <= 16` kall_tac >>
+  qpat_x_assum `EVERY _ _` kall_tac >>
+  qpat_x_assum `!v. MEM (Var v) _ \/ _ ==> _` kall_tac >>
+  qpat_x_assum `PERM _ _` kall_tac >>
+  qpat_x_assum `reorder_plan dfg selected _ = _` kall_tac >>
+  qpat_x_assum `Abbrev ((rops,ps4) = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [generate_regular_inst_plan_def, LET_THM,
+    pairTheory.pair_CASE_def, pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND,
+    pairTheory.PAIR, arithmeticTheory.GREATER_EQ] >>
+  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `(if is_commutative _ /\ _ then _ else _) = _`
+    (fn th => pure_rewrite_tac [th, pairTheory.FST, pairTheory.SND]) >>
+  Cases_on `inst.inst_outputs = []` >> asm_simp_tac bool_ss [] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic emitted` >>
+  qpat_x_assum `Abbrev (topic = _)` kall_tac >>
+  qpat_x_assum `Abbrev (swapped = _)` kall_tac >>
+  qpat_x_assum `emit_input_plan _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `inst.inst_opcode <> JMP` kall_tac >>
+  `!v. MEM v nl ==> MEM (Var v) emitted.ps_stack \/ Var v IN FDOM emitted.ps_spilled` by
+    (simp[Abbr `emitted`, parameter_push_fold] >> gvs[] >> metis_tac[]) >>
+  namedCases_on `generate_emit_ops inst topic emitted` ["eops ps7"] >>
+  `ps7.ps_stack = emitted.ps_stack /\ ps7.ps_spilled = emitted.ps_spilled` by
+    metis_tac[fnPlanLineageReorderTheory.generate_emit_ops_slots] >>
+  `!v. MEM v nl ==> MEM (Var v) ps7.ps_stack \/ Var v IN FDOM ps7.ps_spilled` by
+    metis_tac[] >>
+  qpat_x_assum `Abbrev (emitted = _)` kall_tac >>
+  qpat_x_assum `!v. MEM v nl ==> MEM (Var v) (_ ++ _) \/ _` kall_tac >>
+  qpat_x_assum `!v. MEM v nl ==> MEM (Var v) emitted.ps_stack \/ _` kall_tac >>
+  simp_tac bool_ss [pairTheory.FST, pairTheory.SND] >>
+  drule (SRULE [] regular_post_emit_tail_live_coverage) >>
+  disch_then (qspecl_then [`inst.inst_outputs`, `halting`, `dfg`, `inst`, `term`] mp_tac) >>
+  Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
+  Cases_on `FILTER (\v. MEM v nl) inst.inst_outputs = []` >>
+  simp[] >> rpt strip_tac >> gvs[]
+QED
+
+Finalise native_regular_live_lower
