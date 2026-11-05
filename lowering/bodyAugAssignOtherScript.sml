@@ -248,6 +248,45 @@ Proof
   metis_tac[assignable_type_well_formed]
 QED
 
+Theorem augassign_target_case[local]:
+  body_base_target_ok cx t /\ body_inv tops ctx cenv cx ==>
+  target_case F ctx func cenv cx t
+Proof
+  metis_tac[aug_place_body_target_idx, target_case_all]
+QED
+
+Theorem augassign_target_not_immutable[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) ==>
+  ~immutable_root cx t
+Proof
+  metis_tac[aug_place_supported_stmt_target_info,
+            aug_place_supported_root_not_immutable]
+QED
+
+Theorem augassign_target_pre[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) ==>
+  target_indices_pre cenv cx env t
+Proof
+  rpt strip_tac >>
+  `?pt. supported_target_info tops bindings t = SOME pt` by
+    metis_tac[aug_place_supported_stmt_target_info] >>
+  irule aug_place_target_indices_pre >>
+  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_def,
+      supported_stmt_expr_exists_def, int_calls_stmt_def, AllCaseEqs()] >>
+  fs[body_inv_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            optionTheory.IS_SOME_EXISTS]
+QED
+
 Theorem augassign_toplevel_success[local]:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
