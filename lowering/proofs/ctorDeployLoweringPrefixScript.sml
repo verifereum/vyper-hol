@@ -547,6 +547,81 @@ Proof
   EVAL_TAC
 QED
 
+val prefix_sue_insts_tm = ``[
+  <|inst_id := 0; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["%0"]|>;
+  <|inst_id := 13; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["formal_var_3"]|>;
+  <|inst_id := 12; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["formal_var_2"]|>;
+  <|inst_id := 1; inst_opcode := ADD; inst_operands := [Var "formal_var_3"; Var "formal_var_2"]; inst_outputs := ["%1"]|>;
+  <|inst_id := 8; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["formal_var_0"]|>;
+  <|inst_id := 9; inst_opcode := ADD; inst_operands := [Var "%1"; Label "code_end"]; inst_outputs := ["formal_var_1"]|>;
+  <|inst_id := 15; inst_opcode := ASSIGN; inst_operands := [Var "formal_var_0"]; inst_outputs := ["formal_var_5"]|>;
+  <|inst_id := 14; inst_opcode := ASSIGN; inst_operands := [Lit 32w]; inst_outputs := ["formal_var_4"]|>;
+  <|inst_id := 10; inst_opcode := CODECOPY; inst_operands := [Var "formal_var_5"; Var "formal_var_1"; Var "formal_var_4"]; inst_outputs := []|>;
+  <|inst_id := 16; inst_opcode := ASSIGN; inst_operands := [Var "formal_var_0"]; inst_outputs := ["formal_var_6"]|>;
+  <|inst_id := 11; inst_opcode := MLOAD; inst_operands := [Var "formal_var_6"]; inst_outputs := ["%2"]|>;
+  <|inst_id := 3; inst_opcode := MSTORE; inst_operands := [Var "%0"; Var "%2"]; inst_outputs := []|>;
+  <|inst_id := 5; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["%3"]|>;
+  <|inst_id := 18; inst_opcode := ASSIGN; inst_operands := [Var "%3"]; inst_outputs := ["formal_var_8"]|>;
+  <|inst_id := 17; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["formal_var_7"]|>;
+  <|inst_id := 6; inst_opcode := CODECOPY; inst_operands := [Var "formal_var_8"; Label "runtime_begin"; Var "formal_var_7"]; inst_outputs := []|>;
+  <|inst_id := 20; inst_opcode := ASSIGN; inst_operands := [Var "%3"]; inst_outputs := ["formal_var_10"]|>;
+  <|inst_id := 19; inst_opcode := ASSIGN; inst_operands := [Lit 0w]; inst_outputs := ["formal_var_9"]|>;
+  <|inst_id := 7; inst_opcode := RETURN; inst_operands := [Var "formal_var_10"; Var "formal_var_9"]; inst_outputs := []|>]``;
+val prefix_sue_unit_tm = ``^prefix_fmp_unit_tm with cu_context :=
+  ((^prefix_fmp_unit_tm).cu_context with ctx_functions :=
+    [(HD ((^prefix_fmp_unit_tm).cu_context.ctx_functions)) with fn_blocks :=
+      [<|bb_label := "__deploy"; bb_instructions := ^prefix_sue_insts_tm|>]])``;
+val prefix_sue_supply_tm = ``<|irs_next_inst := 21; irs_next_var := 11; irs_next_label := 0;
+  irs_used_inst_ids := [20;19;18;17;16;15;14;13;12;11;10;9;8;0;1;2;3;4;5;6;7];
+  irs_used_vars := ["formal_var_10";"formal_var_9";"formal_var_8";"formal_var_7";"formal_var_6";
+    "formal_var_5";"formal_var_4";"formal_var_3";"formal_var_2";"formal_var_1";"formal_var_0";
+    "%0";"%1";"%2";"%1";"%0";"%2";"%3";"%3";"%3"];
+  irs_used_labels := ["code_end";"__deploy";"__deploy";"__deploy";"@ctor_exit_0";"@ctor_exit_0";
+    "runtime_begin";"runtime_begin"]|>``;
+
+Theorem deploy_prefix_negative_sue_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_SingleUseExpansion] "__deploy"
+    ^prefix_fmp_unit_tm ^prefix_dload_supply_tm =
+    SOME (^prefix_sue_unit_tm, ^prefix_sue_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
+val prefix_sue_insts = prefix_sue_insts_tm |> listSyntax.dest_list |> fst;
+val prefix_dft_insts_tm = listSyntax.mk_list
+  (map (fn n => List.nth (prefix_sue_insts,n))
+    [7,2,1,3,5,4,6,8,9,10,0,11,14,12,13,15,17,16,18],
+   type_of (hd prefix_sue_insts));
+val prefix_dft_unit_tm = ``^prefix_sue_unit_tm with cu_context :=
+  ((^prefix_sue_unit_tm).cu_context with ctx_functions :=
+    [(HD ((^prefix_sue_unit_tm).cu_context.ctx_functions)) with fn_blocks :=
+      [<|bb_label := "__deploy"; bb_instructions := ^prefix_dft_insts_tm|>]])``;
+
+Theorem deploy_prefix_negative_dft_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_DFT] "__deploy"
+    ^prefix_sue_unit_tm ^prefix_sue_supply_tm =
+    SOME (^prefix_dft_unit_tm, ^prefix_sue_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_normalize_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_CFGNormalization] "__deploy"
+    ^prefix_dft_unit_tm ^prefix_sue_supply_tm =
+    SOME (^prefix_dft_unit_tm, ^prefix_sue_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
