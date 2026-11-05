@@ -11,7 +11,8 @@
 Theory bodyPtrLogCases
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
-  vyperState vyperContext vyperTypeCallGraph list
+  vyperState vyperContext vyperTypeCallGraph list bodyAppendStoragePtr
+  supportedStmts
 
 val _ = Parse.hide "body";
 
@@ -30,5 +31,8 @@ Theorem body_append_case_ptr:
     body_base_target_ptr_ok cx t ==>
     body_stmt_ptr_ok cx (Append t e)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_other_ptr >> first_assum ACCEPT_TAC) >>
+  Cases_on `t` >> gvs[] >>
+  rw[body_stmt_ptr_ok_def, supported_stmt_def, supported_append_target_def]
 QED
