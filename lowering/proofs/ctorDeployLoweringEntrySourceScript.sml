@@ -142,6 +142,21 @@ Proof
   EVAL_TAC >> simp[wordsTheory.dimword_def]
 QED
 
+Theorem deploy_ctor_fn_pass_fold_append:
+  !xs s fn lm fn1 lm1 s1 ys fn2 lm2 s2.
+    run_configured_fn_pass_fold runner rp xs unit s fn lm =
+      SOME (fn1,lm1,s1) /\
+    run_configured_fn_pass_fold runner rp ys unit s1 fn1 lm1 =
+      SOME (fn2,lm2,s2) ==>
+    run_configured_fn_pass_fold runner rp (xs ++ ys) unit s fn lm =
+      SOME (fn2,lm2,s2)
+Proof
+  Induct_on `xs` >>
+  simp[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
 local
   val stage_cs = computeLib.add_thms
     [venomPipelineRunnerTheory.run_callee_first_def,
@@ -332,6 +347,106 @@ Theorem deploy_ctor_noninit_postfmp_probe:
      CFP_Simple VP_CFGNormalization]
     "__deploy" ^fmp_unit ^dload_supply = SOME (^final_unit, ^final_supply)
 Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_fold_ssa:
+  run_configured_fn_pass_fold execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_MakeSSA; CFP_Simple VP_LowerDload]
+    ^pre_unit ^pre_supply (HD (^pre_unit).cu_context.ctx_functions) [] =
+    SOME (HD (^pre_unit).cu_context.ctx_functions, [], ^dload_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_fold_concretize:
+  run_configured_fn_pass_fold execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_ConcretizeMemLoc]
+    ^pre_unit ^dload_supply (HD (^pre_unit).cu_context.ctx_functions) [] =
+    SOME (HD (^concrete_unit).cu_context.ctx_functions, [], ^dload_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs) >>
+  simp[wordsTheory.dimword_def] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_fold_fmp:
+  run_configured_fn_pass_fold execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_FmpLowering]
+    ^pre_unit ^dload_supply (HD (^concrete_unit).cu_context.ctx_functions) [] =
+    SOME (HD (^fmp_unit).cu_context.ctx_functions, [], ^dload_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_fold_postfmp:
+  run_configured_fn_pass_fold execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_MakeSSA; CFP_Simple VP_SimplifyCFG;
+     CFP_Simple VP_SingleUseExpansion; CFP_Simple VP_DFT;
+     CFP_Simple VP_CFGNormalization]
+    ^pre_unit ^dload_supply (HD (^fmp_unit).cu_context.ctx_functions) [] =
+    SOME (HD (^final_unit).cu_context.ctx_functions, [], ^final_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_fold_all:
+  run_configured_fn_pass_fold execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    ([CFP_Simple VP_MakeSSA; CFP_Simple VP_LowerDload] ++
+     ([CFP_Simple VP_ConcretizeMemLoc] ++
+      ([CFP_Simple VP_FmpLowering] ++
+       [CFP_Simple VP_MakeSSA; CFP_Simple VP_SimplifyCFG;
+        CFP_Simple VP_SingleUseExpansion; CFP_Simple VP_DFT;
+        CFP_Simple VP_CFGNormalization])))
+    ^pre_unit ^pre_supply (HD (^pre_unit).cu_context.ctx_functions) [] =
+    SOME (HD (^final_unit).cu_context.ctx_functions, [], ^final_supply)
+Proof
+  irule deploy_ctor_fn_pass_fold_append >>
+  irule_at Any deploy_ctor_noninit_fold_ssa >>
+  irule deploy_ctor_fn_pass_fold_append >>
+  irule_at Any deploy_ctor_noninit_fold_concretize >>
+  irule deploy_ctor_fn_pass_fold_append >>
+  irule_at Any deploy_ctor_noninit_fold_fmp >>
+  irule deploy_ctor_noninit_fold_postfmp
+QED
+
+
+Theorem deploy_ctor_noninit_schedule_eq:
+  run_configured_fn_passes execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    o1_fn_passes "__deploy" ^pre_unit ^pre_supply =
+    SOME (^final_unit, ^final_supply)
+Proof
+  rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_passes_def,
+              venomPassScheduleTheory.o1_fn_passes_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``run_configured_fn_pass_fold``]) >>
+  rewrite_tac[CONV_RULE
+    (computeLib.RESTR_EVAL_CONV [``run_configured_fn_pass_fold``])
+    deploy_ctor_noninit_fold_all] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_walk_eq:
+  run_callee_first
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    o1_fn_passes ["__deploy"] ^pre_unit ^pre_supply =
+    SOME (^final_unit, ^final_supply)
+Proof
+  rewrite_tac[venomPipelineRunnerTheory.run_callee_first_def,
+              venomPipelineRunnerTheory.run_named_fn_schedules_def,
+              deploy_ctor_noninit_schedule_eq] >>
   CONV_TAC (computeLib.CBV_CONV stage_cs)
 QED
 
