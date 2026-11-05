@@ -2,6 +2,7 @@ Theory o1MakeSsaFormats
 Ancestors
   o1MakeSsaFrontier o1MakeSsaCfg makeSsaCurrentDefs unitShapeDefs
   venomInst stackPlanTypes list o1ContractSueStep simplifyCfgStruct
+  cfgNormSupplySim venomWf
 
 Theorem rename_current_operands_length:
   !ops. LENGTH (rename_current_operands rs ops) = LENGTH ops
@@ -203,4 +204,70 @@ Proof
               add_phi_nodes_supply_shape) >> disch_then irule >>
      gvs[EVERY_MEM, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
   gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem rename_current_inst_opcode:
+  rename_current_inst s rs inst = (rs',s',inst') ==>
+  inst'.inst_opcode = inst.inst_opcode
+Proof
+  simp[rename_current_inst_def] >> IF_CASES_TAC >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[]
+QED
+
+Theorem rename_current_block_insts_opcodes:
+  !insts s rs rs' s' insts'.
+    rename_current_block_insts s rs insts = (rs',s',insts') ==>
+    MAP (\i. i.inst_opcode) insts' = MAP (\i. i.inst_opcode) insts
+Proof
+  Induct >> simp[rename_current_block_insts_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  conj_tac >- metis_tac[rename_current_inst_opcode] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem rename_current_block_insts_well_formed:
+  rename_current_block_insts s rs bb.bb_instructions = (rs',s',insts') /\
+  bb_well_formed bb ==>
+  bb_well_formed (bb with bb_instructions := insts')
+Proof
+  strip_tac >> irule supply_bb_well_formed_opcodes >>
+  qexists `bb` >> simp[] >>
+  drule rename_current_block_insts_opcodes >> simp[]
+QED
+
+Theorem update_current_succ_phis_well_formed:
+  !succs bbs. EVERY bb_well_formed bbs ==>
+    EVERY bb_well_formed (update_current_succ_phis rs lbl bbs succs)
+Proof
+  Induct >> gvs[update_current_succ_phis_def] >> rpt strip_tac >>
+  first_x_assum irule >> Cases_on `lookup_block h bbs` >> simp[] >>
+  irule EVERY_replace_block >> simp[] >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  irule cfgTransformPropsTheory.bb_well_formed_map_classification >>
+  conj_tac >- (gen_tac >> Cases_on `inst.inst_opcode = PHI` >> simp[]) >>
+  metis_tac[EVERY_MEM]
+QED
+
+Theorem rename_current_blocks_well_formed:
+  (!t s rs bbs sm ctrs s' bbs'.
+    rename_current_blocks s rs bbs sm t = (ctrs,s',bbs') /\
+    EVERY bb_well_formed bbs ==> EVERY bb_well_formed bbs') /\
+  (!ts s ctrs stacks bbs sm ctrs' s' bbs'.
+    rename_current_children s ctrs stacks bbs sm ts = (ctrs',s',bbs') /\
+    EVERY bb_well_formed bbs ==> EVERY bb_well_formed bbs')
+Proof
+  ho_match_mp_tac makeSsaCurrentInductTheory.current_dom_tree_induction >>
+  rpt conj_tac
+  >- (rpt strip_tac >> gvs[rename_current_blocks_def, AllCaseEqs()] >>
+      pairarg_tac >> gvs[] >> first_x_assum drule >> disch_then irule >>
+      irule update_current_succ_phis_well_formed >>
+      irule EVERY_replace_block >> simp[] >>
+      drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+      irule rename_current_block_insts_well_formed >>
+      conj_tac >- metis_tac[EVERY_MEM] >>
+      goal_assum (drule_at Any))
+  >- simp[rename_current_blocks_def] >>
+  rpt strip_tac >> gvs[rename_current_blocks_def] >> pairarg_tac >> gvs[] >>
+  first_x_assum drule >> disch_then irule >>
+  first_x_assum drule_all >> simp[]
 QED
