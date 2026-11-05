@@ -41,3 +41,34 @@ Proof
       irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
   irule alloca_step_ptr_covers >> metis_tac[]
 QED
+
+(* A clean selector/offset store is a zero-count encoder edge. *)
+Theorem reason_buffer_mstore_path:
+  !D ctx func PG G tn s id dst value s1 bb.
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MSTORE [Var dst; value] []) /\
+    ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
+    step_inst_base (mk_inst id MSTORE [Var dst; value] []) s = OK s1 ==>
+    gas_path_ptr D 0 ctx func PG G tn s 0
+      (step_prov PG G (mk_inst id MSTORE [Var dst; value] []) s1)
+      (step_taint (mk_inst id MSTORE [Var dst; value] []) s s1 tn)
+      (OK (s1 with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `gas_path_ptr_edge D 0 ctx func PG G tn s
+     (if (mk_inst id MSTORE [Var dst; value] []).inst_opcode = GAS then 1 else 0)
+     (step_prov PG G (mk_inst id MSTORE [Var dst; value] []) s1)
+     (step_taint (mk_inst id MSTORE [Var dst; value] []) s s1 tn)
+     (OK (s1 with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule straight_line_ptr_edge >>
+     simp[mk_inst_def, is_terminator_def] >>
+     metis_tac[SRULE [mk_inst_def] ptr_inst_ok_mstore]) >>
+  `step_inst 0 ctx (mk_inst id MSTORE [Var dst; value] []) s = OK s1` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  `~s1.vs_halted` by
+    (drule step_preserves_halted >> simp[mk_inst_def, is_terminator_def]) >>
+  drule (cj 2 gas_path_ptr_rules) >> simp[] >> disch_then irule >>
+  irule (cj 1 gas_path_ptr_rules) >> simp[]
+QED
