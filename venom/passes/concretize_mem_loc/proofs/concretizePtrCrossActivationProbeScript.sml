@@ -342,3 +342,155 @@ Proof
   assume_tac cap_target_to_call_checked >>
   drule_all ptr_ledger_follow_history >> simp[]
 QED
+
+Definition cap_tcall_def:
+  cap_tcall = LAST cap_target_to_call
+End
+
+Definition cap_tframe_def:
+  cap_tframe = <| cf_fn := cap_caller_out; cf_inst := cap_tcall.po_inst;
+    cf_state := cap_tcall.po_state; cf_params := cap_tcall.po_params;
+    cf_prov := cap_tcall.po_prov; cf_tvar := cap_tcall.po_taint.t_var |>
+End
+
+Definition cap_tcs_def:
+  cap_tcs = THE (setup_callee sop_leaf_out [32w] cap_tcall.po_state)
+End
+
+Definition cap_tcallee_def:
+  cap_tcallee = ptr_observe [cap_tframe] [NONE] FEMPTY
+    (cap_tcall.po_taint with t_var := FEMPTY) sop_leaf_out
+    (HD (HD sop_leaf_out.fn_blocks).bb_instructions) cap_tcs
+End
+
+Theorem cap_target_call_view:
+  cap_tcall = ptr_observe [] [] FEMPTY
+    (entry_taint with t_var := FEMPTY |+ ("a",{})) cap_caller_out
+    (EL 2 (HD cap_caller_out.fn_blocks).bb_instructions)
+    ((mstore 32 1w (update_var "a" 32w sop_initial)) with vs_inst_idx := 2)
+Proof
+  EVAL_TAC >> simp[FLOOKUP_UPDATE, FUPDATE_EQ]
+QED
+
+Theorem cap_target_call_step:
+  ptr_chrono_step cap_target cap_tcall cap_tcallee
+Proof
+  simp[Once ptr_chrono_step_cases, cap_target_call_view,
+    cap_tcallee_def, cap_tframe_def, ptr_observe_def] >> EVAL_TAC >>
+  simp[FLOOKUP_UPDATE, FUPDATE_EQ, pred_setTheory.SUBSET_DEF,
+    eval_phis_def, phi_prefix_length_def, eval_operands_def,
+    eval_operand_def, lookup_var_def, op_prov_def]
+QED
+
+Definition cap_target_callee_tail_def:
+  cap_target_callee_tail = THE (ptr_ledger_follow cap_target
+    (TL (HD sop_leaf_out.fn_blocks).bb_instructions) cap_tcallee)
+End
+
+Theorem cap_target_callee_follow:
+  ptr_ledger_follow cap_target (TL (HD sop_leaf_out.fn_blocks).bb_instructions)
+    cap_tcallee = SOME cap_target_callee_tail
+Proof
+  simp[cap_target_callee_tail_def, cap_tcallee_def, cap_tcs_def,
+    cap_target_call_view, ptr_observe_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``cap_tframe``]) >> simp[]
+QED
+
+Theorem cap_target_return_history:
+  ptr_chrono_history sop_initial cap_target
+    ((([cap_target_entry] ++ cap_target_to_call) ++ [cap_tcallee]) ++
+      cap_target_callee_tail)
+    (if cap_target_callee_tail = [] then cap_tcallee else LAST cap_target_callee_tail)
+Proof
+  `ptr_chrono_history sop_initial cap_target
+      (([cap_target_entry] ++ cap_target_to_call) ++ [cap_tcallee]) cap_tcallee`
+    by (irule (cj 2 ptr_chrono_history_rules) >> qexists_tac `cap_tcall` >>
+        conj_tac >- ACCEPT_TAC cap_target_call_step >>
+        mp_tac cap_target_call_history >> simp[cap_tcall_def]) >>
+  assume_tac cap_target_callee_follow >>
+  drule_all ptr_ledger_follow_history >> simp[]
+QED
+
+Definition cap_tr_def:
+  cap_tr = LAST cap_target_callee_tail
+End
+
+Definition cap_tcr_def:
+  cap_tcr = (mstore 0 9w (mstore 32 7w
+    (update_var "b" 0w (update_var "p" 32w cap_tcs)))) with vs_inst_idx := 4
+End
+
+Theorem cap_target_return_view:
+  cap_tr = ptr_observe [cap_tframe] [NONE] FEMPTY
+    (entry_taint with t_var := FEMPTY |+ ("p",{}) |+ ("b",{})) sop_leaf_out
+    (EL 4 (HD sop_leaf_out.fn_blocks).bb_instructions) cap_tcr
+Proof
+  simp[cap_tr_def, cap_target_callee_tail_def, cap_tcallee_def, cap_tcs_def,
+    cap_target_call_view, cap_tcr_def, ptr_observe_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``cap_tframe``]) >>
+  simp[FLOOKUP_UPDATE, FUPDATE_EQ]
+QED
+
+Definition cap_target_second_call_def:
+  cap_target_second_call = ptr_observe [] [] FEMPTY
+    (cap_tr.po_taint with t_var := cap_tcall.po_taint.t_var) cap_caller_out
+    (EL 3 (HD cap_caller_out.fn_blocks).bb_instructions)
+    ((merge_callee_state cap_tcall.po_state cap_tr.po_state) with vs_inst_idx := 3)
+End
+
+Theorem cap_target_ret_step:
+  ptr_chrono_step cap_target cap_tr cap_target_second_call
+Proof
+  simp[Once ptr_chrono_step_cases, cap_target_second_call_def,
+    cap_target_return_view, cap_tframe_def, cap_target_call_view,
+    ptr_observe_def] >>
+  qexistsl_tac [`<|iret_values := []; iret_adopt_fmp := NONE|>`,
+    `cap_tcr`, `merge_callee_state cap_tcall.po_state cap_tcr`, `0`] >>
+  simp[cap_target_call_view, ptr_observe_def, cap_tcr_def, cap_tcs_def] >>
+  EVAL_TAC >> simp[FLOOKUP_UPDATE, FUPDATE_EQ]
+QED
+
+Definition cap_tframe2_def:
+  cap_tframe2 = <| cf_fn := cap_caller_out; cf_inst := cap_target_second_call.po_inst;
+    cf_state := cap_target_second_call.po_state; cf_params := [];
+    cf_prov := FEMPTY; cf_tvar := cap_target_second_call.po_taint.t_var |>
+End
+
+Definition cap_tcs2_def:
+  cap_tcs2 = THE (setup_callee sop_leaf_out [32w] cap_target_second_call.po_state)
+End
+
+Definition cap_tcallee2_def:
+  cap_tcallee2 = ptr_observe [cap_tframe2] [NONE] FEMPTY
+    (cap_target_second_call.po_taint with t_var := FEMPTY) sop_leaf_out
+    (HD (HD sop_leaf_out.fn_blocks).bb_instructions) cap_tcs2
+End
+
+Theorem cap_target_second_entry_step:
+  ptr_chrono_step cap_target cap_target_second_call cap_tcallee2
+Proof
+  simp[Once ptr_chrono_step_cases, cap_tcallee2_def, cap_tframe2_def,
+    cap_tcs2_def, cap_target_second_call_def, cap_target_return_view,
+    cap_target_call_view, ptr_observe_def, cap_tcr_def, cap_tcs_def] >>
+  EVAL_TAC >>
+  simp[FLOOKUP_UPDATE, FUPDATE_EQ, eval_phis_def, phi_prefix_length_def,
+    eval_operands_def, eval_operand_def, lookup_var_def, op_prov_def]
+QED
+
+Definition cap_target_reuse_tail_def:
+  cap_target_reuse_tail = THE (ptr_ledger_follow cap_target
+    [EL 1 (HD sop_leaf_out.fn_blocks).bb_instructions;
+     EL 2 (HD sop_leaf_out.fn_blocks).bb_instructions] cap_tcallee2)
+End
+
+Theorem cap_target_reuse_follow:
+  ptr_ledger_follow cap_target
+    [EL 1 (HD sop_leaf_out.fn_blocks).bb_instructions;
+     EL 2 (HD sop_leaf_out.fn_blocks).bb_instructions] cap_tcallee2 =
+  SOME cap_target_reuse_tail
+Proof
+  simp[cap_target_reuse_tail_def, cap_tcallee2_def, cap_tcs2_def,
+    cap_target_second_call_def, cap_target_return_view, cap_target_call_view,
+    cap_tcr_def, cap_tcs_def, ptr_observe_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``cap_tframe2``]) >> simp[]
+QED
