@@ -5,14 +5,6 @@ Ancestors
   loweringShapeDefs loweringShapeProps vyperCompiler compileEnv venomInst
   list moduleLowering venomWf removeUnusedSsaProofs
 
-Theorem initial_entry_shape[local]:
-  shape_state (initial_compile_state "__entry")
-Proof
-  simp[initial_compile_state_def, shape_state_def, shape_base_state_def,
-       raw_checked_state_def, raw_checked_blocks_def, opaque_insts_ok_def,
-       state_insts_def, all_blocks_def]
-QED
-
 Theorem entry_prefix_label_shape[local]:
   shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
   all_blocks st <> [] /\ (HD (all_blocks st)).bb_label = "__entry" /\
@@ -58,7 +50,7 @@ Proof
       SOME (unit.cu_context, data) /\ lowering_context_ok unit.cu_context` by
     (Cases_on `extract_context_with_internals "__entry" internal_fns st1` >>
      gvs[AllCaseEqs()]) >>
-  mp_tac initial_entry_shape >> strip_tac >>
+  mp_tac (Q.SPEC `"__entry"` shape_state_initial_compile_state) >> strip_tac >>
   drule_all runtime_selected_body_states >> strip_tac >>
   drule entry_prefix_label_shape >> strip_tac >>
   `ALL_DISTINCT (MAP (\bb. bb.bb_label) efn.fn_blocks)` by
