@@ -145,6 +145,58 @@ Proof
   metis_tac[]
 QED
 
+(* Shared proof phases: semantic parameters are supplied by each literal case. *)
+fun literal_buffer_run_tac size =
+  Q.SUBGOAL_THEN size ASSUME_TAC
+    >- (simp[wordsTheory.dimword_def] >> decide_tac) >>
+  drule_all literal_bytelike_ptr_run >>
+  disch_then (qspecl_then [`tn0`, `func`, `PG`, `G0`, `cx_dead cx`]
+    strip_assume_tac) >>
+  drule_all literal_buffer_ptr_path >> strip_tac >>
+  drule_all literal_bytelike_ptr_nonmemory_frame >> strip_tac >>
+  `b < dimword (:256)` by decide_tac >>
+  `w2n (n2w b : 256 word) = b` by simp[wordsTheory.w2n_n2w];
+
+fun literal_buffer_vv_post_tac e size tv =
+  simp[] >>
+  once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
+  irule (SRULE [vyperASTTheory.expr_type_def]
+    (Q.INST [`n` |-> size, `e` |-> e]
+      (SPEC_ALL literal_ptr_memory_vv_frame_post))) >>
+  simp[is_word_type_def] >>
+  conj_tac >- (drule literal_buffer_next_id >> simp[]) >>
+  conj_tac
+  >- (drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+      qexists_tac `STRING #"%" (toString sa.cs_next_var)` >> gvs[]) >>
+  qexistsl_tac [`sh`, tv, `u`, `n2w b`] >>
+  drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+  simp[vyperASTTheory.expr_type_def, is_word_type_def,
+    vyperValueTheory.evaluate_type_def, eval_operand_def] >>
+  gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
+      type_slot_size_def, type_memory_size_def, wordsTheory.dimword_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC;
+
+fun literal_buffer_ghost_tac size =
+  `ghost_inv d cenv cx es G' tn' t /\
+   ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
+    (irule literal_ptr_ghost_frame >> simp[] >>
+     qexistsl_tac [`b`, `ctx`, `func`, size, `u`] >>
+     gvs[] >> rpt conj_tac >> metis_tac[]);
+
+fun literal_buffer_value_tac e size tv value =
+  mp_tac (Q.INST
+    [`e` |-> e, `n` |-> size, `tv` |-> tv, `v` |-> value,
+     `w` |-> `n2w b : 256 word`, `G` |-> `G'`, `tn` |-> `tn'`,
+     `idx` |-> `LENGTH cs'.cs_current_insts`, `es` |-> `es with gas_obs := []`]
+    (SPEC_ALL literal_ptr_value_posts)) >>
+  (impl_tac
+   >- (simp[vyperASTTheory.expr_type_def, vyperValueTheory.evaluate_type_def,
+            lowered_value_type_def, type_memory_bytes_def, type_memory_size_def] >>
+       gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
+           type_slot_size_def, vfmConstantsTheory.word_size_def,
+           wordsTheory.dimword_def])) >>
+  strip_tac;
+
 (* A dynamic bytes or string literal: compile_bytelike_literal's ALLOCA, the
    length word and the padded chunks.  The new site starts tainted
    (mem_taint); the stores write all val_store_size bytes of the value with
@@ -169,66 +221,28 @@ Resume literal_buffer_sim_ptr[bytes_vv]:
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
       Once evaluate_def, return_def, evaluate_literal_def,
       alloc_limits_expr_def, literal_alloc_ok_def] >>
-  `32+32*word_size (LENGTH bs) < dimword (:256)` by
-    (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  drule_all literal_bytelike_ptr_run >>
-  disch_then (qspecl_then [`tn0`, `func`, `PG`, `G0`, `cx_dead cx`]
-    strip_assume_tac) >>
-  drule_all literal_buffer_ptr_path >> strip_tac >>
-  drule_all literal_bytelike_ptr_nonmemory_frame >> strip_tac >>
-  `b < dimword (:256)` by decide_tac >>
-  `w2n (n2w b : 256 word) = b` by simp[wordsTheory.w2n_n2w] >>
+  literal_buffer_run_tac `32+32*word_size (LENGTH bs) < dimword (:256)` >>
   `LENGTH bs <= n` by gvs[vyperValueTheory.compatible_bound_def] >>
   drule_all literal_ptr_bytes_representation >> strip_tac >>
+  `vv_post ctx func cenv cx
+    (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
+    (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
+    (t with vs_inst_idx := LENGTH cs'.cs_current_insts)` by
+    literal_buffer_vv_post_tac
+      `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
+      `32+32*word_size (LENGTH (bs:word8 list))` `BaseTV (BytesT (Dynamic n))` >>
+  literal_buffer_ghost_tac `32+32*word_size (LENGTH bs)` >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value (BytesV bs))`, `es`, `G'`, `tn'`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   simp[gas_explicit_def, Once evaluate_def, return_def, evaluate_literal_def] >>
-  conj_tac
-  >- (once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
-      irule (SRULE [vyperASTTheory.expr_type_def]
-        (Q.INST [`n` |-> `32+32*word_size (LENGTH (bs:word8 list))`,
-                 `e` |-> `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`]
-          (SPEC_ALL literal_ptr_memory_vv_frame_post))) >>
-      simp[is_word_type_def] >>
-      conj_tac >- (drule literal_buffer_next_id >> simp[]) >>
-      conj_tac
-      >- (drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
-          qexists_tac `STRING #"%" (toString sa.cs_next_var)` >> gvs[]) >>
-      qexistsl_tac [`sh`, `BaseTV (BytesT (Dynamic n))`, `u`, `n2w b`] >>
-      drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
-      simp[vyperASTTheory.expr_type_def, is_word_type_def,
-        vyperValueTheory.evaluate_type_def, eval_operand_def] >>
-      gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
-          type_slot_size_def, type_memory_size_def, wordsTheory.dimword_def] >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `ghost_inv d cenv cx es G' tn' t /\
-   ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
-    (irule literal_ptr_ghost_frame >>
-     simp[] >>
-     qexistsl_tac [`b`, `ctx`, `func`, `32+32*word_size (LENGTH bs)`, `u`] >>
-     gvs[] >> rpt conj_tac >> metis_tac[]) >>
-  simp[literal_ptr_ghost_inv_normalize] >>
-  `ptr_vv_ok cx (BaseT (BytesT (Dynamic n))) (Value (BytesV bs))
-     (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
-     (es with gas_obs := []) G' tn' (t with vs_inst_idx := LENGTH cs'.cs_current_insts) /\
-   ptr_val_ok cx (BaseT (BytesT (Dynamic n))) (BytesV bs) (Var p) G' tn'
-     (t with vs_inst_idx := LENGTH cs'.cs_current_insts) /\
-   ptr_buf_ok cenv (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) (Var p) G'
-     (t with vs_inst_idx := LENGTH cs'.cs_current_insts)` by
-    (irule (SRULE [vyperASTTheory.expr_type_def]
-      (Q.INST [`n` |-> `32+32*word_size (LENGTH (bs:word8 list))`,
-               `e` |-> `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`]
-       (SPEC_ALL literal_ptr_value_posts))) >>
-     simp[] >>
-     qexists_tac `BaseTV (BytesT (Dynamic n))` >>
-     simp[vyperValueTheory.evaluate_type_def, lowered_value_type_def,
-          type_memory_bytes_def, type_memory_size_def] >>
-     gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
-         type_slot_size_def, vfmConstantsTheory.word_size_def,
-         wordsTheory.dimword_def]) >>
-  simp[contextTheory.base_ptr_def]
+  simp[literal_ptr_ghost_inv_normalize, vv_post_initial_gas] >>
+  literal_buffer_value_tac
+    `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
+    `32+32*word_size (LENGTH (bs:word8 list))`
+    `BaseTV (BytesT (Dynamic n))` `BytesV bs` >>
+  gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def]
 QED
 
 Resume literal_buffer_sim_ptr[bytes_expr]:
