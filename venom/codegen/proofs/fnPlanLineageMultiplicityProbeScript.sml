@@ -108,3 +108,58 @@ QED
    stronger pending_inventory_wf before restoration). Ordinary set coverage
    does not supply this multiplicity bound. This diagnostic establishes no
    counterexample to the frozen block theorem. *)
+
+(* A genuine ready local producer: ADD leaves one x before a JMP requesting
+   two. The global JMP plan is rejected, as proved above; this only rules
+   out an unconditional scalar producer from readiness and ordinary steps. *)
+Theorem repeated_use_local_scalar_obstruction:
+  IS_SOME (generate_inst_plan
+    (liveness_analyze (repeated_use_fn F))
+    (dfg_build_function (repeated_use_fn F)) (cfg_analyze (repeated_use_fn F))
+    (repeated_use_fn F) (mk_inst 0 ADD [Lit 10w; Lit 1w] ["x"])
+    (live_vars_at (liveness_analyze (repeated_use_fn F)) "entry" 1)
+    F T "entry" (init_cleanup_plan_state NONE [] 0 0)) /\
+  (SND (THE (generate_inst_plan
+    (liveness_analyze (repeated_use_fn F))
+    (dfg_build_function (repeated_use_fn F)) (cfg_analyze (repeated_use_fn F))
+    (repeated_use_fn F) (mk_inst 0 ADD [Lit 10w; Lit 1w] ["x"])
+    (live_vars_at (liveness_analyze (repeated_use_fn F)) "entry" 1)
+    F T "entry" (init_cleanup_plan_state NONE [] 0 0)))).ps_stack = [Var "x"] /\
+  join_target_ops (liveness_analyze (repeated_use_fn F)) (repeated_use_fn F)
+    "entry" (mk_inst 2 JMP [Label "use"] []) = SOME [Var "x"; Var "x"] /\
+  ~(LENGTH [Var "x"; Var "x"] <= LENGTH [Var "x"] +
+    CARD (set [Var "x"; Var "x"] INTER
+      FDOM (init_cleanup_plan_state NONE [] 0 0).ps_spilled))
+Proof
+  (computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY]; EVAL_TAC)
+QED
+
+(* Scalar producer audit (not a reachable-state invariant):
+   - join_target_ops is MAP Var of input_vars_from; singleton-label JMP has
+     no compute_operands and therefore input emission adds no resources.
+   - analyzed_live_out_jmp in fnPlanLineageLiveness equates SETS, not lists
+     or counts. liveness_block combines edges with list_union, so repeated
+     target occurrences need not survive into the predecessor's live-out.
+   - input_vars_from's fold appends at most one result per base occurrence.
+     PHI mapped indices are placed only once. Under phi_uses_disjoint the
+     matching-to-operand map coherence prevents different indices from
+     selecting the same variable (fnPlanLineagePhiMaps). Unmapped repeated
+     base occurrences can still survive. No analyzed ALL_DISTINCT premise
+     is available; repeated_use_liveness is a checked obstruction.
+   - ordinary_position_invariant supplies live membership coverage, upper
+     demand_available support and residual_budget_wf. These bound resources
+     from above, not by target-list length from below. The preceding local
+     producer proves that readiness and a successful ordinary step cannot
+     by themselves imply the scalar lower bound. Spare non-target stack
+     entries may satisfy the bound but are not guaranteed by those facts.
+   - release_dead_spills preserves the stack and removes dead spill keys;
+     it neither creates duplicate stack resources nor preserves all counts
+     of arbitrary future target lists. Parameters/empty initialization also
+     need an explicit lower-resource producer, not merely well-formedness.
+   A possible sufficient new invariant would lower-bound stack length plus
+   distinct target spills at each upcoming JMP. Its producers must handle
+   initialization/parameters, each ordinary instruction's consumption and
+   dead-output cleanup, PHI renaming, and every CFG edge/reset. No proof of
+   these producers is supplied here. Global successful-function hypotheses
+   exclude repeated_use_fn F, so the local obstruction does not refute the
+   frozen theorem or the still-open success-conditioned scalar producer. *)
