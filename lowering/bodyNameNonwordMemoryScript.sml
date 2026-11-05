@@ -44,7 +44,7 @@ Proof
   rpt strip_tac >> gvs[] >>
   disj2_tac >> disj1_tac >> qexistsl [`id`, `w2n w`, `sz`] >>
   drule val_footprint_le >> strip_tac >>
-  conj_tac >- decide_tac >>
+  `val_footprint entry.type entry.value <= sz` by decide_tac >> simp[] >>
   irule local_path_at_val_at >> irule local_path_at_root >> simp[]
 QED
 
