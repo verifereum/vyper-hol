@@ -384,3 +384,26 @@ These are residual obligations, not new assumptions asserted by the stage
 contract or a certification of generic recursive simulation. The next PLAN
 refinement must explicitly own PHI entry, recursive block/call replay and fuel,
 caller saved-root/returned-root binding and source push/pop demand transport.
+
+## Parallel PHI value/ghost checkpoint
+
+`concretizeLayoutLocalPhi.concretize_parallel_phis_transport` now consumes
+successful source `eval_phis`, the guarded incoming relation, independent
+`relocation_taint_le`, both environment supplements, equal previous block,
+and membership of all instructions in the current function. It produces
+successful target parallel PHIs, resolved output origins and their actual
+`phis_prov` erasure, source `phis_taint` masks, independently computed target
+`phis_taint` inclusion, and both preserved environment supplements.
+The observation is concretely `dead_result_rel D` on Halt, not an assumed
+post-observation. Demand R remains unchanged in this value-only boundary.
+Selections use original maps, including aliased destinations and inputs;
+no output-distinctness or equality of parameter values is assumed.
+
+The existing `venomExecProofs.eval_phis_only_updates_vs_vars` is the canonical
+field-frame fact: successful PHIs change only `vs_vars`. Reuse it for control,
+code/data, initial FMP, parameters and allocation metadata; no duplicate
+field-preservation lemma was added. `phis_taint_subset` and
+`relocation_taint_le_phis` provide the independent-mask monotonicity boundary.
+The actual OriginBlock event adapter (preceding terminator, next demand,
+index reset and transformed-prefix alignment) remains open; this checkpoint
+does not apply ordinary-event demand retention to a block event.
