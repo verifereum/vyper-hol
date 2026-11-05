@@ -541,3 +541,17 @@ by this inventory; revert-forward and observation production remain open.
    saved embedding proves those producers, macro C1-C12 closure, completion
    of calls, revert-forward execution, or observation coverage.
 *)
+
+(* Concrete live transition checkpoint: lowerDloadFrameRepresentation now
+   proves ld_live_call_shape and ld_live_call_endpoints for the pushed saved
+   frame plus mapped argument selectors, consuming the six paired-geometry
+   hypotheses rather than assuming endpoints. ld_live_restrict_shape uses
+   arbitrary restriction keys; ld_live_return_entries produces survivor
+   inclusion from table agreement on SAVED live owners. This last agreement
+   is still an explicit invariant input: C1-C12 do not assert preservation
+   of an earlier saved table's entries across intervening owner allocation.
+   Fresh-owner extension needs a domain/fresh-serial bound; return table
+   restriction needs retention on all saved live owners. Existing conditional
+   table congruence lemmas do not produce that temporal agreement. No whole
+   call completion or memory restoration follows from these selector facts.
+*)

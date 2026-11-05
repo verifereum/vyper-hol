@@ -1,6 +1,6 @@
 Theory lowerDloadFrameRepresentation
 Ancestors
-  lowerDloadFrameFloor lowerDloadLifetime lowerDloadOwnership
+  lowerDloadFrameFloor lowerDloadLifetime lowerDloadOwnership lowerDloadTargetGeometry
   venomExecSemantics venomState finite_map pred_set
 
 Theorem ld_representation_empty:
@@ -35,4 +35,51 @@ Theorem ld_representation_return:
 Proof
   strip_tac >> drule ld_bind_outputs_allocas >> strip_tac >>
   gvs[adopt_return_fmp_allocas, merge_callee_state_def] >> metis_tac[]
+QED
+
+Theorem ld_live_call_shape:
+  f.lf_local = L /\ f.lf_params = AP /\ f.lf_prov = AG ==>
+  (ld_live (f::astk) FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY site <=>
+   ld_live astk L AP AG site)
+Proof
+  strip_tac >> simp[ld_live_def] >>
+  metis_tac[ld_call_selected]
+QED
+
+Theorem ld_live_call_endpoints:
+  ld_frame_embedding E L H s t /\
+  LIST_REL (ld_owned_selection E) AP BP /\
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)) /\
+  LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g) astk gstk /\
+  ld_frame_bound t.vs_alloca_next H BP BH /\
+  ld_stack_bound t.vs_alloca_next gstk /\
+  f.lf_local = L /\ f.lf_params = AP /\ f.lf_prov = AG ==>
+  !owner bs bt sz.
+    ld_live (f::astk) FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY (owner,(bs,sz)) /\
+    ld_site_entry E owner bs bt sz ==> bt+sz <= t.vs_alloca_next
+Proof
+  strip_tac >> drule_all ld_live_call_shape >>
+  disch_then assume_tac >>
+  simp[] >> ho_match_mp_tac ld_paired_live_endpoints >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_live_restrict_shape:
+  ld_live astk f.lf_local f.lf_params (DRESTRICT f.lf_prov keys) site ==>
+  ld_live astk f.lf_local f.lf_params f.lf_prov site
+Proof
+  simp[ld_live_def] >> metis_tac[ld_restrict_selected]
+QED
+
+Theorem ld_live_return_entries:
+  (!owner bs sz. ld_live astk f.lf_local f.lf_params f.lf_prov (owner,(bs,sz)) ==>
+    FLOOKUP E' owner = FLOOKUP E owner) ==>
+  !owner bs bt sz.
+    ld_live astk f.lf_local f.lf_params (DRESTRICT f.lf_prov keys) (owner,(bs,sz)) /\
+    ld_site_entry E' owner bs bt sz ==>
+    ld_live astk f.lf_local f.lf_params f.lf_prov (owner,(bs,sz)) /\
+    ld_site_entry E owner bs bt sz
+Proof
+  rpt strip_tac >> drule ld_live_restrict_shape >> strip_tac >>
+  gvs[ld_site_entry_def] >> metis_tac[]
 QED
