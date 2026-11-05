@@ -2020,6 +2020,42 @@ Proof
   drule_all dispatch_precompiles_inr_not_reverted_not_abort >> simp[]
 QED
 
+Theorem asm_call_finish_terminal_kind:
+  u.contexts = (c,rb)::rest /\
+  value <= (lookup_account sender accounts).balance /\
+  LENGTH u.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR e,t) ==>
+  ~vfm_abort e /\ e <> SOME Reverted
+Proof
+  strip_tac >> drule_all asm_call_finish_proceed >>
+  disch_then (fn th => qpat_x_assum `asm_call_finish _ _ _ = _` mp_tac >>
+    rewrite_tac[th]) >> strip_tac >>
+  irule asm_proceed_call_terminal_kind >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem asm_call_prepared_terminal_kind:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR e,t) ==>
+  ~vfm_abort e /\ e <> SOME Reverted
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_terminal_kind >> simp[]
+QED
+
 Theorem asm_frame_call_same_depth_transport:
   asm_frame_rel prog data es0 a s /\ s.contexts = (c,rb)::rest /\
   step s = (INL (),t) /\ LENGTH t.contexts = LENGTH s.contexts /\
@@ -2244,6 +2280,28 @@ Resume asm_frame_call_terminal_exception[apply]:
 QED
 
 Finalise asm_frame_call_terminal_exception
+
+Theorem asm_frame_call_terminal_some:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR (SOME exc),v) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac >- metis_tac[]) >>
+  drule_all asm_call_prepared_terminal_kind >> strip_tac >>
+  `exc <> Reverted` by gvs[] >>
+  drule_all asm_frame_call_terminal_exception >> simp[]
+QED
 
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
