@@ -105,3 +105,29 @@ Proof
     venomStateTheory.write_memory_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
+
+(* Capacity and live-byte representation are independent: padding need not
+   be clean. These folds work for output bytes and inline result tuples. *)
+Theorem ptr_val_ok_from_covers:
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ptr_covers G tn p s capacity /\ val_store_size tv v <= capacity /\
+  (!w mem. lookup_var p s = SOME w /\
+    mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n w) mem) ==>
+  ptr_val_ok cx ty v (Var p) G tn s
+Proof
+  simp[ptr_covers_def, ptr_val_ok_def, ptr_mem_ok_def,
+    venomStateTheory.eval_operand_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+    arithmeticTheory.LESS_EQ_MONO_ADD_EQ]
+QED
+
+Theorem ptr_buf_ok_from_covers:
+  ptr_covers G tn p s capacity /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= capacity ==>
+  ptr_buf_ok cenv e (Var p) G s
+Proof
+  simp[ptr_covers_def, ptr_buf_ok_def, venomStateTheory.eval_operand_def] >>
+  rpt strip_tac >> gvs[] >>
+  qexistsl_tac [`b`, `sz'`] >> simp[] >> decide_tac
+QED
