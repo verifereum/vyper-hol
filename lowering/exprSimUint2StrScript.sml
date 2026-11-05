@@ -2135,7 +2135,8 @@ Proof
   `gas_marked_path F ctx fn (t with vs_inst_idx := LENGTH pre + LENGTH is) 0
      (OK (jump_to lbl t))` by
     (qpat_assum `jump_to _ _ = jump_to _ _` (SUBST1_TAC o SYM) >>
-     irule storage_copy_jump_path >> simp[]) >>
+     irule storage_copy_jump_path >> simp[] >>
+     qexists_tac `j` >> gvs[arithmeticTheory.ADD_COMM]) >>
   irule u2s_path_then >>
   qexists_tac `t with vs_inst_idx := LENGTH pre + LENGTH is` >> simp[]
 QED
@@ -2178,9 +2179,9 @@ Proof
   `LENGTH (TAKE 1 (u2s_cond a)) = 1 /\
    step_inst_base (LAST (u2s_cond a)) (t with vs_inst_idx := 1) =
      OK (jump_to (u2s_label a (if x = 0 then 4 else 2)) t)` by
-    (qpat_assum `lookup_var (u2s_var a 4) _ = _`
-       (assume_tac o MATCH_MP u2s_jnz_step) >>
-     simp_tac (srw_ss()) [u2s_cond_def, LAST_DEF] >>
+    (simp_tac (srw_ss()) [u2s_cond_def, LAST_DEF] >>
+     drule u2s_jnz_step >>
+     disch_then (qspecl_then [`u2s_label a 4`, `u2s_label a 2`, `7`] mp_tac) >>
      Cases_on `x = 0` >> simp[venomStateTheory.jump_to_def]) >>
   `gas_marked_path F ctx fn s 0
      (OK (jump_to (u2s_label a (if x = 0 then 4 else 2)) t))` by
@@ -2226,9 +2227,9 @@ Proof
   `LENGTH (TAKE 1 (u2s_check a)) = 1 /\
    step_inst_base (LAST (u2s_check a)) (t with vs_inst_idx := 1) =
      OK (jump_to (u2s_label a (if x = 0 then 3 else 1)) t)` by
-    (qpat_assum `lookup_var (u2s_var a 3) _ = _`
-       (assume_tac o MATCH_MP u2s_jnz_step) >>
-     simp_tac (srw_ss()) [u2s_check_def, LAST_DEF] >>
+    (simp_tac (srw_ss()) [u2s_check_def, LAST_DEF] >>
+     drule u2s_jnz_step >>
+     disch_then (qspecl_then [`u2s_label a 3`, `u2s_label a 1`, `5`] mp_tac) >>
      Cases_on `x = 0` >> simp[venomStateTheory.jump_to_def]) >>
   `gas_marked_path F ctx fn s 0
      (OK (jump_to (u2s_label a (if x = 0 then 3 else 1)) t))` by
@@ -2397,7 +2398,7 @@ Resume u2s_loop_path[zero_quotient]:
        `<|bb_label := u2s_label a 4; bb_instructions := u2s_final a (Var p) n|>` mp_tac) >>
          simp[u2s_blocks_def]) >>
      qexists_tac `X` >> gvs[]) >>
-  qexists_tac `t` >> simp[] >>
+  qexists_tac `t` >> gvs[] >>
   irule u2s_path_then >> qexists_tac `c` >> simp[]
 QED
 
@@ -2466,10 +2467,10 @@ Proof
          impl_tac >- (fs[] >> first_x_assum (qspec_then
            `<|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|>` mp_tac) >>
            simp[u2s_blocks_def]) >>
-         strip_tac >> qexists_tac `t` >> simp[]) >>
+         strip_tac >> qexists_tac `t` >> gvs[]) >>
      qspecl_then [`X`, `c`, `[]`] mp_tac u2s_loop_path >>
      impl_tac >- (simp[] >> irule u2s_digits_initial >> simp[]) >>
-     strip_tac >> qexists_tac `t` >> simp[]) >>
+     strip_tac >> qexists_tac `t` >> gvs[]) >>
   qexists_tac `t` >> simp[] >>
   irule u2s_path_then >> qexists_tac `c` >> simp[]
 QED
@@ -2531,7 +2532,8 @@ Proof
      impl_tac >- (simp[u2s_safe_jump] >>
        fs[venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def] >>
        metis_tac[]) >>
-     strip_tac >> qexists_tac `t` >> simp[]) >>
+     strip_tac >> rename1 `gas_marked_path F ctx fn _ 0 (OK result)` >>
+     qexists_tac `result` >> simp[]) >>
   qexists_tac `u` >> simp[] >>
   irule u2s_path_then >> qexists_tac `jump_to (u2s_label a 0) t` >> simp[]
 QED
@@ -2549,7 +2551,8 @@ Proof
   rpt strip_tac >> drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
   qspecl_then [`emitted_insts sa a`, `s`, `t`, `F`, `ctx`, `fn`, `bb`] mp_tac
     storage_copy_seq_path >>
-  gvs[exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+  gvs[exprLoweringPropsTheory.emitted_insts_def, DROP_APPEND,
+      rich_listTheory.DROP_LENGTH_APPEND,
       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
@@ -2757,7 +2760,7 @@ Theorem compile_uint2str_singleton:
 Proof
   `~names_builtin (Uint2Str n) [e]` by
     (Cases_on `e` >> simp[names_builtin_def]) >>
-  simp[exprSimWordBuiltinsTheory.compile_expr_builtin_dispatch] >>
+  simp[exprSimHypsDefsTheory.compile_expr_builtin_dispatch] >>
   simp[Once (CONJUNCT1 (CONJUNCT2 exprLoweringTheory.compile_expr_raw_def)),
        exprLoweringTheory.compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -2818,14 +2821,16 @@ Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
+  `!k. bt <> Slice k` by
+    (strip_tac >> strip_tac >> gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >>
+    (drule exprSimSourceTheory.expr_body_pre_builtin_arg >>
      disch_then irule >> gvs[expr_body_pre_def]) >>
   qpat_x_assum `!sa sb vv. _` drule >> strip_tac >>
   `cs_appends (code x)` by simp[] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[expr_body_pre_gas_admissible] >>
+    metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
   `eval_expr cx (Builtin ann bt [e]) =
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
@@ -2846,12 +2851,12 @@ Proof
   disch_then (qspecl_then [`env`, `cenv`] mp_tac) >>
   simp[] >> strip_tac >>
   `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
-    (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
+    (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[vyperStateTheory.bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
      gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
   qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
   `ee with gas_obs := [] = ee` by
-    simp[evaluation_state_component_equality] >>
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
   qexists_tac `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
@@ -2912,7 +2917,7 @@ Theorem uint2str_numeric_suffix:
 Proof
   strip_tac >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  drule_all exprSimOperatorsTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
+  drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
@@ -2958,7 +2963,7 @@ Theorem uint2str_typed_suffix:
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
+    (drule exprSimSourceTheory.expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
   `k <= 256` by gvs[vyperValueTheory.evaluate_type_def] >>
@@ -3001,7 +3006,7 @@ Theorem uint2str_numeric_path:
 Proof
   strip_tac >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  drule_all exprSimOperatorsTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
+  drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
@@ -3055,7 +3060,7 @@ Theorem uint2str_typed_path:
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
+    (drule exprSimSourceTheory.expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
   `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
     (drule (CONV_RULE (DEPTH_CONV ETA_CONV) forced_eval_expr_preserves_scopes_dom) >>
      simp[]) >>
