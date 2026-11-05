@@ -182,6 +182,22 @@ Proof
   gvs[o1_fn_shape_def, entry_fn_no_return_def]
 QED
 
+Theorem o1_ctx_shape_wf_functions:
+  o1_ctx_shape C ==> EVERY wf_function C.ctx_functions
+Proof
+  rw[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]
+QED
+
+(* dft_fn keeps wf_function on o1-shaped functions (dft_fn_wf_function). *)
+Theorem dft_ctx_wf_functions:
+  o1_ctx_shape C /\ C'.ctx_functions = MAP dft_fn C.ctx_functions ==>
+  EVERY wf_function C'.ctx_functions
+Proof
+  rw[EVERY_MEM, MEM_MAP] >> irule dftLiftingTheory.dft_fn_wf_function >>
+  gvs[o1_ctx_shape_def, EVERY_MEM] >> first_x_assum drule >>
+  simp[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM]
+QED
+
 Theorem gas_res_rel_terminates:
   gas_res_rel r e /\ terminates r ==> terminates e
 Proof
@@ -218,10 +234,17 @@ Theorem dft_ctx_sim_gas:
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
   strip_tac >>
+  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
+    metis_tac[dft_ctx_functions_map] >>
   drule dft_ctx_block_ids_distinct >> strip_tac >>
-  drule_then (qspec_then `vs'` strip_assume_tac) gas_oracle_from_list >>
-  drule_then assume_tac gas_oracle_to_list >>
-  first_x_assum (qspecl_then [`vs'`, `C`] strip_assume_tac) >>
+  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
+  drule_all dft_ctx_wf_functions >> strip_tac >>
+  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
+            gas_oracle_from_list) >>
+  impl_tac >- simp[] >> strip_tac >>
+  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
+            gas_oracle_to_list) >>
+  impl_tac >- simp[] >> strip_tac >>
   rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
   qexists_tac `vs' with vs_gas_readings := rds` >>
   conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
@@ -233,8 +256,6 @@ Proof
       simp[] >> irule dft_ev_context_sim >> simp[] >>
       metis_tac[gas_res_rel_terminates]) >>
   rw[o1_lowered_inv_def] >> qexists_tac `eom` >>
-  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
-    metis_tac[dft_ctx_functions_map] >>
   conj_tac >- gvs[max_live_eom_def, collect_fn_eoms_dft] >>
   gvs[mem_inv_raw_reachable] >>
   `!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
