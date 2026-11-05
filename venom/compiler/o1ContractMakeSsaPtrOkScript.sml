@@ -8,7 +8,7 @@ Ancestors
   venomInst venomWf cfgWf o1PassContract makeSsaCurrentDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentOrigin makeSsaCurrentWfSsa
   makeSsaCurrentInputOk makeSsaCurrentNonDegenerate
-  removeUnusedProofs
+  removeUnusedProofs allocaRemapSSA mem2varBlockSimHelpers
 
 Definition mssa_inst_origin_def:
   mssa_inst_origin orig fn inst' <=>
@@ -250,6 +250,76 @@ Proof
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> decide_tac
+QED
+
+Theorem mssa_derived_initial:
+  FINITE roots /\ v IN roots ==> v IN pointer_derived_vars fn roots
+Proof
+  simp[pointer_derived_vars_def] >> metis_tac[pointer_use_vars_initial,
+    listTheory.MEM_SET_TO_LIST]
+QED
+
+Theorem mssa_derived_closed:
+  MEM inst (fn_insts fn) /\ is_pointer_preserving_op inst.inst_opcode /\
+  MEM (Var u) inst.inst_operands /\ u IN pointer_derived_vars fn roots /\
+  MEM v inst.inst_outputs ==> v IN pointer_derived_vars fn roots
+Proof
+  simp[pointer_derived_vars_def, fn_insts_def, MEM_fn_insts_blocks_iff] >>
+  metis_tac[pointer_use_vars_closed]
+QED
+
+Theorem mssa_derived_least:
+  FINITE roots /\ roots SUBSET pv /\
+  (!inst u v. MEM inst (fn_insts fn) /\
+    is_pointer_preserving_op inst.inst_opcode /\
+    MEM (Var u) inst.inst_operands /\ u IN pv /\
+    MEM v inst.inst_outputs ==> v IN pv) ==>
+  pointer_derived_vars fn roots SUBSET pv
+Proof
+  strip_tac >> simp[pointer_derived_vars_def, pred_setTheory.SUBSET_DEF] >>
+  ho_match_mp_tac pointer_use_vars_least >>
+  gvs[pred_setTheory.SUBSET_DEF, listTheory.MEM_SET_TO_LIST,
+      fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
+QED
+
+Theorem mssa_derived_producer:
+  FINITE roots /\ v IN pointer_derived_vars fn roots ==>
+  v IN roots \/ ?inst u. MEM inst (fn_insts fn) /\
+    MEM v inst.inst_outputs /\ is_pointer_preserving_op inst.inst_opcode /\
+    MEM (Var u) inst.inst_operands /\ u IN pointer_derived_vars fn roots
+Proof
+  simp[pointer_derived_vars_def] >> strip_tac >>
+  drule pointer_use_vars_mem_char >>
+  gvs[listTheory.MEM_SET_TO_LIST, fn_insts_def, MEM_fn_insts_blocks_iff] >>
+  metis_tac[]
+QED
+
+Theorem mssa_derived_definition:
+  FINITE roots /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  MEM v inst.inst_outputs /\ v IN pointer_derived_vars fn roots ==>
+  v IN roots \/ is_pointer_preserving_op inst.inst_opcode /\
+    ?u. MEM (Var u) inst.inst_operands /\ u IN pointer_derived_vars fn roots
+Proof
+  strip_tac >> drule_all mssa_derived_producer >> strip_tac >- simp[] >>
+  rename1 `MEM v producer.inst_outputs` >>
+  `inst = producer` by (irule ssa_unique_output >> metis_tac[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem mssa_ptr_roots_finite:
+  FINITE (ptr_roots P fn)
+Proof
+  simp[ptr_roots_def, FINITE_alloca_roots, pred_setTheory.FINITE_UNION] >>
+  conj_tac >> irule pred_setTheory.SUBSET_FINITE >>
+  qexists_tac `IMAGE (\i. THE (inst_output i)) (set (fn_insts fn))` >>
+  simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem mssa_nonalloca_roots_finite:
+  FINITE (ptr_roots P fn DIFF alloca_roots fn)
+Proof
+  simp[mssa_ptr_roots_finite]
 QED
 
 (* Why it holds.  make_ssa_current_fn_origin gives orig, from fn' vars to
