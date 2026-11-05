@@ -7,8 +7,8 @@ Ancestors
 
 (* Companion runtime frame, separate from the frozen slot_copy_inv. Bundling
    these compositional projections keeps the counted induction readable. *)
-Definition copy_runtime_frame_def:
-  copy_runtime_frame cs d i r s <=>
+Definition slot_copy_runtime_frame_def:
+  slot_copy_runtime_frame cs d i r s <=>
     s.vs_allocas = r.vs_allocas /\ s.vs_alloca_next = r.vs_alloca_next /\
     s.vs_accounts = r.vs_accounts /\ s.vs_transient = r.vs_transient /\
     s.vs_call_ctx = r.vs_call_ctx /\
@@ -17,26 +17,26 @@ Definition copy_runtime_frame_def:
       mem_bytes_at a 1 s.vs_memory = mem_bytes_at a 1 r.vs_memory)
 End
 
-Theorem copy_runtime_frame_initial:
-  copy_runtime_frame cs d 0 s (slot_copy_initial cs s)
+Theorem slot_copy_runtime_frame_initial:
+  slot_copy_runtime_frame cs d 0 s (slot_copy_initial cs s)
 Proof
-  simp[copy_runtime_frame_def, copy_initial_runtime_frame,
+  simp[slot_copy_runtime_frame_def, copy_initial_runtime_frame,
        copy_initial_external_operand]
 QED
 
-Theorem copy_runtime_frame_condition:
-  copy_runtime_frame cs d i r s ==>
-  copy_runtime_frame cs d i r (slot_copy_cond_result cs n i s)
+Theorem slot_copy_runtime_frame_condition:
+  slot_copy_runtime_frame cs d i r s ==>
+  slot_copy_runtime_frame cs d i r (slot_copy_cond_result cs n i s)
 Proof
-  simp[copy_runtime_frame_def, copy_condition_allocation_frame,
+  simp[slot_copy_runtime_frame_def, copy_condition_allocation_frame,
        slot_copy_cond_frame, slot_copy_cond_operand] >> metis_tac[]
 QED
 
-Theorem copy_runtime_frame_body:
-  copy_runtime_frame cs d i r s /\ w2n d+32*n < 2**256 /\ i<n ==>
-  copy_runtime_frame cs d (i+1) r (slot_copy_body_result cs p d load i s)
+Theorem slot_copy_runtime_frame_body:
+  slot_copy_runtime_frame cs d i r s /\ w2n d+32*n < 2**256 /\ i<n ==>
+  slot_copy_runtime_frame cs d (i+1) r (slot_copy_body_result cs p d load i s)
 Proof
-  simp[copy_runtime_frame_def, copy_body_allocation_frame,
+  simp[slot_copy_runtime_frame_def, copy_body_allocation_frame,
        slot_copy_body_sources, slot_copy_body_operand] >>
   rpt strip_tac >> irule copy_body_exterior_prefix >>
   (conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[])) >>
@@ -67,14 +67,14 @@ Theorem copy_counted_loop_framed:
   lookup_block (slot_copy_body cs) fn.fn_blocks = SOME bodybb /\
   bodybb.bb_instructions = slot_copy_body_insts cs src (Var root) load /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  copy_runtime_frame cs d i r s ==>
+  slot_copy_runtime_frame cs d i r s ==>
   ?Gf tnf t.
     gas_path_ptr D lo ctx fn PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\
     slot_copy_inv cs load original p d n regions n t /\
     slot_copy_ghost_inv cs load p d root n G0 tn0 n Gf tnf t /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    copy_runtime_frame cs d n r t
+    slot_copy_runtime_frame cs d n r t
 Proof
   measureInduct_on `n-i` >> rpt gen_tac >> strip_tac >> (
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME condbb` by simp[] >>
@@ -82,16 +82,16 @@ Proof
   >- (drule_all copy_condition_preserves_invariants >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
       qexistsl_tac [`G1`, `tn1`, `slot_copy_cond_result cs n n s`] >>
-      gvs[slot_copy_cond_frame, copy_runtime_frame_condition]) >>
+      gvs[slot_copy_cond_frame, slot_copy_runtime_frame_condition]) >>
   `i < n` by (fs[slot_copy_inv_def] >> decide_tac) >>
   mp_tac (Q.INST [`cond` |-> `condbb`] (SPEC_ALL copy_counted_iteration)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `OK u` >>
   `~u.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
   `op_taint tnf src = {}` by metis_tac[copy_ghost_external_taint] >>
-  `copy_runtime_frame cs d (i+1) r u` by
-    (simp[Abbr `u`] >> irule copy_runtime_frame_body >>
-     (reverse conj_tac >- simp[copy_runtime_frame_condition]) >>
+  `slot_copy_runtime_frame cs d (i+1) r u` by
+    (simp[Abbr `u`] >> irule slot_copy_runtime_frame_body >>
+     (reverse conj_tac >- simp[slot_copy_runtime_frame_condition]) >>
      qexists_tac `n` >> fs[slot_copy_inv_def]) >>
   first_x_assum (qspec_then `i+1` mp_tac) >>
   (impl_tac >- decide_tac) >>
@@ -103,8 +103,8 @@ Proof
   qexistsl_tac [`Gf`, `u`, `tnf`] >> gvs[])
 QED
 
-Theorem copy_runtime_frame_projections:
-  copy_runtime_frame cs d i r s ==>
+Theorem slot_copy_runtime_frame_projections:
+  slot_copy_runtime_frame cs d i r s ==>
   s.vs_allocas = r.vs_allocas /\ s.vs_alloca_next = r.vs_alloca_next /\
   s.vs_accounts = r.vs_accounts /\ s.vs_transient = r.vs_transient /\
   s.vs_call_ctx = r.vs_call_ctx /\
@@ -112,7 +112,7 @@ Theorem copy_runtime_frame_projections:
   (!a. ~(w2n d <= a /\ a < w2n d+32*i) ==>
     mem_bytes_at a 1 s.vs_memory = mem_bytes_at a 1 r.vs_memory)
 Proof
-  rewrite_tac[copy_runtime_frame_def]
+  rewrite_tac[slot_copy_runtime_frame_def]
 QED
 
 Theorem copy_external_ptr_covers_between:
@@ -140,14 +140,14 @@ Theorem copy_counted_loop_old_pointers:
   lookup_block (slot_copy_body cs) fn.fn_blocks = SOME bodybb /\
   bodybb.bb_instructions = slot_copy_body_insts cs src (Var root) load /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  copy_runtime_frame cs d i r s ==>
+  slot_copy_runtime_frame cs d i r s ==>
   ?Gf tnf t.
     gas_path_ptr D lo ctx fn PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\
     slot_copy_inv cs load original p d n regions n t /\
     slot_copy_ghost_inv cs load p d root n G0 tn0 n Gf tnf t /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    copy_runtime_frame cs d n r t /\
+    slot_copy_runtime_frame cs d n r t /\
     (!x k. slot_copy_external cs (Var x) ==>
       (ptr_covers Gf tnf x t k <=> ptr_covers G tn x s k))
 Proof
@@ -182,7 +182,7 @@ Theorem copy_counted_entry_loop_framed:
     slot_copy_inv cs load s p d n regions n t /\
     slot_copy_ghost_inv cs load p d root n G0 tn0 n Gf tnf t /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    copy_runtime_frame cs d n s t /\
+    slot_copy_runtime_frame cs d n s t /\
     (!x k. slot_copy_external cs (Var x) ==>
       (ptr_covers Gf tnf x t k <=> ptr_covers G0 tn0 x s k))
 Proof
@@ -191,8 +191,8 @@ Proof
     (SPEC_ALL (INST_TYPE [``:'a`` |-> ``:256``]
       copy_initial_counted_invariants))) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `copy_runtime_frame cs d 0 s (slot_copy_initial cs s)` by
-    simp[copy_runtime_frame_initial] >>
+  `slot_copy_runtime_frame cs d 0 s (slot_copy_initial cs s)` by
+    simp[slot_copy_runtime_frame_initial] >>
   `op_taint tn1 src = {}` by metis_tac[copy_ghost_external_taint] >>
   `~(slot_copy_initial cs s).vs_halted` by
     metis_tac[gas_path_ptr_ok_not_halted] >>
@@ -207,6 +207,6 @@ Proof
       qexistsl_tac [`G1`, `slot_copy_initial cs s`, `tn1`] >> simp[]) >>
   rpt strip_tac >>
   `eval_operand (Var x) t = eval_operand (Var x) s` by
-    (fs[copy_runtime_frame_def] >> metis_tac[]) >>
+    (fs[slot_copy_runtime_frame_def] >> metis_tac[]) >>
   metis_tac[copy_external_ptr_covers])
 QED
