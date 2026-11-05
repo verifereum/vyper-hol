@@ -318,3 +318,134 @@ source freshness can justify the target-taint subset, not equality. The
 remaining boundary is demand-lifetime transport across birth, plus pointer
 output relocation and variable-domain agreement. Proving zero memory contents
 is neither necessary nor supported by the actual ALLOCA definition.
+
+## Execution producer audit (C0.relocation.consumers.producers.execution)
+
+### Hidden return token: equality is not justified
+
+`setup_callee_frame` exports `vs_return_pc_token = LAST args` (or zero),
+but `fn_invoke_ok` checks only the callee Label, not the last argument's
+classification. `ptr_use_ok` permits a pointer at ANY argument index provided
+that index is in P nm. Thus do not assert LAST args equality. The earlier
+scalar candidate needs a separate opaque-return-PC class: `RETPC_PARAM`
+reads the hidden token even though `origin_out` gives it no provenance.
+
+The actual frozen shape contract offers a different derivation path:
+`o1_fn_shape` includes `fn_shape_ok`, which includes `opaque_use_ok` and
+`retpc_shape_ok`. By `opaque_use_ok_retpc_use`, RETPC_PARAM-derived variables
+may only flow through ASSIGN/PHI or the final operand of RET/RETFMP/DRET
+(`retpc_use_ok_def`). The last operand is discarded by RET (`FRONT ret_vals`);
+RETFMP/DRET are excluded by fn_ptr_ok. A scalar relation excluding
+`retpc_var fn v`, with equal lookup domains but opaque values in that class,
+is therefore the candidate interface. Opaque copies/PHIs, callee token setup,
+and RET FRONT erasure each need their own producer. This is a design path,
+NOT a proved noninterference theorem. No checked stage counterexample follows
+from token inequality alone; the opaque-use restrictions must be respected.
+
+### Actual write/byte boundary (schematic unproved obligations)
+
+For matched ordinary steps, write `W = range_bytes (step_writes i s s1)`
+and `WT = range_bytes (step_writes it st st1)`. These are step results, NOT
+fields assumed in a state invariant. The required boundary is:
+
+```text
+step_inst fuel C i s = OK s1 /\ step_inst fuelt Ct it st = OK st1 ==>
+  (!z. z IN WT ==> ?a. a IN W /\ relocation_pair lo positions q a z) /\
+  (!a. a NOTIN W ==> read_byte a s1.vs_memory = read_byte a s.vs_memory) /\
+  (!z. z NOTIN WT ==> read_byte z st1.vs_memory = read_byte z st.vs_memory)
+```
+
+The implication also needs the candidate operand relation, opcode alignment
+and access hypotheses; it is not claimed for arbitrary i,it. Produced-byte
+agreement must be demand-scoped, not on all W:
+
+```text
+post_demand a z /\ a IN W /\ z IN WT ==>
+read_byte a s1.vs_memory = read_byte z st1.vs_memory
+```
+
+Derive it per opcode from related untainted bytes and address/length
+translation. MSTORE uses bytewise word agreement; MCOPY uses PRE-state
+source observations and handles overlap simultaneously; read-byte tail zero
+must be preserved through the observation interface, not list-index bounds.
+External-call return writes need identical request/outcome control and a
+matched return-copy footprint; length truncation cannot be silently ignored.
+ALLOCA and transformed constant ASSIGN have empty W/WT and unchanged memory;
+new-site taint and post-demand transport remain separate obligations.
+
+Observable boundaries additionally preserve request shape, logs, addresses,
+pending deletions, halted/control outcomes and equal domains of immutables;
+accounts/transient/immutable payloads agree outside source taint. Request
+snapshots are PRE-call, so request taint consumption must use pre-state tn,
+not step_taint. Reverting continuations use `joint_read_exempt` and the checked
+nonrevert-demand lemma; do not derive ordinary read equality for their payloads.
+
+### Generic frame lifting, not identical instruction lists
+
+A reusable interface should parameterize a function/control alignment, a
+relocation of allocation tokens, and local step obligations. Push:
+`setup_callee` resets vars/cache, stores args, resets predecessor/control and
+copies shared observations. Pop: `merge_callee_state` copies memory, accounts,
+transient, returndata, logs, outcomes, requests, pending deletions, immutables;
+it restores caller control/vars/cache by starting with saved caller state.
+`bind_outputs` requires equal output/value arities and folds zipped updates;
+`adopt_return_fmp` only changes fmp, with existing `adopt_return_fmp_allocas`
+and frame projections. Keep fmp/allocator values out of observable equality;
+fn_ptr_ok/no-DALLOCA must prove their numerical difference unobserved.
+
+The generic local interfaces need distinct ordinary, block/parallel-PHI,
+push, pop, halt and abort clauses. Terminal clauses must preserve result
+kind (with the allowed Revert exemption), and bind related return VALUE
+vectors after FRONT removal. They must NOT demand equality of the discarded
+return-PC token. Frame relation stacks save resolved origins and parameter
+vectors, caller taint variables and opaque classifications.
+
+Allow an aligned step to match a finite nonempty sequence on the other side,
+plus explicit silent insertion steps preserving observations, if clients may
+insert dead ALLOCAs. A prefix-reflection proof with zero-step matches needs
+a well-founded rank preventing infinite stuttering; control alignment alone
+is not such a rank. Concretize's same-length instruction replacement may use
+one-step alignment, but the generic call lift must not bake it in.
+
+### Forward and target-prefix obligations and induction indices
+
+Forward: induct on a finite source execution derivation/trace length, using
+entry alignment and per-boundary extension to build a target prefix. A
+terminating source result needs a related terminal target result. Arbitrary
+execution fuel is not a syntactic instruction-count index: recursive INVOKE
+runs also consume fuel, so a separate adequacy lemma must choose target fuel.
+
+Reverse: induct on the target `frame_reachable` derivation (or its finite
+history length), reflecting entry/next/block/call/ret to a source prefix.
+Entry witnesses use the same input vs, context entry lookup, block-entry
+alignment and initial taint; target entry PHIs cannot be waved away in a
+generic client. In the concrete task first_block_no_phi simplifies this.
+Silent target insertions require the rank/alignment boundary above.
+Reachability reflection must preserve matched REQUEST/HALT witnesses, not
+just match the resulting active state:
+
+```text
+target reachable st /\ target ordinary OK step adds request ==>
+  source reachable s /\ source ordinary OK step adds matching request /\
+  target pre-taint stor/trans SUBSET source pre-taint stor/trans /\
+  source/target pre-snapshot agreement outside D
+
+final_taint vs Ct sth tnt Rt ==>
+  ?sh tn R. final_taint vs C sh tn R /\
+    tnt.t_stor SUBSET tn.t_stor /\ tnt.t_trans SUBSET tn.t_trans /\
+    tnt.t_imm SUBSET tn.t_imm /\ Rt SUBSET R /\
+    dead-observable agreement of sh and sth
+```
+
+Each displayed schema includes existential source witnesses; it is not an
+additional hypothesis permitted on the frozen wrappers. `taint_within_def`
+has exactly the request stor/trans and final stor/trans/imm/return clauses
+shown. `final_taint_def` is reachable non-INVOKE Halt plus step_taint and
+ret_taint; merely reflecting an active instruction misses its post-taint.
+`dead_wf` transports the dead sets from the source storages/immutables/
+returndata to the target only AFTER the corresponding agreement is proved.
+
+All these execution clauses remain implementation obligations. Clean builds
+of the existing boundaries do not establish a full opcode or generic call
+simulation. The strategist must now turn the three audits into explicit
+producer implementation components before final stage work is authorized.
