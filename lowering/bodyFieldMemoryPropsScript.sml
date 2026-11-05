@@ -3,8 +3,8 @@ Theory bodyFieldMemoryProps
 Ancestors
   exprSimHypsDefs supportedExprTraverse supportedProgram valueEncodingProps vyperTypeCallGraph
   bodyNameMemoryFacts exprSimSource
-  exprSimFieldLayout exprSimAttributeProps exprSimVVFrame exprSimProps
-  valueEncoding compileEnv venomState words list rich_list finite_map
+  exprSimFieldLayout exprSimAttributeProps exprSimAttributeFields exprSimVVFrame
+  exprSimProps valueEncoding compileEnv venomState words list rich_list finite_map
   exprOperandVar exprSimDefs loweringPosts context
   exprSimUnwrapProps exprSimMemoryPath
   exprLowering exprLoweringProps emitHelper emitHelperProps
@@ -209,8 +209,21 @@ Theorem body_base_memory_at_struct:
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
-       expr_val_at_def, is_word_type_def, dynarray_type_def] >>
+       expr_val_at_def, is_word_type_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* A field of a struct a local holds sits at the field's offset in it. *)
+Theorem body_local_val_at_field:
+  local_val_at cenv cx n k (StructTV fs) (StructV vals) /\
+  fields_layout fields fs /\ ALOOKUP fs fld = SOME ftv ==>
+  local_val_at cenv cx n (k + struct_field_offset fields fld) ftv fv
+Proof
+  rw[local_val_at_def] >> disj1_tac >>
+  `mem_step_offset (StructTV fs) (AttrSubscript fld) =
+   SOME (struct_field_offset fields fld, ftv)` by
+    (simp[mem_step_offset_def] >> irule mem_field_offset_layout >> simp[]) >>
+  drule_all local_path_at_step >> simp[]
 QED
 
 Theorem body_attr_memory_at_field:
@@ -256,8 +269,9 @@ Proof
       first_assum ACCEPT_TAC)
   >~ [`local_region cenv es1.scopes q n b sz`]
   >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
-      rpt strip_tac >>
-      `b + 32 <= w2n w` by metis_tac[] >> decide_tac) >>
+      `w2n w + struct_field_offset fields fld - b =
+       (w2n w - b) + struct_field_offset fields fld` by decide_tac >>
+      pop_assum SUBST1_TAC >> irule body_local_val_at_field >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
