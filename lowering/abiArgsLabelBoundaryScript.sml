@@ -252,3 +252,150 @@ Proof
   gvs[expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def] >>
   metis_tac[abi_args_zero_footprint_relocate]
 QED
+
+Theorem abi_args_local_region_frontier:
+  stmt_state_rel ctx func ce cx es s /\
+  local_region ce es.scopes s name b sz ==>
+  b + sz <= s.vs_alloca_next
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+       local_ptrs_rel_def, local_region_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]
+QED
+
+Theorem abi_args_value_at_frontier:
+  stmt_state_rel ctx func ce cx es s /\
+  expr_val_at ce cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w /\ 0 < val_footprint tv v ==>
+  w2n w + val_footprint tv v <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >- (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+          venomMemDefsTheory.alloca_inv_def,
+          venomMemDefsTheory.alloca_next_valid_def] >>
+      first_x_assum drule >> decide_tac) >>
+  drule_all abi_args_local_region_frontier >> decide_tac
+QED
+
+Theorem abi_args_runtime_footprint_observed:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (Label "runtime_begin",sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  FLOOKUP s0.vs_labels "runtime_begin" = SOME (-1w) ==>
+  val_footprint tv v = 0
+Proof
+  strip_tac >>
+  qabbrev_tac `z = s0 with <|vs_halted := F;
+    vs_current_bb := sa.cs_current_bb;
+    vs_inst_idx := LENGTH sa.cs_current_insts|>` >>
+  `stmt_state_rel ctx func ce cx es z` by
+    simp[Abbr `z`, abi_args_state_rel_control_only] >>
+  `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  drule_all expr_sim_apply >> disch_then (qspec_then `z` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule abi_lower_value_label_observer >> disch_then drule >>
+  disch_then (qspecl_then [`z`, `func`] mp_tac) >>
+  (impl_tac >- (simp[Abbr `z`, SRULE [] abi_args_state_rel_control_only])) >>
+  strip_tac >>
+  gvs[expr_post_def] >>
+  spose_not_then assume_tac >>
+  `0 < val_footprint tv v` by decide_tac >>
+  `eval_operand (Label "runtime_begin") t = SOME (-1w)` by
+    simp[venomStateTheory.eval_operand_def, Abbr `z`] >>
+  drule_all abi_args_value_at_frontier >>
+  `t.vs_alloca_next < dimword (:256)` by
+    metis_tac[exprLoweringPropsTheory.stmt_state_rel_def,
+              exprLoweringPropsTheory.alloca_room_next_lt] >>
+  simp[wordsTheory.word_2comp_n2w, wordsTheory.w2n_n2w,
+       wordsTheory.dimword_def] >>
+  fs[wordsTheory.dimword_def] >> decide_tac
+QED
+
+Theorem abi_args_runtime_nonbase_zero:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (Label "runtime_begin",sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  ce.ce_imm_alloca <> SOME (Label "runtime_begin") /\
+  ~is_word_type (expr_type e) ==>
+  !tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+       val_footprint tv v = 0
+Proof
+  rpt strip_tac >>
+  `stmt_state_rel ctx func ce cx es
+     (s0 with vs_labels := s0.vs_labels |+ ("runtime_begin",-1w))` by
+    metis_tac[abi_args_state_rel_update_runtime] >>
+  `FLOOKUP (s0 with vs_labels := s0.vs_labels |+ ("runtime_begin",-1w)).vs_labels
+     "runtime_begin" = SOME (-1w)` by simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[abi_args_runtime_footprint_observed]
+QED
+
+Theorem abi_args_runtime_nonbase_transport:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (Label "runtime_begin",sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  ce.ce_imm_alloca <> SOME (Label "runtime_begin") /\ ce.ce_is_ctor /\
+  stmt_state_rel ctx func ce cx es' u /\
+  expr_val_rel cx (expr_type e) v (Label "runtime_begin") t /\
+  expr_val_at ce cx (expr_type e) sc sd est v (Label "runtime_begin") t ==>
+  expr_val_rel cx (expr_type e) v (Label "runtime_begin") u /\
+  expr_val_at ce cx (expr_type e) sc sd es' v (Label "runtime_begin") u
+Proof
+  strip_tac >> Cases_on `is_word_type (expr_type e)`
+  >- (`!tv. evaluate_type (get_tenv cx) (expr_type e) <> SOME tv` by
+        metis_tac[abi_args_runtime_word_is_base] >>
+      `IS_SOME (FLOOKUP u.vs_labels "runtime_begin")` by
+        gvs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def] >>
+      Cases_on `FLOOKUP u.vs_labels "runtime_begin"` >> gvs[] >>
+      simp[expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def]) >>
+  `!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+        val_footprint tv v = 0` by metis_tac[abi_args_runtime_nonbase_zero] >>
+  metis_tac[abi_args_runtime_zero_transport]
+QED
+
+(* Consumer boundary: the original suffix witness is retained.  A protected
+   base has the same operand value; a nonbase runtime label carries only a
+   zero-footprint value (or an unevaluated type), so needs no address equality. *)
+Theorem abi_args_success_label_transport:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (Label l,sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel ctx func ce cx es1 t /\ stmt_state_rel ctx func ce cx es' u /\
+  expr_val_rel cx (expr_type e) v (Label l) t /\
+  expr_val_at ce cx (expr_type e) sc sd est v (Label l) t ==>
+  eval_operand (Label l) t = eval_operand (Label l) u \/
+  (expr_val_rel cx (expr_type e) v (Label l) u /\
+   expr_val_at ce cx (expr_type e) sc sd es' v (Label l) u)
+Proof
+  strip_tac >>
+  drule_all abi_args_success_label_classification >> strip_tac
+  >- metis_tac[abi_args_immutable_base_kept] >>
+  Cases_on `ce.ce_imm_alloca = SOME (Label l)`
+  >- metis_tac[abi_args_immutable_base_kept] >>
+  gvs[] >> disj2_tac >> metis_tac[abi_args_runtime_nonbase_transport]
+QED
+
+(* Caller-premise audit for success_label_transport:
+   abi_args_ready supplies expr_sim at Inv es; the uncaptured branch supplies
+   lower_value, successful forced evaluation, head fn_has_code/distinctness and
+   local_ptrs_reserved.  Its precondition supplies the related initial s0.
+   expr_post at the head witness t supplies stmt_state_rel, expr_val_rel and
+   expr_val_at; abi_args_post at the ORIGINAL suffix witness u supplies the
+   final stmt_state_rel.  Thus no expr_vv_sim, evaluated-type existence,
+   positive-footprint, label equality or metadata-coherence premise is added.
+   The equality alternative uses existing memory/frame transport; the other
+   alternative already gives both value obligations at u.  Live operand and
+   frame adapters are separate consumers, not asserted by this diagnostic. *)
