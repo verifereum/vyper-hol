@@ -1953,6 +1953,71 @@ Proof
   simp[take_outcome_def]
 QED
 
+Theorem asm_buffer_take_extend_read:
+  (az = 0 \/ ao + az <= buffer_length mem + n) ==>
+  buffer_take ao az (buffer_extend n mem) = buffer_read ao az mem
+Proof
+  strip_tac >> Cases_on `az = 0` >> simp[buffer_take_to_list, buffer_read_to_list] >>
+  gvs[] >>
+  simp[buffer_to_list_extend, take_pad_0_def, PAD_RIGHT, GSYM REPLICATE_GENLIST] >>
+  irule LIST_EQ >>
+  simp[LENGTH_TAKE_EQ, EL_TAKE, EL_DROP, EL_APPEND_EQN, EL_REPLICATE] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[EL_DROP]
+QED
+
+Theorem asm_call_expanded_input:
+  max_expansion_range (ao,az) (ro,rs) = (off,sz) /\
+  n = MAX (buffer_length mem)
+        (if 0 < sz then word_size (off+sz) * 32 else 0) - buffer_length mem ==>
+  buffer_take ao az (buffer_extend n mem) = buffer_read ao az mem
+Proof
+  strip_tac >> irule asm_buffer_take_extend_read >>
+  Cases_on `az = 0` >> simp[] >>
+  mp_tac (Q.SPEC `off+sz` spillSimTheory.n_le_round_up_32) >>
+  gvs[max_expansion_range_def, vfmConstantsTheory.word_size_def] >>
+  Cases_on `rs = 0` >> gvs[] >>
+  Cases_on `ao + az < ro + rs` >> gvs[] >>
+  rpt strip_tac >> gvs[] >> rw[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem asm_call_prepared_input:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  buffer_take ao az (FST (HD u.contexts)).memory = buffer_read ao az c.memory
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qpat_assum `u = _` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+  rename1 `max_expansion_range (ao,az) (ro,rs) = (off,sz)` >>
+  simp_tac (srw_ss()) [] >>
+  irule asm_call_expanded_input >>
+  goal_assum (drule_at Any) >> simp_tac (srw_ss()) []
+QED
+
+Theorem asm_call_prepared_request:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  (request_of s).cr_kind = MessageCall /\
+  (request_of s).cr_target = address /\ (request_of s).cr_value = value /\
+  (request_of s).cr_data = buffer_read ao az c.memory /\
+  (request_of s).cr_static = (op = StaticCall) /\
+  (request_of s).cr_accounts = s.rollback.accounts /\
+  (request_of s).cr_tStorage = s.rollback.tStorage
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  Cases_on `op = Call` >> gvs[call_has_value_def, request_of_def, EL_TAKE]
+QED
+
 Theorem asm_computed_proceed_success:
   s.contexts = (c,rb)::rest /\ (op = Call \/ op = StaticCall) /\
   (address = 1w \/ address = 2w \/ address = 6w \/ address = 7w) /\
@@ -1976,6 +2041,43 @@ Proof
   drule_all asm_computed_precompile_success >>
   simp[Abbr `pushed`, Abbr `child`, vfmContextTheory.initial_context_def,
        vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem asm_call_computed_finish_success:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  computed_precompile (request_of s) /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR NONE,v) ==>
+  precompile_result (request_of s).cr_target (request_of s).cr_data =
+    SOME (SOME (FST (HD v.contexts)).returnData) /\
+  v.rollback = u.rollback /\ (FST (HD v.contexts)).logs = []
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepared_request >> strip_tac >>
+  drule_all asm_call_prepared_input >> disch_tac >>
+  `value = 0` by fs[computed_precompile_addresses] >>
+  (Q.SUBGOAL_THEN `address = 1w \/ address = 2w \/ address = 6w \/ address = 7w`
+    assume_tac >- fs[computed_precompile_addresses]) >>
+  drule_all asm_call_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_proceed >>
+  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
+    rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
+  `p.contexts = (parent with returnData := [],rb)::rest` by simp[Abbr `p`] >>
+  qpat_x_assum `value = 0` SUBST_ALL_TAC >>
+  drule_all asm_computed_proceed_success >> strip_tac >>
+  gvs[Abbr `p`]
 QED
 
 Theorem asm_proceed_call_saved_checkpoint:
@@ -2018,6 +2120,30 @@ Proof
   qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed` >>
   `pushed.contexts <> []` by simp[Abbr `pushed`] >>
   drule_all dispatch_precompiles_inr_not_reverted_not_abort >> simp[]
+QED
+
+Theorem asm_proceed_call_zero_terminal_effects:
+  s.contexts <> [] /\
+  proceed_call op sender address 0 ao az code stipend outputTo s = (INR e,t) ==>
+  t.rollback.accounts = s.rollback.accounts /\
+  t.rollback.tStorage = s.rollback.tStorage /\
+  t.rollback.toDelete = s.rollback.toDelete /\
+  (FST (HD t.contexts)).logs = []
+Proof
+  Cases_on `s.contexts` >> simp[] >>
+  simp[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_caller_def,
+       get_value_def, get_static_def, push_context_def,
+       get_current_context_def, return_def] >>
+  Cases_on `fIN address precompile_addresses` >> simp[return_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed` >>
+  `pushed.contexts <> []` by simp[Abbr `pushed`] >>
+  qspec_then `address` mp_tac
+    (GEN_ALL (INST_TYPE [alpha |-> ``:unit``]
+      vfmStaticCallsTheory.cp_dispatch_precompiles)) >>
+  rewrite_tac[vfmStaticCallsTheory.cp_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  gvs[Abbr `pushed`, vfmContextTheory.initial_context_def]
 QED
 
 Theorem asm_call_finish_terminal_kind:
