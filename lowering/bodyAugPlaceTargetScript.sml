@@ -133,7 +133,7 @@ Theorem aug_place_target_indices_pre:
     IS_SOME (type_place_target env t) /\
     IS_SOME (supported_target_info tops bindings t) /\
     ~supported_target_exists
-      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
     call_evaluation_safe cx (int_calls_target t) /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
               occurs_abi_decode_target target tops) /\
@@ -146,7 +146,7 @@ Proof
     IS_SOME (type_place_target env t) /\
     IS_SOME (supported_target_info tops bindings t) /\
     ~supported_target_exists
-      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
     call_evaluation_safe cx (int_calls_target t) /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
               occurs_abi_decode_target target tops) /\
