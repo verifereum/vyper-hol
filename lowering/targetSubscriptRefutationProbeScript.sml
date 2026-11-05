@@ -427,3 +427,11 @@ Proof
          wordsTheory.WORD_MULT_CLAUSES]) >>
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >> simp[]
 QED
+
+Theorem clear_outer_no_halt:
+  !fuel k t. run_from fuel (probe_descendant_ctx k)
+    probe_descendant_outer_caller clear_outer_machine <> Halt t
+Proof
+  rpt gen_tac >> qspec_then `k` strip_assume_tac clear_outer_concrete_abort >>
+  drule fragExecTheory.run_from_abort_no_halt >> simp[]
+QED
