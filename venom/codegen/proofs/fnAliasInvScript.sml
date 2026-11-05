@@ -877,6 +877,36 @@ Proof
   Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[]
 QED
 
+Theorem alias_emit_reorder_pop_mass:
+  emit_input_plan opc inputs live ps = (iops,mid) /\
+  (!op. MEM op inputs /\ is_var_operand op ==> plan_holds ps op) /\
+  PERM targets inputs /\ LENGTH inputs <= 16 /\
+  reorder_plan dfg targets mid = (rops,qs) ==>
+  alias_var_mass x (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack) <=
+  alias_var_mass x ps
+Proof
+  strip_tac >>
+  `PERM inputs targets` by metis_tac[PERM_SYM] >>
+  `!op. MEM op inputs /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    metis_tac[plan_holds_def] >>
+  drule_all alias_emit_reorder_consumed_window >> strip_tac >>
+  `LENGTH targets = LENGTH inputs` by metis_tac[PERM_LENGTH] >>
+  `alias_var_mass x qs <= alias_var_mass x mid` by
+    (mp_tac (Q.INST [`targets` |-> `targets`, `ps` |-> `mid`,
+                    `dfg` |-> `dfg`, `x` |-> `x`] alias_var_mass_reorder_plan) >>
+     simp[]) >>
+  `alias_var_mass x qs =
+   alias_var_mass x (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack) +
+   LIST_ELEM_COUNT (Var x) inputs` by
+    (drule perm_operand_counts >> strip_tac >>
+     qpat_x_assum `qs.ps_stack = _`
+       (mp_tac o AP_TERM ``LIST_ELEM_COUNT (Var x)``) >>
+     simp[alias_var_mass_def, elem_count_append] >> decide_tac) >>
+  qspecl_then [`inputs`, `opc`, `live`, `ps`, `x`] mp_tac
+    alias_var_mass_emit_inputs >> simp[] >> decide_tac
+QED
+
 Theorem alias_regular_plan_support:
   inst.inst_opcode <> JMP /\ alias_var_budget [] ps /\
   (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
@@ -950,6 +980,97 @@ Resume alias_regular_plan_support[post]:
 QED
 
 Finalise alias_regular_plan_support
+
+Theorem alias_regular_plan_budget:
+  inst.inst_opcode <> JMP /\ alias_var_budget [] ps /\
+  (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  ALL_DISTINCT inst.inst_outputs /\
+  (!x. MEM x inst.inst_outputs ==>
+    ~plan_holds ps (Var x) /\ ~MEM (Var x) (compute_operands inst)) /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) ==>
+  alias_var_budget [] qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def] >>
+  pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics` >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  pairarg_tac >> simp[] >>
+  `?targets. PERM targets (compute_operands inst) /\
+     reorder_plan dfg targets ps1 = (reorder_ops,ps4)` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- (pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+         IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+         >- metis_tac[PERM_REFL] >>
+         `2 <= LENGTH (compute_operands inst)` by decide_tac >>
+         drule last_two_reorder_perm >>
+         metis_tac[PERM_SYM]) >>
+     metis_tac[PERM_REFL]) >>
+  `!x. alias_var_mass x
+      (ps4 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack)
+      <= alias_var_mass x ps` by
+    (qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+     metis_tac[alias_emit_reorder_pop_mass]) >>
+  pairarg_tac >> simp[] >> suspend "outputs"
+QED
+
+Resume alias_regular_plan_budget[outputs]:
+  `!xs:string list. !x. ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1` by
+    (Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
+     Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
+     >- (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+     first_x_assum (qspec_then `x` mp_tac) >> simp[]) >>
+  `!x. alias_var_mass x ps7 <= 1` by
+    (gen_tac >>
+     qpat_x_assum `generate_emit_ops _ _ _ = _`
+       (mp_tac o AP_TERM ``\p:stack_op list # plan_state. alias_var_mass x (SND p)``) >>
+     simp[alias_var_mass_emit_ops, alias_var_mass_outputs] >>
+     strip_tac >>
+     qpat_x_assum `!x. alias_var_mass x (_ with ps_stack := _) <= _`
+       (qspec_then `x` assume_tac) >>
+     Cases_on `MEM x inst.inst_outputs`
+     >- (`alias_var_mass x ps = 0` by metis_tac[alias_var_mass_zero] >>
+         `LIST_ELEM_COUNT x inst.inst_outputs <= 1` by metis_tac[] >>
+         decide_tac) >>
+     `LIST_ELEM_COUNT x inst.inst_outputs = 0` by
+       (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+     fs[alias_var_budget_def, LIST_ELEM_COUNT_THM] >>
+     qpat_x_assum `!x. alias_var_mass x ps <= 1`
+       (qspec_then `x` mp_tac) >> decide_tac) >>
+  suspend "post"
+QED
+
+Resume alias_regular_plan_budget[post]:
+  qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+  IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[] >> simp[alias_var_budget_def, LIST_ELEM_COUNT_THM] >>
+      gen_tac >>
+      mp_tac (Q.INST [`ps` |-> `ps7`] alias_var_mass_release_dead_spills) >>
+      first_x_assum (qspec_then `x` mp_tac) >> decide_tac) >>
+  pairarg_tac >> simp[] >>
+  `!x. alias_var_mass x ps8 <= alias_var_mass x ps7` by
+    (gen_tac >> qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     metis_tac[alias_var_mass_popmany, pairTheory.SND]) >>
+  pairarg_tac >> simp[] >>
+  `!x. alias_var_mass x ps9 <= alias_var_mass x ps8` by
+    (gen_tac >> qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     metis_tac[alias_var_mass_optimistic_swap, pairTheory.SND]) >>
+  strip_tac >> gvs[] >> simp[alias_var_budget_def, LIST_ELEM_COUNT_THM] >>
+  gen_tac >>
+  mp_tac (Q.INST [`ps` |-> `ps9`] alias_var_mass_release_dead_spills) >>
+  qpat_x_assum `!x. alias_var_mass x ps9 <= _` (qspec_then `x` mp_tac) >>
+  qpat_x_assum `!x. alias_var_mass x ps8 <= _` (qspec_then `x` mp_tac) >>
+  qpat_x_assum `!x. alias_var_mass x ps7 <= 1` (qspec_then `x` mp_tac) >>
+  decide_tac
+QED
+
+Finalise alias_regular_plan_budget
 
 Definition alias_probe_phis_def:
   alias_probe_phis =
