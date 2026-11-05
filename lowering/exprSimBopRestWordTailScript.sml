@@ -156,3 +156,59 @@ Proof
   drule_all rest_word_compiled_search >>
   simp[rest_word_search_rep_def] >> metis_tac[]
 QED
+
+(* Slot-addressed loaders need no memory frontier premise. *)
+Theorem rest_word_storage_element_run:
+  storage_holds cx tr (ArrayT ty bd) (Value (ArrayV av)) baseword es' p /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  i < array_length (ArrayTV et bd) av /\
+  array_index (ArrayTV et bd) av (&i) = SOME value /\
+  context$compile_ptr_load ctor imm (if tr then LocTransient else LocStorage) addr cl = (v,cm) /\
+  eval_operand addr p = SOME
+    (baseword + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i)) ==>
+  ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
+      eval_operand v q = SOME (typed_val_to_w256 et value) /\
+      run_inst_seq_mem_ok (emitted_insts cl cm) p
+Proof
+  strip_tac >>
+  `read_result cx (Value (ArrayV av)) es' = (INL (ArrayV av), es')` by
+    simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  drule_all exprSimBopRestWordStorageTheory.rest_word_storage_array_load >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts cl cm) p` by
+    (drule exprSimBopRestWordLoadSafetyTheory.rest_word_ptr_load_mem_ok >>
+     Cases_on `tr` >> simp[]) >>
+  Cases_on `tr` >> gvs[] >>
+  drule (Q.INST [`b` |-> `0w`] exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_run) >>
+  simp[] >> disch_then (qspecl_then [`p`,
+    `baseword + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i)`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem rest_word_immutable_element_run:
+  stmt_state_rel ctx func cenv cx es' p /\
+  immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) baseword es' p /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  array_index (ArrayTV et bd) av (&i) = SOME value /\
+  context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode addr cl = (v,cm) /\
+  eval_operand addr p = SOME
+    (baseword + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) ==>
+  ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
+      eval_operand v q = SOME (typed_val_to_w256 et value) /\
+      run_inst_seq_mem_ok (emitted_insts cl cm) p
+Proof
+  strip_tac >>
+  drule_all exprSimBopRestWordLoadsTheory.rest_word_array_immutable_load >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts cl cm) p` by
+    (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_array_immutable_load_mem_ok >> simp[]) >>
+  `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
+    eval_operand (THE cenv.ce_imm_alloca) p = SOME 0w)` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.immutable_base_zero_def] >>
+     Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
+  drule (Q.INST [`b` |-> `0w`] exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_run) >> simp[] >>
+  disch_then (qspecl_then [`p`,
+    `baseword + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)`] mp_tac) >>
+  Cases_on `cenv.ce_is_ctor` >> Cases_on `cenv.ce_imm_alloca` >>
+  gvs[wordsTheory.WORD_ADD_0] >> metis_tac[]
+QED
