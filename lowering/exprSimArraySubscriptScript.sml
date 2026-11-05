@@ -2660,11 +2660,11 @@ QED
 (* A universal fragment judgment can test an INVALID fallback against a
    STOP suffix. This uses backward result inclusion, not prefix reachability. *)
 Theorem frag_exec_invalid_no_normal_probe[local]:
-  !ctx sa sb s0 Q.
+  !ctx sa sb s0 Q tail.
     sb.cs_blocks = sa.cs_blocks /\
     sb.cs_current_bb = sa.cs_current_bb /\
     sb.cs_current_insts = sa.cs_current_insts ++
-      [mk_inst sa.cs_next_id INVALID [] []] /\
+      [mk_inst sa.cs_next_id INVALID [] []] ++ tail /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ~frag_exec ctx sa sb (\s. s = s0) Q (\r. F)
