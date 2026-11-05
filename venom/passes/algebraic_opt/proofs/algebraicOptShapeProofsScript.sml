@@ -303,3 +303,189 @@ Proof
   irule ao_rewrite_layout_distinct_outputs >>
   qexistsl [`fr`,`inst`] >> gvs[]
 QED
+
+Theorem ao_resolve_iszero_op_support:
+  set (venomInst$operand_vars [op]) SUBSET V /\
+  (!v chain p. ALOOKUP targets v = SOME chain /\ MEM p chain ==>
+     set (venomInst$operand_vars [p]) SUBSET V) ==>
+  set (venomInst$operand_vars [ao_resolve_iszero_op targets opc op]) SUBSET V
+Proof
+  strip_tac >> Cases_on `op` >>
+  simp[ao_resolve_iszero_op_def] >>
+  Cases_on `ALOOKUP targets s` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  first_x_assum irule >> metis_tac[MEM_EL]
+QED
+
+Theorem ao_operand_support:
+  set (venomInst$operand_vars ops) SUBSET V <=>
+  !op. MEM op ops ==> set (venomInst$operand_vars [op]) SUBSET V
+Proof
+  Induct_on `ops`
+  >- simp[venomInstTheory.operand_vars_def, SUBSET_DEF] >>
+  gen_tac >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM] >>
+  Cases_on `venomInst$operand_var h` >>
+  simp[venomInstTheory.operand_vars_def, SUBSET_DEF] >>
+  qpat_x_assum `_ <=> _` mp_tac >>
+  simp[venomInstTheory.operand_vars_def, SUBSET_DEF,
+       DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem ao_resolve_iszero_inst_support:
+  set (inst_uses inst) SUBSET V /\
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     set (venomInst$operand_vars [op]) SUBSET V) ==>
+  set (inst_uses (ao_resolve_iszero_inst targets inst)) SUBSET V
+Proof
+  simp[inst_uses_def, ao_resolve_iszero_inst_def] >>
+  pure_once_rewrite_tac[ao_operand_support] >>
+  simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  irule ao_resolve_iszero_op_support >> metis_tac[]
+QED
+
+Theorem ao_simple_peephole_support:
+  (MEM out (ao_opt_shift inst) \/
+   MEM out (ao_opt_signextend ra lbl idx inst) \/
+   MEM out (ao_opt_exp inst) \/
+   MEM out (ao_opt_addsub inst) \/
+   MEM out (ao_opt_and inst) \/
+   MEM out (ao_opt_muldiv inst) \/
+   MEM out (ao_opt_or dfg inst)) ==>
+  set (inst_uses out) SUBSET set (inst_uses inst)
+Proof
+  pure_rewrite_tac[DISJ_IMP_THM] >> rpt conj_tac >>
+  Cases_on `inst.inst_operands` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t'` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `h` >> Cases_on `h'` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >>
+  gvs[inst_uses_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, SUBSET_DEF]
+QED
+
+Theorem ao_opt_eq_support:
+  fr "xor" = fr "not" /\ MEM out (ao_opt_eq dfg fr inst) ==>
+  set (inst_uses out) SUBSET
+    (set (inst_uses inst) UNION {SND (fr "not"); SND (fr "iz")})
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  Cases_on `inst.inst_operands` >> simp[ao_opt_eq_def] >>
+  Cases_on `t` >> simp[ao_opt_eq_def] >>
+  Cases_on `t'` >> simp[ao_opt_eq_def] >>
+  Cases_on `fr "not"` >> gvs[] >>
+  Cases_on `h` >> Cases_on `h'` >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
+  gvs[inst_uses_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, SUBSET_DEF]
+QED
+
+Theorem ao_opt_cmp_range_support:
+  ao_opt_cmp_range ra lbl idx inst is_gt signed = SOME op ==>
+  venomInst$operand_vars [op] = []
+Proof
+  simp[ao_opt_cmp_range_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def]
+QED
+
+Theorem ao_cmp_prefer_iz_support:
+  !fr op1 op2 inst. fr "xor" = fr "not" ==>
+  !out.
+  (MEM out (ao_cmp_prefer_iz_zero fr op1 inst) \/
+   MEM out (ao_cmp_prefer_iz_max fr op1 inst) \/
+   MEM out (ao_cmp_prefer_iz_general fr op1 op2 inst)) ==>
+  set (inst_uses out) SUBSET
+    (set (venomInst$operand_vars [op1;op2]) UNION
+     {SND (fr "not"); SND (fr "iz")})
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `fr "not"` >> Cases_on `fr "iz"` >>
+  simp[ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+       ao_cmp_prefer_iz_general_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[inst_uses_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, SUBSET_DEF]
+QED
+
+Theorem ao_opt_comparator_support:
+  fr "xor" = fr "not" ==>
+  !out. MEM out (ao_opt_comparator dfg ra lbl idx fr inst) ==>
+  set (inst_uses out) SUBSET
+    (set (inst_uses inst) UNION {SND (fr "not"); SND (fr "iz")})
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t'` >> simp[ao_opt_comparator_def] >>
+  Cases_on `h = h'`
+  >- (simp[inst_uses_def, venomInstTheory.operand_vars_def,
+           venomInstTheory.operand_var_def, SUBSET_DEF]) >>
+  simp[] >>
+  Cases_on `ao_opt_cmp_range ra lbl idx inst
+    (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+    (inst.inst_opcode = SGT \/ inst.inst_opcode = SLT)`
+  >- (qspecl_then [`fr`,`h`,`h'`,`inst`] mp_tac ao_cmp_prefer_iz_support >>
+      simp[] >> strip_tac >>
+      simp[] >> pairarg_tac >> simp[] >>
+      rpt (IF_CASES_TAC >> simp[]) >>
+      Cases_on `fr "not"` >> Cases_on `fr "iz"` >> simp[] >>
+      Cases_on `h` >> Cases_on `h'` >>
+      rpt strip_tac >> gvs[] >>
+      gvs[inst_uses_def, venomInstTheory.operand_vars_def,
+          venomInstTheory.operand_var_def, SUBSET_DEF] >> metis_tac[]) >>
+  drule ao_opt_cmp_range_support >> strip_tac >>
+  simp[inst_uses_def, SUBSET_DEF]
+QED
+
+Theorem ao_peephole_inst_support:
+  fr "xor" = fr "not" ==>
+  !out. MEM out (ao_peephole_inst dfg ra lbl idx fr inst) ==>
+  set (inst_uses out) SUBSET
+    (set (inst_uses inst) UNION {SND (fr "not"); SND (fr "iz")})
+Proof
+  strip_tac >> simp[ao_peephole_inst_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac
+  >~ [`MEM out (ao_opt_eq dfg fr inst)`]
+  >- (irule ao_opt_eq_support >> simp[] >> qexists_tac `dfg` >> simp[]) 
+  >~ [`MEM out (ao_opt_comparator dfg ra lbl idx fr inst)`]
+  >- (irule ao_opt_comparator_support >> simp[] >>
+      qexistsl_tac [`dfg`,`idx`,`lbl`,`ra`] >> simp[]) >>
+  irule SUBSET_TRANS >> qexists_tac `set (inst_uses inst)` >>
+  simp[] >> irule ao_simple_peephole_support >>
+  qexistsl_tac [`dfg`,`idx`,`lbl`,`ra`] >> simp[]
+QED
+
+Theorem ao_transform_inst_support:
+  fr "xor" = fr "not" /\ set (inst_uses inst) SUBSET V /\
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     set (venomInst$operand_vars [op]) SUBSET V) ==>
+  !out. MEM out (ao_transform_inst dfg ra lbl idx targets fr inst) ==>
+  set (inst_uses out) SUBSET (V UNION {SND (fr "not"); SND (fr "iz")})
+Proof
+  strip_tac >>
+  `set (inst_uses (ao_resolve_iszero_inst targets inst)) SUBSET V`
+    by (irule ao_resolve_iszero_inst_support >> metis_tac[]) >>
+  simp[ao_transform_inst_def] >>
+  qabbrev_tac `inst0 = ao_resolve_iszero_inst targets inst` >>
+  `set (inst_uses inst0) SUBSET (V UNION {SND (fr "not"); SND (fr "iz")})`
+    by (simp[SUBSET_DEF] >> metis_tac[SUBSET_DEF]) >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `ao_opt_producer dfg inst0`
+  >- (simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+      simp[ao_post_flip_inst_shape] >>
+      irule SUBSET_TRANS >>
+      qexists_tac `set (inst_uses (ao_pre_flip_inst inst0)) UNION
+                     {SND (fr "not"); SND (fr "iz")}` >>
+      conj_tac
+      >- (irule ao_peephole_inst_support >> simp[] >>
+          qexistsl_tac [`dfg`,`idx`,`lbl`,`ra`] >> simp[]) >>
+      gvs[ao_pre_flip_inst_shape, SUBSET_DEF] >> metis_tac[]) >>
+  drule ao_opt_producer_shape >> strip_tac >> gvs[] >>
+  simp[ao_post_flip_inst_shape] >> metis_tac[SUBSET_TRANS, SUBSET_UNION]
+QED
