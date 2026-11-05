@@ -583,7 +583,8 @@ Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Convert target_ty ts =
     (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
-    (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
+    (LENGTH ts = 2 /\ (?m. EL 0 ts = BaseT (BytesT (Dynamic m))) /\
+     is_uint_type (EL 1 ts) /\
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
     (LENGTH ts = 1 /\ ?n. HD ts = BaseT (BytesT (Dynamic n))) /\
