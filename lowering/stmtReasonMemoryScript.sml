@@ -63,6 +63,49 @@ Definition reason_tail_def:
      mk_inst (j + 27) REVERT [Var (x (u + 19)); Var (x (u + 20))] []]
 End
 
+(* Every opcode of the encoder's head and tail is neither GAS nor INVOKE,
+   and REVERT is its only terminator. *)
+Theorem reason_encoder_ops:
+  !id v M j u op.
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
+      (reason_head id v M) /\
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
+      (reason_tail j u v op)
+Proof
+  simp[reason_head_def, reason_tail_def, is_terminator_def, mk_inst_def]
+QED
+
+(* A length within k words rounds up to at most k words. *)
+Theorem round_le_of_le_mult:
+  !L k. L <= 32 * k ==> (L + 31) DIV 32 <= k
+Proof
+  rpt strip_tac >>
+  `(L + 31) DIV 32 <= (k * 32 + 31) DIV 32` by
+    (irule DIV_LE_MONOTONE >> simp[]) >>
+  `(k * 32 + 31) DIV 32 = k` by
+    simp[ADD_DIV_ADD_DIV] >>
+  fs[]
+QED
+
+(* Straight-line code keeps the data section and the labels. *)
+Theorem run_inst_seq_data_section:
+  !code s t.
+    run_inst_seq code s = OK t /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code ==>
+    t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> rpt strip_tac >>
+  rename1 `step_inst_base h s = OK u` >>
+  `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+  drule_all step_preserves_data_section >>
+  drule_all step_preserves_labels >> first_x_assum drule_all >>
+  simp[]
+QED
+
+
 Theorem compile_revert_reason_shape:
   !cenv vv mt M sa sb.
     compile_revert_with_reason cenv vv mt M sa = ((), sb) ==>

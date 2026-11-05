@@ -116,15 +116,6 @@ Proof
   asm_simp_tac (srw_ss()) [is_terminator_def]
 QED
 
-Theorem encoder_opcodes[local]:
-  !id v M j u op.
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
-      (reason_head id v M ++ reason_tail j u v op)
-Proof
-  simp[reason_head_def, reason_tail_def, is_terminator_def, mk_inst_def]
-QED
-
 (* The literal's buffer and the reason encoder after it run, from a state
    at the start of that code, to the encoder's REVERT below the frontier. *)
 Theorem lit_reason_revert_path_mem:
@@ -293,7 +284,8 @@ Proof
      (emitted_insts sa sm ++ ecode)` by
     (rewrite_tac[EVERY_APPEND] >> conj_tac
      >- (irule alloca_add_mstore_opcodes >> first_assum ACCEPT_TAC) >>
-     qpat_assum `ecode = _` SUBST1_TAC >> rewrite_tac[encoder_opcodes]) >>
+     qpat_assum `ecode = _` SUBST1_TAC >>
+     rewrite_tac[EVERY_APPEND, reason_encoder_ops]) >>
   qspecl_then [`emitted_insts sa sm ++ ecode`, `s0`, `t`, `Revert_abort`,
                `ctx`, `func`, `bb`] mp_tac run_inst_seq_revert_path_mem >>
   impl_tac

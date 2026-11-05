@@ -15,26 +15,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem encoder_opcodes_mem[local]:
-  !id v M j u op.
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
-      (reason_head id v M ++ reason_tail j u v op)
-Proof
-  simp[reason_head_def, reason_tail_def, is_terminator_def, mk_inst_def]
-QED
-
-Theorem round_le_of_le_mult[local]:
-  !L k. L <= 32 * k ==> (L + 31) DIV 32 <= k
-Proof
-  rpt strip_tac >>
-  `(L + 31) DIV 32 <= (k * 32 + 31) DIV 32` by
-    (irule DIV_LE_MONOTONE >> simp[]) >>
-  `(k * 32 + 31) DIV 32 = k` by
-    simp[ADD_DIV_ADD_DIV] >>
-  fs[]
-QED
-
 Theorem unwrap_value_reason_vv_mem[local]:
   !cenv vv op st. reason_vv vv = SOME op ==> unwrap_value cenv vv st = (op, st)
 Proof
@@ -245,7 +225,7 @@ Proof
           first_assum ACCEPT_TAC)
       >- (qpat_assum `t.vs_inst_idx = _` SUBST1_TAC >>
           first_assum ACCEPT_TAC)
-      >- simp[Abbr `ecode`, encoder_opcodes_mem]
+      >- simp[Abbr `ecode`, EVERY_APPEND, reason_encoder_ops]
       >- simp[Abbr `ecode`] >>
       simp[Abbr `ecode`]) >>
   strip_tac >>

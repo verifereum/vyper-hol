@@ -18,44 +18,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem run_inst_seq_data_section[local]:
-  !code s t.
-    run_inst_seq code s = OK t /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code ==>
-    t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
-  Cases_on `step_inst_base h s` >> simp[] >> rpt strip_tac >>
-  rename1 `step_inst_base h s = OK u` >>
-  `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-  drule_all step_preserves_data_section >>
-  drule_all step_preserves_labels >> first_x_assum drule_all >>
-  simp[]
-QED
-
-Theorem encoder_ops[local]:
-  !id v M j u op.
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
-      (reason_head id v M) /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
-      (reason_tail j u v op)
-Proof
-  simp[reason_head_def, reason_tail_def, is_terminator_def, mk_inst_def]
-QED
-
-Theorem round_le_of_le_mult[local]:
-  !L k. L <= 32 * k ==> (L + 31) DIV 32 <= k
-Proof
-  rpt strip_tac >>
-  `(L + 31) DIV 32 <= (k * 32 + 31) DIV 32` by
-    (irule DIV_LE_MONOTONE >> simp[]) >>
-  `(k * 32 + 31) DIV 32 = k` by
-    simp[ADD_DIV_ADD_DIV] >>
-  fs[]
-QED
-
 (* The runtime word copy writes the data section's bytes at the buffer,
    whatever memory held before: the buffer's first word does not depend on
    the state the copy starts from, beyond its data section. *)
@@ -445,14 +407,14 @@ Proof
      qpat_x_assum `ecode = _` (fn th => rewrite_tac[th]) >>
      simp[Abbr `tcode`, MEM_APPEND] >> strip_tac
      >- (mp_tac (cj 1 (Q.SPECL [`id0`, `v0`, `Z`, `j`, `u0`, `Var out`]
-           encoder_ops)) >>
+           reason_encoder_ops)) >>
          simp[EVERY_MEM] >> disch_then drule >> simp[])
      >- simp[Abbr `allocI`, mk_inst_def, is_terminator_def]
      >- (qpat_x_assum `EVERY _ cis` mp_tac >> simp[EVERY_MEM] >>
          disch_then drule >> strip_tac >> asm_rewrite_tac[] >>
          simp[is_terminator_def]) >>
      mp_tac (cj 2 (Q.SPECL [`id0`, `v0`, `Z`, `j`, `u0`, `Var out`]
-       encoder_ops)) >>
+       reason_encoder_ops)) >>
      simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
   qspecl_then [`ecode`, `t`, `t'`, `Revert_abort`, `ctx`, `func`, `bb`] mp_tac
     run_inst_seq_revert_path_mem >>
