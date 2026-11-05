@@ -730,7 +730,8 @@ Proof
         simp[SF ETA_ss, gas_shadow_compiles_emit_op, gas_shadow_compiles_return]) >>
     gen_tac >> BETA_TAC >>
     match_mp_tac gas_shadow_compiles_bind >> conj_tac
-    >- simp[gasShadowCompileExternalTheory.gas_shadow_compiles_external_call_kwargs] >>
+    >- simp[SF ETA_ss, MAP_MAP_o, combinTheory.o_DEF,
+            gasShadowCompileExternalTheory.gas_shadow_compiles_external_call_kwargs] >>
     gen_tac >> BETA_TAC >>
     qmatch_goalsub_abbrev_tac `if no_return then _ else _` >>
     Cases_on `no_return` >> simp[SF ETA_ss, gas_shadow_compiles_return]))
