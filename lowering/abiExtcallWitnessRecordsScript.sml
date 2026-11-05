@@ -6,7 +6,7 @@ Ancestors
 
 Definition witness_cx_def:
   witness_cx = empty_evaluation_context with
-    <|txn := empty_call_txn with <|block_number := 1; block_hashes := [0w]|>;
+    <|stk := [(NONE,"probe")]; txn := empty_call_txn with <|block_number := 1; block_hashes := [0w]|>;
       sources := [(0w,[(NONE,[])])]; layouts := [(0w,([],[]))]|>
 End
 
