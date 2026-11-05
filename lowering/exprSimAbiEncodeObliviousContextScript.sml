@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeObliviousContext
 Ancestors
-  exprSimAbiGasBridge fragExec list rich_list compileEnv
+  exprSimAbiGasBridge fragExec list rich_list compileEnv emitHelper context
 
 Definition entry_shape_def:
   entry_shape (a:compile_state) (s:compile_state) <=>
@@ -167,4 +167,98 @@ Theorem start_swap_two_blocks:
 Proof
   rpt strip_tac
   >> simp[start_swap_new_block, entry_shape_new_block]
+QED
+
+Theorem entry_action_bind:
+  !m k. entry_action m /\ (!v. entry_action (k v)) ==>
+    entry_action (comp_bind m k)
+Proof
+  rw[entry_action_def, comp_bind_def]
+  >> Cases_on `m s` >> gvs[]
+  >> qpat_x_assum `!a s x t L ids. _` (drule_all_then (qspec_then `L` strip_assume_tac))
+  >> qpat_x_assum `!v a s x t L ids. _` (drule_all_then (qspec_then `L` strip_assume_tac))
+  >> simp[]
+QED
+
+Theorem entry_action_ignore_bind:
+  !m k. entry_action m /\ entry_action k ==>
+    entry_action (comp_ignore_bind m k)
+Proof
+  simp[comp_ignore_bind_def, entry_action_bind]
+QED
+
+Theorem entry_action_fresh_var:
+  entry_action fresh_var
+Proof
+  rw[entry_action_def, fresh_var_def]
+  >- gvs[entry_shape_def]
+  >> simp[start_swap_def, emitted_blocks_def]
+  >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem entry_action_fresh_id:
+  entry_action fresh_id
+Proof
+  rw[entry_action_def, fresh_id_def]
+  >- gvs[entry_shape_def]
+  >> simp[start_swap_def, emitted_blocks_def]
+  >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem entry_action_fresh_label:
+  !suffix. entry_action (fresh_label suffix)
+Proof
+  rw[entry_action_def, fresh_label_def]
+  >- gvs[entry_shape_def]
+  >> simp[start_swap_def, emitted_blocks_def]
+  >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem entry_action_emit_inst:
+  !opc ops outs. entry_action (emit_inst opc ops outs)
+Proof
+  rw[emit_inst_def]
+  >> irule entry_action_bind
+  >> simp[entry_action_fresh_id, entry_action_emit]
+QED
+
+Theorem entry_action_emit_void:
+  !opc ops. entry_action (emit_void opc ops)
+Proof
+  rw[emit_void_def]
+  >> irule entry_action_bind
+  >> simp[entry_action_fresh_id, entry_action_emit]
+QED
+
+Theorem entry_action_emit_op:
+  !opc ops. entry_action (emit_op opc ops)
+Proof
+  rw[emit_op_def]
+  >> irule entry_action_bind >> simp[entry_action_fresh_id]
+  >> gen_tac >> irule entry_action_bind >> simp[entry_action_fresh_var]
+  >> gen_tac >> irule entry_action_ignore_bind
+  >> simp[entry_action_emit, entry_action_return]
+QED
+
+Theorem entry_action_alloc_buffer:
+  !size. entry_action (compile_alloc_buffer size)
+Proof
+  rw[compile_alloc_buffer_def]
+  >> irule entry_action_bind
+  >> simp[entry_action_emit_op, entry_action_return]
+QED
+
+Theorem entry_action_new_block:
+  !l k. entry_action k ==>
+    entry_action (comp_ignore_bind (new_block l) k)
+Proof
+  rpt strip_tac
+  >> `comp_ignore_bind (new_block l) k =
+      comp_ignore_bind (comp_ignore_bind (new_block l) (comp_return ())) k`
+       by (simp[comp_ignore_bind_def, comp_bind_def, comp_return_def,
+                FUN_EQ_THM, pairTheory.FORALL_PROD] >> gen_tac >>
+           Cases_on `new_block l x` >> simp[])
+  >> pop_assum SUBST1_TAC
+  >> irule entry_action_ignore_bind
+  >> simp[entry_action_new_block_unit]
 QED
