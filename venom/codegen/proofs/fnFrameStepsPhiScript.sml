@@ -1959,3 +1959,33 @@ Proof
   first_x_assum irule >> gvs[listTheory.ALL_DISTINCT_APPEND] >>
   qexistsl_tac [`inst`, `s`] >> simp[]
 QED
+
+Theorem phi_eval_member_result:
+  !insts s final inst.
+    eval_phis s insts = OK final /\ EVERY (\i. i.inst_opcode = PHI) insts /\
+    MEM inst insts ==> ?out value. eval_one_phi s inst = SOME (out,value)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `eval_phis s (head::tail)` >>
+  simp[eval_phis_def] >> strip_tac >>
+  Cases_on `eval_one_phi s head` >> gvs[] >>
+  rename1 `eval_one_phi s head = SOME result` >> PairCases_on `result` >>
+  Cases_on `eval_phis s tail` >> gvs[] >> metis_tac[]
+QED
+
+Theorem phi_eval_member_output_agree:
+  eval_phis s insts = OK final /\ eval_phis s prefix = OK partial /\
+  EVERY (\i. i.inst_opcode = PHI) insts /\
+  EVERY (\i. i.inst_opcode = PHI) prefix /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) prefix)) /\
+  MEM inst insts /\ MEM inst prefix /\ MEM out inst.inst_outputs ==>
+  FLOOKUP partial.vs_vars out = FLOOKUP final.vs_vars out
+Proof
+  strip_tac >>
+  `?name value. eval_one_phi s inst = SOME (name,value)` by
+    metis_tac[phi_eval_member_result] >>
+  `inst.inst_outputs = [name]` by
+    metis_tac[venomExecProofsTheory.eval_one_phi_imp_inst_outputs] >>
+  gvs[] >> metis_tac[phi_eval_member_value]
+QED
