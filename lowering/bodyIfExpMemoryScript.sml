@@ -1468,6 +1468,36 @@ Proof
        assign_subscripts_def] >> EVAL_TAC >> simp[]
 QED
 
+Theorem ifexp_entry_pop_metadata_probe[local]:
+  !historical.
+  entry = <|assignable := T;
+    type := ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1);
+    value := ArrayV (DynArrayV (if historical then [] else
+      [ArrayV (DynArrayV [IntV 7]) ]));
+    popped := if historical then
+      [([ValueSubscript (IntV 0)], ArrayV (DynArrayV [IntV 7]))] else []|> /\
+  entry' = entry with <|
+    value := ArrayV (DynArrayV (if historical then [] else [ArrayV (DynArrayV [])]));
+    popped := ([ValueSubscript (IntV 0);ValueSubscript (IntV 0)], IntV 7)::
+      (if historical then
+        [([ValueSubscript (IntV 0)],ArrayV (DynArrayV []))] else [])|> ==>
+  entry_pop_step entry [ValueSubscript (IntV 0)] entry' /\
+  subscripts_type entry.type [ValueSubscript (IntV 0);ValueSubscript (IntV 0)] =
+    SOME (BaseTV BoolT) /\
+  read_memory_path entry [ValueSubscript (IntV 0);ValueSubscript (IntV 0)] = INL (IntV 7) /\
+  read_memory_path entry' [ValueSubscript (IntV 0);ValueSubscript (IntV 0)] = INL (IntV 7) /\
+  read_memory_path entry' [ValueSubscript (IntV 0)] = INL (ArrayV (DynArrayV []))
+Proof
+  Cases_on `historical` >> rpt strip_tac >> gvs[] >>
+  simp[vyperPlaceResultTypingTheory.entry_pop_step_def,
+       read_memory_path_def, evaluate_subscripts_def, read_popped_def,
+       replace_popped_def, record_pop_def, subscripts_type_def, subscript_type_def,
+       vyperValueOperationTheory.popped_value_def,
+       vyperValueOperationTheory.pop_element_def, assign_subscripts_def] >>
+  EVAL_TAC >> simp[vyperValueOperationTheory.popped_value_def,
+    vyperValueOperationTheory.pop_element_def, oEL_THM]
+QED
+
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
   (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
