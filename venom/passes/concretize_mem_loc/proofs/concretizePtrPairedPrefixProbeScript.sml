@@ -2,6 +2,7 @@ Theory concretizePtrPairedPrefixProbe
 Ancestors
   concretizePtrPairedPrefix concretizePtrValueTransport
   concretizePtrValueSelection concretizePtrAffineTransport
+  concretizePtrOwnedAssignPrefix concretizePtrSharedFields
   concretizePtrChronologicalHistory
   concretizePtrDeletedGapHistory concretizePtrSourceOwnership
   concretizePtrLedgerAlignment makeSsaHelper o1PassContract unitTransformDefs
@@ -126,4 +127,20 @@ Proof
   >- simp[ptr_gap_scan_def] >>
   `0 < EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx` by decide_tac >>
   simp[ptr_gap_scan_fields]
+QED
+
+Theorem ptr_paired_gap_scan_sample:
+  fn_inst_wf a.po_fn /\ MEM bb a.po_fn.fn_blocks /\
+  a.po_inst = EL a.po_state.vs_inst_idx bb.bb_instructions /\
+  a.po_state.vs_inst_idx + n < LENGTH bb.bb_instructions /\
+  (!q. a.po_state.vs_inst_idx <= q /\ q < a.po_state.vs_inst_idx + n ==>
+    (EL q bb.bb_instructions).inst_opcode = NOP) /\
+  ptr_paired_sample positions a at
+    (tokens,registry,births,PT,TG,saved,entries) ==>
+  ptr_paired_sample positions (ptr_gap_scan bb n a) at
+    (tokens,registry,births,PT,ptr_gap_tag_scan bb n a PT TG,saved,entries)
+Proof
+  simp[ptr_paired_sample_def] >> strip_tac >> conj_tac
+  >- (irule ptr_assign_prefix_gap_transport >> simp[]) >>
+  gvs[ptr_gap_scan_fields, ptr_shared_fields_def]
 QED
