@@ -2904,3 +2904,191 @@ Proof
     irule cse_prefix_last_write_binding >> metis_tac[]) >>
  metis_tac[]
 QED
+
+Theorem cse_event_covers_points:
+ cse_event_covers ev bb k inst ==>
+ MEM ((bb.bb_label,k),SOME (j,k)) (cse_event_points j ev)
+Proof
+ Cases_on `ev` >>
+ simp[cse_event_covers_def, cse_event_points_def, MEM_GENLIST] >>
+ rpt strip_tac >> gvs[]
+QED
+
+Theorem cse_history_covers_points:
+ !events start j bb k inst.
+ j < LENGTH events /\ cse_event_covers (EL j events) bb k inst ==>
+ MEM ((bb.bb_label,k),SOME (start+j,k)) (cse_history_points start events)
+Proof
+ Induct >> simp[cse_history_points_def] >> rpt gen_tac >>
+ Cases_on `j`
+ >- (simp[] >> metis_tac[cse_event_covers_points]) >>
+ simp[cse_history_points_def] >> strip_tac >>
+ first_x_assum drule >> disch_then (qspec_then `SUC start` mp_tac) >>
+ simp[arithmeticTheory.ADD_CLAUSES] >> metis_tac[]
+QED
+
+Theorem cse_prefix_covered_point_has_id:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ MEM ev events /\ cse_event_covers ev bb k inst ==>
+ cse_point_has_id fn (bb.bb_label,k) inst.inst_id
+Proof
+ strip_tac >> drule_all cse_prefix_event_provenance >>
+ Cases_on `ev` >> gvs[cse_event_covers_def, cse_point_has_id_def,
+                          get_instruction_def, AllCaseEqs()] >>
+ metis_tac[lookup_block_label]
+QED
+
+Theorem cse_point_identifies_member[local]:
+ wf_function fn /\ MEM inst (fn_insts fn) /\
+ cse_point_has_id fn (lbl,k) inst.inst_id ==>
+ ?bb. lookup_block lbl fn.fn_blocks = SOME bb /\
+      get_instruction bb k = SOME inst
+Proof
+ strip_tac >>
+ `!bbs. MEM inst (fn_insts_blocks bbs) ==>
+   ?b. MEM b bbs /\ MEM inst b.bb_instructions` by
+   (Induct >> simp[fn_insts_blocks_def] >> metis_tac[]) >>
+ `?b. MEM b fn.fn_blocks /\ MEM inst b.bb_instructions` by
+   metis_tac[fn_insts_def] >>
+ `?i. i < LENGTH b.bb_instructions /\ EL i b.bb_instructions = inst` by
+   metis_tac[MEM_EL] >>
+ `lookup_block b.bb_label fn.fn_blocks = SOME b` by
+   (gvs[wf_function_def, fn_labels_def] >> metis_tac[MEM_lookup_block]) >>
+ `cse_point_has_id fn (b.bb_label,i) inst.inst_id` by
+   (simp[cse_point_has_id_def] >> metis_tac[]) >>
+ `(lbl,k) = (b.bb_label,i)` by metis_tac[cse_point_has_id_injective] >>
+ gvs[get_instruction_def]
+QED
+
+Theorem cse_prefix_event_point_instruction[local]:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\ MEM ev events /\
+ MEM ((lbl,k),tag) (cse_event_points start ev) /\
+ MEM inst (fn_insts fn) /\ cse_point_has_id fn (lbl,k) inst.inst_id ==>
+ tag = SOME (start,k) /\ ?b. cse_event_covers ev b k inst
+Proof
+ strip_tac >> drule_all cse_point_identifies_member >> strip_tac >>
+ drule_all cse_prefix_event_provenance >>
+ Cases_on `ev` >> gvs[cse_event_points_def, MEM_GENLIST] >>
+ rpt strip_tac >> gvs[]
+ >- (`v.vs_current_bb = b.bb_label` by metis_tac[lookup_block_label] >>
+     gvs[] >> simp[cse_event_covers_def] >> metis_tac[]) >>
+ `v.vs_current_bb = b.bb_label` by metis_tac[lookup_block_label] >>
+ gvs[] >> Cases_on `is_terminator i.inst_opcode` >>
+ gvs[cse_event_covers_def, get_instruction_def]
+QED
+
+Theorem cse_event_copy_cover_unique[local]:
+ cse_event_covers ev db dk definst /\
+ cse_event_covers ev cb ck copy /\ copy.inst_opcode = ASSIGN ==>
+ definst = copy
+Proof
+ Cases_on `ev` >> simp[cse_event_covers_def] >> strip_tac >> gvs[] >>
+ qspec_then `b.bb_instructions` mp_tac
+   analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+ rewrite_tac[EVERY_EL] >> disch_then (qspec_then `ck` mp_tac) >>
+ gvs[get_instruction_def, LENGTH_TAKE, EL_TAKE, phi_prefix_length_le]
+QED
+
+Theorem cse_prefix_history_point_instruction[local]:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\ MEM inst (fn_insts fn) ==>
+ !tail start lbl k tag.
+ EVERY (\ev. MEM ev events) tail /\
+ MEM ((lbl,k),tag) (cse_history_points start tail) /\
+ cse_point_has_id fn (lbl,k) inst.inst_id ==>
+ ?pre ev post b. tail = pre ++ ev::post /\
+ tag = SOME (start + LENGTH pre,k) /\ cse_event_covers ev b k inst
+Proof
+ strip_tac >> Induct >> simp[cse_history_points_def] >>
+ rpt gen_tac >> strip_tac
+ >- (drule_all cse_prefix_event_point_instruction >> strip_tac >>
+     qexistsl [`[]`, `h`, `tail`, `b`] >> simp[]) >>
+ first_x_assum drule_all >> strip_tac >>
+ qexistsl [`h::pre`, `ev`, `post`, `b`] >>
+ simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem cse_prefix_copy_suffix_crossing:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_id <> use.inst_id /\
+ cse_path_preorder fn d copy.inst_id /\ d <> copy.inst_id /\
+ cse_path_preorder fn copy.inst_id use.inst_id /\
+ j < LENGTH events /\ cse_event_covers (EL j events) db dk definst /\
+ definst.inst_id = d ==>
+ ?i cb ck. j < i /\ i < LENGTH events /\
+   cse_event_covers (EL i events) cb ck copy
+Proof
+ strip_tac >>
+ `MEM (EL j events) events` by metis_tac[EL_MEM] >>
+ `MEM ((db.bb_label,dk),SOME (j,dk)) (cse_history_points 0 events)` by
+   (drule_all cse_history_covers_points >>
+    disch_then (qspec_then `0` mp_tac) >> simp[]) >>
+ drule cse_history_points_cut >> strip_tac >>
+ `cse_point_has_id fn (db.bb_label,dk) d` by
+   metis_tac[cse_prefix_covered_point_has_id] >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ `cse_point_has_id fn (bb.bb_label,s.vs_inst_idx) use.inst_id` by
+   (gvs[cse_point_has_id_def, get_instruction_def, AllCaseEqs()] >> metis_tac[]) >>
+ `cse_static_trace fn (cse_project_trace events (CseExec n bb s))` by
+   metis_tac[cse_prefix_project_exec] >>
+ qpat_x_assum `cse_static_trace fn _` mp_tac >>
+ pure_rewrite_tac[cse_project_trace_def, cse_phase_point_def] >>
+ qpat_assum `cse_history_points 0 events = _` (fn th => rewrite_tac[th]) >>
+ rewrite_tac[MAP_APPEND, MAP, APPEND_ASSOC] >> strip_tac >>
+ `?q. MEM q (MAP FST (right ++ cse_history_points (SUC j) post) ++
+                [(bb.bb_label,s.vs_inst_idx)]) /\
+       cse_point_has_id fn q copy.inst_id` by
+   (irule cse_path_preorder_suffix_crossing >> simp[] >>
+    qexistsl [`use.inst_id`, `d`, `(db.bb_label,dk)`,
+              `MAP FST (cse_history_points 0 pre) ++ MAP FST left`] >>
+    pure_asm_rewrite_tac[] >> simp_tac bool_ss [] >> conj_tac
+    >- (qpat_x_assum `cse_static_trace fn _` mp_tac >>
+        pure_rewrite_tac[MAP_APPEND, GSYM APPEND_ASSOC, APPEND] >>
+        metis_tac[]) >>
+    once_rewrite_tac[GSYM APPEND] >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.LAST_APPEND_NOT_NIL,
+                     LAST_DEF, NOT_CONS_NIL] >>
+    simp_tac bool_ss [rich_listTheory.LAST_APPEND_NOT_NIL, LAST_DEF,
+                      NOT_CONS_NIL] >> metis_tac[]) >>
+ suspend "extract"
+QED
+
+Resume cse_prefix_copy_suffix_crossing[extract]:
+ `~cse_point_has_id fn (bb.bb_label,s.vs_inst_idx) copy.inst_id` by
+   (gvs[cse_point_has_id_def] >> metis_tac[]) >>
+ `MEM q (MAP FST (right ++ cse_history_points (SUC j) post))` by
+   metis_tac[MEM_APPEND, MEM] >>
+ qpat_x_assum `MEM q (MAP FST _)` mp_tac >>
+ pure_rewrite_tac[MEM_MAP] >> strip_tac >>
+ PairCases_on `y` >> rule_assum_tac (PURE_REWRITE_RULE [pairTheory.FST]) >>
+ qpat_x_assum `q = _` SUBST_ALL_TAC >>
+ Cases_on `MEM ((y0,y1),y2) right`
+ >- (`MEM ((y0,y1),y2) (cse_event_points j ev)` by
+       metis_tac[MEM_APPEND, MEM] >>
+     `MEM ev events` by metis_tac[MEM_APPEND, MEM] >>
+     `?b. cse_event_covers ev b y1 copy` by
+       metis_tac[cse_prefix_event_point_instruction] >>
+     `cse_event_covers ev db dk definst` by
+       (qpat_x_assum `cse_event_covers (EL j events) _ _ _` mp_tac >>
+        simp[EL_APPEND_EQN]) >>
+     metis_tac[cse_event_copy_cover_unique]) >>
+ `MEM ((y0,y1),y2) (cse_history_points (SUC j) post)` by
+   metis_tac[MEM_APPEND] >>
+ `EVERY (\e. MEM e events) post` by
+   (simp[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
+ drule_all cse_prefix_history_point_instruction >> strip_tac >>
+ qexistsl [`SUC j + LENGTH pre'`, `b`, `y1`] >>
+ conj_tac >- decide_tac >>
+ conj_tac >- (gvs[] >> simp[] >> decide_tac) >>
+ qpat_assum `events = pre ++ ev::post` (fn th => rewrite_tac[th]) >>
+ qpat_assum `post = pre' ++ _` (fn th => rewrite_tac[th]) >>
+ simp[EL_APPEND_EQN, arithmeticTheory.ADD1] >>
+ pure_rewrite_tac[GSYM arithmeticTheory.ADD1, EL] >>
+ simp[EL_APPEND_EQN]
+QED
+Finalise cse_prefix_copy_suffix_crossing
