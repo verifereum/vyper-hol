@@ -209,3 +209,70 @@ Proof
   `LENGTH bb.bb_instructions = SUC (LENGTH (get_params bb.bb_instructions) + k)` by
     decide_tac >> AP_TERM_TAC >> decide_tac
 QED
+
+Theorem analyzed_entry_prefix_support:
+  !fn bb n v.
+    codegen_ready_fn fn /\ entry_block fn = SOME bb /\
+    n <= LENGTH bb.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label n) ==>
+    demand_available fn bb n v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn.fn_blocks <> [] /\ bb = HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[entry_block_def]) >>
+  `MEM bb fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `fn_reachable fn bb.bb_label` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_reachable_def, fn_entry_label_def] >>
+     metis_tac[relationTheory.RTC_REFL]) >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfg_analyze_reachable_sets >> simp[pred_setTheory.EXTENSION] >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
+  `live_vars_at (liveness_analyze fn) bb.bb_label 0 = []` by
+    metis_tac[analyzed_entry_live_empty] >>
+  qpat_x_assum `bb = HD _` kall_tac >>
+  drule_all live_prefix_demand >>
+  simp[MEM_FLAT, MEM_MAP] >> strip_tac >>
+  qpat_x_assum `MEM _ (TAKE _ _)` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `j < LENGTH (TAKE n bb.bb_instructions)` >>
+  `j < n /\ j < LENGTH bb.bb_instructions` by gvs[LENGTH_TAKE] >>
+  `MEM v (EL j bb.bb_instructions).inst_outputs` by
+    gvs[EL_TAKE, inst_defs_def] >>
+  irule demand_available_mono >> qexists_tac `SUC j` >> simp[] >>
+  irule current_output_demand_available_suc >> simp[]
+QED
+
+Theorem initial_parameter_definition_support:
+  !fn ch growth spill_base lbl_ctr ps v.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    ps = SND (prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    demand_available fn (HD fn.fn_blocks)
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_parameter_inventory >> strip_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))` by
+    (gvs[pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[]) >>
+  `entry_block fn = SOME (HD fn.fn_blocks)` by
+    (Cases_on `fn.fn_blocks` >> gvs[entry_block_def]) >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <=
+      LENGTH (HD fn.fn_blocks).bb_instructions` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  irule analyzed_entry_prefix_support >> simp[]
+QED
+
+Theorem ready_entry_no_clean:
+  !fn. codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+    cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []
+Proof
+  rpt strip_tac >> gvs[codegen_ready_fn_def, block_entries_ready_def] >>
+  Cases_on `fn.fn_blocks` >> gvs[entry_block_def, NULL_EQ]
+QED
