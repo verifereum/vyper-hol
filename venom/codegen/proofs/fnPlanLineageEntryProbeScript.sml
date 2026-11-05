@@ -462,3 +462,364 @@ Proof
 QED
 
 
+Theorem residual_pressure_liveness_cache:
+  liveness_analyze residual_pressure_fn =
+<|ds_inst :=
+    FEMPTY⟨
+      ("entry",0) ↦ []; ("entry",1) ↦ ["v00"]; ("entry",2) ↦ ["v01"; "v00"];
+      ("entry",3) ↦ ["v02"; "v01"; "v00"]; ("entry",4) ↦ ["v03"; "v02"; "v01"; "v00"];
+      ("entry",5) ↦ ["v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",6) ↦ ["v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",7) ↦ ["v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",8) ↦ ["v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",9) ↦ ["v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",10) ↦ ["v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",11) ↦ ["v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",12) ↦
+        ["v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",13) ↦
+        ["v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+      ("entry",14) ↦
+        ["v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01";
+         "v00"];
+      ("entry",15) ↦
+        ["v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02";
+         "v01"; "v00"];
+      ("entry",16) ↦
+        ["v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03";
+         "v02"; "v01"; "v00"];
+      ("entry",17) ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"];
+      ("entry",18) ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"]
+    ⟩ ⊌
+    (FEMPTY⟨
+       ("entry",0) ↦ []; ("entry",1) ↦ ["v00"]; ("entry",2) ↦ ["v01"; "v00"];
+       ("entry",3) ↦ ["v02"; "v01"; "v00"]; ("entry",4) ↦ ["v03"; "v02"; "v01"; "v00"];
+       ("entry",5) ↦ ["v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",6) ↦ ["v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",7) ↦ ["v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",8) ↦ ["v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",9) ↦ ["v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",10) ↦ ["v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",11) ↦ ["v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",12) ↦
+         ["v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",13) ↦
+         ["v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+       ("entry",14) ↦
+         ["v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01";
+          "v00"];
+       ("entry",15) ↦
+         ["v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02";
+          "v01"; "v00"];
+       ("entry",16) ↦
+         ["v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03";
+          "v02"; "v01"; "v00"];
+       ("entry",17) ↦
+         ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+          "v03"; "v02"; "v01"; "v00"];
+       ("entry",18) ↦
+         ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+          "v03"; "v02"; "v01"; "v00"]
+     ⟩ ⊌
+     (FEMPTY⟨
+        ("R",0) ↦
+          ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+           "v04"; "v03"; "v02"; "v01"; "v00"];
+        ("R",1) ↦
+          ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+           "v04"; "v03"; "v02"; "v01"; "v00"; "b"];
+        ("R",2) ↦
+          ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+           "v04"; "v03"; "v02"; "v01"; "v00"; "b"]
+      ⟩ ⊌
+      (FEMPTY⟨
+         ("L",0) ↦
+           ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+            "v04"; "v03"; "v02"; "v01"; "v00"];
+         ("L",1) ↦
+           ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+            "v04"; "v03"; "v02"; "v01"; "v00"; "a"];
+         ("L",2) ↦
+           ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+            "v04"; "v03"; "v02"; "v01"; "v00"; "a"]
+       ⟩ ⊌
+       (FEMPTY⟨
+          ("entry",0) ↦ []; ("entry",1) ↦ ["v00"]; ("entry",2) ↦ ["v01"; "v00"];
+          ("entry",3) ↦ ["v02"; "v01"; "v00"]; ("entry",4) ↦ ["v03"; "v02"; "v01"; "v00"];
+          ("entry",5) ↦ ["v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",6) ↦ ["v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",7) ↦ ["v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",8) ↦ ["v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",9) ↦ ["v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",10) ↦ ["v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",11) ↦
+            ["v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",12) ↦
+            ["v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",13) ↦
+            ["v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02"; "v01";
+             "v00"];
+          ("entry",14) ↦
+            ["v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03"; "v02";
+             "v01"; "v00"];
+          ("entry",15) ↦
+            ["v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04"; "v03";
+             "v02"; "v01"; "v00"];
+          ("entry",16) ↦
+            ["v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+             "v03"; "v02"; "v01"; "v00"];
+          ("entry",17) ↦
+            ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+             "v04"; "v03"; "v02"; "v01"; "v00"];
+          ("entry",18) ↦
+            ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+             "v04"; "v03"; "v02"; "v01"; "v00"]
+        ⟩ ⊌
+        (FEMPTY⟨
+           ("L",0) ↦
+             ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+              "v04"; "v03"; "v02"; "v01"; "v00"];
+           ("L",1) ↦
+             ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+              "v04"; "v03"; "v02"; "v01"; "v00"; "a"];
+           ("L",2) ↦
+             ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+              "v04"; "v03"; "v02"; "v01"; "v00"; "a"]
+         ⟩ ⊌
+         (FEMPTY⟨
+            ("R",0) ↦
+              ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+               "v04"; "v03"; "v02"; "v01"; "v00"];
+            ("R",1) ↦
+              ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+               "v04"; "v03"; "v02"; "v01"; "v00"; "b"];
+            ("R",2) ↦
+              ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+               "v04"; "v03"; "v02"; "v01"; "v00"; "b"]
+          ⟩ ⊌
+          (FEMPTY⟨
+             ("J",0) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"; "v03"; "v02"; "v01"; "v00"; "a"; "b"];
+             ("J",1) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"; "v03"; "v02"; "v01"; "v00"; "x"];
+             ("J",2) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"; "v03"; "v02"; "v01"; "v00"];
+             ("J",3) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"; "v03"; "v02"; "v01"];
+             ("J",4) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"; "v03"; "v02"];
+             ("J",5) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"; "v03"];
+             ("J",6) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05";
+                "v04"];
+             ("J",7) ↦
+               ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"];
+             ("J",8) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"];
+             ("J",9) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"];
+             ("J",10) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"];
+             ("J",11) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"];
+             ("J",12) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"];
+             ("J",13) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"];
+             ("J",14) ↦ ["v16"; "v15"; "v14"; "v13"; "v12"];
+             ("J",15) ↦ ["v16"; "v15"; "v14"; "v13"]; ("J",16) ↦ ["v16"; "v15"; "v14"];
+             ("J",17) ↦ ["v16"; "v15"]; ("J",18) ↦ ["v16"]; ("J",19) ↦ []; ("J",20) ↦ []
+           ⟩ ⊌ (FEMPTY⟨("exit",0) ↦ []; ("exit",1) ↦ []⟩ ⊌ FEMPTY))))))));
+  ds_boundary :=
+    FEMPTY⟨
+      "entry" ↦ []; "entry" ↦ [];
+      "R" ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"];
+      "L" ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"]; "entry" ↦ [];
+      "L" ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"];
+      "R" ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"];
+      "J" ↦
+        ["v16"; "v15"; "v14"; "v13"; "v12"; "v11"; "v10"; "v09"; "v08"; "v07"; "v06"; "v05"; "v04";
+         "v03"; "v02"; "v01"; "v00"; "a"; "b"]; "exit" ↦ []; "exit" ↦ []; "J" ↦ []; "R" ↦ [];
+      "L" ↦ []; "entry" ↦ []
+    ⟩|>
+Proof
+  CONV_TAC (LAND_CONV EVAL) >> REFL_TAC
+QED
+
+Definition residual_pressure_entry_def:
+  residual_pressure_entry =
+    <|ps_stack :=
+       [Var "v01"; Var "v02"; Var "v03"; Var "v04"; Var "v05"; Var "v06"; Var "v07"; Var "v08";
+        Var "v09"; Var "v10"; Var "v11"; Var "v12"; Var "v13"; Var "v14"; Var "v15"; Var "v00";
+        Var "v16"]; ps_spilled := FEMPTY;
+     ps_alloc := <|sa_free_slots := []; sa_next_offset := 0; sa_spill_base := 0|>;
+     ps_label_counter := 0; ps_cleanup_height := NONE; ps_cleanup_growth := [];
+     ps_cleanup_promised := F|>
+End
+
+Theorem residual_pressure_entry_result:
+  ?ops. generate_block_plan (liveness_analyze residual_pressure_fn)
+    (dfg_build_function residual_pressure_fn) (cfg_analyze residual_pressure_fn)
+    residual_pressure_fn (EL 0 residual_pressure_fn.fn_blocks) entry_probe_start =
+      SOME (ops, residual_pressure_entry)
+Proof
+  pure_rewrite_tac [residual_pressure_liveness_cache] >>
+  CONV_TAC (PAT_CONV ``?ops. generate_block_plan lv dg cg fn bb start =
+    SOME (ops, residual_pressure_entry)`` EVAL) >>
+  EVAL_TAC >> simp[] >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qmatch_goalsub_abbrev_tac `ops = _` >> qexists_tac `ops` >> simp[]
+QED
+
+Theorem residual_pressure_entry_step:
+  residual_step residual_pressure_fn 0 entry_probe_start = residual_pressure_entry
+Proof
+  strip_assume_tac residual_pressure_entry_result >>
+  simp[residual_step_def]
+QED
+
+Definition residual_pressure_incoming_def:
+  residual_pressure_incoming (side:num) =
+    <|ps_stack :=
+       [Var "v16"; Var "v15"; Var "v14"; Var "v13"; Var "v12"; Var "v11"; Var "v10"; Var "v09";
+        Var "v08"; Var "v07"; Var "v06"; Var "v05"; Var "v04"; Var "v03"; Var "v02"; Var "v01";
+        Var "v00"; Var (if side = 1 then "a" else "b")]; ps_spilled := FEMPTY;
+     ps_alloc :=
+       <|sa_free_slots :=
+           [0; 32; 64; 96; 128; 160; 192; 224; 256; 288; 320; 352; 384; 416; 448; 480; 512; 544];
+         sa_next_offset := 576; sa_spill_base := 0|>; ps_label_counter := 0;
+     ps_cleanup_height := NONE; ps_cleanup_growth := []; ps_cleanup_promised := F|>
+End
+
+Theorem residual_pressure_sides_result:
+  !side. MEM side [1;2] ==>
+    ?ops. generate_block_plan (liveness_analyze residual_pressure_fn)
+      (dfg_build_function residual_pressure_fn) (cfg_analyze residual_pressure_fn)
+      residual_pressure_fn (EL side residual_pressure_fn.fn_blocks) residual_pressure_entry =
+        SOME (ops, residual_pressure_incoming side)
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac [residual_pressure_liveness_cache] >>
+  CONV_TAC (PAT_CONV ``?ops. generate_block_plan lv dg cg fn bb start =
+    SOME (ops, result)`` EVAL) >>
+  EVAL_TAC >> simp[] >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qmatch_goalsub_abbrev_tac `ops = _` >> qexists_tac `ops` >> simp[]
+QED
+
+Theorem residual_pressure_incoming_steps:
+  !side. MEM side [1;2] ==>
+    residual_incoming residual_pressure_fn side = residual_pressure_incoming side
+Proof
+  rpt strip_tac >> drule residual_pressure_sides_result >> strip_tac >>
+  simp[residual_incoming_def, residual_pressure_entry_step, residual_step_def]
+QED
+
+Definition residual_pressure_post_phi_def:
+  residual_pressure_post_phi = residual_pressure_incoming 1 with ps_stack :=
+    MAP Var (REVERSE residual_pressure_names) ++ [Var "x"]
+End
+
+Theorem residual_pressure_phi_boundary:
+  !side. MEM side [1;2] ==>
+    clean_stack_plan (liveness_analyze residual_pressure_fn) (cfg_analyze residual_pressure_fn)
+      residual_pressure_fn (EL 3 residual_pressure_fn.fn_blocks)
+      (residual_pressure_incoming side) = ([], residual_pressure_incoming side) /\
+    residual_phi residual_pressure_fn 3 (residual_pressure_incoming side) =
+      residual_pressure_post_phi
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac [residual_pressure_liveness_cache] >> EVAL_TAC
+QED
+
+Theorem residual_pressure_join_success:
+  !side. MEM side [1;2] ==>
+    IS_SOME (generate_block_plan (liveness_analyze residual_pressure_fn)
+      (dfg_build_function residual_pressure_fn) (cfg_analyze residual_pressure_fn)
+      residual_pressure_fn (EL 3 residual_pressure_fn.fn_blocks)
+      (residual_pressure_incoming side))
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.MEM] >> rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac [residual_pressure_liveness_cache] >>
+  CONV_TAC (PAT_CONV ``IS_SOME (generate_block_plan lv dg cg fn bb start)`` EVAL) >>
+  EVAL_TAC
+QED
+
+Definition residual_pressure_post_ordinary_def:
+  residual_pressure_post_ordinary = residual_pressure_post_phi with ps_stack :=
+    MAP Var (REVERSE residual_pressure_names)
+End
+
+Theorem residual_pressure_ordinary_result:
+  ?ops. generate_inst_plan (liveness_analyze residual_pressure_fn)
+    (dfg_build_function residual_pressure_fn) (cfg_analyze residual_pressure_fn)
+    residual_pressure_fn (EL 1 (EL 3 residual_pressure_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze residual_pressure_fn) "J" 2) F T "J"
+    residual_pressure_post_phi = SOME (ops,residual_pressure_post_ordinary)
+Proof
+  pure_rewrite_tac [residual_pressure_liveness_cache] >>
+  CONV_TAC (PAT_CONV ``?ops. generate_inst_plan lv dg cg fn inst live F T "J" start =
+    SOME (ops,result)`` EVAL) >>
+  EVAL_TAC >> simp[] >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qmatch_goalsub_abbrev_tac `ops = _` >> qexists_tac `ops` >> simp[]
+QED
+
+Theorem residual_pressure_join_reachable:
+  fn_reachable residual_pressure_fn "J"
+Proof
+  simp[venomWfTheory.fn_reachable_def] >> qexists_tac `"entry"` >>
+  conj_tac >- EVAL_TAC >>
+  irule relationTheory.RTC_TRANS >> qexists_tac `"L"` >> conj_tac
+  >- (irule relationTheory.RTC_SINGLE >> simp[venomWfTheory.fn_cfg_edge_def] >>
+      qexists_tac `EL 0 residual_pressure_fn.fn_blocks` >> EVAL_TAC) >>
+  irule relationTheory.RTC_SINGLE >> simp[venomWfTheory.fn_cfg_edge_def] >>
+  qexists_tac `EL 1 residual_pressure_fn.fn_blocks` >> EVAL_TAC
+QED
+
+Theorem residual_pressure_join_dominators:
+  fn_dominates residual_pressure_fn "entry" "J" /\
+  fn_dominates residual_pressure_fn "J" "J"
+Proof
+  simp[venomWfTheory.fn_dominates_def, residual_pressure_join_reachable] >> conj_tac
+  >- (rpt strip_tac >> `fn_entry_label residual_pressure_fn = SOME "entry"` by EVAL_TAC >>
+      gvs[] >> Cases_on `path` >> gvs[]) >>
+  rpt strip_tac >> Cases_on `path` >> gvs[] >>
+  qspecl_then [`h`, `t`] mp_tac rich_listTheory.MEM_LAST >> simp[]
+QED
+
+Theorem residual_pressure_post_phi_inventory:
+  ALL_DISTINCT residual_pressure_post_phi.ps_stack /\
+  residual_pressure_post_phi.ps_spilled = FEMPTY /\
+  ~MEM (Var "a") residual_pressure_post_phi.ps_stack /\
+  ~MEM (Var "b") residual_pressure_post_phi.ps_stack /\
+  ~MEM (Var "y") residual_pressure_post_phi.ps_stack /\
+  EVERY (\v. MEM (Var v) residual_pressure_post_phi.ps_stack ==>
+    LIST_ELEM_COUNT (Var v) residual_pressure_post_phi.ps_stack = 1)
+    ("x" :: residual_pressure_names)
+Proof
+  EVAL_TAC
+QED
+
+(* Staged pressure observation: both successful predecessors restore all 18
+   join targets, leaving no spill-domain entries. The PHI replaces the unique
+   selected a/b by x; the other 17 names remain exactly once, below x. The
+   first ordinary ADD removes x and its dead output y, leaving those 17 names.
+   All residual names are defined in entry (which dominates J, checked above).
+   This fixture exercises transient spill/restore but NOT a nonempty spill
+   domain at the post-PHI boundary; it cannot certify that missing producer.
+   The loop fixture above similarly retains only the entry-defined t below x.
+   No universal residual-support or uniqueness theorem is inferred here. *)
