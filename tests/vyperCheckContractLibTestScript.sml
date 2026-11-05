@@ -981,6 +981,19 @@ fun check_rejects layouts mods = assert_none
 fun one_fn params ret body =
   ``[(NONE, [FunctionDecl External Nonpayable F F "f" ^params [] ^ret ^body])]
     : (num option # toplevel list) list``
+(* extract32 takes a dynamic Bytes source and an unsigned start, as Vyper's
+   Extract32._inputs (BytesT.any(), IntegerT.unsigneds()). *)
+val () = app (fn (params, expression) => check_rejects empty_layouts
+  (builtin_modules ``Pure`` params ``BaseT (UintT 256)`` expression))
+  [(``[("b", BaseT (BytesT (Fixed 32)))]``,
+    ``TypeBuiltin (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
+        [Name (BaseT (BytesT (Fixed 32))) "b";
+         Literal (BaseT (UintT 256)) (IntL 0)]``),
+   (``[("b", BaseT (BytesT (Dynamic 33)))]``,
+    ``TypeBuiltin (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
+        [Name (BaseT (BytesT (Dynamic 33))) "b";
+         Literal (BaseT (IntT 256)) (IntL (-1))]``)]
+
 val s10 = ``BaseT (StringT 10)``
 val s20 = ``BaseT (StringT 20)``
 val () = check_rejects empty_layouts
