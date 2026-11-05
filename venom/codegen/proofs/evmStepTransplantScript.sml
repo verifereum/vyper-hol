@@ -864,5 +864,30 @@ Theorem step_transplant_end:
     frame_outcome es (INL ()) es' e c'.returnData lgs /\
     (e = NONE ==> es'.rollback = t.rollback)
 Proof
-  cheat
+  strip_tac >>
+  `wf_context c` by gvs[wf_state_def] >>
+  Cases_on `step_inner (es with contexts := [(c,rb)])` >>
+  rename1 `step_inner (es with contexts := [(c,rb)]) = (res,u)` >>
+  drule_at (Pat `step_inner _ = _`) transplant_raw_boundary >> simp[] >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  Cases_on `res` >> gvs[transplant_step_eq, handle_def] >>
+  rename1 `handle_step err u = (INR e,t)` >>
+  `~vfm_abort err` by
+    (Cases_on `vfm_abort err` >>
+     gvs[handle_step_def, reraise_def]) >>
+  `step_inner (es with contexts := [(c,rb)]) = (INR err,u)` by
+    (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `same_frame_rel (es with contexts := [(c,rb)]) u` by
+    (drule_at (Pat `m s = _`) same_frame_or_grow_eq_length >> simp[]) >>
+  `u.txParams = es.txParams` by fs[same_frame_rel_def] >>
+  drule_at (Pat `wf_state _`) transplant_finalization_boundary >>
+  simp[] >>
+  disch_then (qspecl_then [`u`, `lgs`, `err`, `d`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `es with contexts := (c,rb)::rest = es` by
+    simp[vfmContextTheory.execution_state_component_equality] >>
+  gvs[] >>
+  qpat_x_assum `!rest'. step_inner _ = _`
+    (qspec_then `rest` mp_tac) >> simp[] >>
+  strip_tac >> simp[] >> metis_tac[]
 QED
