@@ -116,6 +116,36 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
+Theorem no_module_root_untyped[local]:
+  !env cx src id.
+    env_context_consistent env cx /\ get_module_code cx src = NONE ==>
+    type_place_target env (TopLevelNameTarget (src,id)) = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >> simp[] >>
+  gvs[type_place_target_TopLevelNameTarget, env_context_consistent_def] >>
+  TRY (Cases_on `x`) >> gvs[] >> res_tac >> gvs[]
+QED
+
+(* A root in no module: the root does not type, so neither does the pop. *)
+Theorem pop_nested_no_module_sim[local]:
+  !ctx func cenv cx env ann bt ty es src id.
+    get_module_code cx src = NONE /\
+    expr_body_pre cenv cx env (Pop ann bt) es /\
+    target_root bt = TopLevelNameTarget (src,id) ==>
+    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env_context_consistent env cx` by
+    metis_tac[expr_body_pre_def, expr_sim_inv_def, env_consistent_def] >>
+  `type_place_target env (target_root bt) = NONE` by
+    metis_tac[no_module_root_untyped] >>
+  drule target_root_untyped >> strip_tac >>
+  `well_typed_expr env (Pop ann bt)` by metis_tac[expr_body_pre_def] >>
+  qpat_x_assum `well_typed_expr env (Pop ann bt)` mp_tac >>
+  simp[Once well_typed_expr_def]
+QED
+
 Theorem target_root_cases[local]:
   !bt. (?id. target_root bt = NameTarget id) \/
        (?src id. target_root bt = TopLevelNameTarget (src,id))
@@ -133,6 +163,14 @@ QED
 Theorem pop_nested_sim:
   !ctx func cenv cx env ann bt ty es.
     (~immutable_root cx bt ==> pop_target_frag ctx func cenv cx env bt es) /\
+    (immutable_root cx bt ==>
+     ?nocalls. target_idx_case nocalls ctx func cenv cx bt /\
+               (nocalls ==> int_calls_target bt = [])) /\
+    (immutable_root cx bt /\ cx.in_deploy ==>
+     cenv.ce_is_ctor /\
+     !src id ty0. target_root bt = TopLevelNameTarget (src,id) /\
+                  FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
+                  cenv.ce_module_var_type (src,id) = SOME ty0) /\
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
@@ -148,6 +186,12 @@ Proof
         find_var_decl_by_name id ts = NONE` by
     (rpt strip_tac >> Cases_on `find_var_decl_by_name id ts` >> metis_tac[]) >>
   Cases_on `cx.in_deploy`
-  >- (irule pop_nested_immutable_deploy_sim >> metis_tac[]) >>
+  >- (Cases_on `get_module_code cx src`
+      >- (irule pop_nested_no_module_sim >> metis_tac[]) >>
+      `immutable_root cx bt` by (simp[immutable_root_def] >> metis_tac[]) >>
+      gvs[] >> irule pop_nested_immutable_deploy_sim >>
+      rpt conj_tac
+      >- gvs[] >- gvs[] >- (qexistsl [`env`,`id`,`src`] >> gvs[]) >>
+      metis_tac[]) >>
   irule pop_nested_immutable_runtime_sim >> metis_tac[]
 QED
