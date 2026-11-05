@@ -481,6 +481,50 @@ Proof
   simp[pairTheory.LAMBDA_PROD]
 QED
 
+Definition phi_place_run_def:
+  phi_place_run om mt acc (placed:num list) (xs:string list) =
+    FOLDL (\(acc,placed) w.
+      case FLOOKUP om w of
+        SOME idx => if MEM idx placed then (acc,placed)
+          else (case FLOOKUP mt idx of
+            SOME src => (acc ++ [src],idx::placed) | NONE => (acc,placed))
+      | NONE => (acc ++ [w],placed)) (acc,placed) xs
+End
+
+Theorem phi_place_run_mem[local]:
+  !xs om mt acc placed v.
+    MEM v (FST (phi_place_run om mt acc placed xs)) <=>
+    MEM v acc \/ (MEM v xs /\ FLOOKUP om v = NONE) \/
+    (?i w. MEM w xs /\ FLOOKUP om w = SOME i /\
+      ~MEM i placed /\ FLOOKUP mt i = SOME v)
+Proof
+  Induct >- simp[phi_place_run_def] >>
+  rpt gen_tac >>
+  simp[Once phi_place_run_def, FOLDL] >>
+  Cases_on `FLOOKUP om h`
+  >- (simp[GSYM phi_place_run_def] >>
+      qpat_x_assum `!om mt acc placed v. _` kall_tac >>
+      simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      Cases_on `v = h` >> gvs[] >> metis_tac[]) >>
+  rename1 `FLOOKUP om h = SOME idx` >>
+  Cases_on `MEM idx placed`
+  >- (simp[GSYM phi_place_run_def] >>
+      qpat_x_assum `!om mt acc placed v. _` kall_tac >>
+      simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      Cases_on `v = h` >> gvs[] >> metis_tac[]) >>
+  Cases_on `FLOOKUP mt idx`
+  >- (simp[GSYM phi_place_run_def] >>
+      qpat_x_assum `!om mt acc placed v. _` kall_tac >>
+      simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      Cases_on `v = h` >> gvs[] >> metis_tac[]) >>
+  rename1 `FLOOKUP mt idx = SOME chosen` >>
+  simp[GSYM phi_place_run_def, MEM_APPEND] >>
+  qpat_x_assum `!om mt acc placed v. _` kall_tac >>
+  simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  Cases_on `v = chosen` >> gvs[] >>
+  Cases_on `v = h` >> gvs[] >> metis_tac[optionTheory.SOME_11]
+QED
+
 Theorem input_vars_from_collect[local]:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
