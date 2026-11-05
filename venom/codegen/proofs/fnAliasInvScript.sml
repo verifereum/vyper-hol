@@ -19,7 +19,45 @@ Ancestors
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
   venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
-  stackPlanOps reorderSim sorting
+  stackPlanOps reorderSim sorting genericInputReady
+
+Theorem alias_emit_reorder_consumed_window:
+  emit_input_plan opc inputs nl ps = (iops,prepared) /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  PERM inputs selected /\ LENGTH inputs <= 16 /\
+  reorder_plan dfg selected prepared = (rops,arranged) ==>
+  arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected
+Proof
+  `!xs : operand list. !ys.
+     (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
+     LENGTH xs <= LENGTH ys` by
+    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+     `MEM h ys` by
+       (simp[GSYM LIST_ELEM_COUNT_MEM] >>
+        first_x_assum (qspec_then `h` mp_tac) >>
+        simp[LIST_ELEM_COUNT_THM]) >>
+     qpat_x_assum `MEM h ys` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+     gvs[] >>
+     first_x_assum (qspec_then `l1 ++ l2` mp_tac) >>
+     impl_tac >-
+       (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
+        simp[elem_count_append, LIST_ELEM_COUNT_THM] >>
+        Cases_on `h = x` >> simp[LIST_ELEM_COUNT_THM] ) >>
+     simp[]) >>
+  rpt strip_tac >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  `LENGTH selected = LENGTH inputs` by metis_tac[PERM_LENGTH] >>
+  `!x. LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x prepared.ps_stack` by
+    metis_tac[] >>
+  `LENGTH selected <= LENGTH prepared.ps_stack` by metis_tac[] >>
+  match_mp_tac fixed_suffix_decompose >> conj_tac
+  >- (irule reorder_plan_materialised_length_floor >>
+      simp[] >> qexistsl [`dfg`, `rops`, `prepared`] >> simp[]) >>
+  rpt strip_tac >> irule reorder_plan_materialised_order >>
+  simp[] >> qexistsl [`dfg`, `rops`, `prepared`] >> simp[]
+QED
 
 (* Actual single steps followed by normalize_operand, including literal roots. *)
 Definition alias_assign_step_def:
