@@ -482,3 +482,38 @@ val () = List.app (fn th =>
         mapping_scratch_hash_flag, mapping_scratch_hash_bool,
         mapping_scratch_hash_address, mapping_scratch_hash_fixed_bytes,
         mapping_scratch_hash_dynamic_bytes, mapping_scratch_hash_string];
+
+Theorem compile_subscript_mapping_shape:
+  !cfn cenv ret_ty ty base_e idx_e sa out sb kt vt.
+  place_type cenv base_e = MapPT kt vt /\
+  compile_subscript cfn cenv ret_ty ty base_e idx_e sa = (out,sb) ==>
+  ?base_vv s1 key_op s2 hashed_key s3 slot.
+    cfn cenv ty base_e sa = (base_vv,s1) /\
+    lower_value cfn cenv (expr_type idx_e) idx_e s1 = (key_op,s2) /\
+    (if is_bytestring_type kt then compile_keccak256_key key_op F
+     else comp_return key_op) s2 = (hashed_key,s3) /\
+    compile_mapping_subscript (vv_operand base_vv) hashed_key s3 = (slot,sb) /\
+    out = LocatedValue ret_ty
+      (mk_ptr slot (case vv_location base_vv of SOME l => l | NONE => LocMemory))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_subscript _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_subscript_def, comp_bind_def, comp_return_def, LET_THM] >>
+  Cases_on `cfn cenv ty base_e sa` >> simp[] >>
+  rename1 `cfn cenv ty base_e sa = (base_vv,s1)` >>
+  Cases_on `lower_value cfn cenv (expr_type idx_e) idx_e s1` >> simp[] >>
+  rename1 `lower_value cfn cenv (expr_type idx_e) idx_e s1 = (key_op,s2)` >>
+  Cases_on `(if is_bytestring_type kt then compile_keccak256_key key_op F
+             else comp_return key_op) s2` >> simp[] >>
+  rename1 `(if is_bytestring_type kt then _ else _) s2 = (hashed_key,s3)` >>
+  Cases_on `compile_mapping_subscript (vv_operand base_vv) hashed_key s3` >>
+  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_subscript_mapping_shape)
+  in
+    if null axioms andalso null (Thm.hyp compile_subscript_mapping_shape) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping dispatch shape has unproved dependencies"
+  end;
