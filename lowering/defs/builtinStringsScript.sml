@@ -10,7 +10,8 @@
  * 3. Store at buf + n_digits - i (overlapping mstores)
  * 4. Store length and return pointer
  *
- * Mirrors Python: ~/vyper/vyper/codegen_venom/builtins/strings.py
+ * Mirrors Python: ~/vyper/vyper/codegen_venom/builtins/strings.py, except
+ * that the buffer is n_digits bytes larger (see compile_uint2str_def).
  *)
 
 Theory builtinStrings
@@ -24,8 +25,12 @@ Libs
    Returns pointer to [length][string_data] *)
 Definition compile_uint2str_def:
   compile_uint2str val_op n_digits buf_size =
-    do (* Output buffer: new_temporary_value(out_t), buf_size bytes *)
-       buf_alloc <- compile_alloc_buffer buf_size;
+    do (* Output buffer: buf_size + n_digits bytes.  Python allocates
+          buf_size (new_temporary_value(out_t)), but the result pointer sits
+          up to n_digits bytes into the buffer and callers copy buf_size
+          bytes from it (the staging copy and the storage copy of an
+          assignment), so the extra n_digits keep that read in the buffer. *)
+       buf_alloc <- compile_alloc_buffer (buf_size + n_digits);
        buf <- return buf_alloc.buf_operand;
        (* Mutable variables *)
        val_var <- fresh_var;
