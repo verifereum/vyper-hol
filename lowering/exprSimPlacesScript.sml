@@ -50,7 +50,8 @@ Theory exprSimPlaces
 Ancestors
   exprSimSubscriptMap exprSimSubscriptArray exprSimPopNestedTargetFrag
   exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
-  exprSimArrayIndex
+  exprSimArrayIndex targetPlaceSim targetPlaceSimCases exprSimPopNestedBase
+  exprSimPopNestedImmutableDeploy
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* ===== Subscripts ===== *)
@@ -223,16 +224,33 @@ QED
 
 (* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
    exprSimPopNested's pop_nested_sim, by the target's root, with the
-   target's fragment judgment from pop_nested_expr_target_frag. *)
+   target's fragment judgment from pop_nested_expr_target_frag; an
+   immutable root in the constructor by the residual
+   pop_nested_immutable_deploy_expr_case, since expr_sim_inv does not give
+   pop_nested_sim's constructor compile-env premises yet. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >> irule pop_nested_sim >>
-  qexists_tac `env` >> conj_tac
-  >- metis_tac[pop_nested_expr_target_frag] >>
+  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
+  Cases_on `immutable_root cx tgt /\ cx.in_deploy`
+  >- (gvs[immutable_root_def, expr_sim_pre_body] >>
+      irule exprSimPopNestedImmutableDeployTheory.pop_nested_immutable_deploy_expr_case >>
+      rpt conj_tac >- gvs[]
+      >- (qexistsl_tac [`id`, `src`] >> gvs[]) >>
+      metis_tac[]) >>
+  irule pop_nested_sim >> conj_tac
+  >- (strip_tac >> qexists_tac `T` >>
+      `int_calls_target tgt = []` by
+        gvs[expr_sim_pre_def, int_calls_expr_def] >>
+      simp[] >> irule target_idx_case_ok >> rw[] >>
+      fs[expr_sim_below_def] >> first_x_assum irule >>
+      drule nested_pop_index_size >> simp[expr_size_def]) >>
+  qexists_tac `env` >> rpt conj_tac
+  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag]
+  >~ [`cenv.ce_is_ctor`] >- (strip_tac >> gvs[]) >>
   gvs[expr_sim_pre_body]
 QED
 
