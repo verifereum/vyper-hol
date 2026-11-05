@@ -21,7 +21,8 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
-  stmtSimAssignPlace
+  stmtSimAssignPlace bodyExprPreFacts bodySimExprCases
+  supportedStmtTraverse vyperTypeCallGraph
 
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
@@ -138,6 +139,41 @@ Theorem augassign_place_effectful_index_case:
       (eval_stmt cx (AugAssign ty bt bop e)) es
 Proof
   cheat
+QED
+
+Theorem augassign_rhs_pre[local]:
+  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) ==>
+  expr_body_pre cenv cx env e es
+Proof
+  rpt strip_tac >>
+  drule supported_expr_body_calls >> strip_tac >>
+  gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, AllCaseEqs()] >>
+  irule stmt_expr_body_pre >>
+  fs[body_inv_def, gasContextTheory.cx_tops_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right,
+            APPEND_NIL]
+QED
+
+Theorem augassign_rhs_case[local]:
+  body_inv tops ctx cenv cx /\
+  (!s p s1 s2 cur s3 s4 ptv s5.
+     eval_target_place cx t s = (INL p,s1) /\
+     read_place cx p s2 = (INL cur,s3) /\
+     place_type_value cx p s4 = (INL ptv,s5) ==> body_expr_ok cx e) ==>
+  ((?s p s1 s2 cur s3 s4 ptv s5.
+     eval_target_place cx t s = (INL p,s1) /\
+     read_place cx p s2 = (INL cur,s3) /\
+     place_type_value cx p s4 = (INL ptv,s5)) ==>
+   expr_sim_case F ctx func cenv cx e)
+Proof
+  metis_tac[body_expr_ok_case]
 QED
 
 (* x op= e on a word storage or transient variable of any width:
