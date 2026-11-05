@@ -108,7 +108,7 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 | ASSERT_UNREACHABLE | conditional halt_state / OK or Abort ExHalt | missing | Equal clean condition; OK and exceptional terminal handled separately. |
 | DLOAD | exec_read1 data section slice / OK | complete reachable producer | `concretize_code_data_reader_local_complete` in concretizeLayoutLocalCodeDataReaders: explicit code/data equality supplement preserved; clean offset derived from reachable discipline, actual G, successor D, observations, independent target T and both environment supplements. |
 | DLOADBYTES | write_memory_with_expansion data slice / OK | missing | Equal data section, clean scalar source offset/size, relocated destination/write geometry and T. |
-| OFFSET | exec_pure2 word_add / OK | missing | Not in scalar_binary_opcode; label lookup equality required; pointer Label arithmetic forbidden by fn_ptr_ok for ADD/SUB only, so inspect ptr_use_ok rather than assuming OFFSET pointer preservation. Need actual origin/taint rule. |
+| OFFSET | exec_pure2 word_add / OK | reachable producer checked | concretizeLayoutLocalOffset.concretize_offset_local_complete derives clean variable operands from reachable nonpointer discipline, uses explicit relocation_env for label equality, and preserves actual origin erasure, independent source/target taint, restricted successor demand, observations and relocation_reader_context. Does not cover pointer-capable ADD/SUB or full dispatch. |
 
 ## Frozen exclusions and non-exclusions
 
