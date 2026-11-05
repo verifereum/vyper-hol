@@ -901,6 +901,10 @@ Resume compile_ifexp_word_vv_sim_mem[selected]:
     (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
   `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by
     (irule ifexp_root_condition_scopes >> fs[gas_marked_exec_def] >> metis_tac[]) >>
+  suspend "selected_raw_arm"
+QED
+
+Resume compile_ifexp_word_vv_sim_mem[selected_raw_arm]:
   `unwrap_value cenv av sea = (aop,sx)` by
     gvs[compile_ifexp_arm_def] >>
   drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
@@ -952,7 +956,31 @@ Resume compile_ifexp_word_vv_sim_mem[selected]:
 QED
 
 Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
-  cheat
+  `~u.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ (conditional_result _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+  `?w. eval_operand aop u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
+  qexistsl_tac [`tv`, `jump_to sb.cs_current_bb
+    (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)`] >>
+  conj_tac
+  >- (irule ifexp_marked_zero_suffix_mem >> goal_assum (drule_at Any) >>
+      irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
+  simp[Abbr `root_post`, vyperASTTheory.expr_type_def, vv_store_bound_stack_word] >>
+  conj_tac
+  >- (`sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
+        (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+      qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
+        (mp_then Any mp_tac ifexp_finish_post) >>
+      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+      simp[] >> disch_then irule >> gvs[]) >>
+  `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
+  `alloca_history func (update_var rv w u with
+      vs_inst_idx := LENGTH sy.cs_current_insts)` by
+    (irule assign_history >> metis_tac[]) >>
+  drule ifexp_history_jump >> disch_then (qspec_then `sb.cs_current_bb` assume_tac) >>
+  gvs[jump_to_def, update_var_def] >> decide_tac
 QED
 
 Finalise compile_ifexp_word_vv_sim_mem
