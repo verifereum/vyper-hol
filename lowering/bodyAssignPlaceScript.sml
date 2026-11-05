@@ -24,6 +24,26 @@ Ancestors
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperTypeSystem
 
+(* Intuition (a statement check's derivation; ignore if unhelpful):
+   - typing: type_stmt_def's Assign case with atarget_accepts_def on
+     BaseTarget gives type_place_target env t = SOME (Type dty), the
+     widening and assignable_type.
+   - target_case: an induction on t gives body_base_target_ok cx t /\
+     body_inv ==> target_idx_case F ctx func cenv cx t (body_expr_ok with
+     body_inv is expr_sim_case F / expr_vv_case F), then target_case_all.
+   - immutable_root: the only supported immutable target is a bare
+     TopLevelNameTarget (NONE,n) with supported_immutable_type; every other
+     supported root has a storage/transient or hashmap declaration.  At run
+     time bare_global_assignable is empty (env_context_consistent in
+     expr_sim_inv), so type_place_target is NONE; in deploy it gives the
+     immutable's type, for immutable_deploy_assign_case.
+   - target_indices_pre and e's expr_body_pre: stmt_expr_body_pre (as
+     body_assign_tuple_rhs_pre does it), with int_calls_stmt of Assign =
+     int_calls_target t ++ int_calls_expr e, stmt_exprs_ok's
+     supported_target_exists for the keys, and the ABI coverage premise
+     with cx_tops_module.
+   - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
+     acyclic_struct_metadata: body_inv_def. *)
 Theorem body_assign_place_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
