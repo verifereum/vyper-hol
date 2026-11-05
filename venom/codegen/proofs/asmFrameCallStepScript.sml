@@ -2040,6 +2040,54 @@ Proof
   Cases_on `op = Call` >> gvs[call_has_value_def, request_of_def, EL_TAKE]
 QED
 
+Theorem asm_call_prepared_enter_ordinary:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) ==>
+  ~computed_precompile (request_of s)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepared_request >> strip_tac >>
+  drule_all asm_call_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_proceed >>
+  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
+    rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
+  `p.contexts <> []` by simp[Abbr `p`] >>
+  drule_all vfmRunCallTheory.proceed_call_inl_nonprecompile >>
+  gvs[computed_precompile_addresses, vfmContextTheory.precompile_addresses_def,
+      finite_setTheory.fIN_fset_ABS]
+QED
+
+Theorem asm_call_prepared_enter_take_outcome:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) ==>
+  take_outcome (request_of s) (outcome_of kind t n m::outcomes) =
+    (outcome_of kind t n m,outcomes) /\
+  record_request (request_of s) requests = requests ++ [request_of s]
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepared_enter_ordinary >>
+  metis_tac[take_outcome_ordinary]
+QED
+
 Theorem asm_computed_proceed_success:
   s.contexts = (c,rb)::rest /\ (op = Call \/ op = StaticCall) /\
   (address = 1w \/ address = 2w \/ address = 6w \/ address = 7w) /\
