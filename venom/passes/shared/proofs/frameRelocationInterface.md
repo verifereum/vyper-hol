@@ -473,7 +473,10 @@ cache-history induction is unnecessary! `activation_cache_def` combines
 these two cases. `joint_trace_prefix_reachable` supplies reachability of
 all prefix configurations.
 
-The remaining raw endpoint adapter has this exact intended conclusion:
+The raw endpoint adapter is now proved as `joint_activation_cache_strict`
+in `frameRawEndpoints`. Its interface uses the weaker explicit empty-cache
+premise instead of `o1_run_state_ok`, and requires `EVERY wf_function`
+(the prefix-adequacy well-formedness premise). The previous intended shape was:
 
 ```sml
 mem_inv raw_mem_ok C vs0 /\ o1_run_state_ok vs0 /\
@@ -483,18 +486,16 @@ activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
   depth owner aid (b,sz) ==> b + sz < dimword (:256)
 ```
 
-To close it, use `mem_inv_raw_reachable` and `raw_mem_ok_def` to bound the
-CURRENT frontier. A projection from this joint/frame reachability to
-`raw_reachable vs0 C fn inst s` is still needed: the searched
-`frame_reach_raw_reachable` in o1PassLift:653 is NOT that projection!
-It concerns the separate frame-local `frame_reach` relation with an entry
-hypothesis. `joint_origin_history_erasure` followed by
-`origin_frame_erasure` reaches `frame_reachable`, but no direct raw
-projection was located in the inspected compiler sources. Plan this
-projection/adapter, not a duplicate alloca invariant. Returning restores
-the caller cache AND frontier (`return_bind_allocation_frame`); the
-accepted separation induction already accounts for this non-monotone
-current frontier.
+`joint_reachable_raw_frontier` now composes `joint_config_raw` with
+`mem_inv_raw_reachable` and `raw_mem_ok_def` to bound the CURRENT frontier.
+`joint_activation_cache_strict` combines this with the existing current
+and saved cache bounds, covering zero-size as well as positive sites.
+`frame_reachable_mem_inv` and `frame_reachable_saved_mem_inv` expose the
+more general transport of any memory invariant to current/saved frames.
+No cache-size or initial-zero-frontier premise is needed for these bounds.
+Returning restores the caller cache AND frontier
+(`return_bind_allocation_frame`); the accepted separation induction
+already accounts for this non-monotone current frontier.
 
 ### Target strict endpoint: size bridge and actual positions remain
 
