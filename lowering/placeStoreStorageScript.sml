@@ -6071,6 +6071,78 @@ Resume place_store_wrap_probe_phase_edge[exit]:
 QED
 Finalise place_store_wrap_probe_phase_edge
 
+Theorem place_store_wrap_probe_path_observation:
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let sb = SND (compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa) in
+  !ctx func cc tc bc t.
+    func.fn_blocks =
+      <|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+        sb.cs_blocks /\
+    gas_marked_path F ctx func
+      ((init_venom_state "entry") with
+        <|vs_memory := byte$word_to_bytes (1w:bytes32) T ++
+            (2w:byte) :: REPLICATE 31 0w;
+          vs_alloca_next := dimword (:256)-32;
+          vs_call_ctx := cc with cc_static := F;
+          vs_tx_ctx := tc; vs_block_ctx := bc|>) 0 (OK t) ==>
+    EL 0 (word_to_bytes (lookup_storage 1w (contract_storage t)) T) = 0w
+Proof
+  simp_tac pure_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  drule gas_marked_path_exec >> disch_tac >>
+  drule place_store_path_invariant >>
+  disch_then (qspec_then `place_store_wrap_probe_phase` (qspec_then `t` mp_tac)) >>
+  simp_tac pure_ss [boolTheory.REFL_CLAUSE, boolTheory.AND_CLAUSES] >>
+  (impl_tac
+   >- (conj_tac >- irule place_store_wrap_probe_phase_initial >>
+       rpt strip_tac >>
+       irule (SRULE [LET_THM] place_store_wrap_probe_phase_edge) >>
+       goal_assum (drule_at (Pat `gas_path_edge _ _ _ _ _`)) >> simp[])) >>
+  simp[place_store_wrap_probe_phase_def]
+QED
+
+Theorem place_store_wrap_probe_endpoint_exclusion:
+  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let sb = SND (compile_assign_value
+    ((ARB:compile_env) with <|ce_struct_fields := FEMPTY; ce_target := K T|>)
+    (Lit 0w) LocStorage (Lit 0w) F (SOME LocMemory)
+    (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) NONE (dimword (:256)) sa) in
+  !ctx func cenv txn es ff cc tc bc.
+    func.fn_blocks =
+      <|bb_label := sb.cs_current_bb; bb_instructions := sb.cs_current_insts|> ::
+        sb.cs_blocks /\ txn.target = 0w /\
+    write_place (place_store_wrap_probe_context with txn := txn)
+      (StoragePlace F 0w (ArrayTV
+        (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)))
+      (ArrayV (SArrayV [(0,BytesV [2w])])) es = (INL (),ff) ==>
+    ~?t. gas_marked_path F ctx func
+      ((init_venom_state "entry") with
+        <|vs_memory := byte$word_to_bytes (1w:bytes32) T ++
+            (2w:byte) :: REPLICATE 31 0w;
+          vs_alloca_next := dimword (:256)-32;
+          vs_call_ctx := cc with cc_static := F;
+          vs_tx_ctx := tc; vs_block_ctx := bc|>) 0 (OK t) /\
+      stmt_state_rel ctx func cenv
+        (place_store_wrap_probe_context with txn := txn) ff t
+Proof
+  simp_tac pure_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  qspecl_then [`ctx`, `func`, `cc`] mp_tac
+    (SIMP_RULE pure_ss [LET_THM] place_store_wrap_probe_path_observation) >>
+  disch_then drule_all >>
+  disch_tac >>
+  drule_all (SIMP_RULE pure_ss [LET_THM] place_store_wrap_probe_live_observation) >>
+  simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
