@@ -1,6 +1,6 @@
 Theory fnFrameBoundaryEntryParams
 Ancestors
-  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
+  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
@@ -1603,4 +1603,29 @@ Proof
   gvs[init_cleanup_plan_state_def, init_plan_state_def,
       plan_spill_rel_def, frame_view_def, entry_bind_pairs_normal,
       fn_entry_state_rel_def, shared_state_rel_def, venom_asm_terminal_rel_def]
+QED
+
+Theorem entry_do_swap_prefix_spill_wf:
+  !dist ps ops ps' lo initial_fmp.
+    do_swap dist ps = (ops,ps') /\ dist < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) ==>
+    prefix_spill_wf initial_fmp lo ops ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `dist <= 16`
+  >- (Cases_on `dist = 0` >>
+      gvs[do_swap_def, prefix_spill_wf_def, spill_op_wf_def]) >>
+  `16 < dist` by decide_tac >>
+  `ALL_DISTINCT (top_n (dist + 1) ps.ps_stack)` by
+    simp[top_n_def, ALL_DISTINCT_TAKE] >>
+  `EVERY (\off. off < dimword (:256))
+    (FST (spill_alloc_n [] ps.ps_alloc (top_n (dist + 1) ps.ps_stack)))` by
+    (qspecl_then [`dist`, `ps`] mp_tac do_swap_big_decompose >>
+     simp[LET_THM] >> strip_tac >>
+     gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  irule do_swap_prefix_spill_wf_from_generated_spills >>
+  simp[] >> qexistsl [`dist`, `ps'`] >> simp[] >>
+  irule do_swap_generated_spills_prefix_wf_bounds >> simp[]
 QED
