@@ -321,6 +321,8 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[joint_origin_history_erasure, origin_frame_erasure] >>
   fs[ptr_discipline_def] >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `access_ok lo G fn inst s` by metis_tac[] >>
   drule_all concretize_protected_cached_byte_no_kill >> simp[]
 QED
@@ -401,6 +403,8 @@ Proof
   `EVERY wf_function C.ctx_functions /\ wf_function fn /\ ssa_form fn` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   fs[ptr_discipline_def] >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `Allocation aid IN bp_bases
     (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) v` by
     (irule origin_frame_current_production_coverage >> metis_tac[]) >>

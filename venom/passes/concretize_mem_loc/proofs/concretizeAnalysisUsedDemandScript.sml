@@ -208,7 +208,10 @@ Proof
   `Allocation aid IN bp_bases
     (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) u` by
     (irule origin_frame_current_production_coverage >>
-     fs[ptr_discipline_def] >> goal_assum (drule_at Any) >> metis_tac[]) >>
+     fs[ptr_discipline_def] >>
+     `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
   `MEM (Var u) inst.inst_operands` by metis_tac[write_ops_operand] >>
   simp[ml_used_gen_def, ml_operand_gen_def] >>
   disj1_tac >> qexists_tac `Var u` >> gvs[bp_bases_find_base_allocas]

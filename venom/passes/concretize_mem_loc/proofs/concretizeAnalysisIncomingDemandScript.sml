@@ -67,7 +67,10 @@ Proof
   `Allocation aid IN bp_bases
       (bp_analyze_fuel (concretize_memloc_fuel (EL k stk).cf_fn)
         (cfg_analyze (EL k stk).cf_fn) (EL k stk).cf_fn) u` by
-    (fs[ptr_discipline_def] >> metis_tac[origin_frame_saved_production_coverage]) >>
+    (fs[ptr_discipline_def] >>
+     `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     metis_tac[origin_frame_saved_production_coverage]) >>
   qexistsl_tac [`k`,`aid`,`u`,`nm`,`ops`] >> simp[] >>
   metis_tac[active_invoke_argument_generators]
 QED

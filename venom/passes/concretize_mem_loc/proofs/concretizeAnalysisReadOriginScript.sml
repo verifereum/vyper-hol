@@ -73,6 +73,8 @@ Proof
     metis_tac[shape_context_inst_wf] >>
   `wf_function fn /\ all_reachable fn /\ ssa_form fn` by metis_tac[EVERY_MEM] >>
   fs[ptr_discipline_def] >>
+  `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `access_ok lo G fn inst s` by metis_tac[] >>
   `byte IN range_bytes (source_memory_read_ranges inst s)` by gvs[joint_reads_def] >>
   drule_all access_ok_read_site >> strip_tac >>

@@ -106,6 +106,8 @@ Resume joint_write_past_owner_generator[dynamic]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[]) >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[origin_frame_current_not_dynamic]
 QED
 

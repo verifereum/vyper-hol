@@ -58,7 +58,8 @@ Resume concretize_write_owner_liveset[local]:
   gvs[] >>
   `EVERY wf_function C.ctx_functions` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_def] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
   `wf_function fn /\ all_reachable fn /\ ssa_form fn` by metis_tac[EVERY_MEM] >>
   `Allocation aid IN bp_bases
@@ -112,6 +113,8 @@ Resume concretize_write_owner_liveset[dynamic]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[]) >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[origin_frame_current_not_dynamic]
 QED
 
