@@ -2,6 +2,7 @@
 Theory exprSimSubscriptArrayFramed
 Ancestors
   exprSimSubscriptArrayFrame exprSimSubscriptArrayOrigin exprSimArrayIndex exprSimLen exprSimCopy
+  exprSimSubscriptArraySource vyperState vyperMisc
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
   emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
   exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
@@ -616,4 +617,94 @@ Theorem dynamic_memory_selection_snapshot_probe[local]:
        (ArrayV (DynArrayV [IntV 5; IntV 1])) [ValueSubscript (IntV 0)] = INL (IntV 5)
 Proof
   EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+(* Successful source selection after an index which preserves the captured
+   non-storage base's source memory and immutable maps. *)
+Theorem framed_array_select_read:
+  expr_body_pre cenv cx env obj es /\
+  eval_expr cx obj es = (INL r,t) /\
+  expr_type obj = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  t'.scopes = t.scopes /\ t'.immutables = t.immutables /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  (vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode \/
+   (?n. bd = Fixed n)) /\
+  read_result cx r t' = (INL (ArrayV av),t') /\
+  array_index (ArrayTV etv bd) av i = SOME v ==>
+  ?child. select_result cx (ArrayT et bd) r (ValueSubscript (IntV i)) t' =
+            (INL child,t') /\
+          read_result cx child t' = (INL v,t')
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `evaluate_subscripts (ArrayTV etv bd) (ArrayV av)
+      [ValueSubscript (IntV i)] = INL v` by
+    simp[evaluate_array_subscript_result] >>
+  Cases_on `r`
+  >~ [`read_result cx (HashMapRef tr slot tv key) _ = _`] >-
+    gvs[read_result_def, raise_def]
+  >~ [`Value value`] >-
+    (gvs[read_result_def, return_def] >>
+     drule_all select_value_read >> metis_tac[]) >>
+  drule_all expr_body_pre_place_metadata >> strip_tac >>
+  gnvs[] >>
+  drule_all expr_body_pre_popped_keys_indexed >> strip_tac >>
+  Cases_on `p`
+  >~ [`StoragePlace tr slot vt`] >- metis_tac[]
+  >~ [`MemoryPlace id path`] >-
+    (qpat_x_assum `_ \/ _` strip_assume_tac
+     >- (drule_all expr_body_pre_code_not_memory >> simp[]) >>
+     gvs[] >>
+     `runtime_place_typed cx t' (MemoryPlace id path) (ArrayTV etv (Fixed n))`
+       by gvs[vyperPlaceTypingTheory.runtime_place_typed_memory] >>
+     `popped_keys_indexed t'.scopes` by simp[] >>
+     drule_all select_fixed_memory_read >> metis_tac[]) >>
+  rename1 `ImmutablePlace src id path` >>
+  `runtime_place_typed cx t' (ImmutablePlace src id path) (ArrayTV etv bd)` by
+    (qpat_x_assum `runtime_place_typed _ _ _ _` mp_tac >>
+     Cases_on `ALOOKUP t.immutables cx.txn.target` >>
+     simp[vyperPlaceTypingTheory.runtime_place_typed_immutable,
+          get_immutables_def, get_address_immutables_def, bind_def,
+          return_def, raise_def]) >>
+  drule_all select_typed_immutable_read >> metis_tac[]
+QED
+
+Theorem vv_post_array_element:
+  vv_post ctx func cenv cx obj es sa sb s0 es' r (LocatedValue ann p) s /\
+  expr_type obj = ArrayT et bd /\
+  (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
+  (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
+  eval_operand p.ptr_operand s = SOME w /\
+  read_result cx r es' = (INL (ArrayV av),es') /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  evaluate_type (get_tenv cx) et = SOME etv /\
+  val_wf (ArrayTV etv bd) (ArrayV av) /\
+  array_index (ArrayTV etv bd) av i = SOME v /\
+  val_wf etv v /\ value_has_type etv v /\
+  read_result cx child es' = (INL v,es') /\
+  j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
+  eval_operand dst s = SOME (w + n2w j) /\
+  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
+  vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
+    (LocatedValue et (mk_ptr dst p.ptr_location)) s
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `vv_holds cenv cx (ArrayT et bd) r (LocatedValue ann p) es' s` by
+    gvs[vv_post_def] >>
+  drule_all vv_holds_array_element >> strip_tac >>
+  `vv_at cenv cx et sa sb es' child (LocatedValue et (mk_ptr dst p.ptr_location)) s` by
+    (Cases_on `p.ptr_location = LocMemory`
+     >- (fs[] >> gnvs[] >> rename1 `expr_type obj = ArrayT et (Fixed n)` >>
+         `vv_at cenv cx (ArrayT et (Fixed n)) sa sb es' r (LocatedValue ann p) s`
+           by gvs[vv_post_def] >>
+         `mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
+            SOME (Num i * type_memory_size etv,etv)` by
+           (Cases_on `av` >>
+            gvs[mem_step_offset_def, vyperValueOperationTheory.array_index_def,
+                valueEncodingTheory.val_wf_def, listTheory.oEL_THM,
+                AllCaseEqs()]) >>
+         drule_all vv_at_fixed_array_element >> simp[]) >>
+     simp[vv_at_def, contextTheory.mk_ptr_def]) >>
+  gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
+  first_assum ACCEPT_TAC
 QED
