@@ -335,3 +335,130 @@ QED
    No example here certifies arbitrary residual prefixes or a universal
      support producer. In particular no emitted-code mismatch is claimed.
 *)
+
+(* Residual inventory diagnostics: an entry-defined live-through name. *)
+Definition residual_diamond_fn_def:
+  residual_diamond_fn = entry_probe_fn with fn_blocks :=
+    LUPDATE ((EL 0 entry_probe_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 9 ADD [Lit 3w; Lit 4w] ["t"];
+       mk_inst 0 JNZ [Lit 1w; Label "L"; Label "R"] []]) 0
+    (LUPDATE ((EL 3 entry_probe_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 5 PHI [Label "L"; Var "a"; Label "R"; Var "b"] ["x"];
+       mk_inst 6 ADD [Var "x"; Var "t"] ["y"];
+       mk_inst 7 JMP [Label "exit"] []]) 3 entry_probe_fn.fn_blocks)
+End
+
+Definition residual_loop_fn_def:
+  residual_loop_fn = entry_loop_fn with fn_blocks :=
+    LUPDATE ((EL 0 entry_loop_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 7 ADD [Lit 3w; Lit 4w] ["t"];
+       mk_inst 0 ADD [Lit 0w; Lit 1w] ["a"];
+       mk_inst 1 JMP [Label "H"] []]) 0
+    (LUPDATE ((EL 1 entry_loop_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 2 PHI [Label "entry"; Var "a"; Label "back"; Var "n"] ["x"];
+       mk_inst 8 ADD [Lit 5w; Lit 2w] ["obsolete"];
+       mk_inst 3 ADD [Var "x"; Var "t"] ["n"];
+       mk_inst 4 JNZ [Lit 1w; Label "back"; Label "exit"] []])
+       1 entry_loop_fn.fn_blocks)
+End
+
+Theorem residual_small_ready:
+  EVERY (\fn. codegen_ready_fn fn /\
+    EVERY (\bb. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb.bb_instructions) fn.fn_blocks)
+    [residual_diamond_fn; residual_loop_fn]
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.EVERY_DEF] >> rpt conj_tac >>
+  EVAL_TAC >> simp[]
+QED
+
+Definition residual_step_def:
+  residual_step fn n ps = SND (THE (generate_block_plan
+    (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (EL n fn.fn_blocks) ps))
+End
+
+Definition residual_incoming_def:
+  residual_incoming fn n = residual_step fn n (residual_step fn 0 entry_probe_start)
+End
+
+Definition residual_phi_def:
+  residual_phi fn n ps = SND (generate_phi_plan
+    (HD (EL n fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze fn) (EL n fn.fn_blocks).bb_label 1) F ps)
+End
+
+Theorem residual_small_plan_success:
+  EVERY (\fn. IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn)
+    NONE [] fn 0 0)) [residual_diamond_fn; residual_loop_fn]
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.EVERY_DEF] >> conj_tac >> EVAL_TAC
+QED
+
+Theorem residual_diamond_inventory:
+  (residual_incoming residual_diamond_fn 1).ps_stack = [Var "t"; Var "a"] /\
+  (residual_phi residual_diamond_fn 3
+    (residual_incoming residual_diamond_fn 1)).ps_stack = [Var "t"; Var "x"]
+Proof
+  conj_tac >> EVAL_TAC
+QED
+
+Definition residual_loop_incoming_def:
+  residual_loop_incoming r =
+    if r then residual_step residual_loop_fn 2 (residual_step residual_loop_fn 1
+      (residual_step residual_loop_fn 0 entry_probe_start))
+    else residual_step residual_loop_fn 0 entry_probe_start
+End
+
+Theorem residual_loop_inventory:
+  (residual_loop_incoming F).ps_stack = [Var "t"; Var "a"] /\
+  (residual_loop_incoming T).ps_stack = [Var "t"; Var "n"] /\
+  EVERY (\r. (residual_phi residual_loop_fn 1 (residual_loop_incoming r)).ps_stack =
+    [Var "t"; Var "x"] /\
+    (residual_loop_incoming r).ps_spilled = FEMPTY /\
+    (residual_phi residual_loop_fn 1 (residual_loop_incoming r)).ps_spilled = FEMPTY)
+    [F;T]
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.EVERY_DEF] >> rpt conj_tac >> EVAL_TAC
+QED
+
+Definition residual_pressure_names_def:
+  residual_pressure_names =
+    ["v00";"v01";"v02";"v03";"v04";"v05";"v06";"v07";"v08";
+     "v09";"v10";"v11";"v12";"v13";"v14";"v15";"v16"]
+End
+
+Definition residual_pressure_fn_def:
+  residual_pressure_fn = entry_probe_fn with fn_blocks :=
+    LUPDATE ((EL 0 entry_probe_fn.fn_blocks) with bb_instructions :=
+      GENLIST (\n. mk_inst (10+n) ADD [Lit 3w; Lit 4w]
+        [EL n residual_pressure_names]) 17 ++
+      [mk_inst 0 JNZ [Lit 1w; Label "L"; Label "R"] []]) 0
+    (LUPDATE ((EL 3 entry_probe_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 5 PHI [Label "L"; Var "a"; Label "R"; Var "b"] ["x"];
+       mk_inst 6 ADD [Var "x"; Lit 1w] ["y"]] ++
+      GENLIST (\n. mk_inst (100+n) ADD [Var (EL n residual_pressure_names); Lit 1w]
+        [STRCAT "dead_" (EL n residual_pressure_names)]) 17 ++ [mk_inst 7 JMP [Label "exit"] []])
+      3 entry_probe_fn.fn_blocks)
+End
+
+Theorem residual_pressure_ready:
+  codegen_ready_fn residual_pressure_fn /\
+  EVERY (\bb. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb.bb_instructions) residual_pressure_fn.fn_blocks
+Proof
+  conj_tac >> EVAL_TAC >> simp[]
+QED
+
+Theorem residual_pressure_plan_result:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze residual_pressure_fn) (dfg_build_function residual_pressure_fn)
+    (cfg_analyze residual_pressure_fn) NONE [] residual_pressure_fn 0 0)
+Proof
+  CONV_TAC (PAT_CONV ``IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    lv dg cg NONE [] residual_pressure_fn 0 0)`` EVAL) >>
+  EVAL_TAC
+QED
+
+
