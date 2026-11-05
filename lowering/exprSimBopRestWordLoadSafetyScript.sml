@@ -89,3 +89,47 @@ Proof
   irule rest_word_staged_load_safety_probe >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem rest_word_array_memory_load_mem_ok:
+  vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+  expr_type e = ArrayT ty bd /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  context$compile_ptr_load ctor imm LocMemory addr sa = (op,sb) /\
+  eval_operand addr s = SOME
+    (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  `type_memory_size et = 32` by
+    metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `w2n (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) =
+   w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32` by
+    metis_tac[rest_word_vv_memory_offset] >>
+  drule_all rest_word_array_element_extent >> strip_tac >>
+  drule rest_word_vv_memory_bound >> simp[] >> strip_tac >>
+  irule (Q.INST [`loc` |-> `LocMemory`] rest_word_ptr_load_mem_ok) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem rest_word_array_memory_header_mem_ok:
+  vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+  expr_type e = ArrayT ty (Dynamic cap) /\
+  evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (ArrayTV et (Dynamic cap)) /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  context$compile_ptr_load ctor imm LocMemory addr sa = (op,sb) /\
+  eval_operand addr s = SOME w ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  drule rest_word_vv_memory_bound >> simp[] >> strip_tac >>
+  irule (Q.INST [`loc` |-> `LocMemory`] rest_word_ptr_load_mem_ok) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  fs[valueEncodingTheory.type_memory_size_def] >> metis_tac[]
+QED
