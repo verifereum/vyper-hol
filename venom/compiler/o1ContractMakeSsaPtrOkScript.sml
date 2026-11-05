@@ -817,6 +817,449 @@ Proof
   rename1 `op :: ops` >> Cases_on `op` >> simp[]
 QED
 
+Theorem mssa_fields:
+  make_ssa_current_fn s fn = (fn',s') ==>
+  fn'.fn_name = fn.fn_name /\
+  fn'.fn_forced_alloc_positions = fn.fn_forced_alloc_positions
+Proof
+  rw[make_ssa_current_fn_def] >> gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem mssa_mem_fn_insts:
+  MEM inst (fn_insts fn) <=>
+  ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
+Proof
+  simp[fn_insts_def, MEM_fn_insts_blocks_iff]
+QED
+
+Theorem mssa_map_var_mem:
+  MEM (Var v) ops ==>
+  MEM (Var (orig v))
+    (MAP (\op. case op of Var u => Var (orig u) | _ => op) ops)
+Proof
+  simp[mssa_map_var_member] >> metis_tac[]
+QED
+
+Theorem mssa_map_two_vars:
+  MAP (\op. case op of Var u => Var (orig u) | _ => op) ops =
+    [Var a; Var b] ==>
+  ?a' b'. ops = [Var a'; Var b'] /\ orig a' = a /\ orig b' = b
+Proof
+  namedCases_on `ops` ["", "x xs"] >> simp[] >>
+  namedCases_on `xs` ["", "y ys"] >> simp[] >>
+  Cases_on `x` >> Cases_on `y` >> simp[]
+QED
+
+Theorem mssa_map_lit:
+  MAP (\op. case op of Var u => Var (orig u) | _ => op) ops = [Lit x] ==>
+  ops = [Lit x]
+Proof
+  namedCases_on `ops` ["", "y ys"] >> simp[] >> Cases_on `y` >> simp[]
+QED
+
+Theorem mssa_filter_unique:
+  !xs. FILTER ($= (f a)) (MAP f xs) = [f a] /\ MEM a xs /\ MEM b xs /\
+       f b = f a ==> b = a
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `f a = f h` >> simp[] >> strip_tac >>
+  gvs[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
+
+(* mem_write_ops and mem_read_ops look only at the opcode and the shape
+   of the operand list, so a map over the operands maps the offset. *)
+Theorem mssa_write_offset_map:
+  inst'.inst_opcode = inst.inst_opcode /\
+  MAP f inst'.inst_operands = inst.inst_operands ==>
+  OPTREL (\ops ops'. ops.iao_ofst = f ops'.iao_ofst /\
+                     MEM ops'.iao_ofst inst'.inst_operands)
+    (mem_write_ops inst) (mem_write_ops inst')
+Proof
+  rewrite_tac [memLocDefsTheory.mem_write_ops_def] >> strip_tac >>
+  qpat_x_assum `MAP _ _ = _` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[] >>
+  namedCases_on `inst'.inst_operands` ["", "a xs"] >> gvs[] >>
+  namedCases_on `xs` ["", "b ys"] >> gvs[] >>
+  namedCases_on `ys` ["", "c zs"] >> gvs[] >>
+  namedCases_on `zs` ["", "d ts"] >> gvs[] >>
+  namedCases_on `ts` ["", "e us"] >> gvs[] >>
+  namedCases_on `us` ["", "g vs"] >> gvs[] >>
+  namedCases_on `vs` ["", "h ws"] >> gvs[] >>
+  Cases_on `ws` >> gvs[]
+QED
+
+Theorem mssa_read_offset_map:
+  inst'.inst_opcode = inst.inst_opcode /\
+  MAP f inst'.inst_operands = inst.inst_operands ==>
+  OPTREL (\ops ops'. ops.iao_ofst = f ops'.iao_ofst /\
+                     MEM ops'.iao_ofst inst'.inst_operands)
+    (mem_read_ops inst) (mem_read_ops inst')
+Proof
+  rewrite_tac [memLocDefsTheory.mem_read_ops_def] >> strip_tac >>
+  qpat_x_assum `MAP _ _ = _` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `inst.inst_opcode = LOG`
+  >- (gvs[] >>
+      `REVERSE (MAP f inst'.inst_operands) =
+       MAP f (REVERSE inst'.inst_operands)` by
+        simp[listTheory.MAP_REVERSE] >>
+      `!x. MEM x inst'.inst_operands <=>
+           MEM x (REVERSE inst'.inst_operands)` by simp[] >>
+      pop_assum (fn th => once_rewrite_tac [th]) >>
+      pop_assum (fn th => rewrite_tac [th]) >>
+      qspec_tac (`REVERSE inst'.inst_operands`, `xs`) >>
+      namedCases_on `xs` ["", "a ys"] >> simp[] >>
+      namedCases_on `ys` ["", "b zs"] >> simp[] >>
+      Cases_on `zs` >> simp[]) >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[] >>
+  namedCases_on `inst'.inst_operands` ["", "a xs"] >> gvs[] >>
+  namedCases_on `xs` ["", "b ys"] >> gvs[] >>
+  namedCases_on `ys` ["", "c zs"] >> gvs[] >>
+  namedCases_on `zs` ["", "d ts"] >> gvs[] >>
+  namedCases_on `ts` ["", "e us"] >> gvs[] >>
+  namedCases_on `us` ["", "g vs"] >> gvs[] >>
+  namedCases_on `vs` ["", "h ws"] >> gvs[] >>
+  Cases_on `ws` >> gvs[]
+QED
+
+Theorem mssa_renamed_write_var:
+  inst'.inst_opcode = inst.inst_opcode /\
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var x ==>
+  ?ops' u. mem_write_ops inst' = SOME ops' /\ ops'.iao_ofst = Var u /\
+           orig u = x /\ MEM (Var u) inst'.inst_operands
+Proof
+  strip_tac >> drule_all mssa_write_offset_map >>
+  Cases_on `mem_write_ops inst'` >> simp[] >> strip_tac >>
+  rename1 `mem_write_ops inst' = SOME ops'` >>
+  Cases_on `ops'.iao_ofst` >> gvs[]
+QED
+
+Theorem mssa_renamed_read_var:
+  inst'.inst_opcode = inst.inst_opcode /\
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var x ==>
+  ?ops' u. mem_read_ops inst' = SOME ops' /\ ops'.iao_ofst = Var u /\
+           orig u = x /\ MEM (Var u) inst'.inst_operands
+Proof
+  strip_tac >> drule_all mssa_read_offset_map >>
+  Cases_on `mem_read_ops inst'` >> simp[] >> strip_tac >>
+  rename1 `mem_read_ops inst' = SOME ops'` >>
+  Cases_on `ops'.iao_ofst` >> gvs[]
+QED
+
+Theorem mssa_renamed_write_back:
+  inst'.inst_opcode = inst.inst_opcode /\
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  mem_write_ops inst' = SOME ops' /\ ops'.iao_ofst = Var u ==>
+  ?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var (orig u)
+Proof
+  strip_tac >> drule_all mssa_write_offset_map >>
+  Cases_on `mem_write_ops inst` >> gvs[]
+QED
+
+Theorem mssa_renamed_invoke:
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  (!v. MEM (Var v) inst'.inst_operands ==> (v IN pv' <=> orig v IN pv)) /\
+  decode_invoke inst = SOME (nm,args) /\
+  (!k v. k < LENGTH args /\ EL k args = Var v /\ v IN pv ==> k IN P nm) ==>
+  ?nm args. decode_invoke inst' = SOME (nm,args) /\
+    !k v. k < LENGTH args /\ EL k args = Var v /\ v IN pv' ==> k IN P nm
+Proof
+  rewrite_tac [venomExecSemanticsTheory.decode_invoke_def] >> strip_tac >>
+  qpat_x_assum `MAP _ _ = _` (SUBST_ALL_TAC o SYM) >>
+  gvs[] >>
+  namedCases_on `inst'.inst_operands` ["", "op ops"] >> gvs[] >>
+  Cases_on `op` >> gvs[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[listTheory.EL_MAP] >>
+  metis_tac[listTheory.EL_MEM]
+QED
+
+Theorem mssa_ren_filter:
+  FILTER ($= (Var (orig v)))
+    (MAP (\op. case op of Var u => Var (orig u) | _ => op) ops) =
+    [Var (orig v)] /\
+  MEM (Var v) ops ==>
+  FILTER ($= (Var v)) ops = [Var v] /\
+  !u. MEM (Var u) ops /\ orig u = orig v ==> u = v
+Proof
+  strip_tac >> conj_tac
+  >- (mp_tac (SIMP_RULE (srw_ss()) [] (Q.ISPECL
+        [`\op. case op of Var u => Var (orig u) | _ => op`, `Var v`]
+        (Q.GENL [`f`, `v`] mssa_filter_map_singleton))) >>
+      disch_then drule_all >> simp[]) >>
+  rpt strip_tac >>
+  mp_tac (SIMP_RULE (srw_ss()) [] (Q.ISPECL
+        [`\op. case op of Var u => Var (orig u) | _ => op`, `Var v`, `Var u`]
+        (Q.GENL [`f`, `a`, `b`] mssa_filter_unique))) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem mssa_renamed_use:
+  inst'.inst_opcode = inst.inst_opcode /\
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  (!v. MEM (Var v) inst'.inst_operands ==> (v IN pv' <=> orig v IN pv)) /\
+  ptr_use_ok P pv inst ==>
+  ptr_use_ok P pv' inst'
+Proof
+  rewrite_tac [ptr_use_ok_def] >> strip_tac >> conj_tac
+  >- (strip_tac >>
+      `inst.inst_opcode = INVOKE` by gvs[] >>
+      qpat_x_assum `inst.inst_opcode = INVOKE ==> _` drule >> strip_tac >>
+      irule mssa_renamed_invoke >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `orig v IN pv` by metis_tac[] >>
+  `MEM (Var (orig v)) inst.inst_operands` by metis_tac[mssa_map_var_mem] >>
+  `~((inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+      inst.inst_opcode = EQ) /\
+     ?u w. inst.inst_operands = [Var u; Var w] /\ u IN pv /\ w IN pv)` by
+    (strip_tac >>
+     `MAP (\op. case op of Var u => Var (orig u) | _ => op)
+        inst'.inst_operands = [Var u; Var w]` by metis_tac[] >>
+     drule mssa_map_two_vars >> strip_tac >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `!v. MEM (Var v) inst.inst_operands /\ _ ==> _`
+    (qspec_then `orig v` mp_tac) >>
+  impl_tac >- gvs[] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  `FILTER ($= (Var (orig v)))
+     (MAP (\op. case op of Var u => Var (orig u) | _ => op)
+        inst'.inst_operands) = [Var (orig v)]` by metis_tac[] >>
+  drule_all mssa_ren_filter >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `?ops. _` strip_assume_tac
+  >- (drule_all mssa_renamed_write_var >> strip_tac >>
+      `u = v` by metis_tac[] >> pop_assum SUBST_ALL_TAC >>
+      qexists_tac `ops'` >>
+      qpat_x_assum `mem_write_ops inst' = _` (fn th => rewrite_tac [th]) >>
+      qpat_x_assum `ops'.iao_ofst = _` (fn th => rewrite_tac [th])) >>
+  drule_all mssa_renamed_read_var >> strip_tac >>
+  `u = v` by metis_tac[] >> pop_assum SUBST_ALL_TAC >>
+  qexists_tac `ops'` >>
+  qpat_x_assum `mem_read_ops inst' = _` (fn th => rewrite_tac [th]) >>
+  qpat_x_assum `ops'.iao_ofst = _` (fn th => rewrite_tac [th])
+QED
+
+Theorem mssa_ok_inst:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) ==>
+  inst.inst_opcode <> MEMTOP /\ inst.inst_opcode <> DRET /\
+  inst.inst_opcode <> GETFMP /\ inst.inst_opcode <> SETFMP /\
+  inst.inst_opcode <> RETFMP /\ inst.inst_opcode <> FMP_PARAM /\
+  ((inst.inst_opcode = ISTORE \/ inst.inst_opcode = ILOAD) ==>
+   !v. MEM (Var v) inst.inst_operands ==> v NOTIN fn_pv P fn) /\
+  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+   (?v. MEM (Var v) inst.inst_operands /\ v IN fn_pv P fn) ==>
+   !l. ~MEM (Label l) inst.inst_operands) /\
+  ptr_use_ok P (fn_pv P fn) inst
+Proof
+  rewrite_tac [fn_ptr_ok_def] >> strip_tac >>
+  qpat_x_assum `!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> MEMTOP /\ _`
+    drule >> simp[]
+QED
+
+Theorem mssa_ok_write:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v ==>
+  ~(v IN pointer_derived_vars fn (alloca_roots fn) /\
+    v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn))
+Proof
+  rewrite_tac [fn_ptr_ok_def] >> strip_tac >>
+  qpat_x_assum `!inst ops v. _` drule_all >> simp[]
+QED
+
+Theorem mssa_target_inst:
+  fn_ptr_ok P fn /\ mssa_inst_origin orig fn inst' /\
+  (!v. MEM (Var v) inst'.inst_operands ==>
+       (v IN pv' <=> orig v IN fn_pv P fn)) ==>
+  inst'.inst_opcode <> MEMTOP /\ inst'.inst_opcode <> DRET /\
+  inst'.inst_opcode <> GETFMP /\ inst'.inst_opcode <> SETFMP /\
+  inst'.inst_opcode <> RETFMP /\ inst'.inst_opcode <> FMP_PARAM /\
+  ((inst'.inst_opcode = ISTORE \/ inst'.inst_opcode = ILOAD) ==>
+   !v. MEM (Var v) inst'.inst_operands ==> v NOTIN pv') /\
+  ((inst'.inst_opcode = ADD \/ inst'.inst_opcode = SUB) /\
+   (?v. MEM (Var v) inst'.inst_operands /\ v IN pv') ==>
+   !l. ~MEM (Label l) inst'.inst_operands) /\
+  ptr_use_ok P pv' inst'
+Proof
+  strip_tac >>
+  qpat_x_assum `mssa_inst_origin _ _ _`
+    (strip_assume_tac o REWRITE_RULE [mssa_inst_origin_def])
+  >- (drule_all mssa_ok_inst >> strip_tac >>
+      drule_all mssa_renamed_use >> strip_tac >>
+      qpat_x_assum `MAP _ inst'.inst_operands = _` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `inst'.inst_opcode = _` (SUBST_ALL_TAC o SYM) >>
+      rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- (rpt strip_tac >> metis_tac[mssa_map_var_mem])
+      >- (rpt strip_tac >> metis_tac[mssa_map_var_mem, mssa_map_label_member])
+      >> first_assum ACCEPT_TAC)
+  >> gvs[ptr_use_ok_def, is_pointer_preserving_op_def]
+QED
+
+Theorem mssa_phi_output_pv:
+  MEM inst (fn_insts fn) /\ MEM (orig w) inst.inst_outputs /\
+  orig v IN fn_pv P fn /\
+  (orig v = orig w \/
+   (inst.inst_opcode = PHI /\ MEM (Var (orig v)) inst.inst_operands)) ==>
+  orig w IN fn_pv P fn
+Proof
+  rw[] >> gvs[fn_pv_def] >> irule mssa_derived_closed >>
+  metis_tac[is_pointer_preserving_op_def]
+QED
+
+Theorem mssa_phi_operand_pv:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  MEM (orig w) inst.inst_outputs /\ orig w IN fn_pv P fn /\
+  (orig u = orig w \/
+   (inst.inst_opcode = PHI /\ MEM (Var (orig u)) inst.inst_operands)) ==>
+  orig u IN fn_pv P fn
+Proof
+  rw[] >> gvs[] >> irule mssa_input_phi_pointer_operand >> metis_tac[]
+QED
+
+Theorem mssa_affine:
+  fn_ptr_ok P fn /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  (!inst v. MEM inst (fn_insts fn') /\ MEM (Var v) inst.inst_operands ==>
+     (v IN fn_pv P fn' <=> orig v IN fn_pv P fn)) ==>
+  affine_pointer_ops fn' (ptr_roots P fn')
+Proof
+  strip_tac >>
+  `affine_pointer_ops fn (ptr_roots P fn)` by gvs[fn_ptr_ok_def] >>
+  pop_assum mp_tac >>
+  simp[affine_pointer_ops_def, LET_THM, GSYM fn_pv_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `MEM inst (fn_insts fn')` by metis_tac[mssa_mem_fn_insts] >>
+  `mssa_inst_origin orig fn inst` by metis_tac[] >>
+  qpat_x_assum `mssa_inst_origin _ _ inst`
+    (strip_assume_tac o REWRITE_RULE [mssa_inst_origin_def]) >>
+  gvs[] >>
+  rename1 `MEM i0 (fn_insts fn)` >>
+  `?bb0. MEM bb0 fn.fn_blocks /\ MEM i0 bb0.bb_instructions` by
+    metis_tac[mssa_mem_fn_insts] >>
+  `!v. MEM (Var v) inst.inst_operands ==>
+       (v IN fn_pv P fn' <=> orig v IN fn_pv P fn)` by metis_tac[] >>
+  qpat_x_assum `!bb inst op1 op2. _` (qspecl_then [`bb0`, `i0`] mp_tac) >>
+  qpat_x_assum `_ = i0.inst_operands` (SUBST_ALL_TAC o SYM) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem mssa_phi_all_var:
+  fn_ptr_ok P fn /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  (!inst v. MEM inst (fn_insts fn') /\ MEM (Var v) inst.inst_operands ==>
+     (v IN fn_pv P fn' <=> orig v IN fn_pv P fn)) ==>
+  phi_pv_all_var fn' (ptr_roots P fn')
+Proof
+  strip_tac >>
+  simp[phi_pv_all_var_def, LET_THM, GSYM fn_pv_def] >>
+  rpt gen_tac >> strip_tac >>
+  `MEM inst (fn_insts fn')` by metis_tac[mssa_mem_fn_insts] >>
+  `mssa_inst_origin orig fn inst` by metis_tac[] >>
+  qpat_x_assum `mssa_inst_origin _ _ inst`
+    (strip_assume_tac o REWRITE_RULE [mssa_inst_origin_def]) >>
+  gvs[] >>
+  rename1 `MEM i0 (fn_insts fn)` >>
+  `orig v IN fn_pv P fn` by metis_tac[] >>
+  `orig w IN fn_pv P fn` by
+    (irule mssa_phi_output_pv >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+               `orig v' IN fn_pv P fn` suffices_by metis_tac[] >>
+               irule mssa_phi_operand_pv >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem mssa_write_disjoint:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  MEM inst' (fn_insts fn') /\ mem_write_ops inst' = SOME ops' /\
+  ops'.iao_ofst = Var v ==>
+  ~(v IN pointer_derived_vars fn' (alloca_roots fn') /\
+    v IN pointer_derived_vars fn' (ptr_roots P fn' DIFF alloca_roots fn'))
+Proof
+  rpt strip_tac >>
+  drule_all mssa_alloca_forward >> strip_tac >>
+  drule_all mssa_nonalloca_forward >> strip_tac >>
+  `mssa_inst_origin orig fn inst'` by metis_tac[] >>
+  qpat_x_assum `mssa_inst_origin _ _ inst'`
+    (strip_assume_tac o REWRITE_RULE [mssa_inst_origin_def])
+  >- (drule_all mssa_renamed_write_back >> strip_tac >>
+      drule_all mssa_ok_write >> simp[]) >>
+  gvs[memLocDefsTheory.mem_write_ops_def]
+QED
+
+Theorem mssa_pv_definition:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  fn_phis_non_degenerate fn' /\
+  (!inst v. MEM inst (fn_insts fn') /\ MEM (Var v) inst.inst_operands ==>
+     (v IN fn_pv P fn' <=> orig v IN fn_pv P fn)) /\
+  MEM inst' (fn_insts fn') /\ MEM v inst'.inst_outputs /\
+  v IN fn_pv P fn' ==>
+  inst'.inst_opcode = ALLOCA \/
+  ((inst'.inst_opcode = DALLOCA \/
+    (inst'.inst_opcode = PARAM /\
+     ?idx. inst'.inst_operands = [Lit idx] /\ w2n idx IN P fn'.fn_name)) /\
+   v NOTIN alloca_roots fn') \/
+  (is_pointer_preserving_op inst'.inst_opcode /\
+   ?u. MEM (Var u) inst'.inst_operands /\ u IN fn_pv P fn')
+Proof
+  strip_tac >>
+  `orig v IN fn_pv P fn` by (irule mssa_pv_forward >> metis_tac[]) >>
+  `mssa_inst_origin orig fn inst'` by metis_tac[] >>
+  qpat_x_assum `mssa_inst_origin _ _ inst'`
+    (strip_assume_tac o REWRITE_RULE [mssa_inst_origin_def])
+  >- (`MEM (orig v) inst.inst_outputs` by
+        metis_tac[listTheory.MEM_MAP] >>
+      drule_all mssa_input_pointer_definition >> strip_tac
+      >- gvs[]
+      >- (`v NOTIN alloca_roots fn'` by
+            (strip_tac >> drule_all mssa_alloca_roots_origin >>
+             metis_tac[]) >>
+          gvs[])
+      >- (`v NOTIN alloca_roots fn'` by
+            (strip_tac >> drule_all mssa_alloca_roots_origin >>
+             metis_tac[]) >>
+          `inst'.inst_operands = [Lit idx]` by
+            (irule mssa_map_lit >> metis_tac[]) >>
+          gvs[]) >>
+      `?u'. MEM (Var u') inst'.inst_operands /\ orig u' = u` by
+        metis_tac[mssa_map_var_member] >>
+      `u' IN fn_pv P fn'` by metis_tac[] >>
+      disj2_tac >> disj2_tac >> conj_tac >- gvs[] >>
+      qexists_tac `u'` >> gvs[])
+  >- gvs[]
+  >> (disj2_tac >> disj2_tac >> conj_tac
+      >- gvs[is_pointer_preserving_op_def] >>
+      gvs[] >>
+      `?u. MEM (Var u) inst'.inst_operands` by
+        (Cases_on `inst'.inst_opcode = ASSIGN` >- gvs[] >>
+         gvs[fn_phis_non_degenerate_def] >>
+         first_x_assum drule >> simp[] >> strip_tac >>
+         metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
+      `!x. MEM (Var x) inst'.inst_operands ==> x IN fn_pv P fn'` by
+        (rpt strip_tac >>
+         `orig x IN fn_pv P fn` by
+           (Cases_on `inst'.inst_opcode = ASSIGN`
+            >- (gvs[] >> irule mssa_input_phi_pointer_operand >>
+                metis_tac[]) >>
+            irule mssa_phi_operand_pv >> metis_tac[]) >>
+         metis_tac[]) >>
+      metis_tac[listTheory.MEM])
+QED
+
 Theorem make_ssa_current_fn_ptr_ok:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
@@ -824,5 +1267,33 @@ Theorem make_ssa_current_fn_ptr_ok:
   make_ssa_current_fn s fn = (fn',s') /\ fn_ptr_ok P fn ==>
   fn_ptr_ok P fn' /\ fn_ptr_ok P (reachable_fn fn')
 Proof
-  cheat
+  strip_tac >>
+  `reachable_fn fn' = fn'` by
+    (irule mssa_reachable_output_identity >> metis_tac[]) >>
+  simp[] >>
+  `?orig. !inst. MEM inst (fn_insts fn') ==> mssa_inst_origin orig fn inst` by
+    (irule mssa_origin >> metis_tac[]) >>
+  drule mssa_fields >> strip_tac >>
+  `wf_ssa fn'` by (irule mssa_wf_ssa >> metis_tac[]) >>
+  drule_all make_ssa_current_fn_input_ok >> strip_tac >>
+  drule_all make_ssa_current_fn_phis_non_degenerate >> strip_tac >>
+  `!bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+     fn_entry_label fn' = SOME bb.bb_label ==> inst.inst_opcode <> PHI` by
+    (rpt gen_tac >> strip_tac >> irule mssa_entry_no_phi >> metis_tac[]) >>
+  `!inst v. MEM inst (fn_insts fn') /\ MEM (Var v) inst.inst_operands ==>
+     (v IN fn_pv P fn' <=> orig v IN fn_pv P fn)` by
+    (rpt strip_tac >> eq_tac >> strip_tac
+     >- (irule mssa_pv_forward >> metis_tac[]) >>
+     irule mssa_pointer_operand_backward >> metis_tac[]) >>
+  rewrite_tac [fn_ptr_ok_def] >> rpt conj_tac
+  >- gvs[fn_ptr_ok_def]
+  >- (gen_tac >> strip_tac >>
+      `mssa_inst_origin orig fn inst` by metis_tac[] >>
+      `!v. MEM (Var v) inst.inst_operands ==>
+           (v IN fn_pv P fn' <=> orig v IN fn_pv P fn)` by metis_tac[] >>
+      drule_all mssa_target_inst >> disch_then ACCEPT_TAC)
+  >- (irule mssa_affine >> metis_tac[])
+  >- (irule mssa_phi_all_var >> metis_tac[])
+  >- (rpt strip_tac >> drule_at Any mssa_write_disjoint >> metis_tac[]) >>
+  rpt strip_tac >> irule mssa_pv_definition >> metis_tac[]
 QED
