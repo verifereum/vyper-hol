@@ -855,3 +855,246 @@ Proof
   qmatch_goalsub_abbrev_tac `LENGTH suffix` >>
   simp[execute_plan_def, exec_stack_op_def, EL_APPEND_EQN]
 QED
+
+Theorem invoke_bind_frame_outside:
+  !outs vals s t fn ra x.
+  bind_outputs outs vals s = SOME t /\ ~MEM x outs ==>
+  lookup_var x (frame_view fn ra t) = lookup_var x (frame_view fn ra s)
+Proof
+  Induct >- (Cases >> simp[bind_outputs_def]) >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `bind_outputs (out::outs) (value::values) source = SOME result` >>
+  `bind_outputs outs values (update_var out value source) = SOME result` by
+    gvs[bind_outputs_def, ZIP, FOLDL] >>
+  first_x_assum (drule_at Any) >>
+  disch_then (qspecl_then [`fn`, `ra`, `x`] mp_tac) >>
+  gvs[lookup_var_def, frame_view_vars_lookup, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem invoke_bind_frame_position:
+  !outs vals s t fn ra k.
+  ALL_DISTINCT outs /\ EVERY (\x. ~retpc_var fn x) outs /\
+  bind_outputs outs vals s = SOME t /\ k < LENGTH outs ==>
+  lookup_var (EL k outs) (frame_view fn ra t) = SOME (EL k vals)
+Proof
+  Induct >- simp[] >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `bind_outputs (out::outs) (value::values) source = SOME result` >>
+  `bind_outputs outs values (update_var out value source) = SOME result` by
+    gvs[bind_outputs_def, ZIP, FOLDL] >>
+  Cases_on `k`
+  >- (fs[] >> drule_all invoke_bind_frame_outside >>
+      disch_then (qspecl_then [`fn`, `ra`] mp_tac) >>
+      gvs[lookup_var_def, frame_view_vars_lookup, update_var_def, FLOOKUP_UPDATE]) >>
+  gvs[] >> first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem invoke_bind_frame_values:
+  !fn ra outs vals s t.
+  ALL_DISTINCT outs /\ EVERY (\x. ~retpc_var fn x) outs /\
+  bind_outputs outs vals s = SOME t ==>
+  (!k. k < LENGTH outs ==>
+    lookup_var (EL k outs) (frame_view fn ra t) = SOME (EL k vals)) /\
+  (!x. ~MEM x outs ==>
+    lookup_var x (frame_view fn ra t) = lookup_var x (frame_view fn ra s))
+Proof
+  metis_tac[invoke_bind_frame_position, invoke_bind_frame_outside]
+QED
+
+Theorem invoke_return_outside_closure:
+  !ctx cp lo fn ra rest mem0 arranged vs mid callee cvs cas ras.
+  fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+  fn_directly_calls ctx fn.fn_name callee.fn_name /\
+  cas.as_memory = mid.as_memory /\
+  fn_return_state_rel ctx cp callee cvs cas ras ==>
+  !b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+    read_byte b ras.as_memory = read_byte b mem0
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `fn_return_state_rel ctx plan callee cvs cas ras` >>
+  `~closure_spill_byte ctx plan callee.fn_name b` by
+    metis_tac[invoke_closure_subset] >>
+  gvs[fn_frame_inv_def, fn_return_state_rel_def] >> metis_tac[]
+QED
+
+Theorem invoke_bind_shared_state:
+  !outs vals s t st.
+  bind_outputs outs vals s = SOME t /\ shared_state_rel s st ==>
+  shared_state_rel t st
+Proof
+  Induct >- (Cases >> simp[bind_outputs_def]) >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `bind_outputs (out::outs) (value::values) source = SOME result` >>
+  `bind_outputs outs values (update_var out value source) = SOME result` by
+    gvs[bind_outputs_def, ZIP, FOLDL] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  gvs[shared_state_rel_def, venom_asm_terminal_rel_def, update_var_def]
+QED
+
+Theorem invoke_merge_return_shared:
+  !ctx cp callee cvs cas ras caller ret.
+  fn_return_state_rel ctx cp callee cvs cas ras /\
+  cas.as_call_ctx = caller.vs_call_ctx /\ cas.as_tx_ctx = caller.vs_tx_ctx /\
+  cas.as_block_ctx = caller.vs_block_ctx /\ cas.as_code = caller.vs_code /\
+  cas.as_prev_hashes = caller.vs_prev_hashes ==>
+  shared_state_rel (adopt_return_fmp ret (merge_callee_state caller cvs)) ras
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `ret.iret_adopt_fmp` >>
+  gvs[fn_return_state_rel_def, shared_state_rel_def, venom_asm_terminal_rel_def,
+      adopt_return_fmp_def, merge_callee_state_def]
+QED
+
+Theorem invoke_bind_frame_fields:
+  !outs vals s t.
+  bind_outputs outs vals s = SOME t ==>
+  t = s with vs_vars := t.vs_vars
+Proof
+  Induct >- (Cases >> simp[bind_outputs_def]) >>
+  Cases_on `vals` >- simp[bind_outputs_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `bind_outputs (out::outs) (value::values) source = SOME result` >>
+  `bind_outputs outs values (update_var out value source) = SOME result` by
+    gvs[bind_outputs_def, ZIP, FOLDL] >>
+  first_x_assum drule >> simp[update_var_def]
+QED
+
+Theorem invoke_return_old_operand:
+  !outs vals caller cvs ret result fn ra lo op.
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state caller cvs)) = SOME result /\
+  EVERY (\out. case op of Var x => x <> out | _ => T) outs ==>
+  operand_val (frame_view fn ra result) lo op =
+  operand_val (frame_view fn ra caller) lo op
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `op` >>
+  gvs[operand_val_def] >>
+  rename1 `FLOOKUP (frame_view fn ra result).vs_vars x` >>
+  `~MEM x outs` by gvs[EVERY_MEM] >>
+  drule_all invoke_bind_frame_outside >>
+  disch_then (qspecl_then [`fn`, `ra`] mp_tac) >>
+  Cases_on `ret.iret_adopt_fmp` >>
+  simp[lookup_var_def, frame_view_vars_lookup, adopt_return_fmp_def,
+       merge_callee_state_def]
+QED
+
+Theorem invoke_return_saved_stack:
+  !outs vals caller cvs ret result fn ra lo stack saved.
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state caller cvs)) = SOME result /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs) stack /\
+  plan_stack_rel lo (frame_view fn ra caller) stack saved ==>
+  plan_stack_rel lo (frame_view fn ra result) stack saved
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[plan_stack_rel_def] >> rpt strip_tac >>
+  `MEM (EL i (REVERSE stack)) stack` by
+    metis_tac[EL_MEM, LENGTH_REVERSE, MEM_REVERSE] >>
+  `EVERY (\out. case EL i (REVERSE stack) of Var x => x <> out | _ => T) outs` by
+    (qpat_x_assum `EVERY _ stack` mp_tac >>
+     rewrite_tac[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  drule_all invoke_return_old_operand >>
+  disch_then (qspecl_then [`fn`, `ra`, `lo`] assume_tac) >>
+  metis_tac[]
+QED
+
+Theorem invoke_return_output_stack:
+  !outs vals s result fn ra lo stack saved.
+  ALL_DISTINCT outs /\ EVERY (\x. ~retpc_var fn x) outs /\
+  bind_outputs outs vals s = SOME result /\
+  plan_stack_rel lo (frame_view fn ra result) stack saved ==>
+  plan_stack_rel lo (frame_view fn ra result) (stack ++ MAP Var outs)
+    (REVERSE vals ++ saved)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH vals = LENGTH outs` by gvs[bind_outputs_def] >>
+  `!k. k < LENGTH outs ==>
+    lookup_var (EL k outs) (frame_view fn ra result) = SOME (EL k vals)` by
+    (rpt strip_tac >> irule invoke_bind_frame_position >>
+     simp[] >> metis_tac[]) >>
+  gvs[plan_stack_rel_def, REVERSE_APPEND] >> rpt strip_tac >>
+  Cases_on `i < LENGTH outs`
+  >- (simp[EL_APPEND_EQN, EL_MAP, EL_REVERSE, operand_val_def] >>
+      first_x_assum (qspec_then `PRE (LENGTH outs - i)` mp_tac) >>
+      simp[lookup_var_def]) >>
+  simp[EL_APPEND_EQN] >> first_x_assum irule >> decide_tac
+QED
+
+Theorem invoke_return_spills:
+  !ctx cp fn callee r lo ra spilled outs vals caller cvs ret result cas ras.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\ fn_directly_calls ctx fn.fn_name callee.fn_name /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  fn_return_state_rel ctx cp callee cvs cas ras /\
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state caller cvs)) = SOME result /\
+  plan_spill_rel lo (frame_view fn ra caller) spilled cas.as_memory /\
+  (!op off. FLOOKUP spilled op = SOME off ==>
+    r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
+    EVERY (\out. case op of Var x => x <> out | _ => T) outs) ==>
+  plan_spill_rel lo (frame_view fn ra result) spilled ras.as_memory
+Proof
+  rpt gen_tac >> strip_tac >> simp[plan_spill_rel_def] >> rpt strip_tac >>
+  `r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
+    EVERY (\out. case op of Var x => x <> out | _ => T) outs` by metis_tac[] >>
+  drule_all invoke_return_old_operand >>
+  disch_then (qspecl_then [`fn`, `ra`, `lo`] assume_tac) >>
+  drule_all invoke_return_preserves_caller_spills >> strip_tac >>
+  gvs[plan_spill_rel_def] >> metis_tac[]
+QED
+
+Theorem invoke_return_context:
+  !ctx cp fn callee r lo ra consumed outs vals caller cvs ret result cas ras.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\ fn_directly_calls ctx fn.fn_name callee.fn_name /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  fn_return_state_rel ctx cp callee cvs cas ras /\
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state caller cvs)) = SOME result /\
+  ALL_DISTINCT outs /\ EVERY (\x. ~retpc_var fn x) outs /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs)
+    consumed.ps_stack /\
+  (!op off. FLOOKUP consumed.ps_spilled op = SOME off ==>
+    r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
+    EVERY (\out. case op of Var x => x <> out | _ => T) outs) /\
+  context_venom_asm_rel cp lo consumed (frame_view fn ra caller) cas /\
+  ras.as_stack = REVERSE vals ++ cas.as_stack ==>
+  context_venom_asm_rel cp lo
+    (consumed with ps_stack := consumed.ps_stack ++ MAP Var outs)
+    (frame_view fn ra result) ras
+Proof
+  rpt gen_tac >> strip_tac >>
+  `plan_stack_rel lo (frame_view fn ra caller) consumed.ps_stack cas.as_stack /\
+   plan_spill_rel lo (frame_view fn ra caller) consumed.ps_spilled cas.as_memory` by
+    gvs[context_venom_asm_rel_def] >>
+  `plan_stack_rel lo (frame_view fn ra result) consumed.ps_stack cas.as_stack` by
+    (irule invoke_return_saved_stack >> simp[] >> metis_tac[]) >>
+  `plan_stack_rel lo (frame_view fn ra result)
+    (consumed.ps_stack ++ MAP Var outs) ras.as_stack` by
+    (gvs[] >> irule invoke_return_output_stack >> simp[] >> metis_tac[]) >>
+  `plan_spill_rel lo (frame_view fn ra result) consumed.ps_spilled ras.as_memory` by
+    (irule invoke_return_spills >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `shared_state_rel (adopt_return_fmp ret (merge_callee_state caller cvs)) ras` by
+    (irule invoke_merge_return_shared >> goal_assum (drule_at Any) >>
+     gvs[context_venom_asm_rel_def, frame_view_def]) >>
+  `shared_state_rel result ras` by metis_tac[invoke_bind_shared_state] >>
+  `result.vs_memory = cvs.vs_memory` by
+    (drule invoke_bind_frame_fields >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+  qpat_x_assum `fn_return_state_rel _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[fn_return_state_rel_def] >> strip_tac >>
+  simp[context_venom_asm_rel_def, frame_view_def] >>
+  gvs[shared_state_rel_def, venom_asm_terminal_rel_def, frame_view_def]
+QED
+
+Theorem invoke_return_frame_fields:
+  !outs vals caller cvs ret result.
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state caller cvs)) = SOME result ==>
+  result.vs_initial_fmp = caller.vs_initial_fmp /\
+  result.vs_halted = caller.vs_halted
+Proof
+  rpt gen_tac >> strip_tac >> drule invoke_bind_frame_fields >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_initial_fmp, s.vs_halted)`) >>
+  Cases_on `ret.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, merge_callee_state_def]
+QED
