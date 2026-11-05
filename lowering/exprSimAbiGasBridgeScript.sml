@@ -1387,6 +1387,131 @@ Proof
   qexists_tac `"A"` >> simp[]
 QED
 
+Theorem relabel_probe_edge:
+  !ctx s n t.
+    gas_path_edge ctx relabel_probe_fn s n (OK t) /\
+    s.vs_current_bb = "A" /\ s.vs_prev_bb = SOME "A" ==>
+    t.vs_current_bb = "A" /\ t.vs_prev_bb = SOME "A"
+Proof
+  rpt gen_tac >> Cases_on `s.vs_inst_idx`
+  >- (simp[gas_path_edge_def, relabel_probe_fn_def, relabel_probe_block_def,
+        lookup_block_def, FIND_thm, get_instruction_def] >>
+      rpt strip_tac >> gvs[relabel_probe_bad_def, relabel_probe_bad_step,
+        exit_result_def]) >>
+  rename1 `s.vs_inst_idx = SUC k` >> Cases_on `k` >>
+  simp[gas_path_edge_def, relabel_probe_fn_def, relabel_probe_block_def,
+    lookup_block_def, FIND_thm, get_instruction_def] >> rpt strip_tac >>
+  qpat_x_assum `n = gas_count_step _ _ _ _` kall_tac >>
+  gvs[relabel_probe_jump_def, mk_inst_def, is_terminator_def] >>
+  gvs[step_inst_def] >>
+  gvs[step_inst_base_opcode_eqs] >>
+  gvs[jump_to_def, relabel_probe_bad_def, mk_inst_def,
+    eval_phis_def, phi_prefix_length_def, exit_result_def] >>
+  first_x_assum (mp_tac o AP_TERM ``\(u:venom_state). u.vs_current_bb``) >> simp[]
+QED
+
+Theorem relabel_probe_path:
+  !ctx fn s n r.
+    gas_path ctx fn s n r ==>
+    fn = relabel_probe_fn /\ s.vs_current_bb = "A" /\
+    s.vs_prev_bb = SOME "A" ==>
+    !t. r = OK t ==> t.vs_current_bb = "A" /\ t.vs_prev_bb = SOME "A"
+Proof
+  ho_match_mp_tac gas_path_ind >> rpt strip_tac >> gvs[exit_result_def] >>
+  metis_tac[relabel_probe_edge]
+QED
+
+Theorem relabel_probe_no_endpoint:
+  !ctx. ~(?t. gas_marked_path F ctx relabel_probe_fn relabel_probe_s 0 (OK t) /\
+    t.vs_prev_bb <> SOME "A" /\ ~t.vs_halted /\
+    t.vs_current_bb = "A" /\ t.vs_inst_idx = 0)
+Proof
+  gen_tac >> strip_tac >> gvs[gas_marked_path_def] >>
+  drule relabel_probe_path >> simp[relabel_probe_s_def]
+QED
+
+(* Both original conclusions are false, although every relabeled
+   continuation premise holds. These certificates do not use either bridge. *)
+Theorem relabel_probe_abi_counterexample:
+  !ctx.
+    (!L ids fn'.
+       LENGTH ids = LENGTH relabel_probe_sa.cs_current_insts /\
+       fn_has_code (start_relabel L ids relabel_probe_sa)
+         (start_swap relabel_probe_sa L ids relabel_probe_sb) fn' /\
+       fn_inst_ids_distinct fn' /\ fn'.fn_name = relabel_probe_fn.fn_name /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
+            i.inst_opcode <> NOP ==> MEM i (fn_insts relabel_probe_fn)) /\
+       (!bb. lookup_block relabel_probe_sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) ==>
+       ?t. t.vs_prev_bb <> SOME "A" /\ ~t.vs_halted /\
+           t.vs_current_bb = relabel_probe_sb.cs_current_bb /\
+           t.vs_inst_idx = LENGTH relabel_probe_sb.cs_current_insts /\
+           abi_decode_sim ctx fn' (relabel_probe_s with vs_current_bb := L) t) /\
+    relabel_probe_sa.cs_blocks <> relabel_probe_sb.cs_blocks /\
+    cs_extends relabel_probe_sa relabel_probe_sb /\
+    frag_ops_free relabel_probe_sa relabel_probe_sb /\
+    ~MEM relabel_probe_sb.cs_current_bb (MAP (\bb. bb.bb_label)
+      (FRONT (emitted_blocks relabel_probe_sa relabel_probe_sb))) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code relabel_probe_sa relabel_probe_sb)) /\
+    (!t rd. t.vs_prev_bb <> SOME "A" ==>
+       (t with vs_returndata := rd).vs_prev_bb <> SOME "A") /\
+    fn_has_code relabel_probe_sa relabel_probe_sb relabel_probe_fn /\
+    (relabel_probe_sb.cs_current_insts <> [] \/
+     !bb. lookup_block relabel_probe_sb.cs_current_bb relabel_probe_fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
+    ~relabel_probe_s.vs_halted /\
+    relabel_probe_s.vs_current_bb = relabel_probe_sa.cs_current_bb /\
+    relabel_probe_s.vs_inst_idx = LENGTH relabel_probe_sa.cs_current_insts /\
+    ~(?t. gas_marked_path F ctx relabel_probe_fn relabel_probe_s 0 (OK t) /\
+       t.vs_prev_bb <> SOME "A" /\ ~t.vs_halted /\
+       t.vs_current_bb = relabel_probe_sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH relabel_probe_sb.cs_current_insts)
+Proof
+  gen_tac >>
+  mp_tac relabel_probe_structure >> mp_tac relabel_probe_start >>
+  simp[relabel_probe_sa_def, relabel_probe_sb_def] >> rpt strip_tac >>
+  simp[relabel_probe_no_endpoint]
+  >- (qspecl_then [`ctx`, `L`, `ids`, `fn'`] mp_tac relabel_probe_sim >>
+      simp[relabel_probe_sa_def, relabel_probe_sb_def]) >>
+  metis_tac[relabel_probe_no_endpoint]
+QED
+
+Theorem relabel_probe_frag_counterexample:
+  !ctx.
+    (!L ids fn'.
+       LENGTH ids = LENGTH relabel_probe_sa.cs_current_insts /\
+       fn_has_code (start_relabel L ids relabel_probe_sa)
+         (start_swap relabel_probe_sa L ids relabel_probe_sb) fn' /\
+       fn_inst_ids_distinct fn' /\ fn'.fn_name = relabel_probe_fn.fn_name /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\
+            i.inst_opcode <> NOP ==> MEM i (fn_insts relabel_probe_fn)) /\
+       (relabel_probe_sb.cs_current_insts <> [] \/
+        !bb. lookup_block relabel_probe_sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
+           phi_prefix_length bb.bb_instructions = 0) ==>
+       (?t. t.vs_prev_bb <> SOME "A" /\ ~t.vs_halted /\
+            t.vs_current_bb = relabel_probe_sb.cs_current_bb /\
+            t.vs_inst_idx = LENGTH relabel_probe_sb.cs_current_insts /\
+            !fuel r. run_from fuel ctx fn' t = r /\ (!e. r <> Error e) ==>
+              ?fuel'. run_from fuel' ctx fn' (relabel_probe_s with vs_current_bb := L) = r) \/
+       (?fuel r. run_from fuel ctx fn' (relabel_probe_s with vs_current_bb := L) = r /\
+          exit_result r /\ F)) /\
+    (!h. ~((\r. F) (Halt h))) /\
+    (!a t b. (\r. F) (Abort a t) ==> (\r. F) (Abort a (t with vs_current_bb := b))) /\
+    (!v t b. (\r. F) (IntRet v t) ==> (\r. F) (IntRet v (t with vs_current_bb := b))) /\
+    ~((?t. gas_marked_path F ctx relabel_probe_fn relabel_probe_s 0 (OK t) /\
+       t.vs_prev_bb <> SOME "A" /\ ~t.vs_halted /\
+       t.vs_current_bb = relabel_probe_sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH relabel_probe_sb.cs_current_insts) \/
+      (?r. gas_marked_path F ctx relabel_probe_fn relabel_probe_s 0 r /\
+         exit_result r /\ F))
+Proof
+  gen_tac >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qspecl_then [`ctx`, `L`, `ids`, `fn'`] mp_tac relabel_probe_sim >>
+      gvs[relabel_probe_sa_def, relabel_probe_sb_def, abi_decode_sim_def]) >>
+  simp[relabel_probe_sb_def] >> metis_tac[relabel_probe_no_endpoint]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
