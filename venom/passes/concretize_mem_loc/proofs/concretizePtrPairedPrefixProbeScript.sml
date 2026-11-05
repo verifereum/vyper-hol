@@ -3,7 +3,8 @@ Ancestors
   concretizePtrPairedPrefix concretizePtrValueTransport
   concretizePtrValueSelection concretizePtrAffineTransport
   concretizePtrChronologicalHistory
-  concretizePtrDeletedGapHistory o1PassContract unitTransformDefs
+  concretizePtrDeletedGapHistory concretizePtrSourceOwnership
+  concretizePtrLedgerAlignment makeSsaHelper o1PassContract unitTransformDefs
   contextCodegenRel ptrDiscipline venomExecSemantics lowerDloadDefs
   venomState list finite_map words
 
@@ -87,6 +88,38 @@ Proof
   `a.po_state.vs_inst_idx +
     (EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx) =
     EL at.po_state.vs_inst_idx indices` by decide_tac >>
+  simp[ptr_gap_scan_fields] >>
+  qexists_tac `indices` >> simp[] >>
+  Cases_on `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices`
+  >- simp[ptr_gap_scan_def] >>
+  `0 < EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx` by decide_tac >>
+  simp[ptr_gap_scan_fields]
+QED
+
+Theorem ptr_paired_cursor_owned_scan:
+  ptr_paired_cursor local_positions a at /\
+  lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
+  ?n delta. LENGTH delta = n /\
+    ptr_source_ownership vs0 C (h ++ delta) (ptr_gap_scan bb n a)
+      tokens registry births PT (ptr_gap_tag_scan bb n a PT TG) saved /\
+    ptr_paired_cursor local_positions (ptr_gap_scan bb n a) at
+Proof
+  simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >>
+  rpt strip_tac >> gvs[] >>
+  `EL at.po_state.vs_inst_idx indices < LENGTH bb.bb_instructions` by
+    (drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >>
+     strip_tac >> gvs[]) >>
+  `?delta. LENGTH delta = EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx /\
+    ptr_source_ownership vs0 C (h ++ delta)
+      (ptr_gap_scan bb (EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx) a)
+      tokens registry births PT
+      (ptr_gap_tag_scan bb (EL at.po_state.vs_inst_idx indices - a.po_state.vs_inst_idx) a PT TG) saved` by
+    (irule ptr_gap_ownership_scan >> simp[] >>
+     `bb.bb_label = a.po_state.vs_current_bb` by
+       metis_tac[lookup_block_label] >> simp[]) >>
+  qexists_tac `delta` >>
+  `a.po_state.vs_inst_idx + LENGTH delta = EL at.po_state.vs_inst_idx indices` by decide_tac >>
   simp[ptr_gap_scan_fields] >>
   qexists_tac `indices` >> simp[] >>
   Cases_on `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices`
