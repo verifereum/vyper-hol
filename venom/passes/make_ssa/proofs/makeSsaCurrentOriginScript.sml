@@ -36,6 +36,7 @@ Theorem make_ssa_current_fn_origin:
       ((inst'.inst_opcode = PHI \/ inst'.inst_opcode = ASSIGN) /\
        ?w inst. inst'.inst_outputs = [w] /\ MEM inst (fn_insts fn) /\
          MEM (orig w) inst.inst_outputs /\
+         (inst'.inst_opcode = ASSIGN ==> ?u. inst'.inst_operands = [Var u]) /\
          (!op. MEM op inst'.inst_operands ==> ?x. op = Var x \/ op = Label x) /\
          !u. MEM (Var u) inst'.inst_operands ==>
              orig u = orig w \/
