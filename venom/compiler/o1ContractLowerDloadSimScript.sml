@@ -24,6 +24,7 @@ Ancestors
   o1LowerDloadJointCall o1LowerDloadInvokeArguments o1LowerDloadAbortResult
   o1LowerDloadHaltResult o1LowerDloadBranchExec o1LowerDloadSegmentContinuation
   o1LowerDloadOrdinaryDispatch o1LowerDloadEntryFetch o1LowerDloadRootResult
+  o1LowerDloadRunnerBoundary
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
