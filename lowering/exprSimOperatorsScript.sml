@@ -39,12 +39,14 @@
  *                              for the rest
  *   compile_ifexp_sim        — compile_expr_sim's case: compile_ifexp_case
  *
- * Cheated, for the later #636 PRs:
  *   compile_bop_rest_case    — == and != on bytestrings and in and not in
- *                              on arrays (#569), Operators row 6
+ *                              on arrays (#569), Operators row 6: on arrays
+ *                              of words by exprSimBopRestWord, the rest by
+ *                              exprSimBopHeld (held for #742)
  *   compile_bop_in_literal_sim — the same row for in and not in on an
- *                              array literal, from its elements'
- *                              simulation
+ *                              array literal: of words by
+ *                              exprSimBopInLiteralWord, the rest by
+ *                              exprSimBopHeld (held for #742)
  *
  * Row 9, ternaries, is proved: word ternaries by compile_ifexp_word_case,
  * aggregate ones by compile_ifexp_aggregate_case, and with them row 8's
@@ -67,6 +69,7 @@
 
 Theory exprSimOperators
 Ancestors
+  exprSimBopRestWord exprSimBopInLiteralWord exprSimBopHeld
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps
@@ -391,11 +394,12 @@ Proof
   simp[]
 QED
 
-(* Cheated, the rest of the binary operators whose operands are not both
+(* The rest of the binary operators whose operands are not both
    of word_value_type: == and != on bytestrings, which compare the
    keccak256 hashes of the operands' bytes, and in and not in on arrays
    (#569), but for in and not in on an array literal
-   (compile_bop_in_literal_sim).  Nothing else is left: the other
+   (compile_bop_in_literal_sim).  Bytestring equality and membership in
+   an array of non-words are held for #742 (exprSimBopHeld).  Nothing else is left: the other
    operators take operands of word_value_type (well_typed_binop), and a
    bytesN wider than 32 bytes does not evaluate
    (expr_body_pre_type_evaluates). *)
@@ -415,12 +419,19 @@ Theorem compile_bop_rest_case:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
-  cheat
+  rpt gen_tac >>
+  Cases_on `(bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)`
+  >- (MATCH_MP_TAC compile_bop_bytestring_eqne_case >> first_assum ACCEPT_TAC) >>
+  Cases_on `(bop = In \/ bop = NotIn) /\ ~is_word_type (expr_type e1)`
+  >- (MATCH_MP_TAC compile_bop_nonword_membership_case >>
+      first_assum ACCEPT_TAC) >>
+  MATCH_MP_TAC compile_bop_rest_word_case >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* Cheated, in and not in on an array literal (#569), which the lowering
+(* In and not in on an array literal (#569), which the lowering
    unrolls to a comparison with each element (compile_multi_exprs), so it
-   takes the elements' judgments, not the array's.  The body simulation,
+   takes the elements' judgments, not the array's.  An array literal of
+   non-words is held for #742 (exprSimBopHeld).  The body simulation,
    whose operand judgments are the array's, leaves this case as
    bodySimExprCases' body_bop_in_literal_case. *)
 Theorem compile_bop_in_literal_sim:
@@ -430,7 +441,9 @@ Theorem compile_bop_in_literal_sim:
     (bop = In \/ bop = NotIn) ==>
     expr_ok cenv (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  cheat
+  rpt gen_tac >> Cases_on `is_word_type (expr_type e1)`
+  >- (MATCH_MP_TAC compile_bop_in_literal_word_sim >> first_assum ACCEPT_TAC) >>
+  MATCH_MP_TAC compile_bop_in_literal_nonword_sim >> first_assum ACCEPT_TAC
 QED
 
 (* ===== All binary operators ===== *)
