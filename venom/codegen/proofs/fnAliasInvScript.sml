@@ -18,6 +18,50 @@ Ancestors
   fnPlanLineage frameRel codegenRel unitShapeDefs stackPlanGen stackPlanTypes
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
 
+(* Inventory boundaries do not depend on cleanup metadata or allocator fields. *)
+Definition plan_holds_def:
+  plan_holds ps at <=> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+End
+
+Theorem plan_holds_cleanup_update[simp]:
+  plan_holds
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) at
+  <=> plan_holds ps at
+Proof
+  simp[plan_holds_def]
+QED
+
+Theorem plan_holds_inventory_update[simp]:
+  plan_holds (ps with <| ps_stack := stk; ps_spilled := spilled |>) at
+  <=> MEM at stk \/ at IN FDOM spilled
+Proof
+  simp[plan_holds_def]
+QED
+
+Theorem plan_holds_init_cleanup[simp]:
+  ~plan_holds (init_cleanup_plan_state ch growth spill_base lbl_ctr) at
+Proof
+  simp[plan_holds_def, init_cleanup_plan_state_def, init_plan_state_def]
+QED
+
+(* A successful PHI plan does not, by itself, establish demand coverage. *)
+Theorem generate_phi_plan_absent_slot:
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack =
+    NONE ==>
+  generate_phi_plan inst next_liveness is_halting ps = ([], ps)
+Proof
+  simp[generate_phi_plan_def]
+QED
+
+(* OFFSET bypasses dead-output filtering. Such names must not be confused
+   with nontrivial ASSIGN aliases by a static support invariant. *)
+Theorem generate_offset_plan_holds_output:
+  inst.inst_operands = [Lit n; Label lbl] /\ inst.inst_outputs = [out] ==>
+  plan_holds (SND (generate_offset_plan inst ps)) (Var out)
+Proof
+  simp[generate_offset_plan_def, plan_holds_def, stackModelTheory.stack_push_def]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
