@@ -82,6 +82,24 @@ Proof
   metis_tac[SUBSET_UNION]
 QED
 
+Theorem hash_alloca_old_operand:
+  !ctx fn cenv cx es s id n out t b PG G tn value w.
+    stmt_state_rel ctx fn cenv cx es s /\
+    MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+    n < dimword (:256) /\
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
+    FLOOKUP t.vs_allocas id = SOME (b,n) /\
+    (!x. value = Var x ==> x <> out) /\
+    eval_operand value s = SOME w /\ op_taint tn value = {} ==>
+    eval_operand value t = SOME w /\
+    op_taint (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn) value = {}
+Proof
+  rpt gen_tac >> strip_tac >> drule_all hash_alloca_exterior_effects >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  conj_tac >- metis_tac[alloca_step_operand_preserved] >>
+  Cases_on `value` >> gvs[op_taint_def] >> metis_tac[]
+QED
+
 Theorem hash_alloca_step_frame:
   !ctx fn cenv cx es s id n out s1 b PG G tn d sa.
     stmt_state_rel ctx fn cenv cx es s /\
@@ -217,15 +235,14 @@ Theorem hash_literal_alloc_store_frame:
     ghost_inv d cenv cx es G tn s /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
-    (!t G1 tn1. run_inst_seq (emitted_insts sa sm) s = OK t /\
-      G1 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
-        [STRING #"%" (toString sa.cs_next_var)]) t /\
-      tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
-        [STRING #"%" (toString sa.cs_next_var)]) s t tn ==>
-      eval_operand value t = SOME v /\ op_taint tn1 value = {}) ==>
+    (!x. value = Var x ==> not_fresh_at sa x) /\
+    eval_operand value s = SOME v /\ op_taint tn value = {} ==>
     ?t a p G1 tn1 G2 tn2.
       run_inst_seq (emitted_insts sa sm) s = OK t /\
       buf.buf_operand = Var p /\ lookup_var p t = SOME a /\
+      p = STRING #"%" (toString sa.cs_next_var) /\
+      step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) s = OK t /\
+      eval_operand value t = SOME v /\ op_taint tn1 value = {} /\
       G1 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) t /\
       tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) s t tn /\
       G2 = step_prov PG G1 (mk_inst sid MSTORE [Var p;value] []) (mstore (w2n a) v t) /\
@@ -244,9 +261,16 @@ Proof
   disch_then (qspec_then `PG` strip_assume_tac) >>
   drule compile_alloc_buffer_parts >> strip_tac >>
   `lookup_var p t = SOME w` by gvs[eval_operand_def] >>
+  `emitted_insts sa sm = [mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]]` by
+    (drule compile_alloc_buffer_emission >> strip_tac >>
+     drule emitted_insts_emit_inst >> simp[emitted_insts_def] >> strip_tac >> gvs[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) s = OK t` by
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
   `eval_operand value t = SOME v /\ op_taint tn1 value = {}` by
-    (qpat_x_assum `!t G1 tn1. _` (qspecl_then [`t`, `G1`, `tn1`] mp_tac) >>
-     gvs[]) >>
+    (qpat_x_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
+     irule hash_alloca_old_operand >>
+     gvs[] >> metis_tac[]) >>
   qexistsl_tac [`t`, `w`, `p`, `G1`, `tn1`,
     `step_prov PG G1 (mk_inst sid MSTORE [Var p;value] []) (mstore (w2n w) v t)`,
     `step_taint (mk_inst sid MSTORE [Var p;value] []) t (mstore (w2n w) v t) tn1`] >>

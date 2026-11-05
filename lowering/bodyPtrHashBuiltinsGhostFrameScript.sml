@@ -97,3 +97,15 @@ Resume hash_ghost_inv_exterior_frame[locals]:
 QED
 
 Finalise hash_ghost_inv_exterior_frame
+
+Theorem hash_ghost_inv_inst_idx:
+  !d cenv cx es G tn s k.
+    ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
+    ghost_inv d cenv cx es G tn s
+Proof
+  Cases_on `d` >>
+  simp[ghost_inv_def, ptr_covers_def, lookup_var_def,
+    return_buf_ptr_def, stor_taint_ok_def] >>
+  PairCases_on `x` >>
+  simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
+QED
