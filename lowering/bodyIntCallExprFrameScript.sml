@@ -2242,3 +2242,97 @@ val _ = List.app (fn th =>
        List.all (fn oracle => oracle = "DISK_THM") oracles then ()
     else raise Fail "Mapping key audit has unproved dependencies"
   end) [mapping_dynamic_key_post_hash_frag, mapping_scalar_key_encoding];
+
+(* Runtime suffix dispatch retains the copy layout obligations explicitly. *)
+Theorem unwrap_runtime_storage_frame_frag:
+  unwrap_value cenv vv sm = (op,sb) /\ ~cenv.ce_is_ctor /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (case vv of StackValue t operand => T | LocatedValue t p =>
+    ~is_word_type t /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+     p.ptr_location = LocCode) ==>
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+      type_memory_bytes cenv t = type_memory_size tvt /\
+      ((p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+       type_memory_size tvt < 2 ** 64))) ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  strip_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  Cases_on `vv`
+  >- (irule unwrap_noncopy_runtime_storage_frame_frag >> gvs[]) >>
+  rename1 `LocatedValue t p` >>
+  Cases_on `p.ptr_location = LocMemory \/ is_word_type t`
+  >- (irule unwrap_noncopy_runtime_storage_frame_frag >> gvs[]) >>
+  Cases_on `p.ptr_location = LocCalldata`
+  >- (irule frag_exec_conseq >> qexistsl [`\s. F`, `\s. F`, `R`] >>
+      gvs[frag_exec_false_pre, vv_post_calldata]) >>
+  Cases_on `p.ptr_location = LocCode`
+  >- (gvs[] >> irule frag_exec_pointwise >> gen_tac >> simp[] >> strip_tac >>
+      drule_all unwrap_runtime_code_copy_storage_frame_frag >>
+      disch_then (qspec_then `R` mp_tac) >>
+      disch_then (mp_then Any mp_tac frag_exec_conseq) >>
+      disch_then irule >> simp[]) >>
+  `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by
+    (Cases_on `p.ptr_location` >> gvs[]) >>
+  gvs[] >> irule frag_exec_pointwise >> gen_tac >> simp[] >> strip_tac >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) unwrap_storage_copy_storage_frame_frag >>
+  disch_then (qspecl_then [`sb`, `op`, `R`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq) >>
+  disch_then irule >> simp[]
+QED
+
+Theorem raw_to_forced_runtime_storage_frame_frag:
+  compile_expr cenv ty e sa = (vv,sm) /\
+  unwrap_value cenv vv sm = (op,sb) /\
+  eval_expr cx e es = (rawres,est) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\
+  expr_res_ok res /\ ~cenv.ce_is_ctor /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM est.scopes /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (case vv of StackValue t operand => T | LocatedValue t p =>
+    ~is_word_type t /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+     p.ptr_location = LocCode) ==>
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+      type_memory_bytes cenv t = type_memory_size tvt /\
+      ((p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+       type_memory_size tvt < 2 ** 64))) /\
+  frag_exec ctx sa sm P
+    (\s. ?raw. rawres = INL raw /\
+         vv_post ctx func cenv cx e es sa sm s0 est raw vv s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (expr_exit rawres) ==>
+  frag_exec ctx sa sb P
+    (\s. ?v. res = INL v /\
+         expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (expr_exit res)
+Proof
+  strip_tac >> irule raw_to_forced_storage_frame_frag >> simp[] >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+  simp[] >> rpt strip_tac >>
+  irule unwrap_runtime_storage_frame_frag >> simp[]
+QED
+
+val _ = List.app (fn th =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Runtime forcing has unproved dependencies"
+  end) [unwrap_runtime_storage_frame_frag,
+        raw_to_forced_runtime_storage_frame_frag];
