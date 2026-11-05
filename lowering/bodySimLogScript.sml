@@ -111,7 +111,8 @@ Theorem log_arg_body_pre[local]:
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
     well_typed_expr env e /\
     ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+       (\e. ~is_extcode e /\
+            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target tops) /\
@@ -137,7 +138,8 @@ Theorem body_log_args_ready:
     body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
     supported_pure_exprs tops args /\ well_typed_exprs env args /\
     ~supported_exprs_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+       (\e. ~is_extcode e /\
+            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
     call_evaluation_safe cx (int_calls_exprs args) /\
     (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
               occurs_abi_decode_target target tops) ==>
