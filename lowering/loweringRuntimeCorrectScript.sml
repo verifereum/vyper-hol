@@ -660,6 +660,57 @@ Proof
   qexistsl_tac [`fb`, `sa`, `sd`, `sx`] >> simp[]
 QED
 
+Theorem runtime_entry_dispatch_code_labels[local]:
+  !selectors packages fallback_fn se func.
+    EVERY (\(sel,lbl). jump_label_ok lbl) selectors /\
+    EVERY (\p. isPREFIX "fn_" (FST p)) packages /\
+    (do fb <- fresh_label "fallback";
+        compile_selector_dispatch_linear selectors fb;
+        compile_external_fn_bodies packages;
+        new_block fb;
+        (case fallback_fn of
+           NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+         | SOME (ce,pay,nr,key,ut,iv,fbody,rt) =>
+             compile_fallback_body ce pay nr key ut iv fbody rt)
+     od) (initial_compile_state "__entry") = ((),se) /\
+    func.fn_blocks = all_blocks se ==>
+    ?fb sa sd sx.
+      fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
+      compile_selector_dispatch_linear selectors fb sa = ((),sd) /\
+      compile_external_fn_bodies packages sd = ((),sx) /\
+      shape_state sd /\ cs_extends sd se /\ cs_extends sx se /\
+      (!l. l IN bound_labels sd ==> ~isPREFIX "fn_" l) /\
+      fn_has_code sa sd func
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `fresh_label "fallback" (initial_compile_state "__entry")` >>
+  rename1 `_ = (fb,sa)` >>
+  Cases_on `compile_selector_dispatch_linear selectors fb sa` >>
+  rename1 `_ = (u,sd)` >> Cases_on `u` >>
+  Cases_on `compile_external_fn_bodies packages sd` >>
+  rename1 `_ = (u,sx)` >> Cases_on `u` >>
+  `shape_state sd /\ cs_extends sa sd /\ jump_label_ok fb` by
+    (drule_all linear_dispatch_shape >> simp[]) >>
+  `(do new_block fb;
+      (case fallback_fn of
+         NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+       | SOME (ce,pay,nr,key,ut,iv,fbody,rt) =>
+           compile_fallback_body ce pay nr key ut iv fbody rt)
+    od) sx = ((),se)` by
+    (qpat_x_assum `_ (initial_compile_state "__entry") = ((),se)` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def]) >>
+  `cs_extends sd sx` by
+    (qspecl_then [`packages`, `sd`] mp_tac
+       loweringShapePropsTheory.compile_external_fn_bodies_label_partition >> simp[]) >>
+  `cs_extends sx se` by
+    (qspecl_then [`fb`, `fallback_fn`, `\l. T`] mp_tac
+       loweringShapePropsTheory.runtime_fallback_suffix_labels >> simp[] >>
+     disch_then (qspec_then `sx` mp_tac) >> simp[]) >>
+  `cs_extends sd se` by (irule cs_extends_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all linear_dispatch_prefix_code >> strip_tac >>
+  qexistsl_tac [`fb`, `sa`, `sd`, `sx`] >> simp[]
+QED
+
 Theorem external_checks_code[local]:
   !packages lbl ce args min_cds pay nr key ut iv fbody rt sd sx se func.
     MEM (lbl,ce,args,min_cds,pay,nr,key,ut,iv,fbody,rt) packages /\

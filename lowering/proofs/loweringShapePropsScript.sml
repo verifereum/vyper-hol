@@ -17368,6 +17368,32 @@ Proof
   stmt_labels_chain (compile_guarded_body_labels :: stmt_labels_rws)
 QED
 
+Theorem runtime_fallback_suffix_labels:
+  !fb fallback P.
+    P fb /\ (!l. isPREFIX "@" l ==> P l) ==>
+    !s. cs_extends s
+      (SND ((do new_block fb;
+                case fallback of
+                  NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+                | SOME (ce,pay,nr,k,t,v,fbody,rt) =>
+                    compile_fallback_body ce pay nr k t v fbody rt
+             od) s)) /\
+      EVERY P (added_labels s
+        (SND ((do new_block fb;
+                  case fallback of
+                    NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+                  | SOME (ce,pay,nr,k,t,v,fbody,rt) =>
+                      compile_fallback_body ce pay nr k t v fbody rt
+               od) s)))
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  irule comp_ignore_bind_labels >> conj_tac
+  >- (rpt gen_tac >> irule new_block_action_labels >> simp[]) >>
+  Cases_on `fallback` >- simp[emit_inst_labels] >>
+  PairCases_on `x` >> simp[] >> gen_tac >> irule fresh_namespace_labels_mono >>
+  simp[compile_fallback_body_labels]
+QED
+
 Theorem compile_internal_param_decls_labels[local]:
   !params idx s.
     cs_extends s (SND (compile_internal_param_decls params idx s)) /\
@@ -17439,6 +17465,43 @@ Proof
   >- (rpt gen_tac >> irule fresh_namespace_labels_mono >>
       simp[compile_internal_function_labels]) >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem compile_internal_fn_bodies_entry_prefix:
+  !packages se sf entry functions.
+    compile_internal_fn_bodies packages se = ((),sf) /\
+    (packages <> [] ==> ~MEM (FST (HD packages))
+      (MAP (\bb. bb.bb_label) (all_blocks se))) /\
+    package_internal_blocks (internal_fn_descriptors packages) (all_blocks sf) =
+      SOME (entry,functions) ==>
+    entry = all_blocks se
+Proof
+  Cases >> rpt gen_tac
+  >- simp[compile_internal_fn_bodies_def, internal_fn_descriptors_def,
+           package_internal_blocks_def, comp_return_def] >>
+  PairCases_on `h` >> strip_tac >>
+  Cases_on `new_block h0 se` >> rename1 `_ = (u,sm)` >>
+  `cs_extends sm sf` by
+    (qpat_x_assum `compile_internal_fn_bodies _ _ = _` mp_tac >>
+     once_rewrite_tac[compile_internal_fn_bodies_def] >>
+     simp[comp_ignore_bind_def, comp_bind_def] >> strip_tac >>
+     `cs_extends sm
+       (SND ((do compile_internal_function h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11;
+                 compile_internal_fn_bodies t od) sm)) /\
+      EVERY (\l. T)
+       (added_labels sm
+         (SND ((do compile_internal_function h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11;
+                   compile_internal_fn_bodies t od) sm)))` by
+       (irule comp_ignore_bind_labels >> conj_tac
+        >- simp[compile_internal_function_labels] >>
+        irule compile_internal_fn_bodies_labels >> simp[EVERY_MEM]) >>
+     gvs[comp_ignore_bind_def, comp_bind_def]) >>
+  drule cs_extends_block_stream >> strip_tac >>
+  `REVERSE sm.cs_blocks = all_blocks se /\ sm.cs_current_bb = h0` by
+    gvs[new_block_def, all_blocks_def, LET_THM] >>
+  gvs[internal_fn_descriptors_def] >>
+  irule package_internal_blocks_entry_prefix >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
