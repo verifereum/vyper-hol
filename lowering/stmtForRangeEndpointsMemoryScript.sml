@@ -10,7 +10,7 @@ Theorem for_endpoint_bind_outcome_mem:
       (\res ee t. ?v. res = INL v /\ A v ee t)
       (\res ee r. expr_exit res r) /\
     (!v ee t. A v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs ee1. a (es with gas_obs := gs) = (INL v,ee1)) ==>
+       (!tail. ?gs. a (es with gas_obs := gs) = (INL v,ee with gas_obs := tail)) ==>
        gas_outcome T tops (ctx,func) (k v) (ee,t) Q R) /\
     (!ex ee r. expr_exit (INR ex : value + exception) r ==>
        R (INR ex) ee r) ==>
@@ -22,7 +22,8 @@ Proof
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       simp[gas_summary_at_def] >> strip_tac
       >- (gvs[] >>
-          `?gs ee1. a (es with gas_obs := gs) = (INL v,ee1)` by
+          `!tail. ?gs. a (es with gas_obs := gs) =
+              (INL v,es_end with gas_obs := tail)` by
             (fs[gas_marked_exec_def] >> metis_tac[]) >>
           `~t.vs_halted` by
             (fs[gas_marked_exec_def, gas_marked_path_def] >>
@@ -69,8 +70,8 @@ Theorem for_expr_endpoint_outcome_mem:
      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
      ee.gas_obs = [] /\ ~t.vs_halted /\
-     (?gs ee1. bind (eval_expr cx e) (read_result cx)
-        (es with gas_obs := gs) = (INL v,ee1)) ==>
+     (!tail. ?gs. bind (eval_expr cx e) (read_result cx)
+        (es with gas_obs := gs) = (INL v,ee with gas_obs := tail)) ==>
      gas_outcome T (cx_tops cx) (ctx,func) (k v) (ee,t) Q R) /\
   (!ex ee r. expr_exit (INR ex : value + exception) r ==> R (INR ex) ee r) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
@@ -84,8 +85,7 @@ Proof
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[] >>
   qhdtm_x_assum `expr_sim_mem` mp_tac >>
   simp[expr_sim_mem_def] >> disch_then irule >> simp[]
 QED
