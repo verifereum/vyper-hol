@@ -542,6 +542,7 @@ Proof
   simp[simplify_cfg_stage_walk] >>
   irule o1_step_contract_at_preserve >>
   simp[simplify_cfg_step_contract, o1_fn_row_def] >> rpt strip_tac >>
+  drule fn_pass_step_fmp_sig_no_param >> simp[fn_pass_tag_def] >> strip_tac >>
   drule simplify_cfg_pass_step_function >> strip_tac >>
   `MEM fn observed.cu_context.ctx_functions` by
     (gvs[fn_pass_step_def] >>
