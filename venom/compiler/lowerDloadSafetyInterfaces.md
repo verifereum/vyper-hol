@@ -374,11 +374,13 @@ not an assumed no-op. The current generic write effect excludes this opcode;
 private CODECOPY cannot substitute for selected/public relocated overwrite.
 A new actual paired DLOADBYTES byte/write effect remains necessary.
 
-### Exact proposed common reconstruction statement (NOT proved)
+### Exact common nonallocating reconstruction statement (checked)
 
-This is the nonallocating version required by the identity consumer. It is
-not an additional definition, and not an exported theorem. The corresponding
-allocation/scratch versions must change A/E and preserve the same fields.
+This nonallocating version is exported as `ld_nonallocating_endpoint` in
+`lowerDloadSafetyAdvanceTheory`. Its allocation/ownership reasoning is factored
+through `ld_head_allocation_update`, also reused by `ld_sync_head_update`.
+The corresponding allocation/scratch versions must change A/E and preserve
+the same fields.
 
 ```sml
 ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -430,3 +432,19 @@ infrastructure: source-active envelope transport, location-independent
 maps/global/saved-map/charge reconstruction, and DLOADBYTES actual write
 transport. The audit is ready for a scoped strategist checkpoint, not broad
 endpoint assembly.
+
+### Common nonallocating constructor validation
+
+`ld_nonallocating_endpoint` now proves the exact statement above, with
+unconditional vars/maps/global/domain/saved-map fields and only the last sync
+clause conditional on source activity. It uses `ld_envelope_source_next` and
+`frame_reachable_next` inside that implication. A temporary full identity
+consumer combined `ld_sync_identity_effect` with this constructor, producing
+actual source success and all fields without target successor activity. It
+built with `null(hyp ld_identity_endpoint_audit)` checked
+(TO_ld_mem-20261104T190123Z_m6941_t001), then was removed to avoid duplication.
+The producer-to-constructor application used forward `drule_all` after
+instantiating only the two ghost equations tn'/G'; no source/effect witnesses
+were recovered by backwards application. The permanent three boundaries also
+have explicit `null(hyp ...)` assertions. Public DLOADBYTES writes and changing
+allocation/scratch endpoint reconstruction remain separate obligations.
