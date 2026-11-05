@@ -7,6 +7,8 @@ Ancestors makeSsaCurrentRuntimeOwners makeSsaCurrentLastSite makeSsaCurrentTreeP
   makeSsaCurrentCleanupShape makeSsaCurrentProps
   makeSsaCurrentReinsertionSlots makeSsaCurrentRestrictedSegment
   makeSsaCurrentExecutionHistory makeSsaCurrentSemanticHistory
+  makeSsaCurrentRuntimeTransport makeSsaCurrentJointRuntime
+  makeSsaCurrentTemporalWrites alist
   venomInst venomExecSemantics venomExecProps venomWf cfgWf list pair
 
 Theorem current_original_annotations_output_members[local]:
@@ -186,4 +188,36 @@ Proof
   `~current_changing_site fn (current_actual_inserted fn) v l` by
     (gvs[current_restricted_path_def, EVERY_MEM] >> metis_tac[]) >>
   strip_tac >> gvs[] >> metis_tac[current_certificate_clean_output_excludes]
+QED
+
+Theorem current_restricted_actual_prefix_origin_transport:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s ==>
+  ?U. current_history_valid U H /\
+    !v ev selected labels ctx loc before phases next result after
+      Val Ms source Mt origin value protected.
+    MEM v U /\ MEM ev events /\
+    selected = latest_current_name (current_event_entry_rs ev) v /\
+    current_restricted_path fn v labels /\
+    EVERY (\phase. case phase of CurrentBatch l phis => MEM l labels
+      | CurrentOrdinary l i inst => MEM l labels | CurrentControl => T) phases /\
+    current_actual_prefix fn' ctx loc before phases next result after /\
+    current_origin_realizes Val Ms source /\ current_origin_realizes Val Mt before /\
+    ALOOKUP Mt selected = SOME origin /\ Val origin = SOME value ==>
+    ?Val' Mt'.
+      current_origin_realizes Val' Ms source /\
+      current_origin_realizes Val' Mt' after /\
+      ALOOKUP Mt' selected = SOME origin /\ Val' origin = SOME value /\
+      lookup_var selected after = SOME value /\
+      (!orig. MEM orig (MAP SND Ms ++ MAP SND Mt ++ protected) ==> Val' orig = Val orig)
+Proof
+  strip_tac >> drule_all current_certificate_all_output_owners >> strip_tac >>
+  qexists_tac `U` >> conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+  irule current_actual_prefix_origin_transport >>
+  simp[] >> goal_assum $ drule_at (Pat `current_actual_prefix _ _ _ _ _ _ _ _`) >>
+  qexistsl_tac [`H`, `U`, `v`] >> simp[] >> conj_tac
+  >- (rpt gen_tac >> spose_not_then strip_assume_tac >>
+      drule_all current_restricted_prefix_owner_exclusion >> simp[]) >>
+  metis_tac[]
 QED
