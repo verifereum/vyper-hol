@@ -1936,8 +1936,9 @@ Triviality step_inst_base_intret_terminator[local]:
     step_inst_base inst s = IntRet vals s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Effect-free ops only return OK or Error *)
