@@ -14,6 +14,7 @@ Two theorems in `lowering/bodyIfExpMemoryScript.sml`:
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (is_word_type t ==> ?tvt. evaluate_type (get_tenv cx) t = SOME tvt) /\
     (~is_word_type t ==>
      !e. (e = a \/ e = b) ==>
          lowered_value_type cenv e = expr_type e \/
