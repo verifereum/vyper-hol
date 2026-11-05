@@ -2,6 +2,7 @@
 Theory lowerDloadExpansionExit
 Ancestors
   lowerDloadCodeDataBytes lowerDloadSafetyKernel lowerDloadSafetyAllocation
+  lowerDloadSafetyWriteBytes
   venomExecSemantics venomState venomInst finite_map list words arithmetic
 
 Theorem ld_alloca_value_frame[local]:
@@ -96,3 +97,22 @@ QED
 val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "expansion exit theorem has hypotheses")
   [ld_alloca_value_frame, ld_codecopy_value_frame, ld_dload_expansion_value_exit];
+
+Theorem ld_codecopy_memory_private:
+  ld_memory lo A tn s t /\
+  inst.inst_opcode = CODECOPY /\
+  inst.inst_operands = [dest; src; len] /\
+  eval_operand dest t = SOME dw /\ eval_operand src t = SOME sw /\
+  eval_operand len t = SOME nw /\ lo <= w2n dw /\
+  (!k b c n. FLOOKUP A k = SOME (b,c,n) /\ 0 < n ==>
+     c+n <= w2n dw \/ w2n dw+w2n nw <= c) /\
+  step_inst fuel C inst t = OK u ==>
+  ld_memory lo A tn s u
+Proof
+  strip_tac >>
+  gvs[step_inst_non_invoke, Once step_inst_base_def] >>
+  irule ld_memory_write_private >> simp[] >> metis_tac[]
+QED
+
+val _ = if null (hyp ld_codecopy_memory_private) then ()
+  else raise Fail "private CODECOPY theorem has hypotheses";

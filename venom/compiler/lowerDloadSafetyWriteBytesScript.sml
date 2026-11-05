@@ -83,3 +83,25 @@ Proof
   gvs[read_byte_write_memory_with_expansion, ld_write_interval] >>
   decide_tac)
 QED
+
+(* Private target writes have no corresponding source allocation. *)
+Theorem ld_memory_write_private:
+  ld_memory lo A tn s t /\ lo <= dst /\
+  (!k b c n. FLOOKUP A k = SOME (b,c,n) /\ 0 < n ==>
+     c+n <= dst \/ dst+LENGTH bytes <= c) ==>
+  ld_memory lo A tn s (write_memory_with_expansion dst bytes t)
+Proof
+  strip_tac >> fs[ld_memory_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `~(dst <= i /\ i < dst+LENGTH bytes)` by decide_tac >>
+      simp[read_byte_write_memory_with_expansion, ld_write_interval]) >>
+  rpt strip_tac >>
+  `0 < n` by decide_tac >>
+  `c+n <= dst \/ dst+LENGTH bytes <= c` by metis_tac[] >>
+  `~(dst <= c+j /\ c+j < dst+LENGTH bytes)` by decide_tac >>
+  simp[read_byte_write_memory_with_expansion, ld_write_interval] >>
+  metis_tac[]
+QED
+
+val _ = if null (hyp ld_memory_write_private) then ()
+  else raise Fail "private memory theorem has hypotheses";
