@@ -53,6 +53,7 @@ Several ancestor theories are built here with their proofs admitted (a scratch o
 | Assigned theorem | lowering/exprSimConcatScript.sml |
 | Source side, already proved (use it): typed operands are BytesV/StringV lists and evaluate_concat returns their FLAT | lowering/exprSimConcatSourceScript.sml (evaluate_concat_typed_bytes, evaluate_concat_typed_string) |
 | Operand-list induction under the counted judgments (closest template for the operand loop: suspend head_normal/head_exit/head_exempt, wb_args_head_exempt_cert, gas_marked_exec_bind_normal) | lowering/exprSimWordArgsScript.sml (lower_word_args_sim, compile_word_builtin_sim) |
+| Per-operand store steps, already proved (use them): the state after each arm of compile_concat's store, as mstore/mcopy plus fresh registers | lowering/exprSimConcatStepScript.sml (concat_fixed_step_run, concat_bytes_step_run) |
 | Straight-line code as a counted path with 0 GAS reads | lowering/fragGasSeqScript.sml (tuple_run_inst_seq_gas_path) |
 | Case judgments (expr_vv_case, exprs_case, expr_body_pre, expr_sim_inv) | lowering/exprSimHypsDefsScript.sml |
 | Counted judgments expr_sim / expr_vv_sim, expr_exit | lowering/exprSimDefsScript.sml |
