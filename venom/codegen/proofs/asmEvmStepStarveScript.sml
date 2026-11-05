@@ -4,7 +4,9 @@
  * matches the assembly step, or raises OutOfGas or StackOverflow, which
  * the assembly doesn't model.  Unlike evmStepSim's asm_evm_step there is
  * no stack bound, the frame's code may have a data suffix after the
- * program, and no other EVM exception is absorbed.
+ * program, and no other EVM exception is absorbed.  Data must come only
+ * at the end of prog: a data item before a label would make the EVM
+ * parse the label's JUMPDEST as push data.
  *
  * TOP-LEVEL:
  *   asm_evm_step_starve - every instruction but GAS and the calls
@@ -33,8 +35,9 @@ Theorem asm_evm_step_starve:
     asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
     LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
     ~(FST (HD es.contexts)).msgParams.static /\
-    as.as_pc < LENGTH prog /\
-    (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+    (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
+         !j. j <= i ==> ~is_data_inst (EL j prog)) /\
+    as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
     (!name. EL as.as_pc prog = AsmOp name ==> ~is_evm_call_name name) /\
     EL as.as_pc prog <> AsmOp "GAS" ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\
