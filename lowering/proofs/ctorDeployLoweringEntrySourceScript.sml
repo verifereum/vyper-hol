@@ -2,7 +2,8 @@
 Theory ctorDeployLoweringEntrySource
 Ancestors
   ctorDeployLoweringDefs e2eDeployDefs emitHelperProps compileVyper
-  vyperInterpreter vyperTypeContract
+  vyperInterpreter vyperTypeContract supportedProgram
+  venomInst venomWf venomState
 
 Theorem deploy_ctor_start_nonreentrant_false:
   !tops deploy_bc am tx es mut nr body am_c es0.
@@ -44,3 +45,33 @@ Theorem deploy_ctor_noninit_selection_probe:
 Proof
   EVAL_TAC
 QED
+
+Theorem deploy_ctor_noninit_supported_probe:
+  supported_program
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]] /\
+  contract_namespaces_ok T
+    [(NONE,[FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]])] /\
+  contract_namespaces_ok F
+    [(NONE,[FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]])]
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_ctor_noninit_typecheck_probe:
+  IS_SOME (check_contract T [] 0w
+    [(NONE,[FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]])]) /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]])])
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_ctor_noninit_lower_probe:
+  IS_SOME (lower_vyper_deploy_unit
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> [])
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
