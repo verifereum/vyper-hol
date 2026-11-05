@@ -2,12 +2,12 @@
 Theory entryReachBodyCanonicalBytesArray
 Ancestors
   entryReachBodyCanonicalBytes entryReachBodyCanonicalChildAddress
-  entryReachBodyExactArrayLoop entryReachBodyExactChildOwnership entryReachBodyArrayInit calldataBytesLeaf
+  entryReachBodyExactArrayLoop entryReachBodyExactChildOwnership entryReachBodyArrayInit calldataBytesLeaf calldataDynOwned
   abiEncoderSequence abiDecoderExecution abiDecoderLoop abiDecoderLoopRegisters abiDecoderReentryPointer ctorAbiActualBytes
   abiDecoderTypedContract abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecoderDynamicLoopSetup
   abiDecoderArraySetupInputs abiDecoderArrayBackedge abiDecoderReentry venomMemProofs
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
-  venomExecSemantics venomExecProofs venomState venomInst valueEncoding valueEncodingProps words list arithmetic finite_map
+  venomExecSemantics venomExecProofs venomState venomInst venomMemDefs valueEncoding valueEncodingProps words list arithmetic finite_map
 
 Theorem entry_bytes_step_fields[local]:
   MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATACOPY] /\
@@ -476,7 +476,9 @@ Theorem entry_bytes_array_backedge[local]:
   ?v. abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) (SUC j) v /\
     entry_bytes_array_inv next limit_st d outsz (w2n p) (LENGTH xs) prepared v /\
     entry_loop_prefix tv xs d (SUC j) v /\ entry_loop_fields t v /\
-    abi_decode_sim ctx fn t v
+    abi_decode_sim ctx fn t v /\
+    v = jump_to hdr (mstore (w2n p) (n2w (SUC j))
+      (update_var (STRING #"%" (toString nv)) (n2w (SUC j)) t))
 Proof
   strip_tac >>
   `abi_decoder_operand_live nv ip /\ abi_decoder_operand_live nv src` by
@@ -513,3 +515,414 @@ Proof
     update_var_def, write_memory_with_expansion_def]
 QED
 
+(* Fixed canonical/compiler facts are separated from the indexed live state.
+   Sizes have one normal form here: the parent allocation size and tv stride. *)
+Definition entry_bytes_array_config_def:
+  entry_bytes_array_config
+    ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+     (ip,src,dst,ops,st,middle,last,limit_st),
+     (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+     ((ctx:venom_context),fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) <=>
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
+    (type_memory_bytes ce ty) st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
+    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  EVERY (val_wf tv) xs /\ LENGTH xs < dimword (:256) /\ LENGTH xs <= maxn /\
+  abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
+  abi_decoder_operand_live next dst /\ next <= st.cs_next_var /\
+  next + 4 <= limit_st.cs_next_var /\
+  middle.cs_next_var <= limit_st.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+  st.cs_current_bb = body_lbl /\ st.cs_current_insts = [] /\ fn_has_code st last fn /\
+  abi_decode_loop_cfg fn hdr body_lbl exit_lbl hid ip src CALLDATALOAD
+    (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
+    (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3))) /\
+  src <> Var (STRING #"%" (toString next)) /\
+  STRING #"%" (toString next) <> STRING #"%" (toString (next+1)) /\
+  (?bb. lookup_block tail fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = prefix ++ abi_decode_backedge_insts bid iv
+      (STRING #"%" (toString nv)) ip hdr) /\
+  last.cs_current_bb = tail /\ last.cs_current_insts = prefix /\
+  FST ops = Var iv /\
+  next <= nv /\ nv < limit_st.cs_next_var /\
+  (d+32 <= w2n p \/ w2n p+32 <= d) /\
+  (!k. k < LENGTH xs ==>
+    32+k*type_memory_size tv <= capacity /\
+    d+32+k*type_memory_size tv+type_memory_size tv <=
+      d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
+    (w2n p+32 <= d+32+k*type_memory_size tv \/
+     d+32+k*type_memory_size tv+type_memory_size tv <= w2n p))
+End
+
+Definition entry_bytes_array_state_def:
+  entry_bytes_array_state
+    ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+     (ip,src,dst,ops,st,middle,last,limit_st),
+     (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+     (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) prepared j s <=>
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) j s /\
+  entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+    (w2n p) (LENGTH xs) prepared s /\
+  entry_loop_prefix tv xs d j s /\ j <= LENGTH xs /\ alloca_inv s /\
+  FLOOKUP s.vs_allocas oid = SOME (d,capacity) /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)
+End
+
+Theorem entry_bytes_array_config_child[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  j < LENGTH xs /\
+  h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s) ==>
+  ?t. run_inst_seq (emitted_insts st last) h = OK t /\
+    val_in_memory tv (EL j xs) (d+32+j*type_memory_size tv) t.vs_memory /\
+    fresh_vars_wrt limit_st t /\ entry_loop_fields h t /\
+    abi_decode_frame (d+32+j*type_memory_size tv) (type_memory_size tv) h t /\
+    t.vs_allocas = h.vs_allocas /\ t.vs_alloca_next = h.vs_alloca_next /\
+    ~t.vs_halted /\ eval_operand (Var iv) t = SOME (n2w j) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op h = SOME w ==>
+      eval_operand op t = SOME w) /\
+    t.vs_current_bb = tail /\
+    abi_decode_sim ctx fn h (t with vs_inst_idx := LENGTH prefix)
+Proof
+  strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  qpat_x_assum `entry_bytes_array_state _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_state_def]) >>
+  `fresh_vars_wrt limit_st s` by fs[entry_bytes_array_inv_def] >>
+  drule_all entry_bytes_element_after_header >> strip_tac >>
+  qpat_x_assum `!ctx fn. _` (qspecl_then [`ctx`,`fn`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  goal_assum (drule_at Any) >> gvs[]
+QED
+
+Theorem entry_bytes_array_config_header[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  j < LENGTH xs /\
+  h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s) ==>
+  entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+    (w2n p) (LENGTH xs) prepared h /\ entry_loop_prefix tv xs d j h /\
+  alloca_inv h /\ FLOOKUP h.vs_allocas oid = SOME (d,capacity) /\
+  eval_operand ip h = SOME p /\ eval_operand src h = SOME srcaddr /\
+  entry_loop_fields s h /\ abi_decode_sim ctx fn s h /\
+  (!op. abi_decoder_operand_live next op ==> eval_operand op h = eval_operand op s) /\
+  next <= st.cs_next_var
+Proof
+  strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  qpat_x_assum `entry_bytes_array_state _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_state_def]) >>
+  `fresh_vars_wrt limit_st s` by fs[entry_bytes_array_inv_def] >>
+  `entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+    (w2n p) (LENGTH xs) prepared h` by
+    (asm_rewrite_tac[] >> irule entry_bytes_array_inv_header >> simp[]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_decode_sim ctx fn s h` by
+    (drule_all abi_decode_ready_header_sim >> simp[]) >>
+  drule_all abi_decoder_header_registers >>
+  disch_then (qspecl_then [`LENGTH xs`,`j`] strip_assume_tac) >>
+  `eval_operand ip h = SOME p /\ eval_operand src h = SOME srcaddr` by
+    (asm_simp_tac (srw_ss()) [abi_decoder_operand_jump] >>
+     fs[abi_decode_loop_ready_def]) >>
+  `alloca_inv h` by
+    (qpat_x_assum `h = _` SUBST1_TAC >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+       alloca_next_valid_def, jump_to_def, abi_decode_header_state_def, update_var_def]) >>
+  `!op. abi_decoder_operand_live next op ==> eval_operand op h = eval_operand op s` by
+    asm_simp_tac (srw_ss()) [abi_decoder_operand_jump] >>
+  asm_rewrite_tac[] >>
+  gvs[entry_loop_prefix_def, entry_loop_fields_def,
+    abi_decode_header_state_def, jump_to_def, update_var_def]
+QED
+
+Theorem entry_bytes_array_state_transfer[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+    (w2n p) (LENGTH xs) prepared t /\
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) k t /\
+  entry_loop_prefix tv xs d k t /\ k <= LENGTH xs /\
+  entry_loop_fields s t /\ t.vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next /\
+  (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+     eval_operand op t = SOME w) ==>
+  entry_bytes_array_state cfg prepared k t
+Proof
+  strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  qpat_x_assum `entry_bytes_array_state _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_state_def]) >>
+  pure_rewrite_tac[entry_bytes_array_state_def] >> asm_rewrite_tac[] >>
+  `alloca_inv t` by
+    (qpat_x_assum `alloca_inv s` mp_tac >>
+     asm_simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+       alloca_next_valid_def]) >>
+  `t.vs_call_ctx = s.vs_call_ctx` by
+    fs[entry_loop_fields_def] >>
+  asm_rewrite_tac[] >>
+  fs[abi_decoder_ranges_def, abi_decode_source_def] >>
+  metis_tac[]
+QED
+
+Theorem entry_bytes_array_child_memory[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  j < LENGTH xs /\
+  h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s) /\
+  val_in_memory tv (EL j xs) (d+32+j*type_memory_size tv) t.vs_memory /\
+  fresh_vars_wrt limit_st t /\ entry_loop_fields h t /\
+  abi_decode_frame (d+32+j*type_memory_size tv) (type_memory_size tv) h t /\
+  t.vs_allocas = h.vs_allocas /\ t.vs_alloca_next = h.vs_alloca_next /\
+  (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op h = SOME w ==>
+    eval_operand op t = SOME w) ==>
+  entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+    (w2n p) (LENGTH xs) prepared t /\ entry_loop_prefix tv xs d (SUC j) t
+Proof
+  strip_tac >> drule_all entry_bytes_array_config_header >> strip_tac >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  `alloca_inv t` by
+    (qpat_x_assum `alloca_inv h` mp_tac >>
+     asm_simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+       alloca_next_valid_def]) >>
+  `32+j*type_memory_size tv <= capacity /\
+   d+32+j*type_memory_size tv+type_memory_size tv <=
+      d+type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by simp[] >>
+  drule_all entry_bytes_element_invariant >> simp[]
+QED
+
+Theorem entry_bytes_array_child_tail[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  j < LENGTH xs /\
+  h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s) /\
+  ~t.vs_halted /\ t.vs_current_bb = tail /\
+  eval_operand (Var iv) t = SOME (n2w j) /\ entry_loop_fields h t /\
+  (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op h = SOME w ==>
+    eval_operand op t = SOME w) ==>
+  entry_loop_child_end fn tail prefix bid iv (STRING #"%" (toString nv))
+    ip hdr src p srcaddr (LENGTH xs) j (t with vs_inst_idx := LENGTH prefix)
+Proof
+  strip_tac >> drule_all entry_bytes_array_config_header >> strip_tac >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  qpat_x_assum `entry_bytes_array_state _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_state_def]) >>
+  `abi_decoder_operand_live st.cs_next_var ip /\
+   abi_decoder_operand_live st.cs_next_var src` by
+    (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+  `eval_operand ip t = SOME p /\ eval_operand src t = SOME srcaddr` by metis_tac[] >>
+  `t.vs_call_ctx = s.vs_call_ctx` by fs[entry_loop_fields_def] >>
+  `abi_decode_load CALLDATALOAD srcaddr t = n2w (LENGTH xs)` by
+    fs[abi_decode_loop_ready_def, abi_decode_load_def, abi_decode_source_def] >>
+  fs[entry_loop_child_end_def, eval_operand_def, lookup_var_def,
+    abi_decode_load_def, abi_decode_source_def] >> metis_tac[]
+QED
+
+Theorem entry_bytes_array_config_backedge[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  j < LENGTH xs /\
+  entry_loop_child_end fn tail prefix bid iv (STRING #"%" (toString nv))
+    ip hdr src p srcaddr (LENGTH xs) j u /\
+  entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+    (w2n p) (LENGTH xs) prepared u /\ entry_loop_prefix tv xs d (SUC j) u /\
+  entry_loop_fields s u /\ u.vs_allocas = s.vs_allocas /\
+  u.vs_alloca_next = s.vs_alloca_next /\
+  (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+     eval_operand op u = SOME w) ==>
+  ?v. entry_bytes_array_state cfg prepared (SUC j) v /\
+    entry_loop_fields s v /\ abi_decode_sim ctx fn u v
+Proof
+  strip_tac >>
+  `?v. abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) (SUC j) v /\
+    entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+      (w2n p) (LENGTH xs) prepared v /\ entry_loop_prefix tv xs d (SUC j) v /\
+    entry_loop_fields u v /\ abi_decode_sim ctx fn u v /\
+    v = jump_to hdr (mstore (w2n p) (n2w (SUC j))
+      (update_var (STRING #"%" (toString nv)) (n2w (SUC j)) u))` by
+    (qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+     qpat_x_assum `entry_bytes_array_config _`
+       (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+     `?hdr_bb. lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
+       phi_prefix_length hdr_bb.bb_instructions = 0` by
+       fs[abi_decode_loop_cfg_def, abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
+     `!k. k < SUC j ==> w2n p+32 <= d+32+k*type_memory_size tv \/
+       d+32+k*type_memory_size tv+type_memory_size tv <= w2n p` by
+       (rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+     irule entry_bytes_array_backedge >> simp[SF SFY_ss]) >>
+  `entry_loop_fields s v /\ v.vs_allocas = s.vs_allocas /\
+   v.vs_alloca_next = s.vs_alloca_next` by
+    fs[entry_loop_fields_def, jump_to_def, mstore_def, update_var_def,
+       write_memory_with_expansion_def] >>
+  `!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+     eval_operand op v = SOME w` by suspend "live" >>
+  `SUC j <= LENGTH xs` by decide_tac >>
+  drule_all entry_bytes_array_state_transfer >> strip_tac >>
+  qexists_tac `v` >> asm_rewrite_tac[]
+QED
+
+Resume entry_bytes_array_config_backedge[live]:
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  rpt strip_tac >>
+  `abi_decoder_operand_live nv op` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+  asm_simp_tac (srw_ss()) [eval_operand_mstore, abi_decoder_generated_update_operand]
+QED
+
+Finalise entry_bytes_array_config_backedge
+
+Theorem entry_bytes_array_iteration[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s /\
+  j < LENGTH xs ==>
+  ?v. entry_bytes_array_state cfg prepared (SUC j) v /\
+    entry_loop_fields s v /\ abi_decode_sim ctx fn s v
+Proof
+  strip_tac >>
+  qabbrev_tac `h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s)` >>
+  `h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s)` by simp[Abbr `h`] >>
+  drule_all entry_bytes_array_config_header >> strip_tac >>
+  drule_all entry_bytes_array_config_child >> strip_tac >>
+  drule_all entry_bytes_array_child_memory >> strip_tac >>
+  drule_all entry_bytes_array_child_tail >> strip_tac >>
+  qabbrev_tac `u = t with vs_inst_idx := LENGTH prefix` >>
+  `entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+     (w2n p) (LENGTH xs) prepared u /\ entry_loop_prefix tv xs d (SUC j) u /\
+   entry_loop_fields s u /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_alloca_next = s.vs_alloca_next` by suspend "adjust" >>
+  `!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+     eval_operand op u = SOME w` by suspend "live" >>
+  `entry_loop_child_end fn tail prefix bid iv (STRING #"%" (toString nv))
+     ip hdr src p srcaddr (LENGTH xs) j u /\ abi_decode_sim ctx fn h u` by
+    fs[Abbr `u`] >>
+  drule_all entry_bytes_array_config_backedge >> strip_tac >>
+  `abi_decode_sim ctx fn s u` by metis_tac[abi_decode_sim_trans] >>
+  `abi_decode_sim ctx fn s v` by metis_tac[abi_decode_sim_trans] >>
+  qexists_tac `v` >> asm_rewrite_tac[]
+QED
+
+Resume entry_bytes_array_iteration[adjust]:
+  fs[Abbr `u`, Abbr `h`, entry_bytes_array_inv_def, entry_loop_prefix_def,
+    entry_loop_fields_def, jump_to_def, abi_decode_header_state_def, update_var_def,
+    eval_operand_def, lookup_var_def, fresh_vars_wrt_def, abi_decode_footprint_frame_def]
+QED
+
+Resume entry_bytes_array_iteration[live]:
+  rpt strip_tac >>
+  `abi_decoder_operand_live st.cs_next_var op` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+  `eval_operand op h = SOME w` by metis_tac[] >>
+  `eval_operand op t = SOME w` by metis_tac[] >>
+  Cases_on `op` >> fs[Abbr `u`, eval_operand_def, lookup_var_def]
+QED
+
+Finalise entry_bytes_array_iteration
+
+Theorem entry_bytes_array_iterations[local]:
+  !remaining j s.
+  LENGTH xs = j + remaining /\
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared j s ==>
+  ?v. entry_bytes_array_state cfg prepared (LENGTH xs) v /\
+    entry_loop_fields s v /\ abi_decode_sim ctx fn s v
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (qexists_tac `s` >> gvs[entry_loop_fields_def, abi_decode_sim_refl]) >>
+  `j < LENGTH xs` by decide_tac >>
+  drule_all entry_bytes_array_iteration >> strip_tac >>
+  first_x_assum (qspecl_then [`SUC j`,`v`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  conj_tac >- fs[entry_loop_fields_def] >>
+  metis_tac[abi_decode_sim_trans]
+QED
+
+Theorem entry_bytes_array_exit[local]:
+  cfg = ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
+       (ip,src,dst,ops,st,middle,last,limit_st),
+       (next,d,p,srcaddr,sb,b,cap,oid,capacity),
+       (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
+  entry_bytes_array_config cfg /\ entry_bytes_array_state cfg prepared (LENGTH xs) s ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+      (w2n p) (LENGTH xs) prepared t /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_fields s t /\ abi_decode_sim ctx fn s t
+Proof
+  strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `entry_bytes_array_config _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_config_def]) >>
+  qpat_x_assum `entry_bytes_array_state _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_bytes_array_state_def]) >>
+  qabbrev_tac `t = jump_to exit_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) (LENGTH xs) (LENGTH xs) s)` >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_decode_sim ctx fn s t` by
+    (drule_all abi_decode_ready_header_sim >> simp[Abbr `t`]) >>
+  `entry_bytes_array_inv next limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
+      (w2n p) (LENGTH xs) prepared t` by
+    (simp[Abbr `t`] >> irule entry_bytes_array_inv_header >> simp[]) >>
+  `val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d s.vs_memory` by
+    (irule (cj 2 calldata_terminal_array_memory) >>
+     fs[entry_loop_prefix_def, entry_bytes_array_inv_def]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  fs[Abbr `t`, abi_decode_loop_ready_def, entry_loop_fields_def,
+    abi_decode_header_state_def, jump_to_def, update_var_def]
+QED
