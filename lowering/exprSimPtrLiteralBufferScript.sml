@@ -417,3 +417,113 @@ Resume literal_bytelike_ptr_run[assemble]:
 QED
 
 Finalise literal_bytelike_ptr_run
+
+(* Ordinary transport across the fully written buffer. *)
+Theorem literal_ptr_state_memory_frame:
+  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
+  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
+  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+  (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
+  (!name a len. local_region cenv es.scopes u name a len ==>
+    regions_disjoint b n a len) /\
+  (!a len. a+len <= b \/ b+n <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+  MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
+  FLOOKUP u.vs_allocas aid = SOME (b,n) ==>
+  stmt_state_rel ctx func cenv cx es t
+Proof
+  strip_tac >> irule literal_state_memory_frame >>
+  qexists_tac `u` >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+      qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
+      simp[regions_disjoint_def] >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      rename1 `FLOOKUP cenv.ce_vars _ = SOME (PtrVar (Var lp) _)` >>
+      `not_fresh_at sa lp` by metis_tac[local_ptrs_reserved_def] >>
+      qpat_x_assum `!x. not_fresh_at sh x ==> _` irule >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sh x ==> _` irule >> metis_tac[]) >>
+  rpt strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b n` by
+    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ u` mp_tac >>
+     simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
+     goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+  qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+  gvs[regions_disjoint_def] >> decide_tac
+QED
+
+(* Public counterpart of S1's local post constructor. *)
+Theorem literal_ptr_memory_vv_post:
+  !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
+    ~is_word_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
+    stmt_state_rel ctx func cenv cx es t /\
+    eval_operand buf.buf_operand t = SOME w /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+    sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) /\
+    (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
+    (!name b len. local_region cenv es.scopes s0 name b len ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
+    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
+      (LocatedValue (expr_type e) (base_ptr buf))
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `locals_kept cenv es s0 t` by
+    (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
+  simp[loweringPostsTheory.vv_post_def, stmt_state_rel_inst_idx,
+       loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def, base_ptr_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+       eval_operand_def, lookup_var_def] >>
+  `eval_operand buf.buf_operand (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
+    (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
+  conj_tac
+  >- (disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `w2n w`, `sz`] >>
+      simp[] >> rpt strip_tac >>
+      `local_region cenv es.scopes t n lb lsz` by
+        gvs[local_region_def, lookup_var_def] >>
+      qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
+        drule >> simp[regions_disjoint_def] >> decide_tac) >>
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem literal_ptr_local_footprint_exterior:
+  stmt_state_rel ctx func cenv cx es s /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b n a len) ==>
+  !name entry p sz w.
+    lookup_scopes name es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w ==>
+    val_wf entry.type entry.value /\
+    (!i. w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
+      i NOTIN {i | b <= i /\ i < b+n})
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `local_region cenv es.scopes s name (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `type_memory_size entry.type <= sz /\ val_wf entry.type entry.value` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     metis_tac[]) >>
+  `val_footprint entry.type entry.value <= sz` by metis_tac[val_footprint_le, arithmeticTheory.LESS_EQ_TRANS] >>
+  conj_tac >- simp[] >>
+  qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
+  simp[regions_disjoint_def] >> rpt strip_tac >> decide_tac
+QED
