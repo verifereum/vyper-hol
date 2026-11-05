@@ -44,7 +44,7 @@
 
 Theory vyperLoweringCorrect
 Ancestors
-  vyperCompiler
+  vyperCompiler gasSummary
   ptrOkCheck
   selectorDispatch
   moduleLoweringProps
@@ -201,11 +201,26 @@ Definition external_call_result_rel_def:
     | _ => F
 End
 
+(* The source call at gas observations gobs either fails with an
+   exempt error or relates to a run of the lowered unit.  The lowered
+   run reads GAS from vs.vs_gas_readings, so the source call that
+   matches it reads the observations the run's GAS reads produce. *)
+Definition source_unit_execution_correct_at_def:
+  source_unit_execution_correct_at gobs tops ret am tx unit vs <=>
+    source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) \/
+    ?fuel. external_call_result_rel tops ret tx
+             (call_external (SOME vs.vs_outcomes) gobs am tx)
+             (run_context fuel unit.cu_context vs)
+End
+
+(* The observations are those some of the run's GAS reads produce
+   (gas_explicit), so a lowered unit cannot pass with readings of its own
+   choosing. *)
 Definition source_unit_execution_correct_def:
   source_unit_execution_correct tops ret am tx unit vs <=>
-    ?fuel. external_call_result_rel tops ret tx
-             (call_external (SOME vs.vs_outcomes) [] am tx)
-             (run_context fuel unit.cu_context vs)
+    ?marks. source_unit_execution_correct_at
+              (gas_explicit marks vs.vs_gas_readings)
+              tops ret am tx unit vs
 End
 
 (* ===== S1 halt bridge (#640) ===== *)
