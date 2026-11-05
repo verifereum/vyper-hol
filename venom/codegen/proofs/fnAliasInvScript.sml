@@ -22,6 +22,49 @@ Ancestors
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
   fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
 
+(* A final successful JMP checks its target suffix; block finalization leaves
+   that checked state unchanged.  No coverage assumption on entry is needed. *)
+Theorem alias_jmp_plan_join_reached:
+  inst.inst_opcode = JMP /\
+  generate_inst_plan liveness dfg cfg fn inst live halting next_term lbl ps =
+    SOME (ops, ps') ==>
+  join_reached liveness fn lbl inst ps'
+Proof
+  strip_tac >>
+  gvs[generate_inst_plan_def, is_param_opcode_def, AllCaseEqs()]
+QED
+
+Theorem alias_block_insts_final_jmp_join_reached:
+  !prefix i ps ops ps'.
+  inst.inst_opcode = JMP /\
+  generate_block_insts_plan liveness dfg cfg fn lbl halting np blen i
+    (prefix ++ [inst]) ps = SOME (ops, ps') ==>
+  join_reached liveness fn lbl inst ps'
+Proof
+  Induct >> simp[Once generate_block_insts_plan_def] >>
+  rpt gen_tac >> simp[AllCaseEqs()] >> strip_tac
+  >- (gvs[generate_block_insts_plan_def] >>
+      drule_all alias_jmp_plan_join_reached >> simp[]) >>
+  gvs[] >> first_x_assum drule >> simp[]
+QED
+
+Theorem alias_block_plan_final_jmp_inputs:
+  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') /\
+  non_param_insts bb = prefix ++ [inst] /\
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\
+  lookup_block target fn.fn_blocks = SOME target_bb /\
+  MEM v (input_vars_from bb.bb_label target_bb.bb_instructions
+    (live_vars_at liveness target 0)) ==>
+  MEM (Var v) ps'.ps_stack
+Proof
+  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_all alias_block_insts_final_jmp_join_reached >>
+  simp[join_reached_def, join_target_ops_def] >> strip_tac >>
+  qpat_x_assum `_ ++ _ = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  simp[MEM_MAP]
+QED
+
 Theorem alias_do_swap_stack:
   dist < LENGTH ps.ps_stack ==>
   (SND (do_swap dist ps)).ps_stack = stack_swap dist ps.ps_stack
