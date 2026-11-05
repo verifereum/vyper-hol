@@ -84,3 +84,27 @@ Theorem protected_reorder_height_probe:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+(* The bulk swap is intentionally left symbolic at out-of-range ELs.
+   Subsequent fold steps branch on whether these unspecified values equal x. *)
+Theorem protected_reorder_first_stack_probe:
+  (SND (reorder_one (dfg_build_function (repeated_use_fn F))
+    (REPLICATE 18 (Var "x")) 0 (Var "x")
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := [Var "x"]))).ps_stack =
+  [EL 17 [Var "x"]] ++ GENLIST (\i. EL (i + 1) [Var "x"]) 16 ++ [Var "x"]
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* Whole-fold diagnostic: evaluation of reorder_plan on the preceding
+   singleton example stops at comparisons of Var "x" with EL n [] / HD [].
+   These are unspecified HOL values, not fresh symbolic operands that may be
+   assumed different from x. Thus neither final suffix success nor failure
+   has been certified for this example. The first step already raises the
+   height to the target length; the existing reorder_one_length_floor and
+   reorder_plan_inventory_subset_nb interfaces require an input floor, not
+   merely a successful output suffix. A native producer for that route must
+   establish LENGTH targets <= LENGTH mid.ps_stack after restoration (or the
+   stronger pending_inventory_wf before restoration). Ordinary set coverage
+   does not supply this multiplicity bound. This diagnostic establishes no
+   counterexample to the frozen block theorem. *)
