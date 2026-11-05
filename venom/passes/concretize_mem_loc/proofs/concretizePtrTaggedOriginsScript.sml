@@ -245,3 +245,76 @@ Proof
   qexistsl [`SND (EL n saved)`, `EL (SUC n) tokens`, `v`] >> simp[] >>
   metis_tac[ptr_source_tag_roots_saved]
 QED
+
+Theorem ptr_source_tag_history_bound[local]:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  FLOOKUP TG v = SOME (owner,aid) ==> owner < LENGTH h
+Proof
+  strip_tac >>
+  `MEM owner tokens` by metis_tac[ptr_source_ownership_live_prov] >>
+  `ptr_ledger_source_activations vs C h a tokens registry` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
+  `LENGTH tokens = SUC (LENGTH a.po_stack)` by
+    metis_tac[ptr_source_activations_length] >>
+  gvs[MEM_EL] >>
+  `n <= LENGTH a.po_stack` by decide_tac >>
+  drule ptr_source_activations_owner_lookup >>
+  disch_then (qspec_then `LENGTH a.po_stack - n` mp_tac) >> simp[] >>
+  `LENGTH a.po_stack - (LENGTH a.po_stack - n) = n` by decide_tac >>
+  simp[] >> strip_tac >> irule ptr_source_activations_registry_bound >>
+  goal_assum (drule_at Any) >> gvs[FLOOKUP_DEF, AllCaseEqs()]
+QED
+
+Theorem ptr_source_params_fresh_invariant[local]:
+  !vs C h a tokens registry births PT TG saved.
+  ptr_source_ownership vs C h a tokens registry births PT TG saved ==>
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+    (!owner aid. MEM (SOME (owner,aid)) PT ==> owner < HD tokens) /\
+    (!n owner aid. n < LENGTH saved /\
+      MEM (SOME (owner,aid)) (FST (EL n saved)) ==>
+      owner < EL (SUC n) tokens))
+Proof
+  ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[ptr_source_ownership_rules] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >> strip_tac >>
+  `!v owner aid. FLOOKUP TG v = SOME (owner,aid) ==> owner < LENGTH h` by
+    metis_tac[ptr_source_tag_history_bound] >>
+  `LENGTH tokens = SUC (LENGTH a.po_stack)` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations,
+      ptr_source_activations_length] >>
+  qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
+  rpt (qhdtm_x_assum `ptr_source_ownership` kall_tac) >>
+  qpat_x_assum `ptr_tagged_chrono_step _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[Once ptr_tagged_chrono_step_cases] >> strip_tac >>
+  gvs[ptr_observe_def, ptr_activation_tokens_def]
+  >- metis_tac[]
+  >- metis_tac[]
+  >- (conj_tac
+      >- (simp[MEM_MAP] >> rpt strip_tac >> Cases_on `y` >> gvs[op_prov_def] >> metis_tac[]) >>
+      rpt gen_tac >> Cases_on `n` >> simp[] >> metis_tac[HD]) >>
+  Cases_on `tokens` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  conj_tac
+  >- (qpat_x_assum `!n owner aid. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  rpt strip_tac >> qpat_x_assum `!n owner aid. _` (qspec_then `SUC n` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_source_params_fresh_current:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  MEM (SOME (owner,aid)) PT ==> owner < HD tokens
+Proof
+  metis_tac[ptr_source_params_fresh_invariant]
+QED
+
+Theorem ptr_source_params_fresh_saved:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  n < LENGTH saved /\ MEM (SOME (owner,aid)) (FST (EL n saved)) ==>
+  owner < EL (SUC n) tokens
+Proof
+  metis_tac[ptr_source_params_fresh_invariant]
+QED
