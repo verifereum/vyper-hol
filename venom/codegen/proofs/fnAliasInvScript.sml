@@ -27,6 +27,7 @@ Theorem alias_emit_reorder_consumed_window:
     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
   PERM inputs selected /\ LENGTH inputs <= 16 /\
   reorder_plan dfg selected prepared = (rops,arranged) ==>
+  LENGTH selected <= LENGTH prepared.ps_stack /\
   arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected
 Proof
   `!xs : operand list. !ys.
@@ -589,6 +590,85 @@ Proof
   qspecl_then [`opc`, `operand_vars inputs ++ live`, `h`, `ps`, `x`]
     mp_tac alias_var_mass_emit_one >>
   gvs[] >> Cases_on `h = Var x` >> simp[LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem alias_var_mass_emit_inputs_dead:
+  !inputs opc live ps x. ~MEM x live ==>
+  alias_var_mass x (SND (emit_input_plan opc inputs live ps)) +
+    (if MEM (Var x) inputs then 1 else 0) <=
+  alias_var_mass x ps + LIST_ELEM_COUNT (Var x) inputs
+Proof
+  `!ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops` by
+    (Induct >> simp[dfgDefsTheory.operand_vars_def] >>
+     rpt gen_tac >> Cases_on `h` >>
+     simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]) >>
+  Induct >> simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> strip_tac >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >>
+  first_x_assum (qspecl_then [`opc`, `live`, `ps1`, `x`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `h = Var x`
+  >- (gvs[] >> Cases_on `MEM (Var x) inputs`
+      >- (qspecl_then [`opc`, `operand_vars inputs ++ live`, `Var x`, `ps`, `x`]
+            mp_tac alias_var_mass_emit_one >>
+          gvs[LIST_ELEM_COUNT_THM] >> decide_tac) >>
+      `~MEM x (operand_vars inputs ++ live)` by
+        simp[passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+      qpat_x_assum `emit_one_input _ _ _ _ = _` mp_tac >>
+      simp[emit_one_input_def, is_var_operand_def] >>
+      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      `alias_var_mass x ps1 = alias_var_mass x ps` by
+        (Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var x))` >>
+         gvs[] >> metis_tac[alias_var_mass_restore, pairTheory.SND]) >>
+      simp[LIST_ELEM_COUNT_THM] >> decide_tac) >>
+  qspecl_then [`opc`, `operand_vars inputs ++ live`, `h`, `ps`, `x`]
+    mp_tac alias_var_mass_emit_one >>
+  simp[LIST_ELEM_COUNT_THM] >>
+  Cases_on `MEM (Var x) inputs` >> gvs[] >> decide_tac
+QED
+
+Theorem alias_emit_reorder_pop_support:
+  alias_var_budget [] ps /\
+  (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) inputs) /\
+  (!op. MEM op inputs /\ is_var_operand op ==> plan_holds ps op) /\
+  emit_input_plan opc inputs live ps = (iops,mid) /\
+  PERM targets inputs /\ LENGTH inputs <= 16 /\
+  reorder_plan dfg targets mid = (rops,qs) ==>
+  !x. plan_holds (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack)
+         (Var x) ==> MEM x live
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  `PERM inputs targets` by metis_tac[PERM_SYM] >>
+  `!op. MEM op inputs /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    metis_tac[plan_holds_def] >>
+  drule_all alias_emit_reorder_consumed_window >> strip_tac >>
+  `LENGTH targets = LENGTH inputs` by metis_tac[PERM_LENGTH] >>
+  `alias_var_mass x qs <= alias_var_mass x mid` by
+    (mp_tac (Q.INST [`targets` |-> `targets`, `ps` |-> `mid`,
+                    `dfg` |-> `dfg`, `x` |-> `x`] alias_var_mass_reorder_plan) >>
+     simp[]) >>
+  qspecl_then [`inputs`, `opc`, `live`, `ps`, `x`] mp_tac
+    alias_var_mass_emit_inputs_dead >> simp[] >> strip_tac >>
+  `alias_var_mass x qs =
+   alias_var_mass x (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack) +
+   LIST_ELEM_COUNT (Var x) inputs` by
+    (drule perm_operand_counts >> strip_tac >>
+     qpat_x_assum `qs.ps_stack = _`
+       (mp_tac o AP_TERM ``LIST_ELEM_COUNT (Var x)``) >>
+     simp[alias_var_mass_def, elem_count_append] >> decide_tac) >>
+  `0 < alias_var_mass x
+     (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack)` by
+    (gvs[plan_holds_def, alias_var_mass_def, GSYM LIST_ELEM_COUNT_MEM] >>
+     decide_tac) >>
+  Cases_on `MEM (Var x) inputs`
+  >- (gvs[alias_var_budget_def, LIST_ELEM_COUNT_THM] >>
+      qpat_x_assum `!v. alias_var_mass v ps <= 1`
+        (qspec_then `x` mp_tac) >> decide_tac) >>
+  `~plan_holds ps (Var x)` by metis_tac[] >>
+  `alias_var_mass x ps = 0` by
+    gvs[plan_holds_def, alias_var_mass_def, GSYM LIST_ELEM_COUNT_MEM] >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
 QED
 
 Theorem alias_var_budget_emit_inputs:
