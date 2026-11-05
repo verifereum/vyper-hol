@@ -9,7 +9,7 @@
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
- *                                shape (msg.gas, raw_call, create
+ *                                shape (raw_call, create
  *                                calls) and builtins with too few arguments
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
@@ -65,12 +65,11 @@ Definition type_builtin_arity_def:
     | _ => 0
 End
 
-(* msg.gas returns a GAS output as an ordinary value; raw_call lowers to
+(* raw_call lowers to
    DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
    create calls emit CREATE/CREATE2, outside inst_shape_ok; a builtin with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
-    (?ty es. e = Builtin ty (Env MsgGas) es) \/
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
     (?ty kind salted rof order es d.
@@ -3311,7 +3310,7 @@ QED
 
 Theorem expr_shape_builtin[local]:
   ~supported_expr_exists expr_shape_root (Builtin ann bi es) <=>
-  bi <> Env MsgGas /\ builtin_arity bi <= LENGTH es /\
+  builtin_arity bi <= LENGTH es /\
   ~supported_exprs_exists expr_shape_root es
 Proof
   simp[supported_expr_exists_def, expr_shape_root_def, arithmeticTheory.NOT_LESS, CONJ_ASSOC]
@@ -3392,13 +3391,13 @@ QED
 
 Theorem builtin_child_callback_shape[local]:
   (!ce rt t bi args internal.
-     list_size expr_size args < bound /\ bi <> Env MsgGas /\
+     list_size expr_size args < bound /\
      builtin_arity bi <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (f ce rt t bi args) (\v st. value_shape_ok st v)) ==>
   !ce rt t bi args internal.
-    bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+    builtin_arity bi <= LENGTH args /\
     ~supported_exprs_exists expr_shape_root args ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
       (builtin_child_callback bound f ce rt t bi args)
@@ -3675,11 +3674,13 @@ Proof
 QED
 
 Theorem compile_env_var_shape[local]:
-  shape_stable R /\ item <> MsgGas ==>
+  shape_stable R ==>
   shape_step internal compiler_label R (compile_env_var item)
     (\op st. R st /\ plain_operand st op)
 Proof
   strip_tac >> Cases_on `item` >> gvs[compile_env_var_def]
+  >~ [`emit_op GAS []`]
+  >- (irule shape_step_emit_op_gas_plain >> simp[])
   >~ [`comp_bind (emit_op NUMBER []) _`]
   >- (match_mp_tac shape_step_bind >>
       qexists_tac `\op st. R st /\ plain_operand st op` >> conj_tac
@@ -8091,7 +8092,7 @@ Theorem compile_builtin_dispatch_body_shape[local]:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+  builtin_arity bi <= LENGTH args /\
   ~supported_exprs_exists expr_shape_root args ==>
   shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
@@ -8334,7 +8335,7 @@ Theorem compile_expr_body_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  (!ce ret t bi es. bi <> Env MsgGas /\ builtin_arity bi <= LENGTH es /\
+  (!ce ret t bi es. builtin_arity bi <= LENGTH es /\
      ~supported_exprs_exists expr_shape_root es ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (bfn ce ret t bi es) (\v st. value_shape_ok st v)) /\
@@ -8492,7 +8493,7 @@ Theorem compile_expr_shape_pointwise[local]:
     compile_expr ce ty e st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
     shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
   (!ce rt ty bi args st. !internal v st'.
-    bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+    builtin_arity bi <= LENGTH args /\
     ~supported_exprs_exists expr_shape_root args /\
     compile_builtin_dispatch ce rt ty bi args st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
     shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
@@ -8540,14 +8541,14 @@ QED
 
 (* compile_expr_shape_pointwise in shape_step form.  Immutable loads retain
    the environment invariant, including plainness of the optional staging base.
-   GAS is emitted only as the gas operand of the call right after it. *)
+   GAS results may be used as ordinary values. *)
 Theorem compile_expr_shape:
   (!cenv ty e internal.
      ~supported_expr_exists expr_shape_root e ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_expr cenv ty e) (\v st. value_shape_ok st v)) /\
   (!cenv ret_ty ty bi args internal.
-     bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+     builtin_arity bi <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_builtin_dispatch cenv ret_ty ty bi args)
@@ -12748,7 +12749,7 @@ QED
 
 (* ===== Source side conditions from supported_program ===== *)
 
-(* supported_expr rejects Env MsgGas, every raw_call form and create calls,
+(* supported_expr rejects every raw_call form and create calls,
    and accepts builtins only at the arity their dispatcher reads. *)
 Theorem supported_builtin_form_shape_root[local]:
   supported_builtin_form tops ty bi es ==>

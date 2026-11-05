@@ -853,7 +853,7 @@ Proof
   Cases_on `tr` >> gvs[] >>
   simp[vyperStorageTheory.apply_writes_def] >>
   qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule exprSimTheory.stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   first_x_assum (drule_then mp_tac) >>
   gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]

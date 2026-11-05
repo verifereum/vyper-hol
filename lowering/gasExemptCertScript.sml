@@ -172,10 +172,72 @@ Inductive gas_exempt_cert:
        marks (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) source (es, s)
        marks (err, ee) (leaf, finish))
+
+[~unforce_result:]
+  (!memory tops ctx func cx e es s0 marks err ee leaf finish.
+     gas_exempt_cert memory tops (ctx, func)
+       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+       (es, s0) marks (err, ee) (leaf, finish) ==>
+     gas_exempt_cert memory tops (ctx, func)
+       (ignore_bind (eval_expr cx e) (return ()))
+       (es, s0) marks (err, ee) (leaf, finish))
 End
 
 (* The endpoint of the concrete child remains separate from the source
    endpoint after enclosing cleanup. Entering a call is not completing it. *)
+Theorem read_place_no_exempt_error[local]:
+  !tops cx p st err st'.
+    read_place cx p st = (INR (Error err), st') ==>
+    ~unspecified_behaviour_exempt tops err
+Proof
+  rpt gen_tac >> Cases_on `p`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tr` >>
+      simp[read_place_def, read_storage_slot_def, get_storage_backend_def,
+           get_accounts_def, get_transient_storage_def, bind_def, return_def,
+           lift_option_def, vyperMiscTheory.option_CASE_rator, raise_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def])
+  >- (simp[read_place_def, get_scopes_def, bind_def, return_def,
+           lift_option_type_def, lift_sum_def, vyperMiscTheory.option_CASE_rator,
+           vyperMiscTheory.sum_CASE_rator, raise_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def] >>
+      drule read_memory_path_error_shape >>
+      strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def])
+  >> simp[read_place_def, get_immutables_def, get_address_immutables_def,
+          bind_def, return_def, lift_option_type_def, lift_sum_def,
+          vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+          raise_def, return_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def] >>
+     drule evaluate_subscripts_error_shape >>
+     strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def]
+QED
+
+Theorem read_result_no_exempt_error:
+  !tops cx r st err st'.
+    read_result cx r st = (INR (Error err), st') ==>
+    ~unspecified_behaviour_exempt tops err
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  simp[read_result_def, return_def, raise_def] >>
+  rpt strip_tac
+  >- (drule read_place_no_exempt_error >> metis_tac[])
+  >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def]
+QED
+
+Theorem gas_source_unforce_result:
+  !tops cx e st err ee.
+    unspecified_behaviour_exempt tops err /\
+    ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()) st =
+      (INR (Error err), ee) ==>
+    ignore_bind (eval_expr cx e) (return ()) st =
+      (INR (Error err), ee)
+Proof
+  rpt gen_tac >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >>
+  simp[ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule read_result_no_exempt_error >> metis_tac[]
+QED
+
 Theorem gas_exempt_cert_execution:
   !memory tops ctx func source es s0 marks err ee leaf finish.
     gas_exempt_cert memory tops (ctx, func) source (es, s0)
@@ -232,9 +294,11 @@ Proof
       irule gas_source_try_exception >> qexists_tac `mid` >>
       simp[evaluation_state_component_equality])
   >- (rpt gen_tac >> simp[get_scopes_def, bind_def, return_def])
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      drule gas_invoke_entry_readings >> strip_tac >>
+      conj_tac >- gvs[] >> metis_tac[gas_focus_path_rules])
   >> rpt gen_tac >> simp[] >> strip_tac >>
-  drule gas_invoke_entry_readings >> strip_tac >>
-  conj_tac >- gvs[] >> metis_tac[gas_focus_path_rules]
+     gen_tac >> irule gas_source_unforce_result >> metis_tac[]
   end
 QED
 
