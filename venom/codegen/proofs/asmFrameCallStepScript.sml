@@ -2992,6 +2992,148 @@ Proof
   metis_tac[asm_call_safe_charge_push]
 QED
 
+Theorem asm_call_safe_memory_expansion_info:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  memory_expansion_info offset sz s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[memory_expansion_info_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_expand_memory:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  expand_memory n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[expand_memory_def, get_current_context_def, set_current_context_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_read_memory:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  read_memory offset sz s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[read_memory_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_write_memory:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  write_memory offset bytes s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[write_memory_def, get_current_context_def, set_current_context_def,
+      bind_def, return_def]
+QED
+
+Theorem asm_call_safe_get_call_data:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_call_data s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[get_call_data_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_copy_source:
+  (!f. source = SOME f ==> !s r t.
+    s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\ f s = (r,t) ==>
+    (!e. r = INR e ==> ~vfm_abort e) /\
+    (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)) /\
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  (case source of SOME f => do
+     bytes <- f; expand_memory n;
+     return (take_pad_0 sz (DROP off bytes)) od
+   | NONE => do expand_memory n; read_memory off sz od) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `source` >> simp[ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac
+  >- (drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+      disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+      BETA_TAC >> disch_then irule >> simp[] >>
+      conj_tac >- metis_tac[asm_call_safe_expand_memory] >>
+      metis_tac[asm_call_safe_read_memory]) >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[return_def] >>
+  metis_tac[asm_call_safe_expand_memory]
+QED
+
+Theorem asm_call_safe_copy_to_memory:
+  (!f. source = SOME f ==> !s r t.
+    s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\ f s = (r,t) ==>
+    (!e. r = INR e ==> ~vfm_abort e) /\
+    (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)) /\
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  copy_to_memory gas offset off sz source s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[copy_to_memory_def, ignore_bind_def, LET_THM] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  Cases_on `if source = NONE then max_expansion_range (offset,sz) (off,sz)
+            else (offset,sz)` >> gvs[] >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_memory_expansion_info] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_consume_gas] >>
+  rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  drule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pat `(case source of _ => _ | _ => _) _ = _`)
+        (REWRITE_RULE [ignore_bind_def] asm_call_safe_copy_source) >>
+      simp[] >> disch_then irule >> simp[]
+      >- (qpat_x_assum `!f. source = SOME f ==> _` mp_tac >>
+          simp[GSYM AND_IMP_INTRO]) >>
+      metis_tac[]) >>
+  metis_tac[asm_call_safe_write_memory]
+QED
+
+Theorem asm_call_safe_copy_memory_source:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  copy_to_memory gas offset off sz NONE s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  strip_tac >>
+  drule_at (Pat `copy_to_memory _ _ _ _ _ _ = _`) asm_call_safe_copy_to_memory >>
+  simp[]
+QED
+
+Theorem asm_call_safe_copy_call_data:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  copy_to_memory gas offset off sz (SOME get_call_data) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  strip_tac >>
+  drule_at (Pat `copy_to_memory _ _ _ _ _ _ = _`) asm_call_safe_copy_to_memory >>
+  simp[] >> impl_tac >- metis_tac[asm_call_safe_get_call_data] >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
