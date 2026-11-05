@@ -118,7 +118,7 @@ QED
    HOL lowering and source semantics agree and therefore stay in the domain. *)
 fun check_conversion expected name = let
   val path = "../conversions/checker-oracle/" ^ name ^ ".json"
-  val input = vyperCheckContractFrontendLib.prepare_check_input
+  val input = vyperCheckContractFrontendLib.prepare_check_input_legacy
     {in_deploy = false, address = ``0w : address``,
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
      storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout path}
