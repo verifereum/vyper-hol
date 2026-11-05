@@ -12,6 +12,7 @@ Ancestors
   bodyPtrIntCallSource bodyPtrIntCallWriteFrame bodyPtrIntCallTaintBounds
   bodyPtrIntCallAllocation bodyPtrIntCallFrontier
   bodyPtrIntCallFrontierTransport bodyPtrIntCallLowRegion
+  bodyPtrIntCallStageBoundary
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
