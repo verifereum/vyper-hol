@@ -109,3 +109,64 @@ Proof
     (irule (cj 5 copy_len_binop_ghost_frame) >> simp[]) >>
   gvs[ptr_covers_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
+
+Theorem for_bytes_copy_steps:
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  u0 = update_var t0 (mload (w2n a) s) s /\
+  u1 = update_var t1 (mload (w2n a) s + 31w) u0 /\
+  u2 = update_var t2 ((mload (w2n a) s + 31w) && i2w (-32)) u1 /\
+  u3 = update_var t3 (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) u2 ==>
+  step_inst_base (mk_inst id MLOAD [Var src] [t0]) s = OK u0 /\
+  step_inst_base (mk_inst (id+1) ADD [Var t0; Lit 31w] [t1]) u0 = OK u1 /\
+  step_inst_base (mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2]) u1 = OK u2 /\
+  step_inst_base (mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]) u2 = OK u3 /\
+  step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) u3 =
+    OK (mcopy (w2n b) (w2n a)
+      (w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)) u3)
+Proof
+  strip_tac >>
+  `eval_operand (Var t0) u0 = SOME (mload (w2n a) s) /\
+   eval_operand (Var t1) u1 = SOME (mload (w2n a) s + 31w) /\
+   eval_operand (Var t2) u2 = SOME ((mload (w2n a) s + 31w) && i2w (-32)) /\
+   eval_operand (Var t3) u3 = SOME (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) /\
+   eval_operand (Var src) u3 = SOME a /\ eval_operand (Var dst) u3 = SOME b` by
+    (simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     gvs[lookup_var_def]) >>
+  rpt conj_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  PURE_REWRITE_TAC[mk_inst_def, instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_read1_def, exec_pure2_def, eval_operand_def] >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem for_bytes_copy_run:
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  u0 = update_var t0 (mload (w2n a) s) s /\
+  u1 = update_var t1 (mload (w2n a) s + 31w) u0 /\
+  u2 = update_var t2 ((mload (w2n a) s + 31w) && i2w (-32)) u1 /\
+  u3 = update_var t3 (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) u2 ==>
+  run_inst_seq
+    [mk_inst id MLOAD [Var src] [t0];
+     mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
+     mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
+     mk_inst (id+3) ADD [Var t2; Lit 32w] [t3];
+     mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []] s =
+    OK (mcopy (w2n b) (w2n a)
+      (w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)) u3)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MLOAD [Var src] [t0]) s = OK u0 /\
+   step_inst_base (mk_inst (id+1) ADD [Var t0; Lit 31w] [t1]) u0 = OK u1 /\
+   step_inst_base (mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2]) u1 = OK u2 /\
+   step_inst_base (mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]) u2 = OK u3 /\
+   step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) u3 =
+     OK (mcopy (w2n b) (w2n a)
+       (w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)) u3)` by
+    (irule for_bytes_copy_steps >> simp[]) >>
+  map_every (fn pat => qpat_x_assum pat kall_tac)
+    [`u0 = _`, `u1 = _`, `u2 = _`, `u3 = _`] >>
+  simp[run_inst_seq_def]
+QED
