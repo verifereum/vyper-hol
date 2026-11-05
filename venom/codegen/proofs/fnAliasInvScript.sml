@@ -2350,6 +2350,70 @@ QED
 
 Finalise alias_popmany_plan_deletes
 
+Theorem alias_popmany_stack_count:
+  LIST_ELEM_COUNT at (SND (popmany_plan to_pop ps)).ps_stack <=
+    LIST_ELEM_COUNT at ps.ps_stack
+Proof
+  Cases_on `to_pop` >- simp[popmany_plan_def] >>
+  simp[Once popmany_plan_def] >>
+  reverse IF_CASES_TAC
+  >- simp[popmany_individual_eq_foldl, alias_pop_fold_count] >>
+  reverse IF_CASES_TAC
+  >- simp[popmany_individual_eq_foldl, alias_pop_fold_count] >>
+  `LENGTH (h::t) < LENGTH ps.ps_stack` by
+    (irule contiguous_top_stack_bound >> simp[]) >>
+  pairarg_tac >> simp[] >>
+  `LIST_ELEM_COUNT at ps'.ps_stack = LIST_ELEM_COUNT at ps.ps_stack` by
+    (mp_tac (Q.SPECL [`SUC (LENGTH (t:operand list))`, `ps`]
+       doSwapSimTheory.do_swap_multiplicity) >> fs[]) >>
+  simp[stack_pop_def] >>
+  metis_tac[elem_count_append, TAKE_DROP, arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem alias_clean_stack_edge_deletes:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM v (live_vars_at live pred (LENGTH pb.bb_instructions)) /\
+  ~MEM v (input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0)) /\
+  LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 ==>
+  ~MEM (Var v) (SND (clean_stack_plan live cfg fn bb ps)).ps_stack
+Proof
+  strip_tac >> simp[clean_stack_plan_def] >>
+  qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+  qmatch_goalsub_abbrev_tac `if ok then _ else _` >>
+  qmatch_goalsub_abbrev_tac `mark_dead_stack retained` >>
+  qmatch_goalsub_abbrev_tac `popmany_plan cleanup ps` >>
+  IF_CASES_TAC
+  >- simp[MEM_MAP, dead_stack_marker_def] >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[alias_mark_dead_stack_upper_support] >>
+      Cases_on `MEM (Var v) retained` >> simp[] >>
+      Cases_on `MEM (Var v) ps.ps_stack`
+      >- (`MEM (Var v) cleanup` by
+            (`IS_SOME (stack_get_depth (Var v) ps.ps_stack)` by
+               (Cases_on `stack_get_depth (Var v) ps.ps_stack` >> simp[] >>
+                qpat_x_assum `MEM (Var v) ps.ps_stack` mp_tac >>
+                qpat_x_assum `stack_get_depth _ _ = NONE` mp_tac >>
+                POP_ASSUM_LIST (K ALL_TAC) >>
+                simp[stack_get_depth_NONE, MEM_EL] >> rpt strip_tac >>
+                first_x_assum (qspec_then `LENGTH ps.ps_stack - 1 - n` mp_tac) >>
+                simp[stack_peek_def] >>
+                `LENGTH ps.ps_stack - 1 - n < LENGTH ps.ps_stack /\
+                 LENGTH ps.ps_stack - 1 - (LENGTH ps.ps_stack - 1 - n) = n` by decide_tac >>
+                simp[]) >>
+             simp[Abbr `cleanup`, MEM_FILTER, MEM_MAP]) >>
+          metis_tac[alias_popmany_plan_deletes, pairTheory.SND]) >>
+      mp_tac (Q.INST [`at` |-> `Var v`, `to_pop` |-> `cleanup`] alias_popmany_stack_count) >>
+      gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  `MEM (Var v) (MAP Var (FILTER
+     (\v. ~MEM v (input_vars_from pred bb.bb_instructions
+       (live_vars_at live bb.bb_label 0)))
+     (live_vars_at live pred (LENGTH pb.bb_instructions))))` by
+    simp[MEM_MAP, MEM_FILTER] >>
+  metis_tac[alias_popmany_plan_deletes]
+QED
+
 Theorem alias_pop_fold_mass_zero:
   !xs ops ps. MEM (Var x) xs /\ alias_var_mass x ps <= 1 /\
     Var x NOTIN FDOM ps.ps_spilled ==>
