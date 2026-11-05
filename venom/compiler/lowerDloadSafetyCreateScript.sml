@@ -2,8 +2,9 @@ Theory lowerDloadSafetyCreate
 Ancestors
   lowerDloadExternalBoundary lowerDloadSafetyHashLog
   lowerDloadOracleCallAssembly lowerDloadSafetyUpdates lowerDloadSafetyKernel
+  lowerDloadSafetyValues lowerDloadSafetyAssemblyPremises
   ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
-  codegenRel contextCodegenRel memLocDefs finite_map pred_set list words
+  pointerConfinedDefs codegenRel contextCodegenRel memLocDefs finite_map pred_set list words
 
 (* Separate request observation from the finite CREATE outcome consumption. *)
 Theorem ld_create_exec_steps:
@@ -119,4 +120,51 @@ Proof
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`H`,`fn`,`lo`,`tn`] >> simp[])
+QED
+
+Theorem ld_create_scalar_nonpointer:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  ((inst.inst_opcode = CREATE /\ inst.inst_operands = [value;off;len] /\
+    MEM op [value;len]) \/
+   (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [value;off;len;salt] /\
+    MEM op [value;len;salt])) /\ op = Var v ==>
+  v NOTIN fn_pv P fn
+Proof
+  strip_tac >> (
+  `ptr_use_ok P (fn_pv P fn) inst` by fs[fn_ptr_ok_def] >>
+  qpat_x_assum `fn_ptr_ok _ _` kall_tac >> disch_tac >>
+  qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_use_ok_def] >>
+  disch_then (CONJUNCTS_THEN2 kall_tac (qspec_then `v` mp_tac)) >>
+  gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def] >>
+  gvs[AllCaseEqs()])
+QED
+
+Theorem ld_create_scalar_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
+  MEM inst (fn_insts f.lf_fn) /\
+  taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
+  ((inst.inst_opcode = CREATE /\ inst.inst_operands = [value;off;len] /\
+    MEM op [value;len]) \/
+   (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [value;off;len;salt] /\
+    MEM op [value;len;salt])) ==>
+  eval_operand op f.lf_src = eval_operand op f.lf_tgt
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `MEM op inst.inst_operands` by (gvs[] >> gvs[]) >>
+  `!v. op = Var v ==> v NOTIN fn_pv P f.lf_fn` by
+    metis_tac[ld_create_scalar_nonpointer] >>
+  `op_prov f.lf_H op = NONE` by
+    (irule ld_vars_nonpointer_provenance >> metis_tac[]) >>
+  irule ld_vars_operand_equal >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  gen_tac >> disch_tac >> conj_tac
+  >- (irule ld_inst_input_ir >> metis_tac[]) >> conj_tac
+  >- (irule ld_numeric_operand_nonopaque >> simp[] >>
+      qexists `inst` >> gvs[]) >>
+  `op_taint tn op = {}` by
+    (irule ld_numeric_operand_untainted >> simp[] >>
+     qexistsl [`f.lf_fn`,`inst`,`f.lf_src`] >> gvs[]) >>
+  gvs[op_taint_def]
 QED
