@@ -239,6 +239,7 @@ Theorem rest_word_compiled_search:
     context$compile_ptr_load ctor imm loc h.rw_addr cl = (v,cm) /\ i < len /\
     rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len p /\
+    eval_operand arrop p = SOME baseword /\
     eval_operand h.rw_addr p = SOME (baseword + n2w (off + i * stride)) ==>
     ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
         eval_operand v q = SOME (elem i) /\
@@ -378,6 +379,7 @@ Resume rest_word_compiled_search[body]:
        (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)` by
     (`rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
         needleop needle lenop len p` by fs[Abbr `R`] >>
+     `eval_operand arrop p = SOME baseword` by fs[Abbr `R`] >>
      qpat_x_assum `!h cl cm v i p. _` drule_all >> simp[]) >>
   `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len p` by fs[Abbr `R`] >>
