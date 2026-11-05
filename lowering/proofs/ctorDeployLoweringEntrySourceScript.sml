@@ -159,7 +159,8 @@ QED
 
 local
   val stage_cs = computeLib.add_thms
-    [venomPipelineRunnerTheory.run_callee_first_def,
+    [listTheory.SET_TO_LIST_EMPTY,
+     venomPipelineRunnerTheory.run_callee_first_def,
      venomPipelineRunnerTheory.run_pipeline_stages_def,
      venomPipelineRunnerTheory.run_named_fn_schedules_def,
      venomFnScheduleRunnerTheory.run_configured_fn_passes_def,
@@ -449,5 +450,34 @@ Proof
               deploy_ctor_noninit_schedule_eq] >>
   CONV_TAC (computeLib.CBV_CONV stage_cs)
 QED
+
+Theorem deploy_ctor_noninit_pipeline_eq:
+  o1PipelineCorrect$o1_pipeline
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    (THE (lower_vyper_deploy_unit
+      [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+      <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+         rpol_final_assembly := FAP_Optimize |> [])) =
+    SOME <|po_unit := ^final_unit; po_final_assembly := FAP_Optimize|>
+Proof
+  rewrite_tac[o1PipelineCorrectTheory.o1_pipeline_def,
+    venomPipelineDriverTheory.run_venom_pipeline_def] >>
+  rewrite_tac[venomPassScheduleTheory.o1_pipeline_spec_def,
+              deploy_ctor_noninit_prewalk_eq,
+              deploy_ctor_noninit_lower_eq] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``run_pipeline_stages``, ``run_callee_first``]) >>
+  rewrite_tac[CONV_RULE
+    (computeLib.RESTR_EVAL_CONV [``run_pipeline_stages``])
+    (REWRITE_RULE [deploy_ctor_noninit_lower_eq] deploy_ctor_noninit_prewalk_eq)] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``run_pipeline_stages``, ``run_callee_first``]) >>
+  rewrite_tac[CONV_RULE
+    (computeLib.RESTR_EVAL_CONV [``run_callee_first``])
+    deploy_ctor_noninit_walk_eq] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
 
 end
