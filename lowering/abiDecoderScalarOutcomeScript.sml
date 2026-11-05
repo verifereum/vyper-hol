@@ -4,7 +4,7 @@ Ancestors
   abiDecoderPrimitiveSource abiDecoderWordOutcome abiCanonicalHeadSize
   calldataReconstruction abiDecoderCoherence vyperTypeABI vyperTypeSystem
   exprLowering compileEnv vyperValue valueEncoding words list arithmetic
-  abiDecoderPrimitiveSourceProbe abiDecoderClampOutcome
+  abiDecoderSourceFacts abiDecoderClampOutcome
 
 Theorem abi_decoder_primitive_is_word:
   assignable_type env ty /\ abi_decoder_coherent ce env sf ty tv /\
@@ -90,7 +90,7 @@ Proof
   strip_tac >>
   `is_word_type ty` by (drule_all abi_decoder_primitive_is_word >> simp[]) >>
   Cases_on `ty` >> gvs[is_word_type_def, type_to_abi_dec_info_def]
-  >- (drule_all abi_decode_checker_clamp_wf_probe >>
+  >- (drule_all abi_decode_checker_clamp_wf >>
       Cases_on `b` >> gvs[type_to_abi_dec_info_def] >>
       Cases_on `b'` >> gvs[type_to_abi_dec_info_def]) >>
   gvs[abi_decoder_coherent_flag_iff] >>

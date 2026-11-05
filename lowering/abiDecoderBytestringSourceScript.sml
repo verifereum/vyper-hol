@@ -1,7 +1,7 @@
 (* Interpretation of arbitrary available bytestring suffixes. *)
 Theory abiDecoderBytestringSource
 Ancestors
-  abiDecoderPrimitiveSourceProbe abiDecoderBytestringOutcome abiCanonicalHeadSize
+  abiDecoderSourceFacts abiDecoderBytestringOutcome abiCanonicalHeadSize
   abiDecoderString vyperABI contractABI vyperValue valueEncoding words
   list rich_list arithmetic abiDecoderContract venomState
 
@@ -15,7 +15,7 @@ Theorem abi_decode_bytestring_source_acceptance:
    32 <= LENGTH bs /\ c <= n /\ c <= LENGTH bs - 32)
 Proof
   strip_tac >> Cases_on `32 <= LENGTH bs`
-  >- (drule abi_decode_bytestring_validation_probe >> strip_tac >>
+  >- (drule abi_decode_bytestring_validation >> strip_tac >>
       gvs[abi_to_vyper_def, compatible_bound_def, LENGTH_TAKE, LENGTH_DROP] >>
       Cases_on `w2n (word_of_bytes T (0w:bytes32) (TAKE 32 bs)) <= LENGTH bs - 32` >>
       simp[LENGTH_TAKE, LENGTH_DROP]) >>
@@ -98,7 +98,7 @@ Proof
        by (irule mem_bytes_at_window >> decide_tac) >> gvs[]) >>
   `w2n (word_of_bytes T (0w:bytes32) (TAKE 32 bs)) = c` by
     simp[mem_word_at_def, mem_bytes_at_def] >>
-  drule abi_decode_bytestring_validation_probe >> strip_tac >>
+  drule abi_decode_bytestring_validation >> strip_tac >>
   gvs[abi_to_vyper_def, compatible_bound_def, LENGTH_TAKE, LENGTH_DROP,
       mem_bytes_at_def]
 QED

@@ -1,7 +1,7 @@
 (* Arbitrary scalar source interpretation boundaries. *)
 Theory abiDecoderPrimitiveSource
 Ancestors
-  abiDecoderPrimitiveSourceProbe abiDecoderSigned convertScalarEncoding
+  abiDecoderSourceFacts abiDecoderSigned convertScalarEncoding
   abiDecoderClamp valueEncoding venomExecSemantics integer_word words
   arithmetic list rich_list byte contractABI exprSimArith convertScalarBytesRun exprSimConvert vyperArith
   vyperValueOperation vyperABI vyperValue convertScalarBytes
@@ -33,7 +33,7 @@ Theorem abi_decoder_fixed_source_acceptance:
    abi_decoder_clamp_valid (if m = 32 then NoClamp else BytesMClamp m)
      (word_of_bytes T (0w:bytes32) bs))
 Proof
-  strip_tac >> drule abi_decode_word_validation_probe >> strip_tac >>
+  strip_tac >> drule abi_decode_word_validation >> strip_tac >>
   Cases_on `m = 32`
   >- gvs[abi_decoder_clamp_valid_def, DROP_LENGTH_TOO_LONG] >>
   simp[abi_decoder_clamp_valid_def] >>
@@ -47,7 +47,7 @@ Theorem abi_decoder_unsigned_source_acceptance:
    abi_decoder_clamp_valid (if n = 256 then NoClamp else IntClamp n F)
      (word_of_bytes T (0w:bytes32) bs))
 Proof
-  strip_tac >> drule abi_decode_word_validation_probe >> strip_tac >>
+  strip_tac >> drule abi_decode_word_validation >> strip_tac >>
   `n <= 256` by fs[valid_int_bound_def] >>
   Cases_on `n = 256`
   >- (gvs[abi_decoder_clamp_valid_def] >>
@@ -63,7 +63,7 @@ Theorem abi_decoder_bool_address_source_acceptance:
   (vyper_decode_valid_enc Address bs <=>
    abi_decoder_clamp_valid (IntClamp 160 F) (word_of_bytes T (0w:bytes32) bs))
 Proof
-  strip_tac >> drule abi_decode_word_validation_probe >>
+  strip_tac >> drule abi_decode_word_validation >>
   simp[abi_decoder_clamp_valid_def]
 QED
 
@@ -123,7 +123,7 @@ Theorem abi_decoder_signed_source_acceptance:
    abi_decoder_clamp_valid (if n = 256 then NoClamp else IntClamp n T)
      (word_of_bytes T (0w:bytes32) bs))
 Proof
-  strip_tac >> drule abi_decode_word_validation_probe >> strip_tac >>
+  strip_tac >> drule abi_decode_word_validation >> strip_tac >>
   `0 < n /\ n <= 256 /\ n MOD 8 = 0` by fs[valid_int_bound_def] >>
   drule_all abi_decoder_signed_word_clamp >>
   disch_then (qspec_then `word_of_bytes T (0w:bytes32) bs` mp_tac) >>
@@ -147,7 +147,7 @@ Theorem abi_decoder_scalar_conversion:
      then SOME (DecimalV (w2i (word_of_bytes T (0w:bytes32) bs)))
      else NONE)
 Proof
-  strip_tac >> drule abi_decode_word_dec_probe >> strip_tac >>
+  strip_tac >> drule abi_decode_word_dec >> strip_tac >>
   simp[check_IntV_def, within_int_bound_ineq,
        abi_decoder_signed_bound_source]
 QED
@@ -161,9 +161,9 @@ Theorem abi_decoder_flag_source_acceptance:
      (word_of_bytes T (0w:bytes32) bs))
 Proof
   strip_tac >>
-  drule abi_decode_word_dec_probe >> strip_tac >>
-  drule abi_decode_word_validation_probe >> strip_tac >>
-  drule abi_decode_flag_conversion_probe >> strip_tac >>
+  drule abi_decode_word_dec >> strip_tac >>
+  drule abi_decode_word_validation >> strip_tac >>
+  drule abi_decode_flag_conversion >> strip_tac >>
   `w2n (word_of_bytes T (0w:bytes32) bs) < 2 ** 256` by
     (mp_tac (Q.ISPEC `word_of_bytes T (0w:bytes32) bs` w2n_lt) >>
      simp[dimword_def]) >>
@@ -194,8 +194,8 @@ Theorem abi_decoder_fixed_converted_word:
   typed_val_to_w256 (BaseTV (BytesT (Fixed m))) v =
     word_of_bytes T (0w:bytes32) bs
 Proof
-  strip_tac >> drule abi_decode_word_validation_probe >> strip_tac >>
-  drule abi_decode_word_dec_probe >> strip_tac >>
+  strip_tac >> drule abi_decode_word_validation >> strip_tac >>
+  drule abi_decode_word_dec >> strip_tac >>
   gvs[abi_to_vyper_def, AllCaseEqs()] >>
   `EVERY (\b. b = 0w) (DROP m bs)` by fs[EVERY_MEM] >>
   drule scalar_fixed_narrow >>
@@ -247,7 +247,7 @@ Proof
   >- (Cases_on `b` >> gvs[exprLoweringTheory.type_to_abi_dec_info_def])
   >- gvs[abi_decoder_coherent_struct_iff,
          exprLoweringTheory.type_to_abi_dec_info_def]
-  >- (drule abi_decode_word_dec_probe >> strip_tac >>
+  >- (drule abi_decode_word_dec >> strip_tac >>
       gvs[typed_val_to_w256_def, val_to_w256_def]) >>
   gvs[assignable_type_def, well_formed_type_def, evaluate_type_def,
       Once abi_decoder_coherent_cases]
@@ -269,7 +269,7 @@ Proof
             fs[assignable_type_def, well_formed_type_def, evaluate_type_def,
                valid_int_bound_def, AllCaseEqs()] >>
           drule_all abi_decoder_unsigned_source_acceptance >> strip_tac >>
-          drule abi_decode_word_validation_probe >> strip_tac >>
+          drule abi_decode_word_validation >> strip_tac >>
           simp[check_IntV_def, within_int_bound_ineq, TAKE_LENGTH_TOO_LONG] >>
           Cases_on `w2n (word_of_bytes T (0w:bytes32) bs) < 2 ** n` >> gvs[])
       >- (`valid_int_bound n` by
@@ -277,7 +277,7 @@ Proof
                valid_int_bound_def, AllCaseEqs()] >>
           `0 < n` by fs[valid_int_bound_def] >>
           drule_all abi_decoder_signed_source_acceptance >> strip_tac >>
-          drule abi_decode_word_validation_probe >> strip_tac >>
+          drule abi_decode_word_validation >> strip_tac >>
           simp[check_IntV_def, GSYM abi_decoder_signed_bound_source,
                TAKE_LENGTH_TOO_LONG] >>
           Cases_on `int_bits_bound (w2i (word_of_bytes T (0w:bytes32) bs)) n` >> gvs[])
@@ -286,25 +286,25 @@ Proof
           metis_tac[])
       >- (`valid_int_bound 168` by simp[valid_int_bound_def] >>
           drule_all abi_decoder_signed_source_acceptance >> strip_tac >>
-          drule abi_decode_word_validation_probe >> strip_tac >>
+          drule abi_decode_word_validation >> strip_tac >>
           gvs[abi_decoder_signed_bound_source, TAKE_LENGTH_TOO_LONG])
       >- (Cases_on `b'` >> gvs[abi_decode_scalar_descriptors] >>
           `0 < n /\ n <= 32` by
             fs[abi_decode_bytes_widths_def, assignable_type_def,
                well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
           drule_all abi_decoder_fixed_source_acceptance >> strip_tac >>
-          drule abi_decode_word_dec_probe >> strip_tac >>
+          drule abi_decode_word_dec >> strip_tac >>
           gvs[abi_to_vyper_def, LENGTH_TAKE, compatible_bound_def])
       >> drule abi_decoder_bool_address_source_acceptance >>
-      drule abi_decode_word_validation_probe >>
+      drule abi_decode_word_validation >>
       simp[TAKE_LENGTH_TOO_LONG, within_int_bound_ineq,
            abi_decoder_clamp_valid_def] >> metis_tac[])
   >- (Cases_on `b` >> gvs[exprLoweringTheory.type_to_abi_dec_info_def])
   >- gvs[abi_decoder_coherent_struct_iff,
          exprLoweringTheory.type_to_abi_dec_info_def]
   >- (drule_all abi_decoder_flag_source_acceptance >>
-      drule abi_decode_word_dec_probe >> strip_tac >>
-      drule abi_decode_flag_conversion_probe >>
+      drule abi_decode_word_dec >> strip_tac >>
+      drule abi_decode_flag_conversion >>
       simp[TAKE_LENGTH_TOO_LONG]) >>
   gvs[assignable_type_def]
 QED
