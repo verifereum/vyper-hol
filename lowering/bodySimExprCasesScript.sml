@@ -26,6 +26,7 @@ Theory bodySimExprCases
 Ancestors
   bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
   bodySimBopInLiteralWord bodySimBopHeld
+  bodySimConvertWidened
   exprSimSource
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
@@ -345,6 +346,11 @@ Proof
       simp[]) >>
   `body_exprs_ok cx es` by
     (first_x_assum irule >> simp[type_check_def, assert_def]) >>
+  Cases_on `tb = Convert /\
+            ?e1 a f cargs d. es = [e1] /\ e1 = Call a (IntCall f) cargs d /\
+                             lowered_value_type cenv e1 <> expr_type e1`
+  >- (gvs[] >> rw[expr_sim_case_def, expr_vv_case_def] >>
+      metis_tac[body_convert_widened_call_arg]) >>
   irule compile_type_builtin_case >> metis_tac[body_exprs_ok_case]
 QED
 

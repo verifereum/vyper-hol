@@ -2883,7 +2883,8 @@ Resume well_typed_type_builtin_no_type_error[extract32]:
   gvs[LENGTH_EQ_NUM_compute] >>
   Cases_on `tvs` >> gvs[] >>
   drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
-  drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+  `is_int_type (BaseT (UintT width))` by simp[] >>
   drule_all evaluate_extract32_supported_no_type_error >>
   fs[evaluate_type_builtin_def] >>
   simp[AllCaseEqs(), LET_THM]
@@ -3010,6 +3011,8 @@ Proof
   >- (gvs[LENGTH_EQ_NUM_compute] >>
       Cases_on `tvs` >> gvs[] >>
       drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+      rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+      `is_int_type (BaseT (UintT width))` by simp[] >>
       drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
       gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
       drule_all evaluate_extract32_well_typed >> simp[])

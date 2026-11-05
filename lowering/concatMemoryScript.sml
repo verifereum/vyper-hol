@@ -37,7 +37,7 @@ Proof
   simp[word_add_def, w2n_n2w, MOD_LESS_EQ]
 QED
 
-Theorem concat_fixed_shape[local]:
+Theorem concat_fixed_shape:
   (do offset_op <- emit_op MLOAD [off_ptr];
       dst <- emit_op ADD [data_ptr; offset_op];
       emit_void MSTORE [dst; v];
@@ -134,7 +134,7 @@ val () =
      else raise Fail "concat memory footprint inherited admission"
   end;
 
-Theorem concat_bytes_shape[local]:
+Theorem concat_bytes_shape:
   (do arg_len <- emit_op MLOAD [mem_ptr];
       arg_data <- emit_op ADD [mem_ptr; Lit 32w];
       offset_op <- emit_op MLOAD [off_ptr];
