@@ -684,7 +684,8 @@ Theorem literal_ptr_value_posts:
   lookup_var p t = SOME w /\ FLOOKUP G p = SOME (b,n) /\
   b <= w2n w /\ w2n w+val_store_size tv v <= b+n /\
   w2n w+type_memory_bytes cenv (lowered_value_type cenv e) <= b+n /\
-  op_taint tn (Var p) = {} /\ buf.buf_operand = Var p ==>
+  op_taint tn (Var p) = {} /\ buf.buf_operand = Var p /\
+  ~is_word_type (expr_type e) ==>
   ptr_vv_ok cx (expr_type e) (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) es G tn (t with vs_inst_idx := idx) /\
   ptr_val_ok cx (expr_type e) v (Var p) G tn (t with vs_inst_idx := idx) /\

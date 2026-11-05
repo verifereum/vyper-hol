@@ -37,7 +37,8 @@ Proof
   gvs[expr_post_def, expr_val_rel_def, expr_val_at_def, locals_kept_def,
       vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
       typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
-      ghost_inv_def, ptr_val_ok_def, op_taint_def, ghost_kept_def] >>
+      ghost_inv_def, ptr_val_ok_def, op_taint_def, op_prov_def,
+      ghost_kept_def] >>
   metis_tac[]
 QED
 
