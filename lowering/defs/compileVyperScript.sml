@@ -1082,6 +1082,15 @@ Definition external_return_buffer_ok_def:
         ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_valued_return body ⇒
         return_buffer_ok cenv
 End
+Theorem build_compile_env_return_buffer_ok:
+  !tops vis mut name args ret body use_trans.
+    return_buffer_ok
+      (build_compile_env tops vis mut name args ret body use_trans)
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[return_buffer_ok_def]
+QED
+
 Theorem update_cenv_ret_abi_word_return_buffer_ok:
   !cenv ret. is_word_type ret ==>
     return_buffer_ok (update_cenv_ret_abi cenv ret)
