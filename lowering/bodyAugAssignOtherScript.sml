@@ -22,7 +22,7 @@ Ancestors
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
   stmtSimAssignPlace bodyExprPreFacts bodySimExprCases
-  supportedStmtTraverse vyperTypeCallGraph
+  supportedStmtTraverse vyperTypeCallGraph vyperState
 
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
@@ -141,6 +141,25 @@ Proof
   cheat
 QED
 
+Theorem aug_storage_decl_some[local]:
+  !ts vis mut id ty init.
+    MEM (VariableDecl vis mut id ty init) ts /\
+    (mut = Storage \/ mut = Transient) ==>
+    find_var_decl_by_name id ts <> NONE
+Proof
+  Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
+QED
+
+Theorem aug_assignable_find_NONE[local]:
+  !env cx st src id ty.
+    env_consistent env cx st /\
+    FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+    ?ts. get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE
+Proof
+  rw[env_consistent_def, env_context_consistent_def] >>
+  first_x_assum drule >> strip_tac >> simp[]
+QED
+
 Theorem augassign_rhs_pre[local]:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\
@@ -174,6 +193,59 @@ Theorem augassign_rhs_case[local]:
    expr_sim_case F ctx func cenv cx e)
 Proof
   metis_tac[body_expr_ok_case]
+QED
+
+Theorem augassign_toplevel_metadata[local]:
+  body_inv tops ctx cenv cx /\
+  supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty (TopLevelNameTarget (src,id)) bop e) =
+    SOME env' ==>
+  src = NONE /\
+  ?tr id_str slot tvt.
+    get_module_code cx src = SOME tops /\
+    find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) ty = SOME tvt /\
+    FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+    well_formed_type env.type_defs ty /\
+    cenv.ce_hashmap_info (src,id) = NONE /\
+    cenv.ce_module_var_type (src,id) = SOME ty /\ is_word_type ty /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
+Proof
+  rpt strip_tac >>
+  drule supported_aug_toplevel_decl >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `vis` (qx_choose_then `mut`
+      (qx_choose_then `dty` (qx_choose_then `init` assume_tac))))) >>
+  `find_var_decl_by_name id tops <> NONE` by
+    metis_tac[aug_storage_decl_some] >>
+  gvs[] >>
+  `get_module_code cx NONE = SOME tops /\ supported_program tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
+    fs[body_inv_def] >>
+  drule_all build_maps_variable >> strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `type_place_target env (TopLevelNameTarget (NONE,id)) = SOME (Type ty) /\
+   assignable_type env.type_defs ty /\
+   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+   (bop = Exp ==> nonneg_int_literal e) /\
+   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
+    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+  `FLOOKUP env.bare_global_assignable (NONE,id) = NONE` by
+    (Cases_on `FLOOKUP env.bare_global_assignable (NONE,id)` >> simp[] >>
+     drule_all aug_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  gvs[type_place_target_TopLevelNameTarget] >>
+  drule_all env_consistent_toplevel_storage_static >> strip_tac >>
+  drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  `dty = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[assignable_type_well_formed]
 QED
 
 (* x op= e on a word storage or transient variable of any width:
