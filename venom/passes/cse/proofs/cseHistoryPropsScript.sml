@@ -2571,3 +2571,76 @@ Proof
  strip_tac >> irule cse_prefix_operand_producer_rewind_aux >>
  metis_tac[]
 QED
+
+Theorem cse_prefix_use_dfg_def[local]:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var x) use.inst_operands ==>
+ ?inst. FLOOKUP (dfg_build_function fn).dfg_defs x = SOME inst
+Proof
+ strip_tac >> drule_all cse_prefix_ordinary_use_last_write >> strip_tac >>
+ `MEM ev events` by gvs[MEM_APPEND] >>
+ drule_all cse_prefix_writing_occurrence >> strip_tac >>
+ `MEM inst (fn_insts_blocks fn.fn_blocks)` by
+   (`MEM inst bb'.bb_instructions` by
+      (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+    qpat_x_assum `MEM bb' fn.fn_blocks` mp_tac >>
+    qspec_tac (`fn.fn_blocks`, `bbs`) >>
+    Induct >> simp[fn_insts_blocks_def] >> metis_tac[]) >>
+ `MEM inst (fn_insts fn)` by simp[fn_insts_def] >>
+ drule_all dfgAnalysisPropsTheory.dfg_build_function_defs_complete >>
+ simp[dfgDefsTheory.dfg_get_def_def]
+QED
+
+Theorem cse_prefix_copy_normal_form:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands ==>
+ ?pre post m cb u terminal_use terminal.
+ events = pre ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+ get_instruction cb u.vs_inst_idx = SOME terminal_use /\
+ terminal_use.inst_opcode <> PHI /\ MEM terminal terminal_use.inst_operands /\
+ RTC (\a b. ?x copy. a = Var x /\
+   FLOOKUP (dfg_build_function fn).dfg_defs x = SOME copy /\
+   copy.inst_opcode = ASSIGN /\ copy.inst_operands = [b]) op terminal /\
+ eval_operand op s = eval_operand terminal u /\
+ ((?w. terminal = Lit w) \/ (?l. terminal = Label l) \/
+  (?x definer. terminal = Var x /\
+   FLOOKUP (dfg_build_function fn).dfg_defs x = SOME definer /\
+   definer.inst_opcode <> ASSIGN))
+Proof
+ map_every qid_spec_tac [`op`, `use`, `s`, `bb`, `n`] >>
+ measureInduct_on `LENGTH events` >> rpt strip_tac >>
+ Cases_on `op`
+ >- (rename1 `MEM (Lit w) use.inst_operands` >>
+     qexistsl [`events`, `[]`, `n`, `bb`, `s`, `use`, `Lit w`] >>
+     simp[relationTheory.RTC_REFL])
+ >- suspend "var" >>
+ qexistsl [`events`, `[]`, `n`, `bb`, `s`, `use`, `Label s'`] >>
+ simp[relationTheory.RTC_REFL]
+QED
+
+Resume cse_prefix_copy_normal_form[var]:
+ drule_all cse_prefix_use_dfg_def >> strip_tac >>
+ Cases_on `inst.inst_opcode = ASSIGN`
+ >- suspend "assign"
+ >> qexistsl [`events`, `[]`, `n`, `bb`, `s`, `use`, `Var s'`] >>
+ simp[relationTheory.RTC_REFL] >> metis_tac[]
+QED
+
+Resume cse_prefix_copy_normal_form[assign]:
+ drule_all cse_dfg_assign_shape >> strip_tac >>
+ drule_all cse_prefix_assign_use_rewind_dfg >> strip_tac >>
+ `inst.inst_opcode <> PHI /\ MEM arg inst.inst_operands` by simp[] >>
+ first_x_assum drule >>
+ disch_then drule_all >> strip_tac >>
+ qexistsl [`pre'`, `post' ++ [CseStep m cb inst u t] ++ post`,
+   `m'`, `cb'`, `u'`, `terminal_use`, `terminal`] >>
+ gvs[APPEND_ASSOC] >>
+ irule relationTheory.RTC_TRANS >> qexists `arg` >>
+ simp[] >> irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]
+QED
+Finalise cse_prefix_copy_normal_form
