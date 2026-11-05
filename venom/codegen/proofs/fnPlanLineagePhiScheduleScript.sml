@@ -1,6 +1,7 @@
 Theory fnPlanLineagePhiSchedule
 Ancestors
   fnPlanLineagePhiTemporal fnPlanLineagePhiClasses fnPlanLineageJoinEntry
+  fnPlanLineagePhiRealization fnPlanLineagePhiSlots
   fnPlanLineagePhiActivation fnPlanLineagePhiMaps venomExecProps venomWf stackPlanGen
   codegenReadyCompute livenessTransferProofs
 
@@ -47,23 +48,25 @@ Proof
   disch_then (qspecl_then [`v`, `pred`, `i`] mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem analyzed_native_phi_schedule_ready:
+Theorem analyzed_native_phi_schedule_classes:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
   fn_reachable fn lbl /\ lbl <> entry /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
-  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
-  MAP (phi_cell_value T) cells = MAP Var
-    (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
-  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
-  phi_origin_classes (native_phi_class pred (collect_phis bb.bb_instructions)) cells ==>
-  ?cells_end. phi_origin_schedule_ready
-    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
-      (collect_phis bb.bb_instructions)) prefixP prefixQ cells cells_end /\
-    phi_origin_classes (native_phi_class pred (collect_phis bb.bb_instructions)) cells_end
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+  !i inst next h.
+    i < LENGTH (collect_phis bb.bb_instructions) /\
+    EL i (MAPi (\j phi. (phi, live_vars_at (liveness_analyze fn) lbl (SUC j), (halting:bool)))
+      (collect_phis bb.bb_instructions)) = (inst,next,h) ==>
+    (!op. MEM op (FILTER is_var_operand inst.inst_operands) <=>
+      native_phi_class pred (collect_phis bb.bb_instructions) op = SOME i) /\
+    native_phi_class pred (collect_phis bb.bb_instructions)
+      (Var (HD inst.inst_outputs)) = NONE /\
+    (!op. native_phi_class pred (collect_phis bb.bb_instructions) op = SOME i ==>
+      ~MEM (operand_to_string op) next)
 Proof
   strip_tac >>
   Cases_on `NULL (collect_phis bb.bb_instructions)`
-  >- gvs[listTheory.NULL_EQ, phi_origin_schedule_ready_def] >>
+  >- gvs[listTheory.NULL_EQ] >>
   `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
     metis_tac[lookup_block_MEM, lookup_block_label] >>
   `wf_function fn /\ fn_inst_wf fn /\ phi_operands_ready fn` by gvs[codegen_ready_fn_def] >>
@@ -80,31 +83,134 @@ Proof
     (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
      `phi.inst_opcode = PHI /\ inst_wf phi` by metis_tac[collect_phis_mem] >>
      metis_tac[cfgNormBaseTheory.inst_wf_phi_well_formed]) >>
-  irule phi_origin_schedule_from_classes >> simp[] >> qexists_tac `0` >>
-  simp[indexedListsTheory.LENGTH_MAPi] >>
+  rpt gen_tac >> strip_tac >> gvs[indexedListsTheory.EL_MAPi] >>
+  conj_tac >- (irule native_phi_class_exact >> simp[]) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      gvs[indexedListsTheory.EL_MAPi] >>
-      conj_tac >- (irule native_phi_class_exact >> simp[]) >>
-      conj_tac
-      >- (`MEM (EL i (collect_phis bb.bb_instructions)) (collect_phis bb.bb_instructions)` by
-            simp[listTheory.EL_MEM] >>
-          `inst_wf (EL i (collect_phis bb.bb_instructions)) /\
-           (EL i (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
-            metis_tac[listTheory.EVERY_MEM, collect_phis_mem] >>
-          drule_all cfgNormBaseTheory.inst_wf_phi_well_formed >> strip_tac >>
-          `MEM (HD (EL i (collect_phis bb.bb_instructions)).inst_outputs)
-             (EL i (collect_phis bb.bb_instructions)).inst_outputs` by
-            (Cases_on `(EL i (collect_phis bb.bb_instructions)).inst_outputs` >> gvs[]) >>
-          metis_tac[reachable_native_phi_output_class_none]) >>
-      rpt strip_tac >> Cases_on `op` >>
-      gvs[native_phi_class_def, stackPlanTypesTheory.operand_to_string_def] >>
-      `native_phi_class pred (collect_phis bb.bb_instructions) (Var s) = SOME i` by
-        simp[native_phi_class_def] >>
-      drule analyzed_native_phi_class_dead_after >> simp[] >>
-      qexistsl_tac [`s`, `pred`, `i`, `bb`] >> simp[]) >>
+  >- (`MEM (EL i (collect_phis bb.bb_instructions)) (collect_phis bb.bb_instructions)` by
+        simp[listTheory.EL_MEM] >>
+      `inst_wf (EL i (collect_phis bb.bb_instructions)) /\
+       (EL i (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
+        metis_tac[listTheory.EVERY_MEM, collect_phis_mem] >>
+      drule_all cfgNormBaseTheory.inst_wf_phi_well_formed >> strip_tac >>
+      `MEM (HD (EL i (collect_phis bb.bb_instructions)).inst_outputs)
+         (EL i (collect_phis bb.bb_instructions)).inst_outputs` by
+        (Cases_on `(EL i (collect_phis bb.bb_instructions)).inst_outputs` >> gvs[]) >>
+      metis_tac[reachable_native_phi_output_class_none]) >>
+  rpt strip_tac >> Cases_on `op` >>
+  gvs[native_phi_class_def, stackPlanTypesTheory.operand_to_string_def] >>
+  `native_phi_class pred (collect_phis bb.bb_instructions) (Var s) = SOME i` by
+    simp[native_phi_class_def] >>
+  drule analyzed_native_phi_class_dead_after >> simp[] >>
+  qexistsl_tac [`s`, `pred`, `i`, `bb`] >> simp[]
+QED
+
+Theorem analyzed_native_phi_schedule_ready:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  MAP (phi_cell_value T) cells = MAP Var
+    (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  phi_origin_classes (native_phi_class pred (collect_phis bb.bb_instructions)) cells ==>
+  ?cells_end. phi_origin_schedule_ready
+    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+      (collect_phis bb.bb_instructions)) prefixP prefixQ cells cells_end /\
+    phi_origin_classes (native_phi_class pred (collect_phis bb.bb_instructions)) cells_end
+Proof
+  strip_tac >>
+  irule phi_origin_schedule_from_classes >> simp[] >> qexists_tac `0` >>
+  simp[indexedListsTheory.LENGTH_MAPi] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule analyzed_native_phi_schedule_classes >>
+      goal_assum (drule_at Any) >>
+      qexistsl_tac [`entry`, `fn`, `halting'`, `halting`, `lbl`] >> simp[]) >>
   rpt strip_tac >> irule reachable_native_phi_cells_coverage >>
   goal_assum (drule_at Any) >> simp[] >> qexistsl_tac [`entry`, `fn`, `lbl`] >> simp[]
+QED
+
+Theorem analyzed_native_slot_schedule_extinction:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  phi_uses_disjoint (collect_phis bb.bb_instructions) /\
+  (!v i. MEM v livebase /\
+    FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = SOME i ==>
+    IS_SOME (FLOOKUP (SND (build_phi_maps p (collect_phis bb.bb_instructions))) i) /\
+    IS_SOME (FLOOKUP (SND (build_phi_maps q (collect_phis bb.bb_instructions))) i)) /\
+  cells = MAP
+    (phi_slot_cell (SND (build_phi_maps p (collect_phis bb.bb_instructions)))
+                   (SND (build_phi_maps q (collect_phis bb.bb_instructions))))
+    (phi_slot_trace (FST (build_phi_maps p (collect_phis bb.bb_instructions))) livebase) /\
+  MAP (phi_cell_value T) cells = MAP Var
+    (input_vars_from p bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) ==>
+  ?cells_end. phi_origin_schedule_ready
+    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+      (collect_phis bb.bb_instructions)) prefixP prefixQ cells cells_end /\
+    MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end
+Proof
+  strip_tac >>
+  `phi_origin_tagged (native_phi_class p (collect_phis bb.bb_instructions)) cells` by
+    (qpat_assum `cells = _` SUBST1_TAC >> irule native_slot_cells_tagged >> simp[] >> metis_tac[]) >>
+  `phi_origin_classes (native_phi_class p (collect_phis bb.bb_instructions)) cells` by
+    metis_tac[phi_origin_tagged_classes] >>
+  drule_all analyzed_native_phi_schedule_ready >>
+  disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
+  qexists_tac `cells_end` >> simp[] >>
+  irule phi_origin_tagged_schedule_projection >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`native_phi_class p (collect_phis bb.bb_instructions)`, `0`] >>
+  simp[indexedListsTheory.LENGTH_MAPi] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule analyzed_native_phi_schedule_classes >>
+      goal_assum (drule_at Any) >>
+      qexistsl_tac [`entry`, `fn`, `halting'`, `halting`, `lbl`] >> simp[]) >>
+  conj_tac >- (gvs[] >> simp[phi_slot_trace_origin_unique]) >>
+  qpat_assum `cells = _` SUBST1_TAC >>
+  simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+  rpt gen_tac >> strip_tac >> Cases_on `x` >> simp[phi_slot_cell_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `MEM (INR k) (phi_slot_trace _ _)` >>
+  `?v. MEM v livebase /\
+    FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = SOME k` by
+    (qpat_x_assum `MEM (INR k) _` mp_tac >> simp[phi_slot_trace_inr_mem]) >>
+  metis_tac[build_phi_maps_operand_range]
+QED
+
+Theorem analyzed_native_slot_state_replay:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  phi_uses_disjoint (collect_phis bb.bb_instructions) /\
+  (!v i. MEM v livebase /\
+    FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = SOME i ==>
+    IS_SOME (FLOOKUP (SND (build_phi_maps p (collect_phis bb.bb_instructions))) i) /\
+    IS_SOME (FLOOKUP (SND (build_phi_maps q (collect_phis bb.bb_instructions))) i)) /\
+  cells = MAP
+    (phi_slot_cell (SND (build_phi_maps p (collect_phis bb.bb_instructions)))
+                   (SND (build_phi_maps q (collect_phis bb.bb_instructions))))
+    (phi_slot_trace (FST (build_phi_maps p (collect_phis bb.bb_instructions))) livebase) /\
+  MAP (phi_cell_value T) cells = MAP Var
+    (input_vars_from p bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  ps.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+  qs.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells /\
+  ps.ps_alloc = qs.ps_alloc ==>
+  ?suffix ops al.
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+        (collect_phis bb.bb_instructions)) ps =
+      (ops, ps with <|ps_stack := prefixP ++ suffix; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+        (collect_phis bb.bb_instructions)) qs =
+      (ops, qs with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>)
+Proof
+  strip_tac >> drule_all analyzed_native_slot_schedule_extinction >>
+  disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
+  drule_all phi_origin_schedule_state_replay >> strip_tac >>
+  qexistsl_tac [`MAP (phi_cell_value T) cells_end`, `ops`, `al`] >> metis_tac[]
 QED
 
 Theorem successful_join_edges_phi_schedule_ready:
