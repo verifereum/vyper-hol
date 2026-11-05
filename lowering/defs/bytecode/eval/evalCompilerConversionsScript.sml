@@ -42,6 +42,62 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation u256_to_flag))) >> EVAL_TAC
 QED
 
+val bys1_to_u8 = memoryStoreWitnessLib.evaluate fixture_root "bys1_to_u8"
+Theorem bys1_to_u8_matches_python_oracle:
+  ^(#term bys1_to_u8) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys1_to_u8")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation bys1_to_u8))) >> EVAL_TAC
+QED
+
+val bys32_to_u8 = memoryStoreWitnessLib.evaluate fixture_root "bys32_to_u8"
+Theorem bys32_to_u8_matches_python_oracle:
+  ^(#term bys32_to_u8) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys32_to_u8")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation bys32_to_u8))) >> EVAL_TAC
+QED
+
+val bys32_to_i8 = memoryStoreWitnessLib.evaluate fixture_root "bys32_to_i8"
+Theorem bys32_to_i8_matches_python_oracle:
+  ^(#term bys32_to_i8) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys32_to_i8")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation bys32_to_i8))) >> EVAL_TAC
+QED
+
+val bys20_to_addr = memoryStoreWitnessLib.evaluate fixture_root "bys20_to_addr"
+Theorem bys20_to_addr_matches_python_oracle:
+  ^(#term bys20_to_addr) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys20_to_addr")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation bys20_to_addr))) >> EVAL_TAC
+QED
+
+val bys16_to_dec = memoryStoreWitnessLib.evaluate fixture_root "bys16_to_dec"
+Theorem bys16_to_dec_matches_python_oracle:
+  ^(#term bys16_to_dec) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys16_to_dec")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation bys16_to_dec))) >> EVAL_TAC
+QED
+
+val bys4_to_b4 = memoryStoreWitnessLib.evaluate fixture_root "bys4_to_b4"
+Theorem bys4_to_b4_matches_python_oracle:
+  ^(#term bys4_to_b4) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys4_to_b4")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation bys4_to_b4))) >> EVAL_TAC
+QED
+
+val str_to_bys = memoryStoreWitnessLib.evaluate fixture_root "str_to_bys"
+Theorem str_to_bys_matches_python_oracle:
+  ^(#term str_to_bys) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "str_to_bys")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation str_to_bys))) >> EVAL_TAC
+QED
+
 val u160_to_b20 = memoryStoreWitnessLib.evaluate fixture_root "u160_to_b20"
 Theorem u160_to_b20_matches_python_oracle:
   ^(#term u160_to_b20) =

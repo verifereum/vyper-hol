@@ -1,6 +1,7 @@
 (* Independent checked-frontend bytecode witnesses for raw_call.
    Half 2 of evalCompilerRawCalls: rc17_nested_len, rc22_bool_in_if,
-   rc01_stmt_nooutsize, rc03_value_gas, rc21_internal_value_gas_order. *)
+   rc01_stmt_nooutsize, rc03_value_gas, rc21_internal_value_gas_order,
+   rc29_delegate. *)
 Theory evalCompilerRawCalls2
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
@@ -51,4 +52,12 @@ Theorem rc21_internal_value_gas_order_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "rc21_internal_value_gas_order")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation rc21_internal_value_gas_order))) >> EVAL_TAC
+QED
+
+val rc29_delegate = memoryStoreWitnessLib.evaluate fixture_root "rc29_delegate"
+Theorem rc29_delegate_matches_python_oracle:
+  ^(#term rc29_delegate) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "rc29_delegate")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation rc29_delegate))) >> EVAL_TAC
 QED

@@ -16,9 +16,10 @@ fun cleanup_plan_conv tm =
       val func = List.nth (args, if analyzed then 5 else 2)
       val unfolded = if analyzed then REFL call else
         REWR_CONV stackPlanGenTheory.generate_fn_plan_with_cleanup_def call
-      val cached = PURE_REWRITE_CONV
+      (* An analyzed call may already carry concrete analyses. *)
+      val cached = QCONV (PURE_REWRITE_CONV
         [EVAL ``liveness_analyze ^func``, EVAL ``dfg_build_function ^func``,
-         EVAL ``cfg_analyze ^func``] (rhs (concl unfolded))
+         EVAL ``cfg_analyze ^func``]) (rhs (concl unfolded))
       val reduced = (REWR_CONV
         stackPlanGenTheory.generate_fn_plan_with_cleanup_analyzed_def THENC EVAL)
         (rhs (concl cached))

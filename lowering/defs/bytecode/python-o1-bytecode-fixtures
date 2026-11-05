@@ -164,6 +164,8 @@ case "$mode" in
                   evalCompilerBytecodeControlTheory \
                   evalCompilerBytecodeStateTheory \
                   evalCompilerBytecodeAbiExternalStaticTheory \
+                  evalCompilerBytecodeAbiExternalArraysTheory \
+                  evalCompilerBytecodeAbiExternalDynamicTheory \
                   evalCompilerBytecodeAbiInternalCallsTheory \
                   evalCompilerBytecodeAbiExternalCallsTheory \
                   evalCompilerBytecodeFunctionModesTheory \

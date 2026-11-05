@@ -1,4 +1,4 @@
-(* Opt-in rollup of all 91 exact pinned-Python bytecode comparisons.
+(* Opt-in rollup of all 94 exact pinned-Python bytecode comparisons.
    Each public parity theorem is proved by plain EVAL_TAC. *)
 Theory evalCompilerBytecodeParity
 Ancestors
@@ -9,6 +9,8 @@ Ancestors
   evalCompilerBytecodeControl
   evalCompilerBytecodeState
   evalCompilerBytecodeAbiExternalStatic
+  evalCompilerBytecodeAbiExternalArrays
+  evalCompilerBytecodeAbiExternalDynamic
   evalCompilerBytecodeAbiInternalCalls
   evalCompilerBytecodeAbiExternalCalls
   evalCompilerBytecodeFunctionModes
@@ -45,7 +47,9 @@ val expected_parity_names = List.concat (map (fn (thy, fixtures) =>
       "add_arg", "deploy_storage", "empty",
       "indexed_event_log", "local_uint", "noop", "return_arg",
       "return_uint", "storage_read", "storage_write", "two_external"]),
+   ("evalCompilerBytecodeAbiExternalArrays", ["external_arrays"]),
    ("evalCompilerBytecodeAbiExternalCalls", ["send_value"]),
+   ("evalCompilerBytecodeAbiExternalDynamic", ["external_dynamic"]),
    ("evalCompilerBytecodeAbiExternalStatic", ["external_scalars", "external_struct"]),
    ("evalCompilerBytecodeAbiInternalCalls", [
       "internal_struct_call", "internal_tuple_call"]),
@@ -83,7 +87,7 @@ val expected_parity_names = List.concat (map (fn (thy, fixtures) =>
       "scalar_shifts", "scalar_unary"]),
    ("evalCompilerBytecodeScalarTypeBuiltins", [
       "scalar_convert_address", "scalar_convert_bytes32_to_address",
-      "scalar_convert_bytes32_to_bytes4",
+      "scalar_convert_bytes32_to_bytes4", "scalar_convert_bytes_dynamic",
       "scalar_convert_bytes_fixed", "scalar_convert_integer",
       "scalar_convert_uint_to_bytes32", "scalar_decimal_bounds",
       "scalar_decimal_max", "scalar_empty", "scalar_integer_bounds",
@@ -109,14 +113,14 @@ val parity_theorems = List.filter
   (List.concat (map (fn thy =>
     map (fn (name, th) => (thy ^ "." ^ name, th)) (DB.theorems thy))
     (Theory.ancestry "-")));
-val () = if length expected_parity_names = 91 andalso
-            length parity_theorems = 91 andalso
+val () = if length expected_parity_names = 94 andalso
+            length parity_theorems = 94 andalso
             List.all (fn name =>
               length (List.filter (fn expected => expected = name)
                 expected_parity_names) = 1 andalso
               length (List.filter (fn (saved, _) => saved = name)
                 parity_theorems) = 1) expected_parity_names then ()
-         else raise Fail "expected exactly the 91 public bytecode parity identities";
+         else raise Fail "expected exactly the 94 public bytecode parity identities";
 fun permissible_parity_tag th =
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in null axioms andalso List.all (fn s => s = "DISK_THM") oracles end;

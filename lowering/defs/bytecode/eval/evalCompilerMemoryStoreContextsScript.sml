@@ -26,3 +26,29 @@ Theorem p06_local_append_struct_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation p06_local_append_struct))) >> EVAL_TAC
 QED
+
+val p15_local_append_bytes = memoryStoreWitnessLib.evaluate fixture_root "p15_local_append_bytes"
+Theorem p15_local_append_bytes_matches_python_oracle:
+  ^(#term p15_local_append_bytes) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "p15_local_append_bytes")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation p15_local_append_bytes))) >> EVAL_TAC
+QED
+
+
+val e70_noData_live_mem2 = memoryStoreWitnessLib.evaluate fixture_root "e70_noData_live_mem2"
+Theorem e70_noData_live_mem2_matches_python_oracle:
+  ^(#term e70_noData_live_mem2) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e70_noData_live_mem2")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e70_noData_live_mem2))) >> EVAL_TAC
+QED
+
+
+val dec_from_memory2 = memoryStoreWitnessLib.evaluate fixture_root "dec_from_memory2"
+Theorem dec_from_memory2_matches_python_oracle:
+  ^(#term dec_from_memory2) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "dec_from_memory2")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation dec_from_memory2))) >> EVAL_TAC
+QED
