@@ -68,6 +68,7 @@ Theorem mload_counted_clean_ambient:
       t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
       t.vs_current_bb = s.vs_current_bb /\
       t.vs_inst_idx = SUC s.vs_inst_idx /\
+      t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
       (!p. p <> out ==> lookup_var p t = lookup_var p s /\
         FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p))

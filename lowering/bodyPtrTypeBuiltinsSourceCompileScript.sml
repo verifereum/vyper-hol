@@ -16,6 +16,7 @@ Theorem compile_bytestring_src_shape_fresh:
       ~not_fresh_at sb len /\ ~not_fresh_at sb data /\
       not_fresh_at sc src /\ not_fresh_at sc len /\ not_fresh_at sc data /\
       sc.cs_next_var = sb.cs_next_var + 2 /\
+      LENGTH sc.cs_current_insts = LENGTH sb.cs_current_insts + 2 /\
       sc.cs_current_bb = sb.cs_current_bb
 Proof
   rpt gen_tac >>
@@ -57,6 +58,7 @@ Theorem compile_bytestring_src_counted_frame:
       t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
       t.vs_current_bb = s.vs_current_bb /\
       t.vs_inst_idx = SUC (SUC s.vs_inst_idx) /\
+      t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
       (!p. p <> len /\ p <> data ==> lookup_var p t = lookup_var p s /\
         FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p)) /\

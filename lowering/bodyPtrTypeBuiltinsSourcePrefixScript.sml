@@ -56,6 +56,7 @@ Theorem add_counted_ambient:
       t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
       t.vs_current_bb = s.vs_current_bb /\
       t.vs_inst_idx = SUC s.vs_inst_idx /\
+      t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
       (!p. p <> out ==> lookup_var p t = lookup_var p s /\
         FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p))
@@ -92,6 +93,7 @@ Theorem bytestring_source_prefix_counted:
       t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
       t.vs_current_bb = s.vs_current_bb /\
       t.vs_inst_idx = SUC (SUC s.vs_inst_idx) /\
+      t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
       (!p. p <> len /\ p <> data ==> lookup_var p t = lookup_var p s /\
         FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p)) /\
@@ -124,7 +126,8 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `G2 = _` (fn th => rewrite_tac[th]) >>
      qpat_x_assum `tn2 = _` (fn th => rewrite_tac[th]) >>
-     qpat_x_assum `s2 = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `s2 = (update_var _ _ _) with vs_inst_idx := _`
+       (fn th => rewrite_tac[th]) >>
      pure_rewrite_tac [ptr_covers_inst_idx] >>
      irule typed_copy_loop_dynamic_offset_covers >>
      simp[eval_operand_def] >> conj_tac
@@ -138,5 +141,7 @@ Proof
   qpat_x_assum `G2 = _` kall_tac >>
   qpat_x_assum `tn2 = _` kall_tac >> qpat_x_assum `s2 = _` kall_tac >>
   qpat_x_assum `ALL_DISTINCT _` mp_tac >> simp[] >>
-  rpt strip_tac >> simp[]
+  rpt strip_tac >> simp[] >>
+  qpat_x_assum `s1 = s with <| vs_vars := _; vs_inst_idx := _ |>`
+    (fn th => once_rewrite_tac[th]) >> simp[update_var_def]
 QED

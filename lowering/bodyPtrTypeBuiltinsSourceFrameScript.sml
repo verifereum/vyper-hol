@@ -1,6 +1,7 @@
 Theory bodyPtrTypeBuiltinsSourceFrame
 Ancestors
   bodyPtrTypeBuiltinsSourcePrefix bodyPtrDefs finite_map
+  exprSimProps exprLoweringProps compileEnv venomState venomExecSemantics
 
 Theorem ghost_inv_readonly_frame:
   !P d cenv cx es G tn s G' tn' s'.
@@ -73,6 +74,7 @@ Theorem bytestring_source_prefix_ghost_frame:
       t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
       t.vs_current_bb = s.vs_current_bb /\
       t.vs_inst_idx = SUC (SUC s.vs_inst_idx) /\
+      t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
       (!p. p <> len /\ p <> data ==> lookup_var p t = lookup_var p s /\
         FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p)) /\
@@ -95,4 +97,36 @@ Proof
      qexistsl_tac [`G`,`\p. p <> len /\ p <> data`,`tn`] >>
      simp[] >> metis_tac[]) >>
   qexistsl_tac [`G'`,`tn'`,`t`] >> simp[]
+QED
+
+Theorem stmt_state_rel_readonly_vars_pc:
+  !ctx fn cenv cx es s sb t.
+    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sb /\
+    t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
+    (!z w. not_fresh_at sb z /\ lookup_var z s = SOME w ==>
+      lookup_var z t = SOME w) ==>
+    stmt_state_rel ctx fn cenv cx es t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+  simp[stmt_state_rel_inst_idx] >>
+  irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_inst_idx] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sb p` by
+        metis_tac[local_ptrs_reserved_def] >>
+      `?w. lookup_var p s = SOME w` by
+        (gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+         metis_tac[]) >>
+      `lookup_var p t = SOME w` by metis_tac[] >>
+      qpat_x_assum `lookup_var p t = _` mp_tac >>
+      qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+      gvs[lookup_var_def]) >>
+  rpt strip_tac >>
+  `not_fresh_at sb p` by metis_tac[local_ptrs_reserved_def] >>
+  `lookup_var p s = SOME 0w` by
+    gvs[stmt_state_rel_def, immutable_base_zero_def, eval_operand_def] >>
+  `lookup_var p t = SOME 0w` by metis_tac[] >>
+  qpat_x_assum `lookup_var p t = _` mp_tac >>
+  qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+  gvs[lookup_var_def]
 QED
