@@ -323,6 +323,123 @@ Proof
   metis_tac[]
 QED
 
+Theorem lower_dload_phi_location[local]:
+  lower_dload_function_supply s f = (g,t) /\ MEM b g.fn_blocks /\
+  MEM i b.bb_instructions /\ i.inst_opcode = PHI ==>
+  ?a. MEM a f.fn_blocks /\ a.bb_label = b.bb_label /\
+      MEM i a.bb_instructions
+Proof
+  strip_tac >>
+  drule lower_dload_function_supply_retained_location >>
+  disch_then (qspecl_then [`b.bb_label`,`i`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem lower_dload_all_reachable[local]:
+  lower_dload_function_supply s f = (g,t) /\ all_reachable f ==>
+  all_reachable g
+Proof
+  strip_tac >> drule lower_dload_function_supply_reachable >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  gvs[all_reachable_def, fn_labels_def] >> rpt strip_tac >>
+  `MEM bb.bb_label (MAP (\x. x.bb_label) f.fn_blocks)` by
+    (qpat_x_assum `MAP _ g.fn_blocks = _` (rewrite_tac o single o GSYM) >>
+     simp[MEM_MAP] >> metis_tac[]) >>
+  gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem lower_dload_phis_cover_preds[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_phis_cover_preds f ==>
+  fn_phis_cover_preds g
+Proof
+  strip_tac >> drule lower_dload_function_supply_cfg_edge >> strip_tac >>
+  simp[fn_phis_cover_preds_def] >> rpt strip_tac >>
+  drule_all lower_dload_phi_location >> strip_tac >>
+  gvs[fn_phis_cover_preds_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_phis_non_degenerate[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_phis_non_degenerate f ==>
+  fn_phis_non_degenerate g
+Proof
+  strip_tac >> simp[fn_phis_non_degenerate_def] >> rpt strip_tac >>
+  drule lower_dload_function_supply_retained_member >>
+  rename1 `i.inst_opcode = PHI` >>
+  disch_then (qspec_then `i` mp_tac) >>
+  simp[] >> strip_tac >> gvs[fn_phis_non_degenerate_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_phi_pair_use[local]:
+  !ops l v. MEM (l,v) (phi_pairs ops) ==> MEM v (venomInst$operand_vars ops)
+Proof
+  recInduct phi_pairs_ind >>
+  simp[phi_pairs_def, venomInstTheory.operand_vars_def,
+       venomInstTheory.operand_var_def] >>
+  rpt strip_tac >>
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+  first_x_assum drule >> strip_tac >>
+  simp[] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem lower_dload_source_var_reserved[local]:
+  ir_supply_covers_fn s f /\ MEM b f.fn_blocks /\
+  MEM i b.bb_instructions /\ MEM v (inst_ir_vars i) ==>
+  MEM v s.irs_used_vars
+Proof
+  simp[ir_supply_covers_fn_def, list_subset_def, fn_ir_vars_def,
+       block_ir_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_phi_operands_single_def[local]:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  fn_inst_wf f /\ fn_phi_operands_single_def f ==>
+  fn_phi_operands_single_def g
+Proof
+  strip_tac >> simp[fn_phi_operands_single_def_def] >> rpt strip_tac >>
+  drule_all lower_dload_phi_location >> strip_tac >>
+  rename1 `MEM (pred,v) (phi_pairs i.inst_operands)` >>
+  `MEM v (inst_ir_vars i)` by
+    (simp[inst_ir_vars_def, inst_uses_def] >>
+     drule lower_dload_phi_pair_use >> simp[]) >>
+  `MEM v s.irs_used_vars` by metis_tac[lower_dload_source_var_reserved] >>
+  drule_all lower_dload_function_supply_output_count >> strip_tac >>
+  gvs[fn_phi_operands_single_def_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_phi_outputs_single_def[local]:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  fn_inst_wf f /\ fn_phi_outputs_single_def f ==>
+  fn_phi_outputs_single_def g
+Proof
+  strip_tac >> simp[fn_phi_outputs_single_def_def] >> rpt strip_tac >>
+  drule_all lower_dload_phi_location >> strip_tac >>
+  rename1 `MEM v i.inst_outputs` >>
+  `MEM v (inst_ir_vars i)` by simp[inst_ir_vars_def] >>
+  `MEM v s.irs_used_vars` by metis_tac[lower_dload_source_var_reserved] >>
+  drule_all lower_dload_function_supply_output_count >> strip_tac >>
+  gvs[fn_phi_outputs_single_def_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_phi_edges[local]:
+  lower_dload_function_supply s f = (g,t) /\
+  (!bb i. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI ==>
+    ALL_DISTINCT (MAP FST (phi_pairs i.inst_operands)) /\
+    !l v. MEM (l,v) (phi_pairs i.inst_operands) ==>
+      fn_cfg_edge f l bb.bb_label) ==>
+  (!bb i. MEM bb g.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI ==>
+    ALL_DISTINCT (MAP FST (phi_pairs i.inst_operands)) /\
+    !l v. MEM (l,v) (phi_pairs i.inst_operands) ==>
+      fn_cfg_edge g l bb.bb_label)
+Proof
+  strip_tac >> drule lower_dload_function_supply_cfg_edge >> strip_tac >>
+  rpt strip_tac >> drule_all lower_dload_phi_location >> strip_tac >>
+  metis_tac[]
+QED
+
 (* Intuition, per conjunct of make_ssa_input_ok:
    - all_reachable and the PHI rows: the CFG (labels, edges, entry) is the
      same, and PHIs are kept unchanged in their same-labelled block
