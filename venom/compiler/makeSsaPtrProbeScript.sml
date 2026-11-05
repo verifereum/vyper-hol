@@ -111,5 +111,5 @@ Proof
   simp[pp_fn_def, pp_inst_def, mk_raw_function_def, fn_insts_def,
        fn_insts_blocks_def, DISJ_IMP_THM, FORALL_AND_THM,
        LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
-  EVAL_TAC >> rw[] >> gvs[]
+  EVAL_TAC >> rw[] >> CCONTR_TAC >> gvs[]
 QED
