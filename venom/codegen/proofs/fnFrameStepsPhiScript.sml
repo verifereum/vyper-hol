@@ -32,3 +32,27 @@ Proof
        alistTheory.MEM_fmap_to_alist] >>
   Cases_on `at` >> simp[] >> metis_tac[]
 QED
+
+Theorem phi_regular_plan_spill_support:
+  !liveness dfg cfg fn inst next_live halting next_term lbl ps ops ps' at.
+    generate_regular_inst_plan liveness dfg cfg fn inst next_live
+      halting next_term lbl ps = (ops, ps') /\
+    at IN FDOM ps'.ps_spilled ==>
+    ?v. at = Var v /\ MEM v next_live
+Proof
+  rpt gen_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (IF_CASES_TAC >> gvs[LET_THM]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[phi_release_dead_spills_domain]
+QED
+
+Theorem phi_regular_plan_spill_fresh:
+  generate_regular_inst_plan liveness dfg cfg fn inst next_live
+    halting next_term lbl ps = (ops, ps') /\
+  ~MEM out next_live ==> ~(Var out IN FDOM ps'.ps_spilled)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all phi_regular_plan_spill_support >> simp[]
+QED
