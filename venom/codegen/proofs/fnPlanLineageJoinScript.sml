@@ -11,6 +11,7 @@ Theory fnPlanLineageJoin
 Ancestors
   fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
   cfgAnalysisProps venomWf venomInst list rich_list simplifyCfgDefs
+  livenessConvergenceProofs livenessBlockProofs livenessTransferProofs
 
 Theorem join_predecessor_jmp_shape:
   !fn pred pb bb.
@@ -63,6 +64,50 @@ Proof
   Cases_on `pb.bb_instructions` >>
   gvs[bb_succs_def, get_successors_def, is_terminator_def,
       venomStateTheory.get_label_def, nub_def]
+QED
+
+Theorem lineage_state_cfg_path:
+  !lv dfg cfg fn ps0 lbl ps.
+    lineage_state lv dfg cfg fn ps0 lbl ps ==>
+    ?entry. fn_entry_label fn = SOME entry /\ cfg_path cfg entry lbl
+Proof
+  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
+  ho_match_mp_tac lineage_state_ind >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `lbl` >>
+      simp[cfg_path_def]) >>
+  rpt strip_tac >> qexists_tac `entry` >> simp[] >>
+  gvs[cfg_path_def] >>
+  irule relationTheory.RTC_TRANS >> qexists_tac `lbl` >>
+  simp[] >> irule relationTheory.RTC_SINGLE >> simp[]
+QED
+
+Theorem lineage_state_reachable:
+  !lv dfg fn ps0 lbl ps.
+    wf_function fn /\
+    lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl ps ==>
+    cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  rpt strip_tac >> drule lineage_state_cfg_path >> strip_tac >>
+  gvs[fn_entry_label_def, AllCaseEqs()] >>
+  metis_tac[cfg_analyze_semantic_reachability]
+QED
+
+Theorem single_successor_exit_live:
+  !fn pred pb bb v.
+    wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    cfg_succs_of (cfg_analyze fn) pred = [bb.bb_label] /\
+    MEM v (live_vars_at (liveness_analyze fn) pred
+                          (LENGTH pb.bb_instructions)) ==>
+    MEM v (input_vars_from pred bb.bb_instructions
+             (live_vars_at (liveness_analyze fn) bb.bb_label 0))
+Proof
+  rpt strip_tac >> drule_all liveness_recompute_convergence >>
+  simp[liveness_instrs_def, liveness_out_def, same_vars_def,
+       EVERY_MEM, mem_foldl_list_union, list_union_mem, liveness_edge_transfer_def,
+       live_vars_at_def, liveness_analyze_def] >>
+  gvs[live_vars_at_def, liveness_analyze_def] >> metis_tac[]
 QED
 
 (* Used by fnFrameStepsPhi for phi_prefix_frame_sim: the PHI prefix reads
