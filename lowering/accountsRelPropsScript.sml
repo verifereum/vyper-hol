@@ -1087,3 +1087,252 @@ Proof
   disch_then (qspecl_then [`st`, `w2n w`, `w2n k`, `b`] mp_tac) >>
   simp[]
 QED
+
+Theorem array_slot_index_unique[local]:
+  !i k sz j base.
+    base + i * sz <= j /\ j < base + (i + 1) * sz /\
+    base + k * sz <= j /\ j < base + (k + 1) * sz ==>
+    i = k
+Proof
+  rpt strip_tac >>
+  `~(i < k)` by
+    (strip_tac >>
+     `i + 1 <= k` by decide_tac >>
+     `(i + 1) * sz <= k * sz` by simp[] >> decide_tac) >>
+  `~(k < i)` by
+    (strip_tac >>
+     `k + 1 <= i` by decide_tac >>
+     `(k + 1) * sz <= i * sz` by simp[] >> decide_tac) >>
+  decide_tac
+QED
+
+Theorem dead_bytes_fixed_selected[local]:
+  !st off tv n j b i.
+  dead_bytes st off (ArrayTV tv (Fixed n)) j b /\
+  off + i * type_slot_size tv <= j /\
+  j < off + (i + 1) * type_slot_size tv ==>
+  dead_bytes st (off + i * type_slot_size tv) tv j b
+Proof
+  simp[Once dead_bytes_def] >> rpt strip_tac >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
+  `i' = i` by
+    (irule array_slot_index_unique >>
+     qexistsl_tac [`off`, `j`, `type_slot_size tv`] >>
+     simp[arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES,
+          arithmeticTheory.RIGHT_ADD_DISTRIB]) >>
+  gvs[]
+QED
+
+Theorem dead_bytes_dynamic_selected[local]:
+  !st off tv n j b i.
+  dead_bytes st off (ArrayTV tv (Dynamic n)) j b /\
+  i < w2n (lookup_storage (n2w off) st) /\
+  off + 1 + i * type_slot_size tv <= j /\
+  j < off + 1 + (i + 1) * type_slot_size tv ==>
+  dead_bytes st (off + 1 + i * type_slot_size tv) tv j b
+Proof
+  simp[Once dead_bytes_def] >> rpt strip_tac >>
+  Cases_on `i' < w2n (lookup_storage (n2w off) st)` >> gvs[]
+  >- (drule (cj 1 dead_bytes_range) >> strip_tac >>
+      `i' = i` by
+        (irule array_slot_index_unique >>
+         qexistsl_tac [`off + 1`, `j`, `type_slot_size tv`] >>
+         simp[arithmeticTheory.RIGHT_ADD_DISTRIB]) >> gvs[]) >>
+  `i' = i` by
+    (irule array_slot_index_unique >>
+     qexistsl_tac [`off + 1`, `j`, `type_slot_size tv`] >> simp[]) >>
+  gvs[]
+QED
+
+Theorem storage_read_live_fixed_element:
+  !cx tr st w tv n i.
+    storage_read_live cx tr st w (ArrayTV tv (Fixed n)) /\ i < n ==>
+    storage_read_live cx tr st (w + n2w (i * type_slot_size tv)) tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_slot_size tv = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + 0w` mp_tac wordsTheory.w2n_lt >> simp[]) >>
+  rewrite_tac[storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> disch_then drule >>
+  strip_tac >>
+  `w2n w + i * type_slot_size tv + type_slot_size tv <=
+   w2n w + n * type_slot_size tv` by
+    (irule array_element_slot_bound >> simp[]) >>
+  `w2n w + i * type_slot_size tv < dimword (:256)` by
+    fs[vyperValueTheory.type_slot_size_def] >>
+  `w2n (w + n2w (i * type_slot_size tv)) = w2n w + i * type_slot_size tv` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> conj_tac
+  >- fs[vyperValueTheory.type_slot_size_def] >>
+  strip_tac >> irule dead_bytes_fixed_selected >>
+  goal_assum (drule_at Any) >>
+  fs[vyperValueTheory.type_slot_size_def,
+     arithmeticTheory.RIGHT_ADD_DISTRIB] >> metis_tac[]
+QED
+
+Theorem storage_read_live_dynamic_element:
+  !cx tr st w tv n i.
+    storage_read_live cx tr st w (ArrayTV tv (Dynamic n)) /\
+    i < n /\ i < w2n (lookup_storage w st) ==>
+    storage_read_live cx tr st (w + n2w (1 + i * type_slot_size tv)) tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_slot_size tv = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + 1w` mp_tac wordsTheory.w2n_lt >> simp[]) >>
+  rewrite_tac[storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> disch_then drule >> strip_tac >>
+  `w2n w + i * type_slot_size tv + type_slot_size tv <=
+   w2n w + n * type_slot_size tv` by
+    (irule array_element_slot_bound >> simp[]) >>
+  `w2n w + 1 + i * type_slot_size tv < dimword (:256)` by
+    fs[vyperValueTheory.type_slot_size_def] >>
+  `w2n (w + n2w (1 + i * type_slot_size tv)) =
+   w2n w + 1 + i * type_slot_size tv` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> conj_tac
+  >- fs[vyperValueTheory.type_slot_size_def] >>
+  strip_tac >>
+  `dead_bytes st (w2n w + 1 + i * type_slot_size tv) tv j b` suffices_by
+    (`w2n w + 1 + i * type_slot_size tv =
+      w2n w + (i * type_slot_size tv + 1)` by decide_tac >>
+     metis_tac[]) >>
+  irule dead_bytes_dynamic_selected >>
+  fs[vyperValueTheory.type_slot_size_def,
+     arithmeticTheory.RIGHT_ADD_DISTRIB] >>
+  qexists_tac `n` >> simp[]
+QED
+
+Theorem dead_bytes_list_selected[local]:
+  !i tvs st off j b.
+    i < LENGTH tvs /\ dead_bytes_list st off tvs j b /\
+    off + tuple_prefix_slot_size i tvs <= j /\
+    j < off + tuple_prefix_slot_size i tvs + type_slot_size (EL i tvs) ==>
+    dead_bytes st (off + tuple_prefix_slot_size i tvs) (EL i tvs) j b
+Proof
+  Induct >> Cases_on `tvs` >>
+  simp[dead_bytes_def, tuple_prefix_slot_size_def] >> rpt strip_tac
+  >- (drule (cj 2 dead_bytes_range) >> simp[]) 
+  >- (drule (cj 1 dead_bytes_range) >> simp[]) >>
+  first_x_assum (drule_at (Pat `dead_bytes_list _ _ _ _ _`)) >>
+  (impl_tac >- decide_tac) >>
+  `off + type_slot_size h + tuple_prefix_slot_size i t =
+   off + (type_slot_size h + tuple_prefix_slot_size i t)` by decide_tac >>
+  metis_tac[]
+QED
+
+Theorem storage_read_live_tuple_element:
+  !cx tr st w tvs i.
+    storage_read_live cx tr st w (TupleTV tvs) /\ i < LENGTH tvs ==>
+    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size i tvs)) (EL i tvs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `tuple_prefix_slot_size i tvs + type_slot_size (EL i tvs) <=
+   type_slot_size (TupleTV tvs)` by
+    (irule tuple_component_slot_end_bound >> simp[listTheory.oEL_EQ_EL]) >>
+  Cases_on `type_slot_size (EL i tvs) = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size i tvs)`
+        mp_tac wordsTheory.w2n_lt >> simp[]) >>
+  rewrite_tac[storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> disch_then drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size i tvs < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size i tvs)) =
+   w2n w + tuple_prefix_slot_size i tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >> irule dead_bytes_list_selected >>
+  fs[Once dead_bytes_def] >> simp[]
+QED
+
+Theorem slots_in_range_word_add[local]:
+  !st (w:bytes32) off tv.
+    slots_in_range st (w2n (w + n2w off)) tv <=>
+    slots_in_range st (w2n w + off) tv
+Proof
+  rpt gen_tac >> irule (cj 1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
+  `w + n2w off = n2w (w2n w + off)` by
+    simp_tac std_ss [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+  asm_rewrite_tac[] >> simp[wordsTheory.w2n_n2w]
+QED
+
+Theorem tuple_slots_in_range_selected[local]:
+  !i tvs st off.
+    i < LENGTH tvs /\ tuple_slots_in_range st off tvs ==>
+    slots_in_range st (off + tuple_prefix_slot_size i tvs) (EL i tvs)
+Proof
+  Induct >> Cases_on `tvs` >>
+  simp[Once vyperLookupStorageTheory.slots_in_range_def, tuple_prefix_slot_size_def] >> rpt strip_tac >>
+  first_x_assum (drule_at (Pat `tuple_slots_in_range _ _ _`)) >>
+  impl_tac >- simp[] >>
+  `off + type_slot_size h + tuple_prefix_slot_size i t =
+   off + (type_slot_size h + tuple_prefix_slot_size i t)` by decide_tac >>
+  metis_tac[]
+QED
+
+Theorem resolve_array_element_nil[local]:
+  resolve_array_element cx tr slot tv [] = return (slot, tv, [])
+Proof
+  Cases_on `tv` >> simp[resolve_array_element_def]
+QED
+
+Theorem extend_storage_place_read_live:
+  !cx tr slot tv sb es tr' slot' tv' es'.
+    storage_read_live cx tr (get_storage cx es tr) slot tv /\
+    slots_in_range (get_storage cx es tr) (w2n slot) tv /\
+    extend_storage_place cx tr slot tv sb es =
+      (INL (StoragePlace tr' slot' tv'), es') ==>
+    es' = es /\ tr' = tr /\
+    storage_read_live cx tr' (get_storage cx es' tr') slot' tv' /\
+    slots_in_range (get_storage cx es' tr') (w2n slot') tv'
+Proof
+  (rpt gen_tac >> Cases_on `tv` >> Cases_on `sb` >>
+  simp[extend_storage_place_def, raise_def] >>
+  TRY (rename1 `ValueSubscript v` >> Cases_on `v` >>
+       simp[extend_storage_place_def, raise_def]) >>
+  strip_tac)
+  >~ [`storage_read_live _ _ _ _ (StructTV _)`]
+  >- (Cases_on `struct_field_slot l s` >>
+      gvs[lift_option_type_def, vyperStateTheory.bind_def,
+          raise_def, vyperStateTheory.return_def] >>
+      PairCases_on `x` >>
+      gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+      metis_tac[storage_read_live_field,
+                vyperLookupStorageTheory.storage_field_slots_in_range])
+  >~ [`storage_read_live _ _ _ _ (ArrayTV _ _)`]
+  >- (Cases_on `b` >>
+      gvs[resolve_array_element_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, check_def, raise_def,
+          vyperStateTheory.return_def, vyperStorageBackendTheory.get_storage_backend_eq,
+          vyperStateTheory.assert_def, AllCaseEqs()] >>
+      gvs[resolve_array_element_nil, vyperStateTheory.return_def,
+          AllCaseEqs()] >>
+      gvs[vyperStateTheory.return_def] >>
+      (conj_tac
+       >- metis_tac[storage_read_live_fixed_element,
+                    storage_read_live_dynamic_element,
+                    arithmeticTheory.ADD_COMM]) >>
+      gvs[slots_in_range_word_add,
+          Once vyperLookupStorageTheory.slots_in_range_def,
+          vyperLookupStorageTheory.array_slots_in_range_indexed] >>
+      fs[vyperStorageTheory.read_slot_def]) >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      check_def, lift_option_type_def, raise_def,
+      vyperStateTheory.return_def, AllCaseEqs()] >>
+  gvs[vyperStateTheory.assert_def, AllCaseEqs()] >>
+  `oEL (Num i) l = SOME (EL (Num i) l)` by simp[listTheory.oEL_EQ_EL] >>
+  gvs[vyperStateTheory.return_def, raise_def] >>
+  conj_tac >- metis_tac[storage_read_live_tuple_element] >>
+  gvs[slots_in_range_word_add, Once vyperLookupStorageTheory.slots_in_range_def] >>
+  metis_tac[tuple_slots_in_range_selected]
+QED
+
+val _ = List.app (fn th =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail "Storage selection liveness dependency" else ()
+  end) [storage_read_live_fixed_element, storage_read_live_dynamic_element,
+         storage_read_live_tuple_element, extend_storage_place_read_live];
