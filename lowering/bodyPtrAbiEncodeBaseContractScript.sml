@@ -6,6 +6,7 @@ Ancestors
   fragGasPathPtr bodyPtrDefs compileEnv exprLoweringProps ptrDiscipline
   venomState venomExecSemantics valueEncodingProofs valueEncoding valueEncodingProps
   abiEncoder abiEncoderInput abiEncoderOpenInput contractABI
+  abiEncoderLeaves abiEncoderPrimitiveEffect
   words finite_map pred_set list arithmetic
 
 Theorem abi_encode_empty_strong_endpoint:
@@ -66,4 +67,48 @@ Proof
   `~s.vs_halted` by fs[abi_encoder_window_pre_def] >>
   qexistsl_tac [`s`, `G`, `tn`] >>
   simp[gas_path_ptr_rules, op_taint_def, mem_agree_outside_def]
+QED
+
+Theorem abi_encode_copy_strong_endpoint:
+  !B K D.
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,en) /\
+  abi_encoder_window_pre ctx fn st en dst src (AbiCopy sz) at av B K D s ==>
+  window_strong_result ctx fn st en out at av D s
+    ((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i b n. i IN window_alloca_sites fn (frag_ids st en) /\
+     FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
+    metis_tac[window_pre_sites] >>
+  pop_assum (mk_asm "sizes") >>
+  drule abi_encode_copy_code >> strip_tac >>
+  qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  fs[abi_encoder_window_copy_iff] >>
+  qpat_x_assum `!inst b sz. _ ==> _` kall_tac >>
+  `LENGTH (enc at av) = sz` by metis_tac[LENGTH_mem_bytes_at_proof] >>
+  `s.vs_alloca_next < dimword(:256)` by metis_tac[alloca_room_next_lt] >>
+  `B < dimword(:256) /\ D < dimword(:256) /\ sz < dimword(:256)` by decide_tac >>
+  `eval_operand (Lit (n2w sz)) s = SOME (n2w sz)` by simp[eval_operand_def] >>
+  drule_all window_emit_copy_run >> strip_tac >>
+  `abi_encoder_extend_sim ctx fn s
+    ((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encoder_run_sequence_extend_sim >>
+     (conj_tac >- first_assum ACCEPT_TAC) >> qexists_tac `st` >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `abi_encoder_registered_effect (window_alloca_sites fn (frag_ids st en))
+    [(D,sz)] s ((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encoder_registered_effect_trans >> qexists_tac `mcopy D B sz s` >>
+     simp[abi_encoder_registered_output_copy, abi_encoder_registered_inst_idx]) >>
+  `abi_encoder_registered_effect (frag_ids st en) [(D,sz)] s
+    ((mcopy D B sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encoder_registered_effect_enlarge >>
+     qexistsl_tac [`window_alloca_sites fn (frag_ids st en)`, `[(D,sz)]`] >>
+     simp[window_alloca_sites_subset]) >>
+  simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
+  simp[eval_operand_def, mcopy_mem_bytes_at_same, abi_encoder_extend_sim_sim] >>
+  drule_all window_copy_state_resources >>
+  disch_then (qspecl_then [`B`, `sz`, `LENGTH en.cs_current_insts`, `D`] mp_tac) >>
+  simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
+  simp[mcopy_def, write_memory_with_expansion_def]
 QED
