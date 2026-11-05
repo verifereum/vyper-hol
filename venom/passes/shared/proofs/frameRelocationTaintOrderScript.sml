@@ -1,5 +1,6 @@
 Theory frameRelocationTaintOrder
-Ancestors frameRelocationCopyTaint frameRelocationLoadSteps frameRelocationMemory ptrDiscipline
+Ancestors frameRelocationCopyTaint frameRelocationLoadSteps frameRelocationMemory
+  frameRelocationTaintBounds ptrDiscipline
   codegenRel venomState venomExecSemantics finite_map pred_set words list
 
 Definition relocation_taint_le_def:
@@ -93,4 +94,17 @@ Proof
   conj_tac
   >- (gvs[demand_taint_def] >> metis_tac[]) >>
   irule set_var_taint_subset >> simp[] >> gvs[op_taint_def]
+QED
+
+Theorem relocation_reachable_operand_taint_bounded:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  relocation_taint_le R tn un ==>
+  op_taint un op SUBSET {k:num | k < 32}
+Proof
+  strip_tac >>
+  `op_taint tn op SUBSET {k:num | k < 32}` by
+    (irule frame_reachable_operand_taint_bounded >> metis_tac[]) >>
+  `op_taint un op SUBSET op_taint tn op` by
+    (Cases_on `op` >> gvs[relocation_taint_le_def, op_taint_def]) >>
+  metis_tac[SUBSET_TRANS]
 QED

@@ -89,3 +89,21 @@ Proof
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
   simp[phis_taint_bounded]
 QED
+
+Theorem frame_reachable_taint_var_bounded:
+  !vs0 ctx stk PG G tn fn inst s.
+  frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+  taint_var_bounded tn.t_var /\ EVERY (\f. taint_var_bounded f.cf_tvar) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt strip_tac >>
+  gvs[entry_taint_def, step_taint_var_bounded, entry_taint_vars_bounded,
+      taint_var_bounded_restrict]
+QED
+
+Theorem frame_reachable_operand_taint_bounded:
+  frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+  op_taint tn op SUBSET {k:num | k < 32}
+Proof
+  strip_tac >> irule taint_var_bounded_operand >>
+  drule frame_reachable_taint_var_bounded >> simp[]
+QED
