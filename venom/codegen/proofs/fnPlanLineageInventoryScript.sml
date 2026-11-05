@@ -3959,3 +3959,77 @@ Proof
      simp[stack_pop_def]) >>
   gvs[] >> metis_tac[]
 QED
+
+(* Exact copy from fnFrameBoundaryGenRet.release_dead_spills_stack;
+   importing that frame-level theory would violate planner leaf layering. *)
+Theorem release_dead_spills_stack:
+  (release_dead_spills nl ps).ps_stack = ps.ps_stack
+Proof
+  simp[release_dead_spills_def] >>
+  qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v nl | Label v => T)
+    (fmap_to_alist ps.ps_spilled)`, `xs`) >>
+  qid_spec_tac `ps` >> Induct_on `xs` >> simp[] >>
+  Cases_on `h` >> simp[]
+QED
+
+Theorem generate_inst_plan_jmp_inventory_subset:
+  !lv dfg cfg fn inst next halt term cur ps targets ops qs.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops lv fn cur inst = SOME targets /\
+    (!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs)
+    ==> !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+             MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?target. inst.inst_operands = [Label target]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_param_opcode_def] >>
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
+  rename1 `restore_spilled_plan targets ps = (rOps,psR)` >>
+  Cases_on `reorder_plan dfg targets psR` >> simp[stack_pop_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `join_reached _ _ _ _ _` mp_tac >>
+  simp[join_reached_def, generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
+       release_dead_spills_stack] >>
+  strip_tac >> gvs[stack_pop_def] >>
+  `!at. MEM at r.ps_stack \/ at IN FDOM r.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> irule restore_reorder_success_inventory_subset >>
+     goal_assum (drule_at Any) >> simp[stack_pop_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  metis_tac[release_dead_spills_inventory_subset]
+QED
+
+Theorem generate_inst_plan_jmp_variable_support:
+  !lv dfg cfg fn inst next halt term cur ps targets ops qs P.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops lv fn cur inst = SOME targets /\
+    (!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==> P v)
+    ==> !v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==> P v
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt strip_tac >>
+  `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    (irule generate_inst_plan_jmp_inventory_subset >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  metis_tac[]
+QED
