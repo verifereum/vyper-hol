@@ -974,3 +974,23 @@ success, successor support, or allocation footprint premise is added.
 This covers ADD/SUB only, not shifts. Allocation, expansion completion,
 residual opcode families and global induction remain unresolved; neither
 this row nor its successful build proves the frozen stage contract.
+
+## C1.12.92: checked ordinary MLOAD whole-normal-Q row
+
+`lowerDloadPtrJointMemoryReadTheory.dload_joint_tracked_mload_next` closes the
+literal arbitrary-fuel next constructor for an original MLOAD with exactly the
+incoming normal existential above and the global source hypotheses. Its output
+is the full normal existential, including exact step_prov/step_taint ghosts,
+finite V, independent U definedness, Support, Stack, Cover and Saved fields.
+Source non-forwardness is derived, not assumed: the source active block is the
+lookup block by distinct labels from source shape; revert_forward_at_opcode
+excludes MLOAD. The semantic step uses the existing arbitrary-V/U MLOAD boundary
+core and does not demand equality of loaded tainted words. Index-update,
+singleton reachability, and normal unchanged-successor interfaces reconstruct
+the boundary and ancillary fields. No memory-read semantics were duplicated.
+
+Checked build: lowerDloadPtrJointMemoryReadTheory and
+ o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6744_t001).
+This is local closure evidence only: allocation, expansion and remaining
+families/global induction still need proof, and the frozen contract is not
+certified by this build.
