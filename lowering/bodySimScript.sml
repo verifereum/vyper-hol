@@ -43,7 +43,9 @@ Ancestors
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
    unit or, while cx.in_deploy, its deployment unit. The constructor and
-   its internal callees share that deployment context. cenv has the program's
+   its internal callees share that deployment context, so tops declares a
+   constructor there (without one the deployment unit packages no internal
+   functions). cenv has the program's
    function ids, parameter types and calling conventions (so compile_call
    gives an internal call the label package_internal_fn gave the callee:
    compile_call_intcall_label) and return types (the type compile_call
@@ -67,6 +69,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
     cenv.ce_func_ids = build_func_ids 0 tops /\

@@ -680,6 +680,22 @@ Proof
   metis_tac[expr_sim_below_mem]
 QED
 
+Theorem results_case_every_ok:
+  !ctx func cenv cx es.
+    EVERY (expr_ok cenv) es ==> results_case T ctx func cenv cx es
+Proof
+  ntac 4 gen_tac >> Induct >> rw[results_case_def] >> gvs[expr_ok_case]
+QED
+
+Theorem results_case_below:
+  !cenv args ctx func cx.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    results_case T ctx func cenv cx args
+Proof
+  rpt strip_tac >> irule results_case_every_ok >> simp[EVERY_MEM] >>
+  metis_tac[expr_sim_below_mem]
+QED
+
 (* An operand of a builtin: its judgments at a state where the operands
    before it evaluated. *)
 Theorem int_calls_builtin_arg:

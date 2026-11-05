@@ -70,17 +70,6 @@ Proof
   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
 
-Theorem gas_shadow_ext_call_arg_types[simp]:
-  !decl_tys args.
-    ext_call_arg_types cenv decl_tys (MAP gas_shadow_expr args) =
-    ext_call_arg_types cenv decl_tys args
-Proof
-  Induct >> Cases_on `args` >> simp[ext_call_arg_types_def] >>
-  simp[gas_shadow_lowered_value_type] >>
-  rename1 `gas_shadow_expr head` >>
-  Cases_on `head` >> simp[gas_shadow_expr_def]
-QED
-
 Theorem gas_shadow_is_msg_data[simp]:
   is_msg_data (gas_shadow_expr e) = is_msg_data e
 Proof

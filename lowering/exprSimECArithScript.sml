@@ -482,7 +482,7 @@ QED
 
 (* These bounds adapters use distinct affine results: addAffine_bounded
    directly, versus mulAffine_bounded with the valid input point unpacked. *)
-Theorem ecadd_success_bounds[local]:
+Theorem ecadd_success_bounds:
   vfmExecution$ecadd a b = SOME (x,y) ==>
   x < 2 ** 256 /\ y < 2 ** 256
 Proof
@@ -490,7 +490,7 @@ Proof
   mp_tac (Q.SPECL [`a`, `b`] addAffine_bounded) >> gvs[]
 QED
 
-Theorem ecmul_success_bounds[local]:
+Theorem ecmul_success_bounds:
   vfmExecution$ecmul a n = SOME (x,y) ==>
   x < 2 ** 256 /\ y < 2 ** 256
 Proof
