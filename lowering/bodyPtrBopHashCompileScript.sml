@@ -51,7 +51,7 @@ Theorem bop_bytes_hash_compile_ptr:
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 3)) /\
-    op_taint tn' op = {} /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. not_fresh_at sc x ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
@@ -82,7 +82,7 @@ Theorem bop_string_hash_compile_ptr:
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 3)) /\
-    op_taint tn' op = {} /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. not_fresh_at sc x ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
@@ -116,7 +116,7 @@ Theorem bop_hash_compile_ptr:
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 3)) /\
-    op_taint tn' op = {} /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. not_fresh_at sc x ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)

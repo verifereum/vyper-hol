@@ -232,6 +232,13 @@ Proof
   drule_all bop_hash_mload_sha3_ok >> simp[]
 QED
 
+Theorem bop_hash_sha3_output_no_prov:
+  op_prov (step_prov PG G (mk_inst id SHA3 ops [h]) u) (Var h) = NONE
+Proof
+  simp[op_prov_def, step_prov_def, set_prov_def, out_prov_def,
+       mk_inst_def, FLOOKUP_DRESTRICT]
+QED
+
 Theorem bop_hash_sequence_ghost_frame:
   tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
   tn2.t_mem = tn1.t_mem /\ tn2.t_stor = tn1.t_stor /\ tn2.t_trans = tn1.t_trans /\
@@ -242,7 +249,7 @@ Theorem bop_hash_sequence_ghost_frame:
   tn1 = step_taint (mk_inst aId ADD [Var p; Lit 32w] [q]) s uA tn /\
   tn2 = step_taint (mk_inst lId MLOAD [Var p] [l]) sA uL tn1 /\
   tn3 = step_taint (mk_inst hId SHA3 [Var q; Var l] [h]) sL uH tn2 ==>
-  op_taint tn3 (Var h) = {} /\
+  op_prov G3 (Var h) = NONE /\ op_taint tn3 (Var h) = {} /\
   tn3.t_mem = tn.t_mem /\ tn3.t_stor = tn.t_stor /\ tn3.t_trans = tn.t_trans /\
   (!x. x <> q /\ x <> l /\ x <> h ==>
     FLOOKUP G3 x = FLOOKUP G x /\ FLOOKUP tn3.t_var x = FLOOKUP tn.t_var x)
@@ -250,6 +257,7 @@ Proof
   strip_tac >>
   `op_taint tn3 (Var h) = {}` by
     gvs[bop_hash_sha3_output_clean] >>
+  `op_prov G3 (Var h) = NONE` by gvs[bop_hash_sha3_output_no_prov] >>
   simp[] >> rpt strip_tac
   >- (gvs[] >> simp[bop_add_preserves_old_prov, bop_hash_load_hash_old_prov]) >>
   gvs[step_taint_def, set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE]
@@ -286,7 +294,7 @@ Theorem bop_hash_sequence_checked:
   step_inst_base iH sL = OK uH /\
   G3 = step_prov PG G2 iH uH /\ tn3 = step_taint iH sL uH tn2 ==>
   inst_seq_ptr D 0 ctx fn PG G tn [iA;iL;iH] s G3 tn3 /\
-  op_taint tn3 (Var h) = {} /\
+  op_prov G3 (Var h) = NONE /\ op_taint tn3 (Var h) = {} /\
   tn3.t_mem = tn.t_mem /\ tn3.t_stor = tn.t_stor /\ tn3.t_trans = tn.t_trans /\
   (!x. x <> q /\ x <> l /\ x <> h ==>
     FLOOKUP G3 x = FLOOKUP G x /\ FLOOKUP tn3.t_var x = FLOOKUP tn.t_var x)

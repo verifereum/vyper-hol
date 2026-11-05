@@ -158,7 +158,7 @@ Theorem bop_hash_compile_ptr_cursor:
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn (s with vs_inst_idx := LENGTH sc.cs_current_insts)
       0 G' tn' (OK (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
-    op_taint tn' op = {} /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. not_fresh_at sc x ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
@@ -196,6 +196,7 @@ Theorem bop_hash_pair_ptr:
   run_inst_seq (emitted_insts sc se) s = OK t ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 6)) /\
+    op_prov G' h1 = NONE /\ op_prov G' h2 = NONE /\
     op_taint tn' h1 = {} /\ op_taint tn' h2 = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. not_fresh_at sc x ==>
@@ -232,10 +233,10 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
   `!x. not_fresh_at sc x ==> not_fresh_at sd x` by fs[not_fresh_at_def] >>
-  `op_taint tn'' h1 = {}` by
+  `op_prov G'' h1 = NONE /\ op_taint tn'' h1 = {}` by
     (qpat_assum `compile_bytestring_hash (Var p) sc = _`
        (mp_then Any strip_assume_tac bop_hash_compile_result_old) >>
-     fs[op_taint_def] >> metis_tac[]) >>
+     fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
   `LENGTH sd.cs_current_insts = s.vs_inst_idx + 3` by simp[] >>
   qexistsl_tac [`G''`, `tn''`] >> simp[] >>
   irule (SIMP_RULE (srw_ss()) []

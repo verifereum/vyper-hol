@@ -16,7 +16,7 @@ Theorem bop_hash_run_checked:
   iH = mk_inst hId SHA3 [Var q; Var l] [h] /\
   run_inst_seq [iA;iL;iH] s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn [iA;iL;iH] s G' tn' /\
-    op_taint tn' (Var h) = {} /\
+    op_prov G' (Var h) = NONE /\ op_taint tn' (Var h) = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. x <> q /\ x <> l /\ x <> h ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
@@ -62,7 +62,7 @@ Theorem bop_hash_run_ptr:
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 3)) /\
-    op_taint tn' (Var h) = {} /\
+    op_prov G' (Var h) = NONE /\ op_taint tn' (Var h) = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     (!x. x <> q /\ x <> l /\ x <> h ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
