@@ -619,6 +619,7 @@ QED
 
 Theorem assign_tuple_target_list_gas_obs:
   !gs cx es tvs vs tail.
+    ~cx.txn.is_static /\
     LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
     LIST_REL value_has_type tvs vs ==>
     assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
@@ -642,6 +643,7 @@ QED
 
 Theorem assign_tuple_targets_gas_tail:
   !cx es gs tvs vs.
+    ~cx.txn.is_static /\
     LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
     LIST_REL value_has_type tvs vs ==>
     ?ee. !tail.

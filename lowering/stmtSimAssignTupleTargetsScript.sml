@@ -154,7 +154,10 @@ Resume assign_tuple_targets_suffix[stores]:
   qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   qexistsl [`ee'`, `sfv`] >> conj_tac
-  >- (drule_all assign_tuple_target_list_gas_obs >>
+  >- (`~cx.txn.is_static` by
+        (qpat_x_assum `stmt_state_rel _ _ _ _ ee' sfv` mp_tac >>
+         simp[stmt_state_rel_def, state_rel_def]) >>
+      drule_all assign_tuple_target_list_gas_obs >>
       simp[Once evaluate_def]) >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>
