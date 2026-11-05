@@ -4873,6 +4873,22 @@ Proof
     CHANGED_TAC (simp_tac (srw_ss()) [LET_THM])])
 QED
 
+Theorem asm_call_saved_suffix_step_grow:
+  wf_state s /\ asm_call_saved_suffix saved s /\ step s = (r,t) /\
+  LENGTH s.contexts < LENGTH t.contexts ==>
+  asm_call_saved_suffix saved t
+Proof
+  strip_tac >> drule_all step_grow_dispatch >> strip_tac
+  >- (drule asm_call_saved_suffix_depth >> strip_tac >>
+      drule step_call_push_structure >> simp[] >> strip_tac >>
+      fs[asm_call_saved_suffix_view] >>
+      namedCases_on `t.contexts` ["", "child remaining"] >> gvs[] >>
+      namedCases_on `remaining` ["", "parent tail"] >> gvs[] >>
+      qexists_tac `child` >> simp[])
+  >> drule asm_call_saved_suffix_step_create >>
+  disch_then (qspec_then `two` mp_tac) >> simp[]
+QED
+
 (* The saved suffix is intentionally unconstrained: the caller need not be static. *)
 Theorem asm_call_cp_static_prefix:
   cp f /\ f s = (r,t) /\ active <> [] /\
