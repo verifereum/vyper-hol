@@ -294,7 +294,7 @@ Proof
   `venomWf$phi_edge_uses_wf fn bb in_phi` by
     (gvs[venomWfTheory.def_dominates_uses_def] >> metis_tac[]) >>
   `?pred. MEM (pred,v) (phi_pairs in_phi.inst_operands)` by
-    (irule phi_well_formed_var_pair >>
+    (irule venomWfTheory.phi_well_formed_var_pair >>
      gvs[venomWfTheory.phi_edge_uses_wf_def, venomInstTheory.inst_uses_def,
          passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
   `?j. j < LENGTH (collect_phis bb.bb_instructions) /\
