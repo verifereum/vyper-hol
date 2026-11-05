@@ -1142,6 +1142,24 @@ Proof
   metis_tac[finite_mapTheory.flookup_thm]
 QED
 
+Theorem release_dead_spills_plan_holds:
+  MEM x live /\ plan_holds ps (Var x) ==>
+  plan_holds (release_dead_spills live ps) (Var x)
+Proof
+  simp[plan_holds_def, release_dead_spills_def, alias_release_fold_fields,
+       alias_release_dead_spills_domain]
+QED
+
+Theorem optimistic_swap_plan_holds:
+  optimistic_swap_plan dfg inst live next_term ps = (ops,qs) /\
+  plan_holds ps at ==> plan_holds qs at
+Proof
+  simp[optimistic_swap_plan_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> simp[] >>
+  metis_tac[do_swap_plan_holds]
+QED
+
 Theorem alias_var_mass_release_dead_spills:
   alias_var_mass x (release_dead_spills live ps) <= alias_var_mass x ps
 Proof
@@ -1192,6 +1210,47 @@ Theorem alias_var_mass_emit_ops:
   alias_var_mass x (SND (generate_emit_ops inst topics ps)) = alias_var_mass x ps
 Proof
   simp[alias_var_mass_def, alias_emit_ops_inventory]
+QED
+
+Theorem pop_foldl_body_plan_holds:
+  at <> v /\ plan_holds ps at ==>
+  plan_holds (SND (pop_foldl_body (ops,ps) v)) at
+Proof
+  strip_tac >> Cases_on `stack_get_depth v ps.ps_stack`
+  >- simp[pop_foldl_body_def] >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  simp[pop_foldl_body_def] >> IF_CASES_TAC >> simp[]
+  >- (gvs[plan_holds_def] >> disj1_tac >>
+      irule stack_pop_retains_noninputs >> simp[] >>
+      qexists_tac `[stack_peek 0 ps.ps_stack]` >> simp[]) >>
+  pairarg_tac >> simp[] >>
+  `plan_holds ps1 at` by metis_tac[do_swap_plan_holds] >>
+  `ps1.ps_stack = stack_swap x ps.ps_stack` by
+    metis_tac[doSwapSimTheory.do_swap_stack_result, pairTheory.SND] >>
+  `0 < LENGTH ps1.ps_stack /\ stack_peek 0 ps1.ps_stack = v` by
+    (simp[stack_swap_def, stack_peek_def, EL_LUPDATE] >>
+     gvs[stack_peek_def]) >>
+  gvs[plan_holds_def] >> disj1_tac >>
+  irule stack_pop_retains_noninputs >> simp[] >>
+  qexists_tac `[stack_peek x ps.ps_stack]` >> simp[]
+QED
+
+Theorem pop_fold_plan_holds:
+  !dead ops ps. ~MEM at dead /\ plan_holds ps at ==>
+  plan_holds (SND (FOLDL pop_foldl_body (ops,ps) dead)) at
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `pop_foldl_body (ops,ps) h` >> simp[] >>
+  first_x_assum irule >> simp[] >>
+  mp_tac (Q.INST [`v` |-> `h`] pop_foldl_body_plan_holds) >> simp[]
+QED
+
+Theorem popmany_individual_plan_holds:
+  !dead ps at. ~MEM at dead /\ plan_holds ps at ==>
+  plan_holds (SND (popmany_individual dead ps)) at
+Proof
+  rpt gen_tac >> simp[popmany_individual_eq_foldl] >> strip_tac >>
+  irule pop_fold_plan_holds >> simp[QSORT_MEM]
 QED
 
 Theorem alias_var_mass_pop_foldl_body:
