@@ -498,7 +498,7 @@ Proof
       drule_all compile_decode_word_arg_calldata >>
       disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
       drule frag_exec_weaken >> disch_then irule >>
-      simp[] >> rpt strip_tac >> simp[] >> conj_tac
+      simp[] >> rpt strip_tac >> simp[]
       >- (irule dec_frame_mstore >> metis_tac[]) >>
       irule word_val_in_memory_complete >> metis_tac[]) >>
   qpat_x_assum `is_word_type _ \/ _` mp_tac >> simp[] >> strip_tac >>
