@@ -469,3 +469,85 @@ Proof
   simp[] >>
   simp[order_run_s16_def, order_run_s15_def, venomStateTheory.update_var_def]
 QED
+
+(* The end bound equals the external code size. *)
+Definition order_run_s17_def:
+  order_run_s17 = order_run_s16 with
+    <|vs_vars := order_run_s16.vs_vars |+ ("%14",0w); vs_inst_idx := 17|>
+End
+
+Theorem order_run_step16:
+  step_inst_base (mk_inst 16 GT [Var "%12";Var "%11"] ["%14"]) order_run_s16 =
+    OK (order_run_s17 with vs_inst_idx := 16)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%12" order_run_s16 = SOME 3w` by
+    simp[order_run_s16_def, order_run_s15_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_var "%11" order_run_s16 = SOME 3w` by
+    simp[order_run_s16_def, order_run_s15_def, order_run_s14_def,
+         venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >>
+  simp[order_run_s17_def, order_run_s16_def, venomStateTheory.update_var_def]
+QED
+
+(* Both bound-error flags are zero. *)
+Definition order_run_s18_def:
+  order_run_s18 = order_run_s17 with
+    <|vs_vars := order_run_s17.vs_vars |+ ("%15",0w); vs_inst_idx := 18|>
+End
+
+Theorem order_run_step17:
+  step_inst_base (mk_inst 17 OR [Var "%13";Var "%14"] ["%15"]) order_run_s17 =
+    OK (order_run_s18 with vs_inst_idx := 17)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%13" order_run_s17 = SOME 0w` by
+    simp[order_run_s17_def, order_run_s16_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_var "%14" order_run_s17 = SOME 0w` by
+    simp[order_run_s17_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >>
+  simp[order_run_s18_def, order_run_s17_def, venomStateTheory.update_var_def]
+QED
+
+(* The bound assertion succeeds. *)
+Definition order_run_s19_def:
+  order_run_s19 = order_run_s18 with
+    <|vs_vars := order_run_s18.vs_vars |+ ("%16",1w); vs_inst_idx := 19|>
+End
+
+Theorem order_run_step18:
+  step_inst_base (mk_inst 18 ISZERO [Var "%15"] ["%16"]) order_run_s18 =
+    OK (order_run_s19 with vs_inst_idx := 18)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%15" order_run_s18 = SOME 0w` by
+    simp[order_run_s18_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >>
+  simp[order_run_s19_def, order_run_s18_def, venomStateTheory.update_var_def]
+QED
+
+(* Successful bound assertion advances only the cursor. *)
+Definition order_run_s20_def:
+  order_run_s20 = order_run_s19 with vs_inst_idx := 20
+End
+
+Theorem order_run_step19:
+  step_inst_base (mk_inst 19 ASSERT [Var "%16"] []) order_run_s19 =
+    OK (order_run_s20 with vs_inst_idx := 19)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_run_s20_def, order_run_s19_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]
+QED
