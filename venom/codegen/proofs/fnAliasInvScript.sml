@@ -300,6 +300,50 @@ Proof
   simp[LIST_ELEM_COUNT_THM]
 QED
 
+Theorem alias_var_mass_emit_one:
+  !opc live op ps x.
+  alias_var_mass x (SND (emit_one_input opc live op ps)) <=
+  alias_var_mass x ps + (if op = Var x then 1 else 0)
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[emit_one_input_def, is_var_operand_def, alias_var_mass_push]
+  >~ [`SOPushLabel l`] >-
+    (Cases_on `opc = INVOKE` >> simp[alias_var_mass_push]) >>
+  pairarg_tac >> simp[] >>
+  `alias_var_mass x ps1 = alias_var_mass x ps` by
+    (Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var s))` >>
+     gvs[] >> metis_tac[alias_var_mass_restore, pairTheory.SND]) >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var s) ps1.ps_stack` >> simp[] >>
+  drule_then strip_assume_tac stack_get_depth_props >>
+  pairarg_tac >> simp[] >>
+  drule_then (qspec_then `x` mp_tac) (GEN_ALL alias_var_mass_dup) >>
+  gvs[]
+QED
+
+Theorem alias_var_mass_emit_inputs:
+  !inputs opc live ps x.
+  alias_var_mass x (SND (emit_input_plan opc inputs live ps)) <=
+  alias_var_mass x ps + LIST_ELEM_COUNT (Var x) inputs
+Proof
+  Induct >> simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  first_x_assum (qspecl_then [`opc`, `live`, `ps1`, `x`] mp_tac) >>
+  qspecl_then [`opc`, `operand_vars inputs ++ live`, `h`, `ps`, `x`]
+    mp_tac alias_var_mass_emit_one >>
+  gvs[] >> Cases_on `h = Var x` >> simp[LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem alias_var_budget_emit_inputs:
+  alias_var_budget pending ps ==>
+  alias_var_budget (pending ++ inputs) (SND (emit_input_plan opc inputs live ps))
+Proof
+  simp[alias_var_budget_def, elem_count_append] >> strip_tac >> gen_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >>
+  qspecl_then [`inputs`, `opc`, `live`, `ps`, `x`] mp_tac
+    alias_var_mass_emit_inputs >> decide_tac
+QED
+
 Theorem alias_popmany_singleton_inventory:
   plan_holds (SND (popmany_plan [v] ps)) at ==> plan_holds ps at
 Proof
