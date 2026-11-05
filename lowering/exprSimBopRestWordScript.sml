@@ -10,7 +10,7 @@
 
 Theory exprSimBopRestWord
 Ancestors
-  exprSimBopRestWordLoads
+  exprSimBopRestWordLoads exprSimBopRestWordCompose exprSimBopRestWordFacts
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps
@@ -79,5 +79,11 @@ Theorem compile_bop_rest_word_case:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  pure_rewrite_tac [expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
+  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
+  drule_all rest_word_typed_membership >> strip_tac >>
+  irule compile_rest_word_membership_sim >> metis_tac[]
 QED
