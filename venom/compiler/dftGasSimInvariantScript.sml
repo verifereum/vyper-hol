@@ -185,3 +185,17 @@ Proof
   rpt strip_tac >> rename1 `MEM producer bb.bb_instructions` >>
   Cases_on `producer = y` >> gvs[] >> metis_tac[]
 QED
+
+Theorem ev_setup_callee_labels_bound:
+  setup_callee fn args s = SOME t /\ ctx_labels_bound C s.vs_labels ==>
+  ctx_labels_bound C t.vs_labels
+Proof
+  simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ev_setup_callee_nonstatic:
+  setup_callee fn args s = SOME t /\ ~s.vs_call_ctx.cc_static ==>
+  ~t.vs_call_ctx.cc_static
+Proof
+  simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
