@@ -15,6 +15,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimSource exprSimProps exprSimDefs
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
   fragGasMode fragGasPath fragGasSeq fragExec stmtSimDeclPath
+  stmtSimDeclCompose abiStaticAggregateProps exprBopSimProps
   exprLowering exprLoweringProps compileEnv valueEncoding
   vyperInterpreter vyperState venomState
 
@@ -236,5 +237,152 @@ Theorem aggregate_make_array_counted:
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
+  >- (gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def,
+          comp_return_def] >>
+      mp_tac (SRULE [] (Q.INST [`header` |-> `F`, `idx` |-> `0`, `off` |-> `0`]
+        (SPEC_ALL aggregate_make_array_elems_counted))) >>
+      (impl_tac >- (gvs[] >> metis_tac[])) >> simp[]) >>
+  gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def,
+      AllCaseEqs()] >>
+  Cases_on `emit_void MSTORE [Var x; Lit (n2w (LENGTH args))] sa` >>
+  rename1 `emit_void MSTORE _ sa = (u,sm)` >> Cases_on `u` >> gvs[] >>
+  `ci_mono sa sm` by
+    metis_tac[ci_mono_emit_void, pairTheory.SND] >>
+  `ci_mono sm sb` by
+    (drule compile_make_array_elems_as_tuple >>
+     disch_then (qspecl_then [`T`, `compile_expr`, `ce`, `Var x`, `0`] mp_tac) >>
+     strip_tac >> gvs[] >>
+     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
+  `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome F _ _ _ _ post exitrel` >>
+  qabbrev_tac `sh = mstore b (n2w (LENGTH args)) s0 with
+    vs_inst_idx := SUC s0.vs_inst_idx` >>
+  `gas_marked_path F ctx func s0 0 (OK sh)` by
+    (`b < dimword (:256)` by decide_tac >>
+     drule emit_mstore_marked_path >>
+     disch_then (qspecl_then [`n2w (LENGTH args)`, `n2w b`, `s0`, `func`, `ctx`] mp_tac) >>
+     simp[eval_operand_def, Abbr `sh`]) >>
+  `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
+   locals_kept ce es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
+   (!p n. p+n <= b \/ b+32 <= p ==>
+     mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
+     mem_bytes_at p n s0.vs_memory)` by
+    (irule array_header_store_boundary >>
+     simp[] >> conj_tac
+     >- (rpt strip_tac >> first_x_assum drule_all >>
+         simp[regions_disjoint_def] >> decide_tac) >>
+     qexistsl_tac [`asz`, `inst`, `x`] >> simp[]) >>
+  `sm.cs_current_bb = sa.cs_current_bb /\
+   LENGTH sm.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+   sm.cs_next_id = SUC sa.cs_next_id /\ sm.cs_next_var = sa.cs_next_var` by
+    gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `stmt_state_rel ctx func ce cx es sh /\ ~sh.vs_halted /\
+   sh.vs_current_bb = sm.cs_current_bb /\
+   sh.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    simp[Abbr `sh`, stmt_state_rel_inst_idx, mstore_def] >>
+  `local_ptrs_reserved ce sm /\ not_fresh_at sm x /\
+   inst.inst_id < sm.cs_next_id` by
+    (conj_tac
+     >- (qpat_x_assum `local_ptrs_reserved ce sa` mp_tac >>
+         pure_rewrite_tac[local_ptrs_reserved_def, not_fresh_at_def] >>
+         qpat_x_assum `sm.cs_next_var = _` (fn th => rewrite_tac[th])) >>
+     conj_tac
+     >- (qpat_x_assum `not_fresh_at sa x` mp_tac >>
+         pure_rewrite_tac[not_fresh_at_def] >>
+         qpat_x_assum `sm.cs_next_var = _` (fn th => rewrite_tac[th])) >>
+     decide_tac) >>
+  mp_tac (Q.INST [`header` |-> `T`, `idx` |-> `0`, `off` |-> `32`,
+     `sa` |-> `sm`, `s0` |-> `sh`] (SPEC_ALL aggregate_make_array_elems_counted)) >>
+  (impl_tac >-
+    (qpat_x_assum `Abbrev (post = _)` kall_tac >>
+     qpat_x_assum `Abbrev (exitrel = _)` kall_tac >>
+     `lookup_var x sh = SOME (n2w b) /\
+      FLOOKUP sh.vs_allocas inst.inst_id = SOME (b,asz)` by
+       (simp[Abbr `sh`, mstore_def, lookup_var_def] >>
+        gvs[lookup_var_def]) >>
+     simp[] >> reverse conj_tac
+     >- (rpt strip_tac >> first_x_assum drule_all >>
+         simp[regions_disjoint_def] >> decide_tac) >>
+     metis_tac[])) >>
+  strip_tac >> conj_tac >- simp[] >>
+  irule gas_outcome_zero_prefix >> qexists_tac `sh` >> simp[] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
+  strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      disj1_tac >> suspend "array_post_transport") >>
+  metis_tac[]
 QED
+
+Resume aggregate_make_array_counted[array_post_transport]:
+  qpat_x_assum `EVERY _ _` kall_tac >>
+  qpat_x_assum `evaluate_type _ _ = _` kall_tac >>
+  qpat_x_assum `type_memory_bytes _ _ = _` kall_tac >>
+  qpat_x_assum `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `!e st. MEM e args /\ expr_sim_inv ce cx env st ==> _` kall_tac >>
+  qpat_x_assum `exprs_case _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `~nocalls ==> _` kall_tac >>
+  qpat_x_assum `ce.ce_is_ctor ==> _` kall_tac >>
+  gvs[Abbr `post`] >>
+  conj_tac >- suspend "header_word" >>
+  conj_tac >- suspend "variables" >>
+  conj_tac >- suspend "allocas" >>
+  conj_tac >- suspend "inner_frame" >>
+  conj_tac >- suspend "outer_frame" >>
+  suspend "locals"
+QED
+
+Resume aggregate_make_array_counted[header_word]:
+  `mem_bytes_at b 32 t.vs_memory = mem_bytes_at b 32 sh.vs_memory` by
+    (qpat_x_assum `!p n. b <= p /\ _ ==> _` irule >> simp[]) >>
+  `mem_word_at b t.vs_memory = mem_word_at b sh.vs_memory` by
+    simp[mem_word_at_bytes] >>
+  simp[Abbr `sh`]
+QED
+
+Resume aggregate_make_array_counted[variables]:
+  rpt strip_tac >> qpat_x_assum `!z w. not_fresh_at sm z /\ _ ==> _` irule >>
+  simp[not_fresh_at_def, Abbr `sh`, mstore_def, lookup_var_def] >>
+  gvs[not_fresh_at_def, lookup_var_def]
+QED
+
+Resume aggregate_make_array_counted[allocas]:
+  rpt strip_tac >> first_x_assum irule >> simp[Abbr `sh`, mstore_def]
+QED
+
+Resume aggregate_make_array_counted[inner_frame]:
+  rpt strip_tac >>
+  `mem_bytes_at p n t.vs_memory = mem_bytes_at p n sh.vs_memory` by
+    (qpat_x_assum `!p n. b <= p /\ _ ==> _` irule >> simp[] >> decide_tac) >>
+  `mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
+   mem_bytes_at p n s0.vs_memory` by
+    (qpat_x_assum `!p n. _ \/ _ ==> _` irule >> decide_tac) >>
+  gvs[Abbr `sh`]
+QED
+
+Resume aggregate_make_array_counted[outer_frame]:
+  rpt strip_tac >>
+  `mem_bytes_at p n t.vs_memory = mem_bytes_at p n sh.vs_memory` by
+    (qpat_x_assum `!aid p n. FLOOKUP sh.vs_allocas aid = _ /\ _ ==> _` irule >>
+     conj_tac
+     >- (simp[Abbr `sh`, mstore_def, local_region_def, lookup_var_def] >>
+         gvs[local_region_def, lookup_var_def]) >>
+     conj_tac >- (qexists_tac `aid` >> simp[Abbr `sh`, mstore_def]) >>
+     simp[]) >>
+  `mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
+   mem_bytes_at p n s0.vs_memory` by
+    (qpat_x_assum `!p n. _ \/ _ ==> _` irule >> decide_tac) >>
+  gvs[Abbr `sh`]
+QED
+
+Resume aggregate_make_array_counted[locals]:
+  irule locals_kept_trans >> qexistsl_tac [`es`, `sa`, `sh`] >>
+  simp[Abbr `sh`, locals_kept_def, mstore_def, lookup_var_def]
+QED
+
+Finalise aggregate_make_array_counted
