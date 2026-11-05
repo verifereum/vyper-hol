@@ -9,7 +9,7 @@ Ancestors
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderGuards abiDecoderDynarrayBound
   fragExec abiDecoderArrayHeader abiDecoderIndexInit abiDecoderArrayInit abiDecoderPrimitiveLoopEntry
   abiDecoderLoopEmit abiDecoderAppend abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopEntry context
-  abiDecoderLoopCode abiDecoderArraySetupCode abiDecoderCounters
+  abiDecoderLoopCode abiDecoderArraySetupCode abiDecoderCounters allocaFrontierBound
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
   venomExecSemantics venomExecProofs venomState venomInst venomMemDefs valueEncoding valueEncodingProps words list arithmetic finite_map
 
@@ -1334,7 +1334,7 @@ Theorem entry_bytes_array_compiled_config[local]:
     entry_bytes_array_config
       ((ce,env,sf,ty,tv,maxn,parent_di,avs,xs,n),
        (ip,src,dst,ops,body_st,middle,last,limit_st),
-       (loop_st.cs_next_var,d,(n2w p:bytes32),srcaddr,sb,b,cap,oid,capacity),
+       (loop_st.cs_next_var,d,(n2w p:bytes32),(srcaddr:bytes32),(sb:num),b,cap,oid,capacity),
        (ctx,fn,FST labels,FST (SND labels),SND (SND labels),loop_st.cs_next_id+1,
         last.cs_current_bb,last.cs_current_insts,last.cs_next_id,
         STRING #"%" (toString body_st.cs_next_var),last.cs_next_var)) /\
@@ -1365,3 +1365,121 @@ Proof
   >- (irule entry_bytes_array_concrete_config >> simp[SF SFY_ss]) >>
   simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def, SF SFY_ss]
 QED
+
+Theorem entry_bytes_array_pointer_bound[local]:
+  entry_bytes_array_resources dst src maxn asz st
+    (ctx,fn,site,d,sz,b,cap,p,oid,capacity,initial) ==> p < dimword (:256)
+Proof
+  simp_tac bool_ss [entry_bytes_array_resources_def, entry_array_init_resources_def] >>
+  strip_tac >>
+  qpat_x_assum `alloca_frontier_inv _ _ _ _` mp_tac >>
+  simp_tac bool_ss [alloca_frontier_inv_def] >> strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem entry_canonical_bytes_array_execution:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T maxn) st = ((),final) /\
+  fn_has_code st final fn /\
+  (!bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    (DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T maxn) (ListV avs) (ArrayV (DynArrayV xs)) /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  type_memory_bytes ce ty = type_memory_size tv /\ EVERY (val_wf tv) xs /\
+  LENGTH xs = LENGTH avs /\ LENGTH xs <= maxn /\
+  maxn < dimword (:256) /\ n < dimword (:256) /\
+  entry_bytes_array_resources dst src maxn (abi_embedded_static_size ce.ce_struct_fields ty) st
+    (ctx,fn,site,d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)),b,cap,p,oid,capacity,initial) /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD initial) =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  fresh_vars_wrt limit_st initial /\ final.cs_next_var <= limit_st.cs_next_var /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\ fresh_vars_wrt limit_st t /\
+    entry_loop_fields initial t /\
+    abi_decode_footprint_frame [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)));(p,32)] initial t /\
+    abi_decode_sim ctx fn initial t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule entry_bytes_array_pointer_bound >> strip_tac >>
+  drule_all entry_bytes_array_compiled_config >>
+  disch_then (qspecl_then [`n2w sb`,`sb`] strip_assume_tac) >>
+  `has_type (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+    (qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_decoder_metadata_def, vyperABITheory.vyper_to_abi_type_def] >>
+     metis_tac[]) >>
+  `LENGTH avs <= maxn` by decide_tac >>
+  qmatch_asmsub_abbrev_tac `entry_bytes_array_config cfg` >>
+  drule_all entry_array_init_canonical >> strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ st = _` kall_tac >>
+  qpat_x_assum `abi_decoder_metadata _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_decoder_coherent _ _ _ _ _` kall_tac >>
+  `FLOOKUP t.vs_allocas oid = SOME (d,capacity)` by metis_tac[] >>
+  `eval_operand src t = SOME (n2w sb)` by
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+     pure_rewrite_tac[abi_decoder_ranges_def] >> metis_tac[]) >>
+  `abi_decode_load CALLDATALOAD (n2w sb:bytes32) t = n2w (LENGTH xs)` by
+    (asm_rewrite_tac[] >> irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
+     qexists_tac `vyper_to_abi_type env ty` >> asm_rewrite_tac[] >>
+     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+     pure_rewrite_tac[abi_decoder_ranges_def] >> metis_tac[]) >>
+  `w2n (n2w p:bytes32) = p` by simp[] >>
+  `entry_bytes_array_state cfg t 0 (jump_to (FST labels) t)` by
+    (irule entry_bytes_array_initialized_state >>
+     simp_tac bool_ss [Abbr `cfg`] >> asm_rewrite_tac[] >> metis_tac[]) >>
+  `abi_decode_sim ctx fn initial (jump_to (FST labels) t)` by suspend "initial_sim" >>
+  qpat_assum `Abbrev (cfg = _)` (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all entry_bytes_array_from_header >> strip_tac >>
+  qexists_tac `t'` >> asm_rewrite_tac[] >> suspend "final_frames"
+QED
+
+Resume entry_canonical_bytes_array_execution[initial_sim]:
+  qpat_assum `entry_array_init_resources _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
+  irule entry_bytes_array_initializer_to_header >> simp_tac bool_ss [] >>
+  asm_rewrite_tac[] >> simp[SF SFY_ss] >>
+  goal_assum (drule_at Any) >> simp[SF SFY_ss]
+QED
+
+Resume entry_canonical_bytes_array_execution[final_frames]:
+  qpat_assum `entry_bytes_array_inv _ _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_bytes_array_inv_def]) >>
+  `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
+    simp[Once type_memory_bytes_def] >>
+  `abi_decode_footprint_frame
+    [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)));(p,32)] initial t` by
+    (irule abi_decode_footprint_frame_weaken >>
+     qexists_tac `[(d,32);(p,32)]` >> asm_rewrite_tac[] >>
+     qpat_assum `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [MEM] >> rpt strip_tac >>
+     gvs[] >> simp[LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM]) >>
+  simp_tac bool_ss [listTheory.LENGTH, GSYM CONJ_ASSOC] >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >-
+    (qpat_assum `entry_loop_fields initial t` mp_tac >>
+     qpat_assum `entry_loop_fields t t'` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[entry_loop_fields_def] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `abi_decode_footprint_frame _ t t'` mp_tac >>
+     qpat_assum `abi_decode_footprint_frame [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)));(p,32)] initial t` mp_tac >>
+     qpat_assum `w2n (n2w p:bytes32) = p` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[abi_decode_footprint_frame_trans]) >>
+  qpat_assum `abi_decode_sim ctx fn initial _` mp_tac >>
+  qpat_assum `abi_decode_sim ctx fn _ t'` mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[abi_decode_sim_trans]
+QED
+
+Finalise entry_canonical_bytes_array_execution
