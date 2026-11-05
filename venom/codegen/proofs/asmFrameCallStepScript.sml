@@ -1811,6 +1811,52 @@ QED
 
 Finalise asm_frame_call_abort_step
 
+Theorem asm_frame_call_consume:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a =
+  asm_consume_call_outcome (request_of s) ro rs
+    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+    (a with as_memory := asm_call_memory ao az ro rs a.as_memory)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\
+   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
+    >- (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[])) >>
+  drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
+  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `u = _` kall_tac >>
+  `c.stack = a.as_stack /\ ~a.as_call_ctx.cc_static` by gvs[asm_evm_rel_def] >>
+  `6 <= LENGTH a.as_stack` by
+    (qpat_x_assum `6 + _ <= LENGTH _` mp_tac >> simp[] >> decide_tac) >>
+  `?gas addr x y z w stk. a.as_stack = gas::addr::x::y::z::w::stk` by
+    (qpat_x_assum `6 <= LENGTH a.as_stack` mp_tac >>
+     namedCases_on `a.as_stack` ["", "gas t1"] >> simp[] >>
+     namedCases_on `t1` ["", "addr t2"] >> simp[] >>
+     namedCases_on `t2` ["", "x t3"] >> simp[] >>
+     namedCases_on `t3` ["", "y t4"] >> simp[] >>
+     namedCases_on `t4` ["", "z t5"] >> simp[] >>
+     namedCases_on `t5` ["", "w stk"] >> simp[]) >>
+  Cases_on `EL a.as_pc prog = AsmOp "CALL"`
+  >- (gvs[call_has_value_def] >>
+      namedCases_on `stk` ["", "rsw tail"] >> gvs[] >>
+      drule_all asm_frame_call_request >> disch_tac >>
+      simp[asm_step_call_staticcall_gas, asm_exec_call_def]) >>
+  gvs[call_has_value_def] >>
+  drule_all asm_frame_staticcall_request >> disch_tac >>
+  simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
