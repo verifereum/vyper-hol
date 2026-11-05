@@ -4003,6 +4003,84 @@ Proof
   simp[]
 QED
 
+Theorem place_store_update_identity[local]:
+  !a (f:'a -> 'b). (a =+ f a) f = f
+Proof
+  rpt gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `x = a` >> simp[combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem place_store_encoded_leaf_state:
+  !cenv cx env ee ctx func s mid name subs tr rootk root path delta tv
+   start writes v n rd.
+  expr_sim_inv cenv cx env ee /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+  storage_subregion root path delta tv /\
+  start = w2n rootk + delta /\ 0 < type_slot_size tv /\
+  encode_value tv v = SOME writes /\ value_has_type tv v /\
+  start + type_slot_size tv <= dimword (:256) /\ n <= type_slot_size tv /\
+  (!i b. i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes (n2w start) writes (get_storage cx ee tr))
+       start tv (start+i) b ==>
+    i < n /\
+    EL b (word_to_bytes (lookup_storage (n2w (start+i))
+      (apply_writes (n2w start) writes (get_storage cx ee tr))) T) =
+    EL b (word_to_bytes (rd i) T)) ==>
+  stmt_state_rel ctx func cenv cx
+    (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
+    (FOLDL (\t i. (if tr then tstore else sstore)
+       (n2w (start+i)) (rd i) t) s (COUNT_LIST n))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `storage_agree (storage_dead cx tr (get_storage cx ee tr))
+    (get_storage cx ee tr)
+    (if tr then contract_transient s else contract_storage s)` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     Cases_on `tr` >>
+     simp[stmt_state_rel_def, state_rel_def, accounts_rel_def,
+          accounts_agree_def, transient_agree_def,
+          vyperStorageBackendTheory.get_storage_def,
+          vfmStateTheory.lookup_account_def,
+          contract_storage_def, contract_transient_def,
+          call_ctx_rel_def] >> metis_tac[]) >>
+  drule_all place_store_root_layout >> strip_tac >>
+  `storage_agree
+    (storage_dead cx tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
+    (apply_writes (n2w start) writes (get_storage cx ee tr))
+    (FOLDL (\st i. update_storage (n2w (start+i)) (rd i) st)
+      (if tr then contract_transient s else contract_storage s) (COUNT_LIST n))` by
+    (irule place_store_encoded_copy_agree >>
+     conj_tac >- simp[] >>
+     goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+     gvs[] >> metis_tac[]) >>
+  `!is s. FOLDL (\t i. (if tr then tstore else sstore)
+        (n2w (start+i)) (rd i) t) s is =
+     if tr then s with vs_transient :=
+       (s.vs_call_ctx.cc_address =+
+         FOLDL (\st i. update_storage (n2w (start+i)) (rd i) st)
+           (contract_transient s) is) s.vs_transient
+     else s with vs_accounts :=
+       (s.vs_call_ctx.cc_address =+
+         (lookup_account s.vs_call_ctx.cc_address s.vs_accounts with storage :=
+           FOLDL (\st i. update_storage (n2w (start+i)) (rd i) st)
+             (contract_storage s) is)) s.vs_accounts` by
+    (Induct
+     >- (gen_tac >> pure_rewrite_tac[listTheory.FOLDL] >> Cases_on `tr` >>
+         simp[contract_storage_def, contract_transient_def,
+              vfmStateTheory.lookup_account_def, place_store_update_identity]) >>
+     map_every qx_gen_tac [`h`, `acc`] >>
+     once_rewrite_tac[listTheory.FOLDL] >>
+     first_x_assum (qspec_then `(if tr then tstore else sstore)
+       (n2w (start+h)) (rd h) acc` mp_tac) >>
+     Cases_on `tr` >>
+     simp[sstore_def, tstore_def, contract_storage_def, contract_transient_def,
+          vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM,
+          combinTheory.UPDATE_EQ]) >>
+  drule_all place_store_storage_replace >> Cases_on `tr` >> gvs[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
