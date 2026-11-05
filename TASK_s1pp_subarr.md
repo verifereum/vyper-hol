@@ -41,7 +41,7 @@ Theorem compile_subscript_array_framed_base_case:
 5. Commit messages end with these two lines:
    `Bot: opus (Claude Opus 5.5)`
    `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
-   Commit only `.sml` sources you changed or added . Never commit the 26 files the working tree has modified as a local admission overlay (they're listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
+   Commit only `.sml` sources you changed or added . Never commit the 26 files the working tree has modified as a local admission overlay (they're listed in `~/tasks/s1pp/alan-ref-subarr/overlaid.txt`), nor `~/tasks/s1pp/alan-ref-subarr/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
 
 **If the theorem is false as stated:** produce a HOL4 counterexample, state the tightest sufficient fix, and do NOT silently weaken the statement.
 
@@ -65,7 +65,7 @@ Lowering: `compile_subscript` (lowering/defs/exprLoweringScript.sml) lowers the 
 
 - Follow `AGENTS.md` at the project root (proof conventions for this repo).
 - Default step timeout (2.5 s). A step near it is a proof performance bug: split it or cut the rewrite set.
-- The working tree carries an uncommitted local overlay that admits the proofs of ~26 shared theories not yet repaired on this branch (listed in `alan-ref/overlaid.txt`). Use their statements freely; don't edit, fix or commit them.
+- The working tree carries an uncommitted local overlay that admits the proofs of ~26 shared theories not yet repaired on this branch (listed in `~/tasks/s1pp/alan-ref-subarr/overlaid.txt`). Use their statements freely; don't edit, fix or commit them.
 
 ## Available Resources
 
@@ -81,7 +81,8 @@ Lowering: `compile_subscript` (lowering/defs/exprLoweringScript.sml) lowers the 
 | Storage frames | `lowering/accountsRelPropsScript.sml` | `storage_range_agree`, `storage_range_agree_of_live` |
 | Source facts | `semantics/prop/` (e.g. `vyperPlaceResultTypingScript.sml`, `vyperStatePreservationScript.sml`, `vyperImmutablesPreservationScript.sml`, `vyperStoragePlaceProvenanceScript.sml`) | Evaluation invariants: scope restoration across calls, immutables/storage preservation |
 | Type invariants | `semantics/prop/vyperTypeInvariantsScript.sml` | `bare_global_assignable_complete` (no immutable writes at runtime) |
-| Earlier attempt, OLD BASE | `alan-ref/seq616-old-base/` | An earlier prover run on the no-pop subcase over a base ~890 commits older (frame_exec judgments instead of the counted gas_outcome form; `storage_holds` asked `storage_read_live` then). Its scripts are renamed `.sml.txt`; its DOSSIER/LEARNINGS record what worked and what didn't. Reuse ideas and source-side lemmas after checking them against the current definitions; don't copy blindly. |
+| Earlier attempt, OLD BASE | `~/tasks/s1pp/alan-ref-subarr/seq616-old-base/` | An earlier prover run on the no-pop subcase over a base ~890 commits older (frame_exec judgments instead of the counted gas_outcome form; `storage_holds` asked `storage_read_live` then). Its scripts are renamed `.sml.txt`; its DOSSIER/LEARNINGS record what worked and what didn't. Reuse ideas and source-side lemmas after checking them against the current definitions; don't copy blindly. |
+| Proved no-pop case, OLD BASE | `~/tasks/s1pp/alan-ref-subarr/seq616-proved-34dfd9299/` | The same earlier base's finished proof of the no-pop array subscript (`compile_subscript_array_nopop_case` in `exprSimArraySubscriptScript.sml.txt`; its helpers are the other files in `~/tasks/s1pp/alan-ref-subarr/seq616-old-base/`), and storage-array slot lemmas (`storage_fixed/dynamic_array_child_slots`, `slots_in_range_dynamic_capacity`, `extend_place_storage_array_live/_slots` in `targetSubscriptSimScript.sml.txt`). frame_exec judgments, not gas_outcome: port a lemma only where its statement fits the current definitions. |
 | HOL4 sources | `.holbuild/src/` is off limits; use theory names via `DB.find` in scratch probes | |
 
 ## Notes
