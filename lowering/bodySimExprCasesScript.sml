@@ -15,9 +15,10 @@
  * TOP-LEVEL:
  *   body_expr_ok_intro — an expression with no internal call simulates by
  *                        compile_expr_sim
- *   body_expr_ok_case, body_expr_ok_of_case — body_expr_ok is the shared
- *                        judgments at nocalls = F in every frame
- *   body_exprs_ok_case — body_exprs_ok is exprs_case at nocalls = F
+ *   body_expr_ok_of_case — body_expr_ok from the shared judgments at
+ *                        nocalls = F in every frame (the converse,
+ *                        body_expr_ok_case and body_exprs_ok_case, is in
+ *                        bodySimBopInLiteralWord)
  *   body_*_case        — one case of the induction each; the call cases
  *                        are in bodySimCallCases
  *)
@@ -47,14 +48,6 @@ Proof
   metis_tac[compile_expr_sim, compile_expr_vv_sim, expr_sim_pre_body]
 QED
 
-Theorem body_expr_ok_case:
-  !cx e tops ctx func cenv.
-    body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
-    expr_sim_case F ctx func cenv cx e /\ expr_vv_case F ctx func cenv cx e
-Proof
-  rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
-QED
-
 Theorem body_expr_ok_of_case:
   !cx e.
     (!tops ctx func cenv.
@@ -64,15 +57,6 @@ Theorem body_expr_ok_of_case:
     body_expr_ok cx e
 Proof
   rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
-QED
-
-Theorem body_exprs_ok_case:
-  !cx es tops ctx func cenv.
-    body_exprs_ok cx es /\ body_inv tops ctx cenv cx ==>
-    exprs_case F ctx func cenv cx es
-Proof
-  gen_tac >> Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
-  metis_tac[body_expr_ok_case]
 QED
 
 (* exprSimOperators' compile_ifexp_case. *)
