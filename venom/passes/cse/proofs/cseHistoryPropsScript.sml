@@ -2731,3 +2731,21 @@ Proof
  qexistsl [`pre`, `post`, `m`, `cb`, `u`, `terminal_use`, `terminal`] >>
  simp[] >> gvs[cseDefsTheory.operand_producer_def]
 QED
+
+Theorem cse_prefix_labels_frame[local]:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ (cse_phase_state phase).vs_labels = s0.vs_labels
+Proof
+ ho_match_mp_tac cse_prefix_ind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> gvs[cse_phase_state_def] >>
+ metis_tac[venomExecPropsTheory.eval_phis_preserves_labels,
+           venomExecPropsTheory.step_inst_preserves_labels_always]
+QED
+
+Theorem cse_prefix_exec_labels:
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) ==>
+ s.vs_labels = s0.vs_labels
+Proof
+ strip_tac >> drule cse_prefix_labels_frame >> simp[cse_phase_state_def]
+QED
