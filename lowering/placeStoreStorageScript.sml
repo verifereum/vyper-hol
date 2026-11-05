@@ -2085,6 +2085,274 @@ Proof
   qexists_tac `t` >> simp[] >> metis_tac[gas_marked_path_then, ADD_CLAUSES]
 QED
 
+Theorem place_store_fixed_value_path:
+  compile_copy_memory dst src n sa = ((),sb) /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+  n < dimword (:256) /\ val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= n /\ n <= type_memory_size tv /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory tv v (w2n dw) t.vs_memory /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n dw) (type_memory_size tv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all place_store_copy_fixed_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `(if n = 0 then s else mcopy (w2n dw) (w2n sw) n s)
+                 with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[] >>
+  Cases_on `n = 0` >> simp[]
+  >- (conj_tac
+      >- (irule valueCopyTheory.val_in_memory_relocate >> simp[] >>
+          qexistsl_tac [`w2n sw`, `0`, `s.vs_memory`] >> simp[valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
+           typedMemoryCopyTheory.typed_copy_frame_def, lookup_var_def,
+           venom_state_component_equality]) >>
+  conj_tac >- (irule valueCopyTheory.mcopy_val_in_memory >> simp[]) >>
+  conj_tac
+  >- (irule typedMemoryCopyTheory.typed_copy_state_frame_subinterval >>
+      qexistsl_tac [`w2n dw`, `n`] >>
+      simp[typedMemoryCopyTheory.typed_copy_mcopy_state_frame]) >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem place_store_counted_sarray_slow_path:
+  compile_copy_sarray_typed cenv dst dty src sty N sa = ((),sb) /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_bytes cenv sty = type_memory_size stv /\
+  ~(type_memory_size dtv = type_memory_size stv /\
+    ~is_abi_dynamic cenv.ce_struct_fields dty) /\
+  N < dimword (:256) /\
+  (!i. i < N ==> place_store_counted_entry cenv ctx dty sty dtv stv (f i) /\
+                   val_wf stv (f i) /\ val_wf dtv (f i)) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  (!i. i < N ==> val_in_memory stv (f i)
+     (w2n sw + i * type_memory_size stv) s.vs_memory) /\
+  w2n sw + N * type_memory_size stv < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv < dimword (:256) /\
+  (w2n sw + N * type_memory_size stv <= w2n dw \/
+   w2n dw + N * type_memory_size dtv <= w2n sw) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      (!i. i < N ==> val_in_memory dtv (f i)
+         (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gnvs[]) >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> gnvs[] >>
+  rename1 `fresh_label "typed_sa_cond" sa = (hdr,l1)` >>
+  rename1 `fresh_label "typed_sa_body" l1 = (blabel,l2)` >>
+  rename1 `fresh_label "typed_sa_exit" l2 = (exit,l3)` >>
+  rename1 `fresh_var l3 = (counter,init)` >>
+  rename1 `emit_inst ASSIGN [Lit 0w] [counter] init = ((),st0)` >>
+  rename1 `emit_inst JMP [Label hdr] [] st0 = ((),st1)` >>
+  rename1 `new_block hdr st1 = (u1,sth)` >>
+  rename1 `emit_op LT [Var counter; Lit (n2w N)] sth = (lt,h1)` >>
+  rename1 `emit_op ISZERO [lt] h1 = (done,stj)` >>
+  rename1 `emit_inst JNZ [done; Label exit; Label blabel] [] stj = ((),st2)` >>
+  rename1 `new_block blabel st2 = (u2,stb)` >>
+  rename1 `emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1)` >>
+  rename1 `emit_op MUL [Var counter; Lit (n2w (type_memory_size dtv))] b1 = (doff,b2)` >>
+  rename1 `emit_op ADD [src;so] b2 = (sp,b3)` >>
+  rename1 `emit_op ADD [dst;doff] b3 = (dp,b4)` >>
+  rename1 `compile_store_memory_typed cenv dp dty sp sty b4 = ((),b5)` >>
+  rename1 `emit_op ADD [Var counter; Lit 1w] b5 = (inc,b6)` >>
+  rename1 `emit_inst ASSIGN [inc] [counter] b6 = ((),ste)` >>
+  rename1 `emit_inst JMP [Label hdr] [] ste = ((),st3)` >>
+  rename1 `new_block exit st3 = (u3,stx)` >>
+  drule_all typedMemoryCopyTheory.typed_copy_sarray_slow_layout >> strip_tac >>
+  `cs_extends st0 st1 /\ cs_extends stj st2 /\ cs_extends ste st3` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_inst, ci_mono_def, pairTheory.SND] >>
+  `cs_extends st1 sth /\ cs_extends st2 stb /\ cs_extends st3 stx` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_new_block, ci_mono_def, pairTheory.SND] >>
+  `cs_extends stj stx /\ cs_extends ste stx /\ cs_extends stb stx /\
+   cs_extends sth stx /\ cs_extends st0 sth /\ cs_extends sth st2` by
+    metis_tac[cs_extends_trans] >>
+  `fn_has_code init st0 func /\ fn_has_code st0 st1 func /\
+   fn_has_code sth st2 func /\ fn_has_code stb ste func /\ fn_has_code ste st3 func` by
+    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_mid, cs_extends_trans]) >>
+  `sth.cs_current_bb = hdr /\ sth.cs_current_insts = [] /\
+   stb.cs_current_bb = blabel /\ stb.cs_current_insts = [] /\
+   stx.cs_current_bb = exit /\ stx.cs_current_insts = []` by
+    gvs[new_block_def] >>
+  `(!x. src = Var x ==> not_fresh_at sth x) /\
+   (!x. dst = Var x ==> not_fresh_at sth x)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_operand_fresh_mono] >>
+  `?u. gas_marked_path F ctx func s 0 (OK u) /\
+       typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s 0 u /\
+       ~u.vs_halted /\ u.vs_current_bb = st0.cs_current_bb /\
+       u.vs_inst_idx = LENGTH st0.cs_current_insts` by
+    (irule place_store_index_init_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >> simp[]) >>
+  `eval_operand (Lit (n2w N)) u = SOME (n2w N)` by simp[eval_operand_def] >>
+  drule_all place_store_index_back_edge_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `!i q. i < N /\
+     typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s i q /\
+     eval_operand (Lit (n2w N)) q = SOME (n2w N) /\ ~q.vs_halted /\
+     q.vs_current_bb = blabel /\ q.vs_inst_idx = 0 ==>
+     ?r. gas_marked_path F ctx func q 0 (OK r) /\
+         typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s (SUC i) r /\
+         eval_operand (Lit (n2w N)) r = SOME (n2w N) /\ ~r.vs_halted /\
+         r.vs_current_bb = sth.cs_current_bb /\ r.vs_inst_idx = 0` by
+    (rpt gen_tac >> strip_tac >>
+     `q.vs_current_bb = stb.cs_current_bb /\
+      q.vs_inst_idx = LENGTH stb.cs_current_insts` by simp[] >>
+     drule_all place_store_index_body_path >>
+     disch_then (qx_choose_then `r` strip_assume_tac) >>
+     `eval_operand (Lit (n2w N)) r = SOME (n2w N)` by simp[eval_operand_def] >>
+     drule_all place_store_index_back_edge_path >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     qexists_tac `jump_to hdr r` >> simp[] >>
+     metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
+  `?t. gas_marked_path F ctx func (jump_to hdr u) 0 (OK t) /\
+       typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s N t /\
+       eval_operand (Lit (n2w N)) t = SOME (n2w N) /\ ~t.vs_halted /\
+       t.vs_current_bb = exit /\ t.vs_inst_idx = 0` by
+    (irule place_store_index_loop_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op ISZERO _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op LT _ _ = _`)) >> simp[]) >>
+  qexists_tac `t` >> simp[] >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  gvs[typedMemoryCopyTheory.typed_copy_index_inv_def,
+      typedMemoryCopyTheory.typed_copy_index_prefix_complete]
+QED
+
+Theorem place_store_counted_sarray_path:
+  compile_copy_sarray_typed cenv dst dty src sty N sa = ((),sb) /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_bytes cenv sty = type_memory_size stv /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  val_wf (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  val_wf (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  (!i. i < N ==> place_store_counted_entry cenv ctx dty sty dtv stv
+     (case ALOOKUP kvs i of NONE => default_value stv | SOME v => v)) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  N < dimword (:256) /\
+  val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) (w2n sw) s.vs_memory /\
+  w2n sw + N * type_memory_size stv < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv < dimword (:256) /\
+  (w2n sw + N * type_memory_size stv <= w2n dw \/
+   w2n dw + N * type_memory_size dtv <= w2n sw) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) (w2n dw) t.vs_memory /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `type_memory_size dtv = type_memory_size stv /\
+            ~is_abi_dynamic cenv.ce_struct_fields dty`
+  >- (qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[Once contextTheory.compile_store_memory_typed_def] >> strip_tac >>
+      `stv = dtv` by metis_tac[typedMemoryCopyTheory.typed_copy_static_widening] >>
+      qpat_x_assum `stv = dtv` (SUBST_ALL_TAC o SYM) >>
+      `val_footprint (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) <= N * type_memory_size stv` by
+        simp[val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
+      drule place_store_fixed_value_path >>
+      disch_then (qspecl_then [`ArrayV (SArrayV kvs)`, `ArrayTV stv (Fixed N)`] mp_tac) >>
+      simp[valueEncodingTheory.type_memory_size_def] >>
+      disch_then irule >> simp[] >> decide_tac) >>
+  drule_all typedMemoryCopyTheory.typed_copy_sarray_representation >> strip_tac >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\
+       (!i. i < N ==> val_in_memory dtv
+         (case ALOOKUP kvs i of NONE => default_value stv | SOME v => v)
+         (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
+       typedMemoryCopy$typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
+       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (ho_match_mp_tac place_store_counted_sarray_slow_path >> simp[] >> metis_tac[]) >>
+  qexists_tac `t` >> simp[] >> metis_tac[]
+QED
+
+Theorem place_store_counted_sarray_entry:
+  !cenv tenv ctx de cap sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty (ArrayT de (Fixed cap)) /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv (ArrayT de (Fixed cap)) = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!cd cs cdt cst cv.
+      type_rank cenv.ce_struct_fields cd <
+        type_rank cenv.ce_struct_fields (ArrayT de (Fixed cap)) ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      place_store_counted_entry cenv ctx cd cs cdt cst cv) ==>
+    place_store_counted_entry cenv ctx (ArrayT de (Fixed cap)) sty dtv stv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typedMemoryCopyTheory.typed_copy_array_source >> strip_tac >> gvs[] >>
+  `sb = Fixed cap` by
+    (drule typedMemoryCopyTheory.typed_copy_array_widening >> strip_tac >> gvs[]) >> gvs[] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  `type_widens_to tenv se de` by
+    (qpat_x_assum `type_widens_to _ _ _` mp_tac >>
+     simp[type_widens_to_def, arg_type_fits_def, well_formed_type_def,
+          evaluate_type_def] >> metis_tac[]) >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  `cap < dimword (:256)` by
+    (qpat_x_assum `type_slot_size (ArrayTV tv' (Fixed cap)) < _` mp_tac >>
+     simp[type_slot_size_def] >>
+     `cap <= cap * type_slot_size tv'` by
+       (Cases_on `type_slot_size tv'` >> gvs[MULT_CLAUSES]) >> decide_tac) >>
+  `type_memory_bytes cenv de = type_memory_size tv' /\
+   type_memory_bytes cenv se = type_memory_size tv` by
+    (conj_tac >> irule typedMemoryCopyTheory.typed_copy_memory_size >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  `default_value tv = default_value tv'` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_default_widening] >>
+  `!i. i < cap ==> place_store_counted_entry cenv ctx de se tv' tv
+      (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     simp[Once typedCopyDomainTheory.type_rank_def] >>
+     `val_wf tv (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
+       (irule typedMemoryCopyTheory.typed_copy_sparse_lookup_wf >>
+        qexists_tac `cap` >> fs[valueEncodingTheory.val_wf_def]) >>
+     `val_wf tv' (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
+       (asm_rewrite_tac[] >> irule typedMemoryCopyTheory.typed_copy_sparse_lookup_wf >>
+        qexists_tac `cap` >> fs[valueEncodingTheory.val_wf_def]) >>
+     Cases_on `ALOOKUP l i` >> gvs[]
+     >- metis_tac[vyperTypingTheory.default_value_well_typed,
+                 cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
+     metis_tac[valueEncodingProofsTheory.sparse_has_type_lookup]) >>
+  simp[place_store_counted_entry_def] >> rpt strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def] >> strip_tac >>
+  simp[valueEncodingTheory.type_memory_size_def] >>
+  irule place_store_counted_sarray_path >> simp[] >>
+  (conj_tac >- gvs[valueEncodingTheory.type_memory_size_def]) >>
+  (conj_tac >- simp[vyperTypingTheory.value_has_type_def]) >>
+  goal_assum (drule_at (Pat `compile_copy_sarray_typed _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`tv`, `sw`, `tenv`] >>
+  gvs[valueEncodingTheory.type_memory_size_def, regions_disjoint_def,
+      vyperTypingTheory.value_has_type_def]
+QED
+
 Theorem place_store_counted_tuple_path:
   !dtys stys dtvs stvs vs dst src doff soff sa sb s dw sw.
   LIST_REL (\(dty,dtv) (sty,stv,v).
