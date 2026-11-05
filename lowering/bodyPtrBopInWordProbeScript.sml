@@ -78,3 +78,56 @@ Proof
   simp[well_typed_expr_def, well_typed_builtin_app_def]
 QED
 
+
+Theorem bool_singleton_notin_matches_neq:
+  compile_expr probe_cenv (BaseT BoolT)
+    (Builtin (BaseT BoolT) (Bop NotIn)
+      [Literal (BaseT BoolT) (BoolL T);
+       Builtin (ArrayT (BaseT BoolT) (Fixed 1))
+         (MakeArray (SOME (BaseT BoolT)) (Fixed 1))
+         [Literal (BaseT BoolT) (BoolL T)]])
+    (initial_compile_state "entry") =
+  compile_expr probe_cenv (BaseT BoolT)
+    (Builtin (BaseT BoolT) (Bop NotEq)
+      [Literal (BaseT BoolT) (BoolL T);
+       Literal (BaseT BoolT) (BoolL T)])
+    (initial_compile_state "entry")
+Proof
+  EVAL_TAC
+QED
+
+Theorem uint_singleton_in_matches_eq:
+  compile_expr probe_cenv (BaseT BoolT)
+    (Builtin (BaseT BoolT) (Bop In)
+      [Literal (BaseT (UintT 256)) (IntL 7);
+       Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
+         (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
+         [Literal (BaseT (UintT 256)) (IntL 7)]])
+    (initial_compile_state "entry") =
+  compile_expr probe_cenv (BaseT BoolT)
+    (Builtin (BaseT BoolT) (Bop Eq)
+      [Literal (BaseT (UintT 256)) (IntL 7);
+       Literal (BaseT (UintT 256)) (IntL 7)])
+    (initial_compile_state "entry")
+Proof
+  EVAL_TAC
+QED
+
+Theorem empty_bool_membership_source_results:
+  evaluate_binop BoolTV (ArrayTV (BaseTV BoolT) (Fixed 0)) In
+    (BoolV T) (ArrayV (DynArrayV [])) = INL (BoolV F) /\
+  evaluate_binop BoolTV (ArrayTV (BaseTV BoolT) (Fixed 0)) NotIn
+    (BoolV T) (ArrayV (DynArrayV [])) = INL (BoolV T)
+Proof
+  EVAL_TAC
+QED
+
+Theorem empty_bool_membership_untyped:
+  ~well_typed_expr env
+    (Builtin (BaseT BoolT) (Bop In)
+      [Literal (BaseT BoolT) (BoolL T);
+       Builtin (ArrayT (BaseT BoolT) (Fixed 0))
+         (MakeArray (SOME (BaseT BoolT)) (Fixed 0)) []])
+Proof
+  EVAL_TAC
+QED
