@@ -296,3 +296,97 @@ Proof
   qexistsl_tac [`t`,`G'`,`tn'`] >> simp[] >>
   irule intcall_materialize_end_extend >> metis_tac[]
 QED
+
+(* The analogous S1 compiler-suffix facts are local to intCallCallee,
+   as is loweringShapeProps' materialization shape rule.  This narrow
+   append fact is the code-splitting interface needed by the ptr induction. *)
+Theorem intcall_materialize_append[local]:
+  !caps cenv st ce st'.
+    materialize_internal_params cenv caps st = (ce,st') ==>
+    ?code. st'.cs_current_insts = st.cs_current_insts ++ code
+Proof
+  Induct
+  >- simp[materialize_internal_params_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
+  Cases_on `h1` >> simp[]
+  >- (Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[]
+      >- (strip_tac >> first_x_assum drule >> simp[]) >>
+      rename1 `FLOOKUP cenv.ce_vars h0 = SOME loc` >>
+      Cases_on `loc` >> simp[]
+      >~ [`emit_op _ _`]
+      >- (simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+               comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+          strip_tac >> first_x_assum drule >> strip_tac >>
+          pop_assum mp_tac >> simp[] >> metis_tac[APPEND_ASSOC]) >>
+      strip_tac >> first_x_assum drule >> simp[]) >>
+  strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem intcall_materialize_stack_compile_split:
+  !cenv name off sz op caps st ce st'.
+    FLOOKUP cenv.ce_vars name = SOME (MemLoc off sz) /\
+    materialize_internal_params cenv ((name,T,op)::caps) st = (ce,st') ==>
+    ?mid.
+      mid.cs_next_var = st.cs_next_var + 1 /\
+      mid.cs_next_id = st.cs_next_id + 2 /\
+      mid.cs_blocks = st.cs_blocks /\ mid.cs_current_bb = st.cs_current_bb /\
+      mid.cs_current_insts = st.cs_current_insts ++
+        [mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)]
+           [STRING #"%" (toString st.cs_next_var)];
+         mk_inst (st.cs_next_id+1) MSTORE
+           [Var (STRING #"%" (toString st.cs_next_var)); op] []] /\
+      materialize_internal_params
+        (cenv with ce_vars := cenv.ce_vars |+
+          (name,PtrVar (Var (STRING #"%" (toString st.cs_next_var))) sz))
+        caps mid = (ce,st') /\
+      DROP (LENGTH st.cs_current_insts) st'.cs_current_insts =
+        [mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)]
+           [STRING #"%" (toString st.cs_next_var)];
+         mk_inst (st.cs_next_id+1) MSTORE
+           [Var (STRING #"%" (toString st.cs_next_var)); op] []] ++
+        DROP (LENGTH mid.cs_current_insts) st'.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `materialize_internal_params _ _ _ = _` mp_tac >>
+  simp[Once materialize_internal_params_def] >>
+  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `materialize_internal_params ce1 caps mid` >>
+  `ce1 = cenv with ce_vars := cenv.ce_vars |+
+     (name,PtrVar (Var (STRING #"%" (toString st.cs_next_var))) sz)` by
+    simp[Abbr `ce1`, compile_env_component_equality] >>
+  qexists_tac `mid` >> simp[Abbr `mid`] >>
+  drule intcall_materialize_append >> strip_tac >>
+  qpat_x_assum `Abbrev (ce1 = _)` kall_tac >>
+  gvs[DROP_APPEND] >>
+  `LENGTH st.cs_current_insts - (LENGTH st.cs_current_insts + 2) = 0` by decide_tac >>
+  simp[DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem intcall_materialize_end_runtime:
+  intcall_materialize_end id n out word s s1 G tn t G' tn' ==>
+  t.vs_inst_idx = s.vs_inst_idx + 2 /\
+  t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+  t.vs_allocas = s.vs_allocas |+ (id,(s.vs_alloca_next,n)) /\
+  t.vs_vars = s.vs_vars |+ (out,n2w s.vs_alloca_next)
+Proof
+  rpt gen_tac >> strip_tac >> fs[intcall_materialize_end_def] >>
+  mp_tac (Q.SPECL [`id`,`n`,`out`,`s`] step_alloca_fresh) >> simp[] >>
+  strip_tac >> gvs[mstore_def, update_var_def]
+QED
+
+Theorem intcall_materialize_end_freshness:
+  intcall_materialize_end st.cs_next_id n
+    (STRING #"%" (toString st.cs_next_var)) word s s1 G tn t G' tn' /\
+  fresh_vars_wrt st s /\
+  (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
+  mid.cs_next_var = st.cs_next_var + 1 /\ mid.cs_next_id = st.cs_next_id + 2 ==>
+  fresh_vars_wrt mid t /\
+  (!aid. aid IN FDOM t.vs_allocas ==> aid < mid.cs_next_id)
+Proof
+  rpt gen_tac >> strip_tac >> drule intcall_materialize_end_runtime >> strip_tac >>
+  simp[fresh_vars_wrt_def, FDOM_FUPDATE] >>
+  fs[fresh_vars_wrt_def] >> rpt strip_tac >>
+  gvs[ASCIInumbersTheory.toString_inj] >>
+  first_x_assum drule >> decide_tac
+QED
