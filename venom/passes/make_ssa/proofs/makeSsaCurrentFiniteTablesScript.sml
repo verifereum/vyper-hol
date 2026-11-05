@@ -585,3 +585,104 @@ Proof
     current_sparse_closed_check_sound) >>
   simp[current_loop_sparse_closed, current_loop_sparse_coverage]
 QED
+
+Definition current_backedges_header_cuts_def:
+  current_backedges_header_cuts = FLAT (MAP (\p.
+    [CurrentStaticCut p "H" 0 0; CurrentStaticCut p "H" 1 2;
+     CurrentStaticCut p "H" 1 3; CurrentStaticCut p "H" 2 4;
+     CurrentStaticCut p "H" 3 5]) ["E";"D";"S"])
+End
+
+Definition current_backedges_side_cuts_def:
+  current_backedges_side_cuts =
+    [CurrentStaticCut "H" "D" 0 0; CurrentStaticCut "H" "D" 1 1;
+     CurrentStaticCut "H" "D" 2 2; CurrentStaticCut "H" "S" 0 0;
+     CurrentStaticCut "H" "S" 1 1]
+End
+
+Definition current_backedges_demand_table_def:
+  current_backedges_demand_table =
+    FLAT (MAP (\c. MAP (\op. (c,op,op))
+      [Lit 1w;Lit 2w;Lit 3w;Lit 4w;Label "H";Label "D";Label "S"])
+      ([CurrentStaticCut "" "E" 0 0;CurrentStaticCut "" "E" 1 1;
+        CurrentStaticCut "" "E" 2 2;CurrentStaticCut "" "E" 3 3;
+        CurrentStaticCut "" "E" 4 4] ++ current_backedges_header_cuts ++
+        current_backedges_side_cuts)) ++
+    MAP (\c. (c,Var "a",Var "a"))
+      ([CurrentStaticCut "" "E" 1 1;CurrentStaticCut "" "E" 2 2;
+        CurrentStaticCut "" "E" 3 3;CurrentStaticCut "" "E" 4 4] ++
+        current_backedges_header_cuts ++ current_backedges_side_cuts) ++
+    MAP (\c. (c,Var "b",Var "b"))
+      ([CurrentStaticCut "" "E" 2 2;CurrentStaticCut "" "E" 3 3;
+        CurrentStaticCut "" "E" 4 4] ++ current_backedges_header_cuts ++
+        current_backedges_side_cuts) ++
+    [(CurrentStaticCut "" "E" 3 3,Var "x",Var "x");
+     (CurrentStaticCut "" "E" 4 4,Var "x",Var "x");
+     (CurrentStaticCut "E" "H" 0 0,Var "x",Var "x");
+     (CurrentStaticCut "D" "H" 0 0,Var "x",Var "formal_var_2");
+     (CurrentStaticCut "H" "D" 1 1,Var "x",Var "formal_var_2");
+     (CurrentStaticCut "H" "D" 2 2,Var "x",Var "formal_var_2");
+     (CurrentStaticCut "S" "H" 0 0,Var "x",Var "formal_var_0");
+     (CurrentStaticCut "H" "S" 0 0,Var "x",Var "formal_var_0");
+     (CurrentStaticCut "H" "S" 1 1,Var "x",Var "formal_var_0")] ++
+    FLAT (MAP (\p.
+      [(CurrentStaticCut p "H" 1 2,Var "x",Var "formal_var_0");
+       (CurrentStaticCut p "H" 1 3,Var "x",Var "formal_var_0");
+       (CurrentStaticCut p "H" 2 4,Var "x",Var "formal_var_0");
+       (CurrentStaticCut p "H" 3 5,Var "x",Var "formal_var_0");
+       (CurrentStaticCut p "H" 1 2,Var "v",Var "formal_var_1");
+       (CurrentStaticCut p "H" 1 3,Var "v",Var "formal_var_1");
+       (CurrentStaticCut p "H" 2 4,Var "z",Var "z")]) ["E";"D";"S"])
+End
+
+Theorem current_backedges_table_seeds:
+  current_finite_seed history_probe_backedges (current_finite_target history_probe_backedges)
+    (current_finite_history history_probe_backedges) c x y ==>
+  MEM (c,x,y) current_backedges_demand_table
+Proof
+  strip_tac >> drule current_backedges_seed_covered >>
+  CONV_TAC (LAND_CONV EVAL) >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Definition current_backedges_sparse_edges_def:
+  current_backedges_sparse_edges =
+   [(CurrentStaticCut "" "E" 0 0,CurrentStaticCut "" "E" 0 0,0);
+    (CurrentStaticCut "" "E" 0 0,CurrentStaticCut "" "E" 1 1,2);
+    (CurrentStaticCut "" "E" 1 1,CurrentStaticCut "" "E" 2 2,2);
+    (CurrentStaticCut "" "E" 2 2,CurrentStaticCut "" "E" 3 3,2);
+    (CurrentStaticCut "" "E" 3 3,CurrentStaticCut "" "E" 4 4,2);
+    (CurrentStaticCut "" "E" 4 4,CurrentStaticCut "E" "H" 0 0,3);
+    (CurrentStaticCut "H" "D" 0 0,CurrentStaticCut "H" "D" 0 0,0);
+    (CurrentStaticCut "H" "D" 0 0,CurrentStaticCut "H" "D" 1 1,2);
+    (CurrentStaticCut "H" "D" 1 1,CurrentStaticCut "H" "D" 2 2,2);
+    (CurrentStaticCut "H" "D" 2 2,CurrentStaticCut "D" "H" 0 0,3);
+    (CurrentStaticCut "H" "S" 0 0,CurrentStaticCut "H" "S" 0 0,0);
+    (CurrentStaticCut "H" "S" 0 0,CurrentStaticCut "H" "S" 1 1,2);
+    (CurrentStaticCut "H" "S" 1 1,CurrentStaticCut "S" "H" 0 0,3)] ++
+   FLAT (MAP (\p.
+    [(CurrentStaticCut p "H" 0 0,CurrentStaticCut p "H" 1 2,0);
+     (CurrentStaticCut p "H" 1 2,CurrentStaticCut p "H" 1 3,1);
+     (CurrentStaticCut p "H" 1 3,CurrentStaticCut p "H" 2 4,2);
+     (CurrentStaticCut p "H" 2 4,CurrentStaticCut p "H" 3 5,2);
+     (CurrentStaticCut p "H" 3 5,CurrentStaticCut "H" "D" 0 0,3);
+     (CurrentStaticCut p "H" 3 5,CurrentStaticCut "H" "S" 0 0,3)]) ["E";"D";"S"])
+End
+
+Theorem current_backedges_lookups:
+  (!h. lookup_block h history_probe_backedges.fn_blocks =
+    if h = "E" then SOME (EL 0 history_probe_backedges.fn_blocks)
+    else if h = "H" then SOME (EL 1 history_probe_backedges.fn_blocks)
+    else if h = "D" then SOME (EL 2 history_probe_backedges.fn_blocks)
+    else if h = "S" then SOME (EL 3 history_probe_backedges.fn_blocks) else NONE) /\
+  (!h. lookup_block h (current_finite_target history_probe_backedges).fn_blocks =
+    if h = "E" then SOME (EL 0 history_probe_backedges_target)
+    else if h = "H" then SOME (EL 1 history_probe_backedges_target)
+    else if h = "D" then SOME (EL 2 history_probe_backedges_target)
+    else if h = "S" then SOME (EL 3 history_probe_backedges_target) else NONE)
+Proof
+  simp[current_finite_backedges_source_blocks, current_finite_backedges_target_blocks,
+    history_probe_backedges_target_def, lookup_block_def, FIND_def, INDEX_FIND_def,
+    history_probe_bb_def] >>
+  conj_tac >> gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
