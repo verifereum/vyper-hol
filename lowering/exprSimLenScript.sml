@@ -135,6 +135,24 @@ Proof
        read_slot_def, arithmeticTheory.MIN_DEF]
 QED
 
+Theorem typed_dynamic_array_read_length:
+  env.type_defs = get_tenv cx /\
+  evaluate_type (get_tenv cx) t = SOME (ArrayTV evt (Dynamic k)) /\
+  eval_result_typed (env,cx,es) tv (Type t) /\
+  read_result cx tv es = (INL (ArrayV (DynArrayV vs)),es) ==>
+  result_array_length cx tv es = (INL (LENGTH vs),es)
+Proof
+  strip_tac >> Cases_on `tv`
+  >- gvs[result_array_length_def, read_result_def, bind_def, return_def]
+  >- (rename1 `PlaceR p` >> Cases_on `p`
+      >- (gvs[eval_result_typed_def, runtime_place_typed_def] >>
+          drule read_storage_array_length >>
+          simp[result_array_length_def, read_result_def, bind_def, return_def])
+      >- gvs[result_array_length_def, bind_def, return_def]
+      >> gvs[result_array_length_def, bind_def, return_def]) >>
+  gvs[eval_result_typed_def]
+QED
+
 Theorem slots_to_bytes_length_exact:
   !slots n. LENGTH (slots_to_bytes n slots) = MIN n (32 * LENGTH slots)
 Proof
