@@ -2350,6 +2350,15 @@ Proof
       is_raw_fmp_opcode_def]
 QED
 
+Theorem rf_forward_regular_plan_result:
+  revert_forward_pair bb i j /\ i <= k /\ k <= j /\
+  get_instruction bb k = SOME inst /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term lbl ps = SOME result ==>
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = result
+Proof
+  metis_tac[rf_forward_regular_plan, optionTheory.SOME_11]
+QED
+
 Theorem rf_forward_exec_abort_cases:
   revert_forward_pair bb i j /\ i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
   get_instruction bb vs.vs_inst_idx = SOME inst /\
@@ -3775,3 +3784,158 @@ Proof
     gvs[Once step_inst_def, step_inst_base_def] >>
   simp[] >> drule_all rf_suffix_revert_execution >> simp[]
 QED
+
+Theorem rf_strict_suffix_abort:
+  !k s st ps stk ops ps_end.
+  codegen_ready_fn fn /\ opaque_use_ok fn /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb i j /\ i < k /\ k <= j /\ s.vs_inst_idx = k /\
+  LENGTH (get_params bb.bb_instructions) <= k /\
+  get_instruction bb i = SOME copy /\ copy.inst_operands = [cdop;csop;czop] /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] cdop) = SOME dst /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] czop) = SOME sz /\
+  EVERY (\ti. EVERY (\op. ~is_label_operand op) ti.inst_operands)
+    (DROP i bb.bb_instructions) /\
+  rf_spills_separated ps /\ rf_value_inv fn ra bb j lo entry k s /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel s st /\
+  TAKE (w2n sz) (DROP (w2n dst) s.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) st.as_memory) /\
+  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+    (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+    (k - LENGTH (get_params bb.bb_instructions)) (DROP k bb.bb_instructions)
+    ps = SOME (ops,ps_end) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  exec_block fuel ctx bb s = Abort a s_end ==>
+  a = Revert_abort /\
+  ?n out. asm_steps lo o2pc prog n st = AsmRevert out /\
+    venom_asm_terminal_rel s_end out
+Proof
+  measureInduct_on `j - k` >> rpt gen_tac >> strip_tac >> disch_tac >>
+  `i <= k` by decide_tac >>
+  `?inst. get_instruction bb k = SOME inst` by
+    (irule rf_forward_instruction_exists >> metis_tac[]) >>
+  `MEM inst (fn_insts fn)` by
+    (irule mem_fn_insts_intro >> qexists_tac `bb` >>
+     fs[get_instruction_def] >> metis_tac[lookup_block_MEM, EL_MEM]) >>
+  drule_all rf_forward_instruction_opcode >> strip_tac >>
+  drule_all rf_forward_instruction_shape >> strip_tac >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
+    (irule rf_suffix_instruction_no_labels >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt strip_tac >> fs[rf_value_inv_def] >> first_x_assum irule >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> metis_tac[]) >>
+  drule_all rf_block_plan_step >> strip_tac >>
+  `generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+     (cfg_analyze fn) fn inst
+     (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k)) (bb_is_halting bb)
+     (case DROP (SUC k) bb.bb_instructions of
+        [] => F | next_i::tail => is_terminator next_i.inst_opcode)
+     bb.bb_label ps = (step_ops,ps1)` by
+    (irule rf_forward_regular_plan_result >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`bb`,`i`,`j`,`k`] >> simp[]) >>
+  `asm_block_at prog st.as_pc (execute_plan initial_fmp step_ops) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan initial_fmp step_ops))
+     (execute_plan initial_fmp rest_ops)` by
+    gvs[execute_plan_append, asm_block_at_append] >>
+  `!off. ~MEM (SOSpill off) step_ops /\ ~MEM (SORestore off) step_ops` by
+    fs[MEM_APPEND] >>
+  Cases_on `k = j` >- suspend "revert" >>
+  suspend "assign"
+QED
+
+Resume rf_strict_suffix_abort[revert]:
+  pop_last_assum kall_tac >>
+  `inst.inst_opcode = REVERT /\ inst.inst_outputs = []` by gvs[] >>
+  `?dop zop. inst.inst_operands = [dop;zop]` by
+    gvs[LENGTH_EQ_NUM_compute] >>
+  `operand_val (frame_view fn ra s) lo dop = SOME dst /\
+   operand_val (frame_view fn ra s) lo zop = SOME sz` by
+    (irule rf_forward_revert_range >> metis_tac[]) >>
+  `step_inst fuel ctx inst s = Abort a s_end` by
+    (qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+     gvs[Once exec_block_def, is_terminator_def, AllCaseEqs()]) >>
+  drule_all rf_suffix_revert_abort >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  simp[] >> qexistsl_tac [`LENGTH (execute_plan initial_fmp step_ops)`,`out`] >> simp[]
+QED
+
+Resume rf_strict_suffix_abort[assign]:
+  `k < j /\ inst.inst_opcode = ASSIGN` by gvs[] >>
+  `?rhs out. inst.inst_operands = [rhs] /\ inst.inst_outputs = [out]` by
+    metis_tac[] >>
+  `~is_label_operand rhs` by fs[] >>
+  `?s'. step_inst fuel ctx inst s = OK s' /\
+    exec_block fuel ctx bb (s' with vs_inst_idx := SUC k) = Abort a s_end` by
+    (qpat_x_assum `!y. _ ==> !s st ps stk ops ps_end. _` kall_tac >>
+     qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+     simp[Once exec_block_def, is_terminator_def] >>
+     Cases_on `eval_operand rhs s` >>
+     simp[step_inst_def, step_inst_base_def]) >>
+  `!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI` by
+    (rpt strip_tac >>
+     `ti.inst_opcode =
+       (if r = i then RETURNDATACOPY else if r = j then REVERT else ASSIGN)` by
+       (irule rf_forward_instruction_opcode >>
+        conj_tac >- decide_tac >> simp[] >>
+        qexists_tac `bb` >> simp[]) >>
+     Cases_on `r = i` >> fs[] >> Cases_on `r = j` >> fs[]) >>
+  drule_all rf_assign_success_invariants >> strip_tac >>
+  `is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled` by
+    (strip_tac >> first_x_assum irule >>
+     simp[compute_operands_def, python_stack_operands_def]) >>
+  `operand_val (frame_view fn ra s) lo rhs =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs)` by
+    (first_x_assum irule >> simp[compute_operands_def, python_stack_operands_def]) >>
+  drule_all rf_assign_plan_execution >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `AsmOK mid` >>
+  `s'.vs_memory = s.vs_memory /\
+   venom_asm_terminal_rel (s' with vs_inst_idx := SUC k) mid /\
+   plan_stack_rel lo (frame_view fn ra (s' with vs_inst_idx := SUC k))
+     ps1.ps_stack stk'` by
+    (qpat_x_assum `!y. _ ==> !s st ps stk ops ps_end. _` kall_tac >>
+     qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     simp[step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+     strip_tac >> gvs[] >>
+     fs[venom_asm_terminal_rel_def, venomStateTheory.update_var_def, Abbr `mid`] >>
+     fs[codegenRelTheory.plan_stack_rel_def] >> rpt strip_tac >>
+     qpat_x_assum `!i. i < LENGTH ps1.ps_stack ==> _`
+       (qspec_then `i'` mp_tac) >> simp[] >>
+     Cases_on `EL i' (REVERSE ps1.ps_stack)` >>
+     simp[frame_view_def, codegenRelTheory.operand_val_def,
+       venomStateTheory.lookup_var_def]) >>
+  `j - SUC k < j - k` by decide_tac >>
+  qpat_x_assum `!y. _ ==> !s st ps stk ops ps_end. _`
+    (qspec_then `SUC k` mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`s' with vs_inst_idx := SUC k`, `mid`, `ps1`,
+    `stk'`, `rest_ops`, `ps_end`] mp_tac) >>
+  `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by
+    fs[MEM_APPEND] >>
+  `asm_block_at prog mid.as_pc (execute_plan initial_fmp rest_ops)` by
+    (simp[Abbr `mid`] >>
+     once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC) >>
+  `mid.as_stack = stk' ++ rest /\ mid.as_memory = st.as_memory` by
+    simp[Abbr `mid`] >>
+  simp[] >> strip_tac >> simp[] >>
+  qexistsl_tac [`LENGTH (execute_plan initial_fmp step_ops) + n`, `out'`] >>
+  simp[] >>
+  qpat_x_assum `asm_steps _ _ _ _ st = AsmOK _`
+    (mp_then Any (qspec_then `n` mp_tac) asm_steps_add_ok) >>
+  simp[]
+QED
+
+Finalise rf_strict_suffix_abort
