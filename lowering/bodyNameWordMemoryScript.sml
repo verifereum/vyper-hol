@@ -33,7 +33,7 @@ Proof
   drule_all alloca_history_run_inst_seq >> simp[]
 QED
 
-Theorem body_name_word_counted[local]:
+Theorem body_name_word_counted:
   expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
