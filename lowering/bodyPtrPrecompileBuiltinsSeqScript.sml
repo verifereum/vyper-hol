@@ -25,3 +25,20 @@ Proof
   simp[run_inst_seq_inst_idx, exec_result_map_def, ADD1] >>
   metis_tac[]
 QED
+
+Theorem inst_seq_ptr_append_cursors:
+  EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+  run_inst_seq xs s = OK t /\
+  (!k. inst_seq_ptr D lo ctx fn PG G tn xs
+    (s with vs_inst_idx := k) G1 tn1) /\
+  (!k. inst_seq_ptr D lo ctx fn PG G1 tn1 ys
+    (t with vs_inst_idx := k) G2 tn2) ==>
+  !k. inst_seq_ptr D lo ctx fn PG G tn (xs ++ ys)
+    (s with vs_inst_idx := k) G2 tn2
+Proof
+  strip_tac >> gen_tac >>
+  `run_inst_seq xs (s with vs_inst_idx := k) =
+     OK (t with vs_inst_idx := k)` by
+    simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+  drule_all inst_seq_ptr_append >> simp[] >> metis_tac[]
+QED
