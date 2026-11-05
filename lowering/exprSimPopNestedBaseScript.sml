@@ -16,7 +16,7 @@ Ancestors
   exprLoweringProps compileEnv finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
-  exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame
+  exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame stmtSimProps
   gasOutcome gasExemptCert gasSummaryCompose fragGasMode fragGasPath
 
 
@@ -823,10 +823,18 @@ Proof
    metis_tac[])
 QED
 
-Theorem nested_pop_storage_suffix_sim:
-  expr_sim_inv cenv cx env es /\
-  EVERY pure_expr (target_indices bt) /\
-  eval_target_place cx bt es = (INL (StoragePlace tr slot (ArrayTV tv (Dynamic n))),es) /\
+(* The pop suffix on a storage dynarray whose place is a storage region,
+   in range (slots_in_range) and live (storage_read_live) in the
+   storage at the target's end.  Pure indices give these facts
+   (nested_pop_storage_suffix_sim); so do indices that leave storage
+   alone (exprSimPopNestedStorageFrame). *)
+Theorem nested_pop_storage_live_suffix_sim:
+  storage_layout_safe cx /\
+  storage_place_region cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) /\
+  slots_in_range (vyperStorageBackend$get_storage cx es tr) (w2n slot)
+    (ArrayTV tv (Dynamic n)) /\
+  storage_read_live cx tr (vyperStorageBackend$get_storage cx es tr) slot
+    (ArrayTV tv (Dynamic n)) /\
   target_post ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
     (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t /\
@@ -852,22 +860,10 @@ Proof
   `~cx.txn.is_static /\ ~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
-  `storage_layout_safe cx /\ contract_storage_well_formed cx es` by
-    fs[expr_sim_inv_def] >>
-  `storage_place_region cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))` by
-    metis_tac[eval_target_place_region] >>
   drule_all nested_pop_storage_natural_region >> strip_tac >>
-  `get_storage_backend cx tr es = (INL (vyperStorageBackend$get_storage cx es tr),es)` by
-    simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
-  drule_all nested_pop_eval_target_slots >> strip_tac >>
-  drule_all nested_pop_eval_target_live >> strip_tac >>
   drule_all nested_pop_live_array_agree >> strip_tac >>
   drule nested_pop_array_header_load >> strip_tac >>
-  qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
-  qpat_x_assum `EVERY pure_expr _` kall_tac >>
-  qpat_x_assum `eval_target_place _ _ _ = _` kall_tac >>
   qpat_x_assum `storage_layout_safe _` kall_tac >>
-  qpat_x_assum `contract_storage_well_formed _ _` kall_tac >>
   qpat_x_assum `storage_place_region _ _` kall_tac >>
   qpat_x_assum `storage_read_live _ _ _ _ _` kall_tac >>
   qpat_x_assum `pop_place _ _ _ = _`
@@ -886,7 +882,7 @@ Proof
   drule nested_pop_suffix_shape >> strip_tac >> suspend "positive"
 QED
 
-Resume nested_pop_storage_suffix_sim[empty]:
+Resume nested_pop_storage_live_suffix_sim[empty]:
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
    (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6])` by
     (fs[] >> metis_tac[]) >>
@@ -903,7 +899,7 @@ Resume nested_pop_storage_suffix_sim[empty]:
   simp[]
 QED
 
-Resume nested_pop_storage_suffix_sim[positive]:
+Resume nested_pop_storage_live_suffix_sim[positive]:
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
    (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6])` by
     (fs[] >> metis_tac[]) >>
@@ -992,18 +988,42 @@ Resume nested_pop_storage_suffix_sim[positive]:
   qpat_x_assum `storage_holds _ _ _ _ _ fin u` mp_tac >> simp[]
 QED
 
-Finalise nested_pop_storage_suffix_sim
+Finalise nested_pop_storage_live_suffix_sim
 
-
-
-(* Restated from stmtSimProps, which is not an ancestor. *)
-Theorem expr_exit_INR_type[local]:
-  !ex rr. expr_exit (INR ex : 'a + exception) rr =
-          expr_exit (INR ex : 'b + exception) rr
+Theorem nested_pop_storage_suffix_sim:
+  expr_sim_inv cenv cx env es /\
+  EVERY pure_expr (target_indices bt) /\
+  eval_target_place cx bt es = (INL (StoragePlace tr slot (ArrayTV tv (Dynamic n))),es) /\
+  target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
+    (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t /\
+  compile_dynarray_pop hdr 1 (type_slot_size tv) cenv.ce_is_ctor
+    cenv.ce_imm_alloca (if tr then LocTransient else LocStorage) sm = (q,r) /\
+  pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) es = (res,es') /\
+  local_ptrs_reserved cenv sa /\ ci_mono sa sm /\ es.gas_obs = [] /\
+  fn_has_code sm r func /\ ~t.vs_halted /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))) (es,t)
+    (\res fin u. ?v. res = INL v /\ vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
+      (LocatedValue ann (mk_ptr q (if tr then LocTransient else LocStorage))) u /\
+      u.vs_current_bb = r.cs_current_bb /\ u.vs_inst_idx = LENGTH r.cs_current_insts)
+    (\res fin r. expr_exit res r)
 Proof
-  rpt gen_tac >> Cases_on `rr` >> Cases_on `ex` >> simp[expr_exit_def] >>
-  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
+  strip_tac >>
+  `storage_layout_safe cx /\ contract_storage_well_formed cx es` by
+    fs[expr_sim_inv_def] >>
+  `storage_place_region cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))` by
+    metis_tac[eval_target_place_region] >>
+  `get_storage_backend cx tr es = (INL (vyperStorageBackend$get_storage cx es tr),es)` by
+    simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
+  drule_all nested_pop_eval_target_slots >> strip_tac >>
+  drule_all nested_pop_eval_target_live >> strip_tac >>
+  drule_all nested_pop_storage_live_suffix_sim >> simp[]
 QED
+
+
 
 (* Counted form (why it still holds after the GAS join):
    - eval_expr cx (Pop _ bt) = bind (eval_target_place cx bt) (pop_place cx).
