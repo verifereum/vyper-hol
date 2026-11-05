@@ -7,12 +7,12 @@
  *
  * TOP-LEVEL:
  *   block_rest            - the run_blocks result from inside a block
- *   block_plan_state      - the planner state at an instruction index
  *   block_body_frame_sim  - CHEATED: the rest of the run, simulated
  *)
 
 Theory fnBlockBody
 Ancestors
+  fnBlockPlanStatic fnAliasStep fnFrameStepsRevertForwardDeep
   fnFrameDeep fnLineageStatic fnPlanPrefix fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
   venomExecSemantics
@@ -25,25 +25,6 @@ Definition block_rest_def:
     case exec_block fuel ctx bb vs of
       OK vs' => if vs'.vs_halted then Halt vs' else run_blocks fuel ctx fn vs'
     | res => res
-End
-
-(* The planner state at instruction index k of bb, when generate_block_plan
-   plans bb from ps_in: the parameter and cleanup prefixes, then the
-   non-parameter instructions before k. *)
-Definition block_plan_state_def:
-  block_plan_state liveness dfg cfg fn bb ps_in k ps <=>
-    ?param_ops ps1 clean_ops ps2 pre_ops.
-      (if bb = HD fn.fn_blocks then prepare_params_plan liveness fn ps_in
-       else ([], ps_in)) = (param_ops, ps1) /\
-      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
-       then clean_stack_plan liveness cfg fn bb ps1
-       else ([], ps1)) = (clean_ops, ps2) /\
-      LENGTH (get_params bb.bb_instructions) <= k /\
-      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
-        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-        (LENGTH bb.bb_instructions) 0
-        (k - LENGTH (get_params bb.bb_instructions))
-        (non_param_insts bb) ps2 = SOME (pre_ops, ps)
 End
 
 (* vs is at instruction k of block bb, past its PHIs, and fn_frame_inv
@@ -60,8 +41,10 @@ End
    depth, repeated dead_stack_marker slots): gen_inst_frame_sim_deep,
    gas_inst_frame_sim_owned_deep, gen_invoke_frame_sim_deep with
    gen_fn_sim_at fuel for the callee, the halt, abort and return steps,
-   revert_forward_frame_sim.  Their static premises hold at the planner
-   state ps (block_plan_state, fnLineageStatic) and their
+   revert_forward_frame_sim_deep.  Their static premises at the planner
+   state ps come from fnBlockPlanStatic$block_plan_state_static, the slot
+   alias is carried through each step by fnAliasStep$alias_step_preserve,
+   and their
    memory premises come from Inv (codegen_memory_obligations,
    reachability_closed).  A JMP or JNZ ends the block at a successor
    whose code is placed (dfs_block_code_placed), entered with the

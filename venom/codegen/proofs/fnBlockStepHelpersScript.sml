@@ -12,7 +12,7 @@
 
 Theory fnBlockStepHelpers
 Ancestors
-  fnBlockBody fnFrameSinglePred fnFrameSteps fnLineageStatic fnPlanPrefix
+  fnBlockBody fnBlockPlanStatic fnFrameSinglePred fnFrameSteps fnLineageStatic fnPlanPrefix
   fnPlanLineage fnPlanPlaceDfsBlock fnPlanPlaceFnRegion allocMono
   planSpillBounds contextPlanLayoutProps unitShapeDefs contextCodegenRel
   codegenRel frameRel fnSimSpec venomExecProofs venomExecProps stackOpSim
@@ -388,11 +388,11 @@ Theorem block_prefix_step:
     (!op v. (MEM op ps_l.ps_stack \/ op IN FDOM ps_l.ps_spilled) /\
        ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
                        (collect_phis bb.bb_instructions))) /\
-       normalize_operand dfg [] op = Var v ==>
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
        ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     (LENGTH (cfg_preds_of cfg bb.bb_label) <= 1 ==>
      !op v. (MEM op ps_l.ps_stack \/ op IN FDOM ps_l.ps_spilled) /\
-            normalize_operand dfg [] op = Var v ==>
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
             ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cpl.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
