@@ -220,4 +220,119 @@ Proof
   CONV_TAC (computeLib.CBV_CONV stage_cs)
 QED
 
+val (pre_unit, pre_supply) = pairSyntax.dest_pair
+  (rand (rhs (concl deploy_ctor_noninit_prewalk_eq)));
+
+Theorem deploy_ctor_noninit_callgraph_probe:
+  fcg_postorder (fcg_analyze (^pre_unit).cu_context) "__deploy" =
+    ["__deploy"] /\
+  prune_unit_fcg_unreachable ^pre_unit
+    (fcg_analyze (^pre_unit).cu_context) = ^pre_unit /\
+  reachable_fcg_acyclic (^pre_unit).cu_context
+    (fcg_analyze (^pre_unit).cu_context)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+Theorem deploy_ctor_noninit_ssa_probe:
+  run_configured_fn_passes execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_MakeSSA] "__deploy" ^pre_unit ^pre_supply =
+    SOME (^pre_unit, ^pre_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val dload_supply = ``^pre_supply with irs_used_labels :=
+  "code_end" :: (^pre_supply).irs_used_labels``;
+
+Theorem deploy_ctor_noninit_dload_probe:
+  run_configured_fn_passes execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_LowerDload] "__deploy" ^pre_unit ^pre_supply =
+    SOME (^pre_unit, ^dload_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val concrete_unit = ``^pre_unit with cu_context :=
+  ((^pre_unit).cu_context with ctx_functions :=
+    [HD (^pre_unit).cu_context.ctx_functions with
+      <|fn_blocks := [<|bb_label := "__deploy"; bb_instructions :=
+        [<|inst_id := 1; inst_opcode := ASSIGN;
+           inst_operands := [Lit 0w]; inst_outputs := ["%0"]|>;
+         <|inst_id := 2; inst_opcode := CODECOPY;
+           inst_operands := [Var "%0"; Label "runtime_begin"; Lit 0w];
+           inst_outputs := []|>;
+         <|inst_id := 3; inst_opcode := RETURN;
+           inst_operands := [Var "%0"; Lit 0w]; inst_outputs := []|>]|>];
+        fn_eom := SOME 0; fn_mems_used := [(Allocation 1,0,0)]|>])``;
+
+Theorem deploy_ctor_noninit_concretize_probe:
+  run_configured_fn_passes execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_ConcretizeMemLoc] "__deploy" ^pre_unit ^dload_supply =
+    SOME (^concrete_unit, ^dload_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs) >>
+  simp[wordsTheory.dimword_def] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val fmp_unit = ``^concrete_unit with cu_context :=
+  ((^concrete_unit).cu_context with ctx_functions :=
+   [HD (^concrete_unit).cu_context.ctx_functions with fn_fmp_signature :=
+     SOME <|fms_has_fmp_param := F; fms_publishes := F|>])``;
+
+Theorem deploy_ctor_noninit_fmp_probe:
+  run_configured_fn_passes execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_FmpLowering] "__deploy" ^concrete_unit ^dload_supply =
+    SOME (^fmp_unit, ^dload_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val final_unit = ``^fmp_unit with cu_context :=
+ ((^fmp_unit).cu_context with ctx_functions :=
+ [HD (^fmp_unit).cu_context.ctx_functions with fn_blocks :=
+ [<|bb_label := "__deploy"; bb_instructions :=
+  [<|inst_id := 4; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+     inst_outputs := ["formal_var_0"]|>;
+   <|inst_id := 1; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+     inst_outputs := ["%0"]|>;
+   <|inst_id := 5; inst_opcode := ASSIGN; inst_operands := [Var "%0"];
+     inst_outputs := ["formal_var_1"]|>;
+   <|inst_id := 2; inst_opcode := CODECOPY;
+     inst_operands := [Var "formal_var_1"; Label "runtime_begin"; Var "formal_var_0"];
+     inst_outputs := []|>;
+   <|inst_id := 6; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+     inst_outputs := ["formal_var_2"]|>;
+   <|inst_id := 7; inst_opcode := ASSIGN; inst_operands := [Var "%0"];
+     inst_outputs := ["formal_var_3"]|>;
+   <|inst_id := 3; inst_opcode := RETURN;
+     inst_operands := [Var "formal_var_3"; Var "formal_var_2"];
+     inst_outputs := []|>]|>]])``;
+val final_supply = ``^dload_supply with
+ <|irs_next_inst := 8; irs_next_var := 4;
+   irs_used_inst_ids := [7;6;5;4;0;1;2;3];
+   irs_used_vars := ["formal_var_3";"formal_var_2";"formal_var_1";
+                    "formal_var_0";"%0";"%0";"%0"]|>``;
+
+Theorem deploy_ctor_noninit_postfmp_probe:
+  run_configured_fn_passes execute_configured_fn_pass
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    [CFP_Simple VP_MakeSSA; CFP_Simple VP_SimplifyCFG;
+     CFP_Simple VP_SingleUseExpansion; CFP_Simple VP_DFT;
+     CFP_Simple VP_CFGNormalization]
+    "__deploy" ^fmp_unit ^dload_supply = SOME (^final_unit, ^final_supply)
+Proof
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
 end
