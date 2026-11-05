@@ -38,6 +38,36 @@ Proof
   drule emit_op_safe_operand >> simp[safe_operand_def]
 QED
 
+Theorem compile_get_target_ptr_not_label:
+  (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  type_place_target env bt = SOME vt /\
+  compile_get_target_ptr cfn cenv bt sa = (rb,sm) ==>
+  !l. FST rb <> Label l
+Proof
+  Cases_on `bt`
+  >- (simp[vyperTypeEnvTheory.type_place_target_NameTarget, AllCaseEqs()] >> rpt strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      gvs[compile_get_target_ptr_def, comp_return_def])
+  >- (rename1 `TopLevelNameTarget nsid` >>
+      Cases_on `FLOOKUP cenv.ce_module_vars nsid`
+      >- simp[compile_get_target_ptr_def, comp_return_def] >>
+      rename1 `FLOOKUP cenv.ce_module_vars nsid = SOME vl` >>
+      Cases_on `vl` >> simp[compile_get_target_ptr_def, comp_return_def] >>
+      rpt strip_tac >> gvs[])
+  >- (simp[Once compile_get_target_ptr_def, comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `SND (SND result)` >>
+      simp[comp_bind_def, comp_return_def] >>
+      TRY (rename1 `SND (SND result) = SOME pt` >> Cases_on `pt` >>
+           simp[comp_bind_def, comp_return_def]) >>
+      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+      metis_tac[subscript_pop_not_label]) >>
+  simp[Once compile_get_target_ptr_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[emit_op_safe_operand, safe_operand_def]
+QED
+
 Theorem ec_arith_result_not_label:
   (compile_ecadd_points p1 p2 sa = (op,sb) ==> !l. op <> Label l) /\
   (compile_ecmul_point p scalar sa = (op,sb) ==> !l. op <> Label l)

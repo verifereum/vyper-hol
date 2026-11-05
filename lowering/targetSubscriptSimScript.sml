@@ -14,6 +14,18 @@ Ancestors
 Libs
   pairLib
 
+Theorem compile_get_target_ptr_sim_not_label:
+  expr_sim_inv cenv cx env es /\
+  type_place_target env bt = SOME vt /\
+  compile_get_target_ptr cfn cenv bt sa = (rb,sm) ==>
+  !l. FST rb <> Label l
+Proof
+  strip_tac >>
+  irule exprSafeOperandBuiltinsTheory.compile_get_target_ptr_not_label >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  fs[expr_sim_inv_def]
+QED
+
 Theorem stmt_state_rel_sstore_dead_right:
   !ctx func cenv cx es s k v.
     stmt_state_rel ctx func cenv cx es s /\
