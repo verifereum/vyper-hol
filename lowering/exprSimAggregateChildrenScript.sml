@@ -147,7 +147,8 @@ QED
 
 Theorem vv_at_vars_frame:
   vv_at cenv cx ty sa sm es tv vv s /\
-  t.vs_allocas = s.vs_allocas /\
+  (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==>
+    FLOOKUP t.vs_allocas aid = SOME bs) /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
     local_region cenv es.scopes t n b sz) /\
@@ -171,7 +172,9 @@ QED
 
 Theorem vv_post_vars_frame:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
-  (t with vs_vars := s.vs_vars) = s /\
+  t.vs_memory = s.vs_memory /\
+  (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==>
+    FLOOKUP t.vs_allocas aid = SOME bs) /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
     lookup_var x t = SOME w) /\
@@ -180,9 +183,6 @@ Theorem vv_post_vars_frame:
   vv_post ctx func cenv cx e es sa sn s0 es' tv vv t
 Proof
   strip_tac >>
-  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
-    (qpat_x_assum `t with vs_vars := _ = s`
-      (mp_tac o AP_TERM ``\z. (z.vs_memory,z.vs_allocas)``) >> simp[]) >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `vv_holds cenv cx (expr_type e) tv vv es' t` by
