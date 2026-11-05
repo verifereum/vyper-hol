@@ -342,6 +342,21 @@ Proof
 QED
 
 (* The source invariant supplies concrete witnesses for the conditional IH. *)
+Theorem struct_has_type_field_mem_src[local]:
+  !fs vals id ftv.
+    struct_has_type fs vals /\ ALOOKUP fs id = SOME ftv ==>
+    ?fv. ALOOKUP vals id = SOME fv /\ value_has_type ftv fv
+Proof
+  Induct >> Cases_on `vals` >>
+  FULL_SIMP_TAC std_ss [value_has_type_def, alistTheory.ALOOKUP_def] >>
+  rpt gen_tac >>
+  rename1 `struct_has_type (ft::fs) (v::vs)` >>
+  PairCases_on `ft` >> PairCases_on `v` >>
+  FULL_SIMP_TAC std_ss [value_has_type_def, alistTheory.ALOOKUP_def] >>
+  rpt strip_tac >> Cases_on `ft0 = id` >>
+  FULL_SIMP_TAC std_ss [] >> metis_tac[]
+QED
+
 Theorem augassign_attr_source_fields_mem_src[local]:
   expr_sim_inv cenv cx env es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -363,7 +378,7 @@ Proof
     (fs[expr_sim_inv_def, state_well_typed_def] >>
      metis_tac[scope_well_typed_lookup_scopes]) >>
   Cases_on `entry.value` >> gvs[value_has_type_def] >>
-  drule_all struct_has_type_field >> strip_tac >> metis_tac[]
+  drule_all struct_has_type_field_mem_src >> strip_tac >> metis_tac[]
 QED
 
 Theorem augassign_attr_conditional_ih_mem_src[local]:
@@ -1021,6 +1036,8 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
+
+
 
 
 
