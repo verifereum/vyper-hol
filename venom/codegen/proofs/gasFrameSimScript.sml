@@ -11,7 +11,7 @@ Ancestors
   allocMono contextCodegenRelProps asmIR venomEffects fcgDefs livenessDefs
   dfgDefs list rich_list deepDupCallerSim venomWf opcodeClass unitShapeDefs finite_map
 
-Theorem gas_source_shape[local]:
+Theorem gas_source_shape:
   inst.inst_opcode = GAS /\ inst_wf inst /\
   (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) ==>
   inst.inst_operands = [] /\ ?out. inst.inst_outputs = [out]
@@ -31,7 +31,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem gas_output_non_retpc[local]:
+Theorem gas_output_non_retpc:
   codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = GAS /\ MEM out inst.inst_outputs ==>
   ~retpc_var fn out
@@ -44,7 +44,7 @@ Proof
   `inst = inst'` by metis_tac[gas_distinct_outputs_unique] >> gvs[]
 QED
 
-Theorem gas_frame_view_update[local]:
+Theorem gas_frame_view_update:
   ~retpc_var fn out ==>
   frame_view fn ra (update_var out value vs) =
   update_var out value (frame_view fn ra vs)
@@ -58,14 +58,14 @@ Proof
   gen_tac >> Cases_on `out = x` >> gvs[]
 QED
 
-Theorem gas_frame_view_readings[local]:
+Theorem gas_frame_view_readings:
   frame_view fn ra (vs with vs_gas_readings := readings) =
   (frame_view fn ra vs) with vs_gas_readings := readings
 Proof
   simp[frame_view_def]
 QED
 
-Theorem gas_step_frame_view[local]:
+Theorem gas_step_frame_view:
   codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
   step_inst fuel ctx inst vs = OK vs' ==>
@@ -86,7 +86,7 @@ Proof
   simp[exec_gas_def, gas_frame_view_update, gas_frame_view_readings]
 QED
 
-Theorem gas_step_result[local]:
+Theorem gas_step_result:
   inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
   step_inst fuel ctx inst vs = OK vs' ==>
   vs' = update_var out (HD (vs.vs_gas_readings ++ [0w]))
@@ -114,7 +114,7 @@ Proof
                         plan_state_component_equality]
 QED
 
-Theorem gas_plan_shape[local]:
+Theorem gas_plan_shape:
   inst.inst_opcode = GAS /\ inst.inst_operands = [] /\
   inst.inst_outputs = [out] ==>
   generate_inst_plan liveness dfg cfg fn inst next_liveness
@@ -158,7 +158,7 @@ Proof
   simp[operand_val_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem gas_asm_step[local]:
+Theorem gas_asm_step:
   asm_step lo o2pc (AsmOp "GAS") st = asm_gas st
 Proof
   simp[asm_step_def, asm_step_op_def, asm_step_arith_def,
@@ -167,7 +167,7 @@ Proof
        asm_step_context_def]
 QED
 
-Theorem gas_readings_relation[local]:
+Theorem gas_readings_relation:
   venom_asm_rel lo ps vs st ==>
   venom_asm_rel lo ps (vs with vs_gas_readings := readings)
     (st with as_gas_readings := readings)
@@ -201,7 +201,7 @@ Proof
      update_var_def]
 QED
 
-Theorem gas_emit_steps[local]:
+Theorem gas_emit_steps:
   venom_asm_rel lo ps vs st /\
   EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
   (!op. op IN FDOM ps.ps_spilled ==>
@@ -220,7 +220,7 @@ Proof
   once_rewrite_tac[arithmeticTheory.ONE] >> simp[asm_steps_def]
 QED
 
-Theorem gas_optimistic_cases[local]:
+Theorem gas_optimistic_cases:
   optimistic_swap_plan dfg inst live next_term ps = (ops,ps') ==>
   (ops = [] /\ ps' = ps) \/
   ?dist. stack_get_depth (Var (LAST live)) ps.ps_stack = SOME dist /\
@@ -426,7 +426,7 @@ Proof
   simp[plan_stack_rel_def, plan_spill_rel_def]
 QED
 
-Theorem gas_context_local[local]:
+Theorem gas_context_local:
   !cp lo ps v st.
   context_venom_asm_rel (cp:context_plan) lo ps v st ==>
   venom_asm_rel lo ps (v with vs_memory := st.as_memory) st
@@ -464,7 +464,7 @@ Proof
   qexists_tac `r` >> simp[relationTheory.RTC_REFL]
 QED
 
-Theorem gas_frame_lift[local]:
+Theorem gas_frame_lift:
   !ctx cp lo fn ra rest mem0 ps vs ast r ps' vs' o2pc prog n count.
   fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
   MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\

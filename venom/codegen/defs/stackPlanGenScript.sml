@@ -379,13 +379,18 @@ Definition dead_stack_marker_def:
   dead_stack_marker = Label ""
 End
 
-(* Per-instruction: no pre-codegen opcodes, and no operand the planner could
-   mistake for its dead_stack_marker *)
+(* Per-instruction: no pre-codegen opcodes, no operand the planner could
+   mistake for its dead_stack_marker, at most 16 stack operands for any
+   instruction but a PHI (the frame proofs reach operands with DUP/SWAP),
+   and a LOG's topic count at most 4 (LOG0 to LOG4) *)
 Definition codegen_ready_inst_def:
   codegen_ready_inst inst ⇔
     ¬ is_pre_codegen_opcode inst.inst_opcode ∧
     (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) ∧
-    ¬MEM dead_stack_marker inst.inst_operands
+    ¬MEM dead_stack_marker inst.inst_operands ∧
+    (inst.inst_opcode ≠ PHI ==> LENGTH (compute_operands inst) ≤ 16) ∧
+    (inst.inst_opcode = LOG ==>
+     case inst.inst_operands of Lit tc :: _ => w2n tc ≤ 4 | _ => F)
 End
 
 (* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
