@@ -140,3 +140,37 @@ Resume alloca_step_ghost_inv[return]:
 QED
 
 Finalise alloca_step_ghost_inv
+
+Theorem selector_alloca_local_disjoint:
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+  not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  lookup_var out s1 = SOME a /\ local_region cenv es.scopes s name b sz ==>
+  b + sz <= w2n a \/ w2n a + n <= b
+Proof
+  strip_tac >>
+  `local_ptrs_rel fn cenv es.scopes s /\ alloca_inv s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id`
+  >- (drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
+      simp[] >> disch_then (qspec_then `out` assume_tac) >>
+      drule_all stmt_state_rel_alloca_fresh_bound >> strip_tac >>
+      gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      `s.vs_alloca_next < dimword (:256)` by decide_tac >>
+      gvs[wordsTheory.w2n_n2w] >>
+      `regions_disjoint b sz s.vs_alloca_next n` by
+        (irule local_ptrs_rel_above_frontier >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      fs[compileEnvTheory.regions_disjoint_def]) >>
+  rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
+  drule_all stmt_state_rel_alloca_site_bound >> strip_tac >> gvs[] >>
+  drule reused_alloca_step >> disch_then (qspec_then `out` assume_tac) >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `site0 < dimword (:256)` by decide_tac >> gvs[wordsTheory.w2n_n2w] >>
+  `regions_disjoint site0 n b sz` by
+    (irule local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `fn`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`,
+       `name`, `out`, `es.scopes`, `s`] >> simp[mk_inst_def]) >>
+  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
