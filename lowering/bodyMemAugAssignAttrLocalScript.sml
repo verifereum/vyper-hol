@@ -24,7 +24,7 @@ Ancestors
   vyperLookup vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs
-  monadsyntax
+  monadsyntax emitTacticsLib
 
 (* Pure source boundaries; all observations remain available to the RHS. *)
 Theorem augassign_attr_place_reads_mem_src[local]:
@@ -1680,4 +1680,208 @@ Proof
   drule_all literal_exponent_value_word_mem_src >> strip_tac >>
   simp[wordsTheory.word_exp_def, integer_power_word_mem_src]
 QED
+
+
+Theorem emit_op_exp_mem_src[local]:
+  !x y vx vy sa op sb ss.
+    emit_op Exp [x;y] sa = (op,sb) /\
+    eval_operand x ss = SOME vx /\ eval_operand y ss = SOME vy /\
+    fresh_vars_wrt sa ss ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+      eval_operand op ss' = SOME (word_exp vx vy) /\
+      same_blocks sa sb /\ fresh_vars_wrt sb ss' /\
+      (!op w. eval_operand op ss = SOME w ==> eval_operand op ss' = SOME w) /\
+      (!a. a < LENGTH ss.vs_memory ==> EL a ss'.vs_memory = EL a ss.vs_memory) /\
+      LENGTH ss'.vs_memory = LENGTH ss.vs_memory
+Proof
+  rw[] >> irule emit_op_pure2_correct >> gvs[] >>
+  goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
+  simp[step_inst_base_def, exec_pure2_def, eval_operands_def, mk_inst_def]
+QED
+
+Theorem assert_exp_after_prefix_mem_src[local]:
+  !sa sc sd sb ss sg ok x y vx vy op P.
+    sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+    run_inst_seq (emitted_insts sa sc) ss = OK sg /\
+    fresh_vars_wrt sc sg /\ eval_operand ok sg = SOME (bool_to_word P) /\
+    eval_operand x sg = SOME vx /\ eval_operand y sg = SOME vy /\
+    emit_void ASSERT [ok] sc = ((),sd) /\
+    emit_op Exp [x;y] sd = (op,sb) ==>
+    (P ==> ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+                  eval_operand op ss' = SOME (word_exp vx vy)) /\
+    (~P ==> ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `P` >> fs[]
+  >- (`1w <> (0w:bytes32)` by simp[wordsTheory.WORD_EQ, wordsTheory.dimword_def] >>
+      drule_all emit_void_ASSERT_ok_full >> strip_tac >> gvs[] >>
+      drule_all emit_op_exp_mem_src >> strip_tac >>
+      imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+      drule_all run_inst_seq_chain >> strip_tac >>
+      qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
+      qpat_x_assum `run_inst_seq (emitted_insts sc sd) _ = _` kall_tac >>
+      drule_all run_inst_seq_chain >> strip_tac >>
+      qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
+      metis_tac[]) >>
+  drule_all emit_void_ASSERT_revert >> strip_tac >>
+  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sc) _ = _` kall_tac >>
+  `!s. run_inst_seq (emitted_insts sa sd) ss <> OK s` by simp[] >>
+  drule_all run_inst_seq_chain_err >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem power_bool_word_guard_mem_src[local]:
+  (!P. bool_to_word (bool_to_word P = 0w) = bool_to_word (~P)) /\
+  (!P Q. bool_to_word P && bool_to_word Q = bool_to_word (P /\ Q))
+Proof
+  conj_tac
+  >- (gen_tac >> Cases_on `P` >>
+      simp[bool_to_word_def, wordsTheory.WORD_EQ, wordsTheory.dimword_def]) >>
+  rpt gen_tac >> Cases_on `P` >> Cases_on `Q` >>
+  simp[bool_to_word_def]
+QED
+
+Theorem signed_power_guard_prefix_mem_src[local]:
+  !sa s1 s2 s3 s4 sc ss x y lo hi below ge above le ok vx vy.
+    emit_op SLT [x;Lit lo] sa = (below,s1) /\
+    emit_op ISZERO [below] s1 = (ge,s2) /\
+    emit_op SGT [x;Lit hi] s2 = (above,s3) /\
+    emit_op ISZERO [above] s3 = (le,s4) /\
+    emit_op AND [ge;le] s4 = (ok,sc) /\
+    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME vx /\
+    eval_operand y ss = SOME vy ==>
+    ?sg. sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+      run_inst_seq (emitted_insts sa sc) ss = OK sg /\
+      fresh_vars_wrt sc sg /\ eval_operand x sg = SOME vx /\
+      eval_operand y sg = SOME vy /\
+      eval_operand ok sg = SOME
+        (bool_to_word (bool_to_word (vx < lo) = 0w) &&
+         bool_to_word (bool_to_word (vx > hi) = 0w))
+Proof
+  rpt gen_tac >> strip_tac >>
+  chain_step (elim_lit 2 emit_op_SLT_correct) >>
+  chain_step emit_op_ISZERO_correct_mem >>
+  chain_step (elim_lit 2 emit_op_SGT_correct) >>
+  chain_step emit_op_ISZERO_correct_mem >>
+  chain_step emit_op_AND_correct >>
+  forward_all_evals >>
+  rename1 `eval_operand ok sg = SOME (_ && _)` >>
+  qexists_tac `sg` >> simp[]
+QED
+
+Theorem unsigned_power_guard_prefix_mem_src[local]:
+  !sa s1 sc ss x y hi above ok vx vy.
+    emit_op GT [x;Lit hi] sa = (above,s1) /\
+    emit_op ISZERO [above] s1 = (ok,sc) /\
+    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME vx /\
+    eval_operand y ss = SOME vy ==>
+    ?sg. sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+      run_inst_seq (emitted_insts sa sc) ss = OK sg /\
+      fresh_vars_wrt sc sg /\ eval_operand x sg = SOME vx /\
+      eval_operand y sg = SOME vy /\
+      eval_operand ok sg = SOME (bool_to_word (bool_to_word (w2n vx > w2n hi) = 0w))
+Proof
+  rpt gen_tac >> strip_tac >>
+  chain_step (elim_lit 2 emit_op_GT_correct) >>
+  chain_step emit_op_ISZERO_correct_mem >>
+  forward_all_evals >>
+  rename1 `eval_operand ok sg = SOME (bool_to_word _)` >>
+  qexists_tac `sg` >> simp[]
+QED
+
+Theorem compile_safe_pow_exponent_run_mem_src[local]:
+  !x y ty a b sa op sb ss.
+    0 < type_bits ty /\ type_bits ty <= 256 /\ type_bits ty MOD 8 = 0 /\
+    within_int_bound (if is_signed_type ty then Signed (type_bits ty)
+                      else Unsigned (type_bits ty)) a /\
+    within_int_bound (if is_signed_type ty then Signed (type_bits ty)
+                      else Unsigned (type_bits ty)) b /\ 0 <= b /\
+    compile_safe_pow x y ty NONE (SOME b) sa = (op,sb) /\
+    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME (i2w a) /\
+    eval_operand y ss = SOME (i2w b) ==>
+    (0 <= b /\ within_int_bound
+       (if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty))
+       (a ** Num b) ==>
+     ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+           eval_operand op ss' = SOME (i2w (a ** Num b))) /\
+    (~(0 <= b /\ within_int_bound
+       (if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty))
+       (a ** Num b)) ==>
+     ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `Num b = 0 \/ Num b = 1`
+  >- suspend "shortcut"
+  >> Cases_on `is_signed_type ty`
+  >- suspend "signed"
+  >> suspend "unsigned"
+QED
+
+Resume compile_safe_pow_exponent_run_mem_src[shortcut]:
+  `within_int_bound
+     (if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty))
+     (a ** Num b)` by metis_tac[literal_exponent_typed_shortcut_mem_src] >>
+  `word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)` by
+    metis_tac[literal_exponent_exp_word_mem_src] >>
+  simp[] >>
+  fs[compile_safe_pow_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> fs[]) >>
+  `eval_operand (Lit 1w) ss = SOME (1w:bytes32)` by simp[eval_operand_def] >>
+  `1w <> (0w:bytes32)` by simp[wordsTheory.WORD_EQ, wordsTheory.dimword_def] >>
+  drule_all emit_void_ASSERT_ok_full >> strip_tac >> gvs[] >>
+  chain_step emit_op_exp_mem_src >>
+  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
+  metis_tac[]
+QED
+
+Resume compile_safe_pow_exponent_run_mem_src[signed]:
+  `1 < Num b` by decide_tac >>
+  `word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)` by
+    metis_tac[literal_exponent_exp_word_mem_src] >>
+  `w2i (i2w a : bytes32) = a` by
+    (irule vyperArithTheory.w2i_i2w_within_signed >>
+     qexists_tac `type_bits ty` >> fs[]) >>
+  qspecl_then [`Num b`, `type_bits ty`] mp_tac signed_power_upper_word_mem_src >>
+  impl_tac >- simp[] >> disch_tac >>
+  qspecl_then [`Num b`, `type_bits ty`] mp_tac signed_power_lower_word_mem_src >>
+  impl_tac >- simp[] >> simp_tac bool_ss [LET_THM] >> disch_tac >>
+  qspecl_then [`a`, `Num b`, `type_bits ty`] mp_tac signed_literal_exponent_guard_mem_src >>
+  impl_tac >- simp[] >> simp_tac bool_ss [LET_THM] >> disch_tac >>
+  gvs[compile_safe_pow_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule_all signed_power_guard_prefix_mem_src >> strip_tac >>
+  qpat_x_assum `eval_operand ok sg = SOME _` mp_tac >>
+  simp[power_bool_word_guard_mem_src, integer_wordTheory.WORD_LTi,
+       integer_wordTheory.WORD_GTi, integerTheory.INT_NOT_LT,
+       integerTheory.int_gt] >> disch_tac >>
+  drule_all assert_exp_after_prefix_mem_src >>
+  simp[]
+QED
+Resume compile_safe_pow_exponent_run_mem_src[unsigned]:
+  `1 < Num b` by decide_tac >>
+  `word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)` by
+    metis_tac[literal_exponent_exp_word_mem_src] >>
+  `0 <= a` by fs[within_int_bound_def] >>
+  `w2n (i2w a : bytes32) = Num a` by
+    (irule literal_exponent_value_word_mem_src >>
+     simp[] >> qexistsl_tac [`type_bits ty`, `F`] >> fs[]) >>
+  qspecl_then [`Num b`, `type_bits ty`] mp_tac unsigned_power_upper_word_mem_src >>
+  impl_tac >- simp[] >> disch_tac >>
+  qspecl_then [`a`, `Num b`, `type_bits ty`] mp_tac unsigned_literal_exponent_guard_mem_src >>
+  impl_tac >- simp[] >> disch_tac >>
+  gvs[compile_safe_pow_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule_all unsigned_power_guard_prefix_mem_src >> strip_tac >>
+  qpat_x_assum `eval_operand ok sg = SOME _` mp_tac >>
+  simp[power_bool_word_guard_mem_src] >> disch_tac >>
+  drule_all assert_exp_after_prefix_mem_src >>
+  simp[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS] >>
+  metis_tac[arithmeticTheory.NOT_LESS_EQUAL]
+QED
+Finalise compile_safe_pow_exponent_run_mem_src
 
