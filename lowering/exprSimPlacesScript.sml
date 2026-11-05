@@ -34,10 +34,9 @@
  * expr_sim_case; expr_vv_case describes a base's value_vv, captured memory,
  * storage and transient places included.  It does not cover a hashmap
  * base: that evaluates to a HashMapRef and is typed by type_place_expr, not
- * well_typed_expr, so for a nested mapping (m[a][b]) nothing judges the
- * inner key a.  The mapping lemma's proof needs expr_vv_case to describe a
- * HashMapRef result (the operand holding the mapping's slot), which then
- * carries the inner keys' simulation to the outer subscript.
+ * well_typed_expr.  A mapping base is judged by expr_map_case
+ * (exprSimMapDefs) instead, which compile_subscript_case takes for a
+ * MapPT base and compile_subscript_sim supplies via expr_map_case_below.
  *
  * compile_subscript dispatches on place_type of the base, the base's own
  * type for a nested place, and pop takes its target's place from
