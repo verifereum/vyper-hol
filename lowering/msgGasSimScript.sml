@@ -7,7 +7,7 @@ Ancestors
   venomInst venomState vyperInterpreter vyperState vyperValue
   vyperTypeSystem list rich_list pair arithmetic
 
-Theorem msg_gas_placement[local]:
+Theorem msg_gas_placement:
   compile_env_var MsgGas sa = (op,sb) /\ fn_has_code sa sb func ==>
   ?out id bb. op = Var out /\
     sb.cs_current_bb = sa.cs_current_bb /\
@@ -39,7 +39,7 @@ Proof
        next_gas_reading_def, read_result_def]
 QED
 
-Theorem msg_gas_edge[local]:
+Theorem msg_gas_edge:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id GAS [] [out]) ==>
