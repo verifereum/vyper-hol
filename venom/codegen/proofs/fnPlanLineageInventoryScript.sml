@@ -3721,3 +3721,33 @@ Proof
   metis_tac[reorder_plan_inventory_subset_nb,
             restore_spilled_plan_inventory_subset]
 QED
+
+(* Exact copy from reorderSim.stack_swap_mem_subset (local there).
+   Moved from fnPlanLineagePhiInventory to serve both planner consumers. *)
+Theorem stack_swap_mem_subset:
+  !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
+Proof
+  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
+  `LENGTH stk - 1 < LENGTH stk /\
+   LENGTH stk - (d + 1) < LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
+  `MEM (EL (LENGTH stk - 1) stk) stk /\
+   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
+    (conj_tac >> irule EL_MEM >> decide_tac) >>
+  simp[stack_swap_def, LET_THM] >> strip_tac >>
+  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
+QED
+
+Theorem do_swap_safe_inventory_subset:
+  !d ps ops qs.
+    (d <= 16 \/ d < LENGTH ps.ps_stack) /\
+    do_swap d ps = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `d <= 16`
+  >- (qpat_x_assum `do_swap _ _ = _` mp_tac >>
+      simp[do_swap_def] >> Cases_on `d = 0` >> simp[] >>
+      strip_tac >> gvs[] >> metis_tac[stack_swap_mem_subset]) >>
+  metis_tac[reorderSimTheory.do_swap_inventory_subset]
+QED
