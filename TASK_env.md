@@ -84,3 +84,4 @@ All paths are relative to this directory (the vyper-hol project root).
 ## Notes
 
 - `len` takes only its one operand's `body_expr_ptr_ok` (the second hypothesis); `msg.gas` takes none.
+- The builtin-operand lemmas `expr_body_pre_builtin_arg`, `expr_sim_pre_builtin_arg` and `expr_body_pre_builtin_head` (exprSim*) take the premise `(!n. bi <> Slice n) \/ ~is_extcode e`: a slice's `.code` source (`is_extcode`) is not a lowered operand but is read through its address (`extcode_addr_expr`). For a builtin that isn't a slice, discharge it from the builtin; for word operands the typed forms `expr_body_pre_builtin_typed_arg` and `expr_sim_pre_builtin_typed_arg` avoid it. `rg` them in `lowering/` for their current statements.
