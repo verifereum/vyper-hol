@@ -8,7 +8,7 @@
 
 Theory exprSimConcat
 Ancestors
-  exprSimHypsDefs vyperAST
+  exprSimHypsDefs vyperAST exprSimConcatResult
 
 (* Why it holds (statement audit, not a proof):
    - Typing gives SUM (MAP bytelike_type_bound ts) <= n, and each operand's
@@ -27,5 +27,5 @@ Theorem compile_concat_case:
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Concat n) args)
 Proof
-  cheat
+  rw[expr_vv_case_def] >> irule concat_result_vv_sim >> metis_tac[]
 QED
