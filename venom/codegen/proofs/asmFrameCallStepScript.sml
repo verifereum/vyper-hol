@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
-  vfmAccountFrame asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
+  vfmAccountFrame vfmStepLength asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
   wordsLib
 
@@ -3504,6 +3504,132 @@ Proof
   BETA_TAC >> disch_then (irule o SRULE []) >> simp[] >> conj_tac
   >- metis_tac[asm_call_safe_push_stack] >>
   metis_tac[asm_call_safe_get_context]
+QED
+
+Theorem asm_call_safe_delegate_code:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  (case get_delegate code of
+     NONE => return (code,0)
+   | SOME delegate => do
+       cost <- access_address delegate;
+       return ((lookup_account delegate accounts).code,cost)
+     od) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `get_delegate code` >> simp[]
+  >- metis_tac[asm_call_safe_return] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  dxrule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+  disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+  BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+  >- metis_tac[asm_call_safe_access_address] >>
+  metis_tac[asm_call_safe_return]
+QED
+
+Theorem asm_call_safe_static_guard:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  (if b then assert_not_static else return ()) s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `b` >> simp[]
+  >- metis_tac[asm_call_safe_assert_not_static] >>
+  metis_tac[asm_call_safe_return]
+QED
+
+Theorem asm_call_prepare_safe:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  asm_call_prepare op s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rewrite_tac[asm_call_prepare_def, LET_THM, asm_uncurry_projection,
+              ignore_bind_def] >> BETA_TAC >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  rpt (
+    dxrule_at (Pat `bind _ _ _ = _`) asm_call_safe_bind >>
+    disch_then (qspec_then `\s. s.contexts <> [] /\ ?d. s.msdomain = Collect d` mp_tac) >>
+    BETA_TAC >> disch_then irule >> simp[] >> conj_tac
+    >- (rpt gen_tac >> strip_tac >>
+        FIRST (map (drule_at (Pat `_ _ = (_,_)`))
+          [asm_call_safe_pop_stack, asm_call_safe_memory_expansion_info,
+           asm_call_safe_access_address, asm_call_safe_get_accounts,
+           asm_call_safe_delegate_code, asm_call_safe_get_gas_left,
+           asm_call_safe_consume_gas, asm_call_safe_static_guard,
+           asm_call_safe_expand_memory, asm_call_safe_get_callee]) >> simp[]) >>
+    rpt gen_tac >> pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac) >>
+  gvs[bind_def, get_callee_def, get_current_context_def, return_def,
+      fail_def, AllCaseEqs()]
+QED
+
+Theorem asm_call_charged_suffix_credit:
+  (do consume_gas n;
+      if b then assert_not_static else return ();
+      expand_memory k;
+      sender <- get_callee;
+      return (sender,extra)
+   od) s = (INL (sender',extra'),u) ==>
+  u.contexts <> [] /\ n <= (FST (HD u.contexts)).gasUsed /\
+  extra' = extra
+Proof
+  Cases_on `s.contexts`
+  >- simp[consume_gas_def, get_current_context_def, bind_def,
+          ignore_bind_def, fail_def] >>
+  PairCases_on `h` >> Cases_on `b` >>
+  simp[consume_gas_def, assert_not_static_def, get_static_def,
+       expand_memory_def, get_callee_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def,
+       assert_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem asm_call_prepare_credit:
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  u.contexts <> [] /\ stipend <= (FST (HD u.contexts)).gasUsed
+Proof
+  rewrite_tac[asm_call_prepare_def, LET_THM, asm_uncurry_projection] >> BETA_TAC >>
+  disch_tac >>
+  ntac 6
+    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
+     simp[Once bind_def, AllCaseEqs()] >> disch_tac >> gvs[]) >>
+  ntac 6 (pop_last_assum kall_tac) >>
+  dxrule asm_call_charged_suffix_credit >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac
+    `call_gas value' gas' left cost (ac + (dc + (cc + vc)))` >>
+  qmatch_goalsub_abbrev_tac `SND cg` >>
+  `(if 0 < value' then call_stipend else 0) <= ac + (dc + (cc + vc)) + cost` by
+    (Cases_on `0 < value'` >>
+     gvs[Abbr `vc`, Abbr `value'`, vfmConstantsTheory.call_stipend_def,
+         vfmConstantsTheory.call_value_cost_def]) >>
+  `SND cg <= FST cg + cost` by
+    (irule call_gas_stipend_le_consumed >>
+     qexistsl_tac [`gas'`, `left`, `ac + (dc + (cc + vc))`, `value'`] >>
+     simp[Abbr `cg`]) >>
+  gvs[Abbr `cg`]
+QED
+
+Theorem asm_call_raw_safe:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_call op s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [])
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[asm_step_call_factor, bind_def, AllCaseEqs()]
+      >- (PairCases_on `x` >>
+          drule asm_call_prepare_credit >> strip_tac >>
+          qmatch_asmsub_rename_tac `asm_call_finish _ _ mid = _` >>
+          Cases_on `mid.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+          drule_all asm_call_finish_credit_safe >> simp[]) >>
+      drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_safe >>
+      simp[]) >>
+  rpt strip_tac >>
+  `LENGTH t.contexts >= LENGTH s.contexts` by
+    (mp_tac vfmStepLengthTheory.same_frame_or_grow_step_call >>
+     metis_tac[vfmStepLengthTheory.same_frame_or_grow_length]) >>
+  Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
 QED
 
 Theorem asm_call_safe_msgParams:
