@@ -6,7 +6,7 @@
 
 Theory fnFrameStepsPhi
 Ancestors
-  fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
   allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs dftCommutation fnFrameDeepInvoke
@@ -2200,115 +2200,6 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!at. MEM at _ <=> _` (qspec_then `op` mp_tac) >>
   metis_tac[]
-QED
-
-Theorem do_swap_wf_marked:
-  !base ps dist ops ps'.
-    generated_plan_state_wf_marked base ps /\
-    dist < LENGTH ps.ps_stack /\
-    do_swap dist ps = (ops, ps') ==>
-    generated_plan_state_wf_marked base ps'
-Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `generated_plan_state_wf_marked bound ps` >>
-  `plan_slots_bounded bound ps'` by
-    metis_tac[planSpillBoundsTheory.do_swap_plan_slots_bounded,
-              generated_plan_state_wf_marked_def] >>
-  `sorting$PERM ps'.ps_stack ps.ps_stack` by
-    metis_tac[doSwapSimTheory.do_swap_stack_perm, pairTheory.SND] >>
-  `ps'.ps_spilled = ps.ps_spilled /\
-   doSwapSim$spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled` by
-    metis_tac[doSwapSimTheory.do_swap_layout_wf,
-              generated_plan_state_wf_marked_def, pairTheory.SND] >>
-  gvs[generated_plan_state_wf_marked_def] >> conj_tac
-  >- metis_tac[sortingTheory.PERM_FILTER, sortingTheory.ALL_DISTINCT_PERM] >>
-  fs[pred_setTheory.IN_DISJOINT] >> metis_tac[sortingTheory.PERM_MEM_EQ]
-QED
-
-Theorem wf_marked_stack_sublist:
-  !base ps stk.
-    generated_plan_state_wf_marked base ps /\
-    (!op. MEM op stk ==> MEM op ps.ps_stack) /\
-    ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) ==>
-    generated_plan_state_wf_marked base (ps with ps_stack := stk)
-Proof
-  simp[generated_plan_state_wf_marked_def, pred_setTheory.IN_DISJOINT] >>
-  metis_tac[]
-QED
-
-Theorem wf_marked_pop:
-  !base ps n.
-    generated_plan_state_wf_marked base ps ==>
-    generated_plan_state_wf_marked base
-      (ps with ps_stack := stack_pop n ps.ps_stack)
-Proof
-  rpt strip_tac >> irule wf_marked_stack_sublist >>
-  simp[stackModelTheory.stack_pop_def] >>
-  conj_tac >- metis_tac[rich_listTheory.MEM_TAKE] >>
-  qpat_x_assum `generated_plan_state_wf_marked _ _` mp_tac >>
-  simp[generated_plan_state_wf_marked_def] >> strip_tac >>
-  `ps.ps_stack = TAKE (LENGTH ps.ps_stack - n) ps.ps_stack ++
-                 DROP (LENGTH ps.ps_stack - n) ps.ps_stack` by
-    simp[] >>
-  metis_tac[listTheory.FILTER_APPEND_DISTRIB, listTheory.ALL_DISTINCT_APPEND]
-QED
-
-Theorem popmany_individual_wf_marked:
-  !xs base ps ops ps'.
-    generated_plan_state_wf_marked base ps /\
-    popmany_individual xs ps = (ops, ps') ==>
-    generated_plan_state_wf_marked base ps'
-Proof
-  simp[stackPlanOpsTheory.popmany_individual_def] >> rpt gen_tac >>
-  rename1 `generated_plan_state_wf_marked bound _` >>
-  qmatch_goalsub_abbrev_tac `FOLDL popf acc0 sorted` >>
-  `!items acc.
-     generated_plan_state_wf_marked bound (SND acc) ==>
-     generated_plan_state_wf_marked bound (SND (FOLDL popf acc items))` by
-    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-     first_x_assum irule >> PairCases_on `acc` >> gvs[] >>
-     simp[Abbr `popf`] >>
-     Cases_on `stack_get_depth h acc1.ps_stack` >> simp[] >>
-     rename1 `stack_get_depth h acc1.ps_stack = SOME dist` >>
-     drule stackModelTheory.stack_get_depth_props >> strip_tac >>
-     Cases_on `dist = 0` >> simp[]
-     >- metis_tac[wf_marked_pop, pairTheory.SND] >>
-     pairarg_tac >> simp[] >>
-     metis_tac[wf_marked_pop, do_swap_wf_marked, pairTheory.SND]) >>
-  rpt strip_tac >> first_x_assum (qspec_then `sorted` mp_tac) >>
-  disch_then (qspec_then `acc0` mp_tac) >>
-  gvs[Abbr `acc0`]
-QED
-
-Theorem popmany_plan_wf_marked:
-  !xs base ps ops ps'.
-    generated_plan_state_wf_marked base ps /\
-    popmany_plan xs ps = (ops, ps') ==>
-    generated_plan_state_wf_marked base ps'
-Proof
-  Cases >- simp[stackPlanOpsTheory.popmany_plan_def] >>
-  simp[stackPlanOpsTheory.popmany_plan_def] >> rpt gen_tac >>
-  reverse IF_CASES_TAC
-  >- metis_tac[popmany_individual_wf_marked] >>
-  reverse IF_CASES_TAC
-  >- metis_tac[popmany_individual_wf_marked] >>
-  strip_tac >>
-  qmatch_asmsub_abbrev_tac `is_contiguous_top depths` >>
-  `!v. IS_SOME (stack_get_depth v ps.ps_stack) ==>
-       THE (stack_get_depth v ps.ps_stack) < LENGTH ps.ps_stack` by
-    (gen_tac >> Cases_on `stack_get_depth v ps.ps_stack` >> simp[] >>
-     metis_tac[stackModelTheory.stack_get_depth_props]) >>
-  `!d. MEM d depths ==> d < LENGTH ps.ps_stack` by
-    (simp[Abbr `depths`, listTheory.MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-     gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
-  `MEM (SUC (LENGTH t)) depths` by
-    (`LENGTH depths = SUC (LENGTH t)` by simp[Abbr `depths`] >>
-     `MEM (SUC (LENGTH t)) (QSORT (\a b. a <= b) depths)` by
-       gvs[stackPlanOpsTheory.is_contiguous_top_def, listTheory.MEM_GENLIST] >>
-     metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]) >>
-  `SUC (LENGTH t) < LENGTH ps.ps_stack` by metis_tac[] >>
-  pairarg_tac >> gvs[] >>
-  metis_tac[do_swap_wf_marked, wf_marked_pop]
 QED
 
 Theorem phi_filter_lupdate_distinct:
