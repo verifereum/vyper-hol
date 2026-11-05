@@ -636,3 +636,23 @@ Proof
       gvs[])
   >> gvs[execute_plan_label_length, operand_val_frame_view_inst_idx]
 QED
+
+(* A revert forwarding starts at a RETURNDATACOPY, not a PHI, so it lies
+   past the block's PHI prefix. *)
+Theorem phi_prefix_length_el[local]:
+  !l i. i < phi_prefix_length l ==>
+        i < LENGTH l /\ (EL i l).inst_opcode = PHI
+Proof
+  Induct >> simp[phi_prefix_length_def] >> rw[] >> Cases_on `i` >> gvs[]
+QED
+
+Theorem revert_forward_pair_past_phis:
+  !bb i j. revert_forward_pair bb i j ==>
+           phi_prefix_length bb.bb_instructions <= i \/
+           j < phi_prefix_length bb.bb_instructions
+Proof
+  rw[revert_forward_pair_def] >> CCONTR_TAC >>
+  `i < phi_prefix_length bb.bb_instructions` by decide_tac >>
+  drule phi_prefix_length_el >>
+  gvs[venomInstTheory.get_instruction_def, AllCaseEqs()]
+QED

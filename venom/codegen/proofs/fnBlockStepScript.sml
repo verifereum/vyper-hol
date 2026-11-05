@@ -80,6 +80,10 @@ Resume fn_block_frame_step[ok]:
     `ps_dfs_after`, `vs`, `as`, `Inv`, `ra`, `rest`, `mem0`, `s'`]
     block_step_prefix) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  `!i j. revert_forward_pair bb i j ==>
+         phi_prefix_length bb.bb_instructions <= i \/
+         j < phi_prefix_length bb.bb_instructions` by
+    metis_tac[revert_forward_pair_past_phis] >>
   mp_tac (Q.SPECL [`fuel`, `rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`,
     `o2pc`, `i`, `fn`, `r`, `liveness`, `dfg`, `cfg`, `ch`, `growth`,
     `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb`, `ps`, `h`, `promised`,

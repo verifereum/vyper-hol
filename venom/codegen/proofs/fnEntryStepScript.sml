@@ -12,7 +12,7 @@ Theory fnEntryStep
 Ancestors
   fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
-  venomExecSemantics fnBlockBody fnEntryPlan fnEntryParams fnRunFields
+  venomExecSemantics fnBlockBody fnBlockPlanStatic fnEntryPlan fnEntryParams fnRunFields
   unitShapeDefs contextPlanLayoutProps planSpillBounds contextCodegenRel stackPlanGen
   stackPlanTypes stackOpSim blockSimHelpers
 
@@ -98,6 +98,25 @@ Proof
   gvs[fn_entry_state_rel_def, fn_return_state_rel_def, shared_state_rel_def]
 QED
 
+(* A revert forwarding starts at a RETURNDATACOPY, which is not a
+   parameter, so it lies past the block's parameter prefix. *)
+Theorem get_params_el[local]:
+  !l i. i < LENGTH (get_params l) ==>
+        i < LENGTH l /\ is_param_opcode (EL i l).inst_opcode
+Proof
+  Induct >> simp[get_params_def] >> rw[] >> Cases_on `i` >> gvs[]
+QED
+
+Theorem revert_forward_pair_past_params[local]:
+  !bb i j. revert_forward_pair bb i j ==>
+           LENGTH (get_params bb.bb_instructions) <= i
+Proof
+  rw[revert_forward_pair_def] >> CCONTR_TAC >>
+  `i < LENGTH (get_params bb.bb_instructions)` by decide_tac >>
+  drule get_params_el >>
+  gvs[venomInstTheory.get_instruction_def, AllCaseEqs(), venomInstTheory.is_param_opcode_def]
+QED
+
 Theorem entry_body_frame_sim[local]:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
@@ -172,6 +191,10 @@ Proof
   drule entry_step_phi_bound >> strip_tac >>
   `lineage_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0` by
     metis_tac[lineage_state_rules] >>
+  `!i j. revert_forward_pair (HD fn.fn_blocks) i j ==>
+         LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= i \/
+         j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[revert_forward_pair_past_params] >>
   irule block_body_frame_sim >>
   rpt (conj_tac >- (first_assum ACCEPT_TAC)) >>
   conj_tac >- simp[] >>

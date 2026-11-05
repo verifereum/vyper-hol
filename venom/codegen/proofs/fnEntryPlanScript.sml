@@ -11,7 +11,7 @@
 
 Theory fnEntryPlan
 Ancestors
-  fnBlockBody fnPlanPrefix fnPlanLineage fnPlanPlaceFnRegion allocMono stackPlanGen
+  fnBlockBody fnBlockPlanStatic fnPlanPrefix fnPlanLineage fnPlanPlaceFnRegion allocMono stackPlanGen
   stackPlanTypes fcgDefs livenessDefs dfgDefs cfgDefs venomInst venomWf
   list rich_list arithmetic
 
