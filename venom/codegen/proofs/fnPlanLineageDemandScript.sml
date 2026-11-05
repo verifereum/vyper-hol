@@ -1,6 +1,6 @@
 Theory fnPlanLineageDemand
 Ancestors
-  fnPlanLineageDemandSupport livenessProofs cfgAnalysisProps venomWf stackPlanGen callLayoutDefs list rich_list
+  fnPlanLineageDemandSupport livenessProofs livenessConvergenceProofs codegenReadyCompute cfgAnalysisProps venomWf stackPlanGen callLayoutDefs list rich_list
 
 Theorem live_prefix_demand:
   !fn lbl bb n v.
@@ -297,4 +297,78 @@ Proof
   >- (irule venomExecProofsTheory.MEM_lookup_block >>
       gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
   irule projected_demand_live_out >> simp[]
+QED
+
+Theorem analyzed_endpoint_demand:
+  !fn bb.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    fn_reachable fn bb.bb_label ==>
+    EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
+  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  `liveness_instrs fn.fn_blocks bb.bb_label = bb.bb_instructions` by
+    simp[livenessBlockProofsTheory.liveness_instrs_def] >>
+  drule_all liveness_recompute_convergence >>
+  simp[livenessDefsTheory.same_vars_set] >> strip_tac >>
+  `EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+    (liveness_out fn.fn_blocks (cfg_analyze fn) bb.bb_label (liveness_recompute fn))` by
+    (irule projected_demand_live_out >> simp[projected_demand_recompute]) >>
+  gvs[livenessDefsTheory.live_vars_at_def, livenessDefsTheory.liveness_analyze_def,
+      EVERY_MEM, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem analyzed_ordinary_suffix_demand:
+  !fn bb i.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    fn_reachable fn bb.bb_label /\
+    i <= LENGTH bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode <> PHI) (DROP i bb.bb_instructions) ==>
+    EVERY (demand_available fn bb i)
+      (live_vars_at (liveness_analyze fn) bb.bb_label i)
+Proof
+  rpt gen_tac >> measureInduct_on `LENGTH bb.bb_instructions - i` >> rpt strip_tac >>
+  Cases_on `i = LENGTH bb.bb_instructions`
+  >- (gvs[] >> irule analyzed_endpoint_demand >> simp[]) >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  `wf_function fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
+  `live_vars_at (liveness_analyze fn) bb.bb_label i =
+    liveness_transfer fn.fn_blocks (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
+    (drule livenessProofsTheory.live_vars_at_transfer >>
+     disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >> simp[]) >>
+  `(EL i bb.bb_instructions).inst_opcode <> PHI /\
+    EVERY (\inst. inst.inst_opcode <> PHI) (DROP (SUC i) bb.bb_instructions)` by
+    (Cases_on `DROP i bb.bb_instructions` >- gvs[] >>
+     drule DROP_CONS_EL >> strip_tac >> gvs[]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  rename1 `demand_available fn bb i v` >>
+  Cases_on `MEM v (inst_uses (EL i bb.bb_instructions))`
+  >- (`MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+      qpat_x_assum `def_dominates_uses fn` mp_tac >>
+      simp[def_dominates_uses_def] >>
+      disch_then (drule_then drule) >> simp[] >> strip_tac >>
+      irule demand_available_before_use >> simp[] >>
+      first_x_assum irule >> gvs[venomInstTheory.inst_uses_def] >>
+      metis_tac[passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
+      MEM_FILTER, MEM_APPEND, venomInstTheory.inst_defs_def] >>
+  `EVERY (demand_available fn bb (SUC i))
+     (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
+    (first_x_assum irule >> simp[] >> decide_tac) >>
+  `demand_available fn bb (SUC i) v` by metis_tac[EVERY_MEM] >>
+  metis_tac[demand_available_step_back]
 QED
