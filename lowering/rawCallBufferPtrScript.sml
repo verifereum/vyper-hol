@@ -334,3 +334,31 @@ Proof
   >- (rpt strip_tac >> irule mcopy_mem_bytes_at_disjoint >> decide_tac) >>
   rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[] >> decide_tac
 QED
+
+Theorem ptr_val_ok_from_type_covers:
+  evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
+  ptr_covers G tn p s (type_memory_size tv) /\
+  (!w mem. lookup_var p s = SOME w /\
+    mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n w) mem) ==>
+  ptr_val_ok cx ty v (Var p) G tn s
+Proof
+  strip_tac >> irule ptr_val_ok_from_covers >>
+  goal_assum (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  simp[val_store_size_le] >> metis_tac[]
+QED
+
+Theorem raw_call_result_buffer_capacity:
+  expr_type (Call ty (RawCallTarget flags) es ann) =
+    (if tuple_result then TupleT [BaseT BoolT; BaseT (BytesT (Dynamic cap))]
+     else BaseT (BytesT (Dynamic cap))) /\
+  ptr_covers G tn p s
+    ((if tuple_result then 32 else 0) + 32 + ((cap+31) DIV 32)*32) ==>
+  ptr_buf_ok cenv (Call ty (RawCallTarget flags) es ann) (Var p) G s
+Proof
+  strip_tac >> irule ptr_buf_ok_from_covers >>
+  goal_assum (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  simp[exprLoweringTheory.lowered_value_type_def] >>
+  Cases_on `tuple_result` >>
+  fs[compileEnvTheory.type_memory_bytes_def]
+QED
