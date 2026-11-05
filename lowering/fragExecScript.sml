@@ -316,6 +316,18 @@ Proof
   rw[frag_exec_def] >> first_x_assum drule >> simp[frag_exec_def] >>
   metis_tac[]
 QED
+(* Expose the control facts implicit in every fragment entry. *)
+Theorem frag_exec_pointwise_control:
+  (!s0. P s0 /\ ~s0.vs_halted /\
+        s0.vs_current_bb = st.cs_current_bb /\
+        s0.vs_inst_idx = LENGTH st.cs_current_insts ==>
+        frag_exec ctx st st' (\s. s = s0) Q R) ==>
+  frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> first_x_assum drule_all >> simp[] >>
+  disch_then drule_all >> simp[]
+QED
+
 
 (* Sequential composition: the first fragment's end is the second's start. *)
 Theorem frag_exec_seq:
