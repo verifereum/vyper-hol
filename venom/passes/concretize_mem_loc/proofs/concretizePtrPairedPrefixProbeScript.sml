@@ -5,12 +5,12 @@ Ancestors
   concretizePtrValueTransport
   concretizePtrValueSelection concretizePtrAffineTransport
   concretizePtrOwnedAssignPrefix concretizePtrSharedFields
-  concretizePtrChronologicalHistory
+  concretizePtrChronologicalHistory concretizePtrRuntimeTotality
   concretizePtrDeletedGapHistory concretizePtrSourceOwnership
   concretizePtrLedgerAlignment concretizeStepStructure
   makeSsaHelper o1PassContract unitTransformDefs
   contextCodegenRel ptrDiscipline venomExecSemantics lowerDloadDefs
-  venomState list finite_map words
+  venomState list rich_list finite_map words passSharedDefs
 
 (* The raw total relation cannot represent arbitrary root parameters. *)
 Theorem ptr_args_empty_tags_params_empty:
@@ -242,4 +242,22 @@ Proof
     `(tokens,registry,births,PT,step_prov PT TG a.po_inst a.po_state,saved,entries) :: snapshots`] >>
   simp[ptr_gap_scan_def, ptr_gap_tag_scan_def] >>
   pop_assum mp_tac >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+(* A missing layout entry can delete an ALLOCA, not only a source NOP.
+   This tests the proposed initial cursor interface, not the task theorem. *)
+Theorem ptr_paired_root_deleted_alloca_obstruction:
+  i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
+  t.inst_opcode = STOP ==>
+  EVERY (\inst. inst.inst_opcode <> PHI) [i;t] /\
+  ptr_ledger_block_alignment FEMPTY [i;t] [t] [1] /\
+  (!indices. ptr_ledger_block_alignment FEMPTY [i;t] [t] indices ==>
+    ~(!k. k < EL 0 indices ==>
+      (EL k [i;t]).inst_opcode = NOP))
+Proof
+  strip_tac >>
+  `COUNT_LIST 2 = [0;1]` by EVAL_TAC >>
+  simp[concretizePtrPrefixLedgerTheory.ptr_ledger_block_alignment_def,
+    concretize_positions_missing, concretize_positions_unchanged,
+    mk_nop_inst_def]
 QED

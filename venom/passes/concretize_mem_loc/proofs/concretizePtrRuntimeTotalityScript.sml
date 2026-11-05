@@ -4,7 +4,7 @@ Ancestors
   ptrDiscipline contextCodegenRel venomExecSemantics venomState
   o1PassContract unitTransformDefs pointerConfinedDefs allocaRemapSSA venomWf venomExecProps finite_map pred_set list
 
-Theorem initial_phis_identity[local]:
+Theorem initial_phis_identity:
   !insts s'. s.vs_prev_bb = NONE /\ eval_phis s insts = OK s' ==> s' = s
 Proof
   Cases >> simp[eval_phis_def, eval_one_phi_def, AllCaseEqs()] >>
