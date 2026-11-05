@@ -225,16 +225,25 @@ Proof
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        check_def, lift_option_type_def, vyperStateTheory.return_def] >>
-  Cases_on `take_call_outcome a [] (SOME n) es` >>
+  Cases_on `frame_call_value cx (SOME n) es` >>
+  rename1 `frame_call_value _ _ _ = (fv, es0)` >>
+  drule frame_call_value_state >> disch_then SUBST_ALL_TAC >>
+  reverse (Cases_on `fv`) >> simp[]
+  >- (qpat_x_assum `frame_call_value _ _ _ = _` mp_tac >>
+      rw[frame_call_value_def, ignore_bind_def, bind_def, check_def,
+         assert_def, vyperStateTheory.return_def, raise_def] >>
+      Cases_on `n = 0` >> gvs[]) >>
+  rename1 `frame_call_value _ _ _ = (INL vo, _)` >>
+  Cases_on `take_call_outcome a [] vo es` >>
   qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
   drule_all take_call_outcome_typed >>
-  disch_then (qspecl_then [`a`, `[]`, `SOME n`] mp_tac) >>
+  disch_then (qspecl_then [`a`, `[]`, `vo`] mp_tac) >>
   Cases_on `tr` >> simp[]
   >- (rename1 `INL x` >> PairCases_on `x` >> simp[] >> rpt strip_tac >>
       Cases_on `x1.co_success` >>
       gvs[bind_def, ignore_bind_def, assert_def, raise_def,
           adopt_call_outcome_equation, vyperStateTheory.return_def]) >>
-  rw[] >> gvs[]
+  rw[] >> gvs[bind_def]
 QED
 
 Theorem address_typed_dest:

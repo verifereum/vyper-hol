@@ -23,6 +23,12 @@ Definition no_control_exc_def:
   no_control_exc exc ⇔ (∃str. exc = Error str) ∨ (∃str. exc = AssertException str)
 End
 
+Theorem no_control_exc_Error:
+  no_control_exc (Error e)
+Proof
+  simp[no_control_exc_def]
+QED
+
 (* Useful rewrite set for pushing case expressions through application *)
 val case_rator_ss = [option_CASE_rator, sum_CASE_rator, prod_CASE_rator, COND_RATOR]
 
@@ -246,13 +252,14 @@ Theorem write_storage_slot_no_control:
 Proof
   rpt gen_tac >> strip_tac >> pop_assum mp_tac
   >> PURE_REWRITE_TAC[write_storage_slot_def]
-  >> simp[bind_def, return_def, prod_CASE_rator, sum_CASE_rator, LET_THM,
+  >> simp[bind_def, ignore_bind_def, return_def, prod_CASE_rator, sum_CASE_rator, LET_THM,
     get_storage_backend_def, set_storage_backend_def,
     get_accounts_def, get_transient_storage_def,
     update_accounts_def, update_transient_def]
   >> strip_tac
   >> Cases_on `is_t`
-  >> gvs[AllCaseEqs(), get_storage_backend_def, set_storage_backend_def,
+  >> gvs[AllCaseEqs(), no_control_exc_Error, get_storage_backend_def,
+         set_storage_backend_def,
          get_accounts_def, get_transient_storage_def,
          update_accounts_def, update_transient_def,
          bind_def, return_def, prod_CASE_rator, sum_CASE_rator]
@@ -632,6 +639,10 @@ Proof
   >> ibind_step_tac
   >- (drule check_no_control >> simp[])
   >> bind_step_tac
+  >- gvs[frame_call_value_def, COND_RATOR, check_def, assert_def, bind_def,
+         ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+         no_control_exc_def]
+  >> bind_step_tac
   >- (drule eval_ext_call_effects_no_control >> simp[])
   >> gvs[option_CASE_rator, AllCaseEqs()]
   >- (bind_step_tac >> drule lift_sum_runtime_no_control >> simp[])
@@ -644,7 +655,7 @@ Theorem eval_send_no_control:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        return_def, raise_def, get_accounts_def, get_transient_storage_def,
        lift_option_def, lift_option_type_def, check_def, update_accounts_def,
        update_transient_def, append_logs_def,
@@ -685,7 +696,11 @@ Theorem int_call_tail_no_control[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             (is_view ∨ cx.txn.is_static);
+           if is_view then return () else check_not_static cx
+         od
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
@@ -708,7 +723,7 @@ Proof
     gvs[no_control_exc_def, return_def, raise_def,
         get_scopes_def, push_function_def] >> NO_TAC,
     Cases_on `nr` >> gvs[return_def, raise_def, option_CASE_rator,
-      AllCaseEqs(), no_control_exc_def]
+      ignore_bind_def, bind_def, COND_RATOR, AllCaseEqs(), no_control_exc_def]
     >> metis_tac[acquire_nonreentrant_lock_no_control, no_control_exc_def],
     drule finally_no_control >> disch_then irule >> rpt strip_tac
     >> metis_tac[try_handle_function_no_control, int_call_cleanup_no_INR]])
@@ -780,7 +795,8 @@ Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def,
+       bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,
@@ -969,7 +985,7 @@ QED
 Resume canonical_eval_no_control_with_results[RawLog]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+    AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_Error] >>
   imp_res_tac type_check_no_control >>
   imp_res_tac lift_option_type_no_control >>
   imp_res_tac push_log_no_control >> res_tac
@@ -985,7 +1001,8 @@ QED
 Resume canonical_eval_no_control_with_results[SelfDestruct]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-    get_accounts_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+    get_accounts_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[no_control_exc_Error] >>
   imp_res_tac type_check_no_control >>
   imp_res_tac lift_option_type_no_control >>
   imp_res_tac transfer_value_no_control >> res_tac

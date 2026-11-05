@@ -15,6 +15,7 @@ val send_monad_simps = [vyperStateTheory.bind_def,
   vyperStateTheory.lift_option_type_def, vyperStateTheory.read_result_def,
   dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,
   byteTheory.word_of_bytes_be_def,
+  EVAL ``empty_evaluation_context.txn.is_static``,
   (byteTheory.word_of_bytes_word_to_bytes |> INST_TYPE [alpha |-> ``:160``]
     |> SRULE [dividesTheory.compute_divides])];
 
@@ -63,7 +64,7 @@ Proof
   simp (send_monad_simps @ [send_call_def, evaluate_def,
        evaluate_literal_def, dest_AddressV_def,
        dest_NumV_def, vyperStateTheory.read_result_def, send_address_literal,
-       eval_send_def, ext_call_kwarg_def, forwarded_gas_def,
+       eval_send_def, frame_call_value_def, check_def, COND_RATOR, ext_call_kwarg_def, forwarded_gas_def,
        send_concrete_backend_def])
 QED
 
@@ -89,7 +90,7 @@ Proof
   simp (send_monad_simps @ [send_call_def, evaluate_def,
        evaluate_literal_def, dest_AddressV_def, dest_NumV_def,
        vyperStateTheory.read_result_def, send_zero_address_literal,
-       eval_send_def, ext_call_kwarg_def, forwarded_gas_def,
+       eval_send_def, frame_call_value_def, check_def, COND_RATOR, ext_call_kwarg_def, forwarded_gas_def,
        send_concrete_backend_def])
 QED
 
@@ -102,7 +103,7 @@ Theorem send_zero_initial_state_not_inert:
        st with requests := [call_outcome_request 0w [] (SOME 0) st]) /\
     eval_expr empty_evaluation_context (send_call 0w 0) st <> (INL (Value NoneV),st)
 Proof
-  simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, initial_state_def,
+  simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, initial_state_def,
        take_call_outcome_def, call_outcome_request_def, take_outcome_def,
        record_request_def, computed_precompile_addresses, failed_outcome_def,
        empty_state_def, UNCURRY])
@@ -116,7 +117,7 @@ Theorem send_bigstep_failure_whole_state:
        requests := send_state.requests ++
          [call_outcome_request 9w [] (SOME 7) send_state]|>)
 Proof
-  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, take_call_outcome_def,
+  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY])
@@ -140,7 +141,7 @@ Theorem send_bigstep_success_whole_state:
         requests := send_state.requests ++
           [call_outcome_request 9w [] (SOME 7) send_state]|>)
 Proof
-  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, take_call_outcome_def,
+  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY,

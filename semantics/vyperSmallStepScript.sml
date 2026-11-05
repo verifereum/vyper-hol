@@ -692,6 +692,7 @@ Definition apply_vals_def:
       event <- lift_option
         (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
         "Log encode event";
+      check_not_static cx;
       push_log event
     od st) k ∧
   apply_vals cx vs st (CustomErrorK error_name arg_types k) =
@@ -717,7 +718,7 @@ Definition apply_vals_def:
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
       is_view <<- is_view_mut mut;
       (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
-      lock_if_nr cx nr is_view;
+      lock_if_nr (cx with stk updated_by TL) nr is_view;
       cxf <- push_function src_fn env (cx with stk updated_by TL);
       return (prev, cxf, body, rtv, is_view) od st
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
@@ -757,6 +758,7 @@ Definition apply_vals_def:
       topic_vals <<- (case topics of
          TupleV tvs => tvs | DynArrayV tvs => tvs | _ => []);
       type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+      check_not_static cx;
       push_log (encode_raw_event_values cx.txn.target topic_vals data);
       return $ Value NoneV
     od st
@@ -773,6 +775,7 @@ Definition apply_vals_def:
     (case do
       type_check (LENGTH vs = 1) "selfdestruct args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+      check_not_static cx;
       accounts <- get_accounts;
       self_acct <<- lookup_account cx.txn.target accounts;
       balance <<- self_acct.balance;

@@ -130,6 +130,7 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
+    ~tx.is_static /\
     vs.vs_prev_hashes = tx.block_hashes
 End
 
@@ -262,6 +263,8 @@ Theorem external_return_prim_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
     return_bytes_prim_value >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
@@ -329,6 +332,8 @@ Theorem external_return_none_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -363,6 +368,8 @@ Theorem external_fallthrough_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`] mp_tac
     compile_guarded_body_stop_unlock_frag >>
@@ -519,6 +526,8 @@ Theorem external_return_static_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -770,13 +779,15 @@ Theorem external_return_abi_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   drule_all return_abi_value_package >>
   disch_then (qspec_then
     `needs_external_call_wrap ret /\
      is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
   drule compile_external_return_abi_unlock_frag >>
   disch_then irule >>
-  asm_rewrite_tac[] >>
+  asm_rewrite_tac[] >> conj_tac >- (simp[] >> metis_tac[]) >>
   qexistsl_tac [`av`, `type_env tops`, `tv'`,
     `if needs_external_call_wrap ret /\
         is_dynamic (vyper_to_abi_type (type_env tops) ret)

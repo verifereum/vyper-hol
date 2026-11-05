@@ -216,7 +216,10 @@ Proof
 QED
 
 Resume compile_assign_tuple_targets_stmt_frag[error_source]:
-  irule eval_assign_tuple_targets_error >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_assum `~cx.txn.is_static`
+    (mp_tac o MATCH_MP eval_assign_tuple_targets_error) >>
+  disch_then irule >>
   reverse conj_tac >- (qexists_tac `lctx` >> simp[]) >>
   qexists_tac `gs` >> simp[] >>
   rpt gen_tac >> strip_tac >>

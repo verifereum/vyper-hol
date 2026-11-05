@@ -2309,8 +2309,7 @@ Proof
   >> fs[lift_result_def]
   >> Cases_on `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
   >> fs[lift_result_def]
-  >> Cases_on `exec_block fuel ctx bb' s`
-  >> fs[lift_result_def]
+  >> Cases_on `exec_block fuel ctx bb' s` >> fs[lift_result_def]
   >> metis_tac[execution_equiv_sym, execution_equiv_trans]
 QED
 
@@ -2685,6 +2684,7 @@ Theorem step_inst_base_non_volatile_no_abort[local]:
     inst.inst_opcode <> ASSERT /\
     inst.inst_opcode <> ASSERT_UNREACHABLE /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Abort a s'
@@ -2738,14 +2738,18 @@ Theorem step_inst_base_non_term_no_halt[local]:
   !inst s s'. step_inst_base inst s = Halt s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_non_term_no_intret[local]:
   !inst s vs s'. step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_non_term_only_ok_error_abort[local]:
@@ -2774,7 +2778,8 @@ QED
 
 
 (* Non-terminator, non-INVOKE, non-ASSERT, non-ASSERT_UNREACHABLE,
-   non-volatile-memory, non-alloca, non-ext_call: step_inst cannot Abort. *)
+   non-volatile-memory, non-memory-reading (so not LOG, which aborts in a
+   static frame), non-alloca, non-ext_call: step_inst cannot Abort. *)
 Theorem step_inst_non_volatile_no_abort[local]:
   !fuel ctx inst s a s'.
     ~is_terminator inst.inst_opcode /\
@@ -2782,6 +2787,7 @@ Theorem step_inst_non_volatile_no_abort[local]:
     inst.inst_opcode <> ASSERT /\
     inst.inst_opcode <> ASSERT_UNREACHABLE /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     step_inst fuel ctx inst s <> Abort a s'

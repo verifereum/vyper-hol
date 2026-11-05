@@ -342,10 +342,7 @@ Triviality step_inst_base_abort_type:
     (opcode_fail_class inst.inst_opcode = CanExHalt ==> a = ExHalt_abort)
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[opcode_fail_class_def, is_terminator_def] >>
-  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
-  gvs[exec_create_abort_iff]
+  drule_all step_inst_base_abort_fail_class >> strip_tac >> gvs[]
 QED
 
 (* Two abort_compatible non-term/non-INVOKE instructions that both abort
@@ -383,22 +380,7 @@ Triviality step_inst_base_abort_returndata:
     inst.inst_opcode <> INVOKE ==>
     s'.vs_returndata = []
 Proof
-  rpt strip_tac >>
-  Cases_on `opcode_fail_class inst.inst_opcode` >> gvs[]
-  >- metis_tac[step_inst_nofail_not_halt_abort]
-  >- ((* CanRevert — only ASSERT has this class among non-term/non-ext *)
-      Cases_on `inst.inst_opcode` >>
-      gvs[opcode_fail_class_def, is_terminator_def, is_ext_call_op_def] >>
-      gvs[step_inst_base_def, AllCaseEqs(),
-          revert_state_def, set_returndata_def])
-  >- ((* CanExHalt — INVALID, ASSERT_UNREACHABLE, RETURNDATACOPY *)
-      Cases_on `inst.inst_opcode` >>
-      gvs[opcode_fail_class_def, is_terminator_def, is_ext_call_op_def] >>
-      gvs[step_inst_base_def, AllCaseEqs(),
-          halt_state_def, set_returndata_def])
-  >> ((* AnyFail — only INVOKE, excluded *)
-      Cases_on `inst.inst_opcode` >>
-      gvs[opcode_fail_class_def, is_terminator_def, is_ext_call_op_def])
+  metis_tac[passSharedFrameTheory.step_inst_base_abort_returndata]
 QED
 
 (* Non-terminator non-ext-call aborters always set returndata = [] *)
@@ -445,9 +427,11 @@ local
     in aconv (rhs (concl nt)) T andalso aconv (rhs (concl ni)) T
        andalso aconv (rhs (concl nec)) T andalso aconv (rhs (concl na)) T end
   ) (TypeBase.constructors_of ``:opcode``);
-  val abort_ops = [``ASSERT``, ``ASSERT_UNREACHABLE``, ``RETURNDATACOPY``];
+  (* NoFail excludes ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY and the
+     static-frame aborters SSTORE, TSTORE, LOG *)
   val non_abort_ops = List.filter (fn op_tm =>
-    not (List.exists (fn t => aconv t op_tm) abort_ops)) nt_ni_nec_na_ops;
+    aconv (rhs (concl (EVAL ``opcode_fail_class ^op_tm = NoFail``))) T)
+    nt_ni_nec_na_ops;
   val nt_ni_clauses = map (fn op_tm =>
     REWRITE_CONV [step_inst_base_def, instruction_accfupds,
                   TypeBase.case_def_of ``:opcode``]
@@ -526,6 +510,44 @@ Proof
   metis_tac[bi_ind_ok_preserves_eval_operand]
 QED
 
+Triviality eval_operands_cong:
+  !ops s s'.
+    (!op. MEM op ops ==> eval_operand op s' = eval_operand op s) ==>
+    eval_operands ops s' = eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand h s' = eval_operand h s` by metis_tac[] >>
+  `eval_operands ops s' = eval_operands ops s` by
+    (first_x_assum irule >> metis_tac[]) >>
+  simp[]
+QED
+
+(* A static-frame SSTORE/TSTORE/LOG abort transfers to any state with the
+   same operand values and cc_static. *)
+Triviality static_write_abort_transfer:
+  !inst s s' a v.
+    step_inst_base inst s = Abort a v /\
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+     inst.inst_opcode = LOG) /\
+    (!op. MEM op inst.inst_operands ==>
+          eval_operand op s' = eval_operand op s) /\
+    s'.vs_call_ctx.cc_static = s.vs_call_ctx.cc_static ==>
+    a = ExHalt_abort /\ v.vs_returndata = [] /\
+    step_inst_base inst s' =
+      Abort ExHalt_abort (halt_state (set_returndata [] s'))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`inst`, `s`, `a`, `v`] mp_tac
+    step_inst_base_static_write_abort >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  `eval_operands inst.inst_operands s' = eval_operands inst.inst_operands s`
+    by (irule eval_operands_cong >> first_assum ACCEPT_TAC) >>
+  (rpt conj_tac
+   >- simp[]
+   >- simp[halt_state_def, set_returndata_def] >>
+   irule step_inst_base_static_write_guard >> gvs[])
+QED
+
 (* Abort transfers between states with same operand values and returndata.
    If a non-term/non-alloca/non-ext/non-INVOKE instruction aborts from s,
    it also aborts (with the same abort type) from any s' that agrees on
@@ -540,10 +562,16 @@ Triviality step_inst_base_abort_transfer:
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s' = eval_operand op s) /\
     (inst.inst_opcode = RETURNDATACOPY ==>
-     s'.vs_returndata = s.vs_returndata) ==>
+     s'.vs_returndata = s.vs_returndata) /\
+    s'.vs_call_ctx.cc_static = s.vs_call_ctx.cc_static ==>
     ?v'. step_inst_base inst s' = Abort a v'
 Proof
   rpt strip_tac >>
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+            inst.inst_opcode = LOG`
+  >- (drule static_write_abort_transfer >>
+      disch_then (qspec_then `s'` mp_tac) >>
+      (impl_tac >- gvs[]) >> strip_tac >> gvs[]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       step_inst_base_no_abort_combined] >>
@@ -573,6 +601,16 @@ Proof
   qpat_x_assum `step_inst _ _ y _ = Abort _ _` mp_tac >>
   simp[step_inst_non_invoke] >> strip_tac >>
   simp[step_inst_non_invoke] >>
+  `!op. MEM op y.inst_operands ==> eval_operand op sx = eval_operand op s` by (
+    qpat_x_assum `MAP _ _ = MAP _ _` mp_tac >>
+    simp[listTheory.MAP_EQ_f]) >>
+  `sx.vs_call_ctx = s.vs_call_ctx` by metis_tac[step_preserves_call_ctx] >>
+  Cases_on `y.inst_opcode = SSTORE \/ y.inst_opcode = TSTORE \/
+            y.inst_opcode = LOG`
+  >- (drule static_write_abort_transfer >>
+      disch_then (qspec_then `sx` mp_tac) >>
+      (impl_tac >- gvs[]) >> strip_tac >>
+      gvs[halt_state_def, set_returndata_def]) >>
   (* Only 3 opcodes can abort *)
   Cases_on `y.inst_opcode` >>
   gvs[is_terminator_def, is_ext_call_op_def, is_alloca_op_def,
@@ -684,6 +722,8 @@ Proof
     metis_tac[step_inst_preserves_prev_bb, step_inst_non_invoke] >>
   `sx.vs_params = s.vs_params` by
     metis_tac[step_preserves_params, step_inst_non_invoke] >>
+  `sx.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx, step_inst_non_invoke] >>
   qspecl_then [`y`,`s`,`sy`,`sx`] mp_tac step_inst_base_ok_transfer >>
   simp[] >> disch_then irule >> conj_tac
   >- (rpt strip_tac >>
@@ -819,6 +859,9 @@ Proof
       `s'.vs_params = s.vs_params` by
         (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
            step_preserves_params >> simp[]) >>
+      `s'.vs_call_ctx = s.vs_call_ctx` by
+        (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
+           step_preserves_call_ctx >> simp[]) >>
       (* Returndata: conditional on i being RETURNDATACOPY *)
       `i.inst_opcode = RETURNDATACOPY ==>
        s'.vs_returndata = s.vs_returndata` by
@@ -845,7 +888,12 @@ Resume bi_ind_ok_no_error_iff[reverse]:
       simp[] >> strip_tac >> gvs[])
   (* Abort case: for each aborting opcode, unfold step_inst_base on both
      states; operand equality ensures same branch taken *)
-  >> (Cases_on `i.inst_opcode` >>
+  >> (Cases_on `i.inst_opcode = SSTORE \/ i.inst_opcode = TSTORE \/
+                i.inst_opcode = LOG`
+      >- (drule static_write_abort_transfer >>
+          disch_then (qspec_then `s` mp_tac) >>
+          (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >> gvs[]) >>
+      Cases_on `i.inst_opcode` >>
       gvs[is_terminator_def, is_ext_call_op_def, is_alloca_op_def,
           step_inst_base_no_abort_combined] >>
       qpat_x_assum `step_inst_base _ s' = Abort _ _` mp_tac >>

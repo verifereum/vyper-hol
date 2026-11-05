@@ -3803,6 +3803,61 @@ QED
      instruction whose write_effects include the space (CALL, INVOKE,
      CREATE, ...).  An elided `sstore k x` with x = sload k is the identity
      (sstore_sload_id; likewise tstore_tload_id). *)
+(* The call context (in particular cc_static) is constant along a run. *)
+Triviality mce_step_inst_ok_call_ctx[local]:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  reverse (Cases_on `is_terminator inst.inst_opcode`)
+  >- (drule_all step_preserves_call_ctx >> simp[]) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  gs[step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs(), jump_to_def] >>
+  rpt strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Triviality mce_exec_block_ok_call_ctx[local]:
+  !fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  Cases_on `step_inst fuel ctx x s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_mid` >>
+  imp_res_tac mce_step_inst_ok_call_ctx >>
+  Cases_on `is_terminator inst.inst_opcode` >> fs[] >>
+  strip_tac
+  >- (fs[AllCaseEqs()] >> gvs[]) >>
+  first_x_assum (qspec_then
+    `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- (fs[get_instruction_def, AllCaseEqs()] >> simp[])) >>
+  disch_then (qspecl_then [`bb`,
+    `s_mid with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s'`] mp_tac) >>
+  simp[]
+QED
+
+Triviality mce_run_block_ok_call_ctx[local]:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >> drule venomExecProofsTheory.run_block_OK_decompose >>
+  strip_tac >> imp_res_tac mce_exec_block_ok_call_ctx >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx``) >> simp[]
+QED
+
 Triviality stage2_correct[local]:
   !fuel ctx fn s.
     let cfg = cfg_analyze fn in
@@ -3820,6 +3875,7 @@ Triviality stage2_correct[local]:
     fn_inst_wf fn /\
     ssa_form fn /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     bp_ptr_sound bp s /\
     alloca_inv s /\
     allocas_in_word s /\
@@ -4298,17 +4354,21 @@ Proof
 QED
 
 (* For MSTORE/SSTORE/TSTORE, step_inst_base = exec_write2 with the
-   appropriate write function. *)
+   appropriate write function (SSTORE/TSTORE abort first in a static frame). *)
 Triviality store_step_is_exec_write2[local]:
   (inst.inst_opcode = MSTORE ==>
    step_inst_base inst s =
      exec_write2 (\addr val s. mstore (w2n addr) val s) inst s) /\
   (inst.inst_opcode = SSTORE ==>
    step_inst_base inst s =
-     exec_write2 (\key val s. sstore key val s) inst s) /\
+     if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+     then Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key val s. sstore key val s) inst s) /\
   (inst.inst_opcode = TSTORE ==>
    step_inst_base inst s =
-     exec_write2 (\key val s. tstore key val s) inst s)
+     if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+     then Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key val s. tstore key val s) inst s)
 Proof
   rpt conj_tac
   >- (strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
@@ -4356,7 +4416,7 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_store_opcode_def] >>
   imp_res_tac load_store_compatible_elim >> gvs[] >>
   gvs[store_opcode_addr_space_def, read_at_offset_def,
-      store_step_is_exec_write2] >>
+      store_step_is_exec_write2, bool_case_eq] >>
   drule_all exec_write2_ok_vals >> strip_tac >> gvs[eval_operand_def] >>
   gvs[bp_get_write_location_def, addr_space_word_scale_def,
       resolve_memloc_offset_def] >>
@@ -5265,7 +5325,7 @@ QED
 (* Store opcodes only produce OK or Error via exec_write2 *)
 Triviality store_step_ok_or_error[local]:
   !fuel ctx inst s.
-    is_store_opcode inst.inst_opcode ==>
+    is_store_opcode inst.inst_opcode /\ ~s.vs_call_ctx.cc_static ==>
     (?s'. step_inst fuel ctx inst s = OK s') \/
     (?e. step_inst fuel ctx inst s = Error e)
 Proof
@@ -5278,7 +5338,7 @@ QED
 (* inst_at preserves non-OK non-Error step_inst results *)
 Triviality lse_step_passthrough[local]:
   !aliases bp uc insts i s r.
-    i < LENGTH insts /\
+    i < LENGTH insts /\ ~s.vs_call_ctx.cc_static /\
     step_inst fuel ctx (EL i insts) s = r /\
     (!s'. r <> OK s') /\ (!e. r <> Error e) ==>
     step_inst fuel ctx (inst_at aliases bp uc insts i) s = r
@@ -5361,6 +5421,7 @@ QED
    dynamic; absolute tracked locations and SSA non-clobber are static. *)
 Triviality lse_pointwise_hyps[local]:
   !aliases bp uc bb fuel ctx s.
+    ~s.vs_call_ctx.cc_static /\
     0 < LENGTH bb.bb_instructions /\
     (!inst sp. MEM inst bb.bb_instructions /\
        (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
@@ -5389,6 +5450,7 @@ Triviality lse_pointwise_hyps[local]:
        lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i = OK s_i' ==>
+       ~s_i'.vs_call_ctx.cc_static /\
        lf_sound (lf_at aliases bp uc bb.bb_instructions (SUC s_i.vs_inst_idx))
          (s_i' with vs_inst_idx := SUC s_i.vs_inst_idx)) /\
     (!s_i.
@@ -5407,6 +5469,7 @@ Proof
   >- (rpt strip_tac >> fs[lse_inst_at_eq] >>
       irule lse_step_equiv >> simp[] >> metis_tac[])
   >- (rpt gen_tac >> strip_tac >>
+      conj_tac >- (imp_res_tac mce_step_inst_ok_call_ctx >> gs[]) >>
       Cases_on `is_terminator (EL s_i.vs_inst_idx bb.bb_instructions).inst_opcode`
       >- suspend "terminator_ok"
       >> (
@@ -5420,7 +5483,7 @@ Proof
         simp[] >> metis_tac[]
       ))
   >> (rpt strip_tac >> fs[lse_inst_at_eq] >>
-      irule lse_step_passthrough >> simp[])
+      irule lse_step_passthrough >> gs[])
 QED
 
 Resume lse_pointwise_hyps[terminator_ok]:
@@ -5556,6 +5619,7 @@ Theorem copy_elision_function_correct_proof:
     fn_inst_wf fn /\
     wf_ssa fn /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound dfg s /\
     bp_ptr_sound bp s /\

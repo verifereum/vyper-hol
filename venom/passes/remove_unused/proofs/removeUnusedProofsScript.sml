@@ -452,7 +452,11 @@ Theorem step_inst_base_no_abort[local]:
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
-    inst.inst_opcode = RETURNDATACOPY
+    inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
+      inst.inst_opcode = CALL))
 Proof
   rpt strip_tac >>
   drule opcodeClassTheory.step_inst_base_abort_opcodes >>

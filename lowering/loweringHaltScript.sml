@@ -114,15 +114,18 @@ Proof
 QED
 
 (* TSTORE writes its value at its key in the running contract's transient
-   storage. *)
+   storage, unless the frame is static. *)
 Theorem step_TSTORE:
   !op1 op2 v1 v2 id s.
     eval_operand op1 s = SOME v1 /\ eval_operand op2 s = SOME v2 ==>
-    step_inst_base (mk_inst id TSTORE [op1; op2] []) s = OK (tstore v1 v2 s)
+    step_inst_base (mk_inst id TSTORE [op1; op2] []) s =
+      if s.vs_call_ctx.cc_static then
+        Abort ExHalt_abort (halt_state (set_returndata [] s))
+      else OK (tstore v1 v2 s)
 Proof
   rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def]
+  simp[mk_inst_def, exec_write2_def, eval_operands_def]
 QED
 
 (* ===== Return bytes ===== *)
@@ -1254,6 +1257,7 @@ Theorem optional_unlock_frag:
     (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
       st = ((), st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s. P s ==>
          Q ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
               vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
@@ -1267,7 +1271,7 @@ Proof
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   pure_rewrite_tac [instruction_accessors, opcode_case_def] >>
-  simp[exec_write2_def, eval_operand_def]
+  res_tac >> gvs[exec_write2_def, eval_operand_def, eval_operands_def]
 QED
 
 (* A return without a value, or a fallthrough, in an external function:
@@ -1278,6 +1282,7 @@ Theorem unlock_stop_frag:
       (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
       (emit_inst STOP [] []) st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s ss. P s /\ ss.vs_returndata = [] /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
@@ -1358,7 +1363,9 @@ Theorem compile_external_return_word_unlock_frag:
   !ctx op ei msz nr nkey ut iv st x st' w P Q R.
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (!s. P s ==> eval_operand op s = SOME w) /\
     (!s ss. P s /\ ss.vs_returndata = word_to_bytes w T /\
             ss.vs_accounts = s.vs_accounts /\
@@ -1451,6 +1458,7 @@ Theorem compile_external_return_unlock_seq:
   !ctx rv p rr ei msz nr nkey ut iv st x st' P Q R.
     compile_external_return rv p rr ei msz nr nkey ut iv st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!st1.
        compile_external_return rv p rr ei msz F nkey ut iv st1 = (x, st') /\
        st1.cs_next_var = st.cs_next_var /\
@@ -1492,7 +1500,9 @@ Theorem compile_external_return_copy_unlock_frag:
   !ctx op m msz nr nkey ut iv st x st' P Q R.
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     m < dimword(:256) /\
     (!s. P s ==>
          ?p. eval_operand op s = SOME p /\
@@ -1544,7 +1554,9 @@ Theorem compile_external_return_abi_unlock_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
     value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
     LENGTH (enc (vyper_to_abi_type env ty) av) <= msz /\
@@ -1607,6 +1619,7 @@ Theorem compile_return_none_external_unlock_frag:
     cenv.ce_return_pc = NONE /\
     cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s ss. P s /\ ss.vs_returndata = [] /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
@@ -1633,6 +1646,7 @@ Theorem compile_guarded_body_stop_unlock_frag:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb P Q R.
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (if nr then compile_nonreentrant_lock nkey ut iv else comp_return ()) st =
       ((), sa) /\
     compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\

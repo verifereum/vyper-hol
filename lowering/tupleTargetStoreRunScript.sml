@@ -524,6 +524,7 @@ Proof
   `value_has_type tv v /\ val_wf tv v` by
     (qpat_x_assum `ih :- _` kall_tac >>
      fs[value_has_type_def, val_wf_def]) >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all tuple_target_list_cons_success >> strip_tac >>
   drule_all tuple_target_aligned_compiler >> strip_tac >>
   drule tuple_compiler_target_base >>

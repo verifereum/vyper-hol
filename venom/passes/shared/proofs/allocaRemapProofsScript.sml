@@ -3188,6 +3188,7 @@ QED
 
 (* --- LOG: read from memory, append to logs, no memory write --- *)
 Resume remap_preserved_mem_ops[log]:
+  `~s1.vs_call_ctx.cc_static` by metis_tac[log_ok_not_static] >>
   fs[step_inst_base_log, AllCaseEqs()] >>
   Cases_on `REVERSE rest` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
@@ -4298,6 +4299,9 @@ Theorem step_inst_base_error_transfer[local]:
 Proof
   rpt strip_tac >>
   `s1.vs_params = s2.vs_params` by fs[alloca_remap_rel_def, LET_DEF] >>
+  (* the static-frame guard reads the same frame flag on both sides *)
+  `s1.vs_call_ctx.cc_static <=> s2.vs_call_ctx.cc_static` by
+    fs[alloca_remap_rel_def, LET_DEF] >>
   `!op. eval_operand op s1 = NONE ==> eval_operand op s2 = NONE` by
     metis_tac[eval_operand_none_transfer] >>
   `!ops. eval_operands ops s1 = NONE ==> eval_operands ops s2 = NONE` by
@@ -4466,6 +4470,28 @@ Resume step_inst_base_error_transfer[LOG]:
       Cases_on `eval_operand (EL 1 (REVERSE t)) s2` >> simp[]) >>
   gvs[]
 QED
+Resume step_inst_base_error_transfer[SSTORE]:
+  (* drop the static-frame guard on both sides first; undefined operands
+     transfer *)
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s1))`
+    by (strip_tac >> gvs[]) >>
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s2))`
+    by (rpt strip_tac >> fs[] >> res_tac >> fs[]) >>
+  qpat_x_assum `_ = Error err` mp_tac >> ASM_REWRITE_TAC[] >> strip_tac >>
+  rpt (qpat_x_assum `~(_ /\ _)` kall_tac) >>
+  error_inline_tac
+QED
+Resume step_inst_base_error_transfer[TSTORE]:
+  (* drop the static-frame guard on both sides first; undefined operands
+     transfer *)
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s1))`
+    by (strip_tac >> gvs[]) >>
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s2))`
+    by (rpt strip_tac >> fs[] >> res_tac >> fs[]) >>
+  qpat_x_assum `_ = Error err` mp_tac >> ASM_REWRITE_TAC[] >> strip_tac >>
+  rpt (qpat_x_assum `~(_ /\ _)` kall_tac) >>
+  error_inline_tac
+QED
 Resume step_inst_base_error_transfer[MCOPY]:
   error_inline_tac
 QED
@@ -4518,14 +4544,36 @@ Resume step_inst_base_error_transfer[SHA3]:
 QED
 Finalise step_inst_base_error_transfer
 
+(* Operand definedness transfers across alloca_remap_rel. *)
+Theorem eval_operands_defined_transfer[local]:
+  !ops fn roots remap s1 s2.
+    alloca_remap_rel fn roots remap s1 s2 /\
+    IS_SOME (eval_operands ops s1) ==>
+    IS_SOME (eval_operands ops s2)
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `eval_operand h s1` >> gvs[] >>
+  Cases_on `eval_operands ops s1` >> gvs[] >>
+  `eval_operand h s2 <> NONE` by
+    (drule operand_defined_transfer >>
+     disch_then (qspec_then `h` mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`fn`, `roots`, `remap`, `s1`, `s2`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `eval_operand h s2` >> gvs[] >>
+  Cases_on `eval_operands ops s2` >> gvs[]
+QED
+
 (* Abort transfer: for non-terminator, non-ext-call opcodes,
-   only ASSERT, ASSERT_UNREACHABLE, and RETURNDATACOPY produce Abort.
+   only ASSERT, ASSERT_UNREACHABLE, and RETURNDATACOPY produce Abort,
+   besides SSTORE, TSTORE and LOG in a static frame.
    - ASSERT/ASSERT_UNREACHABLE: single condition operand is non-PV
      (pointer_confined: no mem ops, not pointer-preserving)
    - RETURNDATACOPY: OOB check uses offset/size operands which are non-PV
      (not iao_ofst; uniqueness prevents PV var appearing as both dest and
      offset/size), and LENGTH vs_returndata agrees by alloca_remap_rel_scalars
-   All three produce halt_state/revert_state (set_returndata [] s). *)
+   - SSTORE/TSTORE/LOG: the static guard reads cc_static (agrees by
+     alloca_remap_rel_scalars) and operand definedness (agrees)
+   All produce halt_state/revert_state (set_returndata [] s). *)
 Theorem step_inst_base_abort_transfer[local]:
   !fn roots remap inst s1 s2 a v1 bb.
     alloca_remap_rel fn roots remap s1 s2 /\
@@ -4540,6 +4588,20 @@ Theorem step_inst_base_abort_transfer[local]:
          alloca_remap_rel fn roots remap v1 v2
 Proof
   rpt strip_tac >>
+  (* Static-frame state writes *)
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+            inst.inst_opcode = LOG`
+  >- (qspecl_then [`inst`, `s1`, `a`, `v1`] mp_tac
+        step_inst_base_static_write_abort >>
+      impl_tac >- gvs[] >> strip_tac >>
+      drule alloca_remap_rel_scalars >> strip_tac >>
+      `IS_SOME (eval_operands inst.inst_operands s2)` by
+        metis_tac[eval_operands_defined_transfer] >>
+      `step_inst_base inst s2 =
+       Abort ExHalt_abort (halt_state (set_returndata [] s2))` by
+        (irule step_inst_base_static_write_guard >> gvs[]) >>
+      gvs[] >> irule alloca_remap_rel_halt_returndata >>
+      first_assum ACCEPT_TAC) >>
   (* Step 1: Identify the 3 opcodes that can produce Abort *)
   `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE \/
    inst.inst_opcode = RETURNDATACOPY` by
@@ -4823,6 +4885,16 @@ val is_terminator_cases = prove(
   Cases >> simp[is_terminator_def]);
 
 (* Helper: operand agreement for non-RETURN/REVERT terminators *)
+Triviality eval_operands_MEM_agree:
+  !ops s1 s2.
+    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct >> rw[eval_operands_def] >>
+  `eval_operands ops s1 = eval_operands ops s2` by metis_tac[] >>
+  simp[]
+QED
+
 fun term_op_agree (g as (asl, _)) = (
   qspecl_then [`fn`,`roots`,`remap`,`inst`,`s1`,`s2`]
     mp_tac terminator_control_flow_remap >>
@@ -5021,10 +5093,15 @@ Proof
                       irule alloca_remap_rel_halted >> simp[])
   (* SELFDESTRUCT *)
   >- (term_op_agree >>
+      (* the static-frame guard reads the same operands on both sides *)
+      `eval_operands inst.inst_operands s1 =
+       eval_operands inst.inst_operands s2` by
+        (irule eval_operands_MEM_agree >> simp[]) >>
       BasicProvers.every_case_tac >>
       gvs[lift_result_def] >>
       irule alloca_remap_rel_halt_returndata >>
-      irule alloca_remap_rel_accounts_update >> simp[])
+      (* the static-frame abort leaves the accounts alone *)
+      TRY (irule alloca_remap_rel_accounts_update) >> simp[])
   (* INVALID *)
   >> (irule alloca_remap_rel_halt_returndata >> simp[])
 QED

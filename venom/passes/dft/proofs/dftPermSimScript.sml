@@ -429,6 +429,9 @@ Proof
       step_preserves_params >> simp[]) >>
   `a.inst_opcode = RETURNDATACOPY ==> s.vs_returndata = sb.vs_returndata` by (
     strip_tac >> gvs[read_effects_def]) >>
+  `s.vs_call_ctx = sb.vs_call_ctx` by (
+    qspecl_then [`fuel`, `ctx`, `b`, `s`, `sb`] mp_tac
+      step_preserves_call_ctx >> simp[]) >>
   simp[]
 QED
 
@@ -469,6 +472,9 @@ Proof
   `sa.vs_params = s.vs_params` by
     (qspecl_then [`fuel`, `ctx`, `a`, `s`, `sa`] mp_tac
        step_preserves_params >> simp[]) >>
+  `sa.vs_call_ctx = s.vs_call_ctx` by
+    (qspecl_then [`fuel`, `ctx`, `a`, `s`, `sa`] mp_tac
+       step_preserves_call_ctx >> simp[]) >>
   simp[] >>
   (* RETURNDATACOPY: vs_returndata preserved *)
   strip_tac >>

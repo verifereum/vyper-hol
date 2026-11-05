@@ -17,14 +17,15 @@ Theorem machine_frame_external_body:
        (if nr then
           case cx.nonreentrant_slot of
           | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot T
+          | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot T; return () od
         else return ());
        send_call_value mut cx;
        eval_stmts cx body
      od)
 Proof
   strip_tac >> simp[ignore_bind_def] >>
-  irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_internal_lock] >>
+  irule state_rel_frame_bind_guarded >>
+  simp[machine_frame_def, REWRITE_RULE [ignore_bind_def] machine_frame_internal_lock] >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
   irule machine_frame_nonpayable_value >> Cases_on `mut` >> gvs[]
 QED
@@ -56,7 +57,7 @@ Theorem machine_frame_external_action:
             (if nr then
                case cx.nonreentrant_slot of
                | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-               | SOME slot => acquire_nonreentrant_lock cx.txn.target slot T
+               | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot T; return () od
              else return ());
             eval_stmts cx body
           od
@@ -71,7 +72,7 @@ Proof
   simp[machine_frame_primitives] >>
   match_mp_tac machine_frame_bind >> simp[machine_frame_primitives] >>
   match_mp_tac machine_frame_bind >>
-  simp[machine_frame_internal_lock]
+  simp[REWRITE_RULE [ignore_bind_def] machine_frame_internal_lock]
 QED
 
 Theorem call_external_function_read_only:

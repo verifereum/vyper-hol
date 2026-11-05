@@ -1472,9 +1472,11 @@ Theorem step_SSTORE:
     eval_operand op1 ss = SOME v1 ∧
     eval_operand op2 ss = SOME v2 ⇒
     step_inst_base (mk_inst id SSTORE [op1; op2] []) ss =
-      OK (sstore v1 v2 ss)
+      if ss.vs_call_ctx.cc_static then
+        Abort ExHalt_abort (halt_state (set_returndata [] ss))
+      else OK (sstore v1 v2 ss)
 Proof
-  rw[step_inst_base_def, exec_write2_def]
+  rw[step_inst_base_def, exec_write2_def, eval_operands_def]
 QED
 
 Theorem step_ASSERT_ok:
@@ -1659,7 +1661,8 @@ Theorem emit_void_SSTORE_correct:
     emit_void SSTORE [op1; op2] st = ((), st') ∧
     eval_operand op1 ss = SOME v1 ∧
     eval_operand op2 ss = SOME v2 ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_call_ctx.cc_static
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
@@ -1672,7 +1675,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
   `step_inst_base (mk_inst st.cs_next_id SSTORE [op1; op2] []) ss =
-     OK (sstore v1 v2 ss)` by simp[step_SSTORE] >>
+     OK (sstore v1 v2 ss)` by
+    (qspecl_then [`op1`, `op2`, `v1`, `v2`, `st.cs_next_id`, `ss`]
+       mp_tac step_SSTORE >> gvs[]) >>
   simp[run_inst_seq_def] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
   simp[] >>
