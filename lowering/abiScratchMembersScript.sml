@@ -237,6 +237,59 @@ Definition abi_scratch_members_inv_def:
     s.vs_inst_idx = LENGTH st.cs_current_insts
 End
 
+Definition abi_site_members_inv_def:
+  abi_site_members_inv infos tys avs pre pvs active dyn_ptr site slot A lo st limit_st
+    src dst sb so ho d hl output_size b cap s <=>
+    abi_site_members_pre infos tys avs st src dst sb so d output_size A b cap s /\
+    has_types pre pvs /\ hl = head_lengths (pre++tys) 0 /\
+    ho = SUM (MAP abi_member_head_size pre) /\
+    LENGTH (enc (Tuple (pre++tys)) (ListV (pvs++avs))) <= output_size /\
+    abi_encoder_tuple_prefix hl pre pvs d s.vs_memory /\
+    abi_encoder_cursor active dyn_ptr site slot 0 lo st
+      (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) s /\
+    (active ==> site IN A) /\
+    (active \/ EVERY (\(_,_,_,dyn). ~dyn) infos) /\
+    abi_site_budget A b cap s /\ lo <= st.cs_next_id /\
+    st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts
+End
+
+Theorem abi_site_members_inv_interval:
+  first <= lo /\ st.cs_next_id <= last ==>
+  (abi_site_members_inv infos tys avs pre pvs active dyn_ptr site slot
+    (abi_decoder_ids first last) lo st limit_st src dst sb so ho d hl output_size b cap s <=>
+   abi_scratch_members_inv infos tys avs pre pvs active dyn_ptr site slot
+    first last lo st limit_st src dst sb so ho d hl output_size b cap s)
+Proof
+  strip_tac >>
+  simp_tac bool_ss [abi_site_members_inv_def, abi_scratch_members_inv_def,
+    abi_site_members_pre_interval, abi_site_budget_interval,
+    abi_encoder_cursor_def, abi_decoder_ids_def, IN_GSPEC_IFF] >>
+  Cases_on `active` >> simp[] >> eq_tac >> strip_tac >> simp[]
+QED
+
+Theorem abi_site_members_inv_address:
+  abi_site_members_inv infos tys avs pre pvs active dyn_ptr site slot A lo st limit_st
+    src dst sb so ho d hl sz b cap initial /\
+  abi_decoder_address_frame st.cs_next_var initial actual /\
+  st.cs_next_var <= prepared.cs_next_var /\ st.cs_next_id <= prepared.cs_next_id /\
+  prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st actual /\
+  actual.vs_current_bb = prepared.cs_current_bb /\
+  actual.vs_inst_idx = LENGTH prepared.cs_current_insts ==>
+  abi_site_members_inv infos tys avs pre pvs active dyn_ptr site slot A lo prepared limit_st
+    src dst sb so ho d hl sz b cap actual
+Proof
+  simp_tac bool_ss [abi_site_members_inv_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_site_members_pre_address >> strip_tac >>
+  drule_all abi_encoder_cursor_address >> strip_tac >>
+  drule_all abi_site_address >> strip_tac >>
+  qpat_assum `abi_decoder_address_frame _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
+  gvs[]
+QED
+
 Theorem abi_scratch_members_inv_layout:
   abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
@@ -263,6 +316,42 @@ Proof
   asm_simp_tac bool_ss [] >> decide_tac
 QED
 
+Theorem abi_site_members_after_child:
+  abi_site_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs active dyn_ptr site slot A lo st limit_st
+    src dst sb so ho d hl output_size b cap initial /\
+  abi_site_encoder_effect A lo end_st.cs_next_id st.cs_next_var
+    limit_st d output_size b cap initial actual /\
+  abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d actual.vs_memory /\
+  abi_encoder_cursor active dyn_ptr site slot 0 lo end_st
+    (hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))) actual /\
+  st.cs_next_var <= end_st.cs_next_var /\ st.cs_next_id <= end_st.cs_next_id /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\
+  ~actual.vs_halted /\ actual.vs_current_bb = end_st.cs_current_bb /\
+  actual.vs_inst_idx = LENGTH end_st.cs_current_insts ==>
+  abi_site_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot A lo
+    end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_inv_def]) >>
+  drule_all abi_site_members_pre_effect >> strip_tac >>
+  mp_tac (Q.INST [`prepared` |-> `end_st:compile_state`, `s` |-> `actual:venom_state`,
+    `infos` |-> `(ei,abi_sz,mem_sz,dyn)::infos`, `tys` |-> `ty::tys`, `avs` |-> `av::avs`,
+    `sz` |-> `output_size:num`] abi_site_members_pre_mono) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
+  mp_tac (Q.INST [`st` |-> `end_st:compile_state`, `s` |-> `actual:venom_state`]
+    abi_site_members_pre_cons) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
+  mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  qpat_assum `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_encoder_effect_def]) >>
+  PURE_REWRITE_TAC [abi_site_members_inv_def, GSYM APPEND_ASSOC, APPEND] >>
+  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `active \/ EVERY _ _` mp_tac >> simp_tac (srw_ss()) [] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem abi_scratch_members_after_child:
   abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
@@ -280,26 +369,12 @@ Theorem abi_scratch_members_after_child:
     end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_scratch_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_inv_def]) >>
-  mp_tac (Q.INST [`infos` |-> `(ei,abi_sz,mem_sz,dyn)::infos`, `tys` |-> `ty::tys`,
-    `avs` |-> `av::avs`, `hi` |-> `end_st.cs_next_id`, `sz` |-> `output_size:num`]
-    abi_scratch_members_pre_effect) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  mp_tac (Q.INST [`infos` |-> `(ei,abi_sz,mem_sz,dyn)::infos`, `tys` |-> `ty::tys`,
-    `avs` |-> `av::avs`, `prepared` |-> `end_st`, `s` |-> `actual:venom_state`, `sz` |-> `output_size:num`]
-    abi_scratch_members_pre_mono) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  mp_tac (Q.INST [`st` |-> `end_st`, `s` |-> `actual:venom_state`] abi_scratch_members_pre_cons) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
-  `lo <= end_st.cs_next_id` by decide_tac >>
-  PURE_REWRITE_TAC [abi_scratch_members_inv_def, GSYM APPEND_ASSOC, APPEND] >>
-  asm_simp_tac bool_ss [] >>
-  qpat_x_assum `active \/ EVERY _ _` mp_tac >> simp_tac (srw_ss()) [] >>
-  rpt strip_tac >> asm_simp_tac bool_ss []
+  `first <= lo` by gvs[abi_scratch_members_inv_def] >>
+  `st.cs_next_id <= last` by decide_tac >>
+  gvs[GSYM abi_site_members_inv_interval, GSYM abi_site_encoder_effect_interval] >>
+  drule abi_site_members_after_child >>
+  disch_then (qspecl_then [`end_st`, `actual`] mp_tac) >>
+  (impl_tac >- gvs[abi_encoder_cursor_def]) >> simp[]
 QED
 
 (* ===== Boundary ===== *)
