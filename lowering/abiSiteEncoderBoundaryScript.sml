@@ -9,7 +9,7 @@ Ancestors
   abiEncoderComplexCode emitHelperProps exprLoweringProps compileEnv
   context emitHelper venomExecSemantics venomState venomInst finite_map pred_set words list rich_list arithmetic
 
-Theorem abi_site_alloc_buffer_reentry:
+Theorem abi_site_alloc_buffer_reentry_evolution:
   compile_alloc_buffer 32 st = (buf,st') /\
   abi_site_budget A b cap s /\ st.cs_next_id IN A /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
@@ -22,7 +22,8 @@ Theorem abi_site_alloc_buffer_reentry:
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\
     (!id. id <> st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
-    t.vs_data_section = s.vs_data_section /\ t.vs_halted = s.vs_halted
+    t.vs_data_section = s.vs_data_section /\ t.vs_halted = s.vs_halted /\
+    abi_scratch_evolution A b cap s t
 Proof
   simp_tac bool_ss [compile_alloc_buffer_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
@@ -46,11 +47,35 @@ Proof
     (simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def] >>
      qpat_x_assum `exec_alloca alloc_inst s 32w = OK t` mp_tac >>
      simp[Abbr `alloc_inst`, mk_inst_def]) >>
+  `t.vs_alloca_next <= b + cap` by
+    (qpat_x_assum `abi_site_budget A b cap t` mp_tac >>
+     simp_tac bool_ss [abi_site_budget_def] >> rpt strip_tac >> decide_tac) >>
+  `abi_scratch_evolution A b cap s t` by
+    (drule_all abi_scratch_evolution_alloca >> simp[]) >>
   qexistsl_tac [`t`, `p`] >>
   gvs[Abbr `alloc_inst`, mk_inst_def, eval_operand_def]
 QED
 
-Theorem abi_site_complex_prefix_sequence:
+Theorem abi_site_alloc_buffer_reentry:
+  compile_alloc_buffer 32 st = (buf,st') /\
+  abi_site_budget A b cap s /\ st.cs_next_id IN A /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?t p. run_inst_seq (emitted_insts st st') s = OK t /\
+    eval_operand buf.buf_operand t = SOME (n2w p) /\ buf.buf_size = 32 /\
+    abi_site_budget A b cap t /\ fresh_vars_wrt limit_st t /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    b <= p /\ p + 32 <= b + cap /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\
+    (!id. id <> st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\ t.vs_halted = s.vs_halted
+Proof
+  strip_tac >> drule_all abi_site_alloc_buffer_reentry_evolution >> strip_tac >>
+  qexistsl_tac [`t`, `p`] >> asm_rewrite_tac[]
+QED
+
+Theorem abi_site_complex_prefix_sequence_evolution:
   abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
   abi_site_budget A b cap initial /\ st.cs_next_id IN A /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
@@ -64,13 +89,14 @@ Theorem abi_site_complex_prefix_sequence:
     abi_decode_frame slot 32 initial actual /\
     FLOOKUP actual.vs_allocas st.cs_next_id = SOME (slot,32) /\
     (!id. id <> st.cs_next_id ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
-    actual.vs_halted = initial.vs_halted
+    actual.vs_halted = initial.vs_halted /\
+    abi_scratch_evolution A b cap initial actual
 Proof
   strip_tac >> drule abi_encoder_complex_prefix_trace >> strip_tac >>
   drule abi_encoder_complex_prefix_shape >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >>
   `allocation_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
-  drule_all abi_site_alloc_buffer_reentry >> strip_tac >>
+  drule_all abi_site_alloc_buffer_reentry_evolution >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st allocation_st) initial = OK allocated` >>
   `b+cap < dimword (:256)` by metis_tac[abi_site_budget_def] >>
   `p < dimword (:256)` by decide_tac >>
@@ -92,9 +118,32 @@ Proof
   `!p w s. abi_site_budget A b cap (mstore p w s) <=> abi_site_budget A b cap s` by
     (rpt gen_tac >> irule abi_site_budget_fields >>
      simp[mstore_def, write_memory_with_expansion_def]) >>
+  `!s t p w. abi_scratch_evolution A b cap s (mstore p w t) <=>
+      abi_scratch_evolution A b cap s t` by
+    simp[mstore_def, write_memory_with_expansion_def, abi_scratch_evolution_def] >>
   asm_simp_tac bool_ss [fresh_vars_wrt_mstore, eval_operand_mstore, mload_mstore_same] >>
   gvs[abi_decode_frame_def, mstore_def, write_memory_with_expansion_def] >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem abi_site_complex_prefix_sequence:
+  abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
+  abi_site_budget A b cap initial /\ st.cs_next_id IN A /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
+  ?actual slot. run_inst_seq (emitted_insts st st') initial = OK actual /\
+    eval_operand dyn_ptr actual = SOME (n2w slot) /\
+    mload slot actual = n2w (SUM (MAP (\(_,asz,_,_). asz) infos)) /\
+    b <= slot /\ slot+32 <= b+cap /\
+    abi_site_budget A b cap actual /\ fresh_vars_wrt limit_st actual /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op actual = eval_operand op initial) /\
+    abi_decode_frame slot 32 initial actual /\
+    FLOOKUP actual.vs_allocas st.cs_next_id = SOME (slot,32) /\
+    (!id. id <> st.cs_next_id ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    actual.vs_halted = initial.vs_halted
+Proof
+  strip_tac >> drule_all abi_site_complex_prefix_sequence_evolution >> strip_tac >>
+  qexistsl_tac [`actual`, `slot`] >> asm_rewrite_tac[]
 QED
 
 
@@ -159,6 +208,43 @@ Proof
   `!a b:num. a+b-(a+(b+1)) = 0` by decide_tac >>
   asm_simp_tac (srw_ss()) [SF DNF_ss] >> decide_tac
 QED
+Theorem abi_site_complex_prefix_effect:
+  abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
+  abi_site_budget A b cap initial /\ st.cs_next_id IN A /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
+  ?actual slot. run_inst_seq (emitted_insts st st') initial = OK actual /\
+    eval_operand dyn_ptr actual = SOME (n2w slot) /\
+    mload slot actual = n2w (SUM (MAP (\(_,asz,_,_). asz) infos)) /\
+    b <= slot /\ slot+32 <= b+cap /\
+    FLOOKUP actual.vs_allocas st.cs_next_id = SOME (slot,32) /\
+    abi_site_encoder_effect A st.cs_next_id st'.cs_next_id st.cs_next_var
+      limit_st d sz b cap initial actual
+Proof
+  strip_tac >> drule_all abi_site_complex_prefix_sequence_evolution >> strip_tac >>
+  drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  qabbrev_tac `B = A INTER abi_decoder_ids st.cs_next_id st'.cs_next_id` >>
+  `FINITE A` by
+    (qpat_x_assum `abi_site_budget A b cap initial` mp_tac >>
+     simp_tac bool_ss [abi_site_budget_def] >> rpt strip_tac >> asm_rewrite_tac[]) >>
+  `B SUBSET A /\ st.cs_next_id IN B` by
+    simp[Abbr `B`, abi_decoder_ids_def] >>
+  `FINITE B` by metis_tac[SUBSET_FINITE] >>
+  `abi_scratch_evolution B b cap initial actual` by
+    (irule abi_scratch_evolution_subset >> qexists_tac `A` >> asm_rewrite_tac[]) >>
+  `abi_decode_footprint_frame (abi_decoder_child_scratch B b cap initial)
+      initial actual` by
+    (irule abi_scratch_final_slot_frame >> asm_rewrite_tac[] >>
+     qexistsl_tac [`st.cs_next_id`, `slot`, `32`] >> asm_rewrite_tac[]) >>
+  `abi_decode_footprint_frame ((d,sz)::abi_decoder_child_scratch B b cap initial)
+      initial actual` by
+    (qpat_x_assum `abi_decode_footprint_frame _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_decode_footprint_frame_def] >> strip_tac >>
+     asm_rewrite_tac[] >> rpt strip_tac >> first_x_assum irule >>
+     fs[abi_footprint_disjoint_def]) >>
+  qexistsl_tac [`actual`, `slot`] >> asm_rewrite_tac[] >>
+  simp_tac bool_ss [abi_site_encoder_effect_def] >> gvs[Abbr `B`]
+QED
+
 
 (* Reject any transitive admission in the allocation/child interface probes. *)
 val _ = List.app (fn (name, th) =>
