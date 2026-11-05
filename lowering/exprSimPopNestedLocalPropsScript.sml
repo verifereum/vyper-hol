@@ -1,6 +1,6 @@
 Theory exprSimPopNestedLocalProps
 Ancestors
-  loweringPosts vyperState vyperValueOperation
+  loweringPosts vyperState vyperValueOperation exprSimPopNestedLocalPath
 
 (* A readable place cannot come from history when fallback is excluded. *)
 Theorem read_memory_path_live:
