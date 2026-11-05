@@ -15,6 +15,12 @@ Theorem emit_mload_counted_scalar:
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf = (update_var out (mload (w2n a) s) s with
+          vs_inst_idx := SUC s.vs_inst_idx) /\
+    Gf = step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+           (update_var out (mload (w2n a) s) s) /\
+    tnf = step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
+            (update_var out (mload (w2n a) s) s) tn /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     lookup_var out sf = SOME (mload (w2n a) s) /\
@@ -46,6 +52,9 @@ Proof
   qexistsl_tac [`Gf`, `tnf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac >- (unabbrev_all_tac >>
     irule mload_counted_edge >> simp[] >> metis_tac[]) >>
+  conj_tac >- simp[Abbr `t`] >>
+  conj_tac >- simp[Abbr `Gf`, Abbr `t`] >>
+  conj_tac >- simp[Abbr `tnf`, Abbr `t`] >>
   `op_taint tnf (Var out) = {} /\ tnf.t_mem = tn.t_mem /\
    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans` by
     (simp[Abbr `tnf`, Abbr `t`] >> irule mload_ghost_clean >>
