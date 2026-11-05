@@ -4,7 +4,7 @@ Ancestors assignBasePtrLiteralPost typedCopyPtr robustCopyTransportPtr
   allocationPtr loweringHalt exprLoweringProps localPtrsProps bodyPtrDefs ptrDiscipline venomInst venomExecSemantics
   venomState valueEncodingProps exprSimProps compileEnv finite_map pred_set
   fragGasSeqPtr ghostPcTransportPtr instIdxIndep representationCleanPtr
-  emitHelperProps words
+  emitHelperProps words exprSimMemoryTransport venomMemProofs list valueEncodingProofs
 
 Theorem assign_base_ptr_mstore_imm_taint[local]:
   !tn s id dst value a w.
@@ -367,4 +367,175 @@ Proof
   fs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
      Abbr `tn1`, Abbr `tn2`] >>
   rpt strip_tac >> fs[] >> decide_tac
+QED
+
+(* Only the represented footprint must be clean, not the annotated buffer. *)
+Theorem assign_base_ptr_clean_footprint_robust:
+  !tv v p mem tn n.
+    val_in_memory tv v p mem /\ val_wf tv v /\ val_footprint tv v <= n /\
+    (!b. p <= b /\ b < p+n ==> b NOTIN tn) ==>
+    !m. mem_agree_outside tn mem m ==> val_in_memory tv v p m
+Proof
+  rpt strip_tac >> irule val_in_memory_relocate_footprint >>
+  conj_tac >- simp[] >> qexistsl_tac [`mem`, `p`] >> simp[] >>
+  irule LIST_EQ >> simp[EL_mem_bytes_at] >> rpt strip_tac >>
+  rename1 `i < val_footprint tv v` >>
+  `p+i NOTIN tn` by (first_x_assum irule >> decide_tac) >>
+  `mem_bytes_at (p+i) 1 mem = mem_bytes_at (p+i) 1 m` by
+    metis_tac[mem_agree_outside_def] >>
+  pop_assum mp_tac >> simp[LIST_EQ_REWRITE, EL_mem_bytes_at]
+QED
+
+Theorem assign_base_ptr_one_byte_init_robust:
+  !D lo ctx func PG G tn s G' tn' t p q a i j k.
+    p <> q /\ lookup_var p s = SOME a /\ w2n a + 64 < dimword (:256) /\
+    run_inst_seq
+      [mk_inst i MSTORE [Var p; Lit 1w] [];
+       mk_inst j ADD [Var p; Lit 32w] [q];
+       mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s = OK t /\
+    inst_seq_ptr D lo ctx func PG G tn
+      [mk_inst i MSTORE [Var p; Lit 1w] [];
+       mk_inst j ADD [Var p; Lit 32w] [q];
+       mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s G' tn' ==>
+    !m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
+      val_in_memory (BaseTV (BytesT (Dynamic 64))) (BytesV [1w]) (w2n a) m
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `inst_seq_ptr`) assign_base_ptr_one_byte_init_clean >>
+  simp[] >> strip_tac >>
+  drule_all assign_base_ptr_one_byte_init_endpoint >> strip_tac >>
+  drule_all assign_base_ptr_one_byte_init_memory >> strip_tac >>
+  `val_in_memory (BaseTV (BytesT (Dynamic 64))) (BytesV [1w])
+     (w2n a) t.vs_memory` by
+    (irule assign_base_ptr_one_byte_value >> simp[]) >>
+  rpt strip_tac >> irule assign_base_ptr_clean_footprint_robust >>
+  conj_tac >- simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
+    vyperValueTheory.type_slot_size_def, vfmConstantsTheory.word_size_def] >>
+  qexistsl_tac [`t.vs_memory`, `64`, `tn'.t_mem`] >>
+  simp[valueEncodingTheory.val_wf_def, loweringPostsTheory.val_footprint_def]
+QED
+
+Theorem assign_base_ptr_one_byte_init_kept:
+  !D lo ctx func PG G tn s G' tn' p q a i j k cenv es sa G0 tn0 s0.
+    p <> q /\ lookup_var p s = SOME a /\
+    (!x. not_fresh_at sa x ==> x <> q) /\
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    inst_seq_ptr D lo ctx func PG G tn
+      [mk_inst i MSTORE [Var p; Lit 1w] [];
+       mk_inst j ADD [Var p; Lit 32w] [q];
+       mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s G' tn' ==>
+    ghost_kept cenv es sa G0 tn0 s0 G' tn'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n a) 1w s` >>
+  qabbrev_tac `v = update_var q (a + 32w) u` >>
+  qabbrev_tac `t = mstore (w2n (a + 32w)) (n2w (2 ** 248)) v` >>
+  `lookup_var p u = SOME a /\ lookup_var q v = SOME (a + 32w)` by
+    (simp[Abbr `u`, Abbr `v`, lookup_var_def, mstore_def,
+      update_var_def, FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `step_inst_base (mk_inst i MSTORE [Var p; Lit 1w] []) s = OK u` by
+    (simp[Abbr `u`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j ADD [Var p; Lit 32w] [q]) u = OK v` by
+    (simp[Abbr `v`] >> irule step_ADD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []) v = OK t` by
+    (simp[Abbr `t`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+  `~is_terminator (mk_inst j ADD [Var p; Lit 32w] [q]).inst_opcode /\
+   ~is_terminator (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  fs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
+  simp[Abbr `t`] >> irule assign_base_ptr_clean_mstore_kept >>
+  simp[eval_operand_def, op_taint_def] >>
+  simp[Abbr `v`] >> irule assign_base_ptr_binop_kept >> simp[] >>
+  simp[Abbr `u`] >> irule assign_base_ptr_clean_mstore_kept >>
+  simp[eval_operand_def, op_taint_def] >> qexists_tac `a` >> simp[]
+QED
+
+Theorem assign_base_ptr_one_byte_init_inv:
+  !D lo ctx func PG G tn s G' tn' p q a i j k d cenv cx es.
+    p <> q /\ lookup_var p s = SOME a /\ w2n a + 64 < dimword (:256) /\
+    local_ptrs_rel func cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+    not_local_ptr cenv es.scopes q /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> q) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> q) /\
+    (!name b sz. local_region cenv es.scopes s name b sz ==>
+      regions_disjoint (w2n a) 64 b sz) /\
+    inst_seq_ptr D lo ctx func PG G tn
+      [mk_inst i MSTORE [Var p; Lit 1w] [];
+       mk_inst j ADD [Var p; Lit 32w] [q];
+       mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s G' tn' ==>
+    ghost_inv d cenv cx es G' tn'
+      (mstore (w2n (a + 32w)) (n2w (2 ** 248))
+        (update_var q (a + 32w) (mstore (w2n a) 1w s)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n a) 1w s` >>
+  qabbrev_tac `v = update_var q (a + 32w) u` >>
+  qabbrev_tac `t = mstore (w2n (a + 32w)) (n2w (2 ** 248)) v` >>
+  `lookup_var p u = SOME a /\ lookup_var q v = SOME (a + 32w)` by
+    (simp[Abbr `u`, Abbr `v`, lookup_var_def, mstore_def,
+      update_var_def, FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `step_inst_base (mk_inst i MSTORE [Var p; Lit 1w] []) s = OK u` by
+    (simp[Abbr `u`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j ADD [Var p; Lit 32w] [q]) u = OK v` by
+    (simp[Abbr `v`] >> irule step_ADD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []) v = OK t` by
+    (simp[Abbr `t`] >> irule step_MSTORE >> simp[eval_operand_def]) >>
+  `local_ptrs_rel func cenv es.scopes v /\
+   (!name b sz. local_region cenv es.scopes v name b sz ==>
+      regions_disjoint (w2n (a + 32w)) 32 b sz) /\
+   (!name b sz. local_region cenv es.scopes s name b sz ==>
+      regions_disjoint (w2n a) 32 b sz)` by suspend "frames" >>
+  `~is_terminator (mk_inst j ADD [Var p; Lit 32w] [q]).inst_opcode /\
+   ~is_terminator (mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  fs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
+  simp[Abbr `t`] >> irule assign_base_ptr_clean_mstore_inv >>
+  simp[eval_operand_def, op_taint_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexists_tac `func` >> simp[]) >>
+  simp[Abbr `v`] >> irule assign_base_ptr_binop_inv >> simp[] >>
+  simp[Abbr `u`] >> irule assign_base_ptr_clean_mstore_inv >>
+  simp[eval_operand_def, op_taint_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `func` >> simp[]
+QED
+
+Resume assign_base_ptr_one_byte_init_inv[frames]:
+  `w2n (a + 32w) = w2n a + 32` by
+    (irule EQ_TRANS >> qexists_tac `w2n a + w2n (32w:bytes32)` >>
+     conj_tac >- (irule w2n_add_2 >> fs[dimword_def] >> decide_tac) >> simp[]) >>
+  `!name b sz. local_region cenv es.scopes v name b sz <=>
+     local_region cenv es.scopes s name b sz` by
+    (simp[local_region_def, Abbr `v`, Abbr `u`, lookup_var_def,
+       update_var_def, mstore_def, FLOOKUP_UPDATE] >>
+     fs[not_local_ptr_def] >> metis_tac[]) >>
+  `!name b sz. local_region cenv es.scopes s name b sz ==>
+     w2n a + 32 <= b \/ b + sz <= w2n a` by
+    (rpt strip_tac >> first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac) >>
+  conj_tac
+  >- (simp[Abbr `v`] >> irule local_ptrs_rel_update_var >>
+      simp[not_local_ptr_scope] >> simp[Abbr `u`] >>
+      irule local_ptrs_rel_mstore >> simp[] >> first_assum ACCEPT_TAC) >>
+  simp[regions_disjoint_def] >> rpt strip_tac >>
+  qpat_x_assum `!name b sz. _ ==> regions_disjoint _ _ _ _` drule >>
+  simp[regions_disjoint_def] >> decide_tac
+QED
+
+Finalise assign_base_ptr_one_byte_init_inv
+
+Theorem assign_base_ptr_one_byte_ptr_value:
+  !cx cenv p a G tn t.
+    lookup_var p t = SOME a /\ ptr_covers G tn p t 64 /\
+    (!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
+      val_in_memory (BaseTV (BytesT (Dynamic 64))) (BytesV [1w]) (w2n a) m) ==>
+    ptr_val_ok cx (BaseT (BytesT (Dynamic 64))) (BytesV [1w]) (Var p) G tn t /\
+    ptr_buf_ok cenv (Literal (BaseT (BytesT (Dynamic 64))) (BytesL [1w]))
+      (Var p) G t
+Proof
+  rpt gen_tac >> strip_tac >> fs[ptr_covers_def] >> conj_tac
+  >- (simp[ptr_val_ok_def, ptr_mem_ok_def, is_word_type_def,
+        vyperValueTheory.evaluate_type_def, eval_operand_def] >>
+      simp[loweringPostsTheory.val_footprint_def, exprSimPropsTheory.val_store_size_def,
+        vfmConstantsTheory.word_size_def] >> gvs[]) >>
+  simp[ptr_buf_ok_def, assignBasePtrLiteralSourceTheory.assign_base_ptr_one_byte_buffer_size, eval_operand_def] >>
+  metis_tac[]
 QED
