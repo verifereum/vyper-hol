@@ -213,6 +213,49 @@ Proof
   gvs[gas_marked_exec_def]
 QED
 
+Theorem eval_expr_int_literal_agrees_mem_src[local]:
+  !cx e es tv es' v es'' n.
+    eval_expr cx e es = (INL tv, es') /\
+    read_result cx tv es' = (INL v, es'') /\
+    expr_int_literal e = SOME n ==> v = IntV n
+Proof
+  rpt gen_tac >> Cases_on `e` >>
+  simp[expr_int_literal_def] >>
+  rename1 `Literal ty lit` >> Cases_on `lit` >>
+  simp[expr_int_literal_def, Once evaluate_def, return_def,
+       read_result_def, evaluate_literal_def] >>
+  rpt strip_tac >> gvs[read_result_def, return_def]
+QED
+
+Theorem well_formed_type_bits_mem_src[local]:
+  !tenv ty. well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
+Proof
+  rpt gen_tac >> Cases_on `ty` >> simp[type_bits_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[type_bits_def, well_formed_type_def, evaluate_type_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem eval_expr_shift_amount_mem_src[local]:
+  !cx e es tv es' v es'' tenv vt.
+    eval_expr cx e es = (INL tv, es') /\
+    read_result cx tv es' = (INL v, es'') /\
+    evaluate_type tenv (expr_type e) = SOME vt /\ value_has_type vt v /\
+    shift_amount_ok e ==> ?i. v = IntV i /\ 0 <= i
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_uint_type (expr_type e)`
+  >- (gvs[is_uint_type_def] >>
+      gvs[evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `v` >> gvs[value_has_type_def]) >>
+  `nonneg_int_literal e` by gvs[shift_amount_ok_def] >>
+  Cases_on `e` >> gvs[nonneg_int_literal_def, int_literal_value_def] >>
+  rename1 `Literal ty lit` >> Cases_on `lit` >>
+  gvs[int_literal_value_def, AllCaseEqs()] >>
+  `expr_int_literal (Literal ty (IntL i)) = SOME i` by simp[expr_int_literal_def] >>
+  drule_all eval_expr_int_literal_agrees_mem_src >> strip_tac >> simp[]
+QED
+
 Theorem bop_result_augassign_mem_src[local]:
   !cx ty bop t2 v1 v2 es tv.
     bop <> In /\ bop <> NotIn ==>
