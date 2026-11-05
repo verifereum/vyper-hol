@@ -4754,6 +4754,92 @@ Proof
   simp[] >> strip_tac >> gvs[]
 QED
 
+Definition asm_call_saved_suffix_def:
+  asm_call_saved_suffix saved s <=>
+    ?active. active <> [] /\ s.contexts = active ++ saved
+End
+
+Theorem asm_call_saved_suffix_intro:
+  active <> [] /\ s.contexts = active ++ saved ==>
+  asm_call_saved_suffix saved s
+Proof
+  metis_tac[asm_call_saved_suffix_def]
+QED
+
+Theorem asm_call_saved_suffix_view:
+  asm_call_saved_suffix saved s <=>
+  ?head active. s.contexts = head::(active ++ saved)
+Proof
+  simp[asm_call_saved_suffix_def] >> eq_tac
+  >- (strip_tac >> Cases_on `active` >> gvs[] >> metis_tac[])
+  >> strip_tac >> qexists_tac `head::active` >> simp[]
+QED
+
+Theorem asm_call_saved_suffix_depth:
+  asm_call_saved_suffix saved s ==>
+  s.contexts <> [] /\ LENGTH saved < LENGTH s.contexts
+Proof
+  simp[asm_call_saved_suffix_view] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem asm_call_saved_suffix_same_frame:
+  same_frame_rel s t /\ asm_call_saved_suffix saved s ==>
+  asm_call_saved_suffix saved t
+Proof
+  simp[asm_call_saved_suffix_view, vfmSameFrameTheory.same_frame_rel_def] >>
+  rpt strip_tac >> Cases_on `t.contexts` >> gvs[] >> metis_tac[]
+QED
+
+Theorem asm_call_saved_suffix_psf:
+  preserves_same_frame f ==> !s. asm_call_saved_suffix saved s ==>
+  asm_call_saved_suffix saved (SND (f s))
+Proof
+  simp[vfmSameFrameTheory.preserves_same_frame_def] >> rpt strip_tac >>
+  drule asm_call_saved_suffix_depth >> strip_tac >>
+  Cases_on `f s` >> simp[] >>
+  irule asm_call_saved_suffix_same_frame >>
+  goal_assum $ drule_at Any >> first_x_assum irule >> simp[]
+QED
+
+Theorem asm_call_saved_suffix_bind:
+  (!s. asm_call_saved_suffix saved s ==>
+       asm_call_saved_suffix saved (SND (g s))) /\
+  (!x s. asm_call_saved_suffix saved s ==>
+         asm_call_saved_suffix saved (SND (f x s))) ==>
+  !s. asm_call_saved_suffix saved s ==>
+      asm_call_saved_suffix saved (SND (bind g f s))
+Proof
+  rpt strip_tac >> simp[bind_def] >>
+  Cases_on `g s` >> rename1 `g s = (res,mid)` >>
+  `asm_call_saved_suffix saved mid` by metis_tac[pairTheory.SND] >>
+  Cases_on `res` >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_call_saved_suffix_ignore_bind:
+  (!s. asm_call_saved_suffix saved s ==>
+       asm_call_saved_suffix saved (SND (g s))) /\
+  (!s. asm_call_saved_suffix saved s ==>
+       asm_call_saved_suffix saved (SND (f s))) ==>
+  !s. asm_call_saved_suffix saved s ==>
+      asm_call_saved_suffix saved (SND (ignore_bind g f s))
+Proof
+  simp[ignore_bind_def] >> strip_tac >>
+  ho_match_mp_tac asm_call_saved_suffix_bind >> simp[]
+QED
+
+Theorem asm_call_saved_suffix_proceed_create:
+  asm_call_saved_suffix saved s ==>
+  asm_call_saved_suffix saved
+    (SND (proceed_create sender address value code gas s))
+Proof
+  strip_tac >> drule asm_call_saved_suffix_depth >> strip_tac >>
+  Cases_on `proceed_create sender address value code gas s` >> simp[] >>
+  drule_all asm_call_create_push_saved_tail >> strip_tac >>
+  fs[asm_call_saved_suffix_def] >>
+  Cases_on `r.contexts` >> gvs[] >>
+  qexists_tac `h::active` >> simp[]
+QED
+
 (* The saved suffix is intentionally unconstrained: the caller need not be static. *)
 Theorem asm_call_cp_static_prefix:
   cp f /\ f s = (r,t) /\ active <> [] /\
