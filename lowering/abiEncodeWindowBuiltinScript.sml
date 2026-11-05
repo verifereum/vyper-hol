@@ -6,6 +6,7 @@ Ancestors
   abiEncoderRegisteredEffect abiEncoderSequence abiDecoderLoop instIdxIndep
   exprLoweringProps venomInst list rich_list arithmetic compileEnv abiDecoderVarSequence
   abiBuiltinEncodeMethod abiBuiltinEncodeSetup abiBuiltinAllocation abiEncoderInput
+  venomMemDefs
 
 Theorem abi_window_finish_opcodes[local]:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
@@ -185,4 +186,39 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   qexists_tac `actual` >>
   pure_rewrite_tac[Q.SPECL [`32*word_size (maxlen+4)`, `32`] ADD_COMM] >> simp[]
+QED
+
+(* Resource transport is relative to the pure allocated state, not a claim
+   that allocation itself establishes room or non-overlap. *)
+Theorem abi_window_setup_allocas:
+  abi_builtin_encode_setup_frame next site outsz p write_size s t ==>
+  t.vs_allocas = (abi_builtin_allocate_state site outsz s).vs_allocas
+Proof
+  simp[abi_builtin_encode_setup_frame_def]
+QED
+
+Theorem abi_window_setup_frontier:
+  abi_builtin_encode_setup_frame next site outsz p write_size s t ==>
+  t.vs_alloca_next = (abi_builtin_allocate_state site outsz s).vs_alloca_next
+Proof
+  simp[abi_builtin_encode_setup_frame_def]
+QED
+
+Theorem abi_window_setup_room:
+  abi_builtin_encode_setup_frame next site outsz p write_size s t ==>
+  (alloca_room ctx func t <=>
+   alloca_room ctx func (abi_builtin_allocate_state site outsz s))
+Proof
+  strip_tac >> drule abi_window_setup_allocas >>
+  drule abi_window_setup_frontier >>
+  simp[alloca_room_def, pending_alloca_size_def]
+QED
+
+Theorem abi_window_setup_alloca_inv:
+  abi_builtin_encode_setup_frame next site outsz p write_size s t ==>
+  (alloca_inv t <=> alloca_inv (abi_builtin_allocate_state site outsz s))
+Proof
+  strip_tac >> drule abi_window_setup_allocas >>
+  drule abi_window_setup_frontier >>
+  simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
