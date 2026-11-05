@@ -367,3 +367,60 @@ Resume compile_bop_typed_sim_mem[right_exempt]:
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
 QED
 Finalise compile_bop_typed_sim_mem
+
+(* compile_bop_sim (exprSimBopTyped) for expr_sim_mem: operands of word
+   values, held in their plain words. *)
+Theorem compile_bop_sim_mem:
+  !ctx func cenv cx ty ann bop e1 e2 es.
+    ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
+    ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
+    is_word_type ann /\
+    is_word_type (expr_type e1) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+    is_word_type (expr_type e2) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e1 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e2 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!x y sa sb op.
+       compile_binop bop x y (expr_type e1)
+         (if bop = Exp then expr_int_literal e1 else NONE)
+         (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    expr_sim_mem ctx func cenv cx (expr_type e1) e1 es /\
+    (!gs1 v1 es1. (do result <- eval_expr cx e1; read_result cx result od)
+       (es with gas_obs := gs1) = (INL v1, es1) ==>
+       word_value v1 /\
+       expr_sim_mem ctx func cenv cx (expr_type e1) e2 es1 /\
+       !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
+         (es1 with gas_obs := gs2) = (INL v2, es2) ==>
+         word_value v2 /\
+         binop_frag_mem ctx func cenv cx bop (expr_type e1) ann
+           (if bop = Exp then expr_int_literal e1 else NONE)
+           (if bop = Exp then expr_int_literal e2 else NONE)
+           [expr_type e1; expr_type e2] v1 v2
+           (val_to_w256 v1) (val_to_w256 v2) es2) ==>
+    expr_sim_mem ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ (expr_type e1))`
+    (qx_choose_then `t1` assume_tac o
+     REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ (expr_type e2))`
+    (qx_choose_then `t2` assume_tac o
+     REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  irule compile_bop_typed_sim_mem >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`t1`, `t2`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs1 v1 es1. _ ==> word_value v1 /\ _` drule >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs2 v2 es2. _ ==> word_value v2 /\ _` drule >> strip_tac >>
+  gvs[typed_val_to_w256_word_value]
+QED
