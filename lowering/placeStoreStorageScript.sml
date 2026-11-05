@@ -15,7 +15,55 @@ Ancestors
   loweringPosts fragGasMode
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem
-  venomState
+  venomState fragGasSeq fragGasPath arithmetic venomExecSemantics venomInst exprLoweringProps
+
+(* A checked single storage/transient store boundary. *)
+Theorem place_store_slot_path[local]:
+  !tr k w s ctx func bb id.
+    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id (if tr then TSTORE else SSTORE) [Lit k; Lit w] []) ==>
+    gas_marked_path F ctx func s 0
+      (OK (((if tr then tstore else sstore) k w s)
+        with vs_inst_idx := SUC s.vs_inst_idx)) /\
+    (!x. lookup_var x ((if tr then tstore else sstore) k w s) = lookup_var x s)
+Proof
+  rpt strip_tac
+  >- (`gas_path_edge ctx func s 0
+         (OK (((if tr then tstore else sstore) k w s)
+           with vs_inst_idx := SUC s.vs_inst_idx))` by
+        (drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
+         Cases_on `tr` >>
+         simp[mk_inst_def, is_terminator_def, step_inst_base_def,
+              exec_write2_def, eval_operands_def, eval_operand_def] >>
+         disch_then (qspecl_then [`(if tr then tstore else sstore) k w s`, `func`, `ctx`] mp_tac) >>
+         simp[]) >>
+      simp[gas_marked_path_def] >>
+      metis_tac[gas_path_rules, gas_path_edge_normal, ADD_0])
+  >> Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]
+QED
+
+(* Boundary probe: the second child has three slots (length and two
+   capacity words). A source Bytes[1] copies two slots; slot 5 is untouched
+   and dead when the new length at slot 3 is one. Slot 4 byte 0 is live. *)
+Theorem place_store_bytes_child_probe[local]:
+  !st. lookup_storage 3w st = 1w ==>
+    dead_bytes st 0 (ArrayTV (BaseTV (BytesT (Dynamic 64))) (Fixed 2)) 5 0 /\
+    dead_bytes st 3 (BaseTV (BytesT (Dynamic 64))) 5 0 /\
+    ~dead_bytes st 0 (ArrayTV (BaseTV (BytesT (Dynamic 64))) (Fixed 2)) 4 0 /\
+    ~dead_bytes st 3 (BaseTV (BytesT (Dynamic 64))) 4 0 /\
+    ~dead_bytes st 3 (BaseTV (BytesT (Dynamic 64))) 2 0
+Proof
+  gen_tac >> strip_tac >>
+  `!i:num. i < 2 <=> i = 0 \/ i = 1` by decide_tac >>
+  simp[dead_bytes_def, dyn_bytes_dead_def, type_slot_size_def,
+       vfmConstantsTheory.word_size_def, wordsTheory.w2n_n2w] >>
+  conj_tac
+  >- (qexists_tac `1` >> simp[]) >>
+  gen_tac >> Cases_on `i = 0` >- simp[] >>
+  Cases_on `i = 1` >> simp[]
+QED
 
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
