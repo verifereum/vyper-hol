@@ -28,7 +28,8 @@ Ancestors
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
   bodyStmtsSimPtr extEntryReachesBodyPtr extFrameRetOkPtr bodyAbiDecodeTarget
-  fragGasPathPtr gasPathPtrExec gasSummary
+  fragGasPathPtr gasPathPtrExec gasSummary gasExemptCert loweringPtrBodySource
+  externalBodySourceOk
 
 val _ = Parse.hide "body";
 
@@ -135,6 +136,37 @@ Proof
       source_exempt_def, unspecified_behaviour_exempt_def]
 QED
 
+(* The source exemption at gas observations gobs rules out an exempt
+   error of the body run at gobs. *)
+Theorem nonexempt_body_error_gas:
+  !tops am tx ret mut args fbody env orc gobs es0 err es'.
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    LENGTH tx.args = LENGTH args /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INL (), es0) /\
+    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+      fbody (es0 with gas_obs := gobs) = (INR (Error err), es') /\
+    ~source_exempt tops (call_external orc gobs am tx) ==>
+    ~unspecified_behaviour_exempt tops err
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all call_external_selected_body_gas >>
+  disch_then (qspec_then `gobs` assume_tac) >>
+  `es0.scopes = [env]` by
+    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
+  `(es0 with gas_obs := gobs) with scopes := [env] = es0 with gas_obs := gobs` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.set_scopes_def,
+      source_exempt_def]
+QED
+
 (* ===== The body ===== *)
 
 Theorem lower_vyper_runtime_unit_body_ptr:
@@ -169,5 +201,80 @@ Theorem lower_vyper_runtime_unit_body_ptr:
              (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                          vs_inst_idx := 0 |>)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
+    (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule_all external_entry_reaches_body_ptr >> strip_tac >>
+  first_x_assum irule >>
+  drule_all external_body_frame >> strip_tac >>
+  drule_all external_frame_ret_ok_ptr >>
+  disch_then (qspec_then `func` assume_tac) >>
+  `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) =
+   tops` by
+    (irule gasContextTheory.cx_tops_module >>
+     gvs[source_deployment_rel_def, get_module_code_def,
+         initial_evaluation_context_def]) >>
+  `!gs res ee.
+     eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+       fbody (es0 with gas_obs := gs) = (res, ee) ==>
+     stmt_res_ok NoLoop res` by
+    (rpt strip_tac >> drule_all externalBodySourceOkTheory.external_body_source_ok >> simp[]) >>
+  `!marks err ee.
+     eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+       fbody (es0 with gas_obs := gas_explicit marks vs.vs_gas_readings) =
+       (INR (Error err), ee) ==>
+     ~unspecified_behaviour_exempt tops err` by
+    (rpt strip_tac >> drule_at (Pat `eval_stmts _ _ _ = _`)
+       nonexempt_body_error_gas >> simp[] >> metis_tac[]) >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
+  `rt = if ret = NoneT then NONE else SOME ret` by
+    gvs[package_external_fn_def, set_external_package_target_def] >>
+  drule guarded_body_code >> strip_tac >>
+  drule_all guarded_body_stmts_env >> strip_tac >>
+  `fn_has_code sa sb func /\ fn_has_code sb st' func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  `stmt_frag_ptr NONE unit.cu_context [] func cx NoLoop (\v es gt r. T) cenv
+     (stmts_env cenv NoLoop ret fbody) (eval_stmts cx fbody) es0` by
+    (irule body_stmts_sim_ptr >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[lookup_function_abi_decode_target_occurs]) >>
+  `~cenv.ce_is_ctor` by
+    gvs[bodySimTheory.body_inv_def, Abbr `cx`, initial_evaluation_context_def] >>
+  qpat_x_assum `stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[stmt_frag_ptr_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
+  impl_tac
+  >- (fs[ret_pc_ok_def, gasContextTheory.gas_admissible_def] >>
+      metis_tac[]) >>
+  simp[gas_outcome_ptr_def] >> strip_tac
+  >- ((* the body runs along a pointer-checked path *)
+      gvs[gas_summary_ptr_at_def] >>
+      drule gas_path_ptr_exec >> strip_tac >> gvs[exit_result_def]
+      >- ((* it falls off its end *)
+          gvs[stmt_lands_def] >>
+          `stor_taint_ok cx tn t` by fs[ghost_inv_def] >>
+          `ptr_safe_run (cx_dead cx) 0 0 unit.cu_context func [] G tn t /\
+           (!e. run_from 0 unit.cu_context func t <> Error e)` by
+            (irule compile_guarded_body_end_ptr_safe >>
+             qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _`
+               (irule_at Any) >>
+             qexists_tac `sb` >> simp[]) >>
+          qpat_x_assum `!fuel. (!e. run_from _ _ _ t <> _) ==> _`
+            (qspec_then `0` mp_tac) >>
+          impl_tac >- simp[] >>
+          disch_then (qx_choose_then `f1` strip_assume_tac) >>
+          irule ptr_safe_run_all_fuel >> simp[] >> qexists_tac `f1` >>
+          gvs[]) >>
+      (* it exits *)
+      rename1 `ghost_run f1 _ _ _ _ _ s0` >>
+      irule ptr_safe_run_all_fuel >> simp[] >> qexists_tac `f1` >>
+      gvs[exit_result_not_error]) >>
+  (* an exempt error: excluded by the premise at the cert's marks *)
+  drule gas_exempt_cert_execution >> strip_tac >>
+  qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def] >>
+  Cases_on `eval_stmts cx fbody
+              (es0 with gas_obs := gas_explicit marks s0.vs_gas_readings)` >>
+  rename1 `_ = (res, ee')` >> Cases_on `res` >> simp[] >>
+  strip_tac >> gvs[] >> metis_tac[]
 QED
