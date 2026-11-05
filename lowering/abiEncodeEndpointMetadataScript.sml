@@ -36,9 +36,10 @@ Theorem abi_encode_evaluated_metadata:
     (~vyper_is_dynamic E ty ==>
       abi_static_size sf ty = vyper_abi_size_bound E ty)
 Proof
-  rpt strip_tac >> irule abi_props_vyper_upto >>
-  goal_assum (drule_at Any) >>
-  irule abi_sfields_consistent_upto_init >> simp[]
+  rpt gen_tac >> strip_tac >>
+  drule abi_sfields_consistent_upto_init >>
+  disch_then (qspec_then `type_value_size tv` assume_tac) >>
+  drule_all abi_props_vyper_upto >> simp[]
 QED
 
 Theorem abi_encode_endpoint_output_size:
