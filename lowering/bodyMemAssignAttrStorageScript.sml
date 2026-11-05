@@ -6,6 +6,8 @@ Ancestors
   vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
   exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
+  gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath
+  exprSimDefs exprSimMemorySource exprSimUnwrapProps list rich_list
 Libs
   monadsyntax
 
@@ -203,6 +205,121 @@ Proof
   qexists_tac `sm` >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+QED
+
+Theorem vv_post_add_read_mem_src[local]:
+  emit_op ADD [Lit kb; Lit ko] sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,sb) /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  local_ptrs_rel func ce es.scopes s0 /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\ ee.gas_obs = [] /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv s /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  is_word_type (expr_type e) /\
+  (?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt) /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
+          [] (INL v) ee (OK u) /\
+    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_store_bound cx (expr_type e) v op u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
+    eval_operand dst u = SOME (kb + ko)
+Proof
+  strip_tac >>
+  drule_all vv_post_add_path_mem_src >> strip_tac >>
+  `sm.cs_next_id <= sn.cs_next_id /\ sm.cs_next_var <= sn.cs_next_var` by
+    (drule emitted_insts_emit_op >> simp[]) >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> irule not_fresh_at_mono >>
+     qexists_tac `sm` >> simp[]) >>
+  drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_rebased_read_mem_src >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ sn _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`kb + ko`, `dst`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  strip_tac >> qexistsl_tac [`v`, `u`] >> simp[] >> conj_tac
+  >- (irule gas_marked_exec_zero_prefix_mem_src >>
+      goal_assum (drule_at Any) >>
+      `ee with gas_obs := [] = ee` by
+        simp[vyperStateTheory.evaluation_state_component_equality] >> simp[]) >>
+  irule expr_post_rebased_compose_mem_src >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem compile_expr_add_read_outcome_mem_src[local]:
+  expr_vv_sim_mem ctx func ce cx ty e es /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  emit_op ADD [Lit kb; Lit ko] sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  is_word_type (expr_type e) /\
+  (?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt) ==>
+  gas_outcome T (cx_tops cx) (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (es,s0)
+    (\res ee u. ?v. res = INL v /\
+      expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+      expr_store_bound cx (expr_type e) v op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+      eval_operand dst u = SOME (kb + ko))
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
+    (drule (cj 1 compile_expr_grows) >> simp[]) >>
+  `local_ptrs_rel func ce es.scopes s0` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[forced_expr_admissible_raw] >>
+  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_mem_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `s0`] mp_tac) >> simp[] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_at_def]
+      >- (rename1 `vv_post _ _ _ _ _ _ _ _ _ _ tv vv t` >>
+          `~t.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by
+            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+               (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+             strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
+             drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+             simp[]) >>
+          drule_at (Pat `emit_op _ _ _ = _`) vv_post_add_read_mem_src >>
+          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
+          impl_tac >- simp[] >> strip_tac >>
+          qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u`] >>
+          simp[] >>
+          `marks = marks ++ []` by simp[] >> pop_assum SUBST1_TAC >>
+          irule gas_marked_exec_bind_normal >> goal_assum drule >> simp[]) >>
+      Cases_on `res`
+      >- (Cases_on `r` >> gvs[expr_exit_def]) >>
+      rename1 `expr_exit (INR exc) r` >>
+      `expr_res_ok (INR exc : value + exception)` by
+        (Cases_on `exc` >> Cases_on `r` >>
+         gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
+         Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+      simp[GSYM expr_exit_exception_transport] >>
+      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+  disj2_tac >> metis_tac[force_exempt_cert]
 QED
 
 Theorem body_assign_attr_storage_mem:

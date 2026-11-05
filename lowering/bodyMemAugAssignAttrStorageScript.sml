@@ -284,7 +284,7 @@ QED
 
 (* S1 stmtSimAugAssign's gas_marked_exec_zero_prefix, at either memory
    flag. *)
-Theorem gas_marked_exec_zero_prefix_mem_src[local]:
+Theorem gas_marked_exec_zero_prefix_mem_src:
   gas_marked_path memory ctx func s0 0 (OK t) /\
   gas_marked_exec memory (ctx,func) source (es with gas_obs := [],t)
     marks res ee r ==>
