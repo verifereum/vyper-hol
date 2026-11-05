@@ -648,3 +648,151 @@ Proof
   drule ao_compute_iszero_targets_chain_property >>
   simp[EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem ao_transform_insts_supply_noncontrol:
+  !insts s idx outs s'.
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI) insts /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI) outs
+Proof
+  Induct >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  gvs[Once ao_transform_insts_supply_def, EVERY_APPEND] >>
+  metis_tac[ao_transform_inst_noncontrol]
+QED
+
+Theorem ao_transform_insts_supply_nonempty:
+  !insts s idx outs s'.
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    (outs = [] <=> insts = [])
+Proof
+  Cases >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets r (SUC idx) t` >>
+  simp[Once ao_transform_insts_supply_def] >>
+  metis_tac[ao_transform_inst_nonempty]
+QED
+
+Theorem ao_transform_insts_supply_last:
+  !insts s idx outs s'.
+    insts <> [] /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    is_terminator (LAST outs).inst_opcode =
+      is_terminator (LAST insts).inst_opcode /\
+    ((LAST outs).inst_opcode = PHI <=> (LAST insts).inst_opcode = PHI)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts = (tail,s2)` >>
+  gvs[Once ao_transform_insts_supply_def] >>
+  Cases_on `insts = []`
+  >- (gvs[] >> fs[ao_transform_insts_supply_def] >>
+      metis_tac[ao_transform_inst_control]) >>
+  `tail <> []` by metis_tac[ao_transform_insts_supply_nonempty] >>
+  `ao_transform_inst dfg ra lbl idx targets fr h <> []` by
+    metis_tac[ao_transform_inst_nonempty] >>
+  simp[rich_listTheory.LAST_APPEND_NOT_NIL, LAST_DEF] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ao_transform_insts_supply_successors:
+  !insts s idx outs s'.
+    insts <> [] /\
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+       ~is_label_operand op) /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    get_successors (LAST outs) = get_successors (LAST insts)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts = (tail,s2)` >>
+  gvs[Once ao_transform_insts_supply_def] >>
+  Cases_on `insts = []`
+  >- (gvs[] >> fs[ao_transform_insts_supply_def] >>
+      metis_tac[ao_transform_inst_successors]) >>
+  `tail <> []` by metis_tac[ao_transform_insts_supply_nonempty] >>
+  simp[rich_listTheory.LAST_APPEND_NOT_NIL, LAST_DEF] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ao_transform_block_supply_last:
+  bb.bb_instructions <> [] /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  bb'.bb_instructions <> [] /\
+  is_terminator (LAST bb'.bb_instructions).inst_opcode =
+    is_terminator (LAST bb.bb_instructions).inst_opcode /\
+  ((LAST bb'.bb_instructions).inst_opcode = PHI <=>
+    (LAST bb.bb_instructions).inst_opcode = PHI)
+Proof
+  Cases_on `ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+    bb.bb_instructions` >>
+  gvs[ao_transform_block_supply_def] >> strip_tac >> gvs[] >>
+  metis_tac[ao_transform_insts_supply_nonempty, ao_transform_insts_supply_last]
+QED
+
+Theorem ao_transform_inst_phis:
+  FILTER (\i. i.inst_opcode = PHI)
+    (ao_transform_inst dfg ra lbl idx targets fr inst) =
+  if inst.inst_opcode = PHI then [ao_resolve_iszero_inst targets inst] else []
+Proof
+  Cases_on `is_terminator inst.inst_opcode \/ inst.inst_opcode = PHI`
+  >- (gvs[] >> simp[ao_transform_inst_control_owner,
+        ao_resolve_iszero_inst_fields]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+      (ao_transform_inst dfg ra lbl idx targets fr inst)` by
+    metis_tac[ao_transform_inst_noncontrol] >>
+  gvs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]
+QED
+
+Theorem ao_transform_insts_supply_phis:
+  !insts s idx outs s'.
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    FILTER (\i. i.inst_opcode = PHI) outs =
+      MAP (ao_resolve_iszero_inst targets) (FILTER (\i. i.inst_opcode = PHI) insts)
+Proof
+  Induct >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  gvs[Once ao_transform_insts_supply_def, FILTER_APPEND_DISTRIB] >>
+  first_x_assum drule_all >>
+  simp[ao_transform_inst_phis] >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[]
+QED
+
+Theorem ao_transform_inst_not_terminator:
+  ~is_terminator inst.inst_opcode ==>
+  EVERY (\i. ~is_terminator i.inst_opcode)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- simp[ao_transform_inst_control_owner, ao_resolve_iszero_inst_fields,
+          is_terminator_def] >>
+  drule_all ao_transform_inst_noncontrol >> simp[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ao_transform_insts_supply_front:
+  !insts s idx outs s'.
+    EVERY (\i. ~is_terminator i.inst_opcode) (FRONT insts) /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    EVERY (\i. ~is_terminator i.inst_opcode) (FRONT outs)
+Proof
+  Induct >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts = (tail,s2)` >>
+  gvs[Once ao_transform_insts_supply_def] >>
+  Cases_on `insts = []`
+  >- (gvs[] >> fs[ao_transform_insts_supply_def] >>
+      qspec_then `h` mp_tac (Q.GEN `inst` (cj 1 ao_transform_inst_control)) >>
+      simp[EVERY_MEM]) >>
+  `tail <> []` by metis_tac[ao_transform_insts_supply_nonempty] >>
+  gvs[FRONT_DEF, rich_listTheory.FRONT_APPEND_NOT_NIL, EVERY_APPEND] >>
+  metis_tac[ao_transform_inst_not_terminator]
+QED
