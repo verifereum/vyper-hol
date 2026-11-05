@@ -19,6 +19,7 @@
  *                                    frontier bound after
  *   (the simulation and the raw memory, pointer and taint rows are in
  *    o1ContractLowerDload{Sim,Mem,Ptr,Taint})
+ *   lower_dload_fn_row             - function row 1 to row 2
  *   o1_contract_lower_dload        - the contract theorem
  *)
 Theory o1ContractLowerDloadStage
@@ -28,6 +29,7 @@ Ancestors
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
   venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
   o1ContractLowerDloadPtr o1ContractLowerDloadTaint lowerDloadMakeSsaInput
+  venomFnScheduleRunnerProps
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -304,10 +306,35 @@ Proof
   fs[fixed_region_reserved_def] >> metis_tac[]
 QED
 
+(* One run takes function row 1 to row 2: it keeps a valid MakeSSA
+   input, adds no raw FMP operation and keeps the FMP convention. *)
+Theorem lower_dload_fn_row:
+  fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out /\
+  o1_ctx_shape observed.cu_context /\ o1_fn_row 1 fn ==>
+  o1_fn_row 2 out.fpo_function
+Proof
+  strip_tac >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    (gvs[fn_pass_step_def] >>
+     metis_tac[lookup_unique_function_member]) >>
+  `fn_inst_ids_distinct fn /\ fn_inst_wf fn` by
+    gvs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >>
+  gvs[o1_fn_row_def] >> rpt conj_tac
+  >- metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
+  >- (drule lower_dload_step_supply >> strip_tac >>
+      fs[no_raw_fmp_ops_def] >> rpt strip_tac >>
+      drule_all lower_dload_function_supply_member >> strip_tac >>
+      `EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) ys` by
+        metis_tac[lower_dload_inst_supply_no_raw_fmp] >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  drule fn_pass_step_fmp_sig_no_param >> simp[fn_pass_tag_def]
+QED
+
 Theorem o1_contract_lower_dload:
   o1_step_contract_at 1 rpolicy (CFP_Simple VP_LowerDload) /\
   o1_run_contract rpolicy D 1
 Proof
-  simp[o1_step_contract_at_plain, lower_dload_step_contract,
-       lower_dload_run_contract]
+  simp[lower_dload_run_contract] >>
+  irule o1_step_contract_at_preserve >>
+  simp[lower_dload_step_contract] >> metis_tac[lower_dload_fn_row]
 QED

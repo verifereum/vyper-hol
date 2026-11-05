@@ -1397,7 +1397,9 @@ Proof
         sue_expand_function_supply_opcodes >>
       disch_then (qspec_then `\opc. opc <> ALLOCA` mp_tac) >> simp[])
   >- metis_tac[sue_expand_function_supply_pseudos_prefix]
-  >- metis_tac[sue_expand_function_supply_tl_no_param_insts] >>
-  `wf_function fn /\ fn_inst_wf fn` by gvs[o1_fn_shape_def] >>
-  metis_tac[sue_expand_function_supply_wf_ssa]
+  >- metis_tac[sue_expand_function_supply_tl_no_param_insts]
+  >- (`wf_function fn /\ fn_inst_wf fn` by gvs[o1_fn_shape_def] >>
+      metis_tac[sue_expand_function_supply_wf_ssa]) >>
+  drule fn_pass_step_fmp_sig_no_param >>
+  gvs[o1_fn_row_def, venomPassScheduleTheory.fn_pass_tag_def]
 QED
