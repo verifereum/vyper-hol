@@ -140,3 +140,26 @@ Proof
     vyperStateTheory.bind_def] >> EVAL_TAC >>
   simp[vyperStateTheory.return_def]
 QED
+
+Theorem order_probe_lowering_order:
+  !comp cenv ret_ty ty st start_op st1 len_op st2 out_buf out_data st3 addr_op st4.
+    lower_value comp cenv ty
+      (Builtin (BaseT (UintT 256)) Len
+        [Name (ArrayT (BaseT AddressT) (Dynamic 2)) "arr"]) st = (start_op,st1) /\
+    lower_value comp cenv ty (Literal (BaseT (UintT 256)) (IntL 1)) st1 = (len_op,st2) /\
+    compile_slice_out_buf (type_memory_bytes cenv ret_ty) st2 = ((out_buf,out_data),st3) /\
+    lower_value comp cenv ty (Pop (BaseT AddressT) (NameTarget "arr")) st3 = (addr_op,st4) ==>
+    compile_builtin_dispatch_body comp cenv ret_ty ty (Slice 1)
+      [Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+         [Pop (BaseT AddressT) (NameTarget "arr")];
+       Builtin (BaseT (UintT 256)) Len
+         [Name (ArrayT (BaseT AddressT) (Dynamic 2)) "arr"];
+       Literal (BaseT (UintT 256)) (IntL 1)] st =
+    as_ptr_val ret_ty LocMemory
+      (compile_slice_extcode addr_op start_op len_op out_buf out_data st4)
+Proof
+  rpt strip_tac >>
+  simp[exprLoweringTheory.compile_builtin_dispatch_body_def,
+       exprLoweringTheory.is_msg_data_def, exprLoweringTheory.is_self_code_def,
+       exprLoweringTheory.is_extcode_def, exprLoweringTheory.extcode_addr_expr_def]
+QED
