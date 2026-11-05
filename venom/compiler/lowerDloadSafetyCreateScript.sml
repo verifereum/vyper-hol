@@ -3,7 +3,7 @@ Ancestors
   lowerDloadExternalBoundary lowerDloadSafetyHashLog
   lowerDloadOracleCallAssembly lowerDloadSafetyUpdates lowerDloadSafetyKernel
   ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
-  codegenRel memLocDefs finite_map pred_set list words
+  codegenRel contextCodegenRel memLocDefs finite_map pred_set list words
 
 (* Separate request observation from the finite CREATE outcome consumption. *)
 Theorem ld_create_exec_steps:
@@ -91,4 +91,32 @@ Proof
      irule ld_inst_output_ir >> qexists `inst` >> simp[])) >>
   gvs[ld_memory_def, ld_nonghost_def, update_var_def,
       step_prov_def, ld_erase_set_prov, out_prov_def] >> metis_tac[]
+QED
+
+Theorem ld_create_observed_bytes:
+  ld_memory lo A tn s t /\
+  access_ok lo (ld_erase A o_f H) fn inst s /\
+  taint_ok fn tn inst s /\ ~about_to_revert fn inst s /\
+  ~in_revert_forward fn s /\
+  ((inst.inst_opcode = CREATE /\ inst.inst_operands = [value;off;len]) \/
+   (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [value;off;len;salt])) /\
+  eval_operand value s = SOME v /\
+  (inst.inst_opcode = CREATE2 ==> ?sw. eval_operand salt s = SOME sw) /\
+  eval_operand off s = SOME x /\ eval_operand len s = SOME n /\
+  (op_prov H off = NONE ==> x = y) /\
+  (!k. op_prov H off = SOME k ==> ld_wordrel A (SOME k) x y) /\
+  (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) ==>
+  read_memory (w2n x) (w2n n) s = read_memory (w2n y) (w2n n) t
+Proof
+  strip_tac >> (gvs[] >>
+  `mem_read_ops inst = SOME <|iao_ofst := off; iao_size := SOME len;
+                             iao_max_size := SOME len|>` by
+    simp[mem_read_ops_def] >>
+  `MEM (w2n x,w2n n) (source_memory_read_ranges inst s)` by
+    simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  irule ld_observed_memory_read >> simp[] >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`H`,`fn`,`lo`,`tn`] >> simp[])
 QED
