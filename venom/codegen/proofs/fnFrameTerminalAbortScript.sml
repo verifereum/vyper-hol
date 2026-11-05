@@ -819,6 +819,7 @@ Theorem gen_inst_ext_fault_frame_sim:
   fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  ~vs.vs_call_ctx.cc_static /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
