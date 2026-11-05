@@ -2,7 +2,7 @@ Theory convertScalarBridge
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts
   convertScalarDispatch convertScalarSim convertScalarTyping
-  exprSimHyps  exprLowering compileEnv vyperAST vyperTyping
+  exprSimHypsDefs exprSimSource exprSimHyps exprLowering compileEnv vyperAST vyperTyping
   vyperTypeSystem vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
 
 Theorem scalar_operand_typed_frag:
