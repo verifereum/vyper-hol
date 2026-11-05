@@ -7,7 +7,7 @@ Ancestors
   exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
   sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
   gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState typedWordArgsFactsPtr
-  typedWordArgsPostPtr
+  typedWordArgsPostPtr exprStackPtr
 
 Theorem ptr_inst_ok_assert:
   ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
@@ -657,3 +657,17 @@ Resume send_expr_sim_ptr[tail_post]:
 QED
 
 Finalise send_expr_sim_ptr
+
+Theorem send_expr_vv_sim_ptr:
+  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
+  typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) args /\
+  ptr_args_ready d ctx PG func cenv cx expr_type (expr_sim_inv cenv cx env) args ==>
+  expr_vv_sim_ptr d ctx PG func cenv cx ty (Call ann (Send has_gas) args dflt) es
+Proof
+  strip_tac >> irule expr_vv_sim_stack_ptr >> rpt conj_tac
+  >- (gen_tac >>
+      Cases_on `compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa` >>
+      drule compile_expr_send_stack >> simp[])
+  >- metis_tac[eval_expr_send_value] >>
+  irule send_expr_sim_ptr >> qexists_tac `env` >> simp[]
+QED
