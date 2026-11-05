@@ -6226,3 +6226,73 @@ QED
    successful execution nor source entry admission proves the universal
    base simulation. Unconditional root clearing is not correct source
    copying on arbitrary nonempty donors. No frozen counterexample yet. *)
+
+Theorem probe_descendant_nonempty_source_root:
+  lookup_storage 0w (get_storage probe_deep_context
+    (SND (eval_expr probe_deep_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+      probe_deep_source_state)) F) = 1w
+Proof
+  rewrite_tac[probe_deep_source_call] >>
+  simp[get_storage_after_set, lookup_storage_def, update_storage_def,
+       APPLY_UPDATE_THM]
+QED
+
+Theorem probe_descendant_machine_root:
+  !fuel ctx ss ir s.
+    ss.vs_current_bb = "entry" /\
+    run_blocks (SUC fuel) ctx probe_descendant_function ss = IntRet ir s ==>
+    lookup_storage 0w (contract_storage s) = 0w
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[probe_descendant_run_blocks] >>
+  simp[contract_storage_def, sstore_def, lookup_account_def,
+       lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+Theorem probe_descendant_live_root_incompatible[local]:
+  !ctx func cenv cx es s tv.
+    storage_read_live cx F
+      (lookup_account cx.txn.target es.accounts).storage 0w tv /\
+    0 < type_slot_size tv /\
+    lookup_storage 0w (lookup_account cx.txn.target es.accounts).storage = 1w /\
+    lookup_storage 0w (contract_storage s) = 0w ==>
+    ~stmt_state_rel ctx func cenv cx es s
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `storage_agree
+    (storage_dead cx F (lookup_account cx.txn.target es.accounts).storage)
+    (lookup_account cx.txn.target es.accounts).storage (contract_storage s)` by
+    fs[stmt_state_rel_def, state_rel_def, storage_rel_def] >>
+  drule_all accountsRelPropsTheory.storage_agree_read_head >> simp[]
+QED
+
+(* Universal-base obstruction audit:
+   probe_descendant_nonempty_source_root checks the existing donor-length-one
+   source control, while probe_descendant_machine_root proves root zero for
+   EVERY actual execution of this arbitrary callee from its entry block.
+   probe_descendant_live_root_incompatible is the conditional storage_rel /
+   stmt_state_rel obstruction: a live source root of one cannot relate to
+   that machine result. target_post requires stmt_state_rel as its first
+   conjunct, regardless of descendant liveness.
+
+   Scope of this diagnostic: the existing concrete nonempty-donor fixture
+   has inner donor length zero. probe_deep_inner_shrink_base therefore
+   returns a runtime bounds error, NOT a successful place; target_sim then
+   permits expr_exit instead of target_post. This control alone does not
+   refute universal target_case. probe_deep_copy_symbolic_success also
+   describes n=m=k=1: copying yields root1, middle1, descendant1, but an
+   admitted successful-base entry witness for that branch has not been
+   constructed here. The conditional incompatibility has explicit liveness
+   and root-value hypotheses; no entry admission follows from it.
+
+   Missing to prove ~target_case: admitted machine/source entry, successful
+   source base branch, appropriate compile/code witness, and exclusion of
+   both the success and allowed exit disjuncts of frag_exec. Missing to
+   prove the candidate does satisfy target_case: the complete universal
+   simulation of source copying by this unconditional-clearing callee.
+   Neither is established. nocalls=T cannot fix this: the inner internal
+   call makes the target-case premise vacuous, but also forbids the intended
+   outer target admission. We use nocalls=F for a substantive test.
+   Stop for ancestor strategy review; do not continue admission bookkeeping
+   or replace the callee without a new strategy. *)
