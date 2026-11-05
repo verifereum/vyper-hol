@@ -754,6 +754,66 @@ Proof
   drule_all body_field_region_frontier >> simp[]
 QED
 
+Theorem stmt_state_rel_field_word_mem_src[local]:
+  !func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
+    stmt_state_rel ctx func cenv cx es s /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w0 /\
+    lookup_scopes id es.scopes = SOME entry /\
+    entry.type = StructTV fs /\ entry.value = StructV vals /\
+    fields_layout flds fs /\ struct_has_type fs vals /\
+    ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+    is_word_type fty /\ evaluate_type (get_tenv cx) fty = SOME ftv /\
+    value_has_type ftv fv ==>
+    mload (w2n (w0 + n2w (struct_field_offset flds fld))) s =
+      typed_val_to_w256 ftv fv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac [stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  `w2n w0 + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz /\
+   val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+     pure_rewrite_tac [local_ptrs_rel_def] >> strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     FULL_SIMP_TAC std_ss [optionTheory.SOME_11] >> metis_tac[]) >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `w2n w0 + type_memory_size_fields fs <= s.vs_alloca_next` by
+    (qpat_x_assum `type_memory_size entry.type <= sz` mp_tac >>
+     ASM_SIMP_TAC std_ss [type_memory_size_def] >> decide_tac) >>
+  drule_all body_field_address_no_wrap >>
+  SIMP_TAC std_ss [wordsTheory.n2w_w2n] >> strip_tac >>
+  `fields_in_memory vals fs (w2n w0) s.vs_memory` by
+    (qpat_x_assum `val_in_memory entry.type entry.value _ _` mp_tac >>
+     ASM_SIMP_TAC std_ss [val_in_memory_def, type_value_case_def]) >>
+  drule_all fields_in_memory_field >> strip_tac >>
+  qpat_x_assum `struct_has_type _ _` kall_tac >>
+  qpat_x_assum `val_in_memory entry.type entry.value _ _` kall_tac >>
+  qpat_x_assum `fields_in_memory _ _ _ _` kall_tac >>
+  Cases_on `fty` >> FULL_SIMP_TAC std_ss [is_word_type_def] >-
+   (Cases_on `b` >> FULL_SIMP_TAC std_ss [is_word_type_def] >>
+    qpat_x_assum `evaluate_type _ _ = SOME ftv` mp_tac >>
+    SIMP_TAC std_ss [vyperValueTheory.evaluate_type_def, base_type_case_def,
+      bound_case_def, LET_THM, AllCaseEqs()] >> strip_tac >>
+    qpat_x_assum `BaseTV _ = ftv` (SUBST_ALL_TAC o SYM) >>
+    Cases_on `fv` >>
+    FULL_SIMP_TAC std_ss [value_has_type_def, type_value_distinct,
+      base_type_distinct, type_value_11, base_type_11] >>
+    FULL_SIMP_TAC std_ss [val_in_memory_def,
+      typed_val_to_w256_def, valueEncodingPropsTheory.mem_word_at_eq_mload,
+      type_value_case_def, base_type_case_def, bound_case_def, AllCaseEqs()] >>
+    FULL_SIMP_TAC std_ss [is_word_type_def]) >>
+  qpat_x_assum `evaluate_type _ _ = SOME ftv` mp_tac >>
+  SIMP_TAC std_ss [vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >> qpat_x_assum `FlagTV _ = ftv` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `fv` >>
+  FULL_SIMP_TAC std_ss [value_has_type_def, type_value_distinct,
+    type_value_11] >>
+  FULL_SIMP_TAC std_ss [val_in_memory_def, typed_val_to_w256_def,
+    valueEncodingPropsTheory.mem_word_at_eq_mload, type_value_case_def]
+QED
+
 Theorem augassign_attr_local_load_mem[local]:
   emit_op ADD [Var p; Lit (n2w (struct_field_offset fields fld))] sa = (dst,sn) /\
   emit_op MLOAD [dst] sn = (cur,sb) /\
