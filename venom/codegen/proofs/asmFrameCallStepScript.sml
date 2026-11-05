@@ -2883,6 +2883,85 @@ Proof
   drule_all asm_call_finish_credit_safe >> simp[]
 QED
 
+Theorem asm_create_refund_prefix_credit:
+  s.contexts <> [] /\ s.msdomain = Collect d /\
+  (do consume_gas n; assert_not_static; set_return_data [];
+      get_num_contexts od) s = (INL depth,u) ==>
+  u.contexts <> [] /\ u.msdomain = Collect d /\
+  n <= (FST (HD u.contexts)).gasUsed /\ depth = LENGTH u.contexts
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[consume_gas_def, assert_not_static_def, get_static_def,
+       set_return_data_def, get_num_contexts_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem asm_create_refund_prefix_safe:
+  s.contexts <> [] /\ s.msdomain = Collect d /\
+  (do consume_gas n; assert_not_static; set_return_data [];
+      get_num_contexts od) s = (INL depth,u) /\
+  abort_unuse n u = (INR e,t) ==> ~vfm_abort e
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_create_refund_prefix_credit >> strip_tac >>
+  Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  drule_all asm_call_safe_abort_unuse >> simp[]
+QED
+
+Theorem asm_create_original_access_boundary:
+  s.contexts <> [] /\ s.msdomain = Collect d /\
+  (do access_address address; ensure_storage_in_domain address;
+      update_accounts (increment_nonce sender); get_rollback od) s =
+    (INL rb,u) ==>
+  u.contexts = s.contexts /\ u.msdomain = Collect
+    (d with <| addresses updated_by fINSERT address;
+               fullStorages updated_by fINSERT address |>) /\
+  get_original u = (INL u.originalAccounts,u)
+Proof
+  rpt strip_tac >>
+  gvs[access_address_def, ensure_storage_in_domain_def,
+      domain_check_def, set_domain_def, update_accounts_def, get_rollback_def,
+      get_original_def, bind_def, ignore_bind_def, return_def]
+QED
+
+Theorem asm_create_safe_abort_exists:
+  s.contexts <> [] /\ abort_create_exists sender s = (INR e,t) ==>
+  ~vfm_abort e
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[abort_create_exists_def, update_accounts_def, push_stack_def, inc_pc_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), vfm_abort_def]
+QED
+
+Theorem asm_create_charged_finish_safe:
+  s.contexts <> [] /\ s.msdomain = Collect d /\
+  (do consume_gas n; assert_not_static; set_return_data [];
+      get_num_contexts od) s = (INL depth,u) /\
+  (if b1 \/ b2 \/ depth > 1024 then abort_unuse n else do
+     access_address address; ensure_storage_in_domain address;
+     if b3 then abort_create_exists sender
+     else proceed_create sender address value code n
+   od) u = (INR e,t) ==> ~vfm_abort e
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_create_refund_prefix_credit >> strip_tac >>
+  Cases_on `b1 \/ b2 \/ depth > 1024`
+  >- (gvs[] >> Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+      drule_all asm_call_safe_abort_unuse >> simp[]) >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  simp[access_address_def, ensure_storage_in_domain_def,
+       domain_check_def, set_domain_def, bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `(if b3 then _ else _) v` >>
+  `v.contexts <> []` by simp[Abbr `v`] >>
+  Cases_on `b3` >> simp[] >> strip_tac
+  >- (drule_all asm_create_safe_abort_exists >> simp[]) >>
+  drule_all vfmStepLengthTheory.proceed_create_returns_inl >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
