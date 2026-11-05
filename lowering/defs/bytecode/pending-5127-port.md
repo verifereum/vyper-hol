@@ -107,6 +107,7 @@ from reverting one change at a time in the pinned compiler and recompiling.
 - `builtin-forms/struct_code_slice`
 - `builtin-forms/struct_data_slice`
 - `conversions/str_to_bys`
+- `external-entries/dflt_bytes`
 - `main/external_dynamic`
 - `memory-stores/a02_bytes_local_from_arg`
 - `memory-stores/c07_annassign_str_same_len`
@@ -167,6 +168,7 @@ from reverting one change at a time in the pinned compiler and recompiling.
 - `external-calls/e25_arg_strlit_short`
 - `external-calls/e36_arg_bytes_literal`
 - `external-calls/e46_arg_storage_str`
+- `external-entries/base_dom1`
 - `memory-stores/enc_in_assign`
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
