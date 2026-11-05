@@ -581,7 +581,18 @@ Theorem round_ceil32_checks:
        mk_inst (id+1) AND [Var tmp;
          Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w]
          [out]] s Gf tnf /\
-    op_taint tnf (Var out) = {} /\ tnf.t_mem = tn.t_mem
+    op_taint tnf (Var out) = {} /\ tnf.t_mem = tn.t_mem /\
+    (!t. run_inst_seq
+      [mk_inst id ADD [Var lenvar;Lit 31w] [tmp];
+       mk_inst (id+1) AND [Var tmp;
+         Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w]
+         [out]] s = OK t ==>
+      lookup_var out t = SOME (n2w (contractABI$ceil32 L)) /\
+      (!a. mload a t = mload a s) /\
+      (!x. x <> tmp /\ x <> out ==>
+        lookup_var x t = lookup_var x s /\
+        op_taint tnf (Var x) = op_taint tn (Var x) /\
+        (!C. ptr_covers G tn x s C ==> ptr_covers Gf tnf x t C)))
 Proof
   strip_tac >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j] _ _ _` >>
@@ -608,8 +619,46 @@ Proof
     (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
      simp[exec_pure2_def, eval_operand_def]) >>
-  simp[inst_seq_ptr_def, Abbr `j`, copy_len_binop_ghost_frame]
+  simp[inst_seq_ptr_def, Abbr `j`, copy_len_binop_ghost_frame] >>
+  suspend "endpoint"
 QED
+
+Resume round_ceil32_checks[endpoint]:
+  gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i;j] s` >>
+  `step_inst_base j (update_var tmp (n2w L+31w) s) =
+     OK (update_var out (n2w (contractABI$ceil32 L))
+       (update_var tmp (n2w L+31w) s))` by
+    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE]) >>
+  qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
+  fs[Abbr `j`, run_inst_seq_def] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[mload_def, update_var_def] >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[Abbr `t1`, Abbr `i`, copy_len_binop_ghost_frame] >>
+  suspend "coverage"
+QED
+
+Resume round_ceil32_checks[coverage]:
+  rpt strip_tac >>
+  `ptr_covers g1 t1 x s1 C` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `i`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  qmatch_goalsub_abbrev_tac `step_prov PG g1 j sf` >>
+  `ptr_covers (step_prov PG g1 j sf) (step_taint j s1 sf t1) x sf C` by
+    (simp[Abbr `sf`] >> irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  fs[Abbr `sf`, Abbr `s1`, ptr_covers_def, eval_operand_def,
+     lookup_var_def, update_var_def]
+QED
+
+Finalise round_ceil32_checks
 
 Theorem store_load_clean_checks:
   ptr_covers G tn cell s 32 /\ lookup_var cell s = SOME a /\
