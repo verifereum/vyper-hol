@@ -1,8 +1,10 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): array
-   literal. *)
+   literal.  As S1's body_make_array_case: bodyMemAggregate's
+   body_make_array_nowiden_mem when no element is a widened internal call,
+   bodyMemMakeArrayWidened otherwise. *)
 Theory bodyMemMakeArray
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemAggregate bodyMemMakeArrayWidened
 
 Theorem body_make_array_mem_case:
   !cx ty t n es.
@@ -10,5 +12,10 @@ Theorem body_make_array_mem_case:
      body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Builtin ty (MakeArray t n) es)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >>
+  strip_tac >>
+  Cases_on `!e. MEM e es ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule body_make_array_nowiden_mem >> metis_tac[]) >>
+  irule body_make_array_widened_call_elem_mem >> metis_tac[]
 QED
