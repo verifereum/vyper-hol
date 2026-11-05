@@ -1100,7 +1100,7 @@ val word_of_bytes_be_le_256 =
 
 (* asm_expand_memory agrees with EVM expand_memory.
    After expanding, both sides produce the same memory. *)
-Theorem asm_expand_eq_evm[local]:
+Theorem asm_expand_eq_evm:
   !n (mem:byte list).
     asm_expand_memory n mem =
     mem ++ REPLICATE (MAX (LENGTH mem) (((n + 31) DIV 32) * 32) -
@@ -1122,7 +1122,7 @@ Proof
 QED
 
 (* Simp-normalized form: simp commutes 32 * X vs X * 32, folds offset+size+31 *)
-Theorem asm_expand_eq_evm_simp[local]:
+Theorem asm_expand_eq_evm_simp:
   !n (mem:byte list).
     mem ++ REPLICATE (MAX (LENGTH mem) (32 * ((n + 31) DIV 32)) -
                      LENGTH mem) (0w:byte) =
@@ -3325,7 +3325,7 @@ Proof
 QED
 
 (* Helper: LUPDATE as TAKE/DROP *)
-Theorem lupdate_take_drop[local]:
+Theorem lupdate_take_drop:
   !n v l. n < LENGTH l ==> (LUPDATE v n l = TAKE n l ++ [v] ++ DROP (SUC n) l)
 Proof
   Induct_on `n` >> Cases_on `l` >> simp[LUPDATE_def]

@@ -1495,13 +1495,6 @@ Proof
   simp[asm_frame_step_ok_def]
 QED
 
-Theorem asm_expand_memory_append_zeros[local]:
-  asm_expand_memory n mem =
-    mem ++ REPLICATE (MAX (LENGTH mem) (((n + 31) DIV 32) * 32) - LENGTH mem) 0w
-Proof
-  simp[asm_expand_memory_def] >> rw[arithmeticTheory.MAX_DEF] >> simp[]
-QED
-
 Theorem asm_expand_memory_nested[local]:
   asm_expand_memory n (asm_expand_memory m mem) =
     if m <= n then asm_expand_memory n mem else asm_expand_memory m mem
@@ -1511,11 +1504,11 @@ Proof
         irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >>
   Cases_on `m <= n`
   >- (first_x_assum drule >> strip_tac >>
-      simp[asm_expand_memory_append_zeros, APPEND_ASSOC] >>
+      simp[asm_expand_eq_evm, APPEND_ASSOC] >>
       rw[arithmeticTheory.MAX_DEF] >>
       simp[REPLICATE_APPEND] >> gvs[] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
   `n <= m` by simp[] >> first_x_assum drule >> strip_tac >>
-  simp[asm_expand_memory_append_zeros, APPEND_ASSOC] >>
+  simp[asm_expand_eq_evm, APPEND_ASSOC] >>
   rw[arithmeticTheory.MAX_DEF] >> simp[REPLICATE_APPEND] >> gvs[] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac
 QED
 
@@ -1529,7 +1522,7 @@ Proof
   Cases_on `az = 0` >> Cases_on `rs = 0` >>
   simp[max_expansion_range_def, asm_call_memory_def] >>
   rw[] >> gvs[buffer_to_list_extend, vfmConstantsTheory.word_size_def,
-    asm_expand_memory_nested, asm_expand_memory_append_zeros] >>
+    asm_expand_memory_nested, asm_expand_eq_evm] >>
   IF_CASES_TAC >> gvs[] >>
   `ao + az = ro + rs` by decide_tac >>
   `ao + (az + 31) = ro + (rs + 31)` by decide_tac >> simp[]

@@ -817,15 +817,6 @@ Proof
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
 QED
 
-Theorem starve_expand_memory[local]:
-  !n (mem:byte list).
-    mem ++ REPLICATE (MAX (LENGTH mem) (32 * ((n + 31) DIV 32)) -
-                     LENGTH mem) 0w = asm_expand_memory n mem
-Proof
-  rpt gen_tac >> simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  IF_CASES_TAC >> simp[]
-QED
-
 Theorem starve_word_bytes[local]:
   !bs:byte list. LENGTH bs = 32 ==>
     word_of_bytes T (0w:bytes32) bs =
@@ -1325,7 +1316,7 @@ Proof
   `buffer_to_list expanded = asm_expand_memory n (buffer_to_list b)` by
     (simp[Abbr `expanded`, vfmBufferTheory.buffer_to_list_extend] >>
      pure_rewrite_tac[GSYM vfmBufferTheory.LENGTH_buffer_to_list] >>
-     rewrite_tac[starve_expand_memory]) >>
+     rewrite_tac[asm_expand_eq_evm_simp]) >>
   `n <= buffer_length expanded` by
     (mp_tac (Q.SPECL [`n`, `buffer_to_list b`]
       spillSimTheory.asm_expand_memory_length) >>
@@ -1805,7 +1796,7 @@ Proof
   `buffer_to_list expanded = asm_expand_memory (off + sz) (buffer_to_list b)` by
     (simp[Abbr `expanded`, vfmBufferTheory.buffer_to_list_extend] >>
      pure_rewrite_tac[GSYM vfmBufferTheory.LENGTH_buffer_to_list] >>
-     once_rewrite_tac[GSYM starve_expand_memory] >> simp[GSYM ADD_ASSOC]) >>
+     once_rewrite_tac[GSYM asm_expand_eq_evm_simp] >> simp[GSYM ADD_ASSOC]) >>
   `off + sz <= buffer_length expanded` by
     (mp_tac (Q.SPECL [`off + sz`, `buffer_to_list b`]
        spillSimTheory.asm_expand_memory_length) >>
@@ -2129,19 +2120,12 @@ Proof
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
 QED
 
-Theorem starve_lupdate_take_drop[local]:
-  !n v l. n < LENGTH l ==>
-    LUPDATE v n l = TAKE n l ++ [v] ++ DROP (SUC n) l
-Proof
-  Induct_on `n` >> Cases_on `l` >> simp[LUPDATE_def]
-QED
-
 Theorem starve_swap_stack[local]:
   !n stk. SUC n < LENGTH stk ==>
     LUPDATE (HD stk) (SUC n) (LUPDATE (EL (SUC n) stk) 0 stk) =
       EL n (TL stk) :: TAKE n (TL stk) ++ [HD stk] ++ DROP (SUC n) (TL stk)
 Proof
-  Cases_on `stk` >> simp[LUPDATE_def, starve_lupdate_take_drop]
+  Cases_on `stk` >> simp[LUPDATE_def, lupdate_take_drop]
 QED
 
 Theorem starve_swap:
