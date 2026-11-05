@@ -104,6 +104,25 @@ Ancestors
 Libs
   pairLib
 
+Theorem compatible_dynarray_type_counterexample:
+  arg_type_fits (BaseT (StringT 1)) (BaseT (StringT 2)) /\
+  ~((\ty. ty = BaseT (StringT 1)) (BaseT (StringT 1)) <=>
+    (\ty. ty = BaseT (StringT 1)) (BaseT (StringT 2)))
+Proof
+  EVAL_TAC
+QED
+
+Theorem compatible_dynarray_type_unprovable:
+  ~(!dynarray_type src dst.
+      arg_type_fits src dst ==> (dynarray_type src <=> dynarray_type dst))
+Proof
+  strip_tac >>
+  first_x_assum (qspecl_then
+    [`\ty. ty = BaseT (StringT 1)`, `BaseT (StringT 1)`,
+     `BaseT (StringT 2)`] mp_tac) >>
+  mp_tac compatible_dynarray_type_counterexample >> simp[]
+QED
+
 Theorem outside_locals_transport:
   outside_locals cenv scopes s op /\
   eval_operand op' t = eval_operand op s /\
