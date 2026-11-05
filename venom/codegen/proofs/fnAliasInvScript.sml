@@ -622,6 +622,42 @@ Proof
   metis_tac[alias_ready_selected_source_not_phi_output]
 QED
 
+Theorem alias_input_fold_trigger:
+  !base acc placed.
+  FLOOKUP op_map v = SOME i /\ FLOOKUP matching i = SOME x /\
+  (MEM i placed ==> MEM x acc) /\ (MEM x acc \/ MEM v base) ==>
+  MEM x (FST (FOLDL (\(acc,placed) w.
+    case FLOOKUP op_map w of
+      NONE => (acc ++ [w], placed)
+    | SOME j => if MEM j placed then (acc,placed)
+        else case FLOOKUP matching j of
+          NONE => (acc,placed)
+        | SOME y => (acc ++ [y],j::placed)) (acc,placed) base))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> disch_tac >>
+  Cases_on `FLOOKUP op_map h` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  rename1 `_ = SOME j` >> Cases_on `MEM j placed` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  Cases_on `FLOOKUP matching j` >> simp[] >>
+  first_x_assum irule >> gvs[] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem alias_input_vars_trigger_intro:
+  !pred instrs v i base x.
+  FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME i /\
+  MEM v base /\
+  FLOOKUP (SND (build_phi_maps pred (collect_phis instrs))) i = SOME x ==>
+  MEM x (input_vars_from pred instrs base)
+Proof
+  rpt strip_tac >> simp[input_vars_from_def] >>
+  Cases_on `NULL (collect_phis instrs)`
+  >- gvs[NULL_EQ, build_phi_maps_def] >>
+  Cases_on `build_phi_maps pred (collect_phis instrs)` >> gvs[] >>
+  simp[Once pairTheory.UNCURRY] >> irule alias_input_fold_trigger >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem alias_lineage_join_ordinary_coverage:
   liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
   cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
