@@ -6,27 +6,6 @@ Ancestors
 
 (* Located representations depend on the value read, not the syntax of the
    captured source result.  Normalize once before using value-load adapters. *)
-Theorem rest_word_vv_post_value:
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
-  read_result cx tv es' = (INL v, es') ==>
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s
-Proof
-  strip_tac >>
-  `vv_holds cenv cx (expr_type e) tv vv es' s =
-   vv_holds cenv cx (expr_type e) (Value v) vv es' s` by
-    (Cases_on `vv` >> simp[loweringPostsTheory.vv_holds_def,
-       vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
-     Cases_on `p.ptr_location` >>
-     simp[loweringPostsTheory.storage_holds_def,
-       loweringPostsTheory.immutable_holds_def,
-       vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
-  `vv_at cenv cx (expr_type e) sa sm es' tv vv s =
-   vv_at cenv cx (expr_type e) sa sm es' (Value v) vv s` by
-    (Cases_on `vv` >> simp[loweringPostsTheory.vv_at_def,
-       vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  asm_rewrite_tac[loweringPostsTheory.vv_post_def]
-QED
 
 (* Discharge the loop's element oracle at the actual arithmetic endpoint.
    No control-position premise is needed for this straight-line loader. *)
