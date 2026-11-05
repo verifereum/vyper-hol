@@ -80,10 +80,31 @@ closest worked composition of operand simulation + operator on this
 interface; lowering/stmtSimForcedScript.sml (`forced_then_*`) composes a
 forced expression with a gas-free continuation.
 
-The S1 (non-memory) twin and its source/code helpers are listed below. The
-stmtSimAugAssign* theories are built locally with their proofs admitted by
-an overlay (another branch is porting them); their source-side and
-code-side lemmas are fine to use. Don't edit those files.
+Worked memory composition for this exact shape: the local and top-level
+word leaves are proved, in lowering/bodyMemAugAssignLocalScript.sml and
+lowering/bodyMemAugAssignTopWordScript.sml. Follow their structure
+(`compile_augassign_*_mem` with suspend/Resume phases: load, rhs from
+`expr_sim_mem` with the exempt branch, operator via `binop_frag_typed_mem`
+and `binop_frag_val_mem_def`/`binop_frag_mem_def`, store, post frames
+chained with `not_fresh_at_mono` and `return_buf_frame_frame`).
+
+The S1 proof this ports is on commit e80ec2cf7 (branch
+bot/opus/seq-692-s1-stmts-decls): `git show
+e80ec2cf7:lowering/stmtSimAugAssignAttrScript.sml`. Its source-side helpers
+are NOT in this tree (the stmtSimAugAssignAttr here is an older, different
+file), so copy the ones you need into the target file as `[local]`
+`*_mem_src` theorems, generalising `gas_marked_path F`/`gas_marked_exec F`
+to a `memory` variable, as the two proved leaves do. Don't edit the
+stmtSimAugAssign* files.
+
+Missing piece to build: the MSTORE of the result at the field address
+`p + offset` on a memory-safe path (the field analogue of
+`assign_local_word_store_path_mem` in lowering/bodyMemAssignLocalWordScript.sml).
+Use `emit_mstore_mem_ok` with the bound from `body_field_region_frontier`
+(lowering/bodyFieldMemoryPropsScript.sml); the ADD is `attr_add_frag_mem`/
+`attr_add_prefix_mem_ok` there; the MLOAD of the field on a memory path
+via `body_read1_frag_mem` (lowering/bodyUnwrapMemoryScript.sml) or the
+`compile_attribute_name_body_*_mem` lemmas.
 
 S1 twin: `body_augassign_attr_local` (lowering/bodySimStmtCasesScript.sml)
 via `compile_augassign_attr_local_case` (lowering/stmtSimAugAssignAttrScript.sml),
