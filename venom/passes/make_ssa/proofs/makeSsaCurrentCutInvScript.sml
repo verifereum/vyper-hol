@@ -320,3 +320,12 @@ Proof
   qexistsl_tac [`ev`, `pre`, `rs'`, `E'`] >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
+
+Theorem current_cut_rename_operands_rel[local]:
+  !ops. (!v. MEM (Var v) ops ==> FLOOKUP sg (latest_current_name rs v) = SOME v) ==>
+    LIST_REL (op_rename sg) ops (rename_current_operands rs ops)
+Proof
+  Induct >> simp[makeSsaCurrentDefsTheory.rename_current_operands_def] >>
+  Cases_on `h` >> simp[makeSsaCurrentDefsTheory.rename_current_operands_def,
+    op_rename_def] >> metis_tac[]
+QED
