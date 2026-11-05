@@ -279,3 +279,72 @@ Proof
   simp[dfs_block_state_def] >> rpt strip_tac >>
   drule (cj 1 dfs_call_reachable_mutual) >> simp[]
 QED
+
+Theorem ret_region_dfs_params_unpromised:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base ctr) lbl ps /\
+  cfg_path cfg lbl target /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps else ([],ps)) =
+    (param_ops,ps1) ==>
+  ~ps1.ps_cleanup_promised
+Proof
+  strip_tac >> drule_all ret_region_dfs_block_unpromised >> strip_tac >>
+  Cases_on `bb = HD fn.fn_blocks` >> gvs[] >>
+  metis_tac[prepare_params_plan_promised, pairTheory.SND]
+QED
+
+Theorem ret_region_dfs_cleanup_physical:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base ctr) lbl ps /\
+  cfg_path cfg lbl target /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps else ([],ps)) =
+    (param_ops,ps1) ==>
+  clean_stack_plan lv cfg fn bb ps1 =
+    case cfg_preds_of cfg bb.bb_label of
+      [pred] =>
+        if LENGTH (cfg_succs_of cfg pred) <= 1 then ([],ps1)
+        else (case lookup_block pred fn.fn_blocks of
+          NONE => ([],ps1)
+        | SOME pred_bb =>
+          popmany_plan (MAP Var (FILTER (\v. ~MEM v
+            (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+            (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))) ps1)
+    | _ => ([],ps1)
+Proof
+  strip_tac >>
+  `~ps1.ps_cleanup_promised` by metis_tac[ret_region_dfs_params_unpromised] >>
+  `!n. ~cleanup_elision_safe ps1.ps_cleanup_height ps1.ps_cleanup_growth cfg fn bb n` by
+    metis_tac[inventory_ret_cleanup_not_safe] >>
+  simp[clean_stack_plan_def, LET_THM]
+QED
+
+Theorem ret_region_dfs_cleanup_every:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base ctr) lbl ps /\
+  cfg_path cfg lbl target /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps else ([],ps)) =
+    (param_ops,ps1) /\
+  ALL_DISTINCT ps1.ps_stack /\ EVERY P ps1.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps1 = (ops,qs) ==>
+  EVERY P qs.ps_stack
+Proof
+  strip_tac >> drule_all ret_region_dfs_cleanup_physical >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[] >>
+  rename1 `_ = pred::rest` >> Cases_on `rest` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `lookup_block pred fn.fn_blocks` >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `popmany_plan items ps1` >>
+  drule inventory_popmany >> disch_then (qspec_then `items` mp_tac) >>
+  gvs[EVERY_MEM] >> metis_tac[pairTheory.SND]
+QED
