@@ -306,6 +306,44 @@ Proof
   EVAL_TAC
 QED
 
+(* ML term abbreviations only: no logical constants are introduced. *)
+val prefix_dload_unit_tm = deploy_prefix_negative_dload_artifact
+  |> concl |> find_term (fn tm => is_eq tm andalso
+       optionSyntax.is_some (rhs tm)) |> rhs |> rand
+  |> pairSyntax.dest_pair |> fst;
+val prefix_dload_fn_tm =
+  ``HD (^prefix_dload_unit_tm).cu_context.ctx_functions``;
+
+Theorem deploy_prefix_negative_cfg_artifact:
+  cfgDefs$cfg_analyze ^prefix_dload_fn_tm =
+    <|cfg_succs := FEMPTY |+ ("__deploy", []);
+      cfg_preds := FEMPTY |+ ("__deploy", []);
+      cfg_reachable := FEMPTY |+ ("__deploy", T);
+      cfg_dfs_post := ["__deploy"]; cfg_dfs_pre := ["__deploy"]|>
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FUPDATE_EQ]
+QED
+
+Theorem deploy_prefix_negative_bp_artifact:
+  concretizeMemLocDefs$bp_analyze_fuel 48
+    (cfgDefs$cfg_analyze ^prefix_dload_fn_tm) ^prefix_dload_fn_tm =
+  FEMPTY |+ ("%0", [Ptr (Allocation 0) (SOME 0)])
+         |+ ("formal_var_0", [Ptr (Allocation 8) (SOME 0)])
+         |+ ("%3", [Ptr (Allocation 5) (SOME 0)])
+Proof
+  pure_rewrite_tac[deploy_prefix_negative_cfg_artifact] >> EVAL_TAC >>
+  simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem deploy_prefix_negative_alloc_items_artifact:
+  concretizeMemLocDefs$static_alloca_items ^prefix_dload_fn_tm =
+    SOME [(Allocation 0,32); (Allocation 8,32); (Allocation 5,0)]
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_0_n2w, wordsTheory.w2n_n2w,
+                   wordsTheory.dimword_def]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
