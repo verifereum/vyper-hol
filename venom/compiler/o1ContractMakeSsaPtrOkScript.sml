@@ -472,6 +472,226 @@ Proof
   metis_tac[mssa_nonalloca_roots_origin, pred_setTheory.IN_DIFF]
 QED
 
+Theorem mssa_input_pointer_definition:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  MEM v inst.inst_outputs /\ v IN fn_pv P fn ==>
+  inst.inst_opcode = ALLOCA \/
+  ((inst.inst_opcode = DALLOCA \/
+    (inst.inst_opcode = PARAM /\
+     ?idx. inst.inst_operands = [Lit idx] /\ w2n idx IN P fn.fn_name)) /\
+   v NOTIN alloca_roots fn) \/
+  (is_pointer_preserving_op inst.inst_opcode /\
+   ?u. MEM (Var u) inst.inst_operands /\ u IN fn_pv P fn)
+Proof
+  simp[fn_ptr_ok_def] >> metis_tac[]
+QED
+
+Theorem mssa_input_phi_pointer_operand:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  MEM v inst.inst_outputs /\ v IN fn_pv P fn /\
+  inst.inst_opcode = PHI /\ MEM (Var u) inst.inst_operands ==>
+  u IN fn_pv P fn
+Proof
+  strip_tac >> drule_all mssa_input_pointer_definition >> simp[] >> strip_tac >>
+  qpat_x_assum `fn_ptr_ok _ _` mp_tac >>
+  simp[fn_ptr_ok_def, phi_pv_all_var_def, fn_pv_def] >>
+  gvs[fn_insts_def, MEM_fn_insts_blocks_iff, fn_pv_def] >> metis_tac[]
+QED
+
+Theorem mssa_map_var_member:
+  MEM (Var x) (MAP (\op. case op of Var u => Var (orig u) | _ => op) ops) <=>
+  ?u. MEM (Var u) ops /\ orig u = x
+Proof
+  simp[listTheory.MEM_MAP] >> eq_tac >> rpt strip_tac
+  >- (Cases_on `op` >> gvs[] >> metis_tac[]) >>
+  qexists_tac `Var u` >> simp[]
+QED
+
+Theorem mssa_renamed_pointer_root:
+  fn_inst_wf fn /\ fn'.fn_name = fn.fn_name /\
+  MEM inst' (fn_insts fn') /\
+  MAP orig inst'.inst_outputs = inst.inst_outputs /\
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  inst'.inst_opcode = inst.inst_opcode /\
+  mssa_inst_origin orig fn inst' /\ MEM v inst'.inst_outputs /\
+  (inst.inst_opcode = ALLOCA \/ inst.inst_opcode = DALLOCA \/
+   (inst.inst_opcode = PARAM /\
+    ?idx. inst.inst_operands = [Lit idx] /\ w2n idx IN P fn.fn_name)) ==>
+  v IN ptr_roots P fn'
+Proof
+  strip_tac >>
+  `?w. inst'.inst_outputs = [w]` by
+    (irule mssa_root_output >> metis_tac[]) >>
+  gvs[] >> simp[ptr_roots_def, alloca_roots_def] >>
+  `inst_output inst' = SOME v` by simp[inst_output_def] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mssa_renamed_pointer_definition:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  MEM inst' (fn_insts fn') /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> PHI /\
+  MAP orig inst'.inst_outputs = inst.inst_outputs /\
+  MAP (\op. case op of Var u => Var (orig u) | _ => op)
+    inst'.inst_operands = inst.inst_operands /\
+  inst'.inst_opcode = inst.inst_opcode /\
+  mssa_inst_origin orig fn inst' /\ MEM v inst'.inst_outputs /\
+  orig v IN fn_pv P fn ==>
+  v IN ptr_roots P fn' \/
+  (inst'.inst_opcode <> PHI /\ is_pointer_preserving_op inst'.inst_opcode /\
+   ?u. MEM (Var u) inst'.inst_operands /\ orig u IN fn_pv P fn)
+Proof
+  strip_tac >>
+  `MEM (orig v) inst.inst_outputs` by metis_tac[listTheory.MEM_MAP] >>
+  drule_all mssa_input_pointer_definition >> strip_tac
+  >- (disj1_tac >> irule mssa_renamed_pointer_root >> metis_tac[])
+  >- (disj1_tac >> irule mssa_renamed_pointer_root >> metis_tac[])
+  >- (disj1_tac >> irule mssa_renamed_pointer_root >> metis_tac[]) >>
+  disj2_tac >> simp[] >>
+  qpat_x_assum `MAP _ inst'.inst_operands = _` (SUBST_ALL_TAC o SYM) >>
+  gvs[mssa_map_var_member] >> metis_tac[]
+QED
+
+Theorem mssa_pointer_definition_cases:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  MEM inst' (fn_insts fn') /\ mssa_inst_origin orig fn inst' /\
+  MEM v inst'.inst_outputs /\ orig v IN fn_pv P fn ==>
+  v IN ptr_roots P fn' \/
+  (inst'.inst_opcode <> PHI /\ is_pointer_preserving_op inst'.inst_opcode /\
+   ?u. MEM (Var u) inst'.inst_operands /\ orig u IN fn_pv P fn) \/
+  (inst'.inst_opcode = PHI /\
+   !u. MEM (Var u) inst'.inst_operands ==> orig u IN fn_pv P fn)
+Proof
+  strip_tac >> qpat_assum `mssa_inst_origin _ _ _` mp_tac >>
+  pure_rewrite_tac[mssa_inst_origin_def] >> strip_tac
+  >- (drule_all mssa_renamed_pointer_definition >> metis_tac[]) >>
+  gvs[] >>
+  `!u. MEM (Var u) inst'.inst_operands ==> orig u IN fn_pv P fn` by
+    (simp[] >> rpt strip_tac >> metis_tac[mssa_input_phi_pointer_operand]) >>
+  simp[is_pointer_preserving_op_def] >> metis_tac[]
+QED
+
+Theorem mssa_pointer_output_on_path:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  fn_defs_reach_uses fn' /\ ssa_form fn' /\ fn_phis_cover_preds fn' /\
+  (!bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+    fn_entry_label fn' = SOME bb.bb_label ==> inst.inst_opcode <> PHI) ==>
+  !n j path bb v.
+    LENGTH path = n /\ is_fn_path fn' path /\ path <> [] /\
+    fn_entry_label fn' = SOME (HD path) /\ LAST path = bb.bb_label /\
+    MEM bb fn'.fn_blocks /\ j < LENGTH bb.bb_instructions /\
+    MEM v (EL j bb.bb_instructions).inst_outputs /\ orig v IN fn_pv P fn ==>
+    v IN fn_pv P fn'
+Proof
+  strip_tac >> completeInduct_on `n` >> gen_tac >>
+  completeInduct_on `j` >> rpt strip_tac >>
+  `MEM (EL j bb.bb_instructions) bb.bb_instructions` by simp[listTheory.EL_MEM] >>
+  `MEM (EL j bb.bb_instructions) (fn_insts fn')` by
+    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  `mssa_inst_origin orig fn (EL j bb.bb_instructions)` by metis_tac[] >>
+  drule_all mssa_pointer_definition_cases >> strip_tac
+  >- (simp[fn_pv_def] >> irule mssa_derived_initial >> simp[mssa_ptr_roots_finite])
+  >- suspend "nonphi"
+  >> suspend "phi"
+QED
+
+Resume mssa_pointer_output_on_path[nonphi]:
+  drule_all mssa_nonphi_earlier_def >> strip_tac
+  >- (`u IN fn_pv P fn'` by
+        (qpat_x_assum `!m. m < n ==> _`
+           (qspec_then `LENGTH pre` mp_tac) >>
+         impl_tac >- decide_tac >>
+         disch_then (qspecl_then [`di`, `pre`, `db`, `u`] mp_tac) >> simp[]) >>
+      simp[fn_pv_def] >> irule mssa_derived_closed >> metis_tac[fn_pv_def]) >>
+  `u IN fn_pv P fn'` by
+    (qpat_x_assum `!m. m < j ==> _` (qspec_then `i` mp_tac) >> simp[] >>
+     disch_then (qspecl_then [`path`, `bb`, `u`] mp_tac) >> simp[]) >>
+  simp[fn_pv_def] >> irule mssa_derived_closed >> metis_tac[fn_pv_def]
+QED
+
+Resume mssa_pointer_output_on_path[phi]:
+  qpat_x_assum `!m. m < n ==> _` (mk_asm "outer") >>
+  qpat_x_assum `!m. m < j ==> _` kall_tac >>
+  Cases_on `path` using listTheory.SNOC_CASES >- gvs[] >>
+  rename1 `SNOC last prefix` >>
+  Cases_on `prefix = []`
+  >- (gvs[] >> metis_tac[]) >>
+  `!xs. HD (prefix ++ xs) = HD prefix` by
+    (Cases_on `prefix` >> gvs[]) >>
+  gvs[listTheory.SNOC_APPEND] >>
+  drule_all mssa_phi_earlier_def >> strip_tac >>
+  `MEM (Var u) (EL j bb.bb_instructions).inst_operands` by
+    metis_tac[cfgNormBaseTheory.phi_pairs_mem_var] >>
+  `orig u IN fn_pv P fn` by metis_tac[] >>
+  `u IN fn_pv P fn'` by
+    (asm "outer" (qspec_then `LENGTH pre` mp_tac) >>
+     impl_tac >- gvs[] >>
+     disch_then (qspecl_then [`di`, `pre`, `db`, `u`] mp_tac) >> simp[]) >>
+  simp[fn_pv_def] >> irule mssa_derived_closed >>
+  metis_tac[fn_pv_def, is_pointer_preserving_op_def]
+QED
+
+Finalise mssa_pointer_output_on_path
+
+Theorem mssa_pointer_output_backward:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  fn_defs_reach_uses fn' /\ ssa_form fn' /\ fn_phis_cover_preds fn' /\
+  all_reachable fn' /\
+  (!bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+    fn_entry_label fn' = SOME bb.bb_label ==> inst.inst_opcode <> PHI) /\
+  MEM inst (fn_insts fn') /\ MEM v inst.inst_outputs /\ orig v IN fn_pv P fn ==>
+  v IN fn_pv P fn'
+Proof
+  strip_tac >>
+  `?bb. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions` by
+    (gvs[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  `fn_reachable fn' bb.bb_label` by gvs[all_reachable_def] >>
+  gvs[fn_reachable_def] >> drule venomExecProofsTheory.rtc_to_fn_path >> strip_tac >>
+  `?j. j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = inst` by
+    metis_tac[listTheory.MEM_EL] >>
+  `!bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+     fn_entry_label fn' = SOME bb.bb_label ==> inst.inst_opcode <> PHI` by
+    (simp[] >> metis_tac[]) >>
+  irule mssa_pointer_output_on_path >> simp[] >> conj_tac
+  >- metis_tac[] >> conj_tac
+  >- (qexistsl_tac [`fn`, `orig`] >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`bb`, `j`, `path`] >> simp[]
+QED
+
+Theorem mssa_operand_has_definition:
+  wf_ssa fn /\ MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+  ?di. MEM di (fn_insts fn) /\ MEM v di.inst_outputs
+Proof
+  simp[wf_ssa_def, def_dominates_uses_def] >> strip_tac >>
+  `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+    (gvs[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  first_x_assum drule_all >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[]
+  >- (simp[phi_edge_uses_wf_def] >> strip_tac >>
+      drule_all phi_well_formed_var_pair >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      gvs[def_available_at_def, fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[def_available_at_def] >>
+  strip_tac >> simp[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
+QED
+
+Theorem mssa_pointer_operand_backward:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  fn_defs_reach_uses fn' /\ wf_ssa fn' /\ fn_phis_cover_preds fn' /\
+  all_reachable fn' /\
+  (!bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+    fn_entry_label fn' = SOME bb.bb_label ==> inst.inst_opcode <> PHI) /\
+  MEM inst (fn_insts fn') /\ MEM (Var v) inst.inst_operands /\ orig v IN fn_pv P fn ==>
+  v IN fn_pv P fn'
+Proof
+  strip_tac >> drule_all mssa_operand_has_definition >> strip_tac >>
+  irule mssa_pointer_output_backward >> gvs[wf_ssa_def] >> metis_tac[]
+QED
+
 (* Why it holds.  make_ssa_current_fn_origin gives orig, from fn' vars to
    fn vars: each instruction of fn' is a renamed non-PHI of fn (same
    opcode and id, outputs and Var operands mapped by orig), a NOP, or a
