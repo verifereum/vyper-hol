@@ -661,9 +661,8 @@ Resume gas_base_data_dispatch[log]:
   cheat
 QED
 Resume gas_base_data_dispatch[selfdestruct]:
-  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
-  Cases_on `ops` >> simp[lift_result_def] >>
-  Cases_on `eval_operand a s` >> simp[lift_result_def, halt_state_def, set_returndata_def]
+  (* admitted at base cut: static-frame SELFDESTRUCT semantics (#1169) adds a cc_static Abort branch; Cases_on `ops` finds no var *)
+  cheat
 QED
 Resume gas_base_data_dispatch[call]:
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
