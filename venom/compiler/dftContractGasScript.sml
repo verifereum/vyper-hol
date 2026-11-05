@@ -20,6 +20,8 @@
  *)
 Theory dftContractGas
 Ancestors
+  dftGasOracleFromList dftGasOracleToList dftGasOracleSim dftGasOracleInv
+  dftGasOracleDefs venomRetProps contextRawReachable
   o1DftStep dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
   o1PassContract unitMemInv unitShapeDefs lowerDloadDefs venomPassDispatcher
   venomExecSemantics venomWf venomInst list
@@ -90,9 +92,16 @@ Proof
 QED
 
 (* The witness vs holds the readings C' consumes from vs', reordered to
-   the order C reads them in, then vs' readings' unread tail.  The entry
-   function returns no internal value (o1_fn_shape), so the context's run
-   never ends in IntRet. *)
+   the order C reads them in.  Through the oracle semantics
+   (dftGasOracleDefs): gas_oracle_from_list turns the run of C' from vs'
+   into an oracle run, gas_oracle_to_list turns the oracle run of C into a
+   list run from vs' with readings W, and the two oracle runs agree
+   (dft_ev_context_sim) and carry the memory fact (dft_ev_lowered_inv); vs
+   is vs' with readings W and fuel' is fuel.  The entry function returns
+   no internal value (o1_fn_shape; venomRetProps' run_context_not_int_ret),
+   so the context's run never ends in IntRet.  lowered_mem_fact reads
+   operands, memory ranges and vs_initial_fmp, not vs_gas_readings, and
+   dft_fn keeps fn_eom, so max_live_eom C' = max_live_eom C. *)
 Theorem dft_ctx_sim_gas:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
