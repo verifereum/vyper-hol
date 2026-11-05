@@ -24,6 +24,13 @@ Proof
   qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
 QED
 
+Theorem cenv_top_ext_is_ctor:
+  !cenv c sc. cenv_top_ext cenv c sc ==> (c.ce_is_ctor <=> cenv.ce_is_ctor)
+Proof
+  rw[cenv_top_ext_def] >>
+  qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
+QED
+
 Theorem not_fresh_at_mono:
   not_fresh_at sa x /\ sa.cs_next_var <= sm.cs_next_var ==>
   not_fresh_at sm x
@@ -96,6 +103,7 @@ Resume stmt_frag_cons_env_ptr[normal]:
       (es_end with gas_obs := [])` by
     (irule gas_admissible_stmts_tail >> metis_tac[]) >>
   gvs[stmt_lands_def] >>
+  `~c.ce_is_ctor` by metis_tac[cenv_top_ext_is_ctor] >>
   qpat_x_assum `!gs es1 c sa sm. _` (qspec_then
     `gas_explicit left s0.vs_gas_readings` mp_tac) >>
   simp[] >> disch_then (qspecl_then
