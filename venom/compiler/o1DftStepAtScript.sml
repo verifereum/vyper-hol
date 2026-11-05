@@ -4,7 +4,8 @@
  *)
 Theory o1DftStepAt
 Ancestors
-  o1DftStep o1PassContract venomPassSchedule
+  o1DftStep o1PassContract venomPassSchedule dftCorrectnessFinal
+  venomFnScheduleRunnerProps list
 
 (* dft_fn keeps every opcode and puts each block's pseudo-instructions
    first, so it keeps no-ALLOCA and gives the pseudo prefix of row 8. *)
@@ -13,7 +14,14 @@ Theorem dft_step_row:
   o1_ctx_shape observed.cu_context /\ o1_fn_row 7 fn ==>
   o1_fn_row 8 out.fpo_function
 Proof
-  cheat
+  simp[fn_pass_step_def] >> strip_tac >> gvs[] >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    metis_tac[lookup_unique_function_member] >>
+  `o1_fn_shape observed.cu_context fn` by
+    gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  gvs[o1_fn_row_def, dft_fn_pseudos_prefix, EVERY_MEM] >>
+  rpt strip_tac >> drule_all dft_shape_instruction_source >> strip_tac >>
+  gvs[] >> metis_tac[flip_operands_not_alloca]
 QED
 
 Theorem dft_step_contract_at:

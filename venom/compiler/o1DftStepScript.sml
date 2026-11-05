@@ -218,6 +218,17 @@ Proof
                       flip_comparison_opcode_def]
 QED
 
+Theorem flip_operands_not_alloca:
+  is_flippable i.inst_opcode ==> (flip_operands i).inst_opcode <> ALLOCA
+Proof
+  Cases_on `i.inst_opcode` >>
+  simp[is_flippable_def, is_commutative_def, is_comparator_def] >>
+  Cases_on `i.inst_operands` >> simp[flip_operands_def] >>
+  Cases_on `t` >> simp[flip_operands_def] >>
+  Cases_on `t'` >> simp[flip_operands_def, is_comparator_def,
+                      flip_comparison_opcode_def]
+QED
+
 (* A DALLOCA output of the schedule is one of the input's, and the
    schedule's GAS and return-PC closures are within the input's. *)
 Theorem dft_shape_dalloca:
