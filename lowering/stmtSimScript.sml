@@ -261,13 +261,6 @@ Proof
   >- (qpat_x_assum `!x sz. cenv.ce_return_pc = _ ==> _` drule >> strip_tac >>
       rename1 `lookup_var x s = SOME w` >> qexists_tac `w` >>
       qpat_x_assum `!x w. _ ==> _` irule >> simp[])
-  >- (qpat_x_assum `!x sz. cenv.ce_return_buf = _ ==> _` drule >> strip_tac >>
-      fs[not_fresh_at_def] >> rpt strip_tac >>
-      qpat_x_assum `!n. sa.cs_next_var <= n ==> _` (qspec_then `n` mp_tac) >>
-      simp[]) >>
-  qpat_x_assum `!x sz. cenv.ce_return_buf = _ ==> _` drule >> strip_tac >>
-  rename1 `lookup_var x s = SOME w` >> qexists_tac `w` >> simp[] >>
-  qpat_x_assum `!x w. _ ==> _` irule >> simp[]
 QED
 
 Theorem ret_pc_ok_jump_to:

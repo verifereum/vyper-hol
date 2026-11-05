@@ -8,7 +8,7 @@ Theorem supported_runtime_callable:
   supported_program tops /\
   lookup_callable_function F name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
   nr = F /\ dflts = [] /\
-  MEM (FunctionDecl Internal mut F F name args [] ret ss) tops /\
+  (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret /\
   supported_function_body tops Internal args ss /\
@@ -20,7 +20,8 @@ Proof
        supported_function_argument_def, supported_function_return_def,
        listTheory.NULL_EQ] >>
   strip_tac >> gvs[] >>
-  gvs[EVERY_MEM, supported_function_argument_def]
+  gvs[EVERY_MEM, supported_function_argument_def] >>
+  goal_assum (drule_at Any)
 QED
 
 Theorem body_inv_runtime_callable:
@@ -28,7 +29,7 @@ Theorem body_inv_runtime_callable:
   lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) ==>
   nr = F /\ dflts = [] /\
-  MEM (FunctionDecl Internal mut F F name args [] ret ss) tops /\
+  (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret /\
   supported_function_body tops Internal args ss /\
@@ -97,7 +98,7 @@ Theorem body_intcall_source_selection:
     LENGTH es = LENGTH args /\
     MAP expr_type es = MAP SND args /\
     type_widens_to env.type_defs ret ty /\
-    MEM (FunctionDecl Internal mut F F name args [] ret ss) tops /\
+    (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
     EVERY (supported_value_type tops o SND) args /\
     supported_return_type tops ret /\
     supported_function_body tops Internal args ss /\
