@@ -859,6 +859,98 @@ Proof
   simp[alias_var_mass_swap]
 QED
 
+Theorem alias_var_mass_outputs:
+  !outs ps.
+    alias_var_mass x (FOLDL (\ps' out.
+      ps' with ps_stack := stack_push (Var out) ps'.ps_stack) ps outs) =
+    alias_var_mass x ps + LIST_ELEM_COUNT x outs
+Proof
+  Induct >> simp[LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> simp[alias_var_mass_push] >>
+  Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_DEF] >> decide_tac
+QED
+
+Theorem alias_var_mass_zero:
+  alias_var_mass x ps = 0 <=> ~plan_holds ps (Var x)
+Proof
+  simp[alias_var_mass_def, plan_holds_def, GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[]
+QED
+
+Theorem alias_regular_plan_support:
+  inst.inst_opcode <> JMP /\ alias_var_budget [] ps /\
+  (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) ==>
+  !x. plan_holds qs (Var x) ==> MEM x live \/ MEM x inst.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def] >>
+  pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics` >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  pairarg_tac >> simp[] >>
+  `?targets. PERM targets (compute_operands inst) /\
+     reorder_plan dfg targets ps1 = (reorder_ops,ps4)` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- (pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+         IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+         >- metis_tac[PERM_REFL] >>
+         `2 <= LENGTH (compute_operands inst)` by decide_tac >>
+         drule last_two_reorder_perm >>
+         metis_tac[PERM_SYM]) >>
+     metis_tac[PERM_REFL]) >>
+  `!x. plan_holds
+      (ps4 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack)
+      (Var x) ==> MEM x live` by
+    (qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+     metis_tac[alias_emit_reorder_pop_support]) >>
+  pairarg_tac >> simp[] >>
+  `!x. ~MEM x live /\ ~MEM x inst.inst_outputs ==> alias_var_mass x ps7 = 0` by
+    (rpt strip_tac >>
+     `alias_var_mass x
+       (ps4 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack) = 0` by
+       metis_tac[alias_var_mass_zero] >>
+     qpat_x_assum `generate_emit_ops _ _ _ = _`
+       (mp_tac o AP_TERM ``\p:stack_op list # plan_state. alias_var_mass x (SND p)``) >>
+     simp[alias_var_mass_emit_ops, alias_var_mass_outputs] >>
+     `LIST_ELEM_COUNT x inst.inst_outputs = 0` by
+       (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >> simp[]) >>
+  suspend "post"
+QED
+
+Resume alias_regular_plan_support[post]:
+  qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+  IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[] >> rpt strip_tac >> spose_not_then assume_tac >>
+      `alias_var_mass x ps7 = 0` by metis_tac[] >>
+      mp_tac (Q.INST [`ps` |-> `ps7`] alias_var_mass_release_dead_spills) >>
+      simp[] >> metis_tac[alias_var_mass_zero]) >>
+  pairarg_tac >> simp[] >>
+  `!x. alias_var_mass x ps8 <= alias_var_mass x ps7` by
+    (gen_tac >> qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     metis_tac[alias_var_mass_popmany, pairTheory.SND]) >>
+  pairarg_tac >> simp[] >>
+  `!x. alias_var_mass x ps9 <= alias_var_mass x ps8` by
+    (gen_tac >> qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+     metis_tac[alias_var_mass_optimistic_swap, pairTheory.SND]) >>
+  strip_tac >> gvs[] >> rpt strip_tac >> spose_not_then assume_tac >>
+  `alias_var_mass x ps7 = 0` by metis_tac[] >>
+  `alias_var_mass x ps9 = 0` by
+    (first_x_assum (qspec_then `x` mp_tac) >>
+     qpat_x_assum `!x. alias_var_mass x ps8 <= _` (qspec_then `x` mp_tac) >>
+     decide_tac) >>
+  mp_tac (Q.INST [`ps` |-> `ps9`] alias_var_mass_release_dead_spills) >>
+  simp[] >> metis_tac[alias_var_mass_zero]
+QED
+
+Finalise alias_regular_plan_support
+
 Definition alias_probe_phis_def:
   alias_probe_phis =
     [mk_inst 10 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"];
