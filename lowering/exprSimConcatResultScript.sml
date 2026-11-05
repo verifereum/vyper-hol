@@ -31,45 +31,6 @@ Overload concat_payload_bytes[local] =
 
 (* ===== Source side ===== *)
 
-Theorem eval_expr_concat_bind:
-  !cx ann n args.
-    2 <= LENGTH args ==>
-    eval_expr cx (Builtin ann (Concat n) args) =
-    bind (eval_exprs cx args)
-      (\vs st. ((case evaluate_concat n vs of
-                   INL v => INL (Value v)
-                 | INR err => INR (Error err)), st))
-Proof
-  rw[FUN_EQ_THM] >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
-  Cases_on `eval_exprs cx args x` >>
-  rename1 `eval_exprs cx args x = (rr, st)` >>
-  Cases_on `rr` >>
-  simp[get_accounts_def, lift_sum_def, evaluate_builtin_def, return_def,
-       raise_def, bind_def, ignore_bind_def] >>
-  rename1 `evaluate_concat n vs` >>
-  Cases_on `evaluate_concat n vs` >>
-  simp[return_def, raise_def, bind_def, ignore_bind_def]
-QED
-
-Theorem concat_payload_capacity_bound:
-  !ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
-       MAP bytelike_type_bound ts = MAP concat_payload_capacity ts
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  gvs[bytelike_type_bound_def, concat_payload_capacity_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[bound_length_def, concat_payload_capacity_def]
-QED
-
-Theorem concat_map_ctor_11[local]:
-  (!l1 l2. MAP BytesV l1 = MAP BytesV l2 <=> l1 = l2) /\
-  (!l1 l2. MAP StringV l1 = MAP StringV l2 <=> l1 = l2)
-Proof
-  conj_tac >> Induct >> gen_tac >> Cases_on `l2` >> simp[]
-QED
-
 (* The typed operands concatenate to a located bytestring whose memory
    image is its length word followed by the operands' payloads. *)
 Theorem concat_typed_result:
@@ -288,18 +249,6 @@ Proof
   rw[local_region_def] >> eq_tac >> strip_tac >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   metis_tac[]
-QED
-
-Theorem concat_alloc_size_bounds:
-  !tys. 32 + SUM (MAP concat_payload_capacity tys) <= concat_alloc_size tys /\
-        32 + concat_data_bound 0 tys <= concat_alloc_size tys
-Proof
-  gen_tac >> simp[concat_alloc_size_def, LET_THM] >>
-  qabbrev_tac `c = SUM (MAP concat_payload_capacity tys)` >>
-  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
-  disch_then (qspec_then `c + 31` strip_assume_tac) >>
-  `(c + 31) MOD 32 < 32` by simp[] >>
-  decide_tac
 QED
 
 Theorem concat_state_rws[local,simp]:
@@ -640,7 +589,8 @@ Proof
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
           expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     (rpt gen_tac >> strip_tac >> conj_tac
-     >- (irule expr_body_pre_builtin_arg >> metis_tac[])
+     >- (qspecl_then [`cenv`, `cx`, `env`, `ann`, `Concat n`, `args`, `e`, `es`, `st`]
+           mp_tac expr_body_pre_builtin_arg >> fs[])
      >> metis_tac[int_calls_builtin_arg]) >>
   `expr_sim_inv cenv cx env es /\ well_typed_expr env (Builtin ann (Concat n) args) /\
    alloc_limits_expr cenv (Builtin ann (Concat n) args)` by fs[expr_body_pre_def] >>
