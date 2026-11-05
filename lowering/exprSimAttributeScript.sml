@@ -424,7 +424,7 @@ Proof
   `value_has_type ftv fv` by
     (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
      strip_tac >> gvs[]) >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac
+  rewrite_tac[vv_post_def] >> simp[] >> rpt conj_tac
   >~ [`vv_holds _ _ _ _ (LocatedValue _ _) _ _`]
   >- (simp[vv_holds_def, mk_ptr_def, expr_type_def] >>
       gvs[attr_offset_def] >>
