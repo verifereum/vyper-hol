@@ -2,7 +2,7 @@
 Theory bodyIntCallArgLifetime
 Ancestors
   exprSimAggregateChildren exprSimAggregateSource exprLowering compileEnv vyperEvalPureExpr vyperPureExpr supportedExprs supportedExprForms
-  loweringPosts bodyIntCallSourceFrame exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim exprLoweringProps fragExec
+  bodyIntCallStorageFrame loweringPosts bodyIntCallSourceFrame exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim exprLoweringProps fragExec
   vyperValue valueEncoding valueEncodingProps valueEncodingProofs vyperTypeEnv vyperTypeInvariants vyperTyping
 
 Theorem compile_multi_vvs_empty:
