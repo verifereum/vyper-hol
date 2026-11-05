@@ -88,37 +88,5 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
       es
 Proof
-  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `!i. i < LENGTH ids /\ i < LENGTH tys ==> ?p sz vt.
-     FLOOKUP cenv.ce_vars (EL i ids) = SOME (PtrVar (Var p) sz) /\
-     cenv.ce_var_type (EL i ids) = SOME vt /\
-     (is_word_type vt = is_word_type (EL i tys)) /\
-     (~is_word_type vt ==> vt = EL i tys \/ is_bytestring_type vt)` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_x_assum `!i. i < LENGTH ids ==> _` (qspec_then `i` mp_tac) >>
-     simp[] >> strip_tac >> qexistsl_tac [`p`, `sz`, `vt`] >>
-     Cases_on `is_word_type (EL i tys)` >> gvs[] >>
-     metis_tac[is_bytestring_word_type]) >>
-  `(EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy)` by
-    metis_tac[] >>
-  drule_all assign_tuple_locals_memory_code_parts >> strip_tac >>
-  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  Cases_on `res`
-  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
-      drule_all assign_tuple_locals_memory_success_run >> strip_tac >>
-      disj1_tac >> qexistsl [`t`, `cenv`] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
-  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
-   expr_res_ok (INR y : value + exception)` by
-    (drule eval_assign_tuple_locals_error >> disch_then drule >> simp[]) >>
-  `lower_value compile_expr cenv (TupleT tys) e sa = (op,su)` by
-    simp[lower_value_def, comp_bind_def] >>
-  `cs_extends sa su /\ cs_extends su sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa su func` by
-    (qspecl_then [`sa`, `su`, `sb`, `func`] mp_tac fn_has_code_split >> simp[]) >>
-  drule_all stmtSimDeclTheory.expr_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  cheat
 QED

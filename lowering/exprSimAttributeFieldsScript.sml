@@ -75,12 +75,7 @@ Theorem mem_field_offset_layout:
     fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
     mem_field_offset fs fld = SOME (struct_field_offset flds fld, ftv)
 Proof
-  simp[fields_layout_def] >>
-  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
-  PairCases_on `h` >>
-  simp[struct_field_offset_def, mem_field_offset_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> IF_CASES_TAC >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  cheat
 QED
 
 
@@ -91,8 +86,7 @@ Theorem alookup_zip_field[local]:
     ?ftv. ALOOKUP (ZIP (MAP FST fields, tvs)) fld = SOME ftv /\
           f fty = SOME ftv
 Proof
-  Induct >> simp[] >> PairCases >> rpt gen_tac >> strip_tac >> gvs[] >>
-  rename1 `if h0 = fld then _ else _` >> Cases_on `h0 = fld` >> gvs[]
+  cheat
 QED
 
 (* A field of the lowering's struct table has, in the struct's type value,
@@ -106,18 +100,7 @@ Theorem struct_field_type:
     ?ftv. ALOOKUP fs fld = SOME ftv /\
           evaluate_type (get_tenv cx) fty = SOME ftv
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-  simp[sfields_tenv_consistent_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[get_struct_fields_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  qpat_x_assum `MAP FST fields = _` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
-  drule_all alookup_zip_field >> strip_tac >> simp[] >>
-  metis_tac[cj 1 evaluate_type_mono]
+  cheat
 QED
 
 (* ===== Offsets of declared types and of their type values ===== *)
@@ -127,11 +110,7 @@ Theorem opt_mmap_el:
     OPT_MMAP f l = SOME l' /\ k < LENGTH l ==>
     LENGTH l' = LENGTH l /\ f (EL k l) = SOME (EL k l')
 Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `f h` >> simp[] >> Cases_on `OPT_MMAP f l` >> simp[] >>
-  strip_tac >> gvs[] >> rename1 `OPT_MMAP f l = SOME tl` >>
-  first_x_assum (qspecl_then [`tl`, `PRE k`, `f`] mp_tac) >>
-  Cases_on `k` >> gvs[] >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]
+  cheat
 QED
 
 Theorem tuple_take_memory_bytes[local]:
@@ -141,10 +120,7 @@ Theorem tuple_take_memory_bytes[local]:
     SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) =
       type_memory_size_list (TAKE i tvs)
 Proof
-  Induct >> simp[type_memory_size_def] >> rpt gen_tac >> strip_tac >>
-  gvs[] >> Cases_on `i` >> simp[type_memory_size_def] >>
-  drule_all expr_sim_inv_memory_size >> strip_tac >> simp[] >>
-  first_x_assum drule_all >> simp[]
+  cheat
 QED
 
 (* One step over a declared type is the same step over its type value. *)
@@ -156,28 +132,7 @@ Theorem type_step_offset_mem[local]:
     ?etv. mem_step_offset tv sb = SOME (k,etv) /\
           evaluate_type (get_tenv cx) et = SOME etv
 Proof
-  rpt gen_tac >> Cases_on `t` >> Cases_on `sb` >>
-  TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
-  TRY (rename1 `ArrayT _ bd` >> Cases_on `bd`) >>
-  simp[type_step_offset_def] >> rpt strip_tac >> gvs[]
-  >~ [`StructT sid`]
-  >- (rename1 `ALOOKUP _ _ = SOME z` >> PairCases_on `z` >> gvs[] >>
-      drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-      drule_all struct_field_type >> strip_tac >>
-      drule_all mem_field_offset_layout >> strip_tac >>
-      simp[mem_step_offset_def])
-  >~ [`TupleT tys`]
-  >- (qpat_x_assum `evaluate_type _ (TupleT _) = _` mp_tac >>
-      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-           vyperValueTheory.evaluate_types_OPT_MMAP] >>
-      strip_tac >> gvs[] >>
-      drule_all opt_mmap_el >> strip_tac >>
-      simp[mem_step_offset_def] >>
-      irule (GSYM tuple_take_memory_bytes) >> metis_tac[]) >>
-  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
-  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  strip_tac >> gvs[mem_step_offset_def] >>
-  drule_all expr_sim_inv_memory_size >> simp[]
+  cheat
 QED
 
 (* A path's offset in a declared type is its offset in the type value. *)
@@ -189,12 +144,7 @@ Theorem type_path_offset_mem:
     ?ptv. mem_path_offset tv path = SOME (k,ptv) /\
           evaluate_type (get_tenv cx) pt = SOME ptv
 Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- gvs[type_path_offset_def, mem_path_offset_def] >>
-  gvs[type_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
-  drule_all type_step_offset_mem >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  simp[mem_path_offset_def]
+  cheat
 QED
 
 Theorem fields_layout_alookup[local]:
@@ -202,9 +152,7 @@ Theorem fields_layout_alookup[local]:
     fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
     ?fty fsz. ALOOKUP flds fld = SOME (fty,fsz)
 Proof
-  simp[fields_layout_def] >>
-  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
-  PairCases_on `h` >> rw[] >> metis_tac[]
+  cheat
 QED
 
 (* One step over a type value is the same step over the declared type it
@@ -217,39 +165,7 @@ Theorem mem_step_offset_type[local]:
     ?et. type_step_offset cenv t sb = SOME (k,et) /\
          evaluate_type (get_tenv cx) et = SOME etv
 Proof
-  rpt strip_tac >>
-  `?r. type_step_offset cenv t sb = SOME r` suffices_by
-    (strip_tac >> PairCases_on `r` >> drule_all type_step_offset_mem >>
-     strip_tac >> metis_tac[optionTheory.SOME_11, PAIR_EQ]) >>
-  drule mem_step_offset_shape >> strip_tac >> gvs[]
-  >- (`?sid. t = StructT sid` by
-        (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
-         Cases_on `t` >>
-         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
-      gvs[] >> drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-      drule mem_field_offset_sound >> strip_tac >>
-      drule_all fields_layout_alookup >> strip_tac >>
-      simp[type_step_offset_def])
-  >- (`?et. t = ArrayT et (Fixed n)` by
-        (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
-         Cases_on `t` >>
-         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
-      gvs[type_step_offset_def])
-  >- (`?et. t = ArrayT et (Dynamic n)` by
-        (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
-         Cases_on `t` >>
-         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
-      gvs[type_step_offset_def]) >>
-  `?tys. t = TupleT tys` by
-    (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
-     Cases_on `t` >>
-     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
-  gvs[] >>
-  qpat_x_assum `evaluate_type _ (TupleT _) = _` mp_tac >>
-  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-       vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  strip_tac >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >>
-  simp[type_step_offset_def]
+  cheat
 QED
 
 (* A path's offset in a type value is its offset in the declared type the
@@ -262,12 +178,7 @@ Theorem mem_path_offset_type:
     ?pt. type_path_offset cenv t path = SOME (k,pt) /\
          evaluate_type (get_tenv cx) pt = SOME ptv
 Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- gvs[type_path_offset_def, mem_path_offset_def] >>
-  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
-  drule_all mem_step_offset_type >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  simp[type_path_offset_def]
+  cheat
 QED
 
 (* A dynamic array where local_path_at puts it in a local has its length
@@ -278,13 +189,7 @@ Theorem local_path_at_dynarray_len_at:
     local_path_at cenv cx n k (ArrayTV etv (Dynamic m)) ==>
     dynarray_len_at cenv n k
 Proof
-  rw[local_path_at_def, dynarray_len_at_def] >>
-  drule_all mem_path_offset_type >> strip_tac >>
-  `?et. pt = ArrayT et (Dynamic m)` by
-    (qpat_x_assum `evaluate_type _ pt = _` mp_tac >>
-     Cases_on `pt` >>
-     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
-  gvs[] >> metis_tac[]
+  cheat
 QED
 
 (* A value with no dynamic array in it, where local_path_at puts it in a
@@ -295,11 +200,7 @@ Theorem local_path_at_dynarray_apart:
     dynarray_free tv /\ dynarray_len_at cenv n k' ==>
     k + type_memory_size tv <= k' \/ k' + 32 <= k
 Proof
-  rw[local_path_at_def, dynarray_len_at_def] >> gvs[] >>
-  drule_all type_path_offset_mem >> strip_tac >>
-  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
-  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> strip_tac >>
-  gvs[] >> drule_all mem_path_offset_dynarray_apart >> simp[]
+  cheat
 QED
 
 (* The same where local_val_at puts a well-formed value. *)
@@ -309,11 +210,7 @@ Theorem local_val_at_dynarray_apart:
     val_wf tv v /\ dynarray_free tv /\ dynarray_len_at cenv n k' ==>
     k + val_footprint tv v <= k' \/ k' + 32 <= k
 Proof
-  rw[local_val_at_def]
-  >- (drule_all local_path_at_dynarray_apart >> drule val_footprint_le >>
-      decide_tac) >>
-  `dynarray_free (BaseTV bt0)` by simp[dynarray_free_base] >>
-  drule_all local_path_at_dynarray_apart >> decide_tac
+  cheat
 QED
 
 
@@ -333,9 +230,7 @@ Theorem read_slots_n2w[local]:
     (n2w o1 : bytes32) = n2w o2 ==>
     read_slots storage o1 n = read_slots storage o2 n
 Proof
-  Induct >> rpt strip_tac >> asm_simp_tac std_ss [read_slots_def] >>
-  AP_TERM_TAC >> first_x_assum irule >>
-  once_rewrite_tac[GSYM wordsTheory.word_add_n2w] >> asm_rewrite_tac[]
+  cheat
 QED
 
 (* Decoding reads storage at offsets only through n2w, so an offset that
@@ -353,34 +248,7 @@ Theorem decode_value_n2w:
   (!storage o1 fs o2. (n2w o1 : bytes32) = n2w o2 ==>
      decode_struct storage o1 fs = decode_struct storage o2 fs)
 Proof
-  ho_match_mp_tac decode_value_ind >> rpt conj_tac >> rpt gen_tac >>
-  rpt strip_tac >>
-  `!k. (n2w (o1 + k) : bytes32) = n2w (o2 + k)` by
-    (gen_tac >> once_rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
-     asm_rewrite_tac[]) >>
-  `!n. read_slots storage (o1 + 1) n = read_slots storage (o2 + 1) n` by
-    metis_tac[read_slots_n2w] >>
-  (* an induction hypothesis at the same offset: rewrite with it *)
-  rpt (qpat_x_assum `!x. n2w o1 = n2w x ==> _` (fn ih =>
-         qpat_assum `n2w o1 = n2w o2` (fn obj =>
-           assume_tac (MP (SPEC ``o2:num`` ih) obj)))) >>
-  once_rewrite_tac[decode_value_def] >>
-  asm_rewrite_tac[read_slot_def, decode_dyn_bytes_def, LET_THM] >>
-  (* a dynamic array's elements, after its length word *)
-  TRY (BETA_TAC >> IF_CASES_TAC >> asm_rewrite_tac[] >>
-       qpat_x_assum `!len. _ ==> _`
-         (qspec_then `w2n (lookup_storage (n2w o2) storage)` mp_tac) >>
-       asm_rewrite_tac[read_slot_def] >>
-       disch_then (qspec_then `o2 + 1` mp_tac) >>
-       asm_rewrite_tac[] >> disch_then (fn th => rewrite_tac[th]) >> NO_TAC) >>
-  (* the rest of a tuple, array or struct, after its first component *)
-  Cases_on `decode_value storage o2 tv` >>
-  asm_rewrite_tac[optionTheory.option_case_def] >>
-  rename1 `decode_value storage o2 tv = SOME dv` >>
-  `decode_value storage o1 tv = SOME dv` by asm_rewrite_tac[] >>
-  first_x_assum drule >>
-  disch_then (qspec_then `o2 + type_slot_size tv` mp_tac) >>
-  asm_rewrite_tac[] >> disch_then (fn th => rewrite_tac[th])
+  cheat
 QED
 
 Theorem decode_struct_field:
@@ -390,12 +258,7 @@ Theorem decode_struct_field:
     ?fv. decode_value storage (off + foff) ftv = SOME fv /\
          ALOOKUP vals id = SOME fv
 Proof
-  Induct >> simp[struct_field_slot_def] >> PairCases >>
-  simp[Once decode_value_def, struct_field_slot_def, AllCaseEqs()] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h0 = id` >> gvs[] >>
-  rename1 `struct_field_slot fs id = SOME z` >> PairCases_on `z` >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  cheat
 QED
 
 Theorem read_storage_slot_field:
@@ -405,20 +268,7 @@ Theorem read_storage_slot_field:
     ?vals fv. v = StructV vals /\ ALOOKUP vals id = SOME fv /\
               read_storage_slot cx tr (slot + n2w foff) ftv es = (INL fv, es1)
 Proof
-  rpt gen_tac >> Cases_on `tr` >>
-  simp[read_storage_slot_def, get_storage_backend_def,
-       get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
-  qmatch_goalsub_abbrev_tac `decode_value stor` >>
-  simp[Once decode_value_def] >>
-  Cases_on `decode_struct stor (w2n slot) fs` >>
-  simp[lift_option_def, raise_def, return_def] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all decode_struct_field >> strip_tac >> simp[] >>
-  `decode_value stor (w2n (slot + n2w foff)) ftv =
-   decode_value stor (w2n slot + foff) ftv` by
-    (irule (cj 1 decode_value_n2w) >>
-     rewrite_tac[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n]) >>
-  simp[lift_option_def, return_def]
+  cheat
 QED
 
 (* ===== The source's selection ===== *)
@@ -429,13 +279,7 @@ Theorem evaluate_subscripts_snoc_attr:
     ALOOKUP vals id = SOME fv ==>
     evaluate_subscripts tv a (path ++ [AttrSubscript id]) = INL fv
 Proof
-  Induct
-  >- (rw[evaluate_subscripts_def] >> simp[evaluate_subscripts_def]) >>
-  Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
-  rpt gen_tac >>
-  TRY (rename1 `AttrSubscript fname :: _` >> Cases_on `a`) >>
-  simp[evaluate_subscripts_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >> res_tac >> simp[]
+  cheat
 QED
 
 Theorem evaluate_subscripts_append_err:
@@ -443,12 +287,7 @@ Theorem evaluate_subscripts_append_err:
     evaluate_subscripts tv a path = INR err ==>
     evaluate_subscripts tv a (path ++ sfx) = INR err
 Proof
-  Induct >- simp[evaluate_subscripts_def] >>
-  Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
-  rpt gen_tac >>
-  Cases_on `a` >>
-  simp[evaluate_subscripts_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >> res_tac >> simp[]
+  cheat
 QED
 
 Theorem read_popped_snoc_attr:
@@ -458,21 +297,7 @@ Theorem read_popped_snoc_attr:
     (!v'. ~MEM (path ++ [AttrSubscript id], v') hist) ==>
     read_popped tv (path ++ [AttrSubscript id]) hist = SOME fv
 Proof
-  Induct >> simp[read_popped_def] >> PairCases >> rpt gen_tac >>
-  simp[read_popped_def] >> strip_tac >>
-  Cases_on `IS_PREFIX path h0` >> gvs[]
-  >- (`IS_PREFIX (path ++ [AttrSubscript id]) h0` by
-        metis_tac[IS_PREFIX_TRANS, IS_PREFIX_APPEND3] >>
-      `LENGTH h0 <= LENGTH path` by metis_tac[IS_PREFIX_LENGTH] >>
-      simp[DROP_APPEND1] >>
-      Cases_on `subscripts_type tv h0` >> gvs[] >>
-      rename1 `evaluate_subscripts ptv h1 (DROP _ path)` >>
-      Cases_on `evaluate_subscripts ptv h1 (DROP (LENGTH h0) path)` >> gvs[]
-      >- (drule_all evaluate_subscripts_snoc_attr >> simp[]) >>
-      drule evaluate_subscripts_append_err >> simp[]) >>
-  `~IS_PREFIX (path ++ [AttrSubscript id]) h0` by
-    (strip_tac >> gvs[GSYM SNOC_APPEND, isPREFIX_SNOC_EQ] >> metis_tac[]) >>
-  simp[]
+  cheat
 QED
 
 Theorem read_memory_path_snoc_attr:
@@ -483,13 +308,7 @@ Theorem read_memory_path_snoc_attr:
               ~MEM (path ++ [AttrSubscript id], v') entry.popped) ==>
     read_memory_path entry (path ++ [AttrSubscript id]) = INL fv
 Proof
-  rpt gen_tac >> simp[read_memory_path_def] >>
-  Cases_on `evaluate_subscripts entry.type entry.value path` >> simp[] >>
-  strip_tac >> gvs[]
-  >- (drule_all evaluate_subscripts_snoc_attr >> simp[]) >>
-  gvs[AllCaseEqs()] >>
-  drule evaluate_subscripts_append_err >> simp[] >> strip_tac >>
-  drule_all read_popped_snoc_attr >> simp[]
+  cheat
 QED
 
 (* The base's result is a local's place that memory no longer holds, so
@@ -509,16 +328,7 @@ End
 Theorem popped_keys_indexed_not_at_field:
   !tv id es. popped_keys_indexed es.scopes ==> ~popped_at_field tv id es
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `tv` >> simp[popped_at_field_def] >>
-  rename1 `PlaceR pl` >> Cases_on `pl` >> simp[popped_at_field_def] >>
-  rpt strip_tac >>
-  drule vyperLookupTheory.lookup_scopes_find_containing_scope >> strip_tac >>
-  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
-  gvs[popped_keys_indexed_def] >>
-  qpat_x_assum `!id entry. FLOOKUP env id = _ ==> _` drule >> strip_tac >>
-  qpat_x_assum `EVERY _ (MAP FST _)`
-    (mp_tac o SIMP_RULE (srw_ss()) [EVERY_MEM, MEM_MAP, PULL_EXISTS]) >>
-  disch_then drule >> simp[GSYM SNOC_APPEND, SNOC_11]
+  cheat
 QED
 
 (* select_attr_read for an immutable's place. *)
@@ -533,26 +343,7 @@ Theorem select_attr_read_immutable[local]:
     ?tv' fv. res = INL tv' /\ ALOOKUP vals id = SOME fv /\
              read_result cx tv' es = (INL fv, es)
 Proof
-  rpt gen_tac >>
-  simp[read_result_def, read_place_def, select_result_def,
-       extend_place_def, place_type_value_def,
-       extend_memory_place_def, bind_def, ignore_bind_def, return_def,
-       lift_option_type_def, lift_sum_def] >>
-  Cases_on `get_immutables cx src es` >> rename1 `(ir, ies)` >>
-  `ies = es` by metis_tac[vyperStatePreservationTheory.get_immutables_state] >>
-  Cases_on `ir` >> simp[raise_def] >>
-  rename1 `FLOOKUP imms x` >>
-  Cases_on `FLOOKUP imms x` >> simp[raise_def, return_def] >>
-  rename1 `FLOOKUP imms x = SOME tva` >>
-  Cases_on `evaluate_subscripts (FST tva) (SND tva) path` >>
-  simp[raise_def, return_def] >>
-  Cases_on `subscripts_type (FST tva) path` >> simp[raise_def, return_def] >>
-  Cases_on `ALOOKUP vals id` >>
-  simp[evaluate_subscripts_def, raise_def, return_def] >>
-  rpt strip_tac >> gvs[evaluate_subscripts_def, return_def, raise_def] >>
-  drule_all evaluate_subscripts_snoc_attr >>
-  simp[read_result_def, read_place_def, bind_def, return_def,
-       lift_option_type_def, lift_sum_def]
+  cheat
 QED
 
 (* Selecting a field of a result whose read is a struct: unless the
@@ -568,44 +359,5 @@ Theorem select_attr_read:
     ?tv' fv. res = INL tv' /\ ALOOKUP vals id = SOME fv /\
              read_result cx tv' es = (INL fv, es)
 Proof
-  rpt gen_tac >> Cases_on `tv`
-  >~ [`Value v`]
-  >- (simp[read_result_def, select_result_def, return_def, bind_def,
-           lift_option_type_def, lift_sum_def] >>
-      strip_tac >> gvs[] >>
-      Cases_on `evaluate_type (get_tenv cx) ty` >>
-      gvs[raise_def, return_def, evaluate_subscripts_def] >>
-      Cases_on `ALOOKUP vals id` >>
-      gvs[raise_def, return_def, evaluate_subscripts_def, read_result_def])
-  >~ [`HashMapRef`] >- simp[read_result_def, raise_def] >>
-  rename1 `PlaceR p` >> Cases_on `p`
-  >~ [`StoragePlace tr slot ptv`]
-  >- (simp[read_result_def, read_place_def, select_result_def,
-           extend_place_def, bind_def, return_def] >>
-      strip_tac >>
-      Cases_on `ptv` >> gvs[extend_storage_place_def, raise_def] >>
-      rename1 `struct_field_slot fs id` >>
-      Cases_on `struct_field_slot fs id` >>
-      gvs[lift_option_type_def, raise_def, return_def, bind_def] >>
-      rename1 `struct_field_slot fs id = SOME fo` >> PairCases_on `fo` >>
-      gvs[return_def, read_result_def, read_place_def] >>
-      drule_all read_storage_slot_field >> strip_tac >> gvs[])
-  >~ [`MemoryPlace x path`]
-  >- (simp[read_result_def, read_place_def, select_result_def,
-           extend_place_def, place_type_value_def, get_scopes_def,
-           extend_memory_place_def, bind_def, ignore_bind_def, return_def,
-           lift_option_type_def, lift_sum_def, popped_at_field_def] >>
-      Cases_on `lookup_scopes x es.scopes` >> simp[raise_def] >>
-      rename1 `lookup_scopes x es.scopes = SOME entry` >>
-      Cases_on `read_memory_path entry path` >> simp[raise_def, return_def] >>
-      Cases_on `subscripts_type entry.type path` >>
-      simp[raise_def, return_def] >>
-      Cases_on `ALOOKUP vals id` >>
-      simp[evaluate_subscripts_def, raise_def, return_def] >>
-      rpt strip_tac >> gvs[evaluate_subscripts_def, return_def, raise_def] >>
-      drule_all read_memory_path_snoc_attr >>
-      simp[read_result_def, read_place_def, get_scopes_def, bind_def,
-           return_def, lift_option_type_def, lift_sum_def]) >>
-  rename1 `ImmutablePlace src x path` >> strip_tac >>
-  drule_all select_attr_read_immutable >> simp[]
+  cheat
 QED

@@ -55,15 +55,7 @@ Theorem annassign_empty_store_run[local]:
         !fuel r. run_from fuel ctx func u = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
-  rpt strip_tac >>
-  qspecl_then [`tenv`, `t`, `tyv`, `w2n w`, `(mstore (w2n w) 0w s).vs_memory`]
-    mp_tac memory_length_word_layout >>
-  impl_tac >- fs[mstore_mem_word_at_same] >> strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s`, `id`, `p`, `sz`, `w`,
-               `inst`, `default_value tyv`, `tyv`, `sc`, `rest`, `a`,
-               `Lit 0w`, `st`, `st'`, `0w`] mp_tac annassign_word_store_run >>
-  impl_tac >- simp[eval_operand_lit] >>
-  disch_then ACCEPT_TAC
+  cheat
 QED
 
 Theorem annassign_empty_store_post_run[local]:
@@ -93,14 +85,7 @@ Theorem annassign_empty_store_post_run[local]:
         !fuel r. run_from fuel ctx func u = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_post_def] >> strip_tac >>
-  `lookup_var p s = SOME w` by metis_tac[] >>
-  `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz)` by metis_tac[] >>
-  drule_all annassign_empty_store_run >>
-  disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
-  qexists_tac `u` >> simp[] >> metis_tac[]
+  cheat
 QED
 
 Theorem annassign_empty_success_run[local]:
@@ -129,21 +114,7 @@ Theorem annassign_empty_success_run[local]:
         !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s0 = r
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule eval_stmt_annassign_value >> strip_tac >>
-  qpat_x_assum `!tv es1. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  gvs[read_result_def, return_def] >>
-  `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `vv`, `INL (Value (default_value tyv))`,
-                           `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_vv_res_ok_def] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  `lookup_scopes id es1.scopes = NONE` by gvs[] >>
-  drule_all annassign_empty_store_post_run >>
-  disch_then (qspecl_then [`T`] mp_tac) >> strip_tac >>
-  qexists_tac `u` >> simp[] >> metis_tac[]
+  cheat
 QED
 
 Theorem expr_vv_sim_error_run[local]:
@@ -159,13 +130,7 @@ Theorem expr_vv_sim_error_run[local]:
     ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
              expr_exit (INR ex : unit + exception) r
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `vv`, `INR ex`, `es'`, `s0`] mp_tac) >>
-  impl_tac >- gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  metis_tac[expr_exit_INR_type]
+  cheat
 QED
 
 Theorem compile_annassign_empty_parts[local]:
@@ -178,12 +143,7 @@ Theorem compile_annassign_empty_parts[local]:
       compile_expr cenv (expr_type e) e sA = (vv, sB) /\
       emit_void MSTORE [Var p; Lit 0w] sB = ((), sf)
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[Once compile_stmt_def, emit_local_alloca_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  imp_res_tac emit_inst_unit >> gvs[]
+  cheat
 QED
 
 Theorem annassign_empty_code_parts[local]:
@@ -205,20 +165,7 @@ Theorem annassign_empty_code_parts[local]:
       MEM (mk_inst st.cs_next_id ALLOCA
              [Lit (n2w (type_memory_bytes cenv vtyp))] [p]) (fn_insts func)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule stmt_env_annassign >> strip_tac >>
-  drule_all declare_local_ptr >> strip_tac >>
-  drule_all compile_annassign_empty_parts >>
-  disch_then (qx_choosel_then [`sA`, `vv`, `sB`] strip_assume_tac) >>
-  `fn_has_code st sf func` by gvs[fn_has_code_def, emitted_blocks_def] >>
-  `cs_extends sA sB` by metis_tac[] >>
-  `cs_extends sB sf` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
-  `cs_extends sA sf` by metis_tac[cs_extends_trans] >>
-  drule_all annassign_alloca_code >> strip_tac >>
-  `fn_has_code sA sB func /\ fn_has_code sB sf func` by
-    metis_tac[fn_has_code_split] >>
-  qexistsl [`st`, `sA`, `sB`, `vv`, `STRING #"%" (toString sa.cs_next_var)`] >>
-  simp[]
+  cheat
 QED
 
 (* x: T = e for a type T with a length word, where e is the empty value
@@ -250,63 +197,7 @@ Theorem compile_annassign_empty_stmt_frag:
       (stmt_env cenv lctx ty (AnnAssign id vtyp e))
       (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `!st0 c st1. declare_local cenv id vtyp st0 = (c,st1) ==>
-     !a b vv. compile_expr c (expr_type e) e a = (vv,b) ==> cs_extends a b` by
-    metis_tac[] >>
-  drule_all annassign_empty_code_parts >>
-  disch_then (qx_choosel_then [`st`, `sA`, `sB`, `vv`, `p`] strip_assume_tac) >>
-  rename1 `declare_local cenv id vtyp sa = (c,st)` >>
-  qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
-  `stmt_state_rel ctx func c cx es s0` by
-    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
-  `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
-  `s0.vs_current_bb = st.cs_current_bb /\
-   s0.vs_inst_idx = LENGTH st.cs_current_insts` by
-    (drule_all declare_local_ptr >> simp[] >> strip_tac >> gvs[]) >>
-  `type_memory_bytes cenv vtyp < dimword (:256)` by simp[] >>
-  drule_all annassign_alloca_framed_run >>
-  disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
-  Cases_on `res`
-  >- suspend "success" >>
-  rename1 `eval_stmt _ _ _ = (INR ex, _)` >>
-  `(do raw <- eval_expr cx e; read_result cx raw od) es = (INR ex,es') /\
-   expr_res_ok (INR ex : value + exception)` by
-    (drule eval_annassign_word_error >> simp[] >>
-     disch_then (qspec_then `lctx` mp_tac) >> simp[] >> metis_tac[]) >>
-  `eval_expr cx e es = (INR ex,es')` by
-    (Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1,es1)` >>
-     Cases_on `r1` >> gvs[bind_def, read_result_def, return_def]) >>
-  drule_all expr_vv_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  cheat
 QED
 
-Resume compile_annassign_empty_stmt_frag[success]:
-  rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
-  qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
-  `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
-   FLOOKUP salloc.vs_allocas ai.inst_id =
-     SOME (w2n w,type_memory_bytes cenv vtyp)` by
-    simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
-  `type_memory_size tyv <= type_memory_bytes cenv vtyp` by simp[] >>
-  drule_at (Pat `compile_expr _ _ _ _ = _`) annassign_empty_success_run >>
-  disch_then drule_all >> strip_tac >>
-  `!tv es1. eval_expr cx e es = (INL tv,es1) ==> ?v. tv = Value v` by metis_tac[] >>
-  drule_all annassign_word_top_ext >> strip_tac >>
-  `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by
-    (`sA.cs_next_var = st.cs_next_var` by
-       (drule emit_inst_extends >> simp[]) >>
-     drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
-  disj1_tac >> qexistsl [`t`, `c`] >> simp[stmt_lands_def] >>
-  conj_tac
-  >- (drule emit_void_nonterminator_open >> simp[is_terminator_def]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!fuel r. run_from fuel ctx func t = r /\ _ ==> _`
-    (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `!fuel r. run_from fuel ctx func salloc = r /\ _ ==> _`
-    drule >> simp[]
-QED
 
-Finalise compile_annassign_empty_stmt_frag

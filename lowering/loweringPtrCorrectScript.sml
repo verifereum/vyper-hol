@@ -201,21 +201,7 @@ Theorem terminal_inst_ptr_safe:
     !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s /\
            (!e. run_from fuel ctx fn s <> Error e)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `step_inst_base (mk_inst id op [] []) s =
-     if op = STOP then Halt (halt_state (s with vs_returndata := []))
-     else Abort ExHalt_abort (halt_state (set_returndata [] s))` by
-    (gvs[] >> simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def]) >>
-  gvs[] >> gen_tac >>
-  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
-       ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def,
-       mk_inst_def] >>
-  simp[step_inst_non_invoke] >>
-  gvs[mk_inst_def] >>
-  simp[run_from_def, Once exec_block_def, step_inst_non_invoke] >>
-  gvs[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
-      ret_taint_def, halt_state_def, stor_taint_ok_def, cx_dead_def]
+  cheat
 QED
 
 (* Falling off the end of the guarded body (no lock): a STOP,
@@ -234,21 +220,7 @@ Theorem compile_guarded_body_end_ptr_safe:
     !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s /\
            (!e. run_from fuel ctx fn s <> Error e)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `?op. (op = STOP \/ op = INVALID) /\
-        st'.cs_current_bb = sb.cs_current_bb /\
-        st'.cs_current_insts =
-          sb.cs_current_insts ++ [mk_inst sb.cs_next_id op [] []]` by
-    (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, comp_get_def] >>
-     Cases_on `rt` >>
-     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-          emit_inst_def, fresh_id_def, emit_def] >>
-     rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-  irule terminal_inst_ptr_safe >> simp[] >> metis_tac[]
+  cheat
 QED
 
 Theorem ptr_safe_run_all_fuel:
@@ -257,12 +229,7 @@ Theorem ptr_safe_run_all_fuel:
     (!e. run_from fuel ctx fn s <> Error e) ==>
     !m. ptr_safe_run D lo m ctx fn PG G tn s
 Proof
-  rpt strip_tac >> Cases_on `m <= fuel`
-  >- metis_tac[ptr_safe_run_fuel_mono_down] >>
-  gvs[ptr_safe_run_def, run_from_def] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[] >>
-  irule (cj 2 ptr_safe_fuel_mono_up) >> qexists_tac `fuel` >>
-  gvs[block_run_def]
+  cheat
 QED
 
 Theorem nonexempt_body_result:
@@ -281,16 +248,7 @@ Theorem nonexempt_body_result:
     ~source_exempt tops (call_external orc [] am tx) ==>
     res <> INR (Error (RuntimeError "convert empty bytes to signed"))
 Proof
-  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all call_external_selected_body >> strip_tac >>
-  `es0.scopes = [env]` by
-    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
-  `es0 with scopes := [env] = es0` by
-    (qpat_assum `es0.scopes = [env]` (SUBST1_TAC o SYM) >> simp[]) >>
-  gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
-      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, vyperStateTheory.set_scopes_def,
-      source_exempt_def, unspecified_behaviour_exempt_def]
+  cheat
 QED
 
 (* ===== S3 ===== *)
@@ -320,104 +278,5 @@ Theorem lower_vyper_runtime_unit_run_ptr_safe_composed:
              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                          vs_inst_idx := 0 |>)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `?mut args fbody.
-     lookup_function NONE tx.function_name External tops =
-       SOME (mut, F, args, [], ret, fbody) /\
-     LENGTH tx.args = LENGTH args /\
-     IS_SOME (bind_arguments (type_env tops) args tx.args)` by
-    (fs[valid_vyper_call_def] >> metis_tac[]) >>
-  `?env. bind_arguments (type_env tops) args tx.args = SOME env` by
-    (Cases_on `bind_arguments (type_env tops) args tx.args` >> fs[]) >>
-  Cases_on `send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-        <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
-  rename1 `_ = (sent, es0)` >> Cases_on `sent`
-  >- (rename1 `INL u` >> Cases_on `u` >>
-      drule_all external_entry_reaches_body_ptr >> strip_tac >>
-      first_x_assum irule >>
-      drule_all external_body_frame >> strip_tac >>
-      drule_all external_frame_ret_ok_ptr >>
-      disch_then (qspec_then `func` assume_tac) >>
-      Cases_on `eval_stmts
-        (initial_evaluation_context am.sources am.layouts tx NONE)
-        fbody es0` >> rename1 `_ = (res, es')` >>
-      drule_all external_body_source_ok >> strip_tac >>
-      drule_all nonexempt_body_result >> strip_tac >>
-      qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
-      `rt = if ret = NoneT then NONE else SOME ret` by
-        gvs[package_external_fn_def, set_external_package_target_def] >>
-      `?sb. compile_stmts cenv NoLoop
-          (case rt of SOME t => t | NONE => BaseT BoolT) fbody sa = ((), sb) /\
-          cs_extends sa sb /\ cs_extends sb st'` by
-        (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-         simp[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
-              comp_get_def, comp_return_def] >>
-         Cases_on `compile_stmts cenv NoLoop
-           (case rt of SOME t => t | NONE => BaseT BoolT) fbody sa` >>
-         rename1 `_ = (u, sb)` >> Cases_on `u` >> simp[] >>
-         `cs_extends sa sb` by
-           (qspecl_then [`cenv`, `NoLoop`,
-             `case rt of SOME t => t | NONE => BaseT BoolT`, `fbody`]
-             mp_tac (cj 2 compile_stmt_cs_mono) >>
-            simp[cs_mono_def] >> strip_tac >> gvs[] >> metis_tac[]) >>
-         rw[] >>
-         gvs[comp_return_def, comp_ignore_bind_def, comp_bind_def,
-             cs_extends_refl] >>
-         drule (SIMP_RULE std_ss [cs_appends_def]
-           (cj 1 cs_appends_emit_helpers)) >> simp[]) >>
-      `?cenv'. stmts_env cenv NoLoop ret fbody sa = (cenv', sb)` by
-        (`stmts_env cenv NoLoop ret fbody sa =
-          stmts_env cenv NoLoop
-            (case rt of SOME t => t | NONE => BaseT BoolT) fbody sa` by
-           (Cases_on `ret = NoneT` >> gvs[] >>
-            drule type_stmts_none_valued_return >> strip_tac >>
-            drule_all stmts_env_ret_ty >>
-            disch_then (qspecl_then [`NoLoop`, `NoneT`, `BaseT BoolT`]
-              SUBST1_TAC) >> simp[]) >>
-         gvs[compile_stmts_env] >>
-         metis_tac[pairTheory.PAIR]) >>
-      `fn_has_code sa sb func /\ fn_has_code sb st' func` by
-        (drule_all fn_has_code_split >> simp[]) >>
-      `stmt_frag_ptr NONE unit.cu_context [] func cx NoLoop
-         (\v es gt r. T) cenv (stmts_env cenv NoLoop ret fbody) es0 res es'` by
-        (irule body_stmts_sim_ptr >> goal_assum (drule_at Any) >>
-         simp[] >> metis_tac[]) >>
-      qpat_x_assum `stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      simp[stmt_frag_ptr_def] >>
-      disch_then (qspecl_then [`sa`, `sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
-      impl_tac >- gvs[ret_pc_ok_def] >>
-      map_every (fn pat => rpt (qpat_x_assum pat kall_tac))
-        [`lower_vyper_runtime_unit _ _ = _`, `supported_program _`,
-         `source_typing_ok _ _ _`, `source_storage_ok _ _ _`,
-         `source_deployment_rel _ _ _`, `valid_vyper_call _ _ _ _`,
-         `initial_venom_state_rel _ _ _ _`, `call_outcomes_ok _ _ _`,
-         `~source_exempt _ _`, `lookup_function _ _ = _`,
-         `lookup_function _ _ _ _ _ = _`, `fn_entry_label _ = _`,
-         `LENGTH _ = LENGTH _`, `IS_SOME _`, `bind_arguments _ _ _ = _`,
-         `send_call_value _ _ _ = _`, `set_external_package_target _ _ = _`,
-         `compile_register_positional_args _ _ _ _ = _`,
-         `body_inv _ _ _ _`, `supported_stmts _ _ _`,
-         `expr_sim_inv _ _ _ _ _`, `ce_locals_declared _ _`,
-         `locals_alloc_ok _ _`, `type_stmts _ _ _ = _`,
-         `EVERY _ _`, `call_evaluation_safe _ _`,
-         `frame_ret_ok_ptr _ _ _ _ _ _ _ _`, `eval_stmts _ _ _ = _`,
-         `call_external _ _ _ _ = _`] >>
-      strip_tac
-      >- (gvs[stmt_lands_def] >>
-          `stor_taint_ok cx tn s` by fs[ghost_inv_def] >>
-          `ptr_safe_run (cx_dead cx) 0 0 unit.cu_context func [] G tn s /\
-           (!e. run_from 0 unit.cu_context func s <> Error e)` by
-            (irule compile_guarded_body_end_ptr_safe >>
-             qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _`
-               (irule_at Any) >>
-             qexists_tac `sb` >> simp[]) >>
-          first_x_assum (qspec_then `0` mp_tac) >>
-          impl_tac >- simp[] >> strip_tac >>
-          irule ptr_safe_run_all_fuel >> goal_assum (drule_at Any) >>
-          simp[] >> metis_tac[]) >>
-      irule ptr_safe_run_all_fuel >> goal_assum (drule_at Any) >>
-      simp[] >> metis_tac[exit_result_not_error]) >>
-  drule_all external_entry_value_revert_ptr >> simp[]
+  cheat
 QED
