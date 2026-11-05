@@ -40,7 +40,8 @@ Ancestors
   exprBopSimProps exprSimBopTyped
   exprSimSource
   exprSimProps
-  exprSimDefs
+  exprSimDefs gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
+  fragGasMode fragGasPath fragGasFresh
   loweringPosts
   list  exprSimHyps exprSimOps loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter
@@ -106,19 +107,24 @@ Definition word_builtin_frag_def:
       code xs sa = (op, sb) /\ expr_res_ok res /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
-             LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs)
-        (\s. ?v. res = INL v /\ word_value v /\
-                 stmt_state_rel ctx func cenv cx es0 s /\
-                 eval_operand op s = SOME (val_to_w256 v) /\
-                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
-                        lookup_var z s = SOME w) /\
-                 (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                          FLOOKUP s.vs_allocas aid = SOME b) /\
-                 s.vs_memory = s0.vs_memory)
-        (expr_exit res)
+      local_ptrs_reserved cenv sa /\
+      stmt_state_rel ctx func cenv cx es0 s0 /\
+      LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
+      ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      ?r. gas_marked_path F ctx func s0 0 r /\
+        ((?s v. r = OK s /\ res = INL v /\ word_value v /\
+                stmt_state_rel ctx func cenv cx es0 s /\
+                eval_operand op s = SOME (val_to_w256 v) /\
+                (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+                       lookup_var z s = SOME w) /\
+                (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                         FLOOKUP s.vs_allocas aid = SOME b) /\
+                s.vs_memory = s0.vs_memory /\ ~s.vs_halted /\
+                s.vs_current_bb = sb.cs_current_bb /\
+                s.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+         (exit_result r /\ expr_exit res r))
 End
 
 Theorem word_operands_drop_fresh:
@@ -144,11 +150,19 @@ Theorem word_builtin_frag_success:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
-  ho_match_mp_tac frag_exec_straight_fresh >>
-  qexistsl_tac [`code xs`, `\a. F`] >>
-  simp[word_operands_drop_fresh] >> rpt strip_tac >>
-  first_x_assum irule >>
-  goal_assum (drule_at Any) >> qexists_tac `xs` >> simp[]
+  `fresh_vars_wrt sa (drop_fresh sa s0)` by
+    simp[fresh_vars_wrt_drop_fresh] >>
+  `LIST_REL (\x v. eval_operand x (drop_fresh sa s0) = SOME (val_to_w256 v)) xs vs` by
+    (drule word_operands_drop_fresh >> simp[]) >>
+  qpat_x_assum `!xs sa sb op ss. _`
+    (qspecl_then [`xs`, `sa`, `sb`, `op`, `drop_fresh sa s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!xs. straight_fresh (code xs)` (qspec_then `xs` assume_tac) >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  qexists_tac `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
+  simp[]
 QED
 
 Theorem word_builtin_frag_revert:
@@ -163,12 +177,20 @@ Theorem word_builtin_frag_revert:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
-  ho_match_mp_tac
-    (INST_TYPE [``:'a`` |-> ``:operand``] frag_exec_straight_fresh_abort) >>
-  qexistsl_tac [`code xs`, `op`, `\a. a = Revert_abort`] >>
-  simp[word_operands_drop_fresh, expr_exit_def] >> rpt strip_tac >>
-  first_x_assum irule >>
-  goal_assum (drule_at Any) >> qexistsl_tac [`op`, `xs`] >> simp[]
+  `fresh_vars_wrt sa (drop_fresh sa s0)` by
+    simp[fresh_vars_wrt_drop_fresh] >>
+  `LIST_REL (\x v. eval_operand x (drop_fresh sa s0) = SOME (val_to_w256 v)) xs vs` by
+    (drule word_operands_drop_fresh >> simp[]) >>
+  qpat_x_assum `!xs sa sb op ss. _`
+    (qspecl_then [`xs`, `sa`, `sb`, `op`, `drop_fresh sa s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!xs. straight_fresh (code xs)` (qspec_then `xs` assume_tac) >>
+  drule_all straight_fresh_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qmatch_asmsub_rename_tac
+    `gas_marked_path F ctx func s0 0 (Abort Revert_abort endpoint)` >>
+  qexists_tac `Abort Revert_abort endpoint` >>
+  simp[exit_result_def, expr_exit_def]
 QED
 
 (* ===== Left-to-right word argument lowering ===== *)
@@ -427,24 +449,38 @@ Proof
 QED
 
 Theorem expr_sim_apply:
-  !ctx func cenv cx ty e es sa sb op res es' s0.
+  !ctx func cenv cx ty e es sa sb op s0.
     expr_sim ctx func cenv cx ty e es /\
     lower_value compile_expr cenv ty e sa = (op, sb) /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (res, es') /\ expr_res_ok res /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?v. res = INL v /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op s)
-      (expr_exit res)
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx, func)
+      (bind (eval_expr cx e) (read_result cx)) (es, s0)
+      (\res ee t. ?v. res = INL v /\
+        expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
 Proof
-  simp[expr_sim_def]
+  rewrite_tac[expr_sim_def] >> rpt strip_tac >>
+  first_x_assum irule >> asm_rewrite_tac[]
 QED
 
 Theorem lower_word_args_nil_sim:
   !ctx func cenv cx es sa s0.
-    frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. wb_args_post ctx func cenv cx es sa s0 es [] [] s)
-      (wb_args_exit (INL []))
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx []) (es, s0)
+      (\rr ee t. ?vs. rr = INL vs /\
+         wb_args_post ctx func cenv cx es sa s0 ee [] vs t /\
+         t.vs_current_bb = sa.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sa.cs_current_insts)
+      (\rr ee r. wb_args_exit rr r)
 Proof
   rpt gen_tac >> irule frag_exec_refl >>
   simp[wb_args_post_def, wb_frame_refl] >> metis_tac[]
@@ -497,15 +533,22 @@ Proof
 QED
 
 Theorem lower_word_args_sim:
-  !args ctx func cenv cx arg_ty I es sa xs sb rr es' s0.
-    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
+  !args ctx func cenv cx arg_ty Inv es sa xs sb s0.
+    wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\
     wb_args_shape cenv arg_ty args /\
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
-    eval_exprs cx args es = (rr,es') /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?vs. rr = INL vs /\ wb_args_post ctx func cenv cx es sa s0 es' xs vs s)
-      (wb_args_exit rr)
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx args) (es, s0)
+      (\rr ee t. ?vs. rr = INL vs /\
+         wb_args_post ctx func cenv cx es sa s0 ee xs vs t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\rr ee r. wb_args_exit rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -575,11 +618,12 @@ Theorem compile_word_builtin_sim:
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\
     wb_args_shape cenv arg_ty args /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
     (!xs sm sb op. code xs sm = (op,sb) ==> cs_extends sm sb) /\
-    (!vs es'. eval_exprs cx args es = (INL vs,es') ==>
+    (!gs vs es'. eval_exprs cx args (es with gas_obs := gs) = (INL vs,es') ==>
       word_builtin_frag ctx func cenv cx code
         (builtin_result cx es'.accounts ann bt (MAP expr_type args) vs) vs es') ==>
     expr_sim ctx func cenv cx ty (Builtin ann bt args) es
