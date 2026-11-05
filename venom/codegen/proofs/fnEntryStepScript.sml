@@ -98,6 +98,75 @@ Proof
   gvs[fn_entry_state_rel_def, fn_return_state_rel_def, shared_state_rel_def]
 QED
 
+Theorem entry_body_frame_sim[local]:
+  !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after off_bb pc_bb vs as
+   Inv ra pc_ret rest mem0.
+  gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+  ctx = unit.cu_context /\ lo = SND (compute_label_offsets prog) /\
+  o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  i < LENGTH ctx.ctx_functions /\ EL i ctx.ctx_functions = fn /\
+  EL i cp.cp_regions = r /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  (!f inst callee_name args callee.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label callee_name :: args /\
+    lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+    fn_has_retpc callee) /\
+  (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+  (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\
+  ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+         (fcg_analyze ctx) fn.fn_name /\
+  growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+  ps0 = init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  dfs_block_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0 /\
+  generate_block_plan liveness dfg cfg fn (HD fn.fn_blocks) ps0 =
+    SOME (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops, ps_after) /\
+  block_plan_state liveness dfg cfg fn (HD fn.fn_blocks) ps0
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+  generate_block_insts_plan liveness dfg cfg fn (HD fn.fn_blocks).bb_label
+    (bb_is_halting (HD fn.fn_blocks))
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+    (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+    (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
+  vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+  FLOOKUP lo (HD fn.fn_blocks).bb_label = SOME off_bb /\
+  FLOOKUP o2pc off_bb = SOME pc_bb /\
+  as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps1 vs as /\
+  (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+  (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
+  (!vs'. block_rest fuel ctx fn (HD fn.fn_blocks) vs = Halt vs' ==>
+    ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+      venom_asm_terminal_rel vs' as') /\
+  (!a vs'. block_rest fuel ctx fn (HD fn.fn_blocks) vs = Abort a vs' ==>
+    ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+             (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+      venom_asm_terminal_rel vs' as') /\
+  (!ret vs'. block_rest fuel ctx fn (HD fn.fn_blocks) vs = IntRet ret vs' ==>
+    ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\ as'.as_pc = pc_ret /\
+      as'.as_stack = REVERSE ret.iret_values ++ rest /\
+      context_memory_rel cp vs'.vs_memory as'.as_memory /\
+      (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+        read_byte b as'.as_memory = read_byte b mem0) /\ shared_state_rel vs' as')
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule block_body_frame_sim >>
+  FAIL_TAC "entry adapter witnesses"
+QED
+
 (* As for fn_block_frame_step, but for the entry block, which
    gen_fn_frame_sim_at excludes.
 
