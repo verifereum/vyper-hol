@@ -6,11 +6,10 @@
    constructor, and an element of a storage array or mapping whose index is
    not pure.
    TOP-LEVEL: assign_tuple_other_shapes, body_assign_tuple_places;
-   immutable_deploy_tuple_assign, tuple_assign_effectful_index,
-   body_tuple_target_env_ok (RESIDUAL). *)
+   immutable_deploy_tuple_assign, tuple_assign_effectful_index (RESIDUAL). *)
 Theory bodyAssignTupleOther
 Ancestors
-  stmtSimAssignTuplePlaces targetPlaceSimCases targetPlaceSim bodySimExprCases
+  stmtSimAssignTuplePlaces stmtSimAssignPlace targetPlaceSimCases targetPlaceSim bodySimExprCases
   bodyExprPreFacts bodySim
   exprSimAggregateLayout exprSimHypsDefs bodyStorageMetadata
   supportedStmts supportedDecls vyperTypeSystem vyperTypeInvariants vyperTypeEnv
@@ -137,15 +136,6 @@ Theorem tuple_assign_effectful_index:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
-QED
-
-(* RESIDUAL (target metadata): target_env_ok asks for every module's
-   storage and mapping declarations, body_inv gives the main module's
-   (exprSimPopNested's body_pop_nested_target_frag has the same gap). *)
-Theorem body_tuple_target_env_ok:
-  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> target_env_ok cenv cx
 Proof
   cheat
 QED

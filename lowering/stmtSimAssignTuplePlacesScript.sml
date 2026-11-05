@@ -18,14 +18,14 @@
 
 Theory stmtSimAssignTuplePlaces
 Ancestors
-  placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
+  supportedTargets placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
   stmtSimDefs exprSimHypsDefs exprSimDefs loweringPosts
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperTypeSystem
   list
 
 Theorem compile_assign_tuple_places_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty env gs e es tys tvs.
+  !ctx func cx lctx RetQ cenv ty env tops gs e es tys tvs.
     expr_type e = TupleT tys /\ gs <> [] /\
     LIST_REL (\g t. well_typed_atarget env g t) gs tys /\
     assignable_type (get_tenv cx) (TupleT tys) /\
@@ -36,10 +36,12 @@ Theorem compile_assign_tuple_places_stmt_frag:
       type_memory_size (TupleTV tvs) < dimword (:256)) /\
     (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
       type_memory_size (EL i tvs) + 64 < dimword (:256)) /\
-    EVERY (\g. ?bt. g = BaseTarget bt /\ target_case F ctx func cenv cx bt /\
+    EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
+                    target_case F ctx func cenv cx bt /\
                     ~immutable_root cx bt /\ target_indices_pre cenv cx env bt)
       gs /\
-    target_env_ok cenv cx /\ expr_sim_inv cenv cx env es /\
+    target_env_ok cenv cx /\ acyclic_struct_metadata cenv.ce_struct_fields /\
+    expr_sim_inv cenv cx env es /\
     expr_body_pre cenv cx env e es /\
     expr_sim ctx func cenv cx (TupleT tys) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
