@@ -236,3 +236,39 @@ actual inversion consumer and validate the one-success oracle exchange kernel
 initialization for general blocks, trailing observation framing, representative
 replacement and fetch conversion as connected consumers. No new component IDs
 or executable theorem claims are introduced by this report.
+
+## Checked extraction consumer and integration audit (C1.4.9.15)
+
+`dftGasInvExtractionTheory.inv_lookup_scheduled_observation` now implements
+this restricted contract for a genuine scheduled prefix. Its input is an
+`inv_ev_ftrace` of the actual target records, with existential fuel per step,
+and source/target block lookups under `dft_fn_rel`. The target split is at an
+instruction whose ID equals the original observation's ID. The theorem
+produces an actual `inv_ev_prefix`, the exact source index, operand agreement
+for the original observation and initial-FMP agreement.
+
+The from_block bridge converts the executed prefix to original records,
+including flipped representatives. A separate suffix normalization and
+injective source-ID permutation lifting produce the full original schedule;
+the consumer does not assume that schedule's record PERM. Residual deletion,
+completion, inversion-only sorting and trailing-suffix framing are checked.
+No new no-ALLOCA hypothesis is used: the actual `dft_fn_rel` boundary supplies
+allocation exclusion and the inversion swap certificates. This supersedes
+the old gaps in rows for schedule bookkeeping and no-alloca above.
+
+Remaining task-level obligations are not discharged by this consumer:
+
+* Produce `dft_remaining_inv` at arbitrary actual post-pseudo block entries.
+  The entry-label-only producer does not establish this for loop/jump entries;
+  dominance, predecessor labels and PHI input availability must be connected
+  to the actual oracle execution.
+* Reflect finite returning INVOKEs across C' and C by well-founded fuel
+  induction. All extraction traces here run in the **same** ctx. Local INVOKE
+  exchange and arbitrary per-step fuels do not imply changed-context runs.
+* Connect actual reachable states to the block-slice inputs and project memory
+  ranges for flipped target observations; operand agreement is stated for the
+  original observation, not positional equality of flipped operand lists.
+* Prove concrete DFT revert-forward preservation. Neither the list sorting
+  result nor `dft_block_rel` implies ASSIGN-only forwarding intervals.
+
+These are integration obligations, not premises to add to the frozen theorem.
