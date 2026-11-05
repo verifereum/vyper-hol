@@ -115,7 +115,7 @@ QED
    Proposed single consumer theorem:
 
      is_word_type et /\ evaluate_type (get_tenv cx) et = SOME etv /\
-     value_has_type etv needle /\ value_has_type (ArrayTV etv bd) av /\
+     value_has_type etv needle /\ value_has_type (ArrayTV etv bd) (ArrayV av) /\
      L = array_length (ArrayTV etv bd) av /\
      (!i. i < L ==> array_index (ArrayTV etv bd) av (&i) = SOME (E i))
      ==>
@@ -124,7 +124,7 @@ QED
                          typed_val_to_w256 etv needle).
 
    All names above except L/E are existing constants. E has type num->value,
-   L:num, et:type, etv:type_value, av/needle:value. Here `type` denotes the
+   L:num, et:type, etv:type_value, av:array_value, needle:value. Here `type` denotes the
    existing source type datatype (infer it from evaluate_type), not an ML type.
    array_index already fills a missing fixed-array ALOOKUP with default_value
    etv; dynamic entries use oEL. No new definition is needed for that behavior.
@@ -138,8 +138,8 @@ QED
      vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
      expr_type e = ArrayT et bd /\ is_word_type et /\
      evaluate_type (get_tenv cx) et = SOME etv /\
-     read_result cx tv es' = (INL av,es') /\
-     value_has_type (ArrayTV etv bd) av /\
+     read_result cx tv es' = (INL (ArrayV av),es') /\
+     value_has_type (ArrayTV etv bd) (ArrayV av) /\
      L = array_length (ArrayTV etv bd) av /\
      (!j. j < L ==> array_index (ArrayTV etv bd) av (&j) = SOME (E j)) /\
      eval_operand (vv_operand vv) s = SOME base /\
@@ -190,8 +190,8 @@ QED
 
      storage_holds cx tr (ArrayT et bd) tv base es' s /\
      is_word_type et /\ evaluate_type (get_tenv cx) et = SOME etv /\
-     read_result cx tv es' = (INL av,es') /\
-     value_has_type (ArrayTV etv bd) av /\
+     read_result cx tv es' = (INL (ArrayV av),es') /\
+     value_has_type (ArrayTV etv bd) (ArrayV av) /\
      array_index (ArrayTV etv bd) av (&i) = SOME elem /\
      i < array_length (ArrayTV etv bd) av
      ==>
@@ -212,7 +212,7 @@ QED
      rest_word_array_ready memory ctx func cenv cx et bd etv av vv es s <=>
        stmt_state_rel ctx func cenv cx es s /\
        is_word_type et /\ evaluate_type (get_tenv cx) et = SOME etv /\
-       value_has_type (ArrayTV etv bd) av /\
+       value_has_type (ArrayTV etv bd) (ArrayV av) /\
        let loc = (case vv_location vv of SOME l => l | NONE => LocMemory) in
        let L = array_length (ArrayTV etv bd) av in
        let stride = elem_size_in_location cenv loc et in
@@ -296,7 +296,7 @@ QED
    After proving the actual zero-read path, gas_marked_exec_def with marks=[]
    and gas_explicit_nil reduces its source side to
 
-     !tail. bop_result cx ann bop [expr_type e1;expr_type e2] needle av
+     !tail. bop_result cx ann bop [expr_type e1;expr_type e2] needle (ArrayV av)
               (fin with gas_obs:=tail) = INL (BoolV b),
 
    where bop=In or NotIn and b is the matching source Boolean. Source tail
