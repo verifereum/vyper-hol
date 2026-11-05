@@ -350,3 +350,115 @@ Theorem alias_available_cfg_successor_backward:
 Proof
   metis_tac[alias_cfg_successor_boundary, alias_available_edge_backward]
 QED
+
+Theorem alias_phi_at_index_pending:
+  !instrs i.
+    (!j k. j < k /\ k < LENGTH instrs /\
+      (EL k instrs).inst_opcode = PHI ==>
+      (EL j instrs).inst_opcode = PHI) /\
+    i < LENGTH instrs /\ (EL i instrs).inst_opcode = PHI ==>
+    MEM (EL i instrs) (DROP i (collect_phis instrs))
+Proof
+  Induct >> simp[] >> Cases_on `i` >>
+  simp[livenessDefsTheory.collect_phis_def] >> rpt strip_tac >>
+  `h.inst_opcode = PHI` by
+    (first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
+  simp[livenessDefsTheory.collect_phis_def] >> first_x_assum irule >>
+  simp[] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`SUC j`,`SUC k`] mp_tac) >> simp[]
+QED
+
+Theorem alias_use_available_or_pending:
+  wf_function fn /\ def_dominates_uses fn /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+  alias_path_available fn l i v \/ alias_pending_phi fn l i v
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = l` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI`
+  >- (disj2_tac >> simp[alias_pending_phi_def] >>
+      qexists_tac `EL i bb.bb_instructions` >> simp[] >>
+      irule alias_phi_at_index_pending >>
+      metis_tac[wf_function_def, bb_well_formed_def]) >>
+  disj1_tac >> gvs[] >> irule alias_ordinary_use_available >> simp[]
+QED
+
+Theorem alias_availability_inst_closed:
+  wf_function fn /\ def_dominates_uses fn /\
+  lookup_block l fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  (!v. MEM v live ==> alias_path_available fn l (SUC i) v \/
+     alias_pending_phi fn l (SUC i) v) ==>
+  !v. MEM v (liveness_transfer fn.fn_blocks (EL i bb.bb_instructions) live) ==>
+    alias_path_available fn l i v \/ alias_pending_phi fn l i v
+Proof
+  strip_tac >> ho_match_mp_tac alias_liveness_transfer_rule >> conj_tac
+  >- metis_tac[alias_use_available_or_pending] >>
+  metis_tac[alias_available_nondef_backward, alias_pending_phi_backward]
+QED
+
+Theorem alias_availability_edge_closed:
+  wf_function fn /\ def_dominates_uses fn /\
+  MEM s (cfg_succs_of (cfg_analyze fn) l) /\
+  (!v. MEM v live ==> alias_path_available fn s 0 v \/
+    alias_pending_phi fn s 0 v) ==>
+  !v. MEM v (liveness_edge_transfer fn.fn_blocks s l live) ==>
+    alias_path_available fn l (LENGTH (liveness_instrs fn.fn_blocks l)) v \/
+    alias_pending_phi fn l (LENGTH (liveness_instrs fn.fn_blocks l)) v
+Proof
+  strip_tac >>
+  drule_all alias_cfg_successor_boundary >> strip_tac >>
+  simp[liveness_edge_transfer_def] >> rpt strip_tac >>
+  drule alias_input_vars_from_partition >> strip_tac
+  >- (disj1_tac >> irule alias_available_cfg_successor_backward >>
+      simp[] >> qexists_tac `s` >> simp[] >>
+      `!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+          phi_well_formed phi.inst_operands` by
+        (rpt strip_tac >>
+         drule livenessTransferProofsTheory.collect_phis_mem >> strip_tac >>
+         `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+         metis_tac[def_dominates_uses_def, phi_edge_uses_wf_def]) >>
+      `!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+         ~MEM v (inst_uses phi)` by
+        (metis_tac[alias_build_phi_maps_absent_uses]) >>
+      `~alias_pending_phi fn s 0 v` by
+        (simp[alias_pending_phi_def] >> metis_tac[]) >>
+      metis_tac[]) >>
+  disj1_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  drule livenessTransferProofsTheory.collect_phis_mem >> strip_tac >>
+  drule_all alias_phi_edge_available >> strip_tac >>
+  gvs[livenessBlockProofsTheory.liveness_instrs_def]
+QED
+
+Theorem alias_availability_live_closed:
+  wf_function fn /\ def_dominates_uses fn ==>
+  alias_live_closed fn (\l i v.
+    alias_path_available fn l i v \/ alias_pending_phi fn l i v)
+Proof
+  simp[alias_live_closed_def] >> strip_tac >> conj_tac
+  >- metis_tac[alias_availability_inst_closed] >>
+  metis_tac[alias_availability_edge_closed]
+QED
+
+Theorem alias_live_available_or_pending:
+  wf_function fn /\ def_dominates_uses fn /\
+  MEM v (live_vars_at (liveness_analyze fn) l i) ==>
+  alias_path_available fn l i v \/ alias_pending_phi fn l i v
+Proof
+  strip_tac >> drule_all alias_availability_live_closed >>
+  disch_then (mp_tac o MATCH_MP alias_live_closed_analyze) >> simp[]
+QED
+
+Theorem alias_live_available_after_phis:
+  wf_function fn /\ def_dominates_uses fn /\
+  MEM v (live_vars_at (liveness_analyze fn) l i) /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= i ==>
+  alias_path_available fn l i v
+Proof
+  metis_tac[alias_live_available_or_pending, alias_pending_phi_past_prefix]
+QED
