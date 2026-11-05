@@ -2,7 +2,7 @@
 Theory assignTuplePtrLocalBytesCopy
 Ancestors
   typedCopyPtr fragGasSeqPtr ghostPcTransportPtr instIdxIndep
-  context compileEnv emitHelper fragExec exprLoweringProps
+  context compileEnv emitHelper emitHelperProps fragExec exprLoweringProps
   venomExecSemantics venomInstProofs venomInst venomState
   bodyPtrDefs ptrSafeRun ptrDiscipline finite_map arithmetic list
 
@@ -97,4 +97,102 @@ Proof
   simp[Abbr `i`, Abbr `t`, copy_len_binop_ghost_frame] >>
   gvs[] >> simp[step_taint_def, set_var_taint_def, adopt_reset_def,
                imm_taint_def, mk_inst_def]
+QED
+
+Theorem inst_seq_ptr_append_normalized:
+  EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode) ys /\
+  run_inst_seq xs s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+  t.vs_inst_idx = s.vs_inst_idx + LENGTH xs /\
+  inst_seq_ptr D 0 ctx fn PG G tn xs s G1 tn1 /\
+  run_inst_seq ys t = OK (u with vs_inst_idx := t.vs_inst_idx) /\
+  u.vs_inst_idx = t.vs_inst_idx + LENGTH ys /\
+  inst_seq_ptr D 0 ctx fn PG G1 tn1 ys t G2 tn2 ==>
+  run_inst_seq (xs ++ ys) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+  u.vs_inst_idx = s.vs_inst_idx + LENGTH (xs ++ ys) /\
+  inst_seq_ptr D 0 ctx fn PG G tn (xs ++ ys) s G2 tn2
+Proof
+  strip_tac >> conj_tac
+  >- (qpat_assum `run_inst_seq xs s = _`
+        (mp_then Any (qspec_then `ys` SUBST1_TAC) run_inst_seq_append) >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
+  conj_tac >- simp[LENGTH_APPEND] >>
+  irule inst_seq_ptr_append_run >> conj_tac >- simp[] >>
+  qexistsl_tac [`G1`, `t with vs_inst_idx := s.vs_inst_idx`, `tn1`] >>
+  `t with vs_inst_idx := LENGTH xs + s.vs_inst_idx = t` by
+    (simp[venom_state_component_equality] >> decide_tac) >> simp[]
+QED
+
+Theorem emit_mload_clean_normalized_ptr:
+  emit_op MLOAD [Var src] sa = (Var out,sb) /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~ctx_has_dalloca ctx /\ ptr_covers G tn src s 32 /\
+  lookup_var src s = SOME a /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+  ?G' tn' t.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_current_bb = s.vs_current_bb /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
+    lookup_var out t = SOME (mload (w2n a) s) /\
+    op_taint tn' (Var out) = {} /\
+    t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  `!p. not_fresh_at sa p ==> p <> out` by gvs[not_fresh_at_def] >>
+  drule_all mload_clean_seq_ptr >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`]
+    (qspec_then `sa.cs_next_id` (qspec_then `out` strip_assume_tac))) >>
+  qexistsl_tac [`G'`, `tn'`,
+    `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  gs[] >> simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[venom_state_component_equality] >>
+  rpt strip_tac >>
+  `p <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
+  fs[]
+QED
+
+Theorem emit_copy_len_binop_normalized_ptr:
+  emit_op opc [left;right] sa = (Var out,sb) /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
+  ~ctx_has_dalloca ctx /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} ==>
+  ?G' tn' t.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_current_bb = s.vs_current_bb /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
+    lookup_var out t = SOME (f a b) /\ op_taint tn' (Var out) = {} /\
+    t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `!p. not_fresh_at sa p ==> p <> out` by gvs[not_fresh_at_def] >>
+  qpat_assum `eval_operand left s = SOME a`
+    (mp_then (Pat `eval_operand left s = SOME a`) mp_tac copy_len_binop_seq_ptr) >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`, `G`]
+    (qspec_then `sa.cs_next_id` (qspec_then `out` strip_assume_tac))) >>
+  qexistsl_tac [`G'`, `tn'`,
+    `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  gs[] >> (simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+    conj_tac >- simp[venom_state_component_equality] >>
+    rpt strip_tac >>
+    `p <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >> fs[])
 QED
