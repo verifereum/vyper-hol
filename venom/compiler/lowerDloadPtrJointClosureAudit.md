@@ -1029,3 +1029,20 @@ NormalNext interfaces to return every Q field without unfolding the boundary.
 Checked build: lowerDloadPtrJointMemoryStoreTheory and
 o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6792_t001).
 This is local MSTORE next closure only, not allocation/expansion/global closure.
+
+## C1.12.95: checked ordinary MCOPY whole-normal-Q row
+
+`dload_joint_tracked_mcopy_next` in lowerDloadPtrJointMemoryStoreTheory closes
+the identical normal-Q literal-next interface for MCOPY, with no extra external
+premises. Shape supplies empty outputs and original/non-retpc operand origins;
+source discipline supplies safety, and active lookup plus distinct labels
+excludes forwarding. The existing arbitrary-V/U MCOPY boundary core supplies
+source success and exact post ghosts/definedness, including snapshot behavior
+for overlapping ranges. The new successful-step field lemma preserves allocation,
+call-context and control fields. Fields-singleton reachability, index update and
+NormalNext reconstruct the complete Q existential. No disjointness or bounded
+operand-mask hypothesis is added, and memory-copy semantics are not duplicated.
+Checked build: lowerDloadPtrJointMemoryStoreTheory and
+o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6805_t001).
+This is local MCOPY propagation only; the frozen theorem and the remaining
+allocation, expansion and global closure obligations are still unfinished.
