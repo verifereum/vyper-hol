@@ -615,3 +615,27 @@ Checked exports in `lowerDloadPtrTerminalScript.sml`:
 Verification: two-target holbuild passed, evidence
 `TO_ld_ptr_v2-20261104T185312Z_m5792_t001`. This checks the terminal interfaces,
 not the global joint reachability induction or the frozen contract proof.
+
+## Canonical terminal closure checkpoint (C1.12.71–72)
+
+The terminal candidate in section 1 is superseded by
+`dload_terminal_mode lo P vs C ds H un g j t` in
+`lowerDloadPtrTerminalClosureScript.sml`. This is the canonical indexed,
+memory-free suffix disjunct; no normal boundary memory relation is retained.
+Its entry consumer `dload_actual_copy_terminal_mode` obtains source success,
+reachability and the slice from `dload_actual_copy_terminal_entry`, rather than
+assuming source success separately. Safety is `dload_terminal_mode_safety`.
+
+`dload_terminal_mode_next` propagates the disjunct at the literal next-rule
+boundary using the interior ASSIGN transport. Its explicit
+`ALL_DISTINCT (fn_labels g)` premise is required: `active_inst` by itself can
+select an instruction in another same-label block. Global consumers must supply
+this premise from target shape, not infer it from the terminal predicate.
+The call, return and block constructor exclusions are respectively
+`dload_terminal_mode_no_call`, `dload_terminal_mode_no_return`, and
+`dload_terminal_mode_no_block`.
+
+This certifies terminal-mode propagation only. Normal Support/Stack/Saved
+propagation and the full target `frame_reachable` induction remain open, as
+does the frozen stage contract. The next strategy review must address those
+normal-mode joint consumers, not another terminal inventory.

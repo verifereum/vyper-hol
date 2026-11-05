@@ -90,3 +90,57 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   Cases_on `mid` >> gvs[]
 QED
+
+Theorem dload_terminal_mode_no_call:
+  dload_terminal_mode lo P vs C ds H un g j t ==>
+  j.inst_opcode <> INVOKE
+Proof
+  simp[dload_terminal_mode_def] >> rpt strip_tac >>
+  drule_all dload_indexed_terminal_constructor_exclusions >> metis_tac[]
+QED
+
+Theorem dload_terminal_mode_no_return:
+  dload_terminal_mode lo P vs C ds H un g j t ==>
+  step_inst fuel Ct j t <> IntRet ret t'
+Proof
+  simp[dload_terminal_mode_def] >> rpt strip_tac >>
+  drule_all dload_indexed_terminal_constructor_exclusions >> metis_tac[]
+QED
+
+Theorem dload_terminal_mode_no_block:
+  dload_terminal_mode lo P vs C ds H un g j t /\
+  is_terminator j.inst_opcode ==>
+  step_inst fuel Ct j t <> OK t'
+Proof
+  simp[dload_terminal_mode_def] >> rpt strip_tac >>
+  drule_all dload_indexed_terminal_constructor_exclusions >> strip_tac >>
+  Cases_on `k+1 < LENGTH mid` >- metis_tac[] >>
+  `k+1 = LENGTH mid` by decide_tac >> metis_tac[]
+QED
+
+Theorem dload_terminal_mode_next:
+  ALL_DISTINCT (fn_labels g) /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  dload_terminal_mode lo P vs C ds H un g j t /\
+  step_inst fuel Ct j t = OK t' /\
+  active_inst g jnext (t' with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  dload_terminal_mode lo P vs C ds (step_prov PH H j t')
+    (step_taint j t t' un) g jnext
+    (t' with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  simp[dload_terminal_mode_def] >> rpt strip_tac >>
+  `k+1 < LENGTH mid` by
+    (Cases_on `k+1 < LENGTH mid` >- simp[] >>
+     `k+1 = LENGTH mid` by decide_tac >>
+     drule_all dload_indexed_terminal_constructor_exclusions >> metis_tac[]) >>
+  gvs[] >> drule_all dload_terminal_assign_next >>
+  disch_then (qspec_then `PH` mp_tac) >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  `jnext = EL (k+1) mid` by
+    (irule terminal_active_unique >>
+     qexistsl [`g`,`t' with vs_inst_idx := SUC t.vs_inst_idx`] >>
+     gvs[] >> metis_tac[]) >>
+  gvs[] >>
+  qrefinel [`_`,`_`,`_`,`_`,`_`,`s' with vs_inst_idx := SUC s.vs_inst_idx`,
+    `_`,`_`,`_`,`_`,`mid`,`a`,`b`,`k+1`] >>
+  simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]
+QED
