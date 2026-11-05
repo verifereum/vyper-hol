@@ -133,3 +133,68 @@ Proof
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
   fs[valueEncodingTheory.type_memory_size_def] >> metis_tac[]
 QED
+
+Theorem rest_word_array_immutable_load_mem_ok:
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode addr sa = (op,sb) /\
+  eval_operand addr s = SOME
+    (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT ty bd) = SOME (ArrayTV et bd)` by
+    fs[immutable_holds_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  `type_memory_size et = 32` by
+    metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  drule_all rest_word_array_element_extent >> strip_tac >>
+  drule_all rest_word_immutable_region_bound >> strip_tac >>
+  `w2n w + type_memory_size (ArrayTV et bd) < dimword (:256)` by
+    (qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
+     simp[immutable_holds_def] >> strip_tac >>
+     `k + type_memory_size (ArrayTV et bd) <= type_memory_size itv` by
+       fs[sub_layout_def] >>
+     `off + k < dimword (:256)` by decide_tac >>
+     `w2n w = off + k` by simp[] >> decide_tac) >>
+  `w2n (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) =
+   w2n w + ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)` by
+    (irule exprSimPropsTheory.buffer_offset_no_wrap >>
+     qexists_tac `type_memory_size (ArrayTV et bd)` >> simp[]) >>
+  `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
+    eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        compileEnvTheory.immutable_base_zero_def] >>
+     Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
+  irule (Q.INST [`loc` |-> `LocCode`] rest_word_ptr_load_mem_ok) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  Cases_on `cenv.ce_is_ctor` >> fs[] >> decide_tac
+QED
+
+Theorem rest_word_array_immutable_header_mem_ok:
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx (ArrayT ty (Dynamic cap))
+    (Value (ArrayV av)) w es s /\
+  evaluate_type (get_tenv cx) ty = SOME et /\
+  context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode addr sa = (op,sb) /\
+  eval_operand addr s = SOME w ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT ty (Dynamic cap)) =
+   SOME (ArrayTV et (Dynamic cap))` by
+    fs[immutable_holds_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  drule_all rest_word_immutable_region_bound >> strip_tac >>
+  `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
+    eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        compileEnvTheory.immutable_base_zero_def] >>
+     Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
+  irule (Q.INST [`loc` |-> `LocCode`] rest_word_ptr_load_mem_ok) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  Cases_on `cenv.ce_is_ctor` >> fs[valueEncodingTheory.type_memory_size_def] >> decide_tac
+QED
