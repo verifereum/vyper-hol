@@ -2,7 +2,7 @@
 Theory typedNormalizeRecursiveMem
 Ancestors
   typedNormalizeSemanticMem typedNormalizeTupleSemanticMem typedNormalizeStructSemanticMem
-  typedNormalizeStructMetadata
+  typedNormalizeStructMetadata typedNormalizeStructEntryMem
   typedNormalizeFrame typedMemoryCopy stmtSimReturn
   venomState compileEnv memContinuation typedCopyAgreement emitHelper arithmetic valueCopyBytes
   exprSimBufferStore exprSim exprSimAggregateChildren exprLoweringProps
