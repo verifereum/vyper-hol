@@ -1368,6 +1368,81 @@ Proof
   simp[CONJ_ASSOC]
 QED
 
+Theorem place_store_counted_entry_offset_path:
+  place_store_counted_entry cenv ctx dty sty dtv stv v /\
+  compile_with_byte_offset dst doff sa = (dp,s1) /\
+  compile_with_byte_offset src soff s1 = (sp,s2) /\
+  compile_store_memory_typed cenv dp dty sp sty s2 = ((),sb) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+  val_in_memory stv v (w2n sw + soff) s.vs_memory /\
+  w2n sw + soff + type_memory_size stv < dimword (:256) /\
+  w2n dw + doff + type_memory_size dtv < dimword (:256) /\
+  regions_disjoint (w2n sw + soff) (type_memory_size stv)
+                   (w2n dw + doff) (type_memory_size dtv) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory dtv v (w2n dw + doff) t.vs_memory /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n dw + doff)
+        (type_memory_size dtv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sb` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_offset_mono,
+              cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family, pairTheory.SND] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\ fn_has_code s2 sb func` by
+    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split,
+                                  cs_extends_trans]) >>
+  `w2n (dw + n2w doff) = w2n dw + doff /\
+   w2n (sw + n2w soff) = w2n sw + soff` by
+    (conj_tac >> irule typedMemoryCopyTheory.typed_copy_offset_nonwrap >> decide_tac) >>
+  `(!x. src = Var x ==> not_fresh_at s1 x) /\
+   (!x. dp = Var x ==> not_fresh_at s2 x) /\
+   (!x. sp = Var x ==> not_fresh_at s2 x)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_offset_fresh,
+              typedMemoryCopyTheory.typed_copy_operand_fresh_mono] >>
+  qpat_assum `compile_with_byte_offset dst _ _ = _` mp_tac >>
+  disch_then (mp_then Any mp_tac place_store_offset_path) >>
+  disch_then (qspecl_then [`dw`, `s`, `func`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `q1` strip_assume_tac) >>
+  `eval_operand src q1 = SOME sw` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand] >>
+  qpat_assum `compile_with_byte_offset src _ _ = _` mp_tac >>
+  disch_then (mp_then Any mp_tac place_store_offset_path) >>
+  disch_then (qspecl_then [`sw`, `q1`, `func`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `q2` strip_assume_tac) >>
+  `(!x. dp = Var x ==> not_fresh_at s1 x)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_offset_fresh] >>
+  `eval_operand dp q2 = SOME (dw + n2w doff)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand] >>
+  qpat_x_assum `place_store_counted_entry _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[place_store_counted_entry_def] >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`func`, `q2`, `dw + n2w doff`, `sw + n2w soff`] mp_tac) >>
+  (impl_tac >- metis_tac[ADD_COMM]) >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >>
+  `gas_marked_path F ctx func s 0 (OK q2)` by
+    metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  `gas_marked_path F ctx func s 0 (OK t)` by
+    metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  `ci_mono sa s2` by (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  simp[] >> conj_tac >- metis_tac[ADD_COMM] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_trans >>
+  qexists_tac `q1` >> conj_tac >- metis_tac[] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
+  qexists_tac `s1` >> simp[] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_trans >>
+  qexists_tac `q2` >> conj_tac >- metis_tac[] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
+  qexists_tac `s2` >> simp[] >> metis_tac[ADD_COMM]
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
