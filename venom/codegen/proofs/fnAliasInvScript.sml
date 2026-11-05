@@ -142,6 +142,23 @@ Proof
       NULL_EQ]
 QED
 
+Theorem alias_ready_jmp_single_successor:
+  codegen_ready_fn fn /\ lookup_block pred fn.fn_blocks = SOME pb /\
+  ~NULL pb.bb_instructions /\ (LAST pb.bb_instructions).inst_opcode = JMP /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) ==>
+  cfg_succs_of (cfg_analyze fn) pred = [lbl]
+Proof
+  strip_tac >> drule_all alias_ready_jmp_edge_operands >> strip_tac >>
+  `MEM pb fn.fn_blocks /\ pb.bb_label = pred` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+  strip_tac >> simp[] >>
+  Cases_on `pb.bb_instructions` >>
+  gvs[bb_succs_def, get_successors_def, get_label_def, is_terminator_def, NULL_EQ] >>
+  EVAL_TAC
+QED
+
 Theorem alias_lineage_join_historical_coverage:
   liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
   cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
@@ -1897,6 +1914,30 @@ Proof
   `(LAST pb.bb_instructions).inst_outputs = []` by
     gvs[inst_wf_def] >>
   metis_tac[alias_block_plan_final_jmp_spill_support]
+QED
+
+Theorem alias_lineage_join_selected_spill_support:
+  liveness = liveness_analyze fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\
+  lineage_entry liveness dfg cfg fn ps0 pred lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) ==>
+  !at. at IN FDOM ps.ps_spilled ==> ?v. at = Var v /\
+    MEM v (input_vars_from pred bb.bb_instructions (live_vars_at liveness lbl 0))
+Proof
+  strip_tac >> gvs[] >>
+  drule_all (SRULE[] (Q.INST [`cfg` |-> `cfg_analyze fn`]
+    alias_lineage_join_historical_spill_support)) >> strip_tac >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) pred /\
+   MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
+    (gvs[lineage_entry_def] >> metis_tac[alias_lineage_reachable]) >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  drule_all alias_ready_join_predecessor_jmp >> strip_tac >>
+  drule_all alias_ready_jmp_single_successor >> strip_tac >>
+  drule_all alias_single_successor_liveout >> strip_tac >>
+  fs[pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 
 Theorem release_dead_spills_plan_holds:
