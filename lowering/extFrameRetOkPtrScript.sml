@@ -14,6 +14,7 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract extRetScalarCopyCountedPtr extRetBytesCopyCountedPtr
+  extRetBulkCopyCountedPtr
 
 val _ = Parse.hide "body";
 
