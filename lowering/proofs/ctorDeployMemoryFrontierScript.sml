@@ -16,6 +16,9 @@
  *   alloca_frontier_inv_from_entry
  *   lowered_unit_raw_memory_ok_from, lowered_unit_dload_headroom_ok_from,
  *   lowered_unit_dload_offset_ok, lowered_unit_ptr_taint
+ *   lowered_unit_entry_facts -- what lowering_context_ok gives the entry
+ *   deploy_unit_run_entry -- the deployment unit's entry, at frontier
+ *     imm_len
  *)
 Theory ctorDeployMemoryFrontier
 Ancestors
@@ -23,7 +26,8 @@ Ancestors
   contextCodegenRelProps fcgPostorder fcgCorrectnessProof fcgDefs
   vyperCompiler venomWf venomExecSemantics venomInst venomState
   memSafeRun ptrSafeRun ptrOkCheck ptrDiscipline unitMemInv
-  unitTransformDefs lowerDloadDefs
+  unitTransformDefs lowerDloadDefs ctorDeployDefs deployUnitProducers
+  o1PassContract
   finite_map list pred_set relation arithmetic
 
 (* ===== The frontier from k ===== *)
@@ -138,7 +142,7 @@ QED
 
 (* ===== A unit that passed lowering_context_ok ===== *)
 
-Theorem lowered_unit_entry_facts[local]:
+Theorem lowered_unit_entry_facts:
   lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
   lookup_function name ctx.ctx_functions = SOME fn ==>
   ctx_wf ctx /\ wf_invoke_targets ctx /\ reachable_call_graph_acyclic ctx /\
@@ -278,4 +282,33 @@ Proof
   qspecl_then [`D`, `lo`, `\nm. set (ctx_ptr_param_list ctx nm)`, `ctx`,
                `vs`, `name`, `fn`, `lbl`] mp_tac ptr_safe_ptr_discipline >>
   disch_then irule >> fs[EVERY_MEM]
+QED
+
+(* ===== The deployment unit ===== *)
+
+(* The deployment unit passed lowering_context_ok, its entry is __deploy,
+   and its run starts with the alloca frontier at imm_len. *)
+Theorem deploy_unit_run_entry:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan es vs.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es)
+    ==>
+    lowering_context_ok dunit.cu_context /\
+    dunit.cu_context.ctx_entry = SOME "__deploy" /\
+    vs.vs_alloca_next = imm_len tops /\
+    ?fn lbl. lookup_function "__deploy" dunit.cu_context.ctx_functions =
+               SOME fn /\
+             fn_entry_label fn = SOME lbl
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
+  drule lower_vyper_deploy_unit_entry >> strip_tac >>
+  drule_all lowered_unit_entry_facts >> strip_tac >>
+  simp[] >>
+  qpat_x_assum `gas_variant _ _` mp_tac >> simp[gas_variant_def] >>
+  disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_alloca_next``) >>
+  simp[deploy_entry_state_def]
 QED
