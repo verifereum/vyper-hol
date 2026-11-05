@@ -125,11 +125,39 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
+Theorem supported_subscript_target_shape[local]:
+  !tops bindings t k.
+    supported_target tops bindings (SubscriptTarget t k) \/
+    IS_SOME (supported_target_info tops bindings (SubscriptTarget t k)) ==>
+    supported_expr tops k /\
+    ((?id. t = TopLevelNameTarget id) \/
+     IS_SOME (supported_target_info tops bindings t))
+Proof
+  rpt gen_tac >> Cases_on `t` >> strip_tac >>
+  gvs[supported_target_def, supported_target_info_def, AllCaseEqs(),
+      optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem supported_attribute_target_shape[local]:
+  !tops bindings t f.
+    supported_target tops bindings (AttributeTarget t f) \/
+    IS_SOME (supported_target_info tops bindings (AttributeTarget t f)) ==>
+    (?id. t = TopLevelNameTarget id) \/
+    IS_SOME (supported_target_info tops bindings t)
+Proof
+  rpt gen_tac >> Cases_on `t` >> strip_tac >>
+  gvs[supported_target_def, supported_target_info_def, AllCaseEqs(),
+      optionTheory.IS_SOME_EXISTS]
+QED
+
 Theorem target_indices_body_pre[local]:
-  !t cenv cx env pt.
+  !tops bindings t cenv cx env pt.
     type_place_target env t = SOME pt /\
+    (supported_target tops bindings t \/
+     IS_SOME (supported_target_info tops bindings t)) /\
     ~supported_target_exists
-      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+      (\e. ~is_extcode e /\
+           ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
     call_evaluation_safe cx (int_calls_target t) /\
     ~supported_target_exists expr_evm_run_root t /\
     EVERY (\c. FST c = NONE) (int_calls_target t) /\
@@ -140,14 +168,19 @@ Theorem target_indices_body_pre[local]:
        is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
     target_indices_pre cenv cx env t
 Proof
+  ntac 2 gen_tac >>
   Induct using base_assignment_target_induct >>
   simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
        listTheory.EVERY_APPEND] >> rpt strip_tac >>
+  imp_res_tac supported_subscript_target_shape >>
+  imp_res_tac supported_attribute_target_shape >>
+  imp_res_tac supported_expr_body_calls >>
   gvs[Once well_typed_expr_def, AllCaseEqs()]
-  >- metis_tac[call_evaluation_safe_append_left] >>
-  irule stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
-  qexists_tac `[]` >> simp[] >>
-  metis_tac[call_evaluation_safe_append_right]
+  >>~- ([`expr_body_pre _ _ _ _ _`],
+        irule stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
+        qexists_tac `[]` >> simp[] >>
+        metis_tac[call_evaluation_safe_append_right]) >>
+  metis_tac[call_evaluation_safe_append_left, target_indices_pre_def]
 QED
 
 Theorem body_assign_place_indices_pre[local]:
@@ -171,7 +204,11 @@ Proof
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  irule target_indices_body_pre >>
+  `supported_target tops bindings t \/
+   IS_SOME (supported_target_info tops bindings t)` by
+    (fs[supported_assignment_def] >>
+     Cases_on `supported_target_info tops bindings t` >> fs[]) >>
+  irule (Q.SPECL [`tops`, `bindings`] target_indices_body_pre) >>
   gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
   metis_tac[call_evaluation_safe_append_left]
