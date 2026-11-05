@@ -9,6 +9,7 @@ Ancestors
   exprSimArrayIndex
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
   exprSimTopLevelProps compileEnv finite_map
+  gasSummary fragGasPath fragGasMode vyperInterpreter vyperState
 
 Theorem toplevel_storage_ce_vars_decl:
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
@@ -22,6 +23,19 @@ Proof
   strip_tac >> Cases_on `var_decl_transient d` >>
   gvs[storage_vars_rel_def, transient_vars_rel_def] >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem toplevel_mapping_marked_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (HashMapVarDecl tr kt vt,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\ ~s0.vs_halted ==>
+  gas_marked_exec F (ctx,func) (eval_expr cx (TopLevelName ann (src,id)))
+    (es,s0) [] (INL (HashMapRef tr (n2w slot) kt vt)) es (OK s0)
+Proof
+  strip_tac >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
+       Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, LET_THM]
 QED
 
 (* A top-level mapping variable: compile_expr lowers it to a pointer
