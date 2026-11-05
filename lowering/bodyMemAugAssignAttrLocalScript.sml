@@ -4,6 +4,7 @@
    MSTORE there. *)
 Theory bodyMemAugAssignAttrLocal
 Ancestors
+  bodySim vyperTypeCallGraph supportedStmts supportedStmtTraverse
   bodyMemoryPreds bodyMemoryDefs stmtSimAugAssignAttr stmtSimAugAssign stmtSimAssignAttr
   exprSimMemDefs bodyExprPreFacts bodyBinopFamiliesMemory bodyBinopFragMemory
   exprLowering exprBopLowering stmtLowering loweringPosts exprSimHyps
@@ -945,5 +946,39 @@ Theorem body_augassign_attr_local_mem:
       (stmt_env cenv lctx ret_ty (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
       (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `cx_tops cx = tops` by
+    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supportedExprTraverseTheory.supported_expr_exists_def,
+         int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  drule augassign_attr_typing_mem_src >> strip_tac >>
+  `?sid. FLOOKUP env.var_types id = SOME (StructT sid) /\
+         attribute_type env.type_defs (StructT sid) fld = SOME ty` by
+    (gvs[well_typed_target_def,
+         vyperTypeEnvTheory.type_place_target_AttributeTarget,
+         vyperTypeEnvTheory.type_place_target_NameTarget, AllCaseEqs()] >>
+     Cases_on `tgt_ty` >> gvs[attribute_type_def]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                   (nsid_to_string sid)) fld = SOME (ty,fsz)` by
+    metis_tac[attribute_type_struct_field, expr_sim_inv_def] >>
+  drule_all augassign_attr_conditional_ih_mem_src >> strip_tac >>
+  irule compile_augassign_attr_local_mem >> simp[] >>
+  conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `body_expr_mem_ok cx e`
+        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
+        `es with gas_obs := gs`] mp_tac) >> simp[body_inv_def]) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
+
+
