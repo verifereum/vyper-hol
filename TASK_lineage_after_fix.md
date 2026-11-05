@@ -55,6 +55,7 @@ The definitions it uses (`dfs_aux_call`, `dfs_succs_call`, `dfs_block_state`,
 
 1. `holbuild --gcthreads 8 -j4 build fnPlanLineageTheory` passes with zero CHEAT warnings and zero failures.
 2. No duplicate or near-duplicate lemmas: each helper exists once, in its most general form. Search the existing theories (below) before proving a fact.
+   Owner-approved exception: you may not edit theories outside the `fnPlanLineage*` family (reorderSim, fnAliasStep, fnFrameStepsRevertForward and every other theory owned by another piece stay unchanged). When you need a small fact proved in such a theory and importing it would pull frame-level theories into the planner leaves, put one exact copy (same statement) in a `fnPlanLineage*` leaf, with a comment naming the original. Approved copies: `list_elem_count_dom_length`, `available_input_plan_length` (from fnFrameStepsRevertForward), `generate_emit_ops_slots` (from fnAliasStep). Such a copy satisfies this criterion.
 3. New helper theories, if any, are registered in `holproject.toml` the way the existing ones are.
 
 **If the theorem is false as stated:**
