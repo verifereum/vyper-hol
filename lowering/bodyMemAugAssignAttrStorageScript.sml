@@ -427,7 +427,7 @@ QED
 
 (* One emitted ADD, SLOAD or TLOAD: it touches no memory and writes only its
    fresh output. *)
-Theorem emit_op_word_path_mem[local]:
+Theorem emit_op_word_path_mem:
   !opc args sa op sb w s0 ctx func cenv cx es.
     emit_op opc args sa = (op,sb) /\
     (opc = ADD \/ opc = SLOAD \/ opc = TLOAD) /\
@@ -549,7 +549,7 @@ QED
 
 (* bodyMemAssignTopWord's assign_storage_store_path_mem, at a slot held in
    any operand. *)
-Theorem storage_store_op_path_mem[local]:
+Theorem storage_store_op_path_mem:
   !ctx func cenv cx es' s tr kop slot op w st st'.
     emit_void (if tr then TSTORE else SSTORE) [kop; op] st = ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\

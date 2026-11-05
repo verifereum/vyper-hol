@@ -578,7 +578,7 @@ Proof
 QED
 
 (* The store uses the live local region after RHS/operator evaluation. *)
-Theorem assign_attr_local_word_store_path_mem[local]:
+Theorem assign_attr_local_word_store_path_mem:
   emit_void MSTORE [dst; op] st = ((),st') /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
