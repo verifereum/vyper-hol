@@ -378,6 +378,30 @@ Proof
        bind_def, return_def]
 QED
 
+Theorem asm_pop_and_incorporate_context_state:
+  s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
+  pop_and_incorporate_context success s =
+    let g = child.msgParams.gasLimit - child.gasUsed in
+    let p = if success then parent with <|
+                gasUsed := parent.gasUsed - g;
+                logs := parent.logs ++ child.logs;
+                addRefund := parent.addRefund + child.addRefund;
+                subRefund := parent.subRefund + child.subRefund |>
+            else parent with gasUsed := parent.gasUsed - g in
+    (INL (), s with <| contexts := (p,parent_rb)::rest;
+                       rollback := if success then s.rollback else child_rb |>)
+Proof
+  strip_tac >> Cases_on `success` >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       get_current_context_def, pop_context_def, unuse_gas_def,
+       set_current_context_def, set_rollback_def, push_logs_def,
+       update_gas_refund_def, bind_def, ignore_bind_def, return_def,
+       assert_def] >>
+  AP_THM_TAC >> AP_TERM_TAC >> AP_TERM_TAC >>
+  simp[vfmContextTheory.context_component_equality]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
