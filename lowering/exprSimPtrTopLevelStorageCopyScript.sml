@@ -812,3 +812,145 @@ QED
      ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf /\
        toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf r
    after the whole-body ghost and ordinary observation boundaries. *)
+
+Theorem toplevel_copy_body_ordinary:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  storage_copy_inv cv ds loc a b n s0 (k+1) r /\
+  eval_operand src r = SOME a /\ lookup_var dst r = SOME (n2w b) /\
+  b + 32*n <= r.vs_alloca_next
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule toplevel_copy_inv_source >> strip_tac >>
+  drule toplevel_copy_inv_counter_value >> strip_tac >>
+  drule toplevel_copy_inv_destination >> strip_tac >>
+  `eval_operand (Var cv) s = SOME (n2w k) /\
+   eval_operand (Var dst) s = SOME (n2w b)` by simp[eval_operand_def] >>
+  `!x. src = Var x \/ Var dst = Var x ==>
+       ~MEM x [cv;sv;vv;mv;dv;nv]` by metis_tac[operand_11] >>
+  `?t. run_inst_seq code s = OK t /\
+       eval_operand (Var cv) t = SOME (n2w k + 1w) /\
+       eval_operand src t = SOME a /\ eval_operand (Var dst) t = SOME (n2w b) /\
+       (!x. ~MEM x [cv;sv;vv;mv;dv;nv] ==> lookup_var x t = lookup_var x s) /\
+       t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx /\
+       t.vs_halted = s.vs_halted /\ t.vs_labels = s.vs_labels` by
+    (qpat_assum `code = _` (fn th => rewrite_tac[th]) >>
+     irule storage_copy_body_run >>
+     Cases_on `loc = LocStorage` >> simp[] >>
+     rpt strip_tac >> gvs[] >> metis_tac[MEM]) >>
+  `t = r` by metis_tac[exec_result_11] >>
+  qpat_x_assum `t = r` SUBST_ALL_TAC >>
+  qpat_x_assum `code = _` SUBST_ALL_TAC >>
+  drule_at (Pat `run_inst_seq _ _ = _`) storage_copy_body_run_effect >>
+  disch_then (qspecl_then [`n2w k`, `n2w b`, `a`] mp_tac) >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  drule toplevel_copy_inv_bounds >> strip_tac >>
+  drule toplevel_copy_inv_content >> strip_tac >>
+  `copy_prefix loc a b n s0 k s` by gvs[storage_copy_inv_def] >>
+  drule_all storage_copy_body_prefix >> strip_tac >>
+  `r.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `copy_static r = copy_static s` mp_tac >>
+     simp[copy_static_def, venom_state_component_equality]) >>
+  simp[storage_copy_inv_def, eval_operand_def, GSYM word_add_n2w] >>
+  conj_tac
+  >- (gvs[storage_copy_inv_def, storage_copy_frame_def, EVERY_MEM] >>
+      metis_tac[]) >>
+  gvs[storage_copy_inv_def, venomMemPropsTheory.LENGTH_mstore_eq] >>
+  decide_tac
+QED
+
+Theorem toplevel_copy_body_content:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  storage_copy_inv cv ds loc a b n s0 (k+1) r
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_ordinary >> simp[]
+QED
+
+Theorem toplevel_copy_body_source:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  eval_operand src r = SOME a
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_ordinary >> simp[]
+QED
+
+Theorem toplevel_copy_body_destination:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  lookup_var dst r = SOME (n2w b)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_ordinary >> simp[]
+QED
+
+Theorem toplevel_copy_body_allocation_bound:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  b + 32*n <= r.vs_alloca_next
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_ordinary >> simp[]
+QED
