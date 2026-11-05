@@ -93,6 +93,139 @@ Proof
   simp[APPEND_EQ_CONS] >> rpt strip_tac >> gvs[]
 QED
 
+Theorem lower_dload_insts_supply_output_survives[local]:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) ==>
+  EVERY inst_wf ins ==>
+  !i v. MEM i ins /\ MEM v i.inst_outputs ==>
+  ?j. MEM j xs /\ MEM v j.inst_outputs
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> rpt strip_tac
+  >- (gvs[] >> drule_all lower_dload_inst_supply_output_survives >>
+      strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_insts_supply_output_count[local]:
+  !s xs t v. lower_dload_insts_supply s ins = (xs,t) /\
+  EVERY inst_wf ins /\ MEM v s.irs_used_vars ==>
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) xs) =
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) ins)
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `lower_dload_inst_supply s head = (piece,mid)` >>
+  drule lower_dload_inst_supply_preserves_vars >> strip_tac >>
+  drule_all lower_dload_inst_supply_output_count >> strip_tac >>
+  `MEM v mid.irs_used_vars` by metis_tac[] >>
+  qpat_x_assum `!s xs t v. _` (drule_all_then assume_tac) >>
+  gvs[] >> pure_rewrite_tac[FILTER_APPEND_DISTRIB, LENGTH_APPEND] >>
+  Cases_on `MEM v head.inst_outputs` >> gvs[]
+QED
+
+Theorem lower_dload_blocks_supply_pairing[local]:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) ==>
+  (!a. MEM a bbs ==> ?b u v.
+     MEM b bs /\ lower_dload_block_supply u a = (b,v)) /\
+  (!b. MEM b bs ==> ?a u v.
+     MEM a bbs /\ lower_dload_block_supply u a = (b,v))
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_block_supply_label[local]:
+  lower_dload_block_supply s a = (b,t) ==> b.bb_label = a.bb_label
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem lower_dload_blocks_supply_output_count[local]:
+  !s bs t v. lower_dload_blocks_supply s bbs = (bs,t) /\
+  EVERY (\b. EVERY inst_wf b.bb_instructions) bbs /\
+  MEM v s.irs_used_vars ==>
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) (fn_insts_blocks bs)) =
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) (fn_insts_blocks bbs))
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def, fn_insts_blocks_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt gen_tac >> strip_tac >>
+  rename1 `lower_dload_insts_supply s head.bb_instructions = (piece,mid)` >>
+  drule lower_dload_insts_supply_reserved_operand >> strip_tac >>
+  drule_all lower_dload_insts_supply_output_count >> strip_tac >>
+  `MEM v mid.irs_used_vars` by metis_tac[] >>
+  qpat_x_assum `!s bs t v. _` (drule_all_then assume_tac) >>
+  gvs[fn_insts_blocks_def, FILTER_APPEND_DISTRIB]
+QED
+
+Theorem lower_dload_function_supply_output_count[local]:
+  lower_dload_function_supply s f = (g,t) /\ fn_inst_wf f /\
+  MEM v s.irs_used_vars ==>
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) (fn_insts g)) =
+  LENGTH (FILTER (\j. MEM v j.inst_outputs) (fn_insts f))
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  `EVERY (\b. EVERY inst_wf b.bb_instructions) f.fn_blocks` by
+    (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  drule_all lower_dload_blocks_supply_output_count >>
+  gvs[fn_insts_def]
+QED
+
+Theorem lower_dload_insts_supply_occurrence[local]:
+  !s xs t pre j post.
+  lower_dload_insts_supply s ins = (xs,t) /\ xs = pre ++ j::post ==>
+  ?a i b ap yp ys bp mid next.
+    ins = a ++ i::b /\
+    lower_dload_insts_supply s a = (ap,mid) /\
+    lower_dload_inst_supply mid i = (yp ++ j::ys,next) /\
+    lower_dload_insts_supply next b = (bp,t) /\
+    pre = ap ++ yp /\ post = ys ++ bp
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  rename1 `lower_dload_inst_supply s head = (piece,mid_supply)` >>
+  qpat_x_assum `_ ++ _ = _ ++ _` mp_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  pure_once_rewrite_tac[APPEND_EQ_APPEND] >> strip_tac
+  >- (rename1 `piece = pre ++ overlap` >>
+      Cases_on `overlap`
+      >- (gvs[] >>
+          first_x_assum (qspecl_then [`mid_supply`,`t`,`[]`,`j`,`post`]
+            mp_tac) >> simp[] >> strip_tac >>
+          rename1 `ins = a ++ [i] ++ b` >> qexists `head::a` >>
+          simp[Once lower_dload_insts_supply_def] >>
+          metis_tac[APPEND_ASSOC]) >>
+      gvs[] >> qexists `[]` >> simp[lower_dload_insts_supply_def] >>
+      metis_tac[]) >>
+  gvs[] >> first_x_assum drule >> strip_tac >>
+  rename1 `ins = a ++ [i] ++ b` >> qexists `head::a` >>
+  simp[Once lower_dload_insts_supply_def] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Theorem lower_dload_source_block_distinct[local]:
+  fn_inst_ids_distinct f /\ MEM b f.fn_blocks ==>
+  ALL_DISTINCT b.bb_instructions
+Proof
+  rpt strip_tac >>
+  `?pre post. f.fn_blocks = pre ++ b::post` by metis_tac[MEM_SPLIT] >>
+  gvs[fn_inst_ids_distinct_def, MAP_APPEND, FLAT_APPEND,
+      ALL_DISTINCT_APPEND] >>
+  metis_tac[ALL_DISTINCT_MAP]
+QED
+
 (* Intuition, per conjunct of make_ssa_input_ok:
    - all_reachable and the PHI rows: the CFG (labels, edges, entry) is the
      same, and PHIs are kept unchanged in their same-labelled block
