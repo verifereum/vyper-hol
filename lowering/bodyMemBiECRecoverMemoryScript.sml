@@ -4,7 +4,7 @@ Ancestors
   bodyMemBiECRecoverStores bodyMemBiECRecoverBuffers
   bodyMemBiECRecoverSuffix bodyMemBiECRecoverRun
   exprSimAlloc loweringHalt allocaFootprint exprSimWordArgs valueEncodingProps
-  exprSimPrecompiles bodyLiteralBufferMemory
+  exprSimPrecompiles bodyLiteralBufferMemory venomCallOracleDefs
   fragExecMem instMemFrontier memSafeRun exprSimDefs exprSimProps exprLoweringProps
   compileEnv context emitHelper emitHelperProps abiDecodeStaticProps
   venomExecSemantics venomMemDefs venomState venomInst
@@ -189,4 +189,62 @@ Proof
   qexists_tac `s2` >> conj_tac >- first_assum ACCEPT_TAC >>
   irule run_inst_seq_mem_ok_append_run >> conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `s3` >> simp[]
+QED
+
+Theorem ecrecover_suffix_mem:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL
+        [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
+      emit_void ASSERT [success]; emit_op MLOAD [op] od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!x. ip = Var x ==> not_fresh_at sm x) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
+  w2n wi + 128 <= s.vs_alloca_next /\
+  w2n wo + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >> drule ecrecover_suffix_shape >> strip_tac >>
+  `!q k z t. (q = ip \/ q = op) /\ sm.cs_next_var <= k ==>
+     eval_operand q (update_var (STRING #"%" (toString k)) z t) =
+     eval_operand q t` by
+    (rpt strip_tac >> irule ecrecover_operand_generated_update >>
+     simp[] >> metis_tac[]) >>
+  `!q t rs. eval_operand q (t with vs_gas_readings := rs) = eval_operand q t` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  `!q rq a n t. eval_operand q (SND (consume_call_outcome rq a n t)) =
+     eval_operand q t` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  `!x v t. (update_var x v t).vs_alloca_next = t.vs_alloca_next` by
+    simp[update_var_def] >>
+  `!rq a n t. (SND (consume_call_outcome rq a n t)).vs_alloca_next =
+      t.vs_alloca_next` by simp[] >>
+  `!q k z t rs. (q = ip \/ q = op) /\ sm.cs_next_var <= k ==>
+      eval_operand q ((update_var (STRING #"%" (toString k)) z t)
+        with vs_gas_readings := rs) = eval_operand q t` by
+    (rpt strip_tac >> simp[]) >>
+  qpat_x_assum `emitted_insts sm sb = _` SUBST1_TAC >>
+  Cases_on `s.vs_gas_readings` >>
+  simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
+       step_inst_base_def, mk_inst_def, bind_outputs_def,
+       inst_dload_in_section_def, exec_gas_def] >>
+  pure_rewrite_tac[GSYM mk_inst_def] >>
+  simp[Once run_inst_seq_mem_ok_cons, below_frontier_STATICCALL,
+       wordsTheory.dimword_def,
+       eval_operand_def, lookup_var_update_var] >>
+  pure_rewrite_tac[GSYM update_var_def] >>
+  simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+       lookup_var_update_var, exec_ext_call_def, inst_dload_in_section_def,
+       Excl "consume_call_outcome_eq", pairTheory.UNCURRY_DEF] >>
+  CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  pure_rewrite_tac[GSYM mk_inst_def] >>
+  simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
+       Excl "consume_call_outcome_eq"] >>
+  simp[NoAsms, step_inst_base_def, mk_inst_def, eval_operand_def,
+       lookup_var_update_var, Excl "consume_call_outcome_eq",
+       inst_dload_in_section_def] >>
+  pure_rewrite_tac[GSYM mk_inst_def] >>
+  pure_rewrite_tac[COND_RAND, COND_RATOR] >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD,
+       Excl "consume_call_outcome_eq"]
 QED
