@@ -6143,6 +6143,150 @@ Proof
   simp[]
 QED
 
+(* Forward-copy bodies store through generated operands, not literals. *)
+Theorem place_store_operand_slot_path:
+  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  eval_operand dst s = SOME k /\ eval_operand src s = SOME w /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id (if tr then TSTORE else SSTORE) [dst;src] []) ==>
+  gas_marked_path F ctx func s 0
+    (OK (((if tr then tstore else sstore) k w s)
+      with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base
+      (mk_inst id (if tr then TSTORE else SSTORE) [dst;src] []) s =
+    OK ((if tr then tstore else sstore) k w s)` by
+    (Cases_on `tr` >>
+     simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+       eval_operands_def]) >>
+  drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
+  simp[mk_inst_def, is_terminator_def] >>
+  disch_then (qspecl_then [`func`, `ctx`] mp_tac) >>
+  Cases_on `tr` >> simp[is_terminator_def] >> strip_tac >>
+  simp[gas_marked_path_def] >>
+  metis_tac[gas_path_rules, gas_path_edge_normal, ADD_0]
+QED
+
+Theorem place_store_operand_update[local]:
+  eval_operand op (update_var x v s) =
+    if op = Var x then SOME v else eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def,
+    emitHelperPropsTheory.lookup_var_update_var] >> metis_tac[]
+QED
+
+Theorem place_store_mload_update[local]:
+  mload a (update_var x v s) = mload a s
+Proof
+  simp[mload_def, update_var_def]
+QED
+
+Theorem place_store_slot_operand_frame[local]:
+  eval_operand op ((if tr then tstore else sstore) a v s) = eval_operand op s
+Proof
+  Cases_on `tr` >> Cases_on `op` >>
+  simp[eval_operand_def, lookup_var_def, tstore_def, sstore_def]
+QED
+
+Theorem place_store_update_static[local]:
+  (update_var x v s).vs_call_ctx.cc_static = s.vs_call_ctx.cc_static
+Proof
+  simp[update_var_def]
+QED
+
+Theorem place_store_step_mul[local]:
+  eval_operand a s = SOME x /\ eval_operand b s = SOME y ==>
+  step_inst_base (mk_inst id MUL [a;b] [out]) s =
+    OK (update_var out (x*y) s)
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_pure2_def]
+QED
+
+Theorem place_store_step_add[local]:
+  eval_operand a s = SOME x /\ eval_operand b s = SOME y ==>
+  step_inst_base (mk_inst id ADD [a;b] [out]) s =
+    OK (update_var out (x+y) s)
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_pure2_def]
+QED
+
+Theorem place_store_step_mload[local]:
+  eval_operand a s = SOME x ==>
+  step_inst_base (mk_inst id MLOAD [a] [out]) s =
+    OK (update_var out (mload (w2n x) s) s)
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_read1_def]
+QED
+
+Theorem place_store_step_assign[local]:
+  eval_operand a s = SOME x ==>
+  step_inst_base (mk_inst id ASSIGN [a] [out]) s = OK (update_var out x s)
+Proof
+  simp[step_inst_base_def, mk_inst_def]
+QED
+
+Theorem place_store_step_slot[local]:
+  eval_operand a s = SOME x /\ eval_operand b s = SOME y /\
+  ~s.vs_call_ctx.cc_static ==>
+  step_inst_base (mk_inst id (if tr then TSTORE else SSTORE) [a;b] []) s =
+    OK ((if tr then tstore else sstore) x y s)
+Proof
+  Cases_on `tr` >> simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+    eval_operands_def]
+QED
+
+(* The straight-line part of a forward-copy iteration, before its JMP. *)
+Theorem place_store_forward_body_run:
+  ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
+  (!x. src = Var x \/ dst = Var x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  lookup_var cv s = SOME k /\ ~s.vs_call_ctx.cc_static ==>
+  let a = sw + k * 32w;
+      w = mload (w2n a) s;
+      s1 = update_var mv (k * 32w) s;
+      s2 = update_var sv a s1;
+      s3 = update_var vv w s2;
+      s4 = update_var dv (dw + k) s3;
+      s5 = (if tr then tstore else sstore) (dw + k) w s4;
+      s6 = update_var nv (k + 1w) s5;
+      s7 = update_var cv (k + 1w) s6
+  in run_inst_seq
+    [mk_inst id MUL [Var cv; Lit 32w] [mv];
+     mk_inst (id+1) ADD [src; Var mv] [sv];
+     mk_inst (id+2) MLOAD [Var sv] [vv];
+     mk_inst (id+3) ADD [dst; Var cv] [dv];
+     mk_inst (id+4) (if tr then TSTORE else SSTORE) [Var dv; Var vv] [];
+     mk_inst (id+5) ADD [Var cv; Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK s7
+Proof
+  strip_tac >> gvs[] >>
+  `eval_operand (Var cv) s = SOME k` by simp[eval_operand_def] >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
+    exec_pure2_def, place_store_operand_update,
+    emitHelperPropsTheory.eval_operand_lit] >>
+  `src <> Var mv /\ src <> Var sv /\ src <> Var vv /\
+   dst <> Var mv /\ dst <> Var sv /\ dst <> Var vv /\ dst <> Var dv` by metis_tac[] >>
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+    place_store_operand_update] >>
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
+    place_store_operand_update, place_store_mload_update] >>
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+    place_store_operand_update] >>
+  Cases_on `tr` >>
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+    eval_operands_def, place_store_operand_update, place_store_update_static] >>
+  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+    place_store_operand_update,
+    SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
+    SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame),
+    place_store_update_static, emitHelperPropsTheory.eval_operand_lit] >>
+  simp[run_inst_seq_def, step_inst_base_def,
+    place_store_operand_update]
+QED
+
 (* The allocation-limit check bounds the natural size, before n2w. *)
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
