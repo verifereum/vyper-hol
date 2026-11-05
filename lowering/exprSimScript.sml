@@ -664,6 +664,19 @@ Definition vv_place_ptr_rel_def:
                 (SOME p.ptr_location) (Type t))
 End
 
+Theorem vv_place_ptr_rel_vars_frame:
+  vv_place_ptr_rel cenv cx es pl vv s /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!name p sz w. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w ==> lookup_var p t = SOME w) ==>
+  vv_place_ptr_rel cenv cx es pl vv t
+Proof
+  Cases_on `vv` >> simp[vv_place_ptr_rel_def, contextTheory.vv_operand_def] >>
+  Cases_on `pl` >>
+  simp[vv_place_ptr_rel_def, placeProvenanceTheory.place_ptr_rel_def] >>
+  metis_tac[]
+QED
+
 Theorem vv_place_ptr_rel_stack[simp]:
   ~vv_place_ptr_rel cenv cx es pl (StackValue t op) s
 Proof

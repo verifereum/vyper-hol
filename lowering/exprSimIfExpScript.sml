@@ -47,6 +47,32 @@ Proof
   simp[punnable_def]
 QED
 
+Theorem eval_expr_place_lowered_type:
+  !ce e cx es p es'.
+    eval_expr cx e es = (INL (PlaceR p), es') ==>
+    lowered_value_type ce e = expr_type e
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, expr_type_def] >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+  PairCases_on `func_id` >>
+  gvs[Once evaluate_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_place_arm_lower_value[local]:
+  eval_expr cx e es = (INL (PlaceR p), es') /\
+  expr_type e = rt /\
+  compile_expr cenv ty e sa = (vv, sm) /\
+  compile_ifexp_arm cenv rt (lowered_value_type cenv e) vv sm = (op, sb) ==>
+  lower_value compile_expr cenv ty e sa = (op, sb)
+Proof
+  rpt strip_tac >> drule eval_expr_place_lowered_type >>
+  disch_then (qspec_then `cenv` assume_tac) >>
+  gvs[compile_ifexp_arm_def, same_memory_layout_def, ifexp_layout_refl,
+      lower_value_def, comp_bind_def]
+QED
+
 Theorem ifexp_copy_types[local]:
   !cenv rt at.
     (at = rt \/
@@ -545,8 +571,11 @@ Proof
   fs[vv_post_def] >> rpt conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sa x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
-  >- metis_tac[] >>
-  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+  >- metis_tac[]
+  >- metis_tac[locals_kept_mem_tail] >>
+  rpt strip_tac >> irule vv_place_ptr_rel_vars_frame >>
+  qexists_tac `s` >> simp[] >>
+  metis_tac[local_ptrs_reserved_def]
 QED
 
 (* Rebase variables without changing allocation ownership. *)
@@ -873,6 +902,11 @@ Theorem ifexp_vv_post_inst_idx[local]:
 Proof
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  `!pl vv. vv_place_ptr_rel cenv cx es' pl vv (s with vs_inst_idx := n) <=>
+           vv_place_ptr_rel cenv cx es' pl vv s` by
+    (Cases >> Cases >>
+     simp[vv_place_ptr_rel_def, placeProvenanceTheory.place_ptr_rel_def,
+          lookup_var_def]) >>
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
        expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
@@ -2264,6 +2298,45 @@ Resume compile_ifexp_forced_frag[else_arm]:
 QED
 Finalise compile_ifexp_forced_frag
 
+Theorem conditional_result_retained[local]:
+  conditional_result cx raw es = (INL (PlaceR p),es') ==>
+  raw = PlaceR p /\ es' = es /\
+  ?id path tv. p = MemoryPlace id path /\
+    place_type_value cx p es = (INL tv,es) /\
+    (case tv of ArrayTV _ _ => T | TupleTV _ => T | StructTV _ => T
+      | BaseTV (BytesT (Dynamic _)) => T | BaseTV (StringT _) => T | _ => F)
+Proof
+  Cases_on `raw` >> simp[conditional_result_def, bind_def, return_def, raise_def] >>
+  rename1 `place_type_value cx pl es` >>
+  Cases_on `place_type_value cx pl es` >>
+  rename1 `place_type_value cx pl es = (pr,pst)` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  Cases_on `pr` >> simp[] >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> Cases_on `p` >> gvs[] >> metis_tac[]
+QED
+
+Theorem eval_ifexp_raw_success[local]:
+  eval_expr cx (IfExp t c a b) es = (INL raw,es') ==>
+  ?bv es1 arm es2.
+    (do r <- eval_expr cx c; read_result cx r od) es = (INL (BoolV bv),es1) /\
+    eval_expr cx (if bv then a else b) es1 = (INL arm,es2) /\
+    conditional_result cx arm es2 = (INL raw,es')
+Proof
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, raise_def] >>
+  Cases_on `eval_expr cx c es` >> rename1 `eval_expr cx c es = (cr,cs)` >>
+  Cases_on `cr` >> simp[] >>
+  rename1 `read_result cx x cs` >>
+  Cases_on `read_result cx x cs` >> rename1 `read_result cx x cs = (vr,vs)` >>
+  Cases_on `vr` >> simp[] >>
+  rename1 `read_result cx x cs = (INL cv,vs)` >>
+  Cases_on `cv` >> simp[raise_def] >>
+  rename1 `BoolV bv` >> Cases_on `bv` >> simp[] >>
+  rename1 `eval_expr cx arm vs` >> Cases_on `eval_expr cx arm vs` >>
+  rename1 `eval_expr cx arm vs = (ar,ast)` >> Cases_on `ar` >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem compile_ifexp_vv_sim:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
@@ -2297,19 +2370,66 @@ Theorem compile_ifexp_vv_sim:
       compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
       eval_expr cx (IfExp t c a b) es = (res, es') /\ expr_read_res_ok cx es' res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
+      local_ptrs_reserved cenv sa /\
+      (!p. res = INL (PlaceR p) ==> ~is_word_type t) ==>
       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
         (\s. ?tv. res = INL tv /\
                   vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s)
         (expr_exit res)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  irule readable_eval_frag_transport >>
-  simp[] >> rpt strip_tac >>
+  Cases_on `res`
+  >- (rename1 `eval_expr cx (IfExp t c a b) es = (INL raw,es')` >>
+      Cases_on `raw`
+      >- (irule readable_eval_frag_transport >> simp[] >> rpt strip_tac >>
+          irule compile_ifexp_forced_frag >> simp[] >>
+          reverse conj_tac >- first_assum ACCEPT_TAC >>
+          qexists_tac `ty` >> simp[] >> metis_tac[])
+      >- suspend "retained" >>
+      drule eval_ifexp_raw_success >> strip_tac >>
+      Cases_on `arm` >>
+      gvs[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+      qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+      IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()]) >>
+  irule readable_eval_frag_transport >> simp[] >> rpt strip_tac >>
   irule compile_ifexp_forced_frag >> simp[] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `ty` >> simp[] >> metis_tac[]
 QED
+
+Resume compile_ifexp_vv_sim[retained]:
+  irule readable_eval_frag_transport >> simp[] >> rpt strip_tac >>
+  drule eval_ifexp_raw_success >> strip_tac >>
+  drule conditional_result_retained >> strip_tac >> gvs[] >>
+  gvs[expr_read_res_ok_def, bind_def, expr_res_ok_def] >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
+        simp[frag_exec_false_pre] >>
+      pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >> simp[]) >>
+  drule_all compile_expr_ifexp_states >> strip_tac >>
+  Cases_on `bv`
+  >- (gvs[] >>
+      `lower_value compile_expr cenv ty a s7 = (aop,s8)` by
+        (irule ifexp_place_arm_lower_value >> simp[] >> goal_assum drule >> simp[] >>
+         goal_assum drule >> simp[]) >>
+      drule_at (Pat `lower_value _ _ _ a _ = _`) ifexp_retained_branch_sim >>
+      disch_then (drule_at (Pat `lower_value _ _ _ c _ = _`)) >>
+      disch_then drule >> disch_then drule >>
+      disch_then drule >> disch_then drule >> disch_then drule >>
+      `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+      simp[] >> disch_then irule >> simp[cs_extends_def, bind_def]) >>
+  gvs[] >>
+  `lower_value compile_expr cenv ty b s11 = (bop,s12)` by
+    (irule ifexp_place_arm_lower_value >> simp[] >> goal_assum drule >> simp[] >>
+     goal_assum drule >> simp[]) >>
+  drule_at (Pat `lower_value _ _ _ b _ = _`) ifexp_retained_branch_sim >>
+  disch_then (drule_at (Pat `lower_value _ _ _ c _ = _`)) >>
+  disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  simp[] >> disch_then irule >> simp[cs_extends_def, bind_def]
+QED
+Finalise compile_ifexp_vv_sim
 
 Theorem ifexp_sfields_partial[local]:
   sfields_tenv_consistent sf env ==>
@@ -2786,8 +2906,14 @@ Theorem compile_ifexp_word_vv_sim:
         (expr_exit res)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `!p. res <> INL (PlaceR p)` by metis_tac[] >>
   irule readable_eval_frag_transport >>
   simp[] >> rpt strip_tac >>
   irule compile_ifexp_word_forced_frag >> simp[] >>
   qexists_tac `ty` >> simp[] >> metis_tac[]
 QED
+
+val _ = List.app (fn (name,th) =>
+  if List.exists (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then raise Fail ("oracle dependency: " ^ name) else ())
+  (DB.thms "exprSimIfExp");

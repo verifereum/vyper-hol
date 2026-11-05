@@ -164,19 +164,6 @@ Proof
   >> metis_tac[]
 QED
 
-Theorem vv_place_ptr_rel_vars_frame:
-  vv_place_ptr_rel cenv cx es pl vv s /\
-  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
-  (!name p sz w. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
-    lookup_var p s = SOME w ==> lookup_var p t = SOME w) ==>
-  vv_place_ptr_rel cenv cx es pl vv t
-Proof
-  Cases_on `vv` >> simp[vv_place_ptr_rel_def, vv_operand_def] >>
-  Cases_on `pl` >>
-  simp[vv_place_ptr_rel_def, placeProvenanceTheory.place_ptr_rel_def] >>
-  metis_tac[]
-QED
-
 Theorem vv_post_vars_frame:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   (t with vs_vars := s.vs_vars) = s /\
