@@ -6820,5 +6820,54 @@ Theorem asm_frame_call_step:
   (EL as.as_pc prog = AsmOp "CALL" \/ EL as.as_pc prog = AsmOp "STATICCALL") ==>
   asm_frame_step_ok prog data es0 as es
 Proof
-  cheat
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by
+    metis_tac[asm_frame_rel_def] >>
+  qabbrev_tac `op = if EL as.as_pc prog = AsmOp "CALL" then Call else StaticCall` >>
+  `op = if EL as.as_pc prog = AsmOp "CALL" then Call else StaticCall` by simp[Abbr `op`] >>
+  Cases_on `asm_call_prepare op es` >> rename1 `asm_call_prepare op es = (q,u)` >>
+  Cases_on `q`
+  >- (PairCases_on `x` >>
+      rename1 `asm_call_prepare op es =
+        (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u)` >>
+      Cases_on `(lookup_account sender accounts).balance < value \/ 1024 < LENGTH es.contexts`
+      >- (drule_all asm_frame_call_abort_step >> simp[Abbr `op`]) >>
+      `value <= (lookup_account sender accounts).balance /\ LENGTH es.contexts <= 1024`
+        by (qpat_x_assum `~(_ \/ _)` mp_tac >> simp[]) >>
+      Cases_on `asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u` >>
+      rename1 `asm_call_finish op _ u = (q,v)` >> Cases_on `q`
+      >- (Cases_on `x` >> suspend "entered") >>
+      drule_all asm_frame_call_terminal >> simp[Abbr `op`]) >>
+  drule_all asm_frame_call_prepare_exit >> simp[Abbr `op`]
 QED
+
+Resume asm_frame_call_step[entered]:
+  qpat_x_assum `Abbrev _` kall_tac >>
+  `wf_state es /\ (?d. es.msdomain = Collect d) /\ ~c.msgParams.static /\
+   asm_evm_rel (prog ++ [AsmDataItem data]) as es` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  SUBGOAL_THEN ``op = Call \/ op = StaticCall`` assume_tac
+  >- (Cases_on `EL as.as_pc prog = AsmOp "CALL"` >> simp[]) >>
+  `next_opcode c = SOME op` by
+    (drule_all asm_frame_call_decode >> simp[] >> metis_tac[]) >>
+  `step_call op es = (INL (),v)` by
+    (qpat_x_assum `op = if _ then _ else _` kall_tac >>
+     simp[asm_step_call_factor, bind_def]) >>
+  `step es = (INL (),v)` by (drule_all asm_call_step_success >> simp[]) >>
+  `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by
+    (drule_all asm_call_prepare_success_stack >> simp[]) >>
+  `observable_call c` by
+    (simp[observable_call_def] >> Cases_on `op = Call` >> gvs[call_has_value_def]) >>
+  drule_all asm_call_prepared_enter_view >> strip_tac >>
+  `wf_state v /\ (?d. v.msdomain = Collect d)` by
+    (conj_tac >- (drule_all step_preserves_wf_state >> simp[]) >>
+     drule_at (Pat `step _ = _`) step_preserves_collect >> simp[]) >>
+  `2 <= LENGTH v.contexts` by simp[] >>
+  SUBGOAL_THEN ``?d. v.msdomain = Collect d`` assume_tac >- simp[] >>
+  drule_all asm_call_child_run_normal >> strip_tac >>
+  `LENGTH t.contexts = LENGTH es.contexts` by
+    (qpat_x_assum `LENGTH t.contexts + 1 = _` mp_tac >> simp[]) >>
+  drule_all asm_frame_call_enter_step_ok >> simp[]
+QED
+
+Finalise asm_frame_call_step
