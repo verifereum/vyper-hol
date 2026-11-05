@@ -5327,6 +5327,345 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+(* Joint-cut probe: both incoming PHI identities are defined before the split. *)
+Definition alias_retired_fn_def:
+  alias_retired_fn = mk_raw_function "retired_phi"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["a"];
+          mk_inst 1 CALLDATASIZE [] ["b"];
+          mk_inst 2 CALLDATASIZE [] ["c"];
+          mk_inst 3 JNZ [Var "c"; Label "right"; Label "left"] []] |>;
+     <| bb_label := "left"; bb_instructions :=
+         [mk_inst 11 CALLDATASIZE [] ["tmp"]; mk_inst 4 JMP [Label "join"] []] |>;
+     <| bb_label := "right"; bb_instructions := [mk_inst 5 JMP [Label "join"] []] |>;
+     <| bb_label := "join"; bb_instructions :=
+         [mk_inst 6 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"];
+          mk_inst 7 ADD [Var "p"; Lit 1w] ["w"];
+          mk_inst 8 JNZ [Var "w"; Label "yes"; Label "no"] []] |>;
+     <| bb_label := "yes"; bb_instructions := [mk_inst 9 STOP [] []] |>;
+     <| bb_label := "no"; bb_instructions := [mk_inst 10 STOP [] []] |>]
+End
+
+Theorem alias_retired_ready:
+  codegen_ready_fn alias_retired_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_retired_plan_def:
+  alias_retired_plan n ps = generate_block_plan (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn)
+    alias_retired_fn (EL n alias_retired_fn.fn_blocks) ps
+End
+
+Definition alias_retired_entry_def:
+  alias_retired_entry = THE (alias_retired_plan 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Definition alias_retired_left_def:
+  alias_retired_left = THE (alias_retired_plan 1 (SND alias_retired_entry))
+End
+
+Theorem alias_retired_trace_probe:
+  IS_SOME (alias_retired_plan 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+  IS_SOME (alias_retired_plan 1 (SND alias_retired_entry)) /\
+  (SND alias_retired_left).ps_stack = [Var "a"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_retired_plans:
+  alias_retired_plan 0 (init_cleanup_plan_state NONE [] 0 0) = SOME alias_retired_entry /\
+  alias_retired_plan 1 (SND alias_retired_entry) = SOME alias_retired_left
+Proof
+  mp_tac alias_retired_trace_probe >>
+  Cases_on `alias_retired_plan 0 (init_cleanup_plan_state NONE [] 0 0)` >>
+  Cases_on `alias_retired_plan 1 (SND alias_retired_entry)` >>
+  simp[alias_retired_entry_def, alias_retired_left_def]
+QED
+
+Theorem alias_retired_dfs_left:
+  dfs_aux_call (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["left"] ["entry"] (SND alias_retired_entry)
+Proof
+  `SND alias_retired_entry = (SND alias_retired_entry) with
+    <|ps_stack := (SND alias_retired_entry).ps_stack;
+      ps_spilled := (SND alias_retired_entry).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `["right"]` >>
+  `cfg_succs_of (cfg_analyze alias_retired_fn) "entry" = ["left"; "right"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 0 alias_retired_fn.fn_blocks`, `FST alias_retired_entry`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[GSYM alias_retired_plan_def, alias_retired_plans] >>
+  conj_tac >- EVAL_TAC >> irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_retired_dfs_join:
+  dfs_block_state (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "join" (SND alias_retired_left)
+Proof
+  simp[dfs_block_state_def] >> qexistsl_tac [`[]`, `["left"; "entry"]`] >> simp[] >>
+  `SND alias_retired_left = (SND alias_retired_left) with
+    <|ps_stack := (SND alias_retired_left).ps_stack;
+      ps_spilled := (SND alias_retired_left).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `cfg_succs_of (cfg_analyze alias_retired_fn) "left" = ["join"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 1 alias_retired_fn.fn_blocks`, `FST alias_retired_left`,
+    `SND alias_retired_entry`, `[]`] >>
+  simp[GSYM alias_retired_plan_def, alias_retired_plans, alias_retired_dfs_left] >> EVAL_TAC
+QED
+
+Definition alias_retired_phi_state_def:
+  alias_retired_phi_state = SND (generate_phi_plan
+    (EL 0 (EL 3 alias_retired_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_retired_fn) "join" 1) F
+    (SND alias_retired_left))
+End
+
+Definition alias_retired_add_state_def:
+  alias_retired_add_state = SND (generate_regular_inst_plan
+    (liveness_analyze alias_retired_fn) (dfg_build_function alias_retired_fn)
+    (cfg_analyze alias_retired_fn) alias_retired_fn
+    (EL 1 (EL 3 alias_retired_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_retired_fn) "join" 2) F T "join"
+    alias_retired_phi_state)
+End
+
+Theorem alias_retired_join_cut_fields:
+  (SND alias_retired_entry).ps_stack = [Var "a"; Var "b"] /\
+  (SND alias_retired_left).ps_stack = [Var "a"] /\
+  alias_retired_phi_state.ps_stack = [Var "p"] /\
+  alias_retired_add_state.ps_stack = [Var "w"] /\
+  IS_SOME (alias_retired_plan 3 (SND alias_retired_left)) /\
+  EVERY (\ps. ps.ps_spilled = FEMPTY)
+    [SND alias_retired_entry; SND alias_retired_left;
+     alias_retired_phi_state; alias_retired_add_state]
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- simp[alias_retired_trace_probe] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  EVAL_TAC
+QED
+
+(* C2.24 whole-phase closure ledger (not a global invariant theorem).
+   Initialization: alias_prepare_params_holds_output supplies parameter coverage;
+   alias_entry_live_param_output connects entry demand to parameters. Still need
+   compatible initial mass and provenance for the whole DFS inventory.
+   Cleanup: alias_clean_stack_upper_support introduces no variable identities;
+   it is not a proof that every retained identity is live. Need preservation of
+   the lower-demand and mass predicates at the same cleanup cut.
+   PHIs: alias_lineage_join_phi_prefix_total_slots and
+   alias_lineage_join_phi_fold_lower_coverage close historical lower coverage.
+   alias_phi_prefix_upper_support permits old names plus prefix outputs;
+   alias_phi_prefix_singleton_mass needs output freshness. No theorem here
+   supplies freshness for all old exception names along a DFS path.
+   Regular non-JMP: alias_regular_plan_var_mass and
+   alias_regular_plan_var_budget propagate mass given operand coverage, arity,
+   distinct outputs and absent outputs. Readiness supplies arity/distinctness,
+   not coverage or absent outputs. alias_regular_plan_holds_live propagates
+   covered demand; it does not establish the initial coverage at every cut.
+   alias_regular_plan_var_support additionally needs, for the tracked x,
+     plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst).
+   The branch cut below falsifies this premise despite coverage, mass and
+   freshness. The halting and OFFSET joint cuts below give separate exceptions.
+   Final JMP: alias_jmp_plan_holds_live handles covered live names;
+   alias_lineage_join_historical_coverage and historical_spill_support describe
+   the reached join. They are not an all-path inventory producer.
+   Successor: DFS/lineage transfer copies stack/spills, so needs an edge rule
+   reclassifying exception provenance and re-establishing demanded coverage.
+   No such coupled producer has been established by these finite probes.
+
+   Minimal necessary envelope revision: besides live/current operands, allow
+   inactive branch alternatives BEFORE the PHI (with path/edge and defining
+   instruction provenance), not just retired PHI sources; retain actual OFFSET
+   definitions and earlier singleton outputs of halting blocks. Carry these
+   tags until a proved deletion boundary, not merely until the next cut.
+   Sufficiency is UNPROVED: at each output y still need
+     MEM y inst.inst_outputs ==> ~plan_holds ps (Var y)
+   for every tag class. SSA alone does not rule out a previous loop iteration;
+   a path/dominance argument is still required. No global induction is released.
+   This refutes the proposed inventory envelope, not lineage_alias_successor. *)
+Theorem alias_retired_branch_cut:
+  (!op. MEM op (compute_operands
+      (HD (EL 1 alias_retired_fn.fn_blocks).bb_instructions)) /\
+      is_var_operand op ==> plan_holds (SND alias_retired_entry) op) /\
+  (!x. alias_var_mass x (SND alias_retired_entry) <= 1) /\
+  EVERY (\out. ~plan_holds (SND alias_retired_entry) (Var out))
+    (HD (EL 1 alias_retired_fn.fn_blocks).bb_instructions).inst_outputs /\
+  plan_holds (SND alias_retired_entry) (Var "b") /\
+  ~MEM "b" (live_vars_at (liveness_analyze alias_retired_fn) "left" 1) /\
+  ~MEM (Var "b") (compute_operands
+    (HD (EL 1 alias_retired_fn.fn_blocks).bb_instructions)) /\
+  MEM (Var "b") (EL 0 (EL 3 alias_retired_fn.fn_blocks).bb_instructions).inst_operands
+Proof
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> gen_tac >> rpt IF_CASES_TAC >> gvs[]) >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_retired_join_regular_cuts:
+  EVERY (\(i,ps).
+    (!op. MEM op (compute_operands (EL i (EL 3 alias_retired_fn.fn_blocks).bb_instructions)) /\
+       is_var_operand op ==> plan_holds ps op) /\
+    (!x. alias_var_mass x ps <= 1) /\
+    EVERY (\out. ~plan_holds ps (Var out))
+      (EL i (EL 3 alias_retired_fn.fn_blocks).bb_instructions).inst_outputs /\
+    (!x. plan_holds ps (Var x) ==>
+      MEM x (live_vars_at (liveness_analyze alias_retired_fn) "join" (SUC i)) \/
+      MEM (Var x) (compute_operands (EL i (EL 3 alias_retired_fn.fn_blocks).bb_instructions))))
+    [(1,alias_retired_phi_state); (2,alias_retired_add_state)]
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[is_var_operand_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Definition alias_halting_cut_fn_def:
+  alias_halting_cut_fn = mk_raw_function "halting_cut"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["dead"];
+          mk_inst 1 CALLDATASIZE [] ["b"];
+          mk_inst 2 ISZERO [Var "b"] ["z"];
+          mk_inst 3 STOP [] []] |>]
+End
+
+Definition alias_halting_cut_state_def:
+  alias_halting_cut_state i = SND (THE (generate_block_insts_plan
+    (liveness_analyze alias_halting_cut_fn) (dfg_build_function alias_halting_cut_fn)
+    (cfg_analyze alias_halting_cut_fn) alias_halting_cut_fn "entry" T 0 4 0
+    (TAKE i (HD alias_halting_cut_fn.fn_blocks).bb_instructions)
+    (init_cleanup_plan_state NONE [] 0 0)))
+End
+
+Theorem alias_halting_cut_probe:
+  codegen_ready_fn alias_halting_cut_fn /\
+  IS_SOME (generate_block_plan (liveness_analyze alias_halting_cut_fn)
+    (dfg_build_function alias_halting_cut_fn) (cfg_analyze alias_halting_cut_fn)
+    alias_halting_cut_fn (HD alias_halting_cut_fn.fn_blocks)
+    (init_cleanup_plan_state NONE [] 0 0)) /\
+  (alias_halting_cut_state 1).ps_stack = [Var "dead"] /\
+  (alias_halting_cut_state 2).ps_stack = [Var "dead"; Var "b"] /\
+  (alias_halting_cut_state 3).ps_stack = [Var "dead"; Var "z"] /\
+  ~MEM "dead" (live_vars_at (liveness_analyze alias_halting_cut_fn) "entry" 2) /\
+  ~MEM (Var "dead") (compute_operands
+    (EL 1 (HD alias_halting_cut_fn.fn_blocks).bb_instructions))
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_halting_joint_cuts:
+  EVERY (\i.
+    (!op. MEM op (compute_operands (EL i (HD alias_halting_cut_fn.fn_blocks).bb_instructions)) /\
+       is_var_operand op ==> plan_holds (alias_halting_cut_state i) op) /\
+    (!x. alias_var_mass x (alias_halting_cut_state i) <= 1) /\
+    EVERY (\out. ~plan_holds (alias_halting_cut_state i) (Var out))
+      (EL i (HD alias_halting_cut_fn.fn_blocks).bb_instructions).inst_outputs /\
+    (!x. plan_holds (alias_halting_cut_state i) (Var x) ==>
+      MEM x (live_vars_at (liveness_analyze alias_halting_cut_fn) "entry" (SUC i)) \/
+      MEM (Var x) (compute_operands (EL i (HD alias_halting_cut_fn.fn_blocks).bb_instructions)) \/
+      MEM x (FLAT (MAP (\inst. inst.inst_outputs)
+        (TAKE i (HD alias_halting_cut_fn.fn_blocks).bb_instructions))))) (COUNT_LIST 4)
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[is_var_operand_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_halting_dfs_entry:
+  dfs_block_state (liveness_analyze alias_halting_cut_fn)
+    (dfg_build_function alias_halting_cut_fn) (cfg_analyze alias_halting_cut_fn)
+    alias_halting_cut_fn (init_cleanup_plan_state NONE [] 0 0) "entry"
+    (init_cleanup_plan_state NONE [] 0 0)
+Proof
+  simp[dfs_block_state_def] >> qexistsl_tac [`[]`, `[]`] >> simp[] >>
+  irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Definition alias_offset_cut_state_def:
+  alias_offset_cut_state i = SND (THE (generate_block_insts_plan
+    (liveness_analyze alias_offset_branch_fn) (dfg_build_function alias_offset_branch_fn)
+    (cfg_analyze alias_offset_branch_fn) alias_offset_branch_fn "entry" F 0 3 0
+    (TAKE i (HD alias_offset_branch_fn.fn_blocks).bb_instructions)
+    (init_cleanup_plan_state NONE [] 0 0)))
+End
+
+Theorem alias_offset_cut_trace:
+  IS_SOME (generate_block_plan (liveness_analyze alias_offset_branch_fn)
+    (dfg_build_function alias_offset_branch_fn) (cfg_analyze alias_offset_branch_fn)
+    alias_offset_branch_fn (HD alias_offset_branch_fn.fn_blocks)
+    (init_cleanup_plan_state NONE [] 0 0)) /\
+  (alias_offset_cut_state 3).ps_stack = [Var "v"] /\
+  (alias_offset_cut_state 3).ps_spilled = FEMPTY /\
+  ~MEM "v" (live_vars_at (liveness_analyze alias_offset_branch_fn) "skip" 0) /\
+  IS_SOME (generate_block_plan (liveness_analyze alias_offset_branch_fn)
+    (dfg_build_function alias_offset_branch_fn) (cfg_analyze alias_offset_branch_fn)
+    alias_offset_branch_fn (EL 2 alias_offset_branch_fn.fn_blocks) (alias_offset_cut_state 3))
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_offset_joint_entry_cuts:
+  EVERY (\i.
+    (!op. MEM op (compute_operands (EL i (HD alias_offset_branch_fn.fn_blocks).bb_instructions)) /\
+       is_var_operand op ==> plan_holds (alias_offset_cut_state i) op) /\
+    (!x. alias_var_mass x (alias_offset_cut_state i) <= 1) /\
+    EVERY (\out. ~plan_holds (alias_offset_cut_state i) (Var out))
+      (EL i (HD alias_offset_branch_fn.fn_blocks).bb_instructions).inst_outputs /\
+    (!x. plan_holds (alias_offset_cut_state i) (Var x) ==>
+      MEM x (live_vars_at (liveness_analyze alias_offset_branch_fn) "entry" (SUC i)) \/
+      MEM (Var x) (compute_operands (EL i (HD alias_offset_branch_fn.fn_blocks).bb_instructions))))
+    (COUNT_LIST 3)
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[is_var_operand_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_offset_joint_skip_cut:
+  (!op. MEM op (compute_operands (HD (EL 2 alias_offset_branch_fn.fn_blocks).bb_instructions)) /\
+     is_var_operand op ==> plan_holds (alias_offset_cut_state 3) op) /\
+  (!x. alias_var_mass x (alias_offset_cut_state 3) <= 1) /\
+  EVERY (\out. ~plan_holds (alias_offset_cut_state 3) (Var out))
+    (HD (EL 2 alias_offset_branch_fn.fn_blocks).bb_instructions).inst_outputs /\
+  (!x. plan_holds (alias_offset_cut_state 3) (Var x) ==>
+    MEM x (live_vars_at (liveness_analyze alias_offset_branch_fn) "skip" 1) \/
+    ((EL 1 (HD alias_offset_branch_fn.fn_blocks).bb_instructions).inst_opcode = OFFSET /\
+     MEM x (EL 1 (HD alias_offset_branch_fn.fn_blocks).bb_instructions).inst_outputs))
+Proof
+  EVAL_TAC >> rpt strip_tac >> gvs[is_var_operand_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_offset_dfs_skip:
+  dfs_block_state (liveness_analyze alias_offset_branch_fn)
+    (dfg_build_function alias_offset_branch_fn) (cfg_analyze alias_offset_branch_fn)
+    alias_offset_branch_fn (init_cleanup_plan_state NONE [] 0 0) "skip" (alias_offset_cut_state 3)
+Proof
+  simp[dfs_block_state_def] >> qexistsl_tac [`[]`, `["entry"]`] >> simp[] >>
+  `alias_offset_cut_state 3 = (alias_offset_cut_state 3) with
+    <|ps_stack := (alias_offset_cut_state 3).ps_stack;
+      ps_spilled := (alias_offset_cut_state 3).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `["use"]` >>
+  `cfg_succs_of (cfg_analyze alias_offset_branch_fn) "entry" = ["skip"; "use"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`HD alias_offset_branch_fn.fn_blocks`,
+    `FST (THE (generate_block_plan (liveness_analyze alias_offset_branch_fn)
+      (dfg_build_function alias_offset_branch_fn) (cfg_analyze alias_offset_branch_fn)
+      alias_offset_branch_fn (HD alias_offset_branch_fn.fn_blocks)
+      (init_cleanup_plan_state NONE [] 0 0)))`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
 (* Restricted-ownership probe requested by C1.21.2.6.5. *)
 Definition alias_diamond_fn_def:
   alias_diamond_fn = mk_raw_function "alias_diamond"
