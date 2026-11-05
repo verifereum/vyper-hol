@@ -129,3 +129,29 @@ Proof
   `X <> []` by metis_tac[lower_dload_inst_supply_nonempty] >>
   gvs[] >> Cases_on `X` >> gvs[EL_APPEND]
 QED
+
+(* Source activity suffices for forward expansion-boundary transport. *)
+Theorem ld_envelope_source_next:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  ld_envelope u fn s j X p /\
+  s'.vs_current_bb = s.vs_current_bb /\
+  active_inst fn next (s' with vs_inst_idx := SUC j) ==>
+  ?Y. ld_envelope u fn (s' with vs_inst_idx := SUC j)
+        (SUC j) Y (p + LENGTH X)
+Proof
+  simp[ld_envelope_def, active_inst_def] >> rpt strip_tac >>
+  `bb = EL bi fn.fn_blocks` by
+    (irule ld_block_label_unique >> conj_tac >- simp[] >>
+     qexists_tac `fn.fn_blocks` >> simp[MEM_EL] >> metis_tac[]) >>
+  gvs[] >> qexists_tac `bi` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `lower_dload_insts_supply ub (TAKE j ins)` >>
+  Cases_on `lower_dload_insts_supply ub (TAKE j ins)` >>
+  rename1 `lower_dload_insts_supply ub (TAKE j ins) = (pre,ui)` >>
+  Cases_on `lower_dload_inst_supply ui (EL j ins)` >>
+  rename1 `lower_dload_inst_supply ui (EL j ins) = (out,un)` >>
+  `j < LENGTH ins` by (gvs[Abbr `ins`]) >>
+  drule_all lower_dload_insts_supply_next >> simp[]
+QED
+
+val _ = if null (hyp ld_envelope_source_next) then ()
+        else raise Fail "ld_envelope_source_next has hypotheses";
