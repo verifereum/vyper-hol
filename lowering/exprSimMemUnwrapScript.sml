@@ -361,7 +361,7 @@ Proof
 QED
 
 (* Straight-line code without GAS, memory-checked, keeping the history. *)
-Theorem straight_path_mem[local]:
+Theorem straight_path_mem:
   fn_has_code sa sb func /\ same_blocks sa sb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
