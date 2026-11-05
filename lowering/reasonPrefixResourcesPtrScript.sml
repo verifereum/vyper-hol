@@ -433,7 +433,11 @@ Theorem reason_encoder_selector_resources:
       step_inst_base (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t = OK u /\
       tn2 = step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t u tn1 /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
-      fresh_vars_wrt c2 u /\
+      fresh_vars_wrt c2 u /\ local_ptrs_reserved cenv c2 /\
+      eval_operand op u = SOME ow /\
+      step_prov PG G1 (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) u = G1 /\
+      ptr_covers G1 tn2 out u n /\
+      (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn2 p u k) /\
       (!m. mem_agree_outside tn2.t_mem u.vs_memory m ==>
         val_in_memory tv v (w2n ow) m)
 Proof
@@ -454,13 +458,32 @@ Proof
        t (mstore b 0x08c379a0w t) tn1).t_mem
      (mstore b 0x08c379a0w t).vs_memory m ==>
      val_in_memory tv v (w2n ow) m)` by suspend "post" >>
+  suspend "finish"
+QED
+
+Resume reason_encoder_selector_resources[finish]:
+  `local_ptrs_reserved cenv c2` by suspend "reserved" >>
+  `eval_operand (Lit 0x08c379a0w) t = SOME 0x08c379a0w /\
+   op_taint tn1 (Lit 0x08c379a0w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`, `G1`, `c1.cs_next_id`] mp_tac) >>
+  pure_asm_rewrite_tac[] >> strip_tac >>
+  `!p k. ptr_covers G1 tn1 p t k ==>
+    ptr_covers G1
+      (step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
+        t (mstore b 0x08c379a0w t) tn1) p (mstore b 0x08c379a0w t) k` by
+    (rpt strip_tac >> gvs[ptr_covers_def, op_taint_def, lookup_var_def,
+      mstore_def, write_memory_with_expansion_def]) >>
   qexistsl_tac [`t`, `out`, `b`, `G1`, `tn1`, `mstore b 0x08c379a0w t`,
     `step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
       t (mstore b 0x08c379a0w t) tn1`] >>
-  qpat_assum `i = _` (fn th => once_rewrite_tac[GSYM th]) >> simp[] >>
-  qpat_assum `w2n (n2w b : bytes32) = b`
-    (fn th => once_rewrite_tac[GSYM th]) >>
-  irule step_MSTORE >> simp[eval_operand_def]
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- metis_tac[]
+  >- (qpat_assum `w2n (n2w b : bytes32) = b`
+        (fn th => once_rewrite_tac[GSYM th]) >>
+      irule step_MSTORE >> simp[eval_operand_def])
+  >- simp[eval_operand_mstore] >>
+  metis_tac[]
 QED
 
 Resume reason_encoder_selector_resources[post]:
@@ -471,6 +494,11 @@ Resume reason_encoder_selector_resources[post]:
   simp[op_taint_def, eval_operand_def] >>
   qexistsl_tac [`b`, `cc`, `i`, `n`] >>
   simp[mk_inst_def] >> metis_tac[]
+QED
+
+Resume reason_encoder_selector_resources[reserved]:
+  irule local_ptrs_reserved_next_var >> qexists_tac `c1` >> simp[] >>
+  drule emitted_insts_emit_void >> simp[]
 QED
 
 Finalise reason_encoder_selector_resources
