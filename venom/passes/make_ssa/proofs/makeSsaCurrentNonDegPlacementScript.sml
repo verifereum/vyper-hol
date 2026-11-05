@@ -1,7 +1,7 @@
 Theory makeSsaCurrentNonDegPlacement
 Ancestors
   makeSsaCurrentPlacement makeSsaCurrentPlacementCut makeSsaCurrentDefSupport
-  makeSsaCurrentAnalysis sorting
+  makeSsaCurrentAnalysis makeSsaCurrentFrontier makeSsaCurrentDefs alist list sorting
 
 (* A recursive self-frontier cannot be the first cause of reachability. *)
 Theorem current_pruned_reach_nonself_source:
@@ -82,4 +82,61 @@ Proof
   qspecl_then [`fn`, `entry`, `pre`, `q`] mp_tac
     dominatorProofsTheory.dom_on_every_path >>
   simp[GSYM dominatorDefsTheory.dominates_def] >> metis_tac[]
+QED
+
+Theorem current_nondeg_frontier_source_label:
+  current_frontier_edge (current_frontier_map fn) d y ==>
+  MEM d (fn_labels fn)
+Proof
+  simp[current_frontier_edge_def] >> strip_tac >>
+  imp_res_tac ALOOKUP_MEM >>
+  gvs[current_frontier_map_def, current_query_map_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_nondeg_frontier_nonentry:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  current_frontier_edge (current_frontier_map fn) d y ==>
+  fn_entry_label fn <> SOME y
+Proof
+  strip_tac >>
+  drule current_nondeg_frontier_source_label >> strip_tac >>
+  gvs[current_frontier_edge_def] >>
+  drule_all current_frontier_target_support >> simp[]
+QED
+
+Theorem nondeg_inserted_graph_witnesses:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME entry /\ current_actual_inserted fn v y ==>
+  ?d p q. current_frontier_edge (current_frontier_map fn) d y /\
+    ((?bb inst. MEM bb fn.fn_blocks /\ bb.bb_label = d /\
+      MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs) \/
+      (d <> y /\ current_actual_inserted fn v d)) /\
+    MEM p (cfg_preds_of (cfg_analyze fn) y) /\
+    MEM q (cfg_preds_of (cfg_analyze fn) y) /\
+    dominates (dom_analyze (cfg_analyze fn) fn) d p /\
+    ~dominates (dom_analyze (cfg_analyze fn) fn) d q /\
+    ~dominates (dom_analyze (cfg_analyze fn) fn) y q /\ p <> q
+Proof
+  strip_tac >> drule_all current_actual_inserted_nonself_source >>
+  disch_then (qx_choose_then `d` strip_assume_tac) >>
+  `MEM d (fn_labels fn)` by metis_tac[current_nondeg_frontier_source_label] >>
+  `MEM y (fn_labels fn)` by metis_tac[current_frontier_edge_target_label] >>
+  `fn_entry_label fn <> SOME y` by metis_tac[current_nondeg_frontier_nonentry] >>
+  `y <> entry.bb_label` by
+    gvs[venomInstTheory.entry_block_def, venomInstTheory.fn_entry_label_def,
+        AllCaseEqs()] >>
+  `cfg_reachable_of (cfg_analyze fn) y` by
+    (gvs[current_cfg_reachable, venomInstTheory.fn_labels_def, MEM_MAP,
+         cfgWfTheory.all_reachable_def] >> metis_tac[]) >>
+  `?p. MEM p (cfg_preds_of (cfg_analyze fn) y) /\
+    dominates (dom_analyze (cfg_analyze fn) fn) d p /\
+    ~strict_dominates (dom_analyze (cfg_analyze fn) fn) d y` by
+    (gvs[current_frontier_edge_def] >> metis_tac[current_frontier_elim]) >>
+  `d = y \/ ~dominates (dom_analyze (cfg_analyze fn) fn) d y` by
+    (gvs[dominatorDefsTheory.strict_dominates_def] >> metis_tac[]) >>
+  `?q. MEM q (cfg_preds_of (cfg_analyze fn) y) /\
+    ~dominates (dom_analyze (cfg_analyze fn) fn) d q /\
+    ~dominates (dom_analyze (cfg_analyze fn) fn) y q` by
+    metis_tac[nondeg_separating_predecessor] >>
+  qexistsl_tac [`d`, `p`, `q`] >> simp[] >> metis_tac[]
 QED
