@@ -666,13 +666,16 @@ End
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to.  Up to FmpLowering, which seals a
    function after its callees, the functions are in a callee-first
-   order. *)
+   order.  Rows 1 and 2 are in SSA form (MakeSSA's first run establishes
+   it, LowerDload's fresh variables keep it), which ConcretizeMemLoc's
+   pointer provenance needs. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k = 0 then
       (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k <= 2 then
       (\C vs. o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
