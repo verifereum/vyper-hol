@@ -6,7 +6,7 @@ Ancestors
   abiEncoderRegisteredEffect abiEncoderSequence abiDecoderLoop instIdxIndep
   exprLoweringProps venomInst list rich_list arithmetic compileEnv abiDecoderVarSequence
   abiBuiltinEncodeMethod abiBuiltinEncodeSetup abiBuiltinAllocation abiEncoderInput
-  venomMemDefs
+  venomMemDefs abiEncoderOpenInput abiEncoderWindow
 
 Theorem abi_window_finish_opcodes[local]:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
@@ -221,4 +221,27 @@ Proof
   strip_tac >> drule abi_window_setup_allocas >>
   drule abi_window_setup_frontier >>
   simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
+QED
+
+(* This conversion is semantic, not an inference of declared capacity from a
+   source footprint.  Callers must already supply the encoder input. *)
+Theorem abi_window_setup_input:
+  abi_builtin_encode_setup_frame next site outsz p write_size s t /\
+  abi_encoder_input ei at av sb cap s.vs_memory /\
+  (sb+cap <= p+32 \/ p+32+write_size <= sb) ==>
+  abi_encoder_window_input ei at av sb cap t.vs_memory
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_encoder_input ei at av sb cap t.vs_memory` by
+    (irule abi_builtin_encode_setup_frame_input >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[abi_encoder_input_open, abi_encoder_open_input_window]
+QED
+
+Theorem abi_window_setup_zero_probe[local]:
+  32+32*word_size 0 = 32 /\
+  64 <= 32+32*word_size (0+4) /\
+  (!p. p+32 = dimword (:256) ==> ~(p+32 < dimword (:256)))
+Proof
+  simp[abi_builtin_rounded_capacity_checks]
 QED
