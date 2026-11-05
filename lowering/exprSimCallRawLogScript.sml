@@ -489,7 +489,7 @@ Proof
   asm_rewrite_tac[] >> simp[]
 QED
 
-Theorem raw_log_fixed_tail_frag[local]:
+Theorem raw_log_fixed_tail_summary[local]:
   expr_post ctx func cenv cx data es sa sd s0 es2 (BytesV bs) val_op s /\
   expr_type data = BaseT (BytesT (Fixed 32)) /\
   value_has_type (BaseTV (BytesT (Fixed 32))) (BytesV bs) /\
@@ -504,11 +504,19 @@ Theorem raw_log_fixed_tail_frag[local]:
     b + 32 <= lb \/ lb + len <= b) /\
   MAP FDOM es.scopes = MAP FDOM es2.scopes /\ local_ptrs_reserved cenv sa /\
   eval_operands ops s = SOME (MAP event_value_to_word vs) /\
-  LENGTH ops < dimword (:256) /\ expr_type e = NoneT ==>
-  frag_exec ctx sd sb (\t. t = s)
-    (\t. expr_post ctx func cenv cx e es sa sb s0
-      (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs])
-      NoneV (Lit 0w) t) (expr_exit (INL NoneV))
+  LENGTH ops < dimword (:256) /\ expr_type e = NoneT /\
+  fn_has_code sd sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sd.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
+  gas_summary_at F (ctx,func) []
+    (do bytes <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
+        type_check (LENGTH vs <= 4) "raw_log too many topics";
+        push_log (encode_raw_event_values cx.txn.target vs bytes);
+        return NoneV od) (es2,s)
+    (\rr ee t. rr = INL NoneV /\
+      expr_post ctx func cenv cx e es sa sb s0 ee NoneV (Lit 0w) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
   strip_tac >> drule hash_fixed_post_view >> simp[] >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es sa s0 s` by
@@ -523,14 +531,108 @@ Proof
     (rpt strip_tac >> `aid <> inst.inst_id` by decide_tac >>
      drule_all exprSimPrecompilesTheory.state_allocations_disjoint >>
      simp[compileEnvTheory.regions_disjoint_def]) >>
-  `(\t. t = s) = ($= s)` by simp[FUN_EQ_THM, EQ_SYM_EQ] >>
-  asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  Cases_on `u` >> fs[] >>
-  irule raw_log_fixed_tail_core >> simp[] >>
-  qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >> simp[] >>
-  qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
-  simp[] >> qexists_tac `inst` >>
-  fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  `!name lb len. local_region cenv es2.scopes s name lb len ==>
+     regions_disjoint b 32 lb len` by
+    (simp[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+  `w2n (n2w b : bytes32) = b` by
+    (`b < dimword (:256)` by decide_tac >> simp[wordsTheory.w2n_n2w]) >>
+  `run_inst_seq (emitted_insts sd sm) s = OK (mstore (w2n (n2w b : bytes32)) w s) /\
+   TAKE 32 (DROP (w2n (n2w b : bytes32)) (mstore (w2n (n2w b : bytes32)) w s).vs_memory ++ REPLICATE 32 0w) = bs /\
+   stmt_state_rel ctx func cenv cx es2 (mstore (w2n (n2w b : bytes32)) w s) /\
+   wb_frame cenv es sa s0 (mstore (w2n (n2w b : bytes32)) w s)` by
+    (irule raw_log_fixed_store_frame >> simp[] >>
+     metis_tac[]) >>
+  `eval_operand ptr_op (mstore b w s) = SOME (n2w b) /\
+   eval_operands ops (mstore b w s) = SOME (MAP event_value_to_word vs)` by
+    (`eval_operands ops (mstore b w s) = eval_operands ops s` by
+       (rpt (pop_assum kall_tac) >> Induct_on `ops` >>
+        simp[eval_operands_def] >> Cases_on `h` >>
+        simp[eval_operand_def, mstore_def, lookup_var_def]) >>
+     simp[] >> Cases_on `ptr_op` >>
+     gvs[eval_operand_def, mstore_def, lookup_var_def]) >>
+  qmatch_asmsub_abbrev_tac `emit_inst LOG logops [] sm` >>
+  `?t. step_inst_base (mk_inst sm.cs_next_id LOG logops []) (mstore b w s) = OK t /\
+    stmt_state_rel ctx func cenv cx
+      (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) t /\
+    wb_frame cenv es sa s0 t` by
+    (irule raw_log_core_frame >> simp[mk_inst_def, Abbr `logops`] >>
+     simp[eval_operand_def, wordsTheory.dimword_def] >> metis_tac[]) >>
+  `sb.cs_current_bb = sd.cs_current_bb /\
+   sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb /\
+   emitted_insts sd sb =
+     [mk_inst sd.cs_next_id MSTORE [ptr_op; val_op] [];
+      mk_inst sm.cs_next_id LOG logops []]` by
+    gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_return_def,
+        fresh_id_def, emit_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+  `run_inst_seq (emitted_insts sd sb) s = OK t` by
+    (asm_rewrite_tac[] >>
+     simp[run_inst_seq_def, Once step_inst_base_def, exec_write2_def] >>
+     gvs[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sd sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sd sb) = []` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all hash_run_path >> simp[] >> strip_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
+  qexistsl_tac [`INL NoneV`,
+    `es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]`,
+    `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  simp[dest_BytesV_def, lift_option_type_def, lift_option_def, type_check_def,
+       assert_def, push_log_def, bind_def, ignore_bind_def, return_def] >>
+  irule expr_post_none_intro >>
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
+  gvs[wb_frame_def, locals_kept_def, lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t` mp_tac >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx ee t` >>
+  `es2 with <|logs := es2.logs ++
+     [encode_raw_event_values cx.txn.target vs (TAKE 32 (word_to_bytes_be w))];
+              gas_obs := []|> = ee with gas_obs := []` by simp[Abbr `ee`] >>
+  asm_rewrite_tac[] >> simp[]
+QED
+
+Theorem raw_log_alloc_path[local]:
+  compile_alloc_buffer 32 sa = (buf,sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t w. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx es t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand buf.buf_operand t = SOME w /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32) /\
+    w2n w + 32 < dimword (:256) /\ t.vs_memory = s.vs_memory /\
+    sa.cs_next_id < sb.cs_next_id /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n w) 32 b len) /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+       regions_disjoint (w2n w) 32 b len) /\
+    (?p. buf.buf_operand = Var p /\ not_fresh_at sb p)
+Proof
+  strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w 32)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (irule exprSimAllocTheory.buffer_alloc_code >> goal_assum (drule_at Any) >> simp[]) >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all exprSimAllocTheory.literal_alloc_buffer_run >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    gvs[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_inst_def,
+        comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+        fresh_id_def, emit_def, emitted_insts_def,
+        rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def] >>
+  drule_all hash_run_path >> simp[] >> strip_tac >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
+  simp[stmt_state_rel_inst_idx, lookup_var_def] >>
+  gvs[lookup_var_def, local_region_def] >> metis_tac[]
 QED
 
 Theorem raw_log_dynamic_sim[local]:
