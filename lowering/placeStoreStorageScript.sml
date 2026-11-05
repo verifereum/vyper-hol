@@ -1311,6 +1311,32 @@ Resume place_store_bytestring_path[post]:
 QED
 Finalise place_store_bytestring_path
 
+Theorem place_store_counted_iterate:
+  !I N k q ctx func.
+    (!i q. I i q ==> ~q.vs_halted) /\
+    (!i q. i < N /\ I i q ==>
+      ?r. gas_marked_path F ctx func q 0 (OK r) /\ I (SUC i) r) /\
+    k <= N /\ I k q ==>
+    ?r. gas_marked_path F ctx func q 0 (OK r) /\ I N r
+Proof
+  rpt gen_tac >> qid_spec_tac `q` >> measureInduct_on `N-k` >>
+  rpt strip_tac >>
+  Cases_on `k = N`
+  >- (gvs[] >> qexists_tac `q` >>
+      simp[gas_marked_path_def] >> metis_tac[fragGasPathTheory.gas_path_rules]) >>
+  `k < N /\ SUC k <= N /\ N - SUC k < N - k` by decide_tac >>
+  qpat_assum `!i q. i < N /\ _ ==> _`
+    (qspecl_then [`k`, `q`] mp_tac) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `!y. N - y < N - k ==> _`
+    (qspec_then `SUC k` mp_tac) >> simp[] >>
+  disch_then (qspec_then `r` mp_tac) >> impl_tac
+  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> rename1 `I' N final` >> qexists_tac `final` >> conj_tac
+  >- (drule_all gas_marked_path_then >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
+
 (* Shared actual-execution contract for recursive normalization. *)
 Definition place_store_counted_entry_def:
   place_store_counted_entry cenv ctx dty sty dtv stv v <=>
