@@ -1362,6 +1362,116 @@ Proof
   metis_tac[]
 QED
 
+Theorem imm_gas_outcome_bind_result[local]:
+  !memory tops ctx func (source : evaluation_state -> eval_result evaluation_result)
+    es s0 P R next Q.
+    gas_outcome memory tops (ctx,func) source (es,s0)
+      (\res ee t. ?v. res = INL v /\ P v ee t)
+      (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) /\
+    (!marks v mid t.
+      gas_marked_exec memory (ctx,func) source (es,s0) marks (INL v) mid (OK t) /\
+      P v (mid with gas_obs := []) t ==>
+      gas_outcome memory tops (ctx,func) (next v)
+        (mid with gas_obs := [],t) Q R) ==>
+    gas_outcome memory tops (ctx,func) (bind source next) (es,s0) Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- suspend "summary" >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_result >> fs[ignore_bind_def]
+QED
+
+Resume imm_gas_outcome_bind_result[summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
+  >~ [`exit_result r`]
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+      irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]) >>
+  first_x_assum drule_all >>
+  disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- suspend "tail_summary" >>
+  rewrite_tac[gas_outcome_def] >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_bind_result >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> simp[GSYM ignore_bind_def]
+QED
+
+Resume imm_gas_outcome_bind_result[tail_summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  rewrite_tac[gas_outcome_def] >>
+  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
+  irule gasSummaryComposeTheory.gas_marked_exec_bind_normal >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> gvs[]
+QED
+
+Finalise imm_gas_outcome_bind_result
+
+Theorem imm_gas_outcome_bind_value[local]:
+  !memory tops ctx func (source : evaluation_state -> value evaluation_result)
+    es s0 P R next Q.
+    gas_outcome memory tops (ctx,func) source (es,s0)
+      (\res ee t. ?v. res = INL v /\ P v ee t)
+      (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) /\
+    (!marks v mid t.
+      gas_marked_exec memory (ctx,func) source (es,s0) marks (INL v) mid (OK t) /\
+      P v (mid with gas_obs := []) t ==>
+      gas_outcome memory tops (ctx,func) (next v)
+        (mid with gas_obs := [],t) Q R) ==>
+    gas_outcome memory tops (ctx,func) (bind source next) (es,s0) Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- suspend "summary" >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_value >> fs[ignore_bind_def]
+QED
+
+Resume imm_gas_outcome_bind_value[summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
+  >~ [`exit_result r`]
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+      irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]) >>
+  first_x_assum drule_all >>
+  disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- suspend "tail_summary" >>
+  rewrite_tac[gas_outcome_def] >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> simp[GSYM ignore_bind_def]
+QED
+
+Resume imm_gas_outcome_bind_value[tail_summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  rewrite_tac[gas_outcome_def] >>
+  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
+  irule gasSummaryComposeTheory.gas_marked_exec_bind_normal >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> gvs[]
+QED
+
+Finalise imm_gas_outcome_bind_value
+
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
