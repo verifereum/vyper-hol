@@ -4,7 +4,7 @@ Ancestors
   exprSimSource exprSimHypsDefs vyperState vyperInterpreter vyperValue
   vyperPlaceResultTyping vyperPlaceStatePreservation vyperTypeEnvPreservation
   vyperTypeInvariants vyperTypeSystem vyperPlaceTyping vyperArray
-  integer option list rich_list finite_map
+  vyperAST integer option list rich_list finite_map
 
 Theorem read_result_nonstorage_frame:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
@@ -357,4 +357,53 @@ Proof
   Cases_on `evaluate_subscripts root a l` >> gvs[return_def, raise_def] >>
   drule_all_then assume_tac select_immutable_result >>
   simp[bind_def, lift_sum_def, raise_def]
+QED
+
+Theorem type_place_expr_value_typed:
+  type_place_expr env e = SOME (Type ty) /\
+  well_formed_type env.type_defs ty /\ ty <> NoneT ==>
+  well_typed_expr env e
+Proof
+  Cases_on `e` >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+  >- (PairCases_on `p` >>
+      gvs[well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]) >>
+  gvs[vtype_annotation_ok_def] >>
+  simp[Once well_typed_expr_def] >>
+  metis_tac[]
+QED
+
+(* Context coherence is needed only for the internal place wellformedness
+   argument; unlike the shared local transport facts this boundary returns
+   value-expression typing. *)
+Theorem type_place_expr_context_value_typed:
+  !env cx e ty.
+    env_context_consistent env cx /\
+    type_place_expr env e = SOME (Type ty) /\ ty <> NoneT ==>
+    well_typed_expr env e
+Proof
+  rpt strip_tac >>
+  `!ex vt. type_place_expr env ex = SOME vt ==>
+          well_formed_vtype env.type_defs vt` by
+    (measureInduct_on `expr_size ex` >> rpt strip_tac >>
+     Cases_on `ex` >> gvs[Once well_typed_expr_def, AllCaseEqs()]
+     >- (PairCases_on `p` >>
+         qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+         simp[well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+         gvs[env_context_consistent_def] >>
+         first_x_assum drule >> simp[]) >>
+     qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `e'` mp_tac) >>
+     (impl_tac >- simp[expr_size_def]) >>
+     disch_then (qspec_then `vt'` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `vt'` >>
+     gvs[subscript_vtype_def, well_formed_vtype_def, AllCaseEqs()] >>
+     rename1 `subscript_vtype (Type base_ty) _ = SOME _` >>
+     Cases_on `base_ty` >>
+     gvs[subscript_vtype_def, well_formed_vtype_def,
+         well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
+     rename1 `evaluate_type env.type_defs elem_ty` >>
+     Cases_on `evaluate_type env.type_defs elem_ty` >> gvs[]) >>
+  irule type_place_expr_value_typed >> simp[] >>
+  first_x_assum drule >> simp[well_formed_vtype_def]
 QED

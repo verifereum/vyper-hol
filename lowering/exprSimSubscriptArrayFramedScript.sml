@@ -3,7 +3,8 @@ Theory exprSimSubscriptArrayFramed
 Ancestors
   exprSimSubscriptArrayFrame exprSimArrayIndex exprSimLen exprSimCopy
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
-  emitHelperProps exprLoweringProps venomExecSemantics
+  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
+  exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
 
 (* The runtime loader of a code array's length word: a DLOAD of the data
    section at the base. *)
@@ -181,3 +182,32 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`et`, `get_tenv cx`] >> simp[]
 QED
+
+(* Expose the two child intervals and the bounds/element tail once. *)
+Theorem compile_expr_array_subscript:
+  compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+  place_type cenv obj = ValPT (ArrayT et bd) ==>
+  ?bvv st1 iop st2 dst loc.
+    compile_expr cenv ty obj st = (bvv, st1) /\
+    lower_value compile_expr cenv ty idx st1 = (iop, st2) /\
+    loc = (case vv_location bvv of SOME l => l | NONE => LocMemory) /\
+    compile_array_subscript (vv_operand bvv) iop
+      (case bd of Fixed _ => F | Dynamic _ => T)
+      (case bd of Fixed n => n | Dynamic _ => 0)
+      (word_scale loc) (elem_size_in_location cenv loc et)
+      (is_signed_type (expr_type idx))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc)
+      st2 = (dst, st') /\
+    vv = LocatedValue ann (mk_ptr dst loc)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_subscript_def, lower_value_def,
+       exprCallBoundsTheory.expr_child_callback_def,
+       comp_bind_def, comp_return_def,
+       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
