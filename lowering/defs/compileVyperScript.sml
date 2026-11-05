@@ -1428,13 +1428,14 @@ Definition lower_vyper_runtime_unit_def:
     else NONE
 End
 
+(* A unit that lowers has its immutable section below the CODE allocator's
+   0x6000 limit (Vyper rejects larger sections). *)
 Theorem lower_vyper_runtime_unit_immutables_bound:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+  lower_vyper_runtime_unit tops rpolicy = SOME unit ⇒
   compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
     tops < 0x6000
 Proof
-  Cases_on `classify_functions tops` >>
-  PairCases_on `r` >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rw[lower_vyper_runtime_unit_def, AllCaseEqs()]
 QED
 
@@ -1483,7 +1484,8 @@ Definition lower_vyper_deploy_unit_def:
                  package_internal_fn tops use_trans nkey_map T immutables_len)
                 int_fns
           else [] in
-    if ¬EVERY (fn_allocs_ok tops)
+    if ¬(immutables_len < 0x6000) ∨
+       ¬EVERY (fn_allocs_ok tops)
           (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f]))
     then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
@@ -1497,6 +1499,16 @@ Definition lower_vyper_deploy_unit_def:
       immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
       ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy"
 End
+
+Theorem lower_vyper_deploy_unit_immutables_bound:
+  lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ==>
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >>
+  PairCases_on `r` >>
+  rw[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
 
 (* A deploy unit that lowers has the constructor's and every internal
    function's static buffers below the limit. *)
