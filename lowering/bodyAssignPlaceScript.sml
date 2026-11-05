@@ -20,7 +20,7 @@ Ancestors
   stmtSimAssignPlace bodySim exprSimHypsDefs stmtSimDefs
   targetPlaceSim targetPlaceSimCases supportedStmts supportedTargets
   supportedStmtTraverse supportedProgram bodyExprPreFacts gasContext
-  vyperTypeInvariants vyperTypeCallStackSoundness vyperCompiler
+  vyperTypeInvariants vyperTypeCallStackSoundness vyperTypeCallGraph vyperCompiler
   stmtLowering exprLowering compileEnv compileVyper
   vyperInterpreter vyperState vyperTypeSystem
 
@@ -96,6 +96,33 @@ Theorem body_target_case[local]:
     target_case F ctx func cenv cx t
 Proof
   metis_tac[body_target_idx_case, target_case_all]
+QED
+
+Theorem body_assign_place_rhs_pre[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) ==>
+  expr_body_pre cenv cx env e es
+Proof
+  rpt strip_tac >>
+  `supported_expr tops e` by
+    gvs[supported_stmt_def, supported_assignment_def] >>
+  `well_typed_expr env e` by metis_tac[assign_place_typing] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+     is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+  irule stmt_expr_body_pre >>
+  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  qexists_tac `[]` >> simp[] >>
+  metis_tac[call_evaluation_safe_append_right]
 QED
 
 Theorem body_assign_place_case:
