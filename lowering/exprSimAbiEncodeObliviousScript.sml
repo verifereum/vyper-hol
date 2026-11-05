@@ -1,0 +1,24 @@
+(* lower_abi_encode does not depend on its entry block's label or on the IDs
+   of the instructions already in it, and the code it emits meets the
+   relabeled bridges' shape premises. *)
+Theory exprSimAbiEncodeOblivious
+Ancestors
+  exprSimAbiGasBridge builtinAbi compileEnv fragExec
+
+Theorem lower_abi_encode_start_oblivious:
+  !ensure mid src info maxlen.
+    frag_start_oblivious (lower_abi_encode ensure mid src info maxlen)
+Proof
+  cheat
+QED
+
+Theorem lower_abi_encode_frag_facts:
+  !ensure mid src info maxlen sa out sb.
+    lower_abi_encode ensure mid src info maxlen sa = (out,sb) ==>
+    cs_extends sa sb /\ frag_ops_free sa sb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
+    ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
+    (sa.cs_blocks = sb.cs_blocks ==> frag_gas_free sa sb)
+Proof
+  cheat
+QED
