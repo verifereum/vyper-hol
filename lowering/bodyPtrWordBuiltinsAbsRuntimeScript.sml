@@ -142,7 +142,8 @@ End
 Definition word_abs_runtime_cx_def:
   word_abs_runtime_cx = initial_evaluation_context
     [(0w, [(NONE, word_abs_runtime_tops)])] []
-    (empty_call_txn with <|function_name := "foo"; args := [IntV 1]|>) NONE
+    (empty_call_txn with <|function_name := "foo"; args := [IntV 1];
+      block_number := 1; block_hashes := [0w]|>) NONE
 End
 
 Theorem word_abs_runtime_unit_eq:
@@ -236,4 +237,181 @@ Proof
        relationTheory.irreflexive_def] >>
   gen_tac >> strip_tac >> drule relationTheory.TC_CASES1_E >>
   simp[vyperTypeCallGraphSoundnessTheory.call_edge_rel_def]
+QED
+
+Theorem word_abs_runtime_eval:
+  bind (eval_expr word_abs_runtime_cx word_abs_runtime_expr)
+    (read_result word_abs_runtime_cx)
+    (word_abs_runtime_es with gas_obs := gs) =
+  (INL (IntV 1), word_abs_runtime_es with gas_obs := gs)
+Proof
+  EVAL_TAC
+QED
+
+Theorem word_abs_runtime_gas_admissible:
+  gas_admissible
+    (bind (eval_expr word_abs_runtime_cx word_abs_runtime_expr)
+      (read_result word_abs_runtime_cx)) expr_res_ok word_abs_runtime_es
+Proof
+  simp[gasContextTheory.gas_admissible_def, word_abs_runtime_eval,
+       exprSimDefsTheory.expr_res_ok_def]
+QED
+
+Definition word_abs_runtime_func_def:
+  word_abs_runtime_func = THE (lookup_function "__entry"
+    word_abs_runtime_unit.cu_context.ctx_functions)
+End
+
+Theorem word_abs_runtime_func_name:
+  word_abs_runtime_func.fn_name = "__entry"
+Proof
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``])) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``])) >>
+  simp[listTheory.INDEX_FIND_def]
+QED
+
+(* The expression begins after the actual parameter decoder (ids 10--20).
+   Using the compiled block prefix avoids inventing a replacement function. *)
+Definition word_abs_runtime_sa_def:
+  word_abs_runtime_sa = (initial_compile_state "fn_foo") with
+    <|cs_next_var := 14; cs_next_label := 4; cs_next_id := 21;
+      cs_current_insts := TAKE 11
+        (EL 4 word_abs_runtime_func.fn_blocks).bb_instructions|>
+End
+
+Definition word_abs_runtime_sb_def:
+  word_abs_runtime_sb = SND (lower_value compile_expr
+    word_abs_runtime_frame_cenv (BaseT (IntT 256)) word_abs_runtime_expr
+    word_abs_runtime_sa)
+End
+
+Theorem word_abs_runtime_compile:
+  lower_value compile_expr word_abs_runtime_frame_cenv
+    (BaseT (IntT 256)) word_abs_runtime_expr word_abs_runtime_sa =
+    (Var "%22", word_abs_runtime_sb)
+Proof
+  rewrite_tac[word_abs_runtime_sb_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_abs_runtime_func``, ``function_selector``,
+     ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[]
+QED
+
+Theorem word_abs_runtime_code:
+  fn_has_code word_abs_runtime_sa word_abs_runtime_sb word_abs_runtime_func /\
+  fn_inst_ids_distinct word_abs_runtime_func
+Proof
+  rewrite_tac[word_abs_runtime_sb_def, word_abs_runtime_sa_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_abs_runtime_func``, ``function_selector``,
+     ``calldata_method_id``, ``vyper_to_abi_types``, ``fn_has_code``]) >>
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``,
+     ``fn_has_code``]) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
+     ``fn_has_code``]) >>
+  simp[listTheory.INDEX_FIND_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
+     ``isPREFIX``]) >>
+  simp[] >> EVAL_TAC
+QED
+
+Theorem word_abs_runtime_tx_env_valid:
+  tx_env_ok word_abs_runtime_cx.txn
+Proof
+  EVAL_TAC
+QED
+
+(* Target expression-entry state: the parameter alloca holds IntV 1. *)
+Definition word_abs_runtime_s0_def:
+  word_abs_runtime_s0 = (init_venom_state "fn_foo") with
+    <|vs_memory := REPLICATE 31 0w ++ [1w];
+      vs_vars := FEMPTY |+ ("%11",0w);
+      vs_allocas := FEMPTY |+ (17,(0,32)); vs_alloca_next := 32;
+      vs_inst_idx := 11;
+      vs_block_ctx := empty_block_context with bc_number := 1w|>
+End
+
+Theorem word_abs_runtime_call_ctx:
+  call_ctx_rel word_abs_runtime_cx.txn word_abs_runtime_s0.vs_call_ctx
+    word_abs_runtime_s0.vs_tx_ctx word_abs_runtime_s0.vs_block_ctx
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem word_abs_runtime_state_rel:
+  local_ptrs_rel word_abs_runtime_func word_abs_runtime_frame_cenv
+    word_abs_runtime_es.scopes word_abs_runtime_s0 ==>
+  state_rel word_abs_runtime_func word_abs_runtime_frame_cenv
+    word_abs_runtime_cx word_abs_runtime_es word_abs_runtime_s0
+Proof
+  rewrite_tac[compileEnvTheory.state_rel_def, word_abs_runtime_call_ctx] >>
+  strip_tac >> simp[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[]
+QED
+
+Theorem word_abs_runtime_locals:
+  local_backed word_abs_runtime_func "%11" word_abs_runtime_s0 0 32 ==>
+  local_ptrs_rel word_abs_runtime_func word_abs_runtime_frame_cenv
+    word_abs_runtime_es.scopes word_abs_runtime_s0
+Proof
+  strip_tac >>
+  rewrite_tac[compileEnvTheory.local_ptrs_rel_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_abs_runtime_func``, ``local_backed``, ``function_selector``,
+     ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  rw[AllCaseEqs()] >>
+  gvs[word_abs_runtime_s0_def, venomStateTheory.init_venom_state_def,
+      venomStateTheory.empty_block_context_def, venomStateTheory.empty_call_context_def,
+      venomStateTheory.empty_tx_context_def] >>
+  rule_assum_tac (CONV_RULE (computeLib.RESTR_EVAL_CONV
+    [``local_backed``, ``word_abs_runtime_func``])) >> simp[] >> EVAL_TAC >>
+  simp[wordsTheory.w2n_n2w]
+QED
+
+Theorem word_abs_runtime_local_backed:
+  local_backed word_abs_runtime_func "%11" word_abs_runtime_s0 0 32
+Proof
+  rewrite_tac[compileEnvTheory.local_backed_def] >> disj1_tac >>
+  qexists_tac `<|inst_id := 17; inst_opcode := ALLOCA;
+    inst_operands := [Lit 32w]; inst_outputs := ["%11"]|>` >>
+  simp[word_abs_runtime_s0_def, venomStateTheory.init_venom_state_def] >>
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``]) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[listTheory.INDEX_FIND_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[]
 QED
