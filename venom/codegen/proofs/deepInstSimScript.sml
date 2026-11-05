@@ -11,7 +11,8 @@
 
 Theory deepInstSim
 Ancestors
-  deepResidualSim fnPlanPrefix regularPostfixSim genBlockSim
+  deepResidualSim deepResidualBudget fnPlanPrefix regularPostfixSim genBlockSim planWf
+  regularEmitSim regularPlanSim emitSim prefixExec prefixSim venomWf
   generatedPrefixSim preparedPrefixSim generatedReorderSim reorderSim
   doSwapSim mixedPrefixSim codegenRel blockSimHelpers planSpillBounds
   stackOpSim stackModel stackPlanGen stackPlanOps stackPlanTypes planExec
