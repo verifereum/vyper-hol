@@ -3710,6 +3710,170 @@ Proof
        is_word_type_def, is_bytestring_type_def]
 QED
 
+(* Shared concrete source context for the wrapped-layout realization probe. *)
+Definition place_store_wrap_probe_context_def:
+  place_store_wrap_probe_context =
+    empty_evaluation_context with <|
+      sources := [(0w, [(NONE, [VariableDecl Private Storage "wrapped"
+        (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+        (SOME 0)])])];
+      layouts := [(0w, ([((NONE,"wrapped"),0)], []))]
+    |>
+End
+
+Theorem place_store_wrap_probe_declared_root:
+  declared_storage_region place_store_wrap_probe_context NONE "wrapped" [] =
+    SOME (F, 0w, ArrayTV
+      (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+Proof
+  EVAL_TAC
+QED
+
+Theorem place_store_wrap_probe_context_tables:
+  get_tenv place_store_wrap_probe_context = FEMPTY /\
+  (!src. get_module_code place_store_wrap_probe_context src =
+    if src = NONE then SOME [VariableDecl Private Storage "wrapped"
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+      (SOME 0)] else NONE)
+Proof
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  Cases >> EVAL_TAC
+QED
+
+Theorem place_store_wrap_probe_regions:
+  (!mid n. storage_var_info place_store_wrap_probe_context mid n =
+    if mid = NONE /\ n = "wrapped" then SOME (F,0,
+      ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    else NONE) /\
+  (!mid n subs. declared_storage_region place_store_wrap_probe_context mid n subs =
+    if mid = NONE /\ n = "wrapped" /\ subs = [] then SOME (F,0w,
+      ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))
+    else NONE)
+Proof
+  simp[vyperLookupStorageTheory.storage_var_info_def,
+       vyperStorageLayoutSafetyTheory.declared_storage_region_def,
+       place_store_wrap_probe_context_tables, find_var_decl_by_name_def] >>
+  conj_tac >> rpt gen_tac >>
+  Cases_on `mid = NONE` >> Cases_on `n = "wrapped"` >> simp[] >>
+  EVAL_TAC >> gvs[]
+QED
+
+Theorem place_store_wrap_probe_source_invariant:
+  ?cenv env.
+    expr_sim_inv cenv place_store_wrap_probe_context env
+      (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>)
+Proof
+  qexists_tac `(ARB:compile_env) with <|
+    ce_vars := FEMPTY; ce_var_type := K NONE;
+    ce_struct_fields := FEMPTY; ce_hashmap_info := K NONE;
+    ce_module_var_type := K (SOME
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))) |>` >>
+  qexists_tac `<| current_src := NONE; var_types := FEMPTY;
+    var_assignable := FEMPTY; bare_globals := FEMPTY;
+    bare_global_assignable := FEMPTY;
+    toplevel_vtypes := FEMPTY |+ ((NONE,"wrapped"), Type
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)));
+    type_defs := FEMPTY; fn_sigs := FEMPTY; flag_members := FEMPTY;
+    event_fields := FEMPTY |>` >>
+  simp[expr_sim_inv_def, placeTypingPropsTheory.place_map_tables_agree_on_defined_def,
+       popped_keys_indexed_def] >>
+  conj_tac >- suspend "env" >>
+  simp[empty_state_def, vyperTypeInvariantsTheory.state_well_typed_def,
+       vyperTypeStoragePreservationTheory.oracle_storage_ok_def] >>
+  conj_tac >- simp[vyperTypeInvariantsTheory.scope_well_typed_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- suspend "functions" >>
+  simp[place_store_wrap_probe_context_tables,
+       sfields_tenv_consistent_def, outcomes_accounts_typed_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[AllCaseEqs(), lookup_flag_def]) >>
+  conj_tac >- suspend "storage" >>
+  conj_tac >- suspend "layout" >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[find_var_decl_by_name_def, AllCaseEqs()]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()]
+QED
+
+Resume place_store_wrap_probe_source_invariant[env]:
+  markerLib.RESUME_TAC >>
+  simp[vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_scopes_consistent_def,
+       vyperTypeInvariantsTheory.env_immutables_consistent_def,
+       empty_state_def, lookup_scopes_def] >>
+  conj_tac >- suspend "context" >>
+  simp[place_store_wrap_probe_context_tables,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), find_var_decl_by_name_def]
+QED
+
+Resume place_store_wrap_probe_source_invariant[context]:
+  markerLib.RESUME_TAC >>
+  simp[vyperTypeInvariantsTheory.env_context_consistent_def,
+       place_store_wrap_probe_context_tables,
+       vyperTypeInvariantsTheory.fn_sigs_consistent_def,
+       vyperTypeInvariantsTheory.fn_sigs_live_def,
+       vyperTypeInvariantsTheory.fn_sigs_declared_complete_def,
+       vyperTypeInvariantsTheory.toplevel_vtypes_complete_def,
+       vyperTypeInvariantsTheory.bare_globals_complete_def,
+       vyperTypeInvariantsTheory.bare_global_assignable_complete_def,
+       vyperTypeInvariantsTheory.flag_members_complete_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- simp[lookup_flag_def] >>
+  conj_tac >- EVAL_TAC >>
+  simp[find_var_decl_by_name_def] >> EVAL_TAC
+QED
+
+Resume place_store_wrap_probe_source_invariant[functions]:
+  markerLib.RESUME_TAC >>
+  simp[vyperTypeInvariantsTheory.functions_well_typed_def,
+       place_store_wrap_probe_context_tables] >>
+  rpt gen_tac >> disch_then kall_tac >> rpt gen_tac >>
+  simp[lookup_callable_function_def, vyperInterpreterTheory.lookup_function_def,
+       place_store_wrap_probe_context_def, vyperContextTheory.empty_evaluation_context_def]
+QED
+
+Resume place_store_wrap_probe_source_invariant[storage]:
+  markerLib.RESUME_TAC >>
+  simp[vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.storage_var_in_range_def] >>
+  simp[place_store_wrap_probe_regions] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = get_storage_backend _ _ _` mp_tac >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >>
+  EVAL_TAC >> simp[]
+QED
+
+Resume place_store_wrap_probe_source_invariant[layout]:
+  markerLib.RESUME_TAC >>
+  simp[vyperStorageLayoutSafetyTheory.storage_layout_safe_def,
+       vyperLookupStorageTheory.well_formed_layout_def,
+       place_store_wrap_probe_regions] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Finalise place_store_wrap_probe_source_invariant
+
+Theorem place_store_wrap_probe_source_realizable:
+  ?cenv env dtv.
+    expr_sim_inv cenv place_store_wrap_probe_context env
+      (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>) /\
+    evaluate_type (get_tenv place_store_wrap_probe_context)
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) =
+      SOME dtv /\
+    storage_place_region place_store_wrap_probe_context (StoragePlace F 0w dtv)
+Proof
+  mp_tac place_store_wrap_probe_source_invariant >> strip_tac >>
+  qexistsl_tac [`cenv`, `env`,
+    `ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)`] >>
+  simp[place_store_wrap_probe_context_tables] >>
+  conj_tac >- EVAL_TAC >>
+  irule vyperStoragePlaceProvenanceTheory.declared_storage_place_region >>
+  qexistsl_tac [`[]`, `NONE`, `"wrapped"`] >>
+  rewrite_tac[place_store_wrap_probe_declared_root] >> EVAL_TAC
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
