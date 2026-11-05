@@ -261,3 +261,51 @@ Proof
   disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   irule for_cert_zero_prefix_mem >> qexists_tac `s1` >> simp[]
 QED
+
+Theorem for_round_false_source_mem:
+  gas_marked_exec memory (ctx,func)
+    (do push_scope_with_var id tyv v;
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+                pop_scope od) (ei,s) marks (INL F) mid r ==>
+  ?gs r2 es2 sc rest.
+    eval_stmts cx stmts
+      (ei with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tyv; value := v; popped := []|>)) :: ei.scopes;
+                 gas_obs := gs|>) = (r2,es2) /\
+    (r2 = INL () \/ r2 = INR ContinueException) /\
+    es2.scopes = sc :: rest /\
+    (es2 with scopes := rest) = (mid with gas_obs := [])
+Proof
+  rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+  qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+  simp[push_scope_with_var_def, ignore_bind_def, bind_def, return_def] >>
+  `!st. st with scopes updated_by
+      CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)) =
+    st with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)) :: st.scopes`
+    by simp[evaluation_state_component_equality] >>
+  pure_asm_rewrite_tac[] >>
+  simp[finally_def, try_def, bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `eval_stmts cx stmts E` >>
+  Cases_on `eval_stmts cx stmts E` >> rename1 `eval_stmts cx stmts E = (res,ee)` >>
+  `ee.scopes <> []` by
+    (drule eval_stmts_preserves_scopes_len >> simp[Abbr `E`] >>
+     strip_tac >> Cases_on `ee.scopes` >> gvs[]) >>
+  Cases_on `ee.scopes` >- gvs[] >>
+  simp[finally_def, try_def, ignore_bind_def, bind_def, return_def,
+       handle_loop_exception_def] >>
+  Cases_on `res` >- suspend "normal" >>
+  rename1 `INR err` >> Cases_on `err` >>
+  simp[pop_scope_def, return_def, raise_def] >> suspend "continue"
+QED
+Resume for_round_false_source_mem[normal]:
+  Cases_on `x` >> simp[pop_scope_def, return_def] >> strip_tac >>
+  qexistsl_tac [`gas_explicit marks s.vs_gas_readings`, `INL ()`, `ee`, `h`, `t`] >>
+  gvs[Abbr `E`]
+QED
+Resume for_round_false_source_mem[continue]:
+  strip_tac >>
+  qexistsl_tac [`gas_explicit marks s.vs_gas_readings`, `INR ContinueException`, `ee`, `h`, `t`] >>
+  gvs[Abbr `E`]
+QED
+Finalise for_round_false_source_mem
