@@ -88,3 +88,25 @@ Proof
   simp[vyperStorageTheory.read_slot_def] >>
   Cases_on `w` >> fs[wordsTheory.word_add_n2w, arithmeticTheory.ADD_COMM]
 QED
+
+(* The copy loop must establish both word equality and taint containment;
+   this boundary does not assert either execution property. *)
+Theorem storage_range_copied_robust:
+  !st rt w tv v dst mem m.
+    well_formed_type_value tv /\ slots_in_range st (w2n w) tv /\
+    decode_value st (w2n w) tv = SOME v /\
+    storage_range_agree st rt w tv /\
+    (!i. i < type_slot_size tv ==>
+      mem_word_at (dst + 32*i) mem = lookup_storage (w + n2w i) rt) /\
+    (!i b. i < type_slot_size tv /\ b < 32 /\ dst + 32*i + b IN m ==>
+      dead_bytes rt (w2n w) tv (w2n w+i) b) ==>
+    !mem'. mem_agree_outside m mem mem' ==> val_in_memory tv v dst mem'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `storage_live_memory st (w2n w) tv dst mem` by
+    (irule storage_range_copied_live_memory >> qexists `rt` >> simp[]) >>
+  drule storage_range_agree_dead_bytes >> strip_tac >>
+  rpt strip_tac >> irule storage_live_memory_robust >>
+  simp[] >> qexistsl [`w2n w`, `m`, `mem`, `st`] >>
+  gvs[arithmeticTheory.ADD_COMM] >> metis_tac[]
+QED
