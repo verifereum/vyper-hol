@@ -1,5 +1,5 @@
 (* Checked negation of the frozen membership instance; target unchanged. *)
-Theory bodyPtrBopInCounterexample
+Theory bodyPtrBopInNonwordEvidence
 Ancestors
   bodyPtrBopInOutcomeRejection bodyPtrBopInMachineConditions
   bodyPtrBopInMachineFrame bodyPtrBopInJointSource bodyPtrBopInName
