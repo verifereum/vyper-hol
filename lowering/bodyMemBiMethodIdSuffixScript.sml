@@ -5,6 +5,8 @@ Ancestors
   exprLoweringProps emitHelperProps emitHelper context compileEnv
   fragExecMem instMemFrontier venomState venomExecSemantics
   venomInst venomMemDefs list rich_list words arithmetic
+  exprSimMemDefs exprSimProps loweringPosts exprLowering compileEnv
+  vyperAST vyperValue vyperTypeSystem vyperTyping
 
 Theorem method_id_bytes_hash_mem_ok:
   !src sa op sb s b len.
@@ -39,4 +41,39 @@ Proof
   `len MOD dimword (:256) <= len` by simp[MOD_LESS_EQ] >>
   `(b + 32) MOD dimword (:256) <= b + 32` by simp[MOD_LESS_EQ] >>
   decide_tac
+QED
+
+Theorem method_id_dynamic_hash_mem_ok:
+  expr_post ctx func cenv cx e es sa sm s0 es' v src s /\
+  expr_type e = BaseT bty /\ is_bytestring_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  expr_store_bound cx (expr_type e) v src s /\
+  (!x. src = Var x ==> not_fresh_at sm x) /\
+  compile_keccak256_bytes src sm = (op,sb) ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >>
+  `?b len. eval_operand src s = SOME (n2w b) /\
+      mem_word_at b s.vs_memory = n2w len /\
+      b + 32 < dimword (:256) /\
+      b + 32 + len <= s.vs_alloca_next` by
+    (Cases_on `bty` >> gvs[is_bytestring_type_def]
+     >~ [`BytesT bd`]
+     >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+         Cases_on `v` >> gvs[value_has_type_def] >>
+         drule hash_dynamic_post_view >> simp[] >> strip_tac >>
+         qexistsl_tac [`b`, `LENGTH l`] >> simp[] >>
+         gvs[expr_store_bound_def, is_word_type_def, val_store_size_def,
+             evaluate_type_def] >>
+         qspec_then `LENGTH l` mp_tac le_word_size_mul >> decide_tac) >>
+     Cases_on `v` >> gvs[value_has_type_def] >>
+     drule hash_string_post_view >> simp[] >> strip_tac >>
+     qexistsl_tac [`b`, `LENGTH s'`] >> simp[] >>
+     gvs[expr_store_bound_def, is_word_type_def, val_store_size_def,
+         evaluate_type_def] >>
+     qspec_then `LENGTH s'` mp_tac le_word_size_mul >> decide_tac) >>
+  drule_at (Pat `compile_keccak256_bytes _ _ = _`) method_id_bytes_hash_mem_ok >>
+  disch_then irule >> simp[] >>
+  qexistsl_tac [`b`, `len`] >> simp[] >> decide_tac
 QED
