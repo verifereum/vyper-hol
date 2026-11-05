@@ -1748,6 +1748,31 @@ Proof
   metis_tac[])
 QED
 
+Theorem alias_jmp_plan_holds_live:
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\
+  inst.inst_outputs = [] /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) /\
+  MEM x live /\ plan_holds ps (Var x) ==> plan_holds qs (Var x)
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, is_label_operand_def, emit_input_plan_def,
+       planWfTheory.reorder_plan_nil, stack_pop_def] >>
+  Cases_on `join_target_ops liveness fn lbl inst` >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      irule release_dead_spills_plan_holds >> simp[] >>
+      gvs[plan_holds_def] >>
+      metis_tac[alias_emit_ops_inventory, pairTheory.SND]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qpat_x_assum `(\(restore_ops,ps1'). _) _ = _` mp_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `plan_holds ps1' (Var x)` by metis_tac[restore_spilled_plan_holds] >>
+  `plan_holds ps2 (Var x)` by metis_tac[reorder_plan_holds] >>
+  strip_tac >> gvs[] >> irule release_dead_spills_plan_holds >> simp[] >>
+  gvs[plan_holds_def] >> metis_tac[alias_emit_ops_inventory, pairTheory.SND]
+QED
+
 Theorem alias_regular_plan_var_support:
   inst.inst_opcode <> JMP /\ alias_var_mass x ps <= 1 /\
   (plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
