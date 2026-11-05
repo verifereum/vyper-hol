@@ -1,6 +1,7 @@
 (* Shared observational effects of the checked encoder prefix. *)
 Theory revertReasonPrefixFramePtr
 Ancestors revertReasonPrefixPtr ghostObservationPtr decoderGhostFramePtr
+  allocationPtr loweringHalt typedCopyPtr ptrDiscipline instIdxIndep
   fragGasSeqPtr revertReasonLayout context venomInst venomExecSemantics venomState finite_map
 
 Theorem inst_seq_ptr_other_output_frame:
@@ -109,4 +110,198 @@ Proof
   fs[revert_reason_prefix_def] >>
   drule run_inst_seq_four_endpoint >> strip_tac >>
   metis_tac[alloca_store_add_lookup_frame]
+QED
+
+Theorem alloca_step_memory_taint_bound:
+  n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
+  FLOOKUP t.vs_allocas id = SOME (b,n) ==>
+  (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn).t_mem
+    SUBSET tn.t_mem UNION {i | b <= i /\ i < b+n}
+Proof
+  strip_tac >> Cases_on `FLOOKUP s.vs_allocas id` >-
+    (drule_all fresh_alloca_ghost >>
+     disch_then (qspecl_then [`[]`, `FEMPTY`, `tn`] strip_assume_tac) >>
+     drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
+     simp[] >> disch_then (qspec_then `out` assume_tac) >>
+     gvs[update_var_def, FLOOKUP_UPDATE]) >>
+  rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
+  fs[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  gvs[update_var_def, FLOOKUP_UPDATE] >>
+  drule reused_alloca_memory_taint >>
+  disch_then (qspecl_then [`out`, `tn`] mp_tac) >>
+  simp[mk_inst_def, update_var_def]
+QED
+
+Theorem mstore_literal_memory_taint_bound:
+  step_inst_base (mk_inst id MSTORE [Var dst; Lit value] []) s = OK t ==>
+  (step_taint (mk_inst id MSTORE [Var dst; Lit value] []) s t tn).t_mem
+    SUBSET tn.t_mem
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+       eval_operand_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule mstore_ghost_frame >>
+  disch_then (qspecl_then [`[]`, `FEMPTY`, `tn`, `id`, `Lit value`, `value`]
+    mp_tac) >>
+  simp[eval_operand_def, op_taint_def, mk_inst_def]
+QED
+
+Theorem add_step_memory_taint_frame:
+  step_inst_base (mk_inst id ADD [left; right] [out]) s = OK t ==>
+  (step_taint (mk_inst id ADD [left; right] [out]) s t tn).t_mem = tn.t_mem
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       codegenRelTheory.source_memory_write_ranges_def, written_taint_def,
+       new_site_bytes_def, update_var_def, range_bytes_def, FLOOKUP_DEF] >>
+  SET_TAC[]
+QED
+
+Theorem alloca_store_offset_alloca_memory_taint_bound:
+  n < dimword (:256) /\ sz < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 = OK s2 /\
+  step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 = OK s3 /\
+  step_inst_base (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) s3 = OK t /\
+  FLOOKUP s1.vs_allocas id = SOME (b,n) /\
+  FLOOKUP t.vs_allocas (id+3) = SOME (c,sz) /\
+  inst_seq_ptr D lo ctx func PG G tn
+    [mk_inst id ALLOCA [Lit (n2w n)] [out];
+     mk_inst (id+1) MSTORE [Var out; Lit value] [];
+     mk_inst (id+2) ADD [Var out; Lit off] [p];
+     mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]] s Gf tnf ==>
+  tnf.t_mem SUBSET tn.t_mem UNION
+    {i | b <= i /\ i < b+n} UNION {i | c <= i /\ i < c+sz}
+Proof
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D lo ctx func PG G tn [i;j;k;l] s Gf tnf` >>
+  qabbrev_tac `tn1 = step_taint i s s1 tn` >>
+  qabbrev_tac `tn2 = step_taint j s1 s2 tn1` >>
+  qabbrev_tac `tn3 = step_taint k s2 s3 tn2` >>
+  qabbrev_tac `tn4 = step_taint l s3 t tn3` >>
+  qabbrev_tac `G1 = step_prov PG G i s1` >>
+  qabbrev_tac `G2 = step_prov PG G1 j s2` >>
+  qabbrev_tac `G3 = step_prov PG G2 k s3` >>
+  qabbrev_tac `G4 = step_prov PG G3 l t` >>
+  `~is_terminator j.inst_opcode /\ ~is_terminator k.inst_opcode /\
+   ~is_terminator l.inst_opcode` by
+    simp[Abbr `j`, Abbr `k`, Abbr `l`, mk_inst_def, is_terminator_def] >>
+  `Gf = G4 /\ tnf = tn4` by
+    (irule inst_seq_ptr_four_endpoint >> goal_assum (drule_at Any) >>
+     simp[Abbr `G1`, Abbr `G2`, Abbr `G3`, Abbr `G4`,
+          Abbr `tn1`, Abbr `tn2`, Abbr `tn3`, Abbr `tn4`] >>
+     metis_tac[]) >>
+  `tn1.t_mem SUBSET tn.t_mem UNION {i | b <= i /\ i < b+n}` by
+    (simp[Abbr `tn1`, Abbr `i`] >>
+     irule alloca_step_memory_taint_bound >> goal_assum (drule_at Any) >> simp[]) >>
+  `tn2.t_mem SUBSET tn1.t_mem` by
+    (simp[Abbr `tn2`, Abbr `j`] >>
+     irule mstore_literal_memory_taint_bound >> goal_assum (drule_at Any)) >>
+  `tn3.t_mem = tn2.t_mem` by
+    (simp[Abbr `tn3`, Abbr `k`] >>
+     irule add_step_memory_taint_frame >> goal_assum (drule_at Any)) >>
+  `tn4.t_mem SUBSET tn3.t_mem UNION {i | c <= i /\ i < c+sz}` by
+    (simp[NoAsms, Abbr `tn4`, Abbr `l`] >>
+     irule alloca_step_memory_taint_bound >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`tn4.t_mem SUBSET _`, `tn2.t_mem SUBSET _`, `tn1.t_mem SUBSET _`] >>
+  POP_ASSUM_LIST (K all_tac) >> SET_TAC[]
+QED
+
+Theorem alloca_store_offset_alloca_memory_frame:
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 = OK s2 /\
+  step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 = OK s3 /\
+  step_inst_base (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) s3 = OK t /\
+  lookup_var out s1 = SOME a /\ 32 <= n /\
+  ~(w2n a <= i /\ i < w2n a+n) ==>
+  mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory
+Proof
+  strip_tac >>
+  `s1.vs_memory = s.vs_memory /\ t.vs_memory = s3.vs_memory` by
+    metis_tac[alloca_step_data_frame] >>
+  drule_all store_offset_endpoint >> strip_tac >> gvs[update_var_def] >>
+  qpat_x_assum `s1.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem alloca_store_offset_alloca_run_memory_effects:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
+  32 <= n /\ n < dimword (:256) /\ sz < dimword (:256) /\
+  run_inst_seq
+    [mk_inst id ALLOCA [Lit (n2w n)] [out];
+     mk_inst (id+1) MSTORE [Var out; Lit value] [];
+     mk_inst (id+2) ADD [Var out; Lit off] [p];
+     mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]] s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn
+    [mk_inst id ALLOCA [Lit (n2w n)] [out];
+     mk_inst (id+1) MSTORE [Var out; Lit value] [];
+     mk_inst (id+2) ADD [Var out; Lit off] [p];
+     mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]] s Gf tnf ==>
+  ?b c. b+n < dimword (:256) /\ c+sz < dimword (:256) /\
+    FLOOKUP t.vs_allocas id = SOME (b,n) /\
+    FLOOKUP t.vs_allocas (id+3) = SOME (c,sz) /\
+    (!i. i NOTIN ({i | b <= i /\ i < b+n} UNION {i | c <= i /\ i < c+sz}) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+    tnf.t_mem SUBSET tn.t_mem UNION
+      {i | b <= i /\ i < b+n} UNION {i | c <= i /\ i < c+sz}
+Proof
+  strip_tac >> drule run_inst_seq_four_endpoint >> strip_tac >>
+  drule_all alloca_step_site >> strip_tac >>
+  `lookup_var out s1 = SOME (n2w b)` by gvs[eval_operand_def] >>
+  `stmt_state_rel ctx func cenv cx es s3` by
+    (irule alloca_store_offset_state_rel >> metis_tac[]) >>
+  `?c. FLOOKUP t.vs_allocas (id+3) = SOME (c,sz) /\
+    c+sz < dimword (:256) /\ eval_operand (Var q) t = SOME (n2w c)` by
+    (irule alloca_step_site >> metis_tac[]) >>
+  `FLOOKUP t.vs_allocas id = SOME (b,n)` by
+    (drule_all store_offset_endpoint >> strip_tac >>
+     `s3.vs_allocas = s1.vs_allocas` by simp[update_var_def, mstore_def] >>
+     qpat_x_assum `step_inst_base _ s3 = OK t` mp_tac >>
+     simp[step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+     strip_tac >> simp[update_var_def, FLOOKUP_UPDATE] >>
+     gvs[update_var_def, FLOOKUP_UPDATE]) >>
+  qexistsl_tac [`b`, `c`] >> simp[] >> conj_tac >-
+    (rpt strip_tac >> irule alloca_store_offset_alloca_memory_frame >>
+     goal_assum (drule_at Any) >>
+     simp[wordsTheory.w2n_n2w] >> gvs[pred_setTheory.IN_UNION] >>
+     metis_tac[wordsTheory.w2n_n2w, arithmeticTheory.LESS_ADD]) >>
+  irule alloca_store_offset_alloca_memory_taint_bound >> metis_tac[]
+QED
+
+Theorem revert_reason_prefix_memory_effects:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
+    [STRING #"%" (toString v)]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
+    [STRING #"%" (toString (v+2))]) (fn_insts func) /\
+  (!k. k < 2 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))) /\
+  64+ms < dimword (:256) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
+  ?b c. b+(64+ms) < dimword (:256) /\ c+ms < dimword (:256) /\
+    FLOOKUP t.vs_allocas id = SOME (b,64+ms) /\
+    FLOOKUP t.vs_allocas (id+3) = SOME (c,ms) /\
+    (!i. i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms}) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+    (!i. i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms}) /\
+      i IN tnf.t_mem ==> i IN tn.t_mem)
+Proof
+  strip_tac >> fs[revert_reason_prefix_def] >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString v)) /\
+   not_local_ptr cenv es.scopes (STRING #"%" (toString (v+1)))` by
+    (qpat_x_assum `!k. _` mp_tac >>
+     disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
+       [`0`, `1`]) >> gvs[arithmeticTheory.ADD_COMM]) >>
+  `32 <= ms+64 /\ ms < dimword (:256)` by decide_tac >>
+  drule_at (Pat `run_inst_seq _ _ = _`) alloca_store_offset_alloca_run_memory_effects >>
+  disch_then drule_all >>
+  strip_tac >> qexistsl_tac [`b`, `c`] >> simp[] >>
+  qpat_x_assum `_ SUBSET _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> SET_TAC[]
 QED
