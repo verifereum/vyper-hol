@@ -179,3 +179,72 @@ Proof
   qexistsl_tac [`current_event_renamed_block ev`, `f`, `g`] >>
   metis_tac[current_edge_shape_copy_shape]
 QED
+
+Theorem rf_rename_run_block_boundary:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  (!v. MEM v (FLAT (MAP block_ir_vars bbs)) ==> MEM v V) /\
+  ssa_vars_covered s V /\ ssa_vars_covered s (MAP FST defs) /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  rename_current_blocks s (init_current_rename_state defs) bbs sm tree =
+    (ctrs',s',bbs') /\
+  lookup_block q bbs = SOME old /\ lookup_block q bbs' = SOME final /\
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) old.bb_instructions ==>
+  ?renamed f g.
+    rf_back_trace V f g (REVERSE old.bb_instructions)
+      (REVERSE renamed.bb_instructions) /\
+    LIST_REL rf_copy_shape renamed.bb_instructions final.bb_instructions
+Proof
+  strip_tac >>
+  `current_unvisited_annotations
+    (current_annotation_map bbs (rf_block_annotations bbs)) [] bbs` by
+    simp[rf_block_annotation_map_initial] >>
+  `?ctrs1 s1 bbs1 H' visited' events.
+    current_tree_trace (current_annotation_map bbs (rf_block_annotations bbs))
+      sm tree s (init_current_rename_state defs) bbs [] CurrentDefault []
+      ctrs1 s1 bbs1 H' visited' events` by
+    (irule (cj 1 current_tree_trace_exists) >> simp[]) >>
+  drule (cj 1 current_tree_trace_projection) >> strip_tac >> gvs[] >>
+  `EVERY (current_event_valid
+      (current_annotation_map bbs (rf_block_annotations bbs)) V) events` by
+    (irule rf_initial_tree_events_valid >> metis_tac[]) >>
+  `current_allocation_consistent V [] s (init_current_rename_state defs) /\
+   current_env_realizes ([] : (current_token # string # string) list)
+     CurrentDefault (init_current_rename_state defs) V` by
+    metis_tac[rf_init_allocation] >>
+  `current_annotations_ok V ([] : (current_token # string # string) list)
+     (FLAT (FLAT (rf_block_annotations bbs)))` by
+    metis_tac[rf_block_annotations_ok] >>
+  `EVERY (current_event_names H' V) events` by
+    (drule_at (Pat `current_tree_trace _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       current_annotated_tree_names >>
+     simp[current_env_owned_initial] >>
+     disch_then (qspec_then `V` mp_tac) >>
+     fs[rf_block_annotations_def]) >>
+  irule rf_trace_final_block_boundary >> metis_tac[]
+QED
+
+Theorem rf_rename_cleanup_phase_certificate:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  (!v. MEM v (FLAT (MAP block_ir_vars bbs)) ==> MEM v V) /\
+  ssa_vars_covered s V /\ ssa_vars_covered s (MAP FST defs) /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  rename_current_blocks s (init_current_rename_state defs) bbs sm tree =
+    (ctrs',s',bbs') /\
+  lookup_block q bbs = SOME inserted /\
+  inserted.bb_instructions = pre ++ bb.bb_instructions /\
+  EVERY inst_wf inserted.bb_instructions /\
+  EVERY (\i. EVERY (rf_operand_in V) i.inst_operands) inserted.bb_instructions /\
+  lookup_block q (simplify_current_phis_if enabled bbs') = SOME final ==>
+  rf_phase_certificate V bb final (LENGTH pre)
+Proof
+  strip_tac >>
+  Cases_on `lookup_block q bbs'` >> gvs[current_cleanup_if_lookup] >>
+  rename1 `lookup_block q bbs' = SOME edged` >>
+  `?renamed f g.
+    rf_back_trace V f g (REVERSE inserted.bb_instructions)
+      (REVERSE renamed.bb_instructions) /\
+    LIST_REL rf_copy_shape renamed.bb_instructions edged.bb_instructions` by
+    (irule rf_rename_run_block_boundary >> simp[] >> metis_tac[]) >>
+  simp[rf_phase_certificate_def] >>
+  qexistsl_tac [`pre`, `renamed`, `edged`, `f`, `g`, `enabled`] >> gvs[]
+QED
