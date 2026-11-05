@@ -1,6 +1,7 @@
 (* Extract the three dynamic-child phases with their actual enclosing code. *)
 Theory abiEncoderChildContext
 Ancestors
+  abiDecoderSiteMembership pred_set
   abiEncoderAddressReach abiEncoderChildCode abiEncoderAppend abiEncoderCounters abiEncoderResultLive
   abiDecoderReentry abiDecoderContract fragExec compileEnv emitHelperProps list rich_list arithmetic
 
@@ -60,4 +61,46 @@ Proof
   drule abi_encoder_counters >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule abi_decoder_operand_live_emit >> strip_tac >>
   qexistsl_tac [`head`, `prepared`] >> asm_simp_tac bool_ss []
+QED
+
+(* The site guard is inherited by the actual recursive compiler invocation,
+   without an assumption about instruction-ID interval credit. *)
+Theorem abi_encoder_static_child_site_guard:
+  compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
+  emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A ==>
+  abi_decoder_emitted_sites prepared.cs_next_id en.cs_next_id prepared en SUBSET A
+Proof
+  strip_tac >> drule abi_encode_static_child_trace >> strip_tac >> gvs[] >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `cs_extends prepared en` by (drule cs_extends_abi_encode >> simp[]) >>
+  `st.cs_next_id <= prepared.cs_next_id /\ en.cs_next_id <= en.cs_next_id` by decide_tac >>
+  `cs_extends en en` by simp[cs_extends_refl] >>
+  irule SUBSET_TRANS >>
+  qexists_tac `abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en` >>
+  conj_tac >- (irule abi_decoder_emitted_sites_subsegment >> simp[]) >>
+  asm_rewrite_tac[]
+QED
+
+Theorem abi_encoder_dynamic_child_site_guard:
+  compile_abi_encode_child dst src ei T offset dp st = (out,en) /\
+  abi_encode_child_prefix dst offset dp st = (ops,prepared) /\
+  compile_abi_encode_to_buf (SND (SND ops)) src ei prepared = (len,child_end) /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A ==>
+  abi_decoder_emitted_sites prepared.cs_next_id child_end.cs_next_id prepared child_end SUBSET A
+Proof
+  strip_tac >> drule abi_encode_dynamic_child_trace >> strip_tac >> gvs[] >>
+  drule abi_encode_child_prefix_shape >> strip_tac >>
+  drule abi_encode_child_suffix_shape >> strip_tac >>
+  `cs_extends st prepared` by
+    (irule abi_encoder_straight_extends >> simp[]) >>
+  `cs_extends child_end en` by
+    (irule abi_encoder_straight_extends >> simp[]) >>
+  `cs_extends prepared child_end` by (drule cs_extends_abi_encode >> simp[]) >>
+  `st.cs_next_id <= prepared.cs_next_id /\ child_end.cs_next_id <= en.cs_next_id` by decide_tac >>
+  irule SUBSET_TRANS >>
+  qexists_tac `abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en` >>
+  conj_tac >- (irule abi_decoder_emitted_sites_subsegment >> simp[]) >>
+  asm_rewrite_tac[]
 QED

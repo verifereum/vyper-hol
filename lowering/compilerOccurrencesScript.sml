@@ -178,3 +178,29 @@ Proof
   irule compiler_emitted_concat >>
   metis_tac[compiler_emits_suffix]
 QED
+Theorem compiler_chrono_extends:
+  cs_extends first last ==> isPREFIX (compiler_chrono first) (compiler_chrono last)
+Proof
+  rw[cs_extends_def] >> Cases_on `new` using SNOC_CASES >>
+  gvs[compiler_chrono_def, IS_PREFIX_APPEND, REVERSE_SNOC, MAP_APPEND, FLAT_APPEND] >>
+  simp[GSYM APPEND_ASSOC]
+QED
+
+Theorem compiler_emitted_subsegment:
+  cs_extends first child /\ cs_extends child child_end /\ cs_extends child_end last ==>
+  !i. MEM i (compiler_emitted child child_end) ==> MEM i (compiler_emitted first last)
+Proof
+  strip_tac >> imp_res_tac compiler_chrono_extends >>
+  simp_tac bool_ss [compiler_emitted_def] >>
+  qabbrev_tac `a = compiler_chrono first` >>
+  qabbrev_tac `b = compiler_chrono child` >>
+  qabbrev_tac `c = compiler_chrono child_end` >>
+  qabbrev_tac `d = compiler_chrono last` >>
+  qpat_x_assum `Abbrev (a = _)` kall_tac >>
+  qpat_x_assum `Abbrev (b = _)` kall_tac >>
+  qpat_x_assum `Abbrev (c = _)` kall_tac >>
+  qpat_x_assum `Abbrev (d = _)` kall_tac >>
+  gvs[IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, MEM_APPEND]
+QED

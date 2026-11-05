@@ -266,3 +266,12 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_scratch_member_dynamic_output_detailed >> simp_tac bool_ss []
 QED
+
+val _ = List.app (fn theory => List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean member dependency: " ^ theory ^ "." ^ name)
+  end) (DB.thms theory))
+  ["compilerOccurrences", "abiDecoderSiteMembership", "abiEncoderChildContext",
+   "abiScratchInput", "abiScratchChild", "abiScratchAddress", "abiEncoderMemberPhaseExec"];

@@ -157,6 +157,18 @@ Proof
   simp[SUBSET_DEF] >> metis_tac[MEM_APPEND]
 QED
 
+Theorem abi_decoder_emitted_sites_subsegment:
+  cs_extends first child /\ cs_extends child child_end /\ cs_extends child_end last /\
+  first.cs_next_id <= child.cs_next_id /\ child_end.cs_next_id <= last.cs_next_id ==>
+  abi_decoder_emitted_sites child.cs_next_id child_end.cs_next_id child child_end SUBSET
+    abi_decoder_emitted_sites first.cs_next_id last.cs_next_id first last
+Proof
+  simp[SUBSET_DEF] >> rpt strip_tac >>
+  `MEM i (compiler_emitted first last)` by
+    (irule compiler_emitted_subsegment >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[] >> metis_tac[LESS_EQ_TRANS, LESS_LESS_EQ_TRANS]
+QED
+
 Theorem abi_decoder_emitted_alloca:
   compiler_emits abi_decoder_alloc_shape first last /\
   MEM inst (compiler_emitted first last) /\ inst.inst_opcode = ALLOCA ==>
