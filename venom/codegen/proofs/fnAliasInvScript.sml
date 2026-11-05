@@ -107,6 +107,60 @@ Proof
   metis_tac[relationTheory.TC_RULES]
 QED
 
+Theorem alias_normalize_available:
+  !dfg visited at.
+    dfg = dfg_build_function fn /\ wf_function fn /\ ssa_form fn /\
+    def_dominates_uses fn /\
+    (!v. at = Var v ==> alias_path_available fn l i v) /\
+    normalize_operand dfg visited at = Var r ==>
+    alias_path_available fn l i r
+Proof
+  recInduct normalize_operand_ind >> rpt strip_tac >>
+  gvs[Once normalize_operand_def, AllCaseEqs()] >>
+  first_x_assum irule >> rpt strip_tac >> gvs[] >>
+  irule alias_assign_source_available >>
+  simp[alias_assign_step_def] >> metis_tac[]
+QED
+
+Theorem alias_live_root_not_defined:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn l /\ lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\
+  MEM x (live_vars_at (liveness_analyze fn) l i) /\
+  normalize_operand (dfg_build_function fn) [] (Var x) = Var r ==>
+  ~MEM r (inst_defs (EL i bb.bb_instructions))
+Proof
+  strip_tac >>
+  `alias_path_available fn l i x` by
+    metis_tac[alias_live_available_after_phis] >>
+  `alias_path_available fn l i r` by
+    (irule alias_normalize_available >> simp[] >>
+     qexistsl_tac [`Var x`,`[]`] >> simp[]) >>
+  metis_tac[alias_definition_not_available]
+QED
+
+Theorem alias_live_after_root_not_defined:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn l /\ lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  LENGTH (collect_phis bb.bb_instructions) <= SUC i /\
+  MEM x (live_vars_at (liveness_analyze fn) l (SUC i)) /\
+  ~MEM x (inst_defs (EL i bb.bb_instructions)) /\
+  normalize_operand (dfg_build_function fn) [] (Var x) = Var r ==>
+  ~MEM r (inst_defs (EL i bb.bb_instructions))
+Proof
+  strip_tac >>
+  `alias_path_available fn l (SUC i) x` by
+    metis_tac[alias_live_available_after_phis] >>
+  `alias_path_available fn l i x` by
+    metis_tac[alias_available_nondef_backward] >>
+  `alias_path_available fn l i r` by
+    (irule alias_normalize_available >> simp[] >>
+     qexistsl_tac [`Var x`,`[]`] >> simp[]) >>
+  metis_tac[alias_definition_not_available]
+QED
+
 (* Inventory boundaries do not depend on cleanup metadata or allocator fields. *)
 Definition plan_holds_def:
   plan_holds ps at <=> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
