@@ -2,7 +2,8 @@ Theory loadElimDefinitionCuts
 Ancestors
   loadElimStaticGeneration loadElimNormalizeAvailability loadElimKeyShapeInvariant
   loadElimTransferProvenance loadElimDefs venomWf venomInst venomExecProofs
-  simplifyCfgPhiRepair simplifyCfgStruct list rich_list
+  simplifyCfgPhiRepair simplifyCfgStruct simplifyCfgWfssa list rich_list finite_map
+  dfAnalyzeDefs cfgDefs
 
 Theorem le_first_arrival_no_earlier_dominance:
   is_fn_path fn (pre ++ [db.bb_label]) /\
@@ -156,4 +157,124 @@ Proof
      rpt strip_tac >> gvs[AllCaseEqs()] >>
      rpt (IF_CASES_TAC >> gvs[]) >> metis_tac[]) >>
   irule le_normalize_ordinary_use_available >> metis_tac[]
+QED
+
+Theorem le_ordinary_definition_value_cut:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ MEM bb fn.fn_blocks /\
+  fn_reachable fn bb.bb_label /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  n < LENGTH bb.bb_instructions /\
+  MEM v (EL n bb.bb_instructions).inst_outputs /\
+  (EL n bb.bb_instructions).inst_opcode <> PHI ==>
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) bb.bb_label n)) key <> SOME [Var v]
+Proof
+  strip_tac >> strip_tac >>
+  fs[fn_reachable_def] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  drule_all is_fn_path_first_arrival >> strip_tac >>
+  `fn_entry_label fn = SOME (HD (pre ++ [bb.bb_label]))` by metis_tac[] >>
+  `n <= LENGTH bb.bb_instructions` by simp[] >>
+  `MEM (EL n bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  drule_at (Pat `FLOOKUP _ _ = SOME [_]`) le_static_path_singleton_generation >>
+  disch_then (qspec_then `pre ++ [bb.bb_label]` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- ( `MEM gb.bb_label pre` by (gvs[EL_APPEND1] >> metis_tac[EL_MEM]) >>
+       drule_all le_generator_variable_available >> strip_tac
+       >- (drule_all le_first_arrival_no_earlier_output >> simp[EL_MEM]) >>
+       drule_all le_first_arrival_no_earlier_available >> simp[EL_MEM]) >>
+  `MEM inst bb.bb_instructions` by metis_tac[MEM_TAKE] >>
+  drule_all le_generator_variable_available >> strip_tac
+  >- (drule_all le_before_definition_no_output >> simp[]) >>
+  drule_all le_before_definition_no_available >> simp[]
+QED
+
+Theorem le_phi_definition_value_cut:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ MEM bb fn.fn_blocks /\
+  fn_reachable fn bb.bb_label /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  MEM di bb.bb_instructions /\ di.inst_opcode = PHI /\ MEM v di.inst_outputs ==>
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) bb.bb_label 0)) key <> SOME [Var v]
+Proof
+  strip_tac >> strip_tac >> fs[fn_reachable_def] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  drule_all is_fn_path_first_arrival >> strip_tac >>
+  `fn_entry_label fn = SOME (HD (pre ++ [bb.bb_label]))` by metis_tac[] >>
+  drule_at (Pat `FLOOKUP _ _ = SOME [_]`) le_static_path_singleton_generation >>
+  disch_then (qspec_then `pre ++ [bb.bb_label]` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- (`MEM gb.bb_label pre` by (gvs[EL_APPEND1] >> metis_tac[EL_MEM]) >>
+      drule_all le_generator_variable_available >> strip_tac
+      >- (drule_all le_first_arrival_no_earlier_output >> simp[]) >>
+      drule_all le_first_arrival_no_earlier_available >> simp[]) >> gvs[]
+QED
+
+Theorem le_ordinary_definition_key_cut:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ MEM bb fn.fn_blocks /\
+  fn_reachable fn bb.bb_label /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  n < LENGTH bb.bb_instructions /\
+  MEM v (EL n bb.bb_instructions).inst_outputs /\
+  (EL n bb.bb_instructions).inst_opcode <> PHI /\
+  ctx.lctx_dfg = dfg_build_function fn ==>
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) bb.bb_label n)) (LK_Op (Var v)) = NONE
+Proof
+  strip_tac >>
+  Cases_on `FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) bb.bb_label n)) (LK_Op (Var v))` >- simp[] >>
+  fs[fn_reachable_def] >> drule rtc_to_fn_path >> strip_tac >>
+  drule_all is_fn_path_first_arrival >> strip_tac >>
+  `fn_entry_label fn = SOME (HD (pre ++ [bb.bb_label]))` by metis_tac[] >>
+  `n <= LENGTH bb.bb_instructions` by simp[] >>
+  `MEM (EL n bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  drule_at (Pat `FLOOKUP _ _ = SOME _`) le_static_path_presence_generation >>
+  disch_then (qspec_then `pre ++ [bb.bb_label]` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- (`MEM gb.bb_label pre` by (gvs[EL_APPEND1] >> metis_tac[EL_MEM]) >>
+      drule_all le_generator_key_variable_available >> strip_tac >>
+      drule_all le_first_arrival_no_earlier_available >> simp[]) >>
+  `MEM inst bb.bb_instructions` by metis_tac[MEM_TAKE] >>
+  drule_all le_generator_key_variable_available >> strip_tac >>
+  drule_all le_before_definition_no_available >> simp[]
+QED
+
+Theorem le_phi_definition_key_cut:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ MEM bb fn.fn_blocks /\
+  fn_reachable fn bb.bb_label /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  MEM di bb.bb_instructions /\ di.inst_opcode = PHI /\ MEM v di.inst_outputs /\
+  ctx.lctx_dfg = dfg_build_function fn ==>
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) bb.bb_label 0)) (LK_Op (Var v)) = NONE
+Proof
+  strip_tac >>
+  Cases_on `FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) bb.bb_label 0)) (LK_Op (Var v))` >- simp[] >>
+  fs[fn_reachable_def] >> drule rtc_to_fn_path >> strip_tac >>
+  drule_all is_fn_path_first_arrival >> strip_tac >>
+  `fn_entry_label fn = SOME (HD (pre ++ [bb.bb_label]))` by metis_tac[] >>
+  drule_at (Pat `FLOOKUP _ _ = SOME _`) le_static_path_presence_generation >>
+  disch_then (qspec_then `pre ++ [bb.bb_label]` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- (`MEM gb.bb_label pre` by (gvs[EL_APPEND1] >> metis_tac[EL_MEM]) >>
+      drule_all le_generator_key_variable_available >> strip_tac >>
+      drule_all le_first_arrival_no_earlier_available >> simp[]) >> gvs[]
 QED
