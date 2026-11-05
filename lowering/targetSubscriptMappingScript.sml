@@ -2,7 +2,7 @@
 Theory targetSubscriptMapping
 Ancestors
   targetPlaceSimCasesBase loweringPosts vyperState exprSimHash fragGasMode
-  supportedTypes vyperTyping vyperValue valueEncoding vyperStorage
+  supportedTypes vyperTypeSystem vyperTyping vyperValue valueEncoding vyperStorage
   emitHelperProps venomInst exprSimAlloc exprSimPrecompiles exprSimProps compileEnv
   exprLowering exprLoweringProps emitHelper fragExec venomState words finite_map list arithmetic valueEncodingProps
 
@@ -370,4 +370,80 @@ Theorem target_mapping_decimal_encoding_probe:
     encode_hashmap_key (BaseT DecimalT) (DecimalV 1)
 Proof
   EVAL_TAC >> simp[]
+QED
+
+Theorem target_mapping_scalar_encoding:
+  hashmap_key_type kt /\ ~is_bytestring_type kt /\
+  evaluate_type tenv kt = SOME tv /\ value_has_type tv key ==>
+  typed_val_to_w256 tv key = encode_hashmap_key kt key
+Proof
+  Cases_on `kt` >> simp[hashmap_key_type_def] >>
+  rpt strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `key` >>
+  gvs[hashmap_key_type_def, is_bytestring_type_def,
+      value_has_type_def, typed_val_to_w256_def, val_to_w256_def,
+      encode_hashmap_key_def]
+QED
+
+Theorem target_mapping_scalar_operand:
+  hashmap_key_type kt /\ ~is_bytestring_type kt /\ is_word_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv key /\
+  expr_val_rel cx kt key op s ==>
+  eval_operand op s = SOME (encode_hashmap_key kt key)
+Proof
+  strip_tac >> drule_all target_mapping_scalar_encoding >>
+  gvs[expr_val_rel_def]
+QED
+
+(* Dynamic keys expose precisely the payload that the key hashing code reads.
+   The conversion theory has local bytes/string projections; this shared
+   mapping boundary additionally identifies the source hash encoding. *)
+Theorem target_mapping_dynamic_operand:
+  hashmap_key_type kt /\ is_bytestring_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv key /\
+  expr_val_rel cx kt key op s ==>
+  ?w bs. eval_operand op s = SOME w /\
+    mem_word_at (w2n w) s.vs_memory = n2w (LENGTH bs) /\
+    mem_bytes_at (w2n w + 32) (LENGTH bs) s.vs_memory = bs /\
+    encode_hashmap_key kt key = word_of_bytes_be (Keccak_256_w64 bs)
+Proof
+  Cases_on `kt` >> simp[hashmap_key_type_def, is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[hashmap_key_type_def, is_bytestring_type_def] >>
+  rpt strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `key` >>
+  gvs[is_bytestring_type_def, value_has_type_def, expr_val_rel_def,
+      is_word_type_def, val_in_memory_def, encode_hashmap_key_def,
+      evaluate_type_def] >>
+  qmatch_asmsub_abbrev_tac `mem_bytes_at _ _ _ = payload` >>
+  qexists_tac `payload` >>
+  simp[Abbr `payload`, vyperMiscTheory.n2w_o_ORD_eq]
+QED
+
+Theorem target_mapping_scalar_post:
+  hashmap_key_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv key /\
+  expr_post ctx func cenv cx e es sa sb s0 es' key op s ==>
+  eval_operand op s = SOME (encode_hashmap_key (expr_type e) key)
+Proof
+  strip_tac >> irule target_mapping_scalar_operand >>
+  gvs[expr_post_def] >> metis_tac[]
+QED
+
+Theorem target_mapping_dynamic_post:
+  hashmap_key_type (expr_type e) /\ is_bytestring_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv key /\
+  expr_post ctx func cenv cx e es sa sb s0 es' key op s ==>
+  ?w bs. eval_operand op s = SOME w /\
+    mem_word_at (w2n w) s.vs_memory = n2w (LENGTH bs) /\
+    mem_bytes_at (w2n w + 32) (LENGTH bs) s.vs_memory = bs /\
+    encode_hashmap_key (expr_type e) key = word_of_bytes_be (Keccak_256_w64 bs)
+Proof
+  strip_tac >> irule target_mapping_dynamic_operand >>
+  gvs[expr_post_def] >> metis_tac[]
 QED
