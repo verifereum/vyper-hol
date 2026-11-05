@@ -99,7 +99,7 @@ QED
 
 (* ===== The label and PHI facts the source shape implies ===== *)
 
-Theorem bb_well_formed_terminator_last[local]:
+Theorem bb_well_formed_terminator_last:
   bb_well_formed bb /\ MEM inst bb.bb_instructions /\
   is_terminator inst.inst_opcode ==>
   inst = LAST bb.bb_instructions
