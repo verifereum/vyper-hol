@@ -218,6 +218,85 @@ Proof
        op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
 
+(* Shared scalar rounding; the input may alias either output. *)
+Theorem reason_round_scalar_ptr:
+  emit_inst ADD [Var len;Lit 31w] [tmp] sa = ((),c1) /\
+  emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c1 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
+  ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var len s = SOME n /\ op_taint tn (Var len) = {} ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var rounded sf = SOME ((n + 31w) && i2w (-32)) /\
+    op_taint tnf (Var rounded) = {} /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. p <> tmp /\ p <> rounded ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `eval_operand (Var len) s = SOME n /\
+   eval_operand (Lit 31w) s = SOME 31w /\
+   op_taint tn (Lit 31w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
+    reason_copy_binop_resources_ptr)) >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `eval_operand (Var tmp) s1 = SOME (n + 31w) /\
+   eval_operand (Lit (i2w (-32))) s1 = SOME (i2w (-32)) /\
+   op_taint tn1 (Lit (i2w (-32))) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `AND`, `f` |-> `word_and`]
+    reason_copy_binop_resources_ptr)) >>
+  disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem reason_load_round_ptr:
+  emit_inst MLOAD [Var src] [len] sa = ((),c1) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp] c1 = ((),c2) /\
+  emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c2 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 sb func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  len <> tmp /\ len <> rounded ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var len sf = SOME (mload (w2n a) s) /\
+    op_taint tnf (Var len) = {} /\
+    lookup_var rounded sf = SOME ((mload (w2n a) s + 31w) && i2w (-32)) /\
+    op_taint tnf (Var rounded) = {} /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. p <> len /\ p <> tmp /\ p <> rounded ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all reason_copy_mload_resources_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
+    (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  drule_all reason_round_scalar_ptr >>
+  disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
+  >- metis_tac[gas_path_ptr_then, ADD_CLAUSES] >>
+  simp[] >> rpt strip_tac >> metis_tac[]
+QED
+
 Theorem reason_copy_round_prefix_ptr:
   emit_inst MLOAD [Var src] [v1] sa = ((),c1) /\
   emit_inst ADD [Var v1;Lit 31w] [v2] c1 = ((),c2) /\
@@ -247,19 +326,8 @@ Proof
   drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
-  `eval_operand (Var v1) s1 = SOME (mload (w2n a) s) /\
-   eval_operand (Lit 31w) s1 = SOME 31w /\
-   op_taint tn1 (Lit 31w) = {}` by simp[eval_operand_def, op_taint_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
-    reason_copy_binop_resources_ptr)) >>
-  disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
-    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
-  `eval_operand (Var v2) s2 = SOME (mload (w2n a) s + 31w) /\
-   eval_operand (Lit (i2w (-32))) s2 = SOME (i2w (-32)) /\
-   op_taint tn2 (Lit (i2w (-32))) = {}` by simp[eval_operand_def, op_taint_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `AND`, `f` |-> `word_and`]
-    reason_copy_binop_resources_ptr)) >>
-  disch_then (qspecl_then [`PG`, `G2`, `D`] (qx_choose_then `G3`
+  drule_all reason_round_scalar_ptr >>
+  disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G3`
     (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
   `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && i2w (-32)) /\
    eval_operand (Lit 32w) s3 = SOME 32w /\
