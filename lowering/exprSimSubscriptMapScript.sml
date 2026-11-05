@@ -13,7 +13,7 @@ Ancestors
   vyperCallOutcomeStorage vyperEvalOutcomeSuffix vyperTypeInvariants
   vyperTypeEvalSoundness vyperTypeExprResult vyperRuntimeAccounts
   vyperExprNoControl vyperPlaceInvariants vyperTypeExprSoundness
-  vyperTypeStoragePreservation
+  vyperTypeStoragePreservation exprSimMapKey
 
 (* Counted source sequencing keeps the observation stream available to both
    operands; in particular the index is forced only after the base succeeds. *)
