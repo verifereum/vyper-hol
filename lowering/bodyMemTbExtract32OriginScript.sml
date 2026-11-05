@@ -2,7 +2,7 @@
 Theory bodyMemTbExtract32Origin
 Ancestors
   bodyMemTbExtract32Witness builtinBytes exprLowering context emitHelper compileEnv
-  venomInst builtinMisc
+  venomInst builtinMisc builtinCreate
 
 Theorem extract32_slice_data_opcodes:
   compile_slice_data len data start amount outsz sa = (op,sb) ==>
@@ -75,4 +75,24 @@ Proof
   first_x_assum (qspec_then `sm` mp_tac) >>
   simp[Abbr `sm`] >> rpt strip_tac >>
   qexists_tac `[EQ] ++ ops ++ [OR]` >> simp[]
+QED
+
+Theorem extract32_create_copy_prefix_opcodes:
+  compile_create_copy target value salt rof sa = (r,sb) ==>
+  ?result sm.
+    compile_check_create_result result rof sm = (r,sb) /\
+    MAP (\i. i.inst_opcode) sm.cs_current_insts =
+    MAP (\i. i.inst_opcode) sa.cs_current_insts ++
+      ([EXTCODESIZE; ASSERT; SHL; OR; ADD; DALLOCA; MSTORE; ADD;
+        EXTCODECOPY; ADD; ADD] ++
+       [case salt of NONE => CREATE | SOME s => CREATE2] ++
+       (if rof then [SETFMP] else []))
+Proof
+  Cases_on `salt` >> Cases_on `rof` >>
+  simp[compile_create_copy_def, compile_alloc_dynamic_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       mk_inst_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `compile_check_create_result out flag sm` >>
+  qexistsl_tac [`out`, `sm`] >> simp[Abbr `sm`]
 QED
