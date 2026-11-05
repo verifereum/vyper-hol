@@ -6,6 +6,7 @@ Ancestors
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
   fragGasSeqMem fragGasPathMem stmtSimProps
+  gasOutcome gasExemptCert gasSummary gasContext exprSimProps vyperState
   bodyMemoryDefs exprSimDefs exprSimMemDefs vyperAST vyperInterpreter memSafeRun allocaHistory
 
 Theorem frag_exec_assign_mem:
@@ -135,6 +136,126 @@ Proof
   drule emit_inst_extends >> strip_tac >> simp[] >>
   fs[expr_post_def, expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
      valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def]
+QED
+
+Theorem ifexp_root_eval_forced[local]:
+  eval_expr cx (IfExp t c a b) =
+  vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
+    (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
+         else if v = BoolV F then vyperState$bind (eval_expr cx b) (conditional_result cx)
+         else raise (Error (TypeError "not BoolV")))
+Proof
+  simp[Once evaluate_def, switch_BoolV_def, vyperStateTheory.bind_assoc] >>
+  simp[FUN_EQ_THM, vyperStateTheory.bind_def] >> gen_tac >>
+  Cases_on `eval_expr cx c x` >> rename1 `_ = (raw,st)` >>
+  Cases_on `raw` >> simp[] >>
+  rename1 `read_result cx captured st` >>
+  Cases_on `read_result cx captured st` >> rename1 `_ = (forced,sf)` >>
+  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >>
+  simp[raise_def, vyperStateTheory.bind_def]
+QED
+
+Theorem ifexp_root_condition_admissible[local]:
+  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
+  gas_admissible (vyperState$bind (eval_expr cx c) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
+  simp[ifexp_root_eval_forced, vyperStateTheory.bind_def] >>
+  fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
+QED
+
+Theorem ifexp_root_branch_admissible[local]:
+  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
+  (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
+    (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
+  gas_admissible
+    (vyperState$bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
+    expr_vv_res_ok (mid with gas_obs := [])
+Proof
+  rewrite_tac[gas_admissible_def] >> strip_tac >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
+  simp[ifexp_root_eval_forced, vyperStateTheory.bind_def] >>
+  Cases_on `sel` >> gvs[]
+QED
+
+Theorem ifexp_root_condition_bool[local]:
+  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
+  vyperState$bind (eval_expr cx c) (read_result cx)
+    (es with gas_obs := gs) = (INL v,mid) ==>
+  ?sel. v = BoolV sel
+Proof
+  strip_tac >>
+  Cases_on `v = BoolV T` >- metis_tac[] >>
+  Cases_on `v = BoolV F` >- metis_tac[] >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gas_admissible_def, ifexp_root_eval_forced] >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  simp[vyperStateTheory.bind_def, raise_def, expr_vv_res_ok_def]
+QED
+
+Theorem ifexp_root_condition_cert[local]:
+  gas_exempt_cert memory tops (ctx,func)
+    (vyperState$ignore_bind
+      (vyperState$bind (eval_expr cx c) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finalst) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (vyperState$ignore_bind (eval_expr cx (IfExp t c a b)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finalst)
+Proof
+  strip_tac >> rewrite_tac[ifexp_root_eval_forced] >>
+  pure_once_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
+  pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Theorem ifexp_root_code_layout[local]:
+  compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
+  fn_has_code st st' func /\ local_ptrs_reserved cenv st /\
+  (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op,sb) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id) /\
+  (!e sa sb op. (e = a \/ e = b) /\ lower_value compile_expr cenv ty e sa = (op,sb) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id) ==>
+  ?cop sc sj sn tl el xl rv se av sea aop sx sy sz.
+    lower_value compile_expr cenv (BaseT BoolT) c st = (cop,sc) /\
+    emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
+    sj.cs_current_bb = sc.cs_current_bb /\ sj.cs_current_insts = sc.cs_current_insts /\
+    compile_expr cenv ty (if sel then a else b) se = (av,sea) /\
+    compile_ifexp_arm cenv t (lowered_value_type cenv (if sel then a else b)) av sea = (aop,sx) /\
+    emit_inst ASSIGN [aop] [rv] sx = ((),sy) /\
+    emit_inst JMP [Label xl] [] sy = ((),sz) /\
+    se.cs_current_bb = (if sel then tl else el) /\ se.cs_current_insts = [] /\
+    st'.cs_current_bb = xl /\ st'.cs_current_insts = [] /\
+    vv = (if is_word_type t then StackValue t (Var rv)
+          else LocatedValue t (mk_ptr (Var rv) LocMemory)) /\
+    fn_has_code st sc func /\ fn_has_code sj sn func /\
+    fn_has_code se sx func /\ fn_has_code sx sy func /\ fn_has_code sy sz func /\
+    local_ptrs_reserved cenv se /\ cs_extends sc st' /\ cs_extends se sx /\
+    st.cs_next_var <= sc.cs_next_var /\ st.cs_next_id <= sc.cs_next_id /\
+    sc.cs_next_var <= se.cs_next_var /\ sc.cs_next_id <= se.cs_next_id /\
+    sx.cs_next_id <= st'.cs_next_id /\ (!x. not_fresh_at st x ==> x <> rv)
+Proof
+  strip_tac >> drule_all compile_expr_ifexp_states >> strip_tac >>
+  `cs_extends s5 s6 /\ cs_extends s8 s9 /\ cs_extends s9 s10 /\
+   cs_extends s12 s13 /\ cs_extends s13 s14` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7 /\ cs_extends s10 s11 /\ cs_extends s14 st'` by
+    metis_tac[cs_extends_new_block] >>
+  `fn_has_code st s1 func /\ fn_has_code s5 s6 func /\
+   fn_has_code s7 s8 func /\ fn_has_code s8 s9 func /\ fn_has_code s9 s10 func /\
+   fn_has_code s11 s12 func /\ fn_has_code s12 s13 func /\ fn_has_code s13 s14 func` by
+    metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_trans] >>
+  `local_ptrs_reserved cenv s7 /\ local_ptrs_reserved cenv s11` by
+    metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
+  `~not_fresh_at st rv` by metis_tac[] >>
+  Cases_on `sel`
+  >- (qexistsl_tac [`cond_op`,`s1`,`s5`,`s6`,`tl`,`el`,`xl`,`rv`,
+                   `s7`,`av`,`s7a`,`aop`,`s8`,`s9`,`s10`] >> simp[]) >>
+  qexistsl_tac [`cond_op`,`s1`,`s5`,`s6`,`tl`,`el`,`xl`,`rv`,
+               `s11`,`bv`,`s11a`,`bop`,`s12`,`s13`,`s14`] >> simp[]
 QED
 
 Theorem compile_ifexp_vv_sim_mem:
