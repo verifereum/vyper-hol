@@ -263,6 +263,64 @@ Definition plan_holds_def:
   plan_holds ps at <=> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 End
 
+Theorem do_spill_tos_plan_holds:
+  do_spill_tos ps = (ops,ps') /\ plan_holds ps at ==>
+  plan_holds ps' at
+Proof
+  simp[do_spill_tos_def] >> pairarg_tac >> gvs[] >>
+  qspec_then `ps.ps_stack` strip_assume_tac SNOC_CASES >>
+  gvs[plan_holds_def, stack_pop_def, stack_peek_def,
+      LENGTH_SNOC, TAKE_SNOC, EL_SNOC, EL_LENGTH_SNOC, MEM_SNOC] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem stack_swap_mem_iff:
+  dist < LENGTH (stk : operand list) ==>
+  (MEM at (stack_swap dist stk) <=> MEM at stk)
+Proof
+  strip_tac >>
+  `0 < LENGTH stk` by decide_tac >>
+  qspecl_then [`stk`, `0`, `dist`, `at`] mp_tac
+    doSwapSimTheory.stack_poke_exchange_multiplicity >>
+  simp[stack_poke_def, stack_peek_def, stack_swap_def,
+       GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem do_spill_at_plan_holds:
+  dist < LENGTH ps.ps_stack /\ do_spill_at dist ps = (ops,ps') /\
+  plan_holds ps at ==> plan_holds ps' at
+Proof
+  Cases_on `dist = 0`
+  >- (simp[do_spill_at_def] >> metis_tac[do_spill_tos_plan_holds]) >>
+  simp[do_spill_at_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `plan_holds (ps with ps_stack := stack_swap dist ps.ps_stack) at` by
+    gvs[plan_holds_def, stack_swap_mem_iff] >>
+  drule_all do_spill_tos_plan_holds >> simp[]
+QED
+
+Theorem do_restore_plan_holds:
+  do_restore op ps = (ops,ps') /\ plan_holds ps at ==>
+  plan_holds ps' at
+Proof
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[do_restore_def, plan_holds_def, stack_push_def] >>
+  rpt strip_tac >> gvs[MEM_SNOC]
+QED
+
+Theorem restore_spilled_plan_holds:
+  !pending ps ops ps' at.
+    restore_spilled_plan pending ps = (ops,ps') /\ plan_holds ps at ==>
+    plan_holds ps' at
+Proof
+  Induct >> simp[restore_spilled_plan_def] >>
+  rpt gen_tac >> pairarg_tac >> gvs[] >>
+  Cases_on `restore_spilled_plan pending ps1` >> simp[] >>
+  strip_tac >> gvs[] >>
+  drule_all do_restore_plan_holds >> strip_tac >>
+  first_x_assum (qspec_then `ps1` mp_tac) >>
+  disch_then irule >> simp[]
+QED
+
 Definition alias_var_mass_def:
   alias_var_mass x ps =
     LIST_ELEM_COUNT (Var x) ps.ps_stack +
