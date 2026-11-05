@@ -320,3 +320,83 @@ Proof
   simp[] >> strip_tac >> gvs[AllCaseEqs()] >>
   drule generate_block_insts_plan_promised >> simp[]
 QED
+
+Theorem generate_succs_plan_promised_mutual[local]:
+  (!lv dfg cfg fn wl visited ps.
+    generate_fn_plan_aux lv dfg cfg fn wl visited ps =
+    generate_fn_plan_aux lv dfg cfg fn wl visited ps) /\
+  (!lv dfg cfg fn ss sp succs visited ps.
+    !ops visited' qs.
+    generate_succs_plan lv dfg cfg fn ss sp succs visited ps =
+      SOME (ops,visited',qs) ==>
+    qs.ps_cleanup_promised = ps.ps_cleanup_promised)
+Proof
+  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
+  >- simp[]
+  >- simp[]
+  >- simp[Once generate_fn_plan_aux_def]
+  >> rpt gen_tac >> strip_tac >>
+  simp[Once generate_fn_plan_aux_def, LET_THM] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> first_x_assum drule >> simp[]
+QED
+
+Theorem generate_succs_plan_promised:
+  generate_succs_plan lv dfg cfg fn ss sp succs visited ps =
+    SOME (ops,visited',qs) ==>
+  qs.ps_cleanup_promised = ps.ps_cleanup_promised
+Proof
+  metis_tac[generate_succs_plan_promised_mutual]
+QED
+
+Theorem ret_region_calls_unpromised:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET ==>
+  (!wl visited ps.
+    dfs_aux_call lv dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base ctr) wl visited ps ==>
+    LENGTH wl <= 1 /\
+    ((!l. MEM l wl ==> ~cfg_path cfg l target) \/ ~ps.ps_cleanup_promised)) /\
+  (!ss sp succs visited ps.
+    dfs_succs_call lv dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base ctr) ss sp succs visited ps ==>
+    ((!l. MEM l succs ==> ~cfg_path cfg l target) \/ ~ps.ps_cleanup_promised))
+Proof
+  strip_tac >> ho_match_mp_tac dfs_aux_call_ind >> rpt conj_tac
+  >- (simp[init_cleanup_plan_state_def, init_plan_state_def])
+  >- (rpt strip_tac >> rename1 `LENGTH (head::tail) <= 1` >>
+      Cases_on `tail` >> gvs[])
+  >- (rpt strip_tac >> rename1 `LENGTH (head::tail) <= 1` >>
+      Cases_on `tail` >> gvs[])
+  >- suspend "succs"
+  >- (rpt strip_tac >> rename1 `LENGTH (head::tail) <= 1` >>
+      Cases_on `tail` >> gvs[])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[])
+  >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume ret_region_calls_unpromised[succs]:
+  rpt strip_tac >>
+  (Cases_on `cfg_path cfg lbl target`
+   >- (disj2_tac >> gvs[] >> irule ret_block_plan_unpromised >>
+       goal_assum (drule_at Any) >> simp[] >> metis_tac[])) >>
+  disj1_tac >> rpt strip_tac >>
+  drule_all cfg_path_predecessor_closed >> simp[]
+QED
+
+Finalise ret_region_calls_unpromised
+
+Theorem ret_region_dfs_block_unpromised:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base ctr) lbl ps /\
+  cfg_path cfg lbl target ==>
+  ~ps.ps_cleanup_promised
+Proof
+  strip_tac >> drule_all ret_region_calls_unpromised >>
+  disch_then (mp_tac o cj 1) >> strip_tac >>
+  gvs[dfs_block_state_def] >> first_x_assum drule >> simp[] >>
+  metis_tac[]
+QED
