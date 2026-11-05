@@ -272,7 +272,10 @@ Theorem compile_env_body_vv_sim_mem:
     item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
     expr_vv_sim_mem ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_vv_sim_mem_stack >>
+  rpt gen_tac >> strip_tac >> `is_word_type (expr_type (Builtin ann (Env item) []))` by
+    (Cases_on `item` >>
+      gvs[vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def]) >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   conj_tac
   >- (gen_tac >> simp[compile_expr_def] >>
       Cases_on `compile_env_var item sa` >> simp[as_stack_val_def]) >>

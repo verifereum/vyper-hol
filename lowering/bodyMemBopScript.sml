@@ -24,6 +24,14 @@ Proof
   simp[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
   (conj_asm1_tac
    >- metis_tac[body_bop_word_mem, body_bop_bytes_eq_mem]) >>
-  irule body_expr_vv_sim_mem_stack >>
-  simp[compile_bop_stack] >> metis_tac[eval_expr_builtin_value]
+  `is_word_type ty` by
+    (drule expr_body_pre_bop >> strip_tac >>
+     Cases_on `word_value_type (expr_type e1)`
+     >- (drule_all well_typed_binop_word_result >> simp[]) >>
+     gvs[vyperTypeSystemTheory.well_typed_binop_def,
+         compileEnvTheory.is_word_type_def]) >>
+  irule body_expr_vv_sim_mem_stack_word >> simp[compile_bop_stack] >>
+  rpt conj_tac
+  >>~- ([`Value`], metis_tac[eval_expr_builtin_value]) >>
+  fs[vyperASTTheory.expr_type_def]
 QED
