@@ -108,17 +108,49 @@ Proof
   simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc]
 QED
 
-Theorem subscript_map_base_admissible:
-  gas_admissible (eval_expr cx (Subscript ann obj idx)) expr_map_res_ok es ==>
+Theorem subscript_result_base_admissible:
+  (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) /\
+  gas_admissible (eval_expr cx (Subscript ann obj idx)) A es ==>
   gas_admissible (eval_expr cx obj) expr_map_res_ok es
 Proof
   simp[gas_admissible_def] >> rpt strip_tac >>
   Cases_on `res` >- simp[expr_map_res_ok_def] >>
   rename1 `INR ex` >>
+  first_x_assum irule >>
   qpat_x_assum `!gs res ee. _ ==> _` (qspec_then `gs` mp_tac) >>
   rewrite_tac[eval_subscript_bind] >>
   disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
   simp[bind_def]
+QED
+
+Theorem subscript_result_index_admissible:
+  (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) /\
+  gas_admissible (eval_expr cx (Subscript ann obj idx)) A es /\
+  gas_marked_exec memory (ctx, func) (eval_expr cx obj)
+    (es, s0) marks (INL tv) mid (OK t) ==>
+  gas_admissible (bind (eval_expr cx idx) (read_result cx))
+    expr_res_ok (mid with gas_obs := [])
+Proof
+  simp[gas_admissible_def, gas_marked_exec_def] >> rpt strip_tac >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `expr_map_res_ok (INR ex : eval_result + exception)` suffices_by
+    simp[expr_map_res_ok_def, expr_res_ok_def] >>
+  first_x_assum irule >>
+  qpat_x_assum `!gs res ee. _ ==> _`
+    (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
+  rewrite_tac[eval_subscript_bind] >>
+  disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
+  gvs[bind_def]
+QED
+
+Theorem subscript_map_base_admissible:
+  gas_admissible (eval_expr cx (Subscript ann obj idx)) expr_map_res_ok es ==>
+  gas_admissible (eval_expr cx obj) expr_map_res_ok es
+Proof
+  strip_tac >> irule subscript_result_base_admissible >>
+  qexists `expr_map_res_ok` >> simp[] >>
+  qexistsl_tac [`ann`, `idx`] >> simp[]
 QED
 
 Theorem subscript_map_index_admissible:
@@ -128,14 +160,16 @@ Theorem subscript_map_index_admissible:
   gas_admissible (bind (eval_expr cx idx) (read_result cx))
     expr_res_ok (mid with gas_obs := [])
 Proof
-  simp[gas_admissible_def, gas_marked_exec_def] >> rpt strip_tac >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  qpat_x_assum `!gs res ee. _ ==> _`
-    (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
-  rewrite_tac[eval_subscript_bind] >>
-  disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
-  gvs[bind_def, expr_map_res_ok_def, expr_res_ok_def]
+  strip_tac >> irule subscript_result_index_admissible >>
+  goal_assum (drule_at Any) >> qexists `expr_map_res_ok` >> simp[] >>
+  qexists `ann` >> simp[]
+QED
+
+Theorem subscript_result_predicates_exceptions:
+  (!ex. expr_map_res_ok (INR ex) ==> expr_map_res_ok (INR ex)) /\
+  (!ex. expr_vv_res_ok (INR ex) ==> expr_map_res_ok (INR ex))
+Proof
+  simp[expr_vv_res_ok_def, expr_map_res_ok_def]
 QED
 
 (* A counted continuation, including its exemption origin, may follow a
@@ -416,6 +450,38 @@ Proof
   drule_all expr_map_pre_eval_result >> strip_tac >>
   simp[] >> irule expr_subscript_pre_index >>
   simp[] >> qexistsl_tac [`ann`, `es`, `obj`] >> simp[]
+QED
+
+Theorem expr_map_pre_gas_obs[simp]:
+  expr_map_pre cenv cx env e (es with gas_obs := gs) <=>
+  expr_map_pre cenv cx env e es
+Proof
+  simp[expr_map_pre_def]
+QED
+
+Theorem mapping_subscript_marked_index_pre:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  place_type cenv obj = MapPT kt vt /\
+  gas_marked_exec memory (ctx, func) (eval_expr cx obj)
+    (es, s0) marks (INL tv) mid (OK t) ==>
+  expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
+  ?s u. eval_expr cx obj s = (INL tv, u)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `eval_expr cx obj
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL tv, mid with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >>
+     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >>
+     simp[]) >>
+  conj_tac
+  >- (drule_at (Pat `eval_expr _ _ _ = _`) (cj 3 mapping_subscript_index_pre) >>
+      simp[] >> disch_then irule >>
+      conj_tac >- (goal_assum (drule_at Any)) >>
+      qexists `ann` >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem mapping_subscript_key_type:
