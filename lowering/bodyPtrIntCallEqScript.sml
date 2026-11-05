@@ -9,6 +9,7 @@
  *)
 Theory bodyPtrIntCallEq
 Ancestors
+  bodyPtrIntCallSource
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
