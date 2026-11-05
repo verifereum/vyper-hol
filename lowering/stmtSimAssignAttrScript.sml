@@ -719,9 +719,7 @@ QED
    value its typed word is stored at f's offset in x's region.  e may call
    internal functions: its simulation is a premise. *)
 Theorem compile_assign_attr_local_case:
-  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es res es'.
-    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es.
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -731,7 +729,8 @@ Theorem compile_assign_attr_local_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -755,9 +754,7 @@ QED
 
 (* compile_assign_attr_local_case for an e with no internal call. *)
 Theorem compile_assign_attr_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es res es'.
-    eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-      es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty env id fld sid fty fsz e es.
     expr_vv_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
@@ -766,7 +763,8 @@ Theorem compile_assign_attr_local_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
+      es
 Proof
   rpt strip_tac >> irule compile_assign_attr_local_case >>
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
