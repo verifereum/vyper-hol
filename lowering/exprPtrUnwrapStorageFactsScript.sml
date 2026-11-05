@@ -1,7 +1,8 @@
 (* Live storage bytes remain represented under perturbation of dead bytes. *)
 Theory exprPtrUnwrapStorageFacts
 Ancestors
-  storageDecodeMemory bodyPtrDefs valueEncodingProofs
+  storageDecodeMemory bodyPtrDefs valueEncodingProofs accountsRelProps
+  abiDecodeStaticProps
 
 Theorem copy_bytes_mem_agree_outside:
   !st bs n D dst mem m mem'.
@@ -35,4 +36,32 @@ Proof
   gvs[storage_live_memory_def] >>
   irule copy_bytes_mem_agree_outside >>
   qexistsl [`m`, `mem`] >> simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem ptr_vv_ok_storage_taint:
+  !cx t tv t' p es G tn s w ty k b.
+    ptr_vv_ok cx t tv (LocatedValue t' p) es G tn s /\
+    eval_operand p.ptr_operand s = SOME w /\
+    evaluate_type (get_tenv cx) t = SOME ty /\
+    w2n w <= w2n k /\ w2n k < w2n w + type_slot_size ty /\ b < 32 ==>
+    (p.ptr_location = LocStorage /\ (k,b) IN tn.t_stor ==>
+      dead_bytes (s.vs_accounts s.vs_call_ctx.cc_address).storage
+        (w2n w) ty (w2n k) b) /\
+    (p.ptr_location = LocTransient /\ (k,b) IN tn.t_trans ==>
+      dead_bytes (s.vs_transient s.vs_call_ctx.cc_address)
+        (w2n w) ty (w2n k) b)
+Proof
+  simp[ptr_vv_ok_def] >> metis_tac[]
+QED
+
+Theorem storage_range_agree_dead_bytes:
+  !st rt w tv j b.
+    storage_range_agree st rt w tv ==>
+    (dead_bytes rt (w2n w) tv j b <=> dead_bytes st (w2n w) tv j b)
+Proof
+  rpt strip_tac >> irule (cj 1 dead_bytes_live_frame) >>
+  gvs[storage_range_agree_def] >> rpt strip_tac >>
+  `i < dimword (:256)` by decide_tac >>
+  first_x_assum (qspecl_then [`n2w i`, `c`] mp_tac) >>
+  simp[wordsTheory.w2n_n2w]
 QED
