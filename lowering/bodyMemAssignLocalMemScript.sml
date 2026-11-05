@@ -188,7 +188,7 @@ Proof
   disch_then drule >> strip_tac >> decide_tac
 QED
 
-Theorem local_memory_write_frame[local]:
+Theorem local_memory_write_frame:
   !ctx func cenv cx es s t sa id p sz w pre env entry rest v.
     stmt_state_rel ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
