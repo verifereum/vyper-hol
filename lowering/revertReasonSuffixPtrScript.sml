@@ -668,7 +668,15 @@ Theorem store_load_clean_checks:
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MSTORE [Var cell;value] [];
        mk_inst (id+1) MLOAD [Var cell] [dst]] s Gf tnf /\
-    op_taint tnf (Var dst) = {}
+    op_taint tnf (Var dst) = {} /\
+    (!t. run_inst_seq
+      [mk_inst id MSTORE [Var cell;value] [];
+       mk_inst (id+1) MLOAD [Var cell] [dst]] s = OK t ==>
+      lookup_var dst t = SOME w /\
+      (!x. x <> dst ==>
+        lookup_var x t = lookup_var x s /\
+        op_taint tnf (Var x) = op_taint tn (Var x) /\
+        (!C. ptr_covers G tn x s C ==> ptr_covers Gf tnf x t C)))
 Proof
   strip_tac >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j] _ _ _` >>
@@ -694,5 +702,54 @@ Proof
      PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
      simp[exec_read1_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def, Abbr `j`] >>
-  irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]
+  conj_tac >- (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]) >>
+  suspend "endpoint"
 QED
+
+Resume store_load_clean_checks[endpoint]:
+  gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i;j] s` >>
+  `lookup_var cell (mstore (w2n a) w s) = SOME a` by
+    simp[mstore_def, lookup_var_def] >>
+  `step_inst_base j (mstore (w2n a) w s) =
+     OK (update_var dst w (mstore (w2n a) w s))` by
+    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_read1_def, eval_operand_def, mload_mstore_same]) >>
+  `t = update_var dst w (mstore (w2n a) w s)` by
+    (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
+     simp[run_inst_seq_def] >> metis_tac[]) >>
+  gvs[] >> conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  gen_tac >> strip_tac >>
+  conj_tac >- simp[lookup_var_def, update_var_def, mstore_def, FLOOKUP_UPDATE] >>
+  conj_tac >- suspend "taint" >>
+  suspend "coverage"
+QED
+
+Resume store_load_clean_checks[taint]:
+  `t1.t_var = tn.t_var` by
+    (simp[Abbr `t1`, Abbr `i`] >>
+     irule (cj 2 mstore_ghost_frame) >> simp[eval_operand_def]) >>
+  simp[Abbr `j`, step_taint_def, mk_inst_def, set_var_taint_def,
+     op_taint_def, FLOOKUP_UPDATE]
+QED
+
+Resume store_load_clean_checks[coverage]:
+  rpt strip_tac >>
+  `ptr_covers g1 t1 x s1 C` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `i`, mk_inst_def, lookup_var_def, mstore_def]) >>
+  qmatch_goalsub_abbrev_tac `step_prov PG g1 j sf` >>
+  `ptr_covers (step_prov PG g1 j sf) (step_taint j s1 sf t1) x sf C` by
+    (simp[Abbr `sf`] >> irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `mload (w2n a) s1 = w` by
+    (qsuff_tac `mload (w2n a) s1 = mload (w2n a) (mstore (w2n a) w s)`
+     >- simp[mload_mstore_same] >> simp[Abbr `s1`, mload_def]) >>
+  qpat_x_assum `ptr_covers _ _ x sf C` mp_tac >>
+  simp[Abbr `sf`, Abbr `s1`, ptr_covers_def, eval_operand_def,
+     lookup_var_def, update_var_def]
+QED
+
+Finalise store_load_clean_checks
