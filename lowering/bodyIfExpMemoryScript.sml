@@ -1092,6 +1092,32 @@ Proof
        lift_option_type_def, lift_sum_def, read_result_def, raise_def] >> EVAL_TAC
 QED
 
+Theorem ifexp_current_error_append[local]:
+  !tv value path. !msg suffix.
+    evaluate_subscripts tv value path = INR (RuntimeError msg) ==>
+    evaluate_subscripts tv value (path ++ suffix) = INR (RuntimeError msg)
+Proof
+  recInduct evaluate_subscripts_ind >> rpt strip_tac >>
+  gvs[evaluate_subscripts_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ifexp_current_extension_domain[local]:
+  subscripts_type entry.type path = SOME ptv /\
+  (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg)) /\
+  read_memory_path entry path = INL v /\
+  evaluate_subscripts ptv v [sb] = INL w ==>
+  !msg. evaluate_subscripts entry.type entry.value (path ++ [sb]) <> INR (TypeError msg)
+Proof
+  rpt strip_tac >> Cases_on `evaluate_subscripts entry.type entry.value path`
+  >- (gvs[read_memory_path_def] >>
+      drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+      disch_then (qspec_then `[sb]` mp_tac) >> simp[]) >>
+  drule evaluate_subscripts_error_shape >> strip_tac
+  >- (gvs[] >> drule ifexp_current_error_append >>
+      disch_then (qspec_then `[sb]` assume_tac) >> gvs[]) >>
+  metis_tac[]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
