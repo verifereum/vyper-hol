@@ -345,3 +345,9 @@ Proof
   gvs[terminates_def] >>
   qexists_tac `m` >> metis_tac[]
 QED
+
+(* Kernel-level certification of the frozen contract. *)
+val _ = if null (hyp lower_dload_stage_sim) andalso
+               null (List.filter (fn s => s <> "DISK_THM")
+                       (#1 (Tag.dest_tag (Thm.tag lower_dload_stage_sim))))
+        then () else raise Fail "lower_dload_stage_sim proof audit failed";
