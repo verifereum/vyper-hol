@@ -248,3 +248,59 @@ Proof
   simp[rf_phase_certificate_def] >>
   qexistsl_tac [`pre`, `renamed`, `edged`, `f`, `g`, `enabled`] >> gvs[]
 QED
+
+Theorem rf_build_phi_inst_supply_wf:
+  inst_wf (build_phi_inst_supply id v ps)
+Proof
+  simp[build_phi_inst_supply_def, venomWfTheory.inst_wf_def] >>
+  Induct_on `ps` >> simp[venomWfTheory.phi_well_formed_def]
+QED
+
+Theorem rf_process_frontiers_supply_wf:
+  !fs s v pm li bbs rest hp bbs' rest' hp' s'.
+  process_frontiers_supply s v pm li bbs rest hp fs = (bbs',rest',hp',s') /\
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs'
+Proof
+  Induct >- simp[process_frontiers_supply_def] >>
+  pop_assum $ mk_asm "ih" >>
+  simp[process_frontiers_supply_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- (rpt strip_tac >> asm "ih" drule_all >> simp[]) >>
+  IF_CASES_TAC >> gvs[]
+  >- (rpt strip_tac >> asm "ih" drule_all >> simp[]) >>
+  rpt CASE_TAC >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `process_frontiers_supply _ _ _ _ next _ _ _` >>
+  `EVERY (\bb. EVERY inst_wf bb.bb_instructions) next` by
+    (simp[Abbr `next`, EVERY_MAP, makeSsaDefsTheory.insert_phi_at_block_def,
+      EVERY_MEM] >> rpt strip_tac >> Cases_on `bb.bb_label = h` >>
+     gvs[rf_build_phi_inst_supply_wf, EVERY_MEM] >> metis_tac[]) >>
+  asm "ih" drule_all >> simp[]
+QED
+
+Theorem rf_insert_phis_for_var_supply_wf:
+  !s v df pm li bbs work hp bbs' s'.
+  insert_phis_for_var_supply s v df pm li bbs work hp = (bbs',s') /\
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs'
+Proof
+  recInduct insert_phis_for_var_supply_ind >>
+  rw[insert_phis_for_var_supply_def] >> gvs[] >>
+  rpt CASE_TAC >> gvs[] >> pairarg_tac >> gvs[] >>
+  first_x_assum irule >> simp[] >>
+  irule rf_process_frontiers_supply_wf >> metis_tac[]
+QED
+
+Theorem rf_add_phi_nodes_supply_wf:
+  !defs s df pm li bbs bbs' s'.
+  add_phi_nodes_supply s df pm li bbs defs = (bbs',s') /\
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs'
+Proof
+  Induct >- simp[add_phi_nodes_supply_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[add_phi_nodes_supply_def] >> pairarg_tac >> gvs[] >> strip_tac >>
+  `EVERY (\bb. EVERY inst_wf bb.bb_instructions) bbs''` by
+    (irule rf_insert_phis_for_var_supply_wf >> metis_tac[]) >>
+  first_x_assum drule_all >> simp[]
+QED
