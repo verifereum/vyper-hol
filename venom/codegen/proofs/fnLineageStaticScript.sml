@@ -47,11 +47,11 @@ Theorem lineage_state_static:
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
             ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
                               (collect_phis bb.bb_instructions))) /\
-            normalize_operand dfg [] op = Var v ==>
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
             ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     (LENGTH (cfg_preds_of cfg lbl) <= 1 ==>
      !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-            normalize_operand dfg [] op = Var v ==>
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
             ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions)))
 Proof
   cheat
