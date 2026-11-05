@@ -3569,6 +3569,45 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
+(* Checked size-safety probe: a legal nested widening normalizes to a
+   buffer whose natural byte size wraps to zero in an ALLOCA literal.
+   This is not a counterexample to the full assignment theorem. *)
+Theorem place_store_nested_widening_size_probe:
+  !tenv.
+    evaluate_type tenv
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) =
+      SOME (ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) /\
+    evaluate_type tenv
+      (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) =
+      SOME (ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 1)) /\
+    type_widens_to tenv
+      (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1))
+      (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) /\
+    type_memory_size
+      (ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) =
+      dimword (:256) /\
+    type_slot_size
+      (ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) =
+      dimword (:256) DIV 32 /\
+    0 < dimword (:256) DIV 32 /\
+    dimword (:256) DIV 32 < dimword (:256) /\
+    (n2w (type_memory_size
+      (ArrayTV (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1))) : bytes32) = 0w /\
+    type_memory_size (ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 1)) = 64 /\
+    (~is_word_type
+       (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) /\
+     (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)) <>
+       (ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 1)) /\
+     ~is_bytestring_type
+       (ArrayT (BaseT (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)))
+Proof
+  gen_tac >>
+  simp[type_widens_to_def, arg_type_fits_def, well_formed_type_def,
+       evaluate_type_def, type_slot_size_def, valueEncodingTheory.type_memory_size_def,
+       is_word_type_def, is_bytestring_type_def,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> EVAL_TAC
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
