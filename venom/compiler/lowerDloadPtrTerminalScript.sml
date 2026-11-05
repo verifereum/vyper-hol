@@ -1010,3 +1010,102 @@ Proof
   `k = PRE (LENGTH mid)` by decide_tac >>
   gvs[LAST_EL]
 QED
+
+Theorem assign_control_fields:
+  i.inst_opcode = ASSIGN /\ step_inst fuel C i s = OK s' ==>
+  s'.vs_current_bb = s.vs_current_bb /\ s'.vs_prev_bb = s.vs_prev_bb /\
+  s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  strip_tac >> gvs[assign_step_success, update_var_def]
+QED
+
+Theorem dload_terminal_assign_next:
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  frame_reachable vs C cs PG G tn f (EL k mid) s /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb g.fn_blocks = SOME tb /\
+  s.vs_inst_idx = a+k /\ t.vs_inst_idx = b+k /\
+  TAKE (LENGTH mid) (DROP a bb.bb_instructions) = mid /\
+  TAKE (LENGTH mid) (DROP b tb.bb_instructions) = mid /\
+  a+LENGTH mid <= LENGTH bb.bb_instructions /\
+  b+LENGTH mid <= LENGTH tb.bb_instructions /\
+  mid <> [] /\ EVERY (\j. j.inst_opcode = ASSIGN) (FRONT mid) /\
+  (LAST mid).inst_opcode = REVERT /\ k+1 < LENGTH mid /\
+  s.vs_labels = t.vs_labels /\
+  (!v. v IN set (fn_ir_vars f) ==>
+    (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    G H tn un s t /\
+  dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
+  dload_table_stack fs (s::MAP (\c. c.cf_state) cs)
+                       (t::MAP (\c. c.cf_state) ds) /\
+  step_inst fuel Ct (EL k mid) t = OK t' ==>
+  ?s' ss tt.
+    step_inst fuel C (EL k mid) s = OK s' /\
+    ss = s' with vs_inst_idx := SUC s.vs_inst_idx /\
+    tt = t' with vs_inst_idx := SUC t.vs_inst_idx /\
+    frame_reachable vs C cs PG (step_prov PG G (EL k mid) s')
+      (step_taint (EL k mid) s s' tn) f (EL (k+1) mid) ss /\
+    active_inst f (EL (k+1) mid) ss /\ active_inst g (EL (k+1) mid) tt /\
+    FDOM (step_prov PG G (EL k mid) s') SUBSET fn_pv P f /\
+    lookup_block ss.vs_current_bb f.fn_blocks = SOME bb /\
+    lookup_block tt.vs_current_bb g.fn_blocks = SOME tb /\
+    ss.vs_inst_idx = a+(k+1) /\ tt.vs_inst_idx = b+(k+1) /\
+    ss.vs_labels = tt.vs_labels /\
+    (!v. v IN set (fn_ir_vars f) ==>
+      (lookup_var v ss = NONE <=> lookup_var v tt = NONE)) /\
+    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+      (step_prov PG G (EL k mid) s') (step_prov PH H (EL k mid) t')
+      (step_taint (EL k mid) s s' tn) (step_taint (EL k mid) t t' un) ss tt /\
+    dload_live_layout lo ss.vs_alloca_next tt.vs_alloca_next fs /\
+    dload_table_stack fs (ss::MAP (\c. c.cf_state) cs)
+                         (tt::MAP (\c. c.cf_state) ds)
+Proof
+  strip_tac >>
+  `k < LENGTH mid` by decide_tac >>
+  `(EL k mid).inst_opcode = ASSIGN` by
+    (drule_all dload_terminal_slice_opcode >> simp[]) >>
+  `active_inst f (EL k mid) s` by
+    (irule dload_slice_active >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `MEM (EL k mid) (fn_insts f)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  drule_all dload_terminal_assign_fields >>
+  disch_then (qspecl_then [`PH`,`PG`,`C`] strip_assume_tac) >>
+  `s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx` by
+    metis_tac[assign_control_fields] >>
+  `t'.vs_current_bb = t.vs_current_bb /\ t'.vs_inst_idx = t.vs_inst_idx` by
+    metis_tac[assign_control_fields] >>
+  qabbrev_tac `ss = s' with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `tt = t' with vs_inst_idx := SUC t.vs_inst_idx` >>
+  `active_inst f (EL (k+1) mid) ss` by
+    (irule dload_slice_active >> conj_tac >- simp[] >> qexistsl [`a`,`bb`] >>
+     simp[Abbr `ss`]) >>
+  `active_inst g (EL (k+1) mid) tt` by
+    (irule dload_slice_active >> conj_tac >- simp[] >> qexistsl [`b`,`tb`] >>
+     simp[Abbr `tt`]) >>
+  `frame_reachable vs C cs PG (step_prov PG G (EL k mid) s')
+    (step_taint (EL k mid) s s' tn) f (EL (k+1) mid) ss` by
+    (qunabbrev_tac `ss` >> irule frame_reachable_next >>
+     simp[is_terminator_def] >> metis_tac[]) >>
+  qexistsl [`s'`,`ss`,`tt`] >> simp[Abbr `ss`, Abbr `tt`] >>
+  conj_tac >- suspend "support" >>
+  conj_tac >- (gvs[lookup_var_def]) >>
+  conj_tac >- (gvs[dload_vars_match_def, lookup_var_def]) >>
+  suspend "tables"
+QED
+
+Resume dload_terminal_assign_next[support]:
+  drule frame_reachable_prov_supported >>
+  disch_then (qspec_then `P` mp_tac) >>
+  qpat_x_assum `EVERY (fn_ptr_ok P) _` mp_tac >>
+  simp[EVERY_MEM] >> metis_tac[]
+QED
+Resume dload_terminal_assign_next[tables]:
+  qpat_x_assum `dload_table_stack _ _ _` mp_tac >>
+  simp[dload_table_stack_def] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> simp[] >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!k. _ ==> _` (qspec_then `k'` mp_tac) >>
+  Cases_on `k'` >> simp[]
+QED
+Finalise dload_terminal_assign_next
