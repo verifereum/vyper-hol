@@ -7,7 +7,7 @@ Ancestors
   exprSimWordArgs bodyIntCallCodeCopy fragExec freshWrites
   bodyIntCallCopyContent bodyIntCallStorageLayout bodyIntCallArgLifetime
   loweringPosts valueEncodingProofs exprSafeOperand exprSimCopy
-  immutableCopyExecution exprSimStorageCopy
+  immutableCopyExecution exprSimStorageCopy exprSimUnwrap
 
 (* Preserve the full statement relation across allocation, including replay.
    This supplements the destination-window contract, rather than rebuilding
@@ -860,3 +860,222 @@ Resume force_runtime_code_unwrap_held[typed_endpoint]:
   conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise force_runtime_code_unwrap_held
+
+(* Identity unwraps leave all deferred values at the same target endpoint. *)
+Theorem force_identity_unwrap_held:
+  unwrap_value cenv vv sm = (op,sb) /\
+  ( (?t operand. vv = StackValue t operand) \/
+    (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory /\
+           ~is_word_type t)) ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sm es' raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sb es' raw held s /\
+        safe_operand sb (vv_operand held)) hs) R
+Proof
+  strip_tac >> gvs[exprLoweringTheory.unwrap_value_def, comp_return_def] >>
+  irule frag_exec_refl >> rpt strip_tac >> simp[] >>
+  metis_tac[expr_post_of_vv_post_stack, expr_post_of_vv_post_memory]
+QED
+
+(* Keep the actual load endpoint, including its static fields, for framing
+   deferred locations. The usual emit_op_frag only retains memory. *)
+Theorem force_emit_op_endpoint:
+  emitHelper$emit_op opc args sm = (op,sb) /\
+  local_ptrs_reserved cenv sm /\ opc <> INVOKE /\ ~is_terminator opc /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  (!out. step_inst_base (mk_inst sm.cs_next_id opc args [out]) s0 =
+         OK (update_var out w s0)) ==>
+  frag_exec ctx sm sb (\s. s = s0)
+    (\s. s = (update_var (STRING #"%" (toString sm.cs_next_var)) w s0
+                with vs_inst_idx := LENGTH sm.cs_current_insts + 1) /\
+      stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w) R
+Proof
+  strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
+  `not_local_ptr cenv es.scopes out` by
+    (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
+     qexists_tac `sm` >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sm sb)` by simp[mk_inst_def] >>
+  irule frag_exec_run_inst_seq >> fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> disj1_tac >> gvs[] >>
+  qexists_tac `update_var out w s0` >>
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, stmt_state_rel_inst_idx] >>
+  conj_tac >- (irule stmt_state_rel_update_var >> simp[]) >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem force_fresh_word_held_prefix:
+  EVERY (\(ty,raw,held,lo).
+    vv_holds cenv cx ty raw held es s0 /\
+    vv_at cenv cx ty lo sm es raw held s0 /\
+    safe_operand sm (vv_operand held)) hs /\
+  local_ptrs_reserved cenv sm /\ ~not_fresh_at sm out /\
+  sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id ==>
+  EVERY (\(ty,raw,held,lo).
+    vv_holds cenv cx ty raw held es
+      (update_var out w s0 with vs_inst_idx := pc) /\
+    vv_at cenv cx ty lo sb es raw held
+      (update_var out w s0 with vs_inst_idx := pc) /\
+    safe_operand sb (vv_operand held)) hs
+Proof
+  strip_tac >> irule force_copy_held_prefix >>
+  qexistsl_tac [`0`, `0`, `s0`, `sm`] >>
+  simp[update_var_def, lookup_var_def, contract_storage_def,
+       contract_transient_def, compileEnvTheory.regions_disjoint_def] >>
+  conj_tac
+  >- (rpt strip_tac >> irule local_region_pointer_frame >>
+      rpt strip_tac >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  rpt strip_tac >> simp[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+(* One semantic load certificate handles MLOAD, SLOAD/TLOAD and DLOAD;
+   the load's real endpoint supplies both typed post and held framing. *)
+Theorem force_word_load_held:
+  emitHelper$emit_op opc args sm = (op,sb) /\
+  local_ptrs_reserved cenv sm /\ opc <> INVOKE /\ ~is_terminator opc /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  (!s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+         (LocatedValue t p) s ==>
+    is_word_type (expr_type e) /\
+    (!out. step_inst_base (mk_inst sm.cs_next_id opc args [out]) s =
+           OK (update_var out (load s) s)) /\
+    (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+          load s = typed_val_to_w256 tv v)) ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+        (LocatedValue t p) s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sm es' raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sb es' raw held s /\
+        safe_operand sb (vv_operand held)) hs) R
+Proof
+  strip_tac >> irule frag_exec_pointwise >> qx_gen_tac `s1` >>
+  simp[] >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  drule_all force_emit_op_endpoint >>
+  disch_then (qspec_then `R` mp_tac) >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq) >>
+  disch_then irule >> simp[] >> strip_tac >>
+  `sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  conj_tac
+  >- (irule expr_post_of_vv_post_load >>
+      qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qexists_tac `load s1` >> simp[] >>
+      rpt strip_tac >> gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      fs[not_fresh_at_def] >> metis_tac[]) >>
+  gvs[] >> irule force_fresh_word_held_prefix >>
+  simp[not_fresh_at_def] >> qexists_tac `sm` >> simp[]
+QED
+
+Theorem force_runtime_word_unwrap_held:
+  unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
+  ~cenv.ce_is_ctor /\ is_word_type t /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+        (LocatedValue t p) s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sm es' raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sb es' raw held s /\
+        safe_operand sb (vv_operand held)) hs) R
+Proof
+  strip_tac >> Cases_on `p.ptr_location` >>
+  gvs[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ptr_load_def,
+      contextTheory.compile_imm_load_word_def]
+  >~ [`emitHelper$emit_op MLOAD _ _ = _`] >- suspend "memory"
+  >~ [`emitHelper$emit_op SLOAD _ _ = _`] >- suspend "storage"
+  >~ [`emitHelper$emit_op TLOAD _ _ = _`] >- suspend "storage"
+  >~ [`emitHelper$emit_op DLOAD _ _ = _`] >- suspend "code" >>
+  irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
+  simp[frag_exec_false_pre] >> metis_tac[vv_post_calldata]
+QED
+
+Resume force_runtime_word_unwrap_held[memory]:
+  irule force_word_load_held >>
+  qpat_assum `emitHelper$emit_op _ _ _ = _` (irule_at Any) >>
+  simp[is_terminator_def] >>
+  qexists_tac `\s. mload (w2n (THE (eval_operand p.ptr_operand s))) s` >>
+  simp[] >> qx_gen_tac `s` >> strip_tac >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s = SOME w /\
+       !tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+         mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tv v` by
+    (gvs[vv_post_def, vv_holds_def, vyperStateTheory.read_result_def,
+         vyperStateTheory.return_def] >> metis_tac[]) >>
+  gvs[] >> conj_tac
+  >- (rpt strip_tac >> irule emitHelperPropsTheory.step_MLOAD >> simp[]) >>
+  gvs[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload]
+QED
+
+Resume force_runtime_word_unwrap_held[storage]:
+  markerLib.RESUME_TAC >> (irule force_word_load_held >>
+  qpat_assum `emitHelper$emit_op _ _ _ = _` (irule_at Any) >>
+  simp[is_terminator_def] >>
+  qexists_tac `\s. if p.ptr_location = LocTransient then
+    tload (THE (eval_operand p.ptr_operand s)) s else
+    sload (THE (eval_operand p.ptr_operand s)) s` >>
+  simp[] >> qx_gen_tac `s` >> strip_tac >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s = SOME w /\
+       storage_holds cx (p.ptr_location = LocTransient)
+         (expr_type e) (Value v) w es' s` by gvs[vv_post_def, vv_holds_def] >>
+  gvs[] >> conj_tac
+  >- (rpt strip_tac >> gvs[step_inst_base_def, exec_read1_def]) >>
+  rpt strip_tac >> drule_all storage_holds_load >> simp[])
+QED
+
+Resume force_runtime_word_unwrap_held[code]:
+  irule force_word_load_held >>
+  qpat_assum `emitHelper$emit_op _ _ _ = _` (irule_at Any) >>
+  simp[is_terminator_def] >>
+  qexists_tac `\s. word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n (THE (eval_operand p.ptr_operand s)))
+      s.vs_data_section ++ REPLICATE 32 0w))` >>
+  simp[] >> qx_gen_tac `s` >> strip_tac >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s = SOME w /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       stmt_state_rel ctx func cenv cx es' s` by gvs[vv_post_def, vv_holds_def] >>
+  gvs[] >> conj_tac
+  >- (rpt strip_tac >> irule step_DLOAD >> simp[]) >>
+  drule_all immutable_holds_dload >> strip_tac >>
+  rpt strip_tac >> gvs[]
+QED
+Finalise force_runtime_word_unwrap_held
+
+val () = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print ("HELD_FORCE_AUDIT " ^ name ^ " OK\n")
+    else raise Fail (name ^ " has unproved dependencies")
+  end)
+  [("force_runtime_code_unwrap_held", force_runtime_code_unwrap_held),
+   ("force_identity_unwrap_held", force_identity_unwrap_held),
+   ("force_emit_op_endpoint", force_emit_op_endpoint),
+   ("force_fresh_word_held_prefix", force_fresh_word_held_prefix),
+   ("force_word_load_held", force_word_load_held),
+   ("force_runtime_word_unwrap_held", force_runtime_word_unwrap_held)];
