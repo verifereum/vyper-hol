@@ -5,7 +5,7 @@ Ancestors
   vyperAST vyperInterpreter vyperValue venomInst venomState finite_map
   loweringPosts vyperValueOperation emitHelper exprSimUnwrap emitHelperProps vyperState
   exprSimHyps vyperTypeEnv vyperTypeInvariants vyperTyping valueEncodingProofs
-  vyperTypeSystem exprLoweringProps
+  vyperTypeSystem exprLoweringProps venomExecSemantics
 
 Theorem compile_name_word_storage_frame_frag:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -221,6 +221,49 @@ Proof
   literal_vv_storage_frame_tac
 QED
 
+Theorem unwrap_storage_word_storage_frame_frag:
+  unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  is_word_type t /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+           (LocatedValue t p) s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  rpt strip_tac >>
+  gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >> (
+  irule frag_exec_pointwise >> rw[] >>
+  rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
+  `t = expr_type e /\
+   ?w. eval_operand p.ptr_operand s1 = SOME w /\
+       storage_holds cx (p.ptr_location = LocTransient) (expr_type e)
+         (Value v) w es' s1 /\
+       stmt_state_rel ctx func cenv cx es' s1` by
+    gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+         (if p.ptr_location = LocTransient then tload w s1 else sload w s1) =
+         typed_val_to_w256 tvt v` by
+    (rpt strip_tac >> drule_all storage_holds_load >> simp[]) >>
+  irule frag_exec_conseq >> irule_at Any emit_op_storage_frame_frag >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+  qexistsl_tac [`if p.ptr_location = LocTransient then tload w s1 else sload w s1`,
+               `s1`, `func`, `es'`, `cx`] >>
+  qexists_tac `R` >> simp[is_terminator_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[step_inst_base_def, exec_read1_def]) >>
+  rpt strip_tac
+  >~ [`expr_post`]
+  >- (irule expr_post_of_vv_post_load >> simp[] >> conj_tac
+      >- (rpt strip_tac >> gvs[]) >>
+      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[]) >>
+  gvs[])
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in
@@ -233,4 +276,5 @@ val () = List.app (fn th =>
         unwrap_memory_stack_storage_frame_frag,
         framed_vv_memory_stack_lower_value_frag,
         compile_name_vv_storage_frame_frag,
-        compile_literal_vv_storage_frame_frag];
+        compile_literal_vv_storage_frame_frag,
+        unwrap_storage_word_storage_frame_frag];
