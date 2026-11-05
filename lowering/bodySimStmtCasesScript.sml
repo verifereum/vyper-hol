@@ -58,6 +58,7 @@ Ancestors
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
+  bodyAssignPlace
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
@@ -70,6 +71,7 @@ Ancestors
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
+  bodyAugAssignOther
 Libs
   monadsyntax
 
@@ -1260,29 +1262,47 @@ Proof
   metis_tac[]
 QED
 
-(* RESIDUAL (#637 assignments): the other base targets.
-   - A local in memory that body_assign_local_memory leaves: a value
-     that widens to a type other than a bytestring (type_widens_to: a
-     DynArray of a smaller bound, elementwise) has no statement lemma.
-   - A storage or transient variable that is not a word, other than
-     body_assign_toplevel_copy's: a DynArray (compile_dynarray_to_storage),
-     a value of a narrower type (a widened bytestring), or a type of size
-     0: no statement lemma.
-   - An immutable (supported_target's supported_immutable_type): no
-     statement lemma.
-   - An attribute target other than a word field of a local struct or of
-     a storage or transient struct:
-     - a field of a local, storage or transient struct that is not a
-       word: no statement lemma (the copy of an aggregate into the field);
-     - a field of a field or of a subscript: no statement lemma (the
-       simulation of compile_get_target_ptr on eval_target_place).
-   - Subscript targets: no statement lemma (#851). *)
+(* RESIDUAL (#767): a place assigned a value whose lowered type is
+   neither e's type nor a bytestring type e's fits: an internal call whose
+   return type widens to the call's type (type_widens_to: a DynArray of a
+   smaller bound, a tuple elementwise), as body_assign_widened_aggregate_call
+   for a local, at any place. *)
+Theorem body_assign_place_widened_aggregate_call:
+  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+                (Assign (BaseTarget t) e) ==>
+              occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    ~(lowered_value_type cenv e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type cenv e) /\
+      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  cheat
+QED
+
+(* The other base targets, by bodyAssignPlace's general place root (the
+   target's pointer, then a store at its location), except for a value
+   whose lowered type differs from its own (above). *)
 Theorem body_assign_other:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
     body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+                (Assign (BaseTarget t) e) ==>
+              occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
@@ -1314,7 +1334,13 @@ Theorem body_assign_other:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `lowered_value_type cenv e = expr_type e \/
+            is_bytestring_type (expr_type e) /\
+            is_bytestring_type (lowered_value_type cenv e) /\
+            arg_type_fits (lowered_value_type cenv e) (expr_type e)`
+  >- (irule bodyAssignPlaceTheory.body_assign_place_case >> metis_tac[]) >>
+  irule body_assign_place_widened_aggregate_call >> metis_tac[]
 QED
 
 (* RESIDUAL (#767): a memory-backed local assigned an internal call whose
@@ -2289,6 +2315,8 @@ Theorem body_augassign_other:
        body_expr_ok cx e) /\ body_base_target_ok cx t /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty t bop e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
@@ -2304,7 +2332,7 @@ Theorem body_augassign_other:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt strip_tac >> irule body_augassign_other_leaf >> metis_tac[]
 QED
 
 Theorem body_augassign_case:
