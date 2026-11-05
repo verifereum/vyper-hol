@@ -9,6 +9,7 @@ Ancestors
   abiValidMembers abiDecodeRanges vyperABI contractABI rich_list fragExec
   exprSimAbiDecodeChildBounds abiDecoderReentry abiValidAggregateHeads
   abiCanonicalHeadSize abiValidMember abiDecoderAppend abiDecoderCounters
+  abiDecoderVarSequence abiDecoderVarExtend execEquivParamProps stateEquiv venomExecSemantics
   finite_map pred_set words list arithmetic
 
 Theorem abi_decode_member_setup_reach:
@@ -354,3 +355,121 @@ Proof
   simp_tac (srw_ss()) [abi_head_word_bytes, DROP_DROP_T, ADD_COMM]
 QED
 
+
+(* The rejecting instruction in a member prefix is ASSERT; successful
+   instructions already have a general variable-extension interface. *)
+Theorem abi_decode_assert_extend_abort[local]:
+  abi_decoder_vars_extend extras s t /\ inst.inst_opcode = ASSERT /\
+  step_inst_base inst s = Abort Revert_abort u ==>
+  ?v. step_inst_base inst t = Abort Revert_abort v
+Proof
+  strip_tac >>
+  `abi_decoder_inputs_defined inst s` by
+    (gvs[abi_decoder_inputs_defined_def, step_inst_base_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[eval_operand_def]) >>
+  drule abi_decoder_vars_extend_inputs >> disch_then drule >> strip_tac >>
+  mp_tac (Q.SPECL [`abi_decoder_vars_extend extras`,
+    `\s t. vsr_term_frame s = vsr_term_frame t`, `0`, `ARB`, `inst`, `s`, `t`]
+    step_inst_preserves_R) >>
+  (impl_tac >- simp[abi_decoder_vars_extend_valid]) >>
+  asm_simp_tac (srw_ss()) [step_inst_non_invoke] >>
+  Cases_on `step_inst_base inst t` >> simp[lift_result_def] >> metis_tac[]
+QED
+
+Theorem abi_decode_member_abort_opcode[local]:
+  MEM inst.inst_opcode [ADD; LT; ISZERO; MLOAD; ASSERT] /\
+  step_inst_base inst s = Abort a u ==> inst.inst_opcode = ASSERT /\ a = Revert_abort
+Proof
+  strip_tac >> fs[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [step_inst_base_def] >>
+  simp_tac (srw_ss()) [exec_pure1_def, exec_pure2_def, exec_read1_def,
+      AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem abi_decode_member_sequence_extend_abort[local]:
+  !insts extras s t u.
+  EVERY (\i. MEM i.inst_opcode [ADD; LT; ISZERO; MLOAD; ASSERT]) insts /\
+  abi_decoder_vars_extend extras s t /\
+  run_inst_seq insts s = Abort Revert_abort u ==>
+  ?v. run_inst_seq insts t = Abort Revert_abort v
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  qx_gen_tac `inst` >> rpt gen_tac >>
+  simp_tac bool_ss [EVERY_DEF, run_inst_seq_def] >> strip_tac >>
+  Cases_on `step_inst_base inst s` >> gvs[]
+  >>~- ([`step_inst_base inst s = OK v`],
+      `abi_decoder_reentry_opcode inst.inst_opcode` by
+        fs[abi_decoder_reentry_opcode_def] >>
+      drule_all abi_decoder_step_vars_extend >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      qexists_tac `v''` >> simp[run_inst_seq_def]) >>
+  `MEM inst.inst_opcode [ADD; LT; ISZERO; MLOAD; ASSERT]` by simp[] >>
+  drule_all abi_decode_member_abort_opcode >> strip_tac >>
+  drule_all abi_decode_assert_extend_abort >> strip_tac >>
+  qexists_tac `v` >> simp[run_inst_seq_def]
+QED
+
+Theorem abi_decode_member_setup_reentry_opcodes[local]:
+  abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,middle) ==>
+  EVERY (\i. MEM i.inst_opcode [ADD; LT; ISZERO; MLOAD; ASSERT])
+    (emitted_insts st middle)
+Proof
+  Cases_on `dyn` >> Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+    emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
+Theorem abi_decode_member_setup_revert_reentry:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,middle) /\
+  base_op <> Lit 0w /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand base_op s = SOME(n2w B) /\
+  eval_operand hi s = SOME(n2w H) /\ p+ao+32 <= H /\ B+H < dimword(:256) /\
+  delta = w2n(abi_decode_load MLOAD (n2w(B+p+ao):bytes32) s) /\
+  dimword(:256) <= p+delta /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
+  middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?t. run_inst_seq (emitted_insts st middle) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var s)` by
+    irule abi_decoder_prune_fresh >>
+  `eval_operand src (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w p) /\
+   eval_operand base_op (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w B) /\
+   eval_operand hi (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w H)` by
+    (fs[] >> asm_simp_tac bool_ss [abi_decoder_prune_eval]) >>
+  `delta = w2n(abi_decode_load MLOAD (n2w(B+p+ao):bytes32)
+    (abi_decoder_prune_vars st.cs_next_var s))` by
+    fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def] >>
+  drule_all abi_decode_member_setup_revert >> strip_tac >>
+  `abi_decoder_vars_extend s.vs_vars (abi_decoder_prune_vars st.cs_next_var s) s` by
+    irule abi_decoder_prune_extension >>
+  drule abi_decode_member_setup_reentry_opcodes >> strip_tac >>
+  drule_all abi_decode_member_sequence_extend_abort >> simp[]
+QED
+
+Theorem abi_decode_member_setup_wrap_abort_reentry:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,middle) /\
+  base_op <> Lit 0w /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand base_op s = SOME(n2w B) /\
+  eval_operand hi s = SOME(n2w H) /\ p+ao+32 <= H /\ B+H < dimword(:256) /\
+  delta = w2n(abi_decode_load MLOAD (n2w(B+p+ao):bytes32) s) /\
+  dimword(:256) <= p+delta /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
+  middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st middle fn /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?u. Dabort ctx fn s Revert_abort u
+Proof
+  strip_tac >> drule_all abi_decode_member_setup_revert_reentry >> strip_tac >>
+  drule abi_decode_member_setup_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st middle)` by fs[EVERY_MEM] >>
+  drule_all abi_decoder_run_sequence_abort >> strip_tac >>
+  qpat_x_assum `!ctx. _` (qspec_then `ctx` strip_assume_tac) >>
+  simp[Dabort_def] >> qexistsl_tac [`t with vs_inst_idx := n`, `0`] >> simp[]
+QED
