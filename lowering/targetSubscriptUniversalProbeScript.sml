@@ -824,3 +824,127 @@ Resume clear_base_head_frag[invoke]:
 QED
 
 Finalise clear_base_head_frag
+
+Theorem clear_base_type[local]:
+  !env es vt.
+    target_pre probe_deep_cenv probe_clear_source_context env probe_clear_source_bt es /\
+    type_place_target env probe_clear_source_bt = SOME vt ==>
+    vt = Type (ArrayT (BaseT (UintT 256)) (Dynamic 1))
+Proof
+  rpt strip_tac >>
+  `toplevel_vtypes_complete env.toplevel_vtypes probe_clear_source_context` by
+    gvs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def,
+      vyperTypeInvariantsTheory.env_consistent_def,
+      vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `FLOOKUP env.toplevel_vtypes (NONE,"outer") = SOME (Type probe_deep_type)` by
+    (gvs[vyperTypeInvariantsTheory.toplevel_vtypes_complete_def] >>
+     first_x_assum irule >>
+     qexistsl_tac [`SOME 0`, `Storage`, `probe_clear_source_code`, `Private`] >>
+     EVAL_TAC) >>
+  qpat_x_assum `type_place_target _ _ = _` mp_tac >>
+  simp[probe_clear_source_bt_def, vyperTypeEnvTheory.type_place_target_SubscriptTarget,
+    vyperTypeEnvTheory.type_place_target_TopLevelNameTarget, probe_deep_type_def,
+    probe_word_outer_type_def, vyperTypeSystemTheory.subscript_vtype_def,
+    vyperASTTheory.expr_type_def] >>
+  rpt strip_tac >> gvs[vyperTypeSystemTheory.subscript_vtype_def,
+    vyperTypeSystemTheory.is_int_type_def] >>
+  `env_context_consistent env probe_clear_source_context` by
+    gvs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def,
+      vyperTypeInvariantsTheory.env_consistent_def] >>
+  gvs[vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> _` drule >>
+  strip_tac >>
+  gvs[probe_deep_type_def, probe_word_outer_type_def,
+    vyperTypeSystemTheory.subscript_vtype_def]
+QED
+
+Theorem clear_base_nonzero_sim:
+  !k env es.
+    target_pre probe_deep_cenv probe_clear_source_context env probe_clear_source_bt es /\
+    lookup_storage 0w (get_storage probe_clear_source_context es F) <> 0w ==>
+    target_sim (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context env probe_clear_source_bt es
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[targetPlaceSimTheory.target_sim_def] >> rpt strip_tac >>
+  drule_all clear_base_code_inversion >> strip_tac >>
+  `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = TAKE 23
+     (HD probe_descendant_outer_caller.fn_blocks).bb_instructions` by
+    (qspec_then `sa` mp_tac clear_base_compile_symbolic >>
+     SIMP_TAC bool_ss [LET_THM] >>
+     disch_then (fn th => gvs[th]) >> EVAL_TAC >> simp[]) >>
+  irule fragExecTheory.frag_exec_pointwise >> rpt strip_tac >> gvs[] >>
+  drule_all clear_base_head_frag >>
+  disch_then (qspec_then `expr_exit res` mp_tac) >> strip_tac >>
+  dxrule fragExecTheory.frag_exec_then >> disch_then irule >>
+  reverse conj_tac
+  >- (simp[cs_extends_def] >> EVAL_TAC >> simp[]) >>
+  rpt strip_tac >>
+  gvs[] >>
+  irule fragExecTheory.frag_exec_run_inst_seq >>
+  simp[emitted_insts_def] >>
+  reverse conj_tac >- EVAL_TAC >>
+  `DROP (LENGTH (TAKE 14 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions))
+    (TAKE 23 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions) =
+    TAKE 9 (DROP 14 (HD probe_descendant_outer_caller.fn_blocks).bb_instructions)`
+    by EVAL_TAC >>
+  rpt strip_tac >> gvs[] >>
+  simp[clear_child_suffix] >>
+  Cases_on `lookup_storage 1w (get_storage probe_clear_source_context es F) = 0w`
+  >- (qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[clear_base_symbolic] >> strip_tac >> gvs[] >>
+      simp[exprSimTheory.expr_exit_def]) >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[clear_base_symbolic] >> strip_tac >> gvs[] >>
+  `r = (Var "%19", SOME LocStorage,
+    SOME (ValPT (ArrayT (BaseT (UintT 256)) (Dynamic 1)))) /\
+    sb.cs_next_id = 23 /\ sb.cs_next_var = 20` by
+    (qspec_then `sa` mp_tac clear_base_compile_symbolic >>
+     SIMP_TAC bool_ss [LET_THM] >>
+     disch_then (fn th => gvs[th]) >> EVAL_TAC >> simp[]) >>
+  gvs[] >> suspend "post"
+QED
+
+Resume clear_base_nonzero_sim[post]:
+  simp[targetPlaceSimTheory.target_post_def, stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- (ntac 8 (irule clear_stmt_update_var) >> simp[]) >>
+  drule_all clear_base_type >> strip_tac >> gvs[] >>
+  simp[targetPlaceSimTheory.place_ptr_rel_def,
+    targetPlaceSimTheory.place_readable_def, eval_operand_def,
+    emitHelperPropsTheory.lookup_var_update_var, not_fresh_at_def,
+    slot_loc_def, exprLoweringTheory.value_type_place_def, evaluate_type_def,
+    exprSimTheory.locals_kept_def, probe_deep_cenv_def] >>
+  simp[type_slot_size_def, dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  conj_tac
+  >- (`"19" = toString (19:num)` by EVAL_TAC >>
+      pop_assum (fn th => rewrite_tac[th]) >>
+      simp[ASCIInumbersTheory.toString_inj]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `~local_region probe_deep_cenv es.scopes s0 n b sz` by
+        simp[clear_no_local_region] >>
+      gvs[probe_deep_cenv_def]) >>
+  rpt strip_tac >>
+  `~MEM x (GENLIST (\n. STRING #"%" (toString n)) 20)` by
+    simp[listTheory.MEM_GENLIST] >>
+  pop_assum mp_tac >>
+  CONV_TAC (LAND_CONV EVAL) >> strip_tac >>
+  simp[emitHelperPropsTheory.lookup_var_update_var, lookup_var_def] >>
+  gvs[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Finalise clear_base_nonzero_sim
+
+Theorem clear_base_case:
+  !k. target_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+    probe_deep_cenv probe_clear_source_context probe_clear_source_bt
+Proof
+  rewrite_tac[targetPlaceSimTheory.target_case_def] >> rpt strip_tac >>
+  Cases_on `lookup_storage 0w (get_storage probe_clear_source_context es F) = 0w`
+  >- (irule clear_base_zero_sim >> simp[]) >>
+  irule clear_base_nonzero_sim >> simp[]
+QED
