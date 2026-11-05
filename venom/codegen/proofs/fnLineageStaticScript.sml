@@ -21,6 +21,7 @@ Ancestors
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
   relation list finite_map dominatorProofs cfgAnalysisProps
   removeUnusedSsaProofs cfgNormBase livenessProofs livenessTransferProofs
+  fnFrameStepsRevertForward dominatorAnalysisProps dfgAnalysisProps
 
 Theorem lineage_state_entry_cases[local]:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>
@@ -163,6 +164,28 @@ Proof
   metis_tac[ssa_unique_output_block]
 QED
 
+Theorem ready_dominates_trans[local]:
+  codegen_ready_fn fn /\ fn_dominates fn a b /\ fn_dominates fn b c ==>
+  fn_dominates fn a c
+Proof
+  strip_tac >> `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  gvs[fn_dominates_cfg_analyze] >> metis_tac[dominates_trans]
+QED
+
+Theorem ready_dominates_antisym[local]:
+  codegen_ready_fn fn /\ fn_dominates fn a b /\ fn_dominates fn b a ==>
+  a = b
+Proof
+  strip_tac >> `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  gvs[fn_dominates_cfg_analyze] >> metis_tac[dominates_antisym]
+QED
+
+Theorem normalize_marker_not_var[local]:
+  normalize_operand dfg visited dead_stack_marker <> Var v
+Proof
+  simp[dead_stack_marker_def, normalize_operand_def]
+QED
+
 Theorem collect_phis_idempotent[local]:
   !instrs. collect_phis (collect_phis instrs) = collect_phis instrs
 Proof
@@ -197,6 +220,101 @@ Proof
   rename1 `MEM (source, value) (phi_pairs inst.inst_operands)` >>
   `MEM (Var value) inst.inst_operands` by metis_tac[phi_pairs_mem_var] >>
   gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem phi_index_in_collect[local]:
+  !instrs j.
+    (!i k. i < k /\ k < LENGTH instrs /\
+           (EL k instrs).inst_opcode = PHI ==>
+           (EL i instrs).inst_opcode = PHI) /\
+    j < LENGTH instrs /\ (EL j instrs).inst_opcode = PHI ==>
+    MEM (EL j instrs) (collect_phis instrs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `j`
+  >- gvs[collect_phis_def] >>
+  rename1 `SUC idx < SUC (LENGTH instrs)` >>
+  `h.inst_opcode = PHI` by
+    (first_x_assum (qspecl_then [`0`, `SUC idx`] mp_tac) >> simp[]) >>
+  simp[collect_phis_def] >> disj2_tac >> first_x_assum irule >>
+  gvs[] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`SUC i`, `SUC k`] mp_tac) >> simp[]
+QED
+
+Theorem ready_phi_index_in_collect[local]:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  j < LENGTH bb.bb_instructions /\
+  (EL j bb.bb_instructions).inst_opcode = PHI ==>
+  MEM (EL j bb.bb_instructions) (collect_phis bb.bb_instructions)
+Proof
+  strip_tac >> irule phi_index_in_collect >> simp[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  gvs[codegen_ready_fn_def, wf_function_def, bb_well_formed_def] >>
+  metis_tac[]
+QED
+
+Theorem live_end_dominating_def[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
+  ?def_bb inst. MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
+    MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label lbl
+Proof
+  strip_tac >>
+  mp_tac (live_def_dominates |> Q.SPEC `fn` |> Q.SPEC `lbl` |>
+    Q.SPEC `bb` |> Q.SPEC `LENGTH bb.bb_instructions` |> Q.SPEC `v`) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >> decide_tac)) >>
+  metis_tac[]
+QED
+
+Theorem live_start_strict_dominating_def[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+  ~MEM (Var v) (FLAT (MAP (\phi. phi.inst_operands)
+    (collect_phis bb.bb_instructions))) ==>
+  ?def_bb inst. MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
+    MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label lbl /\
+    def_bb.bb_label <> lbl
+Proof
+  strip_tac >>
+  `!j. 0 <= j /\ j < LENGTH bb.bb_instructions /\
+       (EL j bb.bb_instructions).inst_opcode = PHI ==>
+       ~MEM (Var v) (EL j bb.bb_instructions).inst_operands` by
+    (rpt strip_tac >> drule_all ready_phi_index_in_collect >>
+     gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  mp_tac (live_def_dominates |> Q.SPEC `fn` |> Q.SPEC `lbl` |>
+    Q.SPEC `bb` |> Q.SPEC `0` |> Q.SPEC `v`) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ready_entry_live_empty[local]:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  live_vars_at (liveness_analyze fn) lbl 0 = []
+Proof
+  strip_tac >>
+  `collect_phis bb.bb_instructions = []` by metis_tac[ready_entry_no_phis] >>
+  `fn_reachable fn lbl` by
+    (simp[fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
+  Cases_on `live_vars_at (liveness_analyze fn) lbl 0` >> simp[] >>
+  rename1 `live_vars_at (liveness_analyze fn) lbl 0 = v::vs` >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by simp[] >>
+  `~MEM (Var v) (FLAT (MAP (\phi. phi.inst_operands)
+      (collect_phis bb.bb_instructions)))` by simp[] >>
+  drule_all live_start_strict_dominating_def >>
+  metis_tac[dominates_entry_label]
+QED
+
+Theorem initial_cleanup_wf_marked[local]:
+  generated_plan_state_wf_marked spill_base
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+Proof
+  simp[generated_plan_state_wf_marked_def,
+       planSpillBoundsTheory.plan_slots_bounded_def,
+       planSpillBoundsTheory.alloc_slots_bounded_def,
+       doSwapSimTheory.spill_alloc_layout_wf_def,
+       init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
 QED
 
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
