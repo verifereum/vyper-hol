@@ -4117,6 +4117,47 @@ Proof
   rewrite_tac[alias_diamond_loop_fields] >> EVAL_TAC
 QED
 
+(* C2.1 finite mechanism domain: retain a header-root alias on the
+   alternate (exit) edge; independently try copying a consumed PHI source. *)
+Definition alias_search_fn_def:
+  alias_search_fn retain absent two = alias_diamond_fn with fn_blocks :=
+    MAP (\bb.
+      if bb.bb_label = "header" /\ retain then
+        bb with bb_instructions :=
+          TAKE 2 bb.bb_instructions ++
+          [mk_inst 20 ASSIGN [Var "r"] ["keep1"]] ++
+          (if two then [mk_inst 21 ASSIGN [Var "keep1"] ["keep2"]] else []) ++
+          DROP 2 bb.bb_instructions
+      else if bb.bb_label = "exit" /\ retain then
+        bb with bb_instructions :=
+          mk_inst 22 ISZERO [Var (if two then "keep2" else "keep1")] ["sink"] ::
+          bb.bb_instructions
+      else if bb.bb_label = "join" /\ absent then
+        bb with bb_instructions :=
+          TAKE 2 bb.bb_instructions ++
+          [mk_inst 23 ASSIGN [Var "u"] ["miss1"]] ++
+          (if two then [mk_inst 24 ASSIGN [Var "miss1"] ["miss2"]] else []) ++
+          DROP 2 bb.bb_instructions
+      else bb) alias_diamond_fn.fn_blocks
+End
+
+Theorem alias_search_readiness:
+  codegen_ready_fn (alias_search_fn F F F) /\
+  codegen_ready_fn (alias_search_fn T F F) /\
+  codegen_ready_fn (alias_search_fn T F T)
+Proof
+  rpt conj_tac >> CONV_TAC (RAND_CONV EVAL) >> EVAL_TAC
+QED
+
+Theorem alias_search_rejected:
+  ~codegen_ready_fn (alias_search_fn F T F) /\
+  ~codegen_ready_fn (alias_search_fn F T T) /\
+  ~codegen_ready_fn (alias_search_fn T T F) /\
+  ~codegen_ready_fn (alias_search_fn T T T)
+Proof
+  rpt conj_tac >> CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >> EVAL_TAC
+QED
+
 Theorem eval_one_phi_without_predecessor:
   s.vs_prev_bb = NONE ==> eval_one_phi s inst = NONE
 Proof
