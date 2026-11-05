@@ -1351,7 +1351,8 @@ Theorem entry_ret_family_witness_lookup[local]:
 Proof
   strip_tac >> gen_tac >> strip_tac >>
   drule entry_ret_family_exec >>
-  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`fuel`, `ctx`]
+    (qx_choose_then `u` strip_assume_tac)) >>
   `exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t =
      IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u` by metis_tac[] >>
   drule_all entry_ret_family_tail_exec >> strip_tac >>
