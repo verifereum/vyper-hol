@@ -16,6 +16,21 @@ Proof
   simp[current_inst_no_id_def, instruction_component_equality, eval_one_phi_def]
 QED
 
+Theorem current_phi_slots_well_formed:
+  !slots. phi_well_formed (current_phi_slots slots)
+Proof
+  Induct >> simp[current_phi_slots_def, phi_well_formed_def] >>
+  gen_tac >> PairCases_on `h` >> fs[current_phi_slots_def, phi_well_formed_def]
+QED
+
+Theorem current_event_fold_phi_well_formed:
+  phi_well_formed ops ==>
+  phi_well_formed (FOLDL (\ops ev. current_event_operand_action sm h ev ops) ops events)
+Proof
+  strip_tac >> drule current_wf_phi_slots >> disch_then SUBST1_TAC >>
+  simp[current_event_fold_slots, current_phi_slots_well_formed]
+QED
+
 Theorem current_certificate_leading_slot:
   current_structural_certificate s fn fn' s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
@@ -34,7 +49,10 @@ Theorem current_certificate_leading_slot:
           (case ALOOKUP (current_pred_map fn) h of NONE => [] | SOME ps => ps))) events) \/
   (?i dst n. i < LENGTH phis /\ (EL i old.bb_instructions).inst_outputs = [dst] /\
     current_token_name H (CurrentOriginal h i 0) = SOME n /\
-    inst.inst_outputs = [n])
+    inst.inst_outputs = [n] /\ inst.inst_opcode = PHI /\
+    inst.inst_operands =
+      FOLDL (\ops ev. current_event_operand_action (current_succ_map fn) h ev ops)
+        (EL i old.bb_instructions).inst_operands events)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all current_certificate_block_replay >> strip_tac >>
@@ -92,8 +110,12 @@ Proof
      simp[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
   qpat_x_assum `!i v. i < LENGTH old.bb_instructions /\ _ ==> _`
     (qspecl_then [`i`, `dst`] mp_tac) >> simp[] >> strip_tac >>
+  `k < LENGTH (pre ++ old.bb_instructions) /\
+   (EL k (pre ++ old.bb_instructions)).inst_opcode = PHI` by
+    (simp[EL_APPEND_EQN] >> fs[EVERY_EL]) >>
+  drule_all current_phi_view_fold_instruction >> strip_tac >>
   qexistsl_tac [`i`, `dst`, `src`] >>
-  gvs[current_inst_no_id_def, instruction_component_equality])
+  gvs[current_inst_no_id_def, instruction_component_equality, EL_APPEND_EQN])
 QED
 
 Theorem current_phi_batch_ready:
@@ -191,3 +213,47 @@ Resume current_certificate_mixed_batch_ready[original]:
 QED
 
 Finalise current_certificate_mixed_batch_ready
+
+Theorem current_certificate_leading_phi_wf:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  lookup_block h fn.fn_blocks = SOME old /\ old.bb_instructions = phis ++ tail /\
+  EVERY (\j. j.inst_opcode = PHI) phis /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  lookup_block h fn'.fn_blocks = SOME out ==>
+  EVERY inst_wf (collect_phis out.bb_instructions)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rewrite_tac[EVERY_MEM] >> qx_gen_tac `inst` >> strip_tac >>
+  drule_all current_certificate_leading_slot >> strip_tac
+  >- (simp[inst_wf_def] >>
+      irule current_event_fold_phi_well_formed >> simp[current_phi_slots_well_formed]) >>
+  `i < LENGTH old.bb_instructions` by simp[] >>
+  `inst_wf (EL i old.bb_instructions)` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[lookup_block_MEM, EL_MEM]) >>
+  `(EL i old.bb_instructions).inst_opcode = PHI` by
+    (simp[EL_APPEND_EQN] >> fs[EVERY_EL]) >>
+  `phi_well_formed (EL i old.bb_instructions).inst_operands` by fs[inst_wf_def] >>
+  simp[inst_wf_def] >> irule current_event_fold_phi_well_formed >> metis_tac[]
+QED
+
+Theorem current_certificate_target_phi_prefix_wf:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  lookup_block h fn.fn_blocks = SOME old /\ old.bb_instructions = phis ++ tail /\
+  EVERY (\j. j.inst_opcode = PHI) phis /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  lookup_block h fn'.fn_blocks = SOME out /\
+  out.bb_instructions = target_phis ++ target_tail /\
+  EVERY (\j. j.inst_opcode = PHI) target_phis /\
+  (target_tail = [] \/ (HD target_tail).inst_opcode <> PHI) ==>
+  EVERY (\j. j.inst_opcode = PHI /\ inst_wf j) target_phis
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all current_certificate_leading_phi_wf >> strip_tac >>
+  `collect_phis out.bb_instructions = target_phis` by
+    (asm_rewrite_tac[] >> irule current_collect_phis_split >> metis_tac[]) >>
+  fs[EVERY_MEM]
+QED
