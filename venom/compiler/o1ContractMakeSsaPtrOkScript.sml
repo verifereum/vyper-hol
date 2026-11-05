@@ -8,6 +8,7 @@ Ancestors
   venomInst venomWf cfgWf o1PassContract makeSsaCurrentDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentOrigin makeSsaCurrentWfSsa
   makeSsaCurrentInputOk makeSsaCurrentNonDegenerate
+  removeUnusedProofs
 
 Definition mssa_inst_origin_def:
   mssa_inst_origin orig fn inst' <=>
@@ -110,6 +111,145 @@ Proof
   `LENGTH inst'.inst_outputs = 1` by metis_tac[listTheory.LENGTH_MAP] >>
   Cases_on `inst'.inst_outputs` >> gvs[] >>
   rename1 `LENGTH rest = 0` >> Cases_on `rest` >> gvs[]
+QED
+
+Theorem mssa_path_take:
+  !path n. is_fn_path fn path ==> is_fn_path fn (TAKE n path)
+Proof
+  Induct >> simp[] >> Cases_on `n` >> simp[] >>
+  Cases_on `path` >> simp[is_fn_path_def] >> rpt strip_tac >>
+  rename1 `is_fn_path fn (head::TAKE k (next::rest))` >>
+  Cases_on `k` >> simp[is_fn_path_def] >>
+  rename1 `is_fn_path fn (next::TAKE nn rest)` >>
+  first_x_assum (qspec_then `SUC nn` mp_tac) >>
+  simp[is_fn_path_def]
+QED
+
+Theorem mssa_path_prefix_at:
+  is_fn_path fn path /\ k < LENGTH path ==>
+  is_fn_path fn (TAKE (SUC k) path) /\
+  TAKE (SUC k) path <> [] /\
+  HD (TAKE (SUC k) path) = HD path /\
+  LAST (TAKE (SUC k) path) = EL k path /\
+  LENGTH (TAKE (SUC k) path) = SUC k
+Proof
+  strip_tac >> simp[mssa_path_take, listTheory.LENGTH_TAKE] >>
+  `TAKE (SUC k) path <> []` by
+    (Cases_on `path` >> gvs[]) >>
+  simp[listTheory.LAST_EL, listTheory.LENGTH_TAKE, listTheory.EL_TAKE] >>
+  Cases_on `path` >> gvs[]
+QED
+
+Theorem mssa_def_on_path:
+  def_on_all_paths fn bb point v /\
+  is_fn_path fn path /\ path <> [] /\
+  fn_entry_label fn = SOME (HD path) /\ LAST path = bb.bb_label ==>
+  (?pre db di. is_fn_path fn pre /\ pre <> [] /\
+     HD pre = HD path /\ LENGTH pre < LENGTH path /\
+     LAST pre = db.bb_label /\ MEM db fn.fn_blocks /\
+     di < LENGTH db.bb_instructions /\
+     MEM v (EL di db.bb_instructions).inst_outputs) \/
+  (?i. i < LENGTH bb.bb_instructions /\
+     MEM v (EL i bb.bb_instructions).inst_outputs /\
+     case point of NONE => T | SOME inst =>
+       ?j. i < j /\ j < LENGTH bb.bb_instructions /\
+           EL j bb.bb_instructions = inst)
+Proof
+  strip_tac >>
+  qpat_x_assum `def_on_all_paths _ _ _ _` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `path` mp_tac) >> simp[] >> strip_tac
+  >- (disj1_tac >> rename1 `kk < LENGTH path - 1` >>
+      rename1 `MEM defining_inst defining_bb.bb_instructions` >>
+      `kk < LENGTH path` by decide_tac >>
+      drule_all mssa_path_prefix_at >> strip_tac >>
+      qexistsl_tac [`TAKE (SUC kk) path`, `defining_bb`] >> gvs[] >>
+      qpat_x_assum `MEM defining_inst defining_bb.bb_instructions` mp_tac >>
+      simp[listTheory.MEM_EL] >> strip_tac >>
+      goal_assum (drule_at Any) >> gvs[] >> metis_tac[listTheory.MEM_EL]) >>
+  disj2_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem mssa_nonphi_earlier_def:
+  fn_defs_reach_uses fn /\
+  (EL j bb.bb_instructions).inst_opcode <> PHI /\
+  MEM (Var v) (EL j bb.bb_instructions).inst_operands /\
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions /\
+  MEM w (EL j bb.bb_instructions).inst_outputs /\
+  is_fn_path fn path /\ path <> [] /\
+  fn_entry_label fn = SOME (HD path) /\ LAST path = bb.bb_label ==>
+  (?pre db di. is_fn_path fn pre /\ pre <> [] /\
+     HD pre = HD path /\ LENGTH pre < LENGTH path /\
+     LAST pre = db.bb_label /\ MEM db fn.fn_blocks /\
+     di < LENGTH db.bb_instructions /\
+     MEM v (EL di db.bb_instructions).inst_outputs) \/
+  (?i. i < j /\ MEM v (EL i bb.bb_instructions).inst_outputs)
+Proof
+  strip_tac >>
+  `MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+    simp[listTheory.EL_MEM] >>
+  `def_on_all_paths fn bb (SOME (EL j bb.bb_instructions)) v` by
+    (gvs[fn_defs_reach_uses_def] >> metis_tac[]) >>
+  drule_all mssa_def_on_path >> simp[] >> strip_tac
+  >- (disj1_tac >> metis_tac[]) >>
+  disj2_tac >> rename1 `EL use_j bb.bb_instructions = EL j bb.bb_instructions` >>
+  `use_j = j` by
+    (irule ssa_form_no_dup_in_block >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     qexists_tac `fn` >> gvs[]) >>
+  gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem mssa_end_def:
+  def_on_all_paths fn bb NONE v /\ MEM bb fn.fn_blocks /\
+  is_fn_path fn path /\ path <> [] /\
+  fn_entry_label fn = SOME (HD path) /\ LAST path = bb.bb_label ==>
+  ?pre db di. is_fn_path fn pre /\ pre <> [] /\
+    HD pre = HD path /\ LENGTH pre <= LENGTH path /\
+    LAST pre = db.bb_label /\ MEM db fn.fn_blocks /\
+    di < LENGTH db.bb_instructions /\
+    MEM v (EL di db.bb_instructions).inst_outputs
+Proof
+  strip_tac >> drule_all mssa_def_on_path >> simp[] >> strip_tac
+  >- (goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  qexistsl_tac [`path`, `bb`] >> simp[] >> metis_tac[]
+QED
+
+Theorem mssa_path_last_edge:
+  !pre lbl. pre <> [] /\ is_fn_path fn (pre ++ [lbl]) ==>
+  is_fn_path fn pre /\ fn_cfg_edge fn (LAST pre) lbl
+Proof
+  Induct >> simp[] >> Cases_on `pre` >> simp[is_fn_path_def] >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem mssa_phi_earlier_def:
+  fn_defs_reach_uses fn /\ fn_phis_cover_preds fn /\
+  MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  inst.inst_opcode = PHI /\ q <> [] /\
+  is_fn_path fn (q ++ [bb.bb_label]) /\
+  fn_entry_label fn = SOME (HD q) ==>
+  ?u pre db di.
+    MEM (LAST q,u) (phi_pairs inst.inst_operands) /\
+    is_fn_path fn pre /\ pre <> [] /\ HD pre = HD q /\
+    LENGTH pre < LENGTH (q ++ [bb.bb_label]) /\
+    LAST pre = db.bb_label /\ MEM db fn.fn_blocks /\
+    di < LENGTH db.bb_instructions /\
+    MEM u (EL di db.bb_instructions).inst_outputs
+Proof
+  strip_tac >> drule_all mssa_path_last_edge >> strip_tac >>
+  `?u. MEM (LAST q,u) (phi_pairs inst.inst_operands)` by
+    (gvs[fn_phis_cover_preds_def] >> metis_tac[]) >>
+  `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = LAST q` by
+    (gvs[fn_cfg_edge_def] >> metis_tac[]) >>
+  `def_on_all_paths fn pb NONE u` by
+    (gvs[fn_defs_reach_uses_def] >> metis_tac[]) >>
+  `LAST q = pb.bb_label` by simp[] >>
+  drule_all mssa_end_def >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> decide_tac
 QED
 
 (* Why it holds.  make_ssa_current_fn_origin gives orig, from fn' vars to
