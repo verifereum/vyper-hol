@@ -54,3 +54,13 @@ Proof
       vyperContextTheory.type_env_all_modules_def,
       vyperContextTheory.type_env_for_module_def]
 QED
+
+Theorem order_run_env_not_source_frame:
+  FLOOKUP env.var_types "arr" = SOME ty ==>
+  ~expr_sim_inv order_run_env cx env es
+Proof
+  strip_tac >> strip_tac >>
+  fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  qpat_x_assum `!id ty. _ ==> ?p sz. _` (qspec_then `"arr"` mp_tac) >>
+  simp[order_run_env_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
