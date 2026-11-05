@@ -21,7 +21,9 @@
  *     on that theory's admissions
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
  *
- * Named admissions (cheats), all memory twins of pieces S1 rests on:
+ * Pieces, each admitted in its own leaf theory (loweringMem{BodyStmts,
+ * EntryRevert,EntryReach,FrameRet}), all memory twins of pieces S1
+ * rests on:
  *   body_stmts_sim_mem -- body_stmts_sim with memory (#641's body
  *     footprint)
  *   external_entry_value_revert_mem, external_entry_reaches_body_mem --
@@ -41,148 +43,10 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
+  loweringMemBodyStmts loweringMemEntryRevert loweringMemEntryReach
+  loweringMemFrameRet
 
 val _ = Parse.hide "body";
-
-(* ===== The body (#641) ===== *)
-
-(* ADMITTED (#641): body_stmts_sim with memory, in a frame whose
-   caller return buffer, if any, is d. *)
-Theorem body_stmts_sim_mem:
-  !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
-    body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
-    call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmts_env cenv lctx ret_ty ss)
-      (eval_stmts cx ss) es
-Proof
-  cheat
-QED
-
-(* ===== The entry (#639, #867) ===== *)
-
-(* ADMITTED (#639): external_entry_value_revert's run is memory-safe. *)
-Theorem external_entry_value_revert_mem:
-  !tops rpolicy unit am tx ret vs mut args fbody env e st efn elbl.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INR e, st) /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
-    fn_entry_label efn = SOME elbl ==>
-    !fuel. mem_safe_blocks fuel unit.cu_context efn
-             (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                         vs_inst_idx := 0 |>)
-Proof
-  cheat
-QED
-
-(* ADMITTED (#639): external_entry_reaches_body, with the body's frame
-   free of a caller return buffer, and with a memory-safe run from the
-   body's start making the run from __entry memory-safe: the selector
-   dispatch and the entry checks touch no memory, and the argument decode
-   writes only the parameters' buffers (entryHaltMem's
-   entry_decode_arg_mem_ok). *)
-Theorem external_entry_reaches_body_mem:
-  !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
-    fn_entry_label efn = SOME elbl ==>
-    ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
-     s0.
-      set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
-           (mut, F, lookup_raw_return_or_F (NONE : num option)
-                       tx.function_name External tops,
-            tx.function_name, args, [], ret, fbody)) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
-         rt) /\
-      compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
-      compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
-      fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      stmt_state_rel unit.cu_context func cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      alloca_history func s0 /\
-      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      cenv.ce_return_buf = NONE /\
-      ((!fuel. mem_safe_run fuel unit.cu_context func s0) ==>
-       !fuel. mem_safe_blocks fuel unit.cu_context efn
-                (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                            vs_inst_idx := 0 |>))
-Proof
-  cheat
-QED
-
-(* ===== The frame's returns (#640) ===== *)
-
-(* ADMITTED (#640): external_frame_ret_ok with memory, for any outcome of
-   the return: every return sequence halts memory-safely, by entryHaltMem's
-   return leaves after the returned expression's memory simulation. *)
-Theorem external_frame_ret_ok_mem:
-  !tops rpolicy unit am tx ret vs mut args fbody env lbl cenv0 pos_args
-   min_cds is_payable nkey ut' iv rt st cenv sa func.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
-         (mut, F, lookup_raw_return_or_F (NONE : num option)
-                     tx.function_name External tops,
-          tx.function_name, args, [], ret, fbody)) =
-      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
-       rt) /\
-    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
-    frame_ret_ok_mem NONE unit.cu_context func
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (\v es r. T) cenv ret
-Proof
-  cheat
-QED
 
 (* ===== The end of the body ===== *)
 
