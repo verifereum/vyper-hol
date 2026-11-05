@@ -1325,6 +1325,81 @@ Proof
   strip_tac >> drule vyperScopePreservationTheory.finally_set_scopes >> simp[]
 QED
 
+Theorem ifexp_entry_pop_domain[local]:
+  entry_pop_step entry mutation entry' /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
+  entry'.type = entry.type /\
+  (!msg. evaluate_subscripts entry'.type entry'.value retained <> INR (TypeError msg))
+Proof
+  simp[vyperPlaceResultTypingTheory.entry_pop_step_def] >> rpt strip_tac >> gvs[] >>
+  gvs[read_memory_path_def, AllCaseEqs()] >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def,
+    vyperValueOperationTheory.pop_element_def, AllCaseEqs()] >>
+  Cases_on `a` >> gvs[vyperValueOperationTheory.pop_element_def, AllCaseEqs()] >>
+  drule_all ifexp_pop_replace_domain >> simp[]
+QED
+
+Theorem ifexp_scope_pop_trace_domain[local]:
+  !events sc final keep entry retained.
+    scope_pop_trace sc events final /\ lookup_scopes keep sc = SOME entry /\
+    (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
+    ?entry'. lookup_scopes keep final = SOME entry' /\ entry'.type = entry.type /\
+      (!msg. evaluate_subscripts entry'.type entry'.value retained <> INR (TypeError msg))
+Proof
+  Induct >- simp[vyperPlaceResultTypingTheory.scope_pop_trace_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[vyperPlaceResultTypingTheory.scope_pop_trace_def] >> strip_tac >>
+  Cases_on `h0 = keep`
+  >- (gvs[] >> drule vyperPlaceResultTypingTheory.scope_pop_step_lookup >>
+      strip_tac >> gvs[] >> drule_all ifexp_entry_pop_domain >> strip_tac >>
+      first_x_assum drule_all >> metis_tac[]) >>
+  drule_all vyperPlaceResultTypingTheory.scope_pop_step_lookup_other >> strip_tac >>
+  gvs[] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem ifexp_scope_pop_effect_domain[local]:
+  scope_pop_effect f /\ f es = (res,ee) /\
+  lookup_scopes keep es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
+  ?entry'. lookup_scopes keep ee.scopes = SOME entry' /\ entry'.type = entry.type /\
+    (!msg. evaluate_subscripts entry'.type entry'.value retained <> INR (TypeError msg))
+Proof
+  simp[vyperPlaceResultTypingTheory.scope_pop_effect_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> drule_all ifexp_scope_pop_trace_domain >> simp[]
+QED
+
+Theorem ifexp_eval_expr_retained_domain[local]:
+  eval_expr cx e es = (res,ee) /\ lookup_scopes keep es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
+  ?entry'. lookup_scopes keep ee.scopes = SOME entry' /\ entry'.type = entry.type /\
+    (!msg. evaluate_subscripts entry'.type entry'.value retained <> INR (TypeError msg))
+Proof
+  strip_tac >>
+  `scope_pop_effect (eval_expr cx e)` by
+    metis_tac[vyperPlaceResultTypingTheory.eval_mutual_scope_pop_effect] >>
+  drule_all ifexp_scope_pop_effect_domain >> simp[]
+QED
+
+Theorem ifexp_expr_results_pop_effect[local]:
+  !args cx. scope_pop_effect (eval_expr_results cx args)
+Proof
+  Induct >> simp[Once evaluate_def] >> rpt gen_tac >>
+  irule vyperPlaceResultTypingTheory.scope_pop_effect_bind >> conj_tac
+  >- (gen_tac >> simp[] >> irule vyperPlaceResultTypingTheory.scope_pop_effect_bind >> simp[]) >>
+  metis_tac[vyperPlaceResultTypingTheory.eval_mutual_scope_pop_effect]
+QED
+
+Theorem ifexp_eval_expr_results_retained_domain[local]:
+  eval_expr_results cx args es = (res,ee) /\ lookup_scopes keep es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
+  ?entry'. lookup_scopes keep ee.scopes = SOME entry' /\ entry'.type = entry.type /\
+    (!msg. evaluate_subscripts entry'.type entry'.value retained <> INR (TypeError msg))
+Proof
+  strip_tac >>
+  qspecl_then [`args`, `cx`] assume_tac ifexp_expr_results_pop_effect >>
+  drule_all ifexp_scope_pop_effect_domain >> simp[]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
