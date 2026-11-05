@@ -17,6 +17,25 @@ Ancestors
   exprLowering exprLoweringProps compileEnv valueEncoding
   vyperInterpreter vyperState
 
+(* Post transport keeps the counted execution and exemption witnesses intact. *)
+Theorem struct_gas_outcome_post[local]:
+  gas_outcome memory tops (ctx,func) source (es,s0) Q R /\
+  (!res es' r. Q res es' r ==> Q' res es' r) ==>
+  gas_outcome memory tops (ctx,func) source (es,s0) Q' R
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
+QED
+
+Theorem struct_tuple_memory_post[local]:
+  !names tvs vs ptr mem.
+  LENGTH names = LENGTH tvs /\ tuple_in_memory vs tvs ptr mem ==>
+  fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) ptr mem
+Proof
+  Induct_on `names` >> Cases_on `tvs` >> Cases_on `vs` >>
+  simp[listTheory.ZIP_def, valueEncodingTheory.val_in_memory_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
 Theorem aggregate_struct_fields_counted:
   !fields ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx nocalls.
   EVERY (\(name,e).
