@@ -32,12 +32,13 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_dynarray_pop:
-  gas_shadow_compiles (compile_dynarray_pop base_op stride elem_size load_opc store_opc)
-    (compile_dynarray_pop base_op stride elem_size load_opc store_opc)
+  gas_shadow_compiles (compile_dynarray_pop base_op stride elem_size is_ctor imm loc)
+    (compile_dynarray_pop base_op stride elem_size is_ctor imm loc)
 Proof
   simp[compile_dynarray_pop_def, LET_THM, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_emit_void] >> gen_tac >> BETA_TAC) >> simp[]
+       >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_ptr_load,
+               gas_shadow_compiles_ptr_store] >> gen_tac >> BETA_TAC) >> simp[]
 QED
 
 Theorem gas_shadow_compiles_dynarray_append:
