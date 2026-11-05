@@ -1,4 +1,4 @@
-# TASK: pointer-safe raise with a reason
+# TASK: pointer-safe assert with a reason
 
 ## Meta
 Status: planned
@@ -8,19 +8,22 @@ Location: lowering/bodyPtrExitCasesScript.sml
 
 ## Theorem Statement (FROZEN)
 
-`body_raise_reason_case_ptr` in `lowering/bodyPtrExitCasesScript.sml`:
+`body_assert_reason_case_ptr` in `lowering/bodyPtrExitCasesScript.sml`:
 
 ```sml
-Theorem body_raise_reason_case_ptr:
-  !cx e. body_expr_ptr_ok cx e ==> body_stmt_ptr_ok cx (Raise (RaiseReason e))
+Theorem body_assert_reason_case_ptr:
+  !cx e se.
+    (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_ptr_ok cx se) /\
+    body_expr_ptr_ok cx e ==>
+    body_stmt_ptr_ok cx (Assert e (AssertReason se))
 ```
 
 **Do not modify this statement.** Prove it as-is, or produce a counterexample.
 
 ## Completion Criteria
 
-1. `holbuild -j4 build bodyPtrExitCasesTheory` passes, with `body_raise_reason_case_ptr` proved with no `cheat` in its proof or in any theory you add. CHEAT warnings inherited from the locally admitted ancestors are expected (see Domain Constraints). `body_assert_reason_case_ptr` in the same file is not yours: leave it as it is.
-2. No duplicate lemmas. Search before adding one; each helper exists once, in its most general form, in a new leaf theory under `lowering/`. Name the helpers so the assert-with-reason case (whose failing branch runs the same revert encoder) can reuse them.
+1. `holbuild -j4 build bodyPtrExitCasesTheory` passes, with `body_assert_reason_case_ptr` proved with no `cheat` in its proof or in any theory you add. CHEAT warnings inherited from the locally admitted ancestors are expected (see Domain Constraints). `body_raise_reason_case_ptr` in the same file is not yours (a separate run proves it): leave it as it is.
+2. No duplicate lemmas. Search before adding one; each helper exists once, in its most general form, in a new leaf theory under `lowering/`. The raise-with-reason case, proved by a separate run, uses the same revert encoder; its helpers will be merged with yours afterwards, so name yours for what they state.
 
 **If the theorem is false as stated:** give a concrete counterexample, state the tightest sufficient fix, and stop. Do not weaken the statement.
 
@@ -34,11 +37,12 @@ holbuild -j4 build bodyPtrExitCasesTheory
 
 The S3 pointer-safety proof of the Vyper-to-Venom lowering is a pointer twin of the S1 body simulation. `bodySimPtrMain`'s `body_sim_ptr_mutual` runs the body induction over the predicates of `bodyPtrPreds`, one case lemma per statement form. Each case is the twin of S1's case of the same name, with `stmt_frag_ptr` in place of S1's `stmt_frag`. `stmt_frag_ptr` is a counted path `gas_path_ptr` on which every edge passes `ptr_safe_step`, with the ghost provenance `G` and taint `tn` threaded along. So the simulation half replays S1's proof; the new work is the ghost and the per-instruction check `ptr_inst_ok`.
 
-S1's proof is `body_raise_reason_case` in `alan-ref/s1/bodySimStmtCasesScript.sml.txt`. It splits the reason four ways:
-- a string literal: `compile_raise_reason_lit_frag`, stmtSimReason
-- a word or memory value: `compile_raise_reason_frag`, stmtSimReasonExpr
-- a storage or transient pointer: `compile_raise_storage_reason_frag`, stmtSimReasonStorage(Path)
-- a pointer into code (an immutable): `body_raise_reason_other` / `compile_raise_code_reason_shared_frag`, stmtSimReasonCode
+S1's proof is `body_assert_reason_case` in `alan-ref/s1/bodySimStmtCasesScript.sml.txt`. The condition is a JNZ as in the bare assert; the failing branch runs the same revert-with-reason encoder as `raise` with a reason. S1 splits the reason four ways:
+- a string literal: `compile_assert_reason_lit_frag`, stmtSimReason
+- a word or memory value: `compile_assert_reason_frag`, stmtSimReasonExpr
+- a storage or transient pointer: `compile_assert_storage_reason_frag`, stmtSimReasonStorage(Path)
+- a pointer into code (an immutable): `body_assert_reason_other`, stmtSimReasonCode
+(`assert_reason_vv_sim` in bodySimStmtCases gives the reason's simulation after the condition fails.)
 
 Their pointer twins don't exist yet. Building them, as reusable lemmas in leaf theories, is part of this task. The bare and unreachable raise and assert are already done in this piece: `lowering/stmtAbortPtrScript.sml` (REVERT 0 0 / INVALID pass `ptr_inst_ok`; the abort edge) and `lowering/stmtAssertPtrScript.sml` (the JNZ edge, the assert fragment).
 
@@ -66,10 +70,11 @@ All paths are relative to this directory (the vyper-hol project root).
 | Straight-line runs | `lowering/fragGasSeqPtrScript.sml` | `run_inst_seq_gas_path_ptr`, `inst_seq_ptr`, `gas_path_ptr_step`, aborts |
 | Ghost and check | `venom/compiler/ptrSafeRunScript.sml`, `venom/compiler/ptrDisciplineScript.sml` | `ptr_safe_step`, `ptr_inst_ok`, `access_ok`, `taint_ok`, `out_prov`, `out_taint`, `about_to_revert` |
 | Pointer toolkit | `lowering/fragExecPtrScript.sml`, `lowering/typedCopy*PtrScript.sml` (esp. `typedCopyBytesRobustPtr`), `lowering/wordCopyRobustPtrScript.sml`, `lowering/batchCopyRobustPtrScript.sml`, `lowering/robustCopyTransportPtrScript.sml`, `lowering/representationCleanPtrScript.sml`, `lowering/typedCopyLoop*PtrScript.sml`, `lowering/allocationPtrScript.sml` | Per-instruction pointer facts (copies, stores, word-copy loops, ALLOCA buffers, ghost transport), stated over the fixed-run `frag_exec_ptr` |
-| Revert encoder | `lowering/defs/stmtLoweringScript.sml` (~lines 140-190) | The raise-with-reason lowering: ALLOCA buffers, `unwrap_value`, MLOAD length, MCOPY, MSTORE, REVERT |
+| Revert encoder | `lowering/defs/stmtLoweringScript.sml` (~lines 140-190) | The assert/raise-with-reason lowering: ALLOCA buffers, `unwrap_value`, MLOAD length, MCOPY, MSTORE, REVERT |
 | Unwrap / buffers | `lowering/defs/exprLoweringScript.sml` (`unwrap_value`), `lowering/defs/contextScript.sml` (`compile_alloc_buffer`, `compile_word_copy_loop`) | How a located reason becomes a memory buffer |
 | S1 proofs (unadmitted copies) | `alan-ref/s1/*.sml.txt` | S1's proofs of the case and the four reason fragments (stmtSimReason, stmtSimReasonExpr, stmtSimReasonStorage(Path), stmtSimReasonCode, stmtSimRaise, bodySimStmtCases). Read these, not the copies under `lowering/`, which are admitted locally |
 | Memory twin | `lowering/stmtRaiseMemoryScript.sml` | The bare raise ported to another checked path (no reason twin exists) |
+| Assert in S1 | `alan-ref/s1/stmtSimAssertScript.sml.txt`, `alan-ref/s1/stmtSimAssertPropsScript.sml.txt` | S1's assert fragments, `assert_success_post`, `eval_assert_bind` |
 | Value sizes | `lowering/exprSimPropsScript.sml` | `val_store_size`, `val_store_size_le`; `val_footprint_le_store_size` in bodyPtrDefs |
 
 ## Notes
