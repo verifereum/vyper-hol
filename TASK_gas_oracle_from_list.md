@@ -12,6 +12,7 @@ In `venom/compiler/dftGasOracleFromListScript.sml`:
 
 ```sml
 Theorem gas_oracle_from_list:
+  EVERY wf_function ctx.ctx_functions /\
   EVERY (\fn. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
                 fn.fn_blocks) ctx.ctx_functions ==>
   ?orc. FINITE {e | orc e <> 0w} /\
