@@ -455,6 +455,37 @@ Proof
   simp[vfmContextTheory.context_component_equality]
 QED
 
+Theorem asm_handle_exception_memory_exception:
+  s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+  child.msgParams.outputTo = Memory r /\
+  child.gasUsed <= child.msgParams.gasLimit /\
+  LENGTH parent.stack < stack_limit /\ exc <> Reverted ==>
+  handle_exception (SOME exc) s = (INL (), s with <|
+    contexts := (parent with <| pc := SUC parent.pc;
+      stack := 0w :: parent.stack; returnData := [];
+      memory := buffer_write r.offset [] parent.memory |>,parent_rb)::rest;
+    rollback := child_rb |>)
+Proof
+  strip_tac >>
+  simp[handle_exception_def, get_gas_left_def, get_current_context_def,
+       consume_gas_def, set_current_context_def, set_return_data_def,
+       get_num_contexts_def, get_return_data_def, get_output_to_def,
+       bind_def, ignore_bind_def, return_def, assert_def] >>
+  qmatch_goalsub_abbrev_tac `pop_and_incorporate_context F t` >>
+  `t.contexts = (child with <|returnData := [];
+       gasUsed := child.msgParams.gasLimit|>,child_rb)::(parent,parent_rb)::rest`
+    by simp[Abbr `t`] >>
+  qpat_x_assum `s.contexts = _` kall_tac >>
+  drule asm_pop_and_incorporate_context_state >>
+  simp[] >> disch_then (qspec_then `F` assume_tac) >>
+  fs[vfmConstantsTheory.stack_limit_def] >>
+  simp[inc_pc_def, set_return_data_def, push_stack_def, write_memory_def,
+       get_current_context_def, set_current_context_def, bind_def,
+       ignore_bind_def, return_def, assert_def, Abbr `t`] >>
+  AP_THM_TAC >> AP_TERM_TAC >> AP_TERM_TAC >>
+  simp[vfmContextTheory.context_component_equality]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
