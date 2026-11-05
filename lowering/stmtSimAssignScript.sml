@@ -199,5 +199,5 @@ Theorem compile_assign_local_stmt_frag:
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt strip_tac >> irule assign_local_stmt_frag_given_unforce >>
-  metis_tac[gas_exempt_cert_unforce_result]
+  metis_tac[gasExemptCertTheory.gas_exempt_cert_unforce_result]
 QED
