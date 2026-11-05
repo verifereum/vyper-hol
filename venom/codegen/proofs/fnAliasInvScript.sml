@@ -483,6 +483,49 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+Theorem stack_pop_retains_noninputs:
+  n <= LENGTH stk /\
+  (!i. i < n ==> MEM (stack_peek i stk) pending) /\
+  ~MEM at pending /\ MEM at stk ==>
+  MEM at (stack_pop n stk)
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM at stk` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `j < LENGTH stk` >>
+  Cases_on `j < LENGTH stk - n`
+  >- (simp[stack_pop_def, MEM_EL] >> qexists_tac `j` >>
+      simp[LENGTH_TAKE_EQ, EL_TAKE]) >>
+  `LENGTH stk - 1 - j < n` by decide_tac >>
+  `stack_peek (LENGTH stk - 1 - j) stk = at` by
+    (simp[stack_peek_def] >>
+     `LENGTH stk - (LENGTH stk - 1 - j + 1) = j` by decide_tac >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem reorder_consume_retains_noninputs:
+  LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  (!x. MEM x pending ==>
+    LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+  reorder_plan dfg pending ps = (ops,ps') /\
+  plan_holds ps at /\ ~MEM at pending ==>
+  plan_holds (ps' with ps_stack := stack_pop (LENGTH pending) ps'.ps_stack) at
+Proof
+  strip_tac >>
+  drule_all reorder_plan_holds >> strip_tac >>
+  drule_all reorder_plan_materialised_length_floor >> strip_tac >>
+  drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_materialised_order >>
+  simp[] >> disch_tac >>
+  `!d. d < LENGTH pending ==> MEM (stack_peek d ps'.ps_stack) pending` by
+    (rpt strip_tac >>
+     first_x_assum (qspec_then `LENGTH pending - 1 - d` mp_tac) >>
+     `LENGTH pending - 1 - d < LENGTH pending` by decide_tac >>
+     `LENGTH pending - 1 - (LENGTH pending - 1 - d) = d` by decide_tac >>
+     simp[] >> strip_tac >> simp[MEM_EL] >>
+     qexists_tac `LENGTH pending - (d + 1)` >> simp[]) >>
+  gvs[plan_holds_def] >> disj1_tac >> irule stack_pop_retains_noninputs >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `pending` >> simp[]
+QED
+
 Definition alias_var_mass_def:
   alias_var_mass x ps =
     LIST_ELEM_COUNT (Var x) ps.ps_stack +
