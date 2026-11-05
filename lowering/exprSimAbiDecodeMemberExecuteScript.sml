@@ -8,6 +8,7 @@ Ancestors
   abiDecoderSiteEffect abiDecoderBytestringOutcome actualDecoderSites
   abiValidMembers abiDecodeRanges vyperABI contractABI rich_list fragExec
   exprSimAbiDecodeChildBounds abiDecoderReentry abiValidAggregateHeads
+  abiCanonicalHeadSize abiValidMember abiDecoderAppend abiDecoderCounters
   finite_map pred_set words list arithmetic
 
 Theorem abi_decode_member_setup_reach:
@@ -335,3 +336,21 @@ Proof
   gen_tac >> strip_tac >> drule_all abi_decode_scalar_member_head >>
   strip_tac >> fs[]
 QED
+
+Theorem abi_decode_member_offset_load:
+  bs = mem_bytes_at B (LENGTH bs) s.vs_memory /\
+  p+ao+32 <= LENGTH bs /\ B+LENGTH bs < dimword(:256) ==>
+  abi_decode_load MLOAD (n2w(B+p+ao):bytes32) s =
+    n2w(abi_head_word (DROP ao (DROP p bs)))
+Proof
+  strip_tac >>
+  `B+(p+ao) < dimword(:256)` by decide_tac >>
+  `mem_bytes_at B (LENGTH bs) (abi_decode_source MLOAD s) = bs` by
+    simp[abi_decode_source_def] >>
+  `mem_bytes_at (B+(p+ao)) 32 (abi_decode_source MLOAD s) =
+    TAKE 32 (DROP (p+ao) bs)` by
+    (irule abi_decode_source_window >> simp[]) >>
+  asm_simp_tac bool_ss [GSYM ADD_ASSOC, abi_decode_load_bytes] >>
+  simp_tac (srw_ss()) [abi_head_word_bytes, DROP_DROP_T, ADD_COMM]
+QED
+
