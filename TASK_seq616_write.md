@@ -22,7 +22,7 @@ Theorem target_subscript_nopop_case:
        compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
        FST (SND r) = SOME l /\ is_slot_addressed l /\
        (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
-       ~expr_has_effect e) ==>
+       ~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 ```
 

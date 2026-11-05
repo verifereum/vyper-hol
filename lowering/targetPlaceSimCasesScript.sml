@@ -517,6 +517,14 @@ Finalise target_attr_case
 
 (* ===== Subscripts ===== *)
 
+(* The index expressions of a target, base first. *)
+Definition target_indices_def:
+  target_indices (NameTarget id) = [] /\
+  target_indices (TopLevelNameTarget nsid) = [] /\
+  target_indices (AttributeTarget t fld) = target_indices t /\
+  target_indices (SubscriptTarget t e) = target_indices t ++ [e]
+End
+
 (* An element of an array or a mapping, for a target with no pop: the
    base's fragment, the index's (lower_value), then, by the base's place
    type, the slot of the key (compile_mapping_subscript, with
@@ -552,19 +560,23 @@ Theorem target_subscript_nopop_case:
        compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
        FST (SND r) = SOME l /\ is_slot_addressed l /\
        (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
-       ~expr_has_effect e) ==>
+       ~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
   cheat
 QED
 
-(* An element of a storage or transient array target whose index has a
-   call (expr_has_effect).  ADMITTED (cheat), with exprSimPlaces'
+(* An element of a storage or transient array target with a call in any of
+   its indices (expr_has_effect).  ADMITTED (cheat), with exprSimPlaces'
    compile_subscript_array_storage_call_case on the read side: the call can
    shrink the array the target already points into (outer[0][shrink()] = v),
    and stmt_state_rel relates no dead slots, so nothing says the element's
-   slot is still the source's place.  A storage judgment that relates dead
-   slots replaces this lemma. *)
+   slot is still the source's place.  The call may sit in the base target
+   too: in outer[0][shrink()][0] = v, the base's target_case holds, but the
+   outer subscript reads the length word of outer[0], which shrink made
+   dead (targetSubscriptRefutationProbe's
+   clear_frozen_subscript_counterexample).  A storage judgment that relates
+   dead slots replaces this lemma. *)
 Theorem target_subscript_storage_call_case:
   !nocalls ctx func cenv cx bt e st r st' l.
     target_case nocalls ctx func cenv cx bt /\
@@ -574,7 +586,7 @@ Theorem target_subscript_storage_call_case:
     compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
     FST (SND r) = SOME l /\ is_slot_addressed l /\
     (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
-    expr_has_effect e ==>
+    EXISTS expr_has_effect (target_indices (SubscriptTarget bt e)) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
   cheat
@@ -616,7 +628,7 @@ Proof
               compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
               FST (SND r) = SOME l /\ is_slot_addressed l /\
               (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
-              expr_has_effect e`
+              EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))`
   >- metis_tac[target_subscript_storage_call_case] >>
   irule target_subscript_nopop_case >> metis_tac[]
 QED
@@ -635,13 +647,6 @@ Proof
 QED
 
 (* The indices of a target, in order. *)
-Definition target_indices_def:
-  target_indices (NameTarget id) = [] /\
-  target_indices (TopLevelNameTarget nsid) = [] /\
-  target_indices (AttributeTarget t fld) = target_indices t /\
-  target_indices (SubscriptTarget t e) = target_indices t ++ [e]
-End
-
 (* With no internal calls, the indices' judgments follow from expr_ok, as
    compile_expr_sim's induction hypotheses give it. *)
 Theorem target_idx_case_ok:
