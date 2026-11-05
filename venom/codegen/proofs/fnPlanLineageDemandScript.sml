@@ -88,3 +88,34 @@ Proof
   qpat_x_assum `FLAT _ = _` mp_tac >>
   simp[MAP_APPEND, FLAT_APPEND] >> metis_tac[MEM_APPEND]
 QED
+
+Theorem phi_selected_def_available:
+  !fn bb inst pred v.
+    def_dominates_uses fn /\ MEM bb fn.fn_blocks /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    MEM (pred,v) (phi_pairs inst.inst_operands) ==>
+    ?pred_bb. MEM pred_bb fn.fn_blocks /\ pred_bb.bb_label = pred /\
+      fn_cfg_edge fn pred bb.bb_label /\
+      def_available_at fn pred_bb NONE v
+Proof
+  rpt strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by
+    (gvs[def_dominates_uses_def] >> metis_tac[]) >>
+  gvs[phi_edge_uses_wf_def] >> metis_tac[]
+QED
+
+Theorem input_vars_from_def_available:
+  !fn bb pred base v.
+    def_dominates_uses fn /\ MEM bb fn.fn_blocks /\
+    MEM v (input_vars_from pred bb.bb_instructions base) ==>
+    MEM v base \/
+    ?pred_bb. MEM pred_bb fn.fn_blocks /\ pred_bb.bb_label = pred /\
+      fn_cfg_edge fn pred bb.bb_label /\
+      def_available_at fn pred_bb NONE v
+Proof
+  rpt strip_tac >>
+  drule livenessTransferProofsTheory.input_vars_from_phi_correct_proof >>
+  strip_tac >- simp[] >>
+  disj2_tac >> irule phi_selected_def_available >>
+  metis_tac[]
+QED
