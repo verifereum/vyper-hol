@@ -265,3 +265,19 @@ evaluation of source and normalized addresses. DLOAD uses the existing
 local address facts, not analysis-origin or normalization-currentness theorems;
 those hypotheses still need discharge at reached consumers. Retained-store
 content preservation and retained-key origin remain separate obligations.
+
+## Checked retained-key content boundary (C1.K.2.b.7)
+
+`loadElimRetainedReadTheory` proves retained-domain membership exposes two
+nonundefined key locations and a negative alias test. Under empty BP queries
+and `le_absolute_key` for both keys, `le_retained_absolute_disjoint` derives
+disjoint bounded word regions at defined resolved addresses. In particular,
+unknown-offset Var operand keys cannot survive that negative alias test against
+a nonempty word region. No allocation-state invariant is needed.
+
+The three `le_retained_*_content` lemmas preserve reads at a fixed address
+across primitive memory/storage/transient stores. Their `*_key_read`
+corollaries expose the additional post/pre key-address equality explicitly;
+this is not inferred from nonaliasing. These facts do not establish key origin
+in a solver lattice, normalized evaluation agreement, or persistence across
+an instruction's output assignment. Those remain integration obligations.
