@@ -961,7 +961,8 @@ Proof
   simp[gas_replay_at_def, lift_result_def] >> gen_tac >>
   TRY (IF_CASES_TAC
        >- (simp[lift_result_def, halt_state_def, set_returndata_def] >> NO_TAC) >>
-       irule (SRULE [gas_replay_at_def] gas_exec_write2) >> simp[] >> NO_TAC) >>
+       simp[] >> irule (SRULE [gas_replay_at_def] gas_exec_write2) >> simp[] >>
+       NO_TAC) >>
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def] >>
