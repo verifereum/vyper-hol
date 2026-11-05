@@ -161,3 +161,100 @@ QED
      recursive nested-call closure. No whole-run claim follows just from
      the checked conditional INVOKE boundary.
 *)
+
+(* C1.2.3 proposed preparation contracts (DESIGN ONLY; no exported claims).
+
+   SOURCE PREFIXES. Name the three antecedents at Eq lines 21--83 HB, HD,
+   HA, respectively (including their universal binders), and name their
+   conjunctions of successful equations PB, PD, PA. Exact elimination
+   signatures, with the displayed variables universally quantified, are:
+     HA /\ PA ==> body_results_ptr_ok cx es
+     HD /\ PD ==> body_exprs_ptr_ok cxd needed_dflts
+     HB /\ PB ==> body_stmts_ptr_ok cxf body'
+   These are direct specializations, not strengthened IHs. PA must be
+   extracted before argument evaluation, PD after successful results and
+   scope reset, PB only after defaults/read_results/binding/push_function.
+   Successful source-prefix equations supply every extra premise here;
+   no Venom or ghost premise is involved. Proposed helpers should factor
+   the source decomposition once rather than copy all tuple projections.
+
+   DEFAULTS. There is NO default-expression phase in compile_call IntCall
+   (exprLowering 2627--2667), or in compile_internal_function
+   (moduleLowering 658--734). The latter captures/materializes params,
+   reserves stack return storage, locks, and compiles the body. The
+   supported_function_header_contract (supportedDecls 120 onward) requires
+   NULL defaults. Thus the proposed signature to discharge this phase is:
+     supported_declaration_header tops
+       (FunctionDecl vis mut nr rr name args defaults ret body) ==>
+     defaults = [] /\
+     DROP (LENGTH defaults - (LENGTH args - LENGTH es)) defaults = []
+   Supplier: supported_function_header_contract and list simplification.
+   Remaining proof obligation: recover that header for the actual runtime
+   lookup from body_inv/supported_program, using selectedBodyCode and
+   returnMetadataPtr lookup interfaces. Do NOT invent counted default
+   instructions in caller or callee. HD still belongs in source-prefix
+   elimination; after header recovery body_exprs_ptr_ok cxd [] is trivial.
+
+   ARGUMENTS. Proposed counted-list interface (schema with A defined
+   below; all variables universally quantified):
+     body_results_ptr_ok cx es /\
+     compile_multi_vvs compile_expr cenv es sa = (vvs,sb) /\ A ==>
+     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+       (eval_expr_results cx es) (ee,s0,G0,tn0)
+       (\res ee' G tn t. ?results. res = INL results /\
+          LIST_REL (\e tv. T) es results /\
+          stmt_state_rel ctx func cenv cx ee' t /\
+          ghost_inv d cenv cx ee' G tn t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          ghost_kept cenv ee sa G0 tn0 s0 G tn /\
+          !i. i < LENGTH es ==>
+            ptr_vv_ok cx (expr_type (EL i es)) (EL i results)
+                      (EL i vvs) ee' G tn t)
+       (\res ee' gt r. expr_exit res r)
+   Here LIST_REL above specifies equal lengths only; the final implementation
+   MUST additionally carry the ordinary multi-vv post (per-element vv_post
+   transported across later evaluations), and ptr_buf_ok for each memory
+   operand, exactly as expr_vv_sim_ptr does. This is an unresolved interface
+   detail, not permission to assume persistence. A is exactly the common
+   code/ids/reservation/runtime/no-dalloca/old-return-variable/initial-PC,
+   state-rel and ghost premises of expr_vv_sim_ptr, plus body_inv and
+   per-expression typing/supported preconditions, with gas_admissible for
+   eval_expr_results. Suppliers: argument IH, body_ptr predicates and
+   expr_vv_sim_ptr; composition gas_outcome_ptr_bind and ghost_kept
+   transport. MISSING: proved counted list composition and transported
+   multi-vv post. S1 simulation cannot supply a pointer path.
+
+   STAGING. The proposed final-state payload is the following exact HOL
+   formula, to be conjoined with ordinary internal_args_rel and counted
+   pointer-safe execution of compile_stage_intcall_args:
+     eval_operands ops t = SOME words /\
+     EVERY (\op. op_taint tn op = {}) ops /\
+     intcall_prov_outside P (MAP (op_prov G) ops) FEMPTY /\
+     intcall_mem_frame P tn0 tn
+   P = intcall_protected cenv ee sa s0 is fixed at expression entry, NOT
+   recomputed at a callee state. ops includes buf_prefix exactly when
+   returns_count = 0 and return_buf is SOME. Ordinary supplier:
+   stage_mem_arg_frag / internal_args_rel. MISSING pointer suppliers:
+   fresh-buffer typed-copy counted path, whole-site exclusion after copies,
+   clean stack operands (including proof that the T flag cannot forward an
+   older aggregate pointer), and framing through unwrap_value.
+   Additional INVOKE-entry allocator requirements, stated exactly, are:
+     (!id b n. FLOOKUP t.vs_allocas id = SOME (b,n) ==>
+                 intcall_site_outside P (b,n)) /\
+     (!a. t.vs_alloca_next <= a ==> a NOTIN P)
+   MISSING suppliers at call site; the old-map reset alone supplies neither.
+   Return buffer also needs ptr_covers and clean pointer operand taint;
+   its contents need not be clean. compile_call allocates it BEFORE staging
+   and after argument evaluation, for 32*returns_count or return_buf_size.
+
+   ABNORMAL/GAS. Counted arguments must retain the gas_outcome_ptr abnormal
+   post above, not only a successful argument-list theorem. Source failures
+   before PA require source lookup/typechecking impossibility or the
+   gas-exempt branch, not an unavailable argument IH. Subsequent source
+   failures similarly cannot justify PB. Existing gasIntCallArgs/Body
+   provide ordinary gas-exempt facts only; pointer outcomes still require
+   the appropriate empty/prefix outcome combinators. These remain proof
+   obligations. No whole-run confinement is claimed by any proposed
+   payload, and no target hypothesis may be added to supply missing facts.
+*)
