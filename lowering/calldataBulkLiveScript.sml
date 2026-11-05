@@ -1,6 +1,7 @@
 (* Bulk decoder execution over reentrant register states. *)
 Theory calldataBulkLive
 Ancestors
+  abiDecoderRange
   safeSequence calldataWordLeaf calldataBytesLeaf calldataBytesLive calldataBulkLeaf calldataDynOwned abiDecoderReentry
   abiDecoderFrameCompose abiDecoderBulk abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderGuards abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
@@ -165,7 +166,7 @@ Theorem calldata_bulk_accepted_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -215,7 +216,7 @@ Theorem calldata_bulk_rejected_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -362,7 +363,7 @@ Theorem calldata_bulk_live_prefix_safe:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
@@ -472,7 +473,7 @@ Theorem calldata_bulk_accepted_live_mod:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -522,7 +523,7 @@ Theorem calldata_bulk_rejected_live_mod:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -550,7 +551,7 @@ Theorem calldata_bulk_live_prefix_safe_mod:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>

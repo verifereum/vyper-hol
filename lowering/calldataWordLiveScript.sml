@@ -1,6 +1,7 @@
 (* Reentrant primitive calldata decoding: older operands may be absent. *)
 Theory calldataWordLive
 Ancestors
+  abiDecoderRange
   calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
   abiDecoderGuards abiDecoderContract valueEncodingProps safeSequence
   emitHelperProps exprLoweringProps compileEnv emitHelper

@@ -1,6 +1,7 @@
 (* Arbitrary-calldata fixed-buffer bytestring decoding. *)
 Theory calldataBytesLeaf
 Ancestors
+  abiDecoderRange
   safeSequence fragExecMem abiDecoderBytesTyped
   abiCanonicalHeadSize calldataWordLeaf abiDecoderReservation abiDecoderBytes abiDecoderComposition abiDecoderCopy
   abiDecoderGuards abiDecoderAllocation abiDecoderContract abiEncoder
@@ -8,13 +9,13 @@ Ancestors
   venomExecSemantics venomState venomInst words arithmetic list rich_list
 
 Theorem calldata_bytes_opcodes:
-  compile_abi_decode_to_buf dst src CALLDATALOAD hi (DecBytestring n) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) hi (DecBytestring n) st = ((),st') ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st st')
 Proof
   strip_tac >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
@@ -39,6 +40,11 @@ Proof
   `abi_decode_load CALLDATALOAD p s =
      n2w (w2n (abi_decode_load CALLDATALOAD p s))` by simp[] >>
   `abi_decode_bytes_copy_size maxn < dimword (:256)` by decide_tac >>
+  `eval_operand src s = SOME (n2w (w2n (p:bytes32))) /\ w2n p < dimword (:256) /\
+   d < dimword (:256) /\
+   abi_decode_load CALLDATALOAD (n2w (w2n p) : bytes32) s =
+     n2w (w2n (abi_decode_load CALLDATALOAD p s))`
+    by (rewrite_tac[wordsTheory.n2w_w2n] >> simp[w2n_lt]) >>
   drule_all abi_decode_bytes_sentinel_sequence >> strip_tac >>
   qexists_tac `t` >> gvs[w2n_n2w, abi_decode_source_def]
 QED
@@ -48,7 +54,7 @@ Theorem calldata_bytes_allocation_shape:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               ~is_alloca_op i.inst_opcode) (emitted_insts st st')
 Proof
-  simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
@@ -129,8 +135,8 @@ Theorem calldata_bytes_rejected_sequence:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all calldata_count_guard_rejected_sequence >> strip_tac >>
   drule abi_decode_count_guard_shape >> strip_tac >>
@@ -193,8 +199,8 @@ Theorem calldata_bytes_prefix_safe:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
   drule abi_decode_count_guard_shape >> strip_tac >>

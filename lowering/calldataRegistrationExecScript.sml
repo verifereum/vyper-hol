@@ -442,7 +442,7 @@ Proof
   drule_all registration_singleton_owned_prefix >> strip_tac >>
   `first.cs_next_id <= final.cs_next_id /\
    first.cs_next_var <= final.cs_next_var` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[cj 1 ci_mono_compile_abi_decode, ci_mono_def, pairTheory.SND]) >>
   `!id q k. first.cs_next_id <= id /\ id < final.cs_next_id /\
@@ -451,7 +451,7 @@ Proof
     ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
       ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
     suspend "scratch_input" >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     calldataRecursiveExecutionTheory.calldata_coherent_owned_run >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
@@ -478,7 +478,7 @@ QED
 Resume registration_singleton_owned_run[success]:
   disj2_tac >> qexistsl_tac [`v`,`x`,`dst`,`p`,`first.cs_next_id`,`sc`] >>
   qpat_x_assum `compile_register_positional_args _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `!entry. FLOOKUP initial.vs_allocas _ = SOME entry ==> _` kall_tac >>
   qpat_x_assum `!id q k. st.cs_next_id < id /\ _ ==> _` kall_tac >>
   qpat_x_assum `!id q k. first.cs_next_id <= id /\ _ /\ FLOOKUP ready.vs_allocas _ = _ ==> _` kall_tac >>

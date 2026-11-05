@@ -472,7 +472,7 @@ QED
 
 Theorem ctor_decode_buffer_old_prefix:
   !dst src hi ce env ty tv av v st st' ctx func site initial sb d.
-  compile_abi_decode_to_buf dst src DLOAD hi
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),st') /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv
@@ -521,7 +521,7 @@ Proof
      rpt strip_tac >> res_tac >> gvs[]) >>
   drule (BETA_RULE ctor_actual_coherent_run) >>
   disch_then (drule_at Any) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
   disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
@@ -785,7 +785,7 @@ Theorem ctor_singleton_decode_code:
        do offset_val <- emit_op DLOAD [static_src];
           emit_op ADD [Lit 0w; offset_val]
        od else comp_return static_src);
-     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
        (type_to_abi_dec_info ce.ce_struct_fields ce ty)
   od
 Proof
@@ -817,7 +817,7 @@ Theorem ctor_singleton_decode_phases:
      (?offset_val second. ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty /\
        emit_op DLOAD [static_src] first = (offset_val,second) /\
        emit_op ADD [Lit 0w; offset_val] second = (src,middle))) /\
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last)
 Proof
   rpt gen_tac >> strip_tac >> drule ctor_singleton_decode_code >>
@@ -1133,7 +1133,7 @@ Theorem ctor_singleton_address_prefix[local]:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME
       (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty
@@ -1215,7 +1215,7 @@ Theorem ctor_canonical_singleton_prefix[local]:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared sb.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME (n2w sb) /\
     eval_operand (Var ptr) prepared = SOME (n2w d) /\

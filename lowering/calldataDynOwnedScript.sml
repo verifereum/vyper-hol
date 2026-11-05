@@ -1,6 +1,7 @@
 (* Allocator ownership for the actual dynamic calldata shell. *)
 Theory calldataDynOwned
 Ancestors
+  abiDecoderRange
   calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
   allocaFrontierBound allocaBudgetProps abiDecoderIndexInit abiDecoderContract
   compileEnv emitHelper venomState venomInst venomExecSemantics venomMemProps venomMemDefs
@@ -636,7 +637,7 @@ QED
 
 Theorem calldata_element_pointer_repeat:
   !head data stride st ptr st' s hp dp.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\ eval_operand head s = SOME hp /\ eval_operand data s = SOME dp /\
   abi_decoder_operand_live st.cs_next_var head /\
   abi_decoder_operand_live st.cs_next_var data ==>
@@ -913,7 +914,7 @@ QED
 
 Theorem calldata_element_pointer_code_shape:
   !head data stride st ptr st'.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -955,7 +956,7 @@ QED
 
 Theorem calldata_element_pointer_repeat_frag_mem:
   !head data stride st ptr st' initial hp dp ctx.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\ eval_operand head initial = SOME hp /\
   eval_operand data initial = SOME dp /\
   abi_decoder_operand_live st.cs_next_var head /\
@@ -1255,7 +1256,7 @@ Proof
   PairCases_on `src_ops` >> PairCases_on `head_ops` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `abi_decode_array_head_setup ip src abi_sz st = ((idx,data,head),c1)` >>
-  rename1 `compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz c1 =
+  rename1 `compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) abi_sz c1 =
     (child_src,c2)` >>
   rename1 `abi_decode_indexed_address dst idx mem_sz c2 = (child_dst,end_st)` >>
   imp_res_tac abi_decode_array_head_setup_counters >>
