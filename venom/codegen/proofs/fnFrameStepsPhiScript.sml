@@ -557,14 +557,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem phi_do_dup_spilled[local]:
-  !dist ps ops ps'. do_dup dist ps = (ops, ps') ==> ps'.ps_spilled = ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[stackPlanOpsTheory.do_dup_def, LET_THM] >>
-  IF_CASES_TAC >> simp[] >> rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[]
-QED
-
 Theorem phi_popmany_fold_spilled[local]:
   !xs acc ps.
     (SND (FOLDL (\(ops, ps) v.
@@ -632,7 +624,7 @@ Proof
   simp[] >> rpt (IF_CASES_TAC >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> gvs[] >>
-  imp_res_tac phi_popmany_spilled >> imp_res_tac phi_do_dup_spilled >> gvs[]
+  imp_res_tac phi_popmany_spilled >> imp_res_tac deepResidualBudgetTheory.do_dup_spilled_eq >> gvs[]
 QED
 
 Theorem phi_output_normalize_self:
@@ -660,16 +652,6 @@ Proof
   simp[listTheory.FIND_thm] >> strip_tac >> gvs[] >>
   Cases_on `h0 = pred` >> gvs[] >>
   metis_tac[listTheory.MEM_MAP, pairTheory.FST]
-QED
-
-Theorem phi_pair_updates_lookup[local]:
-  !pairs m n v.
-    FLOOKUP (FOLDL (\m (l,w). m |+ (w,n)) m pairs) v =
-    if MEM v (MAP SND pairs) then SOME n else FLOOKUP m v
-Proof
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
-  simp[] >> Cases_on `v = h1` >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `MEM v (MAP SND pairs)` >> simp[]
 QED
 
 Definition phi_edge_maps_acc_def:
@@ -709,7 +691,7 @@ Proof
    FLOOKUP (SND (phi_edge_maps_acc pred (SUC n) phis acc)) i =
       FLOOKUP (SND acc) i` by
     (Cases_on `acc` >> simp[] >> first_x_assum irule >> simp[]) >>
-  simp[Abbr `acc`, phi_pair_updates_lookup] >>
+  simp[Abbr `acc`, fnLineageStaticTheory.phi_pair_updates_lookup] >>
   Cases_on `FIND (\(l,w). l = pred) (phi_pairs h.inst_operands)`
   >- simp[] >>
   rename1 `_ = SOME pair` >> Cases_on `pair` >>
@@ -843,7 +825,7 @@ Theorem phi_edge_maps_acc_op_none[local]:
 Proof
   Induct >- simp[phi_edge_maps_acc_def] >>
   rpt gen_tac >> simp[phi_edge_maps_acc_cons] >> strip_tac >>
-  first_x_assum drule >> simp[phi_pair_updates_lookup] >>
+  first_x_assum drule >> simp[fnLineageStaticTheory.phi_pair_updates_lookup] >>
   rw[] >> gvs[]
 QED
 
@@ -932,20 +914,6 @@ Proof
   rename1 `FIND _ _ = SOME pr` >> PairCases_on `pr` >> simp[]
 QED
 
-Theorem phi_pairs_mem_var_operand[local]:
-  !ops l v. MEM (l,v) (phi_pairs ops) ==> MEM (Var v) ops
-Proof
-  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
-  rw[venomInstTheory.phi_pairs_def] >> metis_tac[]
-QED
-
-Theorem phi_operand_vars_mem[local]:
-  !ops v. MEM v (venomInst$operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[venomInstTheory.operand_vars_def] >>
-  Cases >> simp[venomInstTheory.operand_var_def] >> metis_tac[]
-QED
-
 Theorem phi_uses_disjoint_el[local]:
   !l i k v.
     phi_uses_disjoint l /\ i < LENGTH l /\ k < LENGTH l /\ i <> k /\
@@ -954,9 +922,9 @@ Theorem phi_uses_disjoint_el[local]:
 Proof
   Induct >> simp[] >> rpt gen_tac >> simp[phi_uses_disjoint_def] >>
   strip_tac >> Cases_on `i` >> Cases_on `k` >> gvs[]
-  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, phi_operand_vars_mem] >>
+  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
       metis_tac[listTheory.EL_MEM])
-  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, phi_operand_vars_mem] >>
+  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
       metis_tac[listTheory.EL_MEM]) >>
   metis_tac[]
 QED
@@ -988,7 +956,7 @@ Proof
   `?k. k < LENGTH (collect_phis instrs) /\ inst = EL k (collect_phis instrs)`
     by metis_tac[listTheory.MEM_EL] >>
   drule stackPlanGenTheory.FIND_SOME_MEM >> strip_tac >>
-  drule phi_pairs_mem_var_operand >> strip_tac >>
+  drule cfgNormBaseTheory.phi_pairs_mem_var >> strip_tac >>
   Cases_on `i = k`
   >- (gvs[] >>
       `phi_well_formed (EL i (collect_phis instrs)).inst_operands` by
@@ -1207,16 +1175,6 @@ Proof
   Cases_on `pre` >> gvs[venomWfTheory.is_fn_path_def]
 QED
 
-Theorem phi_rtc_path[local]:
-  !fn x y. RTC (fn_cfg_edge fn) x y ==>
-    ?path. is_fn_path fn path /\ path <> [] /\ HD path = x /\ LAST path = y
-Proof
-  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> rpt strip_tac
-  >- (qexists_tac `[x]` >> simp[venomWfTheory.is_fn_path_def]) >>
-  qexists_tac `x::path` >> Cases_on `path` >>
-  gvs[venomWfTheory.is_fn_path_def]
-QED
-
 Theorem phi_path_snoc_edge[local]:
   !path fn target.
     path <> [] /\ is_fn_path fn (path ++ [target]) ==>
@@ -1240,7 +1198,7 @@ Theorem phi_first_entry_path[local]:
       fn_cfg_edge fn (LAST path) target
 Proof
   rpt gen_tac >> simp[venomWfTheory.fn_reachable_def] >> strip_tac >>
-  drule phi_rtc_path >> strip_tac >>
+  drule venomExecProofsTheory.rtc_to_fn_path >> strip_tac >>
   `MEM target path` by metis_tac[rich_listTheory.MEM_LAST_NOT_NIL] >>
   drule_all phi_path_first_prefix >> strip_tac >>
   `pre <> []` by (strip_tac >> gvs[]) >>
@@ -1335,7 +1293,7 @@ Proof
     metis_tac[phi_codegen_has_incoming] >>
   `fn_reachable fn bb.bb_label` by
     (irule phi_edge_operand_reachable >> qexistsl_tac [`phi`, `u`] >>
-     metis_tac[phi_pairs_mem_var_operand]) >>
+     metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
   `fn_entry_label fn <> SOME bb.bb_label` by
     (gvs[codegen_ready_fn_def, venomWfTheory.wf_function_def,
          venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
@@ -1392,7 +1350,7 @@ Proof
   strip_tac >> drule_all phi_entry_representative >> strip_tac >>
   qexistsl_tac [`p`, `u`] >> simp[] >>
   irule phi_unkilled_use_live_entry >> goal_assum drule >> simp[] >>
-  qexists_tac `phi` >> simp[] >> metis_tac[phi_pairs_mem_var_operand]
+  qexists_tac `phi` >> simp[] >> metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]
 QED
 
 Theorem phi_input_vars_fold_covers[local]:
@@ -1440,7 +1398,7 @@ Proof
        FLOOKUP (FST acc) u` by
         (Cases_on `acc` >> simp[] >>
          irule (cj 1 phi_edge_maps_acc_preserves) >> simp[] >> qexists_tac `n` >> simp[]) >>
-      simp[Abbr `acc`, phi_pair_updates_lookup]) >>
+      simp[Abbr `acc`, fnLineageStaticTheory.phi_pair_updates_lookup]) >>
   rename1 `SUC j < LENGTH (h::phis)` >>
   simp[phi_edge_maps_acc_cons] >>
   qmatch_goalsub_abbrev_tac `phi_edge_maps_acc pred (SUC n) phis acc` >>
@@ -1479,11 +1437,11 @@ Proof
      irule phi_edge_maps_acc_slot >> simp[] >> rpt strip_tac >>
      `MEM (Var u) (EL i (collect_phis instrs)).inst_operands` by
        (gvs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
-        metis_tac[phi_pairs_mem_var_operand]) >>
+        metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
      `i <> k` by decide_tac >>
      drule_all phi_uses_disjoint_el >>
      gvs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
-     metis_tac[phi_pairs_mem_var_operand]) >>
+     metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
   `FIND (\(l,w). l = p)
     (phi_pairs (EL i (collect_phis instrs)).inst_operands) = SOME (p,v)` by
     metis_tac[phi_pair_find_selected] >>
@@ -1601,8 +1559,8 @@ Proof
   goal_assum drule >> simp[] >> qexistsl_tac [`qb`, `q`] >> simp[] >>
   rpt strip_tac >>
   `MEM v (inst_uses inst)` by
-    (gvs[inst_uses_def, phi_operand_vars_mem, listTheory.MEM_MAP,
-         pairTheory.EXISTS_PROD] >> metis_tac[phi_pairs_mem_var_operand]) >>
+    (gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var, listTheory.MEM_MAP,
+         pairTheory.EXISTS_PROD] >> metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
   drule_all phi_codegen_input_dead_after_prefix >> metis_tac[]
 QED
 
@@ -1657,42 +1615,6 @@ Proof
   qexists_tac `rest` >> simp[]
 QED
 
-Theorem phi_path_member_reachable[local]:
-  !path fn lbl. is_fn_path fn path /\ path <> [] /\
-    fn_reachable fn (HD path) /\ MEM lbl path ==> fn_reachable fn lbl
-Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  rename1 `is_fn_path fn (head::tail)` >> strip_tac >>
-  Cases_on `lbl = head` >- gvs[] >>
-  Cases_on `tail` >- gvs[] >>
-  rename1 `is_fn_path fn (head::next::rest)` >>
-  `fn_cfg_edge fn head next /\ is_fn_path fn (next::rest)` by
-    gvs[venomWfTheory.is_fn_path_def] >>
-  `fn_reachable fn next` by
-    (gvs[venomWfTheory.fn_reachable_def] >>
-     metis_tac[relationTheory.RTC_RULES_RIGHT1]) >>
-  first_x_assum irule >> gvs[] >> metis_tac[]
-QED
-
-Theorem phi_reachable_lookup[local]:
-  wf_function fn /\ fn_reachable fn lbl ==>
-    ?bb. lookup_block lbl fn.fn_blocks = SOME bb
-Proof
-  strip_tac >> gvs[venomWfTheory.fn_reachable_def] >>
-  gvs[Once relationTheory.RTC_CASES2]
-  >- (gvs[fn_entry_label_def, entry_block_def] >>
-      Cases_on `fn.fn_blocks` >> gvs[] >>
-      rename1 `head::tail` >> qexists_tac `head` >>
-      irule venomExecPropsTheory.MEM_lookup_block >>
-      gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
-  gvs[venomWfTheory.fn_cfg_edge_def] >>
-  `MEM lbl (fn_labels fn)` by
-    metis_tac[venomWfTheory.wf_function_def, venomWfTheory.fn_succs_closed_def] >>
-  gvs[fn_labels_def, listTheory.MEM_MAP] >>
-  metis_tac[venomExecPropsTheory.MEM_lookup_block, venomWfTheory.wf_function_def,
-            fn_labels_def]
-QED
-
 Theorem phi_defined_live_out_back[local]:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
   MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs /\
@@ -1707,13 +1629,13 @@ Proof
   `fn_reachable fn p` by gvs[venomWfTheory.fn_dominates_def] >>
   qpat_assum `fn_reachable fn p`
     (strip_assume_tac o REWRITE_RULE [venomWfTheory.fn_reachable_def]) >>
-  drule phi_rtc_path >> strip_tac >>
+  drule venomExecProofsTheory.rtc_to_fn_path >> strip_tac >>
   `MEM bb.bb_label path` by
     (gvs[venomWfTheory.fn_dominates_def] >> metis_tac[]) >>
   `fn_reachable fn (HD path)` by
     (simp[venomWfTheory.fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
   `!lbl. MEM lbl path ==> fn_reachable fn lbl` by
-    metis_tac[phi_path_member_reachable] >>
+    metis_tac[removeUnusedSsaProofsTheory.is_fn_path_all_reachable] >>
   drule_all phi_path_last_suffix >> strip_tac >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     (irule venomExecPropsTheory.MEM_lookup_block >>
@@ -1722,7 +1644,7 @@ Proof
   simp[] >> qexists_tac `pb` >> simp[] >>
   qexists_tac `tail` >> simp[] >>
   reverse conj_tac
-  >- (rpt strip_tac >> metis_tac[phi_reachable_lookup, listTheory.MEM]) >>
+  >- (rpt strip_tac >> metis_tac[removeUnusedSsaProofsTheory.fn_reachable_has_block, listTheory.MEM]) >>
   rpt gen_tac >> strip_tac >>
   rename1 `lookup_block lbl fn.fn_blocks = SOME other_bb` >>
   `MEM other_bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
@@ -1749,19 +1671,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem phi_block_outputs_distinct[local]:
-  ssa_form fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
-Proof
-  strip_tac >> gvs[venomWfTheory.ssa_form_def, fn_insts_def] >>
-  qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
-  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
-  Q.SPEC_TAC (`fn.fn_blocks`, `blocks`) >>
-  Induct >> simp[fn_insts_blocks_def, listTheory.MAP_APPEND,
-    listTheory.FLAT_APPEND, listTheory.ALL_DISTINCT_APPEND] >>
-  metis_tac[]
-QED
-
 Theorem phi_output_exit_live_prefix[local]:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
   MEM outphi (collect_phis bb.bb_instructions) /\ MEM v outphi.inst_outputs /\
@@ -1773,7 +1682,7 @@ Proof
   strip_tac >>
   `wf_function fn /\ ssa_form fn` by gvs[codegen_ready_fn_def] >>
   `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
-    metis_tac[phi_block_outputs_distinct] >>
+    metis_tac[phiBlockTheory.ssa_form_block_outputs_distinct] >>
   `~MEM v (FLAT (MAP (\inst. inst.inst_outputs)
     (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)))` by
     (irule phi_prefix_outputs_disjoint_suffix >> simp[] >>
@@ -1958,7 +1867,7 @@ Proof
          metis_tac[phi_prefix_output_not_operand]) >>
      `i <> k` by decide_tac >>
      drule_all phi_uses_disjoint_el >>
-     gvs[inst_uses_def, phi_operand_vars_mem]) >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
   mp_tac (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_forward_or_used) >>
   disch_then drule >> disch_then drule >>
   disch_then (qspecl_then
@@ -2048,21 +1957,6 @@ Proof
     metis_tac[doSwapSimTheory.do_swap_stack_result, pairTheory.SND] >> simp[]
 QED
 
-(* The count boundary allows repeated markers; only the removed variable
-   will subsequently need a uniqueness hypothesis. *)
-Theorem phi_stack_pop_one_count:
-  !x (xs : 'a list). xs <> [] ==>
-    LIST_ELEM_COUNT x (stack_pop 1 xs) +
-      (if x = stack_peek 0 xs then 1 else 0) = LIST_ELEM_COUNT x xs
-Proof
-  rpt strip_tac >>
-  `?ys y. xs = SNOC y ys` by metis_tac[rich_listTheory.SNOC_CASES] >>
-  gvs[stackModelTheory.stack_pop_def, stackModelTheory.stack_peek_def,
-      rich_listTheory.TAKE_SNOC, listTheory.EL_LENGTH_SNOC,
-      rich_listTheory.LIST_ELEM_COUNT_DEF, rich_listTheory.FILTER_SNOC] >>
-  Cases_on `x = y` >> simp[]
-QED
-
 Theorem phi_popmany_singleton_count:
   !v ps x. MEM v ps.ps_stack ==>
     LIST_ELEM_COUNT x (SND (popmany_plan [v] ps)).ps_stack +
@@ -2087,12 +1981,13 @@ Proof
   `stack_peek 0 (stack_swap d ps.ps_stack) = v` by
     (simp[stackModelTheory.stack_peek_def, stackModelTheory.stack_swap_def,
           listTheory.EL_LUPDATE] >> gvs[stackModelTheory.stack_peek_def]) >>
-  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac phi_stack_pop_one_count >>
+  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac reorderSimTheory.stack_pop_one_elem_count >>
   simp[phi_popmany_singleton_stack] >>
   `stack_swap d ps.ps_stack <> []` by
     (strip_tac >>
      `LENGTH (stack_swap d ps.ps_stack) = 0` by simp[] >>
-     gvs[stackModelTheory.stack_swap_def]) >> simp[]
+     gvs[stackModelTheory.stack_swap_def]) >>
+  Cases_on `v = x` >> simp[rich_listTheory.LIST_ELEM_COUNT_DEF]
 QED
 
 Theorem phi_popmany_singleton_mem:
@@ -2307,22 +2202,22 @@ Proof
   metis_tac[]
 QED
 
-(* These marked-wf boundaries cannot be imported from fnFrameCleanStack:
-   that theory depends on this one. *)
-Theorem phi_do_swap_wf_marked:
-  !base ps dist ops next.
-    generated_plan_state_wf_marked base ps /\ dist < LENGTH ps.ps_stack /\
-    do_swap dist ps = (ops,next) ==>
-    generated_plan_state_wf_marked base next
+Theorem do_swap_wf_marked:
+  !base ps dist ops ps'.
+    generated_plan_state_wf_marked base ps /\
+    dist < LENGTH ps.ps_stack /\
+    do_swap dist ps = (ops, ps') ==>
+    generated_plan_state_wf_marked base ps'
 Proof
-  rpt gen_tac >> strip_tac >> rename1 `generated_plan_state_wf_marked bound ps` >>
-  `plan_slots_bounded bound next` by
+  rpt gen_tac >> strip_tac >>
+  rename1 `generated_plan_state_wf_marked bound ps` >>
+  `plan_slots_bounded bound ps'` by
     metis_tac[planSpillBoundsTheory.do_swap_plan_slots_bounded,
               generated_plan_state_wf_marked_def] >>
-  `sorting$PERM next.ps_stack ps.ps_stack` by
+  `sorting$PERM ps'.ps_stack ps.ps_stack` by
     metis_tac[doSwapSimTheory.do_swap_stack_perm, pairTheory.SND] >>
-  `next.ps_spilled = ps.ps_spilled /\
-   doSwapSim$spill_alloc_layout_wf next.ps_alloc next.ps_spilled` by
+  `ps'.ps_spilled = ps.ps_spilled /\
+   doSwapSim$spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled` by
     metis_tac[doSwapSimTheory.do_swap_layout_wf,
               generated_plan_state_wf_marked_def, pairTheory.SND] >>
   gvs[generated_plan_state_wf_marked_def] >> conj_tac
@@ -2330,40 +2225,90 @@ Proof
   fs[pred_setTheory.IN_DISJOINT] >> metis_tac[sortingTheory.PERM_MEM_EQ]
 QED
 
-Theorem phi_wf_marked_pop:
-  !base ps n. generated_plan_state_wf_marked base ps ==>
+Theorem wf_marked_stack_sublist:
+  !base ps stk.
+    generated_plan_state_wf_marked base ps /\
+    (!op. MEM op stk ==> MEM op ps.ps_stack) /\
+    ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) ==>
+    generated_plan_state_wf_marked base (ps with ps_stack := stk)
+Proof
+  simp[generated_plan_state_wf_marked_def, pred_setTheory.IN_DISJOINT] >>
+  metis_tac[]
+QED
+
+Theorem wf_marked_pop:
+  !base ps n.
+    generated_plan_state_wf_marked base ps ==>
     generated_plan_state_wf_marked base
       (ps with ps_stack := stack_pop n ps.ps_stack)
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[generated_plan_state_wf_marked_def, stackModelTheory.stack_pop_def] >>
-  conj_tac
-  >- ( `ps.ps_stack = TAKE (LENGTH ps.ps_stack - n) ps.ps_stack ++
-                     DROP (LENGTH ps.ps_stack - n) ps.ps_stack` by simp[] >>
-       metis_tac[listTheory.FILTER_APPEND_DISTRIB, listTheory.ALL_DISTINCT_APPEND]) >>
-  fs[pred_setTheory.IN_DISJOINT] >> metis_tac[rich_listTheory.MEM_TAKE]
+  rpt strip_tac >> irule wf_marked_stack_sublist >>
+  simp[stackModelTheory.stack_pop_def] >>
+  conj_tac >- metis_tac[rich_listTheory.MEM_TAKE] >>
+  qpat_x_assum `generated_plan_state_wf_marked _ _` mp_tac >>
+  simp[generated_plan_state_wf_marked_def] >> strip_tac >>
+  `ps.ps_stack = TAKE (LENGTH ps.ps_stack - n) ps.ps_stack ++
+                 DROP (LENGTH ps.ps_stack - n) ps.ps_stack` by
+    simp[] >>
+  metis_tac[listTheory.FILTER_APPEND_DISTRIB, listTheory.ALL_DISTINCT_APPEND]
 QED
 
-Theorem phi_popmany_singleton_wf_marked:
-  !base ps v. generated_plan_state_wf_marked base ps ==>
-    generated_plan_state_wf_marked base (SND (popmany_plan [v] ps))
+Theorem popmany_individual_wf_marked:
+  !xs base ps ops ps'.
+    generated_plan_state_wf_marked base ps /\
+    popmany_individual xs ps = (ops, ps') ==>
+    generated_plan_state_wf_marked base ps'
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `stack_get_depth v ps.ps_stack` >>
-  simp[stackPlanOpsTheory.popmany_plan_def,
-       stackPlanOpsTheory.popmany_individual_def,
-       stackPlanOpsTheory.is_contiguous_top_def,
-       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
-       sortingTheory.PART_DEF] >>
-  rename1 `stack_get_depth v ps.ps_stack = SOME d` >>
-  `d < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
-  Cases_on `d = 1` >> simp[]
-  >- (pairarg_tac >> gvs[] >>
-      metis_tac[phi_do_swap_wf_marked, phi_wf_marked_pop, pairTheory.SND]) >>
-  Cases_on `d = 0` >> simp[]
-  >- metis_tac[phi_wf_marked_pop] >>
+  simp[stackPlanOpsTheory.popmany_individual_def] >> rpt gen_tac >>
+  rename1 `generated_plan_state_wf_marked bound _` >>
+  qmatch_goalsub_abbrev_tac `FOLDL popf acc0 sorted` >>
+  `!items acc.
+     generated_plan_state_wf_marked bound (SND acc) ==>
+     generated_plan_state_wf_marked bound (SND (FOLDL popf acc items))` by
+    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+     first_x_assum irule >> PairCases_on `acc` >> gvs[] >>
+     simp[Abbr `popf`] >>
+     Cases_on `stack_get_depth h acc1.ps_stack` >> simp[] >>
+     rename1 `stack_get_depth h acc1.ps_stack = SOME dist` >>
+     drule stackModelTheory.stack_get_depth_props >> strip_tac >>
+     Cases_on `dist = 0` >> simp[]
+     >- metis_tac[wf_marked_pop, pairTheory.SND] >>
+     pairarg_tac >> simp[] >>
+     metis_tac[wf_marked_pop, do_swap_wf_marked, pairTheory.SND]) >>
+  rpt strip_tac >> first_x_assum (qspec_then `sorted` mp_tac) >>
+  disch_then (qspec_then `acc0` mp_tac) >>
+  gvs[Abbr `acc0`]
+QED
+
+Theorem popmany_plan_wf_marked:
+  !xs base ps ops ps'.
+    generated_plan_state_wf_marked base ps /\
+    popmany_plan xs ps = (ops, ps') ==>
+    generated_plan_state_wf_marked base ps'
+Proof
+  Cases >- simp[stackPlanOpsTheory.popmany_plan_def] >>
+  simp[stackPlanOpsTheory.popmany_plan_def] >> rpt gen_tac >>
+  reverse IF_CASES_TAC
+  >- metis_tac[popmany_individual_wf_marked] >>
+  reverse IF_CASES_TAC
+  >- metis_tac[popmany_individual_wf_marked] >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `is_contiguous_top depths` >>
+  `!v. IS_SOME (stack_get_depth v ps.ps_stack) ==>
+       THE (stack_get_depth v ps.ps_stack) < LENGTH ps.ps_stack` by
+    (gen_tac >> Cases_on `stack_get_depth v ps.ps_stack` >> simp[] >>
+     metis_tac[stackModelTheory.stack_get_depth_props]) >>
+  `!d. MEM d depths ==> d < LENGTH ps.ps_stack` by
+    (simp[Abbr `depths`, listTheory.MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+     gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  `MEM (SUC (LENGTH t)) depths` by
+    (`LENGTH depths = SUC (LENGTH t)` by simp[Abbr `depths`] >>
+     `MEM (SUC (LENGTH t)) (QSORT (\a b. a <= b) depths)` by
+       gvs[stackPlanOpsTheory.is_contiguous_top_def, listTheory.MEM_GENLIST] >>
+     metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]) >>
+  `SUC (LENGTH t) < LENGTH ps.ps_stack` by metis_tac[] >>
   pairarg_tac >> gvs[] >>
-  metis_tac[phi_do_swap_wf_marked, phi_wf_marked_pop, pairTheory.SND]
+  metis_tac[do_swap_wf_marked, wf_marked_pop]
 QED
 
 Theorem phi_filter_lupdate_distinct:
@@ -2429,19 +2374,11 @@ Proof
   drule_all phi_plan_hit_no_dup >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> simp[]
   >- (pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
-      conj_tac >- metis_tac[phi_popmany_singleton_wf_marked, pairTheory.SND] >>
+      conj_tac >- metis_tac[popmany_plan_wf_marked, pairTheory.SND] >>
       conj_tac >- (drule phi_popmany_spilled >> simp[]) >>
       gen_tac >> irule phi_stack_poke_pop_mem >> metis_tac[]) >>
   strip_tac >> gvs[] >> gen_tac >>
   simp[phi_stack_poke_mem] >> metis_tac[]
-QED
-
-Theorem phi_stack_find_none_mem:
-  !xs p. stack_find p xs = NONE ==> !x. MEM x xs ==> ~p x
-Proof
-  Induct >> simp[stackModelTheory.stack_find_def] >>
-  rpt gen_tac >> Cases_on `p h` >> simp[] >>
-  Cases_on `stack_find p xs` >> simp[] >> metis_tac[]
 QED
 
 Theorem phi_no_hit_selected_absent:
@@ -2450,7 +2387,8 @@ Theorem phi_no_hit_selected_absent:
   !at. MEM at ps.ps_stack ==> resolve_phi pred inst.inst_operands <> SOME at
 Proof
   simp[stackModelTheory.stack_get_phi_depth_def] >> strip_tac >>
-  drule phi_stack_find_none_mem >> simp[listTheory.MEM_REVERSE] >>
+  fs[stackModelTheory.stack_find_NONE_EVERY, listTheory.EVERY_MEM,
+     listTheory.MEM_REVERSE] >>
   metis_tac[dftCommutationTheory.resolve_phi_MEM, listTheory.MEM_FILTER]
 QED
 
@@ -2499,7 +2437,7 @@ Theorem phi_pending_source_excluded:
     !phi. MEM phi todo ==> ~MEM (Var v) phi.inst_operands
 Proof
   Induct >> simp[phi_uses_disjoint_def] >> rpt strip_tac
-  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, phi_operand_vars_mem] >> metis_tac[]) >>
+  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -2556,15 +2494,6 @@ Proof
   gvs[venomWfTheory.inst_wf_def]
 QED
 
-Theorem phi_resolve_is_var:
-  !pred ops. phi_well_formed ops ==>
-    !op. resolve_phi pred ops = SOME op ==> is_var_operand op
-Proof
-  recInduct resolve_phi_ind >> rw[resolve_phi_def, venomWfTheory.phi_well_formed_def] >>
-  rename1 `phi_well_formed (_::arg::_)` >>
-  Cases_on `arg` >> gvs[venomWfTheory.phi_well_formed_def, is_var_operand_def]
-QED
-
 Theorem phi_codegen_pending_excluded:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
   collect_phis bb.bb_instructions = done ++ inst::todo /\
@@ -2595,7 +2524,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (collect_phis bb.bb_instructions)))` by
     (irule phi_collect_outputs_distinct >>
-     irule phi_block_outputs_distinct >>
+     irule phiBlockTheory.ssa_form_block_outputs_distinct >>
      qexists_tac `fn` >> gvs[codegen_ready_fn_def]) >>
   metis_tac[phi_provenance_fresh_output]
 QED
@@ -2626,7 +2555,7 @@ Proof
         by simp[] >>
       pop_assum (SUBST1_TAC o SYM) >>
       irule phi_provenance_plan_no_hit >> simp[] >>
-      metis_tac[phi_resolve_is_var]) >>
+      metis_tac[phiWellFormedTheory.resolve_phi_well_formed, is_var_operand_def]) >>
   rename1 `stack_get_phi_depth _ _ = SOME d` >>
   `is_var_operand (stack_peek d ps.ps_stack) /\
    MEM (stack_peek d ps.ps_stack) inst.inst_operands` by
@@ -2879,7 +2808,7 @@ Proof
      metis_tac[phi_codegen_inst_shape]) >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ [inst])))` by
     (`ssa_form fn` by gvs[codegen_ready_fn_def] >>
-     drule_all phi_block_outputs_distinct >> strip_tac >>
+     drule_all phiBlockTheory.ssa_form_block_outputs_distinct >> strip_tac >>
      drule phi_collect_outputs_distinct >> simp[] >>
      simp[listTheory.ALL_DISTINCT_APPEND]) >>
   `MEM inst (done ++ [inst])` by simp[] >>
@@ -2953,7 +2882,7 @@ Proof
        phi_codegen_inst_shape]) >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ [inst])))` by
     (`ssa_form fn` by gvs[codegen_ready_fn_def] >>
-     drule_all phi_block_outputs_distinct >> strip_tac >>
+     drule_all phiBlockTheory.ssa_form_block_outputs_distinct >> strip_tac >>
      drule phi_collect_outputs_distinct >> simp[] >>
      simp[listTheory.ALL_DISTINCT_APPEND]) >>
   `MEM (HD inst.inst_outputs) inst.inst_outputs` by

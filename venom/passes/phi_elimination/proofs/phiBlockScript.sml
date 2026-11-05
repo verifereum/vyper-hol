@@ -259,7 +259,7 @@ Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
 QED
 
-Triviality ssa_form_block_outputs_distinct:
+Theorem ssa_form_block_outputs_distinct:
   !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
 Proof
