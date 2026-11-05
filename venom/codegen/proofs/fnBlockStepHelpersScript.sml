@@ -356,3 +356,136 @@ Proof
     (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>
   simp[]
 QED
+
+(* ===== The block's prefix: cleanup and PHIs ===== *)
+
+Theorem take_drop_phi_prefix[local]:
+  !bb. non_param_insts bb = bb.bb_instructions ==>
+    LENGTH (TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)) =
+      phi_prefix_length bb.bb_instructions
+Proof
+  rw[LENGTH_TAKE_EQ, phi_prefix_length_le]
+QED
+
+(* Both prefix lemmas (one predecessor: cleanup then PHIs; otherwise PHIs
+   only), with the lineage state's cleanup fields set as
+   lineage_state_block_plan chose them. *)
+Theorem block_prefix_step:
+  !ctx cpl lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb
+   pred ps_l h promised vs as s_phi clean_ops ps2 ops ps3 r ra rest mem0.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    vs.vs_prev_bb = SOME pred /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps_l /\
+    generated_plan_state_wf_marked spill_base ps_l /\
+    (!op v. (MEM op ps_l.ps_stack \/ op IN FDOM ps_l.ps_spilled) /\
+       ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+                       (collect_phis bb.bb_instructions))) /\
+       normalize_operand dfg [] op = Var v ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+    (LENGTH (cfg_preds_of cfg bb.bb_label) <= 1 ==>
+     !op v. (MEM op ps_l.ps_stack \/ op IN FDOM ps_l.ps_spilled) /\
+            normalize_operand dfg [] op = Var v ==>
+            ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+    MEM r cpl.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
+    ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) (clean_ops ++ ops) \/
+           MEM (SORestore off) (clean_ops ++ ops) ==>
+           off < dimword (:256)) /\
+    (!at. MEM at ps_l.ps_stack \/ at IN FDOM ps_l.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps_l vs as /\
+    eval_phis vs bb.bb_instructions = OK s_phi /\
+    non_param_insts bb = bb.bb_instructions /\
+    (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+     then clean_stack_plan liveness cfg fn bb
+            (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+     else ([], ps_l with <| ps_cleanup_height := h;
+                            ps_cleanup_promised := promised |>)) =
+      (clean_ops, ps2) /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps2 = SOME (ops, ps3) /\
+    asm_block_at prog as.as_pc
+      (execute_plan cpl.cp_initial_fmp (clean_ops ++ ops))
+    ==>
+    ?phi_ops ps1 body_ops n as'.
+      ops = phi_ops ++ body_ops /\
+      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) 0 (phi_prefix_length bb.bb_instructions)
+        (non_param_insts bb) ps2 = SOME (phi_ops, ps1) /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (phi_prefix_length bb.bb_instructions)
+        (DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb))
+        ps1 = SOME (body_ops, ps3) /\
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = as.as_pc +
+        LENGTH (execute_plan cpl.cp_initial_fmp (clean_ops ++ phi_ops)) /\
+      fn_frame_inv ctx cpl lo fn ra rest mem0 ps1
+        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) as' /\
+      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+         operand_val (frame_view fn ra s_phi) lo at =
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule take_drop_phi_prefix >> strip_tac >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1`
+  >- suspend "single"
+  >> suspend "join"
+QED
+
+Resume block_prefix_step[single]:
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+  pop_assum (fn th => REWRITE_TAC [th] >> assume_tac th) >> strip_tac >>
+  qpat_x_assum `LENGTH _ <= 1 ==> _` mp_tac >>
+  impl_tac >- simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`ctx`, `cpl`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`,
+     `cfg`, `ch`, `growth`, `spill_base`, `lbl_ctr`, `fn`, `bb`, `pred`,
+     `ps_l`, `h`, `promised`,
+     `ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
+     `spill_base`, `vs`, `as`, `s_phi`, `clean_ops`, `ps2`,
+     `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
+     `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
+     `ops`, `ps3`, `r`, `ra`, `rest`, `mem0`] single_pred_prefix_frame_sim |>
+   REWRITE_RULE [plan_state_accfupds, combinTheory.K_THM,
+                 wf_marked_cleanup_fields, fn_frame_inv_cleanup_fields,
+                 TAKE_DROP]) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  strip_tac >> qexistsl_tac [`phi_ops`, `ps1`, `body_ops`, `n`, `as'`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
+QED
+
+Resume block_prefix_step[join]:
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+  pop_assum (fn th => REWRITE_TAC [th, pairTheory.PAIR_EQ] >> assume_tac th) >>
+  strip_tac >>
+  qpat_x_assum `[] = clean_ops` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `_ = ps2` (SUBST_ALL_TAC o SYM) >>
+  mp_tac (Q.SPECL [`ctx`, `cpl`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`,
+     `cfg`, `ch`, `growth`, `spill_base`, `lbl_ctr`, `fn`, `bb`, `pred`,
+     `ps_l`, `h`, `promised`,
+     `ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
+     `spill_base`, `vs`, `as`, `s_phi`,
+     `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
+     `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
+     `ops`, `ps3`, `r`, `ra`, `rest`, `mem0`] phi_prefix_frame_sim |>
+   REWRITE_RULE [plan_state_accfupds, combinTheory.K_THM,
+                 wf_marked_cleanup_fields, fn_frame_inv_cleanup_fields,
+                 TAKE_DROP]) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+  strip_tac >> qexistsl_tac [`phi_ops`, `ps1`, `body_ops`, `n`, `as'`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
+QED
+
+Finalise block_prefix_step
