@@ -183,3 +183,97 @@ and bidirectional pre-abort memory coverage (or revise the demanded
 integration contract if only one direction is mathematically needed), then
 port the small stopping/observation wrappers to common positional witnesses.
 This audit establishes neither impossibility nor a counterexample.
+
+## Special-effect Error coverage decision (C3.7.14.6 replacement diagnostic)
+
+E0366 invalidated the blanket empty-partner-range proposal, not the frozen
+task. `dftOrdinaryErrorTheory` now builds with just the checked classification
+`dft_ordinary_error_special` (committed a49c680c2). No dftGuards import is
+retained: its unrestricted empty-write helper still treats GAS as neutral.
+
+### Actual Error and readiness interfaces
+
+* `exec_delegatecall` and `exec_create` return Error on failed extraction, or
+  on a non-singleton output list after successful extraction. The surrounding
+  `step_inst_base` branches additionally reject malformed operands and
+  undefined evaluations. wf and operand readiness eliminate those shape/
+  evaluation branches, not the extraction branch.
+* `extract_venom_result_def` (venomExecSemantics:456-488) returns NONE iff
+  the run result is NONE, or SOME with a final context list not of length one.
+  EVM exceptions with a singleton final context are NOT native Error: they
+  are extracted as a failed call/create with output zero. Thus arbitrary
+  EVM failure is not a counterexample. To rule out the residual native Error,
+  prove run totality AND singleton final context for the constructed state.
+* `make_venom_create_state_def` (:428-442) starts with one context, a Code
+  return destination, account transfer, rollback and tx parameters from s.
+  Whether its `run` always terminates retaining one context is a substantive
+  external-semantics boundary, not decided by this audit. No divergent EVM
+  instance has been checked.
+* `dft_pos_ordinary_selected_success` (:64-74) assumes both OK results; it
+  cannot supply Error-free execution to the exhaustive consumer. Other
+  premises are positional edit/runtime readiness, two original contexts,
+  pair, wf, phase, actual cores/slot/index. `dft_pos_phase_def` (:64-74)
+  supplies original readiness on both sides. `dft_original_ready_def` and
+  `dft_original_control_ready_def` (OriginalRuntime:9-32) reduce that to
+  structural original-function/block facts, reachability, and an activation
+  cut. `dft_original_cut_def` (ProtectedRuntime:16-18) is schedule plus
+  activation-cut; its operand theorem supplies variable definedness. None
+  of these definitions asserts EVM run totality or a final context shape.
+* At the frozen compiler boundary `o1_run_state_ok` is initial-state-ok,
+  fmp initialization and code-layout-valid. Initial-state-ok fixes vars,
+  halted, memory and allocas/frontier (unitTransformDefs:96-100), not a
+  special-effect result. `o1_ctx_shape` is ctx wf and per-function shape.
+  No direct native-Error exclusion is present. A derived EVM boundary may
+  nevertheless prove it, so absence of a hypothesis is NOT falsehood evidence.
+
+### Observation comparison
+
+`dft_open_observe_def` (OpenMachine:100-105) requires the actual current
+instruction fetch. It does not allow observing an arbitrary instruction in
+an earlier state. `dft_orbit_observation_def` (OrbitObservation:13-30)
+allows a *different* source instruction, but requires equal memory AND
+exactly equal range lists. The one-way ordinary prefix cover is stronger:
+it requires the same instruction and operand agreement as well.
+
+If x=CREATE errors before y=MLOAD, source can observe x at the selected
+entry, then Error/Done tails have no observations. Target observes y at its
+entry before attempting x. Matching target y by an unexecuted source y is
+not licensed. Matching it by source x is allowed only if range lists happen
+to agree; there is no generic equality. For example, a zero-size CREATE
+init-code range is not generally the positive 32-byte MLOAD range. This is
+an interface obstruction, not a checked concrete execution counterexample.
+
+The original partner-range proof fails for a precise reason:
+`write_effects CREATE = write_effects CREATE2 = all_effects DIFF
+{Eff_MEMORY;Eff_IMMUTABLES}`. Both read all effects, so independent partners
+have empty writes, but may read memory (MLOAD). DELEGATECALL writes memory,
+so its independent partners cannot read memory; this does not generalize.
+Replay of x Error after a successful y bounds the target suffix but leaves
+the target's initial y observation uncovered.
+
+### Smallest repair / probe boundary
+
+The unresolved obligation belongs to C3.7.14's exhaustive observation lift,
+not to the already proved successful diamond. Preferred repair candidate:
+for wf, defined-operand CREATE/CREATE2 at original-ready reachable states,
+prove `extract_venom_result ... (run (make_venom_create_state ...)) <> NONE`
+(and the analogous delegatecall fact if needed), via an EVM termination/
+final-context invariant. This supplies totality only where actually needed,
+without altering protected definitions or adding hypotheses to frozen goals.
+No such theorem was identified by this bounded audit.
+
+If that boundary is not valid, a separately authorized probe should first
+check the narrower proposed helper, not declare the whole task false:
+choose disjoint-output CREATE with literal operands [0;0;0] (or another
+concretely failing constructed EVM input), and literal-offset MLOAD whose
+range differs from CREATE's; verify pair/wf and compute failed extraction.
+Use a two-instruction selected suffix with no earlier matching ranges and
+empty stack to test actual orbit memory coverage. Only if a failing EVM
+instance is found should it be extended to original-ready provenance and
+ultimately to the frozen compiler/mem_inv contract. Replacing Error by
+Abort or assuming failed extraction without computation is not evidence.
+
+Diagnostic conclusion: exact pre-Error memory coverage remains conditional
+on an unproved EVM result-shape boundary. Neither semantic impossibility nor
+native totality has been established. Do not authorize unrestricted Error
+coverage merely from independent variable-update framing.
