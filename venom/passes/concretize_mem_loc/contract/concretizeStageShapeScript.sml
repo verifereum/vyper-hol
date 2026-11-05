@@ -729,5 +729,9 @@ Theorem concretize_stage_shape:
   callee_first names C'.ctx_functions /\
   ?eom. max_live_eom C' = SOME eom
 Proof
-  cheat
+  strip_tac >> rpt conj_tac
+  >- (irule concretize_stage_fmp_free >> metis_tac[])
+  >- (irule concretize_stage_make_ssa_input_ok >> metis_tac[])
+  >- (irule concretize_stage_callee_first >> metis_tac[]) >>
+  irule concretize_stage_max_live_eom >> metis_tac[]
 QED
