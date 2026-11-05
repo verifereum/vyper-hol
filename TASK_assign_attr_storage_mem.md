@@ -76,9 +76,14 @@ Worked memory twins:
   via `compile_assign_storage_typed_stmt_frag_mem`, the plain
   `self.x = e` word store (`forced_then_outcome` over e's `expr_sim_mem`,
   then `assign_storage_store_path_mem`). Follow its structure.
-- lowering/bodyMemAugAssignAttrStorageScript.sml (if present in the tree):
-  `self.x.f op= e`, the same field slot ADD then a store at an operand
-  slot, on a memory-safe path.
+- lowering/bodyMemAugAssignAttrStorageScript.sml: `self.x.f op= e`, the
+  same field slot ADD then a store at an operand slot. Its exported
+  `emit_op_word_path_mem` (the ADD on a memory-safe path) and
+  `storage_store_op_path_mem` (SSTORE/TSTORE at a slot held in an
+  operand) are the pieces this proof needs: use them, don't re-prove
+  them. Its `*_mem_src` copies are `[local]` there; if you need one,
+  export it from that file (drop `[local]`, statement unchanged) rather
+  than copying it.
 
 S1 (non-memory) twin: `body_assign_attr_storage` (lowering/bodySimStmtCasesScript.sml
 on commit ab7b4209c, branch bot/opus/seq-692-s1-stmts-decls: `git show
@@ -114,7 +119,9 @@ fine to use. Where the S1 commit's counted source-side helpers
   `lowering/gasSummaryComposeScript.sml`, `lowering/gasExemptCertScript.sml`,
   `lowering/stmtSimForcedScript.sml`
 - Worked memory twins: `lowering/bodyMemAssignTopWordScript.sml`,
-  `lowering/bodyMemAssignLocalWordScript.sml`
+  `lowering/bodyMemAssignLocalWordScript.sml`,
+  `lowering/bodyMemAugAssignAttrStorageScript.sml` (`emit_op_word_path_mem`,
+  `storage_store_op_path_mem`)
 - Value unwrap on a memory path: `lowering/exprSimMemUnwrapScript.sml`,
   `lowering/bodyRhsRoomMemoryScript.sml` (`expr_sim_mem_room`)
 - S1 twins: `lowering/bodySimStmtCasesScript.sml`, `lowering/stmtSimAssignAttrStorageScript.sml`

@@ -84,8 +84,14 @@ Worked memory twins:
   Follow its structure.
 - lowering/bodyMemAssignTopWordScript.sml: the counted outcome
   composition (`forced_then_outcome` over e's simulation).
-- lowering/bodyMemAugAssignAttrLocalScript.sml (if proved in the tree):
-  `x.f op= e`, the same field ADD and MSTORE.
+- lowering/bodyMemAugAssignAttrLocalScript.sml: `x.f op= e`, the same
+  field ADD and MSTORE. Its exported `assign_attr_local_word_store_path_mem`
+  (proved; the file's main theorem is still admitted, which doesn't
+  matter here) is the MSTORE at the field address on a memory-safe
+  path: use it, don't re-prove it. Its other helpers (`*_mem_src`,
+  `augassign_field_*_path_mem`) are `[local]`; if you need one, export it
+  from that file (drop `[local]`, statement unchanged) rather than
+  copying it. Don't touch that file's admitted main theorem.
 
 S1 (non-memory) twin: `body_assign_attr_local` (lowering/bodySimStmtCasesScript.sml
 on commit ab7b4209c, branch bot/opus/seq-692-s1-stmts-decls: `git show
@@ -122,7 +128,8 @@ missing here, copy the ones you need into the target file as `[local]`
   `lowering/gasSummaryComposeScript.sml`, `lowering/gasExemptCertScript.sml`,
   `lowering/stmtSimForcedScript.sml`
 - Worked memory twins: `lowering/bodyMemAssignLocalWordScript.sml`,
-  `lowering/bodyMemAssignTopWordScript.sml`
+  `lowering/bodyMemAssignTopWordScript.sml`,
+  `lowering/bodyMemAugAssignAttrLocalScript.sml` (`assign_attr_local_word_store_path_mem`)
 - Field address, ADD, field reads on a memory path: `lowering/bodyFieldMemoryPropsScript.sml`,
   `lowering/bodyFieldMemoryScript.sml`, `lowering/bodyAttributeMemoryScript.sml`
 - Value unwrap on a memory path: `lowering/exprSimMemUnwrapScript.sml`,
