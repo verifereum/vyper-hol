@@ -5458,3 +5458,115 @@ Proof
   Cases_on `bd` >>
   gvs[vyperValueTheory.type_slot_size_def, vyperASTTheory.bound_length_def]
 QED
+
+(* A current immutable read and its runtime metadata suffice for selection;
+   no historical-path interpretation is involved. *)
+Theorem immutable_read_selection:
+  runtime_place_typed cx s (ImmutablePlace md name path) tv /\
+  read_result cx (PlaceR (ImmutablePlace md name path)) s = (INL arr,s) ==>
+  (!sb v. evaluate_subscripts tv arr [sb] = INL v ==>
+    select_result cx ty (PlaceR (ImmutablePlace md name path)) sb s =
+      (INL (PlaceR (ImmutablePlace md name (path ++ [sb]))),s) /\
+    read_result cx (PlaceR (ImmutablePlace md name (path ++ [sb]))) s =
+      (INL v,s)) /\
+  (!sb err. evaluate_subscripts tv arr [sb] = INR err ==>
+    select_result cx ty (PlaceR (ImmutablePlace md name path)) sb s =
+      (INR (Error err),s))
+Proof
+  simp[runtime_place_typed_def, place_type_value_def, read_result_def,
+       read_place_def, bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def, vyperMiscTheory.option_CASE_rator,
+       vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac get_immutables_state >> gvs[] >>
+  PairCases_on `tva` >> gvs[] >>
+  all_tac
+  >~ [`evaluate_subscripts tv arr [sb] = INR err`]
+  >- (drule_all select_result_immutable_error >> simp[]) >>
+  drule_all select_result_immutable >>
+  disch_then (qspec_then `ty` strip_assume_tac) >>
+  simp[read_result_def] >>
+  drule_all evaluate_subscripts_append >> simp[]
+QED
+
+Theorem storage_array_resolve_selection:
+  read_result cx (PlaceR (StoragePlace tr slot (ArrayTV evt bd))) s =
+    (INL (ArrayV av),s) /\
+  value_has_type (ArrayTV evt bd) (ArrayV av) ==>
+  (valid_index (ArrayTV evt bd) av i ==>
+    resolve_array_element cx tr slot (ArrayTV evt bd)
+      [ValueSubscript (IntV i)] s =
+    (INL (slot + n2w ((case bd of Fixed n => 0 | Dynamic n => 1) +
+       Num i * type_slot_size evt),evt,[]),s)) /\
+  (~valid_index (ArrayTV evt bd) av i ==>
+    ?msg. resolve_array_element cx tr slot (ArrayTV evt bd)
+      [ValueSubscript (IntV i)] s = (INR (Error (RuntimeError msg)),s))
+Proof
+  strip_tac >> Cases_on `bd`
+  >- (Cases_on `av` >>
+      gvs[vyperTypingTheory.value_has_type_def, valid_index_def,
+          vyperValueOperationTheory.array_length_def] >>
+      ` (0 <= i /\ i < &n) <=> (0 <= i /\ Num i < n)` by
+        intLib.ARITH_TAC >>
+      simp[] >> Cases_on `0 <= i /\ Num i < n` >>
+      simp[resolve_array_element_def, bind_def, check_def,
+           assert_def, ignore_bind_def, return_def, raise_def] >>
+      gvs[] >> Cases_on `evt` >> simp[resolve_array_element_def, return_def]) >>
+  drule read_storage_array_length >>
+  Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `DynArrayV vs` >> Cases_on `tr` >>
+  simp[result_array_length_def, read_result_def, return_def, bind_def,
+       get_storage_backend_def, get_accounts_def, get_transient_storage_def,
+       vyperValueOperationTheory.array_length_def] >>
+  strip_tac >> gvs[] >>
+  ` (0 <= i /\ i < &LENGTH vs) <=> (0 <= i /\ Num i < LENGTH vs)` by
+    intLib.ARITH_TAC >>
+  simp[] >>
+  Cases_on `0 <= i /\ Num i < LENGTH vs` >> gvs[] >>
+  simp[Once resolve_array_element_def, bind_def, check_def,
+       assert_def, ignore_bind_def, return_def, raise_def,
+       get_storage_backend_def, get_accounts_def, get_transient_storage_def] >>
+  all_tac
+  >>~- ([`resolve_array_element _ _ _ evt [] _ = _`],
+    Cases_on `evt` >> simp[resolve_array_element_def, return_def]) >>
+  Cases_on `0 <= i` >>
+  gvs[resolve_array_element_def, bind_def, check_def, assert_def,
+      ignore_bind_def, return_def, raise_def, get_storage_backend_def,
+      get_accounts_def, get_transient_storage_def] >>
+  Cases_on `Num i < n` >> gvs[]
+QED
+
+Theorem storage_array_read_selection:
+  read_result cx (PlaceR (StoragePlace tr slot (ArrayTV evt bd))) s =
+    (INL (ArrayV av),s) /\
+  value_has_type (ArrayTV evt bd) (ArrayV av) ==>
+  (!i v. valid_index (ArrayTV evt bd) av i /\
+    evaluate_subscripts (ArrayTV evt bd) (ArrayV av)
+      [ValueSubscript (IntV i)] = INL v ==>
+    ?out. select_result cx ty (PlaceR (StoragePlace tr slot (ArrayTV evt bd)))
+      (ValueSubscript (IntV i)) s = (INL out,s) /\
+    read_result cx out s = (INL v,s) /\
+    (!id path. out <> PlaceR (MemoryPlace id path))) /\
+  (!i. ~valid_index (ArrayTV evt bd) av i ==>
+    ?msg. select_result cx ty (PlaceR (StoragePlace tr slot (ArrayTV evt bd)))
+      (ValueSubscript (IntV i)) s = (INR (Error (RuntimeError msg)),s))
+Proof
+  strip_tac >> drule_all storage_array_resolve_selection >> strip_tac >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `i` strip_assume_tac) >>
+      first_x_assum drule >> strip_tac >>
+      drule select_result_storage_array >> strip_tac >> gvs[] >>
+      `?j. i = &j` by
+        (fs[valid_index_def] >> metis_tac[integerTheory.NUM_POSINT_EXISTS]) >>
+      gvs[] >>
+      qpat_x_assum `read_result _ _ _ = _` mp_tac >>
+      simp[read_result_def, read_place_def] >> strip_tac >>
+      drule_all read_storage_slot_array_elem >>
+      simp[arithmeticTheory.ADD_COMM]) >>
+  rpt strip_tac >> first_x_assum (qspec_then `i` strip_assume_tac) >>
+  first_x_assum drule >> strip_tac >>
+  drule select_result_storage_array_error >>
+  disch_then (qspec_then `ty` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
