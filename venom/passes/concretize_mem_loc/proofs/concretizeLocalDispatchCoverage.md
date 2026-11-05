@@ -158,3 +158,17 @@ output envelopes, successful source step, current guarded relation, independent
 taint order and execution environment. This is not full dispatch/frame
 composition. Binary clean-value cases, CALLVALUE/GAS reachable adapters and all
 other outstanding inventory rows retain their previous conditional status.
+
+## Checked reachable CALLVALUE/GAS adapter
+
+`concretizeLayoutLocalEnvironmentTheory.concretize_env_reader_local_complete`
+covers both environment readers at an ordinary joint-trace event. It derives
+successor demand restriction from no writes and the explicit initial empty
+allocation cache. It consumes current `relocation_env`, guarded `local_rel`,
+independent taint order, one output and successful source execution; no operand
+arity or cleanliness assumption is needed. It returns target execution,
+successor guarded relation with actual source ghosts, provenance erasure,
+independent target taint order and successor environment. CALLVALUE/GAS are
+therefore no longer merely conditional on arbitrary demand inclusion. This
+does not produce the incoming environment at frame push/pop, cover other
+execution readers, or close the remaining dispatch inventory.
