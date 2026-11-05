@@ -80,6 +80,30 @@ Proof
   simp[MEM_EL] >> metis_tac[]
 QED
 
+Theorem entry_plan_first_block[local]:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn spill_base ctr =
+    SOME (ops, pend) ==>
+  fn.fn_blocks <> [] /\
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks =
+    SOME (HD fn.fn_blocks) /\
+  ?bops pa rest.
+    generate_block_plan lv dfg cfg fn (HD fn.fn_blocks)
+      (init_cleanup_plan_state ch growth spill_base ctr) = SOME (bops, pa) /\
+    ops = bops ++ rest /\
+    pa.ps_alloc.sa_next_offset <= pend.ps_alloc.sa_next_offset
+Proof
+  Cases_on `fn.fn_blocks` >-
+    simp[generate_fn_plan_with_cleanup_analyzed_def, callLayoutDefsTheory.canonical_param_prefix_def] >>
+  simp[generate_fn_plan_with_cleanup_analyzed_def, fn_entry_label_def,
+       entry_block_def] >>
+  simp[Once generate_fn_plan_aux_def, lookup_block_def, FIND_thm] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule (cj 2 fn_plan_aux_alloc_mono) >> strip_tac >>
+  drule (cj 1 fn_plan_aux_alloc_mono) >> strip_tac >>
+  decide_tac
+QED
+
 (* The DFS planner starts at the entry label from the initial state ps0,
    so the entry block is planned first, from ps0: the plan begins with the
    entry block's code, its label, its parameter code (prepare_params_plan)
