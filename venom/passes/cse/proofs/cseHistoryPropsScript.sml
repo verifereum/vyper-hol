@@ -2979,9 +2979,9 @@ Proof
  gvs[cse_event_covers_def, get_instruction_def]
 QED
 
-Theorem cse_event_copy_cover_unique[local]:
+Theorem cse_event_ordinary_cover_unique[local]:
  cse_event_covers ev db dk definst /\
- cse_event_covers ev cb ck copy /\ copy.inst_opcode = ASSIGN ==>
+ cse_event_covers ev cb ck copy /\ copy.inst_opcode <> PHI ==>
  definst = copy
 Proof
  Cases_on `ev` >> simp[cse_event_covers_def] >> strip_tac >> gvs[] >>
@@ -3010,11 +3010,11 @@ Proof
  simp[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem cse_prefix_copy_suffix_crossing:
+Theorem cse_prefix_ordinary_suffix_crossing:
  wf_function fn /\ fn_inst_wf fn /\
  cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
  get_instruction bb s.vs_inst_idx = SOME use /\
- MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode <> PHI /\
  copy.inst_id <> use.inst_id /\
  cse_path_preorder fn d copy.inst_id /\ d <> copy.inst_id /\
  cse_path_preorder fn copy.inst_id use.inst_id /\
@@ -3058,7 +3058,7 @@ Proof
  suspend "extract"
 QED
 
-Resume cse_prefix_copy_suffix_crossing[extract]:
+Resume cse_prefix_ordinary_suffix_crossing[extract]:
  `~cse_point_has_id fn (bb.bb_label,s.vs_inst_idx) copy.inst_id` by
    (gvs[cse_point_has_id_def] >> metis_tac[]) >>
  `MEM q (MAP FST (right ++ cse_history_points (SUC j) post))` by
@@ -3076,7 +3076,7 @@ Resume cse_prefix_copy_suffix_crossing[extract]:
      `cse_event_covers ev db dk definst` by
        (qpat_x_assum `cse_event_covers (EL j events) _ _ _` mp_tac >>
         simp[EL_APPEND_EQN]) >>
-     metis_tac[cse_event_copy_cover_unique]) >>
+     metis_tac[cse_event_ordinary_cover_unique]) >>
  `MEM ((y0,y1),y2) (cse_history_points (SUC j) post)` by
    metis_tac[MEM_APPEND] >>
  `EVERY (\e. MEM e events) post` by
@@ -3091,14 +3091,14 @@ Resume cse_prefix_copy_suffix_crossing[extract]:
  pure_rewrite_tac[GSYM arithmeticTheory.ADD1, EL] >>
  simp[EL_APPEND_EQN]
 QED
-Finalise cse_prefix_copy_suffix_crossing
+Finalise cse_prefix_ordinary_suffix_crossing
 
-Theorem cse_prefix_live_copy_predecessor_nonwriting:
+Theorem cse_prefix_live_ordinary_predecessor_nonwriting:
  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
  cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
  get_instruction bb s.vs_inst_idx = SOME use /\
  events = pre ++ [CseStep m cb copy u t] ++ post /\
- MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode <> PHI /\
  copy.inst_outputs = [y] /\ EVERY (\ev. ~cse_event_writes ev y) post /\
  MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
  cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id /\
@@ -3122,7 +3122,7 @@ Proof
     simp[EL_APPEND_EQN]) >>
  `?i b l. LENGTH pre + 1 + k < i /\ i < LENGTH events /\
     cse_event_covers (EL i events) b l copy` by
-   (metis_tac[cse_prefix_copy_suffix_crossing]) >>
+   (metis_tac[cse_prefix_ordinary_suffix_crossing]) >>
  `LENGTH pre + 1 <= i` by decide_tac >>
  `i - (LENGTH pre + 1) < LENGTH post` by
    (qpat_x_assum `i < LENGTH events` mp_tac >> simp[] >> decide_tac) >>
@@ -3134,6 +3134,73 @@ Proof
    (irule cse_prefix_covered_write >> metis_tac[MEM]) >>
  qpat_x_assum `EVERY _ post` mp_tac >> rewrite_tac[EVERY_MEM] >>
  metis_tac[]
+QED
+
+Theorem cse_prefix_live_ordinary_predecessor_binding:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ events = pre ++ [CseStep m cb copy u t] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode <> PHI /\
+ copy.inst_outputs = [y] /\ EVERY (\ev. ~cse_event_writes ev y) post /\
+ MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id /\
+ cse_path_preorder fn copy.inst_id use.inst_id /\ copy.inst_id <> use.inst_id ==>
+ lookup_var x s = lookup_var x u
+Proof
+ strip_tac >>
+ drule_all cse_prefix_live_ordinary_predecessor_nonwriting >> strip_tac >>
+ `lookup_var x (cse_phase_state (CseExec n bb s)) =
+  lookup_var x (cse_phase_state (CseExec m cb u))` suffices_by
+   simp[cse_phase_state_def] >>
+ irule cse_prefix_nonwriting_cut_binding >>
+ goal_assum (drule_at Any) >>
+ goal_assum (drule_at Any) >>
+ qexistsl [`events`, `events`, `[]`] >> simp[]
+QED
+
+(* ASSIGN-specialized interfaces retained for existing copy consumers. *)
+Theorem cse_event_copy_cover_unique[local]:
+ cse_event_covers ev db dk definst /\
+ cse_event_covers ev cb ck copy /\ copy.inst_opcode = ASSIGN ==>
+ definst = copy
+Proof
+ strip_tac >> `copy.inst_opcode <> PHI` by simp[] >>
+ metis_tac[cse_event_ordinary_cover_unique]
+QED
+
+Theorem cse_prefix_copy_suffix_crossing:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_id <> use.inst_id /\
+ cse_path_preorder fn d copy.inst_id /\ d <> copy.inst_id /\
+ cse_path_preorder fn copy.inst_id use.inst_id /\
+ j < LENGTH events /\ cse_event_covers (EL j events) db dk definst /\
+ definst.inst_id = d ==>
+ ?i cb ck. j < i /\ i < LENGTH events /\
+   cse_event_covers (EL i events) cb ck copy
+Proof
+ strip_tac >> `copy.inst_opcode <> PHI` by simp[] >>
+ drule_all cse_prefix_ordinary_suffix_crossing >> simp[]
+QED
+
+Theorem cse_prefix_live_copy_predecessor_nonwriting:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ events = pre ++ [CseStep m cb copy u t] ++ post /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] /\ EVERY (\ev. ~cse_event_writes ev y) post /\
+ MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id /\
+ cse_path_preorder fn copy.inst_id use.inst_id /\ copy.inst_id <> use.inst_id ==>
+ EVERY (\ev. ~cse_event_writes ev x) (CseStep m cb copy u t :: post)
+Proof
+ strip_tac >> `copy.inst_opcode <> PHI` by simp[] >>
+ drule_all cse_prefix_live_ordinary_predecessor_nonwriting >> simp[]
 QED
 
 Theorem cse_prefix_live_copy_predecessor_binding:
@@ -3149,15 +3216,8 @@ Theorem cse_prefix_live_copy_predecessor_binding:
  cse_path_preorder fn copy.inst_id use.inst_id /\ copy.inst_id <> use.inst_id ==>
  lookup_var x s = lookup_var x u
 Proof
- strip_tac >>
- drule_all cse_prefix_live_copy_predecessor_nonwriting >> strip_tac >>
- `lookup_var x (cse_phase_state (CseExec n bb s)) =
-  lookup_var x (cse_phase_state (CseExec m cb u))` suffices_by
-   simp[cse_phase_state_def] >>
- irule cse_prefix_nonwriting_cut_binding >>
- goal_assum (drule_at Any) >>
- goal_assum (drule_at Any) >>
- qexistsl [`events`, `events`, `[]`] >> simp[]
+ strip_tac >> `copy.inst_opcode <> PHI` by simp[] >>
+ drule_all cse_prefix_live_ordinary_predecessor_binding >> simp[]
 QED
 
 Theorem cse_prefix_def_use_distinct:
