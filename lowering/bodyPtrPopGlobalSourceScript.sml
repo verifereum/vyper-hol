@@ -3,6 +3,8 @@ Ancestors
   bodyPtrPopGlobalUnit bodyPtrPopGlobalLegality bodyPtrPopGlobalOperand
   vyperContext vyperState vyperTypeInvariants vyperTypeCallStackSoundness
   bodyPtrPreds vyperTypeCallGraphSoundness vyperTypeCallGraph
+  vyperTypeContractFunction vyperValue vyperInterpreter vyperTypeContract
+  vyperTypeSystem vyperTypeContractContext vyperStorageBackend
 
 (* Closed diagnostic context fixes the actual module and declared slot layout.
    The enclosing expression is tested in its own nonrecursive call frame. *)
@@ -87,4 +89,104 @@ Proof
   simp[call_stack_follows_def, pop_global_source_call_graph,
        GSYM pop_global_cx_def, pop_global_source_functions_call_free,
        calls_follow_call_graph_def, call_edge_rel_def]
+QED
+
+Theorem pop_global_source_contract_checked:
+  check_contract F pop_global_cx.layouts 0w pop_global_mods = SOME pop_global_art
+Proof
+  EVAL_TAC >> simp[SF wordsLib.SIZES_ss, type_slot_size_def] >> EVAL_TAC
+QED
+
+Theorem pop_global_source_initial_functions:
+  functions_well_typed pop_global_cx <=>
+  functions_well_typed (initial_evaluation_context pop_global_cx.sources
+    pop_global_cx.layouts pop_global_cx.txn NONE)
+Proof
+  simp[functions_well_typed_def, pop_global_cx_def,
+       empty_evaluation_context_def, initial_evaluation_context_def,
+       lookup_nonreentrant_slot_def, empty_call_txn_def,
+       get_module_code_def, get_tenv_def, context_function_live_def,
+       fn_sigs_consistent_def, fn_sigs_declared_complete_def,
+       toplevel_vtypes_complete_def, bare_globals_complete_def,
+       bare_global_assignable_complete_def, flag_members_complete_def,
+       well_formed_type_def]
+QED
+
+Theorem pop_global_source_functions_typed:
+  functions_well_typed pop_global_cx
+Proof
+  rewrite_tac[pop_global_source_initial_functions] >>
+  irule check_contract_functions_well_typed_initial >>
+  qexistsl_tac [`0w`, `pop_global_art`, `pop_global_mods`] >>
+  simp[pop_global_source_contract_checked, pop_global_cx_def,
+       empty_evaluation_context_def, empty_call_txn_def]
+QED
+
+Theorem pop_global_source_initial_context:
+  pop_global_cx = (initial_evaluation_context pop_global_cx.sources
+    pop_global_cx.layouts pop_global_cx.txn NONE) with stk := [(NONE,"probe")]
+Proof
+  EVAL_TAC
+QED
+
+Theorem pop_global_source_artifact_env:
+  pop_global_env = artifact_env pop_global_art pop_global_mods NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem pop_global_source_env_context:
+  env_context_consistent pop_global_env pop_global_cx
+Proof
+  once_rewrite_tac[pop_global_source_initial_context] >>
+  rewrite_tac[pop_global_source_artifact_env] >>
+  irule check_contract_env_context_consistent_initial_with_current_src >>
+  qexists_tac `0w` >>
+  simp[pop_global_source_contract_checked, pop_global_cx_def,
+       empty_evaluation_context_def, empty_call_txn_def]
+QED
+
+(* Concrete diagnostic storage: A has one element at each of its three array
+   levels and payload 7; B is empty. The names bound evaluation of records. *)
+Definition pop_global_storage_def:
+  pop_global_storage : bytes32 -> bytes32 =
+    (0w =+ 1w) ((1w =+ 1w) ((2w =+ 1w) ((3w =+ 7w) (K 0w))))
+End
+
+Definition pop_global_es_def:
+  pop_global_es = set_storage pop_global_cx
+    (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>) F pop_global_storage
+End
+
+Theorem pop_global_source_scopes:
+  env_scopes_consistent pop_global_env pop_global_cx pop_global_es
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem pop_global_source_immutables:
+  env_immutables_consistent pop_global_env pop_global_cx pop_global_es
+Proof
+  EVAL_TAC >> rpt strip_tac >>
+  Cases_on `id = "B"` >> Cases_on `id = "A"` >> gvs[] >>
+  gvs[find_var_decl_by_name_def]
+QED
+
+Theorem pop_global_source_env_consistent:
+  env_consistent pop_global_env pop_global_cx pop_global_es
+Proof
+  simp[env_consistent_def, pop_global_source_env_context,
+       pop_global_source_scopes, pop_global_source_immutables]
+QED
+
+Theorem pop_global_source_state_typed:
+  state_well_typed pop_global_es
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem pop_global_source_accounts_typed:
+  accounts_well_typed pop_global_es.accounts
+Proof
+  EVAL_TAC >> gen_tac >> Cases_on `addr = 0w` >> simp[]
 QED
