@@ -415,6 +415,8 @@ Proof
   `encode_value tvt w = SOME [(0, typed_val_to_w256 tvt w)]` by
     metis_tac[encode_value_word_typed] >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt w ee` >>
+  `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   drule_all assign_storage_store_path >> strip_tac >>
   `sf.cs_current_bb = st.cs_current_bb /\
