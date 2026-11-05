@@ -108,6 +108,81 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem aggregate_outcome_map[local]:
+  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
+  (!res ee t. Q res ee t ==> Q' (SUM_MAP f I res) ee t) /\
+  (!res ee r. R res ee r ==> R' (SUM_MAP f I res) ee r) ==>
+  gas_outcome memory tops (ctx,func) (bind source (return o f)) (es,s) Q' R'
+Proof
+  strip_tac >>
+  `ignore_bind (bind source (return o f)) (return ()) =
+   ignore_bind source (return ())` by
+    (simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >>
+     gen_tac >> Cases_on `source x` >> Cases_on `q` >> simp[]) >>
+  gvs[gas_outcome_def] >> qexists_tac `marks`
+  >- (disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
+      qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >>
+      simp[bind_def, return_def] >>
+      Cases_on `res` >> gvs[] >> metis_tac[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Theorem aggregate_struct_action[local]:
+  eval_expr cx (StructLit ann nsid fields) =
+  bind (eval_exprs cx (MAP SND fields))
+    (return o (\vs. Value (StructV (ZIP (MAP FST fields,vs)))))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `eval_exprs cx (MAP SND fields) x` >>
+  drule aggregate_eval_struct >>
+  disch_then (qspecl_then [`nsid`,`ann`] mp_tac) >>
+  Cases_on `q` >> simp[bind_def, return_def]
+QED
+
+Theorem aggregate_tuple_action[local]:
+  compatible_bound bnd (LENGTH args) ==>
+  eval_expr cx (Builtin ann (MakeArray NONE bnd) args) =
+  bind (eval_exprs cx args) (return o (\vs. Value (ArrayV (TupleV vs))))
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `eval_exprs cx args x` >>
+  drule_all aggregate_eval_make_tuple >>
+  disch_then (qspec_then `ann` mp_tac) >>
+  Cases_on `q` >> simp[bind_def, return_def]
+QED
+
+Theorem aggregate_array_action[local]:
+  compatible_bound bnd (LENGTH args) /\
+  evaluate_type (get_tenv cx) et = SOME tv ==>
+  eval_expr cx (Builtin ann (MakeArray (SOME et) bnd) args) =
+  bind (eval_exprs cx args)
+    (return o (\vs. Value (ArrayV (make_array_value tv bnd vs))))
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `eval_exprs cx args x` >>
+  drule_all aggregate_eval_make_array >>
+  disch_then (qspec_then `ann` mp_tac) >>
+  Cases_on `q` >> simp[bind_def, return_def]
+QED
+
+Theorem aggregate_outcome_source_run[local]:
+  gas_outcome memory tops (ctx,func) source (es,s) Q R ==>
+  gas_outcome memory tops (ctx,func) source (es,s)
+    (\res ee t. Q res ee t /\
+       ?gs. source (es with gas_obs := gs) = (res,ee)) R
+Proof
+  simp[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      first_x_assum (qspec_then `[]` assume_tac) >>
+      gvs[] >> metis_tac[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
@@ -124,10 +199,7 @@ Proof
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_struct_field] >>
   `!e. MEM e (MAP SND fields) /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
-  Cases_on `eval_exprs cx (MAP SND fields) es` >>
-  rename1 `eval_exprs cx (MAP SND fields) es = (rr,est)` >>
-  drule aggregate_eval_struct >>
-  disch_then (qspecl_then [`nsid`,`ann`] assume_tac) >> gvs[] >>
+
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
     metis_tac[ci_mono_compile_struct_lit_cfn, compile_expr_ci_mono, pairTheory.SND] >>
@@ -138,16 +210,11 @@ Proof
     dimword (:256)` by
     (gvs[expr_body_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
-  qmatch_goalsub_abbrev_tac `expr_exit result` >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all buffer_alloc_frag >>
-  disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
-  qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
-  disch_then irule >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
+  drule_all buffer_alloc_counted >> strip_tac >>
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
-  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
+  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_counted >>
   simp[] >> disch_then drule >>
   simp[] >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
@@ -161,31 +228,40 @@ Proof
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
     goal_assum (drule_at Any) >> simp[])) >> strip_tac >> gvs[] >>
-  drule frag_exec_weaken >> disch_then irule >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[Abbr `result`]) >>
-  rpt strip_tac >> gvs[Abbr `result`] >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
+  irule stmtSimDeclComposeTheory.gas_outcome_zero_prefix >>
+  goal_assum (drule_at Any) >>
+  rewrite_tac[aggregate_struct_action] >>
+  drule aggregate_outcome_source_run >> strip_tac >>
+  irule aggregate_outcome_map >>
+  goal_assum (drule_at Any) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
+  rename1 `eval_exprs cx (MAP SND fields) (es with gas_obs := gs) = (INL vs,ee)` >>
+  `eval_expr cx (StructLit ann nsid fields) (es with gas_obs := gs) =
+    (INL (Value (StructV (ZIP (MAP FST fields,vs)))),ee)` by
+    (drule aggregate_eval_struct >> simp[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  rename1 `stmt_state_rel ctx func cenv cx ee s` >>
+  `expr_body_pre cenv cx env (StructLit ann nsid fields) (es with gas_obs := gs)` by simp[] >>
   `ann = StructT nsid` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
   gvs[] >>
   `val_wf (StructTV (ZIP (MAP FST fields,tvs)))
     (StructV (ZIP (MAP FST fields,vs)))` by
     (irule aggregate_materialised_child_wf >>
-     simp[expr_type_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >>
-     goal_assum (drule_at Any) >>
-     simp[expr_type_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+     simp[expr_type_def, read_result_def, return_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `val_footprint (StructTV (ZIP (MAP FST fields,tvs)))
      (StructV (ZIP (MAP FST fields,vs))) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def] >>
      `LENGTH (MAP FST fields) = LENGTH tvs` by
        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
      simp[struct_layout_size_zip]) >>
-  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
-  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+  `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule buffer_loop_memory_vv_post >>
@@ -223,10 +299,7 @@ Resume compile_make_array_vv_case[tuple]:
   `compatible_bound bnd (LENGTH args)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
       vyperTypeSystemTheory.well_typed_builtin_app_def] >>
-  Cases_on `eval_exprs cx args es` >>
-  rename1 `eval_exprs cx args es = (rr,est)` >>
-  drule_all aggregate_eval_make_tuple >>
-  disch_then (qspec_then `TupleT (MAP expr_type args)` assume_tac) >> gvs[] >>
+
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
@@ -235,20 +308,14 @@ Resume compile_make_array_vv_case[tuple]:
   `SUM (MAP (type_memory_bytes cenv o expr_type) args) < dimword (:256)` by
     (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
-  qmatch_goalsub_abbrev_tac `expr_exit result` >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all buffer_alloc_frag >>
-  disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
-  qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
-  disch_then irule >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
-  gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
+  drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) exprSimAggregatesLoopsCountedTheory.aggregate_make_tuple_counted >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
-  disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
@@ -256,23 +323,33 @@ Resume compile_make_array_vv_case[tuple]:
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
     goal_assum (drule_at Any) >> simp[])) >> strip_tac >> gvs[] >>
-  drule frag_exec_weaken >> disch_then irule >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[Abbr `result`]) >>
-  rpt strip_tac >> gvs[Abbr `result`] >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
+  irule stmtSimDeclComposeTheory.gas_outcome_zero_prefix >>
+  goal_assum (drule_at Any) >>
+  simp[aggregate_tuple_action] >>
+  drule aggregate_outcome_source_run >> strip_tac >>
+  irule aggregate_outcome_map >> goal_assum (drule_at Any) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
+  rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
+  `eval_expr cx (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+    (es with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
+    (drule_all aggregate_eval_make_tuple >> simp[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  rename1 `stmt_state_rel ctx func cenv cx ee s` >>
+  `expr_body_pre cenv cx env
+    (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+    (es with gas_obs := gs)` by simp[] >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
     (irule aggregate_materialised_child_wf >>
-     simp[expr_type_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >>
-     goal_assum (drule_at Any) >>
-     simp[expr_type_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+     simp[expr_type_def, read_result_def, return_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def]) >>
-  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
-  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+  `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
@@ -301,12 +378,7 @@ Resume compile_make_array_vv_case[array]:
   `compatible_bound bnd (LENGTH args)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
       vyperTypeSystemTheory.well_typed_builtin_app_def] >>
-  Cases_on `eval_exprs cx args es` >>
-  rename1 `eval_exprs cx args es = (rr,est)` >>
-  `eval_expr cx (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args) es =
-    ((case rr of INL vs => INL (Value (ArrayV (make_array_value tv bnd vs)))
-      | INR exc => INR exc),est)` by
-    (irule aggregate_eval_make_array >> simp[]) >> gvs[] >>
+
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
     metis_tac[ci_mono_compile_make_array_cfn, compile_expr_ci_mono, pairTheory.SND] >>
@@ -315,20 +387,14 @@ Resume compile_make_array_vv_case[array]:
   `type_memory_bytes cenv (ArrayT x bnd) < dimword (:256)` by
     (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
-  qmatch_goalsub_abbrev_tac `expr_exit result` >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all buffer_alloc_frag >>
-  disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
-  qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
-  disch_then irule >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
-  gvs[] >>
-  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_sim >>
-  disch_then (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+  drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
+  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_counted >>
+  disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[wordsTheory.dimword_def] >>
-  disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env`,`es`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
@@ -340,26 +406,39 @@ Resume compile_make_array_vv_case[array]:
        goal_assum (drule_at Any) >> simp[]) >>
     gvs[regions_disjoint_def] >>
     qpat_x_assum `_ <= type_memory_bytes _ _` mp_tac >> decide_tac)) >> strip_tac >> gvs[] >>
-  drule frag_exec_weaken >> disch_then irule >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[Abbr `result`]) >>
-  rpt strip_tac >> gvs[Abbr `result`] >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
+  irule stmtSimDeclComposeTheory.gas_outcome_zero_prefix >>
+  goal_assum (drule_at Any) >>
+  `eval_expr cx (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args) =
+    bind (eval_exprs cx args) (return o (\vs. Value (ArrayV (make_array_value tv bnd vs))))` by
+    (irule aggregate_array_action >> simp[]) >>
+  qpat_assum `eval_expr _ _ = bind _ _` (fn th => once_rewrite_tac[th]) >>
+  drule aggregate_outcome_source_run >> strip_tac >>
+  irule aggregate_outcome_map >> goal_assum (drule_at Any) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
+  rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
+  `eval_expr cx (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)
+    (es with gas_obs := gs) = (INL (Value (ArrayV (make_array_value tv bnd vs))),ee)` by
+    (simp[bind_def, return_def]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  rename1 `stmt_state_rel ctx func cenv cx ee s` >>
+  `expr_body_pre cenv cx env
+    (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)
+    (es with gas_obs := gs)` by simp[] >>
   `val_wf (ArrayTV tv bnd) (ArrayV (make_array_value tv bnd vs))` by
     (irule aggregate_materialised_child_wf >>
-     simp[expr_type_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >>
-     goal_assum (drule_at Any) >>
-     simp[expr_type_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+     simp[expr_type_def, read_result_def, return_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `val_footprint (ArrayTV tv bnd) (ArrayV (make_array_value tv bnd vs)) <=
     type_memory_bytes cenv (ArrayT x bnd)` by
     (drule val_footprint_le >>
      `type_memory_bytes cenv (ArrayT x bnd) = type_memory_size (ArrayTV tv bnd)` by
        metis_tac[expr_sim_inv_memory_size] >> simp[]) >>
-  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
-  `!nm lb len. local_region cenv es'.scopes s nm lb len ==>
+  `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_bytes cenv (ArrayT x bnd) <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
