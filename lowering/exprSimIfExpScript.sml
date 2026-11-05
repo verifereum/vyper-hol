@@ -21,7 +21,7 @@
 
 Theory exprSimIfExp
 Ancestors
-  loweringPosts typedMemoryCopy
+  loweringPosts typedMemoryCopy exprSimTypedAlloc
   list rich_list finite_map marker exprSimHyps exprSimIfExpCompat exprSimLayoutTransport
   fragExec exprSim exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
