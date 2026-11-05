@@ -60,3 +60,17 @@ Proof
   drule_all ao_alloc_fresh_contract >> strip_tac >>
   gvs[SUBSET_DEF, DISJOINT_DEF, EXTENSION] >> metis_tac[]
 QED
+
+Theorem ao_alloc_fresh_tags:
+  ao_alloc_fresh s = (fr,s1) ==>
+  !tag. fr tag = if tag = "iz" then fr "iz" else fr "inner"
+Proof
+  Cases_on `fresh_inst_id s` >>
+  rename1 `fresh_inst_id s = (i,s2)` >>
+  Cases_on `fresh_ir_var s2` >>
+  rename1 `fresh_ir_var s2 = (v,s3)` >>
+  Cases_on `fresh_inst_id s3` >>
+  rename1 `fresh_inst_id s3 = (j,s4)` >>
+  Cases_on `fresh_ir_var s4` >>
+  gvs[ao_alloc_fresh_def] >> strip_tac >> gvs[]
+QED

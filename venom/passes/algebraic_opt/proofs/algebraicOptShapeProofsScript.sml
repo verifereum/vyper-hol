@@ -1,6 +1,6 @@
 Theory algebraicOptShapeProofs
 Ancestors
-  algebraicOptDefs venomInst
+  algebraicOptDefs venomInst algebraicOptSupplyProofs irSupply
 Libs
   listTheory pred_setTheory
 
@@ -224,4 +224,82 @@ Proof
       metis_tac[ao_rewrite_layout_source, ao_pre_flip_inst_shape]) >>
   simp[] >> irule ao_rewrite_layout_post_flip >>
   drule ao_opt_producer_shape >> strip_tac >> gvs[]
+QED
+
+Theorem ao_rewrite_layout_distinct_ids:
+  ao_rewrite_layout inst fr outs /\
+  FST (fr "not") <> FST (fr "iz") /\
+  FST (fr "not") <> inst.inst_id /\ FST (fr "iz") <> inst.inst_id ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id) outs)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST (MAP (\i. (i.inst_id,i.inst_outputs)) outs))`
+    suffices_by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  gvs[ao_rewrite_layout_def]
+QED
+
+Theorem ao_rewrite_layout_distinct_outputs:
+  ao_rewrite_layout inst fr outs /\ ALL_DISTINCT inst.inst_outputs /\
+  SND (fr "not") <> SND (fr "iz") /\
+  ~MEM (SND (fr "not")) inst.inst_outputs /\
+  ~MEM (SND (fr "iz")) inst.inst_outputs ==>
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) outs))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP SND (MAP (\i. (i.inst_id,i.inst_outputs)) outs)))`
+    suffices_by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  gvs[ao_rewrite_layout_def]
+QED
+
+Theorem ao_rewrite_layout_ids:
+  ao_rewrite_layout inst fr outs ==>
+  set (MAP (\i. i.inst_id) outs) SUBSET
+    {inst.inst_id; FST (fr "not"); FST (fr "iz")}
+Proof
+  strip_tac >>
+  `set (MAP FST (MAP (\i. (i.inst_id,i.inst_outputs)) outs)) SUBSET
+    {inst.inst_id; FST (fr "not"); FST (fr "iz")}`
+    suffices_by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  gvs[ao_rewrite_layout_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_rewrite_layout_outputs:
+  ao_rewrite_layout inst fr outs ==>
+  set (FLAT (MAP (\i. i.inst_outputs) outs)) SUBSET
+    (set inst.inst_outputs UNION {SND (fr "not"); SND (fr "iz")})
+Proof
+  strip_tac >>
+  `set (FLAT (MAP SND (MAP (\i. (i.inst_id,i.inst_outputs)) outs))) SUBSET
+    (set inst.inst_outputs UNION {SND (fr "not"); SND (fr "iz")})`
+    suffices_by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  gvs[ao_rewrite_layout_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_transform_inst_supply_distinct:
+  ir_supply_inst_ok s /\ ao_alloc_fresh s = (fr,s1) /\
+  MEM inst.inst_id s.irs_used_inst_ids /\
+  set inst.inst_outputs SUBSET set s.irs_used_vars /\
+  ALL_DISTINCT inst.inst_outputs ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)) /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)))
+Proof
+  strip_tac >>
+  drule ao_alloc_fresh_tags >>
+  disch_then (qspec_then `"not"` mp_tac) >> simp[] >> strip_tac >>
+  drule ao_alloc_fresh_tags >>
+  disch_then (qspec_then `"xor"` mp_tac) >> simp[] >> strip_tac >>
+  drule_all ao_alloc_fresh_contract >> strip_tac >>
+  `ao_rewrite_layout inst fr
+    (ao_transform_inst dfg ra lbl idx targets fr inst)` by
+      simp[ao_transform_inst_layout] >>
+  `~MEM (SND (fr "not")) inst.inst_outputs /\
+   ~MEM (SND (fr "iz")) inst.inst_outputs` by
+    (gvs[SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac
+  >- (irule ao_rewrite_layout_distinct_ids >>
+      qexistsl [`fr`,`inst`] >> gvs[] >> metis_tac[]) >>
+  irule ao_rewrite_layout_distinct_outputs >>
+  qexistsl [`fr`,`inst`] >> gvs[]
 QED
