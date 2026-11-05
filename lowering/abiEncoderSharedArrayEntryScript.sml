@@ -221,9 +221,11 @@ Theorem abi_encoder_array_exit_step_readonly[local]:
   (i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD) /\
   step_inst_base i s = OK t ==>
   (t.vs_memory,t.vs_allocas,t.vs_alloca_next,t.vs_accounts,t.vs_transient,
-   t.vs_logs,t.vs_requests,t.vs_pending_deletions) =
+   t.vs_logs,t.vs_requests,t.vs_tx_ctx,t.vs_block_ctx,t.vs_immutables,
+   t.vs_outcomes,t.vs_pending_deletions) =
   (s.vs_memory,s.vs_allocas,s.vs_alloca_next,s.vs_accounts,s.vs_transient,
-   s.vs_logs,s.vs_requests,s.vs_pending_deletions)
+   s.vs_logs,s.vs_requests,s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,
+   s.vs_outcomes,s.vs_pending_deletions)
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
