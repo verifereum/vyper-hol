@@ -326,7 +326,7 @@ Proof
 QED
 
 Theorem abi_image_pop_operand_not_label:
-  compile_dynarray_pop bop ws es load store sa = (op,sb) ==> op <> Label l
+  compile_dynarray_pop bop ws es is_ctor imm loc sa = (op,sb) ==> op <> Label l
 Proof
   simp[compile_dynarray_pop_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
