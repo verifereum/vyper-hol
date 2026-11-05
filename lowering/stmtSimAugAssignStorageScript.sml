@@ -400,10 +400,8 @@ QED
    operands simulate, so it does (compile_bop_word_case), and its values
    are of x's type: compile_assign_storage_typed_stmt_frag applies. *)
 Theorem compile_augassign_toplevel_case:
-  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es res es'
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
-    eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
-      (res, es') /\
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     get_module_code cx src = SOME ts /\
@@ -420,7 +418,7 @@ Theorem compile_augassign_toplevel_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
