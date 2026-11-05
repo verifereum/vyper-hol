@@ -431,6 +431,10 @@ QED
    Splicing B's physical fields into A's DFS join entry preserves both join
    operations and allocation; both PHIs have the same depth 0/1 behavior.
    This finite observation does not prove the frozen reachability predicates
-   or a universal physical-state invariant. The remaining family-wide
-   spliced replay checks should use cached arm states rather than nested EVAL.
+   or a universal physical-state invariant. No further family-wide spliced
+   replay enumeration is needed for this diagnostic. Nonempty persistent
+   spill maps at successful join entry remain an unvalidated universal gap;
+   the restore pass here is trivial, not evidence that restoration alone
+   forces final emptiness. Allocator history and persistent spill contents
+   must be treated separately by subsequent universal boundaries.
 *)
