@@ -5,7 +5,8 @@ Ancestors
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
   exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
-  sendSourceFrame
+  sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
+  gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState
 
 Theorem ptr_inst_ok_assert:
   ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
@@ -532,3 +533,18 @@ Proof
   qexistsl_tac [`res`,`ee`,`G'`,`tn'`,`r`] >>
   simp[gasSummaryTheory.gas_explicit_def]
 QED
+
+Theorem send_read_action_ptr:
+  LENGTH args = (if has_gas then 3 else 2) ==>
+  (do r <- eval_expr cx (Call ann (Send has_gas) args dflt); read_result cx r od) =
+  (do vs <- eval_exprs cx args;
+      tv <- eval_send cx has_gas vs; read_result cx tv od)
+Proof
+  strip_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.check_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_return,
+       vyperStateTheory.assert_def, vyperStateTheory.bind_assoc] >>
+  simp[FUN_EQ_THM, vyperStateTheory.bind_def, vyperStateTheory.assert_def]
+QED
+
