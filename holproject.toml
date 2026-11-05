@@ -87,6 +87,7 @@ roots = ["tests/createSizeBoundaryTestScript.sml",
          "venom/codegen/proofs/fnFrameTerminalAbortScript.sml",
          "venom/codegen/proofs/fnFrameBoundaryGenRetScript.sml",
          "venom/codegen/proofs/fnFrameBoundaryScript.sml",
+         "venom/codegen/proofs/fnFrameBoundaryEntryParamsScript.sml",
          "venom/compiler/o1PassLiftScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]

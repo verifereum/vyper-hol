@@ -12,8 +12,8 @@
 
 Theory fnFrameBoundary
 Ancestors
-  fnFrameBoundaryGenRet genFrameSim frameRel contextCodegenRel codegenRel
-  stackOpAsmSim blockSimHelpers
+  fnFrameBoundaryGenRet fnFrameBoundaryEntryParams genFrameSim frameRel
+  contextCodegenRel codegenRel stackOpAsmSim stackOpSim blockSimHelpers
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
 
@@ -265,7 +265,12 @@ QED
    premise is fn_frame_inv's region clause for ps1, as in genFrameSim.
    With 17 or more parameters popmany_plan and optimistic_swap_plan can
    spill; the offset bound keeps those pushes from wrapping, as the
-   per-instruction lemmas' SORestore bound does.
+   per-instruction lemmas' SORestore bound does.  The parameter-count
+   bound keeps PARAM's word ordinal from wrapping: without it, a function
+   with more than 2^256 parameters is a counterexample
+   (fnFrameBoundaryEntryParams$entry_params_frame_sim_counterexample).
+   Every parameter is on the entry stack, so the stack-height bound
+   discharges it.
 
    Why it should hold: canonical_param_prefix orders the PARAM indices and
    puts RETPC_PARAM last, and fn_entry_state_rel stacks ra above
@@ -288,6 +293,7 @@ Theorem entry_params_frame_sim:
     r.sr_spill_base <= spill_base /\
     ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
     fn_entry_state_rel cp fn vs as ra rest /\
     asm_block_at prog as.as_pc
       (execute_plan cp.cp_initial_fmp
@@ -303,5 +309,66 @@ Theorem entry_params_frame_sim:
       vs_p.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
       fn_frame_inv ctx cp lo fn ra rest as.as_memory ps1 vs_p as'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_entry_state_rel cplan fn vs a ra rest` >>
+  qabbrev_tac `params = get_params (HD fn.fn_blocks).bb_instructions` >>
+  qabbrev_tac `vp = (entry_bind_pairs (entry_param_pairs vs params) vs)
+    with vs_inst_idx := LENGTH params` >>
+  `exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+    exec_block fuel ctx (HD fn.fn_blocks) vp` by
+    (unabbrev_all_tac >> irule bounded_entry_param_skip >> metis_tac[]) >>
+  `context_venom_asm_rel cplan lo
+    (ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params)
+    (frame_view fn ra vp)
+    (a with as_stack := (if fn_has_retpc fn then [ra] else []) ++ REVERSE vs.vs_params)` by
+    (irule bounded_entry_installed_context_rel >> metis_tac[]) >>
+  qabbrev_tac `top = (if fn_has_retpc fn then [ra] else []) ++ REVERSE vs.vs_params` >>
+  qabbrev_tac `local = a with as_stack := top` >>
+  qabbrev_tac `start = local with as_pc := local.as_pc + 1` >>
+  `asm_block_at prog local.as_pc [AsmLabel (HD fn.fn_blocks).bb_label] /\
+   asm_block_at prog start.as_pc (execute_plan cplan.cp_initial_fmp param_ops)` by
+    (qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+     pure_rewrite_tac[execute_plan_def, listTheory.MAP, listTheory.FLAT, exec_stack_op_def,
+       asm_block_at_append] >>
+     simp[Abbr `local`, Abbr `start`]) >>
+  `asm_steps lo o2pc prog 1 local = AsmOK start` by
+    (simp[Abbr `start`] >> irule label_op_asm_steps >> metis_tac[]) >>
+  `context_venom_asm_rel cplan lo
+    (ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params)
+    (frame_view fn ra vp) start` by
+    gvs[Abbr `start`, context_venom_asm_rel_def] >>
+  `params = get_params (HD fn.fn_blocks).bb_instructions` by simp[Abbr `params`] >>
+  qabbrev_tac `installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params` >>
+  `installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params` by
+    simp[Abbr `installed`] >>
+  drule_all entry_prepare_params_context_sim >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  qpat_x_assum `installed = _` kall_tac >>
+  qpat_x_assum `params = get_params _` kall_tac >>
+  `asm_steps lo o2pc prog (1 + LENGTH (execute_plan cplan.cp_initial_fmp param_ops))
+    (a with as_stack := top) = AsmOK st'` by
+    (gvs[Abbr `local`] >>
+     once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+     irule asm_steps_compose_ok >> qexists `start` >> simp[]) >>
+  `a.as_stack = top ++ rest` by gvs[fn_entry_state_rel_def, Abbr `top`] >>
+  `~vp.vs_halted /\ n2w cplan.cp_initial_fmp = vp.vs_initial_fmp` by
+    gvs[Abbr `vp`, entry_bind_pairs_normal, fn_entry_state_rel_def] >>
+  `!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    read_byte b st'.as_memory = read_byte b a.as_memory` by
+    gvs[Abbr `start`, Abbr `local`] >>
+  drule_all entry_local_run_frame_inv >> strip_tac >>
+  qexistsl [`1 + LENGTH (execute_plan cplan.cp_initial_fmp param_ops)`, `a'`, `vp`] >>
+  simp[] >> conj_tac
+  >- gvs[Abbr `start`, Abbr `local`, execute_plan_def, exec_stack_op_def] >>
+  simp[Abbr `vp`]
 QED
+
+(* The other boundary simulations are separate proof tasks.  Certify this
+   entry theorem and every helper in its dedicated theory independently. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean entry parameter proof: " ^ name)
+  end) (("entry_params_frame_sim", entry_params_frame_sim) ::
+        DB.thms "fnFrameBoundaryEntryParams");
