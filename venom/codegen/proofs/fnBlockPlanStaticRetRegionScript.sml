@@ -2,6 +2,7 @@ Theory fnBlockPlanStaticRetRegion
 Ancestors
   stackPlanGen cfgAnalysisProps venomExecProps simplifyCfgStruct
   venomWf venomInst cfgTransform cfgDefs relation
+  livenessConvergenceProofs livenessBlockProofs livenessDefs list pred_set
 
 Theorem ready_block_ret_last:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -190,4 +191,39 @@ Proof
   strip_tac >> drule_all ret_reaching_not_must_halt >>
   drule lookup_block_label >>
   simp[cleanup_height_safe_def, cleanup_elision_safe_def]
+QED
+
+Theorem ready_block_ret_index_last:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = RET ==> k + 1 = LENGTH bb.bb_instructions
+Proof
+  strip_tac >> drule lookup_block_MEM >> strip_tac >>
+  `bb_well_formed bb` by
+    (fs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  `is_terminator (EL k bb.bb_instructions).inst_opcode`
+    by simp[is_terminator_def] >>
+  fs[bb_well_formed_def] >>
+  `k = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >> decide_tac
+QED
+
+Theorem regional_ret_next_live_empty:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  cfg_reachable_of (cfg_analyze fn) lbl /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = RET ==>
+  live_vars_at (liveness_analyze fn) bb.bb_label (k + 1) = []
+Proof
+  strip_tac >>
+  `k + 1 = LENGTH bb.bb_instructions` by
+    (irule ready_block_ret_index_last >> metis_tac[]) >>
+  `MEM inst bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `cfg_succs_of (cfg_analyze fn) lbl = []` by
+    (irule ready_block_ret_successors_empty >> metis_tac[]) >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  drule_all liveness_recompute_convergence >>
+  drule lookup_block_label >>
+  simp[liveness_instrs_def, liveness_out_def, same_vars_set,
+       live_vars_at_def, liveness_analyze_def] >>
+  metis_tac[]
 QED
