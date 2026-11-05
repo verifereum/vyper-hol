@@ -272,3 +272,32 @@ Proof
   simp[contextTheory.compile_transient_to_memory_def] >>
   metis_tac[extract32_word_copy_loop_delta_excluded]
 QED
+
+Theorem extract32_imm_copy_to_memory_delta_excluded:
+  !n sa off sb u ic imm src dst v.
+  not_fresh_at sa v /\ src <> Var v /\ dst <> Var v /\
+  (!base. imm = SOME base ==> base <> Var v) /\
+  compile_imm_copy_to_memory ic imm src dst n off sa = (u,sb) ==>
+  ?delta.
+    FLAT (MAP (\b. b.bb_instructions) (REVERSE sb.cs_blocks)) ++ sb.cs_current_insts =
+    (FLAT (MAP (\b. b.bb_instructions) (REVERSE sa.cs_blocks)) ++ sa.cs_current_insts) ++ delta /\
+    EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta
+Proof
+  Induct
+  >- (simp[contextTheory.compile_imm_copy_to_memory_def, comp_return_def] >>
+      rpt strip_tac >> gvs[]) >>
+  simp[Once contextTheory.compile_imm_copy_to_memory_def, comp_bind_def,
+       comp_ignore_bind_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >>
+  Cases_on `off = 0` >> Cases_on `src` >> Cases_on `dst` >>
+  Cases_on `ic` >> Cases_on `imm` >>
+  gvs[contextTheory.compile_lit_byte_offset_def, contextTheory.compile_imm_load_word_def,
+      comp_return_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  every_assum (fn eq => TRY (extract32_call_mono_tac eq)) >>
+  ntac 2 (imp_res_tac compiler_ci_mono_not_fresh) >>
+  rpt (CHANGED_TAC (every_assum (fn eq => TRY (extract32_call_delta_tac eq)))) >>
+  qpat_x_assum `!sa off sb ic imm src dst v. _` (drule_at (Pos last)) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+  simp[listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]
+QED
