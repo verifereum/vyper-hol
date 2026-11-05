@@ -293,7 +293,15 @@ Theorem body_augassign_toplevel_aug:
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
       (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all augassign_rhs_pre >> strip_tac >>
+  drule_all augassign_toplevel_success >> strip_tac >>
+  `body_expr_ok cx e` by metis_tac[] >>
+  `expr_sim_case F ctx func cenv cx e` by
+    metis_tac[body_expr_ok_case] >>
+  drule_all augassign_toplevel_metadata >> strip_tac >>
+  irule compile_augassign_toplevel_case >>
+  simp[] >> metis_tac[]
 QED
 
 (* The residual augmented assignments of bodySimStmtCases'
