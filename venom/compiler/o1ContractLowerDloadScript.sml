@@ -801,22 +801,17 @@ Theorem lower_dload_function_supply_opaque_use:
   opaque_use_ok f ==> opaque_use_ok g
 Proof
   strip_tac >>
-  `!x. gas_var g x ==> gas_var f x` by
-    (simp[gas_var_def] >> rpt strip_tac >>
-     drule lower_dload_function_supply_copy_phi >> simp[] >> metis_tac[]) >>
   `!x. retpc_var g x ==> retpc_var f x` by
     (simp[retpc_var_def] >> rpt strip_tac >>
      drule lower_dload_function_supply_copy_phi >> simp[] >> metis_tac[]) >>
   rw[opaque_use_ok_def] >>
   `MEM x s.irs_used_vars` by
     (gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
-     metis_tac[lower_dload_copy_phi_ir_var, gas_var_def, retpc_var_def]) >>
+     metis_tac[lower_dload_copy_phi_ir_var, retpc_var_def]) >>
   drule_all lower_dload_function_supply_reserved_operand >> strip_tac >>
-  `gas_use_ok i x \/ retpc_use_ok i x` by
-    metis_tac[opaque_use_ok_gas_use, opaque_use_ok_retpc_use] >>
-  `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by
-    gvs[gas_use_ok_def, retpc_use_ok_def] >>
-  gvs[] >> metis_tac[opaque_use_ok_gas_use, opaque_use_ok_retpc_use]
+  `retpc_use_ok i x` by metis_tac[opaque_use_ok_retpc_use] >>
+  `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by gvs[retpc_use_ok_def] >>
+  gvs[] >> metis_tac[opaque_use_ok_retpc_use]
 QED
 
 Theorem lower_dload_function_supply_cfg_edge:
