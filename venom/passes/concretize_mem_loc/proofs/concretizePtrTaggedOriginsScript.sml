@@ -3,7 +3,7 @@ Ancestors concretizePtrSourceOwnership concretizePtrRuntimeOrigins
   concretizePtrActivationBirths concretizePtrActivationChronology
   concretizePtrChronologicalHistory
   concretizePtrActivationSupport pointerClosure pointerConfinedDefs
-  ptrDiscipline venomInst finite_map pred_set list
+  ptrDiscipline venomInst venomWf concretizePtrBPOrigins While finite_map pred_set list
 
 Definition ptr_tag_roots_def:
   ptr_tag_roots fn tok PT tag =
@@ -133,4 +133,115 @@ Theorem ptr_source_tag_roots_saved:
         (FST (EL n saved)) tag)) (SND (EL n saved)) tag
 Proof
   metis_tac[ptr_source_tag_roots_support]
+QED
+
+Theorem pointer_derived_vars_empty[simp]:
+  pointer_derived_vars fn {} = {}
+Proof
+  `pointer_use_step fn [] = []` by
+    (Cases_on `pointer_use_step fn []` >> simp[] >>
+     metis_tac[pointer_use_step_membership, MEM]) >>
+  simp[pointer_derived_vars_def, pointer_use_vars_def, SET_TO_LIST_EMPTY,
+    pointer_use_step_step_def, Once OWHILE_THM] >>
+  simp[Once OWHILE_THM]
+QED
+
+Theorem ptr_tag_roots_local:
+  (!i. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA ==>
+    LENGTH i.inst_outputs = 1) /\
+  ~(?i idx v. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
+    MEM v i.inst_outputs /\ i.inst_operands = [Lit idx] /\
+    w2n idx < LENGTH PT /\ EL (w2n idx) PT = SOME (tok,aid)) ==>
+  ptr_tag_roots fn tok PT (tok,aid) = ptr_bp_alloc_roots fn aid
+Proof
+  strip_tac >> simp[EXTENSION, ptr_tag_roots_def, ptr_bp_alloc_roots_def] >>
+  gen_tac >> eq_tac
+  >- (strip_tac
+      >- (`LENGTH i.inst_outputs = 1` by metis_tac[] >>
+          qpat_x_assum `!i. _` kall_tac >>
+          qpat_x_assum `~(?i idx v. _)` kall_tac >>
+          qexists `i` >> gvs[] >>
+          Cases_on `i.inst_outputs` >> gvs[inst_output_def]) >>
+      metis_tac[]) >>
+  strip_tac >> qexists `inst` >> simp[] >>
+  gvs[inst_output_def, AllCaseEqs()] >> simp[]
+QED
+
+Theorem ptr_tag_roots_foreign_param:
+  ptr_site_supported
+    (pointer_derived_vars fn (ptr_tag_roots fn tok PT (owner,aid))) TG (owner,aid) /\
+  FLOOKUP TG v = SOME (owner,aid) /\ owner <> tok ==>
+  ?i idx out. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
+    MEM out i.inst_outputs /\ i.inst_operands = [Lit idx] /\
+    w2n idx < LENGTH PT /\ EL (w2n idx) PT = SOME (owner,aid)
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `ptr_tag_roots fn tok PT (owner,aid) = {}` by
+    (simp[EXTENSION, ptr_tag_roots_def] >> metis_tac[]) >>
+  gvs[ptr_site_supported_def]
+QED
+
+Theorem ptr_tag_roots_local_supported:
+  (!i. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA ==>
+    LENGTH i.inst_outputs = 1) /\
+  ~(?i idx out. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
+    MEM out i.inst_outputs /\ i.inst_operands = [Lit idx] /\
+    w2n idx < LENGTH PT /\ EL (w2n idx) PT = SOME (tok,aid)) /\
+  ptr_site_supported
+    (pointer_derived_vars fn (ptr_tag_roots fn tok PT (tok,aid))) TG (tok,aid) /\
+  FLOOKUP TG v = SOME (tok,aid) ==>
+  v IN pointer_derived_vars fn (ptr_bp_alloc_roots fn aid)
+Proof
+  strip_tac >> drule_all ptr_tag_roots_local >> strip_tac >>
+  gvs[ptr_site_supported_def] >> metis_tac[]
+QED
+
+Theorem ptr_tag_roots_local_wf:
+  fn_inst_wf fn /\
+  ~(?i idx out. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
+    MEM out i.inst_outputs /\ i.inst_operands = [Lit idx] /\
+    w2n idx < LENGTH PT /\ EL (w2n idx) PT = SOME (tok,aid)) /\
+  ptr_site_supported
+    (pointer_derived_vars fn (ptr_tag_roots fn tok PT (tok,aid))) TG (tok,aid) /\
+  FLOOKUP TG v = SOME (tok,aid) ==>
+  v IN pointer_derived_vars fn (ptr_bp_alloc_roots fn aid)
+Proof
+  strip_tac >> irule ptr_tag_roots_local_supported >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `inst_wf i` by
+        (gvs[fn_inst_wf_def, fn_insts_def,
+          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[]) >>
+      gvs[inst_wf_def]) >>
+  qexistsl [`PT`, `TG`, `tok`] >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_source_tag_roots_current_foreign_param:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  FLOOKUP TG v = SOME (owner,aid) /\ owner <> HD tokens ==>
+  ?i idx out. MEM i (fn_insts a.po_fn) /\ i.inst_opcode = PARAM /\
+    MEM out i.inst_outputs /\ i.inst_operands = [Lit idx] /\
+    w2n idx < LENGTH PT /\ EL (w2n idx) PT = SOME (owner,aid)
+Proof
+  strip_tac >> irule ptr_tag_roots_foreign_param >>
+  qexistsl [`TG`, `HD tokens`, `v`] >> simp[] >>
+  metis_tac[ptr_source_tag_roots_current]
+QED
+
+Theorem ptr_source_tag_roots_saved_foreign_param:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  n < LENGTH a.po_stack /\
+  FLOOKUP (SND (EL n saved)) v = SOME (owner,aid) /\
+  owner <> EL (SUC n) tokens ==>
+  ?i idx out. MEM i (fn_insts (EL n a.po_stack).cf_fn) /\
+    i.inst_opcode = PARAM /\ MEM out i.inst_outputs /\
+    i.inst_operands = [Lit idx] /\ w2n idx < LENGTH (FST (EL n saved)) /\
+    EL (w2n idx) (FST (EL n saved)) = SOME (owner,aid)
+Proof
+  strip_tac >> irule ptr_tag_roots_foreign_param >>
+  qexistsl [`SND (EL n saved)`, `EL (SUC n) tokens`, `v`] >> simp[] >>
+  metis_tac[ptr_source_tag_roots_saved]
 QED
