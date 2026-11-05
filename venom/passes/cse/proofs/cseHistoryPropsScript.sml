@@ -2827,3 +2827,80 @@ Proof
            `terminal_use`, `v`, `definer`, `bb'`, `k`] >>
  gvs[APPEND_ASSOC, eval_operand_def]
 QED
+
+Theorem cse_prefix_nonwriting_cut_binding[local]:
+ cse_prefix ctx fn fuel0 s0 pre phase0 /\
+ cse_prefix ctx fn fuel0 s0 cut phase /\
+ events = pre ++ suffix /\ events = cut ++ rest /\
+ LENGTH pre <= LENGTH cut /\ EVERY (\ev. ~cse_event_writes ev x) suffix ==>
+ lookup_var x (cse_phase_state phase) =
+ lookup_var x (cse_phase_state phase0)
+Proof
+ strip_tac >>
+ `cut = pre ++ TAKE (LENGTH cut - LENGTH pre) suffix` by
+   (`TAKE (LENGTH cut) events = cut` by
+      (qpat_assum `events = cut ++ rest` (fn th => pure_rewrite_tac[th]) >>
+       simp[TAKE_APPEND1]) >>
+    Cases_on `LENGTH pre = LENGTH cut`
+    >- (gvs[TAKE_APPEND1] >> metis_tac[TAKE_LENGTH_TOO_LONG, arithmeticTheory.LESS_EQ_REFL]) >>
+    `LENGTH pre < LENGTH cut` by decide_tac >>
+    gvs[TAKE_APPEND2]) >>
+ `EVERY (\ev. ~cse_event_writes ev x)
+    (TAKE (LENGTH cut - LENGTH pre) suffix)` by
+   metis_tac[rich_listTheory.EVERY_TAKE] >>
+ qpat_assum `cse_prefix _ _ _ _ cut _`
+   (mp_then Any (qspec_then `x` mp_tac) cse_prefix_binding_fold) >>
+ qpat_assum `cse_prefix _ _ _ _ pre _`
+   (mp_then Any (qspec_then `x` mp_tac) cse_prefix_binding_fold) >>
+ qpat_assum `cut = pre ++ _` (fn th => once_rewrite_tac[th]) >>
+ simp[rich_listTheory.FOLDL_APPEND, cse_binding_fold_nonwriting]
+QED
+
+Theorem cse_source_interval_terminal_epochs_equal:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ events = pre ++ [CseStep m sb src u v] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+ MEM src (fn_insts fn) /\ MEM d (fn_insts fn) /\
+ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id src.inst_id /\ d.inst_id <> src.inst_id /\
+ (!k ph. LENGTH pre < k /\ k <= LENGTH events /\
+   cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+   cse_phase_has_source fn ph e src) /\
+ events = cut1 ++ rest1 /\ LENGTH pre <= LENGTH cut1 /\
+ cse_prefix ctx fn fuel0 s0 cut1 (CseExec n1 bb1 s1) /\
+ cut1 = before1 ++ [ev1] ++ middle1 /\
+ cse_event_writes ev1 x /\ EVERY (\ev. ~cse_event_writes ev x) middle1 /\
+ events = cut2 ++ rest2 /\ LENGTH pre <= LENGTH cut2 /\
+ cse_prefix ctx fn fuel0 s0 cut2 (CseExec n2 bb2 s2) /\
+ cut2 = before2 ++ [ev2] ++ middle2 /\
+ cse_event_writes ev2 x /\ EVERY (\ev. ~cse_event_writes ev x) middle2 ==>
+ lookup_var x (cse_event_output ev1) = lookup_var x (cse_event_output ev2)
+Proof
+ strip_tac >>
+ `EVERY (\ev. ~cse_event_writes ev x) (CseStep m sb src u v :: post)` by
+   (drule_all cse_source_interval_predecessor_nonwriting_all >> simp[]) >>
+ `lookup_var x s1 = lookup_var x u` by
+   (`lookup_var x (cse_phase_state (CseExec n1 bb1 s1)) =
+      lookup_var x (cse_phase_state (CseExec m sb u))` suffices_by
+       simp[cse_phase_state_def] >>
+    irule cse_prefix_nonwriting_cut_binding >>
+    metis_tac[APPEND, APPEND_ASSOC]) >>
+ `lookup_var x s2 = lookup_var x u` by
+   (`lookup_var x (cse_phase_state (CseExec n2 bb2 s2)) =
+      lookup_var x (cse_phase_state (CseExec m sb u))` suffices_by
+       simp[cse_phase_state_def] >>
+    irule cse_prefix_nonwriting_cut_binding >>
+    metis_tac[APPEND, APPEND_ASSOC]) >>
+ `lookup_var x s1 = lookup_var x (cse_event_output ev1)` by
+   (`lookup_var x (cse_phase_state (CseExec n1 bb1 s1)) =
+      lookup_var x (cse_event_output ev1)` suffices_by
+       simp[cse_phase_state_def] >>
+    irule cse_prefix_last_write_binding >> metis_tac[]) >>
+ `lookup_var x s2 = lookup_var x (cse_event_output ev2)` by
+   (`lookup_var x (cse_phase_state (CseExec n2 bb2 s2)) =
+      lookup_var x (cse_event_output ev2)` suffices_by
+       simp[cse_phase_state_def] >>
+    irule cse_prefix_last_write_binding >> metis_tac[]) >>
+ metis_tac[]
+QED
