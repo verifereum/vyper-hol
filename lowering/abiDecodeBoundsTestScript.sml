@@ -41,6 +41,37 @@ Proof
   EVAL_TAC
 QED
 
+(* The primitive clamp must reject a non-boolean word after the load. *)
+Theorem bounded_decode_invalid_bool_reverts:
+  case exec_block 1 ARB
+    <| bb_label := "entry";
+       bb_instructions :=
+         (SND (compile_abi_decode_to_buf (Lit 256w) (Lit 0w) MLOAD (Lit 128w)
+           (Lit 32w) (DecPrimWord BoolClamp) abi_decode_bounds_test_state)).cs_current_insts |>
+    (mstore 128 2w (init_venom_state "entry")) of
+    Abort Revert_abort _ => T
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+(* A successful first child writes its output. The later dynamic child has a
+   valid offset word but no in-bounds head; that read must abort. *)
+Theorem bounded_decode_nested_head_reverts_after_prefix:
+  case exec_block 1 ARB
+    <| bb_label := "entry";
+       bb_instructions :=
+         (SND (compile_abi_decode_to_buf (Lit 256w) (Lit 0w) MLOAD (Lit 128w)
+           (Lit 96w) (DecComplex T [(DecPrimWord BoolClamp,32,32);
+                                   (DecBytestring 1,32,64)])
+           abi_decode_bounds_test_state)).cs_current_insts |>
+    (mstore 128 1w (mstore 160 96w (init_venom_state "entry"))) of
+    Abort Revert_abort s => mload 256 s = 1w
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
 val _ = List.app (fn (name, th) =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso

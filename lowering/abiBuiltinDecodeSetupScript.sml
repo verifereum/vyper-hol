@@ -75,3 +75,38 @@ Proof
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emitted_insts_emit_op >> simp[]
 QED
+
+(* These are syntactic operands, not assertions that their runtime values
+   are nonzero.  The two Vars select the bounded-memory decoder branches. *)
+Theorem abi_builtin_decode_setup_bounded_operands:
+  abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) ==>
+  FST (SND ops) <> Lit 0w /\ SND (SND ops) <> Lit 0w
+Proof
+  strip_tac >> drule abi_builtin_decode_setup_trace >> strip_tac >>
+  drule abi_builtin_decode_header_outputs >> strip_tac >> gvs[]
+QED
+
+Theorem lower_abi_decode_bounded_setup:
+  lower_abi_decode data info min_size max_size outsz st = (result,last) ==>
+  ?ops ready decoded.
+    abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
+    compile_abi_decode_to_buf (FST ops) (Lit 0w) MLOAD
+      (FST (SND ops)) (SND (SND ops)) info ready = (decoded,last) /\
+    result = FST ops /\
+    FST (SND ops) <> Lit 0w /\ SND (SND ops) <> Lit 0w
+Proof
+  rewrite_tac[lower_abi_decode_setup] >>
+  simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  drule abi_builtin_decode_setup_bounded_operands >> strip_tac >>
+  metis_tac[]
+QED
+
+(* Recursive specialization audit (compile_abi_decode_to_buf_def):
+   DecDynArray -> dyn_loop, DecComplex -> complex_elems,
+   complex_elems cons -> to_buf and complex_elems tail, and
+   dyn_loop -> to_buf all pass load_opc/base_op/hi_op unchanged.
+   dyn_loop's dyn_elem_ptr helper also receives these same parameters.
+   PrimWord and Bytestring have no recursive decoder calls. Thus later
+   recursive proofs can keep these three parameters fixed. This syntactic
+   observation establishes neither runtime bounds nor finite execution. *)
