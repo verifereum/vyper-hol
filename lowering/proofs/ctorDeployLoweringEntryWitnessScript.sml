@@ -143,4 +143,51 @@ Proof
        vfmContextTheory.initial_context_def]
 QED
 
+Theorem deploy_ctor_noninit_evm_exists:
+  ?es. deploy_state_rel
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+    ^witness_bc initial_machine_state
+    (empty_call_txn with <| function_name := "__init__"; is_creation := T;
+                            block_number := 1; block_hashes := [0w] |>) es
+Proof
+  qexists_tac `^witness_es` >>
+  simp[deploy_state_rel_def, deploy_ctor_noninit_trace, call_outcomes_ok_def,
+       make_asm_call_state_def, asm_oracle_initial_def,
+       initial_context_def, initial_msg_params_def, make_sub_tx_def,
+       initial_machine_state_def, empty_call_txn_def] >>
+  simp[wf_state_def, wf_context_def, all_accounts_def, wf_accounts_def,
+       stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
+       outputTo_consistent_ctx_def, empty_accounts_def, stack_limit_def,
+       context_limit_def, venomStateTheory.empty_call_context_def,
+       venomStateTheory.empty_tx_context_def, venomStateTheory.empty_block_context_def,
+       make_rollback_def, transfer_value_def, asm_to_tx_params_def,
+       value_transfer_ok_def, accounts_after_transfer_def, tx_block_fields_rel_def,
+       layouts_agree_def] >>
+  EVAL_TAC >> simp[find_var_decl_by_name_def, COND_RAND, COND_RATOR] >>
+  simp[listTheory.REV_DEF]
+QED
+
+Theorem deploy_ctor_noninit_joint_compatibility:
+  ?am_c es0 es.
+    deploy_source_ok
+      [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+      initial_machine_state
+      (empty_call_txn with <| function_name := "__init__"; is_creation := T;
+                              block_number := 1; block_hashes := [0w] |>) /\
+    deploy_ctor_start
+      [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+      initial_machine_state
+      (empty_call_txn with <| function_name := "__init__"; is_creation := T;
+                              block_number := 1; block_hashes := [0w] |>)
+      (Payable,F,[],am_c,es0) /\
+    deploy_state_rel
+      [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+      ^witness_bc initial_machine_state
+      (empty_call_txn with <| function_name := "__init__"; is_creation := T;
+                              block_number := 1; block_hashes := [0w] |>) es
+Proof
+  metis_tac[deploy_ctor_noninit_source_ready, deploy_ctor_noninit_source_start,
+            deploy_ctor_noninit_evm_exists]
+QED
+
 end
