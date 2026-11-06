@@ -99,4 +99,3 @@ loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
 
 [actions.vyperJsonReplayLib]
 loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn", "jsonDocumentLib"]
-rev = "f5562577de645f973144750d88223bce177b6a1b"
