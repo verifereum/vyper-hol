@@ -5305,6 +5305,49 @@ Proof
   decide_tac
 QED
 
+Theorem generate_inst_plan_jmp_residual_count:
+  !liveness dfg cfg fn inst next halt term cur ps targets ops qs x.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops liveness fn cur inst = SOME targets /\
+    generate_inst_plan liveness dfg cfg fn inst next halt term cur ps =
+      SOME (ops,qs) ==>
+    LIST_ELEM_COUNT x (stack_pop (LENGTH targets) qs.ps_stack) <=
+    (LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)) -
+    LIST_ELEM_COUNT x targets
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?target. inst.inst_operands = [Label target]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_param_opcode_def] >>
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
+  rename1 `restore_spilled_plan targets ps = (rOps,psR)` >>
+  Cases_on `reorder_plan dfg targets psR` >> simp[stack_pop_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `join_reached _ _ _ _ _` mp_tac >>
+  simp[join_reached_def, generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
+       release_dead_spills_stack] >>
+  simp[stack_pop_def] >> strip_tac >>
+  drule_all (SRULE [stack_pop_def] restore_reorder_release_residual_count) >>
+  disch_then (qspecl_then [`next`, `x`] mp_tac) >>
+  simp[stack_pop_def, release_dead_spills_stack]
+QED
+
 Theorem emit_reorder_pop_next_live_upper:
   !opc operands selected nl dfg ps iops ps1 rops ps2.
     LENGTH operands <= 16 /\ PERM operands selected /\
