@@ -40,14 +40,6 @@ exit-block, whole-stack, dominance/derived-variable whitelist, and whole-functio
 capture restrictions are gone. `analyze_fmp_reclaims_target_checked` exposes
 the resulting current-state certificate, not an operational safety claim.
 
-`fmpIndexedProbe` evaluates the production step for all reclaim/effect boundary
-classes, needs/publishing/unresolved invokes, partial pops, current derived
-captures, joins, unreachable points and deliberately non-index instruction ids.
-Its final probe runs the complete production bounded analysis on two blocks:
-restores appear before the second DALLOCA and before JMP, and nowhere at STOP
-or block end. The older `fmpReclaimProbe` remains reference investigation;
-its obsolete approximation definitions have been moved into that probe theory.
-
 ## Limits
 
 The static projection ordering limits documented in `fmpAliasInterface.md`

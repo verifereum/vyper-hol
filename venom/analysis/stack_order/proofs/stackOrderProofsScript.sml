@@ -576,8 +576,8 @@ Proof
   irule foldl_step_distinct >> simp[]
 QED
 
-(* so_needed_are_live_proof: DROPPED — FALSE without single_use_form.
-   See stackOrderCexScript.sml for counterexample. *)
+(* so_needed_are_live_proof: DROPPED — FALSE without single_use_form;
+   see docs/deleted-counterexamples.md. *)
 
 (* ==========================================================================
    so_get_stack_sound — ALL_DISTINCT preservation through the analysis

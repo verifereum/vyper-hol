@@ -90,7 +90,7 @@ The exported test funnel alone cannot detect either historical mismatch:
 `setup-vyper-test-exports` deselects fuzzing tests, including the only
 runtime bytes32 inversion test; negative `test_unimplemented_unary_not`
 cases export no traces/source and cannot be replayed. Direct deterministic
-HOL regressions are build roots, independent of exported traces; they do not
+HOL regressions are built by default, independent of exported traces; they do not
 convert the upstream compile-only tests into replayed tests.
 
 ### Lowering definitions
