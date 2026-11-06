@@ -2341,6 +2341,19 @@ Proof
   IF_CASES_TAC >> decide_tac
 QED
 
+Theorem alias_do_swap_oversized_stack:
+  16 < d /\ LENGTH ps.ps_stack <= d ==>
+  (SND (do_swap d ps)).ps_stack =
+    MAP (\idx. EL idx ps.ps_stack)
+      ([d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0])
+Proof
+  strip_tac >> simp[do_swap_def] >> pairarg_tac >> simp[] >>
+  `LENGTH ps.ps_stack - (d + 1) = 0` by decide_tac >>
+  `TAKE (d + 1) (REVERSE ps.ps_stack) = REVERSE ps.ps_stack` by
+    (irule TAKE_LENGTH_TOO_LONG >> simp[] >> decide_tac) >>
+  simp[top_n_def]
+QED
+
 Theorem alias_restore_spilled_domain:
   !targets ps.
   FDOM (SND (restore_spilled_plan targets ps)).ps_spilled =
@@ -7015,8 +7028,13 @@ Proof
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
   >- (Cases_on `b` >> Cases_on `phi`
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi`
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC) >>
+  >- (Cases_on `b` >> Cases_on `phi` >>
+      rewrite_tac[Ntimes alias_buried_path_def 4] >>
+      CONV_TAC (LHS_CONV (funpow 12 RAND_CONV computeLib.EVAL_CONV)) >>
+      CONV_TAC (LHS_CONV (funpow 9 RAND_CONV computeLib.EVAL_CONV)) >>
+      CONV_TAC (LHS_CONV (funpow 6 RAND_CONV computeLib.EVAL_CONV)) >>
+      CONV_TAC (LHS_CONV (funpow 3 RAND_CONV computeLib.EVAL_CONV)) >>
+      EVAL_TAC) >>
   Cases_on `b` >> Cases_on `phi` >>
   rewrite_tac[Ntimes alias_buried_path_def 2]
   >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
