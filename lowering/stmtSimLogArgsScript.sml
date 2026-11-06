@@ -10,8 +10,8 @@ Ancestors
    its footprint avoids the local's dynamic array length words, the only
    local bytes expressions may change (locals_kept). *)
 Theorem log_local_footprint_kept:
-  !cenv es s t n b sz off len.
-    locals_kept cenv es es s t /\
+  !cenv es ee s t n b sz off len.
+    locals_kept cenv es ee s t /\
     local_region cenv es.scopes s n b sz /\
     b <= off /\ off + len <= b + sz /\
     (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
@@ -24,11 +24,11 @@ Proof
 QED
 
 Theorem log_local_value_kept:
-  !cenv cx ty tv v op es s t n b sz w.
+  !cenv cx ty tv v op es ee s t n b sz w.
     expr_val_rel cx ty v op s /\ ~is_word_type ty /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
     eval_operand op s = SOME w /\ eval_operand op t = SOME w /\
-    locals_kept cenv es es s t /\
+    locals_kept cenv es ee s t /\
     local_region cenv es.scopes s n b sz /\
     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
     (!k. dynarray_len_at cenv n k ==>
@@ -63,12 +63,12 @@ Proof
 QED
 
 Theorem log_argument_footprint_kept:
-  !cenv cx ty tv v op sa sb es s t w.
+  !cenv cx ty tv v op sa sb es ee s t w.
     expr_val_at cenv cx ty sa sb es v op s /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     ~is_word_type ty /\ log_arg_clear cenv cx ty v /\
     eval_operand op s = SOME w /\
-    wb_frame cenv es es sb s t ==>
+    wb_frame cenv es ee sb s t ==>
     mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
     mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
@@ -95,10 +95,10 @@ Proof
 QED
 
 Theorem log_argument_value_kept:
-  !cenv cx ty es sa sb s t v op.
+  !cenv cx ty es ee sa sb s t v op.
     expr_val_rel cx ty v op s /\
     expr_val_at cenv cx ty sa sb es v op s /\
-    wb_frame cenv es es sb s t /\
+    wb_frame cenv es ee sb s t /\
     (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
     log_arg_clear cenv cx ty v ==>
     expr_val_rel cx ty v op t
@@ -180,7 +180,7 @@ Proof
 QED
 
 Theorem log_frame_operand:
-  wb_frame cenv es es sb s t /\
+  wb_frame cenv es ee sb s t /\
   (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME w ==>
   eval_operand op t = SOME w
@@ -194,7 +194,7 @@ Theorem log_frame_local_region:
   stmt_state_rel ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  wb_frame cenv es es sb s t ==>
+  wb_frame cenv es ee sb s t ==>
   (local_region cenv es'.scopes t n b sz <=>
    local_region cenv es.scopes s n b sz)
 Proof
@@ -213,7 +213,7 @@ Theorem log_frame_placement:
   stmt_state_rel ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es es sb s t /\
+  sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es ee sb s t /\
   (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
   expr_val_at cenv cx ty sa sb es v op s ==>
   expr_val_at cenv cx ty sa sc es' v op t
@@ -254,7 +254,7 @@ Theorem log_arg_rel_frame:
   stmt_state_rel ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es es sb s t /\
+  sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es ee sb s t /\
   (!z. FST arg = Var z ==> not_fresh_at sb z) /\
   (!l. FST arg <> Label l) /\
   log_arg_rel cenv cx sa sb es s arg v ==>
@@ -271,7 +271,7 @@ Definition log_args_post_def:
   log_args_post ctx func cenv cx es sa sb s0 es' xs vs s <=>
     stmt_state_rel ctx func cenv cx es' s /\
     LIST_REL (log_arg_rel cenv cx sa sb es' s) xs vs /\
-    wb_frame cenv es es sa s0 s
+    wb_frame cenv es es' sa s0 s
 End
 
 Theorem log_args_post_nil:
@@ -290,7 +290,7 @@ QED
 
 Theorem log_args_post_frame:
   log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
-  wb_frame cenv es es sa s0 s
+  wb_frame cenv es es' sa s0 s
 Proof
   simp[log_args_post_def]
 QED
@@ -332,7 +332,7 @@ Proof
   `stmt_state_rel ctx func cenv cx es1 t` by
     (drule_all expr_post_state >> simp[]) >>
   `wb_frame cenv es es1 sa s0 t` by (drule_all expr_post_frame >> simp[]) >>
-  `wb_frame cenv es1 es1 sm t u` by (drule_all log_args_post_frame >> simp[]) >>
+  `wb_frame cenv es1 es' sm t u` by (drule_all log_args_post_frame >> simp[]) >>
   `log_arg_rel cenv cx sa sm es1 t (x,expr_type e) v` by
     (gvs[expr_post_def, log_arg_rel_def] >>
      irule log_arg_clear_base >> metis_tac[]) >>
