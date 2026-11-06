@@ -39,6 +39,22 @@ Proof
   simp[] >> decide_tac
 QED
 
+Theorem store_lays_out_robust_ptr:
+  store_lays_out etv dtv v ==>
+  !m. mem_agree_outside
+    (dirty DIFF {i | off <= i /\ i < off + 32})
+    (mstore off (typed_val_to_w256 etv v) s).vs_memory m ==>
+    val_in_memory dtv v off m
+Proof
+  strip_tac >> fs[store_lays_out_def] >>
+  rpt strip_tac >> irule val_in_memory_clean_footprint_ptr >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`dirty DIFF {i | off <= i /\ i < off+32}`,
+    `(mstore off (typed_val_to_w256 etv v) s).vs_memory`] >> simp[] >>
+  `val_footprint dtv v <= type_memory_size dtv` by metis_tac[val_footprint_le] >>
+  rpt strip_tac >> simp[] >> decide_tac
+QED
+
 Theorem emit_mstore_zero_path_ptr:
   emit_inst MSTORE [Var dst; value] [] sa = ((),sb) /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
