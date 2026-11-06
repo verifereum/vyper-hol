@@ -337,12 +337,12 @@ QED
 Theorem wb_frame_trans:
   !func cenv cx es s0 sa es1 es' s1 t u ctx.
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
     wb_frame cenv es es1 sa s0 t /\ wb_frame cenv es1 es' s1 t u ==>
     wb_frame cenv es es' sa s0 u
 Proof
   rpt gen_tac >> simp[wb_frame_def] >> strip_tac >>
-  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by fs[locals_kept_def] >>
   conj_tac
   >- (rpt strip_tac >> metis_tac[not_fresh_at_mono]) >>
   reverse conj_tac
