@@ -7,7 +7,7 @@ Ancestors
   finite_map words arithmetic list rich_list
   logMembersInvariantPtr logAbiInputPtr abiEncoderMembersInput logAbiChildPtr
   stmtSimLogScalarMembers stmtSimLogEncodeLayout abiEncoderInput contractABI abiDecodeRanges abiEncoderBytes
-  valueEncodingProps
+  valueEncodingProps calldataDynOwned
 
 Theorem compile_abi_copy_child_seq_ptr:
   compile_abi_encode_child (Var dst) (Var src) (AbiCopy 32) F ho dp sa = (out,sb) /\
@@ -239,3 +239,158 @@ Resume log_scalar_child_ranges_seq_ptr[bytes]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise log_scalar_child_ranges_seq_ptr
+
+Theorem log_scalar_member_child_seq_ptr:
+  compile_abi_encode_child (Var dst) (Var src) ei dyn ho (Var dp) sa = (out,end_st) /\
+  log_members_layout ((ei,asz,mz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs sb so ho d hl cap s.vs_memory /\
+  (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
+    abi_encoder_input (AbiComplex ((ei,asz,mz,dyn)::infos))
+      (Tuple (ty::tys)) (ListV (av::avs)) (sb+so)
+      (abi_encoder_member_span ((ei,asz,mz,dyn)::infos)) q) /\
+  not_fresh_at sa dst /\ not_fresh_at sa src /\ not_fresh_at sa dp /\
+  lookup_var dst s = SOME (n2w d) /\ lookup_var src s = SOME (n2w (sb+so)) /\
+  lookup_var dp s = SOME (n2w p) /\
+  mload p s = n2w (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) /\
+  ptr_covers G tn dst s cap /\ ptr_covers G tn src s mz /\ ptr_covers G tn dp s 32 /\
+  sb+so+mz+abi_encoder_member_span infos < dimword(:256) /\
+  d+cap < dimword(:256) /\ p+32 < dimword(:256) /\
+  (sb+so+mz+abi_encoder_member_span infos <= d \/ d+cap <= sb+so) /\
+  (sb+so+mz+abi_encoder_member_span infos <= p \/ p+32 <= sb+so) /\
+  (d+cap <= p \/ p+32 <= d) /\
+  (!i. d <= i /\ i < d+ho ==> i NOTIN tn.t_mem) /\
+  (!i. d+hl <= i /\ i < d+hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) ==>
+    i NOTIN tn.t_mem) /\
+  (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st s ==>
+  ?H tm t.
+    run_inst_seq (emitted_insts sa end_st) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa end_st) s H tm /\
+    inst_extends sa end_st /\ fresh_vars_wrt limit_st t /\
+    log_members_layout infos tys avs (pre++[ty]) (pvs++[av])
+      sb (so+mz) (ho+asz) d hl cap t.vs_memory /\
+    mload p t = n2w (hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))) /\
+    abi_decode_footprint_frame [(d,cap);(p,32)] s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_halted = s.vs_halted /\
+    (!q. mem_agree_outside tm.t_mem t.vs_memory q ==>
+      abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs)
+        (sb+(so+mz)) (abi_encoder_member_span infos) q) /\
+    (!i. d <= i /\ i < d+(ho+asz) ==> i NOTIN tm.t_mem) /\
+    (!i. d+hl <= i /\
+      i < d+hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av]))) ==>
+      i NOTIN tm.t_mem) /\
+    (!i. p <= i /\ i < p+32 ==> i NOTIN tm.t_mem) /\
+    (!i. ~(d <= i /\ i < d+cap) /\ ~(p <= i /\ i < p+32) ==>
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v t = lookup_var v s /\ FLOOKUP H v = FLOOKUP G v /\
+      op_taint tm (Var v) = op_taint tn (Var v))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule robust_abi_encoder_members_input_cons >> strip_tac >>
+  `sb+so+mz < dimword(:256)` by decide_tac >>
+  SUBGOAL_THEN ``sb+so+mz <= d \/ d+cap <= sb+so`` assume_tac
+  >- decide_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST
+    [`r` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`]
+    log_scalar_child_ranges_seq_ptr)) >>
+  suspend "ranges"
+QED
+Resume log_scalar_member_child_seq_ptr[ranges]:
+  markerLib.RESUME_TAC >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t` strip_assume_tac)))) >>
+  `eval_operand (Var src) s = SOME (n2w (sb+so)) /\
+   eval_operand (Var dst) s = SOME (n2w d) /\
+   eval_operand (Var dp) s = SOME (n2w p) /\
+   abi_decoder_operand_live sa.cs_next_var (Var src) /\
+   abi_decoder_operand_live sa.cs_next_var (Var dst) /\
+   abi_decoder_operand_live sa.cs_next_var (Var dp)` by
+    (asm_simp_tac bool_ss [eval_operand_def, calldata_operand_live_not_fresh]) >>
+  `sb+so < dimword(:256) /\ p < dimword(:256)` by decide_tac >>
+  drule_all log_scalar_member_child_run >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  `u = t` by
+    (qpat_x_assum `run_inst_seq _ _ = OK u` mp_tac >>
+     qpat_x_assum `run_inst_seq _ _ = OK t` (fn th => rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `u = t` SUBST_ALL_TAC >>
+  qexistsl_tac [`H`,`tm`,`t`] >>
+  suspend "post"
+QED
+Resume log_scalar_member_child_seq_ptr[post]:
+  markerLib.RESUME_TAC >>
+  ntac 10 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- suspend "robust" >>
+  `(!i. d <= i /\ i < d+(ho+asz) ==> i NOTIN tm.t_mem) /\
+   (!i. d+hl <= i /\
+    i < d+hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av]))) ==>
+    i NOTIN tm.t_mem)` by suspend "clean" >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (gen_tac >> disch_tac >>
+    qpat_x_assum `!i. _ \/ _ \/ _ ==> i NOTIN tm.t_mem` irule >> simp[]) >>
+  conj_tac >- suspend "frame" >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Resume log_scalar_member_child_seq_ptr[robust]:
+  markerLib.RESUME_TAC >>
+  qmatch_asmsub_abbrev_tac `mem_agree_outside writes t.vs_memory s.vs_memory` >>
+  match_mp_tac (Q.INST [`m` |-> `tn.t_mem`, `mem` |-> `s.vs_memory`,
+    `writes` |-> `writes`] robust_abi_encoder_input_separated_write) >>
+  conj_tac >-
+    (pure_rewrite_tac [ADD_ASSOC] >>
+     first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [ADD_ASSOC])) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  drule log_members_layout_bounds >> strip_tac >>
+  conj_tac >-
+    (simp_tac (srw_ss()) [Abbr `writes`] >> rpt strip_tac >>
+     Cases_on `dyn` >> fs[] >> decide_tac) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!i. _ ==> (i IN tm.t_mem <=> i IN tn.t_mem)` irule >>
+  Cases_on `dyn` >> fs[] >> decide_tac
+QED
+Resume log_scalar_member_child_seq_ptr[clean]:
+  markerLib.RESUME_TAC >>
+  `!i. ~(d+ho <= i /\ i < d+ho+asz) /\
+    ~(d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) <= i /\
+      i < d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))+
+        (if dyn then LENGTH (enc ty av) else 0)) ==>
+    (i IN tm.t_mem <=> i IN tn.t_mem)` by
+    (map_every (fn pat => qpat_x_assum pat mp_tac)
+      [`!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem`,
+       `!i. _ \/ _ \/ _ ==> i NOTIN tm.t_mem`,
+       `!i. _ ==> (i IN tm.t_mem <=> i IN tn.t_mem)`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  drule log_members_layout_cons_input >> strip_tac >>
+  qpat_assum `log_members_layout ((ei,asz,mz,dyn)::infos) _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any (qspecl_then [`ty`,`av`] strip_assume_tac) log_members_layout_offsets) >>
+  `!i. d+ho <= i /\ i < d+ho+asz ==> i NOTIN tm.t_mem` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!i. _ \/ _ \/ _ ==> i NOTIN tm.t_mem` irule >> simp[]) >>
+  `!i. d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) <= i /\
+    i < d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))+
+      (if dyn then LENGTH (enc ty av) else 0) ==> i NOTIN tm.t_mem` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!i. _ \/ _ \/ _ ==> i NOTIN tm.t_mem` irule >> simp[]) >>
+  rule_assum_tac (SIMP_RULE bool_ss [ADD_ASSOC]) >>
+  drule_all (SIMP_RULE bool_ss [ADD_ASSOC] (Q.INST
+    [`tl` |-> `LENGTH (FLAT (abi_tuple_tails pre pvs))`,
+     `tn` |-> `if dyn then LENGTH (enc ty av) else 0`]
+    log_members_layout_advance_clean)) >>
+  strip_tac >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!i. d <= i /\ i < d+SUM _ ==> i NOTIN tm.t_mem` mp_tac >>
+  qpat_x_assum `SUM _ = ho+abi_member_head_size ty` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `asz = abi_member_head_size ty` (fn th => rewrite_tac[GSYM th]) >>
+  simp_tac bool_ss [ADD_ASSOC]
+QED
+Resume log_scalar_member_child_seq_ptr[frame]:
+  markerLib.RESUME_TAC >>
+  drule log_members_layout_bounds >> strip_tac >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!i. _ ==> (i IN tm.t_mem <=> i IN tn.t_mem)` irule >>
+  Cases_on `dyn` >> fs[] >> decide_tac
+QED
+Finalise log_scalar_member_child_seq_ptr
