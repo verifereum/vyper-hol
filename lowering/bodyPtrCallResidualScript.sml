@@ -25,6 +25,7 @@
 Theory bodyPtrCallResidual
 Ancestors
   bodyPtrPreds vyperAST vyperInterpreter list
+  rawRevertPtr exprSimRawRevertCore
 
 val _ = Parse.hide "body";
 
@@ -43,7 +44,15 @@ Theorem raw_revert_case_ptr_residual:
   !cx v22 es v23.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v22 RawRevert es v23)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[Once body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule raw_revert_pre_arg >> strip_tac >> gvs[] >>
+  qpat_x_assum `body_exprs_ptr_ok _ _`
+    (strip_assume_tac o REWRITE_RULE [body_exprs_ptr_ok_def]) >>
+  qpat_x_assum `body_expr_ptr_ok _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+  `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es'` by metis_tac[] >>
+  metis_tac[raw_revert_sim_ptr, raw_revert_vv_sim_ptr]
 QED
 
 (* RESIDUAL: false while extcall's calldata is bound-sized and the return
