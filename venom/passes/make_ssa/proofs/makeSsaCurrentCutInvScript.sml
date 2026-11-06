@@ -26,6 +26,7 @@ Ancestors
   makeSsaCurrentHistoryOwner venomInst venomWf venomExecProps list rich_list
   makeSsaCurrentNonphiDemandEdge makeSsaCurrentSingletonDemandEdge
   makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentExternalExclusion
+  makeSsaCurrentScanOrigin
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -1337,4 +1338,58 @@ Proof
     (irule current_prefix_cleaned_copy_owner >> simp[] >> metis_tac[]) >>
   `w = v` by metis_tac[current_carrier_history_name_owner] >> gvs[] >>
   irule current_cut_retained_original_endpoint >> metis_tac[]
+QED
+
+Theorem current_cut_phi_lookup_origin:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  A h = current_block_annotations old pre /\
+  FLOOKUP (current_cut_sg fn A renamed H events h
+    (LENGTH (collect_phis old.bb_instructions))) z = SOME x ==>
+  current_demand fn x h (LENGTH (collect_phis old.bb_instructions)) /\
+  ?ev rs E.
+    MEM ev events /\ current_event_label ev = h /\
+    current_source_cut A ev
+      (LENGTH pre + LENGTH (collect_phis old.bb_instructions)) rs E /\
+    (current_token_name H (E x) = SOME z \/
+     ?d. E x = CurrentInserted x d /\
+         current_collapsed_carrier fn A renamed d x z) /\
+    (E x = current_event_entry_env ev x \/
+     ((?inst. MEM inst pre /\ MEM x inst.inst_outputs) /\
+      E x = CurrentInserted x h) \/
+     ?j r. j < LENGTH (collect_phis old.bb_instructions) /\
+       r < LENGTH (EL j old.bb_instructions).inst_outputs /\
+       EL r (EL j old.bb_instructions).inst_outputs = x /\
+       E x = CurrentOriginal h j r)
+Proof
+  rpt strip_tac >>
+  `current_cut_pair fn A renamed H events h
+    (LENGTH (collect_phis old.bb_instructions)) z x` by
+    metis_tac[current_cut_sg_lookup] >>
+  fs[current_cut_pair_def] >>
+  `old' = old` by metis_tac[optionTheory.SOME_11] >>
+  gvs[] >>
+  `LENGTH (current_block_annotations old pre') =
+   LENGTH (current_block_annotations old pre)` by metis_tac[] >>
+  `LENGTH pre' = LENGTH pre` by
+    fs[current_block_annotations_def, current_inserted_annotations_def] >>
+  `current_event_label ev = old.bb_label` by
+    metis_tac[lookup_block_label] >>
+  `current_original_scan x old.bb_label 0
+     (TAKE (LENGTH (collect_phis old.bb_instructions)) old.bb_instructions)
+     (if (?inst. MEM inst pre /\ MEM x inst.inst_outputs)
+      then CurrentInserted x old.bb_label else current_event_entry_env ev x) = E x` by
+    metis_tac[current_wf_source_cut_original_scan] >>
+  qspecl_then [`TAKE (LENGTH (collect_phis old.bb_instructions)) old.bb_instructions`,
+                `0`,
+                `if (?inst. MEM inst pre /\ MEM x inst.inst_outputs)
+                 then CurrentInserted x old.bb_label else current_event_entry_env ev x`]
+    mp_tac (Q.INST [`v` |-> `x`, `l` |-> `old.bb_label`]
+      current_original_scan_origin) >>
+  simp[LENGTH_TAKE, EL_TAKE] >>
+  (strip_tac
+   >- (Cases_on `?inst. MEM inst pre /\ MEM x inst.inst_outputs` >>
+       gvs[] >> metis_tac[]) >>
+   gvs[EL_TAKE] >> metis_tac[])
 QED
