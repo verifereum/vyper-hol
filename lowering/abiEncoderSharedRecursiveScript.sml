@@ -103,7 +103,7 @@ Proof
   drule abi_encoder_structural_list_layout >> disch_tac >>
   qpat_x_assum `abi_sites_encoder_shared_members_pre sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_encoder_shared_members_pre_def]) >>
-  disch_then (qx_choose_then `rc` (qx_choose_then `layout` (qx_choose_then `values` strip_assume_tac) o
+  disch_then (qx_choose_then `rcap` (qx_choose_then `layout` (qx_choose_then `values` strip_assume_tac) o
     REWRITE_RULE [abi_encoder_window_complex_iff] o CONJUNCT1)) >>
   gvs[abi_encoder_tuple_type_def] >> rename1 `head_lengths tys 0` >>
   `MAP (\(_,_,_,dyn). dyn) infos = MAP is_dynamic tys` by

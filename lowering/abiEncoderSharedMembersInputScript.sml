@@ -8,11 +8,11 @@ Ancestors
 
 Definition abi_sites_encoder_shared_members_pre_def:
   abi_sites_encoder_shared_members_pre sites infos tys avs st src dst sb so d sz first last b cap s <=>
-    (?rc. abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
-            (sb+so) (rc-so) s.vs_memory /\
-          (infos <> [] ==> so <= rc) /\ sb+rc < dimword (:256) /\
-          regions_disjoint (sb,rc) (d,sz) /\
-          abi_footprint_disjoint sb rc (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)) /\
+    (?rcap. abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
+            (sb+so) (rcap-so) s.vs_memory /\
+          (infos <> [] ==> so <= rcap) /\ sb+rcap < dimword (:256) /\
+          regions_disjoint (sb,rcap) (d,sz) /\
+          abi_footprint_disjoint sb rcap (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)) /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     d+sz < dimword (:256) /\
@@ -24,11 +24,11 @@ Overload abi_encoder_shared_members_pre = “abi_sites_encoder_shared_members_pr
 
 Theorem abi_encoder_shared_members_pre_def:
   abi_encoder_shared_members_pre infos tys avs st src dst sb so d sz first last b cap s <=>
-    (?rc. abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
-            (sb+so) (rc-so) s.vs_memory /\
-          (infos <> [] ==> so <= rc) /\ sb+rc < dimword (:256) /\
-          regions_disjoint (sb,rc) (d,sz) /\
-          abi_footprint_disjoint sb rc (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)) /\
+    (?rcap. abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
+            (sb+so) (rcap-so) s.vs_memory /\
+          (infos <> [] ==> so <= rcap) /\ sb+rcap < dimword (:256) /\
+          regions_disjoint (sb,rcap) (d,sz) /\
+          abi_footprint_disjoint sb rcap (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)) /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     d+sz < dimword (:256) /\
@@ -95,28 +95,28 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_sites_encoder_shared_members_pre sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_members_pre_def]) >>
-  qpat_x_assum `?rc. _` strip_assume_tac >>
+  qpat_x_assum `?rcap. _` strip_assume_tac >>
   `abi_sites_decoder_ids sites lo hi SUBSET abi_sites_decoder_ids sites first last` by
     (simp[SUBSET_DEF, abi_sites_decoder_ids_def] >> decide_tac) >>
-  `abi_footprint_disjoint sb rc
+  `abi_footprint_disjoint sb rcap
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap initial)` by
     (irule abi_scratch_disjoint_subset >> qexists_tac `abi_sites_decoder_ids sites first last` >> simp[]) >>
   `eval_operand src actual = SOME (n2w sb) /\ eval_operand dst actual = SOME (n2w d)` by
     (imp_res_tac abi_scratch_effect_operand >> asm_simp_tac bool_ss []) >>
   qpat_assum `abi_sites_scratch_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_effect_def]) >>
-  `mem_bytes_at sb rc initial.vs_memory = mem_bytes_at sb rc actual.vs_memory` by
+  `mem_bytes_at sb rcap initial.vs_memory = mem_bytes_at sb rcap actual.vs_memory` by
     (drule_all abi_encoder_footprint_frame_zero_slice >> simp[EQ_SYM_EQ]) >>
   `abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs) (sb+so)
-    (rc-so) actual.vs_memory` by
+    (rcap-so) actual.vs_memory` by
     (drule_all abi_encoder_window_input_suffix_mem_agree >> simp[]) >>
-  `abi_footprint_disjoint sb rc
+  `abi_footprint_disjoint sb rcap
       (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual) /\
    abi_footprint_disjoint d sz
       (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual)` by
     (conj_tac >> irule abi_scratch_disjoint_advance >> simp[] >> qexists_tac `initial` >> simp[]) >>
   asm_simp_tac bool_ss [abi_sites_encoder_shared_members_pre_def] >>
-  qexists_tac `rc` >> asm_simp_tac bool_ss []
+  qexists_tac `rcap` >> asm_simp_tac bool_ss []
 QED
 
 Theorem abi_encoder_shared_members_pre_cons:
@@ -127,18 +127,18 @@ Theorem abi_encoder_shared_members_pre_cons:
 Proof
   strip_tac >> qpat_x_assum `abi_sites_encoder_shared_members_pre sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_members_pre_def]) >>
-  qpat_x_assum `?rc. _` strip_assume_tac >>
+  qpat_x_assum `?rcap. _` strip_assume_tac >>
   drule abi_encoder_window_complex_cons >> strip_tac >>
-  `so <= rc` by (qpat_x_assum `_ ==> so <= rc` mp_tac >> simp[]) >>
-  `infos <> [] ==> so+mem_sz <= rc` by
+  `so <= rcap` by (qpat_x_assum `_ ==> so <= rcap` mp_tac >> simp[]) >>
+  `infos <> [] ==> so+mem_sz <= rcap` by
     (strip_tac >> qpat_x_assum `infos <> [] ==> _` drule >> decide_tac) >>
   `abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
-    (sb+(so+mem_sz)) (rc-(so+mem_sz)) s.vs_memory` by
+    (sb+(so+mem_sz)) (rcap-(so+mem_sz)) s.vs_memory` by
     (qpat_x_assum `abi_encoder_window_input (AbiComplex infos) _ _ _ _ _` mp_tac >>
-     `rc - so - mem_sz = rc - (so+mem_sz)` by decide_tac >>
+     `rcap - so - mem_sz = rcap - (so+mem_sz)` by decide_tac >>
      `sb+so+mem_sz = sb+(so+mem_sz)` by decide_tac >> asm_rewrite_tac []) >>
   asm_simp_tac bool_ss [abi_sites_encoder_shared_members_pre_def] >>
-  qexists_tac `rc` >> asm_simp_tac bool_ss []
+  qexists_tac `rcap` >> asm_simp_tac bool_ss []
 QED
 
 Theorem abi_encoder_shared_members_child_buffer:
@@ -153,13 +153,13 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `abi_sites_encoder_shared_members_pre sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_members_pre_def]) >>
-  qpat_x_assum `?rc. _` strip_assume_tac >>
+  qpat_x_assum `?rcap. _` strip_assume_tac >>
   drule abi_encoder_window_complex_cons >> strip_tac >>
-  `so <= rc` by (qpat_x_assum `_ ==> so <= rc` mp_tac >> simp[]) >>
+  `so <= rcap` by (qpat_x_assum `_ ==> so <= rcap` mp_tac >> simp[]) >>
   qexists_tac `child_cap` >>
   `abi_footprint_disjoint (sb+so) child_cap
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by
-    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`, `rc`] >>
+    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`, `rcap`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
   `regions_disjoint (sb+so,child_cap) (d,sz)` by
     (fs[abi_encoder_zero_aware_separation] >> decide_tac) >>

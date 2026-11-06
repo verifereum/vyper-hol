@@ -116,7 +116,7 @@ Theorem abi_scratch_input_shared:
 Proof
   simp_tac bool_ss [abi_scratch_input_def, abi_encoder_shared_input_def,
     abi_encoder_zero_aware_separation] >> strip_tac >>
-  drule abi_encoder_input_open >> simp[]
+  drule abi_encoder_input_open >> simp[abi_encoder_open_input_window]
 QED
 
 Theorem abi_encoder_shared_input_typed:
