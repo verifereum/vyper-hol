@@ -189,3 +189,87 @@ Resume storage_copy_loop_path_ptr[frames]:
 
 QED
 Finalise storage_copy_loop_path_ptr
+
+(* Includes the initializer and final test; n=0 follows the same path. *)
+Theorem storage_copy_entry_loop_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME ebb /\
+  ebb.bb_instructions = pre ++
+    [mk_inst eid ASSIGN [Lit 0w] [cv]; mk_inst (eid+1) JMP [Label hdr] []] /\
+  s.vs_inst_idx = LENGTH pre /\
+  lookup_block hdr fn.fn_blocks = SOME hbb /\
+  hbb.bb_instructions =
+    [mk_inst hid EQ [Var cv; Lit (n2w n)] [tv];
+     mk_inst (hid+1) JNZ [Var tv; Label exit_lbl; Label body_lbl] []] /\
+  lookup_block body_lbl fn.fn_blocks = SOME bbb /\
+  bbb.bb_instructions =
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+3) ADD [Var root;Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv];
+     mk_inst (id+7) JMP [Label hdr] []] /\
+  eval_operand src s = SOME a /\ lookup_var root s = SOME b /\
+  op_taint tn src = {} /\ ptr_covers G tn root s span /\ 32*n <= span /\
+  w2n b+32*n < dimword(:256) /\ n < dimword(:256) /\
+  ALL_DISTINCT [root;tv;cv;sv;vv;mv;dv;nv] /\
+  (!x. MEM x [tv;cv;sv;vv;mv;dv;nv] ==> src <> Var x) /\
+  ~ctx_has_dalloca ctx /\ alloca_inv s /\ alloca_room ctx fn s /\
+  (!i w p sz. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA /\
+    i.inst_operands = [Lit w] /\
+    FLOOKUP s.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w) ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    eval_operand src t = SOME a /\ op_taint tn' src = {} /\
+    lookup_var root t = SOME b /\ ptr_covers G' tn' root t span /\
+    copy_prefix (if tr then LocTransient else LocStorage) a (w2n b) n s n t /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!i h. i < n /\ h < 32 ==>
+       (w2n b+32*i+h IN tn'.t_mem <=>
+        (a+n2w i,h) IN (if tr then tn'.t_trans else tn'.t_stor))) /\
+    (!i. (i < w2n b \/ w2n b+32*n <= i) ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    (!x. ~MEM x [tv;cv;sv;vv;mv;dv;nv] ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    ((t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next) /\
+     alloca_inv t /\ alloca_room ctx fn t /\
+     (!i w p sz. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA /\
+       i.inst_operands = [Lit w] /\
+       FLOOKUP t.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w))
+Proof
+  strip_tac >>
+  drule_all copy_loop_entry_path_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
+  `root <> cv /\ src <> Var cv` by fs[ALL_DISTINCT] >>
+  `copy_prefix (if tr then LocTransient else LocStorage) a (w2n b) n s 0 s`
+    by simp[copy_prefix_zero] >>
+  drule_all (SRULE [] (Q.GENL [`t`, `G'`, `tn'`] storage_copy_header_frame)) >>
+  disch_then (qspecl_then [`0w`, `hdr`] strip_assume_tac) >>
+  suspend "initialize"
+QED
+Resume storage_copy_entry_loop_path_ptr[initialize]:
+  qspecl_then [`n`, `0`, `jump_to hdr (update_var cv 0w s)`,
+    `DRESTRICT G (COMPL {cv})`, `tn with t_var := tn.t_var |+ (cv,{})`]
+    mp_tac (Q.INST [`sbase` |-> `s`, `M0` |-> `tn.t_mem`] storage_copy_loop_path_ptr) >>
+  (impl_tac >-
+    (simp[] >> simp[jump_to_def, update_var_def, lookup_var_def,
+                    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def] >>
+     fs[op_taint_def, ALL_DISTINCT])) >>
+  strip_tac >>
+  rename1 `gas_path_ptr D 0 ctx fn PG _ _ (jump_to hdr (update_var cv 0w s)) 0 Gf tf (OK fin)` >>
+  drule_all gas_path_ptr_then >> disch_then (assume_tac o SRULE []) >>
+  drule_all copy_prefix_recorded_resources >> strip_tac >>
+  qexistsl [`Gf`, `tf`, `fin`] >> simp[] >>
+  suspend "entry_frames"
+QED
+Resume storage_copy_entry_loop_path_ptr[entry_frames]:
+  qpat_x_assum `!i. _ \/ _ <= i ==> (i IN tf.t_mem <=> _)` mp_tac >> simp[] >>
+  strip_tac >> conj_tac >- (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i w p sz. _ ==> sz = w2n w`
+    (qspecl_then [`i`, `w`, `p`, `sz`] mp_tac) >> simp[]
+QED
+Finalise storage_copy_entry_loop_path_ptr
