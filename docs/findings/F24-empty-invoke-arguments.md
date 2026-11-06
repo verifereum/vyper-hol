@@ -39,8 +39,7 @@ inherited memory/account/oracle/frame field, not merely successful lookup.
   `setup_zero_args_preserves_frame`, `setup_empty_function_rejected`,
   `invoke_zero_args_returns_seven`, `invoke_empty_function_rejected`.
 - [Original HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerScript.sml),
-  `internal_call_program`; [byte endpoints](../../lowering/defs/bytecode/eval/evalCompilerBytecodeControlScript.sml),
-  `internal_call_matches_python_oracle` and `internal_call_arg_matches_python_oracle`.
+  `internal_call_program`.
 - [Lowering](../../lowering/defs/exprLoweringScript.sml): internal-call args;
   [function generation](../../lowering/defs/moduleLoweringScript.sml): RETPC_PARAM.
 

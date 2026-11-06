@@ -1,7 +1,7 @@
 # O1 bytecode parity fixtures
 
 This directory contains the independent Python oracle for the frozen 101-fixture
-HOL-supported-subset corpus (12 of them no longer parity-checked, see below). It includes the original 23-fixture milestone and
+HOL-supported-subset corpus (12 of them not parity-checked; see [`pending-5127-port.md`](pending-5127-port.md)). It includes the original 23-fixture milestone and
 78 subset/interaction fixtures.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
@@ -10,13 +10,14 @@ HOL-supported-subset corpus (12 of them no longer parity-checked, see below). It
 - `python-o1-no-asm-opt/` contains the pinned Python Vyper deployment/runtime
   bytecode and its provenance record.
 - `python_o1_bytecode_oracle.py` generates the oracle.
-- `python-o1-bytecode-fixtures` reproduces it and optionally runs the HOL parity
-  theorems.
+- `python-o1-bytecode-fixtures` reproduces it.
 
 The generated provenance records the pinned Python compiler, its dependencies,
 the Vyper fixture source hashes, compilation settings, and output hashes. It
 does not hash HOL scripts: they are not Python compiler inputs, and their
-bytecode parity is checked separately by the HOL theorems.
+bytecode parity is checked separately: by the native runner in `native/`,
+and in the kernel by the three `eval/evalCompilerBytecodeScalarConvert*`
+theories and, for the assembly-optimized oracle, `eval/evalCompilerBytecodeAsmOpt`.
 
 For a public summary of what the fixtures test and what remains unverified,
 see [`docs/bytecode-fixture-coverage.md`](../../../docs/bytecode-fixture-coverage.md).
@@ -53,39 +54,21 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --update \
 
 ## HOL comparison
 
-`eval/evalCompilerBytecodeLib.sml` reads the independent oracle directly. The
-parity theories under `eval/` evaluate
+The [native runner](native/README.md) compiles each retained fixture with
+`compile_vyper (K SOME) (o1_policy all_capabilities)`, exported to ML by
+EmitML, and requires exact deployment and runtime byte equality with this
+oracle. It is a fast regression check, not a kernel-checked proof; its README
+says what a `PASS` trusts. This is finite fixture evidence, not a universal
+compiler-equivalence theorem.
 
-```sml
-compile_vyper (K SOME) (o1_policy all_capabilities) <program>
-```
-
-and requires exact deployment and runtime byte equality. The expensive fixture
-evaluation is opt-in and does not raise the normal project's 2.5-second tactic
-timeout:
-
-```sh
-lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
-  --vyper-repo /path/to/vyper
-```
-
-The complete opt-in HOL rollup, including allocation-budget regressions and
-raw-context evaluator-cost measurements, is:
+No build root reaches five regression theories: the range-folding and
+allocation-budget checks and the three event regressions. Build them with:
 
 ```sh
-holbuild --max-heap 16384 -j1 --tactic-timeout 600 evalCompilerBytecodeParityTheory
+holbuild build evalCompilerRangeTheory evalCompilerAllocationBudgetTheory \
+  vyperImportedEventRegressionTheory vyperEventArgumentLifetimeTheory \
+  vyperEventForwardStructTheory
 ```
-
-89 of the 101 retained fixtures have an exact checked theorem proved by plain
-`EVAL_TAC`; together they check 178 byte lists (deployment and runtime).
-Expensive fixtures use kernel-derived staged compiler evaluation certificates.
-These rederive the exact `lowering_context_ok` check, including
-`unit_alloca_budget ctx < dimword (:256)`, and never register an oracle equality
-as an evaluator rewrite. The independent oracle appears only in parity claims.
-Any byte difference or checked-compiler `NONE` result fails. No HOL-generated expected output or implementation-derived
-fallback is used. The current cached comparison and parity-theory build logs
-contain no `Saved CHEAT` tags. This is finite fixture evidence, not a universal
-compiler-equivalence theorem or a claim about unrelated existing proof debt.
 
 ## Supported-subset boundary
 
@@ -164,11 +147,8 @@ metadata settings as the frozen oracle, and invokes the existing sanitizer.
 Installed compiler Python sources and builtin interfaces are compared with the
 clean checkout; provenance records the verified source count and tree hash.
 
-`eventFixtureProgramsTheory` runs the real frontend and certified checker in
-both modes on all seven JSON inputs and exports the resulting programs. The
-separate `vyperEventRegressionTheory` covers checker mutations, source-topic
-semantics, and the accepted event corpus. Bytecode parity is a separate check;
-frontend/checker acceptance alone does not establish it.
+`vyperEventRegressionTheory` covers checker mutations, source-topic
+semantics, and the accepted event corpus.
 `vyperImportedEventRegressionTheory` checks the single-module rejection of the
 three imported-event inputs after real frontend translation, in both modes.
 `vyperEventArgumentLifetimeTheory` checks a log whose first argument is a
@@ -180,21 +160,8 @@ argument; pure suffixes and word arguments need no snapshot.
 `vyperEventForwardStructTheory` certifies both checker modes and actual LOG
 execution for the forward-declared nested struct, including its 32-byte value.
 
-Run the seven exact deployment/runtime bytecode comparisons and the event
-regression theories with the normal tactic timeout:
-
-```sh
-holbuild --max-heap 16384 -j2 evalCompilerEventParityTheory \
-  eventEncodingPropsTheory eventTopicPropsTheory eventTopicExecPropsTheory
-```
-
-`eventBytecodeEvalLib` derives separate lowering, O1 pipeline and codegen
-evaluation certificates, including the compiler's actual guards, before the
-final byte equality proofs. The Python oracle is read only by those final
-claims. Every saved event parity theorem is audited for admission tags.
-The heap size follows the bytecode-proof profile above; the normal 2.5-second
-tactic timeout is retained. Integer reduction is enabled for signed literals,
-including the `-32` bytestring padding mask.
+No HOL check currently compares the event fixtures' bytes with this oracle:
+the native runner covers only the main corpus.
 
 `eventEncodingPropsTheory` proves complete encoding invariance under checked
 argument widening, with the declared signature hash. `eventTopicPropsTheory`

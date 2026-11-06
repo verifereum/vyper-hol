@@ -53,8 +53,6 @@ python3 lowering/defs/bytecode/memory_store_witnesses.py probe \
   --output /tmp/deep-dup-hol
 python3 lowering/defs/bytecode/deep-dup/check_runtime.py \
   --python-dir /tmp/deep-dup-python --hol-dir /tmp/deep-dup-hol
-lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
-  --vyper-repo /path/to/clean/pinned/vyper
 ```
 
 Oracle generation uses experimental codegen, Prague, optimization NONE and no

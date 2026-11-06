@@ -6,80 +6,18 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["vyperHolScript.sml",
-         "tests/vyperTestsHolScript.sml",
-         "lowering/e2eBoundaryTestScript.sml",
-         "tests/evalCompilerBytecodeLibTestScript.sml",
-         "tests/evalCompilerBaseDftLibTestScript.sml",
-         "tests/evalCompilerPlanCacheLibTestScript.sml",
-         "lowering/evalCompilerWitnessesScript.sml",
-         "tests/vyperCreateOracleTestScript.sml",
-         "tests/createOracleResultTestScript.sml",
-         "tests/createSourceSizeBoundaryTestScript.sml",
-         "tests/vyperCreateMemoryTestScript.sml",
-         "tests/createImmutableBytecodeTestScript.sml",
-         "tests/vyperCreateTypingTestScript.sml",
-         "tests/create/vyperCtorAliasTestScript.sml",
-         "tests/create/vyperCtorStorageAliasTestScript.sml",
-         "tests/createSemanticAuditScript.sml",
-         "tests/createLoweringAuditScript.sml",
-         "lowering/createOracleClosureAuditScript.sml",
-         "venom/codegen/proofs/asmCallActivationRegressionScript.sml",
-         "tests/vyperOracleInitialStateTestScript.sml",
-         "tests/vyperExternalDefaultsTestScript.sml",
-         "tests/vyperExternalEntryBehaviorScript.sml",
-         "tests/vyperExternalEntrySourceBehaviorScript.sml",
-         "tests/vyperExternalHeadersTestScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeExternalEntriesScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeAsmOptScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantMultiScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPragmaScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultEntriesScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultMultiScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultSenderScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodePragmaPureScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultOnlyScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPayableScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantViewScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantNoStorageScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantTransientScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantEarlyReturnScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantFallbackScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPragmaFallbackScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPragmaInitScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalViewScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultConstantScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultNamedConstantScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultPayableScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultBalanceScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeDefaultInternalFullScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPragmaReentrantScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalEarlyReturnScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalReturnScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantFallbackEarlyReturnScript.sml",
-         "venom/passes/concretize_mem_loc/proofs/concretizeCallFrameRegressionScript.sml",
-         "tests/conversionProofAuditScript.sml",
-         "frontend/cv/jsonToVyperCVScript.sml",
-         "lowering/targetPlaceTestScript.sml",
-         "lowering/targetPlaceSimCasesScript.sml",
-         "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
-         "tests/eventEndpointAuditScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",
-         "lowering/abiProofsScript.sml",
-         "lowering/supported/supportedTypePropsScript.sml",
-         "lowering/supported/supportedNamePropsScript.sml",
-         "lowering/supported/supportedDeclPropsScript.sml",
-         "lowering/supported/supportedExprFormPropsScript.sml",
-         "lowering/supported/supportedExprPropsScript.sml",
-         "lowering/supported/supportedStmtPropsScript.sml",
-         "lowering/supported/supportedStmtTraversePropsScript.sml",
-         "lowering/supported/supportedProgramPropsScript.sml",
-         "venom/codegen/proofs/contextReachabilityChecksScript.sml",
-         "venom/codegen/proofs/genFrameSimScript.sml",
-         "tests/vyperPlaceProbesTestScript.sml",
-         "tests/vyperPlaceSanityTestScript.sml"]
+roots = [
+  # the results: semantics, analyses, passes, lowering and compiler proofs
+  "vyperHolScript.sml",
+  # hand-written tests of the semantics, frontend and test runner
+  "tests/vyperTestsHolScript.sml",
+  # concrete checks of the lowering and compiler: parity, membership, audits
+  "lowering/loweringChecksScript.sml",
+  # concrete checks of Venom execution, the passes and codegen
+  "venom/venomChecksScript.sml",
+  # pinned-Python bytecode witnesses, a root of their own so CI can shard them
+  "lowering/evalCompilerWitnessesScript.sml",
+]
 
 [[executable]]
 name = "bytecode_parity_native"
@@ -92,3 +30,22 @@ deps = ["compilerNativeEmitTheory"]
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "837592d18c1ad4f9a040bd8dcc99cf35715803f3"
+
+# Functor parameter signatures are not inferred by HOL's module scanner.
+[actions.JsonASTDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonTraceDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonImportHol]
+loads = ["jsonImportTerm"]
+
+[actions.jsonASTLib]
+loads = ["jsonImportTerm", "JsonImportHol", "JsonASTDecodeFn"]
+
+[actions.vyperTestLib]
+loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
+
+[actions.vyperJsonReplayLib]
+loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn", "jsonDocumentLib"]

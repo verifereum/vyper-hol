@@ -32,8 +32,7 @@ no-TypeError family. Valid `ecmul([1,2],0)` still succeeds with `[0,0]`.
 - [Lowering](../../lowering/defs/builtinMiscScript.sml): EC precompile
   STATICCALL and ASSERT sequences.
 - Affected [ec_builtins source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/ec_builtins.vy),
-  [HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetBuiltinsScript.sml),
-  [byte endpoint](../../lowering/defs/bytecode/eval/evalCompilerBytecodeBuiltinsEcScript.sml).
+  [HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetBuiltinsScript.sml).
 
 Pinned reference `vyper/builtins/functions.py:802–843`,
 `_ECArith.build_IR`, `ECAdd`, `ECMul`: allocates typed buffers and emits
