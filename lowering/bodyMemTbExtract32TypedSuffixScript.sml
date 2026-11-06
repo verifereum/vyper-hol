@@ -82,3 +82,68 @@ Proof
   first_x_assum (qspec_then `ctx` strip_assume_tac) >>
   gvs[] >> metis_tac[]
 QED
+
+Theorem extract32_suffix_success_separated_path:
+  compile_extract32_load l d off sa = (raw,sc) /\
+  compile_clamp_basetype raw (BaseT bt) sc = (op,sb) /\
+  code = emitted_insts sa sc ++ emitted_insts sc sb /\
+  eval_operand l s = SOME (n2w (LENGTH bs)) /\
+  eval_operand d s = SOME (n2w (p + 32)) /\
+  eval_operand off s = SOME (n2w n) /\
+  (!x. l = Var x \/ d = Var x \/ off = Var x ==> not_fresh_at sa x) /\
+  LENGTH bs < dimword (:256) /\ n < dimword (:256) /\
+  n + 32 <= LENGTH bs /\ p + 32 + n < dimword (:256) /\
+  p + 32 < dimword (:256) /\ p + 32 + LENGTH bs <= s.vs_alloca_next /\
+  val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) p s.vs_memory /\
+  extract32_result_base_ok bt /\ well_formed_type tenv (BaseT bt) /\
+  evaluate_extract32 bs n bt = INL v /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t. gas_path_mem ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
+      eval_operand op t = SOME (typed_val_to_w256 (BaseTV bt) v) /\
+      t = s with vs_vars := t.vs_vars /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      run_inst_seq code s = OK t
+Proof
+  strip_tac >> drule_all extract32_suffix_success_separated_run >> strip_tac >>
+  `w2n (n2w (p + 32):bytes32) + w2n (n2w (LENGTH bs):bytes32) <= s.vs_alloca_next` by
+    simp[wordsTheory.w2n_n2w] >>
+  `run_inst_seq_mem_ok code s` by
+    (qpat_x_assum `code = _` (fn th => rewrite_tac[th]) >>
+     irule extract32_suffix_separated_mem_ok >> metis_tac[]) >>
+  drule_all extract32_suffix_safe_gas_paths >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ (drop_fresh sa s) = _` kall_tac >>
+  drule_all extract32_suffix_readonly_frame >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  rpt strip_tac >> irule extract32_suffix_lookup_kept >> metis_tac[]
+QED
+
+Theorem extract32_suffix_revert_separated_path:
+  compile_extract32_load l d off sa = (raw,sc) /\
+  compile_clamp_basetype raw (BaseT bt) sc = (op,sb) /\
+  code = emitted_insts sa sc ++ emitted_insts sc sb /\
+  eval_operand l s = SOME (n2w (LENGTH bs)) /\
+  eval_operand d s = SOME (n2w (p + 32)) /\
+  eval_operand off s = SOME (n2w n) /\
+  (!x. l = Var x \/ d = Var x \/ off = Var x ==> not_fresh_at sa x) /\
+  LENGTH bs < dimword (:256) /\ n < dimword (:256) /\
+  (n + 32 <= LENGTH bs ==> p + 32 + n < dimword (:256)) /\
+  p + 32 < dimword (:256) /\ p + 32 + LENGTH bs <= s.vs_alloca_next /\
+  val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) p s.vs_memory /\
+  extract32_result_base_ok bt /\ well_formed_type tenv (BaseT bt) /\
+  evaluate_extract32 bs n bt = INR (RuntimeError msg) /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t k j. gas_path_mem ctx func s k (Abort Revert_abort (t with vs_inst_idx := j))
+Proof
+  strip_tac >> drule_all extract32_suffix_revert_separated_run >> strip_tac >>
+  `w2n (n2w (p + 32):bytes32) + w2n (n2w (LENGTH bs):bytes32) <= s.vs_alloca_next` by
+    simp[wordsTheory.w2n_n2w] >>
+  `run_inst_seq_mem_ok code s` by
+    (qpat_x_assum `code = _` (fn th => rewrite_tac[th]) >>
+     irule extract32_suffix_separated_mem_ok >> metis_tac[]) >>
+  drule_all extract32_suffix_safe_gas_paths >> strip_tac >>
+  first_x_assum (qspec_then `ctx` strip_assume_tac) >>
+  gvs[] >> metis_tac[]
+QED

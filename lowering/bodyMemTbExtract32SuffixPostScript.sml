@@ -128,7 +128,8 @@ Theorem extract32_suffix_success_entry:
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   eval_operand l s = SOME (n2w (LENGTH bs)) /\
   eval_operand d s = SOME (n2w (p + 32)) /\
-  eval_operand off s = SOME (n2w n) /\ fresh_vars_wrt sa s /\
+  eval_operand off s = SOME (n2w n) /\
+  (!x. l = Var x \/ d = Var x \/ off = Var x ==> not_fresh_at sa x) /\
   LENGTH bs < dimword (:256) /\ n < dimword (:256) /\
   n + 32 <= LENGTH bs /\ p + 32 + n < dimword (:256) /\
   p + 32 < dimword (:256) /\ p + 32 + LENGTH bs <= s.vs_alloca_next /\
@@ -142,12 +143,12 @@ Theorem extract32_suffix_success_entry:
     alloca_history func u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    s.vs_alloca_next <= u.vs_alloca_next /\ fresh_vars_wrt sb u
+    s.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >> drule_all extract32_suffix_code_prefix >> strip_tac >>
   `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
-  drule_all extract32_suffix_success_path >>
+  drule_all extract32_suffix_success_separated_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `DROP s.vs_inst_idx bb.bb_instructions = code ++ rest` by simp[] >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
@@ -160,4 +161,29 @@ Proof
   qexists_tac `t with vs_inst_idx := s.vs_inst_idx + LENGTH code` >>
   gvs[] >> qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >>
   fs[eval_operand_def, fresh_vars_wrt_def]
+QED
+
+Theorem extract32_suffix_revert_entry:
+  compile_extract32_load l d off sa = (raw,sc) /\
+  compile_clamp_basetype raw (BaseT bt) sc = (op,sb) /\
+  code = emitted_insts sa sc ++ emitted_insts sc sb /\
+  fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand l s = SOME (n2w (LENGTH bs)) /\
+  eval_operand d s = SOME (n2w (p + 32)) /\
+  eval_operand off s = SOME (n2w n) /\
+  (!x. l = Var x \/ d = Var x \/ off = Var x ==> not_fresh_at sa x) /\
+  LENGTH bs < dimword (:256) /\ n < dimword (:256) /\
+  (n + 32 <= LENGTH bs ==> p + 32 + n < dimword (:256)) /\
+  p + 32 < dimword (:256) /\ p + 32 + LENGTH bs <= s.vs_alloca_next /\
+  val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) p s.vs_memory /\
+  extract32_result_base_ok bt /\ well_formed_type tenv (BaseT bt) /\
+  evaluate_extract32 bs n bt = INR (RuntimeError msg) /\ ~s.vs_halted ==>
+  ?t k j. gas_path_mem ctx func s k (Abort Revert_abort (t with vs_inst_idx := j))
+Proof
+  strip_tac >> drule_all extract32_suffix_code_prefix >> strip_tac >>
+  `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[rich_listTheory.IS_PREFIX_APPEND] >>
+  drule_all extract32_suffix_revert_separated_path >> simp[]
 QED
