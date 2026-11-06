@@ -216,6 +216,13 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
+(* Static capacities used by Vyper's concat result inference. *)
+Definition bytelike_type_bound_def:
+  bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
+  bytelike_type_bound (BaseT (StringT n)) = n /\
+  bytelike_type_bound _ = 0
+End
+
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
@@ -238,7 +245,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (AsWeiValue _) ts =
     (LENGTH ts = 1 ∧ ty = BaseT (UintT 256) ∧ is_uint_type (HD ts)) ∧
   well_typed_builtin_app ty (Concat n) ts =
-    (2 <= LENGTH ts /\
+    (2 <= LENGTH ts /\ SUM (MAP bytelike_type_bound ts) <= n /\
      ((ty = BaseT (BytesT (Dynamic n)) /\ EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts) \/
       (ty = BaseT (StringT n) /\ EVERY (\t. ?m. t = BaseT (StringT m)) ts))) /\
   well_typed_builtin_app ty (Slice n) ts =
@@ -583,7 +590,8 @@ Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Convert target_ty ts =
     (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
-    (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
+    (LENGTH ts = 2 /\ (?m. EL 0 ts = BaseT (BytesT (Dynamic m))) /\
+     is_uint_type (EL 1 ts) /\
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
     (LENGTH ts = 1 /\ ?n. HD ts = BaseT (BytesT (Dynamic n))) /\
@@ -810,7 +818,7 @@ Definition well_typed_expr_def:
      LENGTH args = 2 + LENGTH flags.rcf_kws /\
      raw_call_kws_ok flags (DROP 2 args) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\

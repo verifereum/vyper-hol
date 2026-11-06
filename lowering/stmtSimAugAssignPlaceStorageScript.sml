@@ -38,7 +38,7 @@ Ancestors
   placeStore supportedTargets exprSimProps exprSimSource loweringPosts
   bodyAugPlaceTarget bodySimAugPlaceStore
   bodySimAugPlaceScopes bodySimAugPlaceMemory
-  stmtSimAugAssignPlace
+  stmtSimAugAssignPlace targetPlaceLive targetPlaceSimCasesBase
 Libs
   monadsyntax
 

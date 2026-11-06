@@ -95,7 +95,8 @@ Proof
    c.ce_hashmap_info = cenv.ce_hashmap_info /\
    c.ce_module_var_type = cenv.ce_module_var_type /\
    c.ce_module = cenv.ce_module /\
-   c.ce_module_vars = cenv.ce_module_vars` by
+   c.ce_module_vars = cenv.ce_module_vars /\
+   c.ce_method_id = cenv.ce_method_id` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
        (SUBST1_TAC o SYM) >> simp[]) >>

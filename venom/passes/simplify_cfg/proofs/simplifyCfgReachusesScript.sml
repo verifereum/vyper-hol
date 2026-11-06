@@ -29,13 +29,6 @@ Proof
   metis_tac[fix_phi_inst_inst_wf]
 QED
 
-Theorem remove_unreachable_blocks_fn_inst_wf:
-  fn_inst_wf fn ==> fn_inst_wf (remove_unreachable_blocks fn)
-Proof
-  simp[fn_inst_wf_def, remove_unreachable_blocks_def] >>
-  Cases_on `fn_entry_label fn` >> simp[MEM_FILTER] >> metis_tac[]
-QED
-
 Theorem repair_reachable_invariants:
   wf_function fn /\ fn_inst_wf fn /\ first_block_no_preds fn /\
   scfg_phi_safe fn /\ fn_defs_reach_uses fn ==>
@@ -333,7 +326,7 @@ Proof
   Cases_on `target = a.bb_label` >>
   Cases_on `bb'.bb_label = target` >>
   Cases_on `is_terminator orig.inst_opcode` >>
-  gvs[inst_wf_update_phi_bypass, inst_wf_canon_jnz_inst, inst_wf_subst_label_inst]
+  gvs[inst_wf_update_phi_bypass, canon_jnz_inst_wf, inst_wf_subst_label_inst]
 QED
 
 Theorem chain_merge_reachable_input:

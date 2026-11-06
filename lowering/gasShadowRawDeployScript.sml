@@ -27,13 +27,13 @@ Proof
   qpat_x_assum `!fs. EXISTS _ _ = _` (qspec_then `int_fns` assume_tac) >>
   simp[gas_shadow_compute_immutables_len] >>
   Cases_on `ctor_fn`
-  >- (simp[set_constructor_package_target_def] >>
+  >- (simp[set_constructor_package_target_def, ctor_named_init_def] >>
       IF_CASES_TAC >> simp[] >>
       irule (SRULE [] (Q.INST [`ints` |-> `[]`, `stmts` |-> `[]`]
         (SPEC_ALL gas_shadow_run_deploy_lowering)))) >>
   PairCases_on `x` >>
   simp[gas_shadow_fn_allocs_ok, gas_shadow_package_constructor,
-       gas_shadow_set_constructor_package_target] >>
+       gas_shadow_set_constructor_package_target, ctor_named_init_def] >>
   IF_CASES_TAC >> simp[] >>
   `MAP (set_internal_package_target rp.rpol_target o
         package_internal_fn (MAP gas_shadow_toplevel tops) F (assign_nkeys tops 0) T
