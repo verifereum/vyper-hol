@@ -1,7 +1,8 @@
 Theory externalReturnBoundaryPtr
 Ancestors
   loweringHalt stmtLowering compileEnv emitHelper venomInst
-  compileVyper entryStateRel bodySim
+  compileVyper entryStateRel bodySim bodyPtrDefs fragExecPtr fragExec stmtSim
+  ptrSafeRun ptrDiscipline venomState venomExecSemantics contextCodegenRelProps
 
 val _ = Parse.hide "body";
 
@@ -36,4 +37,34 @@ Proof
   simp[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `cenv = _` (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem external_return_none_stmt_frag_ptr:
+  cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = NONE /\
+  cenv.ce_nonreentrant = (nr,nkey,ut,iv) /\ (nr ==> iv) /\
+  eval_stmt cx (Return NONE) es = (INR (ReturnException v),es') ==>
+  stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
+    (stmt_env cenv lctx ret_ty (Return NONE)) es
+    (INR (ReturnException v)) es'
+Proof
+  strip_tac >> simp[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule_all compile_return_none_external_code >> strip_tac >>
+  disj2_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s0.vs_inst_idx =
+    SOME (mk_inst sa.cs_next_id STOP [] [])` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `run_from 0 ctx func s0 = Halt (halt_state (s0 with vs_returndata := []))` by
+    (irule run_from_halt >>
+     qexistsl [`bb`, `mk_inst sa.cs_next_id STOP [] []`] >>
+     simp[mk_inst_def, step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]) >>
+  qexists `0` >> simp[exit_result_def, stmt_exit_ptr_def] >>
+  irule ptr_safe_run_stop >> simp[] >>
+  conj_tac >- (qexists `sa.cs_next_id` >> gvs[]) >>
+  gvs[ghost_inv_def]
 QED
