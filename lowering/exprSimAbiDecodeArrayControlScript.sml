@@ -248,3 +248,17 @@ Proof
     simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
   fs[] >> metis_tac[]
 QED
+
+Theorem abi_array_body_post_backedge_prefix:
+  abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\ j < n ==>
+  abi_array_memory_prefix tv d (type_memory_bytes ce ty) (SUC j) vs
+    (jump_to hdr (mstore slot w (update_var nv w s)))
+Proof
+  simp_tac bool_ss [abi_array_body_post_def, abi_array_loop_data_def] >> strip_tac >>
+  `abi_array_memory_prefix tv d (type_memory_bytes ce ty) (SUC j) vs (mstore slot w s)` by
+    (irule abi_array_memory_prefix_store >> simp_tac bool_ss [] >>
+     conj_tac >- (qexists `n` >> simp[] >> decide_tac) >> simp[]) >>
+  fs[abi_array_memory_prefix_def, jump_to_def, mstore_def, update_var_def] >>
+  metis_tac[]
+QED
