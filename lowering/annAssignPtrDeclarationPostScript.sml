@@ -53,7 +53,9 @@ Theorem annassign_copied_declaration_path_ptr:
  ptr_covers Gf tnf dst sf sz /\ lookup_var dst sf = SOME b /\
  (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
       val_in_memory entry.type entry.value (w2n b) m) /\
- ghost_inv d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf
+ ghost_inv d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf /\
+ (!q. not_fresh_at st q ==> lookup_var q sf = lookup_var q s) /\
+ sf.vs_allocas = s.vs_allocas
 Proof
  rpt gen_tac >> strip_tac >> (
  drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
@@ -76,5 +78,6 @@ Proof
  `ghost_inv d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf` by
    (irule annassign_ghost_scope_update_ptr >> simp[] >>
     rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
- qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[])
+ qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[] >>
+ fs[venomStateTheory.venom_state_component_equality])
 QED
