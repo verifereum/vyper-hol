@@ -1,7 +1,7 @@
 (* Source outcome consumption and implicit-GAS exceptional summaries. *)
 Theory bodyPtrHashBuiltinsShaSource
 Ancestors exprSimHash exprLoweringProps compileEnv vyperState vyperInterpreter
-  gasSummaryComposePtr fragGasPathPtr list
+  gasSummaryComposePtr fragGasPathPtr list rich_list
 
 Theorem hash_counted_exit_summary:
   (!tail. source (ee with gas_obs := tail) =
@@ -58,4 +58,25 @@ Proof
   rename1 `s.vs_outcomes = outcome::rest` >>
   qexists_tac `ee with outcomes := SOME rest` >>
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
+QED
+
+(* Shared exceptional packaging for both fixed and dynamic SHA paths. *)
+Theorem hash_sha256_abort_summary:
+  stmt_state_rel ctx fn cenv cx ee s /\ ee.gas_obs = [] /\
+  builtin_result cx ee.accounts ann Sha256 tys [v] = INL r /\
+  ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
+  gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf (Abort Revert_abort t) ==>
+  gas_summary_ptr_at D (ctx,fn) PG [F]
+    (\es'. case builtin_result cx es'.accounts ann Sha256 tys [v] of
+       INR exc => (INR exc,es')
+     | INL w => (do precompile_call_success Sha256; return (Value w) od) es')
+    (ee,s,G,tn) Q (\res ef gt rr. expr_exit res rr)
+Proof
+  strip_tac >> drule_all hash_sha256_source_failure >> strip_tac >>
+  `REPLICATE 1 F = [F]` by EVAL_TAC >>
+  pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
+  irule hash_counted_exit_summary >>
+  first_assum (irule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`, `ef`] >>
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
 QED
