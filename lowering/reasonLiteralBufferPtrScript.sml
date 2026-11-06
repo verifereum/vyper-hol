@@ -250,3 +250,28 @@ Resume reason_literal_buffer_ptr_run[assemble]:
 QED
 
 Finalise reason_literal_buffer_ptr_run
+
+Theorem reason_literal_buffer_ptr_path:
+  compile_bytelike_literal bs ml sa = (buf,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >> drule_all literal_bytelike_gas_path >> strip_tac >>
+  simp[] >> drule reason_literal_compiler_shape >> strip_tac >>
+  gvs[fragExecTheory.fn_has_code_def, exprLoweringPropsTheory.same_blocks_def,
+      rich_listTheory.IS_PREFIX_APPEND] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[rich_listTheory.DROP_APPEND1] >>
+  drule_at (Pat `isPREFIX _ _`)
+    (REWRITE_RULE [GSYM AND_IMP_INTRO] run_inst_seq_gas_path_ptr) >>
+  simp[mk_inst_def] >>
+  disch_then (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
+  fs[mk_inst_def] >> rpt (disch_then drule) >> simp[arithmeticTheory.ADD1]
+QED
