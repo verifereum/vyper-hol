@@ -2,6 +2,8 @@
 Theory fnBlockPlanStaticOffsetLive
 Ancestors
   fnFrameStepsRevertForward venomExecProofs rich_list list stackPlanGen venomWf pair
+  livenessConvergenceProofs livenessDefs livenessBlockProofs
+  codegenReadyCompute pred_set livenessProofs venomInst basePtrProofs
 
 Theorem ready_output_location_unique:
   !fn db k ub j v.
@@ -98,4 +100,123 @@ Theorem ready_output_other_location:
     ~MEM v (EL j ub.bb_instructions).inst_outputs
 Proof
   metis_tac[ready_output_location_unique]
+QED
+
+Theorem input_vars_from_predecessor_exit:
+  !fn pred succ pb sb v.
+    wf_function fn /\ fn_reachable fn pred /\ fn_cfg_edge fn pred succ /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block succ fn.fn_blocks = SOME sb /\
+    MEM v (input_vars_from pred sb.bb_instructions
+      (live_vars_at (liveness_analyze fn) succ 0)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) pred
+      (LENGTH pb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  `MEM succ (cfg_succs_of (cfg_analyze fn) pred)` by
+    metis_tac[fn_cfg_edge_cfg_analyze] >>
+  drule_all liveness_recompute_edge_subset >>
+  simp[liveness_edge_transfer_def, liveness_instrs_def,
+       SUBSET_DEF, GSYM live_vars_at_def, GSYM liveness_analyze_def]
+QED
+
+Theorem collect_phis_length_bound:
+  !instrs. LENGTH (collect_phis instrs) <= LENGTH instrs
+Proof
+  Induct >> simp[collect_phis_def] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem phi_ready_postprefix_edge:
+  !fn lbl bb pred v.
+    wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+    phi_block_ready (liveness_analyze fn) bb /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions))) /\
+    (!k. k < LENGTH (collect_phis bb.bb_instructions) ==>
+      ~MEM v (inst_defs (EL k bb.bb_instructions))) ==>
+    MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  rpt strip_tac >> irule input_vars_from_non_phi >> reverse conj_tac
+  >- (drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
+      qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
+      simp[collect_phis_length_bound]) >>
+  gvs[phi_block_ready_def, EVERY_MEM, inst_uses_def] >>
+  metis_tac[phi_pairs_mem_operand_vars]
+QED
+
+Theorem ready_phi_block:
+  !fn bb. codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
+    phi_block_ready (liveness_analyze fn) bb
+Proof
+  rpt strip_tac >>
+  `phi_operands_ready fn` by gvs[codegen_ready_fn_def] >>
+  qpat_x_assum `phi_operands_ready fn` mp_tac >>
+  rewrite_tac[phi_operands_ready_def] >>
+  Cases_on `EVERY (\bb. NULL (collect_phis bb.bb_instructions)) fn.fn_blocks`
+  >- (strip_tac >>
+      `collect_phis bb.bb_instructions = []` by
+        (qpat_x_assum `EVERY _ fn.fn_blocks` mp_tac >>
+         simp[EVERY_MEM, NULL_EQ] >> disch_then drule >> simp[]) >>
+      simp[phi_block_ready_def, phi_uses_disjoint_def]) >>
+  simp[EVERY_MEM]
+QED
+
+Theorem ready_postprefix_edge:
+  !fn lbl bb pred v.
+    codegen_ready_fn fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions))) /\
+    (!k. k < LENGTH (collect_phis bb.bb_instructions) ==>
+      ~MEM v (inst_defs (EL k bb.bb_instructions))) ==>
+    MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  rpt strip_tac >> irule phi_ready_postprefix_edge >> simp[] >>
+  conj_tac >- gvs[codegen_ready_fn_def] >>
+  irule ready_phi_block >> metis_tac[lookup_block_MEM]
+QED
+
+Theorem phi_input_fold_selected:
+  !live acc placed op_map matching v idx.
+    FLOOKUP op_map v = SOME idx /\ FLOOKUP matching idx = SOME v /\
+    (MEM idx placed ==> MEM v acc) /\ (MEM v live \/ MEM v acc) ==>
+    MEM v (FST (FOLDL (\(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME i => if MEM i placed then (acc, placed)
+                  else case FLOOKUP matching i of
+                         NONE => (acc, placed)
+                       | SOME src => (acc ++ [src], i :: placed))
+      (acc, placed) live))
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP op_map v = SOME idx` >>
+  Cases_on `FLOOKUP op_map h` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  rename1 `FLOOKUP op_map h = SOME i` >>
+  Cases_on `MEM i placed` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  Cases_on `FLOOKUP matching i` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  first_x_assum irule >> Cases_on `idx = i` >> gvs[] >> metis_tac[]
+QED
+
+Theorem input_vars_from_selected_maps:
+  !pred instrs live op_map matching v idx.
+    build_phi_maps pred (collect_phis instrs) = (op_map, matching) /\
+    FLOOKUP op_map v = SOME idx /\ FLOOKUP matching idx = SOME v /\
+    MEM v live ==>
+    MEM v (input_vars_from pred instrs live)
+Proof
+  rpt strip_tac >> simp[input_vars_from_def] >>
+  Cases_on `NULL (collect_phis instrs)` >> simp[] >>
+  qpat_x_assum `build_phi_maps _ _ = _` (fn th => rewrite_tac[th]) >>
+  simp[Once UNCURRY] >>
+  irule phi_input_fold_selected >> simp[] >> metis_tac[]
 QED
