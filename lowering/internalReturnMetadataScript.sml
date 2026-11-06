@@ -4,7 +4,7 @@ Ancestors
   externalReturnPrefix compileVyper moduleLowering entryStateRel bodySim
   externalNormalizePremises supportedNames vyperInterpreter compileEnv loweringShapeProps
   memoryLocalRhsProps supportedProgram supportedDecls e2eDefs vyperTypeContractSoundness
-  exprSimHypsDefs vyperTypeInvariants vyperContext
+  exprSimHypsDefs vyperTypeInvariants vyperContext vyperTypeContractStaticMaps vyperTypeContract vyperTypeSystem
 
 Theorem external_package_frame_internal_maps:
   set_external_package_target tgt
@@ -132,4 +132,21 @@ Proof
        vyperTypeSystemTheory.well_typed_expr_def, AllCaseEqs()] >>
   rpt strip_tac >> drule_all source_signature_internal_decl >>
   simp[] >> metis_tac[]
+QED
+
+Theorem source_function_return_evaluates:
+  !tops am tx vis mut nr rr name args dflts declared body.
+  source_typing_ok tops am tx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts declared body) tops ==>
+  ?tv. evaluate_type
+    (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+    declared = SOME tv
+Proof
+  rpt gen_tac >> simp[source_typing_ok_def] >> strip_tac >>
+  drule check_contract_toplevel_decl_MEM >>
+  simp[] >> disch_then (drule_at Any) >>
+  simp[check_toplevel_decl_def, well_formed_type_def] >>
+  fs[checked_contract_runtime_ready_def, get_tenv_def,
+     initial_evaluation_context_def] >>
+  simp[optionTheory.IS_SOME_EXISTS]
 QED
