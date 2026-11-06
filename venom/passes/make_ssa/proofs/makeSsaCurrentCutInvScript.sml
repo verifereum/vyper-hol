@@ -1177,3 +1177,96 @@ Proof
   simp[current_cut_semantic_endpoint_def] >>
   disj2_tac >> disj2_tac >> qexists `x` >> simp[]
 QED
+
+Theorem current_cut_nonself_slot_values[local]:
+  !pairs out. current_phi_values
+    (remove_current_phi_self out (current_phi_slots pairs)) =
+    SOME (MAP SND (FILTER (\a. SND a <> out) pairs))
+Proof
+  Induct >> simp[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
+    makeSsaCurrentDefsTheory.remove_current_phi_self_def,
+    makeSsaCurrentDefsTheory.current_phi_values_def] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  simp[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
+    makeSsaCurrentDefsTheory.remove_current_phi_self_def,
+    makeSsaCurrentDefsTheory.current_phi_values_def] >>
+  Cases_on `h1 = out` >>
+  fs[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
+    makeSsaCurrentDefsTheory.current_phi_values_def]
+QED
+
+Theorem current_cut_collapsed_slot_cases[local]:
+  inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = current_phi_slots pairs /\
+  simplify_current_phi inst =
+    inst with <|inst_opcode := ASSIGN; inst_operands := [Var src]|> /\
+  MEM (p,n) pairs ==> n = out \/ n = src
+Proof
+  strip_tac >>
+  gvs[makeSsaCurrentDefsTheory.simplify_current_phi_def,
+    makeSsaCurrentDefsTheory.keep_current_phi_vars_def, AllCaseEqs()] >>
+  gvs[makeSsaCurrentDefsTheory.simplify_current_phi_raw_def,
+    makeSsaCurrentDefsTheory.current_phi_output_def,
+    current_cut_nonself_slot_values, AllCaseEqs()] >>
+  gvs[venomInstTheory.instruction_component_equality] >>
+  Cases_on `n = out` >> simp[] >>
+  `MEM n (MAP SND (FILTER (\a. SND a <> out) pairs))` by
+    (simp[listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+     qexists_tac `(p,n)` >> simp[]) >>
+  gvs[listTheory.EVERY_MEM]
+QED
+
+Theorem current_cut_collapsed_inserted_edge_lookup:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\ fn_cfg_edge fn p h /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) /\
+  simplify_current_phi (EL q new.bb_instructions) =
+    (EL q new.bb_instructions) with
+      <|inst_opcode := ASSIGN; inst_operands := [Var src]|> ==>
+  FLOOKUP (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)) src = SOME v
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_slots >> strip_tac >>
+  drule_all current_wf_inserted_phi_output >> strip_tac >>
+  `wf_function fn` by fs[current_wf_phi_context_def] >>
+  `MEM h (fn_labels fn)` by
+    (simp[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       makeSsaHelperTheory.lookup_block_label]) >>
+  `MAP FST pairs = cfg_preds_of (cfg_analyze fn) h` by
+    (drule makeSsaCurrentDefsTheory.ALOOKUP_current_pred_map >> disch_tac >>
+     qpat_x_assum `MAP FST pairs = _` mp_tac >> simp[]) >>
+  `MEM p (MAP FST pairs)` by
+    metis_tac[makeSsaCurrentAnalysisTheory.current_cfg_edge_preds] >>
+  `?n. MEM (p,n) pairs` by
+    (fs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  `?i. i < LENGTH pairs /\ EL i pairs = (p,n)` by metis_tac[listTheory.MEM_EL] >>
+  drule_all current_wf_inserted_phi_pair >> strip_tac >>
+  drule_all current_wf_inserted_phi_prefix >> strip_tac >>
+  `current_demand fn v p (LENGTH pred.bb_instructions)` by
+    (irule current_wf_inserted_pred_demand >> metis_tac[]) >>
+  `(EL q new.bb_instructions).inst_opcode = PHI` by
+    fs[current_wf_inserted_phi_at_def] >>
+  `n = out \/ n = src` by
+    (irule current_cut_collapsed_slot_cases >> metis_tac[]) >>
+  reverse (Cases_on `n = src`)
+  >- (`current_wf_precleanup_certificate s fn renamed s' A H events /\
+       fn_inst_wf fn /\ fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
+       all_reachable fn /\ first_block_no_preds fn /\ first_block_no_phi fn /\
+       ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+        fs[current_wf_phi_context_def] >>
+      `lookup_block (current_event_label ev) fn.fn_blocks = SOME pred` by simp[] >>
+      `current_demand fn v (current_event_label ev) (LENGTH pred.bb_instructions)` by simp[] >>
+      drule_all current_wf_precleanup_exit_nondefault >> disch_tac >>
+      drule_all current_wf_precleanup_names >> strip_tac >>
+      `current_event_exit_env ev v = CurrentInserted v h` by
+        (irule current_allocated_name_injective >> simp[] >> metis_tac[]) >>
+      `current_collapsed_carrier fn A renamed h v src` by
+        (simp[current_collapsed_carrier_def] >> metis_tac[]) >>
+      irule current_cut_sg_exit_lookup >> metis_tac[]) >>
+  irule current_cut_sg_exit_name_lookup >> metis_tac[]
+QED
