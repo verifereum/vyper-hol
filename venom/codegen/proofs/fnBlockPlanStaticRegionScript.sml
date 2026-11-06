@@ -786,3 +786,50 @@ Proof
     (irule regional_phi_physical_depth >> simp[]) >>
   qexistsl_tac [`src`, `d`] >> simp[] >> metis_tac[]
 QED
+
+(* Frame a future PHI independently of the representation used for the overwrite. *)
+Theorem regional_phi_stack_frame:
+  (!x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var removed) \/ (x = Var added /\ keep)) /\
+  ~MEM (Var removed) phi.inst_operands /\
+  ~MEM (Var added) phi.inst_operands ==>
+  !v. MEM (Var v) phi.inst_operands ==>
+    (MEM (Var v) qs.ps_stack <=> MEM (Var v) ps.ps_stack)
+Proof
+  rpt strip_tac >> first_x_assum (qspec_then `Var v` mp_tac) >>
+  metis_tac[]
+QED
+
+Theorem regional_phi_owned_frame:
+  qs.ps_spilled = ps.ps_spilled /\
+  (!x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var removed) \/ (x = Var added /\ keep)) /\
+  ~MEM (Var removed) phi.inst_operands /\
+  ~MEM (Var added) phi.inst_operands ==>
+  !v. MEM (Var v) phi.inst_operands ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) <=>
+     (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!x. MEM x _ <=> _` (qspec_then `Var v` mp_tac) >>
+  metis_tac[]
+QED
+
+Theorem regional_phi_selected_frame:
+  qs.ps_spilled = ps.ps_spilled /\
+  (!x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var removed) \/ (x = Var added /\ keep)) /\
+  ~MEM (Var removed) phi.inst_operands /\
+  ~MEM (Var added) phi.inst_operands /\
+  MEM (Var src) phi.inst_operands /\ MEM (Var src) ps.ps_stack /\
+  (!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src) ==>
+  MEM (Var src) qs.ps_stack /\
+  (!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==> v = src)
+Proof
+  strip_tac >>
+  drule_all regional_phi_stack_frame >> strip_tac >>
+  drule_all regional_phi_owned_frame >> strip_tac >>
+  metis_tac[]
+QED
