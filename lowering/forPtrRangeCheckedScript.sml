@@ -1,6 +1,6 @@
 Theory forPtrRangeChecked
 Ancestors
-  forPtrCheckedScalar fragGasSeqPtr fragGasPathPtr
+  forPtrCheckedScalar exprSendPtr fragGasSeqPtr fragGasPathPtr
   exprSimOperands instIdxIndep emitHelperProps
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   exprLoweringProps rich_list finite_map pred_set list
@@ -116,3 +116,131 @@ Resume for_checked_order_prefix_ptr[prefix_path]:
   simp[Abbr `code`, mk_inst_def] >> gvs[]
 QED
 Finalise for_checked_order_prefix_ptr
+
+(* A bound test, independent of the preceding order test and of the block
+   index.  The comparison outputs need not be distinct for this prefix. *)
+Theorem for_checked_gt_zero_prefix_ptr:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst i GT [left;right] [g];
+            mk_inst (i+1) ISZERO [Var g] [z]]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  s1 = update_var g (bool_to_word (w2n a > w2n b)) s /\
+  s2 = update_var z (bool_to_word (bool_to_word (w2n a > w2n b) = 0w)) s1 ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (DRESTRICT G (COMPL {g;z}))
+    (tn with t_var := tn.t_var |++ [(g,{});(z,{})])
+    (OK (s2 with vs_inst_idx := s.vs_inst_idx + 2))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst i GT [left;right] [g]) s = OK s1` by
+    (qpat_x_assum `s1 = _` SUBST1_TAC >> irule step_GT >> simp[]) >>
+  `step_inst_base (mk_inst (i+1) ISZERO [Var g] [z]) s1 = OK s2` by
+    (qpat_x_assum `s2 = _` SUBST1_TAC >> irule step_ISZERO >>
+     simp[eval_operand_def, lookup_var_update_var]) >>
+  qmatch_goalsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf _` >>
+  qabbrev_tac `code = [mk_inst i GT [left;right] [g];
+                      mk_inst (i+1) ISZERO [Var g] [z]]` >>
+  `inst_seq_ptr D 0 ctx fn PG G tn code s Gf tf` by
+    (simp[Abbr `code`] >> irule (iffRL for_checked_scalar_seq_cons) >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     qexists_tac `bool_to_word (w2n a > w2n b)` >> simp[] >>
+     qpat_assum `s1 = _` (fn th => rewrite_tac[GSYM th]) >>
+     irule (iffRL for_checked_scalar_seq_index) >> simp[] >>
+     qexists_tac `bool_to_word (bool_to_word (w2n a > w2n b) = 0w)` >>
+     (conj_tac >- (qpat_x_assum `step_inst_base (mk_inst _ ISZERO _ _) _ = _`
+       mp_tac >> simp[])) >>
+     simp[inst_seq_ptr_def, Abbr `Gf`, Abbr `tf`, FUPDATE_LIST_THM] >>
+     AP_TERM_TAC >> simp[EXTENSION] >> metis_tac[]) >>
+  `run_inst_seq code s = OK s2` by
+    simp[Abbr `code`, run_inst_seq_def, IgnAsm `s1 = _`, IgnAsm `s2 = _`] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_gas_path_ptr >>
+  simp[Abbr `code`, mk_inst_def] >> gvs[]
+QED
+
+(* Shared assertion composition keeps both checked failure and success paths. *)
+Theorem for_checked_assert_prefix_ptr:
+  gas_path_ptr D 0 ctx fn PG G tn s n Gend tt (OK t) /\
+  ~ctx_has_dalloca ctx /\ op_taint tt op = {} /\
+  eval_operand op t = SOME w /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) ==>
+  (w = 0w ==> ?u. gas_path_ptr D 0 ctx fn PG G tn s n Gend tt
+    (Abort Revert_abort u)) /\
+  (w <> 0w ==> gas_path_ptr D 0 ctx fn PG G tn s n Gend tt
+    (OK (t with vs_inst_idx := SUC t.vs_inst_idx)))
+Proof
+  strip_tac >>
+  `~t.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
+  conj_tac >> strip_tac
+  >- (`gas_path_ptr D 0 ctx fn PG Gend tt t 0 Gend tt
+        (Abort Revert_abort (revert_state (set_returndata [] t)))` by
+        (irule assert_fail_path_ptr >> simp[] >> metis_tac[]) >>
+      drule gas_path_ptr_then >> disch_then drule >> simp[] >> metis_tac[]) >>
+  `gas_path_ptr D 0 ctx fn PG Gend tt t 0 Gend tt
+     (OK (t with vs_inst_idx := SUC t.vs_inst_idx))` by
+    (irule assert_ok_path_ptr >> simp[] >> metis_tac[]) >>
+  rev_drule gas_path_ptr_then >> disch_then drule >> simp[]
+QED
+
+Theorem for_checked_order_assert_ptr:
+  lookup_block ee.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    [mk_inst i ASSIGN [op1] [cv];
+     mk_inst (i+1) SUB [op2;op1] [rv];
+     mk_inst (i+2) cmp [op1;op2] [g1];
+     mk_inst (i+3) ISZERO [Var g1] [z1];
+     mk_inst (i+4) ASSERT [Var z1] []] ++ tail /\
+  MEM cmp [SGT;GT] /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  eval_operand op1 ee = SOME a /\ eval_operand op2 ee = SOME b /\
+  op_taint tn op1 = {} /\ op_taint tn op2 = {} /\
+  op_prov G op1 = NONE /\ op_prov G op2 = NONE /\
+  ALL_DISTINCT [cv;rv;g1;z1] /\
+  (!x. op1 = Var x \/ op2 = Var x ==> ~MEM x [cv;rv;g1;z1]) /\
+  bad = (if cmp = SGT then word_gt a b else w2n a > w2n b) /\
+  s1 = update_var cv a ee /\ s2 = update_var rv (b-a) s1 /\
+  s3 = update_var g1 (bool_to_word bad) s2 /\
+  s4 = update_var z1 (bool_to_word (bool_to_word bad = 0w)) s3 ==>
+  (bad ==> ?t. gas_path_ptr D 0 ctx fn PG G tn ee 0
+    (DRESTRICT G (COMPL {cv;rv;g1;z1}))
+    (tn with t_var := tn.t_var |++ [(cv,{});(rv,{});(g1,{});(z1,{})])
+    (Abort Revert_abort t)) /\
+  (~bad ==> gas_path_ptr D 0 ctx fn PG G tn ee 0
+    (DRESTRICT G (COMPL {cv;rv;g1;z1}))
+    (tn with t_var := tn.t_var |++ [(cv,{});(rv,{});(g1,{});(z1,{})])
+    (OK (s4 with vs_inst_idx := 5)))
+Proof
+  strip_tac >>
+  qabbrev_tac `G4 = DRESTRICT G (COMPL {cv;rv;g1;z1})` >>
+  qabbrev_tac `t4 = tn with t_var := tn.t_var |++ [(cv,{});(rv,{});(g1,{});(z1,{})]` >>
+  `gas_path_ptr D 0 ctx fn PG G tn ee 0 G4 t4
+     (OK (s4 with vs_inst_idx := 4))` by
+    (simp[Abbr `G4`, Abbr `t4`] >> irule for_checked_order_prefix_ptr >>
+     simp[mk_inst_def] >> gvs[] >> metis_tac[]) >>
+  suspend "assert_paths"
+QED
+
+Resume for_checked_order_assert_ptr[assert_paths]:
+  `~(s4 with vs_inst_idx := 4).vs_halted` by
+    metis_tac[gas_path_ptr_ok_not_halted] >>
+  `lookup_block (s4 with vs_inst_idx := 4).vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb 4 = SOME (mk_inst (i+4) ASSERT [Var z1] [])` by
+    simp[update_var_def, get_instruction_def] >>
+  `op_taint t4 (Var z1) = {}` by
+    simp[Abbr `t4`, FUPDATE_LIST_THM, for_checked_operand_taint_update] >>
+  `eval_operand (Var z1) (s4 with vs_inst_idx := 4) =
+     SOME (bool_to_word (bool_to_word bad = 0w))` by
+    (simp[instIdxIndepTheory.eval_op_inst_idx] >>
+     simp[eval_operand_def, lookup_var_update_var]) >>
+  `get_instruction bb (s4 with vs_inst_idx := 4).vs_inst_idx =
+     SOME (mk_inst (i+4) ASSERT [Var z1] [])` by simp[] >>
+  drule_all for_checked_assert_prefix_ptr >>
+  simp[bool_to_word_def]
+QED
+Finalise for_checked_order_assert_ptr
