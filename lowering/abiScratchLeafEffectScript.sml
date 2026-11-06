@@ -43,11 +43,11 @@ Theorem abi_scratch_leaf_reach:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st st') /\
   (?raw. run_inst_seq (emitted_insts st st') initial = OK raw /\
     abi_encoder_sequence_post at av out st limit_st d initial raw) /\
-  fn_has_code st st' func /\ abi_sites_decoder_budget sites first last b cap initial /\ ~initial.vs_halted /\
+  fn_has_code st st' func /\ abi_decoder_budget first last b cap initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av /\
     eval_operand out actual = SOME (n2w (LENGTH (enc at av))) /\
-    abi_sites_scratch_effect sites first last st.cs_next_id st'.cs_next_id st.cs_next_var
+    abi_scratch_effect first last st.cs_next_id st'.cs_next_id st.cs_next_var
       limit_st d (LENGTH (enc at av)) b cap initial actual /\
     actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -56,7 +56,7 @@ Proof
   drule_all abi_encoder_sequence_from_state >> disch_then (qspec_then `ctx` assume_tac) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  `abi_sites_scratch_effect sites first last st.cs_next_id st'.cs_next_id st.cs_next_var
+  `abi_scratch_effect first last st.cs_next_id st'.cs_next_id st.cs_next_var
     limit_st d (LENGTH (enc at av)) b cap initial actual` by
     (irule abi_scratch_sequence_post_effect >> asm_simp_tac bool_ss [] >>
      qexists_tac `out` >> first_assum ACCEPT_TAC) >>

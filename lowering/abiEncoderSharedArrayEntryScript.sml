@@ -301,10 +301,10 @@ Theorem abi_encoder_shared_array_exit_source:
    else abi_encode_array_static_exit src asz st = (out,final)) /\
   abi_encoder_member_phase_raw st final initial ready /\
   abi_decoder_address_frame owner_st.cs_next_var initial ready /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (owner_st,source,dst)
+  abi_encoder_shared_input (ei,ty,av) (owner_st,source,dst)
     (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix elem_ty avs k d initial.vs_memory ==>
-  abi_sites_encoder_shared_input sites (ei,ty,av) (owner_st,source,dst)
+  abi_encoder_shared_input (ei,ty,av) (owner_st,source,dst)
     (sb,source_cap) (d,sz) (first,last,b,cap) ready /\
   abi_encoder_array_prefix elem_ty avs k d ready.vs_memory
 Proof

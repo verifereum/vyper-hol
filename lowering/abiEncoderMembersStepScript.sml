@@ -94,7 +94,7 @@ Proof
 QED
 
 Theorem abi_encoder_members_inv_layout:
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial ==>
   has_type ty av /\ has_types tys avs /\ LENGTH pre = LENGTH pvs /\
@@ -105,8 +105,8 @@ Theorem abi_encoder_members_inv_layout:
   (~dyn ==> ho+LENGTH (enc ty av) <= hl) /\
   (dyn ==> ho+32 <= hl /\ hl+SUM (MAP2 abi_member_tail_size pre pvs)+LENGTH (enc ty av) <= output_size)
 Proof
-  strip_tac >> qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  strip_tac >> qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`] abi_encoder_members_pre_cons) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `LENGTH pre = LENGTH pvs` by (irule has_types_length >> asm_simp_tac bool_ss []) >>
@@ -121,10 +121,10 @@ QED
 
 (* Transfer successful child observations to the next member's pure invariant. *)
 Theorem abi_encoder_members_after_child:
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
-  abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+  abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual /\
   abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d actual.vs_memory /\
   abi_encoder_cursor active dyn_ptr site slot first lo end_st
@@ -133,12 +133,12 @@ Theorem abi_encoder_members_after_child:
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   ~actual.vs_halted /\ actual.vs_current_bb = end_st.cs_current_bb /\
   actual.vs_inst_idx = LENGTH end_st.cs_current_insts ==>
-  abi_sites_encoder_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot first last lo
+  abi_encoder_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot first last lo
     end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   mp_tac (Q.INST [`infos` |-> `(ei,abi_sz,mem_sz,dyn)::infos`, `tys` |-> `ty::tys`,
     `avs` |-> `av::avs`, `hi` |-> `end_st.cs_next_id`] abi_encoder_members_pre_effect) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -149,10 +149,10 @@ Proof
   mp_tac (Q.INST [`st` |-> `end_st`, `s` |-> `actual:venom_state`] abi_encoder_members_pre_cons) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qpat_assum `abi_sites_decoder_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_effect_def]) >>
+  qpat_assum `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
   `first <= end_st.cs_next_id /\ lo <= end_st.cs_next_id` by decide_tac >>
-  PURE_REWRITE_TAC [abi_sites_encoder_members_inv_def, GSYM APPEND_ASSOC, APPEND] >>
+  PURE_REWRITE_TAC [abi_encoder_members_inv_def, GSYM APPEND_ASSOC, APPEND] >>
   asm_simp_tac bool_ss [] >>
   qpat_x_assum `active \/ EVERY _ _` mp_tac >> simp_tac (srw_ss()) [] >>
   rpt strip_tac >> asm_simp_tac bool_ss []
@@ -166,23 +166,23 @@ Theorem abi_encoder_members_static_endpoint:
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,F)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,F)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   abi_encoder_buffer_pre ei ty av st elem_src dst (sb+so) mem_sz d output_size b cap initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   abi_encoder_spine_child_output
-    (abi_sites_encoder_member_core_post sites (ctx,func) (ty,av,sb+so,mem_sz,d+ho)
+    (abi_encoder_member_core_post (ctx,func) (ty,av,sb+so,mem_sz,d+ho)
       (first,last,b,cap,limit_st))
     (ei,F,dst,elem_src,ho,dyn_ptr,st,end_st,out) initial actual ==>
-  abi_sites_encoder_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
+  abi_encoder_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
     first last lo end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual /\
-  abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+  abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   mp_tac (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `F`] abi_encoder_members_inv_layout)) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   drule abi_encoder_child_bounds >> strip_tac >>
@@ -201,7 +201,7 @@ Proof
        qpat_assum `LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av]))) = _`
          (fn th => PURE_REWRITE_TAC [SIMP_RULE bool_ss [dyn_th, ADD_CLAUSES] th])) >>
      first_assum ACCEPT_TAC) >>
-  `abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+  `abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`, `output_size`] >>
@@ -217,25 +217,25 @@ Theorem abi_encoder_members_dynamic_endpoint:
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,T)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,T)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   abi_encoder_buffer_pre ei ty av st elem_src dst (sb+so) mem_sz d output_size b cap initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
   abi_encoder_spine_child_output
-    (abi_sites_encoder_member_dynamic_post sites (ctx,func) (ty,av,sb+so,mem_sz,d+off)
+    (abi_encoder_member_dynamic_post (ctx,func) (ty,av,sb+so,mem_sz,d+off)
       (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dyn_ptr,d+ho,off,slot,site))
     (ei,T,dst,elem_src,ho,dyn_ptr,st,end_st,out) initial actual ==>
-  abi_sites_encoder_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
+  abi_encoder_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
     first last lo end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual /\
-  abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+  abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
-  reverse (Cases_on `active`) >- simp[abi_sites_encoder_members_inv_def] >>
+  reverse (Cases_on `active`) >- simp[abi_encoder_members_inv_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   mp_tac (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `T`, `active` |-> `T`]
     abi_encoder_members_inv_layout)) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -267,23 +267,23 @@ QED
 (* The list interpretation keeps origin/initial fixed, rather than resetting
    its effect ledger to the most recent prepare state. *)
 Theorem abi_encoder_members_origin_transport:
-  abi_sites_decoder_effect sites first last lo hi origin.cs_next_var limit_st d sz b cap initial s /\
+  abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial s /\
   abi_decode_sim ctx func initial s /\
   abi_decoder_address_frame st.cs_next_var s r /\ fresh_vars_wrt limit_st r /\
-  abi_sites_decoder_budget sites first last b cap s /\
+  abi_decoder_budget first last b cap s /\
   abi_decode_sim ctx func s r /\
-  abi_sites_decoder_effect sites first last lo ce.cs_next_id prepared.cs_next_var
+  abi_decoder_effect first last lo ce.cs_next_id prepared.cs_next_var
     limit_st d sz b cap r u /\ abi_decode_sim ctx func r u /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_var <= prepared.cs_next_var /\
   ce.cs_next_id <= hi ==>
-  abi_sites_decoder_effect sites first last lo hi origin.cs_next_var limit_st d sz b cap initial u /\
+  abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial u /\
   abi_decode_sim ctx func initial u
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_sites_decoder_effect sites first last lo hi origin.cs_next_var limit_st d sz b cap s r` by
+  `abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap s r` by
     (irule abi_decoder_address_effect >> asm_rewrite_tac [] >>
      qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
-  `abi_sites_decoder_effect sites first last lo hi origin.cs_next_var limit_st d sz b cap r u` by
+  `abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap r u` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `ce.cs_next_id`, `lo:num`, `prepared.cs_next_var`, `sz:num`] >>
      simp[]) >>
@@ -296,24 +296,24 @@ QED
 
 (* Execute a static child and retain the parent cursor for the remaining members. *)
 Theorem abi_encoder_members_static_advance:
-  abi_sites_encoder_correct sites ei /\ compile_abi_encode_child dst elem_src ei F ho dyn_ptr st = (out,end_st) /\
+  abi_encoder_correct ei /\ compile_abi_encode_child dst elem_src ei F ho dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,F)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,F)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   abi_encoder_buffer_pre ei ty av st elem_src dst (sb+so) mem_sz d output_size b cap initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?actual. abi_sites_encoder_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
+  ?actual. abi_encoder_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
       first last lo end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual /\
-    abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+    abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   mp_tac (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `F`] abi_encoder_members_inv_layout)) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   drule abi_encoder_child_bounds >> strip_tac >>
@@ -332,7 +332,7 @@ Proof
        qpat_assum `LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av]))) = _`
          (fn th => PURE_REWRITE_TAC [SIMP_RULE bool_ss [dyn_th, ADD_CLAUSES] th])) >>
      first_assum ACCEPT_TAC) >>
-  `abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+  `abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`, `output_size`] >>
@@ -344,25 +344,25 @@ QED
 
 (* Execute a dynamic child and advance its parent cursor and remaining source invariant. *)
 Theorem abi_encoder_members_dynamic_advance:
-  abi_sites_encoder_correct sites ei /\ compile_abi_encode_child dst elem_src ei T ho dyn_ptr st = (out,end_st) /\
+  abi_encoder_correct ei /\ compile_abi_encode_child dst elem_src ei T ho dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,T)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,T)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   abi_encoder_buffer_pre ei ty av st elem_src dst (sb+so) mem_sz d output_size b cap initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?actual. abi_sites_encoder_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
+  ?actual. abi_encoder_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
       first last lo end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual /\
-    abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+    abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
-  reverse (Cases_on `active`) >- simp[abi_sites_encoder_members_inv_def] >>
+  reverse (Cases_on `active`) >- simp[abi_encoder_members_inv_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   mp_tac (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `T`, `active` |-> `T`]
     abi_encoder_members_inv_layout)) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -388,19 +388,19 @@ QED
 
 (* Both child branches establish the same next-member state and execution contract. *)
 Theorem abi_encoder_members_child_advance:
-  abi_sites_encoder_correct sites ei /\ compile_abi_encode_child dst elem_src ei dyn ho dyn_ptr st = (out,end_st) /\
+  abi_encoder_correct ei /\ compile_abi_encode_child dst elem_src ei dyn ho dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   abi_encoder_buffer_pre ei ty av st elem_src dst (sb+so) mem_sz d output_size b cap initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?actual. abi_sites_encoder_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
+  ?actual. abi_encoder_members_inv infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
       first last lo end_st limit_st src dst sb (so+mem_sz) (ho+abi_sz) d hl output_size b cap actual /\
-    abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+    abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
   Cases_on `dyn` >| [ACCEPT_TAC abi_encoder_members_dynamic_advance,

@@ -16,7 +16,7 @@ Theorem abi_encoder_dynamic_child_prepare:
   abi_encoder_buffer_pre ei at av st src dst sb source_cap d output_size b cap initial /\
   eval_operand dyn_ptr initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
   abi_decoder_operand_live st.cs_next_var dyn_ptr /\ slot < dimword (:256) /\
-  off+LENGTH (enc at av) <= output_size /\ abi_sites_decoder_budget sites first last b cap initial /\
+  off+LENGTH (enc at av) <= output_size /\ abi_decoder_budget first last b cap initial /\
   prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -27,7 +27,7 @@ Theorem abi_encoder_dynamic_child_prepare:
     abi_decoder_operand_live prepared.cs_next_var (FST ops) /\
     abi_decoder_operand_live prepared.cs_next_var (FST (SND ops)) /\
     abi_decoder_operand_live prepared.cs_next_var (SND (SND ops)) /\
-    fresh_vars_wrt limit_st ready /\ abi_sites_decoder_budget sites first last b cap ready /\
+    fresh_vars_wrt limit_st ready /\ abi_decoder_budget first last b cap ready /\
     abi_decoder_address_frame st.cs_next_var initial ready /\
     ready.vs_current_bb = prepared.cs_current_bb /\ ready.vs_inst_idx = LENGTH prepared.cs_current_insts /\
     ~ready.vs_halted /\ abi_decode_sim ctx func initial ready
@@ -45,7 +45,7 @@ Proof
     (mp_tac (Q.INST [`child_st` |-> `prepared`, `child_dst` |-> `SND (SND (ops:operand # operand # operand))`,
       `actual` |-> `ready:venom_state`, `offset` |-> `off:num`] abi_encoder_child_pre_address) >>
      asm_simp_tac bool_ss []) >>
-  `abi_sites_decoder_budget sites first last b cap ready` by
+  `abi_decoder_budget first last b cap ready` by
     (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
       abi_decoder_budget_transport) >>
      impl_tac >- fs[abi_decoder_address_frame_def] >> asm_simp_tac bool_ss []) >>
@@ -57,11 +57,11 @@ QED
 (* Recursive core execution preserves the child's saved head/offset and parent cursor. *)
 
 Theorem abi_encoder_effect_operand:
-  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t /\
+  abi_decoder_effect first last lo hi next limit_st d sz b cap s t /\
   abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
   eval_operand op t = SOME w
 Proof
-  simp_tac bool_ss [abi_sites_decoder_effect_def] >> strip_tac >> first_x_assum irule >> simp[]
+  simp_tac bool_ss [abi_decoder_effect_def] >> strip_tac >> first_x_assum irule >> simp[]
 QED
 
 (* ===== Child Finish ===== *)
@@ -76,7 +76,7 @@ Theorem abi_encoder_dynamic_child_finish:
   mem_bytes_at (d+off) len initial.vs_memory = bytes /\
   d <= h /\ h+32 <= d+off /\ off+len <= output_size /\
   d+output_size < dimword (:256) /\ (d+output_size <= b \/ b+cap <= d) /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
+  abi_decoder_budget first last b cap initial /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -86,15 +86,15 @@ Theorem abi_encoder_dynamic_child_finish:
     eval_operand out t = SOME (n2w len) /\
     abi_decode_footprint_frame [(h,32);(slot,32)] initial t /\
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\
-    abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial t /\
+    abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial t /\
     t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
+  `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  qpat_assum `abi_sites_decoder_budget sites _ _ _ _ _`
-    (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_decoder_budget_def]) >>
+  qpat_assum `abi_decoder_budget _ _ _ _ _`
+    (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_decoder_budget_def]) >>
   `h < dimword (:256) /\ slot < dimword (:256) /\ h+32 <= d+output_size` by decide_tac >>
   mp_tac (Q.INST [`p` |-> `slot:num`] abi_encode_child_suffix_reach) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>

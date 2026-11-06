@@ -6,16 +6,16 @@ Ancestors
 
 (* Sites restrict the budget to the ids that can be allocation sites; the
    interval names below are the instance sites = UNIV. *)
-Definition abi_site_ids_def:
+Definition abi_sites_decoder_ids_def:
   abi_sites_decoder_ids sites first last = {i:num | i IN sites /\ first <= i /\ i < last}
 End
 
-Definition abi_site_missing_def:
+Definition abi_sites_decoder_missing_def:
   abi_sites_decoder_missing sites first last s =
     abi_sites_decoder_ids sites first last DIFF FDOM s.vs_allocas
 End
 
-Definition abi_site_budget_def:
+Definition abi_sites_decoder_budget_def:
   abi_sites_decoder_budget sites first last b cap s <=>
     b + cap < dimword (:256) /\ b <= s.vs_alloca_next /\
     s.vs_alloca_next + 32 * CARD (abi_sites_decoder_missing sites first last s) <= b + cap /\
@@ -36,14 +36,14 @@ Overload abi_decoder_budget = “abi_sites_decoder_budget UNIV”
 Theorem abi_decoder_ids_def:
   abi_decoder_ids first last = {i:num | first <= i /\ i < last}
 Proof
-  simp[abi_site_ids_def]
+  simp[abi_sites_decoder_ids_def]
 QED
 
 Theorem abi_decoder_missing_def:
   abi_decoder_missing first last s =
     abi_decoder_ids first last DIFF FDOM s.vs_allocas
 Proof
-  simp[abi_site_missing_def]
+  simp[abi_sites_decoder_missing_def]
 QED
 
 Theorem abi_decoder_budget_def:
@@ -59,20 +59,20 @@ Theorem abi_decoder_budget_def:
        FLOOKUP s.vs_allocas j = SOME (q,32) ==>
        p + 32 <= q \/ q + 32 <= p)
 Proof
-  rewrite_tac[abi_site_budget_def]
+  rewrite_tac[abi_sites_decoder_budget_def]
 QED
 
 Theorem abi_decoder_ids_finite[simp]:
   FINITE (abi_sites_decoder_ids sites first last)
 Proof
   irule SUBSET_FINITE_I >> qexists_tac `count last` >>
-  simp[abi_site_ids_def, SUBSET_DEF]
+  simp[abi_sites_decoder_ids_def, SUBSET_DEF]
 QED
 
 Theorem abi_decoder_missing_finite[simp]:
   FINITE (abi_sites_decoder_missing sites first last s)
 Proof
-  simp[abi_site_missing_def]
+  simp[abi_sites_decoder_missing_def]
 QED
 
 Theorem abi_decoder_budget_reservation:
@@ -98,11 +98,11 @@ Theorem abi_decoder_budget_empty:
 Proof
   strip_tac >>
   `abi_sites_decoder_missing sites first last s = abi_sites_decoder_ids sites first last` by
-    (rw[abi_site_missing_def, EXTENSION] >>
+    (rw[abi_sites_decoder_missing_def, EXTENSION] >>
      eq_tac >- simp[] >> strip_tac >> simp[] >>
      first_x_assum drule >> simp[FLOOKUP_DEF] >>
      Cases_on `x IN FDOM s.vs_allocas` >> simp[]) >>
-  rw[abi_site_budget_def] >> metis_tac[optionTheory.NOT_NONE_SOME]
+  rw[abi_sites_decoder_budget_def] >> metis_tac[optionTheory.NOT_NONE_SOME]
 QED
 
 Theorem abi_decoder_missing_insert:
@@ -110,7 +110,7 @@ Theorem abi_decoder_missing_insert:
     (s with vs_allocas := s.vs_allocas |+ (id,(p,32))) =
   abi_sites_decoder_missing sites first last s DELETE id
 Proof
-  simp[abi_site_missing_def, EXTENSION] >> metis_tac[]
+  simp[abi_sites_decoder_missing_def, EXTENSION] >> metis_tac[]
 QED
 
 Theorem abi_decoder_missing_credit:
@@ -120,7 +120,7 @@ Theorem abi_decoder_missing_credit:
 Proof
   strip_tac >>
   `id IN abi_sites_decoder_missing sites first last s` by
-    (gvs[abi_site_missing_def, FLOOKUP_DEF] >>
+    (gvs[abi_sites_decoder_missing_def, FLOOKUP_DEF] >>
      Cases_on `id IN FDOM s.vs_allocas` >> gvs[]) >>
   `abi_sites_decoder_missing sites first last s =
     id INSERT (abi_sites_decoder_missing sites first last s DELETE id)` by
@@ -162,9 +162,9 @@ Proof
      (s with <|vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,32));
                vs_alloca_next := s.vs_alloca_next + 32|>) =
    abi_sites_decoder_missing sites first last s DELETE id` by
-    (simp[abi_site_missing_def, EXTENSION] >> metis_tac[]) >>
+    (simp[abi_sites_decoder_missing_def, EXTENSION] >> metis_tac[]) >>
   qpat_x_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[abi_site_budget_def] >> strip_tac >>
+  pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >>
   simp_tac (srw_ss()) [] >>
   conj_tac >- asm_rewrite_tac[] >>
   conj_tac >- decide_tac >>
@@ -187,7 +187,7 @@ Theorem abi_decoder_budget_update_var[simp]:
   abi_sites_decoder_budget sites first last b cap (update_var out w s) <=>
   abi_sites_decoder_budget sites first last b cap s
 Proof
-  simp[abi_site_budget_def, abi_site_missing_def, update_var_def]
+  simp[abi_sites_decoder_budget_def, abi_sites_decoder_missing_def, update_var_def]
 QED
 
 Theorem abi_decoder_alloca32_fresh:
@@ -210,11 +210,11 @@ Proof
   simp_tac (srw_ss()) [update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   conj_tac >- (qpat_x_assum `abi_sites_decoder_budget sites first last b cap s` kall_tac >>
     qpat_x_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
-    pure_rewrite_tac[abi_site_budget_def, abi_site_missing_def] >>
+    pure_rewrite_tac[abi_sites_decoder_budget_def, abi_sites_decoder_missing_def] >>
     pure_rewrite_tac[venom_state_accfupds, combinTheory.K_THM] >>
     rewrite_tac[]) >>
   qpat_x_assum `abi_sites_decoder_budget sites first last b cap s` mp_tac >>
-  pure_rewrite_tac[abi_site_budget_def] >> strip_tac >> decide_tac
+  pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >> decide_tac
 QED
 
 Theorem abi_decoder_alloca32_reuse:
@@ -230,12 +230,12 @@ Proof
   strip_tac >>
   `sz = 32 /\ b <= p /\ p + 32 <= s.vs_alloca_next` by
     (qpat_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[abi_site_budget_def] >> strip_tac >>
+     pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >>
      qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` drule >>
      disch_then drule >> simp_tac std_ss []) >>
   `p + 32 <= b + cap` by
     (qpat_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[abi_site_budget_def] >> strip_tac >> decide_tac) >>
+     pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >> decide_tac) >>
   simp_tac (srw_ss()) [exec_alloca_def] >> asm_rewrite_tac[] >>
   simp_tac (srw_ss()) [abi_decoder_budget_update_var] >> asm_rewrite_tac[] >>
   simp_tac (srw_ss()) [update_var_def]
@@ -266,11 +266,11 @@ Proof
   strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
   >- (drule_all abi_decoder_missing_credit >> strip_tac >>
       qpat_x_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
-      pure_rewrite_tac[abi_site_budget_def] >> strip_tac >>
+      pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >>
       spose_not_then kall_tac >> decide_tac) >>
   rename1 `SOME pair` >> PairCases_on `pair` >>
   qpat_x_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[abi_site_budget_def] >> strip_tac >>
+  pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >>
   qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` drule >>
   disch_then drule >> strip_tac >> asm_rewrite_tac[] >>
   qexists_tac `pair0` >> asm_rewrite_tac[]

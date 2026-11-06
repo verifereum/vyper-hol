@@ -279,10 +279,10 @@ Proof
 QED
 
 Theorem abi_encoder_shared_array_dynamic_body_run[local]:
-  abi_sites_encoder_shared sites ei /\
+  abi_encoder_shared ei /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz st = (out,en) /\
   fn_has_code st en func /\
-  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
+  abi_encoder_shared_input (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
   abi_encoder_cursor T ip site slot first site st j initial /\
@@ -291,7 +291,7 @@ Theorem abi_encoder_shared_array_dynamic_body_run[local]:
       SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial /\
   j < LENGTH avs /\ en.cs_next_id <= last /\
   en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  abi_sites_decoder_budget sites first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?coords addressed ops prepared len ce address_ready ready encoded actual.
@@ -302,7 +302,7 @@ Theorem abi_encoder_shared_array_dynamic_body_run[local]:
     out = FST (FST coords) /\
     abi_encoder_member_phase_raw st addressed initial address_ready /\
     abi_encoder_member_phase_raw addressed prepared address_ready ready /\
-    abi_sites_encoder_shared_member_dynamic_post sites (ctx,func)
+    abi_encoder_shared_member_dynamic_post (ctx,func)
       (ty,EL j avs,sb+32+j*msz,msz,
         d+32+LENGTH avs*abi_member_head_size ty+
           SUM (MAP (abi_member_tail_size ty) (TAKE j avs)))
@@ -312,7 +312,7 @@ Theorem abi_encoder_shared_array_dynamic_body_run[local]:
           SUM (MAP (abi_member_tail_size ty) (TAKE j avs)),cursor_slot,cursor_site)
       (ei,SND ops,SND (FST coords),prepared,ce,len) ready encoded /\
     abi_encoder_member_phase_raw ce en encoded actual /\
-    abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
+    abi_encoder_shared_input (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
       (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) address_ready /\
     abi_encoder_array_prefix ty avs j d address_ready.vs_memory /\
     abi_encoder_cursor T ip site slot first site st j address_ready /\
@@ -320,7 +320,7 @@ Theorem abi_encoder_shared_array_dynamic_body_run[local]:
       (LENGTH avs*abi_member_head_size ty+
         SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) address_ready /\
     abi_decoder_address_frame st.cs_next_var initial address_ready /\
-    abi_encoder_registered_effect (abi_sites_decoder_ids sites first last) [(d,sz)] initial address_ready /\
+    abi_encoder_registered_effect (abi_decoder_ids first last) [(d,sz)] initial address_ready /\
     (alloca_inv initial ==> alloca_inv address_ready) /\
     abi_encoder_extend_sim ctx func initial address_ready /\
     eval_operand out address_ready = SOME (n2w j) /\

@@ -54,12 +54,12 @@ QED
    Remaining premises describe scratch sizes, the envelope and fresh credit. *)
 Theorem abi_caller_allocation_budget:
   alloca_inv s /\ b + cap < dimword (:256) /\ b <= s.vs_alloca_next /\
-  s.vs_alloca_next + 32 * CARD (abi_sites_decoder_missing sites first last s) <= b + cap /\
-  (!id off sz. id IN abi_sites_decoder_ids sites first last /\
+  s.vs_alloca_next + 32 * CARD (abi_decoder_missing first last s) <= b + cap /\
+  (!id off sz. id IN abi_decoder_ids first last /\
     FLOOKUP s.vs_allocas id = SOME (off,sz) ==> sz = 32 /\ b <= off) ==>
-  abi_sites_decoder_budget sites first last b cap s
+  abi_decoder_budget first last b cap s
 Proof
-  pure_rewrite_tac [abi_sites_decoder_budget_def, alloca_inv_def,
+  pure_rewrite_tac [abi_decoder_budget_def, alloca_inv_def,
     alloca_next_valid_def, allocas_non_overlapping_def] >>
   rpt strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   metis_tac[]
@@ -67,11 +67,11 @@ QED
 
 Theorem abi_caller_allocation_budget_zero:
   alloca_inv s /\
-  s.vs_alloca_next + 32 * CARD (abi_sites_decoder_missing sites first last s) < dimword (:256) /\
-  (!id off sz. id IN abi_sites_decoder_ids sites first last /\
+  s.vs_alloca_next + 32 * CARD (abi_decoder_missing first last s) < dimword (:256) /\
+  (!id off sz. id IN abi_decoder_ids first last /\
     FLOOKUP s.vs_allocas id = SOME (off,sz) ==> sz = 32) ==>
-  abi_sites_decoder_budget sites first last 0
-    (s.vs_alloca_next + 32 * CARD (abi_sites_decoder_missing sites first last s)) s
+  abi_decoder_budget first last 0
+    (s.vs_alloca_next + 32 * CARD (abi_decoder_missing first last s)) s
 Proof
   strip_tac >> irule abi_caller_allocation_budget >>
   asm_simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC

@@ -31,7 +31,7 @@ Theorem abi_encoder_member_core_pre_def:
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts
 Proof
-  rewrite_tac[abi_sites_encoder_member_core_pre_def]
+  rewrite_tac[abi_encoder_member_core_pre_def]
 QED
 
 Definition abi_sites_encoder_member_core_post_def:
@@ -57,17 +57,17 @@ Theorem abi_encoder_member_core_post_def:
     t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func s t
 Proof
-  rewrite_tac[abi_sites_encoder_member_core_post_def]
+  rewrite_tac[abi_encoder_member_core_post_def]
 QED
 
 Theorem abi_encoder_member_source_core_run:
-  abi_encoder_spine_core_code func c /\ abi_sites_encoder_member_core_pre sites value resources c s ==>
+  abi_encoder_spine_core_code func c /\ abi_encoder_member_core_pre value resources c s ==>
   ?t. abi_decode_sim ctx func s t /\
-    abi_sites_encoder_member_core_post sites (ctx,func) value resources c s t
+    abi_encoder_member_core_post (ctx,func) value resources c s t
 Proof
   PairCases_on `c` >> PairCases_on `value` >> PairCases_on `resources` >>
-  simp_tac bool_ss [abi_encoder_spine_core_code_def, abi_sites_encoder_member_core_pre_def,
-    abi_sites_encoder_member_core_post_def] >>
+  simp_tac bool_ss [abi_encoder_spine_core_code_def, abi_encoder_member_core_pre_def,
+    abi_encoder_member_core_post_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encoder_correct_run >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `t` >> asm_rewrite_tac []
@@ -75,11 +75,11 @@ QED
 
 Theorem abi_encoder_member_source_child_run:
   abi_encoder_spine_child_input func limit_st
-    (abi_sites_encoder_member_core_pre sites value resources)
-    (abi_sites_encoder_member_core_post sites (ctx,func) value resources) c s ==>
+    (abi_encoder_member_core_pre value resources)
+    (abi_encoder_member_core_post (ctx,func) value resources) c s ==>
   ?t. abi_encoder_spine_child (\c r u. abi_decode_sim ctx func r u) c s t /\
     abi_encoder_spine_child_output
-      (abi_sites_encoder_member_core_post sites (ctx,func) value resources) c s t
+      (abi_encoder_member_core_post (ctx,func) value resources) c s t
 Proof
   strip_tac >> irule abi_encoder_spine_child_generate >>
   goal_assum (drule_at Any) >> rpt strip_tac >> BETA_TAC >>
@@ -89,7 +89,7 @@ QED
 (* Saved cursor operands are observations transported by the genuine core
    effect, not an additional execution contract. *)
 Theorem abi_encoder_member_source_core_saved:
-  abi_sites_encoder_member_core_post sites (ctx,func) (at,av,sb,source_cap,d)
+  abi_encoder_member_core_post (ctx,func) (at,av,sb,source_cap,d)
     (first,last,b,cap,limit_st) (ei,dst,src,start,en,out) initial actual /\
   first <= site /\ site < last /\ site < start.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) ==>
@@ -97,17 +97,17 @@ Theorem abi_encoder_member_source_core_saved:
     eval_operand op actual = SOME w) /\
   FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
   mload slot actual = mload slot initial /\ fresh_vars_wrt limit_st actual /\
-  abi_sites_decoder_budget sites first last b cap actual
+  abi_decoder_budget first last b cap actual
 Proof
-  simp_tac bool_ss [abi_sites_encoder_member_core_post_def] >>
+  simp_tac bool_ss [abi_encoder_member_core_post_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decoder_effect_protected_slot >>
   disch_then (qspecl_then [`slot`, `site`] mp_tac) >>
   simp_tac bool_ss [] >> strip_tac >>
   `!op w. abi_decoder_operand_live start.cs_next_var op /\ eval_operand op initial = SOME w ==>
     eval_operand op actual = SOME w` by
-    (fs[abi_sites_decoder_effect_def] >> metis_tac[]) >>
-  asm_simp_tac bool_ss [] >> fs[abi_sites_decoder_effect_def] >> metis_tac[]
+    (fs[abi_decoder_effect_def] >> metis_tac[]) >>
+  asm_simp_tac bool_ss [] >> fs[abi_decoder_effect_def] >> metis_tac[]
 QED
 
 (* Entry observations are ghost data retained with the genuine core post.
@@ -137,7 +137,7 @@ Theorem abi_encoder_member_dynamic_pre_def:
     abi_encoder_member_core_pre value resources c s /\
     abi_encoder_member_cursor_saved cursor resources c s
 Proof
-  rewrite_tac[abi_sites_encoder_member_dynamic_pre_def]
+  rewrite_tac[abi_encoder_member_dynamic_pre_def]
 QED
 
 Definition abi_sites_encoder_member_dynamic_post_def:
@@ -155,42 +155,42 @@ Theorem abi_encoder_member_dynamic_post_def:
     abi_encoder_member_cursor_saved cursor resources c s /\
     abi_encoder_spine_core_code func c
 Proof
-  rewrite_tac[abi_sites_encoder_member_dynamic_post_def]
+  rewrite_tac[abi_encoder_member_dynamic_post_def]
 QED
 
 Theorem abi_encoder_member_source_dynamic_run:
   abi_encoder_spine_core_code func c /\
-  abi_sites_encoder_member_dynamic_pre sites value resources cursor c s ==>
+  abi_encoder_member_dynamic_pre value resources cursor c s ==>
   ?t. abi_decode_sim ctx func s t /\
-    abi_sites_encoder_member_dynamic_post sites (ctx,func) value resources cursor c s t
+    abi_encoder_member_dynamic_post (ctx,func) value resources cursor c s t
 Proof
-  simp_tac bool_ss [abi_sites_encoder_member_dynamic_pre_def, abi_sites_encoder_member_dynamic_post_def] >>
+  simp_tac bool_ss [abi_encoder_member_dynamic_pre_def, abi_encoder_member_dynamic_post_def] >>
   strip_tac >> drule_all abi_encoder_member_source_core_run >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `t` >> asm_rewrite_tac []
 QED
 
 Theorem abi_encoder_member_source_dynamic_saved:
-  abi_sites_encoder_member_dynamic_post sites (ctx,func) (at,av,sb:num,source_cap:num,d)
+  abi_encoder_member_dynamic_post (ctx,func) (at,av,sb:num,source_cap:num,d)
     (first,last,b,cap,limit_st) (head,offset,dp,h,off,slot,site)
     (ei:abi_enc_info,dst:operand,src:operand,st,en,out) initial actual ==>
   eval_operand head actual = SOME (n2w h) /\ eval_operand offset actual = SOME (n2w off) /\
   eval_operand dp actual = SOME (n2w slot) /\
   FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
   mload slot actual = mload slot initial /\ fresh_vars_wrt limit_st actual /\
-  abi_sites_decoder_budget sites first last b cap actual
+  abi_decoder_budget first last b cap actual
 Proof
-  simp_tac bool_ss [abi_sites_encoder_member_dynamic_post_def, abi_encoder_member_cursor_saved_def] >>
+  simp_tac bool_ss [abi_encoder_member_dynamic_post_def, abi_encoder_member_cursor_saved_def] >>
   strip_tac >> drule_all abi_encoder_member_source_core_saved >> strip_tac >> metis_tac[]
 QED
 
 Theorem abi_encoder_member_source_dynamic_child_run:
   abi_encoder_spine_child_input func limit_st
-    (abi_sites_encoder_member_dynamic_pre sites value resources cursor)
-    (abi_sites_encoder_member_dynamic_post sites (ctx,func) value resources cursor) c s ==>
+    (abi_encoder_member_dynamic_pre value resources cursor)
+    (abi_encoder_member_dynamic_post (ctx,func) value resources cursor) c s ==>
   ?t. abi_encoder_spine_child (\c r u. abi_decode_sim ctx func r u) c s t /\
     abi_encoder_spine_child_output
-      (abi_sites_encoder_member_dynamic_post sites (ctx,func) value resources cursor) c s t
+      (abi_encoder_member_dynamic_post (ctx,func) value resources cursor) c s t
 Proof
   strip_tac >> irule abi_encoder_spine_child_generate >>
   goal_assum (drule_at Any) >> rpt strip_tac >> BETA_TAC >>

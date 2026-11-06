@@ -104,18 +104,18 @@ Proof
 QED
 
 Theorem abi_encoder_shared_input_registered_write:
-  abi_sites_encoder_shared_input sites (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) s /\
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) s /\
   first <= site /\ site < last /\ FLOOKUP s.vs_allocas site = SOME (slot,32) /\
   abi_decode_footprint_frame [(slot,32)] s t /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op s) ==>
-  abi_sites_encoder_shared_input sites (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) t
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) t
 Proof
   strip_tac >>
-  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-  `MEM (slot,32) (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by
-    (irule abi_scratch_registered_member >> simp[abi_sites_decoder_ids_def] >>
+  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (irule abi_scratch_registered_member >> simp[abi_decoder_ids_def] >>
      qexists_tac `site` >> simp[]) >>
   `abi_footprint_disjoint sb source_cap [(slot,32)]` by
     (fs[abi_footprint_disjoint_def] >> metis_tac[]) >>
@@ -123,7 +123,7 @@ Proof
     (drule_all abi_decode_footprint_frame_slice >> simp[]) >>
   `abi_encoder_open_input ei at av sb source_cap t.vs_memory` by
     (drule_all abi_encoder_open_input_mem_agree >> simp[]) >>
-  simp[abi_sites_encoder_shared_input_def] >> gvs[abi_decoder_child_scratch_def]
+  simp[abi_encoder_shared_input_def] >> gvs[abi_decoder_child_scratch_def]
 QED
 
 Theorem abi_encoder_shared_array_backedge_memory:

@@ -41,7 +41,7 @@ Theorem abi_encoder_members_inv_def:
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts
 Proof
-  rewrite_tac[abi_sites_encoder_members_inv_def]
+  rewrite_tac[abi_encoder_members_inv_def]
 QED
 
 Definition abi_sites_encoder_members_correct_def:
@@ -85,7 +85,7 @@ Theorem abi_encoder_members_correct_def:
       abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
         limit_st d output_size b cap initial t /\ abi_decode_sim ctx func initial t
 Proof
-  rewrite_tac[abi_sites_encoder_members_correct_def]
+  rewrite_tac[abi_encoder_members_correct_def]
 QED
 
 Theorem abi_encoder_members_empty_types:
@@ -96,12 +96,12 @@ Proof
 QED
 
 Theorem abi_encoder_members_correct_empty:
-  abi_sites_encoder_members_correct sites []
+  abi_encoder_members_correct []
 Proof
-  simp_tac bool_ss [abi_sites_encoder_members_correct_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_encoder_members_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   qpat_assum `abi_encoder_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_pre_def]) >>
   drule abi_encoder_members_empty_types >> strip_tac >>
@@ -112,23 +112,23 @@ Proof
 QED
 
 Theorem abi_encoder_members_run:
-  abi_sites_encoder_members_correct sites infos /\ EVERY (\(ei,_,_,_). abi_sites_encoder_correct sites ei) infos /\
+  abi_encoder_members_correct infos /\ EVERY (\(ei,_,_,_). abi_encoder_correct ei) infos /\
   compile_abi_encode_complex_elems dst src infos so ho dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_encoder_members_inv sites infos tys avs pre pvs active dyn_ptr site slot first last lo st limit_st
+  abi_encoder_members_inv infos tys avs pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?t. abi_sites_encoder_members_inv sites [] [] [] (pre++tys) (pvs++avs) active dyn_ptr site slot first last lo
+  ?t. abi_encoder_members_inv [] [] [] (pre++tys) (pvs++avs) active dyn_ptr site slot first last lo
       end_st limit_st src dst sb (so+abi_encoder_member_span infos)
       (ho+SUM (MAP (\(_,abi_sz,_,_). abi_sz) infos)) d hl output_size b cap t /\
-    abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+    abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial t /\ abi_decode_sim ctx func initial t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_sites_encoder_members_correct sites _` (mp_tac o PURE_REWRITE_RULE [abi_sites_encoder_members_correct_def]) >>
+  qpat_x_assum `abi_encoder_members_correct _` (mp_tac o PURE_REWRITE_RULE [abi_encoder_members_correct_def]) >>
   disch_then (qspecl_then [`tys`, `avs`, `pre`, `pvs`, `active`, `dyn_ptr`, `site`, `slot`,
     `first`, `last`, `lo`, `st`, `end_st`, `limit_st`, `src`, `dst`, `sb`, `so`, `ho`, `d`, `hl`,
     `output_size`, `b`, `cap`, `initial`, `out`, `func`, `ctx`] mp_tac) >>

@@ -4,25 +4,25 @@ Ancestors
   abiEncoderSharedLeaves abiEncoderSharedContract abiScratchEncoderContract
 
 Theorem abi_scratch_encoder_word:
-  abi_sites_scratch_encoder sites AbiPrimWord
+  abi_scratch_encoder AbiPrimWord
 Proof
   irule abi_encoder_shared_scratch >> irule abi_encoder_shared_word
 QED
 
 Theorem abi_scratch_encoder_copy:
-  abi_sites_scratch_encoder sites (AbiCopy sz)
+  abi_scratch_encoder (AbiCopy sz)
 Proof
   irule abi_encoder_shared_scratch >> irule abi_encoder_shared_copy
 QED
 
 Theorem abi_scratch_encoder_bytes:
-  abi_sites_scratch_encoder sites (AbiBytestring maxlen)
+  abi_scratch_encoder (AbiBytestring maxlen)
 Proof
   irule abi_encoder_shared_scratch >> irule abi_encoder_shared_bytes
 QED
 
 Theorem abi_scratch_encoder_empty:
-  abi_sites_scratch_encoder sites (AbiComplex [])
+  abi_scratch_encoder (AbiComplex [])
 Proof
   irule abi_encoder_shared_scratch >> irule abi_encoder_shared_empty
 QED

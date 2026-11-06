@@ -62,28 +62,28 @@ Theorem abi_encoder_correct_def:
       t.vs_current_bb = end_st.cs_current_bb /\ t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
       ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
-  rewrite_tac[abi_sites_encoder_correct_def]
+  rewrite_tac[abi_encoder_correct_def]
 QED
 
 Theorem abi_encoder_correct_run:
-  abi_sites_encoder_correct sites ei /\ compile_abi_encode_to_buf dst src ei start = (out,end_st) /\
+  abi_encoder_correct ei /\ compile_abi_encode_to_buf dst src ei start = (out,end_st) /\
   fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_encoder_pre ei at av start src dst sb source_cap d b cap initial /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
   ?t. mem_bytes_at d (LENGTH (enc at av)) t.vs_memory = enc at av /\
     eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
-    abi_sites_decoder_effect sites first last start.cs_next_id end_st.cs_next_id start.cs_next_var
+    abi_decoder_effect first last start.cs_next_id end_st.cs_next_id start.cs_next_var
       limit_st d (LENGTH (enc at av)) b cap initial t /\
     t.vs_current_bb = end_st.cs_current_bb /\ t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
-  strip_tac >> qpat_x_assum `abi_sites_encoder_correct sites _` (mp_tac o PURE_REWRITE_RULE [abi_sites_encoder_correct_def]) >>
+  strip_tac >> qpat_x_assum `abi_encoder_correct _` (mp_tac o PURE_REWRITE_RULE [abi_encoder_correct_def]) >>
   disch_then (qspecl_then [`dst`, `src`, `start`, `end_st`, `out`, `func`, `ctx`, `first`, `last`,
     `b`, `cap`, `limit_st`, `initial`, `at`, `av`, `sb`, `source_cap`, `d`] mp_tac) >>
   asm_simp_tac bool_ss []

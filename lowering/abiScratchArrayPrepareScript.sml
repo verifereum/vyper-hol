@@ -21,32 +21,32 @@ QED
 Theorem abi_scratch_array_prepare:
   abi_encode_array_addresses ip src dst asz msz st = (coords,prepared) /\
   fn_has_code st prepared func /\
-  abi_sites_scratch_input sites (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
+  abi_scratch_input (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\ j < LENGTH avs /\
-  abi_sites_decoder_budget sites first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\
   prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual.
-    abi_sites_scratch_input sites ei ty (EL j avs) prepared (SND (FST coords)) (FST (SND coords))
+    abi_scratch_input ei ty (EL j avs) prepared (SND (FST coords)) (FST (SND coords))
       (sb+32+j*msz) msz (d+32) (output_size-32) first last b cap actual /\
     abi_encoder_input (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
       sb source_cap actual.vs_memory /\
     asz = abi_member_head_size ty /\ active = is_dynamic ty /\
     eval_operand (FST (FST coords)) actual = SOME (n2w j) /\
     eval_operand (SND (SND coords)) actual = SOME (n2w (d+32+j*asz)) /\
-    fresh_vars_wrt limit_st actual /\ abi_sites_decoder_budget sites first last b cap actual /\
-    abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual /\
+    fresh_vars_wrt limit_st actual /\ abi_decoder_budget first last b cap actual /\
+    abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual /\
     abi_decoder_address_frame st.cs_next_var initial actual /\
     abi_decode_footprint_frame
-      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial) initial actual /\
+      (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial) initial actual /\
     actual.vs_current_bb = prepared.cs_current_bb /\ actual.vs_inst_idx = LENGTH prepared.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   strip_tac >>
-  qpat_assum `abi_sites_scratch_input sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_input_def]) >>
+  qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   drule abi_encode_array_addresses_shape >> strip_tac >>
   drule_all abi_encode_array_addresses_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >>
@@ -56,8 +56,8 @@ Proof
        (ACCEPT_TAC o MATCH_MP abi_encoder_input_typed)) >>
   drule_all abi_scratch_array_child_capacity >> strip_tac >>
   `actual.vs_memory = initial.vs_memory` by fs[abi_decoder_address_frame_def] >>
-  mp_tac (Q.INST [`ids` |-> `abi_sites_decoder_ids sites first last`,
-    `fp` |-> `abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial`,
+  mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`,
+    `fp` |-> `abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial`,
     `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`]
     abi_scratch_address) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `sb <= sb+32+j*msz /\ sb+32+j*msz+msz <= sb+source_cap /\

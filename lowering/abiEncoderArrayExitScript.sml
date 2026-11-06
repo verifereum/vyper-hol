@@ -12,15 +12,15 @@ Ancestors
 
 (* Actual header/body/backedge iterations terminate at the semantic array frontier. *)
 Theorem abi_encoder_array_loop_step:
-  (if active then abi_sites_encoder_correct sites ei else abi_encoder_static_leaf ei) /\
+  (if active then abi_encoder_correct ei else abi_encoder_static_leaf ei) /\
   (if active then abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz body_st = (idx,body_end)
     else abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end)) /\
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\ body_end.cs_next_var+1 <= limit_st.cs_next_var /\
-  abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
     site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (FST labels) j origin initial /\
   j < LENGTH avs ==>
-  ?actual. abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  ?actual. abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
       site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (FST labels) (SUC j) origin actual /\
     abi_decode_sim ctx func initial actual
 Proof
@@ -32,9 +32,9 @@ QED
 Theorem abi_encoder_array_loop_exit:
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\ body_end.cs_next_var+1 <= limit_st.cs_next_var /\
-  abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
     site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (FST labels) (LENGTH avs) origin initial ==>
-  ?actual. abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  ?actual. abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
       site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (SND (SND labels)) (LENGTH avs) origin actual /\
     abi_decode_sim ctx func initial actual
 Proof
@@ -45,24 +45,24 @@ Proof
 QED
 
 Theorem abi_encoder_array_finite_loop:
-  (if active then abi_sites_encoder_correct sites ei else abi_encoder_static_leaf ei) /\
+  (if active then abi_encoder_correct ei else abi_encoder_static_leaf ei) /\
   (if active then abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz body_st = (idx,body_end)
     else abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end)) /\
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\ body_end.cs_next_var+1 <= limit_st.cs_next_var /\
-  abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
     site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (FST labels) i origin initial ==>
-  ?actual. abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  ?actual. abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
       site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (SND (SND labels)) (LENGTH avs) origin actual /\
     abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `i <= LENGTH avs` by (drule abi_encoder_array_loop_inv_facts >> simp[]) >>
   qabbrev_tac `loop_inv = \(j:num) (s:venom_state).
-    abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+    abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
       site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (FST labels) j origin s` >>
   qabbrev_tac `loop_post = \(s:venom_state).
-    abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+    abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
       site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op (SND (SND labels)) (LENGTH avs) origin s` >>
   mp_tac (Q.SPECL [`LENGTH (avs:abi_value list)`, `i:num`, `loop_inv`, `loop_post`, `ctx`, `func`, `initial:venom_state`]
     abi_decode_finite_iteration) >>
@@ -78,15 +78,15 @@ Proof
 QED
 
 Theorem abi_encoder_array_loop_output:
-  abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
     site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op label (LENGTH avs) origin actual ==>
   mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) actual.vs_memory = enc (Array NONE ty) (ListV avs) /\
   abi_encoder_cursor active dyn_ptr cursor_site cursor_slot first site owner_st
     (LENGTH (enc (Array NONE ty) (ListV avs))-32) actual
 Proof
   strip_tac >> drule abi_encoder_array_loop_inv_facts >> strip_tac >>
-  qpat_assum `abi_sites_encoder_array_loop_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_array_loop_inv_def]) >>
+  qpat_assum `abi_encoder_array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_array_loop_inv_def]) >>
   qpat_assum `abi_encoder_array_memory _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_array_memory_def]) >>
   drule_all abi_encoder_array_prefix_complete >> disch_tac >>
@@ -263,7 +263,7 @@ Theorem abi_encoder_array_exit_reach:
     else abi_encode_array_static_exit src asz st = (out,final)) /\
   fn_has_code st final func /\ owner_st.cs_next_var <= st.cs_next_var /\ owner_st.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  abi_sites_decoder_budget sites first last b cap initial /\ ~initial.vs_halted /\
+  abi_decoder_budget first last b cap initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. eval_operand out actual = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
     fresh_vars_wrt limit_st actual /\ abi_decoder_address_frame st.cs_next_var initial actual /\
@@ -291,7 +291,7 @@ Proof
 QED
 
 Theorem abi_encoder_array_loop_scalar_exit:
-  abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+  abi_encoder_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
     site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op label (LENGTH avs) origin initial /\
   (if active then abi_encode_array_dynamic_exit src dyn_ptr st = (out,final)
     else abi_encode_array_static_exit src asz st = (out,final)) /\
@@ -301,22 +301,22 @@ Theorem abi_encoder_array_loop_scalar_exit:
   ?actual.
     mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) actual.vs_memory = enc (Array NONE ty) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
-    abi_sites_decoder_effect sites first last site hi owner_st.cs_next_var limit_st d output_size b cap origin actual /\
+    abi_decoder_effect first last site hi owner_st.cs_next_var limit_st d output_size b cap origin actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_encoder_array_loop_output >> strip_tac >>
   drule abi_encoder_array_loop_inv_facts >> strip_tac >>
-  qpat_assum `abi_sites_encoder_array_loop_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_array_loop_inv_def]) >>
+  qpat_assum `abi_encoder_array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_array_loop_inv_def]) >>
   mp_tac (Q.INST [`j` |-> `LENGTH (avs:abi_value list)`] abi_encoder_array_exit_reach) >>
   impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
     `next` |-> `owner_st.cs_next_var`, `child_next` |-> `st.cs_next_var`,
     `lo` |-> `site:num`, `sz` |-> `output_size:num`] abi_decoder_address_effect) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  `abi_sites_decoder_effect sites first last site hi owner_st.cs_next_var limit_st d output_size b cap origin actual` by
+  `abi_decoder_effect first last site hi owner_st.cs_next_var limit_st d output_size b cap origin actual` by
     (irule abi_decoder_effect_trans >> qexists_tac `initial` >> asm_simp_tac bool_ss []) >>
   qexists_tac `actual` >> full_simp_tac bool_ss [abi_decoder_address_frame_def]
 QED

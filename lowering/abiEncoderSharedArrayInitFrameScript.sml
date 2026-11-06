@@ -42,18 +42,18 @@ Proof
 QED
 
 Theorem abi_encoder_shared_array_selected_input:
-  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s /\
   j < LENGTH avs /\ LENGTH (enc ty (EL j avs)) <= output_size /\
   eval_operand child_src s = SOME (n2w (sb+32+j*msz)) /\
   abi_decoder_operand_live st.cs_next_var child_src ==>
-  abi_sites_encoder_shared_input sites (ei,ty,EL j avs) (st,child_src,dst)
+  abi_encoder_shared_input (ei,ty,EL j avs) (st,child_src,dst)
     (sb+32+j*msz,msz) (d,output_size) (first,last,b,cap) s
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_encoder_shared_array_input_facts >> strip_tac >>
-  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
+  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
   `sb+32+j*msz+msz <= sb+source_cap` by
     (`SUC j*msz <= LENGTH avs*msz` by simp[] >>
      pop_assum mp_tac >> pure_rewrite_tac[MULT_CLAUSES] >>
@@ -61,9 +61,9 @@ Proof
   `regions_disjoint (sb+32+j*msz,msz) (d,output_size)` by
     (gvs[abi_encoder_zero_aware_separation] >> decide_tac) >>
   `abi_footprint_disjoint (sb+32+j*msz) msz
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
     (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`,`source_cap`] >> simp[] >> decide_tac) >>
-  asm_simp_tac bool_ss [abi_sites_encoder_shared_input_def] >> decide_tac
+  asm_simp_tac bool_ss [abi_encoder_shared_input_def] >> decide_tac
 QED
 
 Theorem abi_encoder_open_array_length:

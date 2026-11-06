@@ -56,17 +56,17 @@ Proof
 QED
 
 Theorem abi_decoder_child_allocation:
-  abi_sites_decoder_budget sites first last b cap s /\ FINITE ids /\
-  ids SUBSET abi_sites_decoder_ids sites first last /\ inst.inst_id IN ids /\
+  abi_decoder_budget first last b cap s /\ FINITE ids /\
+  ids SUBSET abi_decoder_ids first last /\ inst.inst_id IN ids /\
   inst.inst_outputs = [out] ==>
   ?t p base len. exec_alloca inst s (32w:bytes32) = OK t /\
-    abi_sites_decoder_budget sites first last b cap t /\
+    abi_decoder_budget first last b cap t /\
     lookup_var out t = SOME (n2w p) /\
     MEM (base,len) (abi_decoder_child_scratch ids b cap s) /\
     base <= p /\ p + 32 <= base + len
 Proof
   strip_tac >>
-  `inst.inst_id IN abi_sites_decoder_ids sites first last` by metis_tac[SUBSET_DEF] >>
+  `inst.inst_id IN abi_decoder_ids first last` by metis_tac[SUBSET_DEF] >>
   Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
   >- (drule_all abi_decoder_alloca32_fresh >> strip_tac >>
       qexistsl_tac [`t`, `s.vs_alloca_next`, `s.vs_alloca_next`,
@@ -80,37 +80,12 @@ Proof
   disj2_tac >> qexists_tac `inst.inst_id` >> simp[MEM_SET_TO_LIST]
 QED
 
-(* Generation interval certificates select exactly the child's sites. *)
-Theorem abi_decoder_generated_child_allocation:
-  abi_decoder_code child child_end /\
-  abi_decoder_code_member inst child_end /\
-  ~abi_decoder_code_member inst child /\ inst.inst_opcode = ALLOCA /\
-  abi_sites_decoder_budget sites first last b cap s /\
-  abi_sites_decoder_ids sites child.cs_next_id child_end.cs_next_id SUBSET
-    abi_sites_decoder_ids sites first last ==>
-  ?out t p base len. inst.inst_outputs = [out] /\
-    inst.inst_operands = [Lit 32w] /\
-    exec_alloca inst s (32w:bytes32) = OK t /\
-    abi_sites_decoder_budget sites first last b cap t /\
-    lookup_var out t = SOME (n2w p) /\
-    MEM (base,len) (abi_decoder_child_scratch
-      (abi_sites_decoder_ids sites child.cs_next_id child_end.cs_next_id) b cap s) /\
-    base <= p /\ p + 32 <= base + len
-Proof
-  strip_tac >> drule_all abi_decoder_code_alloca >> strip_tac >>
-  `inst.inst_id IN abi_sites_decoder_ids sites child.cs_next_id child_end.cs_next_id` by
-    simp[abi_sites_decoder_ids_def] >>
-  `FINITE (abi_sites_decoder_ids sites child.cs_next_id child_end.cs_next_id)` by simp[] >>
-  drule_all abi_decoder_child_allocation >> strip_tac >>
-  metis_tac[]
-QED
-
 (* Child output must also exclude the ancestor index. Source and initialized
    siblings are protected observations, not part of the scratch allowance. *)
 Theorem abi_decoder_child_frame_protected:
-  abi_sites_decoder_budget sites first last b cap s /\ FINITE ids /\
-  ids SUBSET abi_sites_decoder_ids sites first last /\
-  ancestor IN abi_sites_decoder_ids sites first last /\ ~(ancestor IN ids) /\
+  abi_decoder_budget first last b cap s /\ FINITE ids /\
+  ids SUBSET abi_decoder_ids first last /\
+  ancestor IN abi_decoder_ids first last /\ ~(ancestor IN ids) /\
   FLOOKUP s.vs_allocas ancestor = SOME (ip,32) /\
   (ip + 32 <= d \/ d + sz <= ip) /\
   abi_footprint_disjoint sb n
@@ -146,20 +121,20 @@ QED
    credit, and live source/output below the frontier are explicit premises.
    No claim that canonical encoding or SSA freshness supplies these facts. *)
 Theorem abi_decoder_caller_initialize:
-  (!id. id IN abi_sites_decoder_ids sites first last ==>
+  (!id. id IN abi_decoder_ids first last ==>
         FLOOKUP s.vs_allocas id = NONE) /\
   b <= s.vs_alloca_next /\
-  s.vs_alloca_next + 32 * CARD (abi_sites_decoder_ids sites first last) <= b + cap /\
+  s.vs_alloca_next + 32 * CARD (abi_decoder_ids first last) <= b + cap /\
   b + cap < dimword (:256) /\
   sb + n <= s.vs_alloca_next /\ d + sz <= s.vs_alloca_next ==>
-  abi_sites_decoder_budget sites first last b cap s /\
+  abi_decoder_budget first last b cap s /\
   abi_footprint_disjoint sb n
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s) /\
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
   abi_footprint_disjoint d sz
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 Proof
   strip_tac >>
-  `abi_sites_decoder_budget sites first last b cap s` by
+  `abi_decoder_budget first last b cap s` by
     (irule abi_decoder_budget_empty >> simp[]) >>
   drule abi_decoder_budget_frontier >> strip_tac >> simp[] >>
   conj_tac >> irule abi_decoder_child_scratch_disjoint >> simp[] >>

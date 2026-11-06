@@ -12,20 +12,20 @@ Ancestors
 
 Theorem abi_encoder_members_prepare_raw_transport:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   prepared.cs_next_var <= limit_st.cs_next_var /\
   abi_encoder_member_phase_raw st prepared initial ready ==>
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo prepared limit_st
     src dst sb so ho d hl output_size b cap ready /\
   abi_encoder_buffer_pre ei ty av prepared elem_src dst (sb+so) mem_sz d output_size b cap ready /\
   abi_decoder_address_frame st.cs_next_var initial ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   qpat_assum `abi_encoder_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_pre_def]) >>
   drule abi_encoder_emit_address_shape >> strip_tac >>
@@ -47,17 +47,17 @@ Proof
   `abi_encoder_tuple_prefix hl pre pvs d ready.vs_memory` by
     (qpat_assum `ready.vs_memory = initial.vs_memory` (fn th => PURE_REWRITE_TAC [th]) >>
      first_assum ACCEPT_TAC) >>
-  `abi_sites_decoder_budget sites first last b cap ready` by
+  `abi_decoder_budget first last b cap ready` by
     (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
       abi_decoder_budget_transport) >>
      impl_tac >- asm_simp_tac bool_ss [] >> asm_simp_tac bool_ss []) >>
   qpat_assum `hl = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   qpat_assum `ho = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  asm_simp_tac bool_ss [abi_sites_encoder_members_inv_def, abi_decoder_address_frame_def] >> decide_tac
+  asm_simp_tac bool_ss [abi_encoder_members_inv_def, abi_decoder_address_frame_def] >> decide_tac
 QED
 
 Theorem abi_encoder_complex_finish_raw_transport:
-  abi_sites_encoder_members_inv sites [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
+  abi_encoder_members_inv [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap encoded /\
   emit_op MLOAD [dyn_ptr] st = (out,end_st) /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
@@ -72,12 +72,12 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule emitted_insts_emit_op >> strip_tac >>
   drule abi_encoder_members_final_output >> strip_tac >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  `site IN abi_sites_decoder_ids sites first last` by
-    (simp_tac std_ss [abi_sites_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  `site IN abi_decoder_ids first last` by
+    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   drule abi_decoder_budget_word_bound >> strip_tac >> `slot < dimword (:256)` by decide_tac >>
   drule_all abi_encoder_member_load_transport >> strip_tac >>
@@ -87,11 +87,11 @@ QED
 
 Theorem abi_encoder_members_prepare:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\ fn_has_code st prepared func /\
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   prepared.cs_next_var <= limit_st.cs_next_var ==>
-  ?ready. abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  ?ready. abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
       pre pvs active dyn_ptr site slot first last lo prepared limit_st
       src dst sb so ho d hl output_size b cap ready /\
     abi_encoder_buffer_pre ei ty av prepared elem_src dst (sb+so) mem_sz d output_size b cap ready /\
@@ -101,7 +101,7 @@ Proof
   `fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
    initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
    eval_operand src initial = SOME (n2w sb)` by
-    fs[abi_sites_encoder_members_inv_def, abi_encoder_members_pre_def] >>
+    fs[abi_encoder_members_inv_def, abi_encoder_members_pre_def] >>
   `eval_operand (Lit (n2w so)) initial = SOME (n2w so)` by simp[eval_operand_def] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw)) >> strip_tac >>
   drule_all abi_encoder_members_prepare_raw_transport >> strip_tac >>

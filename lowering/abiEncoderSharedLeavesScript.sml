@@ -170,20 +170,20 @@ Proof
 QED
 
 Theorem abi_encoder_shared_empty:
-  abi_sites_encoder_shared sites (AbiComplex [])
+  abi_encoder_shared (AbiComplex [])
 Proof
-  simp_tac bool_ss [abi_sites_encoder_shared_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_encoder_shared_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   gvs[Once compile_abi_encode_child_def, comp_return_def] >>
-  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
+  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
   `enc at av = []` by
     (fs[abi_encoder_open_complex_iff, abi_encoder_tuple_type_def,
        abi_encoder_member_span_def, enc_def, LET_THM, REV_DEF]) >>
-  `abi_sites_scratch_effect sites first last end_st.cs_next_id end_st.cs_next_id end_st.cs_next_var
+  `abi_scratch_effect first last end_st.cs_next_id end_st.cs_next_id end_st.cs_next_var
     limit_st d (LENGTH (enc at av)) b cap initial initial` by
     (irule abi_scratch_leaf_effect >> simp[abi_decode_frame_def]) >>
   qexists_tac `initial` >>
-  simp[abi_sites_encoder_shared_endpoint_def, mem_bytes_at_def, eval_operand_def,
+  simp[abi_encoder_shared_endpoint_def, mem_bytes_at_def, eval_operand_def,
     abi_encoder_registered_effect_refl, abi_encoder_extend_sim_refl]
 QED

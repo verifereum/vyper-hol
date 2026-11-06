@@ -8,21 +8,21 @@ Ancestors
   compileEnv valueEncoding contractABI venomState list arithmetic
 
 Theorem abi_encoder_members_inv_nonempty:
-  abi_sites_encoder_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) tys avs pre pvs active dyn_ptr site slot
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) tys avs pre pvs active dyn_ptr site slot
     first last lo st limit_st src dst sb so ho d hl output_size b cap initial ==>
   tys <> [] /\ avs <> []
 Proof
-  strip_tac >> qpat_x_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  strip_tac >> qpat_x_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   disch_then (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_members_pre_def]) >>
   simp_tac bool_ss [abi_encoder_complex_input_iff] >> rpt strip_tac >>
   Cases_on `tys` >> Cases_on `avs` >> gvs[abi_encoder_tuple_type_def]
 QED
 
 Theorem abi_encoder_members_correct_all:
-  !infos. abi_sites_encoder_members_correct sites infos
+  !infos. abi_encoder_members_correct infos
 Proof
-  gen_tac >> simp_tac bool_ss [abi_sites_encoder_members_correct_def] >> rpt gen_tac >>
+  gen_tac >> simp_tac bool_ss [abi_encoder_members_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_encoder_spine_code func limit_st end_st.cs_next_id (dst,src,dyn_ptr)
     infos (st,so,ho) (out,end_st)` by
@@ -34,8 +34,8 @@ Proof
 QED
 
 Theorem abi_encoder_members_correct_cons:
-  abi_sites_encoder_members_correct sites infos ==>
-  abi_sites_encoder_members_correct sites ((ei,abi_sz,mem_sz,dyn)::infos)
+  abi_encoder_members_correct infos ==>
+  abi_encoder_members_correct ((ei,abi_sz,mem_sz,dyn)::infos)
 Proof
   strip_tac >> MATCH_ACCEPT_TAC abi_encoder_members_correct_all
 QED

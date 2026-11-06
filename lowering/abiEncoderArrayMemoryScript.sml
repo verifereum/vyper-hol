@@ -62,7 +62,7 @@ QED
 
 Theorem abi_encoder_array_memory_advance:
   abi_encoder_array_memory ei asz msz dyn ty avs st src dst sb source_cap d output_size b cap j initial /\
-  abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
+  abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
   abi_encoder_array_prefix ty avs k d actual.vs_memory ==>
   abi_encoder_array_memory ei asz msz dyn ty avs st src dst sb source_cap d output_size b cap k actual
 Proof
@@ -73,7 +73,7 @@ QED
 
 Theorem abi_encoder_array_memory_scratch:
   abi_encoder_array_memory ei asz msz dyn ty avs st src dst sb source_cap d output_size b cap j initial /\
-  abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
+  abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
   abi_decode_footprint_frame fp initial actual /\ abi_footprint_disjoint d output_size fp ==>
   abi_encoder_array_memory ei asz msz dyn ty avs st src dst sb source_cap d output_size b cap j actual
 Proof

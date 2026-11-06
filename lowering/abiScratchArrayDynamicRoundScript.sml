@@ -15,16 +15,16 @@ Ancestors
    TOP-LEVEL: abi_scratch_array_dynamic_tail_reach composes all three actual
    stages under the child induction hypothesis and returns one precise effect. *)
 Theorem abi_scratch_array_dynamic_tail_reach:
-  abi_sites_scratch_encoder sites ei /\
+  abi_scratch_encoder ei /\
   abi_encode_array_tail data_op dyn_ptr st = (ops,prepared) /\
   compile_abi_encode_to_buf (SND ops) src ei prepared = (child_len,child_end) /\
   abi_encode_child_suffix head dyn_ptr (FST ops) child_len child_end = (child_len,end_st) /\
   fn_has_code st prepared func /\ fn_has_code prepared child_end func /\ fn_has_code child_end end_st func /\
-  abi_sites_scratch_input sites ei at av st src data_op sb source_cap d output_size first last b cap initial /\
+  abi_scratch_input ei at av st src data_op sb source_cap d output_size first last b cap initial /\
   abi_decoder_operand_live st.cs_next_var head /\ eval_operand head initial = SOME (n2w (d+ho)) /\
   abi_decoder_operand_live st.cs_next_var dyn_ptr /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
   mload slot initial = n2w off /\ ho+32 <= off /\ off+LENGTH (enc at av) <= output_size /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= lo /\ lo <= site /\ site < st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= lo /\ lo <= site /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -37,8 +37,8 @@ Theorem abi_scratch_array_dynamic_tail_reach:
     abi_encoder_input ei at av sb source_cap actual.vs_memory /\
     abi_decode_footprint_frame
       ([(d+ho,32);(d+off,LENGTH (enc at av))] ++
-        abi_decoder_child_scratch (abi_sites_decoder_ids sites lo end_st.cs_next_id) b cap initial) initial actual /\
-    abi_sites_scratch_effect sites first last lo end_st.cs_next_id st.cs_next_var
+        abi_decoder_child_scratch (abi_decoder_ids lo end_st.cs_next_id) b cap initial) initial actual /\
+    abi_scratch_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -47,13 +47,13 @@ Proof
   drule_all abi_scratch_array_tail_code >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand data_op initial = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var data_op /\
-    d+output_size < dimword (:256)` by fs[abi_sites_scratch_input_def] >>
+    d+output_size < dimword (:256)` by fs[abi_scratch_input_def] >>
   `abi_encoder_spine_core_code func (ei,SND ops,src,prepared,child_end,child_len)` by
     fs[abi_encoder_spine_core_code_def] >>
   qabbrev_tac `Pre = \(e,dd,ss,p,en,op:operand) s.
-    abi_sites_scratch_encoder sites e /\ abi_sites_scratch_input sites e at av p ss dd sb source_cap (d+off)
+    abi_scratch_encoder e /\ abi_scratch_input e at av p ss dd sb source_cap (d+off)
       (LENGTH (enc at av)) first last b cap s /\
-    abi_sites_decoder_budget sites first last b cap s /\ first <= p.cs_next_id /\ en.cs_next_id <= last /\
+    abi_decoder_budget first last b cap s /\ first <= p.cs_next_id /\ en.cs_next_id <= last /\
     en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
     abi_decoder_operand_live p.cs_next_var head /\
     abi_decoder_operand_live p.cs_next_var (FST ops) /\
@@ -67,12 +67,12 @@ Proof
     mem_bytes_at (d+off) (LENGTH (enc at av)) t.vs_memory = enc at av /\
     eval_operand op t = SOME (n2w (LENGTH (enc at av))) /\
     abi_encoder_input e at av sb source_cap t.vs_memory /\
-    abi_sites_scratch_effect sites first last p.cs_next_id en.cs_next_id p.cs_next_var
+    abi_scratch_effect first last p.cs_next_id en.cs_next_id p.cs_next_var
       limit_st (d+off) (LENGTH (enc at av)) b cap s t /\
     eval_operand head t = SOME (n2w (d+ho)) /\
     eval_operand (FST ops) t = SOME (n2w off) /\
     eval_operand dyn_ptr t = SOME (n2w slot) /\ FLOOKUP t.vs_allocas site = SOME (slot,32) /\
-    mload slot t = mload slot s /\ fresh_vars_wrt limit_st t /\ abi_sites_decoder_budget sites first last b cap t /\
+    mload slot t = mload slot s /\ fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap t /\
     t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func s t` >>
   `!c ready. abi_encoder_spine_core_code func c /\ Pre c ready ==>
@@ -100,23 +100,23 @@ Proof
   qpat_x_assum `!rr uu. _` kall_tac >>
   qpat_x_assum `Abbrev (Pre = _)` kall_tac >>
   drule_all abi_scratch_array_prepare_raw_transport >> strip_tac >>
-  `abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap ready encoded` by fs[abi_sites_scratch_effect_def] >>
-  `abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial encoded` by
+  `abi_scratch_evolution (abi_decoder_ids first last) b cap ready encoded` by fs[abi_scratch_effect_def] >>
+  `abi_scratch_evolution (abi_decoder_ids first last) b cap initial encoded` by
     (drule_all abi_scratch_evolution_trans >> simp[]) >>
   `abi_footprint_disjoint d output_size
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap encoded)` by
-    (mp_tac (Q.INST [`ids` |-> `abi_sites_decoder_ids sites first last`, `b` |-> `b:num`, `cap` |-> `cap:num`,
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap encoded)` by
+    (mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`, `b` |-> `b:num`, `cap` |-> `cap:num`,
        `p` |-> `d:num`, `n` |-> `output_size:num`, `s` |-> `initial:venom_state`,
        `t` |-> `encoded:venom_state`] abi_scratch_disjoint_advance) >>
-     impl_tac >- fs[abi_sites_scratch_input_def] >> simp[]) >>
+     impl_tac >- fs[abi_scratch_input_def] >> simp[]) >>
   `d <= d+ho /\ d+ho+32 <= d+off` by decide_tac >>
   drule_all abi_scratch_dynamic_finish_raw_transport >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `lo <= prepared.cs_next_id /\ child_end.cs_next_id <= end_st.cs_next_id /\
     st.cs_next_var <= prepared.cs_next_var /\
-    site IN abi_sites_decoder_ids sites lo end_st.cs_next_id /\
+    site IN abi_decoder_ids lo end_st.cs_next_id /\
     d <= d+off /\ (d+off)+LENGTH (enc at av) <= d+output_size /\ d+ho+32 <= d+output_size` by
-    (simp[abi_sites_decoder_ids_def] >> decide_tac) >>
+    (simp[abi_decoder_ids_def] >> decide_tac) >>
   drule_all abi_scratch_child_effect >> strip_tac >>
   `abi_encoder_input ei at av sb source_cap actual.vs_memory` by
     (irule (Q.INST [`s` |-> `initial:venom_state`, `st` |-> `st:compile_state`,
@@ -155,15 +155,15 @@ Proof
 QED
 
 Theorem abi_scratch_array_dynamic_body_reach:
-  abi_sites_scratch_encoder sites ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
+  abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
   fn_has_code st end_st func /\
-  abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\ j < LENGTH avs /\
   off = LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs)) /\
   abi_decoder_operand_live st.cs_next_var dyn_ptr /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
   mload slot initial = n2w off /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= site /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -174,8 +174,8 @@ Theorem abi_scratch_array_dynamic_body_reach:
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ eval_operand out actual = SOME (n2w j) /\
     abi_decode_footprint_frame
       ([(d+32+j*asz,32);(d+32+off,LENGTH (enc ty (EL j avs)))] ++
-        abi_decoder_child_scratch (abi_sites_decoder_ids sites site end_st.cs_next_id) b cap initial) initial actual /\
-    abi_sites_scratch_effect sites first last site end_st.cs_next_id st.cs_next_var
+        abi_decoder_child_scratch (abi_decoder_ids site end_st.cs_next_id) b cap initial) initial actual /\
+    abi_scratch_effect first last site end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -184,8 +184,8 @@ Proof
   drule_all abi_encode_array_dynamic_body_context >> strip_tac >>
   `addressed.cs_next_var <= limit_st.cs_next_var /\ site < addressed.cs_next_id /\
    st.cs_next_var <= addressed.cs_next_var` by decide_tac >>
-  qpat_assum `abi_sites_scratch_input sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_input_def]) >>
+  qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   drule_all abi_scratch_array_body_bounds >> strip_tac >>
   mp_tac (Q.INST [`prepared` |-> `addressed`, `active` |-> `T`] abi_scratch_array_prepare) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -211,7 +211,7 @@ Proof
        `next` |-> `addressed.cs_next_var`, `d` |-> `d+32`, `sz` |-> `output_size-32`,
        `lo` |-> `site:num`, `hi` |-> `end_st.cs_next_id`] abi_scratch_effect_operand) >>
      asm_simp_tac bool_ss []) >>
-  mp_tac (Q.INST [`ids` |-> `abi_sites_decoder_ids sites site end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
+  mp_tac (Q.INST [`ids` |-> `abi_decoder_ids site end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
     `fp` |-> `[(d+32+j*asz,32);(d+32+off,LENGTH (enc ty (EL j avs)))]`]
     abi_scratch_frame_after_address) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`child_lo` |-> `site:num`, `child_hi` |-> `end_st.cs_next_id`,
@@ -227,43 +227,43 @@ QED
    TOP-LEVEL: abi_scratch_array_dynamic_iteration extends the encoded prefix,
    updates the tail offset and retains complete source data and separation. *)
 Theorem abi_scratch_array_dynamic_iteration:
-  abi_sites_scratch_encoder sites ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
+  abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
   fn_has_code st end_st func /\
-  abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size first last b cap initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\ j < LENGTH avs /\
   off = LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs)) /\
   abi_decoder_operand_live st.cs_next_var dyn_ptr /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
   mload slot initial = n2w off /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= site /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
-    abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+    abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
       st src dst sb source_cap d output_size first last b cap actual /\
     mem_word_at slot actual.vs_memory = n2w (LENGTH avs*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ eval_operand out actual = SOME (n2w j) /\
-    abi_sites_scratch_effect sites first last site end_st.cs_next_id st.cs_next_var
+    abi_scratch_effect first last site end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac abi_scratch_array_dynamic_body_reach >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qpat_assum `abi_sites_scratch_input sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_input_def]) >>
+  qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   drule_all abi_scratch_array_body_bounds >> strip_tac >>
-  `abi_sites_decoder_ids sites site end_st.cs_next_id SUBSET abi_sites_decoder_ids sites first last` by
-    (simp[SUBSET_DEF, abi_sites_decoder_ids_def] >> decide_tac) >>
+  `abi_decoder_ids site end_st.cs_next_id SUBSET abi_decoder_ids first last` by
+    (simp[SUBSET_DEF, abi_decoder_ids_def] >> decide_tac) >>
   `abi_footprint_disjoint d output_size
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites site end_st.cs_next_id) b cap initial)` by
-    (irule abi_scratch_disjoint_subset >> qexists_tac `abi_sites_decoder_ids sites first last` >> simp[]) >>
+    (abi_decoder_child_scratch (abi_decoder_ids site end_st.cs_next_id) b cap initial)` by
+    (irule abi_scratch_disjoint_subset >> qexists_tac `abi_decoder_ids first last` >> simp[]) >>
   qpat_assum `asz = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  mp_tac (Q.INST [`fp` |-> `abi_decoder_child_scratch (abi_sites_decoder_ids sites site end_st.cs_next_id) b cap initial`]
+  mp_tac (Q.INST [`fp` |-> `abi_decoder_child_scratch (abi_decoder_ids site end_st.cs_next_id) b cap initial`]
     abi_scratch_array_dynamic_step) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`ei` |-> `AbiDynArray ei (abi_member_head_size ty) msz T`,
     `at` |-> `Array NONE ty`, `av` |-> `ListV avs`, `sz` |-> `output_size:num`,
@@ -277,27 +277,27 @@ QED
    TOP-LEVEL: abi_scratch_array_dynamic_body_memory advances the output/tail
    while retaining the complete source contract and the registered index. *)
 Theorem abi_scratch_array_dynamic_body_memory:
-  abi_sites_scratch_encoder sites ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
+  abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
   fn_has_code st end_st func /\
-  abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
     owner_st src dst sb source_cap d output_size first last b cap initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
   abi_encoder_cursor T ip index_site index_slot first lo owner_st j initial /\
   abi_encoder_cursor T dyn_ptr site slot first lo owner_st off initial /\ index_site < site /\
   off = LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs)) /\
   j < LENGTH avs /\ owner_st.cs_next_var <= st.cs_next_var /\ owner_st.cs_next_id <= st.cs_next_id /\
-  abi_sites_decoder_budget sites first last b cap initial /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?actual. abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  ?actual. abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
       owner_st src dst sb source_cap d output_size first last b cap actual /\
     abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
     abi_encoder_cursor T ip index_site index_slot first lo owner_st j actual /\
     abi_encoder_cursor T dyn_ptr site slot first lo owner_st
       (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual /\
     eval_operand out actual = SOME (n2w j) /\
-    abi_sites_scratch_effect sites first last site end_st.cs_next_id owner_st.cs_next_var
+    abi_scratch_effect first last site end_st.cs_next_id owner_st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -307,14 +307,14 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
   qpat_assum `abi_encoder_cursor T dyn_ptr _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  qpat_assum `abi_sites_scratch_input sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_input_def]) >>
+  qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   drule_all abi_encode_array_dynamic_body_context >> strip_tac >>
   `site < st.cs_next_id /\ index_site < last /\ site < last /\ owner_st.cs_next_id <= last` by decide_tac >>
   mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
     `site` |-> `index_site:num`, `slot` |-> `index_slot:num`, `s` |-> `initial:venom_state`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  `abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  `abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size first last b cap initial` by
     (irule abi_scratch_input_mono >> qexists_tac `owner_st` >> asm_simp_tac bool_ss []) >>
   `abi_decoder_operand_live st.cs_next_var dyn_ptr` by
@@ -322,7 +322,7 @@ Proof
   mp_tac (Q.INST [`p` |-> `n2w index_slot:bytes32`] abi_scratch_array_dynamic_iteration) >>
   impl_tac >- asm_simp_tac (srw_ss()) [w2n_n2w, Excl "enc_def"] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  `abi_sites_scratch_effect sites first last site end_st.cs_next_id owner_st.cs_next_var
+  `abi_scratch_effect first last site end_st.cs_next_id owner_st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `site`, `st.cs_next_var`, `output_size`] >> simp[]) >>
@@ -348,13 +348,13 @@ QED
    TOP-LEVEL: abi_scratch_array_dynamic_round composes recursive encoding and
    the index update into one physical effect and containing-function simulation. *)
 Theorem abi_scratch_array_dynamic_round:
-  abi_sites_scratch_encoder sites ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
+  abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
   fn_has_code st end_st func /\
   lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb /\
   bb.bb_instructions = end_st.cs_current_insts ++ abi_decode_backedge_insts end_st.cs_next_id
     (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString end_st.cs_next_var)) ip hdr /\
   lookup_block hdr func.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0 /\
-  abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
     owner_st src dst sb source_cap d output_size first last b cap initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
   abi_encoder_cursor T ip site slot first lo owner_st j initial /\
@@ -362,17 +362,17 @@ Theorem abi_scratch_array_dynamic_round:
     (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial /\
   site < cursor_site /\ j < LENGTH avs /\
   owner_st.cs_next_var <= st.cs_next_var /\ owner_st.cs_next_id <= st.cs_next_id /\
-  abi_sites_decoder_budget sites first last b cap initial /\ end_st.cs_next_id+3 <= last /\
+  abi_decoder_budget first last b cap initial /\ end_st.cs_next_id+3 <= last /\
   end_st.cs_next_var+1 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?actual. abi_sites_scratch_input sites (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
+  ?actual. abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
       owner_st src dst sb source_cap d output_size first last b cap actual /\
     abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
     abi_encoder_cursor T ip site slot first lo owner_st (SUC j) actual /\
     abi_encoder_cursor T dyn_ptr cursor_site cursor_slot first lo owner_st
       (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual /\
-    abi_sites_scratch_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+    abi_scratch_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = hdr /\ actual.vs_inst_idx = 0 /\ ~actual.vs_halted /\
     abi_decode_sim ctx func initial actual
@@ -391,12 +391,12 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial encoded` >>
   qpat_assum `out = Var _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  qpat_assum `abi_sites_scratch_input sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_input_def]) >>
+  qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   drule abi_encoder_input_typed >> disch_tac >>
   `j <= LENGTH avs` by decide_tac >> drule_all abi_encoder_array_prefix_types >> strip_tac >>
-  qpat_assum `abi_sites_scratch_effect sites _ _ cursor_site end_st.cs_next_id _ _ _ _ _ _ initial encoded`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_effect_def]) >>
+  qpat_assum `abi_scratch_effect _ _ cursor_site end_st.cs_next_id _ _ _ _ _ _ initial encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
   mp_tac (Q.INST [`initial` |-> `encoded:venom_state`, `k` |-> `SUC j`, `n` |-> `LENGTH (avs:abi_value list)`,
     `off` |-> `LENGTH (avs:abi_value list)*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) (avs:abi_value list)))`,
@@ -405,17 +405,17 @@ Proof
   impl_tac >- full_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func encoded actual` >>
   `first <= site` by fs[abi_encoder_cursor_def] >>
-  `abi_sites_scratch_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+  `abi_scratch_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
     limit_st d output_size b cap initial encoded` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `cursor_site`, `owner_st.cs_next_var`, `output_size`] >>
      asm_simp_tac bool_ss [] >> fs[abi_encoder_cursor_def] >> decide_tac) >>
-  `abi_sites_scratch_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+  `abi_scratch_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
     limit_st d output_size b cap encoded actual` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`, `site+1`, `site`, `end_st.cs_next_var`, `output_size`] >>
      asm_simp_tac bool_ss [] >> fs[abi_encoder_cursor_def] >> decide_tac) >>
-  `abi_sites_scratch_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+  `abi_scratch_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_trans >> asm_simp_tac bool_ss [] >>
      qexists_tac `encoded` >> asm_simp_tac bool_ss []) >>

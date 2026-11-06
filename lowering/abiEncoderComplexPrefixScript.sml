@@ -117,7 +117,7 @@ Theorem abi_encoder_complex_prefix_post_def:
       (!id. id <> site ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
       actual.vs_halted = initial.vs_halted
 Proof
-  rewrite_tac[abi_sites_encoder_complex_prefix_post_def]
+  rewrite_tac[abi_encoder_complex_prefix_post_def]
 QED
 
 Theorem abi_encoder_complex_prefix_post_inst_idx[simp]:
@@ -131,10 +131,10 @@ QED
 
 Theorem abi_encoder_complex_prefix_from_state:
   abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
-  abi_sites_decoder_budget sites first last b cap initial /\ st.cs_next_id IN abi_sites_decoder_ids sites first last /\
+  abi_decoder_budget first last b cap initial /\ st.cs_next_id IN abi_decoder_ids first last /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st st' (\s. s = initial)
-    (abi_sites_encoder_complex_prefix_post sites infos dyn_ptr st.cs_next_var st.cs_next_id
+    (abi_encoder_complex_prefix_post infos dyn_ptr st.cs_next_var st.cs_next_id
       limit_st first last b cap initial) (K F)
 Proof
   strip_tac >> drule abi_encoder_complex_prefix_shape >> strip_tac >>
@@ -143,7 +143,7 @@ Proof
   irule frag_exec_run_inst_seq >> simp[] >>
   drule_all abi_encoder_complex_prefix_sequence >> strip_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [abi_encoder_complex_prefix_post_inst_idx] >>
-  PURE_REWRITE_TAC [abi_sites_encoder_complex_prefix_post_def] >> qexists_tac `slot` >>
+  PURE_REWRITE_TAC [abi_encoder_complex_prefix_post_def] >> qexists_tac `slot` >>
   qpat_assum `dyn_ptr = _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   asm_simp_tac bool_ss []
@@ -151,11 +151,11 @@ QED
 
 Theorem abi_encoder_complex_prefix_reach:
   abi_encode_complex_prefix infos st = (dyn_ptr,st') /\ fn_has_code st st' func /\
-  abi_sites_decoder_budget sites first last b cap initial /\ st.cs_next_id IN abi_sites_decoder_ids sites first last /\
+  abi_decoder_budget first last b cap initial /\ st.cs_next_id IN abi_decoder_ids first last /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?actual. abi_sites_encoder_complex_prefix_post sites infos dyn_ptr st.cs_next_var st.cs_next_id
+  ?actual. abi_encoder_complex_prefix_post infos dyn_ptr st.cs_next_var st.cs_next_id
       limit_st first last b cap initial actual /\
     actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -164,7 +164,7 @@ Proof
   drule_all abi_encoder_complex_prefix_from_state >> disch_then (qspec_then `ctx` assume_tac) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  `~actual.vs_halted` by fs[abi_sites_encoder_complex_prefix_post_def] >>
+  `~actual.vs_halted` by fs[abi_encoder_complex_prefix_post_def] >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
 
@@ -173,14 +173,14 @@ QED
 (* The parent cursor's initializer owns its allocation site and preserves other scratch. *)
 
 Theorem abi_encoder_complex_prefix_effect:
-  abi_sites_encoder_complex_prefix_post sites infos dyn_ptr next site limit_st first last b cap initial actual /\
+  abi_encoder_complex_prefix_post infos dyn_ptr next site limit_st first last b cap initial actual /\
   first <= site /\ site < hi /\ hi <= last /\ (d+outsz <= b \/ b+cap <= d) ==>
-  abi_sites_decoder_effect sites first last site hi next limit_st d outsz b cap initial actual
+  abi_decoder_effect first last site hi next limit_st d outsz b cap initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_sites_encoder_complex_prefix_post sites _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_encoder_complex_prefix_post _ _ _ _ _ _ _ _ _ _ _`
     (qx_choose_then `slot` (MAP_EVERY assume_tac o CONJUNCTS) o
-      PURE_REWRITE_RULE [abi_sites_encoder_complex_prefix_post_def]) >>
+      PURE_REWRITE_RULE [abi_encoder_complex_prefix_post_def]) >>
   `abi_decode_frame b cap initial actual` by
     (irule abi_decode_frame_widen >> qexistsl_tac [`slot`, `32`] >> asm_simp_tac bool_ss []) >>
   `abi_decode_footprint_frame [(d,outsz);(b,cap)] initial actual` by
@@ -193,8 +193,8 @@ Proof
   `abi_decoder_scratch_frame first last site hi initial actual` by
     (simp_tac bool_ss [abi_decoder_scratch_frame_def] >> conj_tac
      >- (rpt strip_tac >> `id <> site` by decide_tac >> asm_simp_tac bool_ss []) >>
-     rpt strip_tac >> `id IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
+     rpt strip_tac >> `id IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
      qpat_x_assum `!other protected. _` (qspecl_then [`id`, `p`] mp_tac) >>
      asm_simp_tac bool_ss []) >>
-  asm_simp_tac bool_ss [abi_sites_decoder_effect_def] >> rpt strip_tac >> asm_simp_tac bool_ss []
+  asm_simp_tac bool_ss [abi_decoder_effect_def] >> rpt strip_tac >> asm_simp_tac bool_ss []
 QED

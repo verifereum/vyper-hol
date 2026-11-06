@@ -11,36 +11,36 @@ Ancestors
   arithmetic
 
 Theorem abi_scratch_input_owned_output:
-  abi_sites_scratch_input sites ei at av st src dst sb source_cap d sz first last b cap s /\
+  abi_scratch_input ei at av st src dst sb source_cap d sz first last b cap s /\
   first <= lo /\ hi <= last ==>
-  abi_footprint_disjoint d sz (abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap s)
+  abi_footprint_disjoint d sz (abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap s)
 Proof
   strip_tac >>
   `abi_footprint_disjoint d sz
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by fs[abi_sites_scratch_input_def] >>
-  irule abi_scratch_disjoint_subset >> qexists_tac `abi_sites_decoder_ids sites first last` >>
-  simp[SUBSET_DEF, abi_sites_decoder_ids_def] >> decide_tac
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by fs[abi_scratch_input_def] >>
+  irule abi_scratch_disjoint_subset >> qexists_tac `abi_decoder_ids first last` >>
+  simp[SUBSET_DEF, abi_decoder_ids_def] >> decide_tac
 QED
 
 Theorem abi_scratch_static_member_step:
-  abi_sites_scratch_encoder sites ei /\ compile_abi_encode_child dst src ei F heads dyn_ptr st = (out,end_st) /\
+  abi_scratch_encoder ei /\ compile_abi_encode_child dst src ei F heads dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_sites_scratch_input sites ei ty av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_scratch_input ei ty av st src dst sb source_cap d output_size first last b cap initial /\
   LENGTH pre = LENGTH pvs /\ ~is_dynamic ty /\
   heads = LENGTH (FLAT (abi_tuple_heads hl 0 pre pvs)) /\
   tails = LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
   heads+LENGTH (enc ty av) <= hl /\ hl+tails <= output_size /\
   abi_encoder_tuple_prefix hl pre pvs d initial.vs_memory /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d actual.vs_memory /\
     eval_operand out actual = SOME (n2w (LENGTH (enc ty av))) /\
-    abi_sites_scratch_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+    abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -54,15 +54,15 @@ Proof
     `at` |-> `ty:abi_type`, `sz` |-> `output_size:num`, `s` |-> `initial:venom_state`]
     abi_scratch_input_owned_output) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`fp` |-> `abi_decoder_child_scratch
-    (abi_sites_decoder_ids sites st.cs_next_id end_st.cs_next_id) b cap initial`] abi_scratch_tuple_static_step) >>
+    (abi_decoder_ids st.cs_next_id end_st.cs_next_id) b cap initial`] abi_scratch_tuple_static_step) >>
   impl_tac >- gvs[Excl "enc_def"] >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
 
 Theorem abi_scratch_dynamic_member_step:
-  abi_sites_scratch_encoder sites ei /\ compile_abi_encode_child dst src ei T heads dyn_ptr st = (out,end_st) /\
+  abi_scratch_encoder ei /\ compile_abi_encode_child dst src ei T heads dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
-  abi_sites_scratch_input sites ei ty av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_scratch_input ei ty av st src dst sb source_cap d output_size first last b cap initial /\
   LENGTH pre = LENGTH pvs /\ is_dynamic ty /\
   heads = LENGTH (FLAT (abi_tuple_heads hl 0 pre pvs)) /\
   tails = LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
@@ -70,7 +70,7 @@ Theorem abi_scratch_dynamic_member_step:
   abi_encoder_tuple_prefix hl pre pvs d initial.vs_memory /\
   eval_operand dyn_ptr initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
   abi_decoder_operand_live st.cs_next_var dyn_ptr /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= lo /\ lo <= site /\ site < st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= lo /\ lo <= site /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -79,7 +79,7 @@ Theorem abi_scratch_dynamic_member_step:
     mload slot actual = n2w (off+LENGTH (enc ty av)) /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc ty av))) /\
-    abi_sites_scratch_effect sites first last lo end_st.cs_next_id st.cs_next_var
+    abi_scratch_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -92,7 +92,7 @@ Proof
     `at` |-> `ty:abi_type`, `sz` |-> `output_size:num`, `s` |-> `initial:venom_state`]
     abi_scratch_input_owned_output) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`fp` |-> `abi_decoder_child_scratch
-    (abi_sites_decoder_ids sites lo end_st.cs_next_id) b cap initial`] abi_scratch_tuple_dynamic_step) >>
+    (abi_decoder_ids lo end_st.cs_next_id) b cap initial`] abi_scratch_tuple_dynamic_step) >>
   impl_tac >- gvs[Excl "enc_def"] >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [GSYM mem_word_at_eq_mload]
 QED

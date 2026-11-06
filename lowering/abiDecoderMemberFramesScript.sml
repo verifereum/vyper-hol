@@ -20,14 +20,14 @@ Proof
 QED
 
 Theorem abi_decoder_member_frame_source:
-  abi_sites_decoder_effect sites first last lo hi next limit_st cell sz b cap s t /\
+  abi_decoder_effect first last lo hi next limit_st cell sz b cap s t /\
   abi_decoder_ranges opc base_op hi_op src dst B sb len d outsz b cap s /\
   d <= cell /\ cell + sz <= d + outsz ==>
   mem_bytes_at (B+sb) len (abi_decode_source opc t) = mem_bytes_at (B+sb) len (abi_decode_source opc s)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_sites_decoder_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_effect_def]) >>
+  qpat_assum `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   irule abi_decode_footprint_frame_source_window >> asm_simp_tac bool_ss [] >>
@@ -38,7 +38,7 @@ QED
 
 Theorem abi_decoder_suffix_preserves_head:
   val_in_memory tv v cell s.vs_memory /\ value_has_type tv v /\
-  abi_sites_decoder_effect sites first last lo hi next limit_st
+  abi_decoder_effect first last lo hi next limit_st
     (cell + type_memory_size tv) restsz b cap s t /\
   (cell + type_memory_size tv + restsz <= b \/ b + cap <= cell) ==>
   val_in_memory tv v cell t.vs_memory
@@ -49,11 +49,11 @@ Proof
     (simp[abi_footprint_disjoint_def] >> decide_tac) >>
   irule abi_decoder_value_frame >> asm_simp_tac bool_ss [] >>
   qexistsl_tac [`[(cell + type_memory_size tv,restsz);(b,cap)]`, `s`] >>
-  fs[abi_sites_decoder_effect_def]
+  fs[abi_decoder_effect_def]
 QED
 
 Theorem abi_decoder_member_observations:
-  abi_sites_decoder_effect sites first last lo hi next limit_st cell sz b cap before after /\
+  abi_decoder_effect first last lo hi next limit_st cell sz b cap before after /\
   abi_decoder_ranges opc base_op hi_op src dst B sb len d outsz b cap before /\
   d <= cell /\ cell + sz <= d + outsz /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
@@ -61,7 +61,7 @@ Theorem abi_decoder_member_observations:
   mem_bytes_at (B+sb) len (abi_decode_source opc before) = bytes ==>
   abi_decoder_ranges opc base_op hi_op src dst B sb len d outsz b cap after /\
   mem_bytes_at (B+sb) len (abi_decode_source opc after) = bytes /\
-  fresh_vars_wrt limit_st after /\ abi_sites_decoder_budget sites first last b cap after /\
+  fresh_vars_wrt limit_st after /\ abi_decoder_budget first last b cap after /\
   abi_decoder_operand_live new_next src /\ abi_decoder_operand_live new_next dst /\
   abi_decoder_operand_live new_next hi_op /\ abi_decoder_operand_live new_next base_op
 Proof
@@ -71,23 +71,23 @@ Proof
   `abi_decoder_operand_live new_next src /\ abi_decoder_operand_live new_next dst /\
    abi_decoder_operand_live new_next hi_op /\ abi_decoder_operand_live new_next base_op` by
     (rpt conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
-  fs[abi_sites_decoder_effect_def]
+  fs[abi_decoder_effect_def]
 QED
 
 Theorem abi_decoder_member_effects_compose:
-  abi_sites_decoder_effect sites first last lo mid_id next limit_st cell headsz b cap s middle /\
-  abi_sites_decoder_effect sites first last mid_id hi tail_next limit_st
+  abi_decoder_effect first last lo mid_id next limit_st cell headsz b cap s middle /\
+  abi_decoder_effect first last mid_id hi tail_next limit_st
     (cell + headsz) tailsz b cap middle t /\
   lo <= mid_id /\ mid_id <= hi /\ next <= tail_next ==>
-  abi_sites_decoder_effect sites first last lo hi next limit_st cell (headsz + tailsz) b cap s t
+  abi_decoder_effect first last lo hi next limit_st cell (headsz + tailsz) b cap s t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_sites_decoder_effect sites first last lo hi next limit_st cell (headsz + tailsz) b cap s middle` by
+  `abi_decoder_effect first last lo hi next limit_st cell (headsz + tailsz) b cap s middle` by
     (mp_tac (Q.INST [`child_lo` |-> `lo:num`, `child_hi` |-> `mid_id:num`,
       `child_next` |-> `next:num`, `child_d` |-> `cell:num`, `child_sz` |-> `headsz:num`,
       `d` |-> `cell:num`, `sz` |-> `headsz + tailsz`, `t` |-> `middle:venom_state`]
       abi_decoder_effect_widen) >> asm_simp_tac arith_ss []) >>
-  `abi_sites_decoder_effect sites first last lo hi next limit_st cell (headsz + tailsz) b cap middle t` by
+  `abi_decoder_effect first last lo hi next limit_st cell (headsz + tailsz) b cap middle t` by
     (mp_tac (Q.INST [`child_lo` |-> `mid_id:num`, `child_hi` |-> `hi:num`,
       `child_next` |-> `tail_next:num`, `child_d` |-> `cell + headsz`, `child_sz` |-> `tailsz:num`,
       `d` |-> `cell:num`, `sz` |-> `headsz + tailsz`, `s` |-> `middle:venom_state`]

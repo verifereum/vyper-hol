@@ -62,8 +62,8 @@ Proof
 QED
 
 Theorem abi_decoder_effect_jump:
-  fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s ==>
-  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s (jump_to hdr s)
+  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s ==>
+  abi_decoder_effect first last lo hi next limit_st d sz b cap s (jump_to hdr s)
 Proof
   strip_tac >>
   `abi_decoder_address_frame next s (jump_to hdr s)` by
@@ -81,15 +81,15 @@ Theorem abi_decoder_recursive_loop_from_state:
   first <= lo /\ lo <= site /\ site < start.cs_next_id /\ final.cs_next_id <= hi /\ hi <= last /\
   next <= start.cs_next_var /\ final.cs_next_var <= limit_st.cs_next_var /\
   abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
-    B sb d slot b cap next initial /\ abi_sites_decoder_correct sites ce env sf ty tv /\
+    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
   (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d 0 initial /\
-  fresh_vars_wrt limit_st initial /\ abi_sites_decoder_budget sites first last b cap initial /\
+  fresh_vars_wrt limit_st initial /\ abi_decoder_budget first last b cap initial /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ mload slot initial = 0w /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
   ?t. val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d t.vs_memory /\
-    abi_sites_decoder_effect sites first last lo hi next limit_st
+    abi_decoder_effect first last lo hi next limit_st
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial t /\
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = n2w (LENGTH vs) /\
     t.vs_current_bb = final.cs_current_bb /\
@@ -104,11 +104,11 @@ Proof
   `abi_decode_sim ctx func initial h` by
     (simp_tac bool_ss [Abbr`h`] >> irule abi_decoder_loop_entry_sim >>
      asm_simp_tac bool_ss [] >> metis_tac[]) >>
-  `abi_sites_decoder_recursive_loop_inv sites opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d
+  `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial
     (fresh_label_output "dec_dyn_hdr" start.cs_next_label) 0 h` by
-    (simp_tac bool_ss [abi_sites_decoder_recursive_loop_inv_def, Abbr`h`,
+    (simp_tac bool_ss [abi_decoder_recursive_loop_inv_def, Abbr`h`,
        abi_decoder_array_memory_jump, abi_decode_mload_jump] >>
      simp[jump_to_def, abi_decoder_effect_jump]) >>
   drule_all abi_decoder_recursive_dyn_loop >> disch_then (qspec_then `ctx` strip_assume_tac) >>

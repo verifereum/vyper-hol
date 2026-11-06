@@ -163,11 +163,11 @@ Proof
 QED
 
 Theorem abi_scratch_allocation:
-  abi_sites_decoder_budget sites first last b cap s /\ FINITE ids /\
-  ids SUBSET abi_sites_decoder_ids sites first last /\ inst.inst_id IN ids /\
+  abi_decoder_budget first last b cap s /\ FINITE ids /\
+  ids SUBSET abi_decoder_ids first last /\ inst.inst_id IN ids /\
   inst.inst_outputs = [out] ==>
   ?t p loff len. exec_alloca inst s (32w:bytes32) = OK t /\
-    abi_sites_decoder_budget sites first last b cap t /\
+    abi_decoder_budget first last b cap t /\
     lookup_var out t = SOME (n2w p) /\ abi_scratch_evolution ids b cap s t /\
     MEM (loff,len) (abi_decoder_child_scratch ids b cap s) /\
     loff <= p /\ p + 32 <= loff + len /\
@@ -177,8 +177,8 @@ Proof
   rename1 `lookup_var out t = SOME (n2w p)` >>
   rename1 `MEM (loff,len) (abi_decoder_child_scratch ids b cap s)` >>
   `t.vs_alloca_next <= b + cap` by
-    (qpat_x_assum `abi_sites_decoder_budget sites first last b cap t` mp_tac >>
-     simp[abi_sites_decoder_budget_def] >> decide_tac) >>
+    (qpat_x_assum `abi_decoder_budget first last b cap t` mp_tac >>
+     simp[abi_decoder_budget_def] >> decide_tac) >>
   `abi_scratch_evolution ids b cap s t` by
     (drule_all (Q.INST [`ids` |-> `ids`] abi_scratch_evolution_alloca) >> simp[]) >>
   `abi_decode_footprint_frame (abi_decoder_child_scratch ids b cap s) s t` by

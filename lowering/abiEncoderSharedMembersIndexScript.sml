@@ -44,7 +44,7 @@ Theorem abi_encoder_shared_members_inv_def:
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts
 Proof
-  rewrite_tac[abi_sites_encoder_shared_members_inv_def]
+  rewrite_tac[abi_encoder_shared_members_inv_def]
 QED
 
 Definition abi_sites_encoder_shared_members_index_def:
@@ -84,7 +84,7 @@ Theorem abi_encoder_shared_members_index_def:
     (alloca_inv initial ==> alloca_inv s) /\
     abi_encoder_extend_sim ctx func initial s
 Proof
-  rewrite_tac[abi_sites_encoder_shared_members_index_def]
+  rewrite_tac[abi_encoder_shared_members_index_def]
 QED
 
 Theorem abi_encoder_shared_members_index_initial:

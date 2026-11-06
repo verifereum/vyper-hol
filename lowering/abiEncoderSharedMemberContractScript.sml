@@ -33,7 +33,7 @@ Theorem abi_encoder_shared_member_dynamic_pre_def:
     abi_encoder_spine_shared_pre value resources c s /\
     abi_scratch_member_cursor_saved cursor resources c s
 Proof
-  rewrite_tac[abi_sites_encoder_shared_member_dynamic_pre_def]
+  rewrite_tac[abi_encoder_shared_member_dynamic_pre_def]
 QED
 
 Definition abi_sites_encoder_shared_member_dynamic_post_def:
@@ -51,7 +51,7 @@ Theorem abi_encoder_shared_member_dynamic_post_def:
     abi_encoder_shared_member_dynamic_pre value resources cursor c s /\
     abi_encoder_spine_core_code (SND ambient) c
 Proof
-  rewrite_tac[abi_sites_encoder_shared_member_dynamic_post_def]
+  rewrite_tac[abi_encoder_shared_member_dynamic_post_def]
 QED
 
 Theorem abi_encoder_shared_member_dynamic_run:
@@ -129,7 +129,7 @@ Theorem abi_encoder_shared_members_child_pre_def:
     if dyn then abi_encoder_shared_member_dynamic_pre value resources cursor c s
     else abi_encoder_spine_shared_pre value resources c s
 Proof
-  rewrite_tac[abi_sites_encoder_shared_members_child_pre_def]
+  rewrite_tac[abi_encoder_shared_members_child_pre_def]
 QED
 
 Definition abi_sites_encoder_shared_members_child_post_def:
@@ -145,7 +145,7 @@ Theorem abi_encoder_shared_members_child_post_def:
     if dyn then abi_encoder_shared_member_dynamic_post ambient value resources cursor c s t
     else abi_encoder_spine_shared_post ambient value resources c s t
 Proof
-  rewrite_tac[abi_sites_encoder_shared_members_child_post_def]
+  rewrite_tac[abi_encoder_shared_members_child_post_def]
 QED
 
 Theorem abi_encoder_shared_members_child_dispatch:

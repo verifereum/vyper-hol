@@ -154,8 +154,8 @@ Theorem abi_scratch_child_finish:
   mem_bytes_at (d+off) len initial.vs_memory = bytes /\
   d <= h /\ h+32 <= d+off /\ off+len <= output_size /\ d+output_size < dimword (:256) /\
   abi_footprint_disjoint d output_size
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial) /\
-  abi_sites_decoder_budget sites first last b cap initial /\ site IN abi_sites_decoder_ids sites first last /\
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial) /\
+  abi_decoder_budget first last b cap initial /\ site IN abi_decoder_ids first last /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -165,18 +165,18 @@ Theorem abi_scratch_child_finish:
     mem_word_at slot actual.vs_memory = n2w (off+len) /\
     eval_operand out actual = SOME (n2w len) /\ FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
     abi_encoder_child_suffix_post out st limit_st h slot off len initial actual /\
-    fresh_vars_wrt limit_st actual /\ abi_sites_decoder_budget sites first last b cap actual /\
-    abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual /\
+    fresh_vars_wrt limit_st actual /\ abi_decoder_budget first last b cap actual /\
+    abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual /\
     actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   `b+cap < dimword (:256)` by
-    (qpat_x_assum `abi_sites_decoder_budget sites first last b cap initial` mp_tac >>
-     simp_tac (srw_ss()) [abi_sites_decoder_budget_def]) >>
+    (qpat_x_assum `abi_decoder_budget first last b cap initial` mp_tac >>
+     simp_tac (srw_ss()) [abi_decoder_budget_def]) >>
   `h < dimword (:256) /\ slot < dimword (:256) /\ h+32 <= d+output_size` by decide_tac >>
-  `MEM (slot,32) (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial)` by
+  `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
     (irule abi_scratch_registered_member >> asm_simp_tac (srw_ss()) [] >>
      qexists_tac `site` >> simp[]) >>
   qpat_assum `abi_footprint_disjoint d output_size _`
@@ -187,10 +187,10 @@ Proof
   rename1 `abi_decode_sim ctx func initial actual` >>
   mp_tac (Q.INST [`q` |-> `d+off`, `offset` |-> `off:num`] abi_encoder_child_suffix_output) >>
   impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> strip_tac >>
-  `(abi_sites_decoder_budget sites first last b cap actual <=> abi_sites_decoder_budget sites first last b cap initial)` by
+  `(abi_decoder_budget first last b cap actual <=> abi_decoder_budget first last b cap initial)` by
     (irule abi_decoder_budget_transport >> fs[abi_encoder_child_suffix_post_def]) >>
   `initial.vs_alloca_next <= b+cap` by (drule abi_decoder_budget_frontier >> simp[]) >>
-  `abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual` by
+  `abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual` by
     (qpat_assum `abi_encoder_child_suffix_post _ _ _ _ _ _ _ _ _`
        (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_child_suffix_post_def]) >>
      rw[abi_scratch_evolution_def] >> gvs[]) >>
@@ -204,19 +204,19 @@ QED
    after the real register-only prefix, without a numeric arena exclusion. *)
 
 Theorem abi_scratch_child_input_address:
-  abi_sites_scratch_input sites ei at av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
   abi_decoder_address_frame st.cs_next_var initial actual /\
-  abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual /\
+  abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual /\
   st.cs_next_var <= prepared.cs_next_var /\
   abi_decoder_operand_live prepared.cs_next_var child_dst /\
   eval_operand child_dst actual = SOME (n2w (d+off)) /\
   off+LENGTH (enc at av) <= output_size ==>
-  abi_sites_scratch_input sites ei at av prepared src child_dst sb source_cap (d+off)
+  abi_scratch_input ei at av prepared src child_dst sb source_cap (d+off)
     (LENGTH (enc at av)) first last b cap actual
 Proof
   strip_tac >>
-  qpat_assum `abi_sites_scratch_input sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_input_def]) >>
+  qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   `actual.vs_memory = initial.vs_memory` by fs[abi_decoder_address_frame_def] >>
   `abi_encoder_input ei at av sb source_cap actual.vs_memory` by simp[] >>
   `eval_operand src actual = SOME (n2w sb)` by fs[abi_decoder_address_frame_def] >>

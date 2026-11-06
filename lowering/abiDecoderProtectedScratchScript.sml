@@ -16,19 +16,19 @@ Proof
 QED
 
 Theorem abi_decoder_budget_sites_disjoint:
-  abi_sites_decoder_budget sites first last b cap s /\
-  i IN abi_sites_decoder_ids sites first last /\ j IN abi_sites_decoder_ids sites first last /\ i <> j /\
+  abi_decoder_budget first last b cap s /\
+  i IN abi_decoder_ids first last /\ j IN abi_decoder_ids first last /\ i <> j /\
   FLOOKUP s.vs_allocas i = SOME (p,32) /\ FLOOKUP s.vs_allocas j = SOME (q,32) ==>
   p + 32 <= q \/ q + 32 <= p
 Proof
-  strip_tac >> qpat_x_assum `abi_sites_decoder_budget sites _ _ _ _ _`
+  strip_tac >> qpat_x_assum `abi_decoder_budget _ _ _ _ _`
     (qspecl_then [`i`, `j`, `p`, `q`] mp_tac o List.last o CONJUNCTS o
-      PURE_REWRITE_RULE [abi_sites_decoder_budget_def]) >> simp[]
+      PURE_REWRITE_RULE [abi_decoder_budget_def]) >> simp[]
 QED
 
 Theorem abi_decoder_private_scratch_preserves_slot:
-  abi_sites_decoder_budget sites first last b cap t /\
-  site IN abi_sites_decoder_ids sites first last /\ other IN abi_sites_decoder_ids sites first last /\ site <> other /\
+  abi_decoder_budget first last b cap t /\
+  site IN abi_decoder_ids first last /\ other IN abi_decoder_ids first last /\ site <> other /\
   FLOOKUP t.vs_allocas site = SOME (slot,32) /\
   FLOOKUP t.vs_allocas other = SOME (protected,32) /\
   abi_decode_footprint_frame [(d,outsz);(slot,32)] s t /\
@@ -47,8 +47,8 @@ Proof
 QED
 
 Theorem abi_decoder_private_scratch_preserves_other_site:
-  abi_sites_decoder_budget sites first last b cap t /\
-  site IN abi_sites_decoder_ids sites first last /\ other IN abi_sites_decoder_ids sites first last /\ site <> other /\
+  abi_decoder_budget first last b cap t /\
+  site IN abi_decoder_ids first last /\ other IN abi_decoder_ids first last /\ site <> other /\
   FLOOKUP t.vs_allocas site = SOME (slot,32) /\
   FLOOKUP s.vs_allocas other = SOME (protected,32) /\
   (!id. id <> site ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
@@ -70,28 +70,28 @@ Proof
 QED
 
 Theorem abi_decoder_child_scratch_preservation:
-  abi_sites_decoder_budget sites first last b cap t /\ first <= child_first /\ child_last <= last /\
+  abi_decoder_budget first last b cap t /\ first <= child_first /\ child_last <= last /\
   child_first <= site /\ site < child_last /\
   FLOOKUP t.vs_allocas site = SOME (slot,32) /\
   (!id. id <> site ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
   abi_decode_footprint_frame [(d,outsz);(slot,32)] s t /\ (d + outsz <= b \/ b + cap <= d) ==>
   !other protected.
-    other IN abi_sites_decoder_ids sites first last /\ (other < child_first \/ child_last <= other) /\
+    other IN abi_decoder_ids first last /\ (other < child_first \/ child_last <= other) /\
     FLOOKUP s.vs_allocas other = SOME (protected,32) ==>
     FLOOKUP t.vs_allocas other = SOME (protected,32) /\ mload protected t = mload protected s
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_sites_decoder_ids sites first last` by
-    (simp_tac std_ss [abi_sites_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  `site IN abi_decoder_ids first last` by
+    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
   `site <> other` by decide_tac >>
   drule_all abi_decoder_private_scratch_preserves_other_site >> simp[]
 QED
 
 Theorem abi_decoder_bulk_scratch_preservation:
-  abi_sites_decoder_budget sites first last b cap s /\ t.vs_allocas = s.vs_allocas /\
+  abi_decoder_budget first last b cap s /\ t.vs_allocas = s.vs_allocas /\
   abi_decode_frame d outsz s t /\ (d + outsz <= b \/ b + cap <= d) ==>
-  !other protected. other IN abi_sites_decoder_ids sites first last /\
+  !other protected. other IN abi_decoder_ids first last /\
     FLOOKUP s.vs_allocas other = SOME (protected,32) ==>
     FLOOKUP t.vs_allocas other = SOME (protected,32) /\ mload protected t = mload protected s
 Proof

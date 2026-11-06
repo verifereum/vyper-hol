@@ -50,7 +50,7 @@ QED
 
 (* Load the completed parent's cursor without changing the encoded bytes. *)
 Theorem abi_encoder_complex_finish:
-  abi_sites_encoder_members_inv sites [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
+  abi_encoder_members_inv [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap encoded /\
   emit_op MLOAD [dyn_ptr] st = (out,end_st) /\ fn_has_code st end_st func /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
@@ -58,20 +58,20 @@ Theorem abi_encoder_complex_finish:
     mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) actual.vs_memory =
       enc (Tuple tys) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple tys) (ListV avs)))) /\
-    abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
+    abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap encoded actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func encoded actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_encoder_members_final_output >> strip_tac >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
   drule emitted_insts_emit_op >> strip_tac >>
-  `site IN abi_sites_decoder_ids sites first last` by
-    (simp_tac std_ss [abi_sites_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  `site IN abi_decoder_ids first last` by
+    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   drule abi_decoder_budget_word_bound >> strip_tac >> `slot < dimword (:256)` by decide_tac >>
   mp_tac (Q.INST [`src` |-> `dyn_ptr`, `p` |-> `n2w slot:bytes32`,
@@ -90,37 +90,37 @@ QED
 
 (* Sequential recursive effects can grow their owned interval and local-variable frontier. *)
 Theorem abi_decoder_effect_sequence:
-  abi_sites_decoder_effect sites first last lo mid next limit_st d sz b cap initial ready /\
-  abi_sites_decoder_effect sites first last lo hi later limit_st d sz b cap ready actual /\
+  abi_decoder_effect first last lo mid next limit_st d sz b cap initial ready /\
+  abi_decoder_effect first last lo hi later limit_st d sz b cap ready actual /\
   mid <= hi /\ next <= later ==>
-  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap initial actual
+  abi_decoder_effect first last lo hi next limit_st d sz b cap initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap initial ready` by
+  `abi_decoder_effect first last lo hi next limit_st d sz b cap initial ready` by
     (irule abi_decoder_effect_widen >> qexistsl_tac [`d`, `mid`, `lo`, `next`, `sz`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
-  `abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap ready actual` by
+  `abi_decoder_effect first last lo hi next limit_st d sz b cap ready actual` by
     (irule abi_decoder_effect_widen >> qexistsl_tac [`d`, `hi`, `lo`, `later`, `sz`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
   irule abi_decoder_effect_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss []
 QED
 
 Theorem abi_encoder_complex_compose:
-  abi_sites_decoder_effect sites first last st.cs_next_id prepared.cs_next_id st.cs_next_var
+  abi_decoder_effect first last st.cs_next_id prepared.cs_next_id st.cs_next_var
     limit_st d sz b cap initial ready /\
-  abi_sites_decoder_effect sites first last st.cs_next_id middle.cs_next_id prepared.cs_next_var
+  abi_decoder_effect first last st.cs_next_id middle.cs_next_id prepared.cs_next_var
     limit_st d sz b cap ready encoded /\
-  abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id middle.cs_next_var
+  abi_decoder_effect first last st.cs_next_id end_st.cs_next_id middle.cs_next_var
     limit_st d sz b cap encoded actual /\
   prepared.cs_next_id <= middle.cs_next_id /\ middle.cs_next_id <= end_st.cs_next_id /\
   st.cs_next_var <= prepared.cs_next_var /\ prepared.cs_next_var <= middle.cs_next_var /\
   abi_decode_sim ctx func initial ready /\ abi_decode_sim ctx func ready encoded /\
   abi_decode_sim ctx func encoded actual ==>
-  abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+  abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
     limit_st d sz b cap initial actual /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_sites_decoder_effect sites first last st.cs_next_id middle.cs_next_id st.cs_next_var
+  `abi_decoder_effect first last st.cs_next_id middle.cs_next_id st.cs_next_var
     limit_st d sz b cap initial encoded` by
     (mp_tac (Q.INST [`ready` |-> `ready:venom_state`, `actual` |-> `encoded:venom_state`,
       `lo` |-> `st.cs_next_id`, `hi` |-> `middle.cs_next_id`, `next` |-> `st.cs_next_var`,
@@ -204,12 +204,12 @@ Proof
 QED
 
 Theorem abi_encoder_correct_complex_static:
-  EVERY (\(ei,_,_,_). abi_sites_encoder_correct sites ei) infos /\
+  EVERY (\(ei,_,_,_). abi_encoder_correct ei) infos /\
   ~EXISTS (\(_,_,_,dyn). dyn) infos ==>
-  abi_sites_encoder_correct sites (AbiComplex infos)
+  abi_encoder_correct (AbiComplex infos)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  simp_tac bool_ss [abi_sites_encoder_correct_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_encoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_encoder_pre _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_pre_def]) >>
@@ -238,11 +238,11 @@ Proof
     abi_encoder_members_run) >>
   impl_tac >- asm_simp_tac bool_ss [abi_encoder_members_correct_all] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ actual`
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ actual`
     (assume_tac o SIMP_RULE bool_ss [APPEND, ADD_CLAUSES]) >>
   drule abi_encoder_members_final_output >> strip_tac >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ actual`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ actual`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [eval_operand_def, Excl "enc_def"]
 QED
 
@@ -251,14 +251,14 @@ Theorem abi_encoder_complex_prepare:
   abi_encode_complex_prefix infos st = (dyn_ptr,prepared) /\ fn_has_code st prepared func /\
   abi_encoder_members_pre infos tys avs st src dst sb 0 d output_size b cap initial /\
   LENGTH (enc (Tuple tys) (ListV avs)) <= output_size /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
   prepared.cs_next_id <= last /\ prepared.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?ready slot.
-    abi_sites_encoder_members_inv sites infos tys avs [] [] T dyn_ptr st.cs_next_id slot first last
+    abi_encoder_members_inv infos tys avs [] [] T dyn_ptr st.cs_next_id slot first last
       st.cs_next_id prepared limit_st src dst sb 0 0 d (head_lengths tys 0) output_size b cap ready /\
-    abi_sites_decoder_effect sites first last st.cs_next_id prepared.cs_next_id st.cs_next_var
+    abi_decoder_effect first last st.cs_next_id prepared.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial ready /\ abi_decode_sim ctx func initial ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -266,8 +266,8 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_pre_def]) >>
   drule abi_encoder_complex_input_metadata >> strip_tac >>
   drule abi_encoder_complex_prefix_shape >> strip_tac >>
-  `st.cs_next_id IN abi_sites_decoder_ids sites first last` by
-    (simp_tac std_ss [abi_sites_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  `st.cs_next_id IN abi_decoder_ids first last` by
+    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
   drule_all abi_encoder_complex_prefix_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial ready` >>
   mp_tac (Q.INST [`site` |-> `st.cs_next_id`, `hi` |-> `prepared.cs_next_id`,
@@ -279,9 +279,9 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
   drule_all abi_encoder_members_pre_mono >> strip_tac >>
-  qpat_assum `abi_sites_encoder_complex_prefix_post sites _ _ _ _ _ _ _ _ _ _ ready`
+  qpat_assum `abi_encoder_complex_prefix_post _ _ _ _ _ _ _ _ _ _ ready`
     (qx_choose_then `slot` (MAP_EVERY assume_tac o CONJUNCTS) o
-      PURE_REWRITE_RULE [abi_sites_encoder_complex_prefix_post_def]) >>
+      PURE_REWRITE_RULE [abi_encoder_complex_prefix_post_def]) >>
   `abi_decoder_operand_live prepared.cs_next_var dyn_ptr` by
     (asm_simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> decide_tac) >>
@@ -297,12 +297,12 @@ QED
 
 (* Top-level dynamic complex encoders compose cursor setup, every member and the final load. *)
 Theorem abi_encoder_correct_complex_dynamic:
-  EVERY (\(ei,_,_,_). abi_sites_encoder_correct sites ei) infos /\
+  EVERY (\(ei,_,_,_). abi_encoder_correct ei) infos /\
   EXISTS (\(_,_,_,dyn). dyn) infos ==>
-  abi_sites_encoder_correct sites (AbiComplex infos)
+  abi_encoder_correct (AbiComplex infos)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  simp_tac bool_ss [abi_sites_encoder_correct_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_encoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_encoder_pre _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_pre_def]) >>
@@ -329,7 +329,7 @@ Proof
     abi_encoder_members_run) >>
   impl_tac >- asm_simp_tac bool_ss [abi_encoder_members_correct_all] >> strip_tac >>
   rename1 `abi_decode_sim ctx func ready encoded` >>
-  qpat_assum `abi_sites_encoder_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
     (assume_tac o SIMP_RULE bool_ss [APPEND, ADD_CLAUSES]) >>
   mp_tac (Q.INST [`st` |-> `middle`, `site` |-> `start.cs_next_id`, `lo` |-> `start.cs_next_id`,
     `so` |-> `abi_encoder_member_span infos`,
