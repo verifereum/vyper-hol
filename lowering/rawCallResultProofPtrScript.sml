@@ -1066,6 +1066,26 @@ Proof
   drule_all raw_call_mstore_path_ptr >> simp[]
 QED
 
+Theorem raw_call_mstore_clean_effect:
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  op_taint tn value = {} ==>
+  step_taint (mk_inst iid MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn =
+    tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}
+Proof
+  strip_tac >>
+  simp[ptrDisciplineTheory.step_taint_def, venomInstTheory.mk_inst_def,
+    ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.store_taint_def,
+    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.imm_taint_def,
+    ptrDisciplineTheory.mem_taint_def, ptrDisciplineTheory.step_writes_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.fixed_source_write_range_def,
+    venomStateTheory.eval_operand_def, ptrDisciplineTheory.written_taint_def,
+    ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.new_site_bytes_def,
+    venomStateTheory.mstore_def, finite_mapTheory.FLOOKUP_DEF,
+    ptrDisciplineTheory.taint_component_equality, pred_setTheory.EXTENSION,
+    finite_mapTheory.DRESTRICT_UNIV, SF CONJ_ss]
+QED
+
 Theorem raw_call_bytes_length_write_stage:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -1083,7 +1103,7 @@ Theorem raw_call_bytes_length_write_stage:
     t = mstore (w2n a) (n2w (LENGTH bs)) s with vs_inst_idx := LENGTH sb.cs_current_insts /\
     t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
     un.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
-    un.t_var = tn.t_var /\ un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\
+    un = tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
     (!x. lookup_var x t = lookup_var x s) /\
     t.vs_returndata = s.vs_returndata
 Proof
@@ -1111,7 +1131,8 @@ Proof
   conj_tac
   >- (irule rawCallBufferPtrTheory.ptr_buf_ok_from_covers >>
       goal_assum (drule_at Any) >> simp[] >> qexists_tac `capacity` >> simp[]) >>
-  simp[Abbr `t`, venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
+  simp[Abbr `t`, Abbr `un`, raw_call_mstore_clean_effect,
+    venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
 QED
 
 Resume raw_call_bytes_length_write_stage[robust]:
@@ -1126,3 +1147,85 @@ Resume raw_call_bytes_length_write_stage[robust]:
 QED
 
 Finalise raw_call_bytes_length_write_stage
+
+Theorem raw_call_mstore_ghost_write_frame:
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_reserved cenv protected /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!name off len. local_region cenv es.scopes s name off len ==>
+    regions_disjoint b 32 off len) /\
+  (!aid off len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+    regions_disjoint b 32 off len) ==>
+  ghost_inv dep cenv cx es G
+    (tn with t_mem := tn.t_mem DIFF {i | b <= i /\ i < b+32})
+    (mstore b w s with vs_inst_idx := pc) /\
+  ghost_kept cenv es protected G tn s G
+    (tn with t_mem := tn.t_mem DIFF {i | b <= i /\ i < b+32}) /\
+  wb_frame cenv es protected s (mstore b w s with vs_inst_idx := pc)
+Proof
+  strip_tac >> conj_tac
+  >- (irule rawCallMemoryFramePtrTheory.ghost_inv_clean_write_frame >>
+      conj_tac
+      >- fs[bodyPtrDefsTheory.ghost_inv_def, bodyPtrDefsTheory.stor_taint_ok_def,
+           venomStateTheory.mstore_def] >>
+      first_assum (irule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+      first_assum (irule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+      qexistsl_tac [`protected`, `b`, `word_to_bytes w T`] >>
+      simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def,
+        venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def,
+        ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[bodyPtrDefsTheory.ghost_kept_def, ptrDisciplineTheory.op_taint_def] >>
+      metis_tac[]) >>
+  irule rawCallMemoryFramePtrTheory.wb_frame_clean_write >>
+  conj_tac >- simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def] >>
+  conj_tac >- simp[venomStateTheory.mstore_def] >>
+  qexistsl_tac [`word_to_bytes w T`, `b`] >>
+  simp[venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def,
+    venomStateTheory.write_memory_def] >> metis_tac[]
+QED
+
+Theorem raw_call_mstore_state_frame:
+  stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+  (!name off len. local_region cenv es.scopes s name off len ==>
+    regions_disjoint b 32 off len) ==>
+  stmt_state_rel ctx func cenv cx es (mstore b w s with vs_inst_idx := pc)
+Proof
+  strip_tac >> simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes (mstore b w s)` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
+     fs[compileEnvTheory.state_rel_def] >>
+     rpt strip_tac >> first_x_assum drule_all >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module F es (mstore b w s)` by
+    (irule rawCallMemoryFramePtrTheory.immutables_rel_runtime_write_frame >>
+     qexistsl_tac [`word_to_bytes w T`, `b`, `s`] >>
+     simp[venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def,
+       venomStateTheory.write_memory_def] >> gvs[compileEnvTheory.state_rel_def]) >>
+  rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  conj_tac
+  >- (irule exprLoweringPropsTheory.state_rel_frame >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`es`, `s`] >> gvs[venomStateTheory.mstore_def]) >>
+  conj_tac
+  >- (irule localPtrsPropsTheory.alloca_inv_fields >>
+      qexists_tac `s` >> simp[venomStateTheory.mstore_def]) >>
+  conj_tac
+  >- (irule exprLoweringPropsTheory.alloca_room_fields >>
+      qexists_tac `s` >> simp[venomStateTheory.mstore_def]) >>
+  conj_tac
+  >- (irule exprLoweringPropsTheory.fmp_room_fields >>
+      qexists_tac `s` >> simp[venomStateTheory.mstore_def]) >>
+  conj_tac
+  >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
+      qexistsl_tac [`s`, `es`] >> simp[venomStateTheory.mstore_def] >>
+      rpt strip_tac >> qexists_tac `id` >>
+      fs[compileEnvTheory.local_region_def, venomStateTheory.lookup_var_def]) >>
+  conj_tac
+  >- (irule exprLoweringPropsTheory.immutable_base_zero_frame >>
+      qexists_tac `s` >> simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]) >>
+  simp[venomStateTheory.mstore_def] >> first_assum MATCH_ACCEPT_TAC
+QED
