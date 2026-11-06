@@ -5,7 +5,7 @@ Ancestors
   bodyPtrBytestringBuiltinsBuffer builtinBytes emitHelper compileEnv fragExec
   exprLoweringProps list rich_list exprSimPtrProps typedCopyPtr fragExecPtr
   ptrDiscipline venomInst venomState emitHelperProps fragGasPathPtr finite_map
-  venomExecSemantics bodyPtrDefs
+  venomExecSemantics bodyPtrDefs freshWrites exprSimProps
 
 Theorem compile_slice_data_parts:
   compile_slice_data src_len src_data start len N sa = (out,sb) ==>
@@ -166,3 +166,32 @@ Resume emit_slice_copy_counted[copy_frame]:
 QED
 
 Finalise emit_slice_copy_counted
+
+(* The successful bounds prefix changes only fresh scalar registers.  This
+   keeps allocation resources available at the next compiler cursor. *)
+Theorem slice_bounds_allocation_frame:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK u /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel ctx fn cenv cx es
+    (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  local_ptrs_reserved cenv sb /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule compile_assert_slice_bounds_layout >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    (simp[writes_fresh_def, mk_inst_def, fresh_write_op_def,
+      not_fresh_at_def] >> rpt strip_tac >> gvs[] >> decide_tac) >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
+    simp[lookup_var_def] >>
+  `stmt_state_rel ctx fn cenv cx es (s with vs_vars := u.vs_vars)` by
+    (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+     `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     gvs[lookup_var_def]) >>
+  conj_tac
+  >- (qpat_x_assum `u = _` SUBST1_TAC >> simp[stmt_state_rel_inst_idx]) >>
+  simp[] >> irule local_ptrs_reserved_next_var >>
+  qexists_tac `sa` >> simp[]
+QED
+

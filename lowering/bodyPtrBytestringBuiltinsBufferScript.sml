@@ -234,7 +234,17 @@ Theorem compile_slice_out_buf_counted:
     gas_path_ptr D 0 ctx func PG G tn s 0 G2 tn2 (OK t) /\
     ptr_covers G2 tn2 r t n /\ ptr_covers G2 tn2 p t (n - 32) /\
     t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G2 x = FLOOKUP G x /\
+      op_taint tn2 (Var x) = op_taint tn (Var x)) /\
+    (!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
+      ptr_covers G2 tn2 x t k) /\
+    stmt_state_rel ctx func cenv cx es t /\ t.vs_memory = s.vs_memory /\
+    (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
+      eval_operand op t = eval_operand op s /\
+      op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op)
 Proof
   strip_tac >> drule compile_slice_out_buf_compiler_parts >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
@@ -291,6 +301,42 @@ Resume compile_slice_out_buf_counted[finish]:
    t = ((update_var p (n2w a + 32w) u) with vs_inst_idx := s.vs_inst_idx + 2)` by
     simp[Abbr `t`, Abbr `uh`, update_var_def, arithmeticTheory.ADD1,
       arithmeticTheory.ADD_ASSOC] >>
+  suspend "frame"
+QED
+
+Resume compile_slice_out_buf_counted[frame]:
+  `!x. not_fresh_at sa x ==> x <> r /\ x <> p` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `!x. not_fresh_at sa x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP G2 x = FLOOKUP G x /\
+    op_taint tn2 (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >>
+     `x <> r /\ x <> p` by simp[] >>
+     simp[Abbr `t`, Abbr `uh`, lookup_var_update_var] >>
+     simp[Abbr `G2`, Abbr `tn2`, copy_len_binop_ghost_frame] >>
+     gvs[alloca_old_register_ghost_frame, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
+    ptr_covers G2 tn2 x t k` by
+    (rpt strip_tac >> simp[ptr_covers_def] >> fs[ptr_covers_def]) >>
+  `not_local_ptr cenv es.scopes p` by
+    (fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (qpat_assum `t = _` SUBST1_TAC >> simp[stmt_state_rel_inst_idx] >>
+     irule stmt_state_rel_update_var >> simp[]) >>
+  `t.vs_memory = s.vs_memory` by simp[Abbr `t`, Abbr `uh`, update_var_def] >>
+  `u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+     strip_tac >> gvs[update_var_def]) >>
+  `t.vs_labels = s.vs_labels` by simp[Abbr `t`, Abbr `uh`, update_var_def] >>
+  `!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
+    eval_operand op t = eval_operand op s /\
+    op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op` by
+    (Cases >> simp[eval_operand_def, op_prov_def, op_taint_def]) >>
   qexistsl_tac [`buf`, `sm`, `r`, `p`, `u`, `n2w a`, `G1`, `tn1`,
     `G2`, `tn2`, `t`] >>
   gvs[Abbr `G2`, Abbr `tn2`, Abbr `uh`, w2n_n2w]

@@ -80,3 +80,17 @@ Proof
        update_var_def, w2n_add_2, w2n_n2w, arithmeticTheory.LESS_MOD] >>
   decide_tac
 QED
+
+Theorem alloca_old_register_ghost_frame:
+  x <> out ==>
+  FLOOKUP (step_prov PG G (mk_inst id ALLOCA [sz] [out]) u) x = FLOOKUP G x /\
+  op_taint (step_taint (mk_inst id ALLOCA [sz] [out]) s u tn) (Var x) =
+    op_taint tn (Var x)
+Proof
+  strip_tac >>
+  Cases_on `FLOOKUP u.vs_allocas id` >>
+  simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+    step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
+    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  Cases_on `x'` >> simp[FLOOKUP_UPDATE]
+QED
