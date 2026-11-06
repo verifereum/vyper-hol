@@ -137,7 +137,7 @@ Theorem straight_fresh_scalar_success_post:
   ghost_inv d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  ghost_kept cenv es origin G0 tn0 s0 G tn /\
+  ghost_kept cenv frame_es origin G0 tn0 s0 G tn /\
   (!x. not_fresh_at origin x ==> not_fresh_at sa x) /\
   scalar_available
     (A UNION BIGUNION (set (MAP (\i. set i.inst_outputs)
@@ -154,7 +154,7 @@ Theorem straight_fresh_scalar_success_post:
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     ghost_inv d cenv cx es H tm (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv es origin G0 tn0 s0 H tm /\
+    ghost_kept cenv frame_es origin G0 tn0 s0 H tm /\
     op_prov H op = NONE /\ op_taint tm op = {}
 Proof
   strip_tac >> drule_all straight_fresh_scalar_success_path >>

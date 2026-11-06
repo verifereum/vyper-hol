@@ -28,7 +28,7 @@ Theorem binop_typed_scalar_continuation:
   ghost_inv d cenv cx es G tn s /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
-  ghost_kept cenv es origin G0 tn0 s0 G tn /\
+  ghost_kept cenv frame_es origin G0 tn0 s0 G tn /\
   (!z. not_fresh_at origin z ==> not_fresh_at sa z) /\
   scalar_available
     (A UNION BIGUNION (set (MAP (\i. set i.inst_outputs)
@@ -44,7 +44,7 @@ Theorem binop_typed_scalar_continuation:
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     ghost_inv d cenv cx es H tm (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv es origin G0 tn0 s0 H tm /\
+    ghost_kept cenv frame_es origin G0 tn0 s0 H tm /\
     op_prov H op = NONE /\ op_taint tm op = {}) \/
   (?msg t j H tm.
     bop_result cx ann bop tys v1 v2 es0 = INR (Error (RuntimeError msg)) /\
