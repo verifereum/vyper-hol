@@ -1,6 +1,6 @@
 (* Joint count validation, count store and scratch-index initialization. *)
 Theory decoderArrayInitPtr
-Ancestors abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
+Ancestors decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
   decoderNavigationPtr calldataClampPtr typedCopyPtr bodyPtrDefs
   compileEnv emitHelper venomInst venomExecSemantics venomState words list
   rich_list arithmetic finite_map ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
@@ -50,52 +50,10 @@ Theorem emit_count_comparison_endpoint_ptr[local]:
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
-  qabbrev_tac `out = "%" ++ toString sa.cs_next_var` >>
-  qabbrev_tac `inst = mk_inst sa.cs_next_id GT [src; Lit bound] [out]` >>
-  `t = update_var out (bool_to_word (w2n a > w2n bound)) s` by
-    (gvs[run_inst_seq_def, Abbr `inst`, Abbr `out`, step_inst_base_def,
-      mk_inst_def, exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
-  `step_inst_base inst s = OK t` by
-    (simp[Abbr `inst`, step_inst_base_def, mk_inst_def,
-      exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
-  `!fuel fn. ~ctx_has_dalloca ctx ==>
-    ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn inst s` by
-    (rpt strip_tac >>
-     `op_taint tn (Lit bound) = {}` by simp[op_taint_def] >>
-     qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
-     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       allocas_from_def, Abbr `inst`, mk_inst_def, step_inst_non_invoke,
-       source_memory_write_ranges_def, source_memory_read_ranges_def,
-       update_var_def] >>
-     metis_tac[]) >>
-  `!x. not_fresh_at sa x ==> x <> out` by
-    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
-  qabbrev_tac `H = step_prov PG G inst t` >>
-  qabbrev_tac `u = step_taint inst s t tn` >>
-  qexistsl_tac [`H`,`u`] >> conj_tac
-  >- (irule ptr_fragment_step >>
-      simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
-      rpt strip_tac >>
-      qexists_tac `update_var out (bool_to_word (w2n a > w2n bound)) s` >>
-      simp[Abbr `H`, Abbr `u`] >> gvs[update_var_def, mk_inst_def, Abbr `out`]) >>
-  simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `out`,
-    lookup_var_def,
-    op_prov_def, step_prov_def, out_prov_def, set_prov_def,
-    op_taint_def, step_taint_def, out_taint_def, set_var_taint_def,
-    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, mk_inst_def,
-    mem_taint_def, new_site_bytes_def, step_writes_def,
-    written_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
-    update_var_def, source_memory_write_ranges_def, range_bytes_def,
-    pred_setTheory.EXTENSION, FDOM_DRESTRICT, SF CONJ_ss] >>
-  simp[FLOOKUP_DEF, SF CONJ_ss] >>
-  conj_tac >- (qexists_tac `t.vs_vars` >> simp[update_var_def]) >>
-  qpat_x_assum `!x. not_fresh_at sa x ==> _` (assume_tac o SRULE []) >>
-  gen_tac >> disch_tac >>
-  `x <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
-  simp[FLOOKUP_DEF, SF CONJ_ss]
+  drule_all emit_count_comparison_endpoint_ptr_core >>
+  disch_then (qspec_then `G` mp_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[] >> metis_tac[]
 QED
 
 Theorem clamp_scalar_frag_ptr[local]:
@@ -220,48 +178,9 @@ Theorem emit_count_load_endpoint_ptr[local]:
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
-  qabbrev_tac `out = "%" ++ toString sa.cs_next_var` >>
-  qabbrev_tac `inst = mk_inst sa.cs_next_id CALLDATALOAD [src] [out]` >>
-  `t = update_var out (abi_decode_load CALLDATALOAD a s) s` by
-    gvs[run_inst_seq_def, Abbr `out`, step_inst_base_def, mk_inst_def,
-      exec_read1_def, abi_decode_load_def, abi_decode_source_def] >>
-  qabbrev_tac `H = step_prov PG G inst t` >>
-  qabbrev_tac `u = step_taint inst s t tn` >>
-  qexistsl_tac [`H`, `u`] >> conj_tac >-
-    (irule ptr_fragment_step >> simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
-     rpt strip_tac >> qexists_tac `update_var out (abi_decode_load CALLDATALOAD a s) s` >>
-     simp[Abbr `H`, Abbr `u`, Abbr `out`, mk_inst_def,
-       step_inst_base_def, exec_read1_def, abi_decode_load_def,
-       abi_decode_source_def, update_var_def] >>
-     rpt strip_tac >>
-     irule (cj 1 (SRULE [ptr_safe_step_def, mk_inst_def] ptr_safe_dispatch_scalar_step)) >>
-     simp[allocas_from_def] >>
-     qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (abi_decode_load CALLDATALOAD a s) s` >>
-     simp[mk_inst_def, step_inst_non_invoke,
-       step_inst_base_def, exec_read1_def, abi_decode_load_def,
-       abi_decode_source_def, update_var_def]) >>
-  conj_tac >-
-    (simp[Abbr `u`, Abbr `inst`, Abbr `out`] >>
-     irule dispatch_scalar_output_clean >> simp[]) >>
-  `!x. not_fresh_at sa x ==> x <> out` by
-    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
-  simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `out`,
-    op_prov_def, step_prov_def, out_prov_def, set_prov_def,
-    op_taint_def, step_taint_def, out_taint_def, set_var_taint_def,
-    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, mk_inst_def,
-    mem_taint_def, new_site_bytes_def, step_writes_def,
-    written_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
-    update_var_def, lookup_var_def, source_memory_write_ranges_def, range_bytes_def,
-    pred_setTheory.EXTENSION, FDOM_DRESTRICT, SF CONJ_ss] >>
-  simp[FLOOKUP_DEF, SF CONJ_ss] >>
-  conj_tac >- (qexists_tac `t.vs_vars` >> simp[update_var_def]) >>
-  qpat_x_assum `!x. not_fresh_at sa x ==> _` (assume_tac o SRULE []) >>
-  gen_tac >> disch_tac >>
-  `x <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
-  simp[FLOOKUP_DEF, SF CONJ_ss]
+  drule_all emit_count_load_endpoint_ptr_core >>
+  disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[] >> metis_tac[]
 QED
 
 
