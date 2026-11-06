@@ -78,7 +78,7 @@ Proof
   `step_inst_base i s = OK t` by
     (gvs[Abbr `i`, Abbr `t`] >>
      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def]) >>
+     simp[mk_inst_def] >> simp[exec_pure2_def]) >>
   qexistsl_tac [`step_prov PG G i t`, `step_taint i s t tn`, `t`] >>
   conj_tac >- simp[run_inst_seq_def] >>
   conj_tac >-
@@ -105,6 +105,7 @@ Theorem emit_mload_clean_seq_ptr:
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
     lookup_var out sf = SOME (mload (w2n a) s) /\ op_taint tnf (Var out) = {} /\
+    op_prov Gf (Var out) = NONE /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -134,6 +135,9 @@ Proof
    (step_taint i s t tn).t_trans = tn.t_trans` by
     (simp[Abbr `i`, Abbr `t`] >> irule mload_ghost_clean >>
      simp[eval_operand_def]) >>
+  `op_prov (step_prov PG G i t) (Var out) = NONE` by
+    simp[Abbr `i`, step_prov_def, set_prov_def, out_prov_def,
+      op_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
   simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> `p <> out` by metis_tac[] >>
   simp[Abbr `i`, step_prov_def, set_prov_def, out_prov_def,
