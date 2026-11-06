@@ -54,8 +54,7 @@ Theorem storage_body_source_endpoint:
   get_instruction bb (SUC s.vs_inst_idx) = SOME
     (mk_inst lid (if loc = LocStorage then SLOAD else TLOAD) [Var av] [vv]) /\
   eval_operand src s = SOME a /\ lookup_var cv s = SOME (n2w k) /\
-  op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  op_prov G src = NONE /\ op_prov G (Var cv) = NONE ==>
+  op_taint tn src = {} /\ op_taint tn (Var cv) = {} ==>
   ?t H tm.
     gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
     storage_body_frame {av;vv} G tn s H tm t /\
@@ -68,10 +67,19 @@ Theorem storage_body_source_endpoint:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `s1 = (update_var av (a+n2w k) s) with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `step_taint (mk_inst id ADD [src;Var cv] [av]) s
+      (update_var av (a+n2w k) s) tn = (tn with t_var := tn.t_var |+ (av,{}))` by
+    (simp[step_taint_def, set_var_taint_def, venomInstTheory.mk_inst_def,
+      out_taint_def, mem_taint_def, step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+      written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+      new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+      pred_setTheory.EXTENSION, range_bytes_def, taint_component_equality,
+      SF CONJ_ss]) >>
   qexistsl_tac [
     `(update_var vv (copy_runtime_word loc s (a+n2w k)) s1) with
       vs_inst_idx := SUC s1.vs_inst_idx`,
-    `DRESTRICT (DRESTRICT G (COMPL {av})) (COMPL {vv})`,
+    `DRESTRICT (step_prov PG G (mk_inst id ADD [src; Var cv] [av])
+      (update_var av (a+n2w k) s)) (COMPL {vv})`,
     `tn with t_var := (tn.t_var |+ (av,{})) |+ (vv,
       key_taint (if loc = LocStorage then tn.t_stor else tn.t_trans) (a+n2w k))`] >>
   conj_tac >-
@@ -86,11 +94,19 @@ Proof
         Cases_on `loc = LocStorage` >>
         simp[contract_transient_def, contract_storage_def]) >>
      mp_tac (Q.INST [`opc` |-> `if loc = LocStorage then SLOAD else TLOAD`,
+       `H` |-> `step_prov PG G (mk_inst id ADD [src;Var cv] [av])
+         (update_var av (a+n2w k) s)`,
+       `tm` |-> `tn with t_var := tn.t_var |+ (av,{})`,
        `w` |-> `copy_runtime_word loc s (a+n2w k)`] storage_body_source_load) >>
      simp[Abbr `s1`] >> Cases_on `loc = LocStorage` >> simp[]) >>
   simp[storage_body_frame_def, Abbr `s1`, copy_static_def,
     update_var_def, lookup_var_def, op_prov_def, op_taint_def,
-    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >>
+  mp_tac (Q.INST [`opc` |-> `ADD`, `out` |-> `av`, `vv` |-> `x`,
+    `left` |-> `src`, `right` |-> `Var cv`,
+    `w` |-> `a+n2w k`] storage_body_arith_loaded_frame) >>
+  simp[op_prov_def, update_var_def]
 QED
 
 Theorem storage_body_destination_stage:

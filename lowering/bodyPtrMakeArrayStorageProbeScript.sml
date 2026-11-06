@@ -6,44 +6,6 @@ Ancestors
   ptrDiscipline venomState fragGasPathPtr finite_map accountsRelProps words
   storageDecodeMemory valueEncodingProofs vyperStorage bodyPtrMakeArrayStorageRobust
 
-Theorem storage_source_load_arbitrary_provenance:
-  (opc = SLOAD \/ opc = TLOAD) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from 0 s /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [src; Var cv] [av]) /\
-  get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst lid opc [Var av] [vv]) /\
-  eval_operand src s = SOME a /\ lookup_var cv s = SOME (n2w k) /\
-  op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  s1 = ((update_var av (a+n2w k) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
-  H = step_prov PG G (mk_inst id ADD [src; Var cv] [av]) (update_var av (a+n2w k) s) /\
-  tm = step_taint (mk_inst id ADD [src; Var cv] [av]) s (update_var av (a+n2w k) s) tn /\
-  step_inst_base (mk_inst lid opc [Var av] [vv]) s1 = OK (update_var vv w s1) ==>
-  gas_path_ptr D 0 ctx fn PG G tn s 0
-    (DRESTRICT H (COMPL {vv}))
-    (tm with t_var := tm.t_var |+
-      (vv, if opc = SLOAD then key_taint tm.t_stor (a+n2w k)
-           else key_taint tm.t_trans (a+n2w k)))
-    (OK ((update_var vv w s1) with vs_inst_idx := SUC s1.vs_inst_idx))
-Proof
-  strip_tac >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK s1)` by
-    (gvs[] >> irule clean_binop_ptr_path >> simp[eval_operand_def]) >>
-  `op_taint tm (Var av) = {}` by
-    (gvs[] >> metis_tac[copy_len_binop_ghost_frame]) >>
-  `gas_path_ptr D 0 ctx fn PG H tm s1 0
-    (DRESTRICT H (COMPL {vv}))
-    (tm with t_var := tm.t_var |+
-      (vv, if opc = SLOAD then key_taint tm.t_stor (a+n2w k)
-           else key_taint tm.t_trans (a+n2w k)))
-    (OK ((update_var vv w s1) with vs_inst_idx := SUC s1.vs_inst_idx))` by
-    (irule storage_body_load_path >>
-     simp[update_var_def, lookup_var_def, eval_operand_def, allocas_from_def] >>
-     qexistsl_tac [`lid`, `Var av`] >>
-     gvs[update_var_def, lookup_var_def, eval_operand_def, op_taint_def,
-         FLOOKUP_UPDATE]) >>
-  drule_all gas_path_ptr_then >> simp[]
-QED
-
 Theorem storage_range_agree_dead_bytes:
   storage_range_agree st rt a tv ==>
   (dead_bytes rt (w2n a) tv j b <=> dead_bytes st (w2n a) tv j b)

@@ -4,7 +4,7 @@ Ancestors
   bodyPtrMakeArrayStorageControl bodyPtrMakeArrayAdd bodyPtrMakeArrayCopyStep
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   finite_map words codegenRel fragGasPathPtr typedCopyLoopHeaderPtr
-  bodyPtrMakeArrayExternalLoop exprSimStorageCopy bodyPtrMakeArrayPrefix
+  bodyPtrMakeArrayExternalLoop exprSimStorageCopy bodyPtrMakeArrayPrefix typedCopyPtr
 
 Theorem storage_body_scalar_add_ghost:
   op_prov G left = NONE /\ op_prov G right = NONE ==>
@@ -84,36 +84,33 @@ Theorem storage_body_source_load:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst lid opc [Var av] [vv]) /\
   eval_operand src s = SOME a /\ lookup_var cv s = SOME (n2w k) /\
   op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  op_prov G src = NONE /\ op_prov G (Var cv) = NONE /\
   s1 = ((update_var av (a+n2w k) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  H = step_prov PG G (mk_inst id ADD [src; Var cv] [av]) (update_var av (a+n2w k) s) /\
+  tm = step_taint (mk_inst id ADD [src; Var cv] [av]) s (update_var av (a+n2w k) s) tn /\
   step_inst_base (mk_inst lid opc [Var av] [vv]) s1 = OK (update_var vv w s1) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
-    (DRESTRICT (DRESTRICT G (COMPL {av})) (COMPL {vv}))
-    (tn with t_var := (tn.t_var |+ (av,{})) |+
-      (vv, if opc = SLOAD then key_taint tn.t_stor (a+n2w k)
-           else key_taint tn.t_trans (a+n2w k)))
+    (DRESTRICT H (COMPL {vv}))
+    (tm with t_var := tm.t_var |+
+      (vv, if opc = SLOAD then key_taint tm.t_stor (a+n2w k)
+           else key_taint tm.t_trans (a+n2w k)))
     (OK ((update_var vv w s1) with vs_inst_idx := SUC s1.vs_inst_idx))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0
-    (DRESTRICT G (COMPL {av})) (tn with t_var := tn.t_var |+ (av,{}))
-    (OK s1)` by
-    (simp[] >> irule storage_body_scalar_add_path >>
-     simp[eval_operand_def] >>
-     qexistsl_tac [`id`, `src`, `Var cv`] >> simp[eval_operand_def]) >>
-  `gas_path_ptr D 0 ctx fn PG
-    (DRESTRICT G (COMPL {av})) (tn with t_var := tn.t_var |+ (av,{})) s1 0
-    (DRESTRICT (DRESTRICT G (COMPL {av})) (COMPL {vv}))
-    (tn with t_var := (tn.t_var |+ (av,{})) |+
-      (vv, if opc = SLOAD then key_taint tn.t_stor (a+n2w k)
-           else key_taint tn.t_trans (a+n2w k)))
+  strip_tac >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK s1)` by
+    (gvs[] >> irule clean_binop_ptr_path >> simp[eval_operand_def]) >>
+  `op_taint tm (Var av) = {}` by
+    (gvs[] >> metis_tac[copy_len_binop_ghost_frame]) >>
+  `gas_path_ptr D 0 ctx fn PG H tm s1 0
+    (DRESTRICT H (COMPL {vv}))
+    (tm with t_var := tm.t_var |+
+      (vv, if opc = SLOAD then key_taint tm.t_stor (a+n2w k)
+           else key_taint tm.t_trans (a+n2w k)))
     (OK ((update_var vv w s1) with vs_inst_idx := SUC s1.vs_inst_idx))` by
-    (mp_tac (Q.INST [`s` |-> `s1`, `G` |-> `DRESTRICT G (COMPL {av})`,
-      `tn` |-> `tn with t_var := tn.t_var |+ (av,{})`, `src` |-> `Var av`,
-      `tmp` |-> `vv`, `id` |-> `lid`, `key` |-> `a+n2w k`] storage_body_load_path) >>
-     simp[] >> disch_then irule >>
+    (irule storage_body_load_path >>
+     simp[update_var_def, lookup_var_def, eval_operand_def, allocas_from_def] >>
+     qexistsl_tac [`lid`, `Var av`] >>
      gvs[update_var_def, lookup_var_def, eval_operand_def, op_taint_def,
-         FLOOKUP_UPDATE, allocas_from_def]) >>
+         FLOOKUP_UPDATE]) >>
   drule_all gas_path_ptr_then >> simp[]
 QED
 
@@ -224,7 +221,8 @@ QED
 Theorem storage_body_source_load_frame:
   s1 = ((update_var av key s) with vs_inst_idx := SUC s.vs_inst_idx) /\
   sf = ((update_var vv w s1) with vs_inst_idx := SUC s1.vs_inst_idx) /\
-  Gf = DRESTRICT (DRESTRICT G (COMPL {av})) (COMPL {vv}) /\
+  Gf = DRESTRICT (step_prov PG G (mk_inst id ADD [left;right] [av])
+    (update_var av key s)) (COMPL {vv}) /\
   tnf = (tn with t_var := (tn.t_var |+ (av,{})) |+ (vv,kt)) ==>
   copy_static sf = copy_static s /\ sf.vs_memory = s.vs_memory /\
   tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -237,6 +235,12 @@ Theorem storage_body_source_load_frame:
     op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `!x. x <> av ==>
+    op_prov (step_prov PG G (mk_inst id ADD [left;right] [av])
+      (update_var av key s)) (Var x) = op_prov G (Var x)` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`opc` |-> `ADD`, `out` |-> `av`, `vv` |-> `x`,
+       `w` |-> `key`] storage_body_arith_loaded_frame) >> simp[]) >>
   gvs[copy_static_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
       FLOOKUP_DRESTRICT, op_prov_def, op_taint_def]
 QED
