@@ -3780,7 +3780,7 @@ rpt (CHANGED_TAC (
    irule_at (Pos last) ci_mono_compile_alloc_buffer) ORELSE
   (irule ci_mono_compile_multi_vvs)
 )) >>
-rpt strip_tac >> first_assum irule)
+rpt strip_tac >> simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
   >- ( (* ExtCall *)
     PairCases_on `p` >> simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
