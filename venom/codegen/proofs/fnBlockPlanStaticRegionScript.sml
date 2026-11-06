@@ -833,3 +833,42 @@ Proof
   drule_all regional_phi_owned_frame >> strip_tac >>
   metis_tac[]
 QED
+
+(* A PHI output has no further definition after the complete PHI prefix.
+   This is independent of whether that output occurs on an incoming edge. *)
+Theorem regional_phi_output_no_suffix_def:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs ==>
+  !p. LENGTH (collect_phis bb.bb_instructions) <= p /\
+      p < LENGTH bb.bb_instructions ==>
+      ~MEM v (inst_defs (EL p bb.bb_instructions))
+Proof
+  strip_tac >>
+  `?k. k < LENGTH (collect_phis bb.bb_instructions) /\
+       EL k (collect_phis bb.bb_instructions) = phi` by metis_tac[MEM_EL] >>
+  `EL k bb.bb_instructions = phi` by metis_tac[collect_phis_index] >>
+  qx_gen_tac `p` >> strip_tac >> simp[inst_defs_def] >>
+  irule ready_output_other_location >> simp[] >>
+  qexistsl_tac [`bb`, `fn`, `k`] >> simp[] >>
+  mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac
+QED
+
+Theorem regional_phi_output_exit_live:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs /\
+  fn_reachable fn bb.bb_label /\
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions)) ==>
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[ready_reachable_preorder] >>
+  drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
+  qexists_tac `LENGTH bb.bb_instructions` >> simp[collect_phis_length_bound] >>
+  metis_tac[regional_phi_output_no_suffix_def]
+QED
