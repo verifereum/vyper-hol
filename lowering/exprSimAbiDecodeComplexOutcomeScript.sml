@@ -6,6 +6,7 @@ Ancestors
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderReentry abiDecoderVarExtend
   abiDecoderSequenceReach abiDecoderFiniteControl
   exprSimAbiDecodeMemberExecute abiDecoderDynamicLoopSetup instIdxIndep
+  abiDecoderBytestringOutcome abiDecoderSiteEffect exprSimAbiDecodeSiteProvenance
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   venomState venomInst words list rich_list arithmetic
 
@@ -72,19 +73,65 @@ Theorem abi_decode_complex_head_guard_reach_reentry:
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var hi /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  fn_has_code st st' fn /\ abi_decode_entry st s ==>
+  fn_has_code st st' fn /\ abi_decode_entry st s /\
+  decode_site_resources ctx func s ==>
   ?t. Dreach ctx fn s t /\ fresh_vars_wrt limit_st t /\
-    abi_decoder_address_frame st.cs_next_var s t /\ abi_decode_entry st' t
+    abi_decoder_address_frame st.cs_next_var s t /\ abi_decode_entry st' t /\
+    decode_site_effect ctx func st.cs_next_var writes s t /\
+    abi_decode_alloc_progress sites s t
 Proof
   strip_tac >>
   drule abi_decoder_complex_guard_reentry >>
   disch_then (qspecl_then [`p`, `limit_st`, `s`] mp_tac) >>
   (impl_tac >- (simp[] >> qexists_tac `H` >> simp[])) >> strip_tac >>
   drule abi_decode_complex_head_guard_prefix_shape >> strip_tac >>
+  `EVERY (\i. abi_bytes_opcode i.inst_opcode) (emitted_insts st st')` by
+    (drule abi_decode_complex_guard_abort_opcodes >>
+     simp[EVERY_MEM, abi_bytes_opcode_def, abiDecoderWordOutcomeTheory.abi_word_opcode_def] >>
+     strip_tac >> gen_tac >> disch_tac >> first_x_assum drule >>
+     rpt strip_tac >> simp[]) >>
+  drule_all abi_bytes_sequence_static >> strip_tac >>
+  `decode_site_resources ctx func actual` by
+    (irule decode_site_resources_fields >> qexists_tac `s` >>
+     fs[abi_decoder_address_frame_def, venom_state_component_equality]) >>
+  `decode_site_effect ctx func st.cs_next_var writes s actual` by
+    (simp[decode_site_effect_def, decode_memory_frame_def] >>
+     fs[abi_decoder_address_frame_def, decode_static_frame_def,
+       venom_state_component_equality]) >>
+  qpat_x_assum `actual = s with <|vs_vars := _; vs_memory := _|>` kall_tac >>
   `~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts` by fs[abi_decode_entry_def] >>
   drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
   qexists_tac `t` >> conj_tac >- metis_tac[Dreach_straight_prefix] >>
   gvs[abi_decode_entry_def, abi_decoder_address_frame_def, fresh_vars_wrt_def,
-    eval_op_inst_idx]
+    eval_op_inst_idx, abi_decode_alloc_progress_def] >> metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem abi_decode_owned_rows_address_frame:
+  abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
+    st dst src base_op hi B bs p d ao vo rows s /\
+  st.cs_next_var <= ready.cs_next_var /\
+  ready.cs_next_var <= limit_st.cs_next_var /\
+  abi_decoder_address_frame st.cs_next_var s t /\
+  fresh_vars_wrt limit_st t /\ abi_decode_entry ready t /\
+  decode_site_resources ctx func t ==>
+  abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
+    ready dst src base_op hi B bs p d ao vo rows t
+Proof
+  strip_tac >>
+  `abi_decode_owned sites scratch (d+vo)
+     (SUM(MAP abi_tuple_row_mem_width rows)) t` by
+    metis_tac[abi_decode_owned_address_frame,
+      exprSimAbiDecodeOwnedRowsTheory.abi_decode_owned_rows_pre_def] >>
+  qhdtm_x_assum `abi_decode_owned_rows_pre`
+    (strip_assume_tac o PURE_REWRITE_RULE
+      [exprSimAbiDecodeOwnedRowsTheory.abi_decode_owned_rows_pre_def]) >>
+  `EVERY (abi_decoder_operand_live ready.cs_next_var) [dst;src;base_op;hi]` by
+    (fs[EVERY_DEF] >> metis_tac[abi_decoder_operand_live_mono]) >>
+  `eval_operand src t = SOME(n2w p) /\ eval_operand dst t = SOME(n2w d) /\
+   eval_operand base_op t = SOME(n2w B) /\
+   eval_operand hi t = SOME(n2w(LENGTH bs))` by
+    (fs[EVERY_DEF, abi_decoder_address_frame_def] >> metis_tac[]) >>
+  simp_tac bool_ss [exprSimAbiDecodeOwnedRowsTheory.abi_decode_owned_rows_pre_def] >>
+  fs[abi_decoder_address_frame_def] >> metis_tac[LESS_EQ_TRANS]
 QED
