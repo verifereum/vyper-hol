@@ -1,7 +1,7 @@
 (* Scalar bounds checks shared by all slice sources. *)
 Theory bodyPtrBytestringBuiltinsBounds
 Ancestors
-  builtinBytes fragGasSeqPtr stmtAppendStorageRunPtr
+  builtinBytes fragGasSeqPtr stmtAppendStorageRunPtr stmtAppendStoragePathPtr
   ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomInst venomState emitHelperProps
   finite_map list words arithmetic context emitHelper compileEnv exprLoweringProps
@@ -447,4 +447,66 @@ Proof
     eval_operand op (update_var (STRING #"%" (toString j)) v ss) = eval_operand op ss` by
     (rpt strip_tac >> irule eval_operand_update_not_fresh >>
      qexists_tac `sa` >> simp[] >> metis_tac[]) >> simp[]
+QED
+
+
+Theorem compile_assert_slice_bounds_counted_abort:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl /\
+  (!op. MEM op [a;n;limit] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sa sb) s = Abort ab u ==>
+  ab = Revert_abort /\
+  ?p G' tn' j.
+    run_inst_seq (TAKE 5 (emitted_insts sa sb)) s = OK p /\
+    p = s with vs_vars := p.vs_vars /\
+    u = revert_state (set_returndata [] p) /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (Abort Revert_abort (u with vs_inst_idx := j)) /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule_all compile_assert_slice_bounds_prefix_run >> strip_tac >>
+  `emitted_insts sa sb = TAKE 5 (emitted_insts sa sb) ++
+    [EL 5 (emitted_insts sa sb)]` by
+    (drule compile_assert_slice_bounds_layout >> simp[]) >>
+  `ab = Revert_abort /\ u = revert_state (set_returndata [] p)` by
+    (qpat_x_assum `run_inst_seq _ _ = Abort _ _` mp_tac >>
+     once_asm_rewrite_tac[] >>
+     drule run_inst_seq_append >>
+     disch_then (qspec_then `[EL 5 (emitted_insts sa sb)]` assume_tac) >>
+     qpat_x_assum `emitted_insts _ _ = _` kall_tac >>
+     qpat_x_assum `run_inst_seq (_ ++ _) _ = _` (fn th => rewrite_tac[th]) >>
+     simp[run_inst_seq_def] >>
+     Cases_on `w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn)` >>
+     gvs[] >> metis_tac[]) >>
+  simp[] >>
+  qpat_x_assum `emitted_insts _ _ = _` kall_tac >>
+  `!op. MEM op [a;n;limit] ==>
+    op_prov G op = NONE /\ op_taint tn op = {} /\
+    (!z. op = Var z ==> not_fresh_at sa z)` by
+    (fs[DISJ_IMP_THM, FORALL_AND_THM] >> rpt strip_tac >> simp[] >>
+     rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
+  qabbrev_tac `names = GENLIST (\j. STRING #"%" (toString (sa.cs_next_var + j))) 5` >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s
+    (FOLDL (\g x. DRESTRICT g (COMPL {x})) G names)
+    (tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names)` by
+    (irule compile_assert_slice_bounds_ghost_sequence >> simp[Abbr `names`] >>
+     qexistsl_tac [`a`,`limit`,`n`,`wa`,`wl`,`wn`] >>
+     simp[] >> metis_tac[MEM]) >>
+  drule_all compile_assert_slice_bounds_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  drule_all run_inst_seq_abort_zero_path_ptr >> strip_tac >>
+  qexistsl_tac [`FOLDL (\g x. DRESTRICT g (COMPL {x})) G names`,
+    `tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names`, `j`] >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  match_mp_tac slice_bounds_ghost_frame >> simp[Abbr `names`]
 QED
