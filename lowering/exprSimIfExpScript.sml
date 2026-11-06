@@ -52,7 +52,7 @@ Proof
   simp[punnable_def]
 QED
 
-Theorem ifexp_copy_types[local]:
+Theorem ifexp_copy_types:
   !cenv rt at.
     (at = rt \/
      is_bytestring_type rt /\ is_bytestring_type at /\ arg_type_fits at rt \/
