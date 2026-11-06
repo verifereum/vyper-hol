@@ -6,7 +6,7 @@ Ancestors bodyPtrHashBuiltinsSummary bodyPtrDefs exprSimDefs
 Theorem hash_word_endpoint_summary:
   (!tail. source (ee with gas_obs := tail) =
     (INL tv, ef with gas_obs := tail)) /\ ef.gas_obs = [] /\
-  gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+  gas_path_ptr D 0 ctx fn PG G tn s n Gf tf (OK u) /\
   vv_post ctx fn cenv cx e es sa sb s0 ef tv (StackValue ann op) u /\
   u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -27,8 +27,13 @@ Theorem hash_word_endpoint_summary:
         p.ptr_location = LocMemory ==> ptr_buf_ok cenv e p.ptr_operand G' t) /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn') R
 Proof
-  strip_tac >> qexists_tac `[]` >> irule hash_zero_mark_summary >>
-  first_assum (irule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl_tac [`INL tv`, `ef`] >> simp[] >>
-  simp[ptr_vv_ok_def] >> irule ptr_val_ok_word >> simp[]
+  strip_tac >> qexists_tac `REPLICATE n F` >>
+  rewrite_tac[gas_summary_ptr_at_marked] >>
+  qexistsl_tac [`INL tv`, `ef`, `Gf`, `tf`, `OK u`] >>
+  conj_tac
+  >- (irule gas_marked_exec_ptr_no_source_read >> simp[]) >>
+  `ef with gas_obs := [] = ef` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  simp[] >> disj1_tac >> simp[ptr_vv_ok_def] >>
+  irule ptr_val_ok_word >> simp[]
 QED
