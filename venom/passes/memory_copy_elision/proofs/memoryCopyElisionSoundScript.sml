@@ -100,31 +100,6 @@ Definition cf_entry_sound_def:
     | NONE => T
 End
 
-(* For ml_alloca = NONE, memloc_runtime_region reduces to (ml_offset, ml_size).
-   This lets existing proofs (which all handle alloca=NONE) use the old form. *)
-Triviality cf_entry_sound_none_alloca[local]:
-  !bp dfg ml cf s.
-    ml.ml_alloca = NONE ==>
-    (cf_entry_sound bp dfg ml cf s <=>
-     case (ml.ml_offset, ml.ml_size) of
-       (SOME dst_off, SOME sz_num) =>
-         ?src_val.
-           eval_operand (normalize_operand dfg [] cf.cf_source) s = SOME src_val /\
-           let mem = s.vs_memory in
-           let src_data = cf_source_data cf.cf_opcode s in
-           dst_off + sz_num <= LENGTH mem /\
-           (cf.cf_opcode = RETURNDATACOPY ==>
-            w2n src_val + sz_num <= LENGTH src_data) /\
-           TAKE sz_num (DROP dst_off mem) =
-           TAKE sz_num (DROP (w2n src_val) src_data ++ REPLICATE sz_num 0w)
-     | (SOME _, NONE) => T
-     | (NONE, SOME _) => T
-     | (NONE, NONE) => T)
-Proof
-  rw[cf_entry_sound_def, memloc_runtime_region_def] >>
-  Cases_on `ml.ml_offset` >> Cases_on `ml.ml_size` >> simp[]
-QED
-
 (* Raw lattice soundness: all entries are sound *)
 Definition cf_sound_def:
   cf_sound bp dfg (cfl : copy_fact_lattice_raw) s <=>
@@ -246,12 +221,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[] >> res_tac
 QED
 
-Triviality cf_alloca_ok_opt_fempty[local]:
-  !bp s. cf_alloca_ok_opt bp (SOME FEMPTY) s
-Proof
-  simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty]
-QED
-
 (* Absolute locations need no alloca bound, regardless of offset or size. *)
 Triviality memloc_within_alloca_none[local]:
   !ml s. ml.ml_alloca = NONE ==> memloc_within_alloca ml s
@@ -290,18 +259,6 @@ Proof
   irule cf_alloca_ok_drestrict >> simp[]
 QED
 
-(* _opt versions for DRESTRICT of unwrap_copy_facts *)
-Triviality cf_alloca_ok_opt_drestrict_step[local]:
-  !bp v S s s'.
-    cf_alloca_ok_opt bp v s /\ s'.vs_allocas = s.vs_allocas ==>
-    cf_alloca_ok_opt bp (SOME (DRESTRICT (unwrap_copy_facts v) S)) s'
-Proof
-  Cases_on `v` >>
-  simp[cf_alloca_ok_opt_def, unwrap_copy_facts_def,
-       DRESTRICT_FEMPTY, cf_alloca_ok_fempty] >>
-  metis_tac[cf_alloca_ok_drestrict_step]
-QED
-
 (* cf_alloca_ok preserved through FUPDATE when allocas unchanged *)
 Triviality cf_alloca_ok_fupdate_step[local]:
   !bp cfl ml cf s s'.
@@ -335,17 +292,6 @@ Proof
   irule cf_alloca_ok_drestrict_step >> qexists `s` >> simp[] >>
   Cases_on `v` >>
   gvs[cf_alloca_ok_opt_def, unwrap_copy_facts_def, cf_alloca_ok_fempty]
-QED
-
-Triviality cf_keys_ok_opt_drestrict[local]:
-  !bp v S.
-    cf_keys_ok_opt bp v ==>
-    cf_keys_ok_opt bp (SOME (DRESTRICT (unwrap_copy_facts v) S))
-Proof
-  Cases_on `v` >>
-  simp[cf_keys_ok_opt_def, unwrap_copy_facts_def,
-       DRESTRICT_FEMPTY, cf_keys_ok_fempty] >>
-  metis_tac[cf_keys_ok_drestrict]
 QED
 
 (* Alloca addresses fit in a word.  Trivially holds for real EVM execution
@@ -568,14 +514,6 @@ Proof
   simp[memloc_within_alloca_def, ce_memloc_projections]
 QED
 
-(* Label offsets produce ml_undefined, which is trivially within alloca *)
-Triviality memloc_within_alloca_label[local]:
-  !bp l sz s. memloc_within_alloca (ce_memloc_from_ops bp (Label l) sz) s
-Proof
-  simp[ce_memloc_from_ops_def, bp_segment_from_ops_def,
-       ml_undefined_def, memloc_within_alloca_def]
-QED
-
 (* bp_ptrs_bounded gives memloc_within_alloca for MCOPY read locations *)
 Triviality bp_ptrs_bounded_mcopy_read_loc[local]:
   !bp fn s bb inst dst src sz.
@@ -690,22 +628,6 @@ Triviality copy_opcode_cases[local]:
     op = DLOADBYTES \/ op = RETURNDATACOPY
 Proof
   Cases >> simp[is_copy_opcode_def]
-QED
-
-(* mcopy is identity when destination bytes already equal source bytes *)
-Theorem mcopy_identity[local]:
-  !dst src sz s.
-    dst + sz <= LENGTH s.vs_memory /\
-    src + sz <= LENGTH s.vs_memory /\
-    TAKE sz (DROP dst s.vs_memory) = TAKE sz (DROP src s.vs_memory) ==>
-    mcopy dst src sz s = s
-Proof
-  rw[mcopy_def] >>
-  `LENGTH (TAKE sz (DROP src s.vs_memory)) = sz` by simp[LENGTH_TAKE, LENGTH_DROP] >>
-  `TAKE sz (DROP src s.vs_memory ++ REPLICATE sz 0w) = TAKE sz (DROP src s.vs_memory)` by
-    simp[TAKE_APPEND1] >>
-  simp[] >>
-  match_mp_tac write_memory_with_expansion_identity >> simp[]
 QED
 
 (* run_insts of singleton = step_inst *)
@@ -1304,15 +1226,6 @@ Proof
   simp[]
 QED
 
-(* cf_sound is preserved by DRESTRICT (subset of entries) *)
-Triviality cf_sound_drestrict[local]:
-  !bp dfg cfl s keys.
-    cf_sound bp dfg cfl s ==>
-    cf_sound bp dfg (DRESTRICT cfl keys) s
-Proof
-  rw[cf_sound_def] >> rpt strip_tac >> fs[FLOOKUP_DRESTRICT]
-QED
-
 (* cf_entry_sound preserved when memory, allocas, source eval unchanged *)
 Triviality cf_entry_sound_preserved[local]:
   !bp dfg ml cf s s'.
@@ -1570,38 +1483,6 @@ Proof
   Cases >> simp[cf_source_data_def, write_memory_with_expansion_def, LET_THM]
 QED
 
-(* cf_entry_sound preserved across state transition s → s' when:
-   - eval_operand for source unchanged
-   - allocas unchanged
-   - memory didn't shrink
-   - dest region bytes preserved
-   - source data slice preserved (handles MCOPY where source = memory)
-   - source data didn't shrink *)
-Triviality cf_entry_sound_transfer[local]:
-  !bp dfg ml cf s s'.
-    cf_entry_sound bp dfg ml cf s /\
-    eval_operand (normalize_operand dfg [] cf.cf_source) s' =
-    eval_operand (normalize_operand dfg [] cf.cf_source) s /\
-    LENGTH s'.vs_memory >= LENGTH s.vs_memory /\
-    s'.vs_allocas = s.vs_allocas /\
-    (case memloc_runtime_region ml s of
-       SOME (dst_off, sz_num) =>
-         !src_val. eval_operand (normalize_operand dfg [] cf.cf_source) s = SOME src_val ==>
-           TAKE sz_num (DROP dst_off s'.vs_memory) =
-           TAKE sz_num (DROP dst_off s.vs_memory) /\
-           (cf.cf_opcode = RETURNDATACOPY ==>
-            w2n src_val + sz_num <= LENGTH (cf_source_data cf.cf_opcode s')) /\
-           TAKE sz_num (DROP (w2n src_val) (cf_source_data cf.cf_opcode s') ++
-                        REPLICATE sz_num 0w) =
-           TAKE sz_num (DROP (w2n src_val) (cf_source_data cf.cf_opcode s) ++
-                        REPLICATE sz_num 0w)
-     | NONE => T) ==>
-    cf_entry_sound bp dfg ml cf s'
-Proof
-  rw[cf_entry_sound_def, memloc_runtime_region_def] >>
-  BasicProvers.every_case_tac >> gvs[]
-QED
-
 (* step_inst for MSTORE gives mstore *)
 Triviality step_mstore_eq[local]:
   !fuel ctx inst s s'.
@@ -1621,35 +1502,6 @@ QED
 
 (* Memory doesn't shrink after mstore *)
 (* ===== MSTORE transfer case ===== *)
-
-(* For MSTORE with literal destination operand Lit n:
-   bp_get_write_location returns ml_offset = SOME (w2n n), ml_size = SOME 32,
-   ml_alloca = NONE, matching the runtime write destination exactly. *)
-Triviality bp_write_loc_mstore_lit[local]:
-  !bp inst n val_op.
-    inst.inst_opcode = MSTORE /\
-    inst.inst_operands = [Lit n; val_op] ==>
-    bp_get_write_location bp inst AddrSp_Memory =
-    <| ml_offset := SOME (w2n n); ml_size := SOME 32;
-       ml_alloca := NONE; ml_volatile := F |>
-Proof
-  rw[bp_get_write_location_def, mem_write_ops_def, bp_segment_from_ops_def,
-     LET_THM, is_alloca_op_def, is_raw_fmp_opcode_def,
-     venomEffectsTheory.write_effects_def] >>
-  simp[wordsTheory.dimword_def]
-QED
-
-(* Helper: ¬may_overlap with known offsets/sizes/alloca → arithmetic disjointness *)
-Triviality not_overlap_disjoint[local]:
-  !loc1 loc2 o1 s1 o2 s2.
-    ~may_overlap loc1 loc2 /\
-    loc1.ml_offset = SOME o1 /\ loc1.ml_size = SOME s1 /\
-    loc2.ml_offset = SOME o2 /\ loc2.ml_size = SOME s2 /\
-    loc1.ml_alloca = loc2.ml_alloca ==>
-    (s1 = 0 \/ s2 = 0 \/ o1 + s1 <= o2 \/ o2 + s2 <= o1)
-Proof
-  rw[may_overlap_def] >> BasicProvers.every_case_tac >> gvs[LET_THM]
-QED
 
 
 
