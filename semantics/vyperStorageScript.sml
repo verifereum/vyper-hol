@@ -213,11 +213,19 @@ Definition encode_value_def:
   encode_value NoneTV v = SOME [] /\
   encode_value (TupleTV tvs) (ArrayV (TupleV vs)) =
     encode_tuple 0 tvs vs /\
+  (* Default missing members structurally: an empty dynamic array writes its
+     header, preserving inactive slots reachable through captured places. *)
   encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) =
-    (let zeros = GENLIST (λi. (i, 0w)) (n * type_slot_size tv) in
-     case encode_static_array tv 0 sparse of
-     | SOME nonzeros => SOME (zeros ++ nonzeros)
-     | NONE => NONE) /\
+    (case encode_value tv (default_value tv) of
+     | NONE => NONE
+     | SOME defaults =>
+         (case encode_static_array tv 0 sparse of
+          | NONE => NONE
+          | SOME nonzeros =>
+              SOME (FLAT (GENLIST (λk.
+                if MEM k (MAP FST sparse) then []
+                else MAP (λ(off,s). (off + k * type_slot_size tv, s)) defaults)
+                n) ++ nonzeros))) /\
   encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV vs)) =
     (case encode_dyn_array tv 1 vs of
      | SOME slots => SOME ((0, n2w (LENGTH vs)) :: slots)
@@ -270,21 +278,35 @@ Definition encode_value_def:
      else NONE) /\
   encode_struct offset _ _ = NONE
 Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL (_, v) => value_size v
-    | INR (INL (_, _, vs)) => list_size value_size vs
-    | INR (INR (INL (_, _, sparse))) => list_size (pair_size (λx.0) value_size) sparse
-    | INR (INR (INR (INL (_, _, vs)))) => list_size value_size vs
-    | INR (INR (INR (INR (_, _, fields)))) => list_size (pair_size (λx.0) value_size) fields)` >>
+  WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+    | INL (tv, v) => (type_value_size tv, value_size v)
+    | INR (INL (_, tvs, vs)) =>
+        (list_size type_value_size tvs, list_size value_size vs)
+    | INR (INR (INL (tv, _, sparse))) =>
+        (type_value_size tv, list_size (pair_size (λx.0) value_size) sparse)
+    | INR (INR (INR (INL (tv, _, vs)))) =>
+        (type_value_size tv, list_size value_size vs)
+    | INR (INR (INR (INR (_, ftypes, fields)))) =>
+        (list_size (pair_size (list_size char_size) type_value_size) ftypes,
+         list_size (pair_size (λx.0) value_size) fields))` >>
   rw[struct_fields_size_lt, sparse_size_lt] >>
   irule LESS_EQ_LESS_TRANS >> qexists `list_size (pair_size (λx. x) value_size) sparse` >>
   rw[list_size_pair_0_le]
 End
 
 val encode_value_pre_def =
-  cv_auto_trans_pre
+  cv_auto_trans_pre_rec
     "encode_value_pre encode_tuple_pre encode_static_array_pre encode_dyn_array_pre encode_struct_pre"
-    encode_value_def;
+    encode_value_def
+    (WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+       | INL (tv, v) => (cv_size tv, cv_size v)
+       | INR (INL (_, tvs, vs)) => (cv_size tvs, cv_size vs)
+       | INR (INR (INL (tv, _, sparse))) => (cv_size tv, cv_size sparse)
+       | INR (INR (INR (INL (tv, _, vs)))) => (cv_size tv, cv_size vs)
+       | INR (INR (INR (INR (_, ftypes, fields)))) =>
+           (cv_size ftypes, cv_size fields))` >>
+     rw[cv_termination_simp] >>
+     gvs[cv_termination_simp, cv_size_def, cv_snd_def, cv_fst_def]);
 
 (* Keep recursive precondition schemas out of the ambient simplifier. Unfold
    only the goal, then clean up with cached logical/constructor rules and IHs. *)

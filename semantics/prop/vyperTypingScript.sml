@@ -251,6 +251,36 @@ Proof
   Cases_on `bd` >> simp[well_formed_type_value_def, type_slot_size_def]
 QED
 
+Theorem encode_default_value:
+  (∀tv. IS_SOME (encode_value tv (default_value tv))) ∧
+  (∀tvs offset.
+    IS_SOME (encode_tuple offset tvs (MAP default_value tvs))) ∧
+  (∀ftypes offset.
+    IS_SOME (encode_struct offset ftypes
+      (MAP (λ(id,t). (id,default_value t)) ftypes))) ∧
+  (∀p : string # type_value.
+    IS_SOME (encode_value (SND p) (default_value (SND p))))
+Proof
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.induction_of ``:type_value``)) >>
+  simp[default_value_def, default_value_tuple_MAP,
+       default_value_struct_MAP, encode_value_def, encode_base_to_slot_def,
+       IS_SOME_option_CASE] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac
+  >~ [`BaseTV bt`]
+  >- (Cases_on `bt` >>
+      simp[default_value_def, encode_value_def, encode_base_to_slot_def,
+           encode_dyn_bytes_slots_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[default_value_def, encode_value_def, encode_base_to_slot_def,
+           encode_dyn_bytes_slots_def])
+  >~ [`ArrayTV tv bd`]
+  >- (Cases_on `bd` >>
+      simp[default_value_def, encode_value_def, IS_SOME_option_CASE]) >>
+  Cases_on `p` >> gvs[encode_value_def, IS_SOME_option_CASE]
+QED
+
 Theorem value_has_type_equiv:
   (∀tv v. value_has_type tv v ⇒ IS_SOME (encode_value tv v)) ∧
   (∀tvs vs. values_have_types tvs vs ⇒ IS_SOME (encode_tuple 0 tvs vs)) ∧
@@ -267,7 +297,8 @@ Proof
   simp_tac (bool_ss ++ optionSimps.OPTION_ss ++ listSimps.LIST_ss)
     [Once encode_value_def, encode_base_to_slot_def,
      encode_dyn_bytes_slots_def, IS_SOME_option_CASE,
-     encode_IS_SOME_at_0, COND_RAND, COND_RATOR, LET_THM]
+     encode_IS_SOME_at_0, COND_RAND, COND_RATOR, LET_THM,
+     encode_default_value]
 QED
 
 (* ===== Derived typing properties ===== *)
