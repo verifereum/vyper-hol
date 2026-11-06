@@ -137,7 +137,7 @@ Theorem augassign_storage_load_clean_ptr:
   evaluate_type (get_tenv cx) ty = SOME tvt /\
   (!st. storage_read_live cx tr st slot tvt) /\ 0 < type_slot_size tvt /\
   ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
-  return_buf_frame d cenv sa s ==>
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?H tm t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
     eval_operand (Var out) t = SOME (typed_val_to_w256 tvt v) /\
@@ -170,8 +170,7 @@ Proof
   conj_tac
   >- (qpat_x_assum `t = _` kall_tac >> irule ghost_inv_load_frame >>
       qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[] >>
-      Cases_on `d` >> gvs[return_buf_frame_def, ret_pc_ok_def] >>
-      PairCases_on `x` >> gvs[return_buf_frame_def]) >>
+      gvs[ret_pc_ok_def]) >>
   conj_tac >- simp[ghost_kept_def] >>
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
