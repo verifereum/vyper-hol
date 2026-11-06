@@ -6,7 +6,7 @@ Ancestors
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
-  reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf
+  reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -2668,4 +2668,115 @@ Proof
     (get_params (HD fn.fn_blocks).bb_instructions))` by
     metis_tac[regional_entry_params_live_heads] >>
   gvs[stackPlanTypesTheory.operand_to_string_def]
+QED
+
+Theorem regional_popmany_fold_slots_layout[local]:
+  !xs acc ps.
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  let qs = SND (FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+          let (swap_ops, qs) =
+            if dist = 0 then ([], ps) else do_swap dist ps in
+          (ops ++ swap_ops ++ [SOPop 1],
+           qs with ps_stack := stack_pop 1 qs.ps_stack)) (acc,ps) xs) in
+  plan_slots_bounded sb qs /\
+  spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  Induct >> simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  fs[LET_THM] >> Cases_on `stack_get_depth h ps.ps_stack`
+  >- (simp[] >> first_x_assum irule >> simp[]) >>
+  rename1 `stack_get_depth h ps.ps_stack = SOME d` >>
+  drule stack_get_depth_props >> strip_tac >>
+  drule_all do_swap_layout_wf >> strip_tac >>
+  `plan_slots_bounded sb (SND (do_swap d ps))` by
+    (irule do_swap_plan_slots_bounded >> metis_tac[PAIR]) >>
+  Cases_on `d = 0`
+  >- (simp[] >> first_x_assum irule >> gvs[plan_slots_bounded_def]) >>
+  simp[] >> pairarg_tac >> gvs[] >> first_x_assum irule >>
+  gvs[plan_slots_bounded_def]
+QED
+
+Theorem regional_popmany_slots_layout:
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  plan_slots_bounded sb (SND (popmany_plan vs ps)) /\
+  spill_alloc_layout_wf (SND (popmany_plan vs ps)).ps_alloc
+    (SND (popmany_plan vs ps)).ps_spilled
+Proof
+  strip_tac >> Cases_on `vs` >- simp[popmany_plan_def] >>
+  simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (`plan_slots_bounded sb (SND (do_swap (LENGTH (h::t)) ps))` by
+            (irule do_swap_plan_slots_bounded >> metis_tac[PAIR]) >>
+          `LENGTH (h::t) < LENGTH ps.ps_stack` by
+            (irule contiguous_top_stack_bound >> simp[]) >>
+          drule_all do_swap_layout_wf >> strip_tac >>
+          pairarg_tac >> gvs[plan_slots_bounded_def] >> metis_tac[]) >>
+      simp[popmany_individual_def, LET_THM] >>
+      irule (SRULE[LET_THM] regional_popmany_fold_slots_layout) >> simp[]) >>
+  simp[popmany_individual_def, LET_THM] >>
+  irule (SRULE[LET_THM] regional_popmany_fold_slots_layout) >> simp[]
+QED
+
+Theorem regional_optimistic_slots_layout:
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  plan_slots_bounded sb (SND (optimistic_swap_plan dfg inst nl next_term ps)) /\
+  spill_alloc_layout_wf (SND (optimistic_swap_plan dfg inst nl next_term ps)).ps_alloc
+    (SND (optimistic_swap_plan dfg inst nl next_term ps)).ps_spilled
+Proof
+  strip_tac >> simp[optimistic_swap_plan_def] >>
+  Cases_on `next_term` >- simp[] >>
+  Cases_on `inst.inst_outputs = []` >- simp[] >>
+  Cases_on `nl = []` >- simp[] >>
+  Cases_on `operand_equiv dfg (Var (LAST inst.inst_outputs)) (Var (LAST nl))`
+  >- simp[] >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >- simp[] >>
+  rename1 `stack_get_depth _ _ = SOME d` >> simp[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  drule_all do_swap_layout_wf >> strip_tac >> simp[] >>
+  irule do_swap_plan_slots_bounded >> metis_tac[PAIR]
+QED
+
+Theorem regional_prepare_params_slots_layout:
+  prepare_params_plan lv fn ps = (ops,qs) /\
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  plan_slots_bounded sb qs /\ spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  strip_tac >> qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  simp[prepare_params_plan_def, LET_THM, parameter_stack_fold] >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `popmany_plan victims installed` >>
+  `plan_slots_bounded sb installed /\
+   spill_alloc_layout_wf installed.ps_alloc installed.ps_spilled` by
+    simp[Abbr `installed`, plan_slots_bounded_def] >>
+  drule_all regional_popmany_slots_layout >>
+  disch_then (qspec_then `victims` mp_tac) >> simp[] >> strip_tac >>
+  drule_all regional_optimistic_slots_layout >> metis_tac[SND]
+QED
+
+Theorem regional_prepare_params_initial_wf:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  generated_plan_state_wf_marked sb qs
+Proof
+  strip_tac >>
+  drule_all regional_prepare_params_initial_spilled >> strip_tac >>
+  drule_all regional_prepare_params_initial_distinct >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `prepare_params_plan _ _ initial` >>
+  `plan_slots_bounded sb initial /\
+   spill_alloc_layout_wf initial.ps_alloc initial.ps_spilled` by
+    simp[Abbr `initial`, init_cleanup_plan_state_def, init_plan_state_def,
+      init_spill_alloc_def, plan_slots_bounded_def, alloc_slots_bounded_def,
+      spill_alloc_layout_wf_def] >>
+  drule_all regional_prepare_params_slots_layout >> strip_tac >>
+  simp[generated_plan_state_wf_marked_def, FILTER_ALL_DISTINCT]
 QED
