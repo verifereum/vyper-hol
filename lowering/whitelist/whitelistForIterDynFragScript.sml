@@ -445,9 +445,10 @@ Proof
       qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       qpat_x_assum `MEM _ (fn_insts func)` mp_tac >>
       simp[mk_inst_def] >> rpt strip_tac >> simp[not_fresh_at_def] >>
-      rpt strip_tac >> qpat_x_assum `!x. arr_op = Var x ==> _` drule >>
+      rpt strip_tac >> rename1 `x = STRING #"%" (toString m)` >>
+      qpat_x_assum `!x. arr_op = Var x ==> _` drule >>
       rewrite_tac[not_fresh_at_def] >>
-      disch_then (qspec_then `n'` mp_tac) >> simp[])
+      disch_then (qspec_then `m` mp_tac) >> simp[])
   >- gvs[ALL_DISTINCT]
   >- (rpt strip_tac >> gvs[] >> fs[not_fresh_at_def])
   >- (rpt strip_tac >> qpat_x_assum `not_fresh_at st _` mp_tac >>
