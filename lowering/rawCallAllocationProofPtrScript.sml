@@ -458,7 +458,9 @@ Theorem raw_call_outbuf_positive_stage:
         regions_disjoint dst cap a len)) /\
     (?ob. sa.cs_next_id < sb.cs_next_id /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (ob,((cap+31) DIV 32)*32+32) /\
-      eval_operand ov u = SOME (n2w ob) /\ ob+(((cap+31) DIV 32)*32+32) < dimword(:256) /\
+      eval_operand ov u = SOME (n2w ob) /\
+      eval_operand op u = SOME (n2w (ob+32)) /\
+      ob+(((cap+31) DIV 32)*32+32) < dimword(:256) /\
       (!name a len. local_region cenv es.scopes s name a len ==>
         regions_disjoint ob (((cap+31) DIV 32)*32+32) a len) /\
       (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
@@ -583,7 +585,9 @@ Theorem raw_call_outbuf_stage:
         regions_disjoint dst cap a len)) /\
     (?ob bytes. sa.cs_next_id < sb.cs_next_id /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (ob,bytes) /\
-      eval_operand ov u = SOME (n2w ob) /\ ob+bytes < dimword(:256) /\
+      eval_operand ov u = SOME (n2w ob) /\
+      eval_operand op u = SOME (n2w (if cap = 0 then ob else ob+32)) /\
+      ob+bytes < dimword(:256) /\
       bytes = (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
       (!name a len. local_region cenv es.scopes s name a len ==>
         regions_disjoint ob bytes a len) /\
@@ -594,10 +598,13 @@ Proof
   >- (gvs[] >> drule_all raw_call_outbuf_zero_stage >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
       qexistsl_tac [`H`, `un`, `u`, `x`, `x`] >> simp[] >>
-      conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >> metis_tac[]) >>
+      conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >>
+      gvs[wordsTheory.n2w_11] >> metis_tac[]) >>
   `0 < cap` by decide_tac >> gvs[] >>
   drule_all (SIMP_RULE (srw_ss()) [arithmeticTheory.MULT_COMM] raw_call_outbuf_positive_stage) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `ob+32 < dimword(:256)` by decide_tac >>
+  `dst = ob+32` by fs[wordsTheory.n2w_11] >>
   qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
   conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >> metis_tac[]
 QED
@@ -640,7 +647,9 @@ Theorem raw_call_outbuf_ready_stage:
         regions_disjoint dst cap a len)) /\
     (?ob bytes. sa.cs_next_id < sb.cs_next_id /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (ob,bytes) /\
-      eval_operand ov u = SOME (n2w ob) /\ ob+bytes < dimword(:256) /\
+      eval_operand ov u = SOME (n2w ob) /\
+      eval_operand op u = SOME (n2w (if cap = 0 then ob else ob+32)) /\
+      ob+bytes < dimword(:256) /\
       bytes = (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
       (!name a len. local_region cenv es.scopes s name a len ==>
         regions_disjoint ob bytes a len) /\
@@ -657,6 +666,9 @@ Proof
        ptrDisciplineTheory.op_taint_def, ghost_kept_def]) >>
   `op_prov H data_op = SOME (region_base,sz)` by
     (Cases_on `data_op` >> fs[ptrDisciplineTheory.op_prov_def, ghost_kept_def]) >>
+  `(if cap = 0 then ob else ob+32) < dimword(:256)` by
+    (Cases_on `cap = 0` >> gvs[] >> decide_tac) >>
+  `dst = (if cap = 0 then ob else ob+32)` by fs[wordsTheory.n2w_11] >>
   qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
   reverse conj_tac
   >- (conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >> gvs[] >> metis_tac[]) >>
@@ -720,7 +732,9 @@ Theorem raw_call_outbuf_ready_outcome:
           regions_disjoint dst cap a len)) /\
       (?ob bytes. sa.cs_next_id < sb.cs_next_id /\
         FLOOKUP u.vs_allocas sa.cs_next_id = SOME (ob,bytes) /\
-        eval_operand ov u = SOME (n2w ob) /\ ob+bytes < dimword(:256) /\
+        eval_operand ov u = SOME (n2w ob) /\
+        eval_operand op u = SOME (n2w (if cap = 0 then ob else ob+32)) /\
+        ob+bytes < dimword(:256) /\
         bytes = (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
         (!name a len. local_region cenv ee.scopes t name a len ==>
           regions_disjoint ob bytes a len) /\
@@ -762,7 +776,9 @@ Resume raw_call_outbuf_ready_outcome[normal]:
         regions_disjoint dst cap a len)) /\
     (?ob bytes. sa.cs_next_id < sb.cs_next_id /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (ob,bytes) /\
-      eval_operand ov u = SOME (n2w ob) /\ ob+bytes < dimword(:256) /\
+      eval_operand ov u = SOME (n2w ob) /\
+      eval_operand op u = SOME (n2w (if cap = 0 then ob else ob+32)) /\
+      ob+bytes < dimword(:256) /\
       bytes = (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
       (!name a len. local_region cenv (es_end with gas_obs := []).scopes t name a len ==>
         regions_disjoint ob bytes a len) /\
