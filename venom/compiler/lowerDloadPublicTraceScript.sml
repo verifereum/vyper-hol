@@ -6,6 +6,32 @@ Ancestors
   lowerDloadSafetyLocations venomFnScheduleRunner contextCodegenRel passSharedDefs lowerDloadSafetyRelation codegenRel lowerDloadDefs irSupply ptrDiscipline pointerConfinedDefs memLocDefs pred_set unitShapeDefs
   venomExecSemantics venomState venomInst finite_map list words
 
+Theorem ld_dloadbytes_prefix_observations:
+  X = [<|inst_id := ai; inst_opcode := ADD;
+         inst_operands := [off; Label "code_end"]; inst_outputs := [z]|>;
+       <|inst_id := ci; inst_opcode := CODECOPY;
+         inst_operands := [dest; Var z; len]; inst_outputs := []|>] /\
+  dest <> Var z /\ len <> Var z /\
+  ld_prefix C' fn' X p 1 t0 t1 ==>
+  eval_operand dest t1 = eval_operand dest t0 /\
+  eval_operand len t1 = eval_operand len t0 /\
+  t1.vs_alloca_next = t0.vs_alloca_next /\
+  t1.vs_code = t0.vs_code /\ t1.vs_labels = t0.vs_labels /\
+  ?ow basew. eval_operand off t0 = SOME ow /\
+    eval_operand (Label "code_end") t0 = SOME basew /\
+    eval_operand (Var z) t1 = SOME (ow + basew)
+Proof
+  strip_tac >>
+  dxrule (ld_prefix_predecessor |> Q.INST [`h` |-> `0`] |> SRULE []) >>
+  disch_then (qx_choose_then `v` (qx_choose_then `w` strip_assume_tac)) >>
+  gvs[ld_prefix_zero] >>
+  qpat_x_assum `step_inst 0 _ _ _ = OK w` mp_tac >>
+  simp[step_inst_non_invoke, Once step_inst_base_def, exec_pure2_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  map_every Cases_on [`dest`, `len`] >>
+  gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
 Theorem ld_dloadbytes_trace_operands:
   X = [<|inst_id := ai; inst_opcode := ADD;
          inst_operands := [off; Label "code_end"]; inst_outputs := [z]|>;
@@ -24,17 +50,10 @@ Theorem ld_dloadbytes_trace_operands:
     t1.vs_code = t0.vs_code /\ t1.vs_labels = t0.vs_labels
 Proof
   strip_tac >>
-  dxrule (ld_prefix_predecessor |> Q.INST [`h` |-> `0`] |> SRULE []) >>
-  disch_then (qx_choose_then `v` (qx_choose_then `w` strip_assume_tac)) >>
-  gvs[ld_prefix_zero] >>
-  qpat_x_assum `step_inst 0 _ _ _ = OK w` mp_tac >>
-  simp[step_inst_non_invoke, Once step_inst_base_def, exec_pure2_def] >>
-  strip_tac >> gvs[] >>
+  drule_all ld_dloadbytes_prefix_observations >> strip_tac >>
   qpat_x_assum `step_inst fuel _ _ _ = OK u` mp_tac >>
   simp[step_inst_non_invoke, Once step_inst_base_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  map_every Cases_on [`dest`, `len`] >>
-  gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   metis_tac[]
 QED
 
