@@ -504,16 +504,22 @@ QED
    RETURNDATACOPY is in bb, so generate_block_plan would have rejected the
    replay (revert_block_spills) had the instruction ops, of which these
    are a suffix, held one.  JMP target inventory (pending_inventory_wf):
-   the target stack is input_vars_from of the target's live-in set, which
-   holds each variable once once live_update dedupes uses (first
-   occurrence; ALL_DISTINCT live ==> ALL_DISTINCT (live_update defs uses
-   live)).  Without that, a target like [x; x; y15..y0] needs one slot
-   more than the 17-slot stack, and reorder_one's do_swap reads past the
-   stack's end.  With distinct targets, all on the stack or spilled, the
-   JMP plan restores every spilled target first, and the reorder keeps
-   the stack's length, so no swap reaches past the stack.  OPEN: a dead OFFSET
-   output is pushed and never popped (generate_offset_plan), which leaves
-   a slot at RET; this conjunct needs that excluded.  The
+   the target stack is input_vars_from of the target's live-in set, and
+   live_update keeps each variable once (first occurrence, like Python's
+   OrderedSet.update; livenessDefsTheory.live_update_ALL_DISTINCT), so
+   ALL_DISTINCT target_stack (at a join, input_vars_from puts each PHI's
+   operand from bb in place of its output; phi_uses_disjoint in
+   codegen_ready_fn keeps those apart from each other; how they relate
+   to the non-PHI live-in is for the proof to settle).  Distinct targets
+   that are all on the stack or spilled (coverage) give pending_inventory_wf target_stack ps, and
+   ALL_DISTINCT target_stack /\ pending_inventory_wf target_stack ps ==>
+   LENGTH target_stack <=
+     LENGTH (SND (restore_spilled_plan target_stack ps)).ps_stack:
+   the JMP plan restores every spilled target first, and reorder_plan
+   keeps the stack's length, so it never calls do_swap with a distance at
+   or past the stack's length.  A dead OFFSET
+   output would be pushed and never popped (generate_offset_plan), leaving
+   a slot at RET; offset_outputs_used (codegen_ready_fn) excludes it.  The
    marker clauses hold since no instruction has the marker as an operand,
    and normalize_operand only follows ASSIGNs of operands. *)
 Theorem block_plan_state_static:
