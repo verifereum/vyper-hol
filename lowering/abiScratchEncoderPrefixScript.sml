@@ -33,7 +33,7 @@ Proof
        abi_scratch_final_slot_frame) >> simp[]) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   pure_rewrite_tac [abi_sites_encoder_complex_prefix_post_def] >>
-  qexists_tac `slot` >> simp[]
+  qexists_tac `slot` >> fs[abi_sites_decoder_ids_def]
 QED
 
 Theorem abi_scratch_encoder_prefix_source:
