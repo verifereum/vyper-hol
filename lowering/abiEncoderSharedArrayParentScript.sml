@@ -107,7 +107,7 @@ Proof
   disch_then (qx_choose_then `raw` (qx_choose_then `slot` strip_assume_tac)) >>
   gvs[abi_encoder_member_phase_raw_def] >>
   simp_tac bool_ss [abi_encoder_complex_prefix_post_inst_idx, abi_sites_encoder_complex_prefix_post_def] >>
-  qexists_tac `slot` >> simp[]
+  qexists_tac `slot` >> fs[abi_sites_decoder_ids_def]
 QED
 
 Theorem abi_encoder_complex_prefix_raw_allocated:
