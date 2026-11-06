@@ -1317,6 +1317,20 @@ Proof
   Cases_on `at` >> gvs[operand_val_def, frame_view_def]
 QED
 
+Theorem alias_certificate_endpoint:
+  EL 0 states = vs /\ EL n states = vs' /\
+  (!at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+    alias_certificate fn dfg lo ps states n at) /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) ==>
+  !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+    operand_val (frame_view fn ra vs') lo at =
+    operand_val (frame_view fn ra vs') lo (normalize_operand dfg [] at)
+Proof
+  metis_tac[alias_certificate_sound]
+QED
+
 (* Universal interface tests: a root write blocks the survival constructor,
    but a subsequent ASSIGN may repair the destination from a reflexive source,
    without needing any certificate for the destination at the preceding cut. *)
@@ -6478,6 +6492,15 @@ Definition alias_buried_path_def:
     SND (THE (alias_buried_plan phi n flip idx (alias_buried_path phi n flip rest))))
 End
 
+Theorem alias_buried_zero_def:
+  dfg_get_def (dfg_build_function (alias_buried_fn F 0 F)) "buried" =
+    SOME (mk_inst 50 ASSIGN [Var "r"] ["buried"]) /\
+  dfg_get_def (dfg_build_function (alias_buried_fn F 0 F)) "r" =
+    SOME (mk_inst 3 CALLDATASIZE [] ["r"])
+Proof
+  EVAL_TAC
+QED
+
 Theorem alias_buried_zero_probe:
   normalize_operand (dfg_build_function (alias_buried_fn F 0 F)) []
     (Var "buried") = Var "r" /\
@@ -6485,7 +6508,13 @@ Theorem alias_buried_zero_probe:
     [Var "buried"; Var "z"] /\
   ~plan_holds (alias_buried_path F 0 F [6; 4; 3; 1; 0]) (Var "buried")
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac
+  >- (simp[Once normalize_operand_def, GSYM dfg_get_def_def,
+           alias_buried_zero_def, mk_inst_def] >>
+      simp[Once normalize_operand_def, GSYM dfg_get_def_def,
+           alias_buried_zero_def, mk_inst_def]) >>
+  conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 
 Definition alias_buried_path_ok_def:
