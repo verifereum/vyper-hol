@@ -3751,28 +3751,19 @@ Proof
   metis_tac[alias_block_insts_final_control_spill_support, MEM]
 QED
 
-Theorem alias_lineage_join_historical_spill_support:
-  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
-  lineage_entry liveness dfg cfg fn ps0 pred lbl ps /\
-  lookup_block lbl fn.fn_blocks = SOME bb /\
-  1 < LENGTH (cfg_preds_of cfg lbl) ==>
+Theorem alias_lineage_historical_spill_support:
+  wf_function fn /\
+  lineage_entry liveness dfg cfg fn ps0 pred lbl ps ==>
   ?pb. lookup_block pred fn.fn_blocks = SOME pb /\
     (!at. at IN FDOM ps.ps_spilled ==> ?v. at = Var v /\
       MEM v (live_vars_at liveness pred (LENGTH pb.bb_instructions)))
 Proof
   strip_tac >> gvs[lineage_entry_def] >>
-  `MEM pred (cfg_preds_of (cfg_analyze fn) lbl)` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
-  drule_all alias_ready_join_predecessor_jmp >> strip_tac >>
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   `pb.bb_label = pred /\ MEM pb fn.fn_blocks` by
     metis_tac[lookup_block_label, lookup_block_MEM] >>
-  `inst_wf (LAST pb.bb_instructions)` by
-    (fs[codegen_ready_fn_def, fn_inst_wf_def] >>
-     metis_tac[LAST_MEM, NULL_EQ]) >>
-  `(LAST pb.bb_instructions).inst_outputs = []` by
-    gvs[inst_wf_def] >>
-  metis_tac[alias_block_plan_final_control_spill_support, MEM]
+  `bb_well_formed pb` by metis_tac[wf_function_def] >>
+  metis_tac[alias_block_plan_final_spill_support]
 QED
 
 Theorem alias_lineage_join_selected_spill_support:
@@ -3785,9 +3776,8 @@ Theorem alias_lineage_join_selected_spill_support:
     MEM v (input_vars_from pred bb.bb_instructions (live_vars_at liveness lbl 0))
 Proof
   strip_tac >> gvs[] >>
-  drule_all (SRULE[] (Q.INST [`cfg` |-> `cfg_analyze fn`]
-    alias_lineage_join_historical_spill_support)) >> strip_tac >>
   `wf_function fn` by fs[codegen_ready_fn_def] >>
+  drule_all alias_lineage_historical_spill_support >> strip_tac >>
   `cfg_reachable_of (cfg_analyze fn) pred /\
    MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
     (gvs[lineage_entry_def] >> metis_tac[alias_lineage_reachable]) >>
@@ -8540,6 +8530,10 @@ Proof
   >- (Cases_on `b` >> Cases_on `phi` >>
       rewrite_tac[Ntimes alias_buried_path_def 4] >>
       CONV_TAC (LHS_CONV (funpow 12 RAND_CONV computeLib.EVAL_CONV)) >>
+      CONV_TAC (LHS_CONV (funpow 11 RAND_CONV
+        (REWR_CONV alias_buried_plan_def))) >>
+      CONV_TAC (LHS_CONV (funpow 11 RAND_CONV
+        (computeLib.RESTR_EVAL_CONV [``generate_block_plan``]))) >>
       CONV_TAC (LHS_CONV (funpow 9 RAND_CONV computeLib.EVAL_CONV)) >>
       CONV_TAC (LHS_CONV (funpow 6 RAND_CONV computeLib.EVAL_CONV)) >>
       CONV_TAC (LHS_CONV (funpow 5 RAND_CONV
