@@ -6069,6 +6069,32 @@ Proof
     metis_tac[reorder_plan_stack_support] >>
   metis_tac[restore_spilled_plan_stack_support]
 QED
+(* Final-result support does not assert safety of intermediate deep swaps. *)
+Theorem restore_reorder_success_stack_support:
+  !targets ps rops mid dfg ops qs x.
+    restore_spilled_plan targets ps = (rops,mid) /\
+    reorder_plan dfg targets mid = (ops,qs) /\
+    stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack /\
+    MEM x qs.ps_stack ==>
+    MEM x targets \/ MEM x ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `LENGTH targets <= LENGTH mid.ps_stack`
+  >- (`MEM x targets \/ MEM x mid.ps_stack` by
+        metis_tac[reorder_plan_stack_support] >>
+      metis_tac[restore_spilled_plan_stack_support]) >>
+  `FDOM mid.ps_spilled = FDOM ps.ps_spilled DIFF set targets` by
+    (qspecl_then [`targets`, `ps`] mp_tac restore_spilled_plan_domain >> simp[]) >>
+  `DISJOINT (set targets) (FDOM mid.ps_spilled)` by ASM_SET_TAC[] >>
+  `LENGTH mid.ps_stack <= LENGTH targets` by decide_tac >>
+  `LENGTH qs.ps_stack <= LENGTH targets` by
+    metis_tac[reorder_plan_target_ceiling] >>
+  `LENGTH qs.ps_stack - LENGTH targets = 0` by decide_tac >>
+  `qs.ps_stack = targets` by
+    (qpat_x_assum `stack_pop _ _ ++ _ = _` mp_tac >> simp[stack_pop_def]) >>
+  gvs[]
+QED
+
 
 Theorem pop_swap_other_elem_count:
   !x y ps d.
