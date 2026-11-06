@@ -6,7 +6,7 @@ Ancestors
   abiEncoderWindowRun abiEncodeWindowBuiltin abiEncoderWindowContract
   abiEncoderWindow abiEncoderRegisteredEffect abiDecoderContract abiBuiltinEncodeCode
   abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderLoop compileEnv
-  exprLoweringProps words list finite_map abiBuiltinEncodeAllocate emitHelper
+  exprLoweringProps words list finite_map abiBuiltinEncodeAllocate emitHelper emitHelperProps
 
 Theorem abi_encode_none_setup_allocate[local]:
   abi_builtin_encode_setup NONE maxlen st =
@@ -15,6 +15,39 @@ Proof
   simp[abi_builtin_encode_setup_allocate, abi_builtin_encode_method_id_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[]
+QED
+
+Theorem abi_encode_none_setup_buffer_old:
+  abi_builtin_encode_setup NONE maxlen st = (ops,ready) ==>
+  (!x. FST ops = Var x ==> not_fresh_at ready x)
+Proof
+  pure_rewrite_tac[abi_encode_none_setup_allocate] >> strip_tac >>
+  drule (cj 1 abi_builtin_encode_allocate_live) >>
+  Cases_on `FST ops` >>
+  simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+    not_fresh_at_def]
+QED
+
+Theorem abi_encode_none_setup_buffer_eval:
+  abi_builtin_encode_setup NONE maxlen st = (ops,ready) /\
+  abi_encoder_window_result ctx func ready body_end out at av d s t /\
+  eval_operand (FST ops) s = SOME w ==>
+  eval_operand (FST ops) t = SOME w
+Proof
+  strip_tac >>
+  `FST ops = Var ("%" ++ toString st.cs_next_var)` by
+    (qpat_x_assum `abi_builtin_encode_setup NONE _ _ = _` mp_tac >>
+     pure_rewrite_tac[abi_encode_none_setup_allocate] >> strip_tac >>
+     drule abi_builtin_encode_allocate_trace >> strip_tac >>
+     drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> simp[]) >>
+  drule abi_encode_none_setup_buffer_old >>
+  disch_then (qspec_then `"%" ++ toString st.cs_next_var` mp_tac) >>
+  pure_asm_rewrite_tac[] >> simp_tac bool_ss [] >> strip_tac >>
+  qpat_x_assum `eval_operand (FST ops) s = _` mp_tac >>
+  pure_asm_rewrite_tac[eval_operand_def] >> strip_tac >>
+  pure_asm_rewrite_tac[eval_operand_def] >>
+  drule_all abi_encoder_window_result_vars >> simp[]
 QED
 
 Theorem abi_encode_window_none_phases:
@@ -81,26 +114,12 @@ Proof
   qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE
       [window_strong_result_def, abi_encoder_window_result_def]) >>
-  `abi_decoder_operand_live ready.cs_next_var (FST ops)` by
-    (irule (cj 1 abi_builtin_encode_allocate_live) >>
-     qexistsl [`32`, `outsz`, `st`] >>
-     qpat_x_assum `abi_builtin_encode_setup NONE _ _ = _` mp_tac >>
-     pure_asm_rewrite_tac[abi_encode_none_setup_allocate] >> simp_tac bool_ss []) >>
   `eval_operand (FST ops) actual = SOME (n2w p)` by
-    (Cases_on `FST ops`
-     >- (qpat_x_assum `eval_operand (Lit _) prepared = _` mp_tac >>
-         simp_tac std_ss [eval_operand_def])
-     >- (qpat_x_assum `abi_decoder_operand_live ready.cs_next_var (Var _)` mp_tac >>
-         simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
-         strip_tac >>
-         qpat_x_assum `eval_operand (Var _) prepared = _` mp_tac >>
-         pure_rewrite_tac[eval_operand_def] >> strip_tac >>
-         pure_rewrite_tac[eval_operand_def] >> first_x_assum irule >>
-         simp_tac std_ss [not_fresh_at_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
-     qpat_x_assum `eval_operand (Label _) prepared = _` mp_tac >>
-     simp_tac std_ss [eval_operand_def] >>
-     qpat_x_assum `actual.vs_labels = prepared.vs_labels` SUBST1_TAC >>
-     simp_tac bool_ss []) >>
+    (irule abi_encode_none_setup_buffer_eval >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     drule window_strong_result_public >> strip_tac >>
+     goal_assum (drule_at Any)) >>
   drule_all abi_encode_finish_reach_open >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `mem_bytes_at (p+32) (LENGTH (enc at av)) actual'.vs_memory = enc at av` by
