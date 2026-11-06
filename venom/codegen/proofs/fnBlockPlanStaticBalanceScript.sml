@@ -432,14 +432,46 @@ Proof
   impl_tac >- metis_tac[reorder_plan_no_push_var] >> simp[]
 QED
 
+Theorem spill_fold_trace_weight[local]:
+  !items acc offs al.
+    trace_weight (FST (FOLDL (\(ops, offsets, alloc) item.
+      let (off, alloc') = alloc_spill_slot alloc in
+      (ops ++ [SOSpill off], SNOC off offsets, alloc'))
+      (acc,offs,al) items)) = trace_weight acc - &(LENGTH items)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `alloc_spill_slot al` >>
+  fs[LET_THM, trace_weight_append, trace_weight_def, stack_op_weight_def] >>
+  qpat_x_assum `!acc offs al. _` kall_tac >>
+  simp[arithmeticTheory.ADD1] >> intLib.ARITH_TAC
+QED
+
+Theorem restore_map_trace_weight[local]:
+  !xs f. trace_weight (MAP (\i. SORestore (f i)) xs) = &(LENGTH xs)
+Proof
+  Induct >> simp[trace_weight_def, stack_op_weight_def, arithmeticTheory.ADD1] >>
+  qpat_x_assum `!f. _` kall_tac >> intLib.ARITH_TAC
+QED
+
 Theorem do_swap_signed_balance:
-  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops, qs) ==>
+  do_swap dist ps = (ops, qs) ==>
   &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
 Proof
-  strip_tac >> drule do_swap_wf_len >>
-  disch_then (qspec_then `FEMPTY` mp_tac) >> simp[] >> strip_tac >>
-  drule prefix_wf_signed_balance >>
-  impl_tac >- metis_tac[do_swap_no_push_var] >> simp[]
+  Cases_on `dist = 0`
+  >- (gvs[do_swap_def, trace_weight_def]) >>
+  Cases_on `dist <= 16`
+  >- (simp[do_swap_def] >> rpt strip_tac >>
+      gvs[trace_weight_def, stack_op_weight_def]) >>
+  simp[do_swap_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  mp_tac (Q.SPECL [`top_n (dist+1) ps.ps_stack`, `[]`, `[]`, `ps.ps_alloc`]
+    (INST_TYPE [alpha |-> ``:operand``] (SRULE [LET_THM] spill_fold_trace_weight))) >>
+  simp[trace_weight_def] >> strip_tac >>
+  simp[trace_weight_append, trace_weight_def, stack_op_weight_def,
+       restore_map_trace_weight] >>
+  gvs[top_n_def, listTheory.LENGTH_TAKE_EQ] >>
+  qpat_x_assum `FOLDL _ _ _ = _` kall_tac >>
+  Cases_on `dist + 1 <= LENGTH ps.ps_stack` >> gvs[] >> intLib.ARITH_TAC
 QED
 
 Theorem optimistic_swap_plan_signed_balance:
