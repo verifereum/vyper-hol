@@ -350,3 +350,45 @@ Proof
   qx_gen_tac `out` >> PairCases_on `out` >> simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
   metis_tac[first_emission_return]
 QED
+
+Theorem first_emission_stage_intcall_args:
+  !ce vals flags tys a x b. compile_stage_intcall_args ce vals flags tys a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  recInduct compile_stage_intcall_args_ind >> rpt conj_tac
+  >- (simp_tac bool_ss [compile_stage_intcall_args_def] >> metis_tac[first_emission_return])
+  >- (rpt gen_tac >> strip_tac >> simp_tac bool_ss [compile_stage_intcall_args_def] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- MATCH_ACCEPT_TAC first_emission_unwrap_value >> gen_tac >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- first_assum ACCEPT_TAC >> gen_tac >> metis_tac[first_emission_return])
+  >- (rpt gen_tac >> strip_tac >>
+      simp_tac bool_ss [compile_stage_intcall_args_def, LET_THM] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- MATCH_ACCEPT_TAC first_emission_unwrap_value >> gen_tac >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (POP_ASSUM_LIST (K all_tac) >>
+          simp_tac bool_ss [compile_alloc_buffer_def] >> call_weak_tac) >>
+      gen_tac >> rule_assum_tac (SRULE []) >>
+      ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+      >- (IF_CASES_TAC
+          >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+          IF_CASES_TAC
+          >- (ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+              >- (ho_match_mp_tac first_emission_strong >> MATCH_ACCEPT_TAC first_emission_store_bytestring) >>
+              metis_tac[first_emission_return]) >>
+          MATCH_ACCEPT_TAC first_emission_store_memory) >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- first_assum ACCEPT_TAC >> gen_tac >> metis_tac[first_emission_return]) >>
+  rpt gen_tac >> strip_tac >>
+  asm_simp_tac bool_ss [compile_stage_intcall_args_def] >>
+  (ho_match_mp_tac first_emission_bind >> conj_tac
+   >- MATCH_ACCEPT_TAC first_emission_unwrap_value >> gen_tac >>
+   ho_match_mp_tac first_emission_bind >> conj_tac
+   >- first_assum ACCEPT_TAC >> gen_tac >> metis_tac[first_emission_return])
+QED
