@@ -131,6 +131,9 @@ Definition intcall_entry_def:
                 (base_ptr rbuf) /\
          eval_operand rbuf.buf_operand t = SOME (n2w off) /\
          FLOOKUP t.vs_allocas aid = SOME (off,rbuf.buf_size) /\
+         aid = st1.cs_next_id /\
+         (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+                inst.inst_id = aid) /\
          sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
          (0 < rc ==>
           arg_ops = invoke_args /\
@@ -174,6 +177,8 @@ Definition intcall_entry_def:
            FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
            ?aid off asz.
              FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+             (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+                    inst.inst_id = aid) /\
              sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
              off <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
              w2n (EL ((if has_rb then 1 else 0) + i) argv) + psz <=
