@@ -6890,6 +6890,30 @@ Proof
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
+Theorem place_store_emit_slot_path:
+  emit_void (if tr then TSTORE else SSTORE) [dst;src] sa = ((),sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME w ==>
+  gas_marked_path F ctx func s 0
+    (OK (((if tr then tstore else sstore) dw w s)
+      with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  sb.cs_current_bb = sa.cs_current_bb
+Proof
+  strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by gvs[same_blocks_def] >>
+  reverse conj_tac >- simp[] >>
+  irule place_store_emitted_seq_path >> conj_tac >- simp[] >>
+  qexists_tac `sa` >>
+  Cases_on `tr` >>
+  simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
+       step_inst_base_def, exec_write2_def, eval_operands_def]
+QED
+
 (* Counted suffix execution consumes only the live part of the encoded leaf.
    In particular n need not cover dead destination capacity words. *)
 Theorem place_store_memory_leaf_run:
