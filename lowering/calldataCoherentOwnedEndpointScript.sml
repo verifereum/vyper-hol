@@ -342,3 +342,12 @@ Proof
       abi_decode_le_guard_def, comp_return_def] >>
   fs[abi_decoder_metadata_def, value_has_type_def, all_have_type_EVERY]
 QED
+
+Theorem calldata_static_clamped_child_exclusion[local]:
+  ~is_abi_dynamic ce.ce_struct_fields ty /\
+  dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) ==>
+  !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem
+Proof
+  rpt strip_tac >> drule calldata_zero_array_translation >> strip_tac >>
+  gvs[is_abi_dynamic_def, Once type_to_abi_dec_info_def, dec_info_needs_clamp_def]
+QED
