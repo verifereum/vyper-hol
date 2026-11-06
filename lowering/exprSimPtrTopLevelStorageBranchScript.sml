@@ -207,3 +207,126 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   metis_tac[arithmeticTheory.ADD_COMM, arithmeticTheory.ADD_ASSOC]
 QED
+
+
+Theorem toplevel_local_footprint_forward[local]:
+  stmt_state_rel ctx fn cenv cx es s ==>
+  (!name b sz i. local_region cenv es.scopes s name b sz /\
+    b <= i /\ i < b+sz ==> i NOTIN writes) ==>
+  !name entry p sz w.
+    lookup_scopes name es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w ==>
+    val_wf entry.type entry.value /\
+    (!i. w2n w <= i /\ i < w2n w+val_footprint entry.type entry.value ==>
+      i NOTIN writes)
+Proof
+  metis_tac[toplevel_local_footprint_disjoint]
+QED
+
+Theorem toplevel_backend_location[local]:
+  (((if tr then LocTransient else LocStorage) = LocTransient) = tr) /\
+  ((if tr then LocTransient else LocStorage) = LocStorage \/
+   (if tr then LocTransient else LocStorage) = LocTransient)
+Proof
+  Cases_on `tr` >> simp[]
+QED
+
+Theorem compile_toplevel_storage_aggregate_sim_ptr:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  read_storage_slot cx tr (n2w slot) tv es = (INL v,es) /\
+  ~is_word_type ann ==>
+  expr_sim_ptr d ctx PG fn cenv cx ty (TopLevelName ann (src,id)) es
+Proof
+  strip_tac >> rw[expr_sim_ptr_def] >>
+  drule_all toplevel_storage_branch_source >>
+  disch_then (qspec_then `sa` strip_assume_tac) >>
+  drule_all toplevel_storage_branch_compile >> strip_tac >>
+  `storage_holds cx tr ann (Value v) (n2w slot) (es with gas_obs := []) s0` by
+    (fs[vv_post_def, vv_holds_def, vv_at_def, mk_ptr_def, eval_operand_def,
+        expr_type_def] >> Cases_on `tr` >> gvs[expr_type_def]) >>
+  gvs[expr_type_def] >>
+  drule (toplevel_storage_ensure_ptr_post_effects
+    |> Q.INST [`e` |-> `TopLevelName ann (src,id)`,
+               `loc` |-> `if tr then LocTransient else LocStorage`]
+    |> SRULE [expr_type_def, toplevel_backend_location]) >> simp[] >> disch_then drule_all >>
+    disch_then (qspecl_then [`tn0`, `PG`, `G0`, `cx_dead cx`] strip_assume_tac) >>
+    `stor_taint_ok cx tn0 u` by
+      (fs[ghost_inv_def, stor_taint_ok_def]) >>
+    `storage_holds cx tr ann (Value v) (n2w slot) (es with gas_obs := []) u` by
+      gvs[storage_holds_def, contract_transient_def, contract_storage_def] >>
+    `well_formed_type_value tv` by
+      metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+    `decode_value (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tv = SOME v` by
+      (fs[vyperStorageBackendTheory.read_storage_slot_eq, AllCaseEqs()]) >>
+    `storage_range_agree (get_storage cx es tr)
+       (if tr then contract_transient u else contract_storage u) (n2w slot) tv` by
+      (Cases_on `tr` >>
+       gvs[storage_holds_def, vyperStorageBackendTheory.get_storage_def]) >>
+    `!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+       val_in_memory tv v (w2n w) mem` by
+      (rpt strip_tac >> irule toplevel_storage_copy_robust_contents >>
+       rpt (goal_assum (drule_at Any)) >> simp[]) >>
+    `val_wf tv v` by fs[expr_post_def, expr_val_at_def, expr_type_def] >>
+    `val_store_size tv v <= 32 * type_slot_size tv` by
+      (drule exprSimPropsTheory.val_store_size_le >> decide_tac) >>
+    `ptr_val_ok cx ann v (Var p) Gf tnf t /\
+     ptr_buf_ok cenv (TopLevelName ann (src,id)) (Var p) Gf t` by
+      (irule toplevel_storage_copy_pointer_post >>
+       rpt (goal_assum (drule_at Any)) >> simp[]) >>
+    `!name b len. local_region cenv es.scopes s0 name b len ==>
+       local_region cenv es.scopes u name b len` by
+      (simp[local_region_def] >> rpt strip_tac >>
+       `not_fresh_at sa p'` by metis_tac[local_ptrs_reserved_def] >>
+       metis_tac[]) >>
+    `!name b len i. local_region cenv es.scopes s0 name b len /\
+       b <= i /\ i < b+len ==> i NOTIN toplevel_copy_region (w2n w) (type_slot_size tv)` by
+      (simp[toplevel_copy_region_def] >> rpt strip_tac >>
+       `regions_disjoint (w2n w) (32*type_slot_size tv) b len` by metis_tac[] >>
+       fs[regions_disjoint_def] >> decide_tac) >>
+    `!i. i NOTIN toplevel_copy_region (w2n w) (type_slot_size tv) ==>
+       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s0.vs_memory` by
+      (gvs[copy_prefix_def, toplevel_copy_region_def] >> rpt strip_tac >>
+       first_x_assum irule >> decide_tac) >>
+    `!i. i NOTIN toplevel_copy_region (w2n w) (type_slot_size tv) /\
+       i IN tnf.t_mem ==> i IN tn0.t_mem` by
+      (fs[SUBSET_DEF, toplevel_copy_taint_bound_def, toplevel_copy_region_def,
+          toplevel_copy_translated_taint_def] >> rpt strip_tac >>
+       first_x_assum drule >> simp[] >> rpt strip_tac >> gvs[] >> decide_tac) >>
+    qpat_assum `stmt_state_rel _ _ _ _ es s0`
+      (mp_then Any mp_tac toplevel_local_footprint_forward) >>
+    disch_then (qspec_then `toplevel_copy_region (w2n w) (type_slot_size tv)` mp_tac) >>
+    simp[] >> disch_then assume_tac >> fs[] >>
+    `ghost_inv d cenv cx (es with gas_obs := []) Gf tnf t` by
+      (irule toplevel_ghost_inv_memory_frame >>
+       qexistsl_tac [`G0`, `es`, `s0`, `sa`, `tn0`,
+         `toplevel_copy_region (w2n w) (type_slot_size tv)`] >>
+       simp[] >>
+       qpat_assum `!name entry p sz w. _` (fn fp =>
+         qpat_assum `!name b len i. local_region _ _ s0 _ _ _ /\ _ ==> _` (fn ex =>
+           POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[fp,ex]))) >>
+    `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
+      (irule toplevel_ghost_kept_memory_frame >>
+       conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+       qexists_tac `toplevel_copy_region (w2n w) (type_slot_size tv)` >>
+       simp[] >> conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+       rpt strip_tac >>
+       `regions_disjoint (w2n w) (32*type_slot_size tv) off sz` by metis_tac[] >>
+       fs[regions_disjoint_def, toplevel_copy_region_def] >> decide_tac) >>
+    rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
+    qexists_tac `[]` >> disj1_tac >>
+    rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
+    qexistsl_tac [`INL v`, `es`, `Gf`, `tnf`, `OK t`] >>
+    simp[] >> conj_tac
+    >- (Cases_on `tr` >> gvs[] >>
+        simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+             return_def, raise_def, read_result_def, read_place_def,
+             vyperStorageBackendTheory.read_storage_slot_eq,
+             vyperStorageBackendTheory.get_storage_def] >>
+        fs[vyperStorageBackendTheory.get_storage_def]) >>
+    gvs[]
+QED
