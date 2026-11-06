@@ -2753,48 +2753,51 @@ Proof
   metis_tac[finite_mapTheory.flookup_thm]
 QED
 
-Theorem alias_regular_no_outputs_spill_support:
-  inst.inst_outputs = [] ==>
+Theorem alias_regular_spill_support:
   !at. at IN FDOM (SND (generate_regular_inst_plan liveness dfg cfg fn inst
     live halting next_term lbl ps)).ps_spilled ==>
     ?v. at = Var v /\ MEM v live
 Proof
-  strip_tac >> simp[generate_regular_inst_plan_def] >>
+  simp[generate_regular_inst_plan_def] >>
   qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics` >>
   ntac 4 (pairarg_tac >> simp[]) >>
+  Cases_on `inst.inst_outputs = []`
+  >- simp[alias_release_dead_spills_domain] >>
+  ntac 2 (pairarg_tac >> simp[]) >>
   simp[alias_release_dead_spills_domain]
 QED
 
-Theorem alias_jmp_plan_spill_support:
-  inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+Theorem alias_control_plan_spill_support:
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
   generate_inst_plan liveness dfg cfg fn inst live halting next_term lbl ps =
     SOME (ops,qs) ==>
   !at. at IN FDOM qs.ps_spilled ==> ?v. at = Var v /\ MEM v live
 Proof
-  strip_tac >>
-  drule alias_regular_no_outputs_spill_support >>
+  simp[MEM] >> strip_tac >>
+  mp_tac alias_regular_spill_support >>
   gvs[generate_inst_plan_def, is_param_opcode_def, AllCaseEqs()] >>
   metis_tac[pairTheory.SND]
 QED
 
-Theorem alias_block_insts_final_jmp_spill_support:
+Theorem alias_block_insts_final_control_spill_support:
   !prefix i ps ops qs.
-  inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
   generate_block_insts_plan liveness dfg cfg fn lbl halting np blen i
     (prefix ++ [inst]) ps = SOME (ops,qs) ==>
   !at. at IN FDOM qs.ps_spilled ==>
     ?v. at = Var v /\ MEM v (live_vars_at liveness lbl blen)
 Proof
-  Induct >> simp[Once generate_block_insts_plan_def] >>
-  rpt gen_tac >> simp[AllCaseEqs()] >> strip_tac
-  >- (gvs[generate_block_insts_plan_def] >>
-      metis_tac[alias_jmp_plan_spill_support]) >>
+  Induct
+  >- (simp[generate_block_insts_plan_def, AllCaseEqs()] >>
+      metis_tac[alias_control_plan_spill_support, MEM]) >>
+  simp[Once generate_block_insts_plan_def] >>
+  rpt gen_tac >> simp[AllCaseEqs()] >> strip_tac >>
   gvs[] >> first_x_assum drule >> simp[]
 QED
 
-Theorem alias_block_plan_final_jmp_spill_support:
-  ~NULL bb.bb_instructions /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
-  (LAST bb.bb_instructions).inst_outputs = [] /\
+Theorem alias_block_plan_final_control_spill_support:
+  ~NULL bb.bb_instructions /\
+  MEM (LAST bb.bb_instructions).inst_opcode [JMP; JNZ; DJMP] /\
   generate_block_plan liveness dfg cfg fn bb ps = SOME (ops,qs) ==>
   !at. at IN FDOM qs.ps_spilled ==>
     ?v. at = Var v /\
@@ -2806,11 +2809,11 @@ Proof
        metis_tac[APPEND_FRONT_LAST, NULL_EQ] >>
      simp[non_param_insts_def] >>
      qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
-     simp[FILTER_APPEND, is_param_opcode_def]) >>
+     gvs[MEM, FILTER_APPEND, is_param_opcode_def]) >>
   qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
-  metis_tac[alias_block_insts_final_jmp_spill_support]
+  metis_tac[alias_block_insts_final_control_spill_support, MEM]
 QED
 
 Theorem alias_lineage_join_historical_spill_support:
@@ -2834,7 +2837,7 @@ Proof
      metis_tac[LAST_MEM, NULL_EQ]) >>
   `(LAST pb.bb_instructions).inst_outputs = []` by
     gvs[inst_wf_def] >>
-  metis_tac[alias_block_plan_final_jmp_spill_support]
+  metis_tac[alias_block_plan_final_control_spill_support, MEM]
 QED
 
 Theorem alias_lineage_join_selected_spill_support:
