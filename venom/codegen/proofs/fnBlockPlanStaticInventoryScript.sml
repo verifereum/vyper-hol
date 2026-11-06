@@ -2204,3 +2204,184 @@ Proof
   strip_tac >> gvs[] >>
   metis_tac[inventory_release_resources, release_dead_spills_stack]
 QED
+
+Theorem inventory_marked_lupdate_mem[local]:
+  !stk i dst x.
+    i < LENGTH stk /\
+    ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) /\
+    EL i stk <> dead_stack_marker ==>
+    (MEM x (LUPDATE dst i stk) <=>
+      x = dst \/ (MEM x stk /\ x <> EL i stk))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `i`
+  >- (simp[LUPDATE_def] >> strip_tac >> gvs[MEM_FILTER] >> metis_tac[]) >>
+  simp[LUPDATE_def] >> strip_tac >>
+  Cases_on `h = dead_stack_marker` >> gvs[MEM_FILTER] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule EL_MEM >> strip_tac >> metis_tac[]
+QED
+
+Theorem inventory_marked_lupdate_distinct[local]:
+  !stk i dst.
+    ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) /\
+    ~MEM dst stk ==>
+    ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) (LUPDATE dst i stk))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `i` >>
+  simp[LUPDATE_def] >> rpt strip_tac >>
+  Cases_on `h = dead_stack_marker` >>
+  Cases_on `dst = dead_stack_marker` >> gvs[MEM_FILTER] >>
+  simp[MEM_LUPDATE] >> metis_tac[EL_MEM]
+QED
+
+Theorem inventory_marked_pop_top[local]:
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) /\
+  stk <> [] /\ stack_peek 0 stk = v /\ v <> dead_stack_marker ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) (stack_pop 1 stk)) /\
+  (!op. MEM op (stack_pop 1 stk) <=> MEM op stk /\ op <> v)
+Proof
+  Cases_on `stk` using SNOC_CASES >>
+  simp[stack_peek_def, stack_pop_def, FILTER_SNOC, ALL_DISTINCT_SNOC,
+       TAKE_SNOC, EL_LENGTH_SNOC, MEM_SNOC] >>
+  strip_tac >> gvs[ALL_DISTINCT_SNOC, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem inventory_marked_swap_pop[local]:
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  stack_get_depth v ps.ps_stack = SOME d /\ v <> dead_stack_marker ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+    (stack_pop 1 (SND (do_swap d ps)).ps_stack)) /\
+  (!op. MEM op (stack_pop 1 (SND (do_swap d ps)).ps_stack) <=>
+    MEM op ps.ps_stack /\ op <> v)
+Proof
+  strip_tac >> drule stack_get_depth_props >> strip_tac >>
+  drule do_swap_stack_perm >> strip_tac >>
+  `PERM (FILTER (\op. op <> dead_stack_marker) (SND (do_swap d ps)).ps_stack)
+        (FILTER (\op. op <> dead_stack_marker) ps.ps_stack)` by
+    metis_tac[sortingTheory.PERM_FILTER] >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+      (SND (do_swap d ps)).ps_stack)` by
+    metis_tac[sortingTheory.ALL_DISTINCT_PERM] >>
+  `stack_peek 0 (SND (do_swap d ps)).ps_stack = v` by
+    (simp[do_swap_stack_result] >> metis_tac[inventory_swap_top]) >>
+  `(SND (do_swap d ps)).ps_stack <> []` by
+    metis_tac[sortingTheory.PERM_LENGTH, LENGTH_NIL, prim_recTheory.NOT_LESS_0] >>
+  drule_all inventory_marked_pop_top >>
+  metis_tac[sortingTheory.PERM_MEM_EQ]
+QED
+
+Theorem inventory_marked_pop_singleton[local]:
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  v <> dead_stack_marker ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+    (SND (popmany_plan [v] ps)).ps_stack) /\
+  (!op. MEM op (SND (popmany_plan [v] ps)).ps_stack <=>
+    MEM op ps.ps_stack /\ op <> v)
+Proof
+  strip_tac >> Cases_on `stack_get_depth v ps.ps_stack`
+  >- (simp[popmany_plan_def, popmany_individual_def, sortingTheory.QSORT_DEF,
+           sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF] >>
+      gvs[inventory_depth_none] >> metis_tac[]) >>
+  rename1 `stack_get_depth v ps.ps_stack = SOME d` >>
+  drule_all inventory_marked_swap_pop >> strip_tac >>
+  simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF, LET_THM] >>
+  Cases_on `d = 1` >> gvs[] >>
+  Cases_on `d = 0` >> gvs[do_swap_def, stack_pop_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem inventory_marked_poke_mem:
+  d < LENGTH stk /\
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) /\
+  stack_peek d stk = src /\ src <> dead_stack_marker ==>
+  !x. MEM x (stack_poke d dst stk) <=>
+      x = dst \/ (MEM x stk /\ x <> src)
+Proof
+  simp[stack_peek_def, stack_poke_def] >> rpt strip_tac >>
+  qpat_assum `_ = src` (SUBST1_TAC o SYM) >>
+  irule inventory_marked_lupdate_mem >> gvs[]
+QED
+
+Theorem inventory_marked_poke_distinct:
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) stk) /\
+  ~MEM dst stk ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) (stack_poke d dst stk))
+Proof
+  simp[stack_poke_def] >> metis_tac[inventory_marked_lupdate_distinct]
+QED
+
+Theorem inventory_marked_phi_transition[local]:
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  ~MEM (Var out) ps.ps_stack ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+    (SND (generate_phi_plan inst nl F ps)).ps_stack) /\
+  (SND (generate_phi_plan inst nl F ps)).ps_spilled = ps.ps_spilled /\
+  (!x. MEM x (SND (generate_phi_plan inst nl F ps)).ps_stack <=>
+       (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl))
+Proof
+  strip_tac >>
+  `Var src <> dead_stack_marker /\ Var out <> dead_stack_marker` by
+    simp[dead_stack_marker_def] >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+      (stack_poke d (Var out) ps.ps_stack))` by
+    (irule inventory_marked_poke_distinct >> simp[]) >>
+  drule_all inventory_marked_poke_mem >>
+  disch_then (qspec_then `Var out` assume_tac) >>
+  simp[generate_phi_plan_def, LET_THM, stackPlanTypesTheory.operand_to_string_def] >>
+  Cases_on `MEM out nl` >> simp[]
+  >- metis_tac[] >>
+  qmatch_goalsub_abbrev_tac `popmany_plan [Var out] poked` >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) poked.ps_stack)` by
+    simp[Abbr `poked`] >>
+  drule_all inventory_marked_pop_singleton >> strip_tac >>
+  mp_tac (Q.SPECL [`[Var out]`, `poked`] rf_popmany_spilled) >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  gvs[Abbr `poked`] >> metis_tac[]
+QED
+
+Theorem inventory_marked_phi_mem:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  ~MEM (Var out) ps.ps_stack ==>
+  !x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl)
+Proof
+  strip_tac >> drule_all inventory_marked_phi_transition >> gvs[]
+QED
+
+Theorem inventory_marked_phi_spilled:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  ~MEM (Var out) ps.ps_stack ==>
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> drule_all inventory_marked_phi_transition >> gvs[]
+QED
+
+Theorem inventory_marked_phi_distinct:
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  ~MEM (Var out) ps.ps_stack ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) qs.ps_stack)
+Proof
+  strip_tac >> drule_all inventory_marked_phi_transition >> gvs[]
+QED
+
