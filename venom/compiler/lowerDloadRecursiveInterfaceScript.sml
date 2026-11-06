@@ -4,6 +4,7 @@ Ancestors
   lowerDloadTargetValidity lowerDloadConfiguredScratch lowerDloadCoverageReserve
   lowerDloadCoverageLoad lowerDloadCallNormalSetup lowerDloadCallNormalEntry
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
+  lowerDloadSavedGeometry
   lowerDloadNormalJump lowerDloadNormalEntry lowerDloadReachableJump
   o1LowerDloadEntryFetch o1LowerDloadJointEntry lowerDloadNonhalted
   lowerDloadConfiguredSelection lowerDloadCoverageBytes lowerDloadResidualNonmemory
@@ -3407,3 +3408,100 @@ val ld_recursive_saved_clause_goals =
 val [ld_recursive_saved_entry_goal,ld_recursive_saved_next_goal,
      ld_recursive_saved_block_goal,ld_recursive_saved_call_goal,
      ld_recursive_saved_return_goal] = ld_recursive_saved_clause_goals;
+
+(* Saved-geometry integration audit (supersedes only the geometric gap in the
+   earlier RETURN ledger, not its other restoration obligations).
+
+   The five terms ld_recursive_saved_{entry,next,block,call,return}_goal above
+   are the actual projected rules with ONE shared-witness candidate substituted.
+   They are prospective obligations, NOT five proved clauses. In the following
+   S abbreviates ld_indexed_saved_geometry lo E astk gstk savedkeys.
+
+   ENTRY: ld_recursive_entry_clause chooses astk=gstk=savedkeys=[]. Therefore
+   ld_saved_geometry_empty closes S for precisely those witnesses. The closed
+   old entry theorem hides them; it is not itself a strengthened producer.
+   Reuse the entry data/control assembly before its existential packaging.
+
+   NEXT strict prefix: ld_recursive_anchor_prefix_next keeps E,astk,gstk,
+   savedkeys and OLD ta,ua,s literally (only n,t,un change). S is identical.
+   Its arbitrary P is a predicate of ta only, not a predicate of all witnesses:
+   setting P cannot in general add S inside the hidden existential. A separately
+   named strong prefix consumer must retain S during that same packaging.
+
+   NEXT ordinary completion: ld_recursive_ordinary_next_anchor chooses the same
+   E,astk,gstk,savedkeys at source successor; only current AG/BH/tn and position
+   change. Its data producer ld_normal_ordinary_backward and configured source
+   position reasoning remain reusable. S is identical; no transport needed.
+   BLOCK: ld_recursive_block_anchor supplies singleton/phase-zero inversion;
+   ld_recursive_block_clause_anchor obtains source jump/entry data and packages
+   exactly the old E,astk,gstk,savedkeys. S is again identical (current phi
+   provenance does not occur in it). Use data/control before old packaging.
+
+   NEXT ALLOCA completion: ld_configured_alloca_next_backward explicitly returns
+   E',L',H',k' and source annotation. E' is E in the cached case and an update at
+   (0,k) in the fresh case (CoverageAlloca), NOT an arbitrary hidden successor
+   table. ld_recursive_alloca_next_anchor[saved_successor] already proves lookup
+   agreement on ALL old ld_live astk L AP AG roots via ld_annotated_serial.
+   ld_saved_geometry_root_inclusion maps every indexed selection to these roots;
+   ld_indexed_saved_geometry_transport then supplies S at precisely E'. The
+   serial-delete step does not change the old indexed root selections. Do not
+   try to strengthen the existential ld_recursive_alloca_next conclusion.
+
+   NEXT DLOADBYTES: ld_configured_bytes_next_backward (CoverageBytes) returns
+   data with E,astk,gstk unchanged; ld_recursive_bytes_next_anchor packages those
+   same witnesses and savedkeys. NEXT DLOAD: ld_configured_load_next_backward
+   (CoverageLoad) and ld_recursive_geometry_load_next likewise keep these four
+   witnesses; scratch execution only changes A/current provenance/taint.
+   Thus both use literal S, not E transport or a scratch-inclusive target stack.
+
+   Exceptional paths: ld_recursive_exceptional_next_anchor and
+   ld_recursive_configured_revert_anchor construct the exceptional disjunct,
+   which is literally unchanged in the saved candidate. No S is needed there.
+   This includes normal-completion and block/call entry into revert-forward.
+   Strict-prefix normal data must not be continued past that entry.
+
+   CALL: ld_recursive_call_anchor proves singleton INVOKE inversion for the
+   GEOMETRY candidate. ld_call_normal_entry_backward supplies source setup and
+   entered child normal_data. Inside ld_recursive_geometry_call_clause, the
+   actual saved records sf/tf retain parent L/AP/AG and parent t; its normal
+   packaging chooses sf::astk,tf::gstk,E,keys::savedkeys. Hence
+   ld_saved_geometry_call_push supplies S with exactly those witnesses, using
+   PARENT normal_data, not child normal_data. Child live/current tables and A={}
+   do not alter S. Closed old CALL theorem hides sf/tf; reuse its setup and
+   configured-entry outputs before packaging, not by strengthening its result.
+
+   RETURN: generated rule 5 has only the current IH and target IntRet/bind.
+   The saved source origin/setup elimination and same-ret reconstruction from
+   the earlier RETURN ledger are still required; no caller IH is introduced.
+   After identifying heads a,g, ld_saved_geometry_head_consume uses current
+   merge/bind/adopt and the provenance output restriction for the resumed head.
+   It supplies saved floor, allocas_from, floor/frontier bound and selected
+   representation, discharging old ledger items 24 and 29-30 ONLY.
+   Choose owners={owner | ?bs sz. ld_live astk L AP AG (owner,(bs,sz))}, where
+   AG is resumed restricted provenance and L/AP are restored caller tables.
+   ld_saved_geometry_return_tail then retains S at DRESTRICT E owners for
+   astk,gstk,savedkeys after pop. The resumed-owner premise is by construction;
+   every deeper tail frame is covered by root_inclusion. Current callee memory
+   and global masks still come from ld_call_return_memory and current data.
+   Other frame_data/shared-state/envelope/off-address restoration and configured
+   successor obligations in the earlier RETURN ledger remain genuinely open.
+
+   COHERENCE DECISION FOR REVIEW (not a candidate mutation): saved_candidate
+   refines BASE ld_recursive_candidate, whereas the checked DLOAD and CALL
+   consumers use ld_recursive_geometry_candidate. The saved candidate alone
+   does NOT entail alloca_inv t, saved-state validity, or alloca_inv ta. Before
+   constructor closure, choose ONE combined quotation: apply the existing
+   ld_refine_geometry to ld_recursive_saved_candidate, preserving S inside its
+   normal witnesses, and generate its five projected clauses. Needed bridges
+   are separately named combined ENTRY/prefix/ordinary/alloca/bytes/load/BLOCK/
+   CALL/exceptional consumers retaining S in the existing witness assembly,
+   plus RETURN restoration. Preserve every existing theorem statement. There
+   is no justification for old-existential-successor => strengthened-successor.
+   The old pending RETURN geometry-recovery route is superseded by the saved
+   head slice; the other pending RETURN producer obligations remain relevant.
+   This audit does not certify any full constructor closure or final taint row.
+*)
+
+val _ = if length ld_recursive_saved_clause_goals = 5 andalso
+  List.all (fn t => type_of t = bool) ld_recursive_saved_clause_goals
+  then () else raise Fail "saved projected clause audit: expected five booleans";
