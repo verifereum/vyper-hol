@@ -570,3 +570,52 @@ Proof
   first_x_assum (qspec_then `opc` mp_tac) >>
   disch_then drule_all >> simp[trace_weight_append] >> intLib.ARITH_TAC
 QED
+
+Theorem phi_lookup_bound[local]:
+  stack_get_phi_depth items stk = SOME dist ==> dist < LENGTH stk
+Proof
+  simp[stack_get_phi_depth_def] >> strip_tac >>
+  drule stack_find_bound >> simp[]
+QED
+
+Theorem generate_phi_plan_signed_balance:
+  generate_phi_plan inst nl halting ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[generate_phi_plan_def, LET_THM] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >>
+  simp[] >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  rename1 `stack_get_phi_depth _ _ = SOME dist` >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[phi_lookup_bound] >>
+  IF_CASES_TAC >> simp[]
+  >- (Cases_on `do_dup dist ps` >> simp[] >>
+      rename1 `do_dup dist ps = (dup_ops, next_ps)` >>
+      drule_all do_dup_signed_balance >> strip_tac >>
+      IF_CASES_TAC >> simp[]
+      >- (Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+            (next_ps with ps_stack := stack_poke 0 (Var (HD inst.inst_outputs)) next_ps.ps_stack)` >>
+          simp[] >> rpt strip_tac >> gvs[] >>
+          drule popmany_plan_signed_balance >>
+          simp[stack_poke_def, listTheory.LENGTH_LUPDATE, trace_weight_append,
+               trace_weight_def, stack_op_weight_def] >> intLib.ARITH_TAC) >>
+      rpt strip_tac >> gvs[stack_poke_def, listTheory.LENGTH_LUPDATE,
+        trace_weight_append, trace_weight_def, stack_op_weight_def]) >>
+  IF_CASES_TAC >> simp[]
+  >- (Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+        (ps with ps_stack := stack_poke dist (Var (HD inst.inst_outputs)) ps.ps_stack)` >>
+      simp[] >> rpt strip_tac >> gvs[] >>
+      drule popmany_plan_signed_balance >>
+      simp[stack_poke_def, listTheory.LENGTH_LUPDATE, trace_weight_append,
+           trace_weight_def, stack_op_weight_def]) >>
+  rpt strip_tac >> gvs[stack_poke_def, listTheory.LENGTH_LUPDATE,
+    trace_weight_def, stack_op_weight_def]
+QED
+
+Theorem generate_offset_plan_signed_balance:
+  generate_offset_plan inst ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[generate_offset_plan_def, LET_THM] >> Cases_on `EL 1 inst.inst_operands` >>
+  simp[] >> rpt strip_tac >>
+  gvs[stack_push_def, trace_weight_def, stack_op_weight_def] >> intLib.ARITH_TAC
+QED
