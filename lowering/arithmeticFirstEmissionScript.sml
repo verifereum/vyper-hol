@@ -165,3 +165,46 @@ Proof
      first_emission_safe_pow, first_emission_compare]),
     (simp_tac bool_ss [wrap_truncate_def, compile_select_def] >> arith_strong_tac)]
 QED
+
+Theorem first_emission_neg:
+  !a x b. compile_neg v ty a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  simp_tac bool_ss [compile_neg_def, LET_THM] >>
+  pairarg_tac >> asm_simp_tac (srw_ss()) [] >> arith_strong_tac
+QED
+
+Theorem first_emission_invert:
+  !a x b. compile_invert v ty ce a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  Cases_on `ty` >> simp_tac (srw_ss()) [compile_invert_def, LET_THM] >>
+  arith_strong_tac
+QED
+
+Theorem first_emission_builtin_abs:
+  !a x b. compile_builtin_abs v a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  simp_tac bool_ss [compile_builtin_abs_def, compile_select_def, LET_THM] >>
+  arith_strong_tac
+QED
+
+Theorem first_emission_bytestring_hash:
+  !a x b. compile_bytestring_hash v a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  simp_tac bool_ss [compile_bytestring_hash_def] >> arith_strong_tac
+QED
