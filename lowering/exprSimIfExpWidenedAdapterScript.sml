@@ -6,6 +6,8 @@ Ancestors
   vyperTypeSystem valueEncodingProps vyperValue valueEncoding vyperMisc
   exprSimVVFrame exprSimAggregateChildren exprSimUnwrap context venomState
   vyperState exprSimDefs exprSimMemorySource gasContext gasSummary
+  exprSimProps exprSimAlloc loweringHalt freshWrites fragExec stmtSimDefs
+  compileEnv exprLoweringProps
 
 Theorem normalize_owned_value_framed_frag:
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf, sm) /\
@@ -231,4 +233,107 @@ Proof
         disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
         metis_tac[]) >>
   metis_tac[]
+QED
+
+(* Allocation changes provenance monotonically, but not the represented value. *)
+Theorem vv_post_alloc_mono_frame:
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  stmt_state_rel ctx func ce cx ee u /\
+  u.vs_memory = s.vs_memory /\
+  contract_storage u = contract_storage s /\
+  contract_transient u = contract_transient s /\
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\
+  (!n b sz. local_region ce ee.scopes u n b sz <=>
+            local_region ce ee.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_post ctx func ce cx e es sa sn s0 ee tv vv u
+Proof
+  strip_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  `vv_holds ce cx (post_value_type ce e) tv vv ee u` by
+    (irule vv_holds_vars_frame >> goal_assum (drule_at Any) >> simp[]) >>
+  `vv_at ce cx (post_value_type ce e) sa sn ee tv vv u` by
+    (irule vv_at_alloc_mono_frame >> qexistsl [`s`, `sm`] >> simp[]) >>
+  `post_value_type ce e <> expr_type e ==>
+    vv_own ce cx (post_value_type ce e) sa sn ee tv vv u` by
+    (strip_tac >> irule vv_own_alloc_mono_frame >>
+     qexistsl [`s`, `sm`] >> simp[]) >>
+  `locals_kept ce es s0 u` by
+    (irule locals_kept_mem_tail >> goal_assum (drule_at Any) >> simp[]) >>
+  `vv_storage_live cx vv ee s ==> vv_storage_live cx vv ee u` by
+    (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
+  simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem alloc_unwrap_physical_post_frag:
+  compile_alloc_buffer sz sm = (buf,sn) /\
+  unwrap_value ce vv sn = (op,sb) /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ sz < dimword (:256) /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  read_result cx tv ee = (INL v,ee) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+     ~is_word_type (post_value_type ce e) ==>
+     type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+     type_memory_size tvt < 2 ** 64) /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  eval_operand (vv_operand vv) s = SOME a ==>
+  frag_exec ctx sm sb (\z. z = s)
+    (\u. expr_post ctx func ce cx e es sa sb s0 ee v op u) R
+Proof
+  strip_tac >>
+  `cs_extends sm sn /\ cs_extends sn sb` by
+    metis_tac[compile_alloc_buffer_extends, unwrap_value_extends] >>
+  `sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id` by
+    (qspec_then `sz` (qspec_then `sm` mp_tac) ci_mono_compile_alloc_buffer >>
+     simp[ci_mono_def]) >>
+  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  drule_all alloc_buffer_source_frag >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  `!n b k. local_region ce ee.scopes u n b k <=>
+           local_region ce ee.scopes s n b k` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule local_region_frame >>
+         conj_tac
+         >- (qexists `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
+         qexistsl [`sm`, `ee.scopes`, `u`] >> simp[] >> metis_tac[]) >>
+     strip_tac >> irule local_region_frame_fwd >>
+     qexistsl [`s`, `sm`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
+  `vv_post ctx func ce cx e es sa sn s0 ee tv vv u` by
+    (irule vv_post_alloc_mono_frame >> simp[] >>
+     qexistsl [`s`, `sm`] >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >>
+     irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  irule frag_exec_seq >> qexistsl [`(\z. z = u)`, `sn`] >> simp[] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sn x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sm` >> simp[]) >>
+  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
+    decide_tac >>
+  qpat_x_assum `local_ptrs_reserved ce sm` kall_tac >>
+  drule_all unwrap_value_materialise_physical_sim >>
+  disch_then (qspecl_then [`ctx`, `s0`, `R`] mp_tac) >>
+  strip_tac >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]
+QED
+
+(* Common endpoint decomposition, before distinguishing typed and byte copies. *)
+Theorem compile_ifexp_copy_parts:
+  ~is_word_type dty /\ ~same_memory_layout ce sty dty /\
+  compile_ifexp_arm ce dty sty vv sa = (op,sb) ==>
+  ?buf sm src sn.
+    compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\
+    unwrap_value ce vv sm = (src,sn) /\
+    compile_store_memory ce src buf.buf_operand dty sty sn = ((),sb) /\
+    op = buf.buf_operand
+Proof
+  strip_tac >>
+  gvs[exprLoweringTheory.compile_ifexp_arm_def, comp_ignore_bind_def,
+      comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
