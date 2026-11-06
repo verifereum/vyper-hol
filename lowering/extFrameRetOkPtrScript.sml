@@ -17,7 +17,7 @@ Ancestors
   extRetBulkCopyCountedPtr extRetWordStmtPtr extRetCopySuffixPtr extRetCopyInputsPtr
   extRetOperandBoundaryPtr extRetDispatchProtectionPtr extRetDispatchResultPtr
   extRetStaticStmtPtr extRetStaticReservedPtr extRetStaticFrameMetadataPtr
-  extRetStaticFrameConsumerPtr
+  extRetStaticFrameConsumerPtr extRetStaticCapacityPtr
 
 val _ = Parse.hide "body";
 
