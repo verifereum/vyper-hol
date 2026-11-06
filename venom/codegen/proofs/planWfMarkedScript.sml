@@ -7,7 +7,7 @@
 
 Theory planWfMarked
 Ancestors
-  fnPlanPrefix planSpillBounds doSwapSim stackModel stackPlanOps
+  deepResidualBudget reorderSim fnPlanPrefix planSpillBounds doSwapSim stackModel stackPlanOps
   stackPlanGen stackPlanTypes sorting list rich_list pred_set pair combin
 
 Theorem do_swap_wf_marked:
@@ -194,4 +194,74 @@ Proof
           metis_tac[]) >>
       metis_tac[popmany_plan_wf_marked]) >>
   strip_tac >> gvs[]
+QED
+
+Theorem phi_popmany_fold_spilled[local]:
+  !xs acc ps.
+    (SND (FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+        let (swap_ops, ps') =
+          if dist = 0 then ([] : stack_op list, ps) else do_swap dist ps in
+        (ops ++ swap_ops ++ [SOPop 1],
+         ps' with ps_stack := stack_pop 1 ps'.ps_stack)) (acc, ps) xs)).ps_spilled =
+    ps.ps_spilled
+Proof
+  Induct_on `xs` >- simp[] >> rpt gen_tac >>
+  gvs[LET_THM] >> simp[Once listTheory.FOLDL] >>
+  Cases_on `stack_get_depth h ps.ps_stack` >- simp[] >> simp[] >>
+  rename1 `stack_get_depth _ _ = SOME dist` >>
+  Cases_on `dist = 0` >> simp[] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND]
+QED
+
+Theorem phi_do_swap_spilled_result[local]:
+  !dist ps ops ps'. do_swap dist ps = (ops, ps') ==> ps'.ps_spilled = ps.ps_spilled
+Proof
+  rpt strip_tac >>
+  qspecl_then [`dist`, `ps`] mp_tac reorderSimTheory.do_swap_spilled_unchanged >>
+  simp[]
+QED
+
+Theorem phi_popmany_fold_spilled_result[local]:
+  !xs acc ps ops ps'.
+    FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+        let (swap_ops, ps') =
+          if dist = 0 then ([] : stack_op list, ps) else do_swap dist ps in
+        (ops ++ swap_ops ++ [SOPop 1],
+         ps' with ps_stack := stack_pop 1 ps'.ps_stack)) (acc, ps) xs = (ops, ps') ==>
+    ps'.ps_spilled = ps.ps_spilled
+Proof
+  rpt strip_tac >>
+  qspecl_then [`xs`, `acc`, `ps`] mp_tac phi_popmany_fold_spilled >> simp[]
+QED
+
+Theorem phi_popmany_spilled:
+  !xs ps ops ps'. popmany_plan xs ps = (ops, ps') ==> ps'.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> Cases_on `xs` >> simp[stackPlanOpsTheory.popmany_plan_def,
+       stackPlanOpsTheory.popmany_individual_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[SRULE [LET_THM] phi_popmany_fold_spilled_result,
+            phi_do_swap_spilled_result]
+QED
+
+Theorem phi_plan_spilled_unchanged:
+  !inst live halt ps ops ps'.
+    generate_phi_plan inst live halt ps = (ops, ps') ==>
+    ps'.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[generate_phi_plan_def, LET_THM] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[] >>
+  simp[] >> rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> gvs[] >>
+  imp_res_tac phi_popmany_spilled >> imp_res_tac deepResidualBudgetTheory.do_dup_spilled_eq >> gvs[]
 QED
