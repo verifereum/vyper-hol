@@ -659,6 +659,8 @@ Resume assign_tuple_locals_suffix[value]:
 QED
 
 Resume assign_tuple_locals_suffix[memory]:
+  `post_value_type cenv e = TupleT tys` by
+    metis_tac[post_value_type_lowered] >>
   fs[] >>
   `w2n w + val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) < dimword (:256)` by
     (metis_tac[expr_val_at_bound]) >>

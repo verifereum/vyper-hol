@@ -300,6 +300,10 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
+           supported_builtin_form_def])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `supported_expr _ _` mp_tac >>
+      simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
            supported_type_builtin_form_def] >> strip_tac >>
       Cases_on `args` >> gvs[] >>
       rename1 `supported_pure_exprs tops (a :: tail)` >> Cases_on `tail` >> gvs[] >>
@@ -317,13 +321,14 @@ Proof
       metis_tac[type_builtin_read_annotation_typed])
   >- (rpt gen_tac >> strip_tac >>
       simp[lowered_value_type_def] >>
+      rename1 `Call ann (IntCall func_id) args drv` >>
       `expr_sim_inv cenv cx env es /\
-       well_typed_expr env (Call v4 (IntCall func_id) v5 v6)` by
+       well_typed_expr env (Call ann (IntCall func_id) args drv)` by
         gvs[expr_body_pre_def] >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def,
            supported_effect_expr_def] >> strip_tac >>
-      Cases_on `v6` >> gvs[supported_effect_expr_def,
+      Cases_on `drv` >> gvs[supported_effect_expr_def,
                                  optionTheory.IS_SOME_EXISTS] >>
       PairCases_on `x` >>
       `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by

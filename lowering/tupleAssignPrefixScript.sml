@@ -12,7 +12,6 @@ Ancestors
   stmtLowering context
 Libs
   monadsyntax
-    post_value_type cenv e = expr_type e /\
 
 Theorem mcopy_alloca_framed_path[local]:
   !ctx func cenv cx es sa sb s inst p dw sw src sz tv v.

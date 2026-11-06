@@ -24,7 +24,8 @@
 
 Theory bodySimExprCases
 Ancestors
-  bodySimIfExpWidened
+  bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
+  bodySimSubscriptWidened
   bodySimBopInLiteralWord bodySimBopHeld
   bodySimConvertWidened
   exprSimSource
@@ -101,27 +102,11 @@ Theorem body_structlit_case:
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
-  irule compile_struct_lit_case >> simp[] >> metis_tac[body_exprs_ok_case]
-QED
-
-(* A subscript whose base value the lowering lays out differently from the
-   base's type: an internal call whose callee's return type the call's type
-   widens.  compile_subscript reads the base at offsets taken from the base's
-   type (place_type), so for a tuple base this reads the wrong field until the
-   subscript readers use the lowered layout. *)
-Theorem body_subscript_widened_call_base:
-  !cx v8 e1 e2.
-    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
-    body_expr_ok cx e1 ==>
-    !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\
-      expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
-      post_value_type cenv e1 <> expr_type e1 ==>
-      expr_sim ctx func cenv cx ty (Subscript v8 e1 e2) es /\
-      expr_vv_sim ctx func cenv cx ty (Subscript v8 e1 e2) es
-Proof
-  cheat
+  Cases_on `!e. MEM e (MAP SND kes) ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_struct_lit_widened_call_elem]
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
@@ -195,8 +180,11 @@ Proof
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
-  irule compile_make_array_case >> simp[] >> metis_tac[body_exprs_ok_case]
+  Cases_on `!e. MEM e es ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_make_array_widened_call_elem]
 QED
 
 (* ecadd and ecmul: exprSimECArith's compile_ecadd_call_case and

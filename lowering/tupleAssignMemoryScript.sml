@@ -174,7 +174,6 @@ Resume assign_tuple_locals_memory_suffix_path[code]:
      >- (qexists `get_tenv cx` >> first_assum ACCEPT_TAC) >>
      rpt gen_tac >> strip_tac >>
      qpat_x_assum `!i. i < LENGTH ids ==> _` (qspec_then `i` mp_tac) >>
-  `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
      simp[] >> strip_tac >> gvs[]) >>
   `tys <> []` by (Cases_on `tys` >> gvs[]) >>
   `0 < type_memory_size_list tvs` by

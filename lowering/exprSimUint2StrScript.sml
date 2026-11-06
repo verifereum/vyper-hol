@@ -2667,6 +2667,7 @@ Proof
 QED
 
 Theorem u2s_alloc_vv_path:
+  post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
