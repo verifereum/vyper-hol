@@ -115,6 +115,8 @@ Theorem literal_alloca_static_frame:
   u.vs_labels = s.vs_labels /\
   u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
   u.vs_fmp = s.vs_fmp /\ u.vs_memory = s.vs_memory /\
+  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+  u.vs_transient = s.vs_transient /\
   (!p. p <> out ==> lookup_var p u = lookup_var p s)
 Proof
   simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
