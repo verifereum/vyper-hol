@@ -206,3 +206,96 @@ Proof
   conj_tac >- metis_tac[regional_prepare_params_initial_live_coverage] >>
   metis_tac[regional_prepare_params_initial_freshness]
 QED
+
+Theorem regional_canonical_body_layout:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
+  non_param_insts bb = DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions /\
+  no_param_insts (DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions) /\
+  (bb <> HD fn.fn_blocks ==> get_params bb.bb_instructions = [])
+Proof
+  strip_tac >>
+  `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+  qpat_x_assum `canonical_param_prefix fn` mp_tac >>
+  rewrite_tac[canonical_param_prefix_iff] >>
+  simp[PULL_EXISTS] >> map_every qx_gen_tac [`entry`, `rest`, `users`, `fmp`, `retpc`, `suffix`] >> disch_tac >>
+  Cases_on `bb = entry`
+  >- (`EVERY (\inst. is_param_opcode inst.inst_opcode) (users ++ fmp ++ retpc)` by
+        (gvs[EVERY_APPEND, EVERY_MEM, is_param_opcode_def] >> metis_tac[]) >>
+      `get_params ((users ++ fmp ++ retpc) ++ suffix) = users ++ fmp ++ retpc` by
+        metis_tac[fnFrameBoundaryEntryParamsTheory.get_params_prefix] >>
+      gvs[APPEND_ASSOC, non_param_insts_def, FILTER_APPEND, FILTER_EQ_NIL,
+          no_param_insts_def, FILTER_EQ_ID] >>
+      simp[DROP_LENGTH_APPEND] >>
+      `FILTER (\inst. ~is_param_opcode inst.inst_opcode) users = []` by
+        (simp[FILTER_EQ_NIL, EVERY_MEM] >> gvs[EVERY_MEM, is_param_opcode_def]) >>
+      `FILTER (\inst. ~is_param_opcode inst.inst_opcode) suffix = suffix` by
+        (simp[listTheory.FILTER_EQ_ID]) >> simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+  `no_param_insts bb.bb_instructions` by (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `get_params bb.bb_instructions = []` by
+    (Cases_on `bb.bb_instructions` >> gvs[no_param_insts_def, get_params_def]) >>
+  gvs[non_param_insts_def, no_param_insts_def, FILTER_EQ_ID]
+QED
+
+Theorem regional_no_phi_body_layout:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  collect_phis bb.bb_instructions = [] /\
+  LENGTH (get_params bb.bb_instructions) <= i /\
+  i < k /\ k < LENGTH bb.bb_instructions ==>
+  (EL i bb.bb_instructions).inst_opcode <> PHI /\
+  (EL i bb.bb_instructions).inst_opcode <> JMP /\
+  ~is_param_opcode (EL i bb.bb_instructions).inst_opcode
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (strip_tac >>
+      `i < LENGTH (collect_phis bb.bb_instructions)` by
+        (irule regional_phi_index_prefix >> simp[] >>
+         gvs[bb_well_formed_def] >> metis_tac[LESS_TRANS]) >> gvs[]) >>
+  conj_tac
+  >- (strip_tac >>
+      `is_terminator (EL i bb.bb_instructions).inst_opcode` by simp[is_terminator_def] >>
+      gvs[bb_well_formed_def] >>
+      `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[LESS_TRANS] >> decide_tac) >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  gvs[no_param_insts_def, EVERY_MEM] >>
+  first_x_assum irule >> simp[MEM_EL] >>
+  qexists_tac `i - LENGTH (get_params bb.bb_instructions)` >> simp[EL_DROP] >>
+  `LENGTH (get_params bb.bb_instructions) + (i - LENGTH (get_params bb.bb_instructions)) = i` by decide_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem regional_nonentry_no_phi_lower_start:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_l /\ bb <> HD fn.fn_blocks /\
+  collect_phis bb.bb_instructions = [] /\
+  start = ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|> /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+    clean_stack_plan lv cfg fn bb start else ([],start)) = (clean_ops,ps2) ==>
+  regional_body_lower_inv lv dfg sb bb 0 ps2
+Proof
+  strip_tac >> simp[regional_body_lower_inv_def] >>
+  conj_tac >- metis_tac[regional_nonentry_initial_wf] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `~MEM (Var v) (FLAT (MAP (\inst. inst.inst_operands) (collect_phis bb.bb_instructions)))` by simp[] >>
+      metis_tac[regional_nonentry_initial_coverage]) >>
+  `!op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    (rpt strip_tac >>
+     `~MEM op (FLAT (MAP (\inst. inst.inst_operands) (collect_phis bb.bb_instructions)))` by simp[] >>
+     metis_tac[regional_nonentry_initial_freshness]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM (EL j bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED

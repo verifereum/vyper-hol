@@ -118,6 +118,54 @@ Proof
   qexistsl_tac [`cfg`, `tail_ops`, `mid`, `0`] >> gvs[]
 QED
 
+Theorem regional_actual_no_phi_lower_inv:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps_l h promised a k ps.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops,ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps_l /\ collect_phis bb.bb_instructions = [] /\
+    a = LENGTH (get_params bb.bb_instructions) /\
+    a <= k /\ k < LENGTH bb.bb_instructions /\
+    block_plan_state lv dfg cfg fn bb
+      (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) k ps ==>
+    regional_body_lower_inv lv dfg sb bb k ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  qpat_x_assum `block_plan_state _ _ _ _ _ _ _ _` mp_tac >>
+  simp[block_plan_state_def] >> strip_tac >>
+  `regional_body_lower_inv lv dfg sb bb a ps2` by
+    (Cases_on `bb = HD fn.fn_blocks`
+     >- (gvs[] >> metis_tac[regional_entry_lower_start]) >>
+     `a = 0` by simp[] >> gvs[] >>
+     irule regional_nonentry_no_phi_lower_start >>
+     rpt (first_assum $ irule_at Any) >> simp[] >>
+     qexistsl_tac [`promised`, `h`] >> simp[]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule lineage_state_dfs_fields >> strip_tac >>
+     `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+       metis_tac[dfs_block_state_cfg_reachable] >>
+     `wf_function fn` by gvs[codegen_ready_fn_def] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  qpat_x_assum `lv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
+  `k = a + (k-a)` by simp[] >> pop_assum SUBST1_TAC >>
+  irule regional_body_lower_inv_prefix >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule regional_no_phi_body_layout >> simp[] >>
+      conj_tac >- (qexists_tac `k` >> simp[]) >>
+      qexists_tac `fn` >> simp[]) >>
+  qexistsl_tac [`cfg`, `pre_ops`, `ps2`, `a`] >> gvs[]
+QED
+
 (* Used at each instruction of the block body's induction, for the
    planner-only premises of the step it takes there.  next_live and
    next_is_term are the lookahead generate_block_insts_plan passes for
