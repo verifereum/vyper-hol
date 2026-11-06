@@ -148,3 +148,61 @@ Proof
   simp[Once (cj 4 generate_fn_plan_aux_def), AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[aux_trace_rules]
 QED
+
+Theorem dfs_trace_visited_mono:
+  (!wl visited ps result tr.
+    aux_trace lv dfg cfg fn wl visited ps result tr ==>
+    !lbl. MEM lbl visited ==> MEM lbl (FST (SND result))) /\
+  (!ss sp succs visited pg result tr.
+    succ_trace lv dfg cfg fn ss sp succs visited pg result tr ==>
+    !lbl. MEM lbl visited ==> MEM lbl (FST (SND result)))
+Proof
+  ho_match_mp_tac aux_trace_ind >> rpt conj_tac >>
+  rpt strip_tac >> gvs[] >> metis_tac[MEM]
+QED
+
+Theorem dfs_trace_label_support:
+  (!wl visited ps result tr.
+    aux_trace lv dfg cfg fn wl visited ps result tr ==>
+    (!lbl. MEM lbl visited ==> MEM lbl (FST (SND result))) /\
+    (!lbl p. MEM (lbl,p) tr ==>
+      MEM lbl (FST (SND result)) /\ ~MEM lbl visited)) /\
+  (!ss sp succs visited pg result tr.
+    succ_trace lv dfg cfg fn ss sp succs visited pg result tr ==>
+    (!lbl. MEM lbl visited ==> MEM lbl (FST (SND result))) /\
+    (!lbl p. MEM (lbl,p) tr ==>
+      MEM lbl (FST (SND result)) /\ ~MEM lbl visited))
+Proof
+  ho_match_mp_tac aux_trace_ind >> rpt conj_tac >>
+  rpt strip_tac >> gvs[MEM_APPEND] >> metis_tac[MEM]
+QED
+
+Theorem dfs_trace_labels_distinct:
+  (!wl visited ps result tr.
+    aux_trace lv dfg cfg fn wl visited ps result tr ==>
+    ALL_DISTINCT (MAP FST tr)) /\
+  (!ss sp succs visited pg result tr.
+    succ_trace lv dfg cfg fn ss sp succs visited pg result tr ==>
+    ALL_DISTINCT (MAP FST tr))
+Proof
+  ho_match_mp_tac aux_trace_strongind >> rpt conj_tac >>
+  rpt strip_tac >> imp_res_tac dfs_trace_label_support >>
+  gvs[ALL_DISTINCT_APPEND, MEM_MAP, MEM_APPEND] >>
+  metis_tac[PAIR, FST]
+QED
+
+Theorem dfs_trace_label_functional:
+  (!wl visited ps result tr.
+    aux_trace lv dfg cfg fn wl visited ps result tr ==>
+    !lbl p q. MEM (lbl,p) tr /\ MEM (lbl,q) tr ==> p = q) /\
+  (!ss sp succs visited pg result tr.
+    succ_trace lv dfg cfg fn ss sp succs visited pg result tr ==>
+    !lbl p q. MEM (lbl,p) tr /\ MEM (lbl,q) tr ==> p = q)
+Proof
+  `!xs : (string # plan_state) list. ALL_DISTINCT (MAP FST xs) ==>
+    !lbl p q. MEM (lbl,p) xs /\ MEM (lbl,q) xs ==> p = q` by
+    (Induct >> simp[MEM_MAP] >> rpt strip_tac >>
+     gvs[] >> metis_tac[FST, PAIR_EQ]) >>
+  rpt strip_tac >> imp_res_tac dfs_trace_labels_distinct >>
+  metis_tac[]
+QED
