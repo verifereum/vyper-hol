@@ -382,7 +382,8 @@ Theorem abi_decode_member_abort_opcode[local]:
 Proof
   strip_tac >> fs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [step_inst_base_def] >>
+  pure_rewrite_tac [step_inst_base_def] >>
+  asm_rewrite_tac [venomInstTheory.opcode_case_def] >>
   simp_tac (srw_ss()) [exec_pure1_def, exec_pure2_def, exec_read1_def,
       AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED

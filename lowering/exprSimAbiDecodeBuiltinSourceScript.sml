@@ -3,7 +3,7 @@ Ancestors
   exprSimAbiDecodeMemberExecute vyperABI vyperABIValid contractABI list
 
 Theorem abi_decode_builtin_source_window:
-  static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
+  abi_static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
   LENGTH bs <= vyper_abi_size_bound env ty ==>
   (abi_decode_source_accepts env ty bs v <=>
    evaluate_abi_decode env ty bs = INL v)
@@ -16,7 +16,7 @@ Proof
 QED
 
 Theorem abi_decode_builtin_source_size_reject:
-  ~(static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
+  ~(abi_static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
     LENGTH bs <= vyper_abi_size_bound env ty) ==>
   evaluate_abi_decode env ty bs = INR "abi_decode invalid"
 Proof
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem abi_decode_builtin_source_view_window:
-  static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
+  abi_static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
   LENGTH bs <= vyper_abi_size_bound env ty /\
   (~is_dynamic (vyper_to_abi_type env ty) ==>
     LENGTH bs = static_length (vyper_to_abi_type env ty)) ==>
@@ -47,7 +47,7 @@ Proof
 QED
 
 Theorem abi_decode_builtin_source_view_reject:
-  static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
+  abi_static_length (vyper_to_abi_type env ty) <= LENGTH bs /\
   LENGTH bs <= vyper_abi_size_bound env ty /\
   (~is_dynamic (vyper_to_abi_type env ty) ==>
     LENGTH bs = static_length (vyper_to_abi_type env ty)) ==>
