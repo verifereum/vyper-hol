@@ -126,6 +126,10 @@ Proof
       rename1 `BytesT bd` >> Cases_on `bd` >>
       gvs[lowered_value_type_def, vyperASTTheory.expr_type_def, is_bytestring_type_def] >>
       metis_tac[return_bytestring_widening, is_bytestring_type_def])
+  >- (Cases_on `b` >> gvs[lowered_value_type_def] >>
+      gvs[well_typed_builtin_app_def, concat_buffer_type_def,
+          vyperASTTheory.expr_type_def, is_bytestring_type_def] >>
+      metis_tac[return_bytestring_widening, is_bytestring_type_def])
   >- (Cases_on `t0` >>
       gvs[lowered_value_type_def, vyperASTTheory.expr_type_def,
           type_builtin_result_ok_def, is_bytestring_type_def] >>

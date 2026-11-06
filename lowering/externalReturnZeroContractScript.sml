@@ -122,21 +122,16 @@ Proof
     (irule abi_encoder_registered_effect_enlarge >>
      qexistsl_tac [`window_alloca_sites func (frag_ids st st')`, `[(d,0)]`] >>
      simp[window_alloca_sites_subset]) >>
-  qexists_tac `(mcopy d (sb MOD dimword (:256)) 0 s)
-    with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `sb MOD dimword (:256)`, `n` |-> `0`,
     `ix` |-> `LENGTH st'.cs_current_insts`] window_copy_state_resources) >>
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  qexists_tac `(mcopy d (sb MOD dimword (:256)) 0 s)
+    with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
-  (* One timed step per conjunct of the result. *)
-  rpt conj_tac >>
-  TRY (simp[eval_operand_def, mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
-       NO_TAC) >>
-  TRY (simp[mcopy_def, write_memory_with_expansion_def] >> NO_TAC) >>
-  asm "sizes" (fn th =>
-    simp_tac (srw_ss())
-      [abiEncoderWritesTheory.abi_encoder_write_observations] >>
-    ACCEPT_TAC th)
+  asm_simp_tac (srw_ss())
+    [eval_operand_def, mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
+  conj_tac >- asm "sizes" ACCEPT_TAC >>
+  simp[mcopy_def, write_memory_with_expansion_def]
 QED
 
 Theorem zero_window_pre_actual:
