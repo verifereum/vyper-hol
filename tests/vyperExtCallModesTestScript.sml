@@ -319,6 +319,39 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Theorem eager_argument_regression_conflict[local]:
+  ~(FST (eval_expr empty_evaluation_context extcall_argument_expr
+    extcall_argument_state) = INR (Error (RevertData [])) /\
+  (SND (eval_expr empty_evaluation_context extcall_argument_expr
+    extcall_argument_state)).requests =
+      [call_outcome_request 0x99w
+        (THE (build_ext_calldata FEMPTY "f"
+          [ArrayT (BaseT (UintT 256)) (Dynamic 3); BaseT (UintT 256)]
+          [ArrayV (DynArrayV []); IntV 2]))
+        (SOME 1) empty_state])
+Proof
+  simp (extcall_argument_expr_def :: extcall_argument_state_def ::
+        FLOOKUP_UPDATE :: get_place_def ::
+        (map (SRULE (LET_THM :: extcall_argument_state_def ::
+                     EXT_CALL_FIXTURE_SIMP))
+          [extcall_argument_first_pop, extcall_argument_second_pop,
+           extcall_argument_keyword_read]) @
+        [read_place_def, read_memory_path_def, evaluate_subscripts_def,
+         lift_sum_def, dest_NumV_def, array_index_def, read_popped_def,
+         subscripts_type_def, subscript_type_def, oEL_def] @ EXT_CALL_FIXTURE_SIMP) >>
+  Cases_on `build_ext_calldata FEMPTY "f"
+    [ArrayT (BaseT (UintT 256)) (Dynamic 3); BaseT (UintT 256)]
+    [ArrayV (DynArrayV [IntV 1; IntV 2]); IntV 2]` >>
+  pop_assum mp_tac >>
+  CONV_TAC (LAND_CONV (LAND_CONV cv_eval)) >>
+  simp EXT_CALL_FIXTURE_SIMP >> strip_tac >> gvs[] >>
+  Cases_on `build_ext_calldata FEMPTY "f"
+    [ArrayT (BaseT (UintT 256)) (Dynamic 3); BaseT (UintT 256)]
+    [ArrayV (DynArrayV []); IntV 2]` >>
+  pop_assum mp_tac >>
+  CONV_TAC (LAND_CONV (LAND_CONV cv_eval)) >> simp[]
+QED
+
 Theorem external_arguments_read_after_positional_and_keyword_pops:
   FST (eval_expr empty_evaluation_context extcall_argument_expr
     extcall_argument_state) = INR (Error (RevertData [])) /\
