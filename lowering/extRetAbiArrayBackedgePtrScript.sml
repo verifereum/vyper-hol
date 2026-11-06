@@ -20,10 +20,14 @@ Theorem abi_decode_loop_suffix_counted_ptr:
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     lookup_var ip sf = SOME p /\ ptr_covers Gf tnf ip sf 32 /\
     mload (w2n p) sf = n2w (j+1) /\
     (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN tnf.t_mem) /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n p <= i /\ i < w2n p+32} /\
+    (!i. i NOTIN {i | w2n p <= i /\ i < w2n p+32} ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
@@ -106,6 +110,8 @@ Theorem abi_decode_loop_suffix_source_prefix_counted_ptr:
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     lookup_var ip sf = SOME p /\ ptr_covers Gf tnf ip sf 32 /\
     mload (w2n p) sf = n2w (j+1) /\
     (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN tnf.t_mem) /\
@@ -113,6 +119,9 @@ Theorem abi_decode_loop_suffix_source_prefix_counted_ptr:
     lookup_var dst sf = SOME b /\ ptr_covers Gf tnf dst sf dcap /\
     mem_bytes_at (w2n b) k sf.vs_memory = prefix /\
     (!i. w2n b <= i /\ i < w2n b+k ==> i NOTIN tnf.t_mem) /\
+    mem_agree_outside {i | w2n p <= i /\ i < w2n p+32} sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN {i | w2n p <= i /\ i < w2n p+32} ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\

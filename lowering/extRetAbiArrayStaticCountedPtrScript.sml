@@ -88,6 +88,8 @@ Theorem abi_array_static_exit_counted_ptr[local]:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     eval_operand out sf = SOME (n2w (32+n*asz)) /\ op_taint tnf out = {} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!x. not_fresh_at sa x ==>

@@ -34,6 +34,8 @@ Theorem abi_array_coordinates_counted_ptr[local]:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     lookup_var data sf = SOME (n2w (w2n a+32)) /\
     lookup_var addr sf = SOME (n2w (w2n a+32+j*stride)) /\
     ptr_covers Gf tnf addr sf n /\
@@ -159,6 +161,8 @@ Theorem abi_array_addresses_counted_ptr[local]:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     lookup_var idx sf = SOME (n2w j) /\ op_taint tnf (Var idx) = {} /\
     lookup_var child_src sf = SOME (n2w (w2n a+32+j*msz)) /\
     lookup_var child_dst sf = SOME (n2w (w2n b+32+j*asz)) /\
@@ -263,6 +267,8 @@ Theorem compile_abi_array_static_body_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     eval_operand out sf = SOME (n2w j) /\ op_taint tnf out = {} /\
     mem_bytes_at (w2n b+32+j*asz) asz sf.vs_memory = enc ty (EL j avs) /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz} /\

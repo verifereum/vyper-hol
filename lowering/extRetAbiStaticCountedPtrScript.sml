@@ -22,6 +22,8 @@ Theorem abi_static_copy_path_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     eval_operand out sf = SOME (n2w n) /\ op_taint tnf out = {} /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n} /\
@@ -68,6 +70,8 @@ Theorem abi_static_word_path_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     eval_operand out sf = SOME 32w /\ op_taint tnf out = {} /\
     sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
@@ -126,6 +130,8 @@ Theorem compile_abi_static_slice_ptr[local]:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     eval_operand out sf = SOME (n2w n) /\ op_taint tnf out = {} /\
     mem_bytes_at (w2n b) n sf.vs_memory = enc at av /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n} /\
@@ -186,6 +192,8 @@ Theorem compile_abi_encode_static_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     eval_operand out sf = SOME (n2w n) /\ op_taint tnf out = {} /\
     mem_bytes_at (w2n b) n sf.vs_memory = enc at av /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n} /\
@@ -242,6 +250,8 @@ Theorem compile_abi_encode_static_info_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     eval_operand out sf = SOME (n2w n) /\ op_taint tnf out = {} /\
     mem_bytes_at (w2n b) n sf.vs_memory = enc at av /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n} /\

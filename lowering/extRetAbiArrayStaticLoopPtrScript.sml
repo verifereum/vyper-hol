@@ -56,7 +56,7 @@ Theorem abi_array_loop_header_frame:
     sf.vs_current_bb = (if j<n then body_lbl else exit_lbl) /\
     sf.vs_inst_idx = 0 /\ ~sf.vs_halted /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
-    sf.vs_fmp = s.vs_fmp /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_alloca_next = s.vs_alloca_next /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sh v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
@@ -168,6 +168,8 @@ Proof
    `?Gh th h.
     gas_path_ptr D 0 ctx fn PG Gf tnf sf 0 Gh th (OK h) /\
     h.vs_current_bb = hdr /\ h.vs_inst_idx = 0 /\ ~h.vs_halted /\
+    h.vs_allocas = sf.vs_allocas /\ h.vs_alloca_next = sf.vs_alloca_next /\
+    h.vs_fmp = sf.vs_fmp /\
     lookup_var ip h = SOME p /\ ptr_covers Gh th ip h 32 /\
     mload (w2n p) h = n2w (j+1) /\
     (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN th.t_mem) /\
@@ -176,6 +178,9 @@ Proof
     mem_bytes_at (w2n b) (32+(j+1)*asz) h.vs_memory =
       header ++ FLAT (MAP (enc ty) (TAKE (j+1) avs)) /\
     (!i. w2n b <= i /\ i < w2n b+(32+(j+1)*asz) ==> i NOTIN th.t_mem) /\
+    mem_agree_outside {i | w2n p <= i /\ i < w2n p+32} h.vs_memory sf.vs_memory /\
+    (!i. i NOTIN {i | w2n p <= i /\ i < w2n p+32} ==>
+      (i IN th.t_mem <=> i IN tnf.t_mem)) /\
     th.t_stor = tnf.t_stor /\ th.t_trans = tnf.t_trans /\
     (!v. not_fresh_at st v ==>
       lookup_var v h = lookup_var v sf /\ FLOOKUP Gh v = FLOOKUP Gf v /\
