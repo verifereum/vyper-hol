@@ -43,7 +43,9 @@ Ancestors
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
    unit or, while cx.in_deploy, its deployment unit. The constructor and
-   its internal callees share that deployment context. cenv has the program's
+   its internal callees share that deployment context, so tops declares a
+   constructor there (without one the deployment unit packages no internal
+   functions). cenv has the program's
    function ids, parameter types and calling conventions (so compile_call
    gives an internal call the label package_internal_fn gave the callee:
    compile_call_intcall_label) and return types (the type compile_call
@@ -67,6 +69,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
@@ -175,13 +178,47 @@ End
 (* ===== The predicates of the induction ===== *)
 
 (* An expression of a frame of the lowered program, internal calls
-   allowed, simulates as a value and as compile_expr's value_vv. *)
+   allowed, simulates as a value and as compile_expr's value_vv.  A
+   literal array's elements are ok too, since raw_log compiles its topic
+   list's elements without compiling the array.  The operands of an
+   expression (body_exprs_ok), evaluated and read in order: each
+   simulates if the ones before it can evaluate. *)
 Definition body_expr_ok_def:
-  body_expr_ok cx e <=>
-    !tops ctx func cenv env ty es.
+  (body_expr_ok cx e <=>
+    (!tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
-      expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es
+      expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es) /\
+    (!a t n elems.
+      e = Builtin a (MakeArray t n) elems /\
+      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+      body_exprs_ok cx elems)) /\
+  body_exprs_ok cx [] = T /\
+  body_exprs_ok cx (e::es) =
+    (body_expr_ok cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      body_exprs_ok cx es))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+      INL (_, e) => expr_size e
+    | INR (_, es) => list_size expr_size es)` >>
+  simp[expr_size_def]
 End
+
+Theorem body_exprs_ok_def = CONJUNCT2 body_expr_ok_def;
+
+(* The elements of an array literal simulate, by the literal's clause. *)
+Theorem body_make_array_children_ok:
+  !cx a t n elems.
+    body_expr_ok cx (Builtin a (MakeArray t n) elems) /\
+    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+    body_exprs_ok cx elems
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `body_expr_ok _ _`
+    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
+QED
 
 (* A well-typed, supported statement of the frame, with its declaration,
    simulates with the frame's RetQ.  The compile type is the function's
@@ -219,17 +256,6 @@ Definition body_stmts_ok_def:
       frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
         (eval_stmts cx ss) es
-End
-
-(* The operands of an expression, evaluated and read in order: each
-   simulates if the ones before it can evaluate. *)
-Definition body_exprs_ok_def:
-  body_exprs_ok cx [] = T /\
-  body_exprs_ok cx (e::es) =
-    (body_expr_ok cx e /\
-     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
-                        read_result cx tv s1 = (INL v, t1)) ==>
-      body_exprs_ok cx es))
 End
 
 (* The same, evaluated without reading (eval_expr_results). *)

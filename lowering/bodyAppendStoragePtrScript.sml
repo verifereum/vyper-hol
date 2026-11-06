@@ -28,7 +28,10 @@ Theorem body_append_storage_fragment_ptr:
   supported_expr tops e /\ expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) ==>
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (Append (TopLevelNameTarget (src,id)) e) ==>
+            occurs_abi_decode_target target tops) ==>
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
     (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
@@ -73,5 +76,5 @@ Proof
   >- (first_assum ACCEPT_TAC) >>
   simp[] >> conj_tac
   >- (qexists_tac `tops` >> simp[supportedExprsTheory.supported_expr_def]) >>
-  qexistsl_tac [`env`, `env'`] >> simp[]
+  qexistsl_tac [`env`, `env'`] >> simp[] >> metis_tac[]
 QED
