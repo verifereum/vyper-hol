@@ -68,7 +68,10 @@ Proof
 QED
 
 Theorem ptr_write_transport_owner_containment:
-  ptr_vars_transport births positions TG tn s t /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+    (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst s) (eval_operand ops.iao_ofst t) /\
+  ptr_lookup_transport births positions (op_prov TG sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop s) (eval_operand sizeop t) /\
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   ((?v. ops.iao_ofst = Var v) \/ (?w. ops.iao_ofst = Lit w)) /\
   ((?v. sizeop = Var v) \/ (?w. sizeop = Lit w)) /\
@@ -86,15 +89,11 @@ Theorem ptr_write_transport_owner_containment:
 Proof
   strip_tac >>
   `eval_operand sizeop t = SOME z` by
-    (drule ptr_vars_transport_eval >>
-     disch_then (qspec_then `sizeop` mp_tac) >>
-     simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
+    (gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
   `?y. eval_operand ops.iao_ofst t = SOME y /\
     ptr_value_transport births positions (SOME (token,aid))
       (op_taint tn ops.iao_ofst) x y` by
-    (drule ptr_vars_transport_eval >>
-     disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
-     simp[ptr_lookup_transport_some]) >>
+    (gvs[ptr_lookup_transport_some]) >>
   `y = x - n2w srcbase + n2w pos` by
     gvs[ptr_value_transport_def] >>
   `w2n y = pos + (w2n x - srcbase)` by
@@ -109,7 +108,10 @@ Proof
 QED
 
 Theorem ptr_write_transport_fixed_containment:
-  ptr_vars_transport births positions TG tn s t /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+    (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst s) (eval_operand ops.iao_ofst t) /\
+  ptr_lookup_transport births positions (op_prov TG sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop s) (eval_operand sizeop t) /\
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   ((?v. ops.iao_ofst = Var v) \/ (?w. ops.iao_ofst = Lit w)) /\
   ((?v. sizeop = Var v) \/ (?w. sizeop = Lit w)) /\
@@ -121,13 +123,9 @@ Theorem ptr_write_transport_fixed_containment:
 Proof
   strip_tac >>
   `eval_operand sizeop t = SOME z` by
-    (drule ptr_vars_transport_eval >>
-     disch_then (qspec_then `sizeop` mp_tac) >>
-     simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
+    (gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
   `eval_operand ops.iao_ofst t = SOME x` by
-    (drule ptr_vars_transport_eval >>
-     disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
-     simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
+    (gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
   `!q. q IN range_bytes (step_writes inst t post) ==>
     w2n x <= q /\ q < w2n x + w2n z` by
     (gen_tac >> strip_tac >> irule ptr_step_write_max_containment >>

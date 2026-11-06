@@ -237,7 +237,10 @@ Theorem ptr_demand_fixed_write_exclusion[local]:
     rpolicy s out names w /\
   ptr_stage_placements C' positions /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\ fixed_region_reserved lo C /\
-  ptr_vars_transport bj positions TGj tn src tgt /\
+  ptr_lookup_transport bj positions (op_prov TGj ops.iao_ofst)
+    (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst src) (eval_operand ops.iao_ofst tgt) /\
+  ptr_lookup_transport bj positions (op_prov TGj sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop src) (eval_operand sizeop tgt) /\
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   ((?u. ops.iao_ofst = Var u) \/ (?y. ops.iao_ofst = Lit y)) /\
   ((?u. sizeop = Var u) \/ (?y. sizeop = Lit y)) /\
@@ -286,7 +289,13 @@ Theorem ptr_demand_same_owner_write_exclusion[local]:
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
-  ptr_vars_transport bj positions TGj (EL j h).po_taint src tgt /\
+  ptr_lookup_transport bj positions (op_prov TGj ops.iao_ofst)
+    (op_taint (EL j h).po_taint ops.iao_ofst)
+    (eval_operand ops.iao_ofst src) (eval_operand ops.iao_ofst tgt) /\
+  ptr_lookup_transport bj positions (op_prov TGj sizeop)
+    (op_taint (EL j h).po_taint sizeop)
+    (eval_operand sizeop src) (eval_operand sizeop tgt) /\
+  (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
   src.vs_labels = tgt.vs_labels /\
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
@@ -703,7 +712,13 @@ Theorem ptr_demand_ordinary_write_exclusion:
   ptr_stage_placements C' positions /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
   fixed_region_reserved lo C /\
-  ptr_vars_transport bj positions TGj (EL j h).po_taint src tgt /\
+  ptr_lookup_transport bj positions (op_prov TGj ops.iao_ofst)
+    (op_taint (EL j h).po_taint ops.iao_ofst)
+    (eval_operand ops.iao_ofst src) (eval_operand ops.iao_ofst tgt) /\
+  ptr_lookup_transport bj positions (op_prov TGj sizeop)
+    (op_taint (EL j h).po_taint sizeop)
+    (eval_operand sizeop src) (eval_operand sizeop tgt) /\
+  (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
   src.vs_labels = tgt.vs_labels /\
   mem_write_ops (EL j h).po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   ((?u. ops.iao_ofst = Var u) \/ (?y. ops.iao_ofst = Lit y)) /\

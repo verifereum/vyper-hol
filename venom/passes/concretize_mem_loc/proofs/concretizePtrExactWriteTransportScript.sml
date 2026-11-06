@@ -3,12 +3,6 @@ Ancestors concretizePtrWriteTransport concretizePtrWriteClassification
   concretizePtrValueTransport concretizePtrComparisonTransport
   ptrDiscipline memLocDefs venomState words finite_map list pred_set arithmetic option pair
 
-Theorem ptr_write_eval_exists[local]:
-  ptr_lookup_transport births positions tag mask xs ys ==>
-  (IS_SOME xs = IS_SOME ys)
-Proof
-  Cases_on `xs` >> Cases_on `ys` >> simp[ptr_lookup_transport_def]
-QED
 
 Theorem ptr_paired_source_write_range[local]:
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
@@ -49,7 +43,12 @@ Proof
 QED
 
 Theorem ptr_write_transport_owner_exact:
-  ptr_vars_transport births positions TG tn s t /\ s.vs_labels = t.vs_labels /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+    (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst s) (eval_operand ops.iao_ofst t) /\
+  ptr_lookup_transport births positions (op_prov TG sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop s) (eval_operand sizeop t) /\
+  (!op. IS_SOME (eval_operand op s) = IS_SOME (eval_operand op t)) /\
+  s.vs_labels = t.vs_labels /\
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   eval_operand ops.iao_ofst s = SOME x /\ eval_operand sizeop s = SOME z /\
   op_prov TG ops.iao_ofst = SOME (token,aid) /\
@@ -65,23 +64,15 @@ Theorem ptr_write_transport_owner_exact:
 Proof
   strip_tac >>
   `eval_operand sizeop t = SOME z` by
-    (drule_all ptr_vars_transport_eval_all >>
-     disch_then (qspec_then `sizeop` mp_tac) >>
-     simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
+    (gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
   `?y. eval_operand ops.iao_ofst t = SOME y /\
     ptr_value_transport births positions (SOME (token,aid))
       (op_taint tn ops.iao_ofst) x y` by
-    (drule_all ptr_vars_transport_eval_all >>
-     disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
-     simp[ptr_lookup_transport_some]) >>
+    (gvs[ptr_lookup_transport_some]) >>
   `y = x - n2w b + n2w p` by gvs[ptr_value_transport_def] >>
   `w2n y = p + (w2n x - b)` by
     (irule ptr_closed_relocation_value >> simp[] >>
      qexists `sz` >> simp[] >> decide_tac) >>
-  `!op. IS_SOME (eval_operand op s) = IS_SOME (eval_operand op t)` by
-    (gen_tac >> drule_all ptr_vars_transport_eval_all >>
-     disch_then (qspec_then `op` mp_tac) >>
-     metis_tac[ptr_write_eval_exists]) >>
   drule_all ptr_paired_write_intervals >> strip_tac >>
   rpt strip_tac >>
   `!len. (w2n x <= b+k /\ b+k < w2n x+len) <=>
@@ -90,7 +81,12 @@ Proof
 QED
 
 Theorem ptr_write_transport_fixed_exact:
-  ptr_vars_transport births positions TG tn s t /\ s.vs_labels = t.vs_labels /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+    (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst s) (eval_operand ops.iao_ofst t) /\
+  ptr_lookup_transport births positions (op_prov TG sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop s) (eval_operand sizeop t) /\
+  (!op. IS_SOME (eval_operand op s) = IS_SOME (eval_operand op t)) /\
+  s.vs_labels = t.vs_labels /\
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   eval_operand ops.iao_ofst s = SOME x /\ eval_operand sizeop s = SOME z /\
   op_prov TG ops.iao_ofst = NONE /\ op_taint tn ops.iao_ofst = {} /\
@@ -101,17 +97,9 @@ Theorem ptr_write_transport_fixed_exact:
 Proof
   strip_tac >>
   `eval_operand sizeop t = SOME z` by
-    (drule_all ptr_vars_transport_eval_all >>
-     disch_then (qspec_then `sizeop` mp_tac) >>
-     simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
+    (gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
   `eval_operand ops.iao_ofst t = SOME x` by
-    (drule_all ptr_vars_transport_eval_all >>
-     disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
-     simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
-  `!op. IS_SOME (eval_operand op s) = IS_SOME (eval_operand op t)` by
-    (gen_tac >> drule_all ptr_vars_transport_eval_all >>
-     disch_then (qspec_then `op` mp_tac) >>
-     metis_tac[ptr_write_eval_exists]) >>
+    (gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty]) >>
   drule_all ptr_paired_write_intervals >> strip_tac >>
   simp[EXTENSION] >> metis_tac[]
 QED
