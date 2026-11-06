@@ -7,6 +7,7 @@ Ancestors
   bodyMemoryPreds bodyMemTbConvertWidened vyperContext vyperState
   bodyMemTbConvertOperand bodyMemTbConvertCompose bodyMemTbConvertIntSuffix
   bodyMemTbConvertScalarFlags bodyMemTbConvertLoadMemory
+  bodyMemTbConvertScalarDispatch
   bodyMemTbConvertDestMemory bodyMemTbConvertDestPath
 
 Theorem body_type_builtin_convert_plain_mem_case:
