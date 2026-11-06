@@ -328,12 +328,6 @@ Theorem calldata_owned_fixed_successor_endpoint:
   (!op. op = src \/ op = dst \/ op = ip \/ abi_decoder_operand_live st.cs_next_var op ==>
     op <> Var (STRING #"%" (toString nvar)) /\ abi_decoder_operand_live next op) /\
   (!op. abi_decoder_operand_live next op ==> abi_decoder_operand_live ready.cs_next_var op) /\
-  head = jump_to body_lbl
-    (abi_decode_header_state (STRING #"%" (toString next))
-      (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
-      (STRING #"%" (toString (next+3))) j (LENGTH vs) u) /\
-  abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-    (Lit 0w) sb d b cap st0.cs_next_var limit_st head entry /\
   entry.vs_memory = u.vs_memory /\ entry.vs_call_ctx = u.vs_call_ctx /\
   entry.vs_data_section = u.vs_data_section /\ entry.vs_allocas = u.vs_allocas /\
   entry.vs_alloca_next = u.vs_alloca_next /\
