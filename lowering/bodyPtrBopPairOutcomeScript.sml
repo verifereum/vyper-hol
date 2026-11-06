@@ -68,8 +68,8 @@ Theorem bop_operand_outcome_ptr:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv d cenv cx ee G tn t /\
-    ptr_val_ok cx (expr_type e) v op G tn t /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+    ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     P (INL v) ee /\ ee.gas_obs = [] /\ ~t.vs_halted ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
@@ -106,8 +106,8 @@ Proof
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        ghost_inv d cenv cx ee G tn t /\
-       ptr_val_ok cx (expr_type e) v op G tn t /\
-       (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+       ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
        ghost_kept cenv es sa G0 tn0 s0 G tn) /\
        P res ee /\ ee.gas_obs = [] /\ ~t.vs_halted`,
      `\res ee gt r. expr_exit res r`] >>
@@ -135,16 +135,16 @@ Theorem bop_pair_posts_kept:
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   sb.cs_next_id <= sc.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at sb z) /\ (!l. x <> Label l) /\
-  log_arg_clear cenv cx (expr_type e1) v1 /\
-  ptr_val_ok cx (expr_type e1) v1 x G1 tn1 s1 /\
+  log_arg_clear cenv cx (post_value_type cenv e1) v1 /\
+  ptr_val_ok cx (post_value_type cenv e1) v1 x G1 tn1 s1 /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv es1 sb G1 tn1 s1 G2 tn2 /\
   eval_operand x s2 = eval_operand x s1 /\
-  (~is_word_type (expr_type e1) ==>
-    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv) /\
+  (~is_word_type (post_value_type cenv e1) ==>
+    evaluate_type (get_tenv cx) (post_value_type cenv e1) = SOME tv) /\
   stmt_state_rel ctx func cenv cx es s0 ==>
-  log_arg_rel cenv cx sa sc es2 s2 (x,expr_type e1) v1 /\
-  ptr_val_ok cx (expr_type e1) v1 x G2 tn2 s2 /\
+  log_arg_rel cenv cx sa sc es2 s2 (x,post_value_type cenv e1) v1 /\
+  ptr_val_ok cx (post_value_type cenv e1) v1 x G2 tn2 s2 /\
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
   strip_tac >>
@@ -152,7 +152,7 @@ Proof
   `wb_frame cenv es1 sb s1 s2` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `stmt_state_rel ctx func cenv cx es1 s1` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
-  `log_arg_rel cenv cx sa sb es1 s1 (x,expr_type e1) v1` by
+  `log_arg_rel cenv cx sa sb es1 s1 (x,post_value_type cenv e1) v1` by
     fs[log_arg_rel_def, loweringPostsTheory.expr_post_def] >>
   drule_all bop_pair_first_post_kept >> strip_tac >>
   simp[] >> irule wordArgsPtrTheory.ghost_kept_wb_trans >> metis_tac[]
