@@ -274,6 +274,9 @@ Theorem intcall_runtime_prologue_raw_post:
   immutable_alloca_sep fn (ce2 with ce_alloca_locals := T) cx
     (vs with scopes := [src]) u /\ alloca_inv u /\
   fresh_vars_wrt st1 u /\ mat_frame st0 s0 u /\
+  (!inst n base sz. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (base,sz) ==>
+    sz = w2n n) /\
   (?x. rpc = Var x /\ not_fresh_at st1 x /\
        lookup_var x u = SOME s0.vs_return_pc_token) /\
   (has_rb ==> ?rb. not_fresh_at st1 rb /\ lookup_var rb u = SOME (HD args) /\
@@ -281,7 +284,7 @@ Theorem intcall_runtime_prologue_raw_post:
        ce2.ce_return_buf = SOME (PtrVar (Var rb) sz))
 Proof
   strip_tac >> drule internal_prologue_run >> simp[] >>
-  disch_then drule_all >> strip_tac >> gvs[]
+  disch_then drule_all >> strip_tac >> gvs[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem intcall_ghost_inv_alloca_locals:
@@ -649,3 +652,100 @@ Resume intcall_prologue_code_suppliers[opcodes]:
   fs[EVERY_MEM]
 QED
 Finalise intcall_prologue_code_suppliers
+
+
+Theorem intcall_prologue_immutable_fields:
+  compile_internal_prologue ce params has_rb ret_type st0 = ((ce2,rpc),st1) ==>
+  ce2.ce_imm_alloca = ce.ce_imm_alloca /\ ce2.ce_is_ctor = ce.ce_is_ctor
+Proof
+  strip_tac >> drule intcall_prologue_factor >> strip_tac >>
+  drule intcall_entry_prefix_code >> strip_tac >>
+  drule intcall_materialize_return_metadata >> simp[]
+QED
+
+Theorem intcall_runtime_raw_stmt_post:
+  compile_internal_prologue ce params has_rb ret_type st0 = ((ce2,rpc),st1) /\
+  fn_has_code st0 st1 fn /\ fn_inst_ids_distinct fn /\
+  setup_callee fn args caller = SOME s0 /\
+  state_rel f ce cx (vs with scopes := []) caller /\
+  internal_immutable_regions ce cx vs caller.vs_alloca_next /\
+  internal_args_rel ce params src (if has_rb then 1 else 0) args
+    caller.vs_alloca_next caller.vs_memory /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  caller.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
+  run_inst_seq (emitted_insts st0 st1) s0 = OK u /\
+  EVERY (\i. MEM i (fn_insts fn) /\ i.inst_opcode <> INVOKE) (emitted_insts st0 st1) /\
+  alloca_room ctx fn s0 /\ fmp_room ctx fn s0 ==>
+  stmt_state_rel ctx fn (ce2 with ce_alloca_locals := T) cx (vs with scopes := [src]) u
+Proof
+  strip_tac >> drule_all intcall_runtime_prologue_raw_post >> strip_tac >>
+  `u.vs_fmp = s0.vs_fmp` by
+    (qpat_x_assum `mat_frame _ _ _` mp_tac >>
+     simp[mat_frame_def, venom_state_component_equality] >> metis_tac[]) >>
+  `alloca_room ctx fn u` by
+    (drule_all intcall_run_inst_seq_alloca_room >> simp[]) >>
+  `fmp_room ctx fn u` by
+    (drule_all run_inst_seq_fmp_room >> simp[]) >>
+  drule intcall_prologue_immutable_fields >> strip_tac >>
+  simp[stmt_state_rel_def, immutable_base_zero_alt] >> first_assum ACCEPT_TAC
+QED
+
+Theorem intcall_runtime_prologue_stmt_entry_ptr:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  materialize_internal_params ce1 caps stm = (ce2,st2) /\
+  (case ret_type of
+     SOME ty => if ce.ce_returns_count > 0 then
+       do compile_alloc_buffer (type_memory_bytes ce ty); return () od
+       else return ()
+   | NONE => return ()) st2 = ((),st1) /\
+  (case ret_type of NONE => T | SOME ty =>
+    type_memory_bytes ce ty < dimword (:256)) /\
+  fn_has_code st st1 fn /\ fn_inst_ids_distinct fn /\
+  setup_callee fn args caller = SOME s /\
+  state_rel f ce cx (vs with scopes := []) caller /\
+  internal_immutable_regions ce cx vs caller.vs_alloca_next /\
+  internal_args_rel ce params src (if has_rb then 1 else 0) args
+    caller.vs_alloca_next caller.vs_memory /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  caller.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
+  alloca_room ctx fn s /\ fmp_room ctx fn s /\
+  intcall_entry_memory ce params src (if has_rb then 1 else 0) PG tn s /\
+  intcall_entry_return ce has_rb d PG s /\
+  (!name entry off sz. FLOOKUP src name = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (MemLoc off sz) ==>
+    val_footprint entry.type entry.value <= sz) /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH args /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH PG /\
+  (if has_rb then 1 else 0) + LENGTH params < dimword (:256) /\
+  fresh_vars_wrt st s /\
+  (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
+  ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (DROP (LENGTH st.cs_current_insts) st1.cs_current_insts)
+    (DROP s.vs_inst_idx bb.bb_instructions) /\ stor_taint_ok cx tn s ==>
+  ?t G' tn' u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv d (ce2 with ce_alloca_locals := T) cx
+      (vs with scopes := [src]) G' tn' t /\
+    stmt_state_rel ctx fn (ce2 with ce_alloca_locals := T) cx (vs with scopes := [src]) t /\
+    fresh_vars_wrt st1 t /\
+    (?x. rpc = Var x /\ not_fresh_at st1 x /\
+      lookup_var x t = SOME s.vs_return_pc_token) /\
+    (has_rb ==> ?rb. not_fresh_at st1 rb /\ lookup_var rb t = SOME (HD args) /\
+      !off sz. ce.ce_return_buf = SOME (MemLoc off sz) ==>
+        ce2.ce_return_buf = SOME (PtrVar (Var rb) sz)) /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts st st1) /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+    run_inst_seq (emitted_insts st st1) s = OK u /\
+    t = u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st1)
+Proof
+  strip_tac >> drule_all intcall_prologue_code_suppliers >> strip_tac >>
+  `EVERY (\i. MEM i (fn_insts fn) /\ i.inst_opcode <> INVOKE)
+    (DROP (LENGTH st.cs_current_insts) st2.cs_current_insts)` by
+    fs[emitted_insts_def] >>
+  drule_all intcall_runtime_prologue_entry_ptr >>
+  disch_then (qspecl_then [`G`,`D`] strip_assume_tac) >>
+  drule_all intcall_prologue_assemble >> strip_tac >>
+  drule_all intcall_runtime_raw_stmt_post >> strip_tac >>
+  qexistsl_tac [`t`,`G'`,`tn'`,`u`] >> asm_rewrite_tac[] >>
+  qpat_x_assum `t = u with vs_inst_idx := _` SUBST_ALL_TAC >>
+  fs[stmt_state_rel_inst_idx, lookup_var_def]
+QED

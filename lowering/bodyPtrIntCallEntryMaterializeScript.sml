@@ -624,7 +624,8 @@ QED
 Theorem intcall_materialize_return_metadata:
   !caps ce st ce' st'.
   materialize_internal_params ce caps st = (ce',st') ==>
-  ce'.ce_return_pc = ce.ce_return_pc /\ ce'.ce_return_buf = ce.ce_return_buf
+  ce'.ce_return_pc = ce.ce_return_pc /\ ce'.ce_return_buf = ce.ce_return_buf /\
+  ce'.ce_imm_alloca = ce.ce_imm_alloca /\ ce'.ce_is_ctor = ce.ce_is_ctor
 Proof
   Induct >- simp[moduleLoweringTheory.materialize_internal_params_def, comp_return_def] >>
   PairCases >> rpt gen_tac >>
