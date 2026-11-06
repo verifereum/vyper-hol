@@ -67,6 +67,33 @@ Proof
   gvs[lookup_scopes_update, lookup_scopes_update_other] >> metis_tac[]
 QED
 
+Theorem pop_place_scopes_progress[local]:
+  pop_place cx p st = (res,st') ==> scopes_progress st.scopes st'.scopes
+Proof
+  Cases_on `p`
+  >- metis_tac[pop_storage_place_scopes_immutables, scopes_progress_refl]
+  >- (rename1 `MemoryPlace id path` >> strip_tac >>
+      Cases_on `find_containing_scope id st.scopes` >>
+      gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+          return_def, raise_def] >> PairCases_on `x` >>
+      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
+          check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+      fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
+      imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >> gvs[] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
+      irule scopes_progress_update >> goal_assum (drule_at Any) >>
+      gvs[lift_option_type_def, lift_sum_def, sum_CASE_rator, option_CASE_rator,
+          return_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac replace_popped_length >> simp[record_pop_def]) >>
+  simp[pop_place_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, get_immutables_def,
+           get_address_immutables_def, return_def, raise_def]) >>
+  metis_tac[set_immutable_scopes, scopes_progress_refl]
+QED
+
 Theorem eval_scopes_progress:
   (!cx e st res st'. eval_expr cx e st = (res,st') ==>
      scopes_progress st.scopes st'.scopes) /\
