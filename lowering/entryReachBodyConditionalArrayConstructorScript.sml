@@ -60,13 +60,12 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem conditional_array_prepared_endpoint[local]:
+Theorem callback_array_prepared_endpoint:
   cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
      (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
      (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
-     (hdr,body_lbl,exit,hid,bb)) /\ iteration_static_config cfg /\
-  (!k. k < LENGTH xs ==> entry_conditional_array_child_producer ce env ty tv
-    (EL k avs) (EL k xs) ctx fn oid root extent ambient b reserve site limit_st) /\
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_callback_config cfg /\
+  iteration_semantic_callback cfg /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = ploop.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH ploop.cs_current_insts /\
   lookup_block ploop.cs_current_bb fn.fn_blocks = SOME
@@ -104,7 +103,7 @@ Proof
      [(d,32+LENGTH xs*type_memory_size tv)] prepared (jump_to hdr prepared)` by
     (irule conditional_array_header_entry >> simp[] >>
      qexists_tac `ploop` >> simp[] >> goal_assum (drule_at Any)) >>
-  drule_all entry_conditional_dynamic_array_iteration >>
+  drule_all entry_generic_array_callback_iteration >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   qhdtm_x_assum `entry_loop_trace`
@@ -114,6 +113,42 @@ Proof
   >- metis_tac[entry_decode_path_trans] >>
   irule abi_encoder_registered_effect_trans >>
   qexists_tac `jump_to hdr prepared` >> simp[]
+QED
+
+Theorem conditional_array_prepared_endpoint[local]:
+  cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_static_config cfg /\
+  (!k. k < LENGTH xs ==> entry_conditional_array_child_producer ce env ty tv
+    (EL k avs) (EL k xs) ctx fn oid root extent ambient b reserve site limit_st) /\
+  ~prepared.vs_halted /\ prepared.vs_current_bb = ploop.cs_current_bb /\
+  prepared.vs_inst_idx = LENGTH ploop.cs_current_insts /\
+  lookup_block ploop.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := ploop.cs_current_bb; bb_instructions :=
+      ploop.cs_current_insts ++ [mk_inst ploop.cs_next_id JMP [Label hdr] []]|> /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) prepared /\
+  eval_operand ip prepared = SOME p /\ eval_operand src prepared = SOME (n2w sb) /\
+  mload (w2n p) prepared = 0w /\
+  abi_decode_load CALLDATALOAD (n2w sb : bytes32) prepared = n2w (LENGTH xs) /\
+  fresh_vars_wrt limit_st prepared /\ mem_word_at d prepared.vs_memory = n2w (LENGTH xs) /\
+  entry_scratch_ready ambient b reserve prepared ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+    iteration_frame next limit_st prepared ambient b reserve
+      (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_fields prepared t /\ entry_decode_path ctx fn prepared t /\
+    abi_encoder_registered_effect
+      (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+      [(d,32+LENGTH xs*type_memory_size tv)] prepared t
+Proof
+  strip_tac >> drule iteration_static_callback_config >> strip_tac >>
+  drule_all iteration_conditional_semantic_callback >> strip_tac >>
+  drule_all callback_array_prepared_endpoint >> simp[]
 QED
 
 Theorem conditional_array_initializer_resources[local]:
@@ -179,7 +214,7 @@ QED
 
 (* Use the actual counter's 32-byte allocation, not the entire ambient
    scratch interval, for the initializer's disjointness precondition. *)
-Theorem conditional_array_initialization[local]:
+Theorem conditional_array_initialization:
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
@@ -270,12 +305,12 @@ Proof
 QED
 
 (* Compiler-only extraction: semantic states are quantified after witnesses. *)
-Theorem conditional_array_compiler_config[local]:
+Theorem callback_array_compiler_config:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
-    (DecDynArray (type_to_abi_dec_info ce.ce_struct_fields ce ty)
+    (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn)
     st = ((),final) /\
-  (dyn \/ dec_info_needs_clamp (type_to_abi_dec_info ce.ce_struct_fields ce ty)) /\
+  (dyn \/ dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
   fn_has_code st final fn /\ final.cs_next_var <= limit_st.cs_next_var /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   (final.cs_current_insts = [] ==> !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -297,10 +332,15 @@ Theorem conditional_array_compiler_config[local]:
     lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME
       <|bb_label := loop_st.cs_current_bb; bb_instructions := loop_st.cs_current_insts ++
         [mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []]|> /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) body_st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
     (!prepared pnum sb d env tv avs xs ctx (site : instruction) oid (root : num) (extent : num) ambient (b : num) (reserve : num).
-      abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+      abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
       abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-        (DecDynArray (type_to_abi_dec_info ce.ce_struct_fields ce ty)
+        (DecDynArray (type_to_abi_dec_info sf ce ty)
           (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn)
         (ListV avs) (ArrayV (DynArrayV xs)) /\
       mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -316,9 +356,9 @@ Theorem conditional_array_compiler_config[local]:
       oid NOTIN ambient /\ LENGTH xs < dimword (:256) /\ EVERY (val_wf tv) xs /\
       type_memory_bytes ce ty = type_memory_size tv /\
       32+LENGTH xs*type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn)) ==>
-      iteration_static_config
+      iteration_callback_config
         ((ce,env,ty,tv,maxn,
-           DecDynArray (type_to_abi_dec_info ce.ce_struct_fields ce ty)
+           DecDynArray (type_to_abi_dec_info sf ce ty)
              (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn,avs,xs),
          (ip,src,dst,body_st,ops,middle,last,limit_st,loop_st.cs_next_var,last.cs_next_var),
          (ctx,fn,site,header_st.cs_next_id,oid,root,extent,d,b,reserve,prepared,n2w pnum,sb,ambient),
@@ -360,7 +400,7 @@ Proof
   asm_rewrite_tac[] >> conj_tac >- suspend "entry_lookup" >>
   suspend "static_config"
 QED
-Resume conditional_array_compiler_config[entry_lookup]:
+Resume callback_array_compiler_config[entry_lookup]:
   qpat_x_assum `fn_has_code loop_st body_st fn` mp_tac >>
   qpat_x_assum `body_st.cs_blocks = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -369,7 +409,7 @@ Resume conditional_array_compiler_config[entry_lookup]:
     `<|bb_label := loop_st.cs_current_bb; bb_instructions := loop_st.cs_current_insts ++
        [mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []]|>` mp_tac) >> simp[]
 QED
-Resume conditional_array_compiler_config[static_config]:
+Resume callback_array_compiler_config[static_config]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decoder_code middle last` by
     (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _`
@@ -381,12 +421,15 @@ Resume conditional_array_compiler_config[static_config]:
   `window_alloca_sites fn (abi_decoder_ids middle.cs_next_id last.cs_next_id) SUBSET ambient` by
     (fs[window_alloca_sites_def, abi_decoder_ids_def, SUBSET_DEF] >>
      rpt strip_tac >> first_x_assum irule >> simp[] >> decide_tac) >>
-  simp_tac bool_ss [iteration_static_config_def] >>
+  `LENGTH xs <= maxn /\ 32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
+    (drule abi_decoder_dynarray_values >> simp[] >>
+     drule abi_decoder_coherent_array_capacity >> simp[]) >>
+  simp_tac bool_ss [iteration_callback_config_def] >>
   asm_rewrite_tac[] >> simp[] >>
   simp_tac bool_ss [abi_decode_loop_cfg_def] >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
-Finalise conditional_array_compiler_config
+Finalise callback_array_compiler_config
 
 Theorem entry_conditional_nonbulk_array_constructor:
   parent_di = DecDynArray (type_to_abi_dec_info ce.ce_struct_fields ce ty)
@@ -422,7 +465,7 @@ Theorem entry_conditional_nonbulk_array_constructor:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `parent_di = _` SUBST_ALL_TAC >>
-  drule_all conditional_array_compiler_config >> strip_tac >>
+  drule_all callback_array_compiler_config >> strip_tac >>
   rename1 `abi_decode_index_init header_st = (ip,loop_st)` >>
   suspend "initialize"
 QED
@@ -459,7 +502,10 @@ Resume entry_conditional_nonbulk_array_constructor[phases]:
   qpat_x_assum `!sb d env tv avs xs ctx site oid root extent ambient b reserve. _`
     (mp_tac o SPEC_ALL) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `iteration_static_config cfg` >>
+  qmatch_asmsub_abbrev_tac `iteration_callback_config cfg` >>
+  `iteration_static_config cfg` by
+    (fs[Abbr `cfg`, iteration_callback_config_def, iteration_static_config_def,
+        Excl "enc_def"] >> gvs[iteration_callback_config_def, Excl "enc_def"]) >>
   `pnum < dimword (:256)` by
     (qpat_x_assum `entry_owned_loop_resources _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
      simp[entry_owned_loop_resources_def, alloca_inv_def, alloca_next_valid_def] >>

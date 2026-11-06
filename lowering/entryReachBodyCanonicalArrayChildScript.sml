@@ -85,7 +85,7 @@ Proof
   fs[SUBSET_DEF, abi_decoder_ids_def] >> metis_tac[NOT_LESS, LESS_IMP_LESS_OR_EQ]
 QED
 
-Theorem array_child_backedge[local]:
+Theorem array_child_backedge:
   array_child_result ctx fn oid root extent ambient ids b cap site limit_st
     mid last cell tv v u t /\
   entry_decode_path ctx fn s u /\ entry_loop_fields s u /\

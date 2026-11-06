@@ -49,7 +49,7 @@ Proof
   gvs[entry_loop_fields_def]
 QED
 
-Theorem array_entry_static_endpoint[local]:
+Theorem array_entry_static_endpoint:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,mid) /\
   ~dec_info_needs_offset di /\ eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -75,7 +75,7 @@ Proof
   gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, eval_operand_def]
 QED
 
-Theorem array_entry_dynamic_endpoint[local]:
+Theorem array_entry_dynamic_endpoint:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,mid) /\
   dec_info_needs_offset di /\ eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
