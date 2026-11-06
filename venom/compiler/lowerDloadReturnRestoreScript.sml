@@ -6,7 +6,7 @@ Ancestors
   lowerDloadReachability lowerDloadOwnership lowerDloadOwnerTransport
   lowerDloadTableSupport lowerDloadFrameRepresentation
   lowerDloadFrameCertificate lowerDloadCoverageInvariant lowerDloadPairedBoundary
-  lowerDloadOpaqueExecution
+  lowerDloadOpaqueExecution lowerDloadTargetGeometry lowerDloadLifetime
 
 (* Retained environment comes from the caller; global observations and masks
    come from the current callee, never from the saved memory snapshot. *)
@@ -348,4 +348,70 @@ Proof
   irule ld_return_parameter_values >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`astail`, `keep`, `sf`] >> simp[]
+QED
+
+(* Selection certificates pin the source base and size in the unique table
+   entry. An owner alone is not a certificate for an arbitrary source base. *)
+Theorem ld_selected_source_entry:
+  ld_frame_embedding E L H s t /\
+  LIST_REL (ld_owned_selection E) AP BP /\
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)) /\
+  ld_selected L AP AG (owner,(bs,sz)) ==>
+  ?bt. ld_site_entry E owner bs bt sz
+Proof
+  strip_tac >>
+  `!ps. MEM ps AP ==> ?pt. MEM pt BP /\ ld_owned_selection E ps pt` by
+    (gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
+  qpat_x_assum `ld_selected _ _ _ _` mp_tac >>
+  simp[ld_selected_def] >> strip_tac
+  >- (drule ld_frame_embedding_selection >>
+      disch_then (qspec_then `id` mp_tac) >>
+      fs[ld_owned_selection_def] >> metis_tac[]) 
+  >- (first_x_assum drule >> simp[ld_owned_selection_def] >> metis_tac[]) >>
+  qpat_x_assum `!v. ld_owned_selection _ _ _`
+    (qspec_then `v` mp_tac) >> simp[ld_owned_selection_def] >> metis_tac[]
+QED
+
+Theorem ld_live_source_entry:
+  ld_frame_embedding E L H s t /\
+  LIST_REL (ld_owned_selection E) AP BP /\
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)) /\
+  LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g) astk gstk /\
+  ld_live astk L AP AG (owner,(bs,sz)) ==>
+  ?bt. ld_site_entry E owner bs bt sz
+Proof
+  strip_tac >>
+  `!f. MEM f astk ==> ?g. MEM g gstk /\
+    (?V keys d A. ld_saved_embedded V E keys d A f g)` by
+    (gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
+  qpat_x_assum `ld_live _ _ _ _ _` mp_tac >>
+  simp[ld_live_def] >> strip_tac
+  >- (irule ld_selected_source_entry >> goal_assum (drule_at Any) >>
+      metis_tac[]) >>
+  first_x_assum drule >> strip_tac >>
+  irule ld_selected_source_entry >> goal_assum (drule_at Any) >>
+  metis_tac[ld_saved_embedded_layout, ld_saved_embedded_params,
+    ld_saved_embedded_prov]
+QED
+
+Theorem ld_annotated_owner_endpoints:
+  ld_annotated_reachable vs0 C astk k L AP AG tn fn i s /\
+  ld_frame_embedding E L H s t /\
+  LIST_REL (ld_owned_selection E) AP BP /\
+  (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)) /\
+  LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g) astk gstk /\
+  ld_frame_bound t.vs_alloca_next H BP BH /\
+  ld_stack_bound t.vs_alloca_next gstk /\
+  owner IN {owner | ?bs sz. ld_live astk L AP AG (owner,(bs,sz))} /\
+  ld_site_entry E owner bs bt sz ==>
+  bs+sz <= s.vs_alloca_next /\ bt+sz <= t.vs_alloca_next
+Proof
+  simp[] >> strip_tac >>
+  drule_all ld_live_source_entry >> strip_tac >>
+  `bs' = bs /\ sz' = sz` by
+    (fs[ld_site_entry_def] >> metis_tac[]) >> gvs[] >>
+  conj_tac
+  >- (drule_all ld_annotated_live_endpoint >> simp[]) >>
+  irule ld_paired_live_endpoints >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
