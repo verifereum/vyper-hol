@@ -315,3 +315,31 @@ Resume storage_normalization_alloc_copy_path_ptr[covers]:
 QED
 
 Finalise storage_normalization_alloc_copy_path_ptr
+
+(* Expose only the two compiler phases of actual located unwrap. *)
+Theorem storage_unwrap_compile_parts:
+  vv_holds cenv cx ty tv (LocatedValue ann p) es s /\
+  ~is_word_type ty /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  type_memory_bytes cenv ann = 32*n /\
+  (type_memory_bytes cenv ann+31) DIV 32 = n /\
+  unwrap_value cenv (LocatedValue ann p) cc = (op,cb) ==>
+  ?buf ca root result.
+    compile_alloc_buffer (32*n) cc = (buf,ca) /\
+    buf.buf_operand = Var root /\ op = Var root /\
+    (if n = 1 then
+       do v <- emit_op (if p.ptr_location = LocStorage then SLOAD else TLOAD)
+                 [p.ptr_operand]; emit_void MSTORE [Var root;v] od
+     else do compile_word_copy_loop p.ptr_operand (Var root) n p.ptr_location LocMemory F;
+             return () od) ca = (result,cb)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all located_storage_unwrap_layout >> disch_tac >>
+  qpat_x_assum `unwrap_value _ _ cc = _` mp_tac >>
+  asm_rewrite_tac[] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> pairarg_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `_ = (op,cb)` mp_tac >> pairarg_tac >> strip_tac >> gvs[] >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
