@@ -4098,3 +4098,37 @@ Proof
      simp[MEM_MAP, dead_stack_marker_def]) >>
   gvs[]
 QED
+
+Theorem regional_ret_cleanup_marker_free:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  ~ps.ps_cleanup_promised /\ ~MEM dead_stack_marker ps.ps_stack /\
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >> gvs[] >>
+  `!height growth n. ~cleanup_elision_safe height growth (cfg_analyze fn) fn bb n` by
+    metis_tac[ret_reaching_cleanup_not_safe] >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> simp[] >-
+    (strip_tac >> gvs[]) >>
+  rename1 `cfg_preds_of (cfg_analyze fn) bb.bb_label = pred::rest` >>
+  Cases_on `rest` >> simp[] >-
+    (IF_CASES_TAC >> simp[] >- (strip_tac >> gvs[]) >>
+     Cases_on `lookup_block pred fn.fn_blocks` >> simp[] >-
+       (strip_tac >> gvs[]) >>
+     rename1 `lookup_block pred fn.fn_blocks = SOME pred_bb` >>
+     strip_tac >>
+     `EVERY (\op. op <> dead_stack_marker) ps.ps_stack` by
+       simp[EVERY_MEM] >>
+     drule inventory_popmany_every >>
+     disch_then (qspec_then `MAP Var
+       (FILTER (\v. ~MEM v (input_vars_from pred bb.bb_instructions
+          (live_vars_at lv bb.bb_label 0)))
+         (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)))` mp_tac) >>
+     gvs[EVERY_MEM]) >>
+  strip_tac >> gvs[]
+QED
