@@ -58,3 +58,34 @@ Proof
   gvs[opaque_out_def, mk_inst_def] >>
   fs[shape_base_state_def] >> metis_tac[]
 QED
+
+Theorem emit_op_preserves_nonowned:
+  (!i y. MEM i (state_insts st) /\ MEM y i.inst_outputs ==>
+         not_fresh_at st y) /\
+  emit_op opc ops st = (v,st') /\ not_fresh_at st x /\
+  ~opaque_out ALLOCA (state_insts st) x ==>
+  ~opaque_out ALLOCA (state_insts st') x
+Proof
+  rpt strip_tac >> drule emit_op_facts >> strip_tac >>
+  gvs[opaque_out_def, mk_inst_def] >> metis_tac[]
+QED
+
+Theorem emit_inst_nonalloc_owned:
+  emit_inst opc ops outs st = (u,st') /\ opc <> ALLOCA ==>
+  (opaque_out ALLOCA (state_insts st') x <=>
+   opaque_out ALLOCA (state_insts st) x)
+Proof
+  rw[emit_inst_eq, opaque_out_def, state_insts_def, all_blocks_def,
+     mk_inst_def] >> gvs[] >> eq_tac >> rpt strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem emit_void_owned:
+  emit_void opc ops st = (u,st') ==>
+  (opaque_out ALLOCA (state_insts st') x <=>
+   opaque_out ALLOCA (state_insts st) x)
+Proof
+  rw[emit_void_eq, opaque_out_def, state_insts_def, all_blocks_def,
+     mk_inst_def] >> gvs[] >> eq_tac >> rpt strip_tac >>
+  gvs[] >> metis_tac[]
+QED
