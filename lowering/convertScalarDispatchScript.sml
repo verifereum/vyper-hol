@@ -62,8 +62,6 @@ Theorem scalar_fixed_typed_dispatch:
     valid_conversion (BaseT (BytesT (Fixed m))) t /\
     ~is_bytestring_type (BaseT (BytesT (Fixed m))) /\ ~is_bytestring_type t /\
     ~int_convert_pair (BaseT (BytesT (Fixed m))) t /\
-    ~(BaseT (BytesT (Fixed m)) = BaseT (BytesT (Fixed 0)) /\
-      ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
     expr_sim_inv cenv cx env es1 ==>
@@ -89,8 +87,11 @@ Resume scalar_fixed_typed_dispatch[bool]:
   simp[mk_convert_op_def, is_bytestring_type_def] >> irule scalar_bytes_bool_result_frag >> simp[]
 QED
 Resume scalar_fixed_typed_dispatch[signed]:
-  simp[mk_convert_op_def, is_bytestring_type_def] >> irule scalar_bytes_int_result_frag >> simp[] >>
-  rename1 `bs <> []` >> Cases_on `bs` >> gvs[]
+  rename1 `BytesV bs` >> Cases_on `bs = []`
+  >- (gvs[] >> simp[mk_convert_op_def, is_bytestring_type_def] >>
+      irule scalar_bytes0_int_result_frag >> simp[]) >>
+  simp[mk_convert_op_def, is_bytestring_type_def] >>
+  irule scalar_bytes_int_result_frag >> simp[] >> Cases_on `bs` >> gvs[]
 QED
 Resume scalar_fixed_typed_dispatch[unsigned]:
   simp[mk_convert_op_def, is_bytestring_type_def] >> irule scalar_bytes_uint_result_frag >> simp[]
@@ -99,8 +100,10 @@ Resume scalar_fixed_typed_dispatch[address]:
   simp[mk_convert_op_def, is_bytestring_type_def] >> irule scalar_bytes_address_result_frag >> simp[]
 QED
 Resume scalar_fixed_typed_dispatch[decimal]:
-  irule scalar_fixed_decimal_mk_frag >> simp[] >>
-  rename1 `bs <> []` >> Cases_on `bs` >> gvs[]
+  rename1 `BytesV bs` >> Cases_on `bs = []`
+  >- (gvs[] >> pure_rewrite_tac[scalar_fixed_decimal_mk_op] >>
+      irule scalar_bytes0_decimal_result_frag) >>
+  irule scalar_fixed_decimal_mk_frag >> simp[] >> Cases_on `bs` >> gvs[]
 QED
 Resume scalar_fixed_typed_dispatch[fixed]:
   simp[mk_convert_op_def, is_bytestring_type_def] >> irule scalar_bytes_fixed_result_frag >> simp[]
@@ -311,8 +314,6 @@ Theorem scalar_typed_dispatch:
     valid_conversion src t /\
     ~is_bytestring_type src /\ ~is_bytestring_type t /\
     ~int_convert_pair src t /\
-    ~(src = BaseT (BytesT (Fixed 0)) /\
-      ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) src = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
     expr_sim_inv cenv cx env es1 ==>

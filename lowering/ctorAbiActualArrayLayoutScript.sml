@@ -1,7 +1,7 @@
 (* Pure compiler boundaries for actual-site canonical array execution. *)
 Theory ctorAbiActualArrayLayout
 Ancestors
-  abiDecoderArrayLoopInit abiDecoderLoopEmit abiDecoderRecursiveLoopLayout
+  abiDecoderDynarrayPrefix abiDecoderArrayLoopInit abiDecoderLoopEmit abiDecoderRecursiveLoopLayout
   abiDecoderRecursiveLoopContext abiDecoderLoopCode abiDecoderIndexInit
   abiDecoderCode abiDecoderCounters abiDecoderExecution abiDecoderArraySetupCode
   abiDecoderContract abiDecoderArraySetupInputs abiDecoderAppend exprLoweringProps
@@ -10,34 +10,34 @@ Ancestors
   words list rich_list arithmetic pred_set
 
 Theorem ctor_actual_array_loop_trace:
-  compile_abi_decode_to_buf dst src DLOAD hi
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (DecDynArray ei asz msz elem_dyn maxn) st = ((),st') /\
   (elem_dyn \/ dec_info_needs_clamp ei) ==>
   ?guard_st header_st loop_st cnt ip labels body_st ops middle end_st.
-    abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+    abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
     abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (ip,loop_st) /\
-    abi_decode_loop_prefix ip src DLOAD loop_st = (labels,body_st) /\
-    abi_decode_array_element_setup ip src dst DLOAD hi ei asz msz body_st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi ei middle = ((),end_st) /\
+    abi_decode_loop_prefix ip src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
+    abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi ei asz msz body_st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi ei middle = ((),end_st) /\
     abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),st')
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decode_loop_array_trace >> strip_tac >>
   drule abi_decode_array_loop_init_trace >> strip_tac >>
-  gvs[] >> drule abi_decode_dyn_loop_trace >> strip_tac >>
+  gvs[abi_decode_dynarray_position_prefix_zero_base_eq] >> drule abi_decode_dyn_loop_trace >> strip_tac >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem ctor_actual_array_setup_code:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src DLOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst DLOAD hi ei asz msz body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi ei middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi ei asz msz body_st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi ei middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),st') /\
   fn_has_code st st' func ==>
   fn_has_code st guard_st func /\ fn_has_code guard_st header_st func /\
@@ -46,7 +46,7 @@ Theorem ctor_actual_array_setup_code:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule abi_decoder_loop_prefix_extends >> strip_tac >>
@@ -90,15 +90,15 @@ Proof
 QED
 
 Theorem ctor_actual_array_loop_compiled:
-  abi_decode_dynarray_prefix src DLOAD hi maxn
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src DLOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_loop_prefix ip src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),st') /\
   fn_has_code st st' func /\
@@ -106,14 +106,14 @@ Theorem ctor_actual_array_loop_compiled:
     phi_prefix_length bb.bb_instructions = 0) /\
   st'.cs_next_var <= limit_st.cs_next_var ==>
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops ip src dst
-    DLOAD hi (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
+    DLOAD (Lit 0w) hi (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
     loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
     loop_st.cs_next_var limit_st header_st.cs_next_id
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all ctor_actual_array_setup_code >> strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   irule abi_decoder_recursive_loop_layout >>
@@ -122,12 +122,12 @@ Proof
 QED
 
 Theorem ctor_actual_array_loop_intervals:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src DLOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst DLOAD hi ei asz msz body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi ei middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi ei asz msz body_st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi ei middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),st') ==>
   st.cs_next_id <= header_st.cs_next_id /\ loop_st.cs_next_id <= st'.cs_next_id /\
   frag_ids body_st end_st SUBSET frag_ids st st' /\
@@ -135,7 +135,7 @@ Theorem ctor_actual_array_loop_intervals:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule abi_decoder_loop_prefix_facts >> strip_tac >>
@@ -148,18 +148,18 @@ Proof
 QED
 
 Theorem ctor_actual_array_loop_changes_blocks:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src DLOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst DLOAD hi ei asz msz body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi ei middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi ei asz msz body_st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi ei middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),st') ==>
   st.cs_blocks <> st'.cs_blocks
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule abi_decoder_loop_prefix_facts >> strip_tac >>
@@ -174,7 +174,7 @@ Proof
 QED
 
 Theorem ctor_actual_array_loop_layout:
-  compile_abi_decode_to_buf dst src DLOAD hi
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) elem_dyn maxn)
     st = ((),st') /\
@@ -185,22 +185,22 @@ Theorem ctor_actual_array_loop_layout:
      phi_prefix_length bb.bb_instructions = 0) /\
   st'.cs_next_var <= limit_st.cs_next_var ==>
   ?guard_st header_st loop_st cnt ip labels body_st ops middle end_st.
-    abi_decode_dynarray_prefix src DLOAD hi maxn
+    abi_decode_dynarray_checked_prefix src DLOAD hi maxn
       (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
     abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (ip,loop_st) /\
-    abi_decode_loop_prefix ip src DLOAD loop_st = (labels,body_st) /\
-    abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+    abi_decode_loop_prefix ip src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
+    abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       body_st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),st') /\
     fn_has_code st guard_st func /\ fn_has_code guard_st header_st func /\
     fn_has_code header_st loop_st func /\ fn_has_code loop_st st' func /\
     (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts func)) /\
     abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops ip src dst
-      DLOAD hi (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
+      DLOAD (Lit 0w) hi (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
       loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
       loop_st.cs_next_var limit_st header_st.cs_next_id /\
     frag_ids body_st end_st SUBSET frag_ids st st' /\

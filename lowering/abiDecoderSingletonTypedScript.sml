@@ -28,11 +28,11 @@ QED
 
 Theorem abi_decoder_singleton_pre_child:
   abi_decoder_pre ce env (TupleT [ty]) (TupleTV [tv]) di
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap s /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap s /\
   is_dynamic (vyper_to_abi_type env ty) /\
   eval_operand child_src s = SOME (n2w (sb + 32)) ==>
   abi_decoder_pre ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
-    av v st last child_src dst opc hi (sb + 32) d b cap s
+    av v st last child_src dst opc base_op hi B (sb + 32) d b cap s
 Proof
   pure_rewrite_tac[abi_decoder_pre_def] >> strip_tac >>
   drule abi_decoder_singleton_metadata_child >> strip_tac >>
@@ -42,26 +42,26 @@ Proof
       qexistsl_tac [`LENGTH (enc (Tuple [vyper_to_abi_type env ty]) (ListV [av]))`, `src`] >>
       simp[canonical_dynamic_singleton_encoding, LENGTH_word_to_bytes,
            type_memory_bytes_def, Excl "enc_def"]) >>
-  irule canonical_dynamic_singleton_source >>
-  qpat_x_assum `mem_bytes_at sb _ _ = _` mp_tac >>
+  rewrite_tac [ADD_ASSOC] >> irule canonical_dynamic_singleton_source >>
+  qpat_x_assum `mem_bytes_at (B + sb) _ _ = _` mp_tac >>
   simp_tac bool_ss [vyper_to_abi_type_def] >> simp[Excl "enc_def"]
 QED
 
 Theorem abi_decoder_singleton_setup_pre:
   abi_decoder_pre ce env (TupleT [ty]) (TupleTV [tv]) di
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap s /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap s /\
   is_dynamic (vyper_to_abi_type env ty) ==>
-  abi_decode_singleton_setup_pre st src dst opc hi sb d s
+  abi_decode_singleton_setup_pre st src dst opc base_op hi B sb d s
 Proof
   strip_tac >>
   `has_types [vyper_to_abi_type env ty] [av]` by
     fs[abi_decoder_pre_def, abi_decoder_metadata_def, has_type_def, Excl "enc_def"] >>
-  qpat_x_assum `abi_decoder_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qhdtm_x_assum `abi_decoder_pre` mp_tac >>
   pure_rewrite_tac[abi_decoder_pre_def, abi_decoder_ranges_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [vyper_to_abi_type_def]) >>
   mp_tac (Q.INST [`pre` |-> `[]`, `pvs` |-> `[]`, `post` |-> `[]`, `rest` |-> `[]`,
-    `aty` |-> `vyper_to_abi_type env ty`, `v` |-> `(av:abi_value)`]
+    `aty` |-> `vyper_to_abi_type env ty`, `v` |-> `(av:abi_value)`, `sb` |-> `B + sb`]
     (Q.INST [`ty` |-> `aty`] canonical_member_offset_load)) >>
   impl_tac >- simp[Excl "enc_def"] >> simp[head_lengths_def] >> strip_tac >>
   `32 <= LENGTH (enc (Tuple [vyper_to_abi_type env ty]) (ListV [av]))` by
@@ -74,13 +74,13 @@ QED
 
 (* Dynamic singleton setup supplies the actual typed recursive child contract. *)
 Theorem abi_decoder_singleton_setup:
-  abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),st') /\
+  abi_decode_singleton_setup dst src opc base_op hi st = ((child_src,child_dst),st') /\
   abi_decoder_pre ce env (TupleT [ty]) (TupleTV [tv]) di
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap s /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap s /\
   is_dynamic (vyper_to_abi_type env ty) ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_pre ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
-      av v st' last child_src child_dst opc hi (sb + 32) d b cap t /\
+      av v st' last child_src child_dst opc base_op hi B (sb + 32) d b cap t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
@@ -96,19 +96,19 @@ Proof
   drule_all abi_decoder_pre_pure_transport >> strip_tac >>
   drule_all abi_decoder_singleton_pre_child >> strip_tac >>
   `abi_decoder_pre ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
-     av v st' last child_src child_dst opc hi (sb + 32) d b cap t` by
+     av v st' last child_src child_dst opc base_op hi B (sb + 32) d b cap t` by
     (drule_all abi_decoder_pre_destination_value >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED
 
 Theorem abi_decoder_singleton_recursive_setup:
-  abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),st') /\
+  abi_decode_singleton_setup dst src opc base_op hi st = ((child_src,child_dst),st') /\
   abi_decoder_recursive_pre ce env sf (TupleT [ty]) (TupleTV [tv]) di
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap s /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap s /\
   is_dynamic (vyper_to_abi_type env ty) ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty)
-      av v st' last child_src child_dst opc hi (sb + 32) d b cap t /\
+      av v st' last child_src child_dst opc base_op hi B (sb + 32) d b cap t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
@@ -118,7 +118,7 @@ Proof
     gvs[abi_decoder_recursive_pre_def, abi_decoder_coherent_tuple_iff] >>
   `abi_decoder_pre ce env (TupleT [ty]) (TupleTV [tv])
      (type_to_abi_dec_info ce.ce_struct_fields ce (TupleT [ty]))
-     (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap s` by
+     (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap s` by
     fs[abi_decoder_recursive_pre_def] >>
   drule_all abi_decoder_singleton_setup >> strip_tac >>
   qexists_tac `t` >> simp[abi_decoder_recursive_pre_def]

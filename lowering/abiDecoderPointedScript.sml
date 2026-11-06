@@ -48,32 +48,33 @@ Proof
 QED
 
 Theorem abi_decoder_pre_inst_idx:
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap
     (s with vs_inst_idx := ix) <=>
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s
 Proof
   simp[abi_decoder_pre_def, abi_decoder_ranges_def, abi_decoder_reservation_def,
        fresh_vars_wrt_def, lookup_var_def, eval_op_inst_idx, abi_decode_source_def]
 QED
 
 Theorem abi_decoder_recursive_pre_inst_idx:
-  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc hi sb d b cap
+  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc base_op hi src_base sb d b cap
     (s with vs_inst_idx := ix) <=>
-  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc hi sb d b cap s
+  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc base_op hi src_base sb d b cap s
 Proof
   simp[abi_decoder_recursive_pre_def, abi_decoder_pre_inst_idx]
 QED
 
 Theorem abi_decoder_typed_bytes_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_pre ce env (BaseT (BytesT (Dynamic n))) (BaseTV (BytesT (Dynamic n)))
     (DecBytestring n) (contractABI$BytesV bs) (vyperValue$BytesV bs)
-    st last src dst opc hi sb d b cap initial ==>
+    st last src dst opc base_op hi src_base sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV bs)
       st' d (abi_decode_bytes_copy_size n) b cap initial) (K F)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode opc` by fs[abi_decoder_pre_def, abi_decoder_ranges_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
   irule frag_exec_run_inst_seq >> simp[] >>
@@ -82,9 +83,9 @@ Proof
 QED
 
 Theorem abi_decoder_typed_word_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord NoClamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord NoClamp) av v
-    st last src dst opc hi sb d b cap initial ==>
+    st last src dst opc base_op hi src_base sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post tv v st' d 32 b cap initial) (K F)
 Proof
@@ -98,11 +99,11 @@ Proof
 QED
 
 Theorem abi_decoder_typed_bulk_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
+  compile_abi_decode_to_buf dst src opc base_op hi (DecDynArray ei abi_sz mem_sz F maxn)
     st = ((),st') /\ ~dec_info_needs_clamp ei /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-    (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc hi sb d b cap initial ==>
+    (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi src_base sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs))
       st' d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial) (K F)

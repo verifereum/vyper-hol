@@ -35,13 +35,48 @@ Definition type_alloc_ok_def:
     (~is_word_type t ==> type_memory_bytes cenv t < 2 ** 64)
 End
 
+(* The buffers _lower_external_call allocates for an external call: the
+   argument tuple in memory (new_temporary_value) and the call buffer, the
+   larger of the argument and return ABI size bounds plus the method id word
+   (allocate_buffer).  Their sizes are sums over the arguments, which no
+   node's type_alloc_ok bounds. *)
+Definition ext_call_alloc_ok_def:
+  ext_call_alloc_ok cenv (ExtCall _ _ (_, arg_tys, ret) _) es =
+    (let tys = MAP (lowered_value_type cenv) (TAKE (LENGTH arg_tys) (DROP 1 es));
+         wrapped = if needs_external_call_wrap ret then TupleT [ret] else ret in
+       SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 /\
+       MAX (abi_size_bound cenv.ce_struct_fields (TupleT tys))
+           (abi_size_bound cenv.ce_struct_fields wrapped) + 32 < 2 ** 64) /\
+  ext_call_alloc_ok cenv _ _ = T
+End
+
+(* A slice's .code source, replaced by its address, is smaller. *)
+val is_extcode_def = exprLoweringTheory.is_extcode_def;
+val extcode_addr_expr_def = exprLoweringTheory.extcode_addr_expr_def;
+
+Theorem extcode_operands_size[local]:
+  !es. es <> [] /\ is_extcode (HD es) ==>
+       list_size expr_size (extcode_addr_expr (HD es) :: TL es) <
+       list_size expr_size es
+Proof
+  Cases >> simp[] >> rename1 `is_extcode h` >>
+  Cases_on `h` >> simp[is_extcode_def] >>
+  rename1 `Builtin _ b l` >> Cases_on `b` >> simp[is_extcode_def] >>
+  rename1 `Acc a` >> Cases_on `a` >> simp[is_extcode_def] >>
+  Cases_on `l` >> simp[is_extcode_def] >>
+  rename1 `_ :: tl` >> Cases_on `tl` >>
+  simp[is_extcode_def, extcode_addr_expr_def, expr_size_def,
+       listTheory.list_size_def]
+QED
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
    is not a word, a convert to a bytestring (the copy of a widening cast),
-   the output of a calldata slice, and the copy unwrap_value makes of the
-   node's value when it is not in memory, which every node's type_alloc_ok
-   bounds.  The same recursion as byte_widths_expr. *)
+   the output of a calldata slice, an external call's argument and call
+   buffers, and the copy unwrap_value makes of the node's value when it is
+   not in memory, which every node's type_alloc_ok bounds.  The same
+   recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
   alloc_limits_expr cenv (Name t _) = type_alloc_ok cenv t /\
   alloc_limits_expr cenv (TopLevelName t _) = type_alloc_ok cenv t /\
@@ -60,15 +95,23 @@ Definition alloc_limits_expr_def:
      alloc_limits_expr cenv y) /\
   alloc_limits_expr cenv (Attribute t x _) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
+  (* Python's codegen rejects an address's .code anywhere but as slice()'s
+     source (CompilerPanic ".code requires slice() context",
+     codegen_venom/expr.py:672), where compile_slice reads it with
+     EXTCODECOPY and lowers only its address.  The check does the same:
+     Acc Code fails, and a slice's .code source is checked through its
+     address (extcode_addr_expr). *)
   alloc_limits_expr cenv (Builtin t bi es) =
-    (type_alloc_ok cenv t /\
+    (type_alloc_ok cenv t /\ bi <> Acc Code /\
      (case bi of
         MakeArray NONE _ =>
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
       | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
       | _ => T) /\
-     alloc_limits_exprs cenv es) /\
+     alloc_limits_exprs cenv
+       (if (?n. bi = Slice n) /\ es <> [] /\ is_extcode (HD es)
+        then extcode_addr_expr (HD es) :: TL es else es)) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
     (type_alloc_ok cenv t /\
      (case tb of
@@ -90,9 +133,9 @@ Definition alloc_limits_expr_def:
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
     (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
-  alloc_limits_expr cenv (Call t _ es dflt) =
-    (type_alloc_ok cenv t /\ alloc_limits_exprs cenv es /\
-     alloc_limits_opt cenv dflt) /\
+  alloc_limits_expr cenv (Call t ct es dflt) =
+    (type_alloc_ok cenv t /\ ext_call_alloc_ok cenv ct es /\
+     alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
 
   alloc_limits_target cenv (NameTarget _) = T /\
   alloc_limits_target cenv (TopLevelNameTarget _) = T /\
@@ -130,7 +173,8 @@ Termination
   simp[expr_size_def, listTheory.list_size_def,
        basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
        bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
-       listTheory.list_size_map, SF ETA_ss]
+       listTheory.list_size_map, SF ETA_ss] >>
+  rw[] >> drule_all extcode_operands_size >> simp[]
 End
 
 Definition alloc_limits_assignment_def:

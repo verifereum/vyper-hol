@@ -15,13 +15,13 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_return_value_decode:
-  gas_shadow_compiles (compile_return_value_decode buf_op min_size max_size)
-    (compile_return_value_decode buf_op min_size max_size)
+  gas_shadow_compiles (compile_return_value_decode min_size max_size)
+    (compile_return_value_decode min_size max_size)
 Proof
   simp[compile_return_value_decode_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_select]
-       >> gen_tac >> BETA_TAC) >> simp[]
+       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_select]
 QED
 
 Theorem gas_shadow_compiles_default_return_path:
@@ -52,7 +52,7 @@ Theorem gas_shadow_compiles_external_call_kwargs:
       return_size min_size ret_bytes staticcall call_value gas_op skip_check
       has_default default_op return_ty default_ty enc_info dec_info)
 Proof
-  Cases_on `vals = []` >> Cases_on `return_size = 0` >>
+  Cases_on `vals = []` >> Cases_on `return_ty = NoneT` >>
   Cases_on `skip_check` >> Cases_on `staticcall` >> Cases_on `has_default` >>
   simp[compile_external_call_kwargs_def, LET_THM, comp_ignore_bind_def] >>
   rpt (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc] >>

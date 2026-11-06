@@ -8,8 +8,9 @@
  * exprSimConvert proves (which rest on the cheated lower_value_word_shape).
  * Struct and array literals store each child with unwrap_value_sim, so
  * they carry exprSimUnwrap's cheated constructor immutable cases.
- * Cheated, for the later #636 PRs: the other conversions, abi_encode and
- * abi_decode.
+ * The other conversions, abi_encode and abi_decode are re-exported from
+ * their leaf theories (exprSimConvertOther, exprSimAbiEncode,
+ * exprSimAbiDecode).
  *
  * TOP-LEVEL:
  *   compile_struct_lit_case, compile_make_array_case — StructLit, MakeArray
@@ -63,6 +64,9 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprSimAbiDecode
+  exprSimAbiEncode
+  exprSimConvertOther
   exprWordOperand
   exprSimSource
   exprSimProps
@@ -696,20 +700,15 @@ Proof
 QED
 
 (* The conversions exprSimConvert does not cover: those to or from
-   decimal, address, bytesM, bytestrings and flags.  Cheated: for several
-   of them the checker, the lowering and the semantics disagree (#548). *)
-Theorem compile_convert_other_case:
-  !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args /\
-    ~(?e1. args = [e1] /\ int_convert_pair (expr_type e1) t) ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
-Proof
-  cheat
-QED
+   decimal, address, bytesM, bytestrings and flags, in exprSimConvertOther
+   (#548). *)
+Theorem compile_convert_other_case = exprSimConvertOtherTheory.compile_convert_other_case
 
 Theorem compile_convert_case:
   !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (~nocalls ==> !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
 Proof
   rpt strip_tac >>
@@ -718,18 +717,6 @@ Proof
   irule compile_convert_other_case >> metis_tac[]
 QED
 
-Theorem compile_abi_encode_case:
-  !nocalls ctx func cenv cx ann ensure mid t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiEncode ensure mid) t args)
-Proof
-  cheat
-QED
+Theorem compile_abi_encode_case = exprSimAbiEncodeTheory.compile_abi_encode_case
 
-Theorem compile_abi_decode_case:
-  !nocalls ctx func cenv cx ann unwrap t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiDecode unwrap) t args)
-Proof
-  cheat
-QED
+Theorem compile_abi_decode_case = exprSimAbiDecodeTheory.compile_abi_decode_case

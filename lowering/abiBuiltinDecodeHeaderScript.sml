@@ -20,8 +20,7 @@ Theorem lower_abi_decode_phases:
   lower_abi_decode data info min_size max_size output_size =
     do inputs <- abi_builtin_decode_header data min_size max_size;
        buf <- compile_alloc_buffer output_size;
-       hi <- emit_op ADD [SND inputs; FST inputs];
-       compile_abi_decode_to_buf buf.buf_operand (SND inputs) MLOAD hi info;
+       compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD (SND inputs) (FST inputs) info;
        return buf.buf_operand
     od
 Proof
@@ -35,20 +34,18 @@ QED
 
 Theorem lower_abi_decode_trace:
   lower_abi_decode data info min_size max_size output_size st = (out,final) ==>
-  ?inputs header_st buf allocation_st hi ready.
+  ?inputs header_st buf ready.
     abi_builtin_decode_header data min_size max_size st = (inputs,header_st) /\
-    compile_alloc_buffer output_size header_st = (buf,allocation_st) /\
-    emit_op ADD [SND inputs; FST inputs] allocation_st = (hi,ready) /\
-    compile_abi_decode_to_buf buf.buf_operand (SND inputs) MLOAD hi info ready = ((),final) /\
+    compile_alloc_buffer output_size header_st = (buf,ready) /\
+    compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD (SND inputs) (FST inputs) info ready = ((),final) /\
     out = buf.buf_operand
 Proof
   simp_tac bool_ss [lower_abi_decode_phases, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   rename1 `abi_builtin_decode_header data min_size max_size st = (inputs,header_st)` >>
-  rename1 `compile_alloc_buffer output_size header_st = (buf,allocation_st)` >>
-  rename1 `emit_op ADD [SND inputs; FST inputs] allocation_st = (hi,ready)` >>
-  qexistsl_tac [`inputs`, `header_st`, `buf`, `allocation_st`, `hi`, `ready`] >> simp[]
+  rename1 `compile_alloc_buffer output_size header_st = (buf,ready)` >>
+  qexistsl_tac [`inputs`, `header_st`, `buf`, `ready`] >> simp[]
 QED
 
 Theorem abi_builtin_decode_header_shape:

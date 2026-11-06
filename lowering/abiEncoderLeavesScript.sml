@@ -9,11 +9,11 @@ Ancestors
 Theorem abi_encode_word_decode_code:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>
   out = Lit 32w /\
-  compile_abi_decode_to_buf dst src MLOAD (Lit 0w) (DecPrimWord NoClamp) st = ((),st')
+  compile_abi_decode_to_buf dst src MLOAD (Lit 0w) (Lit 0w) (DecPrimWord NoClamp) st = ((),st')
 Proof
   simp[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
        compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
-       compile_abi_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+       compile_abi_clamp_basetype_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
 
@@ -28,8 +28,8 @@ Theorem abi_encode_word_sequence:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
 Proof
   strip_tac >> drule abi_encode_word_decode_code >> strip_tac >>
-  mp_tac (Q.INST [`opc` |-> `MLOAD`, `hi` |-> `Lit 0w`] abi_decode_word_copied_window) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [abi_decode_source_opcode_def] >>
+  mp_tac (Q.INST [`opc` |-> `MLOAD`, `base_op` |-> `Lit 0w`, `src_base` |-> `0`, `hi` |-> `Lit 0w`] abi_decode_word_copied_window) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [abi_decode_source_opcode_def, eval_operand_def] >>
   gvs[abi_decode_source_def, eval_operand_def]
 QED
 

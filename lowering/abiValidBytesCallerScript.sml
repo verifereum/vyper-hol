@@ -20,6 +20,7 @@ Theorem compile_abi_decode_memory_valid_bytes:
     (vv,final) /\ fn_has_code ready final func /\
   abi_builtin_valid_bytes_resources n bs ready srcptr.ptr_operand min_size max_size
     p d prepared /\
+  (p + 32 + LENGTH bs <= d \/ d + abi_decode_bytes_copy_size n <= p + 32) /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = ready.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH ready.cs_current_insts /\
   abi_decode_sim ctx func initial prepared ==>
@@ -109,6 +110,7 @@ Theorem compile_abi_decode_bytes_source_caller:
   abi_decoder_operand_live ready.cs_next_var srcptr.ptr_operand /\
   max_size < dimword (:256) /\ p + 32 + LENGTH bs < dimword (:256) /\
   d + abi_decode_bytes_copy_size n < dimword (:256) /\ fresh_vars_wrt ready prepared /\
+  (p + 32 + LENGTH bs <= d \/ d + abi_decode_bytes_copy_size n <= p + 32) /\
   ((FLOOKUP prepared.vs_allocas (abi_builtin_decode_output_site ready min_size max_size) = NONE /\
       d = prepared.vs_alloca_next) \/
     FLOOKUP prepared.vs_allocas (abi_builtin_decode_output_site ready min_size max_size) =

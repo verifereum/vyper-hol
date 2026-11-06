@@ -1,7 +1,7 @@
 (* Nonallocating canonical array prefix before actual index initialization. *)
 Theory ctorAbiActualArrayPrepare
 Ancestors
-  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderGuards
+  abiEncoder abiDecoderBytesBound abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderGuards
   abiDecoderArrayHeader abiDecoderArrayLoopInit
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend
   abiDecoderDynamicLoopSetup abiDecoderContract abiDecoderGuard abiDecoderReservation
@@ -11,7 +11,7 @@ Ancestors
   fragExec instIdxIndep abiDecoderLoop
 
 Theorem ctor_actual_array_prefix_code:
-  abi_decode_dynarray_prefix src opc hi maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src opc hi maxn asz st = ((),st') /\
   abi_decode_source_opcode opc ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
@@ -19,10 +19,11 @@ Theorem ctor_actual_array_prefix_code:
     (emitted_insts st st')
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  qpat_x_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [abi_decode_dynarray_prefix_def,
-    abi_decode_count_guard_def, abi_decode_dynarray_end_guard_def,
-    abi_decode_dynarray_end_def, abi_decode_le_guard_def,
+  qpat_x_assum `abi_decode_dynarray_checked_prefix _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [abi_decode_dynarray_checked_prefix_def,
+    abi_decode_bytes_head_def, abi_decode_count_guard_def,
+    abi_decode_dynarray_payload_guard_def, compile_abi_decode_range_check_def,
+    abi_decode_le_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
@@ -32,7 +33,7 @@ Proof
 QED
 
 Theorem ctor_actual_array_prefix_reentry:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
@@ -50,7 +51,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   mp_tac (Q.INST [`s` |-> `abi_decoder_prune_vars st.cs_next_var initial`,
-    `opc` |-> `DLOAD`, `abi_sz` |-> `asz`] abi_decode_dynarray_prefix_sequence) >>
+    `opc` |-> `DLOAD`, `abi_sz` |-> `asz`] abi_decode_dynarray_checked_prefix_sequence) >>
   (impl_tac >- (simp[abi_decoder_prune_fresh, abi_decoder_prune_eval,
     abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def] >>
     qpat_x_assum `hi = Lit 0w \/ _` mp_tac >>
@@ -73,7 +74,7 @@ Proof
 QED
 
 Theorem ctor_actual_array_prefix_reach:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
