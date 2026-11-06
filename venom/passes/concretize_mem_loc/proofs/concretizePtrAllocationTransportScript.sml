@@ -15,6 +15,20 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
+Theorem ptr_args_transport_birth_extension:
+  (!owner site. FLOOKUP births owner = SOME site ==>
+    FLOOKUP B owner = SOME site) /\
+  ptr_args_transport births positions tags masks xs ys ==>
+  ptr_args_transport B positions tags masks xs ys
+Proof
+  simp[ptr_args_transport_def, LIST_REL_EL_EQN] >> strip_tac >>
+  gvs[] >> rpt strip_tac >>
+  first_x_assum drule >>
+  Cases_on `EL n (ZIP (tags,ZIP (masks,xs)))` >>
+  Cases_on `r` >> simp[] >>
+  metis_tac[ptr_value_transport_birth_extension]
+QED
+
 Theorem ptr_vars_transport_birth_extension:
   (!owner site. FLOOKUP births owner = SOME site ==>
     FLOOKUP births' owner = SOME site) /\
