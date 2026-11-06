@@ -118,6 +118,8 @@ Theorem compile_alloc_buffer_path_resources_ptr:
     (!i w p sz. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA /\
       i.inst_operands = [Lit w] /\
       FLOOKUP t.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w) /\
+    t.vs_labels = s.vs_labels /\
+    tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
       op_taint tn1 (Var x) = op_taint tn (Var x))
@@ -160,6 +162,13 @@ Resume compile_alloc_buffer_path_resources_ptr[endpoint]:
      simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]) >>
   `alloca_room ctx fn (t with vs_inst_idx := s.vs_inst_idx+1)` by
     (irule alloca_room_fields >> qexists `t` >> simp[]) >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def, mk_inst_def, exec_alloca_def,
+       AllCaseEqs(), update_var_def] >> rpt strip_tac >> gvs[]) >>
+  `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm` by
+    simp[Abbr `tn1`, step_taint_def, out_taint_def, mk_inst_def,
+      adopt_reset_def, store_taint_def, imm_taint_def] >>
   simp[] >>
   fs[ptr_covers_def, eval_operand_def, lookup_var_def] >>
   conj_tac >- metis_tac[optionTheory.SOME_11] >>
