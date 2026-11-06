@@ -1543,6 +1543,7 @@ QED
 
 Theorem runtime_code_copy_run_post:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
     local_ptrs_reserved cenv sa /\
@@ -1625,7 +1626,7 @@ Resume runtime_code_copy_run_post[post]:
   `sm.cs_next_id < cs''.cs_next_id` by decide_tac >>
   fs[copy_runtime_frame_def] >>
   gvs[] >>
-  drule copy_buffer_post_transport >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_post_transport >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `copy_static _ = _`)) >>
   disch_then (drule_at (Pat `!x. not_fresh_at _ x ==> lookup_var x _ = lookup_var x _`)) >>

@@ -118,6 +118,7 @@ QED
    Same interface as S3 bodyMemAssignLocalMem.assign_local_rhs_located_mem. *)
 Theorem tuple_rhs_located_mem:
   !tops ctx func c cx env e es ltv etv.
+    post_value_type c e = expr_type e /\
     body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
     body_expr_mem_ok cx e /\ ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\

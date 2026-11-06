@@ -146,6 +146,7 @@ QED
 
 Theorem assign_local_rhs_located_mem[local]:
   !tops ctx func c cx env e es ltv etv.
+    post_value_type c e = expr_type e /\
     body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
     body_expr_mem_ok cx e /\ ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\
@@ -677,6 +678,8 @@ Proof
     gas_marked_exec T (ctx,func)
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0) m res ee r` by
     (drule assign_local_admissible_run >> rpt strip_tac >> fs[gas_marked_exec_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
   drule_all assign_local_rhs_located_mem >>
   qpat_x_assum `body_inv _ _ _ _` kall_tac >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>

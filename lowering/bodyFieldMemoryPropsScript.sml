@@ -480,11 +480,12 @@ Theorem body_word_load_run_post:
       q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
   rpt strip_tac >>
-  `t = expr_type e /\
+  `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
-       !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+       !tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
              mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tvt v` by
-    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >> metis_tac[]) >>
+    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   gvs[] >> drule emitted_insts_emit_op >> strip_tac >>
   qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
   `not_local_ptr cenv es'.scopes out` by
@@ -497,13 +498,13 @@ Proof
   qexists_tac `update_var out (mload (w2n w) s) s` >>
   simp[run_inst_seq_def, Abbr `out`] >>
   reverse conj_tac >- simp[update_var_def] >>
-  irule expr_post_of_vv_post_load >>
+  irule expr_post_of_vv_post_load_physical >>
   goal_assum (drule_at Any) >>
   simp[eval_operand_def, lookup_var_update_var,
        GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   conj_tac
   >- (irule stmt_state_rel_update_var >> simp[] >> fs[vv_post_def]) >>
-  qexistsl_tac [`p`, `s`, `sm`, `expr_type e`] >>
+  qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >>
   simp[update_var_def]
 QED
 

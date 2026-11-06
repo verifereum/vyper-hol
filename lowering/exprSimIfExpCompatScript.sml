@@ -1,7 +1,8 @@
 Theory exprSimIfExpCompat
 Ancestors
   loweringPosts
-  list rich_list finite_map marker exprSimHyps exprSafeOperand
+  list rich_list finite_map marker exprSimHyps exprSimHypsDefs exprSimSource
+  exprSafeOperand
   exprLowering compileEnv context vyperAST vyperValue
 Libs
   pairLib
@@ -313,7 +314,7 @@ Proof
     (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
      rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
   `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
-  TRY (disj2_tac >> disj1_tac >> irule ifexp_concat_lowered_fits >>
+  TRY (disj2_tac >> irule ifexp_concat_lowered_fits >>
        goal_assum drule >> NO_TAC) >>
   qmatch_goalsub_abbrev_tac `abi_size_bound ce.ce_struct_fields enc_ty` >>
   `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by

@@ -72,7 +72,7 @@ Proof
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
 QED
 
 Theorem runtime_code_copy_seq_path[local]:
@@ -1524,6 +1524,7 @@ QED
 
 Theorem unwrap_runtime_code_copy_path:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
     local_ptrs_reserved cenv sa /\

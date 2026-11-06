@@ -2442,6 +2442,7 @@ Theorem vv_post_frame_intro:
   stmt_state_rel ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
+  (~expr_has_effect e ==> vv_storage_live cx vv es' t) /\
   wb_frame cenv es sa s0 t ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
 Proof

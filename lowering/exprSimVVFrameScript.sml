@@ -136,6 +136,8 @@ Proof
      qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
   `locals_kept cenv es s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
+  `vv_storage_live cx vv es' s ==> vv_storage_live cx vv es' t` by
+    (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
   rpt strip_tac >> metis_tac[]
 QED
