@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsAllocation
 Ancestors
   allocationPtr fragExecPtr fragGasSeqPtr ghostPcTransportPtr
   bodyPtrDefs ptrSafeRun venomInst venomState exprLoweringProps
-  typedCopyPtr finite_map words
+  typedCopyPtr finite_map words venomExecSemantics ptrDiscipline
 
 Theorem alloca_counted_edge_covers:
   !D ctx func cenv cx es s id n out u PG G tn bb.
