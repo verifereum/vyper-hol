@@ -124,7 +124,8 @@ Theorem hash_sha256_bytesm_success_path:
     eval_operand op t = SOME (SHA_256_bytes bs) /\
     ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
-    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {}
+    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
+    op_prov Gf op = NONE
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule hash_sha256_fixed_parts >> strip_tac >>
@@ -243,7 +244,8 @@ Theorem hash_sha256_word_success_path:
     eval_operand op t = SOME (SHA_256_bytes bs) /\
     ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
-    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {}
+    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
+    op_prov Gf op = NONE
 Proof
   rewrite_tac[hash_sha256_word_bytesm] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

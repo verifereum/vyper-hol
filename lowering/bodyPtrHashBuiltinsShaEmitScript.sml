@@ -108,7 +108,8 @@ Theorem hash_emit_sha256_tail_frame:
       t_mem := tn.t_mem DIFF range_bytes [(w2n r,32)]|> ==>
     ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+4) /\
-    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {}
+    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
+    op_prov Gf op = NONE
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all emitted_insts_sha256_tail >> strip_tac >> gvs[] >>

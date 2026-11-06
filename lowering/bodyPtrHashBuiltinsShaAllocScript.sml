@@ -270,7 +270,8 @@ Theorem hash_alloc_sha256_success_path:
     eval_operand op t = SOME (SHA_256_bytes bs) /\
     ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+5) /\
-    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {}
+    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
+    op_prov Gf op = NONE
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `32 < dimword (:256)` by simp[dimword_def] >>

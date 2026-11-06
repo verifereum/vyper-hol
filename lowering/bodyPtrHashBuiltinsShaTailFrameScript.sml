@@ -56,7 +56,8 @@ Theorem hash_sha256_tail_success_frame:
       t_mem := tn.t_mem DIFF range_bytes [(w2n r,32)]|> ==>
     ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+4) /\
-    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf (Var out) = {}
+    ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf (Var out) = {} /\
+    op_prov Gf (Var out) = NONE
 Proof
   rpt gen_tac >> strip_tac >>
   `run_inst_seq [mk_inst i0 GAS [] [gv];
@@ -71,7 +72,7 @@ Proof
   `ghost_inv d cenv cx es Gf tf t /\ ghost_kept cenv es sa G tn s Gf tf` by
     suspend "frame" >>
   simp[hash_ghost_inv_inst_idx, hash_ghost_inv_outcomes] >>
-  gvs[op_taint_def, FLOOKUP_UPDATE]
+  gvs[op_taint_def, FLOOKUP_UPDATE, op_prov_def, FLOOKUP_DRESTRICT]
 QED
 
 Resume hash_sha256_tail_success_frame[frame]:
