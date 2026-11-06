@@ -1078,9 +1078,19 @@ Proof
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   disch_then irule >> simp[] >>
   fs[array_entry_ready_def] >>
-  drule msg_gas_state_frame >>
-  disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`] mp_tac) >>
-  simp[stmt_state_rel_inst_idx]
+  `!E. stmt_state_rel ctx func bc cx E s2 ==>
+       stmt_state_rel ctx func bc cx (E with gas_obs := []) s2` by
+    (rpt strip_tac >>
+     `s2 = s2 with <|vs_gas_readings := s2.vs_gas_readings;
+                     vs_inst_idx := s2.vs_inst_idx|>` by
+       simp[venomStateTheory.venom_state_component_equality] >>
+     pop_assum SUBST1_TAC >> irule msg_gas_state_frame >> simp[]) >>
+  first_x_assum (qspec_then `es with scopes :=
+    (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+      :: es.scopes` mp_tac) >>
+  impl_tac >- fs[] >>
+  match_mp_tac EQ_IMPLIES >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
 (* The selected body run is normalized only at its finish; P is never
