@@ -77,6 +77,7 @@ Theorem bop_ptr_val_ok_frame:
   ptr_val_ok cx ty v op G tn s /\
   eval_operand op s' = eval_operand op s /\
   op_taint tn' op = op_taint tn op /\
+  (is_word_type ty ==> op_prov G' op = NONE) /\
   (~is_word_type ty ==>
     evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
     (!x. op = Var x ==> FLOOKUP G' x = FLOOKUP G x) /\
