@@ -209,7 +209,7 @@ Theorem word_neg_temp_ghost_inv:
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
   ghost_inv d cenv cx es (set_prov G [x] site)
-    (tn with t_var := set_var_taint tn.t_var [x] {}) (update_var x w s)
+    (tn with t_var := set_var_taint tn.t_var [x] m) (update_var x w s)
 Proof
   strip_tac >> Cases_on `site`
   >- (simp[set_prov_def] >> irule word_interval_ghost_inv_temp >> simp[] >> metis_tac[]) >>
@@ -238,7 +238,7 @@ Theorem word_neg_temp_ghost_kept:
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!p. not_fresh_at sa p ==> p <> x) ==>
   ghost_kept cenv es sa G0 tn0 s0 (set_prov G [x] site)
-    (tn with t_var := set_var_taint tn.t_var [x] {})
+    (tn with t_var := set_var_taint tn.t_var [x] m)
 Proof
   strip_tac >> Cases_on `site`
   >- (simp[set_prov_def] >> irule word_interval_ghost_kept_temp >> simp[] >> metis_tac[]) >>

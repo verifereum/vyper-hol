@@ -104,13 +104,15 @@ Proof
 QED
 
 Theorem word_abs_out_taint:
-  MEM inst.inst_opcode [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL] ==>
+  MEM inst.inst_opcode [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL] /\
+  (inst.inst_opcode = MUL ==>
+    EVERY (\op. op_taint tn op = {}) inst.inst_operands) ==>
   out_taint tn inst s = {}
 Proof
   simp[MEM] >> strip_tac >>
-  (namedCases_on `inst.inst_operands` ["", "a rest"]
+  (namedCases_on `inst.inst_operands` ["", "a rest"] >> fs[]
   >- simp[out_taint_def] >>
-  namedCases_on `rest` ["", "b more"]
+  namedCases_on `rest` ["", "b more"] >> fs[]
   >- (Cases_on `eval_operand a s` >> gvs[out_taint_def]) >>
   namedCases_on `more` ["", "c tail"]
   >- (Cases_on `eval_operand a s` >> gvs[out_taint_def]) >>
@@ -131,7 +133,10 @@ Proof
        FLOOKUP (step_prov PG G inst t) x = NONE` by
     (rpt strip_tac >> irule step_prov_scalar_set >> gvs[MEM] >>
      qexists_tac `scalars` >> simp[] >> metis_tac[]) >>
-  drule word_abs_out_taint >> strip_tac >>
+  `out_taint tn inst s = {}` by
+    (irule word_abs_out_taint >> simp[] >> strip_tac >>
+     simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     Cases_on `op` >> gvs[op_taint_def] >> metis_tac[]) >>
   rpt strip_tac >- metis_tac[] >>
   namedCases_on `inst.inst_outputs` ["", "out rest"]
   >- (gvs[step_taint_def, op_taint_def, set_var_taint_def,

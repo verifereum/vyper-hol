@@ -6,26 +6,6 @@ Ancestors
   pointerConfinedDefs memLocDefs o1LowerDloadJointRelation unitShapeDefs list
   venomInst venomExecSemantics o1LowerDloadJointAssign
 
-Theorem ld_env_masked_update:
-  ld_env_agree sites fn H tn s t /\ inst.inst_outputs = [out] /\
-  occurrence_out a HP H inst (update_var out x s) = NONE /\
-  word_agree_except (out_taint tn inst s) x y ==>
-  ld_env_agree sites fn
-    (occurrence_step a HP H inst (update_var out x s))
-    (step_taint inst s (update_var out x s) tn)
-    (update_var out x s) (update_var out y t)
-Proof
-  strip_tac >>
-  simp[ld_env_agree_def, update_var_def, FLOOKUP_UPDATE,
-       occurrence_step_def, set_prov_def, FLOOKUP_DRESTRICT,
-       step_taint_def, set_var_taint_def, op_taint_def] >>
-  conj_tac
-  >- (rpt strip_tac >> Cases_on `v = out` >> gvs[ld_env_agree_def]) >>
-  rpt gen_tac >> Cases_on `v = out` >>
-  gvs[ld_env_agree_def, op_taint_def, ld_value_agree_scalar] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem ld_joint_shift_operands:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\

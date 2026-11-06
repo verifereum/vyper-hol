@@ -189,7 +189,7 @@ Theorem ld_joint_binary_operands_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
-  MEM inst.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; SLT; SGT; AND; OR; XOR] ==>
+  MEM inst.inst_opcode [Div; Mod; SDIV; SMOD; Exp; SLT; SGT; AND; OR; XOR] ==>
   !op. MEM op inst.inst_operands ==>
     op_prov H op = NONE /\ op_taint tn op = {} /\
     eval_operand op s = eval_operand op t
@@ -296,27 +296,116 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem ld_env_masked_update:
+  ld_env_agree sites fn H tn s t /\ inst.inst_outputs = [out] /\
+  occurrence_out a HP H inst (update_var out x s) = NONE /\
+  word_agree_except (out_taint tn inst s) x y ==>
+  ld_env_agree sites fn
+    (occurrence_step a HP H inst (update_var out x s))
+    (step_taint inst s (update_var out x s) tn)
+    (update_var out x s) (update_var out y t)
+Proof
+  strip_tac >>
+  simp[ld_env_agree_def, update_var_def, FLOOKUP_UPDATE,
+       occurrence_step_def, set_prov_def, FLOOKUP_DRESTRICT,
+       step_taint_def, set_var_taint_def, op_taint_def] >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `v = out` >> gvs[ld_env_agree_def]) >>
+  rpt gen_tac >> Cases_on `v = out` >>
+  gvs[ld_env_agree_def, op_taint_def, ld_value_agree_scalar] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_joint_mul_operands[local]:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = MUL /\ inst.inst_operands = [p;q] /\
+  eval_operand p s = SOME x /\ eval_operand q s = SOME z ==>
+  ?y w. eval_operand p t = SOME y /\ eval_operand q t = SOME w /\
+    word_agree_except (out_taint tn inst s) (x * z) (y * w)
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_prov H op = NONE` by
+    (drule ld_joint_scalar_no_provenance >>
+     gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `!op v. MEM op inst.inst_operands /\ op = Var v ==> MEM v (fn_ir_vars fn)` by
+    metis_tac[ld_active_operand_ir_var] >>
+  `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
+  `!op v. MEM op inst.inst_operands /\ op = Var v ==> ~retpc_var fn v` by
+    metis_tac[ld_active_operand_non_retpc] >>
+  `?y. eval_operand p t = SOME y /\
+    ld_value_agree sites (op_prov H p) (op_taint tn p) x y` by
+    (irule ld_joint_operand_value >> metis_tac[MEM]) >>
+  `?w. eval_operand q t = SOME w /\
+    ld_value_agree sites (op_prov H q) (op_taint tn q) z w` by
+    (irule ld_joint_operand_value >> metis_tac[MEM]) >>
+  qexistsl_tac [`y`,`w`] >> simp[] >>
+  `op_prov H p = NONE /\ op_prov H q = NONE` by metis_tac[MEM] >>
+  `op_taint tn p = {} ==> x = y` by
+    (strip_tac >> `eval_operand p s = eval_operand p t` by
+      (irule ld_joint_operand_clean >> metis_tac[MEM]) >> gvs[]) >>
+  `op_taint tn q = {} ==> z = w` by
+    (strip_tac >> `eval_operand q s = eval_operand q t` by
+      (irule ld_joint_operand_clean >> metis_tac[MEM]) >> gvs[]) >>
+  gvs[ld_value_agree_scalar] >>
+  Cases_on `op_taint tn p = {}`
+  >- (Cases_on `op_taint tn q = {}`
+      >- gvs[word_agree_except_def] >>
+      `x = 0w \/ x = 1w` by
+        (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+         simp[taint_ok_def] >> strip_tac >>
+         qpat_x_assum `!op. _` (qspec_then `q` mp_tac) >>
+         gvs[] >> strip_tac >> gvs[]) >>
+      gvs[out_taint_def, word_agree_except_def, wordsTheory.WORD_MULT_CLAUSES]) >>
+  `op_taint tn q = {} /\ (z = 0w \/ z = 1w)` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     simp[taint_ok_def] >> strip_tac >>
+     qpat_x_assum `!op. _` (qspec_then `p` mp_tac) >>
+     gvs[] >> strip_tac >> gvs[]) >>
+  gvs[out_taint_def, word_agree_except_def, wordsTheory.WORD_MULT_CLAUSES]
+QED
+
 Theorem ld_joint_binary_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; SLT; SGT; AND; OR; XOR] /\
   step_inst fuel C inst s = OK s1 ==>
-  ?out x. s1 = update_var out x s /\
-    step_inst fuel C' inst t = OK (update_var out x t) /\
+  ?out x y. s1 = update_var out x s /\
+    step_inst fuel C' inst t = OK (update_var out y t) /\
     ld_env_agree sites fn (occurrence_step a HP H inst s1)
-      (step_taint inst s s1 tn) s1 (update_var out x t)
+      (step_taint inst s s1 tn) s1 (update_var out y t)
 Proof
   strip_tac >>
+  Cases_on `inst.inst_opcode = MUL`
+  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+      strip_tac >>
+      rename1 `eval_operand op1 s = SOME arg1` >>
+      rename1 `eval_operand op2 s = SOME arg2` >>
+      `?y w. eval_operand op1 t = SOME y /\ eval_operand op2 t = SOME w /\
+         word_agree_except (out_taint tn inst s) (arg1 * arg2) (y * w)` by
+        (irule ld_joint_mul_operands >> metis_tac[MEM]) >>
+      qpat_x_assum `update_var _ _ _ = s1` (SUBST_ALL_TAC o SYM) >>
+      qmatch_goalsub_abbrev_tac `update_var out value s` >>
+      qexistsl_tac [`out`,`value`,`y * w`] >> simp[] >>
+      irule ld_env_masked_update >> simp[Abbr `value`] >>
+      conj_tac >- simp[occurrence_out_def, out_prov_def] >>
+      metis_tac[ld_joint_environment]) >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
-    metis_tac[ld_joint_binary_operands_clean] >>
+    (`MEM inst.inst_opcode [Div; Mod; SDIV; SMOD; Exp; SLT; SGT; AND; OR; XOR]` by fs[] >>
+     drule ld_joint_binary_operands_clean >> simp[] >> metis_tac[]) >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   fs[MEM] >>
   (gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >>
   qpat_x_assum `update_var _ _ _ = s1` (SUBST_ALL_TAC o SYM) >>
   qmatch_goalsub_abbrev_tac `update_var out value s` >>
-  qexistsl_tac [`out`,`value`] >> simp[] >>
+  qexistsl_tac [`out`,`value`,`value`] >> simp[] >>
   conj_tac
   >- (simp[Abbr `value`] >> metis_tac[MEM]) >>
   irule ld_env_clean_update >> simp[] >>
@@ -360,10 +449,10 @@ Proof
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
      simp[occurrence_sites_step_def] >> gvs[]) >>
-  qexists_tac `update_var out x t` >> simp[] >>
+  qexists_tac `update_var out y t` >> simp[] >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
   irule ld_joint_var_update_next >> simp[] >>
-  conj_tac >- (qexistsl [`out`,`s.vs_gas_readings`,`x`,`x`] >>
+  conj_tac >- (qexistsl [`out`,`s.vs_gas_readings`,`x`,`y`] >>
     fs[update_var_def, venom_state_component_equality,
        ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def]) >>
   qexistsl_tac [`G`,`H`,`tn`] >> simp[] >>
