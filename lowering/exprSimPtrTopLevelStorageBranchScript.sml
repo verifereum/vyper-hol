@@ -7,7 +7,8 @@ Ancestors
   exprSimHypsDefs exprSimTopLevelProps accountsRelProps exprSimMemorySource
   vyperInterpreter vyperLookupStorage vyperAST context vyperState
   exprSimHyps exprLowering exprLoweringProps compileEnv loweringPosts exprSimSource
-  bodyPtrDefs exprSimPtrTopLevelStorageCopy words pred_set venomState
+  bodyPtrDefs exprSimPtrTopLevelStorageCopy words pred_set venomState storageDecodeMemory
+  exprSimPtrTopLevelStorageDecode exprSimStorageCopy
 
 Theorem toplevel_storage_branch_source:
   expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
@@ -144,13 +145,65 @@ Proof
   strip_tac >> drule toplevel_storage_range_dead_bytes >> strip_tac >>
   simp[storage_live_memory_def, copy_bytes_def] >> rpt strip_tac >>
   `w2n a+i < dimword (:256)` by fs[storage_range_agree_def] >>
-  `~dead_bytes rt (w2n a) tv (w2n a+i) b'` by metis_tac[] >>
+  `~dead_bytes rt (w2n a) tv (w2n a+i) b'` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
   qpat_x_assum `storage_live_memory _ _ _ _ _` mp_tac >>
   simp[storage_live_memory_def, copy_bytes_def] >>
   disch_then (qspecl_then [`i`, `b'`] mp_tac) >> simp[] >>
   disch_then SUBST1_TAC >>
   qpat_x_assum `storage_range_agree _ _ _ _` mp_tac >>
-  simp[storage_range_agree_def] >>
-  disch_then (qspecl_then [`n2w (w2n a+i)`, `b'`] mp_tac) >>
+  simp[storage_range_agree_def] >> strip_tac >>
+  qpat_x_assum `!k b. _` (qspecl_then [`n2w (w2n a+i)`, `b'`] mp_tac) >>
   simp[vyperStorageTheory.read_slot_def]
+QED
+
+Theorem toplevel_storage_copy_robust_contents:
+  stor_taint_ok cx tn u /\
+  (!st. storage_read_live cx tr st a tv) /\
+  well_formed_type_value tv /\ slots_in_range st (w2n a) tv /\
+  decode_value st (w2n a) tv = SOME v /\
+  storage_range_agree st
+    (if tr then contract_transient u else contract_storage u) a tv /\
+  copy_prefix (if tr then LocTransient else LocStorage)
+    a b (type_slot_size tv) u (type_slot_size tv) t /\
+  tnf.t_mem SUBSET toplevel_copy_taint_bound
+    (if tr then LocTransient else LocStorage) a b tn (type_slot_size tv) ==>
+  !mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+    val_in_memory tv v b mem
+Proof
+  strip_tac >>
+  `w2n a+type_slot_size tv <= dimword (:256)` by fs[storage_range_agree_def] >>
+  `!i. i < type_slot_size tv ==> w2n (a+n2w i) = w2n a+i` by
+    (rpt strip_tac >>
+     `w2n a+i < dimword (:256)` by decide_tac >>
+     `a+n2w i = n2w (w2n a+i)` by metis_tac[word_add_n2w, n2w_w2n] >>
+     asm_rewrite_tac[w2n_n2w] >> simp[]) >>
+  `storage_live_memory (if tr then contract_transient u else contract_storage u)
+    (w2n a) tv b t.vs_memory` by
+    (irule toplevel_copy_prefix_live_memory >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> Cases_on `tr` >>
+     gvs[copy_runtime_word_def, vyperStorageTheory.read_slot_def,
+         tload_def, sload_def, contract_transient_def, contract_storage_def,
+         vfmStateTheory.lookup_account_def] >> rpt strip_tac >>
+     `a+n2w i = n2w (i+w2n a)` by metis_tac[word_add_n2w, n2w_w2n,
+       arithmeticTheory.ADD_COMM] >> simp[]) >>
+  `storage_live_memory st (w2n a) tv b t.vs_memory` by
+    metis_tac[toplevel_storage_live_memory_range] >>
+  `!i j. i < type_slot_size tv /\ j < 32 /\
+     (a+n2w i,j) IN toplevel_copy_source_taint
+       (if tr then LocTransient else LocStorage) tn ==>
+     dead_bytes st (w2n a) tv (w2n a+i) j` by
+    (rpt strip_tac >>
+     drule toplevel_storage_backend_taint_dead >>
+     disch_then (qspecl_then [`tr`, `a+n2w i`, `j`] mp_tac) >> simp[] >>
+     drule toplevel_storage_range_dead_bytes >> strip_tac >>
+     fs[storage_read_live_def] >>
+     `w2n a <= w2n a+i /\ w2n a+i < w2n a+type_slot_size tv` by decide_tac >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `!i j. i < type_slot_size tv /\ j < 32 /\ b+32*i+j IN tnf.t_mem ==>
+     dead_bytes st (w2n a) tv (w2n a+i) j` by
+    metis_tac[toplevel_copy_taint_dead_bytes] >>
+  rpt strip_tac >> irule toplevel_storage_decode_robust >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM, arithmeticTheory.ADD_ASSOC]
 QED

@@ -7,6 +7,7 @@ Ancestors
   compileEnv exprLoweringProps exprSimDefs
 
 Theorem toplevel_storage_copy_pointer_post:
+  ~is_word_type ann /\
   evaluate_type (get_tenv cx) ann = SOME tv /\
   lookup_var dst t = SOME w /\ ptr_covers G tn dst t nb /\
   val_store_size tv v <= nb /\ type_memory_bytes cenv ann <= nb /\
