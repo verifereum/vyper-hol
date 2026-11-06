@@ -1,5 +1,5 @@
 Theory fnLineageInvOffset
-Ancestors fnLineageInvOrdinarySuffix fnPlanLineageStages fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState list pred_set
+Ancestors fnLineageInvPointLive fnLineageInvOrdinarySuffix fnPlanLineageStages fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState list pred_set
 
 Theorem offset_lineage_inventory_iff:
   !inst w lab x before after ps ops qs.
@@ -50,4 +50,45 @@ Proof
   qexistsl_tac [`m'`, `core'`] >> simp[] >>
   irule reorderSimTheory.residual_budget_wf_canonical >>
   gvs[reorderSimTheory.residual_budget_wf_def]
+QED
+
+Theorem analyzed_offset_inventory:
+  !fn bb j w lab x ps ops qs base.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    j < LENGTH bb.bb_instructions /\
+    (EL j bb.bb_instructions).inst_opcode = OFFSET /\
+    (EL j bb.bb_instructions).inst_operands = [Lit w; Label lab] /\
+    (EL j bb.bb_instructions).inst_outputs = [x] /\
+    lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label j))) ps /\
+    generate_offset_plan (EL j bb.bb_instructions) ps = (ops,qs) /\
+    (?m core. lineage_core m core ps /\
+      residual_budget_wf base [] (ps with ps_stack := core)) ==>
+    lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j)))) qs /\
+    (?n tail. lineage_core n tail qs /\
+      residual_budget_wf base [] (qs with ps_stack := tail))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j))` by
+    (rewrite_tac[arithmeticTheory.ADD1] >>
+     irule analyzed_offset_output_live_after >> simp[] >> metis_tac[]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[EXTENSION] >> metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze]) >>
+  `set (live_vars_at (liveness_analyze fn) bb.bb_label j) =
+   set (FILTER (\v. v <> x) (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j)))` by
+    (drule livenessProofsTheory.live_vars_at_transfer >>
+     disch_then (qspecl_then [`bb.bb_label`, `bb`, `j`] mp_tac) >>
+     simp[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
+       venomInstTheory.inst_uses_def, venomInstTheory.inst_defs_def,
+       livenessDefsTheory.ordered_inst_uses_def, venomInstTheory.python_stack_operands_def,
+       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+       venomInstTheory.ir_specific_operand_order_def]) >>
+  conj_tac
+  >- (drule_all offset_lineage_inventory_iff >> simp[]) >>
+  irule offset_lineage_inventory_budget >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
