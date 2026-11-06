@@ -333,3 +333,131 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
 QED
 
+val raw_opcode_rewrites =
+  map (fn th => (rhs (fst (dest_imp (snd (strip_forall (concl th))))), th))
+    (CONJUNCTS step_inst_base_opcode_eqs);
+fun raw_opcode_eq eq =
+  let val (_, th) = valOf (List.find
+        (fn (key, _) => aconv key (rhs (concl eq))) raw_opcode_rewrites)
+  in RULE_ASSUM_TAC (PURE_REWRITE_RULE [MATCH_MP th eq]) >>
+     PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end;
+
+    val copy_tac = rpt strip_tac >>
+      namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+      namedCases_on `ops` ["", "b ops2"] >> gvs[exit_result_def] >>
+      namedCases_on `ops2` ["", "c ops3"] >> gvs[exit_result_def] >>
+      Cases_on `ops3` >> gvs[exit_result_def] >>
+      Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+      Cases_on `eval_operand b s` >> gvs[exit_result_def] >>
+      Cases_on `eval_operand c s` >> gvs[exit_result_def];
+    val evalone_tac = rpt strip_tac >>
+      namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+      Cases_on `ops` >> gvs[exit_result_def] >>
+      Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+      Cases_on `outs` >> gvs[exit_result_def];
+    val literal_tac = rpt strip_tac >>
+      namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+      Cases_on `a` >> gvs[exit_result_def] >>
+      Cases_on `ops` >> gvs[exit_result_def] >>
+      rename1 `inst.inst_operands = [Lit idx]` >>
+      Cases_on `w2n idx < LENGTH s.vs_params` >> gvs[exit_result_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+      Cases_on `outs` >> gvs[exit_result_def];
+    val emptyops_tac = rpt strip_tac >>
+      Cases_on `inst.inst_operands` >> gvs[exit_result_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+      Cases_on `outs` >> gvs[exit_result_def];
+    val gas_tac = rpt strip_tac >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+      Cases_on `outs` >> gvs[exit_result_def] >>
+      Cases_on `s.vs_gas_readings` >> gvs[exit_result_def];
+
+Theorem step_inst_exit_opcodes[local]:
+  !inst s. exit_result (step_inst_base inst s) ==>
+    MEM inst.inst_opcode
+      [INVOKE; STOP; RETURN; SINK; RET; RETFMP; DRET; REVERT;
+       ASSERT; ASSERT_UNREACHABLE; RETURNDATACOPY; LOG; SELFDESTRUCT;
+       INVALID; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; SSTORE; TSTORE]
+Proof
+    rpt gen_tac >> Cases_on `inst.inst_opcode` >> simp[] >>
+    first_assum raw_opcode_eq >>
+    simp[exec_pure1_not_exit, exec_pure2_not_exit, exec_pure3_not_exit,
+         exec_read0_not_exit, exec_read1_not_exit, exec_write2_not_exit,
+         exec_alloca_def, exec_gas_def] >> all_tac
+    >~ [`inst.inst_opcode = MCOPY`] >- copy_tac
+    >~ [`inst.inst_opcode = CALLDATACOPY`] >- copy_tac
+    >~ [`inst.inst_opcode = CODECOPY`] >- copy_tac
+    >~ [`inst.inst_opcode = DLOADBYTES`] >- copy_tac
+    >~ [`inst.inst_opcode = ASSIGN`] >- evalone_tac
+    >~ [`inst.inst_opcode = DALLOCA`] >- evalone_tac
+    >~ [`inst.inst_opcode = SETFMP`] >- evalone_tac
+    >~ [`inst.inst_opcode = PARAM`] >- literal_tac
+    >~ [`inst.inst_opcode = FMP_PARAM`] >- literal_tac
+    >~ [`inst.inst_opcode = RETPC_PARAM`] >- literal_tac
+    >~ [`inst.inst_opcode = GAS`] >- gas_tac
+    >~ [`inst.inst_opcode = GETFMP`] >- emptyops_tac
+    >~ [`inst.inst_opcode = INITIAL_FMP`] >- emptyops_tac >>
+    rpt strip_tac >> gvs[exit_result_def]
+    >~ [`inst.inst_opcode = ALLOCA`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        Cases_on `a` >> gvs[exit_result_def] >>
+        Cases_on `ops` >> gvs[exit_result_def] >>
+        namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+        Cases_on `outs` >> gvs[exit_result_def] >>
+        Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> gvs[exit_result_def] >>
+        rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME pair` >>
+        PairCases_on `pair` >> gvs[exit_result_def])
+    >~ [`inst.inst_opcode = BUMP`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        namedCases_on `ops` ["", "b ops2"] >> gvs[exit_result_def] >>
+        Cases_on `ops2` >> gvs[exit_result_def] >>
+        namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+        namedCases_on `outs` ["", "out2 outs2"] >> gvs[exit_result_def] >>
+        Cases_on `outs2` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand b s` >> gvs[exit_result_def])
+    >~ [`inst.inst_opcode = DJMP`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+        Cases_on `extract_labels ops` >> gvs[exit_result_def] >>
+        qpat_x_assum `exit_result _` mp_tac >>
+        IF_CASES_TAC >> simp[exit_result_def])
+    >~ [`inst.inst_opcode = EXTCODECOPY`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        namedCases_on `ops` ["", "b ops2"] >> gvs[exit_result_def] >>
+        namedCases_on `ops2` ["", "c ops3"] >> gvs[exit_result_def] >>
+        namedCases_on `ops3` ["", "d ops4"] >> gvs[exit_result_def] >>
+        Cases_on `ops4` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand b s` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand c s` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand d s` >> gvs[exit_result_def])
+    >~ [`inst.inst_opcode = ISTORE`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        namedCases_on `ops` ["", "b ops2"] >> gvs[exit_result_def] >>
+        Cases_on `ops2` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand b s` >> gvs[exit_result_def])
+    >~ [`inst.inst_opcode = JMP`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        Cases_on `a` >> gvs[exit_result_def] >>
+        Cases_on `ops` >> gvs[exit_result_def])
+    >~ [`inst.inst_opcode = JNZ`]
+    >- (namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+        namedCases_on `ops` ["", "b ops2"] >> gvs[exit_result_def] >>
+        Cases_on `b` >> gvs[exit_result_def] >>
+        namedCases_on `ops2` ["", "c ops3"] >> gvs[exit_result_def] >>
+        Cases_on `c` >> gvs[exit_result_def] >>
+        Cases_on `ops3` >> gvs[exit_result_def] >>
+        Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+        qpat_x_assum `exit_result _` mp_tac >>
+        IF_CASES_TAC >> simp[exit_result_def]) >>
+    namedCases_on `inst.inst_operands` ["", "a ops"] >> gvs[exit_result_def] >>
+    namedCases_on `ops` ["", "b ops2"] >> gvs[exit_result_def] >>
+    Cases_on `ops2` >> gvs[exit_result_def] >>
+    Cases_on `eval_operand a s` >> gvs[exit_result_def] >>
+    Cases_on `eval_operand b s` >> gvs[exit_result_def] >>
+    namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
+    Cases_on `outs` >> gvs[exit_result_def]
+QED
