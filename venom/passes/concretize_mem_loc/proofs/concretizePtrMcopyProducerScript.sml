@@ -6,7 +6,7 @@ Ancestors concretizePtrMcopyContent concretizePtrMcopyEndpoint concretizePtrOrdi
   concretizePtrActivationChronology concretizePtrDeletedGapHistory
   concretizePtrTaggedSupport concretizePtrLedgerProbe concretizePtrPrefixLedger
   concretizePtrStagePlacements concretizePtrSharedFields concretizePtrOpaqueRetpc
-  concretizePtrAllocationSize
+  concretizePtrAllocationSize concretizePtrPairedNextAttach
   concretizePtrValueTransport concretizePtrBytes concretizePtrComparisonTransport
   concretizeMemLocDefs stackPlanGen stackPlanTypes ptrDiscipline o1PassContract
   unitShapeDefs unitLabelMapIdentity venomWf cfgWf o1ScheduleDecomp unitMemInv contextCodegenRel codegenRel memLocDefs
@@ -317,3 +317,135 @@ Resume ptr_mcopy_write_producer[owned]:
 QED
 
 Finalise ptr_mcopy_write_producer
+
+Theorem ptr_paired_prefix_mcopy:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
+  ?z extra. ptr_paired_prefix R lp positions lo vs C C'
+    (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+    tokens registry births PT TG saved entries
+    (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) calls (ws ++ extra) /\
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state) = {} ==> extra = []) /\
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
+      ?rho. extra = [(LENGTH h - 1,LENGTH done,rho)])
+Proof
+  strip_tac >> drule_all ptr_mcopy_write_producer >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `ptr_chrono_step C a z` by
+    (drule ptr_tagged_chrono_step_projection >> simp[]) >>
+  `z.po_fn = a.po_fn /\ z.po_stack = a.po_stack /\
+   z.po_params = a.po_params /\
+   z.po_state = (mcopy (w2n d) (w2n r) (w2n n) a.po_state with
+     vs_inst_idx := SUC a.po_state.vs_inst_idx) /\
+   z.po_taint = step_taint a.po_inst a.po_state
+     (mcopy (w2n d) (w2n r) (w2n n) a.po_state) a.po_taint /\
+   active_inst z.po_fn z.po_inst z.po_state` by
+    (qpat_assum `ptr_chrono_step C a z` mp_tac >>
+     once_rewrite_tac[ptr_chrono_step_cases] >>
+     simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
+     strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def] >> strip_tac >> gvs[]) >>
+  `zt.po_fn = at.po_fn /\ zt.po_stack = at.po_stack /\
+   zt.po_state = (mcopy (w2n dt) (w2n rt) (w2n n) at.po_state with
+     vs_inst_idx := SUC at.po_state.vs_inst_idx) /\
+   active_inst zt.po_fn zt.po_inst zt.po_state` by
+    (qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+     once_rewrite_tac[ptr_chrono_step_cases] >>
+     simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
+     strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def] >> strip_tac >> gvs[]) >>
+  `ptr_paired_sample positions z zt (tokens,registry,births,PT,TG,saved,entries)` by
+    suspend "sample" >>
+  `ptr_paired_params positions z zt (tokens,registry,births,PT,TG,saved,entries)` by
+    gvs[ptr_paired_params_def, mcopy_def, write_memory_with_expansion_def] >>
+  `ptr_paired_code R lp positions z.po_fn zt.po_fn` by simp[] >>
+  `ptr_paired_cursor lp z zt` by suspend "cursor" >>
+  Cases_on `range_bytes (step_writes a.po_inst a.po_state z.po_state) = {}`
+  >- (qexistsl_tac [`z`,`[]`] >> simp[] >>
+      drule ptr_paired_prefix_nonwrite_attach >> disch_then irule >> simp[]) >>
+  first_x_assum drule >> disch_then (qx_choose_then `reloc` assume_tac) >>
+  qexistsl_tac [`z`,`[(LENGTH h - 1,LENGTH done,reloc)]`] >> simp[] >>
+  suspend "retention"
+QED
+
+Resume ptr_paired_prefix_mcopy[sample]:
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> rpt strip_tac >>
+     gvs[active_inst_def, fn_insts_MEM] >> metis_tac[MEM_EL]) >>
+  `inst_wf a.po_inst` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
+        EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
+  `a.po_inst.inst_outputs = []` by gvs[inst_wf_def] >>
+  gvs[ptr_paired_sample_def, ptr_mixed_vars_def, ptr_opaque_env_def,
+      ptr_core_shared_def, ptr_shared_fields_def, step_taint_def,
+      mcopy_def, write_memory_with_expansion_def, set_var_taint_def,
+      lookup_var_def, op_taint_def, DRESTRICT_UNIV] >> metis_tac[]
+QED
+
+Resume ptr_paired_prefix_mcopy[cursor]:
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `ALL_DISTINCT (fn_labels a.po_fn)` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  `ALL_DISTINCT (fn_labels at.po_fn)` by
+    (fs[ptr_paired_code_def] >>
+     metis_tac[fn_labels_def, concretizeStepStructureTheory.concretize_positions_labels]) >>
+  `!ai. MEM ai (fn_insts a.po_fn) /\ ai.inst_opcode = ALLOCA ==>
+     ?p. FLOOKUP (lp a.po_fn) (Allocation ai.inst_id) = SOME p` by
+    (match_mp_tac (Q.INST [`view` |-> `o1_walk_view rpolicy 2`] ptr_paired_stage_local_allocas) >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  irule ptr_ordinary_next_cursor >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Resume ptr_paired_prefix_mcopy[retention]:
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  `LAST h = a /\ 0 < LENGTH h /\ LENGTH ht = SUC (LENGTH done)` by
+    (drule ptr_chrono_history_end >> strip_tac >>
+     fs[ptr_paired_prefix_def, ptr_paired_samples_def]) >>
+  `LENGTH ht - 1 = LENGTH done` by decide_tac >>
+  `EVERY (\n. SUC n < LENGTH h) done` by
+    (qpat_assum `ptr_event_embedding h ht (done ++ _)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[concretizePtrEventEmbeddingTheory.ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
+     gen_tac >> strip_tac >>
+     qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  fs[ptr_paired_prefix_def] >>
+  conj_tac >- (irule ptr_paired_samples_pair >> simp[]) >>
+  conj_tac >- (irule ptr_paired_alignment_pair >> simp[]) >>
+  conj_tac >- (irule ptr_paired_callers_retained >> simp[] >>
+               fs[ptr_paired_samples_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
+  irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def]
+QED
+
+Finalise ptr_paired_prefix_mcopy
