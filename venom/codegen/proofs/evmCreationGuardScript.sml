@@ -3,7 +3,7 @@ Theory evmCreationGuard
 Ancestors
   vfmAccountDeletion vfmExecution vfmExecutionProp vfmState vfmContext
   vfmTypes vfmPreserves vfmRunCall vfmRunWithinFrame vfmAccountFrame
-  list combin finite_map pair
+  vfmStepLength vfmSameFrame list combin finite_map pair arithmetic
 
 Theorem step_inst_creation_original_empty:
   s.contexts <> [] /\
@@ -69,4 +69,105 @@ Proof
   mp_tac (Q.INST [`op` |-> `x`]
     (SRULE [preserves_when_def] inc_pc_or_jump_deletion_exact)) >>
   metis_tac[SND, handle_step_deletion_projections]
+QED
+
+val creation_step_inner = ``do
+  context <- get_current_context;
+  case FLOOKUP context.msgParams.parsed context.pc of
+  | SOME op => ignore_bind (step_inst op) (inc_pc_or_jump op)
+  | NONE => if LENGTH context.msgParams.code <= context.pc
+            then step_inst Stop else step_inst Invalid
+  od``;
+
+Theorem step_creation_live_guard:
+  wf_state s /\
+  account_already_created (lookup_account a s.rollback.accounts) /\
+  (2 <= LENGTH s.contexts ==>
+    account_already_created (lookup_account a (SND (HD s.contexts)).accounts)) /\
+  (FST (HD s.contexts)).msgParams.outputTo <> Code a /\
+  step s = (r,t) ==>
+  account_already_created (lookup_account a t.rollback.accounts)
+Proof
+  strip_tac >>
+  `s.contexts <> []` by gvs[wf_state_def] >>
+  qhdtm_x_assum `step` mp_tac >> simp[step_def, handle_def] >>
+  Cases_on `^creation_step_inner s` >>
+  rename1 `^creation_step_inner s = (q,u)` >>
+  `(lookup_account a s.rollback.accounts).nonce <=
+     (lookup_account a u.rollback.accounts).nonce /\
+   (lookup_account a u.rollback.accounts).code =
+     (lookup_account a s.rollback.accounts).code`
+    by (irule (SRULE [] step_inner_nonce_code) >> metis_tac[]) >>
+  `same_frame_or_grow ^creation_step_inner` by simp[] >>
+  `LENGTH s.contexts <= LENGTH u.contexts`
+    by (drule_all same_frame_or_grow_length >> simp[]) >>
+  `u.contexts <> []` by (strip_tac >> gvs[]) >>
+  `account_already_created (lookup_account a u.rollback.accounts)`
+    by (gvs[account_already_created_def] >> decide_tac) >>
+  Cases_on `q` >> simp[] >> strip_tac
+  >- gvs[] >>
+  Cases_on `LENGTH u.contexts = LENGTH s.contexts`
+  >- (`same_frame_rel s u`
+        by (drule_all same_frame_or_grow_eq_length >> simp[]) >>
+      `(lookup_account a t.rollback.accounts).nonce <> 0 \/
+        ~NULL (lookup_account a t.rollback.accounts).code`
+        suffices_by simp[account_already_created_def] >>
+      irule handle_step_protected_account >>
+      qexistsl_tac [`y`, `r`, `u`] >>
+      gvs[same_frame_rel_def, account_already_created_def]) >>
+  `LENGTH s.contexts < LENGTH u.contexts` by decide_tac >>
+  `((lookup_account a s.rollback.accounts).nonce <> 0 \/
+    ~NULL (lookup_account a s.rollback.accounts).code)`
+    by gvs[account_already_created_def] >>
+  drule_at (Pat `bind _ _ _ = _`) step_inner_inr_grow_protected_head >>
+  disch_then (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
+  `(lookup_account a t.rollback.accounts).nonce <> 0 \/
+    ~NULL (lookup_account a t.rollback.accounts).code`
+    suffices_by simp[account_already_created_def] >>
+  irule handle_step_protected_account >>
+  qexistsl_tac [`y`, `r`, `u`] >>
+  gvs[account_already_created_def]
+QED
+
+Theorem step_creation_active_rollbacks:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (r,t) /\
+  account_already_created (lookup_account a s.rollback.accounts) /\
+  account_already_created (lookup_account a t.rollback.accounts) /\
+  EVERY (\rb. account_already_created (lookup_account a rb.accounts))
+    (active_rollbacks d s) ==>
+  EVERY (\rb. account_already_created (lookup_account a rb.accounts))
+    (active_rollbacks d t)
+Proof
+  strip_tac >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s /\
+   EVERY (wf_context o FST) s.contexts` by gvs[wf_state_def] >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (irule active_rollbacks_same_frame_transport >> simp[] >>
+      qexists_tac `s` >> simp[] >> irule step_same_frame >>
+      metis_tac[outputTo_consistent_stack_imp_consistent]) >>
+  Cases_on `LENGTH t.contexts < LENGTH s.contexts`
+  >- (drule_all step_pop_structure >> strip_tac >>
+      irule active_rollbacks_pop_transport >>
+      simp[] >> metis_tac[]) >>
+  `LENGTH s.contexts < LENGTH t.contexts` by decide_tac >>
+  `LENGTH t.contexts > LENGTH s.contexts` by simp[] >>
+  drule_all step_push_structure >> strip_tac >>
+  irule active_rollbacks_push_transport >>
+  simp[] >>
+  qexistsl_tac [
+    `\rb. account_already_created (lookup_account a rb.accounts)`,
+    `\x y. account_already_created (lookup_account a x.accounts) ==>
+            account_already_created (lookup_account a y.accounts)`, `s`] >>
+  simp[ADD1] >> qx_gen_tac `i` >> strip_tac >>
+  Cases_on `i`
+  >- (simp[] >>
+      drule_all step_growth_saved_head_nonce_code >>
+      disch_then (qspec_then `a` mp_tac) >>
+      gvs[account_already_created_def] >> decide_tac) >>
+  simp[] >> strip_tac >>
+  `lookup_account a (SND (EL (SUC n) t.contexts)).accounts =
+   lookup_account a (SND (EL n s.contexts)).accounts`
+    by (irule step_growth_old_snapshot_lookup >>
+        gvs[account_already_created_def]) >> simp[]
 QED
