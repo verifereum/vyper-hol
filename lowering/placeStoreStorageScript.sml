@@ -12,7 +12,7 @@
 Theory placeStoreStorage
 Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
-  loweringPosts fragGasMode accountsRelProps
+  loweringPosts fragGasMode accountsRelProps copyExecution
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState fragGasSeq fragGasPath arithmetic venomExecSemantics venomInst exprLoweringProps
@@ -6278,13 +6278,123 @@ Proof
   Cases_on `tr` >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
     eval_operands_def, place_store_operand_update, place_store_update_static] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
+  `eval_operand (Var cv) post = SOME k` by
+    (simp[Abbr `post`, place_store_operand_update,
+      SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
+      SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    place_store_operand_update,
-    SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
-    SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame),
-    place_store_update_static, emitHelperPropsTheory.eval_operand_lit] >>
-  simp[run_inst_seq_def, step_inst_base_def,
-    place_store_operand_update]
+    emitHelperPropsTheory.eval_operand_lit] >>
+  simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update]
+QED
+
+(* Forward-copy layout shares names, initialization and test with slot copying.
+   Only the body order and load/store direction differ. *)
+Definition place_store_copy_body_insts_def:
+  place_store_copy_body_insts cs src dst tr =
+    [mk_inst (cs.cs_next_id + 4) MUL
+       [Var (slot_copy_var cs 0); Lit 32w] [slot_copy_var cs 2];
+     mk_inst (cs.cs_next_id + 5) ADD [src; Var (slot_copy_var cs 2)]
+       [slot_copy_var cs 3];
+     mk_inst (cs.cs_next_id + 6) MLOAD [Var (slot_copy_var cs 3)]
+       [slot_copy_var cs 4];
+     mk_inst (cs.cs_next_id + 7) ADD [dst; Var (slot_copy_var cs 0)]
+       [slot_copy_var cs 5];
+     mk_inst (cs.cs_next_id + 8) (if tr then TSTORE else SSTORE)
+       [Var (slot_copy_var cs 5); Var (slot_copy_var cs 4)] [];
+     mk_inst (cs.cs_next_id + 9) ADD [Var (slot_copy_var cs 0); Lit 1w]
+       [slot_copy_var cs 6];
+     mk_inst (cs.cs_next_id + 10) ASSIGN [Var (slot_copy_var cs 6)]
+       [slot_copy_var cs 0];
+     mk_inst (cs.cs_next_id + 11) JMP [Label (slot_copy_cond cs)] []]
+End
+
+Definition place_store_copy_blocks_def:
+  place_store_copy_blocks cs src dst n tr =
+    [<|bb_label := slot_copy_body cs;
+       bb_instructions := place_store_copy_body_insts cs src dst tr|>;
+     <|bb_label := slot_copy_cond cs;
+       bb_instructions := slot_copy_cond_insts cs n|>;
+     <|bb_label := cs.cs_current_bb;
+       bb_instructions := cs.cs_current_insts ++ slot_copy_init_insts cs|>]
+End
+
+Definition place_store_copy_final_def:
+  place_store_copy_final cs src dst n tr =
+    cs with <|cs_next_label := cs.cs_next_label + 3;
+              cs_next_var := cs.cs_next_var + 7;
+              cs_next_id := cs.cs_next_id + 12;
+              cs_blocks := place_store_copy_blocks cs src dst n tr ++ cs.cs_blocks;
+              cs_current_bb := slot_copy_exit cs;
+              cs_current_insts := []|>
+End
+
+Theorem place_store_copy_shape:
+  compile_word_copy_loop src dst n LocMemory
+    (if tr then LocTransient else LocStorage) F cs =
+  (slot_copy_body cs, place_store_copy_final cs src dst n tr)
+Proof
+  Cases_on `tr` >>
+  simp[contextTheory.compile_word_copy_loop_def, word_scale_def,
+       contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_label_def, fresh_var_def, fresh_id_def,
+       emitHelperTheory.emit_inst_def, emitHelperTheory.emit_op_def,
+       emitHelperTheory.emit_void_def, emit_def, new_block_def,
+       place_store_copy_final_def, place_store_copy_blocks_def,
+       place_store_copy_body_insts_def, slot_copy_init_insts_def,
+       slot_copy_cond_insts_def, slot_copy_var_def,
+       slot_copy_body_def, slot_copy_cond_def, slot_copy_exit_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >> REFL_TAC
+QED
+
+Theorem place_store_copy_boundary:
+  compile_word_copy_loop src dst n LocMemory
+    (if tr then LocTransient else LocStorage) F cs = (result,cs') ==>
+  result = slot_copy_body cs /\
+  cs' = place_store_copy_final cs src dst n tr /\
+  cs_extends cs cs' /\
+  cs'.cs_current_bb = slot_copy_exit cs /\
+  cs'.cs_current_insts = [] /\
+  cs'.cs_next_var = cs.cs_next_var + 7 /\
+  cs'.cs_next_label = cs.cs_next_label + 3 /\
+  cs'.cs_next_id = cs.cs_next_id + 12
+Proof
+  simp[place_store_copy_shape] >> strip_tac >> gvs[] >>
+  simp[cs_extends_def, place_store_copy_final_def,
+       place_store_copy_blocks_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem place_store_copy_lookup:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) fn ==>
+  lookup_block (slot_copy_body cs) fn.fn_blocks =
+    SOME <|bb_label := slot_copy_body cs;
+           bb_instructions := place_store_copy_body_insts cs src dst tr|> /\
+  lookup_block (slot_copy_cond cs) fn.fn_blocks =
+    SOME <|bb_label := slot_copy_cond cs;
+           bb_instructions := slot_copy_cond_insts cs n|> /\
+  lookup_block cs.cs_current_bb fn.fn_blocks =
+    SOME <|bb_label := cs.cs_current_bb;
+           bb_instructions := cs.cs_current_insts ++ slot_copy_init_insts cs|> /\
+  ?bb. lookup_block (slot_copy_exit cs) fn.fn_blocks = SOME bb
+Proof
+  simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+       place_store_copy_final_def,
+       place_store_copy_blocks_def, DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem place_store_copy_old_var:
+  not_fresh_at cs x ==> x <> slot_copy_var cs k
+Proof
+  simp[not_fresh_at_def, slot_copy_var_def] >> strip_tac >>
+  first_x_assum (qspec_then `cs.cs_next_var + k` mp_tac) >> simp[]
+QED
+
+Theorem place_store_copy_operand_fresh:
+  (!x. op = Var x ==> not_fresh_at cs x) ==>
+  op <> Var (slot_copy_var cs k)
+Proof
+  metis_tac[place_store_copy_old_var]
 QED
 
 (* The allocation-limit check bounds the natural size, before n2w. *)
