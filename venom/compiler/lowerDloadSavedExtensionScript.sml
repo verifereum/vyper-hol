@@ -99,3 +99,47 @@ Proof
   irule ld_saved_embedded_selected_transport >> qexists_tac `E` >>
   simp[] >> metis_tac[]
 QED
+
+Theorem ld_reachable_saved_indexed_owner_update:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn inst s /\
+  LENGTH astk = LENGTH gstk /\ LENGTH supports = LENGTH astk /\
+  LENGTH savedkeys = LENGTH astk /\ LENGTH suspended = LENGTH astk /\
+  (!q. q < LENGTH astk ==>
+    ld_saved_embedded
+      {v | v IN EL q supports /\ ~retpc_var (EL q astk).lf_fn v}
+      E (EL q savedkeys)
+      (32 * SUM (MAP CARD (DROP (SUC q) suspended)))
+      (EL q suspended) (EL q astk) (EL q gstk) /\
+    (!v. v IN EL q supports ==>
+      (lookup_var v (EL q astk).lf_state = NONE <=>
+       lookup_var v (EL q gstk).lf_state = NONE)) /\
+    (!v. (case FLOOKUP (EL q astk).lf_tvar v of NONE => {} | SOME m => m)
+      SUBSET count 32) /\
+    (!v. (case FLOOKUP (EL q gstk).lf_tvar v of NONE => {} | SOME m => m)
+      SUBSET count 32)) ==>
+  LENGTH astk = LENGTH gstk /\ LENGTH supports = LENGTH astk /\
+  LENGTH savedkeys = LENGTH astk /\ LENGTH suspended = LENGTH astk /\
+  (!q. q < LENGTH astk ==>
+    ld_saved_embedded
+      {v | v IN EL q supports /\ ~retpc_var (EL q astk).lf_fn v}
+      (E |+ ((0,k),entry)) (EL q savedkeys)
+      (32 * SUM (MAP CARD (DROP (SUC q) suspended)))
+      (EL q suspended) (EL q astk) (EL q gstk) /\
+    (!v. v IN EL q supports ==>
+      (lookup_var v (EL q astk).lf_state = NONE <=>
+       lookup_var v (EL q gstk).lf_state = NONE)) /\
+    (!v. (case FLOOKUP (EL q astk).lf_tvar v of NONE => {} | SOME m => m)
+      SUBSET count 32) /\
+    (!v. (case FLOOKUP (EL q gstk).lf_tvar v of NONE => {} | SOME m => m)
+      SUBSET count 32))
+Proof
+  strip_tac >> irule ld_saved_indexed_selected_transport >>
+  simp[] >> qexists_tac `E` >> simp[] >> rpt strip_tac >>
+  `MEM (EL q astk) astk` by metis_tac[MEM_EL] >>
+  `ld_live astk L AP AG (owner,(bs,sz))` by
+    (simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+  drule_all ld_annotated_serial >> simp[] >> strip_tac >>
+  `owner <> (0,k)` by (strip_tac >> gvs[]) >>
+  simp[ld_site_entry_def, FLOOKUP_UPDATE] >>
+  gvs[ld_site_entry_def]
+QED
