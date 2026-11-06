@@ -41,13 +41,57 @@ Theorem temporal_pressure_ready:
       inst.inst_operands) bb.bb_instructions) (temporal_pressure_fn n).fn_blocks)
     [1;16;17]
 Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  BETA_TAC >>
+  conj_tac >- suspend "width_one" >>
+  conj_tac >- suspend "width_sixteen" >> suspend "width_seventeen"
+QED
+
+Resume temporal_pressure_ready[width_one]:
   EVAL_TAC >> simp[]
 QED
+Resume temporal_pressure_ready[width_sixteen]:
+  EVAL_TAC >> simp[]
+QED
+Resume temporal_pressure_ready[width_seventeen]:
+  EVAL_TAC >> simp[]
+QED
+Finalise temporal_pressure_ready
 
 val _ = computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY, listTheory.SET_TO_LIST_SING,
   finite_mapTheory.DRESTRICT_FUPDATE,
   finite_mapTheory.DRESTRICT_FEMPTY, pred_setTheory.IN_COMPL,
   pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY];
+
+(* Normalize probe analysis definitions once and register the concrete native
+   calls with CBV; the cached RHSs are full analysis records. *)
+Definition temporal_live_def:
+  temporal_live n = liveness_analyze (temporal_pressure_fn n)
+End
+Definition temporal_dfg_def:
+  temporal_dfg n = dfg_build_function (temporal_pressure_fn n)
+End
+Definition temporal_cfg_def:
+  temporal_cfg n = cfg_analyze (temporal_pressure_fn n)
+End
+
+val _ = app (fn n => app (fn d => computeLib.add_funs
+  [CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV
+    [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``]))
+    (REWRITE_RULE [d] (CONV_RULE (RAND_CONV EVAL) (Q.SPEC n d)))])
+  [temporal_live_def, temporal_dfg_def, temporal_cfg_def]) [`16`, `17`];
+
+Definition temporal_body_live_def:
+  temporal_body_live n k = live_vars_at (temporal_live n) "body" k
+End
+
+val _ = app (fn n => app (fn k => computeLib.add_funs
+  [CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV [``live_vars_at``]))
+    (REWRITE_RULE [temporal_body_live_def, temporal_live_def]
+      (CONV_RULE (RAND_CONV EVAL)
+        (SPEC (numSyntax.term_of_int k)
+          (Q.SPEC n temporal_body_live_def))))])
+  (List.tabulate (45, fn k => k))) [`16`, `17`];
 
 Definition temporal_call_def:
   temporal_call n i ps = generate_block_plan
@@ -254,6 +298,155 @@ QED
 val _ = computeLib.add_funs (CONJUNCTS
   (SRULE [listTheory.EVERY_DEF] temporal_prefix_one));
 
+Theorem temporal_prefix_two:
+  EVERY (\n. temporal_prefix n 2 =
+    SOME (REPLICATE 2 (SOPush (Lit 1w)),
+      entry_probe_start with ps_stack := [Var "x";Var "t0";Var "t1"])) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] temporal_prefix_two));
+Theorem temporal_prefix_four:
+  EVERY (\n. temporal_prefix n 4 =
+    SOME (REPLICATE 4 (SOPush (Lit 1w)),
+      entry_probe_start with ps_stack :=
+        [Var "x";Var "t0";Var "t1";Var "t2";Var "t3"])) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] temporal_prefix_four));
+
+
+Theorem temporal_prefix_eight:
+  EVERY (\n. temporal_prefix n 8 =
+    SOME (REPLICATE 8 (SOPush (Lit 1w)),
+      entry_probe_start with ps_stack :=
+        Var "x" :: MAP Var (TAKE 8 cycle_deep_names))) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] temporal_prefix_eight));
+
+
+
+Theorem temporal_prefix_sixteen:
+  EVERY (\n. temporal_prefix n 16 =
+    SOME (REPLICATE 16 (SOPush (Lit 1w)),
+      entry_probe_start with ps_stack :=
+        Var "x" :: MAP Var (TAKE 16 cycle_deep_names))) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] temporal_prefix_sixteen));
+Theorem temporal_pressure_add_sixteen:
+  temporal_prefix 16 17 =
+    SOME (REPLICATE 16 (SOPush (Lit 1w)) ++
+      [SOPush (Lit 3w); SOPush (Lit 2w); SOEmit "ADD"; SOSwap 16],
+      entry_probe_start with ps_stack :=
+        [Var "x";Var "b"] ++ MAP Var (TAKE 15 (TL cycle_deep_names)) ++ [Var "t0"])
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs [temporal_pressure_add_sixteen];
+
+Theorem temporal_pressure_add_seventeen:
+  temporal_prefix 17 18 =
+    SOME (REPLICATE 17 (SOPush (Lit 1w)) ++
+      [SOPush (Lit 3w); SOPush (Lit 2w); SOEmit "ADD"] ++
+      MAP SOSpill (GENLIST (\i. 32*i) 18) ++
+      MAP SORestore ([0] ++ REVERSE (GENLIST (\i. 32*(i+1)) 16) ++ [544]),
+      entry_probe_start with <|
+        ps_stack := [Var "x";Var "b"] ++ MAP Var (TL cycle_deep_names) ++ [Var "t0"];
+        ps_alloc := <| sa_free_slots := GENLIST (\i. 32*i) 18;
+          sa_next_offset := 576; sa_spill_base := 0 |> |>)
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs [temporal_pressure_add_seventeen];
+
+Definition temporal_tail_def:
+  temporal_tail n k = generate_block_insts_plan
+    (temporal_live n) (temporal_dfg n) (temporal_cfg n) (temporal_pressure_fn n)
+    "body" F 0 (LENGTH (EL 2 (temporal_pressure_fn n).fn_blocks).bb_instructions)
+    k (DROP k (EL 2 (temporal_pressure_fn n).fn_blocks).bb_instructions)
+    (SND (THE (temporal_prefix n k)))
+End
+
+(* The first unresolved computation is enumeration of a two-element spill
+   domain at the release after instruction 11 (the phi_out consumer).  Both
+   names remain live.  This equation records the native residual, not NONE. *)
+Definition temporal_release_input_def:
+  temporal_release_input = entry_probe_start with <|
+    ps_stack := [Var "padding";Var "b"] ++ MAP Var (TAKE 14 (TL cycle_deep_names));
+    ps_spilled := FEMPTY |+ (Var "t16",480) |+ (Var "t15",512);
+    ps_alloc := <| sa_free_slots := [608;576] ++ GENLIST (\i. 32*i) 15 ++ [544];
+      sa_next_offset := 640; sa_spill_base := 0 |> |>
+End
+
+Theorem temporal_pressure_release_residual:
+  IS_SOME (temporal_prefix 17 25) /\
+  SND (THE (temporal_prefix 17 25)) =
+    release_dead_spills (temporal_body_live 17 25) temporal_release_input
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition temporal_body_end_sixteen_def:
+  temporal_body_end_sixteen = entry_probe_start with ps_alloc :=
+    <| sa_free_slots := REVERSE (GENLIST (\i. 32*(i+2)) 17) ++ [0;32];
+       sa_next_offset := 608; sa_spill_base := 0 |>
+End
+
+Theorem temporal_tail_sixteen:
+  temporal_tail 16 17 = SOME (FST (THE (temporal_tail 16 17)), temporal_body_end_sixteen)
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs [CONV_RULE
+  (LAND_CONV (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]))
+  (REWRITE_RULE [temporal_tail_def]
+    (CONV_RULE (RAND_CONV EVAL) temporal_tail_sixteen))];
+
+Theorem temporal_body_sixteen:
+  temporal_call 16 2 (entry_probe_start with ps_stack := [Var "x"]) =
+    SOME ([SOLabel "body"] ++ FST (THE (temporal_prefix 16 17)) ++
+      FST (THE (temporal_tail 16 17)), temporal_body_end_sixteen)
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (map
+  (CONV_RULE (LAND_CONV
+      (computeLib.RESTR_EVAL_CONV [``generate_block_plan``])) o
+   REWRITE_RULE [temporal_call_def] o CONV_RULE (RAND_CONV EVAL))
+  (temporal_body_sixteen ::
+    CONJUNCTS (SRULE [listTheory.EVERY_DEF] temporal_pressure_entry_calls) @
+    CONJUNCTS (SRULE [listTheory.EVERY_DEF] temporal_pressure_header_calls)));
+
+Theorem temporal_plan_sixteen_success:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (temporal_live 16) (temporal_dfg 16) (temporal_cfg 16)
+    NONE [] (temporal_pressure_fn 16) 0 0)
+Proof
+  EVAL_TAC
+QED
+
+
 
 Definition temporal_header_input_def:
   temporal_header_input n 0 = temporal_step n 0 entry_probe_start /\
@@ -295,4 +488,42 @@ Proof
     temporal_header_input_def] >>
   simp[temporal_step_def, temporal_entry_one, temporal_header_one,
     temporal_header_one_back, temporal_body_one, temporal_latch_one]
+QED
+
+Theorem temporal_latch_sixteen:
+  temporal_call 16 3 temporal_body_end_sixteen =
+    SOME ([SOLabel "latch"; SOPush (Lit 1w); SOPushLabel "H"; SOEmit "JUMP"],
+      temporal_body_end_sixteen with ps_stack := [Var "back"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_header_sixteen_back:
+  temporal_call 16 1 (entry_probe_start with ps_stack := [Var "back"]) =
+    temporal_call 16 1 (entry_probe_start with ps_stack := [Var "seed"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_three_visits_sixteen:
+  EVERY (\k.
+    temporal_header_input 16 k =
+      (entry_probe_start with ps_stack := [Var (if k = 0 then "seed" else "back")]) /\
+    temporal_call 16 1 (temporal_header_input 16 k) =
+      temporal_call 16 1 (entry_probe_start with ps_stack := [Var "seed"]) /\
+    temporal_call 16 2 (temporal_step 16 1 (temporal_header_input 16 k)) =
+      SOME ([SOLabel "body"] ++ FST (THE (temporal_prefix 16 17)) ++
+        FST (THE (temporal_tail 16 17)), temporal_body_end_sixteen) /\
+    temporal_call 16 3 (temporal_step 16 2
+      (temporal_step 16 1 (temporal_header_input 16 k))) =
+      SOME ([SOLabel "latch"; SOPush (Lit 1w); SOPushLabel "H"; SOEmit "JUMP"],
+        temporal_body_end_sixteen with ps_stack := [Var "back"])) [0;1;2]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``1:num``, numLib.num_CONV ``2:num``,
+    temporal_header_input_def] >>
+  `temporal_body_end_sixteen.ps_spilled = entry_probe_start.ps_spilled` by EVAL_TAC >>
+  simp[temporal_step_def, temporal_pressure_entry_calls |> SRULE [listTheory.EVERY_DEF],
+    temporal_pressure_header_calls |> SRULE [listTheory.EVERY_DEF],
+    temporal_header_sixteen_back, temporal_body_sixteen, temporal_latch_sixteen]
 QED
