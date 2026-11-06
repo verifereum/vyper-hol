@@ -1,7 +1,7 @@
 Theory makeSsaCurrentExecRuntime
 Ancestors
   makeSsaCurrentRuntime o1FrameLockstep venomExecProps venomExecProofs
-  venomCallOracleDefs
+  venomCallOracleDefs opcodeClass
   venomInstProps venomWf venomState venomExecSemantics stateFrame finite_map list pred_set
 Libs
   stepInstBaseLib
@@ -783,4 +783,183 @@ Proof
   gvs[inst_pair_def, LENGTH_EQ_NUM_compute] >>
   qexists_tac `halt_state (set_returndata [] st)` >>
   simp[halt_state_def, set_returndata_def]
+QED
+
+Theorem current_exec_pure_opcodes_pair:
+  MEM inst.inst_opcode
+    [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+     EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT; SHL; SHR; SAR;
+     SIGNEXTEND; BYTE; OFFSET] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  metis_tac[current_exec_pure1_pair, current_exec_pure2_pair, current_exec_pure3_pair]
+QED
+
+Theorem current_exec_noninvoke_ok_pair:
+  inst_wf inst /\ inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode
+    [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+     EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT; SHL; SHR; SAR;
+     SIGNEXTEND; BYTE; OFFSET]`
+  >- metis_tac[current_exec_pure_opcodes_pair] >>
+  Cases_on `MEM inst.inst_opcode
+    [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID; COINBASE;
+     TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; BLOBBASEFEE;
+     SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE]`
+  >- metis_tac[current_exec_read0_opcodes_pair] >>
+  Cases_on `MEM inst.inst_opcode
+    [MLOAD; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; BALANCE; CALLDATALOAD;
+     EXTCODESIZE; EXTCODEHASH; ILOAD; DLOAD]`
+  >- metis_tac[current_exec_read1_opcodes_pair] >>
+  Cases_on `MEM inst.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE]`
+  >- (`inst.inst_outputs = []` by (fs[MEM] >> fs[inst_wf_def]) >>
+      drule_all current_exec_write2_opcodes_pair >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [MCOPY; CALLDATACOPY; RETURNDATACOPY; DLOADBYTES; CODECOPY]`
+  >- (`inst.inst_outputs = []` by (fs[MEM] >> fs[inst_wf_def]) >>
+      drule_all current_exec_copy3_opcodes_pair >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [ASSIGN; SHA3]`
+  >- metis_tac[current_exec_assign_sha3_pair] >>
+  Cases_on `MEM inst.inst_opcode [GETFMP; INITIAL_FMP; PARAM; FMP_PARAM; RETPC_PARAM]`
+  >- metis_tac[current_exec_fmp_read_pair] >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL]`
+  >- metis_tac[current_exec_call_opcodes_pair] >>
+  Cases_on `MEM inst.inst_opcode [CREATE; CREATE2]`
+  >- metis_tac[current_exec_create_opcodes_pair] >>
+  suspend "remaining_opcodes"
+QED
+
+Resume current_exec_noninvoke_ok_pair[remaining_opcodes]:
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[MEM]
+  >~ [`inst.inst_opcode = ISTORE`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_istore_extcodecopy_pair, MEM])
+  >~ [`inst.inst_opcode = EXTCODECOPY`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_istore_extcodecopy_pair, MEM])
+  >~ [`inst.inst_opcode = GAS`]
+  >- (stepInstBaseLib.with_opcode_clause fs >> drule_all current_exec_gas_pair >> simp[])
+  >~ [`inst.inst_opcode = DELEGATECALL`]
+  >- (drule_all current_exec_delegatecall_opcode_pair >> simp[])
+  >~ [`inst.inst_opcode = LOG`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      drule_all current_exec_log_pair >> simp[])
+  >~ [`inst.inst_opcode = ALLOCA`]
+  >- (drule_all current_exec_alloca_pair >> simp[])
+  >~ [`inst.inst_opcode = BUMP`]
+  >- (drule_all current_exec_bump_pair >> simp[])
+  >~ [`inst.inst_opcode = SETFMP`]
+  >- (drule_all current_exec_setfmp_pair >> simp[])
+  >~ [`inst.inst_opcode = DALLOCA`]
+  >- (drule_all current_exec_dalloca_pair >> simp[])
+  >~ [`inst.inst_opcode = NOP`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      drule_all current_exec_nop_pair >> simp[])
+  >~ [`inst.inst_opcode = JMP`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_jumps_pair, MEM])
+  >~ [`inst.inst_opcode = JNZ`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_jumps_pair, MEM])
+  >~ [`inst.inst_opcode = DJMP`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_jumps_pair, MEM])
+  >~ [`inst.inst_opcode = ASSERT`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_assertions_pair, MEM])
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`]
+  >- (`inst.inst_outputs = []` by fs[inst_wf_def] >>
+      metis_tac[current_exec_assertions_pair, MEM]) >>
+  stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs()] >>
+  qpat_x_assum `_ = OK t'` mp_tac >> pairarg_tac >> simp[]
+
+QED
+
+Finalise current_exec_noninvoke_ok_pair
+
+Theorem current_exec_noninvoke_intret_pair:
+  inst.inst_opcode <> INVOKE /\ inst_pair sg inst inst' /\ state_rel sg st st' /\
+  step_inst_base inst' st' = IntRet v t' ==>
+  ?t. step_inst_base inst st = IntRet v t /\ execution_frame t' = execution_frame t
+Proof
+  strip_tac >> `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  drule step_inst_base_intret_opcodes >> strip_tac
+  >- metis_tac[current_exec_ret_pair, MEM]
+  >- metis_tac[current_exec_ret_pair, MEM] >>
+  `inst.inst_opcode = DRET` by metis_tac[] >>
+  drule_all current_exec_dret_pair >> simp[]
+QED
+
+Theorem current_exec_noninvoke_halt_pair:
+  inst.inst_opcode <> INVOKE /\ inst_pair sg inst inst' /\ state_rel sg st st' /\
+  step_inst_base inst' st' = Halt t' ==>
+  ?t. step_inst_base inst st = Halt t /\ execution_frame t' = execution_frame t
+Proof
+  strip_tac >> `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  drule step_inst_base_halt_opcodes >> strip_tac >>
+  metis_tac[current_exec_halt_opcodes_pair, MEM]
+QED
+
+Theorem current_exec_noninvoke_abort_pair:
+  inst.inst_opcode <> INVOKE /\ inst_pair sg inst inst' /\ state_rel sg st st' /\
+  step_inst_base inst' st' = Abort reason t' ==>
+  ?t. step_inst_base inst st = Abort reason t /\ execution_frame t' = execution_frame t
+Proof
+  strip_tac >> `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE;
+                        SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; CREATE; CREATE2;
+                        RETURNDATACOPY]` by
+    (drule step_inst_base_abort_opcodes >> simp[MEM] >> metis_tac[]) >>
+  drule_all current_exec_simple_abort_pair >> simp[]
+QED
+
+Theorem current_exec_step_noninvoke_ok_pair:
+  inst_wf inst /\ inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst fuel C' inst' st' = OK t' ==>
+  ?t. step_inst fuel C inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> `inst'.inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+  fs[step_inst_non_invoke] >> drule_all current_exec_noninvoke_ok_pair >> simp[]
+QED
+
+Theorem current_exec_step_noninvoke_intret_pair:
+  inst.inst_opcode <> INVOKE /\ inst_pair sg inst inst' /\ state_rel sg st st' /\
+  step_inst fuel C' inst' st' = IntRet v t' ==>
+  ?t. step_inst fuel C inst st = IntRet v t /\ execution_frame t' = execution_frame t
+Proof
+  strip_tac >> `inst'.inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+  fs[step_inst_non_invoke] >> drule_all current_exec_noninvoke_intret_pair >> simp[]
+QED
+
+Theorem current_exec_step_noninvoke_halt_pair:
+  inst.inst_opcode <> INVOKE /\ inst_pair sg inst inst' /\ state_rel sg st st' /\
+  step_inst fuel C' inst' st' = Halt t' ==>
+  ?t. step_inst fuel C inst st = Halt t /\ execution_frame t' = execution_frame t
+Proof
+  strip_tac >> `inst'.inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+  fs[step_inst_non_invoke] >> drule_all current_exec_noninvoke_halt_pair >> simp[]
+QED
+
+Theorem current_exec_step_noninvoke_abort_pair:
+  inst.inst_opcode <> INVOKE /\ inst_pair sg inst inst' /\ state_rel sg st st' /\
+  step_inst fuel C' inst' st' = Abort reason t' ==>
+  ?t. step_inst fuel C inst st = Abort reason t /\ execution_frame t' = execution_frame t
+Proof
+  strip_tac >> `inst'.inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+  fs[step_inst_non_invoke] >> drule_all current_exec_noninvoke_abort_pair >> simp[]
 QED
