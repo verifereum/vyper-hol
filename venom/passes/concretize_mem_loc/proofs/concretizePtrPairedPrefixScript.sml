@@ -132,6 +132,29 @@ Definition ptr_paired_alignment_def:
         (EL (EL j (done ++ [LENGTH h - 1])) H)
 End
 
+Theorem ptr_paired_alignment_pair:
+  ptr_paired_samples positions h ht done H /\
+  ptr_paired_alignment R lp positions h ht done H /\
+  ptr_paired_code R lp positions b.po_fn bt.po_fn /\
+  ptr_paired_cursor lp b bt /\
+  ptr_paired_params positions b bt snapshot ==>
+  ptr_paired_alignment R lp positions (h ++ [b]) (ht ++ [bt])
+    (done ++ [LENGTH h - 1]) (H ++ [snapshot])
+Proof
+  rewrite_tac[ptr_paired_samples_def, ptr_paired_alignment_def] >>
+  strip_tac >> gen_tac >> strip_tac >> Cases_on `j < LENGTH ht`
+  >- (`EL j (done ++ [LENGTH h - 1]) < LENGTH h` by
+        (Cases_on `j < LENGTH done`
+         >- (simp[EL_APPEND_EQN] >> gvs[EVERY_EL]) >>
+         `j = LENGTH done` by decide_tac >> simp[EL_APPEND_EQN]) >>
+      first_x_assum (qspec_then `j` mp_tac) >>
+      Cases_on `j < LENGTH done`
+      >- (`EL j done < LENGTH h` by gvs[EVERY_EL] >>
+          simp[EL_APPEND_EQN]) >>
+      `j = LENGTH done` by decide_tac >> simp[EL_APPEND_EQN]) >>
+  `j = LENGTH ht` by gvs[] >> simp[EL_APPEND_EQN, ADD1]
+QED
+
 Definition ptr_paired_prefix_def:
   ptr_paired_prefix R local_positions positions lo vs0 C Ct
       h a ht at done tokens registry births PT TG saved entries H calls W <=>

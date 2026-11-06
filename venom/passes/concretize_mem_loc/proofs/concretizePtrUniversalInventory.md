@@ -1093,3 +1093,26 @@ Disprove-first inspection: persistent memory taint is the main potential mismatc
 with the entry boundary's entry_taint presentation. It is not silently reset here;
 empty variable transport depends only on t_var. Imported pointer parameter tags
 are preserved, and empty allocations do not erase retained ancestor births.
+
+## C1.5.90.67.22 — checked chronological INVOKE integration
+
+The former quotation in `concretizePtrPairedCallSchemaScript.sml` is now
+`ptr_paired_invoke_prefix_normalize`, proved with precisely the audited
+hypotheses and conclusions. It constructs source entry, the tagged step,
+computed birth overlay, all six immediate certificate fields and subsequent
+deleted-NOP normalization. Both PairedCallSchemaTheory and PairedJumpTheory
+build cleanly. No source-success or successor-certificate premise was added.
+
+The generic `ptr_paired_alignment_pair` has been moved from its local
+PairedJump declaration into PairedPrefix and is reused by both consumers;
+the earlier audit's assertion that no such lemma existed was incorrect.
+Caller-cons assembly uses the actual departing observations, transcript LAST
+snapshot and retained tail records; no additional caller helper was necessary.
+Persistent memory taint is retained: only variable taint is cleared, and
+`op_taint_def` discharges the entry-taint presentation mismatch. The write
+ledger is unchanged; strict old event indices follow from event embedding,
+and the new event is INVOKE, excluded by the write coverage definition.
+
+This theorem covers call ENTRY only. Return restoration, callee execution,
+read recovery, historical exclusion and universal prefix coverage remain
+separate obligations; this checked assembly supplies none of them implicitly.
