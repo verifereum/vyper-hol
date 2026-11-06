@@ -201,7 +201,8 @@ Proof
   simp[array_loop_inv_def, stmt_state_rel_jump_to, ret_pc_ok_jump_to,
        jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        eval_operand_def] >>
-  Cases_on `saved_base` >> fs[eval_operand_def, lookup_var_def]
+  Cases_on `saved_base` >>
+  fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem array_declared_ptr_unique[local]:
@@ -322,7 +323,7 @@ Proof
   conj_tac
   >- (irule array_entry_zero_inv >>
       simp[stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def] >>
-      fs[lookup_var_def] >> metis_tac[]) >>
+      Cases_on `saved_base` >> fs[lookup_var_def, eval_operand_def]) >>
   `step_inst_base ainst s0 = OK s1` by
     simp[step_inst_base_def, eval_operand_def] >>
   drule array_prefix_continuation >> simp[] >> metis_tac[]
@@ -363,7 +364,7 @@ Proof
   conj_tac
   >- (irule array_entry_zero_inv >>
       simp[stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def] >>
-      fs[lookup_var_def] >> metis_tac[]) >>
+      Cases_on `saved_base` >> fs[lookup_var_def, eval_operand_def]) >>
   conj_tac
   >- (simp[array_caller_frame_def, jump_to_def, update_var_def,
            lookup_var_def, FLOOKUP_UPDATE] >>

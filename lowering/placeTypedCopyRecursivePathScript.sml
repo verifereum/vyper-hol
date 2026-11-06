@@ -2054,7 +2054,7 @@ Resume typed_copy_forward_rank_entry[word]:
      gvs[is_word_type_def, evaluate_type_def, type_memory_size_def,
          AllCaseEqs()]) >>
   `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
-    metis_tac[entryDecodePropsTheory.val_in_memory_word] >>
+    metis_tac[exprSimPropsTheory.val_in_memory_word] >>
   irule place_typed_copy_word_path >> simp[] >>
   goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`sw`, `tenv`] >> simp[]
