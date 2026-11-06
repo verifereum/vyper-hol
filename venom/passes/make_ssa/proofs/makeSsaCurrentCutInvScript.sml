@@ -26,7 +26,8 @@ Ancestors
   makeSsaCurrentHistoryOwner venomInst venomWf venomExecProps list rich_list
   makeSsaCurrentNonphiDemandEdge makeSsaCurrentSingletonDemandEdge
   makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentExternalExclusion
-  makeSsaCurrentScanOrigin
+  makeSsaCurrentScanOrigin makeSsaCurrentEntryProvenance
+  makeSsaCurrentCarrierExternal
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -1698,4 +1699,207 @@ Proof
       irule current_cut_inserted_name_endpoint >> metis_tac[]) >>
   `d = h` by metis_tac[current_token_11] >>
   irule current_cut_local_carrier_endpoint >> metis_tac[]
+QED
+
+Theorem current_cut_output_token_external[local]:
+  !xs j t. current_token_label u <> SOME l ==>
+    (current_output_token v l i j xs t = u <=> t = u /\ ~MEM v xs)
+Proof
+  Induct >> simp[current_output_token_def] >> rpt strip_tac >>
+  Cases_on `h = v` >> simp[] >>
+  metis_tac[current_token_label_def]
+QED
+
+Theorem current_cut_original_scan_external[local]:
+  !insts i t. current_token_label u <> SOME l ==>
+    (current_original_scan v l i insts t = u <=>
+     t = u /\ EVERY (\inst. ~MEM v inst.inst_outputs) insts)
+Proof
+  Induct >> simp[current_original_scan_def] >>
+  metis_tac[current_cut_output_token_external]
+QED
+
+Theorem current_cut_output_at_label[local]:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  current_wf_output_at A H ev k t ==>
+  current_token_label t = SOME (current_event_label ev)
+Proof
+  strip_tac >>
+  `?v. MEM (t,v) (FLAT (A (current_event_label ev)))` by
+    (fs[current_wf_output_at_def] >>
+     metis_tac[MEM_FLAT, EL_MEM, pairTheory.PAIR]) >>
+  drule_all current_wf_precleanup_annotation_lookup >> strip_tac >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `MEM t (MAP FST (FLAT (current_block_annotations old pre)))` by
+    (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+  metis_tac[current_block_annotations_label, lookup_block_label]
+QED
+
+Theorem current_cut_entry_token_external[local]:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM ev events /\
+  current_event_entry_env ev x <> CurrentDefault x ==>
+  current_token_label (current_event_entry_env ev x) <>
+    SOME (current_event_label ev) /\
+  ?d. current_token_label (current_event_entry_env ev x) = SOME d /\
+    d <> current_event_label ev /\
+    fn_dominates fn d (current_event_label ev)
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  `current_event_trace A H ev` by fs[EVERY_MEM] >>
+  drule_all current_wf_precleanup_structural >> strip_tac >>
+  `!dev k j. MEM dev events /\ k < LENGTH (A (current_event_label dev)) /\
+    j < LENGTH (EL k (A (current_event_label dev))) ==>
+    current_wf_output_at A H dev k
+      (FST (EL j (EL k (A (current_event_label dev)))))` by
+    metis_tac[current_wf_precleanup_output_sites] >>
+  drule_all current_wf_nondefault_entry_output >> strip_tac >>
+  drule_all current_cut_output_at_label >> strip_tac >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem current_cut_inherited_phi_clear[local]:
+  current_wf_phi_context s fn renamed s' A H events /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  A h = current_block_annotations old pre /\ current_event_label ev = h /\
+  current_source_cut A ev
+    (LENGTH pre + LENGTH (collect_phis old.bb_instructions)) rs E /\
+  E x = current_event_entry_env ev x /\ current_token_label (E x) <> SOME h ==>
+  ~current_actual_inserted fn x h /\ current_phi_cut_clear fn x h
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn` by fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `old.bb_label = h` by metis_tac[lookup_block_label] >>
+  `LENGTH pre' = LENGTH pre` by
+    (fs[current_block_annotations_def, current_inserted_annotations_def] >>
+     metis_tac[LENGTH_MAP, LENGTH_APPEND, arithmeticTheory.EQ_ADD_RCANCEL]) >>
+  `current_original_scan x h 0
+    (TAKE (LENGTH (collect_phis old.bb_instructions)) old.bb_instructions)
+    (if (?inst. MEM inst pre' /\ MEM x inst.inst_outputs)
+     then CurrentInserted x h else current_event_entry_env ev x) = E x` by
+    metis_tac[current_wf_source_cut_original_scan,
+      makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+  `~current_actual_inserted fn x h /\
+   EVERY (\inst. ~MEM x inst.inst_outputs)
+     (TAKE (LENGTH (collect_phis old.bb_instructions)) old.bb_instructions)` by
+    (drule_all current_cut_original_scan_external >>
+     Cases_on `?inst. MEM inst pre' /\ MEM x inst.inst_outputs` >>
+     simp[] >> metis_tac[current_token_label_def]) >>
+  simp[makeSsaCurrentLastSiteTheory.current_phi_cut_clear_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `EVERY (\inst. ~MEM x inst.inst_outputs) _`
+    (mp_tac o REWRITE_RULE [EVERY_EL]) >>
+  disch_then (qspec_then `k` mp_tac) >>
+  fs[inst_defs_def] >>
+  simp[LENGTH_TAKE, EL_TAKE, inst_defs_def,
+    makeSsaCurrentDemandDominanceTheory.current_collect_phis_length]
+QED
+
+Theorem current_cut_phi_demand_nondefault[local]:
+  current_wf_phi_context s fn renamed s' A H events /\ entry_block fn = SOME eb /\
+  MEM ev events /\ current_event_label ev = h /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  A h = current_block_annotations old pre /\
+  current_source_cut A ev
+    (LENGTH pre + LENGTH (collect_phis old.bb_instructions)) rs E /\
+  current_demand fn x h (LENGTH (collect_phis old.bb_instructions)) ==>
+  E x <> CurrentDefault x
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `old.bb_label = h` by metis_tac[lookup_block_label] >>
+  `LENGTH pre' = LENGTH pre` by
+    (fs[current_block_annotations_def, current_inserted_annotations_def] >>
+     metis_tac[LENGTH_MAP, LENGTH_APPEND, arithmeticTheory.EQ_ADD_RCANCEL]) >>
+  drule_all current_wf_precleanup_structural >> strip_tac >>
+  `LENGTH (collect_phis old.bb_instructions) <= LENGTH old.bb_instructions` by
+    simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+  `current_source_cut A ev
+    (LENGTH pre' + LENGTH (collect_phis old.bb_instructions)) rs E` by simp[] >>
+  fs[current_wf_phi_context_def] >>
+  metis_tac[current_wf_demanded_source_cut_nondefault, arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Theorem current_cut_inherited_nonwrite[local]:
+  current_wf_phi_context s fn renamed s' A H events /\ entry_block fn = SOME eb /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  MEM ev events /\ current_event_label ev = h /\
+  current_event_entry_env ev x <> CurrentDefault x /\
+  (current_token_name H (current_event_entry_env ev x) = SOME z \/
+   ?d. current_event_entry_env ev x = CurrentInserted x d /\
+     current_collapsed_carrier fn A renamed d x z) ==>
+  !ni. MEM ni new.bb_instructions ==> ~MEM z ni.inst_outputs
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  `current_event_trace A H ev` by fs[EVERY_MEM] >>
+  qpat_x_assum `_ \/ _` strip_assume_tac
+  >- (drule_all current_wf_phi_context_entry_named_output >> strip_tac >>
+      `MEM bb renamed /\ MEM (EL k bb.bb_instructions) bb.bb_instructions /\
+       new.bb_label = h` by metis_tac[lookup_block_MEM, lookup_block_label, EL_MEM] >>
+      metis_tac[current_wf_external_output_disjoint]) >>
+  `d <> h /\ fn_dominates fn d h` by
+    (drule_all current_cut_entry_token_external >>
+     simp[current_token_label_def]) >>
+  fs[current_collapsed_carrier_def] >>
+  `q < LENGTH new'.bb_instructions /\
+   (EL q new'.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_inserted_phi_at_def] >> gvs[]) >>
+  metis_tac[makeSsaCurrentCarrierExternalTheory.current_wf_inherited_collapsed_source_external]
+QED
+
+Theorem current_cut_inherited_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\ entry_block fn = SOME eb /\
+  fn_cfg_edge fn p h /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\ lookup_block p fn.fn_blocks = SOME pred /\
+  A h = current_block_annotations old pre /\ MEM ev events /\
+  current_event_label ev = h /\
+  current_source_cut A ev
+    (LENGTH pre + LENGTH (collect_phis old.bb_instructions)) rs E /\
+  current_demand fn x h (LENGTH (collect_phis old.bb_instructions)) /\
+  E x = current_event_entry_env ev x /\
+  (current_token_name H (E x) = SOME z \/
+   ?d. E x = CurrentInserted x d /\ current_collapsed_carrier fn A renamed d x z) ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `E x <> CurrentDefault x` by metis_tac[current_cut_phi_demand_nondefault] >>
+  `current_token_label (E x) <> SOME h` by
+    metis_tac[current_cut_entry_token_external] >>
+  `~current_actual_inserted fn x h /\ current_phi_cut_clear fn x h` by
+    metis_tac[current_cut_inherited_phi_clear] >>
+  `!ni. MEM ni new.bb_instructions ==> ~MEM z ni.inst_outputs` by
+    metis_tac[current_cut_inherited_nonwrite] >>
+  `EVERY (\j. ~MEM z j.inst_outputs)
+    (collect_phis (simplify_current_phi_block new).bb_instructions)` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     `MEM z (FLAT (MAP (\inst. inst.inst_outputs)
+       (simplify_current_phi_block new).bb_instructions))` by
+       (simp[MEM_FLAT, MEM_MAP] >>
+        metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+     drule current_wf_cleanup_block_output_member >>
+     simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by fs[current_wf_phi_context_def] >>
+  `MAP (\bb. bb.bb_label) renamed = MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    metis_tac[current_wf_precleanup_labels] >>
+  `?pb. MEM pb renamed /\ pb.bb_label = p` by
+    (`MEM p (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+       (simp[MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+     metis_tac[MEM_MAP]) >>
+  drule_all current_wf_precleanup_coverage >> strip_tac >>
+  metis_tac[current_cut_reaching_external_endpoint]
 QED
