@@ -107,6 +107,8 @@ Theorem code_offset_add_covers_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (a + n2w off) /\ ptr_covers Gf tnf out sf needed /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
@@ -142,6 +144,8 @@ Theorem compile_lit_byte_offset_covers_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (a + n2w off) /\ ptr_covers Gf tnf out sf needed /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
@@ -152,7 +156,7 @@ Proof
   strip_tac >> Cases_on `off = 0`
   >- (gvs[compile_lit_byte_offset_def, comp_return_def] >>
       qexistsl_tac [`G`, `tn`, `s`] >>
-      simp[WORD_ADD_0] >> conj_tac
+      simp[WORD_ADD_0, venom_state_component_equality] >> conj_tac
       >- (irule (cj 1 fragGasPathPtrTheory.gas_path_ptr_rules) >> simp[]) >>
       gvs[ptr_covers_def] >> decide_tac) >>
   gvs[compile_lit_byte_offset_def] >>
@@ -161,5 +165,6 @@ Proof
    w2n a + off < dimword(:256)` by decide_tac >>
   drule_all code_offset_add_covers_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
+  gvs[venom_state_component_equality]
 QED

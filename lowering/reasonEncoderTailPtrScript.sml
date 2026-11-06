@@ -40,6 +40,8 @@ Theorem reason_encoder_mstore_resources_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     sf.vs_memory = (mstore (w2n a) w s).vs_memory /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     mload (w2n a) sf = w /\
@@ -78,7 +80,8 @@ Proof
      simp[Abbr `t`, venomMemProofsTheory.mload_mstore_same_proof]) >>
   simp[Abbr `t`, mstore_def, write_memory_with_expansion_def,
        lookup_var_def, op_taint_def, ptr_covers_def,
-       pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION]
+       pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION,
+       venom_state_component_equality]
 QED
 
 (* Size slots are initialized and later read through this same checked pair.
@@ -132,6 +135,8 @@ Theorem reason_encoder_offset_path_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (a + d) /\ ptr_covers Gf tnf out sf k /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
@@ -155,7 +160,8 @@ Proof
    LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
     (gvs[emit_inst_def, fresh_id_def, emit_def, comp_bind_def,
          comp_ignore_bind_def, comp_return_def]) >>
-  simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       venom_state_component_equality] >>
   conj_tac >- suspend "covers" >> suspend "frame"
 QED
 
