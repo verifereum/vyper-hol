@@ -270,7 +270,7 @@ Theorem entry_descending_nonbulk_array_constructor:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) parent_di st = ((),final) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+    root_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source CALLDATALOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   sb+LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
@@ -329,8 +329,8 @@ Resume entry_descending_nonbulk_array_constructor[phases]:
      `sz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `pnum` (qx_choose_then `prepared` strip_assume_tac)) >>
-  qpat_x_assum `!prepared pnum sb d env tv avs xs ctx site oid root extent ambient b reserve. _`
-    (qspecl_then [`prepared`,`pnum`] assume_tac) >>
+  qpat_x_assum `!prepared pnum root_di sb d env tv avs xs ctx site oid root extent ambient b reserve. _`
+    (qspecl_then [`prepared`,`pnum`,`root_di`] assume_tac) >>
   `32+LENGTH xs*type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
     (simp[type_memory_size_def] >> decide_tac) >>
   `LENGTH xs < dimword (:256)` by decide_tac >>

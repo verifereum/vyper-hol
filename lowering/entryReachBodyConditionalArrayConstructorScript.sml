@@ -337,12 +337,10 @@ Theorem callback_array_compiler_config:
       (type_memory_bytes ce ty) body_st = (ops,middle) /\
     compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
-    (!prepared pnum sb d env tv avs xs ctx (site : instruction) oid (root : num) (extent : num) ambient (b : num) (reserve : num).
+    (!prepared pnum root_di sb d env tv avs xs ctx (site : instruction) oid (root : num) (extent : num) ambient (b : num) (reserve : num).
       abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
       abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-        (DecDynArray (type_to_abi_dec_info sf ce ty)
-          (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn)
-        (ListV avs) (ArrayV (DynArrayV xs)) /\
+        root_di (ListV avs) (ArrayV (DynArrayV xs)) /\
       mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
         (abi_decode_source CALLDATALOAD prepared) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
       sb+LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
@@ -357,9 +355,7 @@ Theorem callback_array_compiler_config:
       type_memory_bytes ce ty = type_memory_size tv /\
       32+LENGTH xs*type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn)) ==>
       iteration_callback_config
-        ((ce,env,ty,tv,maxn,
-           DecDynArray (type_to_abi_dec_info sf ce ty)
-             (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn,avs,xs),
+        ((ce,env,ty,tv,maxn,root_di,avs,xs),
          (ip,src,dst,body_st,ops,middle,last,limit_st,loop_st.cs_next_var,last.cs_next_var),
          (ctx,fn,site,header_st.cs_next_id,oid,root,extent,d,b,reserve,prepared,n2w pnum,sb,ambient),
          (FST labels,FST (SND labels),SND (SND labels),loop_st.cs_next_id+1,
@@ -494,8 +490,10 @@ Resume entry_conditional_nonbulk_array_constructor[phases]:
      `sz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `pnum` (qx_choose_then `prepared` strip_assume_tac)) >>
-  qpat_x_assum `!prepared pnum sb d env tv avs xs ctx site oid root extent ambient b reserve. _`
-    (qspecl_then [`prepared`,`pnum`] assume_tac) >>
+  qpat_x_assum `!prepared pnum root_di sb d env tv avs xs ctx site oid root extent ambient b reserve. _`
+    (qspecl_then [`prepared`,`pnum`,
+      `DecDynArray (type_to_abi_dec_info ce.ce_struct_fields ce ty)
+        (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn`] assume_tac) >>
   `32+LENGTH xs*type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
     (simp[type_memory_size_def] >> decide_tac) >>
   `LENGTH xs < dimword (:256)` by decide_tac >>
