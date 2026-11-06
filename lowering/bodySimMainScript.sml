@@ -47,8 +47,8 @@ Proof
     (* 2 *) MATCH_ACCEPT_TAC body_break_case,
     (* 3 *) MATCH_ACCEPT_TAC body_return_none_case,
     (* 4 *) MATCH_ACCEPT_TAC body_return_case,
-    (* 5 *) rw[body_stmt_ok_def] >> irule compile_raise_frag >> simp[],
-    (* 6 *) rw[body_stmt_ok_def] >> irule compile_raise_frag >> simp[],
+    (* 5 *) rw[body_stmt_ok_def] >> irule stmtSimRaiseTheory.compile_raise_frag >> simp[],
+    (* 6 *) rw[body_stmt_ok_def] >> irule stmtSimRaiseTheory.compile_raise_frag >> simp[],
     (* 7 *) MATCH_ACCEPT_TAC body_raise_reason_case,
     (* 8 *) rw[body_stmt_ok_def, supported_stmt_def, supported_raise_reason_def],
     (* 9 *) rpt strip_tac >> irule body_assert_case >> simp[],
@@ -114,6 +114,9 @@ QED
 Theorem body_stmts_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
@@ -129,6 +132,9 @@ QED
 Theorem body_stmt_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ s es res es'.
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) s ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\

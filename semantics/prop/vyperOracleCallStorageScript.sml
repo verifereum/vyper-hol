@@ -63,15 +63,79 @@ Proof
        lift_sum_runtime_def, get_accounts_def, return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
-  strip_tac
-  >- (gvs[AllCaseEqs()] >>
-      drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[])
-  >- (gvs[AllCaseEqs()] >>
-      drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[])
-  >- (gvs[AllCaseEqs()] >>
-      drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[]) >>
-  gvs[AllCaseEqs()] >>
-  drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[]
+  (* Split the do-block one case at a time, normalising the hypotheses each
+     split produces; a plain gvs[AllCaseEqs()] is too slow on the whole term. *)
+  strip_tac >> pop_assum mp_tac >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC)
 QED
 
 (* A call or staticcall raw_call adopts its oracle outcome; a delegate

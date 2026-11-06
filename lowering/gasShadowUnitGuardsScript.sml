@@ -1,7 +1,8 @@
 Theory gasShadowUnitGuards
 Ancestors
   gasShadowUnitObservations gasShadowUnit gasShadowState vyperCompiler venomInst
-  venomWf venomExecSemantics cfgDefs memLocDefs pointerConfinedDefs fcgDefs list
+  venomWf venomExecSemantics cfgDefs memLocDefs pointerConfinedDefs fcgDefs
+  defsReachCheck list
 
 Theorem gas_shadow_lookup_function:
   !fs gs name. LIST_REL gas_shadow_function fs gs ==>
@@ -382,6 +383,125 @@ Proof
   simp[]
 QED
 
+(* ===== Definite assignment ===== *)
+
+Theorem gas_shadow_inst_outputs:
+  gas_shadow_inst i j ==> i.inst_outputs = j.inst_outputs
+Proof
+  rw[gas_shadow_inst_def] >> simp[]
+QED
+
+Theorem gas_shadow_insts_writes:
+  !xs ys. LIST_REL gas_shadow_inst xs ys ==>
+    (EXISTS (\inst. MEM v inst.inst_outputs) xs <=>
+     EXISTS (\inst. MEM v inst.inst_outputs) ys)
+Proof
+  Induct >> Cases_on `ys` >> simp[] >> metis_tac[gas_shadow_inst_outputs]
+QED
+
+Theorem gas_shadow_block_writes:
+  gas_shadow_block b c ==> (bb_writes v b <=> bb_writes v c)
+Proof
+  rw[gas_shadow_block_def, bb_writes_def] >>
+  irule gas_shadow_insts_writes >> simp[]
+QED
+
+Theorem gas_shadow_avoid_sweep:
+  !bs cs R. LIST_REL gas_shadow_block bs cs ==>
+    avoid_sweep v bs R = avoid_sweep v cs R
+Proof
+  Induct >> Cases_on `cs` >> simp[avoid_sweep_def] >> rpt strip_tac >>
+  `h.bb_label = h'.bb_label` by fs[gas_shadow_block_def] >>
+  `bb_writes v h <=> bb_writes v h'` by metis_tac[gas_shadow_block_writes] >>
+  `bb_succs h = bb_succs h'` by metis_tac[gas_shadow_block_succs] >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem gas_shadow_avoid_reach:
+  !n R. LIST_REL gas_shadow_block bs cs ==>
+    avoid_reach v bs n R = avoid_reach v cs n R
+Proof
+  Induct >> simp[avoid_reach_def] >> rpt strip_tac >>
+  `!R. avoid_sweep v bs R = avoid_sweep v cs R`
+    by metis_tac[gas_shadow_avoid_sweep] >>
+  rw[] >> metis_tac[]
+QED
+
+Theorem gas_shadow_avoid_fuel:
+  !bs cs. LIST_REL gas_shadow_block bs cs ==> avoid_fuel bs = avoid_fuel cs
+Proof
+  simp[avoid_fuel_def] >> Induct >> Cases_on `cs` >> simp[] >>
+  metis_tac[gas_shadow_block_succs]
+QED
+
+Theorem gas_shadow_var_def_reaches:
+  gas_shadow_function f g /\ gas_shadow_block e e' ==>
+    (var_def_reaches f e lbl v <=> var_def_reaches g e' lbl v)
+Proof
+  strip_tac >> drule gas_shadow_function_blocks >> strip_tac >>
+  `e.bb_label = e'.bb_label` by fs[gas_shadow_block_def] >>
+  `bb_writes v e <=> bb_writes v e'` by metis_tac[gas_shadow_block_writes] >>
+  `avoid_fuel f.fn_blocks = avoid_fuel g.fn_blocks`
+    by metis_tac[gas_shadow_avoid_fuel] >>
+  `!n R. avoid_reach v f.fn_blocks n R = avoid_reach v g.fn_blocks n R`
+    by metis_tac[gas_shadow_avoid_reach] >>
+  simp[var_def_reaches_def]
+QED
+
+Theorem gas_shadow_insts_defs_reach_check:
+  !xs ys defs.
+    LIST_REL gas_shadow_inst xs ys /\
+    (!v. var_def_reaches f e lbl v <=> var_def_reaches g e' lbl v) ==>
+    (insts_defs_reach_check f e lbl defs xs <=>
+     insts_defs_reach_check g e' lbl defs ys)
+Proof
+  Induct >> Cases_on `ys` >> simp[insts_defs_reach_check_def] >>
+  rpt strip_tac >>
+  `h.inst_operands = h'.inst_operands` by metis_tac[gas_shadow_inst_fields] >>
+  `h.inst_outputs = h'.inst_outputs` by metis_tac[gas_shadow_inst_outputs] >>
+  `h.inst_opcode = PHI <=> h'.inst_opcode = PHI`
+    by metis_tac[gas_shadow_inst_succs] >>
+  `!defs. insts_defs_reach_check f e lbl defs xs <=>
+          insts_defs_reach_check g e' lbl defs t` by metis_tac[] >>
+  gs[]
+QED
+
+Theorem gas_shadow_fn_defs_reach_uses_check:
+  gas_shadow_function f g ==>
+    (fn_defs_reach_uses_check f <=> fn_defs_reach_uses_check g)
+Proof
+  strip_tac >> drule gas_shadow_function_blocks >> strip_tac >>
+  simp[fn_defs_reach_uses_check_def] >>
+  Cases_on `f.fn_blocks` >> Cases_on `g.fn_blocks` >> gvs[] >>
+  `!x y. gas_shadow_block x y ==>
+         (insts_defs_reach_check f h x.bb_label [] x.bb_instructions <=>
+          insts_defs_reach_check g h' y.bb_label [] y.bb_instructions)`
+    by (rpt strip_tac >>
+        `x.bb_label = y.bb_label` by fs[gas_shadow_block_def] >>
+        `LIST_REL gas_shadow_inst x.bb_instructions y.bb_instructions`
+          by fs[gas_shadow_block_def] >>
+        `!v. var_def_reaches f h x.bb_label v <=>
+             var_def_reaches g h' x.bb_label v`
+          by metis_tac[gas_shadow_var_def_reaches] >>
+        drule_all gas_shadow_insts_defs_reach_check >> metis_tac[]) >>
+  `EVERY (\bb. insts_defs_reach_check f h bb.bb_label [] bb.bb_instructions) t <=>
+   EVERY (\bb. insts_defs_reach_check g h' bb.bb_label [] bb.bb_instructions) t'`
+    by (irule gas_shadow_list_every >> qexists_tac `gas_shadow_block` >>
+        conj_tac >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem gas_shadow_defs_reach_uses_check:
+  gas_shadow_context c d ==>
+    (EVERY fn_defs_reach_uses_check c.ctx_functions <=>
+     EVERY fn_defs_reach_uses_check d.ctx_functions)
+Proof
+  strip_tac >> irule gas_shadow_list_every >>
+  qexists_tac `gas_shadow_function` >>
+  reverse conj_tac >- fs[gas_shadow_context_def] >>
+  metis_tac[gas_shadow_fn_defs_reach_uses_check]
+QED
+
 Theorem gas_shadow_lowering_context_ok:
   gas_shadow_context c d ==> (lowering_context_ok c <=> lowering_context_ok d)
 Proof
@@ -405,5 +525,8 @@ Proof
     by (irule gas_shadow_functions_filter_opc >> simp[] >>
         fs[gas_shadow_context_def]) >>
   `ptr_ok_check c <=> ptr_ok_check d` by metis_tac[gas_shadow_ptr_ok_check] >>
+  `EVERY fn_defs_reach_uses_check c.ctx_functions <=>
+   EVERY fn_defs_reach_uses_check d.ctx_functions`
+    by metis_tac[gas_shadow_defs_reach_uses_check] >>
   simp[lowering_context_ok_def]
 QED

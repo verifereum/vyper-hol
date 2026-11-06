@@ -2,7 +2,9 @@
  * DFT Pass — Correctness
  *
  * TOP-LEVEL:
- *   dft_pass_correct — DFT preserves execution semantics (pass_correct)
+ *   dft_pass_correct — DFT preserves execution semantics (pass_correct);
+ *                      proved in dftCorrectnessFinal
+ *   dft_fn_pseudos_prefix — DFT output keeps pseudo instructions first
  *
  * Proof strategy:
  *   1. dft_fn only changes bb_instructions of each block (labels preserved)
@@ -1928,6 +1930,21 @@ Definition full_dep_def:
     ~DISJOINT (set (inst_defs x)) (set (inst_defs y))
 End
 
+Theorem full_dep_dft_eda_mono:
+  full_dep (build_eda bi) x y ==> full_dep (dft_eda bi) x y
+Proof
+  rw[full_dep_def, eda_dep_def] >> simp[] >>
+  Cases_on `FLOOKUP (build_eda bi) x.inst_id` >> gvs[] >>
+  drule_all dft_eda_mono >> strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem topo_sorted_full_dep_dft_eda:
+  topo_sorted (full_dep (dft_eda bi)) l ==>
+  topo_sorted (full_dep (build_eda bi)) l
+Proof
+  rw[topo_sorted_def] >> metis_tac[full_dep_dft_eda_mono]
+QED
+
 (* Strengthen topo_sorted with additional dep *)
 Triviality topo_sorted_strengthen:
   !dep1 dep2 l.
@@ -2435,28 +2452,6 @@ Proof
   res_tac >> rename1 `MEM j l1` >>
   `choose_original l1 (EL k l2) = j` by
     (irule choose_original_unique >> metis_tac[]) >>
-  metis_tac[]
-QED
-
-(* topo_sorted transfers through choose_original mapping *)
-Triviality map_choose_original_topo_sorted:
-  !l1 l2 dep.
-    ALL_DISTINCT (MAP (\i. i.inst_id) l1) /\
-    topo_sorted dep l2 /\
-    (!i. MEM i l2 ==> ?j. MEM j l1 /\ j.inst_id = i.inst_id) /\
-    (* dep only depends on inst_id *)
-    (!x y x' y'. x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id ==>
-       (dep x y <=> dep x' y')) ==>
-    topo_sorted dep (MAP (choose_original l1) l2)
-Proof
-  rw[topo_sorted_def, LENGTH_MAP] >>
-  simp[EL_MAP] >>
-  `MEM (EL i l2) l2` by (simp[MEM_EL] >> qexists `i` >> simp[]) >>
-  `MEM (EL j l2) l2` by (simp[MEM_EL] >> qexists `j` >> simp[]) >>
-  `(choose_original l1 (EL i l2)).inst_id = (EL i l2).inst_id` by
-    (irule (cj 2 choose_original_correct) >> metis_tac[]) >>
-  `(choose_original l1 (EL j l2)).inst_id = (EL j l2).inst_id` by
-    (irule (cj 2 choose_original_correct) >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -7017,15 +7012,15 @@ Proof
   rpt strip_tac >>
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
-  qabbrev_tac `eda = build_eda bi` >>
+  qabbrev_tac `eda = dft_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
   (* Standard preamble *)
-  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, dft_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_dft_eda >>
      simp[] >> disch_then irule >>
      fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
@@ -7124,7 +7119,7 @@ Proof
   simp[entry_instructions_def, LET_THM, MEM_FILTER] >>
   conj_tac
   (* LAST bi's inst_id is not in any dep list *)
-  >- (simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  >- (disj1_tac >> simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
       rpt strip_tac >> rename1 `MEM instr (FILTER _ bi)` >>
       qspecl_then [`bi`, `eda`, `order`, `instr`] mp_tac
         terminator_not_dep_target >>
@@ -7173,7 +7168,9 @@ Proof
      gvs[Abbr `nps`, MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
   (* Now apply filter_last_when_last_passes *)
   qabbrev_tac `Q = \i:instruction. ~MEM i.inst_id
-     (FLAT (MAP (\i. MAP (\d. d.inst_id) (inst_all_deps bi order eda i)) nps))` >>
+     (FLAT (MAP (\i. MAP (\d. d.inst_id) (inst_all_deps bi order eda i)) nps)) \/
+     (i.inst_outputs = [] /\ read_effects i.inst_opcode = empty_effects /\
+      write_effects i.inst_opcode = empty_effects)` >>
   `Q (LAST nps)` by simp[Abbr `Q`] >>
   drule_all filter_last_when_last_passes >>
   simp[Abbr `Q`]
@@ -7325,15 +7322,15 @@ Proof
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` >>
-  qabbrev_tac `eda = build_eda bi` >>
+  qabbrev_tac `eda = dft_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
   (* Prerequisites — shared preamble *)
-  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, dft_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_dft_eda >>
      simp[non_pseudo_defs_before_uses_def] >> disch_then irule >>
      fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by (fs[bb_well_formed_def, Abbr `bi`]) >>
@@ -7860,20 +7857,20 @@ Triviality dft_block_body_topo_sorted[local]:
     topo_sorted (full_dep (build_eda bb.bb_instructions))
       (block_body (dft_block order bb))
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> irule topo_sorted_full_dep_dft_eda >>
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` >>
-  qabbrev_tac `eda = build_eda bi` >>
+  qabbrev_tac `eda = dft_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
-  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, dft_eda_wf] >>
   `np_defs_before_uses bi` by
     gvs[non_pseudo_defs_before_uses_def, Abbr `bi`] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_dft_eda >>
      simp[] >> disch_then irule >> fs[bb_well_formed_def, Abbr `bi`]) >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
   `!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
@@ -7947,15 +7944,15 @@ Proof
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` >>
-  qabbrev_tac `eda = build_eda bi` >>
+  qabbrev_tac `eda = dft_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
-  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, dft_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (fs[Abbr `eda`, Abbr `bi`, bb_well_formed_def,
         non_pseudo_defs_before_uses_def] >>
-     metis_tac[eda_topo_compatible_gen_weak_plain]) >>
+     metis_tac[eda_topo_compatible_dft_eda]) >>
   `np_defs_before_uses bi` by
     gvs[non_pseudo_defs_before_uses_def, Abbr `bi`] >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
@@ -8280,10 +8277,10 @@ Proof
   simp[pseudos_prefix_def, dft_block_def, LET_THM] >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions` >>
   qabbrev_tac `sched = schedule_from_entries bb.bb_instructions order
-    (build_eda bb.bb_instructions)
+    (dft_eda bb.bb_instructions)
     (build_offspring_map bb.bb_instructions order)
     (entry_instructions bb.bb_instructions order
-      (build_eda bb.bb_instructions))` >>
+      (dft_eda bb.bb_instructions))` >>
   rpt strip_tac >>
   Cases_on `j < LENGTH phis`
   >- (
@@ -8295,7 +8292,7 @@ Proof
   `EL j (phis ++ sched) = EL (j - LENGTH phis) sched` by simp[EL_APPEND2] >>
   `MEM (EL (j - LENGTH phis) sched) sched` by metis_tac[MEM_EL] >>
   `~is_pseudo (EL (j - LENGTH phis) sched).inst_opcode` by
-    metis_tac[schedule_output_from_block, build_eda_wf,
+    metis_tac[schedule_output_from_block, dft_eda_wf,
               entry_instructions_mem] >>
   gvs[]
 QED
@@ -8734,7 +8731,7 @@ Proof
   simp[] >> disch_then (qspec_then `bb` mp_tac) >> simp[Abbr `tripn`]
 QED
 
-Triviality dft_fn_pseudos_prefix:
+Theorem dft_fn_pseudos_prefix:
   !fn. fn_pseudos_prefix fn ==> fn_pseudos_prefix (dft_fn fn)
 Proof
   rw[dft_fn_def, fn_pseudos_prefix_def, LET_THM] >>
@@ -9963,14 +9960,14 @@ QED
 Triviality dft_block_filter_nonpseudo[local]:
   !order bb.
     FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions =
-    schedule_from_entries bb.bb_instructions order (build_eda bb.bb_instructions)
+    schedule_from_entries bb.bb_instructions order (dft_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
-      (entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions))
+      (entry_instructions bb.bb_instructions order (dft_eda bb.bb_instructions))
 Proof
   simp[dft_block_def, LET_THM, FILTER_APPEND_DISTRIB, FILTER_FILTER,
        FILTER_EQ_NIL, FILTER_EQ_ID, EVERY_MEM] >>
   rpt strip_tac >>
-  metis_tac[sched_output_nonpseudo, build_eda_wf, entry_instructions_mem]
+  metis_tac[sched_output_nonpseudo, dft_eda_wf, entry_instructions_mem]
 QED
 
 
