@@ -44,6 +44,10 @@ Proof
   qpat_assum `vyper_valid_enc _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [vyper_valid_enc_window]) >>
   irule abi_valid_prefix_types >> asm_simp_tac bool_ss [] >>
+  conj_tac
+  >- (drule vyper_valid_enc_static_length_lower >>
+      qpat_x_assum `_ \/ _` strip_assume_tac >>
+      gvs[Once vyper_decode_valid_enc_def]) >>
   irule abi_valid_prefix_validation >> asm_rewrite_tac []
 QED
 
