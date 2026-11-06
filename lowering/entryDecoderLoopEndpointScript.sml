@@ -8,6 +8,7 @@ Ancestors
   compileEnv emitHelper venomInst context abiDecoderGuard abiDecoderVarSequence
   abiDecoderDynarrayBound calldataValidInitHeader finite_map venomWf
   ctorAbiActualArrayRun venomMemDefs
+  calldataSourceMemberFold calldataMemberResourceFrame abiDecoderValidArrayEntry
   calldataOwnedLoopClosure calldataDynOwned decoderPrefixEdges
   abiDecoderLoopRegisters abiDecoderDynamic abiDecoderContract
   abiDecoderExecution abiDecoderArrayBackedge
@@ -412,4 +413,164 @@ val () =
   in if null axioms andalso null (Thm.hyp entry_joint_loop_endpoint) andalso
         List.all (fn name => name = "DISK_THM") oracles
      then () else raise Fail "entry joint loop endpoint inherited admission"
+  end;
+
+(* Consume the actual initializer package without selecting a second header. *)
+Theorem entry_joint_initialized_loop_endpoint:
+  EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
+    hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
+    p d iid oid base_addr cap /\
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial 0 head old /\
+  EntryLoopSafe ctx fn initial head /\ EntryLoopPull ctx fn initial head /\
+  entry_decoder_obs initial head /\ alloca_history fn head /\ fn_inst_ids_distinct fn /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 /\
+  (!k header entry.
+    k < LENGTH vs /\
+    abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st header entry /\
+    ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+    entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
+    alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
+    EntryLoopOwn fn ready.cs_next_id st1.cs_next_id entry /\
+    FLOOKUP entry.vs_allocas oid = SOME (base_addr,cap) /\
+    base_addr <= d+32+k*type_memory_size tv /\
+    d+32+k*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+    d+32+k*type_memory_size tv+type_memory_size tv < dimword (:256) /\
+    alloca_history fn entry ==>
+    ?child new. EntryChildResources ctx fn site ready st1 limit_st tv vs d k entry child new /\
+      EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child /\
+      entry_decoder_obs entry child /\ alloca_history fn child) ==>
+  ?t scratch.
+    ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    val_wf (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d t.vs_memory /\
+    fresh_vars_wrt limit_st t /\
+    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_data_section = initial.vs_data_section /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    EntryLoopOwn fn st.cs_next_id end_st.cs_next_id t /\
+    initial.vs_alloca_next <= t.vs_alloca_next /\
+    (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+    (!id. id < st.cs_next_id \/ end_st.cs_next_id <= id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op initial) /\
+    abi_decode_footprint_frame ((d,32+maxn*type_memory_size tv)::scratch) initial t /\
+    (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+    EntryLoopSafe ctx fn initial t /\ EntryLoopPull ctx fn initial t /\
+    entry_decoder_obs initial t /\ alloca_history fn t
+Proof
+  strip_tac >> `0 <= LENGTH vs` by simp[] >>
+  drule_all entry_joint_loop_endpoint >>
+  disch_then (qx_choose_then `t` (qx_choose_then `scratch` strip_assume_tac)) >>
+  `EntryLoopSafe ctx fn initial t` by
+    (irule entry_joint_loop_safe_trans >> qexists_tac `head` >> asm_rewrite_tac[]) >>
+  `EntryLoopPull ctx fn initial t` by
+    (irule entry_joint_loop_pull_trans >> qexists_tac `head` >> asm_rewrite_tac[]) >>
+  qexistsl_tac [`t`,`scratch`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_joint_initialized_loop_endpoint)
+  in if null axioms andalso null (Thm.hyp entry_joint_initialized_loop_endpoint) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then () else raise Fail "entry initialized loop endpoint inherited admission"
+  end;
+
+(* Convert the ordinary source-member endpoint without changing its witness. *)
+Theorem entry_member_success_child_resources:
+  calldata_member_success ctx fn site limit_st ready st1
+    (d+32+k*type_memory_size tv) (type_memory_size tv) tv (EL k vs)
+    entry child scratch ==>
+  EntryChildResources ctx fn site ready st1 limit_st tv vs d k entry child scratch /\
+  EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child
+Proof
+  pure_rewrite_tac[calldata_member_success_def, calldata_member_resource_frame_def,
+    calldata_member_own_def, calldata_member_wit_def, calldata_member_transfers_def,
+    EntryChildResources_def, EntryLoopOwn_def, EntryLoopSafe_def, EntryLoopPull_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_member_success_child_resources)
+  in if null axioms andalso null (Thm.hyp entry_member_success_child_resources) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then () else raise Fail "entry child resources inherited admission"
+  end;
+
+(* A framed source-child producer is consumed on the valid entry prepared by
+   the loop.  It returns resources and observations under the same existential. *)
+Theorem entry_valid_array_child_resources:
+  (!bytes v child_src child_dst child_sb addr b reserve_cap oid base_addr cap first last s.
+    compile_abi_decode_to_buf child_dst child_src CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) first = ((),last) /\
+    fn_has_code first last fn /\
+    (first.cs_blocks = last.cs_blocks \/
+      !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    last.cs_next_var <= limit_st.cs_next_var /\
+    (oid < first.cs_next_id \/ last.cs_next_id <= oid) /\
+    base_addr <= addr /\ addr+type_memory_size tv <= base_addr+cap /\
+    addr+type_memory_size tv < dimword (:256) /\
+    abi_decoder_valid_pre ce env sf ty tv bytes v first child_src child_dst
+      CALLDATALOAD (Lit 0w) child_sb addr b reserve_cap s /\
+    fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+    calldata_member_own fn first.cs_next_id last.cs_next_id s /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+    ~s.vs_halted /\ s.vs_current_bb = first.cs_current_bb /\
+    s.vs_inst_idx = LENGTH first.cs_current_insts /\ alloca_history fn s ==>
+    ?child scratch. calldata_member_success ctx fn site limit_st first last addr
+      (type_memory_size tv) tv v s child scratch /\
+      entry_decoder_obs s child /\ alloca_history fn child) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) ready = ((),st1) /\
+  fn_has_code ready st1 fn /\
+  (ready.cs_blocks = st1.cs_blocks \/
+    !bb. lookup_block st1.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  st1.cs_next_var <= limit_st.cs_next_var /\
+  (oid < ready.cs_next_id \/ st1.cs_next_id <= oid) /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
+    (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st header entry /\
+  ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+  entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
+  alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
+  EntryLoopOwn fn ready.cs_next_id st1.cs_next_id entry /\
+  FLOOKUP entry.vs_allocas oid = SOME (base_addr,cap) /\
+  base_addr <= d+32+k*type_memory_size tv /\
+  d+32+k*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+  d+32+k*type_memory_size tv+type_memory_size tv < dimword (:256) /\
+  alloca_history fn entry ==>
+  ?child scratch. EntryChildResources ctx fn site ready st1 limit_st tv vs d k
+      entry child scratch /\
+    EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child /\
+    entry_decoder_obs entry child /\ alloca_history fn child
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qhdtm_x_assum `abi_decoder_valid_array_entry`
+    (map_every assume_tac o CONJUNCTS o
+      SIMP_RULE bool_ss [abi_decoder_valid_array_entry_def, LET_THM]) >>
+  `calldata_member_own fn ready.cs_next_id st1.cs_next_id entry` by
+    (qhdtm_assum `EntryLoopOwn` mp_tac >>
+     pure_rewrite_tac[EntryLoopOwn_def, calldata_member_own_def] >> simp[]) >>
+  qpat_assum `type_memory_bytes ce ty = _` (fn th =>
+    qhdtm_x_assum `abi_decoder_valid_pre`
+      (assume_tac o PURE_REWRITE_RULE [th])) >>
+  first_x_assum (drule_at (Pat `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`oid`,`base_addr`,`cap`,`st1`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  drule entry_member_success_child_resources >> strip_tac >>
+  qexistsl_tac [`child`,`scratch`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_valid_array_child_resources)
+  in if null axioms andalso null (Thm.hyp entry_valid_array_child_resources) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then () else raise Fail "entry valid array child resources inherited admission"
   end;
