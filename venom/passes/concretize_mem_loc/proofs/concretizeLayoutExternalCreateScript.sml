@@ -1,7 +1,8 @@
 Theory concretizeLayoutExternalCreate
 Ancestors concretizeLayoutExternalRequests concretizeLayoutSupplement
   venomCallOracleDefs extCallOracle ptrDiscipline venomState venomExecSemantics
-  venomInst list pred_set
+  venomInst list pred_set frameRelocationAllocationSteps frameRelocationGuardedValues
+  frameOriginUpdates frameRelocationGhostCopy frameRelocationLocal finite_map
 
 (* CREATE's clean-storage side condition makes the adopted external snapshot
    exact; immutable taint and historical request agreement are retained. *)
@@ -121,5 +122,46 @@ Proof
   qexistsl_tac [`out`,`w`] >>
   gvs[consume_create_outcome_eq, update_var_def]
 QED
+
+Theorem concretize_create_local_execution:
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  local_rel (\u. F) (guarded_ptr Opaque L rv)
+    (guarded_bytes Opaque rv tn) R concretize_local_obs s t /\
+  concretize_supplement D tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
+  exec_create inst s value off sz salt = OK post /\
+  (!a b. next a b ==> R a b) ==>
+  ?post'. exec_create inst t value offT sz salt = OK post' /\
+    local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv inst.inst_outputs NONE))
+      (guarded_bytes Opaque (origin_set rv inst.inst_outputs NONE) (step_taint inst s post tn))
+      next concretize_local_obs post post' /\
+    concretize_supplement D (step_taint inst s post tn) post post'
+Proof
+  strip_tac >>
+  `concretize_local_obs s t` by metis_tac[local_rel_observation] >>
+  drule_all concretize_create_observation >> strip_tac >>
+  qexists_tac `post'` >> asm_rewrite_tac[] >>
+  `local_rel (\u. F) (guarded_ptr Opaque L rv)
+     (guarded_bytes Opaque rv tn) R (\s t. T) s t` by
+    (fs[local_rel_def]) >>
+  `local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv [out] NONE))
+     (guarded_bytes Opaque (origin_set rv [out] NONE) (step_taint inst s post tn))
+     R (\s t. T) (update_var out w s) (update_var out w t)` by
+    suspend "values" >>
+  irule local_rel_field_frame >> simp[update_var_def] >>
+  goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >> simp[update_var_def]
+QED
+Resume concretize_create_local_execution[values]:
+  irule local_rel_update >> simp[] >>
+  (conj_tac >- simp[guarded_bytes_def, frameRelocationGhostCopyTheory.copy_bytes_def,
+    word_agree_except_def]) >>
+  (conj_tac >- simp[guarded_ptr_def, copy_ptr_def, origin_set_lookup]) >>
+  goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
+  simp[guarded_ptr_def, guarded_bytes_def, copy_ptr_def,
+    frameRelocationGhostCopyTheory.copy_bytes_def, origin_set_lookup,
+    step_taint_def, set_var_taint_def, out_taint_def, MEM, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[op_taint_def, FLOOKUP_UPDATE]
+QED
+Finalise concretize_create_local_execution
 
 val _ = export_theory();
