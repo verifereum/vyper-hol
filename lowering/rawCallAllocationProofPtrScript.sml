@@ -785,3 +785,10 @@ Resume raw_call_outbuf_ready_outcome[package]:
 QED
 
 Finalise raw_call_outbuf_ready_outcome
+
+val _ = if List.all (null o hyp)
+  [raw_call_alloc_buffer_stage, raw_call_alloc_buffer_ghost_stage,
+   raw_call_outbuf_add_stage, raw_call_outbuf_positive_stage,
+   raw_call_outbuf_zero_stage, raw_call_outbuf_stage,
+   raw_call_outbuf_ready_stage, raw_call_outbuf_ready_outcome] then ()
+  else raise Fail "raw_call allocation exports have kernel hypotheses";
