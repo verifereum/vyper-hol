@@ -160,7 +160,8 @@ Proof
 QED
 
 Theorem aug_place_eval_bop:
-  bop <> In /\ bop <> NotIn ==>
+  bop <> In /\ bop <> NotIn /\
+  ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) ==>
   (case evaluate_binop
      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
      ptv bop cur rhs of
@@ -215,11 +216,11 @@ Theorem aug_place_bop_res_ok:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+     ptv bop cur rhs of INL v => INL v | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
     ptv bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]
