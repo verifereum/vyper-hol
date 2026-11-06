@@ -28,7 +28,7 @@ Ancestors
   extRetBufferStatePtr extRetCursorResourcePtr extRetBufferCursorStatePtr
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
-  extRetFrameFactsPtr extRetNoneFramePtr
+  extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr
 
 val _ = Parse.hide "body";
 
@@ -78,5 +78,13 @@ Proof
   drule_all external_frame_control_metadata >> strip_tac >>
   Cases_on `eo`
   >- (irule external_return_none_stmt_frag_ptr >> simp[] >> metis_tac[]) >>
+  Cases_on `is_word_type ret`
+  >- (`~cenv'.ce_raw_return` by
+        (strip_tac >>
+         `lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by metis_tac[] >>
+         drule_all source_typing_raw_return_type >> strip_tac >>
+         gvs[is_word_type_def]) >>
+      irule external_return_word_frame_stmt_frag_ptr >> simp[] >>
+      qexists_tac `env'` >> simp[] >> metis_tac[]) >>
   cheat
 QED
