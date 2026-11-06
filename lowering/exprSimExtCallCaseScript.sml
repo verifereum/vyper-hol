@@ -80,16 +80,25 @@ QED
 
 (* ===== The split: request, call step, return ===== *)
 
-(* The default operand of a call that has default_return_value: its value
-   and, for a memory default, a region below the next alloca, so no later
-   alloca overlaps it.  has_default is the lowering's flag, default_opt the
-   source's keyword value. *)
+(* The default operand of a call that has default_return_value: none on a
+   void call; its type default_ty (the lowered type it is stored from) is
+   the return type or, for bytestrings, another bytestring type; its value
+   is typed at both; and, for a memory default, a region below the next
+   alloca, so no later alloca overlaps it.
+   has_default is the lowering's flag, default_opt the source's keyword
+   value. *)
 Definition extcall_default_ready_def:
-  extcall_default_ready cx has_default default_op default_ty default_opt t <=>
+  extcall_default_ready cx ret_type has_default default_op default_ty
+      default_opt t <=>
     (has_default <=> IS_SOME default_opt) /\
+    (ret_type = NoneT ==> ~has_default) /\
     !d. default_opt = SOME d ==>
-        ?tv w. evaluate_type (get_tenv cx) default_ty = SOME tv /\
-               value_has_type tv d /\
+        (default_ty = ret_type \/
+         is_bytestring_type default_ty /\ is_bytestring_type ret_type) /\
+        ?tv rtv w. evaluate_type (get_tenv cx) default_ty = SOME tv /\
+               evaluate_type (get_tenv cx) ret_type = SOME rtv /\
+               value_has_type tv d /\ val_wf tv d /\
+               value_has_type rtv d /\ val_wf rtv d /\
                eval_operand default_op t = SOME w /\
                expr_val_rel cx default_ty d default_op t /\
                (~is_word_type default_ty ==>
@@ -99,10 +108,11 @@ End
 (* At sp, just before the extcodesize check and the CALL: the source has
    evaluated and read every operand and built the request (target, value,
    calldata); the CALL's operands evaluate to them, calldata is the bytes
-   at call_offset, and the return buffer (cap bytes at buf_op) is clear of
-   the locals, the immutables, the allocas before sa and a memory default. *)
+   at call_offset, and the return buffer (cap bytes at buf_op, an alloca
+   made after sa) is clear of the locals, the immutables, the allocas before
+   sa and a memory default. *)
 Definition extcall_request_ready_def:
-  extcall_request_ready ctx func cenv cx es sa s0 sp is_static
+  extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
@@ -124,6 +134,9 @@ Definition extcall_request_ready_def:
              eval_operand call_len t = SOME az /\
              read_memory (w2n ao) (w2n az) t = calldata) /\
     (?ro. eval_operand buf_op t = SOME ro /\ w2n ro + cap < dimword (:256) /\
+          (?live buf_size. sa.cs_next_id <= live /\ live < sp.cs_next_id /\
+             cap <= buf_size /\
+             FLOOKUP t.vs_allocas live = SOME (w2n ro, buf_size)) /\
           (!name b sz. local_region cenv ee.scopes t name b sz ==>
              compileEnv$regions_disjoint (w2n ro) cap b sz) /\
           (!name b sz. local_region cenv es.scopes s0 name b sz ==>
@@ -145,14 +158,15 @@ Definition extcall_request_ready_def:
              evaluate_type (get_tenv cx) default_ty = SOME tv ==>
              compileEnv$regions_disjoint (w2n ro) cap (w2n w)
                (type_memory_size tv))) /\
-    extcall_default_ready cx has_default default_op default_ty default_opt t
+    extcall_default_ready cx ret_type has_default default_op default_ty
+      default_opt t
 End
 
 (* At sr, the start of the block after a successful call: the source has
-   the call's returndata, which Venom holds too, and the return buffer holds
-   its first cap bytes. *)
+   the call's returndata, which Venom holds too, and the return buffer (an
+   alloca made after sa) holds its first cap bytes. *)
 Definition extcall_returned_def:
-  extcall_returned ctx func cenv cx es sa s0 sr addr_op buf_op cap target
+  extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t <=>
     stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
@@ -163,9 +177,13 @@ Definition extcall_returned_def:
     (?aw. eval_operand addr_op t = SOME aw /\ w2w aw = target) /\
     t.vs_returndata = returnData /\ LENGTH returnData < dimword (:256) /\
     (?ro. eval_operand buf_op t = SOME ro /\ w2n ro + cap < dimword (:256) /\
+          (?live buf_size. sa.cs_next_id <= live /\ live < sr.cs_next_id /\
+             cap <= buf_size /\
+             FLOOKUP t.vs_allocas live = SOME (w2n ro, buf_size)) /\
           mem_bytes_at (w2n ro) (LENGTH (TAKE cap returnData)) t.vs_memory =
             TAKE cap returnData) /\
-    extcall_default_ready cx has_default default_op default_ty default_opt t
+    extcall_default_ready cx ret_type has_default default_op default_ty
+      default_opt t
 End
 
 (* (1) Operands and request.  The lowering up to the extcodesize check, run
@@ -269,7 +287,7 @@ Theorem extcall_request_setup:
                | SOME v => dest_NumV v) /\
        build_ext_calldata (get_tenv cx) fname arg_types
          (TAKE (LENGTH arg_types) rest) = SOME calldata /\
-       extcall_request_ready ctx func cenv cx es sa s0 sp is_static
+       extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static
          addr_op value_op gas_op buf_op call_offset call_len
          (abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
@@ -319,12 +337,12 @@ Theorem extcall_call_step:
        (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
           (new_block cont_lbl)))))))))) sp = (u, sr) /\
     fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
-    extcall_request_ready ctx func cenv cx es sa s0 sp is_static
+    extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t /\
     (!returnData ee' t'.
-       extcall_returned ctx func cenv cx es sa s0 sr addr_op buf_op cap target
+       extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
          has_default default_op default_ty default_opt returnData ee' t' ==>
        ?marks. gas_summary_at F (ctx,func) marks (k returnData) (ee',t') Q
                  (\res ee r. expr_exit res r)) ==>
@@ -376,7 +394,7 @@ Theorem extcall_return_values:
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
-    extcall_returned ctx func cenv cx es sa s0 sr addr_op buf_op cap target
+    extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
     ?marks. gas_summary_at F (ctx,func) marks
       (case (if returnData = [] then default_opt else NONE) of
@@ -502,13 +520,13 @@ Proof
   drule_all eval_ext_call_request >>
   disch_then (qspecl_then [`skip`, `ret_type`] SUBST1_TAC) >>
   ho_match_mp_tac extcall_call_step >>
-  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `comp_ignore_bind _ _ _ = _` (irule_at Any) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >>
   irule extcall_return_values >>
-  qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
   qexists_tac `result_op` >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC]
