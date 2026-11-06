@@ -216,7 +216,7 @@ Proof
   fs[abi_decoder_address_frame_def, eval_op_inst_idx, fresh_vars_wrt_def]
 QED
 
-Theorem entry_header_body_transfer_frame[local]:
+Theorem entry_header_body_transfer_frame:
   lookup_block u.vs_current_bb fn.fn_blocks = SOME
     <|bb_label := hdr; bb_instructions :=
       abi_decode_header_insts hid ip src CALLDATALOAD
