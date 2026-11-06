@@ -312,6 +312,7 @@ Theorem reason_builtin_bop[local]:
 Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
+  Cases_on `bop` >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
