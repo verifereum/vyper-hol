@@ -220,4 +220,63 @@ Proof
        adopt_outcome_deletions_def, Excl "consume_call_outcome_eq"]
 QED
 
+Theorem ext_call_success_envelope[local]:
+  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  ?out w p. inst.inst_outputs = [out] /\
+    consume_call_outcome (venom_call_request s addr value off sz is_static)
+      (w2n ro) (w2n rs) s = (w,p) /\ post = update_var out w p
+Proof
+  simp[exec_ext_call_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  strip_tac >> pairarg_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  metis_tac[]
+QED
+
+Theorem concretize_ext_call_observation:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  is_static = (inst.inst_opcode = STATICCALL) /\
+  concretize_local_obs s t /\ concretize_supplement D tn s t /\
+  s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
+  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  ?post'. exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
+    concretize_local_obs post post' /\
+    concretize_supplement D (step_taint inst s post tn) post post'
+Proof
+  strip_tac >>
+  qabbrev_tac `rq = venom_call_request s addr value off sz is_static` >>
+  qabbrev_tac `rqT = venom_call_request t addr value offT sz is_static` >>
+  `rq.cr_accounts = s.vs_accounts /\ rqT.cr_accounts = t.vs_accounts /\
+   rq.cr_tStorage = s.vs_transient /\ rqT.cr_tStorage = t.vs_transient /\
+   rq.cr_kind = MessageCall /\
+   rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+   rq with <|cr_accounts := rqT.cr_accounts; cr_tStorage := rqT.cr_tStorage|> = rqT` by
+    simp[Abbr `rq`, Abbr `rqT`, venom_call_request_def] >>
+  `request_agree_except D rq rqT` by
+    (drule_all concretize_request_observation >> simp[]) >>
+  drule ext_call_success_envelope >> strip_tac >>
+  `consume_call_outcome rq (w2n ro) (w2n rs) s = (w,p)` by
+    fs[Abbr `rq`, Excl "consume_call_outcome_eq"] >>
+  Cases_on `consume_call_outcome rqT (w2n roT) (w2n rs) t` >>
+  rename1 `consume_call_outcome rqT _ _ t = (wT,pT)` >>
+  `s.vs_logs = t.vs_logs` by fs[concretize_local_obs_def, dead_result_rel_def] >>
+  drule_all concretize_call_completion_supplement >> strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
+  drule_all concretize_call_completion_observation >> strip_tac >>
+  qexists_tac `update_var out wT pT` >> conj_tac
+  >- (gvs[Abbr `rqT`, Excl "consume_call_outcome_eq"] >>
+      simp[exec_ext_call_def, Excl "consume_call_outcome_eq"]) >>
+  conj_tac
+  >- gvs[concretize_local_obs_def, dead_result_rel_def, update_var_def,
+         Excl "consume_call_outcome_eq"] >>
+  qpat_x_assum `concretize_supplement D (step_taint _ _ _ _) _ _` mp_tac >>
+  simp[concretize_supplement_def, step_taint_def, adopt_reset_def,
+       store_taint_def, imm_taint_def, update_var_def,
+       Excl "consume_call_outcome_eq"] >>
+  strip_tac >> fs[Excl "consume_call_outcome_eq"]
+QED
+
 val _ = export_theory();
