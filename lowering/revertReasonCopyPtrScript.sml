@@ -1,6 +1,6 @@
 (* Checked padded-message copy, independent of reason normalization. *)
 Theory revertReasonCopyPtr
-Ancestors revertReasonLayout revertReasonPrefixFramePtr abiEncoderRounding
+Ancestors normalizerAllocationFrame revertReasonLayout revertReasonPrefixFramePtr abiEncoderRounding
   exprLoweringProps venomMemProps venomInst venomExecSemantics venomState
   fragGasSeqPtr typedCopyPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr ptrDiscipline
   words arithmetic list rich_list finite_map codegenRel venomInstProofs
@@ -9,13 +9,9 @@ Theorem revert_reason_copy_allocation_frame:
   run_inst_seq (revert_reason_copy id v q op) s = OK t ==>
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  strip_tac >>
-  drule_at (Pos hd)
-    (Q.ISPEC `\s:venom_state. (s.vs_allocas,s.vs_alloca_next)`
-      run_inst_seq_preserves_field) >> simp[] >> disch_then irule >>
-  rpt strip_tac >> fs[revert_reason_copy_def, MEM] >>
-  drule step_inst_base_preserves_alloca_state >>
-  simp[mk_inst_def, is_terminator_def, is_alloca_op_def]
+  strip_tac >> irule nonallocating_sequence_allocation_fields >>
+  goal_assum (drule_at Any) >>
+  simp[revert_reason_copy_def, mk_inst_def, is_terminator_def, is_alloca_op_def]
 QED
 
 Theorem mcopy_byte_clean:
