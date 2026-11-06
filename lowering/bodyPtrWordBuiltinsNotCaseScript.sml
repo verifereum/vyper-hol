@@ -1,6 +1,7 @@
 (* Full body-level calibration for word Not. *)
 Theory bodyPtrWordBuiltinsNotCase
 Ancestors bodyPtrWordBuiltinsNotSuffix bodyPtrWordBuiltinsWitnessCompose
+  gasSummaryComposePtr ptrDiscipline stmtFragPtr exprSimUnopComposeProps exprSimWordArgs
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps exprSimHypsDefs
   exprSimUnopProps exprSimProps exprSimSource exprPtrUnwrap exprLowering
   vyperAST vyperTypeSystem vyperTyping vyperInterpreter list
@@ -131,4 +132,76 @@ Proof
   >- (qexistsl [`XOR`, `[x; Lit (n2w (2 ** cenv.ce_flag_n_members (nsid_to_string nsid) - 1))]`] >>
       rpt strip_tac >> gvs[] >> simp[ptrDisciplineTheory.op_taint_def]) >>
   qexistsl [`NOT`, `[x]`] >> simp[]
+QED
+
+Theorem word_not_emit_run_step:
+  MEM opc [ISZERO; NOT; XOR] /\ emit_op opc args s1 = (op,sb) /\
+  run_inst_seq (emitted_insts s1 sb) t0 = OK t ==>
+  step_inst_base
+    (mk_inst s1.cs_next_id opc args [STRING #"%" (toString s1.cs_next_var)]) t0 = OK t
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[run_inst_seq_def, AllCaseEqs()]
+QED
+
+Theorem word_not_typed_ptr_outcome:
+  (is_bool_type ann \/ is_uint256_type ann \/ is_bytes32_type ann \/ is_flag_type ann) /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
+  (!nsid m. ann = FlagT nsid /\ tv = FlagTV m ==>
+    cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+  (if ann = BaseT BoolT then emit_op ISZERO [x]
+   else compile_invert x ann cenv) s1 = (op,sb) /\
+  expr_post ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
+  ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
+  t0.vs_current_bb = s1.cs_current_bb /\
+  t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
+  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv d cenv cx ee G tn t0 /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (\vs. (unop_result cx ann Not [expr_type e] v vs,vs)) (ee,t0,G,tn)
+    (\res fin G' tn' u. ?v'. res = INL v' /\
+      expr_post ctx func cenv cx (Builtin ann Not [e]) es sa sb s0 fin v' op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
+      ghost_kept cenv es sa G0 tn0 s0 G' tn')
+    (\res fin gt r. expr_exit res r)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all word_not_typed_post >>
+  disch_then (qspec_then `[expr_type e]` strip_assume_tac) >>
+  `op_taint tn x = {}` by gvs[ptr_val_ok_def] >>
+  drule_all word_not_emit_form >>
+  disch_then (qspec_then `cenv` strip_assume_tac) >>
+  qpat_x_assum `_ = emit_op opc args` SUBST_ALL_TAC >>
+  drule_all word_not_emit_run_step >> strip_tac >>
+  drule_all word_not_emit_cursor >> strip_tac >>
+  `is_word_type ann` by
+    (drule not_type_cases >> strip_tac >> gvs[is_word_type_def]) >>
+  irule gas_outcome_ptr_conseq >>
+  qexistsl [`\res fin G' tn' u.
+    (res = INL v' /\ fin = ee with gas_obs := [] /\
+     expr_post ctx func cenv cx (Builtin ann Not [e]) es sa sb s0 fin v' op u /\
+     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts) /\
+    ghost_inv d cenv cx ee G' tn' u /\ ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE`,
+    `\res fin gt r. expr_exit res r`] >>
+  conj_tac
+  >- (simp[] >> rpt gen_tac >> strip_tac >>
+      gvs[ghost_inv_gas_obs, ptr_val_ok_def]) >>
+  conj_tac >- simp[] >>
+  ho_match_mp_tac (Q.INST [`sa` |-> `s1`, `sc` |-> `sa`, `res` |-> `INL v'`]
+    word_not_emit_outcome) >> simp[allocas_from_def, exprSimUnopComposePropsTheory.unop_result_gas_obs] >>
+  conj_tac
+  >- (qpat_x_assum `expr_post _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
+      simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs] >>
+      metis_tac[]) >>
+  drule_all word_not_normal_update >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  gvs[update_var_def]
 QED
