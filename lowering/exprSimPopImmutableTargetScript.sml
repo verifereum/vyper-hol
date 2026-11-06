@@ -2318,6 +2318,79 @@ Resume imm_target_walk[attribute]:
 QED
 Finalise imm_target_walk
 
+(* Pop consumes a place, rather than the eval_result produced by the walk. *)
+Theorem imm_target_walk_place:
+  !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
+    cx.in_deploy /\ cenv.ce_is_ctor /\
+    target_idx_case nocalls ctx func cenv cx bt /\
+    (nocalls ==> int_calls_target bt = []) /\
+    target_root bt = TopLevelNameTarget (src,id) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) /\
+    (!ty0. FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
+           cenv.ce_module_var_type (src,id) = SOME ty0) /\
+    expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+    EVERY pure_expr (target_indices bt) /\
+    type_place_target env bt = SOME (Type ty) /\
+    compile_get_target_ptr compile_expr cenv bt sa = (r,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
+      (\res ee t. ?p. res = INL p /\ ee = es with gas_obs := [] /\
+         imm_target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) ty r t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, Once evaluate_def, bind_def] >>
+     rpt strip_tac >> Cases_on `res` >> simp[target_res_ok_def] >>
+     first_x_assum (qspec_then `gs` mp_tac) >>
+     simp[target_place_res_ok_def]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+      (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
+         imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)` by
+    (irule imm_target_walk >> simp[] >> conj_tac
+     >- (qexists `env` >> simp[]) >>
+     qexists `nocalls` >> simp[]) >>
+  `eval_target_place cx bt = vyperState$bind (eval_base_place cx bt) get_place` by
+    simp[FUN_EQ_THM, Once evaluate_def, bind_def] >>
+  pop_assum SUBST1_TAC >>
+  irule imm_gas_outcome_bind_result >>
+  qexists `\pv ee t. ee = es with gas_obs := [] /\
+    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts` >>
+  reverse conj_tac
+  >- (`(\(res:eval_result + exception) ee r.
+          ?exc. res = INR exc /\ expr_exit (INR exc : place + exception) r) =
+        (\res (ee:evaluation_state) r. expr_exit res r)` by
+        (simp[FUN_EQ_THM] >> Cases >>
+         simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      BETA_TAC >> pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  Cases_on `v` >>
+  gvs[imm_target_post_def, oneline imm_place_at_def] >>
+  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INL p`, `es`, `OK t`] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
+       get_place_def, return_def] >>
+  metis_tac[]
+QED
+
 (* RESIDUAL, FALSE as stated until ImmutablePlace reads get a popped
    history as MemoryPlace's have (the semantics ledger item shared with
    the array piece's ancestor-pop residual): a nested pop on an immutable
