@@ -251,7 +251,8 @@ Proof
   >- (rpt strip_tac >> irule mem_bytes_at_write_disjoint >>
       first_x_assum (drule_all_then mp_tac) >> decide_tac) >>
   (* the locals: the returned bytes land outside their regions *)
-  rw[locals_kept_def] >> irule mem_bytes_at_write_disjoint >>
+  irule locals_kept_regions >> rpt strip_tac >>
+  irule mem_bytes_at_write_disjoint >>
   first_x_assum (drule_then mp_tac) >>
   qmatch_goalsub_abbrev_tac `LENGTH bs` >>
   `LENGTH bs <= w2n rs` by simp[Abbr `bs`, listTheory.LENGTH_TAKE_EQ] >>

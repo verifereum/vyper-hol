@@ -17,8 +17,10 @@ Theorem log_local_footprint_kept:
     (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
     mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory
 Proof
-  rw[locals_kept_def] >> first_x_assum irule >>
-  qexistsl [`b`, `n`, `sz`] >> simp[]
+  rpt strip_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >> qexistsl [`b`, `n`, `sz`] >> simp[]
 QED
 
 Theorem log_local_value_kept:

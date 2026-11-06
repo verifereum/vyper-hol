@@ -30,7 +30,10 @@ Theorem locals_kept_dynarray_free_value:
   mem_bytes_at off (val_footprint tv v) s'.vs_memory =
     mem_bytes_at off (val_footprint tv v) s.vs_memory
 Proof
-  strip_tac >> gvs[locals_kept_def] >> first_x_assum irule >>
+  strip_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >>
   qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> rpt strip_tac >>
   drule_all local_val_at_dynarray_apart >> simp[]
 QED

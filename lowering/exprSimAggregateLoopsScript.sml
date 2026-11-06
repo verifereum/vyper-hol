@@ -1052,7 +1052,7 @@ Proof
        aggregate_alloca_slice_excludes_local)) >> simp[]) >>
   conj_tac >- (irule array_header_store_state_rel >> metis_tac[]) >>
   conj_tac
-  >- (simp[locals_kept_def] >> rpt strip_tac >>
+  >- (irule locals_kept_regions >> rpt strip_tac >>
       irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
       first_x_assum drule >> strip_tac >> decide_tac) >>
   conj_tac >- simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
