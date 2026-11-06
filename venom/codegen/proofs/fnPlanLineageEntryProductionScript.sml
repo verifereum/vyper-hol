@@ -378,3 +378,26 @@ Proof
   irule_at Any fnPlanLineageInventoryTheory.release_dead_spills_resource_nonincrease >>
   gvs[entry_boundary_resources_def]
 QED
+
+(* Capacity audit: the out-of-range bulk-swap branch grows a short stack.
+   This is reduced-branch evidence, not a counterexample to a ready run. *)
+Theorem short_bulk_swap_capacity_probe:
+  !ps. LENGTH (SND (do_swap 17 (ps with ps_stack := [Var "x"]))).ps_stack = 18
+Proof
+  gen_tac >> simp[stackPlanOpsTheory.do_swap_def] >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem short_reorder_capacity_probe:
+  !dfg ps.
+    SND (reorder_one dfg (REPLICATE 18 (Var "x")) 0 (Var "x")
+      (ps with ps_stack := [Var "x"])) =
+    SND (do_swap 17 (ps with ps_stack := [Var "x"]))
+Proof
+  simp[stackPlanOpsTheory.reorder_one_def,
+       stackModelTheory.stack_get_unfixed_depth_def,
+       stackModelTheory.stack_get_depth_def, stackModelTheory.stack_peek_def,
+       stackModelTheory.stack_find_def] >>
+  simp[Q.SPEC `0` stackPlanOpsTheory.do_swap_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[]
+QED
