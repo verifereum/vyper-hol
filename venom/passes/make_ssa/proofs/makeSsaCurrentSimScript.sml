@@ -32,6 +32,7 @@ Ancestors
   makeSsaCurrentSuccessorRelation makeSsaCurrentPrefixTransport
   venomExecSemantics passSimulationDefs simplifyCfgBypassRootedEntry
   makeSsaCurrentCopyPrefixRuntime makeSsaCurrentEntryPrefix list rich_list
+  makeSsaCurrentReverseRuntime makeSsaCurrentExecRuntime
 
 (* Terminating runs of the input and the output correspond. *)
 Theorem make_ssa_current_fn_fn_bisim:
@@ -368,3 +369,159 @@ Proof
   simp[IgnAsm `fn' = _`, current_prefix_steps_def] >>
   conj_tac >- first_assum ACCEPT_TAC >> metis_tac[]
 QED
+
+Theorem current_exec_block_reverse[local]:
+  !n st' st p inst inst' sg bb bb'.
+  n = LENGTH bb'.bb_instructions - st'.vs_inst_idx /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks) /\
+  lockstep_sim L C C fn fn' pos R /\ R p (inst,st) sg (inst',st') /\
+  lookup_block st.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block st'.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  terminates (exec_block fuel C bb' st') ==>
+  case exec_block fuel C bb' st' of
+    OK t' => ?t. exec_block fuel C bb st = OK t /\
+      execution_frame t' = execution_frame t /\
+      t'.vs_current_bb = t.vs_current_bb /\ t'.vs_prev_bb = t.vs_prev_bb /\
+      (!t1' j'. ~t'.vs_halted /\ enters_block fn' t' t1' /\
+        active_inst fn' j' t1' ==>
+        ?p j t1 sg1. enters_block fn t t1 /\ R p (j,t1) sg1 (j',t1'))
+  | r => frame_result_rel (exec_block fuel C bb st) r
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  drule_all lockstep_rel >> strip_tac >>
+  `get_instruction bb st.vs_inst_idx = SOME inst /\
+   get_instruction bb' st'.vs_inst_idx = SOME inst'` by
+    (imp_res_tac active_inst_at_lookup >> fs[get_instruction_def]) >>
+  qpat_x_assum `terminates _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `step_inst fuel C inst' st'` >> simp[terminates_def]
+  >- suspend "ok"
+  >- suspend "halt"
+  >- suspend "abort"
+  >> suspend "intret"
+QED
+
+Resume current_exec_block_reverse[halt]:
+  simp[Once exec_block_def] >>
+  `p` by metis_tac[step_inst_copy_not_intret] >> gvs[] >>
+  Cases_on `inst'.inst_opcode = INVOKE`
+  >- (`inst.inst_opcode = INVOKE` by fs[inst_pair_def] >>
+      drule_all current_invoke_pair_halt_reverse >> strip_tac >>
+      simp[Once exec_block_def, frame_result_rel_def]) >>
+  drule_all lockstep_halt >> strip_tac >>
+  simp[Once exec_block_def, frame_result_rel_def] >>
+  fs[stateFrameTheory.execution_frame_def, venomStateTheory.venom_state_component_equality]
+QED
+
+Resume current_exec_block_reverse[abort]:
+  simp[Once exec_block_def] >>
+  `p` by metis_tac[current_step_copy_not_abort] >> gvs[] >>
+  Cases_on `inst'.inst_opcode = INVOKE`
+  >- (`inst.inst_opcode = INVOKE` by fs[inst_pair_def] >>
+      drule_all current_invoke_pair_abort_reverse >> strip_tac >>
+      simp[Once exec_block_def, frame_result_rel_def]) >>
+  `inst.inst_opcode <> INVOKE` by (fs[inst_pair_def] >> metis_tac[]) >>
+  drule_all current_exec_step_noninvoke_abort_pair >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  simp[Once exec_block_def, frame_result_rel_def] >>
+  fs[stateFrameTheory.execution_frame_def, venomStateTheory.venom_state_component_equality]
+QED
+
+Resume current_exec_block_reverse[intret]:
+  simp[Once exec_block_def] >>
+  `p` by metis_tac[step_inst_copy_not_intret] >> gvs[] >>
+  `inst'.inst_opcode <> INVOKE` by metis_tac[step_inst_invoke_not_intret] >>
+  drule_all lockstep_intret >> strip_tac >>
+  simp[Once exec_block_def, frame_result_rel_def] >>
+  fs[stateFrameTheory.execution_frame_def, venomStateTheory.venom_state_component_equality]
+QED
+
+Resume current_exec_block_reverse[ok]:
+  Cases_on `is_terminator inst'.inst_opcode`
+  >- suspend "term_ok"
+  >> strip_tac >> suspend "next_ok"
+QED
+
+Resume current_exec_block_reverse[term_ok]:
+  `p /\ inst'.inst_opcode <> INVOKE` by
+    (Cases_on `p` >> gvs[] >>
+     Cases_on `inst'.inst_opcode` >> fs[is_terminator_def]) >> gvs[] >>
+  drule_all lockstep_step >> strip_tac >>
+  `is_terminator inst.inst_opcode` by (fs[inst_pair_def] >> metis_tac[]) >>
+  pure_once_rewrite_tac[exec_block_def] >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[terminates_def, frame_result_rel_def] >>
+  fs[stateFrameTheory.execution_frame_def, venomStateTheory.venom_state_component_equality] >>
+  simp[Once exec_block_def, frame_result_rel_def] >> metis_tac[]
+QED
+
+Resume current_exec_block_reverse[next_ok]:
+  `terminates (exec_block fuel C bb' (v with vs_inst_idx := SUC st'.vs_inst_idx))` by
+    (gvs[] >> fs[terminates_def]) >>
+  `v.vs_current_bb = st'.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  `?j'. active_inst fn' j' (v with vs_inst_idx := SUC st'.vs_inst_idx)` by
+    (irule current_terminating_suffix_active >> simp[] >> metis_tac[]) >>
+  `LENGTH bb'.bb_instructions - SUC st'.vs_inst_idx < n` by
+    (fs[get_instruction_def, AllCaseEqs()] >> decide_tac) >>
+  Cases_on `p`
+  >- suspend "paired_next"
+  >> suspend "copy_next"
+QED
+
+Resume current_exec_block_reverse[copy_next]:
+  drule_all lockstep_copy >> strip_tac >>
+  qpat_x_assum `!m. _` (qspec_then `LENGTH bb'.bb_instructions - SUC st'.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (drule_at (Pat `R _ _ _ _`)) >>
+  simp[] >>
+  `exec_block fuel C bb' st' =
+   exec_block fuel C bb' (v with vs_inst_idx := SUC st'.vs_inst_idx)` by
+    (CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >> simp[]) >>
+  gvs[]
+QED
+
+Resume current_exec_block_reverse[paired_next]:
+  Cases_on `inst'.inst_opcode = INVOKE`
+  >- suspend "invoke_next"
+  >> drule_all lockstep_step >> strip_tac >>
+  gvs[] >> first_x_assum (qspec_then `j'` mp_tac) >> simp[] >> strip_tac >>
+  suspend "ordinary_next"
+QED
+
+Resume current_exec_block_reverse[ordinary_next]:
+  `~is_terminator inst.inst_opcode` by (fs[inst_pair_def] >> metis_tac[]) >>
+  `t.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  qpat_x_assum `!m. _` (qspec_then `LENGTH bb'.bb_instructions - SUC st'.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then (drule_at (Pat `R _ _ _ _`)) >> simp[] >>
+  `exec_block fuel C bb' st' =
+   exec_block fuel C bb' (v with vs_inst_idx := SUC st'.vs_inst_idx)` by
+    (CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >> simp[]) >>
+  `exec_block fuel C bb st =
+   exec_block fuel C bb (t with vs_inst_idx := SUC st.vs_inst_idx)` by
+    (CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >> simp[]) >>
+  gvs[]
+QED
+
+Resume current_exec_block_reverse[invoke_next]:
+  drule_all current_invoke_pair_resume_reverse >> strip_tac >>
+  suspend "invoke_cont"
+QED
+
+Resume current_exec_block_reverse[invoke_cont]:
+  `~is_terminator inst.inst_opcode` by (fs[inst_pair_def] >> gvs[is_terminator_def]) >>
+  `t.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  qpat_x_assum `!m. _` (qspec_then `LENGTH bb'.bb_instructions - SUC st'.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then (drule_at (Pat `R _ _ _ _`)) >> simp[] >>
+  `exec_block fuel C bb' st' =
+   exec_block fuel C bb' (v with vs_inst_idx := SUC st'.vs_inst_idx)` by
+    (CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >> simp[]) >>
+  `exec_block fuel C bb st =
+   exec_block fuel C bb (t with vs_inst_idx := SUC st.vs_inst_idx)` by
+    (CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >> simp[]) >>
+  gvs[]
+QED
+
+Finalise current_exec_block_reverse
