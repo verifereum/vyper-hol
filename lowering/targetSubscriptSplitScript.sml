@@ -14,7 +14,7 @@
 Theory targetSubscriptSplit
 Ancestors
   targetPlaceLive targetSubscriptMemory targetSubscriptDecode targetSubscriptContinuation
-  targetPlaceSimCasesBase
+  targetPlaceSimCasesBase targetSubscriptOperand
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource
   targetPlaceSimDefs
@@ -997,21 +997,11 @@ Proof
   Cases_on `r` >> simp[expr_exit_def, exit_result_def, AllCaseEqs()]
 QED
 
-Theorem target_subscript_global_source_module[local]:
-  !bt cx es pv ee src id.
-    target_root bt = TopLevelNameTarget (src,id) /\
-    eval_base_place cx bt es = (INL pv,ee) ==>
-    ?ts. get_module_code cx src = SOME ts
+Theorem target_subscript_place_access_root[local]:
+  !bt attrs. FST (place_access bt attrs) = target_root bt
 Proof
-  recInduct base_assignment_target_induct >> rpt conj_tac
-  >- simp[target_root_def]
-  >- (rpt strip_tac >>
-      gvs[target_root_def, Once evaluate_def, lookup_global_def,
-          bind_def, lift_option_type_def, raise_def, AllCaseEqs()] >>
-      Cases_on `get_module_code cx src` >> gvs[raise_def]) >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  simp[target_root_def, Once evaluate_def, bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
+  recInduct base_assignment_target_induct >>
+  simp[place_access_def, target_root_def]
 QED
 
 Theorem target_subscript_source_readiness[local]:
@@ -1044,17 +1034,88 @@ Proof
       drule_all target_subscript_local_index_live >> strip_tac >> gvs[] >>
       drule_all target_subscript_memory_array_ready >> strip_tac >>
       gvs[]) >>
-  drule_all target_subscript_global_source_module >> strip_tac >>
-  `?d. find_var_decl_by_name id ts = SOME d` by
-    (Cases_on `find_var_decl_by_name id ts` >> simp[] >>
-     fs[target_pre_def, immutable_root_def] >> metis_tac[]) >>
-  FAIL_TAC "storage class interface cycle" >>
-  strip_tac >> gvs[] >>
-  rpt strip_tac >> gvs[] >>
-  irule target_subscript_storage_ready >>
-  goal_assum (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `bind _ _ _ = _`)) >>
-  fs[expr_sim_inv_def]
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
+      simp[target_subscript_place_access_root]) >>
+  rpt gen_tac >> disch_tac >> gvs[] >>
+  `EVERY pure_expr (target_indices (SubscriptTarget bt e))` by metis_tac[] >>
+  `storage_layout_safe cx /\ contract_storage_well_formed cx es` by
+    fs[expr_sim_inv_def] >>
+  drule_all target_subscript_storage_ready >> simp[]
+QED
+
+Theorem target_subscript_suffix_var[local]:
+  target_subscript_suffix cenv e rb ix sn = (op,sb) ==>
+  !x. FST op = Var x ==> not_fresh_at sb x
+Proof
+  Cases_on `SND (SND rb)` >>
+  simp[target_subscript_suffix_def, LET_THM, comp_bind_def, comp_return_def]
+  >- (rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+      metis_tac[exprOperandVarTheory.compiler_subscript_ops_var]) >>
+  Cases_on `x` >>
+  simp[target_subscript_suffix_def, LET_THM, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[exprOperandVarTheory.compiler_subscript_ops_var]
+QED
+
+Theorem target_subscript_vtype_well_formed[local]:
+  !tenv base_vt idx_ty result_vt.
+    well_formed_vtype tenv base_vt /\
+    subscript_vtype base_vt idx_ty = SOME result_vt ==>
+    well_formed_vtype tenv result_vt
+Proof
+  Cases_on `base_vt` >>
+  simp[subscript_vtype_def, well_formed_vtype_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `t` >>
+      gvs[subscript_vtype_def, well_formed_vtype_def,
+          well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `evaluate_type tenv t'` >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem target_subscript_target_well_formed[local]:
+  !bt env cx st vt. env_consistent env cx st /\
+    type_place_target env bt = SOME vt ==> well_formed_vtype env.type_defs vt
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >> rpt gen_tac
+  >- (simp[type_place_target_NameTarget] >> rpt strip_tac >> gvs[] >>
+      gvs[env_consistent_def, env_scopes_consistent_def] >>
+      first_x_assum drule >> strip_tac >>
+      qpat_x_assum `!id ty entry. _ ==> evaluate_type _ _ = _`
+        (drule_all_then assume_tac) >>
+      fs[env_context_consistent_def, well_formed_vtype_def,
+         well_formed_type_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[])
+  >- (rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      simp[type_place_target_TopLevelNameTarget] >>
+      rpt strip_tac >> gvs[env_consistent_def, env_context_consistent_def] >>
+      metis_tac[])
+  >- (simp[type_place_target_SubscriptTarget] >> rpt strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      metis_tac[target_subscript_vtype_well_formed]) >>
+  simp[type_place_target_AttributeTarget] >> rpt strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[well_formed_vtype_def, well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+  drule_all attribute_type_runtime_step >> strip_tac >> metis_tac[]
+QED
+
+Theorem target_subscript_pre_result_well_formed[local]:
+  target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
+  well_formed_vtype (get_tenv cx) vt
+Proof
+  strip_tac >>
+  `env_consistent env cx es` by fs[target_pre_def, expr_sim_inv_def] >>
+  drule_all target_subscript_target_well_formed >>
+  fs[env_consistent_def, env_context_consistent_def]
+QED
+
+Theorem target_subscript_marked_nonhalted[local]:
+  gas_marked_exec memory (ctx,func) source (es,s0) marks res mid (OK t) ==>
+  ~t.vs_halted
+Proof
+  simp[gas_marked_exec_def] >> strip_tac >>
+  drule gas_marked_path_exec >> strip_tac >> metis_tac[gas_path_normal]
 QED
 
 Theorem target_subscript_base_continuation:
@@ -1153,10 +1214,32 @@ Proof
     fs[target_pre_def, target_indices_pre_def] >>
   drule_all target_subscript_index_source_diagnostic >> strip_tac >>
   drule_all target_subscript_index_runtime_diagnostic >> strip_tac >>
-  irule target_subscript_typed_summary >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> FAIL_TAC "summary readiness and metadata"
+  drule_at (Pat `eval_base_place _ _ _ = _`) target_subscript_source_readiness >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  `local_ptrs_reserved cenv sn` by
+    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
+  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom) >> simp[]) >>
+  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    target_subscript_typed_summary >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then irule >> simp[] >>
+  `?env'. expr_sim_inv cenv cx env' ee` by (qexists `env` >> fs[]) >>
+  `!x. ix = Var x ==> not_fresh_at sn x` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  `!x. FST op = Var x ==> not_fresh_at sb x` by
+    (drule target_subscript_suffix_var >> simp[]) >>
+  `~u.vs_halted` by (drule target_subscript_marked_nonhalted >> simp[]) >>
+  `well_formed_vtype (get_tenv cx) vt` by
+    (`well_formed_vtype (get_tenv cx) bvt` by
+       metis_tac[target_subscript_pre_result_well_formed] >>
+     metis_tac[target_subscript_vtype_well_formed]) >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  irule target_subscript_lower_value_not_label >>
+  goal_assum (drule_at (Pat `lower_value`)) >>
+  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
 (* An element of an array or a mapping, when no index can shrink an array
@@ -1229,7 +1312,11 @@ Proof
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
-  FAIL_TAC "base continuation"
+  gvs[BETA_THM] >>
+  irule target_subscript_base_continuation >> simp[] >>
+  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 (* RESIDUAL (effectful storage indices): an index that calls or pops can
