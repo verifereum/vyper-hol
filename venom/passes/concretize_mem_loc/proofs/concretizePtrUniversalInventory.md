@@ -169,11 +169,11 @@ unless the cited conditional boundary's premises are derived from I.
 | N14 | SHA3, LOG | next on OK; D -> payload/hash/log/taint; LOG physical operand order/topics/static guard |
 | N15 | CALL, STATICCALL | next on OK; .52 content requires WHOLE request read equality and exact shared fields; derive those (untainted byte equality alone insufficient absent taint_ok); MIN output footprint |
 | N16 | DELEGATECALL, CREATE, CREATE2 | next on OK; request/read/outcomes/accounts/rollback/return values and actual effects residual; cannot rename CALL lemma |
-| N17 | ALLOCA | source next versus target ASSIGN; fresh/cached prefix boundaries exist; production position/birth/taint/support integration |
+| N17 | ALLOCA | immediate full certificate checked (E0441); normalized schema-restricted coverage checked by `ptr_paired_structural_prefix_normalize` in concretizePtrStructuralDispatch, retaining all explicit schema bridge premises |
 | N18 | ASSERT, ASSERT_UNREACHABLE | next when condition true; derive scalar untainted condition equality; false condition aborts |
 | J | JMP, JNZ, DJMP | block; successor/control/evaluation and PHI entry residual |
 | C | INVOKE | call only; next explicitly excludes, not a terminator, IntRet converted to OK |
-| R | RET | `ptr_paired_ret_prefix_immediate` (concretizePtrReturnPrefix) now constructs the complete immediate paired prefix from the exact successor_births antecedent: historical caller parameters transported through retained births, both stacks/saved/calls popped, ledger unchanged. Deleted-NOP normalization and universal dispatch remain open; root IntRet has no successor |
+| R | RET | `ptr_paired_ret_prefix_immediate` (concretizePtrReturnPrefix) now constructs the complete immediate paired prefix from the exact successor_births antecedent: historical caller parameters transported through retained births, both stacks/saved/calls popped, ledger unchanged. Deleted-NOP normalization is checked by `ptr_paired_structural_prefix_normalize` under the explicit universal-schema bridges; exhaustive universal dispatch remains open. Root IntRet has no successor |
 | X1 | MEMTOP, GETFMP, SETFMP, FMP_PARAM | raw next exists, source fn_ptr_ok excludes; transfer exclusion by actual stage preimage |
 | X2 | DALLOCA | raw next exists, frozen no-DALLOCA excludes; transfer to output |
 | X3 | DRET, RETFMP | raw ret exists, source fn_ptr_ok EXCLUDES; target preimage exclusion required |
@@ -1350,21 +1350,27 @@ explicitly qualified as contract suppliers.
 | N14 SHA3/LOG | Owned/fixed read recovery plus conditional value/log ingredients | Need actual untainted payload and topics/static guard, exact effects and certificate assembly. No full producer. |
 | N15 CALL/STATICCALL | ExternalCallContent conditional content, exact footprint clipping, post-returndata and core boundaries | Need whole request agreement derived from discipline/read recovery and actual outcomes/shared poststate. No full producer; clipped actual footprint is already available, not a new exclusion gap. |
 | N16 DELEGATECALL/CREATE/CREATE2 | Existing request/footprint ingredients | No full producer. Distinct request/outcome/rollback semantics; cannot infer from CALL. |
-| N17 ALLOCA -> ASSIGN | AllocationTransport: `ptr_alloca_transport`; OwnedAllocationPrefix: `ptr_owned_alloca_prefix_back_next`, `ptr_owned_alloca_prefix_aligned_next` | Fresh/cached ownership and retained birth overlay checked under unrestricted ptr_vars_transport. This premise is NOT implied by mixed variables (opaque return-PC values differ). Selected next boundary below removes this interface gap. No complete six-field ALLOCA extension exists. |
+| N17 ALLOCA -> ASSIGN | MixedAllocationPrefix: `ptr_paired_prefix_alloca_success`, `ptr_paired_prefix_alloca_immediate` (E0441); StructuralDispatch: `ptr_paired_structural_prefix_normalize` | Mixed fresh/cached success, retained births and full immediate six-field certificate checked. Normalized extension checked under exactly the universal-schema antecedent plus the ALLOCA/RET disjunction. Static production bridges remain explicit; not universal coverage. |
 | N18 ASSERT/ASSERT_UNREACHABLE | Scalar/untainted restrictions from discipline are the intended suppliers | No full-prefix producer. Target continuing branch must force matching successful source condition. |
 | J/JMP | PairedJump: `ptr_paired_jump_prefix_normalize` | Full normalized six-field extension checked. Static wf/retpc/coverage, actual target block-event premises and non-DALLOCA must be supplied/inverted. No assumed source success. |
 | J/JNZ | PairedJump: `ptr_paired_jnz_prefix_normalize`; PairedJumpEntry: `ptr_owned_jnz_scalar` | Full normalized extension with explicit cond/yes/no syntax and scalar/nonopaque/empty-taint restrictions. Restriction supplier derives them from ownership+discipline+fn_ptr_ok+inst_wf+no-DALLOCA+opaque_use_ok; these must actually be matched in dispatch. Not unconditional coverage by itself. |
 | J/DJMP | PHI-entry/cursor transport available | No full normalized producer; successor selection and scalar label-index restriction remain. |
 | C/INVOKE | PairedCallSchema: `ptr_paired_invoke_prefix_normalize`, with InvokeArgs/CallEntry | Full immediate and normalized prefix checked; target decode/eval/lookup/setup/entry/event inversion and static context code bridge explicit. New token LENGTH h, registry and entries insertion, empty callee TG, saved (PT,TG) and call indices pushed, ws retained. Root/call entry uses no body execution. |
-| R/RET | OpaqueRetpc: `ptr_mixed_return_bind`, `ptr_retpc_invoke_outputs`; ValueSelection return bind; PairedFields saved caller relation | Conditional bind/merge transport, NOT complete source return or restored six-field prefix. Equal iret_values and no-adopt-FMP are premises of bind lemma; source success, scalar return values, saved caller restoration, token/PT/TG pop and ledger preservation still must be proved together. |
+| R/RET | ReturnPrefix: `ptr_paired_ret_prefix_immediate` (E0456); StructuralDispatch: `ptr_paired_structural_prefix_normalize` | Actual source return, equal ordinary return values, historical saved-caller restoration, synchronized token/PT/TG/saved/calls pop and complete immediate certificate checked. Normalization derives resumed caller fn_inst_wf from actual successor history and context membership, without a new premise. All universal-schema static bridges remain explicit; root RET has no chronological successor. |
 | X1 forbidden FMP family; X2 DALLOCA; X3 DRET/RETFMP | OperationalOpcodes: `ptr_stage_no_dret`, `ptr_stage_observation_no_dret`; contract positions preimages/no-ALLOCA/var-opcode facts | Syntax/discipline exclusions, not producers. Distinguish forbidden family from allowed N6; no-DALLOCA is separate task premise. Need dispatch contradiction at actual target preimage. |
 | X4 PHI | Atomic production entry/PHI transport in MixedPhi and PairedEntry | No successful ordinary PHI next step. Already accounted for at B/J/C; not a residual opcode requiring ordinary simulation. |
 | X5 NOP | Contract concretize_positions_nop; executed coverage/gap interfaces | Output NOP excluded via actual production preimage/coverage. Source-only deleted gaps handled by G. |
 | T RETURN/REVERT/STOP/SINK/SELFDESTRUCT/INVALID | No continuing chronological step for halt/abort/error; successful terminal access uses eventual endpoint static bound | Not an extension branch. A reachable active terminal observation still needs memory access bound/revert-forward exemption; cannot delete it from final stage proof. |
 
-### Structural priorities: ALLOCA and RET
+### Historical structural priorities: ALLOCA and RET
 
-First precise unsupported implication selected:
+The following selection and supplier ledger record the pre-E0441/E0456 audit.
+Their missing immediate certificates and normalization are now discharged by
+MixedAllocationPrefix, ReturnPrefix and StructuralDispatch as summarized in the
+current table above and the closing checkpoint below. They are retained as
+historical interface analysis, not current open obligations.
+
+First precise unsupported implication selected (historically):
 `mixed_allocation_success_schema` in UniversalStepSchema. It retains the frozen
 stage assumptions plus the current actual prefix and normalized production
 instruction correspondence, source ALLOCA opcode, source fn_inst_wf and
@@ -1619,3 +1625,32 @@ fields unchanged, and obtains a non-NOP matched endpoint. Combining list
 appends gives delta=[b]++gap and the analogous snapshot list, so delta is
 nonempty. This is a signature match, NOT a new proved allocation-normalization
 theorem. No extra allocation helper or universal claim was added in this audit.
+
+
+## Checked normalized structural dispatch (C1.5.90.67.structuralDispatch)
+
+`concretizePtrStructuralDispatch.ptr_paired_structural_prefix_normalize` is
+Finalised and build-checked. It has exactly the antecedent of
+`universal_normalized_step_schema`, augmented only by source opcode
+ALLOCA or RET, and exactly its existential conclusion: nonempty source delta,
+equal snapshot length, full appended paired prefix, non-NOP source endpoint
+and actual positions-rewrite endpoint equation. It consumes the accepted
+immediate certificates (ALLOCA E0441, RET E0456), then normalizes once. Resumed
+caller well-formedness follows from actual successor history/context membership
+and the existing global EVERY premise, not a new assumption.
+
+This supersedes the open-status claims in both historical structural audits
+above, including their quotation-only immediate certificates, equal-FRONT and
+saved-caller transport gaps, and normalization-signature-only conclusion.
+Old snapshots are retained unchanged; no memory equality, unrestricted variable
+transport, source-success premise or new positions-rewrite fact is introduced.
+
+The context-wide paired-code/name and source/target wf/shape/coverage bridges
+listed in the common consumer section remain explicit hypotheses. Deriving them
+from the frozen stage antecedent is still integration work. Exhaustive dispatch
+is NOT proved: the table's N1--N6, ILOAD, MSTORE8/ISTORE, N9--N16, N18 and DJMP
+still lack full producers; scalar JNZ restrictions and syntax exclusions must
+still be matched at dispatch, and final terminal access bounds remain separate.
+MLOAD/MSTORE immediate producers still require common normalization at their
+consumer. No claim of universal target-prefix construction or of the frozen
+static-memory theorem follows from restricted ALLOCA/RET coverage.
