@@ -76,8 +76,12 @@ raw-context evaluator-cost measurements, is:
 holbuild --max-heap 16384 -j1 --tactic-timeout 600 evalCompilerBytecodeParityTheory
 ```
 
-All 101 retained fixtures have an exact checked theorem proved by plain
-`EVAL_TAC`; together they check 202 byte lists (deployment and runtime).
+Of the 101 retained fixtures, 98 have an exact checked theorem proved by plain
+`EVAL_TAC`; together they check 196 byte lists (deployment and runtime).
+`abi_static`, `abi_dynamic` and `interface_calls` decode ABI data with the
+bounded decoder (vyperlang/vyper#5333), which deliberately differs from the
+pinned compiler; each is checked to be supported, to compile, and to differ
+from the pinned bytes.
 Expensive fixtures use kernel-derived staged compiler evaluation certificates.
 These rederive the exact `lowering_context_ok` check, including
 `unit_alloca_budget ctx < dimword (:256)`, and never register an oracle equality
