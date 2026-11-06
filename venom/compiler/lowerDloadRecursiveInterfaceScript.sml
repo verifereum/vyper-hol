@@ -622,6 +622,37 @@ val ld_recursive_saved =
     then result else raise Fail "saved clause extraction mismatch"
   end;
 
+(* Synchronized saved-stack extension; the inventory remains the quote above. *)
+val ld_recursive_saved_push =
+  let
+    fun extend (name,head) =
+      let val v = hd (filter (fn v => fst(dest_var v) = name)
+                            (free_vars ld_recursive_saved))
+          val ty = listSyntax.dest_list_type (type_of v)
+      in v |-> listSyntax.mk_cons(mk_var(head,ty),v) end
+  in subst (map extend [("astk","sf"),("gstk","tf"),
+        ("supports","V"),("savedkeys","keys"),("suspended","A")])
+       ld_recursive_saved end;
+
+Theorem ld_recursive_saved_cons[local]:
+  (!q. q < LENGTH gstk ==> (^ld_recursive_saved) E q) /\
+  (^ld_recursive_saved_push) E 0 ==>
+  !q. q < LENGTH (tf::gstk) ==> (^ld_recursive_saved_push) E q
+Proof
+  BETA_TAC >>
+  pure_rewrite_tac [EL, HD, TL, DROP_def, LENGTH, numTheory.NOT_SUC, prim_recTheory.PRE, COND_CLAUSES] >>
+  disch_tac >> Cases
+  >- (pure_rewrite_tac [EL, HD, TL, DROP_def, LENGTH, numTheory.NOT_SUC, prim_recTheory.PRE, COND_CLAUSES] >>
+      disch_tac >> qpat_x_assum `_ /\ _` (ACCEPT_TAC o CONJUNCT2)) >>
+  pure_rewrite_tac [EL, HD, TL, DROP_def, LENGTH, numTheory.NOT_SUC, prim_recTheory.PRE, COND_CLAUSES] >>
+  strip_tac >>
+  qpat_x_assum `_ /\ _` (mp_tac o CONJUNCT1) >>
+  disch_then (qspec_then `n` mp_tac) >>
+  (impl_tac >- fs[]) >>
+  pure_rewrite_tac [arithmeticTheory.ADD1, arithmeticTheory.ADD_SUB] >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem ld_recursive_saved_support[local]:
   q < LENGTH astk /\
   (!owner bs sz. ld_selected (EL q astk).lf_local (EL q astk).lf_params
@@ -2963,3 +2994,210 @@ Proof
   qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
   asm_rewrite_tac []
 QED
+
+Theorem ld_recursive_geometry_call_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_geometry_call_goal
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all ld_recursive_call_anchor >>
+  qpat_x_assum `(^ld_recursive_geometry_candidate) _ _ _ _ _ _ _` kall_tac >>
+  CONV_TAC (LAND_CONV (DEPTH_CONV BETA_CONV)) >> strip_tac >>
+  qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved_tail") >>
+  CONV_TAC (REWR_CONV (GSYM (Q.SPEC `ARB` markerTheory.label_def))) >>
+  gvs[] >>
+  `lookup_function nm CT.ctx_functions = SOME callee` by
+    (qpat_assum `CT.ctx_functions = _` SUBST1_TAC >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >> first_assum ACCEPT_TAC) >>
+  drule_all lower_dload_stage_lookup_indexed >> strip_tac >>
+  rename1 `lookup_function nm CS.ctx_functions = SOME child` >>
+  rename1 `fn_pass_step rpolicy (CFP_Simple VP_LowerDload) obs supply child output` >>
+  `?raw. lower_dload_function_supply supply child = (callee,raw)` by
+    (qpat_assum `output.fpo_function = callee` mp_tac >>
+     qpat_assum `fn_pass_step _ _ obs _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.fn_pass_step_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `MEM i (fn_insts fn)` by
+    (qpat_assum `active_inst fn i s''` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `opaque_use_ok fn` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = cpre ++ [fn] ++ cpost` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+  `?floor. ptr_discipline floor CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+  `taint_ok fn tn' i s''` by
+    (drule_all lowerDloadReachableDisciplineTheory.ld_annotated_taint_ok >> simp[]) >>
+  drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    lowerDloadCallNormalEntryTheory.ld_call_normal_entry_backward >>
+  simp[] >>
+  disch_then (qspec_then `out.fpo_function` assume_tac) >>
+  first_x_assum (drule_at (Pat `lower_dload_function_supply _ _ = _`)) >>
+  disch_then (drule_at (Pat `taint_ok _ _ _ _`)) >>
+  simp[] >>
+  disch_then (qspecl_then [`s1`,
+    `set (MAP (\a. a.inst_id) (FILTER (\a. a.inst_opcode = ALLOCA) (fn_insts callee))) DIFF
+     set (MAP (\a. a.inst_id) (fn_insts child))`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `first_block_no_phi child /\
+   ALL_DISTINCT (MAP (\bb. bb.bb_label) child.fn_blocks)` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `lookup_function nm CS.ctx_functions = SOME child` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       lookup_function_def, FIND_thm] >> rpt strip_tac >>
+     fs[o1PassContractTheory.o1_fn_shape_def, venomWfTheory.wf_function_def,
+       fn_labels_def] >> metis_tac[venomExecPropsTheory.FIND_MEM]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks)` by
+    (qpat_assum `lower_dload_function_supply supply child = _`
+       (mp_then Any mp_tac o1ContractLowerDloadTheory.lower_dload_function_supply_labels) >>
+     simp[fn_labels_def]) >>
+  drule_all lowerDloadCallEntryPositionTheory.ld_call_entry_position >> strip_tac >>
+  CONV_TAC (REWR_CONV markerTheory.label_def) >> BETA_TAC >>
+  conj_asm1_tac >-
+    (qpat_assum `s1 = cs` SUBST1_TAC >>
+     irule venomMemPropsTheory.alloca_inv_empty >>
+     qpat_assum `setup_callee callee args s = SOME cs` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `ld_normal_data CS child _ _ _ _ _ _ _ _ _ _ _ _ _ _ (sf::astk) _ _ _ _ _ (tf::gstk) _` >>
+  `ld_annotated_reachable vs0 CS (sf::astk) k FEMPTY
+    (MAP (ld_op_prov AG) ops) FEMPTY (tn' with t_var := FEMPTY) child i' ss1` by
+    (simp[Abbr `sf`] >> irule ld_annotated_reachable_call >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `frame_reach CS fn s0 i s''` by
+    (drule_all lowerDloadOperationalClosureTheory.ld_annotated_prefix_at_origin >> simp[]) >>
+  `ld_stack_origin vs0 CS (MAP ld_erase_frame (sf::astk)) child ss` by
+    (simp[lowerDloadReachabilityTheory.ld_stack_origin_cons, ld_erase_frame_def, Abbr `sf`] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qabbrev_tac `V = set (fn_ir_vars fn)` >>
+  qabbrev_tac `keys = set (MAP (\a. a.inst_id)
+    (FILTER (\a. a.inst_opcode = ALLOCA) (fn_insts out.fpo_function))) DIFF
+    set (MAP (\a. a.inst_id) (fn_insts fn))` >>
+  `(^ld_recursive_saved_push) E 0` by
+    (BETA_TAC >> simp[Abbr `V`, Abbr `keys`, Abbr `sf`, Abbr `tf`] >>
+     conj_tac >-
+       (qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[lowerDloadNormalDataTheory.ld_normal_data_def,
+          lowerDloadCoverageInvariantTheory.ld_frame_data_def,
+          lowerDloadFrameCertificateTheory.ld_saved_embedded_def,
+          lowerDloadPairedBoundaryTheory.ld_owned_vars_def, op_taint_def] >>
+        rpt strip_tac >> asm_rewrite_tac[]) >>
+     conj_tac >-
+       (qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (mp_then Any mp_tac lowerDloadNormalDataTheory.ld_normal_data_frame) >>
+        disch_then (mp_then Any mp_tac lowerDloadCoverageInvariantTheory.ld_frame_data_definedness) >> simp[]) >>
+     conj_tac >-
+       (qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (mp_then Any mp_tac lowerDloadNormalDataTheory.ld_normal_data_masks) >>
+        simp[op_taint_def]) >>
+     conj_tac >-
+       (qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (mp_then Any mp_tac lowerDloadNormalDataTheory.ld_normal_data_masks) >>
+        simp[op_taint_def]) >>
+     qexistsl_tac [`k`,`tn'`,`s0`,`fa`,`fb`,`cpre`,`cpost`,`gpre`,`gpost`,
+       `observed`,`out`,`bpre`,`bpost`,`qpre`,`qpost`,`a0`,`a3`,
+       `pre`,`post`,`p`,`tail`,`a1`,`a1`] >>
+     simp[] >>
+     conj_tac >-
+       (qpat_assum `CS.ctx_functions = cpre ++ [fn] ++ cpost` mp_tac >>
+        qpat_assum `CS.ctx_functions = pre' ++ child::post'` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+     conj_tac >-
+       (qpat_assum `CT.ctx_functions = gpre ++ [out.fpo_function] ++ gpost` mp_tac >>
+        qpat_assum `CT.ctx_functions = before ++ callee::after` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+     qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any strip_assume_tac lowerDloadNormalDataTheory.ld_normal_data_frame) >>
+     drule lowerDloadCoverageInvariantTheory.ld_frame_data_shared >>
+     disch_then (mp_then Any strip_assume_tac lowerDloadSharedStateTheory.ld_shared_state_environment) >>
+     simp[] >>
+     qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any ACCEPT_TAC lowerDloadNormalDataTheory.ld_normal_data_envelope)) >>
+  `!q. q < LENGTH (sf::astk) ==> (^ld_recursive_saved_push) E q` by
+    (BETA_TAC >>
+     CONV_TAC (BINDER_CONV (LAND_CONV (REWRITE_CONV [LENGTH]))) >>
+     qpat_assum `LENGTH astk = LENGTH gstk` (fn th =>
+       CONV_TAC (BINDER_CONV (LAND_CONV (REWRITE_CONV [th])))) >>
+     match_mp_tac (CONV_RULE (RAND_CONV (BINDER_CONV (LAND_CONV (REWRITE_CONV [LENGTH]))))
+       (BETA_RULE ld_recursive_saved_cons)) >> conj_tac >-
+       (asm "saved_tail" mp_tac >>
+        qpat_assum `LENGTH astk = LENGTH gstk` (fn th => pure_rewrite_tac [th]) >>
+        pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+        disch_then ACCEPT_TAC) >>
+       first_assum (ACCEPT_TAC o BETA_RULE)) >>
+  Cases_on `in_revert_forward child ss1`
+  >- suspend "exceptional_child_entry" >>
+  disj1_tac >>
+  qexistsl_tac [`sf::astk`, `tf::gstk`, `k`, `FEMPTY`,
+    `MAP (ld_op_prov AG) ops`, `FEMPTY`, `tn' with t_var := FEMPTY`,
+    `child`, `i'`, `ss1`, `s1`, `tn with t_var := FEMPTY`,
+    `set (fn_ir_vars child)`,
+    `{v | v IN set (fn_ir_vars child) /\ ~retpc_var child v}`,
+    `E`, `FEMPTY`, `MAP (ld_op_prov BH) ops`, `FEMPTY`, `live`,
+    `set (MAP (\a. a.inst_id) (FILTER (\a. a.inst_opcode = ALLOCA) (fn_insts callee))) DIFF
+     set (MAP (\a. a.inst_id) (fn_insts child))`, `{}`, `A::suspended`,
+    `s.vs_alloca_next`, `supply`, `raw`, `bb'`, `gb'`, `supply`, `supply`,
+    `amid`, `aend`, `[]`, `post''`, `[]`, `code`, `tail'`, `[]`, `bpost'`,
+    `[]`, `qpost'`, `V::supports`, `keys::savedkeys`, `ss`, `0`] >>
+  reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+  qpat_assum `!q. q < LENGTH (sf::astk) ==> _` (fn th => pure_rewrite_tac [BETA_RULE th]) >>
+  asm_rewrite_tac [] >>
+  conj_tac >-
+    (qpat_assum `ld_normal_data CS child _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `ss1 = ss` SUBST1_TAC >> qpat_assum `s1 = cs` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  conj_tac >-
+    (qexistsl_tac [`pre'`, `post'`, `before`, `after`, `obs`, `output`] >>
+     asm_rewrite_tac []) >>
+  simp[lower_dload_blocks_supply_def, lower_dload_insts_supply_def,
+    Abbr `sf`, Abbr `tf`]
+QED
+
+Resume ld_recursive_geometry_call_clause[exceptional_child_entry]:
+  `MEM child obs.cu_context.ctx_functions /\ ir_supply_covers_unit supply obs` by
+    (qpat_assum `fn_pass_step _ _ obs supply child output` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.fn_pass_step_def,
+       venomFnScheduleRunnerTheory.lookup_unique_function_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     `MEM child (FILTER (\f. f.fn_name = child.fn_name)
+        obs.cu_context.ctx_functions)` by simp[] >> gvs[MEM_FILTER]) >>
+  `EVERY (\v. MEM v supply.irs_used_vars)
+    (FLAT (MAP inst_ir_vars bb'.bb_instructions))` by
+    (qpat_assum `MEM child obs.cu_context.ctx_functions` mp_tac >>
+     qpat_assum `ir_supply_covers_unit supply obs` mp_tac >>
+     qpat_assum `child.fn_blocks = bb'::bpost'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[venomFnScheduleRunnerTheory.ir_supply_covers_unit_def,
+       venomFnScheduleRunnerTheory.list_subset_def, irSupplyTheory.unit_ir_vars_def,
+       irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
+       EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     fs[lambdify irSupplyTheory.block_ir_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[MEM]) >>
+  `lower_dload_insts_supply supply (TAKE ss1.vs_inst_idx bb'.bb_instructions) = ([],supply)` by
+    simp[lower_dload_insts_supply_def] >>
+  `get_instruction gb' s1.vs_inst_idx = SOME inst` by
+    (qpat_assum `gb'.bb_instructions = code ++ tail'` mp_tac >>
+     qpat_assum `inst = HD code` mp_tac >>
+     qpat_assum `code <> []` mp_tac >>
+     qpat_assum `s1.vs_inst_idx = 0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `code` >>
+     simp[venomInstTheory.get_instruction_def]) >>
+  `s1.vs_inst_idx = LENGTH ([]:instruction list)` by simp[] >>
+  drule_all ld_configured_revert_interval_entry >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`gb'`, `copypos`, `endpos`] >> asm_rewrite_tac []
+QED
+
+Finalise ld_recursive_geometry_call_clause
