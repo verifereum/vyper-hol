@@ -3,6 +3,7 @@ Theory exprSimAbiDecodeComplexOutcome
 Ancestors
   exprSimAbiDecodeAbortReentry exprSimAbiDecodeCompositePrefix
   exprSimAbiDecodeTupleTraversal exprSimAbiDecodeOwnedMember
+  exprSimAbiDecodeTupleAssembly exprSimAbiDecodeTupleOutcome abiValidMembers
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderReentry abiDecoderVarExtend
   abiDecoderSequenceReach abiDecoderFiniteControl
   exprSimAbiDecodeMemberExecute abiDecoderDynamicLoopSetup instIdxIndep
@@ -10,6 +11,7 @@ Ancestors
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   venomState venomInst words list rich_list arithmetic
   abiDecoderCoherence abiDecodeRanges valueEncodingProps vyperTypeSystem vyperValue
+  vyperABI vyperTypeABI abiDecoderMembers
 
 Theorem abi_decode_complex_guard_abort_opcodes[local]:
   abi_decode_complex_head_guard src hi k st = ((),st') ==>
@@ -193,3 +195,57 @@ QED
    assignable_type_slot_size_pos and coherence give positive member heads.
    Thus short-head rejection should use a positive constructor head, rather
    than impose an unconditional child-position invariant. *)
+
+Theorem abi_decode_schema_heads_positive:
+  abi_tuple_rows_schema ce env rows /\ rows <> [] ==>
+  0 < SUM (MAP abi_tuple_row_abi_width rows)
+Proof
+  strip_tac >> irule abi_decode_nonempty_positive_head_sum >> simp[] >>
+  qpat_x_assum `abi_tuple_rows_schema _ _ _` mp_tac >>
+  simp[abi_tuple_rows_schema_def, EVERY_MEM, pairTheory.FORALL_PROD,
+    abi_tuple_row_abi_width_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all abi_decode_assignable_embedded_head_positive >>
+  drule abi_decoder_coherent_header >>
+  simp[abi_decoder_header_def]
+QED
+
+Theorem abi_decode_schema_head_widths:
+  !rows. abi_tuple_rows_schema ce env rows ==>
+  MAP abi_tuple_row_abi_width rows =
+  MAP (abi_member_head_size o vyper_to_abi_type env)
+    (MAP (\(ei,ty,tv,asz,msz). ty) rows)
+Proof
+  Induct >- simp[] >> gen_tac >> PairCases_on `h` >>
+  simp[abi_tuple_rows_schema_def, abi_tuple_row_abi_width_def] >>
+  metis_tac[abi_tuple_rows_schema_def]
+QED
+
+Theorem abi_decode_tuple_source_head_bound:
+  abi_tuple_rows_schema ce env rows /\
+  tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  abi_decode_source_accepts env (TupleT tys) view v ==>
+  SUM (MAP abi_tuple_row_abi_width rows) <= LENGTH view
+Proof
+  strip_tac >> drule abi_decode_schema_head_widths >> strip_tac >>
+  qpat_x_assum `abi_decode_source_accepts _ _ _ _` mp_tac >>
+  simp_tac bool_ss [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    Once vyper_decode_valid_enc_def] >> strip_tac >>
+  drule abi_valid_members_view >>
+  gvs[vyper_to_abi_types_MAP, MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem abi_decode_struct_source_head_bound:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\
+  MAP SND args = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  abi_decode_source_accepts env (StructT nsid) view v ==>
+  SUM (MAP abi_tuple_row_abi_width rows) <= LENGTH view
+Proof
+  strip_tac >> drule abi_decode_schema_head_widths >> strip_tac >>
+  qpat_x_assum `abi_decode_source_accepts _ _ _ _` mp_tac >>
+  asm_simp_tac (srw_ss()) [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    Once vyper_decode_valid_enc_def] >> strip_tac >>
+  drule abi_valid_members_view >>
+  gvs[vyper_to_abi_types_MAP, MAP_MAP_o, combinTheory.o_DEF]
+QED
