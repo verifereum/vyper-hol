@@ -1083,3 +1083,32 @@ Proof
   Cases_on `inst.inst_outputs = []` >> simp[] >>
   rpt strip_tac >> gvs[release_dead_spills_domain, MEM_MAP]
 QED
+
+Theorem regular_post_emit_tail_resource_nonincrease:
+  !outputs nl halting dfg inst term ps ps8 ps9 qs.
+    ps8 = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1) then
+      SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps) else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v nl) outputs <> [] then
+      SND (optimistic_swap_plan dfg inst nl term ps8) else ps8) /\
+    qs = release_dead_spills nl ps9 ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack + (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  `LIST_ELEM_COUNT x ps8.ps_stack + (if x IN FDOM ps8.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)` by
+    (namedCases_on `popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps` ["pops p"] >>
+     drule popmany_plan_resource_nonincrease >>
+     Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)` >> gvs[]) >>
+  `LIST_ELEM_COUNT x ps9.ps_stack + (if x IN FDOM ps9.ps_spilled then 1 else 0) =
+    LIST_ELEM_COUNT x ps8.ps_stack + (if x IN FDOM ps8.ps_spilled then 1 else 0)` by
+    (namedCases_on `optimistic_swap_plan dfg inst nl term ps8` ["sops p"] >>
+     drule optimistic_swap_plan_resource_count >>
+     Cases_on `outputs <> [] /\ FILTER (\v. MEM v nl) outputs <> []` >> gvs[]) >>
+  qpat_x_assum `qs = _` SUBST1_TAC >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists_tac `LIST_ELEM_COUNT x ps9.ps_stack + (if x IN FDOM ps9.ps_spilled then 1 else 0)` >>
+  conj_tac >- irule release_dead_spills_resource_nonincrease >>
+  qpat_x_assum `ps8 = _` kall_tac >>
+  qpat_x_assum `ps9 = _` kall_tac >> asm_rewrite_tac []
+QED
