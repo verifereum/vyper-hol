@@ -35,7 +35,7 @@ Proof
     calldata_member_wit_def, calldata_member_transfers_def]
 QED
 
-Theorem calldata_bulk_child_contract[local]:
+Theorem calldata_bulk_child_contract:
   unit_alloca_budget ctx < dimword (:256) /\
   abi_decoder_header ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
@@ -62,7 +62,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem calldata_base_child_contract[local]:
+Theorem calldata_base_child_contract:
   calldata_member_child_contract ce env sf ctx fn site limit_st (BaseT bt) (BaseTV bt)
 Proof
   Cases_on `bt`
@@ -75,7 +75,7 @@ Proof
   irule calldata_word_child_contract >> simp[Once type_to_abi_dec_info_def]
 QED
 
-Theorem calldata_flag_child_contract[local]:
+Theorem calldata_flag_child_contract:
   calldata_member_child_contract ce env sf ctx fn site limit_st (FlagT nsid) (FlagTV n)
 Proof
   irule calldata_word_child_contract >> simp[Once type_to_abi_dec_info_def]
@@ -110,7 +110,7 @@ Proof
   gvs[val_wf_def, val_in_memory_def]
 QED
 
-Theorem calldata_tuple_child_contract[local]:
+Theorem calldata_tuple_child_contract:
   LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
   (!i. i < LENGTH tys ==> calldata_member_child_contract ce env sf ctx fn site limit_st
     (EL i tys) (EL i tvs)) ==>
@@ -151,7 +151,7 @@ Proof
   asm_simp_tac bool_ss [type_memory_size_def]
 QED
 
-Theorem calldata_struct_child_contract[local]:
+Theorem calldata_struct_child_contract:
   FLOOKUP env nsid = SOME (StructArgs args) /\
   LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
     (MAP SND args) tvs /\
@@ -213,7 +213,7 @@ Resume calldata_struct_child_contract[value]:
 QED
 Finalise calldata_struct_child_contract
 
-Theorem calldata_fixed_child_contract[local]:
+Theorem calldata_fixed_child_contract:
   abi_decoder_coherent ce env sf ty tv /\
   calldata_member_child_contract ce env sf ctx fn site limit_st ty tv ==>
   calldata_member_child_contract ce env sf ctx fn site limit_st
