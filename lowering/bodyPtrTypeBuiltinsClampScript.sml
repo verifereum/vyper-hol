@@ -80,30 +80,40 @@ Proof
   strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem signed_clamp_runtime_frame:
+Theorem scalar_double_check_runtime_frame:
+  MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   run_inst_seq
-    [mk_inst id SLT [x; Lit lo] [a];
+    [mk_inst id opc1 [x; Lit lo] [a];
      mk_inst (id+1) ISZERO [Var a] [b];
-     mk_inst (id+2) SGT [x; Lit hi] [c];
+     mk_inst (id+2) opc2 [x; Lit hi] [c];
      mk_inst (id+3) ISZERO [Var c] [d];
      mk_inst (id+4) AND [Var b; Var d] [e];
      mk_inst (id+5) ASSERT [Var e] []] s = OK t ==>
   (t with vs_vars := s.vs_vars) = s /\
   (!p. ~MEM p [a;b;c;d;e] ==> lookup_var p t = lookup_var p s)
 Proof
-  strip_tac >> gvs[run_inst_seq_def, AllCaseEqs()] >>
-  qpat_x_assum `step_inst_base (mk_inst id SLT _ _) _ = _`
-    (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >> strip_tac >> gvs[] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `step_inst_base (mk_inst id opc1 _ _) _ = _`
+    (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >>
+  disch_then (qx_choose_then `w1` SUBST_ALL_TAC) >>
+  qpat_x_assum `step_inst_base (mk_inst _ opc2 _ _) _ = _`
+    (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >>
+  disch_then (qx_choose_then `w2` SUBST_ALL_TAC) >>
+  qpat_x_assum `MEM opc1 _` kall_tac >> qpat_x_assum `MEM opc2 _` kall_tac >>
   qpat_x_assum `step_inst_base (mk_inst _ ISZERO _ _) _ = _`
     (mp_then Any strip_assume_tac iszero_run_shape) >> gvs[] >>
-  qpat_x_assum `step_inst_base (mk_inst _ SGT _ _) _ = _`
-    (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base (mk_inst _ ISZERO _ _) _ = _`
     (mp_then Any strip_assume_tac iszero_run_shape) >> gvs[] >>
   qpat_x_assum `step_inst_base (mk_inst _ AND _ _) _ = _`
     (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, mk_inst_def, AllCaseEqs()] >>
+  CONV_TAC (LAND_CONV (LAND_CONV (REWRITE_CONV
+    [step_inst_base_def, mk_inst_def, instruction_accessors,
+     instruction_accfupds, combinTheory.K_THM, opcode_case_def]))) >>
+  simp[AllCaseEqs()] >>
   strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> simp[]
 QED
@@ -116,7 +126,8 @@ Theorem int_clamp_runtime_frame:
 Proof
   strip_tac >> Cases_on `signed`
   >- (drule int_clamp_signed_code >> strip_tac >> gvs[] >>
-      drule signed_clamp_runtime_frame >> strip_tac >> simp[] >> metis_tac[]) >>
+      drule (SIMP_RULE (srw_ss()) [] (Q.INST
+        [`opc1` |-> `SLT`, `opc2` |-> `SGT`] (SPEC_ALL scalar_double_check_runtime_frame))) >> strip_tac >> simp[] >> metis_tac[]) >>
   drule int_clamp_unsigned_code >> strip_tac >> gvs[] >>
   drule unsigned_clamp_runtime_frame >> strip_tac >> simp[] >> metis_tac[]
 QED
