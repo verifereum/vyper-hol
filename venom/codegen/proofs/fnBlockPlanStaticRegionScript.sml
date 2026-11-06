@@ -3700,3 +3700,119 @@ Proof
      metis_tac[regional_optimistic_marked_wf, SND]) >>
   strip_tac >> gvs[] >> irule regional_release_marked_wf >> simp[]
 QED
+
+Theorem regional_dead_outputs_marked_owned[local]:
+  !outputs nl ps v.
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\ MEM v nl /\
+  (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+  MEM (Var v) (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps)).ps_stack \/
+  Var v IN FDOM (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps)).ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM (Var v) ps.ps_stack`
+  >- (disj1_tac >> irule regional_popmany_marked_survives >>
+      simp[dead_stack_marker_def, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  gvs[rf_popmany_spilled]
+QED
+
+Theorem regional_regular_marked_live_coverage:
+  !inst sb ps lv dfg cfg fn nl halting next_term lbl ops qs v.
+  inst.inst_opcode <> JMP /\ generated_plan_state_wf_marked sb ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = (ops,qs) /\
+  MEM v nl /\
+  (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/ MEM v inst.inst_outputs)
+  ==> MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,mid)` >>
+  rename1 `_ = (rops,arranged)` >>
+  `?pending. PERM pending (compute_operands inst) /\
+    reorder_plan dfg pending mid = (rops,arranged)` by
+    (irule inventory_selected_reorder >> qexists_tac `inst.inst_opcode` >> simp[LET_THM]) >>
+  qpat_x_assum `(if _ then _ else _) = (rops,arranged)` kall_tac >> fs[] >>
+  `LENGTH (compute_operands inst) <= LENGTH mid.ps_stack` by
+    (drule available_input_plan_length >> simp[] >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics pushed` >>
+  `generated_plan_state_wf_marked sb pushed` by
+    (simp[Abbr `pushed`] >> irule regional_regular_outputs_marked_wf >> simp[] >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >> simp[]) >>
+  `MEM (Var v) pushed.ps_stack \/ Var v IN FDOM pushed.ps_spilled` by
+    (simp[Abbr `pushed`, inventory_output_push_stack, inventory_output_push_spilled] >>
+     Cases_on `MEM v inst.inst_outputs` >- simp[MEM_MAP] >>
+     `MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack) \/
+      Var v IN FDOM arranged.ps_spilled` by
+       (irule regional_live_ownership_residual >> metis_tac[]) >> simp[]) >>
+  pairarg_tac >> simp[] >> rename1 `generate_emit_ops _ _ _ = (eops,emitted)` >>
+  `generated_plan_state_wf_marked sb emitted` by
+    (drule_all regional_emit_marked_wf >> simp[]) >>
+  `MEM (Var v) emitted.ps_stack \/ Var v IN FDOM emitted.ps_spilled` by
+    metis_tac[fnBlockPlanStaticBalanceTheory.generate_emit_ops_stack, inventory_emit_ops_spilled, SND] >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  qpat_x_assum `Abbrev (pushed = _)` kall_tac >>
+  (Cases_on `inst.inst_outputs = []`
+  >- (simp[] >> strip_tac >> gvs[] >> metis_tac[rf_release_live_owned, release_dead_spills_stack]) >>
+  `MEM (Var v) (SND (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted
+      else ([],emitted))).ps_stack \/
+   Var v IN FDOM (SND (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted
+      else ([],emitted))).ps_spilled` by
+    (IF_CASES_TAC >> simp[] >> irule regional_dead_outputs_marked_owned >>
+     gvs[generated_plan_state_wf_marked_def]) >>
+  simp[] >> pairarg_tac >> fs[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (oopt,optimised)` >>
+  `MEM (Var v) optimised.ps_stack \/ Var v IN FDOM optimised.ps_spilled` by
+    (Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> gvs[] >>
+     metis_tac[regional_optimistic_ownership, SND]) >>
+  strip_tac >> gvs[] >> metis_tac[rf_release_live_owned, release_dead_spills_stack])
+QED
+
+Theorem regional_indexed_body_marked_live_coverage:
+  !fn bb i inst sb ps dfg cfg halting next_term ops qs.
+  wf_function fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+  ~is_param_opcode inst.inst_opcode /\
+  generated_plan_state_wf_marked sb ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+  generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halting next_term
+    bb.bb_label ps = SOME (ops,qs) ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> qx_gen_tac `v` >> disch_tac >>
+  Cases_on `inst.inst_opcode = NOP \/ inst.inst_opcode = OFFSET`
+  >- (drule_all regional_indexed_special_live_coverage >> simp[]) >>
+  `generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halting next_term
+    bb.bb_label ps = (ops,qs)` by
+    (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_inst_plan_def, LET_THM] >> rpt IF_CASES_TAC >> gvs[]) >>
+  `MEM v inst.inst_outputs \/
+   MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+    (Cases_on `MEM v inst.inst_outputs` >- simp[] >>
+     disj2_tac >> irule (SRULE[LET_THM, inst_defs_def] live_vars_at_propagate) >>
+     metis_tac[]) >>
+  irule regional_regular_marked_live_coverage >>
+  goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `sb` >> simp[] >> metis_tac[]
+QED
