@@ -6,7 +6,11 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["lowering/msgGasOriginPostScript.sml",
+roots = ["lowering/whitelist/whitelistDeployScript.sml",
+         "lowering/whitelist/whitelistExprOpenScript.sml",
+         "lowering/whitelist/whitelistS2ExtrasScript.sml",
+         "lowering/whitelist/whitelistCheckerTypesScript.sml",
+         "lowering/msgGasOriginPostScript.sml",
          "lowering/generatedGasOriginScript.sml",
          "lowering/msgGasOriginScript.sml",
          "lowering/stmtSimDeclComposeScript.sml",
