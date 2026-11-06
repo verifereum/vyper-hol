@@ -1,6 +1,7 @@
 (* Persistent semantic frame for canonical finite array iteration. *)
 Theory entryReachBodyCanonicalArrayIteration
 Ancestors
+  entryReachBodyConditionalArrayChild entryReachBodyConditionalProducer
   entryReachBodyCanonicalArrayChild entryReachBodyOwnedLoop entryReachBodyExactArrayLoop
   entryReachBodyRegisteredChild entryReachBodyEnclosingCounter entryReachBodyActualOwnedLoop
   entryReachBodyScratchSet entryReachBodyOwnedRegion
@@ -210,11 +211,84 @@ Definition iteration_config_def:
   32+LENGTH xs*type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))
 End
 
-Theorem iteration_callback[local]:
+(* The producer-independent certificate is shared by both producer interfaces.
+   iteration_config_def remains the established unconditional package. *)
+Definition iteration_static_config_def:
+  iteration_static_config
+    ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) <=>
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info ce.ce_struct_fields ce ty)
+    (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
+  abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD prepared) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  sb+LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
+  d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
+  eval_operand ip prepared = SOME p /\ eval_operand src prepared = SOME (n2w sb) /\
+  eval_operand dst prepared = SOME (n2w d) /\
+  abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
+  abi_decoder_operand_live next dst /\ next+4 <= st.cs_next_var /\
+  st.cs_next_var <= mid.cs_next_var /\ mid.cs_next_var <= limit_st.cs_next_var /\
+  fn_has_code st mid fn /\ st.cs_current_bb = body_lbl /\ st.cs_current_insts = [] /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code mid last fn /\
+  abi_decoder_code mid last /\ fn_inst_ids_distinct fn /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  oid NOTIN abi_decoder_ids mid.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id) SUBSET ambient /\
+  oid NOTIN ambient /\ cid < mid.cs_next_id /\ oid <> cid /\
+  FST ops = Var (STRING #"%" (toString st.cs_next_var)) /\
+  lookup_block last.cs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = last.cs_current_insts ++ abi_decode_backedge_insts last.cs_next_id
+    (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString nv)) ip hdr /\
+  abi_decode_load CALLDATALOAD (n2w sb : bytes32) prepared = n2w (LENGTH xs) /\
+  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD
+    (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
+    (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3))) /\
+  next <= nv /\ nv < limit_st.cs_next_var /\
+  LENGTH xs < dimword (:256) /\ EVERY (val_wf tv) xs /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  32+LENGTH xs*type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))
+End
+
+Definition iteration_semantic_callback_def:
+  iteration_semantic_callback
+    ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,(nv:num)),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) <=>
+  !j u.
+    iteration_body next limit_st prepared ambient b reserve d (LENGTH xs) p j u /\
+    j < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\ u.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) u ==>
+    ?t. iteration_frame next limit_st prepared ambient b reserve
+        (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+      entry_loop_child_end fn last.cs_current_bb last.cs_current_insts last.cs_next_id
+        (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString nv))
+        ip hdr src p (n2w sb) (LENGTH xs) j t /\
+      entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+        (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+      val_in_memory tv (EL j xs) (d+(j*type_memory_size tv+32)) t.vs_memory /\
+      entry_loop_fields u t /\ entry_decode_path ctx fn u t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+        [(d+(j*type_memory_size tv+32),type_memory_size tv)] u t
+End
+
+Theorem iteration_conditional_callback:
   cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
      (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
      (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
-     (hdr,body_lbl,exit,hid,bb)) /\ iteration_config cfg /\
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_static_config cfg /\
+  (!j. j < LENGTH xs ==> entry_conditional_array_child_producer ce env ty tv (EL j avs) (EL j xs)
+    ctx fn oid root extent ambient b reserve site limit_st) /\
   iteration_body next limit_st prepared ambient b reserve d (LENGTH xs) p j u /\
   j < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\ u.vs_inst_idx = 0 /\
   entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
@@ -233,8 +307,8 @@ Theorem iteration_callback[local]:
       [(d+(j*type_memory_size tv+32),type_memory_size tv)] u t
 Proof
   strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
-  qhdtm_x_assum `iteration_config`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_config_def]) >>
+  qhdtm_x_assum `iteration_static_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_static_config_def]) >>
   qhdtm_x_assum `iteration_body`
     (strip_assume_tac o PURE_REWRITE_RULE [iteration_body_def]) >>
   drule_all iteration_frame_inputs >> strip_tac >>
@@ -254,7 +328,7 @@ Proof
       (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString nv))
       ip hdr src p (n2w sb) (LENGTH xs) j t /\
     mload (w2n p) t = n2w j /\ FLOOKUP t.vs_allocas cid = SOME (w2n p,32)` by
-    (irule (SIMP_RULE bool_ss [] entry_canonical_array_child) >>
+    (irule (SIMP_RULE bool_ss [] entry_conditional_canonical_array_child) >>
      simp[Excl "enc_def"] >> conj_tac
      >- (qexistsl_tac [`dst`,`ops`] >> gvs[Excl "enc_def"]) >>
      qexistsl_tac [`avs`,`env`,`maxn`,`parent_di`] >> simp[Excl "enc_def"]) >>
@@ -273,11 +347,12 @@ Proof
     `root`,`oid`,`extent`,`st.cs_next_var`] >> simp[]
 QED
 
-Theorem iteration_contract[local]:
+Theorem entry_array_callback_contract:
   cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
      (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
      (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
-     (hdr,body_lbl,exit,hid,bb)) /\ iteration_config cfg ==>
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_static_config cfg /\
+  iteration_semantic_callback cfg ==>
   entry_actual_owned_indexed_contract ctx fn site hdr body_lbl exit hid
     last.cs_current_bb last.cs_current_insts last.cs_next_id ip src
     (STRING #"%" (toString next)) (STRING #"%" (toString st.cs_next_var))
@@ -296,8 +371,8 @@ Theorem iteration_contract[local]:
       (\m. mem_word_at d m = n2w (LENGTH xs)))
 Proof
   strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
-  qhdtm_assum `iteration_config`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_config_def]) >>
+  qhdtm_assum `iteration_static_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_static_config_def]) >>
   `src <> Var (STRING #"%" (toString next)) /\
    ip <> Var (STRING #"%" (toString nv)) /\ src <> Var (STRING #"%" (toString nv))` by
     (rpt conj_tac >> irule abi_decoder_live_excludes_output >>
@@ -310,21 +385,93 @@ Proof
   >- suspend "child"
   >> suspend "backedge"
 QED
-Resume iteration_contract[header]:
+Resume entry_array_callback_contract[header]:
   rpt strip_tac >> Cases_on `j < LENGTH xs`
   >- (simp[] >> irule iteration_header_body >>
       fs[entry_owned_loop_inv_def, SF SFY_ss, Excl "enc_def"]) >>
   simp[] >> irule iteration_frame_header >> simp[]
 QED
-Resume iteration_contract[child]:
-  rpt strip_tac >> irule (SRULE [] iteration_callback) >>
-  simp[Excl "enc_def"] >> goal_assum (drule_at Any)
+Resume entry_array_callback_contract[child]:
+  rpt strip_tac >>
+  qhdtm_x_assum `iteration_semantic_callback`
+    (mp_tac o PURE_REWRITE_RULE [iteration_semantic_callback_def]) >>
+  disch_then (qspecl_then [`j`,`u`] mp_tac) >> simp[]
 QED
-Resume iteration_contract[backedge]:
+Resume entry_array_callback_contract[backedge]:
   rpt strip_tac >> irule iteration_array_backedge_frame >>
   asm_rewrite_tac[] >> goal_assum (drule_at Any) >> simp[]
 QED
-Finalise iteration_contract
+Finalise entry_array_callback_contract
+
+Theorem entry_array_callback_iteration:
+  cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_static_config cfg /\
+  iteration_semantic_callback cfg /\
+  entry_owned_loop_inv ctx fn site hdr ip src p (n2w sb) tv xs d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) cid oid root extent j s /\
+  iteration_frame next limit_st prepared ambient b reserve
+    (\m. mem_word_at d m = n2w (LENGTH xs)) s ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+    iteration_frame next limit_st prepared ambient b reserve
+      (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_trace ctx fn
+      (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+      [(d,32+LENGTH xs*type_memory_size tv)] s t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all entry_array_callback_contract >> strip_tac >>
+  drule entry_actual_owned_indexed_array_loop_from_index >>
+  simp_tac bool_ss [] >> disch_then drule >>
+  asm_rewrite_tac[] >> disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule (cj 2 calldata_terminal_array_memory) >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qhdtm_x_assum `iteration_static_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_static_config_def]) >>
+  drule abi_decoder_dynarray_values >> strip_tac >>
+  fs[entry_loop_prefix_def, iteration_frame_def, Excl "enc_def"] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem iteration_conditional_semantic_callback:
+  cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_static_config cfg /\
+  (!j. j < LENGTH xs ==> entry_conditional_array_child_producer ce env ty tv
+    (EL j avs) (EL j xs) ctx fn oid root extent ambient b reserve site limit_st) ==>
+  iteration_semantic_callback cfg
+Proof
+  strip_tac >> qpat_assum `cfg = _` SUBST_ALL_TAC >>
+  simp_tac bool_ss [iteration_semantic_callback_def] >> rpt strip_tac >>
+  irule (SRULE [] iteration_conditional_callback) >>
+  simp[Excl "enc_def"] >>
+  qpat_assum `iteration_static_config _` (irule_at Any) >> simp[]
+QED
+
+Theorem iteration_config_static[local]:
+  iteration_config cfg ==> iteration_static_config cfg
+Proof
+  PairCases_on `cfg` >>
+  simp_tac bool_ss [iteration_config_def, iteration_static_config_def] >>
+  rpt strip_tac >> asm_rewrite_tac[]
+QED
+
+Theorem iteration_config_callback[local]:
+  iteration_config cfg ==> iteration_semantic_callback cfg
+Proof
+  PairCases_on `cfg` >> strip_tac >>
+  drule iteration_config_static >> strip_tac >>
+  irule (SRULE [] iteration_conditional_semantic_callback) >>
+  simp[Excl "enc_def"] >>
+  fs[iteration_config_def, Excl "enc_def"] >> rpt strip_tac >>
+  irule entry_unconditional_producer_implies_conditional >> simp[]
+QED
 
 Theorem entry_canonical_dynamic_array_iteration:
   cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
@@ -345,17 +492,7 @@ Theorem entry_canonical_dynamic_array_iteration:
       (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
       [(d,32+LENGTH xs*type_memory_size tv)] s t
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all iteration_contract >> strip_tac >>
-  drule entry_actual_owned_indexed_array_loop_from_index >>
-  simp_tac bool_ss [] >> disch_then drule >>
-  asm_rewrite_tac[] >> disch_then (qx_choose_then `t` strip_assume_tac) >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  irule (cj 2 calldata_terminal_array_memory) >>
-  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
-  qhdtm_x_assum `iteration_config`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_config_def]) >>
-  drule abi_decoder_dynarray_values >> strip_tac >>
-  fs[entry_loop_prefix_def, iteration_frame_def, Excl "enc_def"] >>
-  goal_assum (drule_at Any) >> simp[]
+  strip_tac >> drule iteration_config_static >> strip_tac >>
+  drule iteration_config_callback >> strip_tac >>
+  drule_all entry_array_callback_iteration >> simp[]
 QED
