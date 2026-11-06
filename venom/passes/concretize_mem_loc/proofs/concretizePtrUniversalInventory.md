@@ -1157,8 +1157,8 @@ These are notation in this report, NOT new constants or fresh witness choices.
 | Local/import production conflicts relative to later demanded owner | Checked conditional `ptr_demand_other_owner_separation` plus demand interval, exact snapshot and historical placement. No disjointness by sibling-token inequality is assumed. |
 | Source chrono-write equivalence | ChronologicalHistory:132-149 and actual adjacent step; MCOPY instance HistoricalMcopyExclusion:73-78. Requested source ranges and actual step_writes differ for external CALL; handle its MIN rather than equating them blindly. |
 | Target opcode/operands vs source instruction used by exclusion theorem | Existing production cursor/alignment and positions rewrite facts (reuse StepStructure/StepShape/StepCallChecks/StepRetpc/StageShape). Need historical event instantiation; equal ids by itself is insufficient. No duplicate structural theorem was introduced. |
-| Immediate source poststate vs next normalized sample | Z is at n+1, whereas next mixed sample is at E[q+1], E=done++[LENGTH h-1]. They need not be equal. Deleted NOP scan fields (DeletedGapHistory:75-85) preserve memory/returndata while changing cursor. A historical adjacent-event + intervening-NOP inversion/assembly is needed for arbitrary existing certificate; endpoint scan theorems alone do not assert this historical equation. |
-| CALL post returndata lengths | Shared fields at E[q+1] plus the preceding historical gap bridge can supply LENGTH Z.po_state.vs_returndata = LENGTH U.po_state.vs_returndata. Neither mixed prestate nor equal pre-returndata proves equal post lengths. Ordinary exclusion:713-714 explicitly requires them. |
+| Immediate source poststate vs next normalized sample | Checked by StructuralTrace `ptr_structural_trace_nop_interval`, `ptr_structural_trace_gap_memory`, and `ptr_structural_trace_gap_returndata` (258-352). From structural_trace and q<LENGTH done, with n=EL q done and m=EL(SUC q)(done++[LENGTH h-1]), these give SUC n<=m<LENGTH h, NOP at each strict gap index, and equality of memory/returndata from SUC n to m. They do not equate cursors or whole states. |
+| CALL post returndata lengths | Checked PairedPrefix `ptr_paired_samples_post_returndata` (55-67): structural_trace, paired_samples positions h ht done H, and q<LENGTH done imply source EL(SUC(EL q done)) returndata equals target EL(SUC q) returndata. LENGTH equality follows by congruence; no duplicate LENGTH theorem installed. Uses paired_samples_core at SUC q and the historical NOP gap bridge, not pre-CALL returndata. |
 | W immediate equality / write ownership | PairedFields:91-114, PrefixLedger:16-29. Only source-to-target footprint inclusion, not reverse inclusion; only equality on source written bytes minus POST-taint. Even W's owner choice is a byte-map witness, not the historical instruction destination tag. It cannot supply suffix exclusion or exclude extra target writes. |
 
 ### Exact first missing semantic interface (not another invariant)
@@ -1242,3 +1242,20 @@ universal source-prefix coverage is used to supply X, no new invariant was
 installed, and no task falsehood is claimed. Stop this diagnostic here for
 strategist selection of the next durable interface; do not append RET or a
 queue of conditional opcode wrappers.
+
+### C1.5.90.67.26 historical gap checkpoint
+
+The source-only interval and two field bridges above, and the downstream
+`ptr_paired_samples_post_returndata`, are checked without adding any premise
+to the certificate. Their only event restriction is q<LENGTH done, so the
+last departed event (whose next sample is the final history observation) is
+included; the root with done=[] has no such event. NOP gaps may be empty.
+The source theorem hypotheses are the actual structural trace, index bound,
+and defining n/m equalities; the paired theorem additionally needs the actual
+paired_samples predicate. No future source step or read equality is assumed.
+
+This closes the immediate-poststate/normalized-sample field gap only.
+Historical write classification for remaining ordinary families, source-success
+supply for the MCOPY read consumer, fixed-byte exclusion, and universal target
+prefix coverage remain unresolved. No CALL/RET simulation or global write
+exclusion follows from these field equations alone.

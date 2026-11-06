@@ -50,6 +50,22 @@ Proof
   qmatch_goalsub_abbrev_tac `ptr_paired_sample positions a at snapshot` >>
   PairCases_on `snapshot` >> simp[ptr_paired_sample_def]
 QED
+(* Adjacent source poststates and normalized samples differ only by a NOP
+   gap in the fields needed here; no cursor equality is asserted. *)
+Theorem ptr_paired_samples_post_returndata:
+  ptr_structural_trace R vs0 C Ct h a ht at done tokens registry births PT TG saved entries /\
+  ptr_paired_samples positions h ht done H /\ q < LENGTH done ==>
+  (EL (SUC (EL q done)) h).po_state.vs_returndata =
+    (EL (SUC q) ht).po_state.vs_returndata
+Proof
+  strip_tac >>
+  `SUC q < LENGTH ht` by fs[ptr_paired_samples_def] >>
+  drule_all ptr_paired_samples_core >>
+  simp[ptr_core_shared_def, ptr_shared_fields_def] >> strip_tac >>
+  drule ptr_structural_trace_gap_returndata >>
+  disch_then (qspec_then `q` mp_tac) >> simp[]
+QED
+
 (* Operand transport is available only outside the opaque return-PC class. *)
 Theorem ptr_paired_samples_eval_operands:
   ptr_paired_samples positions h ht done H /\ j < LENGTH ht /\

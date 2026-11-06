@@ -254,3 +254,99 @@ Proof
   drule ptr_source_birth_caches_activations >> strip_tac >>
   drule ptr_source_activations_length >> simp[]
 QED
+
+Theorem ptr_structural_trace_nop_interval:
+  !R vs0 C Ct h a ht at done tokens registry births PT TG saved entries.
+  ptr_structural_trace R vs0 C Ct h a ht at done tokens registry births PT TG saved entries ==>
+  !q. q < LENGTH done ==>
+    SUC (EL q done) <= EL (SUC q) (done ++ [LENGTH h - 1]) /\
+    EL (SUC q) (done ++ [LENGTH h - 1]) < LENGTH h /\
+    !k. SUC (EL q done) <= k /\
+      k < EL (SUC q) (done ++ [LENGTH h - 1]) ==>
+      (EL k h).po_inst.inst_opcode = NOP
+Proof
+  ho_match_mp_tac ptr_structural_trace_strongind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac
+  >- simp[]
+  >- (drule ptr_structural_trace_samples >> strip_tac >>
+      drule ptr_structural_trace_source >>
+      disch_then (mp_tac o MATCH_MP ptr_chrono_history_end) >> strip_tac >>
+      qx_gen_tac `q` >> strip_tac >>
+      qpat_x_assum `!q. q < LENGTH done ==> SUC _ <= _ /\ _`
+        (qspec_then `q` mp_tac) >> simp[] >> strip_tac >>
+      Cases_on `SUC q < LENGTH done`
+      >- (gvs[EL_APPEND_EQN] >> rpt strip_tac >>
+          first_x_assum irule >> simp[]) >>
+      `SUC q = LENGTH done` by decide_tac >>
+      gvs[EL_APPEND_EQN] >>
+      rpt strip_tac >>
+      Cases_on `k < LENGTH h - 1`
+      >- (first_x_assum irule >> simp[]) >>
+      `k = LENGTH h - 1` by decide_tac >>
+      gvs[LAST_EL, PRE_SUB1]) >>
+  (drule ptr_structural_trace_samples >> strip_tac >>
+  qx_gen_tac `q` >> strip_tac >>
+  Cases_on `q < LENGTH done`
+  >- (qpat_x_assum `!q. q < LENGTH done ==> SUC _ <= _ /\ _`
+        (qspec_then `q` mp_tac) >> simp[] >> strip_tac >>
+      Cases_on `SUC q < LENGTH done`
+      >- (gvs[EL_APPEND_EQN] >> rpt strip_tac >>
+          first_x_assum irule >> simp[]) >>
+      `SUC q = LENGTH done` by decide_tac >>
+      gvs[EL_APPEND_EQN] >> rpt strip_tac >>
+      first_x_assum irule >> simp[]) >>
+  `q = LENGTH done` by gvs[] >>
+  `SUC (LENGTH done) = LENGTH ht` by decide_tac >>
+  simp[EL_APPEND_EQN])
+QED
+
+Theorem ptr_chrono_nop_memory_fields[local]:
+  !C a b. ptr_chrono_step C a b ==> a.po_inst.inst_opcode = NOP ==>
+    a.po_state.vs_memory = b.po_state.vs_memory /\
+    a.po_state.vs_returndata = b.po_state.vs_returndata
+Proof
+  ho_match_mp_tac ptr_chrono_step_ind >> simp[ptr_observe_def] >>
+  rpt strip_tac >> gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_def]
+QED
+
+Theorem ptr_chrono_nop_interval_fields[local]:
+  !hi lo. ptr_chrono_history vs0 C h a /\ lo <= hi /\ hi < LENGTH h /\
+    (!k. lo <= k /\ k < hi ==> (EL k h).po_inst.inst_opcode = NOP) ==>
+    (EL lo h).po_state.vs_memory = (EL hi h).po_state.vs_memory /\
+    (EL lo h).po_state.vs_returndata = (EL hi h).po_state.vs_returndata
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (`lo = 0` by decide_tac >> simp[]) >>
+  Cases_on `lo = SUC hi` >- simp[] >>
+  `lo <= hi /\ hi < LENGTH h` by decide_tac >>
+  `ptr_chrono_step C (EL hi h) (EL (SUC hi) h)` by
+    metis_tac[concretizePtrLifetimeTheory.ptr_chrono_history_adjacent] >>
+  `(EL hi h).po_inst.inst_opcode = NOP` by
+    (first_x_assum irule >> decide_tac) >>
+  drule_all ptr_chrono_nop_memory_fields >> strip_tac >>
+  `((EL lo h).po_state.vs_memory = (EL hi h).po_state.vs_memory) /\
+   ((EL lo h).po_state.vs_returndata = (EL hi h).po_state.vs_returndata)` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem ptr_structural_trace_gap_memory:
+  ptr_structural_trace R vs0 C Ct h a ht at done tokens registry births PT TG saved entries /\
+  q < LENGTH done /\ n = EL q done /\ m = EL (SUC q) (done ++ [LENGTH h - 1]) ==>
+  (EL (SUC n) h).po_state.vs_memory = (EL m h).po_state.vs_memory
+Proof
+  strip_tac >> drule_all ptr_structural_trace_nop_interval >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  metis_tac[ptr_chrono_nop_interval_fields]
+QED
+
+Theorem ptr_structural_trace_gap_returndata:
+  ptr_structural_trace R vs0 C Ct h a ht at done tokens registry births PT TG saved entries /\
+  q < LENGTH done /\ n = EL q done /\ m = EL (SUC q) (done ++ [LENGTH h - 1]) ==>
+  (EL (SUC n) h).po_state.vs_returndata = (EL m h).po_state.vs_returndata
+Proof
+  strip_tac >> drule_all ptr_structural_trace_nop_interval >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  metis_tac[ptr_chrono_nop_interval_fields]
+QED
