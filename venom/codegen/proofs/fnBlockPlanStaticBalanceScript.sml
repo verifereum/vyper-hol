@@ -1,6 +1,6 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
-  stackPlanGen stackPlanTypes stackModel asmIR integer
+  stackPlanGen stackPlanTypes stackModel asmIR integer prefixExec
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -223,3 +223,28 @@ QED
  * Once these certificates hold, whole_trace_empty_reflection uses equal
  * WHOLE block ops and source correction, not cancellation of cleanup ops.
  *)
+
+Theorem stack_op_wf_signed_balance[local]:
+  !op lo n. FST (stack_op_wf lo op n) /\
+    (!v. op <> SOPush (Var v)) ==>
+    &(SND (stack_op_wf lo op n)) = (&n:int) + stack_op_weight op
+Proof
+  Cases >> simp[stack_op_wf_def, stack_op_weight_def] >> rpt gen_tac
+  >~ [`stack_op_wf lo (SOPush operand) n`]
+  >- (Cases_on `operand` >>
+      simp[stack_op_wf_def, stack_op_weight_def] >>
+      rpt strip_tac >> intLib.ARITH_TAC) >>
+  rpt strip_tac >> intLib.ARITH_TAC
+QED
+
+Theorem prefix_wf_signed_balance:
+  !ops lo n. prefix_wf lo n ops /\
+    (!v. ~MEM (SOPush (Var v)) ops) ==>
+    &(prefix_end_len lo n ops) = (&n:int) + trace_weight ops
+Proof
+  Induct >> simp[prefix_wf_def, prefix_end_len_def, trace_weight_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac >>
+  `&(SND (stack_op_wf lo h n)) = (&n:int) + stack_op_weight h` by
+    (irule stack_op_wf_signed_balance >> simp[] >> metis_tac[]) >>
+  gvs[] >> intLib.ARITH_TAC
+QED
